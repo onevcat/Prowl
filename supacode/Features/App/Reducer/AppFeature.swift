@@ -188,7 +188,10 @@ struct AppFeature {
         }
 
       case .repositories(.delegate(.repositoriesChanged(let repositories))):
-        let ids = Set(repositories.flatMap { $0.worktrees.map(\.id) })
+        let archivedIDs = state.repositories.archivedWorktreeIDSet
+        let ids = Set(
+          repositories.flatMap { $0.worktrees.map(\.id) }.filter { !archivedIDs.contains($0) }
+        )
         let recencyIDs = CommandPaletteFeature.recencyRetentionIDs(from: repositories)
         let worktrees = state.repositories.worktreesForInfoWatcher()
         state.runScriptStatusByWorktreeID = state.runScriptStatusByWorktreeID.filter { ids.contains($0.key) }

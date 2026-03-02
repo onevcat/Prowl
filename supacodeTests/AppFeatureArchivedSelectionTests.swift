@@ -48,4 +48,60 @@ struct AppFeatureArchivedSelectionTests {
     await store.finish()
     #expect(saved.value.isEmpty)
   }
+
+  @Test(.dependencies) func repositoriesChangedPrunesArchivedWorktreesFromTerminalAndRunScriptStatus() async {
+    let rootURL = URL(fileURLWithPath: "/tmp/repo")
+    let activeWorktree = Worktree(
+      id: "/tmp/repo/wt-active",
+      name: "wt-active",
+      detail: "",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repo/wt-active"),
+      repositoryRootURL: rootURL
+    )
+    let archivedWorktree = Worktree(
+      id: "/tmp/repo/wt-archived",
+      name: "wt-archived",
+      detail: "",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repo/wt-archived"),
+      repositoryRootURL: rootURL
+    )
+    let repository = Repository(
+      id: rootURL.path(percentEncoded: false),
+      rootURL: rootURL,
+      name: "repo",
+      worktrees: IdentifiedArray(uniqueElements: [activeWorktree, archivedWorktree])
+    )
+    var repositoriesState = RepositoriesFeature.State(repositories: [repository])
+    repositoriesState.selection = .worktree(activeWorktree.id)
+    repositoriesState.archivedWorktreeIDs = [archivedWorktree.id]
+    var appState = AppFeature.State(
+      repositories: repositoriesState,
+      settings: SettingsFeature.State()
+    )
+    appState.runScriptStatusByWorktreeID = [
+      activeWorktree.id: true,
+      archivedWorktree.id: true,
+    ]
+    let sentCommands = LockIsolated<[TerminalClient.Command]>([])
+    let store = TestStore(initialState: appState) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sentCommands.withValue { $0.append(command) }
+      }
+      $0.worktreeInfoWatcher.send = { _ in }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.repositories(.delegate(.repositoriesChanged([repository])))) {
+      $0.runScriptStatusByWorktreeID = [activeWorktree.id: true]
+    }
+    await store.finish()
+
+    #expect(
+      sentCommands.value == [
+        .prune([activeWorktree.id])
+      ]
+    )
+  }
 }
