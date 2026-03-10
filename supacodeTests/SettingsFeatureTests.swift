@@ -200,4 +200,53 @@ struct SettingsFeatureTests {
     }
     await store.receive(\.delegate.settingsChanged)
   }
+
+  @Test(.dependencies) func settingsLoadedNormalizesDefaultWorktreeBaseDirectoryPath() async {
+    var loaded = GlobalSettings.default
+    loaded.defaultWorktreeBaseDirectoryPath = " ~/worktrees "
+    let expectedPath = FileManager.default.homeDirectoryForCurrentUser
+      .appending(path: "worktrees", directoryHint: .isDirectory)
+      .standardizedFileURL
+      .path(percentEncoded: false)
+    let storage = SettingsTestStorage()
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json")
+    let store = TestStore(initialState: SettingsFeature.State()) {
+      SettingsFeature()
+    } withDependencies: {
+      $0.settingsFileStorage = storage.storage
+      $0.settingsFileURL = settingsFileURL
+    }
+
+    await store.send(.settingsLoaded(loaded)) {
+      $0.defaultWorktreeBaseDirectoryPath = expectedPath
+    }
+    await store.receive(\.delegate.settingsChanged)
+    #expect(store.state.defaultWorktreeBaseDirectoryPath == expectedPath)
+  }
+
+  @Test(.dependencies) func changingDefaultWorktreeBaseDirectoryUpdatesRepositorySettingsState() async {
+    let rootURL = URL(fileURLWithPath: "/tmp/repo")
+    let expectedPath = FileManager.default.homeDirectoryForCurrentUser
+      .appending(path: "worktrees", directoryHint: .isDirectory)
+      .standardizedFileURL
+      .path(percentEncoded: false)
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = .default }
+    var state = SettingsFeature.State()
+    state.repositorySettings = RepositorySettingsFeature.State(
+      rootURL: rootURL,
+      settings: .default
+    )
+    let store = TestStore(initialState: state) {
+      SettingsFeature()
+    }
+
+    await store.send(.binding(.set(\.defaultWorktreeBaseDirectoryPath, " ~/worktrees "))) {
+      $0.defaultWorktreeBaseDirectoryPath = " ~/worktrees "
+      $0.repositorySettings?.globalDefaultWorktreeBaseDirectoryPath = expectedPath
+    }
+    await store.receive(\.delegate.settingsChanged)
+    #expect(store.state.repositorySettings?.globalDefaultWorktreeBaseDirectoryPath == expectedPath)
+    #expect(settingsFile.global.defaultWorktreeBaseDirectoryPath == expectedPath)
+  }
 }

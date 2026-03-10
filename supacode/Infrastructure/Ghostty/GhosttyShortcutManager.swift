@@ -19,6 +19,11 @@ final class GhosttyShortcutManager {
     generation += 1
   }
 
+  var commandPaletteEntries: [GhosttyCommand] {
+    _ = generation
+    return runtime.commandPaletteEntries()
+  }
+
   func keyboardShortcut(for action: String) -> KeyboardShortcut? {
     _ = generation
     return runtime.keyboardShortcut(for: action)

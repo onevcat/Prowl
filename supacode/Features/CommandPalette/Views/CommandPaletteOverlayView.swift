@@ -341,6 +341,7 @@ private struct CommandPaletteRowView: View {
   private var badge: String? {
     switch row.kind {
     case .checkForUpdates, .openRepository, .openSettings, .newWorktree, .refreshWorktrees,
+      .ghosttyCommand,
       .openPullRequest, .markPullRequestReady, .mergePullRequest, .closePullRequest, .copyFailingJobURL,
       .copyCiFailureLogs,
       .rerunFailedJobs, .openFailingCheckDetails, .worktreeSelect:
@@ -368,6 +369,8 @@ private struct CommandPaletteRowView: View {
       return "plus"
     case .refreshWorktrees:
       return "arrow.clockwise"
+    case .ghosttyCommand:
+      return "terminal"
     case .openPullRequest:
       return "arrow.up.right.square"
     case .markPullRequestReady:
@@ -400,6 +403,7 @@ private struct CommandPaletteRowView: View {
   private var emphasis: Bool {
     switch row.kind {
     case .checkForUpdates, .openRepository, .openSettings, .newWorktree, .refreshWorktrees,
+      .ghosttyCommand,
       .openPullRequest, .markPullRequestReady, .mergePullRequest, .closePullRequest, .copyFailingJobURL,
       .copyCiFailureLogs,
       .rerunFailedJobs, .openFailingCheckDetails:
@@ -492,6 +496,8 @@ private struct CommandPaletteRowView: View {
       base = "New Worktree"
     case .refreshWorktrees:
       base = "Refresh Worktrees"
+    case .ghosttyCommand:
+      base = row.title
     case .removeWorktree:
       base = "Remove \(row.title)"
     case .archiveWorktree:

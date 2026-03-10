@@ -452,6 +452,18 @@ final class GhosttyRuntime {
     return Self.keyboardShortcut(for: trigger)
   }
 
+  func commandPaletteEntries() -> [GhosttyCommand] {
+    guard let config else { return [] }
+    var value = ghostty_config_command_list_s()
+    let key = "command-palette-entry"
+    guard ghostty_config_get(config, &value, key, UInt(key.lengthOfBytes(using: .utf8))) else {
+      return []
+    }
+    guard value.len > 0, let commands = value.commands else { return [] }
+    let buffer = UnsafeBufferPointer(start: commands, count: Int(value.len))
+    return buffer.map(GhosttyCommand.init(cValue:))
+  }
+
   func focusFollowsMouse() -> Bool {
     guard let config else { return false }
     var value = false

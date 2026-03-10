@@ -413,7 +413,8 @@ struct RepositoriesFeatureTests {
         pendingID: "pending:1",
         previousSelection: nil,
         repositoryID: repository.id,
-        name: "../../Desktop"
+        name: "../../Desktop",
+        baseDirectory: URL(fileURLWithPath: "/tmp/repo/.worktrees")
       )
     ) {
       $0.alert = expectedAlert
@@ -442,7 +443,7 @@ struct RepositoriesFeatureTests {
       $0.gitClient.automaticWorktreeBaseRef = { _ in "origin/main" }
       $0.gitClient.ignoredFileCount = { _ in 2 }
       $0.gitClient.untrackedFileCount = { _ in 1 }
-      $0.gitClient.createWorktreeStream = { _, _, _, _, _ in
+      $0.gitClient.createWorktreeStream = { _, _, _, _, _, _ in
         AsyncThrowingStream { continuation in
           continuation.yield(.outputLine(ShellStreamLine(source: .stderr, text: "[1/2] copy .env")))
           continuation.yield(.outputLine(ShellStreamLine(source: .stderr, text: "[2/2] copy .cache")))
@@ -467,6 +468,108 @@ struct RepositoriesFeatureTests {
     #expect(store.state.alert == nil)
   }
 
+  @Test(.dependencies) func createRandomWorktreeUsesRepositoryWorktreeBaseDirectoryOverride() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
+    let createdWorktree = makeWorktree(
+      id: "/tmp/repo/swift-otter",
+      name: "swift-otter",
+      repoRoot: repoRoot
+    )
+    let observedBaseDirectory = LockIsolated<URL?>(nil)
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock {
+      $0.global.promptForWorktreeCreation = false
+      $0.global.defaultWorktreeBaseDirectoryPath = "/tmp/global-worktrees"
+    }
+    @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
+    $repositorySettings.withLock {
+      $0.worktreeBaseDirectoryPath = "/tmp/repo-override"
+    }
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.uuid = .incrementing
+      $0.gitClient.localBranchNames = { _ in [] }
+      $0.gitClient.isBareRepository = { _ in false }
+      $0.gitClient.automaticWorktreeBaseRef = { _ in "origin/main" }
+      $0.gitClient.ignoredFileCount = { _ in 0 }
+      $0.gitClient.untrackedFileCount = { _ in 0 }
+      $0.gitClient.createWorktreeStream = { _, _, baseDirectory, _, _, _ in
+        observedBaseDirectory.withValue { $0 = baseDirectory }
+        return AsyncThrowingStream { continuation in
+          continuation.yield(.finished(createdWorktree))
+          continuation.finish()
+        }
+      }
+      $0.gitClient.worktrees = { _ in [createdWorktree, mainWorktree] }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.createRandomWorktreeInRepository(repository.id))
+    await store.receive(\.createRandomWorktreeSucceeded)
+    await store.finish()
+
+    let expectedBaseDirectory = SupacodePaths.worktreeBaseDirectory(
+      for: repository.rootURL,
+      globalDefaultPath: "/tmp/global-worktrees",
+      repositoryOverridePath: "/tmp/repo-override"
+    )
+    #expect(observedBaseDirectory.value == expectedBaseDirectory)
+  }
+
+  @Test(.dependencies) func createRandomWorktreeUsesGlobalWorktreeBaseDirectoryWhenRepositoryOverrideMissing() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
+    let createdWorktree = makeWorktree(
+      id: "/tmp/repo/swift-otter",
+      name: "swift-otter",
+      repoRoot: repoRoot
+    )
+    let observedBaseDirectory = LockIsolated<URL?>(nil)
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock {
+      $0.global.promptForWorktreeCreation = false
+      $0.global.defaultWorktreeBaseDirectoryPath = "/tmp/global-worktrees"
+    }
+    @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
+    $repositorySettings.withLock {
+      $0.worktreeBaseDirectoryPath = nil
+    }
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.uuid = .incrementing
+      $0.gitClient.localBranchNames = { _ in [] }
+      $0.gitClient.isBareRepository = { _ in false }
+      $0.gitClient.automaticWorktreeBaseRef = { _ in "origin/main" }
+      $0.gitClient.ignoredFileCount = { _ in 0 }
+      $0.gitClient.untrackedFileCount = { _ in 0 }
+      $0.gitClient.createWorktreeStream = { _, _, baseDirectory, _, _, _ in
+        observedBaseDirectory.withValue { $0 = baseDirectory }
+        return AsyncThrowingStream { continuation in
+          continuation.yield(.finished(createdWorktree))
+          continuation.finish()
+        }
+      }
+      $0.gitClient.worktrees = { _ in [createdWorktree, mainWorktree] }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.createRandomWorktreeInRepository(repository.id))
+    await store.receive(\.createRandomWorktreeSucceeded)
+    await store.finish()
+
+    let expectedBaseDirectory = SupacodePaths.worktreeBaseDirectory(
+      for: repository.rootURL,
+      globalDefaultPath: "/tmp/global-worktrees",
+      repositoryOverridePath: nil
+    )
+    #expect(observedBaseDirectory.value == expectedBaseDirectory)
+  }
+
   @Test(.dependencies) func createRandomWorktreeInRepositoryStreamFailureRemovesPendingWorktree() async {
     let repoRoot = "/tmp/repo"
     let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
@@ -482,7 +585,7 @@ struct RepositoriesFeatureTests {
       $0.gitClient.automaticWorktreeBaseRef = { _ in "origin/main" }
       $0.gitClient.ignoredFileCount = { _ in 2 }
       $0.gitClient.untrackedFileCount = { _ in 1 }
-      $0.gitClient.createWorktreeStream = { _, _, _, _, _ in
+      $0.gitClient.createWorktreeStream = { _, _, _, _, _, _ in
         AsyncThrowingStream { continuation in
           continuation.yield(.outputLine(ShellStreamLine(source: .stderr, text: "[1/2] copy .env")))
           continuation.finish(throwing: GitClientError.commandFailed(command: "wt sw", message: "boom"))
@@ -509,6 +612,78 @@ struct RepositoriesFeatureTests {
     #expect(store.state.selection == nil)
     #expect(store.state.alert == expectedAlert)
     #expect(store.state.repositories[id: repository.id]?.worktrees[id: mainWorktree.id] != nil)
+  }
+
+  @Test(.dependencies) func createRandomWorktreeFailureUsesProvidedBaseDirectoryForCleanup() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
+    let createTimeBaseDirectory = SupacodePaths.worktreeBaseDirectory(
+      for: repository.rootURL,
+      globalDefaultPath: "/tmp/worktrees-original",
+      repositoryOverridePath: nil
+    )
+    let changedBaseDirectory = SupacodePaths.worktreeBaseDirectory(
+      for: repository.rootURL,
+      globalDefaultPath: "/tmp/worktrees-changed",
+      repositoryOverridePath: nil
+    )
+    let removedWorktreePath = LockIsolated<String?>(nil)
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock {
+      $0.global.defaultWorktreeBaseDirectoryPath = "/tmp/worktrees-changed"
+    }
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.removeWorktree = { worktree, _ in
+        let workingDirectory = await MainActor.run { worktree.workingDirectory }
+        removedWorktreePath.withValue { $0 = workingDirectory.path(percentEncoded: false) }
+        return workingDirectory
+      }
+      $0.gitClient.pruneWorktrees = { _ in }
+    }
+    store.exhaustivity = .off
+
+    let expectedAlert = AlertState<RepositoriesFeature.Alert> {
+      TextState("Unable to create worktree")
+    } actions: {
+      ButtonState(role: .cancel) {
+        TextState("OK")
+      }
+    } message: {
+      TextState("boom")
+    }
+
+    await store.send(
+      .createRandomWorktreeFailed(
+        title: "Unable to create worktree",
+        message: "boom",
+        pendingID: "pending:test",
+        previousSelection: nil,
+        repositoryID: repository.id,
+        name: "new-branch",
+        baseDirectory: createTimeBaseDirectory
+      )
+    ) {
+      $0.alert = expectedAlert
+    }
+    await store.finish()
+
+    #expect(changedBaseDirectory != createTimeBaseDirectory)
+    #expect(removedWorktreePath.value != nil)
+    #expect(
+      removedWorktreePath.value
+        == createTimeBaseDirectory
+        .appending(path: "new-branch", directoryHint: .isDirectory)
+        .path(percentEncoded: false)
+    )
+    #expect(
+      removedWorktreePath.value
+        != changedBaseDirectory
+        .appending(path: "new-branch", directoryHint: .isDirectory)
+        .path(percentEncoded: false)
+    )
   }
 
   @Test func pendingProgressUpdateUpdatesPendingWorktreeState() async {
@@ -585,7 +760,8 @@ struct RepositoriesFeatureTests {
         pendingID: pendingID,
         previousSelection: nil,
         repositoryID: repository.id,
-        name: nil
+        name: nil,
+        baseDirectory: URL(fileURLWithPath: "/tmp/repo/.worktrees")
       )
     ) {
       $0.pendingWorktrees = []

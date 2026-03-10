@@ -58,6 +58,83 @@ struct CommandPaletteFeatureTests {
     #expect(ids.contains { $0.contains("wt-pending") } == false)
   }
 
+  @Test func commandPaletteItems_includeGhosttyCommandsWhenWorktreeSelected() {
+    let rootPath = "/tmp/repo"
+    let worktree = makeWorktree(id: rootPath, name: "repo", repoRoot: rootPath)
+    let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .worktree(worktree.id)
+
+    let items = CommandPaletteFeature.commandPaletteItems(
+      from: state,
+      ghosttyCommands: [
+        GhosttyCommand(
+          title: "Focus Split Right",
+          description: "Focus the split to the right.",
+          action: "goto_split:right",
+          actionKey: "goto_split"
+        ),
+      ]
+    )
+
+    let ghosttyItem = items.first {
+      if case .ghosttyCommand(let action) = $0.kind {
+        return action == "goto_split:right"
+      }
+      return false
+    }
+
+    #expect(ghosttyItem?.title == "Focus Split Right")
+    #expect(ghosttyItem?.subtitle == "Focus the split to the right.")
+  }
+
+  @Test func commandPaletteItems_omitGhosttyCommandsWithoutSelectedWorktree() {
+    let items = CommandPaletteFeature.commandPaletteItems(
+      from: RepositoriesFeature.State(),
+      ghosttyCommands: [
+        GhosttyCommand(
+          title: "Focus Split Right",
+          description: "",
+          action: "goto_split:right",
+          actionKey: "goto_split"
+        ),
+      ]
+    )
+
+    #expect(
+      items.contains {
+        if case .ghosttyCommand = $0.kind {
+          return true
+        }
+        return false
+      } == false
+    )
+  }
+
+  @Test func emptyQueryHidesGhosttyCommands() {
+    let ghosttyItem = CommandPaletteItem(
+      id: "ghostty.goto_split:right|Focus Split Right",
+      title: "Focus Split Right",
+      subtitle: nil,
+      kind: .ghosttyCommand("goto_split:right")
+    )
+    let prAction = CommandPaletteItem(
+      id: "pr.open",
+      title: "Open PR on GitHub",
+      subtitle: "PR title",
+      kind: .openPullRequest("wt-1"),
+      priorityTier: 2
+    )
+
+    let result = CommandPaletteFeature.filterItems(
+      items: [ghosttyItem, prAction],
+      query: ""
+    )
+
+    #expect(!result.contains { $0.id == ghosttyItem.id })
+    #expect(result.contains { $0.id == prAction.id })
+  }
+
   @Test func commandPaletteItems_omitsSubActionsForMainWorktree() {
     let rootPath = "/tmp/repo"
     let main = makeWorktree(
@@ -545,6 +622,30 @@ struct CommandPaletteFeatureTests {
     )
   }
 
+  @Test func supacodeItemsBeatGhosttyItemsWhenScoresTie() {
+    let supacodeItem = CommandPaletteItem(
+      id: "global.open-settings",
+      title: "Open Settings",
+      subtitle: nil,
+      kind: .openSettings
+    )
+    let ghosttyItem = CommandPaletteItem(
+      id: "ghostty.open-settings|Open Settings",
+      title: "Open Settings",
+      subtitle: nil,
+      kind: .ghosttyCommand("open_settings"),
+      priorityTier: CommandPaletteItem.defaultPriorityTier + 100
+    )
+
+    expectNoDifference(
+      CommandPaletteFeature.filterItems(
+        items: [ghosttyItem, supacodeItem],
+        query: "open settings"
+      ),
+      [supacodeItem, ghosttyItem]
+    )
+  }
+
   // MARK: - Unified Ranking Tests
 
   @Test func worktreeOutranksGlobalWhenBetterMatch() {
@@ -874,6 +975,30 @@ struct CommandPaletteFeatureTests {
       $0.recencyByItemID[item.id] = now.timeIntervalSince1970
     }
     await store.receive(.delegate(.openRepository))
+  }
+
+  @Test func activateGhosttyCommandDispatchesDelegate() async {
+    let now = Date(timeIntervalSince1970: 7_654_321)
+    let item = CommandPaletteItem(
+      id: "ghostty.goto_split:right|Focus Split Right",
+      title: "Focus Split Right",
+      subtitle: nil,
+      kind: .ghosttyCommand("goto_split:right")
+    )
+    var state = CommandPaletteFeature.State()
+    state.isPresented = true
+    let store = TestStore(initialState: state) {
+      CommandPaletteFeature()
+    }
+    store.dependencies.date = .constant(now)
+
+    await store.send(.activateItem(item)) {
+      $0.isPresented = false
+      $0.query = ""
+      $0.selectedIndex = nil
+      $0.recencyByItemID[item.id] = now.timeIntervalSince1970
+    }
+    await store.receive(.delegate(.ghosttyCommand("goto_split:right")))
   }
 }
 

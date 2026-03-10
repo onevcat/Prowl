@@ -4,6 +4,7 @@ import SwiftUI
 struct GhosttySurfaceSearchOverlay: View {
   let surfaceView: GhosttySurfaceView
   @Bindable var state: GhosttySurfaceState
+  @Environment(GhosttyShortcutManager.self) private var ghosttyShortcuts
 
   @State private var searchText: String
   @State private var corner: GhosttySearchCorner = .topRight
@@ -48,21 +49,33 @@ struct GhosttySurfaceSearchOverlay: View {
           Button {
             navigateSearch(.next)
           } label: {
-            SearchButtonLabel(title: "Next", shortcut: "⌘G", systemImage: "chevron.up")
+            SearchButtonLabel(
+              title: "Next",
+              shortcut: ghosttyShortcuts.display(for: "search:next"),
+              systemImage: "chevron.up"
+            )
           }
           .buttonStyle(GhosttySearchButtonStyle())
 
           Button {
             navigateSearch(.previous)
           } label: {
-            SearchButtonLabel(title: "Previous", shortcut: "⇧⌘G", systemImage: "chevron.down")
+            SearchButtonLabel(
+              title: "Previous",
+              shortcut: ghosttyShortcuts.display(for: "search:previous"),
+              systemImage: "chevron.down"
+            )
           }
           .buttonStyle(GhosttySearchButtonStyle())
 
           Button {
             closeSearch()
           } label: {
-            SearchButtonLabel(title: "Close", shortcut: "⇧⌘F", systemImage: "xmark")
+            SearchButtonLabel(
+              title: "Close",
+              shortcut: ghosttyShortcuts.display(for: "end_search"),
+              systemImage: "xmark"
+            )
           }
           .buttonStyle(GhosttySearchButtonStyle())
         }
@@ -245,12 +258,16 @@ private struct GhosttySearchOverlayShape: Shape {
 
 private struct SearchButtonLabel: View {
   let title: String
-  let shortcut: String
+  let shortcut: String?
   let systemImage: String
 
   var body: some View {
     Label {
-      Text("\(title) \(Text("(\(shortcut))").foregroundColor(.secondary.opacity(0.7)))")
+      if let shortcut {
+        Text("\(title) \(Text("(\(shortcut))").foregroundColor(.secondary.opacity(0.7)))")
+      } else {
+        Text(title)
+      }
     } icon: {
       Image(systemName: systemImage)
         .accessibilityHidden(true)

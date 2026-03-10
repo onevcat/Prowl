@@ -14,6 +14,7 @@ struct ContentView: View {
   @Bindable var repositoriesStore: StoreOf<RepositoriesFeature>
   let terminalManager: WorktreeTerminalManager
   @Environment(\.scenePhase) private var scenePhase
+  @Environment(GhosttyShortcutManager.self) private var ghosttyShortcuts
   @State private var leftSidebarVisibility: NavigationSplitViewVisibility = .all
 
   init(store: StoreOf<AppFeature>, terminalManager: WorktreeTerminalManager) {
@@ -90,7 +91,10 @@ struct ContentView: View {
     .overlay {
       CommandPaletteOverlayView(
         store: store.scope(state: \.commandPalette, action: \.commandPalette),
-        items: store.commandPaletteItems
+        items: CommandPaletteFeature.commandPaletteItems(
+          from: store.repositories,
+          ghosttyCommands: ghosttyShortcuts.commandPaletteEntries
+        )
       )
     }
     .background(WindowTabbingDisabler())
@@ -164,7 +168,7 @@ private struct RunScriptPromptView: View {
           text: $script,
           isMonospaced: true
         )
-          .frame(minHeight: 160)
+        .frame(minHeight: 160)
         if script.isEmpty {
           Text("npm run dev")
             .foregroundStyle(.secondary)

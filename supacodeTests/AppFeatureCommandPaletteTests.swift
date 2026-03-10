@@ -79,6 +79,40 @@ struct AppFeatureCommandPaletteTests {
     await store.receive(\.updates.checkForUpdates)
   }
 
+  @Test(.dependencies) func ghosttyCommandDispatchesBindingActionToTerminalClient() async {
+    let worktree = makeWorktree(
+      id: "/tmp/repo-ghostty/wt-1",
+      name: "wt-1",
+      repoRoot: "/tmp/repo-ghostty"
+    )
+    let repository = makeRepository(id: "/tmp/repo-ghostty", worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    repositoriesState.selection = .worktree(worktree.id)
+    let sent = LockIsolated<[TerminalClient.Command]>([])
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositoriesState,
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sent.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.commandPalette(.delegate(.ghosttyCommand("goto_split:right"))))
+    await store.finish()
+
+    #expect(
+      sent.value == [
+        .performBindingAction(worktree, action: "goto_split:right")
+      ]
+    )
+  }
+
   @Test(.dependencies) func closePullRequestDispatchesAction() async {
     let store = TestStore(initialState: AppFeature.State()) {
       AppFeature()

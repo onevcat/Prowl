@@ -25,9 +25,6 @@ struct AppFeature {
     var notificationIndicatorCount: Int = 0
     var lastKnownSystemNotificationsEnabled: Bool
     @Presents var alert: AlertState<Alert>?
-    var commandPaletteItems: [CommandPaletteItem] {
-      CommandPaletteFeature.commandPaletteItems(from: repositories)
-    }
 
     init(
       repositories: RepositoriesFeature.State = .init(),
@@ -695,6 +692,14 @@ struct AppFeature {
 
       case .commandPalette(.delegate(.refreshWorktrees)):
         return .send(.repositories(.refreshWorktrees))
+
+      case .commandPalette(.delegate(.ghosttyCommand(let action))):
+        guard let worktree = state.repositories.worktree(for: state.repositories.selectedWorktreeID) else {
+          return .none
+        }
+        return .run { _ in
+          await terminalClient.send(.performBindingAction(worktree, action: action))
+        }
 
       case .commandPalette(.delegate(.openPullRequest(let worktreeID))):
         return .send(.repositories(.pullRequestAction(worktreeID, .openOnGithub)))

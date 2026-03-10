@@ -37,19 +37,25 @@ struct TerminalCommands: Commands {
       Button("Find...") {
         startSearchAction?()
       }
-      .keyboardShortcut("f", modifiers: .command)
+      .modifier(
+        KeyboardShortcutModifier(shortcut: ghosttyShortcuts.keyboardShortcut(for: "start_search"))
+      )
       .disabled(startSearchAction == nil)
 
       Button("Find Next") {
         navigateSearchNextAction?()
       }
-      .keyboardShortcut("g", modifiers: .command)
+      .modifier(
+        KeyboardShortcutModifier(shortcut: ghosttyShortcuts.keyboardShortcut(for: "search:next"))
+      )
       .disabled(navigateSearchNextAction == nil)
 
       Button("Find Previous") {
         navigateSearchPreviousAction?()
       }
-      .keyboardShortcut("g", modifiers: [.command, .shift])
+      .modifier(
+        KeyboardShortcutModifier(shortcut: ghosttyShortcuts.keyboardShortcut(for: "search:previous"))
+      )
       .disabled(navigateSearchPreviousAction == nil)
 
       Divider()
@@ -57,7 +63,9 @@ struct TerminalCommands: Commands {
       Button("Hide Find Bar") {
         endSearchAction?()
       }
-      .keyboardShortcut("f", modifiers: [.command, .shift])
+      .modifier(
+        KeyboardShortcutModifier(shortcut: ghosttyShortcuts.keyboardShortcut(for: "end_search"))
+      )
       .disabled(endSearchAction == nil)
 
       Divider()
@@ -65,7 +73,9 @@ struct TerminalCommands: Commands {
       Button("Use Selection for Find") {
         searchSelectionAction?()
       }
-      .keyboardShortcut("e", modifiers: .command)
+      .modifier(
+        KeyboardShortcutModifier(shortcut: ghosttyShortcuts.keyboardShortcut(for: "search_selection"))
+      )
       .disabled(searchSelectionAction == nil)
     }
   }

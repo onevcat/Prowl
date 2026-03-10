@@ -39,6 +39,7 @@ struct CommandPaletteFeature {
     case removeWorktree(Worktree.ID, Repository.ID)
     case archiveWorktree(Worktree.ID, Repository.ID)
     case refreshWorktrees
+    case ghosttyCommand(String)
     case openPullRequest(Worktree.ID)
     case markPullRequestReady(Worktree.ID)
     case mergePullRequest(Worktree.ID)
@@ -160,7 +161,8 @@ struct CommandPaletteFeature {
   }
 
   static func commandPaletteItems(
-    from repositories: RepositoriesFeature.State
+    from repositories: RepositoriesFeature.State,
+    ghosttyCommands: [GhosttyCommand] = []
   ) -> [CommandPaletteItem] {
     var items: [CommandPaletteItem] = [
       CommandPaletteItem(
@@ -194,6 +196,9 @@ struct CommandPaletteFeature {
         kind: .refreshWorktrees
       ),
     ]
+    if repositories.selectedWorktreeID != nil {
+      items.append(contentsOf: ghosttyCommandItems(ghosttyCommands))
+    }
     if let selectedWorktreeID = repositories.selectedWorktreeID,
       let repositoryID = repositories.repositoryID(containing: selectedWorktreeID),
       let pullRequest = repositories.worktreeInfo(for: selectedWorktreeID)?.pullRequest,
@@ -408,6 +413,7 @@ private func makeClosePullRequestItem(
 #endif
 
 private enum CommandPaletteItemID {
+  static let ghosttyPrefix = "ghostty."
   static let globalCheckForUpdates = "global.check-for-updates"
   static let globalOpenSettings = "global.open-settings"
   static let globalOpenRepository = "global.open-repository"
@@ -426,6 +432,10 @@ private enum CommandPaletteItemID {
 
   static func worktreeSelect(_ worktreeID: Worktree.ID) -> CommandPaletteItem.ID {
     "worktree.\(worktreeID).select"
+  }
+
+  static func ghosttyCommand(_ command: GhosttyCommand) -> CommandPaletteItem.ID {
+    "\(ghosttyPrefix)\(command.action)|\(command.title)"
   }
 
   static func pullRequestIDs(repositoryID: Repository.ID) -> [CommandPaletteItem.ID] {
@@ -524,6 +534,8 @@ private func delegateAction(for kind: CommandPaletteItem.Kind) -> CommandPalette
     return .archiveWorktree(worktreeID, repositoryID)
   case .refreshWorktrees:
     return .refreshWorktrees
+  case .ghosttyCommand(let action):
+    return .ghosttyCommand(action)
   case .openPullRequest,
     .markPullRequestReady,
     .mergePullRequest,
@@ -567,12 +579,26 @@ private func pullRequestDelegateAction(
     .openRepository,
     .removeWorktree,
     .archiveWorktree,
-    .refreshWorktrees:
+    .refreshWorktrees,
+    .ghosttyCommand:
     return nil
   #if DEBUG
     case .debugTestToast:
       return nil
   #endif
+  }
+}
+
+private func ghosttyCommandItems(_ commands: [GhosttyCommand]) -> [CommandPaletteItem] {
+  commands.map { command in
+    let subtitle = command.description.trimmingCharacters(in: .whitespacesAndNewlines)
+    return CommandPaletteItem(
+      id: CommandPaletteItemID.ghosttyCommand(command),
+      title: command.title,
+      subtitle: subtitle.isEmpty ? nil : subtitle,
+      kind: .ghosttyCommand(command.action),
+      priorityTier: CommandPaletteItem.defaultPriorityTier + 100
+    )
   }
 }
 

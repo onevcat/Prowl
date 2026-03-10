@@ -11,6 +11,11 @@ struct RepositorySettingsView: View {
       store.branchOptions.isEmpty ? [store.defaultWorktreeBaseRef] : store.branchOptions
     let settings = $store.settings
     let onevcatSettings = $store.onevcatSettings
+    let worktreeBaseDirectoryPath = Binding(
+      get: { settings.worktreeBaseDirectoryPath.wrappedValue ?? "" },
+      set: { settings.worktreeBaseDirectoryPath.wrappedValue = $0 },
+    )
+    let exampleWorktreePath = store.exampleWorktreePath
     Form {
       Section {
         if store.isBranchDataLoaded {
@@ -54,6 +59,19 @@ struct RepositorySettingsView: View {
         }
       }
       Section {
+        VStack(alignment: .leading) {
+          TextField(
+            "Inherit global default",
+            text: worktreeBaseDirectoryPath
+          )
+          .textFieldStyle(.roundedBorder)
+          Text("Set a repository-specific worktree base directory. Leave empty to inherit the global setting.")
+            .foregroundStyle(.secondary)
+          Text("Example new worktree path: \(exampleWorktreePath)")
+            .foregroundStyle(.secondary)
+            .monospaced()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
         Toggle(
           "Copy ignored files to new worktrees",
           isOn: settings.copyIgnoredOnWorktreeCreate
