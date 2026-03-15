@@ -36,11 +36,12 @@ struct CanvasCardView: View {
         .stroke(isFocused ? Color.accentColor : Color.secondary.opacity(0.3), lineWidth: isFocused ? 2 : 1)
     }
     .compositingGroup()
-    .offset(dragTranslation)
-    .overlay { resizeHandles }
     .contentShape(.rect)
     .accessibilityAddTraits(.isButton)
     .onTapGesture { onTap() }
+    .fixedSize()
+    .offset(dragTranslation)
+    .overlay { resizeHandles }
   }
 
   private var titleBar: some View {
