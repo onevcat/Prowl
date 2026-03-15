@@ -9,8 +9,7 @@ struct DashboardCardView: View {
   let hasUnseenNotification: Bool
   let cardSize: CGSize
   let onTap: () -> Void
-  let onDragPosition: (CGSize) -> Void
-  let onDragPositionEnd: () -> Void
+  let onDragCommit: (CGSize) -> Void
   let onResize: (CardResizeEdge, CGSize) -> Void
   let onResizeEnd: () -> Void
 
@@ -21,6 +20,9 @@ struct DashboardCardView: View {
 
   private let titleBarHeight: CGFloat = 28
   private let cornerRadius: CGFloat = 8
+
+  // Gesture-driven drag state: does NOT trigger body re-evaluation
+  @GestureState private var dragTranslation: CGSize = .zero
 
   var body: some View {
     VStack(spacing: 0) {
@@ -33,7 +35,8 @@ struct DashboardCardView: View {
       RoundedRectangle(cornerRadius: cornerRadius)
         .stroke(isFocused ? Color.accentColor : Color.secondary.opacity(0.3), lineWidth: isFocused ? 2 : 1)
     }
-    .shadow(color: .black.opacity(0.15), radius: 3, y: 1)
+    .compositingGroup()
+    .offset(dragTranslation)
     .overlay { resizeHandles }
     .contentShape(.rect)
     .accessibilityAddTraits(.isButton)
@@ -61,9 +64,13 @@ struct DashboardCardView: View {
     .frame(maxWidth: .infinity)
     .background(.bar)
     .gesture(
-      DragGesture()
-        .onChanged { value in onDragPosition(value.translation) }
-        .onEnded { _ in onDragPositionEnd() }
+      DragGesture(coordinateSpace: .global)
+        .updating($dragTranslation) { value, state, _ in
+          state = value.translation
+        }
+        .onEnded { value in
+          onDragCommit(value.translation)
+        }
     )
   }
 
@@ -80,7 +87,6 @@ struct DashboardCardView: View {
 
   private var resizeHandles: some View {
     ZStack {
-      // Edge handles — centered on card edge (half inside, half outside)
       edgeHandle(
         cursor: .frameResize(position: .left, directions: .all),
         isVertical: true,
@@ -108,7 +114,6 @@ struct DashboardCardView: View {
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
 
-      // Corner handles — positioned at card corners, extending outward
       cornerHandle(
         cursor: .frameResize(position: .bottomLeft, directions: .all),
         alignment: .bottomLeading
@@ -143,7 +148,7 @@ struct DashboardCardView: View {
         )
         .contentShape(.rect)
         .gesture(
-          DragGesture()
+          DragGesture(coordinateSpace: .global)
             .onChanged { value in onChange(value.translation) }
             .onEnded { _ in onResizeEnd() }
         )
@@ -161,7 +166,7 @@ struct DashboardCardView: View {
         .frame(width: cornerSide, height: cornerSide)
         .contentShape(.rect)
         .gesture(
-          DragGesture()
+          DragGesture(coordinateSpace: .global)
             .onChanged { value in onChange(value.translation) }
             .onEnded { _ in onResizeEnd() }
         )

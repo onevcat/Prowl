@@ -9,7 +9,6 @@ struct DashboardView: View {
   @State private var canvasScale: CGFloat = 1.0
   @State private var lastCanvasScale: CGFloat = 1.0
   @State private var focusedWorktreeID: Worktree.ID?
-  @State private var dragOffset: [Worktree.ID: CGSize] = [:]
   @State private var activeResize: [Worktree.ID: ActiveResize] = [:]
 
   private let minCardWidth: CGFloat = 300
@@ -36,7 +35,6 @@ struct DashboardView: View {
           let worktreeID = state.worktreeID
           let baseLayout = resolvedLayout(for: worktreeID, canvasSize: geometry.size)
           let resized = resizedFrame(for: worktreeID, baseLayout: baseLayout)
-          let drag = dragOffset[worktreeID] ?? .zero
 
           DashboardCardView(
             repositoryName: Repository.name(for: state.repositoryRootURL),
@@ -46,8 +44,7 @@ struct DashboardView: View {
             hasUnseenNotification: state.hasUnseenNotification,
             cardSize: resized.size,
             onTap: { focusCard(worktreeID, states: activeStates) },
-            onDragPosition: { translation in dragOffset[worktreeID] = translation },
-            onDragPositionEnd: { commitDrag(for: worktreeID) },
+            onDragCommit: { translation in commitDrag(for: worktreeID, translation: translation) },
             onResize: { edge, translation in
               activeResize[worktreeID] = ActiveResize(edge: edge, translation: translation)
             },
@@ -55,7 +52,6 @@ struct DashboardView: View {
           )
           .scaleEffect(canvasScale, anchor: .center)
           .position(screenPosition(for: resized.center))
-          .offset(x: drag.width * canvasScale, y: drag.height * canvasScale)
           .zIndex(focusedWorktreeID == worktreeID ? 1 : 0)
         }
       }
@@ -186,14 +182,12 @@ struct DashboardView: View {
 
   // MARK: - Drag
 
-  private func commitDrag(for worktreeID: Worktree.ID) {
-    guard let drag = dragOffset[worktreeID] else { return }
+  private func commitDrag(for worktreeID: Worktree.ID, translation: CGSize) {
     if var layout = layoutStore.cardLayouts[worktreeID] {
-      layout.position.x += drag.width
-      layout.position.y += drag.height
+      layout.position.x += translation.width
+      layout.position.y += translation.height
       layoutStore.cardLayouts[worktreeID] = layout
     }
-    dragOffset[worktreeID] = nil
   }
 
   // MARK: - Resize
