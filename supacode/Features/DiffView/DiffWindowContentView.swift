@@ -35,15 +35,18 @@ struct DiffWindowContentView: View {
           toggleSidebar()
         } label: {
           Image(systemName: "sidebar.left")
+            .accessibilityLabel("Toggle Sidebar")
         }
         .help("Toggle Sidebar (\(AppShortcuts.toggleLeftSidebar.display))")
       }
       ToolbarItem(id: "diffStyle", placement: .primaryAction) {
         Picker("Diff Style", selection: $diffStyleRaw) {
           Image(systemName: "square.split.2x1")
+            .accessibilityLabel("Split")
             .tag(DiffStyle.split.rawValue)
             .help("Split")
           Image(systemName: "text.justify.left")
+            .accessibilityLabel("Unified")
             .tag(DiffStyle.unified.rawValue)
             .help("Unified")
         }
