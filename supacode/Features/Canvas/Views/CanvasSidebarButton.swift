@@ -1,15 +1,15 @@
 import ComposableArchitecture
 import SwiftUI
 
-struct DashboardSidebarButton: View {
+struct CanvasSidebarButton: View {
   let store: StoreOf<RepositoriesFeature>
   let isSelected: Bool
 
   var body: some View {
     Button {
-      store.send(.selectDashboard)
+      store.send(.selectCanvas)
     } label: {
-      Label("Dashboard", systemImage: "square.grid.2x2")
+      Label("Canvas", systemImage: "square.grid.2x2")
         .font(.callout)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -17,6 +17,6 @@ struct DashboardSidebarButton: View {
     .padding(.horizontal, 12)
     .padding(.vertical, 6)
     .background(isSelected ? Color.accentColor.opacity(0.15) : .clear, in: .rect(cornerRadius: 6))
-    .help("Dashboard")
+    .help("Canvas")
   }
 }

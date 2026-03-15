@@ -1,7 +1,7 @@
 import CoreGraphics
 import Foundation
 
-struct DashboardCardLayout: Codable, Equatable, Hashable, Sendable {
+struct CanvasCardLayout: Codable, Equatable, Hashable, Sendable {
   var positionX: CGFloat
   var positionY: CGFloat
   var width: CGFloat
@@ -35,16 +35,16 @@ struct DashboardCardLayout: Codable, Equatable, Hashable, Sendable {
 
 @MainActor
 @Observable
-final class DashboardLayoutStore {
-  private static let storageKey = "dashboardCardLayouts"
+final class CanvasLayoutStore {
+  private static let storageKey = "canvasCardLayouts"
 
-  var cardLayouts: [String: DashboardCardLayout] {
+  var cardLayouts: [String: CanvasCardLayout] {
     didSet { save() }
   }
 
   init() {
     if let data = UserDefaults.standard.data(forKey: Self.storageKey),
-      let layouts = try? JSONDecoder().decode([String: DashboardCardLayout].self, from: data)
+      let layouts = try? JSONDecoder().decode([String: CanvasCardLayout].self, from: data)
     {
       self.cardLayouts = layouts
     } else {

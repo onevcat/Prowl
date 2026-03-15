@@ -1,8 +1,8 @@
 import SwiftUI
 
-struct DashboardView: View {
+struct CanvasView: View {
   let terminalManager: WorktreeTerminalManager
-  @State private var layoutStore = DashboardLayoutStore()
+  @State private var layoutStore = CanvasLayoutStore()
 
   @State private var canvasOffset: CGSize = .zero
   @State private var lastCanvasOffset: CGSize = .zero
@@ -36,7 +36,7 @@ struct DashboardView: View {
           let baseLayout = resolvedLayout(for: worktreeID, canvasSize: geometry.size)
           let resized = resizedFrame(for: worktreeID, baseLayout: baseLayout)
 
-          DashboardCardView(
+          CanvasCardView(
             repositoryName: Repository.name(for: state.repositoryRootURL),
             worktreeName: state.worktreeName,
             surfaceView: surfaceView,
@@ -58,8 +58,8 @@ struct DashboardView: View {
     }
     .contentShape(.rect)
     .simultaneousGesture(canvasZoomGesture)
-    .task { activateDashboard() }
-    .onDisappear { deactivateDashboard() }
+    .task { activateCanvas() }
+    .onDisappear { deactivateCanvas() }
   }
 
   // MARK: - Canvas Gestures
@@ -89,20 +89,20 @@ struct DashboardView: View {
 
   // MARK: - Layout
 
-  private func resolvedLayout(for worktreeID: Worktree.ID, canvasSize: CGSize) -> DashboardCardLayout {
+  private func resolvedLayout(for worktreeID: Worktree.ID, canvasSize: CGSize) -> CanvasCardLayout {
     if let existing = layoutStore.cardLayouts[worktreeID] {
       return existing
     }
     let position = autoPosition(for: worktreeID, canvasSize: canvasSize)
-    let layout = DashboardCardLayout(position: position)
+    let layout = CanvasCardLayout(position: position)
     layoutStore.cardLayouts[worktreeID] = layout
     return layout
   }
 
   private func autoPosition(for worktreeID: Worktree.ID, canvasSize: CGSize) -> CGPoint {
     let existingCount = layoutStore.cardLayouts.count
-    let cardW = DashboardCardLayout.defaultSize.width
-    let cardH = DashboardCardLayout.defaultSize.height + titleBarHeight
+    let cardW = CanvasCardLayout.defaultSize.width
+    let cardH = CanvasCardLayout.defaultSize.height + titleBarHeight
     let spacing: CGFloat = 20
     let columns = max(1, Int(canvasSize.width / (cardW + spacing)))
     let row = existingCount / columns
@@ -117,7 +117,7 @@ struct DashboardView: View {
   /// Drag is applied separately via `.offset()` to avoid layout passes.
   private func resizedFrame(
     for worktreeID: Worktree.ID,
-    baseLayout: DashboardCardLayout
+    baseLayout: CanvasCardLayout
   ) -> (center: CGPoint, size: CGSize) {
     var centerX = baseLayout.position.x
     var centerY = baseLayout.position.y
@@ -238,7 +238,7 @@ struct DashboardView: View {
 
   // MARK: - Occlusion
 
-  private func activateDashboard() {
+  private func activateCanvas() {
     for state in terminalManager.activeWorktreeStates {
       state.setAllSurfacesOccluded()
     }
@@ -247,7 +247,7 @@ struct DashboardView: View {
     }
   }
 
-  private func deactivateDashboard() {
+  private func deactivateCanvas() {
     focusedWorktreeID = nil
     for state in terminalManager.activeWorktreeStates {
       state.activeSurfaceView?.setOcclusion(false)
@@ -257,6 +257,6 @@ struct DashboardView: View {
 }
 
 private struct ActiveResize {
-  let edge: DashboardCardView.CardResizeEdge
+  let edge: CanvasCardView.CardResizeEdge
   var translation: CGSize
 }

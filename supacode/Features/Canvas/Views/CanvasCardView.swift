@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-struct DashboardCardView: View {
+struct CanvasCardView: View {
   let repositoryName: String
   let worktreeName: String
   let surfaceView: GhosttySurfaceView

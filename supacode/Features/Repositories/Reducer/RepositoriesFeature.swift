@@ -133,7 +133,7 @@ struct RepositoriesFeature {
     case reloadRepositories(animated: Bool)
     case repositoriesLoaded([Repository], failures: [LoadFailure], roots: [URL], animated: Bool)
     case selectArchivedWorktrees
-    case selectDashboard
+    case selectCanvas
     case setSidebarSelectedWorktreeIDs(Set<Worktree.ID>)
     case openRepositories([URL])
     case openRepositoriesFinished(
@@ -545,8 +545,8 @@ struct RepositoriesFeature {
         state.sidebarSelectedWorktreeIDs = []
         return .send(.delegate(.selectedWorktreeChanged(nil)))
 
-      case .selectDashboard:
-        state.selection = .dashboard
+      case .selectCanvas:
+        state.selection = .canvas
         state.sidebarSelectedWorktreeIDs = []
         return .none
 
@@ -2676,7 +2676,7 @@ struct RepositoriesFeature {
       shouldPruneArchivedWorktreeIDs
       ? pruneArchivedWorktreeIDs(availableWorktreeIDs: availableWorktreeIDs, state: &state)
       : false
-    if !state.isShowingArchivedWorktrees, !state.isShowingDashboard,
+    if !state.isShowingArchivedWorktrees, !state.isShowingCanvas,
       !isSelectionValid(state.selectedWorktreeID, state: state)
     {
       state.selection = nil
@@ -2784,8 +2784,8 @@ extension RepositoriesFeature.State {
     selection == .archivedWorktrees
   }
 
-  var isShowingDashboard: Bool {
-    selection == .dashboard
+  var isShowingCanvas: Bool {
+    selection == .canvas
   }
 
   var archivedWorktreeIDSet: Set<Worktree.ID> {

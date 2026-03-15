@@ -45,9 +45,9 @@ struct WorktreeDetailView: View {
     )
     .toolbar(removing: .title)
     .toolbar {
-      if repositories.isShowingDashboard {
+      if repositories.isShowingCanvas {
         ToolbarItem(placement: .navigation) {
-          Text("Dashboard")
+          Text("Canvas")
             .font(.headline)
         }
         ToolbarItem(placement: .primaryAction) {
@@ -139,7 +139,7 @@ struct WorktreeDetailView: View {
     selectedWorktreeSummaries: [MultiSelectedWorktreeSummary]
   ) -> Bool {
     !repositories.isShowingArchivedWorktrees
-      && !repositories.isShowingDashboard
+      && !repositories.isShowingCanvas
       && selectedWorktreeSummaries.count > 1
   }
 
@@ -150,8 +150,8 @@ struct WorktreeDetailView: View {
     selectedWorktree: Worktree?,
     selectedWorktreeSummaries: [MultiSelectedWorktreeSummary]
   ) -> some View {
-    if repositories.isShowingDashboard {
-      DashboardView(terminalManager: terminalManager)
+    if repositories.isShowingCanvas {
+      CanvasView(terminalManager: terminalManager)
     } else if repositories.isShowingArchivedWorktrees {
       ArchivedWorktreesDetailView(
         store: store.scope(state: \.repositories, action: \.repositories)

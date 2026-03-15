@@ -2,13 +2,13 @@ enum SidebarSelection: Hashable {
   case worktree(Worktree.ID)
   case archivedWorktrees
   case repository(Repository.ID)
-  case dashboard
+  case canvas
 
   var worktreeID: Worktree.ID? {
     switch self {
     case .worktree(let id):
       return id
-    case .archivedWorktrees, .repository, .dashboard:
+    case .archivedWorktrees, .repository, .canvas:
       return nil
     }
   }

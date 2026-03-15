@@ -146,7 +146,7 @@ struct AppFeature {
               await worktreeInfoWatcher.send(.setSelectedWorktreeID(nil))
             },
           ]
-          if !state.repositories.isShowingArchivedWorktrees, !state.repositories.isShowingDashboard {
+          if !state.repositories.isShowingArchivedWorktrees, !state.repositories.isShowingCanvas {
             effects.insert(
               .run { _ in
                 await repositoryPersistence.saveLastFocusedWorktreeID(lastFocusedWorktreeID)

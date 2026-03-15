@@ -16,13 +16,13 @@ struct SidebarListView: View {
     let selection = Binding<Set<SidebarSelection>>(
       get: {
         var nextSelections = sidebarSelections
-        if state.isShowingDashboard {
-          nextSelections = [.dashboard]
+        if state.isShowingCanvas {
+          nextSelections = [.canvas]
         } else if state.isShowingArchivedWorktrees {
           nextSelections = [.archivedWorktrees]
         } else {
           nextSelections.remove(.archivedWorktrees)
-          nextSelections.remove(.dashboard)
+          nextSelections.remove(.canvas)
           if let selectedWorktreeID = state.selectedWorktreeID {
             nextSelections.insert(.worktree(selectedWorktreeID))
           }
@@ -59,9 +59,9 @@ struct SidebarListView: View {
             })
         }
 
-        if nextSelections.contains(.dashboard) {
-          sidebarSelections = [.dashboard]
-          store.send(.selectDashboard)
+        if nextSelections.contains(.canvas) {
+          sidebarSelections = [.canvas]
+          store.send(.selectCanvas)
           return
         }
 
@@ -184,9 +184,9 @@ struct SidebarListView: View {
       }
     }
     .safeAreaInset(edge: .top) {
-      DashboardSidebarButton(
+      CanvasSidebarButton(
         store: store,
-        isSelected: state.isShowingDashboard
+        isSelected: state.isShowingCanvas
       )
       .padding(.top, 4)
       .overlay(alignment: .bottom) {
