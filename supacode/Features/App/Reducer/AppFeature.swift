@@ -393,7 +393,7 @@ struct AppFeature {
             }
           }
           state.alert = AlertState {
-            TextState("Quit Supacode?")
+            TextState("Quit Prowl?")
           } actions: {
             ButtonState(action: .confirmQuit) {
               TextState("Quit")
@@ -616,10 +616,10 @@ struct AppFeature {
         let message: String
         if let errorMessage, !errorMessage.isEmpty {
           message =
-            "Supacode cannot send system notifications.\n\n"
+            "Prowl cannot send system notifications.\n\n"
             + "Error: \(errorMessage)"
         } else {
-          message = "Supacode cannot send system notifications while permission is denied."
+          message = "Prowl cannot send system notifications while permission is denied."
         }
         state.alert = AlertState {
           TextState("Enable Notifications in System Settings")

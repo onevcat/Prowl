@@ -3,46 +3,42 @@
 <plist version="1.0">
 <dict>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>A program running within Supacode would like to use AppleScript.</string>
+	<string>A program running within Prowl would like to use AppleScript.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>A program running within Supacode would like to use Bluetooth.</string>
+	<string>A program running within Prowl would like to use Bluetooth.</string>
 	<key>NSCalendarsUsageDescription</key>
-	<string>A program running within Supacode would like to access your Calendar.</string>
+	<string>A program running within Prowl would like to access your Calendar.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>A program running within Supacode would like to use the camera.</string>
+	<string>A program running within Prowl would like to use the camera.</string>
 	<key>NSContactsUsageDescription</key>
-	<string>A program running within Supacode would like to access your Contacts.</string>
+	<string>A program running within Prowl would like to access your Contacts.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>A program running within Supacode would like to access the local network.</string>
+	<string>A program running within Prowl would like to access the local network.</string>
 	<key>NSLocationUsageDescription</key>
-	<string>A program running within Supacode would like to access your location information.</string>
+	<string>A program running within Prowl would like to access your location information.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>A program running within Supacode would like to use your microphone.</string>
+	<string>A program running within Prowl would like to use your microphone.</string>
 	<key>NSMotionUsageDescription</key>
-	<string>A program running within Supacode would like to access motion data.</string>
+	<string>A program running within Prowl would like to access motion data.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>A program running within Supacode would like to access your Photo Library.</string>
+	<string>A program running within Prowl would like to access your Photo Library.</string>
 	<key>NSRemindersUsageDescription</key>
-	<string>A program running within Supacode would like to access your reminders.</string>
+	<string>A program running within Prowl would like to access your reminders.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>A program running within Supacode would like to use speech recognition.</string>
+	<string>A program running within Prowl would like to use speech recognition.</string>
 	<key>NSSystemAdministrationUsageDescription</key>
-	<string>A program running within Supacode requires elevated privileges.</string>
-	<key>SUFeedURL</key>
-    <string>https://supacode.sh/download/latest/appcast.xml</string>
-	<key>SUPublicEDKey</key>
-	<string>eBdTbl+6sR8gxO1zyzyvdQHuJrXMLxD31oCc+JoW5jo=</string>
+	<string>A program running within Prowl requires elevated privileges.</string>
 	<key>SUEnableAutomaticChecks</key>
-	<true/>
+	<false/>
 	<key>SUAutomaticallyUpdate</key>
-	<true/>
+	<false/>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>
 			<key>UTTypeIdentifier</key>
-			<string>sh.supacode.ghosttySurfaceId</string>
+			<string>com.onevcat.prowl.ghosttySurfaceId</string>
 			<key>UTTypeDescription</key>
-			<string>Supacode Ghostty Surface Identifier</string>
+			<string>Prowl Ghostty Surface Identifier</string>
 			<key>UTTypeConformsTo</key>
 			<array>
 				<string>public.data</string>

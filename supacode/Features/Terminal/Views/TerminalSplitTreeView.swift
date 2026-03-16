@@ -7,7 +7,7 @@ struct TerminalSplitTreeView: View {
   var pinnedSize: CGSize?
   let action: (Operation) -> Void
 
-  private static let dragType = UTType(exportedAs: "sh.supacode.ghosttySurfaceId")
+  private static let dragType = UTType(exportedAs: "com.onevcat.prowl.ghosttySurfaceId")
   private static func dragProvider(for surfaceView: GhosttySurfaceView) -> NSItemProvider {
     let provider = NSItemProvider()
     let data = surfaceView.id.uuidString.data(using: .utf8) ?? Data()

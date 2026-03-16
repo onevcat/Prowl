@@ -1,8 +1,6 @@
-# Supacode
+# Prowl
 
-Native terminal coding agents command center.
-
-![screenshot](https://www.supacode.sh/screenshot.png)
+Native terminal coding agents command center. Fork of [Supacode](https://github.com/supabitapp/supacode).
 
 ## Technical Stack
 

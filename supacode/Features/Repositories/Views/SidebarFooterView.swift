@@ -24,7 +24,7 @@ struct SidebarFooterView: View {
       Spacer()
       Menu {
         Button("Submit GitHub issue", systemImage: "exclamationmark.bubble") {
-          if let url = URL(string: "https://github.com/supabitapp/supacode/issues/new") {
+          if let url = URL(string: "https://github.com/onevcat/supacode/issues/new") {
             openURL(url)
           }
         }

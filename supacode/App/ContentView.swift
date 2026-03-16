@@ -64,7 +64,7 @@ struct ContentView: View {
           .repositories(
             .presentAlert(
               title: "Unable to open folders",
-              message: "Supacode could not read the selected folders."
+              message: "Prowl could not read the selected folders."
             )
           )
         )

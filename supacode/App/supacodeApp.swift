@@ -159,7 +159,7 @@ struct SupacodeApp: App {
   }
 
   var body: some Scene {
-    Window("Supacode", id: "main") {
+    Window("Prowl", id: "main") {
       GhosttyColorSchemeSyncView(ghostty: ghostty) {
         ContentView(store: store, terminalManager: terminalManager)
           .environment(ghosttyShortcuts)
@@ -202,11 +202,11 @@ struct SupacodeApp: App {
         )
       }
       CommandGroup(replacing: .appTermination) {
-        Button("Quit Supacode") {
+        Button("Quit Prowl") {
           store.send(.requestQuit)
         }
         .keyboardShortcut("q")
-        .help("Quit Supacode (⌘Q)")
+        .help("Quit Prowl (⌘Q)")
       }
     }
   }

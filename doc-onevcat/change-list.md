@@ -16,7 +16,7 @@
 | Execute Terminal Input custom commands by injecting return key so the command runs immediately. | `562042f` | Fork only |
 | Disable push-triggered `tip` release workflow in fork to avoid expected CI failures. | `85b3fd7` | Fork only |
 | Enforce notarized-only fork releases; block non-notarized publishing path in release script and docs. | `2ab70fd` | Fork only |
-| Move repo-scoped settings files to `~/.supacode/repo/<repo-last-path>/` with legacy migration from repo root files. | `ea9259f` | Fork only |
+| Move repo-scoped settings files to `~/.prowl/repo/<repo-last-path>/` (was `~/.supacode/repo/…`) with legacy migration from repo root files. | `ea9259f` | Fork only |
 | Add `/fork-release` slash command for upstream sync and private release workflow. | `64829dc` | Fork only |
 | Add diff window with file tree sidebar and YiTong DiffView for viewing worktree changes. | `0d03848`, `09194c4` | Fork only |
 | Wire up diff badge click in worktree row, `Cmd+]` shortcut, and Show Diff menu item. | `59dc4f6` | Fork only |

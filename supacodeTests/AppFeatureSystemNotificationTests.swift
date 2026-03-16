@@ -46,7 +46,7 @@ struct AppFeatureSystemNotificationTests {
         TextState("Cancel")
       }
     } message: {
-      TextState("Supacode cannot send system notifications.\n\nError: Mock request error")
+      TextState("Prowl cannot send system notifications.\n\nError: Mock request error")
     }
 
     #expect(authorizationRequests.value == 1)
@@ -97,7 +97,7 @@ struct AppFeatureSystemNotificationTests {
         TextState("Cancel")
       }
     } message: {
-      TextState("Supacode cannot send system notifications.\n\nError: Authorization status is denied.")
+      TextState("Prowl cannot send system notifications.\n\nError: Authorization status is denied.")
     }
 
     #expect(authorizationRequests.value == 0)

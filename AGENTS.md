@@ -11,7 +11,7 @@ make format                      # Run swift-format only
 make lint                        # Run swiftlint only (fix + lint)
 make check                       # Run both format and lint
 make test                        # Run all tests
-make log-stream                  # Stream app logs (subsystem: app.supabit.supacode)
+make log-stream                  # Stream app logs (subsystem: com.onevcat.prowl)
 make bump-version                # Bump patch version and create git tag
 make bump-and-release            # Bump version and push to trigger release
 ```
@@ -27,7 +27,7 @@ Requires [mise](https://mise.jdx.dev/) for zig, swiftlint, and xcsift tooling.
 
 ## Architecture
 
-Supacode is a macOS orchestrator for running multiple coding agents in parallel, using GhosttyKit as the underlying terminal.
+Prowl is a macOS orchestrator for running multiple coding agents in parallel, using GhosttyKit as the underlying terminal.
 
 ### Core Data Flow
 
@@ -120,4 +120,4 @@ Reducer ← .terminalEvent(Event) ← AsyncStream<Event>
 ## Submodules
 
 - `ThirdParty/ghostty` (`https://github.com/ghostty-org/ghostty`): Source dependency used to build `Frameworks/GhosttyKit.xcframework` and terminal resources.
-- `Resources/git-wt` (`https://github.com/khoi/git-wt.git`): Bundled `wt` CLI used by Supacode Git worktree flows at runtime.
+- `Resources/git-wt` (`https://github.com/khoi/git-wt.git`): Bundled `wt` CLI used by Prowl Git worktree flows at runtime.

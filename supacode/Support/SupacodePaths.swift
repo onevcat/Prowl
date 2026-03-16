@@ -2,8 +2,16 @@ import Foundation
 
 nonisolated enum SupacodePaths {
   static var baseDirectory: URL {
-    FileManager.default.homeDirectoryForCurrentUser
-      .appending(path: ".supacode", directoryHint: .isDirectory)
+    let home = FileManager.default.homeDirectoryForCurrentUser
+    let prowlDir = home.appending(path: ".prowl", directoryHint: .isDirectory)
+    let legacyDir = home.appending(path: ".supacode", directoryHint: .isDirectory)
+    // Migrate from legacy ~/.supacode to ~/.prowl on first access
+    if !FileManager.default.fileExists(atPath: prowlDir.path(percentEncoded: false)),
+      FileManager.default.fileExists(atPath: legacyDir.path(percentEncoded: false))
+    {
+      try? FileManager.default.moveItem(at: legacyDir, to: prowlDir)
+    }
+    return prowlDir
   }
 
   static var repositorySettingsDirectory: URL {
@@ -87,19 +95,33 @@ nonisolated enum SupacodePaths {
 
   static func repositorySettingsURL(for rootURL: URL) -> URL {
     repositorySettingsDirectory(for: rootURL)
-      .appending(path: "supacode.json", directoryHint: .notDirectory)
+      .appending(path: "prowl.json", directoryHint: .notDirectory)
   }
 
   static func onevcatRepositorySettingsURL(for rootURL: URL) -> URL {
     repositorySettingsDirectory(for: rootURL)
+      .appending(path: "prowl.onevcat.json", directoryHint: .notDirectory)
+  }
+
+  /// Legacy location: ~/.prowl/repo/<name>/supacode.json (pre-rename)
+  static func legacyRepositorySettingsURL(for rootURL: URL) -> URL {
+    repositorySettingsDirectory(for: rootURL)
+      .appending(path: "supacode.json", directoryHint: .notDirectory)
+  }
+
+  /// Legacy location: ~/.prowl/repo/<name>/supacode.onevcat.json (pre-rename)
+  static func legacyOnevcatRepositorySettingsURL(for rootURL: URL) -> URL {
+    repositorySettingsDirectory(for: rootURL)
       .appending(path: "supacode.onevcat.json", directoryHint: .notDirectory)
   }
 
-  static func legacyRepositorySettingsURL(for rootURL: URL) -> URL {
+  /// Legacy location: <repo-root>/supacode.json (original upstream location)
+  static func originalLegacyRepositorySettingsURL(for rootURL: URL) -> URL {
     rootURL.standardizedFileURL.appending(path: "supacode.json", directoryHint: .notDirectory)
   }
 
-  static func legacyOnevcatRepositorySettingsURL(for rootURL: URL) -> URL {
+  /// Legacy location: <repo-root>/supacode.onevcat.json (original upstream location)
+  static func originalLegacyOnevcatRepositorySettingsURL(for rootURL: URL) -> URL {
     rootURL.standardizedFileURL.appending(path: "supacode.onevcat.json", directoryHint: .notDirectory)
   }
 

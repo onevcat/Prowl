@@ -2184,7 +2184,7 @@ struct RepositoriesFeature {
           return .send(
             .presentAlert(
               title: "Pull request not available",
-              message: "Supacode could not find a pull request for this worktree."
+              message: "Prowl could not find a pull request for this worktree."
             )
           )
         }
@@ -2204,7 +2204,7 @@ struct RepositoriesFeature {
             return .send(
               .presentAlert(
                 title: "Invalid pull request URL",
-                message: "Supacode could not open the pull request URL."
+                message: "Prowl could not open the pull request URL."
               )
             )
           }
@@ -2217,7 +2217,7 @@ struct RepositoriesFeature {
             return .send(
               .presentAlert(
                 title: "Failing check not found",
-                message: "Supacode could not find a failing check URL."
+                message: "Prowl could not find a failing check URL."
               )
             )
           }
@@ -2234,7 +2234,7 @@ struct RepositoriesFeature {
             return .send(
               .presentAlert(
                 title: "Failing check not found",
-                message: "Supacode could not find a failing check with details."
+                message: "Prowl could not find a failing check with details."
               )
             )
           }
@@ -2350,7 +2350,7 @@ struct RepositoriesFeature {
               await send(
                 .presentAlert(
                   title: "Branch name unavailable",
-                  message: "Supacode could not determine the pull request branch."
+                  message: "Prowl could not determine the pull request branch."
                 )
               )
               return
@@ -2362,7 +2362,7 @@ struct RepositoriesFeature {
                 await send(
                   .presentAlert(
                     title: "No workflow runs found",
-                    message: "Supacode could not find any workflow runs for this branch."
+                    message: "Prowl could not find any workflow runs for this branch."
                   )
                 )
                 return
@@ -2372,7 +2372,7 @@ struct RepositoriesFeature {
                 await send(
                   .presentAlert(
                     title: "No failing workflow run",
-                    message: "Supacode could not find a failing workflow run to copy logs from."
+                    message: "Prowl could not find a failing workflow run to copy logs from."
                   )
                 )
                 return
@@ -2427,7 +2427,7 @@ struct RepositoriesFeature {
               await send(
                 .presentAlert(
                   title: "Branch name unavailable",
-                  message: "Supacode could not determine the pull request branch."
+                  message: "Prowl could not determine the pull request branch."
                 )
               )
               return
@@ -2439,7 +2439,7 @@ struct RepositoriesFeature {
                 await send(
                   .presentAlert(
                     title: "No workflow runs found",
-                    message: "Supacode could not find any workflow runs for this branch."
+                    message: "Prowl could not find any workflow runs for this branch."
                   )
                 )
                 return
@@ -2449,7 +2449,7 @@ struct RepositoriesFeature {
                 await send(
                   .presentAlert(
                     title: "No failing workflow run",
-                    message: "Supacode could not find a failing workflow run to re-run."
+                    message: "Prowl could not find a failing workflow run to re-run."
                   )
                 )
                 return

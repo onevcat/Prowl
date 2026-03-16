@@ -83,7 +83,7 @@ lint: # Lint code with swiftlint
 check: format lint # Format and lint
 
 log-stream: # Stream logs from the app via log stream
-	log stream --predicate 'subsystem == "app.supabit.supacode"' --style compact --color always
+	log stream --predicate 'subsystem == "com.onevcat.prowl"' --style compact --color always
 
 bump-version: # Bump app version (usage: make bump-version [VERSION=x.x.x] [BUILD=123])
 	@if [ -z "$(VERSION)" ]; then \
