@@ -28,13 +28,15 @@ struct CanvasView: View {
         .onTapGesture { unfocusAll() }
         .gesture(canvasPanGesture)
 
-      // Cards layer: each card uses .position() for committed layout
-      // and .offset() for in-flight drag (pure CA transform, no layout pass).
+      // Cards layer: uses .offset() (not .position()) to avoid parent size
+      // proposals reaching the NSView, keeping terminal grid stable during zoom.
       ForEach(activeStates, id: \.worktreeID) { state in
         if let surfaceView = state.activeSurfaceView {
           let worktreeID = state.worktreeID
           let baseLayout = resolvedLayout(for: worktreeID, canvasSize: geometry.size)
           let resized = resizedFrame(for: worktreeID, baseLayout: baseLayout)
+          let screenCenter = screenPosition(for: resized.center)
+          let cardTotalHeight = resized.size.height + titleBarHeight
 
           CanvasCardView(
             repositoryName: Repository.name(for: state.repositoryRootURL),
@@ -50,9 +52,11 @@ struct CanvasView: View {
             },
             onResizeEnd: { commitResize(for: worktreeID, surfaceView: surfaceView) }
           )
-          .frame(width: resized.size.width, height: resized.size.height + titleBarHeight)
           .scaleEffect(canvasScale, anchor: .center)
-          .position(screenPosition(for: resized.center))
+          .offset(
+            x: screenCenter.x - resized.size.width / 2,
+            y: screenCenter.y - cardTotalHeight / 2
+          )
           .zIndex(focusedWorktreeID == worktreeID ? 1 : 0)
         }
       }
