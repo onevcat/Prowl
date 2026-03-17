@@ -23,13 +23,14 @@ struct CanvasView: View {
 
   var body: some View {
     CanvasScrollContainer(offset: $canvasOffset, lastOffset: $lastCanvasOffset) {
-      GeometryReader { geometry in
+      GeometryReader { _ in
         let activeStates = terminalManager.activeWorktreeStates
         let allCardKeys = collectCardKeys(from: activeStates)
-        let _ = ensureLayouts(for: allCardKeys)
 
         // Background layer: handles canvas pan and tap-to-unfocus.
         Color.clear
+          .onAppear { ensureLayouts(for: allCardKeys) }
+          .onChange(of: allCardKeys) { _, newKeys in ensureLayouts(for: newKeys) }
           .contentShape(.rect)
           .accessibilityAddTraits(.isButton)
           .onTapGesture { unfocusAll() }
@@ -164,9 +165,9 @@ struct CanvasView: View {
 
     // Build locally, assign once to trigger a single save.
     var layouts = layoutStore.cardLayouts
-    for (i, key) in unpositioned.enumerated() {
+    for (offset, key) in unpositioned.enumerated() {
       layouts[key] = CanvasCardLayout(
-        position: gridPosition(index: positionedCount + i, columns: columns)
+        position: gridPosition(index: positionedCount + offset, columns: columns)
       )
     }
     layoutStore.cardLayouts = layouts
@@ -314,6 +315,7 @@ struct CanvasView: View {
     } label: {
       Image(systemName: "square.grid.2x2")
         .font(.body)
+        .accessibilityLabel("Organize")
     }
     .buttonStyle(.bordered)
     .padding()
@@ -358,14 +360,11 @@ struct CanvasView: View {
     focusedTabID = tabID
 
     // Unfocus all surfaces in the previous card's split tree
-    if let previousTabID, previousTabID != tabID {
-      for state in states {
-        if state.surfaceView(for: previousTabID) != nil {
-          for surface in state.splitTree(for: previousTabID).leaves() {
-            surface.focusDidChange(false)
-          }
-          break
-        }
+    if let previousTabID, previousTabID != tabID,
+      let previousState = states.first(where: { $0.surfaceView(for: previousTabID) != nil })
+    {
+      for surface in previousState.splitTree(for: previousTabID).leaves() {
+        surface.focusDidChange(false)
       }
     }
 
@@ -376,12 +375,11 @@ struct CanvasView: View {
   private func unfocusAll() {
     guard let previousTabID = focusedTabID else { return }
     focusedTabID = nil
-    for state in terminalManager.activeWorktreeStates {
-      if state.surfaceView(for: previousTabID) != nil {
-        for surface in state.splitTree(for: previousTabID).leaves() {
-          surface.focusDidChange(false)
-        }
-        break
+    if let state = terminalManager.activeWorktreeStates
+      .first(where: { $0.surfaceView(for: previousTabID) != nil })
+    {
+      for surface in state.splitTree(for: previousTabID).leaves() {
+        surface.focusDidChange(false)
       }
     }
   }
