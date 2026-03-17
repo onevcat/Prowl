@@ -762,7 +762,16 @@ final class GhosttySurfaceView: NSView, Identifiable {
 
   func updateSurfaceSize() {
     guard let surface else { return }
-    let backingSize = convertToBacking(bounds.size)
+    // When pinnedSize is set (canvas mode), convertToBacking() includes the
+    // .scaleEffect() layer transform, producing scale-dependent backing sizes.
+    // Use the pinned size with the window's raw backing scale factor instead.
+    let backingSize: CGSize
+    if let pinnedSize = scrollWrapper?.pinnedSize {
+      let scale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2.0
+      backingSize = CGSize(width: pinnedSize.width * scale, height: pinnedSize.height * scale)
+    } else {
+      backingSize = convertToBacking(bounds.size)
+    }
     if backingSize == lastBackingSize {
       return
     }
@@ -1611,6 +1620,11 @@ final class GhosttySurfaceScrollView: NSView {
   private var lastSentRow: Int?
   private var scrollbar: ScrollbarState?
 
+  /// When set, the surface renders at this fixed size regardless of the hosting
+  /// view's bounds. Used in canvas mode to prevent `.scaleEffect()` from causing
+  /// terminal reflow.
+  var pinnedSize: CGSize?
+
   init(surfaceView: GhosttySurfaceView) {
     self.surfaceView = surfaceView
     scrollView = NSScrollView()
@@ -1706,9 +1720,10 @@ final class GhosttySurfaceScrollView: NSView {
 
   override func layout() {
     super.layout()
-    scrollView.frame = bounds
-    surfaceView.frame.size = scrollView.bounds.size
-    documentView.frame.size.width = scrollView.bounds.width
+    let effectiveSize = pinnedSize ?? bounds.size
+    scrollView.frame = CGRect(origin: .zero, size: effectiveSize)
+    surfaceView.frame.size = effectiveSize
+    documentView.frame.size.width = effectiveSize.width
     synchronizeScrollView()
     synchronizeSurfaceView()
     surfaceView.updateSurfaceSize()

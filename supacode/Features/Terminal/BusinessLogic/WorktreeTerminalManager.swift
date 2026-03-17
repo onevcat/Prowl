@@ -227,6 +227,10 @@ final class WorktreeTerminalManager {
     emitNotificationIndicatorCountIfNeeded()
   }
 
+  var activeWorktreeStates: [WorktreeTerminalState] {
+    states.values.filter { !$0.tabManager.tabs.isEmpty }
+  }
+
   func stateIfExists(for worktreeID: Worktree.ID) -> WorktreeTerminalState? {
     states[worktreeID]
   }

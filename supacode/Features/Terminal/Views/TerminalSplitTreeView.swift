@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 struct TerminalSplitTreeView: View {
   let tree: SplitTree<GhosttySurfaceView>
+  var pinnedSize: CGSize? = nil
   let action: (Operation) -> Void
 
   private static let dragType = UTType(exportedAs: "sh.supacode.ghosttySurfaceId")
@@ -22,7 +23,7 @@ struct TerminalSplitTreeView: View {
 
   var body: some View {
     if let node = tree.zoomed ?? tree.root {
-      SubtreeView(node: node, isRoot: node == tree.root, action: action)
+      SubtreeView(node: node, isRoot: node == tree.root, pinnedSize: pinnedSize, action: action)
         .id(node.structuralIdentity)
     }
   }
@@ -36,18 +37,23 @@ struct TerminalSplitTreeView: View {
   struct SubtreeView: View {
     let node: SplitTree<GhosttySurfaceView>.Node
     var isRoot: Bool = false
+    var pinnedSize: CGSize? = nil
     let action: (Operation) -> Void
 
     var body: some View {
       switch node {
       case .leaf(let leafView):
-        LeafView(surfaceView: leafView, isSplit: !isRoot, action: action)
+        LeafView(surfaceView: leafView, isSplit: !isRoot, pinnedSize: pinnedSize, action: action)
       case .split(let split):
         let splitViewDirection: SplitView<SubtreeView, SubtreeView>.Direction =
           switch split.direction {
           case .horizontal: .horizontal
           case .vertical: .vertical
           }
+        let leftPinned = pinnedSize.map { splitChildSize($0, ratio: split.ratio, direction: split.direction) }
+        let rightPinned = pinnedSize.map {
+          splitChildSize($0, ratio: 1 - split.ratio, direction: split.direction)
+        }
         SplitView(
           splitViewDirection,
           .init(
@@ -60,10 +66,10 @@ struct TerminalSplitTreeView: View {
           dividerColor: .secondary,
           resizeIncrements: .init(width: 1, height: 1),
           left: {
-            SubtreeView(node: split.left, action: action)
+            SubtreeView(node: split.left, pinnedSize: leftPinned, action: action)
           },
           right: {
-            SubtreeView(node: split.right, action: action)
+            SubtreeView(node: split.right, pinnedSize: rightPinned, action: action)
           },
           onEqualize: {
             action(.equalize)
@@ -71,18 +77,30 @@ struct TerminalSplitTreeView: View {
         )
       }
     }
+
+    private func splitChildSize(
+      _ size: CGSize, ratio: Double, direction: SplitTree<GhosttySurfaceView>.Direction
+    ) -> CGSize {
+      switch direction {
+      case .horizontal:
+        CGSize(width: size.width * ratio, height: size.height)
+      case .vertical:
+        CGSize(width: size.width, height: size.height * ratio)
+      }
+    }
   }
 
   struct LeafView: View {
     let surfaceView: GhosttySurfaceView
     let isSplit: Bool
+    var pinnedSize: CGSize? = nil
     let action: (Operation) -> Void
 
     @State private var dropState: DropState = .idle
 
     var body: some View {
       GeometryReader { geometry in
-        GhosttyTerminalView(surfaceView: surfaceView)
+        GhosttyTerminalView(surfaceView: surfaceView, pinnedSize: pinnedSize)
           .frame(maxWidth: .infinity, maxHeight: .infinity)
           .overlay(alignment: .top) {
             GhosttySurfaceProgressOverlay(state: surfaceView.bridge.state)

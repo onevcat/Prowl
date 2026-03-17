@@ -2,12 +2,15 @@ import SwiftUI
 
 struct GhosttyTerminalView: NSViewRepresentable {
   let surfaceView: GhosttySurfaceView
+  var pinnedSize: CGSize?
 
   func makeNSView(context: Context) -> GhosttySurfaceScrollView {
-    GhosttySurfaceScrollView(surfaceView: surfaceView)
+    let view = GhosttySurfaceScrollView(surfaceView: surfaceView)
+    view.pinnedSize = pinnedSize
+    return view
   }
 
   func updateNSView(_ view: GhosttySurfaceScrollView, context: Context) {
-    _ = view
+    view.pinnedSize = pinnedSize
   }
 }

@@ -114,6 +114,7 @@ Reducer ← .terminalEvent(Event) ← AsyncStream<Event>
 - Automatically commit your changes and your changes only. Do not use `git add .`
 - Before you go on your task, check the current git branch name, if it's something generic like an animal name, name it accordingly. Do not do this for main branch
 - After implementing an execplan, always submit a PR if you're not in the main branch
+- PRs must target `onevcat/supacode` (this fork), never the upstream `supabitapp/supacode`, unless explicitly requested.
 - Fork releases must be notarized. Never publish non-notarized releases (`ENABLE_NOTARIZATION=0` is forbidden).
 
 ## Submodules

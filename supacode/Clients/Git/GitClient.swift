@@ -470,7 +470,8 @@ struct GitClient {
         operation: .untrackedFilePaths,
         arguments: ["-C", path, "ls-files", "--others", "--exclude-standard"]
       )
-      return output
+      return
+        output
         .split(whereSeparator: \.isNewline)
         .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
         .filter { !$0.isEmpty }

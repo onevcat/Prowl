@@ -133,6 +133,7 @@ struct RepositoriesFeature {
     case reloadRepositories(animated: Bool)
     case repositoriesLoaded([Repository], failures: [LoadFailure], roots: [URL], animated: Bool)
     case selectArchivedWorktrees
+    case selectCanvas
     case setSidebarSelectedWorktreeIDs(Set<Worktree.ID>)
     case openRepositories([URL])
     case openRepositoriesFinished(
@@ -543,6 +544,11 @@ struct RepositoriesFeature {
         state.selection = .archivedWorktrees
         state.sidebarSelectedWorktreeIDs = []
         return .send(.delegate(.selectedWorktreeChanged(nil)))
+
+      case .selectCanvas:
+        state.selection = .canvas
+        state.sidebarSelectedWorktreeIDs = []
+        return .none
 
       case .setSidebarSelectedWorktreeIDs(let worktreeIDs):
         let validWorktreeIDs = Set(state.orderedWorktreeRows().map(\.id))
@@ -2670,7 +2676,9 @@ struct RepositoriesFeature {
       shouldPruneArchivedWorktreeIDs
       ? pruneArchivedWorktreeIDs(availableWorktreeIDs: availableWorktreeIDs, state: &state)
       : false
-    if !state.isShowingArchivedWorktrees, !isSelectionValid(state.selectedWorktreeID, state: state) {
+    if !state.isShowingArchivedWorktrees, !state.isShowingCanvas,
+      !isSelectionValid(state.selectedWorktreeID, state: state)
+    {
       state.selection = nil
     }
     if state.shouldRestoreLastFocusedWorktree {
@@ -2774,6 +2782,10 @@ extension RepositoriesFeature.State {
 
   var isShowingArchivedWorktrees: Bool {
     selection == .archivedWorktrees
+  }
+
+  var isShowingCanvas: Bool {
+    selection == .canvas
   }
 
   var archivedWorktreeIDSet: Set<Worktree.ID> {

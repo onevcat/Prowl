@@ -45,7 +45,20 @@ struct WorktreeDetailView: View {
     )
     .toolbar(removing: .title)
     .toolbar {
-      if hasActiveWorktree, let selectedWorktree {
+      if repositories.isShowingCanvas {
+        ToolbarItem(placement: .navigation) {
+          Text("Canvas")
+            .font(.headline)
+        }
+        ToolbarItem(placement: .primaryAction) {
+          ToolbarNotificationsPopoverButton(
+            groups: notificationGroups,
+            unseenWorktreeCount: unseenNotificationWorktreeCount,
+            onSelectNotification: selectToolbarNotification,
+            onDismissAll: { dismissAllToolbarNotifications(in: notificationGroups) }
+          )
+        }
+      } else if hasActiveWorktree, let selectedWorktree {
         let pullRequest = repositories.worktreeInfo(for: selectedWorktree.id)?.pullRequest
         let matchesBranch =
           if let pullRequest {
@@ -126,6 +139,7 @@ struct WorktreeDetailView: View {
     selectedWorktreeSummaries: [MultiSelectedWorktreeSummary]
   ) -> Bool {
     !repositories.isShowingArchivedWorktrees
+      && !repositories.isShowingCanvas
       && selectedWorktreeSummaries.count > 1
   }
 
@@ -136,7 +150,9 @@ struct WorktreeDetailView: View {
     selectedWorktree: Worktree?,
     selectedWorktreeSummaries: [MultiSelectedWorktreeSummary]
   ) -> some View {
-    if repositories.isShowingArchivedWorktrees {
+    if repositories.isShowingCanvas {
+      CanvasView(terminalManager: terminalManager)
+    } else if repositories.isShowingArchivedWorktrees {
       ArchivedWorktreesDetailView(
         store: store.scope(state: \.repositories, action: \.repositories)
       )

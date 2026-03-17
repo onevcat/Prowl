@@ -1,0 +1,252 @@
+import AppKit
+import SwiftUI
+
+struct CanvasCardView: View {
+  let repositoryName: String
+  let worktreeName: String
+  let tree: SplitTree<GhosttySurfaceView>
+  let isFocused: Bool
+  let hasUnseenNotification: Bool
+  let cardSize: CGSize
+  let canvasScale: CGFloat
+  let onTap: () -> Void
+  let onDragCommit: (CGSize) -> Void
+  let onResize: (CardResizeEdge, CGSize) -> Void
+  let onResizeEnd: () -> Void
+  let onSplitOperation: (TerminalSplitTreeView.Operation) -> Void
+
+  enum CardResizeEdge {
+    case leading, trailing, top, bottom
+    case topLeading, topTrailing, bottomLeading, bottomTrailing
+
+    /// Sign multipliers for width and height during resize.
+    /// +1 = trailing/bottom grows, -1 = leading/top grows, 0 = no change.
+    var resizeSigns: (width: Int, height: Int) {
+      switch self {
+      case .leading: (-1, 0)
+      case .trailing: (1, 0)
+      case .top: (0, -1)
+      case .bottom: (0, 1)
+      case .topLeading: (-1, -1)
+      case .topTrailing: (1, -1)
+      case .bottomLeading: (-1, 1)
+      case .bottomTrailing: (1, 1)
+      }
+    }
+  }
+
+  private let titleBarHeight: CGFloat = 28
+  private let cornerRadius: CGFloat = 8
+
+  // Gesture-driven drag state: does NOT trigger body re-evaluation
+  @GestureState private var dragTranslation: CGSize = .zero
+
+  var body: some View {
+    VStack(spacing: 0) {
+      titleBar
+      terminalContent
+    }
+    .frame(width: cardSize.width, height: cardSize.height + titleBarHeight)
+    .clipShape(.rect(cornerRadius: cornerRadius))
+    .overlay {
+      RoundedRectangle(cornerRadius: cornerRadius)
+        .stroke(isFocused ? Color.accentColor : Color.secondary.opacity(0.3), lineWidth: isFocused ? 2 : 1)
+    }
+    .compositingGroup()
+    .contentShape(.rect)
+    .accessibilityAddTraits(.isButton)
+    .onTapGesture { onTap() }
+    .offset(
+      x: dragTranslation.width / canvasScale,
+      y: dragTranslation.height / canvasScale
+    )
+    .overlay { resizeHandles }
+  }
+
+  private var titleBar: some View {
+    HStack(spacing: 6) {
+      if hasUnseenNotification {
+        Circle()
+          .fill(Color.orange)
+          .frame(width: 6, height: 6)
+      }
+      Text(repositoryName)
+        .font(.caption.bold())
+        .lineLimit(1)
+      Text("/ \(worktreeName)")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+      Spacer()
+    }
+    .padding(.horizontal, 8)
+    .frame(height: titleBarHeight)
+    .frame(maxWidth: .infinity)
+    .background(.bar)
+    .gesture(
+      DragGesture(coordinateSpace: .global)
+        .updating($dragTranslation) { value, state, _ in
+          state = value.translation
+        }
+        .onEnded { value in
+          onDragCommit(
+            CGSize(
+              width: value.translation.width / canvasScale,
+              height: value.translation.height / canvasScale
+            ))
+        }
+    )
+  }
+
+  private var terminalContent: some View {
+    TerminalSplitTreeView(tree: tree, pinnedSize: cardSize, action: onSplitOperation)
+      .frame(width: cardSize.width, height: cardSize.height)
+      .allowsHitTesting(isFocused)
+  }
+
+  // MARK: - Resize Handles
+
+  private let edgeThickness: CGFloat = 10
+  private let cornerSide: CGFloat = 18
+
+  private var resizeHandles: some View {
+    ZStack {
+      edgeHandle(
+        cursor: .frameResize(position: .left, directions: .all),
+        isVertical: true,
+        edgeOffset: CGSize(width: -edgeThickness / 2, height: 0)
+      ) { translation in
+        onResize(.leading, translation)
+      }
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+
+      edgeHandle(
+        cursor: .frameResize(position: .right, directions: .all),
+        isVertical: true,
+        edgeOffset: CGSize(width: edgeThickness / 2, height: 0)
+      ) { translation in
+        onResize(.trailing, translation)
+      }
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+
+      edgeHandle(
+        cursor: .frameResize(position: .top, directions: .all),
+        isVertical: false,
+        edgeOffset: CGSize(width: 0, height: -edgeThickness / 2)
+      ) { translation in
+        onResize(.top, translation)
+      }
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+
+      edgeHandle(
+        cursor: .frameResize(position: .bottom, directions: .all),
+        isVertical: false,
+        edgeOffset: CGSize(width: 0, height: edgeThickness / 2)
+      ) { translation in
+        onResize(.bottom, translation)
+      }
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+
+      cornerHandle(
+        cursor: .frameResize(position: .topLeft, directions: .all),
+        alignment: .topLeading
+      ) { translation in
+        onResize(.topLeading, translation)
+      }
+
+      cornerHandle(
+        cursor: .frameResize(position: .topRight, directions: .all),
+        alignment: .topTrailing
+      ) { translation in
+        onResize(.topTrailing, translation)
+      }
+
+      cornerHandle(
+        cursor: .frameResize(position: .bottomLeft, directions: .all),
+        alignment: .bottomLeading
+      ) { translation in
+        onResize(.bottomLeading, translation)
+      }
+
+      cornerHandle(
+        cursor: .frameResize(position: .bottomRight, directions: .all),
+        alignment: .bottomTrailing
+      ) { translation in
+        onResize(.bottomTrailing, translation)
+      }
+    }
+  }
+
+  private func edgeHandle(
+    cursor: NSCursor,
+    isVertical: Bool,
+    edgeOffset: CGSize,
+    onChange: @escaping (CGSize) -> Void
+  ) -> some View {
+    ResizeCursorView(cursor: cursor) {
+      Color.clear
+        .frame(
+          width: isVertical ? edgeThickness : nil,
+          height: isVertical ? nil : edgeThickness
+        )
+        .frame(
+          maxWidth: isVertical ? nil : .infinity,
+          maxHeight: isVertical ? .infinity : nil
+        )
+        .contentShape(.rect)
+        .gesture(
+          DragGesture(coordinateSpace: .global)
+            .onChanged { value in onChange(value.translation) }
+            .onEnded { _ in onResizeEnd() }
+        )
+    }
+    .offset(edgeOffset)
+  }
+
+  private func cornerHandle(
+    cursor: NSCursor,
+    alignment: Alignment,
+    onChange: @escaping (CGSize) -> Void
+  ) -> some View {
+    ResizeCursorView(cursor: cursor) {
+      Color.clear
+        .frame(width: cornerSide, height: cornerSide)
+        .contentShape(.rect)
+        .gesture(
+          DragGesture(coordinateSpace: .global)
+            .onChanged { value in onChange(value.translation) }
+            .onEnded { _ in onResizeEnd() }
+        )
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
+    .offset(
+      x: (alignment == .bottomTrailing || alignment == .topTrailing) ? cornerSide / 3 : -cornerSide / 3,
+      y: (alignment == .topLeading || alignment == .topTrailing) ? -cornerSide / 3 : cornerSide / 3
+    )
+  }
+}
+
+private struct ResizeCursorView<Content: View>: View {
+  let cursor: NSCursor
+  @ViewBuilder let content: Content
+  @State private var isHovered = false
+
+  var body: some View {
+    content
+      .onHover { hovering in
+        guard hovering != isHovered else { return }
+        isHovered = hovering
+        if hovering {
+          cursor.push()
+        } else {
+          NSCursor.pop()
+        }
+      }
+      .onDisappear {
+        if isHovered {
+          isHovered = false
+          NSCursor.pop()
+        }
+      }
+  }
+}

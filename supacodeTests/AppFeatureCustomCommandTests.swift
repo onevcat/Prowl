@@ -37,7 +37,7 @@ struct AppFeatureCustomCommandTests {
 
     #expect(
       sent.value == [
-        .createTabWithInput(worktree, input: "swift test", runSetupScriptIfNew: false),
+        .createTabWithInput(worktree, input: "swift test", runSetupScriptIfNew: false)
       ],
     )
   }
@@ -72,7 +72,7 @@ struct AppFeatureCustomCommandTests {
 
     #expect(
       sent.value == [
-        .insertText(worktree, text: "pnpm test --watch"),
+        .insertText(worktree, text: "pnpm test --watch")
       ],
     )
   }

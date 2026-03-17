@@ -16,10 +16,13 @@ struct SidebarListView: View {
     let selection = Binding<Set<SidebarSelection>>(
       get: {
         var nextSelections = sidebarSelections
-        if state.isShowingArchivedWorktrees {
+        if state.isShowingCanvas {
+          nextSelections = [.canvas]
+        } else if state.isShowingArchivedWorktrees {
           nextSelections = [.archivedWorktrees]
         } else {
           nextSelections.remove(.archivedWorktrees)
+          nextSelections.remove(.canvas)
           if let selectedWorktreeID = state.selectedWorktreeID {
             nextSelections.insert(.worktree(selectedWorktreeID))
           }
@@ -54,6 +57,12 @@ struct SidebarListView: View {
               }
               return true
             })
+        }
+
+        if nextSelections.contains(.canvas) {
+          sidebarSelections = [.canvas]
+          store.send(.selectCanvas)
+          return
         }
 
         if nextSelections.contains(.archivedWorktrees) {
@@ -172,6 +181,16 @@ struct SidebarListView: View {
       }
       if !isDragActive {
         isDragActive = true
+      }
+    }
+    .safeAreaInset(edge: .top) {
+      CanvasSidebarButton(
+        store: store,
+        isSelected: state.isShowingCanvas
+      )
+      .padding(.top, 4)
+      .overlay(alignment: .bottom) {
+        Divider()
       }
     }
     .safeAreaInset(edge: .bottom) {

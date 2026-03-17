@@ -54,6 +54,24 @@ final class WorktreeTerminalState {
     )
   }
 
+  var worktreeID: Worktree.ID { worktree.id }
+  var worktreeName: String { worktree.name }
+  var repositoryRootURL: URL { worktree.repositoryRootURL }
+
+  var activeSurfaceView: GhosttySurfaceView? {
+    guard let selectedTabId = tabManager.selectedTabId,
+      let surfaceId = focusedSurfaceIdByTab[selectedTabId]
+    else {
+      return nil
+    }
+    return surfaces[surfaceId]
+  }
+
+  func surfaceView(for tabId: TerminalTabID) -> GhosttySurfaceView? {
+    guard let surfaceId = focusedSurfaceIdByTab[tabId] else { return nil }
+    return surfaces[surfaceId]
+  }
+
   var taskStatus: WorktreeTaskStatus {
     tabIsRunningById.values.contains(true) ? .running : .idle
   }
