@@ -11,7 +11,7 @@ struct CanvasSidebarButton: View {
     } label: {
       Label("Canvas", systemImage: "square.grid.2x2")
         .font(.callout)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity)
     }
     .buttonStyle(.plain)
     .padding(.horizontal, 12)

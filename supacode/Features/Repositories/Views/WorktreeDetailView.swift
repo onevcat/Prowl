@@ -43,13 +43,10 @@ struct WorktreeDetailView: View {
       selectedWorktree: selectedWorktree,
       selectedWorktreeSummaries: selectedWorktreeSummaries
     )
-    .toolbar(removing: .title)
+    .navigationTitle(repositories.isShowingCanvas ? "Canvas" : "")
+    .toolbar(removing: repositories.isShowingCanvas ? nil : .title)
     .toolbar {
       if repositories.isShowingCanvas {
-        ToolbarItem(placement: .navigation) {
-          Text("Canvas")
-            .font(.headline)
-        }
         ToolbarItem(placement: .primaryAction) {
           ToolbarNotificationsPopoverButton(
             groups: notificationGroups,
@@ -697,4 +694,36 @@ private struct WorktreeToolbarPreview: View {
 
 #Preview("Worktree Toolbar") {
   WorktreeToolbarPreview()
+}
+
+@MainActor
+private struct CanvasToolbarPreview: View {
+  var body: some View {
+    NavigationSplitView {
+      List {
+        Text("Sidebar Item 1")
+        Text("Sidebar Item 2")
+      }
+      .navigationSplitViewColumnWidth(220)
+    } detail: {
+      Text("Canvas Content")
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .navigationTitle("Canvas")
+        .toolbar {
+          ToolbarItem(placement: .primaryAction) {
+            ToolbarNotificationsPopoverButton(
+              groups: [],
+              unseenWorktreeCount: 0,
+              onSelectNotification: { _, _ in },
+              onDismissAll: {}
+            )
+          }
+        }
+    }
+    .frame(width: 900, height: 300)
+  }
+}
+
+#Preview("Canvas Toolbar") {
+  CanvasToolbarPreview()
 }

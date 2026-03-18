@@ -189,6 +189,7 @@ struct SidebarListView: View {
         isSelected: state.isShowingCanvas
       )
       .padding(.top, 4)
+      .background(.bar)
       .overlay(alignment: .bottom) {
         Divider()
       }
