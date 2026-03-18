@@ -12,10 +12,10 @@ struct CanvasWaterfallPackerTests {
 
   // MARK: - Single column
 
-  @Test func singleCardSingleColumn() {
+  @Test func singleCardSingleColumn() throws {
     let result = packer.pack(cards: [card("a")], columns: 1, columnWidth: 800)
 
-    let layout = try! #require(result.layouts["a"])
+    let layout = try #require(result.layouts["a"])
     // centerX = spacing + columnWidth / 2 = 20 + 400 = 420
     #expect(layout.position.x == 420)
     // centerY = spacing + (height + titleBar) / 2 = 20 + (550 + 28) / 2 = 20 + 289 = 309
@@ -25,24 +25,24 @@ struct CanvasWaterfallPackerTests {
     #expect(result.totalHeight == 618)
   }
 
-  @Test func multipleCardsSingleColumnStackVertically() {
+  @Test func multipleCardsSingleColumnStackVertically() throws {
     let cards = [card("a", height: 400), card("b", height: 300)]
     let result = packer.pack(cards: cards, columns: 1, columnWidth: 800)
 
-    let a = try! #require(result.layouts["a"])
-    let b = try! #require(result.layouts["b"])
+    let layoutA = try #require(result.layouts["a"])
+    let layoutB = try #require(result.layouts["b"])
 
     // Card "a" starts at spacing (20)
     let aCardHeight: CGFloat = 400 + 28
-    #expect(a.position.y == 20 + aCardHeight / 2)
+    #expect(layoutA.position.y == 20 + aCardHeight / 2)
 
     // Card "b" starts after "a" + spacing
     let bCardHeight: CGFloat = 300 + 28
     let bStartY = 20 + aCardHeight + 20
-    #expect(b.position.y == bStartY + bCardHeight / 2)
+    #expect(layoutB.position.y == bStartY + bCardHeight / 2)
 
     // Both in same column → same centerX
-    #expect(a.position.x == b.position.x)
+    #expect(layoutA.position.x == layoutB.position.x)
 
     // totalHeight = spacing + aCardH + spacing + bCardH + spacing
     #expect(result.totalHeight == 20 + aCardHeight + 20 + bCardHeight + 20)
@@ -50,26 +50,26 @@ struct CanvasWaterfallPackerTests {
 
   // MARK: - Multiple columns
 
-  @Test func twoCardsTwoColumnsPlaceSideBySide() {
+  @Test func twoCardsTwoColumnsPlaceSideBySide() throws {
     let cards = [card("a"), card("b")]
     let result = packer.pack(cards: cards, columns: 2, columnWidth: 800)
 
-    let a = try! #require(result.layouts["a"])
-    let b = try! #require(result.layouts["b"])
+    let layoutA = try #require(result.layouts["a"])
+    let layoutB = try #require(result.layouts["b"])
 
     // Same Y (both start at top)
-    #expect(a.position.y == b.position.y)
+    #expect(layoutA.position.y == layoutB.position.y)
     // Different X (different columns)
-    #expect(a.position.x != b.position.x)
+    #expect(layoutA.position.x != layoutB.position.x)
     // Column 0 centerX = 20 + 800/2 = 420
-    #expect(a.position.x == 420)
+    #expect(layoutA.position.x == 420)
     // Column 1 centerX = 20 + (800 + 20) + 800/2 = 20 + 820 + 400 = 1240
-    #expect(b.position.x == 1240)
+    #expect(layoutB.position.x == 1240)
   }
 
   // MARK: - Waterfall distribution
 
-  @Test func thirdCardGoesToShorterColumn() {
+  @Test func thirdCardGoesToShorterColumn() throws {
     let cards = [
       card("a", height: 600),
       card("b", height: 300),
@@ -77,16 +77,16 @@ struct CanvasWaterfallPackerTests {
     ]
     let result = packer.pack(cards: cards, columns: 2, columnWidth: 800)
 
-    let a = try! #require(result.layouts["a"])
-    let b = try! #require(result.layouts["b"])
-    let c = try! #require(result.layouts["c"])
+    let layoutA = try #require(result.layouts["a"])
+    let layoutB = try #require(result.layouts["b"])
+    let layoutC = try #require(result.layouts["c"])
 
     // "a" → col 0, "b" → col 1 (both start at same height)
     // After placing: col0 = 20+628+20 = 668, col1 = 20+328+20 = 368
     // "c" → col 1 (shorter)
-    #expect(a.position.x == c.position.x || b.position.x == c.position.x)
+    #expect(layoutA.position.x == layoutC.position.x || layoutB.position.x == layoutC.position.x)
     // "c" should be in col 1 (same x as "b")
-    #expect(c.position.x == b.position.x)
+    #expect(layoutC.position.x == layoutB.position.x)
   }
 
   // MARK: - Size preservation
