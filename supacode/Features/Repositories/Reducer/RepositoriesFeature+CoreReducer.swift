@@ -579,6 +579,17 @@ extension RepositoriesFeature {
         await terminalClient.send(.ensureInitialTab(worktree, runSetupScriptIfNew: false, focusing: false))
       }
 
+    case .focusCanvasTab(let worktreeID, let tabID):
+      guard state.isShowingCanvas,
+        let worktree = state.worktree(for: worktreeID)
+      else {
+        return .none
+      }
+      requestCanvasFocus(.tab(tabID), openedWorktreeID: worktree.id, state: &state)
+      return .run { _ in
+        await terminalClient.send(.ensureInitialTab(worktree, runSetupScriptIfNew: false, focusing: false))
+      }
+
     case .selectNextWorktree:
       // In Shelf, the vertical arrow pair maps to tab navigation
       // within the open book — horizontal (← / →) is already book

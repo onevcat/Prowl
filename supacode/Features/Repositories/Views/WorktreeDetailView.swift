@@ -693,6 +693,16 @@ struct WorktreeDetailView: View {
     _ worktreeID: Worktree.ID,
     _ notification: WorktreeTerminalNotification
   ) {
+    if store.state.repositories.isShowingCanvas,
+      let terminalState = terminalManager.stateIfExists(for: worktreeID)
+    {
+      _ = terminalState.focusSurface(id: notification.surfaceId)
+      if let tabID = terminalState.tabID(containing: notification.surfaceId) {
+        store.send(.repositories(.focusCanvasTab(worktreeID: worktreeID, tabID: tabID)))
+      }
+      return
+    }
+
     store.send(.repositories(.selectWorktree(worktreeID)))
     if let terminalState = terminalManager.stateIfExists(for: worktreeID) {
       _ = terminalState.focusSurface(id: notification.surfaceId)
