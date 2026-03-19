@@ -360,8 +360,10 @@ struct RepositoriesFeature {
             var priorityRoot: URL?
             var remainingRoots: [URL] = []
             for root in roots {
+              let rootPath = root.path(percentEncoded: false)
+              let prefix = rootPath.hasSuffix("/") ? rootPath : rootPath + "/"
               if priorityRoot == nil,
-                lastFocused.hasPrefix(root.path(percentEncoded: false))
+                lastFocused.hasPrefix(prefix) || lastFocused == rootPath
               {
                 priorityRoot = root
               } else {
@@ -2642,10 +2644,9 @@ struct RepositoriesFeature {
     .cancellable(id: CancelID.load, cancelInFlight: true)
   }
 
-  private struct WorktreesFetchResult: Sendable {
-    let root: URL
-    let worktrees: [Worktree]?
-    let errorMessage: String?
+  private enum WorktreesFetchResult: Sendable {
+    case loaded(root: URL, worktrees: [Worktree])
+    case failed(root: URL, message: String)
   }
 
   private func loadRepositoriesData(_ roots: [URL]) async -> ([Repository], [LoadFailure]) {
@@ -2655,9 +2656,9 @@ struct RepositoriesFeature {
         group.addTask {
           do {
             let worktrees = try await gitClient.worktrees(root)
-            return WorktreesFetchResult(root: root, worktrees: worktrees, errorMessage: nil)
+            return .loaded(root: root, worktrees: worktrees)
           } catch {
-            return WorktreesFetchResult(root: root, worktrees: nil, errorMessage: error.localizedDescription)
+            return .failed(root: root, message: error.localizedDescription)
           }
         }
       }
@@ -2670,9 +2671,10 @@ struct RepositoriesFeature {
     var loaded: [Repository] = []
     var failures: [LoadFailure] = []
     for result in fetchResults {
-      let normalizedRoot = result.root.standardizedFileURL
-      let rootID = normalizedRoot.path(percentEncoded: false)
-      if let worktrees = result.worktrees {
+      switch result {
+      case .loaded(let root, let worktrees):
+        let normalizedRoot = root.standardizedFileURL
+        let rootID = normalizedRoot.path(percentEncoded: false)
         let name = Repository.name(for: normalizedRoot)
         loaded.append(
           Repository(
@@ -2682,8 +2684,9 @@ struct RepositoriesFeature {
             worktrees: IdentifiedArray(uniqueElements: worktrees),
           )
         )
-      } else {
-        failures.append(LoadFailure(rootID: rootID, message: result.errorMessage ?? "Unknown error"))
+      case .failed(let root, let message):
+        let rootID = root.standardizedFileURL.path(percentEncoded: false)
+        failures.append(LoadFailure(rootID: rootID, message: message))
       }
     }
     return (loaded, failures)
