@@ -2462,4 +2462,98 @@ struct RepositoriesFeatureTests {
     state.repositoryRoots = repositories.map(\.rootURL)
     return state
   }
+
+  // MARK: - Priority startup loading
+
+  @Test func priorityLoadRestoresSelectionOnFirstRepositoriesLoaded() async {
+    let worktreeA = makeWorktree(id: "/tmp/repo-a/main", name: "main", repoRoot: "/tmp/repo-a")
+    let worktreeB = makeWorktree(id: "/tmp/repo-b/main", name: "main", repoRoot: "/tmp/repo-b")
+    let repoB = makeRepository(id: "/tmp/repo-b", worktrees: [worktreeB])
+    let allRootURLs = ["/tmp/repo-a", "/tmp/repo-b"].map { URL(fileURLWithPath: $0) }
+
+    var state = RepositoriesFeature.State()
+    state.lastFocusedWorktreeID = "/tmp/repo-b/main"
+    state.shouldRestoreLastFocusedWorktree = true
+
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    // Simulate the first repositoriesLoaded from priority loading — only the
+    // last-focused repo is included. The UI should become usable immediately.
+    await store.send(
+      .repositoriesLoaded([repoB], failures: [], roots: allRootURLs, animated: false)
+    ) {
+      $0.isInitialLoadComplete = true
+      $0.repositories = IdentifiedArray(uniqueElements: [repoB])
+      $0.repositoryRoots = allRootURLs
+      $0.shouldRestoreLastFocusedWorktree = false
+      $0.selection = SidebarSelection.worktree(worktreeB.id)
+    }
+
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func fullLoadAfterPriorityLoadPreservesSelection() async {
+    let worktreeA = makeWorktree(id: "/tmp/repo-a/main", name: "main", repoRoot: "/tmp/repo-a")
+    let worktreeB = makeWorktree(id: "/tmp/repo-b/main", name: "main", repoRoot: "/tmp/repo-b")
+    let repoA = makeRepository(id: "/tmp/repo-a", worktrees: [worktreeA])
+    let repoB = makeRepository(id: "/tmp/repo-b", worktrees: [worktreeB])
+    let allRootURLs = ["/tmp/repo-a", "/tmp/repo-b"].map { URL(fileURLWithPath: $0) }
+
+    // State after priority load has completed — repo-b is loaded and selected.
+    var state = RepositoriesFeature.State()
+    state.isInitialLoadComplete = true
+    state.repositories = IdentifiedArray(uniqueElements: [repoB])
+    state.repositoryRoots = allRootURLs
+    state.selection = SidebarSelection.worktree(worktreeB.id)
+
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    // Simulate the second repositoriesLoaded with all repos.
+    // Selection must remain on worktree-b.
+    await store.send(
+      .repositoriesLoaded(
+        [repoB, repoA],
+        failures: [],
+        roots: allRootURLs,
+        animated: false,
+      )
+    ) {
+      $0.repositories = IdentifiedArray(uniqueElements: [repoB, repoA])
+    }
+
+    await store.receive(\.delegate.repositoriesChanged)
+
+    #expect(store.state.selection == SidebarSelection.worktree(worktreeB.id))
+  }
+
+  @Test func loadPersistedRepositoriesWithoutLastFocusedLoadsAllAtOnce() async {
+    let worktreeA = makeWorktree(id: "/tmp/repo-a/main", name: "main", repoRoot: "/tmp/repo-a")
+    let worktreeB = makeWorktree(id: "/tmp/repo-b/main", name: "main", repoRoot: "/tmp/repo-b")
+    let roots = ["/tmp/repo-a", "/tmp/repo-b"]
+
+    let store = TestStore(initialState: RepositoriesFeature.State()) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.loadRoots = { roots }
+      $0.gitClient.worktrees = { root in
+        let path = root.path(percentEncoded: false)
+        if path.hasPrefix("/tmp/repo-a") { return [worktreeA] }
+        if path.hasPrefix("/tmp/repo-b") { return [worktreeB] }
+        return []
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.loadPersistedRepositories)
+
+    // No lastFocusedWorktreeID — single repositoriesLoaded with all repos
+    await store.receive(\.repositoriesLoaded) {
+      $0.isInitialLoadComplete = true
+    }
+  }
 }

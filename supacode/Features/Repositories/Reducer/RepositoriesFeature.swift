@@ -356,6 +356,13 @@ struct RepositoriesFeature {
           let rootPaths = RepositoryPathNormalizer.normalize(loadedPaths)
           let roots = rootPaths.map { URL(fileURLWithPath: $0) }
 
+          // Priority loading: load the last-focused repo first so the UI can appear
+          // immediately with the selected worktree, then load remaining repos in the
+          // background. The second `repositoriesLoaded` includes the priority repo again
+          // because `applyRepositories` performs a full replacement — omitting it would
+          // remove the already-visible repo from state. The priority repo is NOT re-fetched
+          // from disk; its in-memory result is simply included in the combined list.
+          // `applyRepositories` is idempotent, so processing it twice is harmless.
           if let lastFocused {
             var priorityRoot: URL?
             var remainingRoots: [URL] = []
