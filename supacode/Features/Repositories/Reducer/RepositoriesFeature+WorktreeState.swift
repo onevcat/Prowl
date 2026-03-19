@@ -15,12 +15,14 @@ func removePendingWorktree(_ id: String, state: inout RepositoriesFeature.State)
 func requestCanvasFocus(
   _ target: CanvasFocusRequest.Target,
   openedWorktreeID: Worktree.ID,
+  shouldCenterInViewport: Bool = false,
   state: inout RepositoriesFeature.State
 ) {
   state.nextCanvasFocusRequestID += 1
   state.pendingCanvasFocusRequest = CanvasFocusRequest(
     id: state.nextCanvasFocusRequestID,
-    target: target
+    target: target,
+    shouldCenterInViewport: shouldCenterInViewport
   )
   state.openedWorktreeIDs.insert(openedWorktreeID)
 }

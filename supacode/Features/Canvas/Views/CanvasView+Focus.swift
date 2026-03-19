@@ -61,7 +61,11 @@ extension CanvasView {
     )
     guard let tabID else { return }
     focusSingleCard(tabID, states: states)
-    focusViewport(on: tabID)
+    if request.shouldCenterInViewport {
+      _ = centerCanvas(on: tabID)
+    } else {
+      ensureTabVisibleInViewport(tabID, minimumInset: focusVisibleInset)
+    }
     onFocusRequestConsumed(request.id)
   }
 

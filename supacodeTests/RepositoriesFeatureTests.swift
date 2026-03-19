@@ -1547,6 +1547,49 @@ struct RepositoriesFeatureTests {
     await store.receive(\.delegate.selectedWorktreeChanged)
   }
 
+  @Test func toggleCanvasSwitchesBetweenCanvasAndWorktree() async {
+    let worktree = makeWorktree(id: "/tmp/repo/wt1", name: "wt1", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .worktree(worktree.id)
+    initialState.sidebarSelectedWorktreeIDs = [worktree.id]
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.toggleCanvas) {
+      $0.selection = .canvas
+      $0.sidebarSelectedWorktreeIDs = []
+      $0.canvasReturnWorktreeID = worktree.id
+    }
+
+    await store.send(.toggleCanvas) {
+      $0.selection = .worktree(worktree.id)
+      $0.sidebarSelectedWorktreeIDs = [worktree.id]
+      $0.canvasReturnWorktreeID = worktree.id
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func toggleCanvasFallsBackToFirstWorktreeWhenStoredSelectionIsMissing() async {
+    let worktree1 = makeWorktree(id: "/tmp/repo/wt1", name: "wt1", repoRoot: "/tmp/repo")
+    let worktree2 = makeWorktree(id: "/tmp/repo/wt2", name: "wt2", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree1, worktree2])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .canvas
+    initialState.canvasReturnWorktreeID = "/tmp/repo/missing"
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.toggleCanvas) {
+      $0.selection = .worktree(worktree1.id)
+      $0.sidebarSelectedWorktreeIDs = [worktree1.id]
+      $0.canvasReturnWorktreeID = worktree1.id
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
   @Test func createRandomWorktreeWithoutRepositoriesShowsAlert() async {
     let store = TestStore(initialState: RepositoriesFeature.State()) {
       RepositoriesFeature()

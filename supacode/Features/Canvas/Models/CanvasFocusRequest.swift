@@ -8,6 +8,7 @@ struct CanvasFocusRequest: Equatable, Sendable {
 
   let id: Int
   let target: Target
+  var shouldCenterInViewport = false
 }
 
 struct CanvasFocusCandidate: Equatable, Sendable {

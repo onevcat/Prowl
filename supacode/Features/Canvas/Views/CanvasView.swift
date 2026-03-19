@@ -3,6 +3,12 @@ import Sharing
 import SwiftUI
 
 struct CanvasView: View {
+  struct ViewportState: Equatable {
+    var offset: CGSize = .zero
+    var scale: CGFloat = 1.0
+    var hasPerformedInitialFit = false
+  }
+
   @Environment(CommandKeyObserver.self) var commandKeyObserver
   @Environment(\.resolvedKeybindings) var resolvedKeybindings
 
@@ -19,6 +25,7 @@ struct CanvasView: View {
   var onFocusedWorktreeChanged: (Worktree.ID?) -> Void = { _ in }
   var onFocusRequestConsumed: (Int) -> Void = { _ in }
   var onCommandConsumed: (Int) -> Void = { _ in }
+  var onViewportStateChanged: ((ViewportState) -> Void)?
   /// Reports whether a card is currently expanded in place, so the parent can
   /// give the window toolbar a matching scrim (it can't be covered from here).
   var onExpandedChange: (Bool) -> Void = { _ in }
@@ -84,6 +91,34 @@ struct CanvasView: View {
   /// large screens still get the roomier card.
   var adaptiveDefaultCardSize: CGSize {
     CanvasCardLayout.adaptiveDefaultSize(forScreenWidth: hostScreenWidth)
+  }
+
+  init(
+    terminalManager: WorktreeTerminalManager,
+    repositoryCustomTitles: [Repository.ID: String] = [:],
+    focusRequest: CanvasFocusRequest? = nil,
+    commandRequest: CanvasCommandRequest? = nil,
+    onFocusedWorktreeChanged: @escaping (Worktree.ID?) -> Void = { _ in },
+    onFocusRequestConsumed: @escaping (Int) -> Void = { _ in },
+    onCommandConsumed: @escaping (Int) -> Void = { _ in },
+    viewportState: ViewportState = .init(),
+    onViewportStateChanged: ((ViewportState) -> Void)? = nil,
+    onExpandedChange: @escaping (Bool) -> Void = { _ in }
+  ) {
+    self.terminalManager = terminalManager
+    self.repositoryCustomTitles = repositoryCustomTitles
+    self.focusRequest = focusRequest
+    self.commandRequest = commandRequest
+    self.onFocusedWorktreeChanged = onFocusedWorktreeChanged
+    self.onFocusRequestConsumed = onFocusRequestConsumed
+    self.onCommandConsumed = onCommandConsumed
+    self.onViewportStateChanged = onViewportStateChanged
+    self.onExpandedChange = onExpandedChange
+    _canvasOffset = State(initialValue: viewportState.offset)
+    _lastCanvasOffset = State(initialValue: viewportState.offset)
+    _canvasScale = State(initialValue: viewportState.scale)
+    _lastCanvasScale = State(initialValue: viewportState.scale)
+    _hasPerformedInitialFit = State(initialValue: viewportState.hasPerformedInitialFit)
   }
 
   var body: some View {
@@ -250,6 +285,15 @@ struct CanvasView: View {
     }
     .onChange(of: expandedTabID) { _, newValue in
       onExpandedChange(newValue != nil)
+    }
+    .onChange(of: canvasOffset) { _, _ in
+      notifyViewportStateChanged()
+    }
+    .onChange(of: canvasScale) { _, _ in
+      notifyViewportStateChanged()
+    }
+    .onChange(of: hasPerformedInitialFit) { _, _ in
+      notifyViewportStateChanged()
     }
     .onChange(of: commandRequest) { _, newRequest in
       fulfillCommandRequest(newRequest)
@@ -700,6 +744,28 @@ struct CanvasView: View {
     canvasScale = newScale
     lastCanvasScale = newScale
     lastCanvasOffset = canvasOffset
+  }
+
+  func centerCanvas(on tabID: TerminalTabID) -> Bool {
+    guard viewportSize.width > 0, viewportSize.height > 0 else { return false }
+    let key = tabID.rawValue.uuidString
+    guard let layout = layoutStore.cardLayouts[key] else { return false }
+    canvasOffset = CGSize(
+      width: viewportSize.width / 2 - layout.position.x * canvasScale,
+      height: viewportSize.height / 2 - layout.position.y * canvasScale
+    )
+    lastCanvasOffset = canvasOffset
+    return true
+  }
+
+  func notifyViewportStateChanged() {
+    onViewportStateChanged?(
+      ViewportState(
+        offset: canvasOffset,
+        scale: canvasScale,
+        hasPerformedInitialFit: hasPerformedInitialFit
+      )
+    )
   }
 
   /// Remove stored layouts for tabs that no longer exist.

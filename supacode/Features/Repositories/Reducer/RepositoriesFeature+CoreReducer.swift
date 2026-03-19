@@ -579,13 +579,18 @@ extension RepositoriesFeature {
         await terminalClient.send(.ensureInitialTab(worktree, runSetupScriptIfNew: false, focusing: false))
       }
 
-    case .focusCanvasTab(let worktreeID, let tabID):
+    case .focusCanvasTab(let worktreeID, let tabID, let shouldCenterInViewport):
       guard state.isShowingCanvas,
         let worktree = state.worktree(for: worktreeID)
       else {
         return .none
       }
-      requestCanvasFocus(.tab(tabID), openedWorktreeID: worktree.id, state: &state)
+      requestCanvasFocus(
+        .tab(tabID),
+        openedWorktreeID: worktree.id,
+        shouldCenterInViewport: shouldCenterInViewport,
+        state: &state
+      )
       return .run { _ in
         await terminalClient.send(.ensureInitialTab(worktree, runSetupScriptIfNew: false, focusing: false))
       }

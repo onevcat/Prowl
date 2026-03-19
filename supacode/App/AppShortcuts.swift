@@ -246,6 +246,7 @@ enum AppShortcuts {
   ]
   static let revealInSidebar = AppShortcut(key: "l", modifiers: [.command, .shift])
   static let archivedWorktrees = AppShortcut(key: "a", modifiers: [.command, .control])
+  static let toggleSidebar = AppShortcut(key: "s", modifiers: .command)
   static let selectNextWorktree = AppShortcut(
     keyEquivalent: .downArrow, ghosttyKeyName: "arrow_down", modifiers: [.command, .control]
   )
@@ -963,6 +964,7 @@ enum AppShortcuts {
     selectShelfBook8,
     selectShelfBook9,
     archivedWorktrees,
+    toggleSidebar,
     selectNextWorktree,
     selectPreviousWorktree,
     worktreeHistoryBack,

@@ -354,7 +354,7 @@ struct RepositoriesFeature {
     case selectWorktree(Worktree.ID?, focusTerminal: Bool = false, recordHistory: Bool = true)
     case focusCanvasRepository(Repository.ID)
     case focusCanvasWorktree(Worktree.ID)
-    case focusCanvasTab(worktreeID: Worktree.ID, tabID: TerminalTabID)
+    case focusCanvasTab(worktreeID: Worktree.ID, tabID: TerminalTabID, shouldCenterInViewport: Bool = false)
     case selectNextWorktree
     case selectPreviousWorktree
     case consumeCanvasFocusRequest(Int)

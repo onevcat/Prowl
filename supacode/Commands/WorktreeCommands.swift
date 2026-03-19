@@ -106,6 +106,11 @@ struct WorktreeCommands: Commands {
       .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.newWorktree)))
       .help(helpText(title: "New Worktree", commandID: AppShortcuts.CommandID.newWorktree))
       .disabled(!repositories.canCreateWorktree)
+      Button(repositories.isShowingCanvas ? "Exit Canvas" : "Canvas") {
+        store.send(.repositories(.toggleCanvas))
+      }
+      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.toggleCanvas)))
+      .help(helpText(title: "Toggle Canvas", commandID: AppShortcuts.CommandID.toggleCanvas))
       Button("Archive Worktree") {
         archiveWorktreeAction?()
       }

@@ -43,9 +43,14 @@ struct WorktreeDetailView: View {
   /// True while a Canvas card is expanded in place, so the otherwise-transparent
   /// Canvas toolbar gets a matching material scrim instead of showing through.
   @State private var isCanvasCardExpanded = false
+  @State private var canvasViewportState = CanvasView.ViewportState()
+  @State private var nonCanvasSnapshotAtCanvasExit: CanvasSelectionSnapshot?
 
   var body: some View {
     detailBody(state: store.state)
+      .onChange(of: store.state.repositories.selection) { oldSelection, newSelection in
+        handleSelectionTransition(from: oldSelection, to: newSelection)
+      }
   }
 
   private func detailBody(state: AppFeature.State) -> some View {
@@ -419,6 +424,10 @@ struct WorktreeDetailView: View {
         onCommandConsumed: { requestID in
           store.send(.repositories(.consumeCanvasCommandRequest(requestID)))
         },
+        viewportState: canvasViewportState,
+        onViewportStateChanged: { state in
+          canvasViewportState = state
+        },
         onExpandedChange: { expanded in
           isCanvasCardExpanded = expanded
         }
@@ -698,7 +707,13 @@ struct WorktreeDetailView: View {
     {
       _ = terminalState.focusSurface(id: notification.surfaceId)
       if let tabID = terminalState.tabID(containing: notification.surfaceId) {
-        store.send(.repositories(.focusCanvasTab(worktreeID: worktreeID, tabID: tabID)))
+        store.send(
+          .repositories(
+            .focusCanvasTab(
+              worktreeID: worktreeID,
+              tabID: tabID,
+              shouldCenterInViewport: false
+            )))
       }
       return
     }
@@ -707,6 +722,58 @@ struct WorktreeDetailView: View {
     if let terminalState = terminalManager.stateIfExists(for: worktreeID) {
       _ = terminalState.focusSurface(id: notification.surfaceId)
     }
+  }
+
+  private func handleSelectionTransition(
+    from oldSelection: SidebarSelection?,
+    to newSelection: SidebarSelection?
+  ) {
+    let wasCanvas = oldSelection == .canvas
+    let isCanvas = newSelection == .canvas
+    let repositories = store.state.repositories
+
+    if wasCanvas && !isCanvas {
+      nonCanvasSnapshotAtCanvasExit = currentCanvasReturnSnapshot(from: repositories)
+      return
+    }
+
+    guard !wasCanvas, isCanvas else { return }
+    queueCanvasFocusOnEntryIfNeeded(repositories: repositories)
+  }
+
+  private func queueCanvasFocusOnEntryIfNeeded(repositories: RepositoriesFeature.State) {
+    guard canvasViewportState.hasPerformedInitialFit else { return }
+    guard let currentSnapshot = currentCanvasReturnSnapshot(from: repositories) else { return }
+    guard currentSnapshot != nonCanvasSnapshotAtCanvasExit else { return }
+    store.send(
+      .repositories(
+        .focusCanvasTab(
+          worktreeID: currentSnapshot.worktreeID,
+          tabID: currentSnapshot.tabID,
+          shouldCenterInViewport: true
+        )))
+  }
+
+  private func currentCanvasReturnSnapshot(
+    from repositories: RepositoriesFeature.State
+  ) -> CanvasSelectionSnapshot? {
+    let worktreeID = repositories.canvasReturnWorktreeID ?? repositories.selectedWorktreeID
+    guard let worktreeID,
+      let terminalState = terminalManager.stateIfExists(for: worktreeID),
+      let surfaceID = selectedSurfaceID(in: terminalState),
+      let tabID = terminalState.tabID(containing: surfaceID)
+    else {
+      return nil
+    }
+    return CanvasSelectionSnapshot(worktreeID: worktreeID, tabID: tabID, surfaceID: surfaceID)
+  }
+
+  private func selectedSurfaceID(in terminalState: WorktreeTerminalState) -> UUID? {
+    if let activeSurfaceID = terminalState.activeSurfaceView?.id {
+      return activeSurfaceID
+    }
+    guard let selectedTabID = terminalState.tabManager.selectedTabId else { return nil }
+    return terminalState.surfaceView(for: selectedTabID)?.id
   }
 
   private func dismissAllToolbarNotifications(in groups: [ToolbarNotificationRepositoryGroup]) {
@@ -728,6 +795,12 @@ struct WorktreeDetailView: View {
     let selectedWorktreeID: Worktree.ID?
     let isShowingCanvas: Bool
     let canvasFocusedWorktreeID: Worktree.ID?
+  }
+
+  private struct CanvasSelectionSnapshot: Equatable {
+    let worktreeID: Worktree.ID
+    let tabID: TerminalTabID
+    let surfaceID: UUID
   }
 
   private struct FocusedActions {
