@@ -9,7 +9,6 @@ import Testing
 
 @testable import supacode
 
-@Suite(.serialized)
 @MainActor
 struct RepositoriesFeatureTests {
   @Test func refreshWorktreesSetsRefreshingStateUntilLoadCompletes() async {
