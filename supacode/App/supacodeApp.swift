@@ -82,27 +82,20 @@ struct SupacodeApp: App {
   @State private var commandKeyObserver: CommandKeyObserver
   @State private var store: StoreOf<AppFeature>
 
-  private static let startupLogger = SupaLogger("Startup")
-
   @MainActor init() {
-    let initStart = ContinuousClock.now
-
     NSWindow.allowsAutomaticWindowTabbing = false
     UserDefaults.standard.set(200, forKey: "NSInitialToolTipDelay")
     @Shared(.settingsFile) var settingsFile
     let initialSettings = settingsFile.global
     #if !DEBUG
       if initialSettings.crashReportsEnabled {
-        let t = ContinuousClock.now
         SentrySDK.start { options in
           options.dsn = "__SENTRY_DSN__"
           options.tracesSampleRate = 1.0
           options.enableAppHangTracking = false
         }
-        Self.startupLogger.info("[Benchmark] Sentry init: \(t.duration(to: .now))")
       }
       if initialSettings.analyticsEnabled {
-        let t = ContinuousClock.now
         let posthogAPIKey = "__POSTHOG_API_KEY__"
         let posthogHost = "__POSTHOG_HOST__"
         let config = PostHogConfig(apiKey: posthogAPIKey, host: posthogHost)
@@ -111,11 +104,8 @@ struct SupacodeApp: App {
         if let hardwareUUID = HardwareInfo.uuid {
           PostHogSDK.shared.identify(hardwareUUID)
         }
-        Self.startupLogger.info("[Benchmark] PostHog init: \(t.duration(to: .now))")
       }
     #endif
-
-    var t = ContinuousClock.now
     if let resourceURL = Bundle.main.resourceURL?.appendingPathComponent("ghostty") {
       setenv("GHOSTTY_RESOURCES_DIR", resourceURL.path, 1)
     }
@@ -126,9 +116,6 @@ struct SupacodeApp: App {
         preconditionFailure("ghostty_init failed")
       }
     }
-    Self.startupLogger.info("[Benchmark] ghostty_init: \(t.duration(to: .now))")
-
-    t = ContinuousClock.now
     let runtime = GhosttyRuntime()
     _ghostty = State(initialValue: runtime)
     let shortcuts = GhosttyShortcutManager(runtime: runtime)
@@ -139,9 +126,6 @@ struct SupacodeApp: App {
     _worktreeInfoWatcher = State(initialValue: worktreeInfoWatcher)
     let keyObserver = CommandKeyObserver()
     _commandKeyObserver = State(initialValue: keyObserver)
-    Self.startupLogger.info("[Benchmark] runtime + managers: \(t.duration(to: .now))")
-
-    t = ContinuousClock.now
     let appStore = Store(
       initialState: AppFeature.State(settings: SettingsFeature.State(settings: initialSettings))
     ) {
@@ -175,8 +159,6 @@ struct SupacodeApp: App {
       ghosttyShortcuts: shortcuts,
       commandKeyObserver: keyObserver
     )
-    Self.startupLogger.info("[Benchmark] TCA store: \(t.duration(to: .now))")
-    Self.startupLogger.info("[Benchmark] init() total: \(initStart.duration(to: .now))")
   }
 
   var body: some Scene {

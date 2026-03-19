@@ -294,8 +294,6 @@ struct RepositoriesFeature {
     case worktreeCreated(Worktree)
   }
 
-  private let startupLogger = SupaLogger("Startup")
-
   @Dependency(TerminalClient.self) private var terminalClient
   @Dependency(AnalyticsClient.self) private var analyticsClient
   @Dependency(GitClientDependency.self) private var gitClient
@@ -310,14 +308,12 @@ struct RepositoriesFeature {
       switch action {
       case .task:
         return .run { send in
-          let t = ContinuousClock.now
           let pinned = await repositoryPersistence.loadPinnedWorktreeIDs()
           let archived = await repositoryPersistence.loadArchivedWorktreeIDs()
           let lastFocused = await repositoryPersistence.loadLastFocusedWorktreeID()
           let repositoryOrderIDs = await repositoryPersistence.loadRepositoryOrderIDs()
           let worktreeOrderByRepository =
             await repositoryPersistence.loadWorktreeOrderByRepository()
-          startupLogger.info("[Benchmark] persistence load: \(t.duration(to: .now))")
           await send(.pinnedWorktreeIDsLoaded(pinned))
           await send(.archivedWorktreeIDsLoaded(archived))
           await send(.repositoryOrderIDsLoaded(repositoryOrderIDs))
@@ -423,11 +419,6 @@ struct RepositoriesFeature {
         return loadRepositories(roots, animated: animated)
 
       case .repositoriesLoaded(let repositories, let failures, let roots, let animated):
-        if !state.isInitialLoadComplete {
-          startupLogger.info(
-            "[Benchmark] initial load complete (end-to-end since AppFeature init): \(AppFeature.appLaunchTime.duration(to: .now))"
-          )
-        }
         state.isRefreshingWorktrees = false
         let previousSelection = state.selectedWorktreeID
         let previousSelectedWorktree = state.worktree(for: previousSelection)
@@ -2658,23 +2649,14 @@ struct RepositoriesFeature {
   }
 
   private func loadRepositoriesData(_ roots: [URL]) async -> ([Repository], [LoadFailure]) {
-    let total = ContinuousClock.now
     let gitClient = self.gitClient
-    let startupLogger = self.startupLogger
     let fetchResults = await withTaskGroup(of: WorktreesFetchResult.self) { group in
       for root in roots {
         group.addTask {
-          let t = ContinuousClock.now
-          let normalizedRoot = root.standardizedFileURL
-          let rootID = normalizedRoot.path(percentEncoded: false)
           do {
             let worktrees = try await gitClient.worktrees(root)
-            startupLogger.info(
-              "[Benchmark] worktrees(\(rootID)): \(t.duration(to: .now)) (\(worktrees.count) worktrees)"
-            )
             return WorktreesFetchResult(root: root, worktrees: worktrees, errorMessage: nil)
           } catch {
-            startupLogger.warning("[Benchmark] worktrees(\(rootID)) failed: \(t.duration(to: .now))")
             return WorktreesFetchResult(root: root, worktrees: nil, errorMessage: error.localizedDescription)
           }
         }
@@ -2704,9 +2686,6 @@ struct RepositoriesFeature {
         failures.append(LoadFailure(rootID: rootID, message: result.errorMessage ?? "Unknown error"))
       }
     }
-    startupLogger.info(
-      "[Benchmark] loadRepositoriesData total: \(total.duration(to: .now)) (\(roots.count) repos)"
-    )
     return (loaded, failures)
   }
 

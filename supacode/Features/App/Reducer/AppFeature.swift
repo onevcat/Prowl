@@ -83,14 +83,10 @@ struct AppFeature {
   @Dependency(TerminalClient.self) private var terminalClient
   @Dependency(WorktreeInfoWatcherClient.self) private var worktreeInfoWatcher
 
-  private let startupLogger = SupaLogger("Startup")
-  static let appLaunchTime = ContinuousClock.now
-
   var body: some Reducer<State, Action> {
     let core = Reduce<State, Action> { state, action in
       switch action {
       case .appLaunched:
-        startupLogger.info("[Benchmark] appLaunched received: \(Self.appLaunchTime.duration(to: .now))")
         return .merge(
           .send(.repositories(.task)),
           .send(.settings(.task)),
