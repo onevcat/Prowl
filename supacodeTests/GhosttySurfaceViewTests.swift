@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import Foundation
 import GhosttyKit
 import Testing
@@ -430,7 +431,6 @@ struct GhosttySurfaceViewTests {
       ) == nil
     )
   }
-
   @Test func stringFromGhosttyTextUsesExplicitLength() {
     let bytes: [UInt8] = Array("alpha".utf8) + [0] + Array("omega".utf8)
 
@@ -471,6 +471,36 @@ struct GhosttySurfaceViewTests {
 
     #expect(!suppression.suppresses(keyCode: 49, timestamp: 11.1))
     #expect(suppression.isExpired(at: 11.1))
+  }
+
+  @Test func optionCanvasNavigationShortcutMatchesByKeyCodeWhenCharactersMissing() {
+    #expect(
+      GhosttySurfaceView.isOptionCanvasNavigationShortcut(
+        keyCode: UInt16(kVK_ANSI_H),
+        charactersIgnoringModifiers: nil,
+        modifierFlags: [.option]
+      )
+    )
+  }
+
+  @Test func optionCanvasNavigationShortcutRejectsExtraModifiers() {
+    #expect(
+      !GhosttySurfaceView.isOptionCanvasNavigationShortcut(
+        keyCode: UInt16(kVK_ANSI_H),
+        charactersIgnoringModifiers: "h",
+        modifierFlags: [.option, .shift]
+      )
+    )
+  }
+
+  @Test func optionCanvasNavigationShortcutMatchesFallbackCharacters() {
+    #expect(
+      GhosttySurfaceView.isOptionCanvasNavigationShortcut(
+        keyCode: 0,
+        charactersIgnoringModifiers: "j",
+        modifierFlags: [.option]
+      )
+    )
   }
 
   private func makeKeyEvent(

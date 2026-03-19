@@ -123,8 +123,26 @@ enum CanvasZoomMath {
   }
 }
 
+struct CanvasOptionScrollRouter {
+  static func shouldRouteToCanvas(
+    modifierFlags: NSEvent.ModifierFlags,
+    eventWindowNumber: Int,
+    canvasWindowNumber: Int?,
+    hasPreciseScrollingDeltas: Bool,
+    locationInCanvas: CGPoint,
+    canvasBounds: CGRect
+  ) -> Bool {
+    guard modifierFlags.contains(.option) else { return false }
+    guard hasPreciseScrollingDeltas else { return false }
+    guard let canvasWindowNumber else { return false }
+    guard eventWindowNumber == canvasWindowNumber else { return false }
+    return canvasBounds.contains(locationInCanvas)
+  }
+}
+
 class CanvasScrollContainerView: NSView {
   var scrollCoordinator: CanvasScrollCoordinator?
+  var localScrollMonitor: Any?
   /// When false (a card is expanded), the container ignores scroll/zoom/
   /// middle-drag so the canvas can't pan or zoom behind the expanded card.
   var isInteractionEnabled = true {
@@ -282,10 +300,59 @@ class CanvasScrollContainerView: NSView {
 
   override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
+    updateLocalScrollMonitor()
     if window != nil {
       installMiddleButtonMonitor()
     } else {
       tearDownMiddleButtonMonitor()
+    }
+  }
+
+  override func viewWillMove(toWindow newWindow: NSWindow?) {
+    if newWindow == nil {
+      removeLocalScrollMonitor()
+      tearDownMiddleButtonMonitor()
+    }
+    super.viewWillMove(toWindow: newWindow)
+  }
+
+  func updateLocalScrollMonitor() {
+    guard window != nil else {
+      removeLocalScrollMonitor()
+      return
+    }
+    guard localScrollMonitor == nil else { return }
+    localScrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+      self?.handleOptionScroll(event) ?? event
+    }
+  }
+
+  func handleOptionScroll(_ event: NSEvent) -> NSEvent? {
+    guard isInteractionEnabled else { return event }
+    guard let window else { return event }
+    let locationInCanvas = convert(event.locationInWindow, from: nil)
+    guard
+      CanvasOptionScrollRouter.shouldRouteToCanvas(
+        modifierFlags: event.modifierFlags,
+        eventWindowNumber: event.windowNumber,
+        canvasWindowNumber: window.windowNumber,
+        hasPreciseScrollingDeltas: event.hasPreciseScrollingDeltas,
+        locationInCanvas: locationInCanvas,
+        canvasBounds: bounds
+      )
+    else { return event }
+
+    scrollCoordinator?.handleScroll(
+      deltaX: event.scrollingDeltaX,
+      deltaY: event.scrollingDeltaY
+    )
+    return nil
+  }
+
+  func removeLocalScrollMonitor() {
+    if let localScrollMonitor {
+      NSEvent.removeMonitor(localScrollMonitor)
+      self.localScrollMonitor = nil
     }
   }
 
@@ -355,9 +422,365 @@ class CanvasScrollContainerView: NSView {
 
   override func removeFromSuperview() {
     tearDownMonitor()
+    removeLocalScrollMonitor()
     tearDownMiddleButtonMonitor()
     super.removeFromSuperview()
   }
+}
+
+struct CanvasTabNavigator {
+  enum Direction {
+    case left
+    case down
+    case up
+    case right
+  }
+
+  struct Entry<ID: Hashable> {
+    let id: ID
+    let center: CGPoint
+    let size: CGSize
+  }
+
+  struct NavigationTarget<ID: Hashable> {
+    let id: ID
+    let didWrap: Bool
+  }
+
+  static func nextID<ID: Hashable>(
+    from currentID: ID,
+    direction: Direction,
+    entries: [Entry<ID>]
+  ) -> ID? {
+    nextTarget(from: currentID, direction: direction, entries: entries)?.id
+  }
+
+  static func nextTarget<ID: Hashable>(
+    from currentID: ID,
+    direction: Direction,
+    entries: [Entry<ID>]
+  ) -> NavigationTarget<ID>? {
+    guard let current = entries.first(where: { $0.id == currentID }) else { return nil }
+    let candidates = entries.filter { $0.id != currentID }
+    guard !candidates.isEmpty else { return nil }
+
+    let axisAligned = candidates.filter { isAxisAligned($0, with: current, direction: direction) }
+    let directionalPool = axisAligned.isEmpty ? candidates : axisAligned
+
+    let directional = directionalPool.filter {
+      isDirectionalCandidate($0.center, from: current.center, direction: direction)
+    }
+    if let best = bestDirectionalCandidate(direction: direction, from: current.center, tabs: directional) {
+      return NavigationTarget(id: best.id, didWrap: false)
+    }
+    guard !axisAligned.isEmpty else { return nil }
+    guard let wrapped = bestWrappedCandidate(direction: direction, from: current.center, tabs: axisAligned) else {
+      return nil
+    }
+    return NavigationTarget(id: wrapped.id, didWrap: true)
+  }
+
+  private static func isAxisAligned<ID: Hashable>(
+    _ candidate: Entry<ID>,
+    with current: Entry<ID>,
+    direction: Direction
+  ) -> Bool {
+    let epsilon: CGFloat = 0.5
+    let candidateFrame = frame(for: candidate)
+    let currentFrame = frame(for: current)
+
+    return switch direction {
+    case .left, .right:
+      overlap(
+        candidateFrame.minY,
+        candidateFrame.maxY,
+        currentFrame.minY,
+        currentFrame.maxY
+      ) > epsilon
+    case .up, .down:
+      overlap(
+        candidateFrame.minX,
+        candidateFrame.maxX,
+        currentFrame.minX,
+        currentFrame.maxX
+      ) > epsilon
+    }
+  }
+
+  private static func frame<ID: Hashable>(for entry: Entry<ID>) -> CGRect {
+    CGRect(
+      x: entry.center.x - entry.size.width / 2,
+      y: entry.center.y - entry.size.height / 2,
+      width: entry.size.width,
+      height: entry.size.height
+    )
+  }
+
+  private static func overlap(
+    _ minA: CGFloat,
+    _ maxA: CGFloat,
+    _ minB: CGFloat,
+    _ maxB: CGFloat
+  ) -> CGFloat {
+    min(maxA, maxB) - max(minA, minB)
+  }
+
+  private static func isDirectionalCandidate(
+    _ point: CGPoint,
+    from origin: CGPoint,
+    direction: Direction
+  ) -> Bool {
+    let epsilon: CGFloat = 0.5
+    let dx = point.x - origin.x
+    let dy = point.y - origin.y
+    return switch direction {
+    case .left:
+      dx < -epsilon
+    case .right:
+      dx > epsilon
+    case .up:
+      dy < -epsilon
+    case .down:
+      dy > epsilon
+    }
+  }
+
+  private static func bestDirectionalCandidate<ID: Hashable>(
+    direction: Direction,
+    from origin: CGPoint,
+    tabs: [Entry<ID>]
+  ) -> Entry<ID>? {
+    tabs.min {
+      directionalScore(for: $0.center, from: origin, direction: direction)
+        < directionalScore(for: $1.center, from: origin, direction: direction)
+    }
+  }
+
+  private static func directionalScore(
+    for point: CGPoint,
+    from origin: CGPoint,
+    direction: Direction
+  ) -> (primary: CGFloat, secondary: CGFloat, distance: CGFloat) {
+    let dx = point.x - origin.x
+    let dy = point.y - origin.y
+    let distance = hypot(dx, dy)
+    return switch direction {
+    case .left:
+      (primary: -dx, secondary: abs(dy), distance: distance)
+    case .right:
+      (primary: dx, secondary: abs(dy), distance: distance)
+    case .up:
+      (primary: -dy, secondary: abs(dx), distance: distance)
+    case .down:
+      (primary: dy, secondary: abs(dx), distance: distance)
+    }
+  }
+
+  private static func bestWrappedCandidate<ID: Hashable>(
+    direction: Direction,
+    from origin: CGPoint,
+    tabs: [Entry<ID>]
+  ) -> Entry<ID>? {
+    let wrapCoordinate: CGFloat = switch direction {
+    case .left:
+      tabs.map(\.center.x).max() ?? origin.x
+    case .right:
+      tabs.map(\.center.x).min() ?? origin.x
+    case .up:
+      tabs.map(\.center.y).max() ?? origin.y
+    case .down:
+      tabs.map(\.center.y).min() ?? origin.y
+    }
+
+    return tabs.min {
+      wrappedScore(
+        for: $0.center,
+        from: origin,
+        direction: direction,
+        wrapCoordinate: wrapCoordinate
+      ) < wrappedScore(
+        for: $1.center,
+        from: origin,
+        direction: direction,
+        wrapCoordinate: wrapCoordinate
+      )
+    }
+  }
+
+  private static func wrappedScore(
+    for point: CGPoint,
+    from origin: CGPoint,
+    direction: Direction,
+    wrapCoordinate: CGFloat
+  ) -> (edgeDistance: CGFloat, crossDistance: CGFloat, distance: CGFloat) {
+    let dx = point.x - origin.x
+    let dy = point.y - origin.y
+    let distance = hypot(dx, dy)
+    return switch direction {
+    case .left, .right:
+      (
+        edgeDistance: abs(point.x - wrapCoordinate),
+        crossDistance: abs(dy),
+        distance: distance
+      )
+    case .up, .down:
+      (
+        edgeDistance: abs(point.y - wrapCoordinate),
+        crossDistance: abs(dx),
+        distance: distance
+      )
+    }
+  }
+}
+
+struct CanvasFocusFallbackCandidate<ID: Hashable> {
+  let id: ID
+  let center: CGPoint
+  let size: CGSize
+  let isSelected: Bool
+}
+
+func canvasFallbackFocusID<ID: Hashable>(
+  focusedID: ID?,
+  viewportSize: CGSize,
+  canvasOffset: CGSize,
+  canvasScale: CGFloat,
+  candidates: [CanvasFocusFallbackCandidate<ID>]
+) -> ID? {
+  guard !candidates.isEmpty else { return nil }
+  if let focusedID, candidates.contains(where: { $0.id == focusedID }) {
+    return focusedID
+  }
+  let selectedCandidates = candidates.filter(\.isSelected)
+  if let selectedID = nearestCanvasFallbackID(
+    from: selectedCandidates,
+    viewportSize: viewportSize,
+    canvasOffset: canvasOffset,
+    canvasScale: canvasScale
+  ) {
+    return selectedID
+  }
+  return nearestCanvasFallbackID(
+    from: candidates,
+    viewportSize: viewportSize,
+    canvasOffset: canvasOffset,
+    canvasScale: canvasScale
+  )
+}
+
+private func nearestCanvasFallbackID<ID: Hashable>(
+  from candidates: [CanvasFocusFallbackCandidate<ID>],
+  viewportSize: CGSize,
+  canvasOffset: CGSize,
+  canvasScale: CGFloat
+) -> ID? {
+  guard !candidates.isEmpty else { return nil }
+  let visibleCandidates = candidates.filter {
+    canvasFallbackCandidateFrame(
+      for: $0,
+      canvasOffset: canvasOffset,
+      canvasScale: canvasScale
+    ).intersects(CGRect(origin: .zero, size: viewportSize))
+  }
+  let candidatePool = visibleCandidates.isEmpty ? candidates : visibleCandidates
+  let viewportCenter = CGPoint(
+    x: viewportSize.width / 2,
+    y: viewportSize.height / 2
+  )
+  return candidatePool.min { lhs, rhs in
+    let lhsDistance = canvasFallbackDistanceToViewportCenter(
+      lhs,
+      viewportCenter: viewportCenter,
+      canvasOffset: canvasOffset,
+      canvasScale: canvasScale
+    )
+    let rhsDistance = canvasFallbackDistanceToViewportCenter(
+      rhs,
+      viewportCenter: viewportCenter,
+      canvasOffset: canvasOffset,
+      canvasScale: canvasScale
+    )
+    if lhsDistance == rhsDistance {
+      return String(describing: lhs.id) < String(describing: rhs.id)
+    }
+    return lhsDistance < rhsDistance
+  }?.id
+}
+
+private func canvasFallbackCandidateFrame<ID: Hashable>(
+  for candidate: CanvasFocusFallbackCandidate<ID>,
+  canvasOffset: CGSize,
+  canvasScale: CGFloat
+) -> CGRect {
+  let screenCenter = CGPoint(
+    x: candidate.center.x * canvasScale + canvasOffset.width,
+    y: candidate.center.y * canvasScale + canvasOffset.height
+  )
+  let width = candidate.size.width * canvasScale
+  let height = candidate.size.height * canvasScale
+  return CGRect(
+    x: screenCenter.x - width / 2,
+    y: screenCenter.y - height / 2,
+    width: width,
+    height: height
+  )
+}
+
+private func canvasFallbackDistanceToViewportCenter<ID: Hashable>(
+  _ candidate: CanvasFocusFallbackCandidate<ID>,
+  viewportCenter: CGPoint,
+  canvasOffset: CGSize,
+  canvasScale: CGFloat
+) -> CGFloat {
+  let screenCenter = CGPoint(
+    x: candidate.center.x * canvasScale + canvasOffset.width,
+    y: candidate.center.y * canvasScale + canvasOffset.height
+  )
+  return hypot(screenCenter.x - viewportCenter.x, screenCenter.y - viewportCenter.y)
+}
+
+func shouldShowCanvasWrapToast<ID: Hashable>(
+  direction: CanvasTabNavigator.Direction,
+  didWrap: Bool,
+  viewportSize: CGSize,
+  canvasOffset: CGSize,
+  canvasScale: CGFloat,
+  entries: [CanvasTabNavigator.Entry<ID>]
+) -> Bool {
+  guard didWrap else { return false }
+  switch direction {
+  case .up, .down:
+    return true
+  case .left, .right:
+    guard viewportSize.width > 0 else { return true }
+    let epsilon: CGFloat = 0.5
+    let allEntriesFullyVisibleInX = entries.allSatisfy { entry in
+      let frame = canvasWrapToastEntryFrame(
+        entry: entry,
+        canvasOffset: canvasOffset,
+        canvasScale: canvasScale
+      )
+      return frame.minX >= -epsilon && frame.maxX <= viewportSize.width + epsilon
+    }
+    return !allEntriesFullyVisibleInX
+  }
+}
+
+private func canvasWrapToastEntryFrame<ID: Hashable>(
+  entry: CanvasTabNavigator.Entry<ID>,
+  canvasOffset: CGSize,
+  canvasScale: CGFloat
+) -> CGRect {
+  let screenCenter = CGPoint(
+    x: entry.center.x * canvasScale + canvasOffset.width,
+    y: entry.center.y * canvasScale + canvasOffset.height
+  )
+  return CGRect(
+    x: screenCenter.x - (entry.size.width * canvasScale) / 2,
+    y: screenCenter.y - (entry.size.height * canvasScale) / 2,
+    width: entry.size.width * canvasScale,
+    height: entry.size.height * canvasScale
+  )
 }
 
 /// Screen-space transform for a card on canvas.

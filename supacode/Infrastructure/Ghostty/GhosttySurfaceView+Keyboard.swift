@@ -5,6 +5,12 @@ import SwiftUI
 
 extension GhosttySurfaceView {
   override func keyDown(with event: NSEvent) {
+    if shouldPreferMenuHandling(for: event),
+      let menu = NSApp.mainMenu,
+      menu.performKeyEquivalent(with: event)
+    {
+      return
+    }
     guard let surface else {
       interpretKeyEvents([event])
       return
@@ -103,7 +109,7 @@ extension GhosttySurfaceView {
       )
     else { return false }
 
-    if UserCustomShortcutRegistry.shared.matches(event: event),
+    if shouldPreferMenuHandling(for: event),
       let menu = NSApp.mainMenu,
       Self.mainMenuHasMatchingItem(for: event, in: menu),
       menu.performKeyEquivalent(with: event)
@@ -200,6 +206,39 @@ extension GhosttySurfaceView {
       return ghostty_surface_key_is_binding(surface, key, &flags)
     }
     return isBinding ? flags : nil
+  }
+
+  func shouldPreferMenuHandling(for event: NSEvent) -> Bool {
+    if UserCustomShortcutRegistry.shared.matches(event: event) {
+      return true
+    }
+    return matchesCanvasNavigationShortcut(event)
+  }
+
+  func matchesCanvasNavigationShortcut(_ event: NSEvent) -> Bool {
+    Self.isOptionCanvasNavigationShortcut(
+      keyCode: event.keyCode,
+      charactersIgnoringModifiers: event.charactersIgnoringModifiers,
+      modifierFlags: event.modifierFlags
+    )
+  }
+
+  static func isOptionCanvasNavigationShortcut(
+    keyCode: UInt16,
+    charactersIgnoringModifiers: String?,
+    modifierFlags: NSEvent.ModifierFlags
+  ) -> Bool {
+    let relevantModifiers = modifierFlags.intersection([.command, .shift, .option, .control])
+    guard relevantModifiers == [.option] else { return false }
+
+    let keyCodeMatches = [kVK_ANSI_H, kVK_ANSI_J, kVK_ANSI_K, kVK_ANSI_L]
+      .contains(Int(keyCode))
+    if keyCodeMatches { return true }
+
+    guard let charactersIgnoringModifiers else { return false }
+    let normalized = charactersIgnoringModifiers.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard normalized.count == 1 else { return false }
+    return ["h", "j", "k", "l"].contains(normalized)
   }
 
   func equivalentKey(for event: NSEvent) -> String? {

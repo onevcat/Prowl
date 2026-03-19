@@ -38,10 +38,14 @@ struct CanvasView: View {
   @State var showsCanvasHelp = false
   @State var configReloadCounter = 0
   @State var focusViewportAnimationID = 0
+  @State var wrapToastDismissTask: Task<Void, Never>?
+  @State var canvasWrapToastMessage: String?
   /// The tab currently expanded in place (near-fullscreen overlay) on canvas,
   /// or nil when no card is expanded.
   @State var expandedTabID: TerminalTabID?
 
+  let focusVisibleInset: CGFloat = 20
+  let focusBottomReservedInset: CGFloat = 36
   let minCardWidth: CGFloat = 300
   let minCardHeight: CGFloat = 200
   let maxCardWidth: CGFloat = 2400
@@ -117,8 +121,10 @@ struct CanvasView: View {
             syncBroadcastCallbacks(states: activeStates)
             fulfillPendingFocusRequest(focusRequest, states: activeStates)
           }
-          .onChange(of: allCardKeys) { _, newKeys in
-            if newKeys.isEmpty {
+          .onChange(of: allCardKeys) { _, _ in
+            let latestStates = terminalManager.activeWorktreeStates
+            let latestKeys = collectCardKeys(from: latestStates)
+            if latestKeys.isEmpty {
               CanvasLayoutStore.hasAutoArrangedInSession = false
               if hasSeenCanvasCards {
                 layoutStore.prune(to: [])
@@ -126,19 +132,23 @@ struct CanvasView: View {
             } else {
               hasSeenCanvasCards = true
             }
-            ensureLayouts(for: newKeys)
-            if !newKeys.isEmpty {
-              layoutStore.ensureZOrder(for: newKeys)
+            ensureLayouts(for: latestKeys)
+            if !latestKeys.isEmpty {
+              layoutStore.ensureZOrder(for: latestKeys)
             }
-            syncBroadcastCallbacks(states: activeStates)
-            fulfillPendingFocusRequest(focusRequest, states: activeStates)
+            syncBroadcastCallbacks(states: latestStates)
+            recoverCanvasFocusIfNeeded(states: latestStates)
+            fulfillPendingFocusRequest(focusRequest, states: latestStates)
           }
-          .onChange(of: allTabIDs) { oldTabIDs, newTabIDs in
-            pruneSelection(previousOrder: oldTabIDs, currentOrder: newTabIDs, states: activeStates)
-            if let expandedTabID, !newTabIDs.contains(expandedTabID) {
+          .onChange(of: allTabIDs) { oldTabIDs, _ in
+            let latestStates = terminalManager.activeWorktreeStates
+            let latestTabIDs = collectVisibleTabIDs(from: latestStates)
+            pruneSelection(previousOrder: oldTabIDs, currentOrder: latestTabIDs, states: latestStates)
+            if let expandedTabID, !latestTabIDs.contains(expandedTabID) {
               cancelExpandForRelayout()
             }
-            fulfillPendingFocusRequest(focusRequest, states: activeStates)
+            recoverCanvasFocusIfNeeded(states: latestStates)
+            fulfillPendingFocusRequest(focusRequest, states: latestStates)
           }
           .onChange(of: focusRequest) { _, newRequest in
             fulfillPendingFocusRequest(newRequest, states: activeStates)
@@ -175,6 +185,14 @@ struct CanvasView: View {
     }
     .overlay(alignment: .bottomLeading) {
       canvasHelpButton
+    }
+    .overlay {
+      canvasWrapToast
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .allowsHitTesting(false)
+        .visualEffect { content, proxy in
+          content.offset(y: proxy.size.height / 3)
+        }
     }
     .onKeyPress(.escape) {
       guard selectionState.isBroadcasting else { return .ignored }
@@ -229,7 +247,14 @@ struct CanvasView: View {
     .onReceive(NotificationCenter.default.publisher(for: .ghosttyRuntimeConfigDidChange)) { _ in
       configReloadCounter &+= 1
     }
-    .onDisappear { deactivateCanvas() }
+    .onDisappear {
+      deactivateCanvas()
+      cancelWrapToastTask()
+    }
+    .focusedSceneValue(\.canvasMoveLeftAction) { focusAdjacentCanvasTab(direction: .left) }
+    .focusedSceneValue(\.canvasMoveDownAction) { focusAdjacentCanvasTab(direction: .down) }
+    .focusedSceneValue(\.canvasMoveUpAction) { focusAdjacentCanvasTab(direction: .up) }
+    .focusedSceneValue(\.canvasMoveRightAction) { focusAdjacentCanvasTab(direction: .right) }
   }
 
   func showsSelectionShield(for tabID: TerminalTabID) -> Bool {
@@ -251,10 +276,15 @@ struct CanvasView: View {
     // full-size frame would resize the stack and shift the cards' base position.
     ZStack(alignment: .topLeading) {
       ForEach(activeStates, id: \.worktreeID) { state in
-        ForEach(state.tabManager.tabs) { tab in
-          if state.surfaceView(for: tab.id) != nil {
-            cardView(for: tab, in: state, activeStates: activeStates)
+        Group {
+          ForEach(state.tabManager.tabs) { tab in
+            if state.surfaceView(for: tab.id) != nil {
+              cardView(for: tab, in: state, activeStates: activeStates)
+            }
           }
+        }
+        .onChange(of: state.tabManager.selectedTabId) { _, _ in
+          syncFocusToSelectedTab(in: state, states: terminalManager.activeWorktreeStates)
         }
       }
 
@@ -336,7 +366,7 @@ struct CanvasView: View {
           if cmdHeld {
             handleSelectionShieldTap(tab.id, surfaceState: state, states: activeStates)
           } else {
-            focusSingleCard(tab.id, states: activeStates)
+            focusSingleCard(tab.id, states: activeStates, ensureVisibleInViewport: true)
           }
         },
         onSelectionTap: {
@@ -787,6 +817,65 @@ struct CanvasView: View {
     return base
   }
 
+  var canvasWrapToast: some View {
+    Group {
+      if let message = canvasWrapToastMessage {
+        HStack(spacing: 8) {
+          Image(systemName: "arrow.triangle.2.circlepath")
+            .font(.headline.weight(.semibold))
+            .symbolRenderingMode(.hierarchical)
+            .foregroundStyle(.secondary)
+          Text(message)
+            .font(.body)
+            .foregroundStyle(.primary)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay {
+          Capsule()
+            .strokeBorder(.quaternary, lineWidth: 1)
+        }
+        .shadow(radius: 8, y: 2)
+        .transition(.opacity.combined(with: .scale(scale: 0.97)))
+      }
+    }
+    .animation(.easeInOut(duration: 0.2), value: canvasWrapToastMessage)
+  }
+
+  func showWrapToast(for direction: CanvasNavigationDirection) {
+    cancelWrapToastTask()
+    withAnimation(.easeInOut(duration: 0.2)) {
+      canvasWrapToastMessage = wrapToastMessage(for: direction)
+    }
+    wrapToastDismissTask = Task { @MainActor in
+      try? await Task.sleep(for: .seconds(2))
+      guard !Task.isCancelled else { return }
+      withAnimation(.easeInOut(duration: 0.2)) {
+        canvasWrapToastMessage = nil
+      }
+      wrapToastDismissTask = nil
+    }
+  }
+
+  func wrapToastMessage(for direction: CanvasNavigationDirection) -> String {
+    switch direction {
+    case .left:
+      "Right"
+    case .right:
+      "Left"
+    case .up:
+      "Bottom"
+    case .down:
+      "Top"
+    }
+  }
+
+  func cancelWrapToastTask() {
+    wrapToastDismissTask?.cancel()
+    wrapToastDismissTask = nil
+  }
+
   // MARK: - Drag
 
   func commitDrag(for cardKey: String, translation: CGSize) {
@@ -795,6 +884,159 @@ struct CanvasView: View {
       layout.position.y += translation.height
       layoutStore.cardLayouts[cardKey] = layout
     }
+  }
+
+  // MARK: - Keyboard Navigation
+
+  typealias CanvasNavigationDirection = CanvasTabNavigator.Direction
+
+  struct CanvasTabTarget {
+    let state: WorktreeTerminalState
+    let tabID: TerminalTabID
+    let center: CGPoint
+    let size: CGSize
+  }
+
+  struct CanvasTabNavigationTarget {
+    let tab: CanvasTabTarget
+    let didWrap: Bool
+  }
+
+  func focusAdjacentCanvasTab(direction: CanvasNavigationDirection) {
+    let states = terminalManager.activeWorktreeStates
+    ensureLayouts(for: collectCardKeys(from: states))
+    let tabs = visibleCanvasTabs(from: states)
+    guard !tabs.isEmpty else { return }
+    guard let current = currentCanvasTab(from: tabs) else { return }
+    guard let navigationTarget = candidateCanvasTab(from: current, direction: direction, tabs: tabs) else {
+      return
+    }
+    focusCanvasTab(navigationTarget.tab, states: states, animatesViewport: false)
+    let navigationEntries = tabs.map { tab in
+      CanvasTabNavigator.Entry(
+        id: tab.tabID,
+        center: tab.center,
+        size: tab.size
+      )
+    }
+    if shouldShowCanvasWrapToast(
+      direction: direction,
+      didWrap: navigationTarget.didWrap,
+      viewportSize: viewportSize,
+      canvasOffset: canvasOffset,
+      canvasScale: canvasScale,
+      entries: navigationEntries
+    ) {
+      showWrapToast(for: direction)
+    }
+  }
+
+  func visibleCanvasTabs(from states: [WorktreeTerminalState]) -> [CanvasTabTarget] {
+    states.flatMap { state in
+      state.tabManager.tabs.compactMap { tab in
+        guard state.surfaceView(for: tab.id) != nil else { return nil }
+        let key = tab.id.rawValue.uuidString
+        let baseLayout = layoutStore.cardLayouts[key] ?? CanvasCardLayout(position: .zero)
+        let resized = resizedFrame(for: tab.id, baseLayout: baseLayout)
+        return CanvasTabTarget(
+          state: state,
+          tabID: tab.id,
+          center: resized.center,
+          size: CGSize(width: resized.size.width, height: resized.size.height + titleBarHeight)
+        )
+      }
+    }
+  }
+
+  func currentCanvasTab(from tabs: [CanvasTabTarget]) -> CanvasTabTarget? {
+    if let primaryTabID = selectionState.primaryTabID,
+      let focused = tabs.first(where: { $0.tabID == primaryTabID })
+    {
+      return focused
+    }
+    if let selected = tabs.first(where: { $0.state.tabManager.selectedTabId == $0.tabID }) {
+      return selected
+    }
+    return tabs.first
+  }
+
+  func candidateCanvasTab(
+    from current: CanvasTabTarget,
+    direction: CanvasNavigationDirection,
+    tabs: [CanvasTabTarget]
+  ) -> CanvasTabNavigationTarget? {
+    let entries = tabs.map { tab in
+      CanvasTabNavigator.Entry(
+        id: tab.tabID,
+        center: tab.center,
+        size: tab.size
+      )
+    }
+    guard
+      let nextTarget = CanvasTabNavigator.nextTarget(
+        from: current.tabID,
+        direction: direction,
+        entries: entries
+      )
+    else { return nil }
+    guard let tab = tabs.first(where: { $0.tabID == nextTarget.id }) else { return nil }
+    return CanvasTabNavigationTarget(tab: tab, didWrap: nextTarget.didWrap)
+  }
+
+  func focusCanvasTab(
+    _ target: CanvasTabTarget,
+    states: [WorktreeTerminalState],
+    animatesViewport: Bool = true
+  ) {
+    focusSingleCard(
+      target.tabID,
+      states: states,
+      ensureVisibleInViewport: true,
+      animatesViewport: animatesViewport
+    )
+  }
+
+  func syncFocusToSelectedTab(in state: WorktreeTerminalState, states: [WorktreeTerminalState]) {
+    guard let selectedTabID = state.tabManager.selectedTabId else {
+      recoverCanvasFocusIfNeeded(states: states)
+      return
+    }
+    guard selectionState.primaryTabID != selectedTabID else { return }
+    mutateSelection(states: states) { currentState in
+      if currentState.isBroadcasting, currentState.selectedTabIDs.contains(selectedTabID) {
+        currentState.setPrimary(selectedTabID)
+      } else {
+        currentState.focusSingle(selectedTabID)
+      }
+    }
+    ensureTabVisibleInViewport(selectedTabID, minimumInset: focusVisibleInset)
+  }
+
+  func recoverCanvasFocusIfNeeded(states: [WorktreeTerminalState]) {
+    let tabs = visibleCanvasTabs(from: states)
+    let candidates = tabs.map { tab in
+      CanvasFocusFallbackCandidate(
+        id: tab.tabID,
+        center: tab.center,
+        size: tab.size,
+        isSelected: tab.state.tabManager.selectedTabId == tab.tabID
+      )
+    }
+    guard let targetTabID = canvasFallbackFocusID(
+      focusedID: selectionState.primaryTabID,
+      viewportSize: viewportSize,
+      canvasOffset: canvasOffset,
+      canvasScale: canvasScale,
+      candidates: candidates
+    ) else {
+      if selectionState.primaryTabID != nil {
+        clearSelection(states: states)
+      }
+      return
+    }
+    guard selectionState.primaryTabID != targetTabID else { return }
+    guard let target = tabs.first(where: { $0.tabID == targetTabID }) else { return }
+    focusCanvasTab(target, states: states)
   }
 
   // MARK: - Resize
@@ -831,12 +1073,100 @@ struct CanvasView: View {
 
   func focusSingleCard(
     _ tabID: TerminalTabID,
-    states: [WorktreeTerminalState]
+    states: [WorktreeTerminalState],
+    ensureVisibleInViewport: Bool = false,
+    animatesViewport: Bool = true
   ) {
     layoutStore.moveToFront(tabID.rawValue.uuidString)
     mutateSelection(states: states) { state in
       state.focusSingle(tabID)
     }
+    if ensureVisibleInViewport {
+      ensureTabVisibleInViewport(
+        tabID,
+        minimumInset: focusVisibleInset,
+        animatesViewport: animatesViewport
+      )
+    }
+  }
+
+  func ensureTabVisibleInViewport(
+    _ tabID: TerminalTabID,
+    minimumInset: CGFloat,
+    animatesViewport: Bool = true
+  ) {
+    guard viewportSize.width > 0, viewportSize.height > 0 else { return }
+    let key = tabID.rawValue.uuidString
+    guard let layout = layoutStore.cardLayouts[key] else { return }
+
+    let resized = resizedFrame(for: tabID, baseLayout: layout)
+    let screenCenter = screenPosition(for: resized.center)
+    let scaledHalfWidth = (resized.size.width * canvasScale) / 2
+    let scaledHalfHeight = ((resized.size.height + titleBarHeight) * canvasScale) / 2
+    let cardMinX = screenCenter.x - scaledHalfWidth
+    let cardMaxX = screenCenter.x + scaledHalfWidth
+    let cardMinY = screenCenter.y - scaledHalfHeight
+    let cardMaxY = screenCenter.y + scaledHalfHeight
+
+    let insetX = min(max(0, minimumInset), viewportSize.width / 2)
+    let insetY = min(max(0, minimumInset), viewportSize.height / 2)
+    let targetMinX = insetX
+    let targetMaxX = viewportSize.width - insetX
+    let targetMinY = insetY
+    let targetMaxY = max(
+      targetMinY,
+      viewportSize.height - insetY - focusBottomReservedInset
+    )
+
+    let deltaX = visibilityAdjustment(
+      min: cardMinX,
+      max: cardMaxX,
+      targetMin: targetMinX,
+      targetMax: targetMaxX
+    )
+    let deltaY = visibilityAdjustment(
+      min: cardMinY,
+      max: cardMaxY,
+      targetMin: targetMinY,
+      targetMax: targetMaxY
+    )
+
+    guard deltaX != 0 || deltaY != 0 else { return }
+    canvasOffset = CGSize(
+      width: canvasOffset.width + deltaX,
+      height: canvasOffset.height + deltaY
+    )
+    lastCanvasOffset = canvasOffset
+    if animatesViewport {
+      focusViewportAnimationID &+= 1
+    }
+  }
+
+  func visibilityAdjustment(
+    min valueMin: CGFloat,
+    max valueMax: CGFloat,
+    targetMin: CGFloat,
+    targetMax: CGFloat
+  ) -> CGFloat {
+    let lowerBound = targetMin - valueMin
+    let upperBound = targetMax - valueMax
+
+    if lowerBound <= upperBound {
+      if 0 < lowerBound { return lowerBound }
+      if 0 > upperBound { return upperBound }
+      return 0
+    }
+
+    if valueMin >= targetMin, valueMax >= targetMax {
+      return targetMin - valueMin
+    }
+    if valueMin <= targetMin, valueMax <= targetMax {
+      return targetMax - valueMax
+    }
+
+    let alignMinDelta = targetMin - valueMin
+    let alignMaxDelta = targetMax - valueMax
+    return abs(alignMinDelta) <= abs(alignMaxDelta) ? alignMinDelta : alignMaxDelta
   }
 
   // MARK: - Expand In Place

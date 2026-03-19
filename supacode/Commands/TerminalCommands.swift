@@ -8,6 +8,10 @@ struct TerminalCommands: Commands {
   @FocusedValue(\.resetFontSizeAction) private var resetFontSizeAction
   @FocusedValue(\.increaseFontSizeAction) private var increaseFontSizeAction
   @FocusedValue(\.decreaseFontSizeAction) private var decreaseFontSizeAction
+  @FocusedValue(\.canvasMoveLeftAction) private var canvasMoveLeftAction
+  @FocusedValue(\.canvasMoveDownAction) private var canvasMoveDownAction
+  @FocusedValue(\.canvasMoveUpAction) private var canvasMoveUpAction
+  @FocusedValue(\.canvasMoveRightAction) private var canvasMoveRightAction
   @FocusedValue(\.startSearchAction) private var startSearchAction
   @FocusedValue(\.searchSelectionAction) private var searchSelectionAction
   @FocusedValue(\.navigateSearchNextAction) private var navigateSearchNextAction
@@ -37,6 +41,27 @@ struct TerminalCommands: Commands {
         KeyboardShortcutModifier(shortcut: ghosttyShortcuts.keyboardShortcut(for: "close_tab"))
       )
       .disabled(closeTabAction == nil)
+      Divider()
+      Button("Canvas Move Left") {
+        canvasMoveLeftAction?()
+      }
+      .keyboardShortcut("h", modifiers: .option)
+      .disabled(canvasMoveLeftAction == nil)
+      Button("Canvas Move Down") {
+        canvasMoveDownAction?()
+      }
+      .keyboardShortcut("j", modifiers: .option)
+      .disabled(canvasMoveDownAction == nil)
+      Button("Canvas Move Up") {
+        canvasMoveUpAction?()
+      }
+      .keyboardShortcut("k", modifiers: .option)
+      .disabled(canvasMoveUpAction == nil)
+      Button("Canvas Move Right") {
+        canvasMoveRightAction?()
+      }
+      .keyboardShortcut("l", modifiers: .option)
+      .disabled(canvasMoveRightAction == nil)
     }
     CommandGroup(after: .toolbar) {
       Divider()
@@ -177,7 +202,49 @@ extension FocusedValues {
     set { self[DecreaseFontSizeActionKey.self] = newValue }
   }
 }
+private struct CanvasMoveLeftActionKey: FocusedValueKey {
+  typealias Value = () -> Void
+}
 
+extension FocusedValues {
+  var canvasMoveLeftAction: (() -> Void)? {
+    get { self[CanvasMoveLeftActionKey.self] }
+    set { self[CanvasMoveLeftActionKey.self] = newValue }
+  }
+}
+
+private struct CanvasMoveDownActionKey: FocusedValueKey {
+  typealias Value = () -> Void
+}
+
+extension FocusedValues {
+  var canvasMoveDownAction: (() -> Void)? {
+    get { self[CanvasMoveDownActionKey.self] }
+    set { self[CanvasMoveDownActionKey.self] = newValue }
+  }
+}
+
+private struct CanvasMoveUpActionKey: FocusedValueKey {
+  typealias Value = () -> Void
+}
+
+extension FocusedValues {
+  var canvasMoveUpAction: (() -> Void)? {
+    get { self[CanvasMoveUpActionKey.self] }
+    set { self[CanvasMoveUpActionKey.self] = newValue }
+  }
+}
+
+private struct CanvasMoveRightActionKey: FocusedValueKey {
+  typealias Value = () -> Void
+}
+
+extension FocusedValues {
+  var canvasMoveRightAction: (() -> Void)? {
+    get { self[CanvasMoveRightActionKey.self] }
+    set { self[CanvasMoveRightActionKey.self] = newValue }
+  }
+}
 private struct StartSearchActionKey: FocusedValueKey {
   typealias Value = FocusedAction<Void>
 }
