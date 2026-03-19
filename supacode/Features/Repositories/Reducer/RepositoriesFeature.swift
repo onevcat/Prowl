@@ -482,8 +482,8 @@ struct RepositoriesFeature {
         analyticsClient.capture("repository_added", ["count": urls.count])
         state.alert = nil
         return .run { send in
-      let loadedPaths = await repositoryPersistence.loadRoots()
-      let existingRootPaths = RepositoryPathNormalizer.normalize(loadedPaths)
+          let loadedPaths = await repositoryPersistence.loadRoots()
+          let existingRootPaths = RepositoryPathNormalizer.normalize(loadedPaths)
           var resolvedRoots: [URL] = []
           var invalidRoots: [String] = []
           for url in urls {
