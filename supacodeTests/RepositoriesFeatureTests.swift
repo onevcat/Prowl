@@ -9,6 +9,7 @@ import Testing
 
 @testable import supacode
 
+@Suite(.serialized)
 @MainActor
 struct RepositoriesFeatureTests {
   @Test func refreshWorktreesSetsRefreshingStateUntilLoadCompletes() async {
@@ -2447,11 +2448,15 @@ struct RepositoriesFeatureTests {
     )
   }
 
-  private func makeRepository(id: String, worktrees: [Worktree]) -> Repository {
+  private func makeRepository(
+    id: String,
+    name: String = "repo",
+    worktrees: [Worktree]
+  ) -> Repository {
     Repository(
       id: id,
       rootURL: URL(fileURLWithPath: id),
-      name: "repo",
+      name: name,
       worktrees: IdentifiedArray(uniqueElements: worktrees)
     )
   }
@@ -2466,7 +2471,6 @@ struct RepositoriesFeatureTests {
   // MARK: - Priority startup loading
 
   @Test func priorityLoadRestoresSelectionOnFirstRepositoriesLoaded() async {
-    let worktreeA = makeWorktree(id: "/tmp/repo-a/main", name: "main", repoRoot: "/tmp/repo-a")
     let worktreeB = makeWorktree(id: "/tmp/repo-b/main", name: "main", repoRoot: "/tmp/repo-b")
     let repoB = makeRepository(id: "/tmp/repo-b", worktrees: [worktreeB])
     let allRootURLs = ["/tmp/repo-a", "/tmp/repo-b"].map { URL(fileURLWithPath: $0) }
@@ -2531,29 +2535,211 @@ struct RepositoriesFeatureTests {
     #expect(store.state.selection == SidebarSelection.worktree(worktreeB.id))
   }
 
-  @Test func loadPersistedRepositoriesWithoutLastFocusedLoadsAllAtOnce() async {
-    let worktreeA = makeWorktree(id: "/tmp/repo-a/main", name: "main", repoRoot: "/tmp/repo-a")
-    let worktreeB = makeWorktree(id: "/tmp/repo-b/main", name: "main", repoRoot: "/tmp/repo-b")
-    let roots = ["/tmp/repo-a", "/tmp/repo-b"]
+  @Test func loadPersistedRepositoriesPrioritizesLinkedLastFocusedWorktree() async {
+    let testID = UUID().uuidString
+    let repoRootA = "/tmp/\(testID)-repo-a"
+    let repoRootB = "/tmp/\(testID)-repo-b"
+    let worktreeA = makeWorktree(
+      id: "/tmp/worktrees/\(testID)-repo-a/feature-a",
+      name: "feature-a",
+      repoRoot: repoRootA
+    )
+    let worktreeB = makeWorktree(
+      id: "/tmp/worktrees/\(testID)-repo-b/feature-b",
+      name: "feature-b",
+      repoRoot: repoRootB
+    )
+    let repoA = makeRepository(
+      id: repoRootA,
+      name: URL(fileURLWithPath: repoRootA).lastPathComponent,
+      worktrees: [worktreeA]
+    )
+    let repoB = makeRepository(
+      id: repoRootB,
+      name: URL(fileURLWithPath: repoRootB).lastPathComponent,
+      worktrees: [worktreeB]
+    )
+    let roots = [repoRootA, repoRootB]
+    let rootURLs = roots.map { URL(fileURLWithPath: $0) }
+    let gate = AsyncGate()
+
+    var state = RepositoriesFeature.State()
+    state.lastFocusedWorktreeID = worktreeB.id
+    state.shouldRestoreLastFocusedWorktree = true
+
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.loadRoots = { roots }
+      $0.gitClient.worktrees = { root in
+        switch root.path(percentEncoded: false) {
+        case repoRootA:
+          await gate.wait()
+          return [worktreeA]
+        case repoRootB:
+          return [worktreeB]
+        default:
+          return []
+        }
+      }
+    }
+
+    await store.send(.loadPersistedRepositories)
+
+    await store.receive(\.repositoriesLoaded) {
+      $0.isInitialLoadComplete = true
+      $0.repositories = IdentifiedArray(uniqueElements: [repoB])
+      $0.repositoryRoots = rootURLs
+      $0.shouldRestoreLastFocusedWorktree = false
+      $0.selection = .worktree(worktreeB.id)
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.receive(\.delegate.selectedWorktreeChanged)
+
+    await gate.resume()
+
+    await store.receive(\.repositoriesLoaded) {
+      $0.repositories = IdentifiedArray(uniqueElements: [repoA, repoB])
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
+  }
+
+  @Test func loadPersistedRepositoriesPreservesRootOrderWhenLoadsFinishOutOfOrder() async {
+    let testID = UUID().uuidString
+    let repoRootA = "/tmp/\(testID)-repo-a"
+    let repoRootB = "/tmp/\(testID)-repo-b"
+    let worktreeA = makeWorktree(id: "\(repoRootA)/main", name: "main", repoRoot: repoRootA)
+    let worktreeB = makeWorktree(id: "\(repoRootB)/main", name: "main", repoRoot: repoRootB)
+    let repoA = makeRepository(
+      id: repoRootA,
+      name: URL(fileURLWithPath: repoRootA).lastPathComponent,
+      worktrees: [worktreeA]
+    )
+    let repoB = makeRepository(
+      id: repoRootB,
+      name: URL(fileURLWithPath: repoRootB).lastPathComponent,
+      worktrees: [worktreeB]
+    )
+    let roots = [repoRootA, repoRootB]
+    let rootURLs = roots.map { URL(fileURLWithPath: $0) }
+    let gate = AsyncGate()
 
     let store = TestStore(initialState: RepositoriesFeature.State()) {
       RepositoriesFeature()
     } withDependencies: {
       $0.repositoryPersistence.loadRoots = { roots }
       $0.gitClient.worktrees = { root in
-        let path = root.path(percentEncoded: false)
-        if path.hasPrefix("/tmp/repo-a") { return [worktreeA] }
-        if path.hasPrefix("/tmp/repo-b") { return [worktreeB] }
-        return []
+        switch root.path(percentEncoded: false) {
+        case repoRootA:
+          await gate.wait()
+          return [worktreeA]
+        case repoRootB:
+          return [worktreeB]
+        default:
+          return []
+        }
       }
     }
-    store.exhaustivity = .off
 
     await store.send(.loadPersistedRepositories)
+    await gate.resume()
 
-    // No lastFocusedWorktreeID — single repositoriesLoaded with all repos
     await store.receive(\.repositoriesLoaded) {
       $0.isInitialLoadComplete = true
+      $0.repositories = IdentifiedArray(uniqueElements: [repoA, repoB])
+      $0.repositoryRoots = rootURLs
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
+  }
+
+  @Test func repositoryRemovedSelectsFirstRemainingWorktreeInRootOrder() async {
+    let testID = UUID().uuidString
+    let removedRoot = "/tmp/\(testID)-repo-removed"
+    let repoRootA = "/tmp/\(testID)-repo-a"
+    let repoRootB = "/tmp/\(testID)-repo-b"
+    let removedWorktree = makeWorktree(id: removedRoot, name: "main", repoRoot: removedRoot)
+    let worktreeA = makeWorktree(id: "\(repoRootA)/main", name: "main", repoRoot: repoRootA)
+    let worktreeB = makeWorktree(id: "\(repoRootB)/main", name: "main", repoRoot: repoRootB)
+    let removedRepo = makeRepository(
+      id: removedRoot,
+      name: URL(fileURLWithPath: removedRoot).lastPathComponent,
+      worktrees: [removedWorktree]
+    )
+    let repoA = makeRepository(
+      id: repoRootA,
+      name: URL(fileURLWithPath: repoRootA).lastPathComponent,
+      worktrees: [worktreeA]
+    )
+    let repoB = makeRepository(
+      id: repoRootB,
+      name: URL(fileURLWithPath: repoRootB).lastPathComponent,
+      worktrees: [worktreeB]
+    )
+    let gate = AsyncGate()
+
+    var state = makeState(repositories: [removedRepo, repoA, repoB])
+    state.selection = .worktree(removedWorktree.id)
+    state.removingRepositoryIDs = [removedRepo.id]
+
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.loadRoots = { [removedRoot, repoRootA, repoRootB] }
+      $0.repositoryPersistence.saveRoots = { _ in }
+      $0.gitClient.worktrees = { root in
+        switch root.path(percentEncoded: false) {
+        case repoRootA:
+          await gate.wait()
+          return [worktreeA]
+        case repoRootB:
+          return [worktreeB]
+        default:
+          return []
+        }
+      }
+    }
+
+    await store.send(.repositoryRemoved(removedRepo.id, selectionWasRemoved: true)) {
+      $0.removingRepositoryIDs = []
+      $0.selection = nil
+      $0.shouldSelectFirstAfterReload = true
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+
+    await gate.resume()
+
+    await store.receive(\.repositoriesLoaded) {
+      $0.isInitialLoadComplete = true
+      $0.repositories = IdentifiedArray(uniqueElements: [repoA, repoB])
+      $0.repositoryRoots = [URL(fileURLWithPath: repoRootA), URL(fileURLWithPath: repoRootB)]
+      $0.selection = .worktree(worktreeA.id)
+      $0.shouldSelectFirstAfterReload = false
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.finish()
+  }
+
+  private actor AsyncGate {
+    var continuation: CheckedContinuation<Void, Never>?
+    var isOpen = false
+
+    func wait() async {
+      guard !isOpen else { return }
+      await withCheckedContinuation { continuation in
+        self.continuation = continuation
+      }
+    }
+
+    func resume() {
+      if let continuation {
+        continuation.resume()
+        self.continuation = nil
+      } else {
+        isOpen = true
+      }
     }
   }
 }

@@ -262,6 +262,12 @@ struct RepositoriesFeature {
     let didPruneArchivedWorktreeIDs: Bool
   }
 
+  private struct RepositoryLoadBatch {
+    let repositories: [Repository]
+    let failures: [LoadFailure]
+    let didLoadPriorityRepository: Bool
+  }
+
   enum StatusToast: Equatable {
     case inProgress(String)
     case success(String)
@@ -356,57 +362,39 @@ struct RepositoriesFeature {
           let rootPaths = RepositoryPathNormalizer.normalize(loadedPaths)
           let roots = rootPaths.map { URL(fileURLWithPath: $0) }
 
-          // Priority loading: load the last-focused repo first so the UI can appear
-          // immediately with the selected worktree, then load remaining repos in the
-          // background. The second `repositoriesLoaded` includes the priority repo again
-          // because `applyRepositories` performs a full replacement — omitting it would
-          // remove the already-visible repo from state. The priority repo is NOT re-fetched
-          // from disk; its in-memory result is simply included in the combined list.
-          // `applyRepositories` is idempotent, so processing it twice is harmless.
+          // Priority loading: emit the repository that actually contains the last-focused
+          // worktree as soon as that fetch completes, then apply the final full snapshot
+          // in root order. Matching on fetched worktree IDs is robust even when linked
+          // worktrees live outside the repository root.
+          let batch: RepositoryLoadBatch
           if let lastFocused {
-            var priorityRoot: URL?
-            var remainingRoots: [URL] = []
-            for root in roots {
-              let rootPath = root.path(percentEncoded: false)
-              let prefix = rootPath.hasSuffix("/") ? rootPath : rootPath + "/"
-              if priorityRoot == nil,
-                lastFocused.hasPrefix(prefix) || lastFocused == rootPath
-              {
-                priorityRoot = root
-              } else {
-                remainingRoots.append(root)
-              }
-            }
-            if let priorityRoot {
-              let (priorityRepos, priorityFailures) = await loadRepositoriesData([priorityRoot])
+            batch = await loadRepositoriesData(
+              roots,
+              prioritizeWorktreeID: lastFocused
+            ) { priorityRepository in
               await send(
                 .repositoriesLoaded(
-                  priorityRepos,
-                  failures: priorityFailures,
+                  [priorityRepository],
+                  failures: [],
                   roots: roots,
                   animated: false
                 )
               )
-              if !remainingRoots.isEmpty {
-                let (remainingRepos, remainingFailures) = await loadRepositoriesData(remainingRoots)
-                await send(
-                  .repositoriesLoaded(
-                    priorityRepos + remainingRepos,
-                    failures: priorityFailures + remainingFailures,
-                    roots: roots,
-                    animated: false
-                  )
-                )
-              }
+            }
+            if batch.didLoadPriorityRepository,
+              batch.repositories.count == 1,
+              batch.failures.isEmpty
+            {
               return
             }
+          } else {
+            batch = await loadRepositoriesData(roots)
           }
 
-          let (repositories, failures) = await loadRepositoriesData(roots)
           await send(
             .repositoriesLoaded(
-              repositories,
-              failures: failures,
+              batch.repositories,
+              failures: batch.failures,
               roots: roots,
               animated: false
             )
@@ -494,8 +482,8 @@ struct RepositoriesFeature {
         analyticsClient.capture("repository_added", ["count": urls.count])
         state.alert = nil
         return .run { send in
-          let loadedPaths = await repositoryPersistence.loadRoots()
-          let existingRootPaths = RepositoryPathNormalizer.normalize(loadedPaths)
+      let loadedPaths = await repositoryPersistence.loadRoots()
+      let existingRootPaths = RepositoryPathNormalizer.normalize(loadedPaths)
           var resolvedRoots: [URL] = []
           var invalidRoots: [String] = []
           for url in urls {
@@ -512,11 +500,11 @@ struct RepositoriesFeature {
           let mergedPaths = RepositoryPathNormalizer.normalize(existingRootPaths + resolvedRootPaths)
           let mergedRoots = mergedPaths.map { URL(fileURLWithPath: $0) }
           await repositoryPersistence.saveRoots(mergedPaths)
-          let (repositories, failures) = await loadRepositoriesData(mergedRoots)
+          let batch = await loadRepositoriesData(mergedRoots)
           await send(
             .openRepositoriesFinished(
-              repositories,
-              failures: failures,
+              batch.repositories,
+              failures: batch.failures,
               invalidRoots: invalidRoots,
               roots: mergedRoots
             )
@@ -1790,11 +1778,11 @@ struct RepositoriesFeature {
           let remaining = rootPaths.filter { $0 != repositoryID }
           await repositoryPersistence.saveRoots(remaining)
           let roots = remaining.map { URL(fileURLWithPath: $0) }
-          let (repositories, failures) = await loadRepositoriesData(roots)
+          let batch = await loadRepositoriesData(roots)
           await send(
             .repositoriesLoaded(
-              repositories,
-              failures: failures,
+              batch.repositories,
+              failures: batch.failures,
               roots: roots,
               animated: true
             )
@@ -1834,11 +1822,11 @@ struct RepositoriesFeature {
             let remaining = rootPaths.filter { $0 != repositoryID }
             await repositoryPersistence.saveRoots(remaining)
             let roots = remaining.map { URL(fileURLWithPath: $0) }
-            let (repositories, failures) = await loadRepositoriesData(roots)
+            let batch = await loadRepositoriesData(roots)
             await send(
               .repositoriesLoaded(
-                repositories,
-                failures: failures,
+                batch.repositories,
+                failures: batch.failures,
                 roots: roots,
                 animated: true
               )
@@ -2638,11 +2626,11 @@ struct RepositoriesFeature {
       for root in roots {
         _ = try? await gitClient.pruneWorktrees(root)
       }
-      let (repositories, failures) = await loadRepositoriesData(roots)
+      let batch = await loadRepositoriesData(roots)
       await send(
         .repositoriesLoaded(
-          repositories,
-          failures: failures,
+          batch.repositories,
+          failures: batch.failures,
           roots: roots,
           animated: animated
         )
@@ -2652,51 +2640,109 @@ struct RepositoriesFeature {
   }
 
   private enum WorktreesFetchResult: Sendable {
-    case loaded(root: URL, worktrees: [Worktree])
-    case failed(root: URL, message: String)
+    case loaded(index: Int, root: URL, worktrees: [Worktree])
+    case failed(index: Int, root: URL, message: String)
+
+    var index: Int {
+      switch self {
+      case .loaded(let index, _, _), .failed(let index, _, _):
+        return index
+      }
+    }
+
+    func contains(worktreeID: Worktree.ID) -> Bool {
+      switch self {
+      case .loaded(_, _, let worktrees):
+        worktrees.contains { $0.id == worktreeID }
+      case .failed:
+        false
+      }
+    }
+
+    var repository: Repository? {
+      switch self {
+      case .loaded(_, let root, let worktrees):
+        let normalizedRoot = root.standardizedFileURL
+        let rootID = normalizedRoot.path(percentEncoded: false)
+        let name = Repository.name(for: normalizedRoot)
+        return Repository(
+          id: rootID,
+          rootURL: normalizedRoot,
+          name: name,
+          worktrees: IdentifiedArray(uniqueElements: worktrees),
+        )
+      case .failed:
+        return nil
+      }
+    }
+
+    var failure: LoadFailure? {
+      switch self {
+      case .failed(_, let root, let message):
+        let rootID = root.standardizedFileURL.path(percentEncoded: false)
+        return LoadFailure(rootID: rootID, message: message)
+      case .loaded:
+        return nil
+      }
+    }
   }
 
-  private func loadRepositoriesData(_ roots: [URL]) async -> ([Repository], [LoadFailure]) {
+  private func loadRepositoriesData(
+    _ roots: [URL],
+    prioritizeWorktreeID: Worktree.ID? = nil,
+    onPriorityRepositoryLoaded: (@Sendable (Repository) async -> Void)? = nil
+  ) async -> RepositoryLoadBatch {
     let gitClient = self.gitClient
     let fetchResults = await withTaskGroup(of: WorktreesFetchResult.self) { group in
-      for root in roots {
+      for (index, root) in roots.enumerated() {
         group.addTask {
           do {
             let worktrees = try await gitClient.worktrees(root)
-            return .loaded(root: root, worktrees: worktrees)
+            return .loaded(index: index, root: root, worktrees: worktrees)
           } catch {
-            return .failed(root: root, message: error.localizedDescription)
+            return .failed(index: index, root: root, message: error.localizedDescription)
           }
         }
       }
       var collected: [WorktreesFetchResult] = []
+      var didSendPriorityRepository = false
       for await result in group {
+        if !didSendPriorityRepository,
+          let prioritizeWorktreeID,
+          result.contains(worktreeID: prioritizeWorktreeID),
+          let priorityRepository = result.repository
+        {
+          didSendPriorityRepository = true
+          await onPriorityRepositoryLoaded?(priorityRepository)
+        }
         collected.append(result)
       }
       return collected
     }
-    var loaded: [Repository] = []
+    let orderedResults = fetchResults.sorted { $0.index < $1.index }
+    var repositories: [Repository] = []
     var failures: [LoadFailure] = []
-    for result in fetchResults {
-      switch result {
-      case .loaded(let root, let worktrees):
-        let normalizedRoot = root.standardizedFileURL
-        let rootID = normalizedRoot.path(percentEncoded: false)
-        let name = Repository.name(for: normalizedRoot)
-        loaded.append(
-          Repository(
-            id: rootID,
-            rootURL: normalizedRoot,
-            name: name,
-            worktrees: IdentifiedArray(uniqueElements: worktrees),
-          )
-        )
-      case .failed(let root, let message):
-        let rootID = root.standardizedFileURL.path(percentEncoded: false)
-        failures.append(LoadFailure(rootID: rootID, message: message))
+    for result in orderedResults {
+      if let repository = result.repository {
+        repositories.append(repository)
+      }
+      if let failure = result.failure {
+        failures.append(failure)
       }
     }
-    return (loaded, failures)
+    let didLoadPriorityRepository: Bool
+    if let prioritizeWorktreeID {
+      didLoadPriorityRepository = orderedResults.contains {
+        $0.contains(worktreeID: prioritizeWorktreeID)
+      }
+    } else {
+      didLoadPriorityRepository = false
+    }
+    return RepositoryLoadBatch(
+      repositories: repositories,
+      failures: failures,
+      didLoadPriorityRepository: didLoadPriorityRepository
+    )
   }
 
   private func applyRepositories(
