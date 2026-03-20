@@ -83,6 +83,7 @@ struct RepositoriesFeature {
     var automaticallyArchiveMergedWorktrees = false
     var moveNotifiedWorktreeToTop = true
     var lastFocusedWorktreeID: Worktree.ID?
+    var lastFocusedRepositoryID: Repository.ID?
     var preCanvasWorktreeID: Worktree.ID?
     var shouldRestoreLastFocusedWorktree = false
     var shouldSelectFirstAfterReload = false
@@ -130,6 +131,7 @@ struct RepositoriesFeature {
     case repositoryOrderIDsLoaded([Repository.ID])
     case worktreeOrderByRepositoryLoaded([Repository.ID: [Worktree.ID]])
     case lastFocusedWorktreeIDLoaded(Worktree.ID?)
+    case lastFocusedRepositoryIDLoaded(Repository.ID?)
     case refreshWorktrees
     case reloadRepositories(animated: Bool)
     case repositoriesLoaded([Repository], failures: [LoadFailure], roots: [URL], animated: Bool)
@@ -318,6 +320,7 @@ struct RepositoriesFeature {
           let archived = await repositoryPersistence.loadArchivedWorktreeIDs()
           let lastFocused = await repositoryPersistence.loadLastFocusedWorktreeID()
           let repositoryOrderIDs = await repositoryPersistence.loadRepositoryOrderIDs()
+          let lastFocusedRepositoryID = await repositoryPersistence.loadLastFocusedRepositoryID()
           let worktreeOrderByRepository =
             await repositoryPersistence.loadWorktreeOrderByRepository()
           await send(.pinnedWorktreeIDsLoaded(pinned))
@@ -326,6 +329,7 @@ struct RepositoriesFeature {
           await send(.worktreeOrderByRepositoryLoaded(worktreeOrderByRepository))
           await send(.lastFocusedWorktreeIDLoaded(lastFocused))
           await send(.loadPersistedRepositories)
+          await send(.lastFocusedRepositoryIDLoaded(lastFocusedRepositoryID))
         }
 
       case .pinnedWorktreeIDsLoaded(let pinnedWorktreeIDs):
@@ -350,6 +354,10 @@ struct RepositoriesFeature {
         return .none
 
       case .setOpenPanelPresented(let isPresented):
+      case .lastFocusedRepositoryIDLoaded(let lastFocusedRepositoryID):
+        state.lastFocusedRepositoryID = lastFocusedRepositoryID
+        return .none
+
         state.isOpenPanelPresented = isPresented
         return .none
 
@@ -359,13 +367,51 @@ struct RepositoriesFeature {
         let lastFocused = state.lastFocusedWorktreeID
         return .run { send in
           let loadedPaths = await repositoryPersistence.loadRoots()
+        let lastFocusedRepositoryID = state.lastFocusedRepositoryID
           let rootPaths = RepositoryPathNormalizer.normalize(loadedPaths)
           let roots = rootPaths.map { URL(fileURLWithPath: $0) }
 
-          // Priority loading: emit the repository that actually contains the last-focused
-          // worktree as soon as that fetch completes, then apply the final full snapshot
-          // in root order. Matching on fetched worktree IDs is robust even when linked
-          // worktrees live outside the repository root.
+          if let priorityRoot = roots.first(where: {
+            $0.standardizedFileURL.path(percentEncoded: false) == lastFocusedRepositoryID
+          }) {
+            let priorityBatch = await loadRepositoriesData([priorityRoot])
+            if !priorityBatch.repositories.isEmpty || !priorityBatch.failures.isEmpty {
+              await send(
+                .repositoriesLoaded(
+                  priorityBatch.repositories,
+                  failures: priorityBatch.failures,
+                  roots: roots,
+                  animated: false
+                )
+              )
+            }
+
+            let remainingRoots = roots.filter {
+              $0.standardizedFileURL.path(percentEncoded: false)
+                != priorityRoot.standardizedFileURL.path(percentEncoded: false)
+            }
+            guard !remainingRoots.isEmpty else { return }
+
+            let remainingBatch = await loadRepositoriesData(remainingRoots)
+            let fullBatch = Self.mergeRepositoryLoadBatches(
+              priorityBatch,
+              remainingBatch,
+              roots: roots
+            )
+            await send(
+              .repositoriesLoaded(
+                fullBatch.repositories,
+                failures: fullBatch.failures,
+                roots: roots,
+                animated: false
+              )
+            )
+            return
+          }
+
+          // Fallback path for users who do not yet have a persisted last-focused
+          // repository root. Matching on fetched worktree IDs is robust even when
+          // linked worktrees live outside the repository root.
           let batch: RepositoryLoadBatch
           if let lastFocused {
             batch = await loadRepositoriesData(
@@ -2751,6 +2797,27 @@ struct RepositoriesFeature {
     shouldPruneArchivedWorktreeIDs: Bool,
     state: inout State,
     animated: Bool
+  private nonisolated static func mergeRepositoryLoadBatches(
+    _ lhs: RepositoryLoadBatch,
+    _ rhs: RepositoryLoadBatch,
+    roots: [URL]
+  ) -> RepositoryLoadBatch {
+    let repositoriesByID = Dictionary(
+      uniqueKeysWithValues: (lhs.repositories + rhs.repositories).map { ($0.id, $0) }
+    )
+    let failuresByID = Dictionary(
+      uniqueKeysWithValues: (lhs.failures + rhs.failures).map { ($0.rootID, $0) }
+    )
+    let orderedRootIDs = roots.map { $0.standardizedFileURL.path(percentEncoded: false) }
+    let repositories = orderedRootIDs.compactMap { repositoriesByID[$0] }
+    let failures = orderedRootIDs.compactMap { failuresByID[$0] }
+    return RepositoryLoadBatch(
+      repositories: repositories,
+      failures: failures,
+      didLoadPriorityRepository: lhs.didLoadPriorityRepository || rhs.didLoadPriorityRepository
+    )
+  }
+
   ) -> ApplyRepositoriesResult {
     let previousCounts = Dictionary(
       uniqueKeysWithValues: state.repositories.map { ($0.id, $0.worktrees.count) }

@@ -45,7 +45,12 @@ struct RepositoriesFeaturePersistenceTests {
           calls.withValue { $0.append("loadLastFocusedWorktreeID") }
           return nil
         },
-        saveLastFocusedWorktreeID: { _ in }
+        saveLastFocusedWorktreeID: { _ in },
+        loadLastFocusedRepositoryID: {
+          calls.withValue { $0.append("loadLastFocusedRepositoryID") }
+          return nil
+        },
+        saveLastFocusedRepositoryID: { _ in }
       )
     }
 
@@ -57,6 +62,7 @@ struct RepositoriesFeaturePersistenceTests {
         "loadPinnedWorktreeIDs",
         "loadArchivedWorktreeIDs",
         "loadLastFocusedWorktreeID",
+        "loadLastFocusedRepositoryID",
         "loadRepositoryOrderIDs",
         "loadWorktreeOrderByRepository",
         "loadRoots",

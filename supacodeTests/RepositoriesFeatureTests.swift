@@ -2561,9 +2561,12 @@ struct RepositoriesFeatureTests {
     let roots = [repoRootA, repoRootB]
     let rootURLs = roots.map { URL(fileURLWithPath: $0) }
     let gate = AsyncGate()
+    let phase = LockIsolated("priority")
+    let worktreeCalls = LockIsolated<[String]>([])
 
     var state = RepositoriesFeature.State()
     state.lastFocusedWorktreeID = worktreeB.id
+    state.lastFocusedRepositoryID = repoRootB
     state.shouldRestoreLastFocusedWorktree = true
 
     let store = TestStore(initialState: state) {
@@ -2571,8 +2574,12 @@ struct RepositoriesFeatureTests {
     } withDependencies: {
       $0.repositoryPersistence.loadRoots = { roots }
       $0.gitClient.worktrees = { root in
+        worktreeCalls.withValue { $0.append(root.path(percentEncoded: false)) }
         switch root.path(percentEncoded: false) {
         case repoRootA:
+          if phase.value == "priority" {
+            Issue.record("Non-priority root started before priority load completed")
+          }
           await gate.wait()
           return [worktreeA]
         case repoRootB:
@@ -2594,13 +2601,16 @@ struct RepositoriesFeatureTests {
     }
     await store.receive(\.delegate.repositoriesChanged)
     await store.receive(\.delegate.selectedWorktreeChanged)
+    #expect(worktreeCalls.value == [repoRootB])
 
+    phase.withValue { $0 = "remaining" }
     await gate.resume()
 
     await store.receive(\.repositoriesLoaded) {
       $0.repositories = IdentifiedArray(uniqueElements: [repoA, repoB])
     }
     await store.receive(\.delegate.repositoriesChanged)
+    #expect(worktreeCalls.value == [repoRootB, repoRootA])
     await store.finish()
   }
 

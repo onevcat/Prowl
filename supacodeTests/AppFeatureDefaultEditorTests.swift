@@ -100,6 +100,8 @@ struct AppFeatureDefaultEditorTests {
     let repositoriesState = makeRepositoriesState(worktree: worktree)
     let expectedOpenActionSelection = OpenWorktreeAction.preferredDefault()
     let watcherCommands = LockIsolated<[WorktreeInfoWatcherClient.Command]>([])
+    let savedWorktreeIDs = LockIsolated<[Worktree.ID?]>([])
+    let savedRepositoryIDs = LockIsolated<[Repository.ID?]>([])
     let storage = SettingsTestStorage()
     let settingsFileURL = URL(
       fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json"
@@ -112,7 +114,12 @@ struct AppFeatureDefaultEditorTests {
     ) {
       AppFeature()
     } withDependencies: {
-      $0.repositoryPersistence.saveLastFocusedWorktreeID = { _ in }
+      $0.repositoryPersistence.saveLastFocusedWorktreeID = { id in
+        savedWorktreeIDs.withValue { $0.append(id) }
+      }
+      $0.repositoryPersistence.saveLastFocusedRepositoryID = { id in
+        savedRepositoryIDs.withValue { $0.append(id) }
+      }
       $0.terminalClient.send = { _ in }
       $0.worktreeInfoWatcher.send = { command in
         watcherCommands.withValue { $0.append(command) }
@@ -129,6 +136,8 @@ struct AppFeatureDefaultEditorTests {
     await store.finish()
 
     #expect(watcherCommands.value == [.setSelectedWorktreeID(worktree.id)])
+    #expect(savedWorktreeIDs.value == [worktree.id])
+    #expect(savedRepositoryIDs.value == [worktree.repositoryRootURL.path(percentEncoded: false)])
   }
 
   private func makeWorktree() -> Worktree {

@@ -130,6 +130,7 @@ struct AppFeature {
 
       case .repositories(.delegate(.selectedWorktreeChanged(let worktree))):
         let lastFocusedWorktreeID = worktree?.id
+        let lastFocusedRepositoryID = worktree?.repositoryRootURL.path(percentEncoded: false)
         let repositoryPersistence = repositoryPersistence
         guard let worktree else {
           state.openActionSelection = .finder
@@ -149,6 +150,7 @@ struct AppFeature {
             effects.insert(
               .run { _ in
                 await repositoryPersistence.saveLastFocusedWorktreeID(lastFocusedWorktreeID)
+                await repositoryPersistence.saveLastFocusedRepositoryID(lastFocusedRepositoryID)
               },
               at: 0
             )
@@ -174,6 +176,7 @@ struct AppFeature {
         return .merge(
           .run { _ in
             await repositoryPersistence.saveLastFocusedWorktreeID(lastFocusedWorktreeID)
+            await repositoryPersistence.saveLastFocusedRepositoryID(lastFocusedRepositoryID)
           },
           .run { _ in
             await terminalClient.send(.setSelectedWorktreeID(worktree.id))

@@ -37,6 +37,7 @@ struct AppFeatureArchivedSelectionTests {
       $0.repositoryPersistence.saveLastFocusedWorktreeID = { id in
         saved.withValue { $0.append(id) }
       }
+      $0.repositoryPersistence.saveLastFocusedRepositoryID = { _ in }
       $0.terminalClient.send = { _ in }
       $0.worktreeInfoWatcher.send = { _ in }
     }

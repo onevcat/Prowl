@@ -15,6 +15,8 @@ struct RepositoryPersistenceClient {
   var saveWorktreeOrderByRepository: @Sendable ([Repository.ID: [Worktree.ID]]) async -> Void
   var loadLastFocusedWorktreeID: @Sendable () async -> Worktree.ID?
   var saveLastFocusedWorktreeID: @Sendable (Worktree.ID?) async -> Void
+  var loadLastFocusedRepositoryID: @Sendable () async -> Repository.ID?
+  var saveLastFocusedRepositoryID: @Sendable (Repository.ID?) async -> Void
 }
 
 extension RepositoryPersistenceClient: DependencyKey {
@@ -82,6 +84,18 @@ extension RepositoryPersistenceClient: DependencyKey {
         $sharedLastFocused.withLock {
           $0 = id
         }
+      },
+      loadLastFocusedRepositoryID: {
+        @Shared(.appStorage("lastFocusedRepositoryID")) var repositoryID: Repository.ID?
+        guard let repositoryID else { return nil }
+        return RepositoryOrderNormalizer.normalizeRepositoryIDs([repositoryID]).first
+      },
+      saveLastFocusedRepositoryID: { id in
+        @Shared(.appStorage("lastFocusedRepositoryID")) var sharedRepositoryID: Repository.ID?
+        let normalized = id.flatMap { RepositoryOrderNormalizer.normalizeRepositoryIDs([$0]).first }
+        $sharedRepositoryID.withLock {
+          $0 = normalized
+        }
       }
     )
   }()
@@ -97,7 +111,9 @@ extension RepositoryPersistenceClient: DependencyKey {
     loadWorktreeOrderByRepository: { [:] },
     saveWorktreeOrderByRepository: { _ in },
     loadLastFocusedWorktreeID: { nil },
-    saveLastFocusedWorktreeID: { _ in }
+    saveLastFocusedWorktreeID: { _ in },
+    loadLastFocusedRepositoryID: { nil },
+    saveLastFocusedRepositoryID: { _ in }
   )
 }
 
