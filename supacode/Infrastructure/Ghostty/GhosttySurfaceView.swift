@@ -137,7 +137,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
   }
   private let skipsSurfaceCreationForTesting: Bool
   private var trackingArea: NSTrackingArea?
-  private var lastBackingSize: CGSize = .zero
+  private var lastSurfacePixelSize: (width: UInt32, height: UInt32)?
   var lastPerformKeyEvent: TimeInterval?
   private var currentCursor: NSCursor = .iBeam
   var focused = false
@@ -247,6 +247,12 @@ final class GhosttySurfaceView: NSView, Identifiable {
 
   static func string(from text: ghostty_text_s) -> String {
     stringFromGhosttyText(pointer: text.text, length: text.text_len)
+  }
+
+  static func backingPixelSize(for logicalSize: CGSize, scale: Double) -> (width: UInt32, height: UInt32) {
+    let width = UInt32(max(1, Int((logicalSize.width * scale).rounded(.down))))
+    let height = UInt32(max(1, Int((logicalSize.height * scale).rounded(.down))))
+    return (width, height)
   }
 
   override var acceptsFirstResponder: Bool { true }
@@ -359,6 +365,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
       ghostty_surface_free(surface)
       self.surface = nil
       bridge.surface = nil
+      lastSurfacePixelSize = nil
       occlusionState.reset()
       lastSurfaceFocus = nil
     }
@@ -566,22 +573,22 @@ final class GhosttySurfaceView: NSView, Identifiable {
   func updateSurfaceSize() {
     resumeDeferredOcclusionIfNeeded()
     guard let surface else { return }
-    // When pinnedSize is set (canvas mode), convertToBacking() includes the
-    // .scaleEffect() layer transform, producing scale-dependent backing sizes.
-    // Use the pinned size with the window's raw backing scale factor instead.
-    let backingSize: CGSize
-    if let pinnedSize = scrollWrapper?.pinnedSize {
-      let scale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2.0
-      backingSize = CGSize(width: pinnedSize.width * scale, height: pinnedSize.height * scale)
-    } else {
-      backingSize = convertToBacking(bounds.size)
-    }
-    if backingSize == lastBackingSize {
+    // Avoid convertToBacking() here because transient view/layer transforms
+    // during sidebar and canvas animations can leak into backing size
+    // calculations and produce unstable Ghostty surface dimensions.
+    let logicalSize = scrollWrapper?.pinnedSize ?? bounds.size
+    guard logicalSize.width > 0, logicalSize.height > 0 else { return }
+    let scale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2.0
+    let pixelSize = Self.backingPixelSize(for: logicalSize, scale: scale)
+    if let lastSurfacePixelSize,
+      lastSurfacePixelSize.width == pixelSize.width,
+      lastSurfacePixelSize.height == pixelSize.height
+    {
       return
     }
-    lastBackingSize = backingSize
-    let width = UInt32(max(1, Int(backingSize.width.rounded(.down))))
-    let height = UInt32(max(1, Int(backingSize.height.rounded(.down))))
+    lastSurfacePixelSize = pixelSize
+    let width = pixelSize.width
+    let height = pixelSize.height
     let currentSize = ghostty_surface_size(surface)
     guard currentSize.cell_width_px > 0, currentSize.cell_height_px > 0 else {
       ghostty_surface_set_size(surface, width, height)

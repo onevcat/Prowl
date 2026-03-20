@@ -473,6 +473,36 @@ struct GhosttySurfaceViewTests {
     #expect(suppression.isExpired(at: 11.1))
   }
 
+  @Test func backingPixelSizeUsesScaleAndFloorsValues() {
+    #expect(
+      GhosttySurfaceView.backingPixelSize(
+        for: CGSize(width: 400.8, height: 300.2),
+        scale: 2
+      ).width == 801
+    )
+    #expect(
+      GhosttySurfaceView.backingPixelSize(
+        for: CGSize(width: 400.8, height: 300.2),
+        scale: 2
+      ).height == 600
+    )
+  }
+
+  @Test func backingPixelSizeClampsToAtLeastOnePixel() {
+    #expect(
+      GhosttySurfaceView.backingPixelSize(
+        for: CGSize(width: 0, height: 0),
+        scale: 2
+      ).width == 1
+    )
+    #expect(
+      GhosttySurfaceView.backingPixelSize(
+        for: CGSize(width: 0, height: 0),
+        scale: 2
+      ).height == 1
+    )
+  }
+
   @Test func optionCanvasNavigationShortcutMatchesByKeyCodeWhenCharactersMissing() {
     #expect(
       GhosttySurfaceView.isOptionCanvasNavigationShortcut(
