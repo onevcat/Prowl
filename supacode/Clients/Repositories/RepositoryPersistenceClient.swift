@@ -15,6 +15,8 @@ struct RepositoryPersistenceClient {
   var saveWorktreeOrderByRepository: @Sendable ([Repository.ID: [Worktree.ID]]) async -> Void
   var loadLastFocusedWorktreeID: @Sendable () async -> Worktree.ID?
   var saveLastFocusedWorktreeID: @Sendable (Worktree.ID?) async -> Void
+  var loadRepositorySnapshot: @Sendable () async -> [Repository]?
+  var saveRepositorySnapshot: @Sendable ([Repository]) async -> Void
 }
 
 extension RepositoryPersistenceClient: DependencyKey {
@@ -82,6 +84,66 @@ extension RepositoryPersistenceClient: DependencyKey {
         $sharedLastFocused.withLock {
           $0 = id
         }
+      },
+      loadRepositorySnapshot: {
+        let snapshotURL = SupacodePaths.repositorySnapshotURL
+        guard let data = try? Data(contentsOf: snapshotURL) else {
+          return nil
+        }
+        guard !data.isEmpty else {
+          discardRepositorySnapshot(at: snapshotURL)
+          return nil
+        }
+        let decoder = JSONDecoder()
+        do {
+          let payload = try await MainActor.run {
+            try decoder.decode(RepositorySnapshotCachePayload.self, from: data)
+          }
+          guard let repositories = await MainActor.run(
+            resultType: [Repository]?.self,
+            body: {
+            payload.restoreRepositories(
+              pathExists: { FileManager.default.fileExists(atPath: $0) }
+            )
+            }
+          ) else {
+            discardRepositorySnapshot(at: snapshotURL)
+            return nil
+          }
+          return repositories
+        } catch {
+          repositoryPersistenceLogger.warning(
+            "Unable to decode repository snapshot cache: \(error.localizedDescription)"
+          )
+          discardRepositorySnapshot(at: snapshotURL)
+          return nil
+        }
+      },
+      saveRepositorySnapshot: { repositories in
+        let snapshotURL = SupacodePaths.repositorySnapshotURL
+        guard !repositories.isEmpty else {
+          discardRepositorySnapshot(at: snapshotURL)
+          return
+        }
+        do {
+          try FileManager.default.createDirectory(
+            at: SupacodePaths.baseDirectory,
+            withIntermediateDirectories: true
+          )
+          let encoder = JSONEncoder()
+          encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+          let payload = await MainActor.run {
+            RepositorySnapshotCachePayload(repositories: repositories)
+          }
+          let data = try await MainActor.run {
+            try encoder.encode(payload)
+          }
+          try data.write(to: snapshotURL, options: .atomic)
+        } catch {
+          repositoryPersistenceLogger.warning(
+            "Unable to write repository snapshot cache: \(error.localizedDescription)"
+          )
+        }
       }
     )
   }()
@@ -97,7 +159,9 @@ extension RepositoryPersistenceClient: DependencyKey {
     loadWorktreeOrderByRepository: { [:] },
     saveWorktreeOrderByRepository: { _ in },
     loadLastFocusedWorktreeID: { nil },
-    saveLastFocusedWorktreeID: { _ in }
+    saveLastFocusedWorktreeID: { _ in },
+    loadRepositorySnapshot: { nil },
+    saveRepositorySnapshot: { _ in }
   )
 }
 
@@ -106,6 +170,134 @@ extension DependencyValues {
     get { self[RepositoryPersistenceClient.self] }
     set { self[RepositoryPersistenceClient.self] = newValue }
   }
+}
+
+private nonisolated let repositoryPersistenceLogger = SupaLogger("Repositories")
+
+private nonisolated func discardRepositorySnapshot(at url: URL) {
+  guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
+    return
+  }
+  do {
+    try FileManager.default.removeItem(at: url)
+  } catch {
+    repositoryPersistenceLogger.warning(
+      "Unable to remove repository snapshot cache: \(error.localizedDescription)"
+    )
+  }
+}
+
+struct RepositorySnapshotCachePayload: Codable, Equatable, Sendable {
+  static let currentVersion = 1
+
+  let version: Int
+  let repositories: [SnapshotRepository]
+
+  init(repositories: [Repository]) {
+    version = Self.currentVersion
+    self.repositories = repositories.map { SnapshotRepository(repository: $0) }
+  }
+
+  func restoreRepositories(
+    pathExists: @Sendable (String) -> Bool
+  ) -> [Repository]? {
+    guard version == Self.currentVersion, !repositories.isEmpty else {
+      return nil
+    }
+
+    var restored: [Repository] = []
+    restored.reserveCapacity(repositories.count)
+
+    for repository in repositories {
+      guard let restoredRepository = repository.restore(pathExists: pathExists) else {
+        return nil
+      }
+      restored.append(restoredRepository)
+    }
+
+    return restored
+  }
+}
+
+extension RepositorySnapshotCachePayload {
+  struct SnapshotRepository: Codable, Equatable, Sendable {
+    let rootPath: String
+    let name: String
+    let worktrees: [SnapshotWorktree]
+
+    init(repository: Repository) {
+      rootPath = repository.rootURL.path(percentEncoded: false)
+      name = repository.name
+      worktrees = repository.worktrees.map { SnapshotWorktree(worktree: $0) }
+    }
+
+    func restore(
+      pathExists: @Sendable (String) -> Bool
+    ) -> Repository? {
+      guard let normalizedRootPath = normalizePath(rootPath), pathExists(normalizedRootPath) else {
+        return nil
+      }
+
+      let rootURL = URL(fileURLWithPath: normalizedRootPath).standardizedFileURL
+      var restoredWorktrees: [Worktree] = []
+      restoredWorktrees.reserveCapacity(worktrees.count)
+
+      for worktree in worktrees {
+        guard let restoredWorktree = worktree.restore(
+          repositoryRootURL: rootURL,
+          pathExists: pathExists
+        ) else {
+          return nil
+        }
+        restoredWorktrees.append(restoredWorktree)
+      }
+
+      let repositoryName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+      return Repository(
+        id: normalizedRootPath,
+        rootURL: rootURL,
+        name: repositoryName.isEmpty ? Repository.name(for: rootURL) : repositoryName,
+        worktrees: IdentifiedArray(uniqueElements: restoredWorktrees)
+      )
+    }
+  }
+
+  struct SnapshotWorktree: Codable, Equatable, Sendable {
+    let name: String
+    let detail: String
+    let workingDirectoryPath: String
+    let createdAt: Date?
+
+    init(worktree: Worktree) {
+      name = worktree.name
+      detail = worktree.detail
+      workingDirectoryPath = worktree.workingDirectory.path(percentEncoded: false)
+      createdAt = worktree.createdAt
+    }
+
+    func restore(
+      repositoryRootURL: URL,
+      pathExists: @Sendable (String) -> Bool
+    ) -> Worktree? {
+      guard let normalizedPath = normalizePath(workingDirectoryPath), pathExists(normalizedPath) else {
+        return nil
+      }
+
+      let worktreeURL = URL(fileURLWithPath: normalizedPath).standardizedFileURL
+      return Worktree(
+        id: normalizedPath,
+        name: name,
+        detail: detail,
+        workingDirectory: worktreeURL,
+        repositoryRootURL: repositoryRootURL,
+        createdAt: createdAt
+      )
+    }
+  }
+}
+
+private func normalizePath(_ path: String) -> String? {
+  RepositoryPathNormalizer.normalize([path]).first
 }
 
 nonisolated enum RepositoryOrderNormalizer {

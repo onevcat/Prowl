@@ -93,6 +93,10 @@ nonisolated enum SupacodePaths {
     baseDirectory.appending(path: "settings.json", directoryHint: .notDirectory)
   }
 
+  static var repositorySnapshotURL: URL {
+    baseDirectory.appending(path: "repository-snapshot.json", directoryHint: .notDirectory)
+  }
+
   static func repositorySettingsURL(for rootURL: URL) -> URL {
     repositorySettingsDirectory(for: rootURL)
       .appending(path: "prowl.json", directoryHint: .notDirectory)

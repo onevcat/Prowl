@@ -123,6 +123,7 @@ struct RepositoriesFeature {
 
   enum Action {
     case task
+    case repositorySnapshotLoaded([Repository]?)
     case setOpenPanelPresented(Bool)
     case loadPersistedRepositories
     case pinnedWorktreeIDsLoaded([Worktree.ID])
@@ -314,13 +315,51 @@ struct RepositoriesFeature {
           let repositoryOrderIDs = await repositoryPersistence.loadRepositoryOrderIDs()
           let worktreeOrderByRepository =
             await repositoryPersistence.loadWorktreeOrderByRepository()
+          let repositorySnapshot = await repositoryPersistence.loadRepositorySnapshot()
           await send(.pinnedWorktreeIDsLoaded(pinned))
           await send(.archivedWorktreeIDsLoaded(archived))
           await send(.repositoryOrderIDsLoaded(repositoryOrderIDs))
           await send(.worktreeOrderByRepositoryLoaded(worktreeOrderByRepository))
           await send(.lastFocusedWorktreeIDLoaded(lastFocused))
+          await send(.repositorySnapshotLoaded(repositorySnapshot))
           await send(.loadPersistedRepositories)
         }
+
+      case .repositorySnapshotLoaded(let repositories):
+        guard let repositories, !repositories.isEmpty else {
+          return .none
+        }
+        state.isRefreshingWorktrees = false
+        let roots = repositories.map(\.rootURL)
+        let previousSelection = state.selectedWorktreeID
+        let previousSelectedWorktree = state.worktree(for: previousSelection)
+        let incomingRepositories = IdentifiedArray(uniqueElements: repositories)
+        let repositoriesChanged = incomingRepositories != state.repositories
+        _ = applyRepositories(
+          repositories,
+          roots: roots,
+          shouldPruneArchivedWorktreeIDs: true,
+          state: &state,
+          animated: false
+        )
+        state.repositoryRoots = roots
+        state.isInitialLoadComplete = true
+        state.loadFailuresByID = [:]
+        let selectedWorktree = state.worktree(for: state.selectedWorktreeID)
+        let selectionChanged = selectionDidChange(
+          previousSelectionID: previousSelection,
+          previousSelectedWorktree: previousSelectedWorktree,
+          selectedWorktreeID: state.selectedWorktreeID,
+          selectedWorktree: selectedWorktree
+        )
+        var allEffects: [Effect<Action>] = []
+        if repositoriesChanged {
+          allEffects.append(.send(.delegate(.repositoriesChanged(state.repositories))))
+        }
+        if selectionChanged {
+          allEffects.append(.send(.delegate(.selectedWorktreeChanged(selectedWorktree))))
+        }
+        return .merge(allEffects)
 
       case .pinnedWorktreeIDsLoaded(let pinnedWorktreeIDs):
         state.pinnedWorktreeIDs = pinnedWorktreeIDs
@@ -440,6 +479,14 @@ struct RepositoriesFeature {
             }
           )
         }
+        if failures.isEmpty {
+          let repositories = Array(state.repositories)
+          allEffects.append(
+            .run { _ in
+              await repositoryPersistence.saveRepositorySnapshot(repositories)
+            }
+          )
+        }
         return .merge(allEffects)
 
       case .openRepositories(let urls):
@@ -538,6 +585,14 @@ struct RepositoriesFeature {
           allEffects.append(
             .run { _ in
               await repositoryPersistence.saveArchivedWorktreeIDs(archivedWorktreeIDs)
+            }
+          )
+        }
+        if failures.isEmpty {
+          let repositories = Array(state.repositories)
+          allEffects.append(
+            .run { _ in
+              await repositoryPersistence.saveRepositorySnapshot(repositories)
             }
           )
         }

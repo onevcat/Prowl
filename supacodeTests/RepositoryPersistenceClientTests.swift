@@ -1,6 +1,7 @@
 import Dependencies
 import DependenciesTestSupport
 import Foundation
+import IdentifiedCollections
 import Sharing
 import Testing
 
@@ -48,5 +49,54 @@ struct RepositoryPersistenceClientTests {
     }
 
     #expect(finalSettings.global.appearanceMode == .dark)
+  }
+
+  @Test func repositorySnapshotPayloadRoundTripsRepositories() {
+    let repoRoot = "/tmp/repo"
+    let worktree = Worktree(
+      id: "\(repoRoot)/main",
+      name: "main",
+      detail: ".",
+      workingDirectory: URL(fileURLWithPath: "\(repoRoot)/main"),
+      repositoryRootURL: URL(fileURLWithPath: repoRoot),
+      createdAt: Date(timeIntervalSince1970: 123)
+    )
+    let repository = Repository(
+      id: repoRoot,
+      rootURL: URL(fileURLWithPath: repoRoot),
+      name: "repo",
+      worktrees: IdentifiedArray(uniqueElements: [worktree])
+    )
+
+    let payload = RepositorySnapshotCachePayload(repositories: [repository])
+    let restored = payload.restoreRepositories { path in
+      [repoRoot, "\(repoRoot)/main"].contains(path)
+    }
+
+    #expect(restored == [repository])
+  }
+
+  @Test func repositorySnapshotPayloadRejectsMissingWorktreePath() {
+    let repoRoot = "/tmp/repo"
+    let worktree = Worktree(
+      id: "\(repoRoot)/main",
+      name: "main",
+      detail: ".",
+      workingDirectory: URL(fileURLWithPath: "\(repoRoot)/main"),
+      repositoryRootURL: URL(fileURLWithPath: repoRoot)
+    )
+    let repository = Repository(
+      id: repoRoot,
+      rootURL: URL(fileURLWithPath: repoRoot),
+      name: "repo",
+      worktrees: IdentifiedArray(uniqueElements: [worktree])
+    )
+
+    let payload = RepositorySnapshotCachePayload(repositories: [repository])
+    let restored = payload.restoreRepositories { path in
+      path == repoRoot
+    }
+
+    #expect(restored == nil)
   }
 }

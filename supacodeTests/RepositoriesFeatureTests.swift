@@ -65,6 +65,151 @@ struct RepositoriesFeatureTests {
     }
   }
 
+  @Test func taskRestoresRepositorySnapshotBeforeLiveRefreshCompletes() async {
+    let repoRoot = "/tmp/repo"
+    let worktree = makeWorktree(id: "\(repoRoot)/main", name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [worktree])
+    let worktreeID = worktree.id
+    let liveRefreshGate = AsyncGate()
+
+    let store = TestStore(initialState: RepositoriesFeature.State()) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.loadLastFocusedWorktreeID = { worktreeID }
+      $0.repositoryPersistence.loadRepositorySnapshot = { [repository] }
+      $0.repositoryPersistence.loadRoots = { [repoRoot] }
+      $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
+      $0.gitClient.worktrees = { _ in
+        await liveRefreshGate.wait()
+        return [worktree]
+      }
+    }
+
+    await store.send(.task)
+    await store.receive(\.pinnedWorktreeIDsLoaded)
+    await store.receive(\.archivedWorktreeIDsLoaded)
+    await store.receive(\.repositoryOrderIDsLoaded)
+    await store.receive(\.worktreeOrderByRepositoryLoaded)
+    await store.receive(\.lastFocusedWorktreeIDLoaded) {
+      $0.lastFocusedWorktreeID = worktreeID
+      $0.shouldRestoreLastFocusedWorktree = true
+    }
+    await store.receive(\.repositorySnapshotLoaded) {
+      $0.repositories = [repository]
+      $0.repositoryRoots = [URL(fileURLWithPath: repoRoot)]
+      $0.selection = .worktree(worktreeID)
+      $0.shouldRestoreLastFocusedWorktree = false
+      $0.isInitialLoadComplete = true
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.receive(\.loadPersistedRepositories)
+
+    await liveRefreshGate.resume()
+
+    await store.receive(\.repositoriesLoaded)
+    await store.finish()
+  }
+
+  @Test func taskFallsBackToLiveLoadWhenRepositorySnapshotIsMissing() async {
+    let repoRoot = "/tmp/repo"
+    let worktree = makeWorktree(id: "\(repoRoot)/main", name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [worktree])
+
+    let store = TestStore(initialState: RepositoriesFeature.State()) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.loadRoots = { [repoRoot] }
+      $0.repositoryPersistence.loadRepositorySnapshot = { nil }
+      $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
+      $0.gitClient.worktrees = { _ in [worktree] }
+    }
+
+    await store.send(.task)
+    await store.receive(\.pinnedWorktreeIDsLoaded)
+    await store.receive(\.archivedWorktreeIDsLoaded)
+    await store.receive(\.repositoryOrderIDsLoaded)
+    await store.receive(\.worktreeOrderByRepositoryLoaded)
+    await store.receive(\.lastFocusedWorktreeIDLoaded) {
+      $0.shouldRestoreLastFocusedWorktree = true
+    }
+    await store.receive(\.repositorySnapshotLoaded)
+    await store.receive(\.loadPersistedRepositories)
+    await store.receive(\.repositoriesLoaded) {
+      $0.repositories = [repository]
+      $0.repositoryRoots = [URL(fileURLWithPath: repoRoot)]
+      $0.shouldRestoreLastFocusedWorktree = false
+      $0.isInitialLoadComplete = true
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
+  }
+
+  @Test func repositoriesLoadedPersistsRepositorySnapshotOnSuccess() async {
+    let repoRoot = "/tmp/repo"
+    let worktree = makeWorktree(id: "\(repoRoot)/main", name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [worktree])
+    let savedSnapshots = LockIsolated<[[Repository]]>([])
+
+    let store = TestStore(initialState: RepositoriesFeature.State()) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.saveRepositorySnapshot = { repositories in
+        savedSnapshots.withValue { $0.append(repositories) }
+      }
+    }
+
+    await store.send(
+      .repositoriesLoaded(
+        [repository],
+        failures: [],
+        roots: [URL(fileURLWithPath: repoRoot)],
+        animated: false
+      )
+    ) {
+      $0.repositories = [repository]
+      $0.repositoryRoots = [URL(fileURLWithPath: repoRoot)]
+      $0.isInitialLoadComplete = true
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
+
+    #expect(savedSnapshots.value == [[repository]])
+  }
+
+  @Test func repositoriesLoadedSkipsRepositorySnapshotPersistenceWhenLoadFails() async {
+    let repoRoot = "/tmp/repo"
+    let worktree = makeWorktree(id: "\(repoRoot)/main", name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [worktree])
+    let savedSnapshots = LockIsolated<[[Repository]]>([])
+
+    let store = TestStore(initialState: RepositoriesFeature.State()) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.saveRepositorySnapshot = { repositories in
+        savedSnapshots.withValue { $0.append(repositories) }
+      }
+    }
+
+    await store.send(
+      .repositoriesLoaded(
+        [repository],
+        failures: [.init(rootID: repoRoot, message: "wt failed")],
+        roots: [URL(fileURLWithPath: repoRoot)],
+        animated: false
+      )
+    ) {
+      $0.repositories = [repository]
+      $0.repositoryRoots = [URL(fileURLWithPath: repoRoot)]
+      $0.isInitialLoadComplete = true
+      $0.loadFailuresByID = [repoRoot: "wt failed"]
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
+
+    #expect(savedSnapshots.value.isEmpty)
+  }
+
   @Test func selectWorktreeSendsDelegate() async {
     let worktree = makeWorktree(id: "/tmp/wt", name: "fox")
     let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
@@ -2461,5 +2606,26 @@ struct RepositoriesFeatureTests {
     state.repositories = IdentifiedArray(uniqueElements: repositories)
     state.repositoryRoots = repositories.map(\.rootURL)
     return state
+  }
+
+  private actor AsyncGate {
+    var continuation: CheckedContinuation<Void, Never>?
+    var isOpen = false
+
+    func wait() async {
+      guard !isOpen else { return }
+      await withCheckedContinuation { continuation in
+        self.continuation = continuation
+      }
+    }
+
+    func resume() {
+      if let continuation {
+        continuation.resume()
+        self.continuation = nil
+      } else {
+        isOpen = true
+      }
+    }
   }
 }
