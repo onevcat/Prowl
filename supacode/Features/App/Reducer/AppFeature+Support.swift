@@ -6,7 +6,10 @@ let notificationJumpLogger = SupaLogger("NotificationJump")
 
 enum CancelID {
   static let periodicRefresh = "app.periodicRefresh"
+  static let canvasSidebarAutoHide = "app.canvasSidebarAutoHide"
 }
+
+nonisolated let canvasSidebarAutoHideDelay: Duration = .seconds(3)
 
 func makeTerminalRestorableWorktrees(from repositories: [Repository]) -> [Worktree] {
   var worktrees: [Worktree] = []
@@ -85,6 +88,21 @@ extension AppFeature {
       return FreestyleTerminal.worktree()
     }
     return actionTargetWorktree(repositories: repositories)
+  }
+
+  func shouldCancelCanvasSidebarAutoHide(
+    for action: RepositoriesFeature.Action
+  ) -> Bool {
+    switch action {
+    case .toggleCanvas,
+      .selectArchivedWorktrees,
+      .selectFreestyle,
+      .selectRepository,
+      .selectWorktree:
+      return true
+    default:
+      return false
+    }
   }
 
   func canvasFocusedTerminalWorktree(repositories: RepositoriesFeature.State) -> Worktree? {

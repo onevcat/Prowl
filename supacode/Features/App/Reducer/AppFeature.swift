@@ -29,7 +29,7 @@ struct AppFeature {
     var hasAppliedInitialViewMode = false
     var suppressLayoutSaveUntilRelaunch = false
     var launchedAt: Date?
-    var leftSidebarVisibility: NavigationSplitViewVisibility = .all
+    @Shared(.appStorage("leftSidebarHidden")) var isLeftSidebarHidden = false
     @Presents var alert: AlertState<Alert>?
 
     init(
@@ -64,7 +64,8 @@ struct AppFeature {
     case jumpToLatestUnread
     case toggleLeftSidebar
     case showLeftSidebar
-    case setLeftSidebarVisibility(NavigationSplitViewVisibility)
+    case setLeftSidebarHidden(Bool)
+    case canvasSidebarAutoHideDelayElapsed
     case newTerminalFromCanvas(focusedWorktreeID: Worktree.ID?)
     case newTerminalFromCanvasUsingPWD(focusedWorktreeID: Worktree.ID?)
     case runScript
@@ -104,10 +105,38 @@ struct AppFeature {
   @Dependency(TerminalClient.self) var terminalClient
   @Dependency(WorktreeInfoWatcherClient.self) var worktreeInfoWatcher
   @Dependency(CustomShortcutRegistryClient.self) var customShortcutRegistryClient
+  @Dependency(\.continuousClock) var clock
 
   var body: some Reducer<State, Action> {
     let core = Reduce<State, Action> { state, action in
       switch action {
+      case .toggleLeftSidebar:
+        state.$isLeftSidebarHidden.withLock { $0.toggle() }
+        return .none
+
+      case .showLeftSidebar:
+        state.$isLeftSidebarHidden.withLock { $0 = false }
+        return .none
+
+      case .setLeftSidebarHidden(let isHidden):
+        state.$isLeftSidebarHidden.withLock { $0 = isHidden }
+        return .none
+
+      case .canvasSidebarAutoHideDelayElapsed:
+        guard state.repositories.isShowingCanvas else { return .none }
+        state.$isLeftSidebarHidden.withLock { $0 = true }
+        return .none
+
+      case .repositories(.selectCanvas):
+        guard !state.repositories.isShowingCanvas else { return .none }
+        guard !state.isLeftSidebarHidden else { return .none }
+        return .run { send in
+          try? await clock.sleep(for: canvasSidebarAutoHideDelay)
+          guard !Task.isCancelled else { return }
+          await send(.canvasSidebarAutoHideDelayElapsed)
+        }
+        .cancellable(id: CancelID.canvasSidebarAutoHide, cancelInFlight: true)
+
       case .appLaunched:
         try? SupacodePaths.migrateLegacyCacheFilesIfNeeded()
         appLogger.info("[LayoutRestore] appLaunched: launchRestoreMode=\(String(describing: state.launchRestoreMode))")
@@ -151,14 +180,20 @@ struct AppFeature {
             .cancellable(id: CancelID.periodicRefresh, cancelInFlight: true)
           )
         case .inactive, .background:
-          var effects: [Effect<Action>] = [.cancel(id: CancelID.periodicRefresh)]
+          var effects: [Effect<Action>] = [
+            .cancel(id: CancelID.periodicRefresh),
+            .cancel(id: CancelID.canvasSidebarAutoHide),
+          ]
           if state.settings.restoreTerminalLayoutOnLaunch, !state.suppressLayoutSaveUntilRelaunch {
             appLogger.info("[LayoutRestore] scenePhase=\(String(describing: phase)), saving layout snapshot")
             effects.append(.run { _ in await terminalClient.send(.saveLayoutSnapshot) })
           }
           return .merge(effects)
         @unknown default:
-          return .cancel(id: CancelID.periodicRefresh)
+          return .merge(
+            .cancel(id: CancelID.periodicRefresh),
+            .cancel(id: CancelID.canvasSidebarAutoHide)
+          )
         }
 
       case .repositories(.delegate(.selectedWorktreeChanged(let worktree))):
@@ -630,18 +665,6 @@ struct AppFeature {
           }
         )
 
-      case .toggleLeftSidebar:
-        state.leftSidebarVisibility = state.leftSidebarVisibility == .detailOnly ? .all : .detailOnly
-        return .none
-
-      case .showLeftSidebar:
-        state.leftSidebarVisibility = .all
-        return .none
-
-      case .setLeftSidebarVisibility(let visibility):
-        state.leftSidebarVisibility = visibility
-        return .none
-
       case .newTerminalFromCanvas(let focusedWorktreeID):
         let worktree =
           if let focusedWorktreeID,
@@ -966,7 +989,12 @@ struct AppFeature {
       case .alert:
         return .none
 
-      case .repositories:
+      case .repositories(let repositoriesAction):
+        if state.repositories.isShowingCanvas,
+          shouldCancelCanvasSidebarAutoHide(for: repositoriesAction)
+        {
+          return .cancel(id: CancelID.canvasSidebarAutoHide)
+        }
         return .none
 
       case .settings:

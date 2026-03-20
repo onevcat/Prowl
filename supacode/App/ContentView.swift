@@ -15,11 +15,15 @@ struct ContentView: View {
   let terminalManager: WorktreeTerminalManager
   @Environment(\.scenePhase) private var scenePhase
   @Environment(GhosttyShortcutManager.self) private var ghosttyShortcuts
+  @State private var leftSidebarVisibility: NavigationSplitViewVisibility
 
   init(store: StoreOf<AppFeature>, terminalManager: WorktreeTerminalManager) {
     self.store = store
     repositoriesStore = store.scope(state: \.repositories, action: \.repositories)
     self.terminalManager = terminalManager
+    _leftSidebarVisibility = State(
+      initialValue: store.state.isLeftSidebarHidden ? .detailOnly : .all
+    )
   }
 
   var body: some View {
@@ -41,7 +45,13 @@ struct ContentView: View {
     )
     Group {
       if store.repositories.isInitialLoadComplete {
-        mainSplitView
+        NavigationSplitView(columnVisibility: sidebarColumnVisibility) {
+          SidebarView(store: repositoriesStore, terminalManager: terminalManager)
+            .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 320)
+        } detail: {
+          WorktreeDetailView(store: store, terminalManager: terminalManager)
+        }
+        .navigationSplitViewStyle(.automatic)
       } else {
         AppLoadingView()
           .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -54,6 +64,9 @@ struct ContentView: View {
     }
     .onChange(of: scenePhase) { _, newValue in
       store.send(.scenePhaseChanged(newValue))
+    }
+    .onChange(of: store.isLeftSidebarHidden) { _, isHidden in
+      syncSidebarVisibility(isHidden: isHidden)
     }
     .fileImporter(
       isPresented: $repositoriesStore.isOpenPanelPresented.sending(\.setOpenPanelPresented),
@@ -129,23 +142,29 @@ struct ContentView: View {
     .background(WindowTabbingDisabler())
   }
 
-  private var mainSplitView: some View {
-    let visibility = Binding<NavigationSplitViewVisibility>(
-      get: { store.leftSidebarVisibility },
-      set: { store.send(.setLeftSidebarVisibility($0)) }
-    )
-    return NavigationSplitView(columnVisibility: visibility) {
-      SidebarView(store: repositoriesStore, terminalManager: terminalManager)
-        .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 320)
-    } detail: {
-      WorktreeDetailView(store: store, terminalManager: terminalManager)
-    }
-    .navigationSplitViewStyle(.automatic)
-    .animation(.easeOut(duration: 0.2), value: store.leftSidebarVisibility)
-  }
-
   private func toggleLeftSidebar() {
     store.send(.toggleLeftSidebar)
+  }
+
+  private var sidebarColumnVisibility: Binding<NavigationSplitViewVisibility> {
+    Binding(
+      get: { leftSidebarVisibility },
+      set: { newValue in
+        leftSidebarVisibility = newValue
+        let isHidden = newValue == .detailOnly
+        if store.isLeftSidebarHidden != isHidden {
+          store.send(.setLeftSidebarHidden(isHidden))
+        }
+      }
+    )
+  }
+
+  private func syncSidebarVisibility(isHidden: Bool) {
+    let targetVisibility: NavigationSplitViewVisibility = isHidden ? .detailOnly : .all
+    guard leftSidebarVisibility != targetVisibility else { return }
+    withAnimation(.easeOut(duration: 0.2)) {
+      leftSidebarVisibility = targetVisibility
+    }
   }
 
   private var revealInSidebarAction: (() -> Void)? {

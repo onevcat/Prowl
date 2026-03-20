@@ -654,7 +654,7 @@ struct AppFeatureCommandPaletteTests {
       repositories: repositoriesState,
       settings: SettingsFeature.State()
     )
-    appState.leftSidebarVisibility = .detailOnly
+    appState.$isLeftSidebarHidden.withLock { $0 = true }
     let store = TestStore(initialState: appState) {
       AppFeature()
     }
@@ -662,7 +662,7 @@ struct AppFeatureCommandPaletteTests {
 
     await store.send(.commandPalette(.delegate(.revealInSidebar)))
     await store.receive(\.showLeftSidebar) {
-      $0.leftSidebarVisibility = .all
+      $0.$isLeftSidebarHidden.withLock { $0 = false }
     }
     await store.receive(\.repositories.revealSelectedWorktreeInSidebar)
   }
