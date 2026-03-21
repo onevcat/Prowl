@@ -656,9 +656,9 @@ final class WorktreeTerminalState {
       guard let self, let view else { return }
       self.handleCloseRequest(for: view, processAlive: processAlive)
     }
-    view.bridge.onPromptTitle = { [weak self, weak view] promptType in
-      guard let self, let view else { return }
-      self.handlePromptTitle(promptType, for: view, tabId: tabId)
+    view.bridge.onPromptTitle = { [weak self] promptType in
+      guard let self else { return }
+      self.handlePromptTitle(promptType, tabId: tabId)
     }
     view.bridge.onOpenConfig = {
       Self.openGhosttyConfig()
@@ -710,14 +710,16 @@ final class WorktreeTerminalState {
 
   private func handlePromptTitle(
     _ promptType: ghostty_action_prompt_title_e,
-    for view: GhosttySurfaceView,
     tabId: TerminalTabID
   ) {
-    guard let window = view.window else { return }
+    guard let surfaceId = focusedSurfaceIdByTab[tabId],
+      let window = surfaces[surfaceId]?.window
+    else { return }
     switch promptType {
-    case GHOSTTY_PROMPT_TITLE_SURFACE:
-      promptSurfaceTitle(for: view, in: window, tabId: tabId)
-    case GHOSTTY_PROMPT_TITLE_TAB:
+    case GHOSTTY_PROMPT_TITLE_SURFACE, GHOSTTY_PROMPT_TITLE_TAB:
+      // Prowl is a single-window app so there is no per-surface window title to set.
+      // Both surface and tab title prompts are treated as tab title changes for now.
+      // TODO: Consider removing GHOSTTY_PROMPT_TITLE_SURFACE support entirely.
       promptTabTitle(for: tabId, in: window)
     default:
       break
@@ -731,38 +733,6 @@ final class WorktreeTerminalState {
     let path = String(data: Data(bytes: ptr, count: Int(configStr.len)), encoding: .utf8) ?? ""
     guard !path.isEmpty else { return }
     NSWorkspace.shared.open(URL(fileURLWithPath: path))
-  }
-
-  private func promptSurfaceTitle(
-    for view: GhosttySurfaceView,
-    in window: NSWindow,
-    tabId: TerminalTabID
-  ) {
-    let alert = NSAlert()
-    alert.messageText = "Change Terminal Title"
-    alert.informativeText = "Leave blank to restore the default."
-    alert.alertStyle = .informational
-
-    let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 250, height: 24))
-    textField.stringValue = view.bridge.state.title ?? ""
-    alert.accessoryView = textField
-
-    alert.addButton(withTitle: "OK")
-    alert.addButton(withTitle: "Cancel")
-    alert.window.initialFirstResponder = textField
-
-    alert.beginSheetModal(for: window) { [weak self, weak view] response in
-      MainActor.assumeIsolated {
-        guard response == .alertFirstButtonReturn else { return }
-        guard let self, let view else { return }
-        let newTitle = textField.stringValue
-        guard !newTitle.isEmpty else { return }
-        view.bridge.state.title = newTitle
-        if self.focusedSurfaceIdByTab[tabId] == view.id {
-          self.tabManager.updateTitle(tabId, title: newTitle)
-        }
-      }
-    }
   }
 
   private func promptTabTitle(for tabId: TerminalTabID, in window: NSWindow) {
