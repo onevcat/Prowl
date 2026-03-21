@@ -29,13 +29,24 @@ final class WindowAppearanceView: NSView {
   }
 
   private func applyAppearance() {
-    guard let window else { return }
+    guard let window else {
+      SupaLogger("Appearance").debug("applyAppearance: no window")
+      return
+    }
     let desiredName: NSAppearance.Name? = switch colorScheme {
     case .light: .aqua
     case .dark: .darkAqua
     default: nil
     }
-    guard window.appearance?.name != desiredName else { return }
-    window.appearance = desiredName.flatMap { NSAppearance(named: $0) }
+    SupaLogger("Appearance").debug(
+      "applyAppearance: colorScheme=\(String(describing: colorScheme)), " +
+      "desired=\(desiredName?.rawValue ?? "nil"), " +
+      "current=\(window.appearance?.name.rawValue ?? "nil")"
+    )
+    let resolvedName: NSAppearance.Name = desiredName
+      ?? NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua])
+      ?? .darkAqua
+    guard window.appearance?.name != resolvedName else { return }
+    window.appearance = NSAppearance(named: resolvedName)
   }
 }

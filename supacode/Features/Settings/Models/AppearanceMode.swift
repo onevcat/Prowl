@@ -20,10 +20,11 @@ enum AppearanceMode: String, CaseIterable, Identifiable, Codable, Sendable {
     }
   }
 
-  var colorScheme: ColorScheme? {
+  var colorScheme: ColorScheme {
     switch self {
     case .system:
-      return nil
+      let isDark = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+      return isDark ? .dark : .light
     case .light:
       return .light
     case .dark:

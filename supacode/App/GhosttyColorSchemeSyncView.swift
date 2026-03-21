@@ -21,6 +21,7 @@ struct GhosttyColorSchemeSyncView<Content: View>: View {
   }
 
   private func apply(_ scheme: ColorScheme) {
+    SupaLogger("ColorSync").debug("apply: \(scheme == .dark ? "dark" : "light")")
     ghostty.setColorScheme(scheme)
   }
 }
