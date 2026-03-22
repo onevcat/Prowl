@@ -59,7 +59,7 @@ struct CanvasView: View {
                 worktreeName: tab.title,
                 tree: tree,
                 isFocused: focusedTabID == tab.id,
-                hasUnseenNotification: state.hasUnseenNotification,
+                hasUnseenNotification: state.hasUnseenNotification(for: tab.id),
                 cardSize: resized.size,
                 canvasScale: canvasScale,
                 onTap: {

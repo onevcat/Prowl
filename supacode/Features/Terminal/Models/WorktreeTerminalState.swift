@@ -32,6 +32,11 @@ final class WorktreeTerminalState {
   var hasUnseenNotification: Bool {
     notifications.contains { !$0.isRead }
   }
+
+  func hasUnseenNotification(for tabId: TerminalTabID) -> Bool {
+    let surfaceIds = trees[tabId]?.leaves().map(\.id) ?? []
+    return notifications.contains { !$0.isRead && surfaceIds.contains($0.surfaceId) }
+  }
   var isSelected: () -> Bool = { false }
   var onNotificationReceived: ((String, String) -> Void)?
   var onNotificationIndicatorChanged: (() -> Void)?
