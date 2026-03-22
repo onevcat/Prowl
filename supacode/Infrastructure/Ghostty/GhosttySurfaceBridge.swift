@@ -17,6 +17,7 @@ final class GhosttySurfaceBridge {
   var onCommandPaletteToggle: (() -> Bool)?
   var onProgressReport: ((ghostty_action_progress_report_state_e) -> Void)?
   var onDesktopNotification: ((String, String) -> Void)?
+  var onCommandFinished: ((Int?, UInt64) -> Void)?
   var onPromptTitle: ((ghostty_action_prompt_title_e) -> Void)?
   private var progressResetTask: Task<Void, Never>?
 
@@ -241,8 +242,10 @@ final class GhosttySurfaceBridge {
 
     case GHOSTTY_ACTION_COMMAND_FINISHED:
       let info = action.action.command_finished
-      state.commandExitCode = info.exit_code == -1 ? nil : Int(info.exit_code)
+      let exitCode = info.exit_code == -1 ? nil : Int(info.exit_code)
+      state.commandExitCode = exitCode
       state.commandDuration = info.duration
+      onCommandFinished?(exitCode, info.duration)
       return true
 
     case GHOSTTY_ACTION_SHOW_CHILD_EXITED:

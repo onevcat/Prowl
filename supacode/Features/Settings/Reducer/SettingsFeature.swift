@@ -15,6 +15,8 @@ struct SettingsFeature {
     var notificationSoundEnabled: Bool
     var systemNotificationsEnabled: Bool
     var moveNotifiedWorktreeToTop: Bool
+    var commandFinishedNotificationEnabled: Bool
+    var commandFinishedNotificationThreshold: Int
     var analyticsEnabled: Bool
     var crashReportsEnabled: Bool
     var githubIntegrationEnabled: Bool
@@ -38,6 +40,8 @@ struct SettingsFeature {
       notificationSoundEnabled = settings.notificationSoundEnabled
       systemNotificationsEnabled = settings.systemNotificationsEnabled
       moveNotifiedWorktreeToTop = settings.moveNotifiedWorktreeToTop
+      commandFinishedNotificationEnabled = settings.commandFinishedNotificationEnabled
+      commandFinishedNotificationThreshold = settings.commandFinishedNotificationThreshold
       analyticsEnabled = settings.analyticsEnabled
       crashReportsEnabled = settings.crashReportsEnabled
       githubIntegrationEnabled = settings.githubIntegrationEnabled
@@ -60,6 +64,8 @@ struct SettingsFeature {
         notificationSoundEnabled: notificationSoundEnabled,
         systemNotificationsEnabled: systemNotificationsEnabled,
         moveNotifiedWorktreeToTop: moveNotifiedWorktreeToTop,
+        commandFinishedNotificationEnabled: commandFinishedNotificationEnabled,
+        commandFinishedNotificationThreshold: commandFinishedNotificationThreshold,
         analyticsEnabled: analyticsEnabled,
         crashReportsEnabled: crashReportsEnabled,
         githubIntegrationEnabled: githubIntegrationEnabled,
@@ -133,6 +139,8 @@ struct SettingsFeature {
         state.notificationSoundEnabled = normalizedSettings.notificationSoundEnabled
         state.systemNotificationsEnabled = normalizedSettings.systemNotificationsEnabled
         state.moveNotifiedWorktreeToTop = normalizedSettings.moveNotifiedWorktreeToTop
+        state.commandFinishedNotificationEnabled = normalizedSettings.commandFinishedNotificationEnabled
+        state.commandFinishedNotificationThreshold = normalizedSettings.commandFinishedNotificationThreshold
         state.analyticsEnabled = normalizedSettings.analyticsEnabled
         state.crashReportsEnabled = normalizedSettings.crashReportsEnabled
         state.githubIntegrationEnabled = normalizedSettings.githubIntegrationEnabled

@@ -29,6 +29,8 @@ final class WorktreeTerminalState {
   private var lastEmittedFocusSurfaceId: UUID?
   var notifications: [WorktreeTerminalNotification] = []
   var notificationsEnabled = true
+  private var commandFinishedNotificationEnabled = true
+  private var commandFinishedNotificationThreshold = 10
   var hasUnseenNotification: Bool {
     notifications.contains { !$0.isRead }
   }
@@ -525,6 +527,11 @@ final class WorktreeTerminalState {
     }
   }
 
+  func setCommandFinishedNotification(enabled: Bool, threshold: Int) {
+    commandFinishedNotificationEnabled = enabled
+    commandFinishedNotificationThreshold = threshold
+  }
+
   func clearNotificationIndicator() {
     markAllNotificationsRead()
   }
@@ -651,6 +658,10 @@ final class WorktreeTerminalState {
     view.bridge.onDesktopNotification = { [weak self, weak view] title, body in
       guard let self, let view else { return }
       self.appendNotification(title: title, body: body, surfaceId: view.id)
+    }
+    view.bridge.onCommandFinished = { [weak self, weak view] exitCode, durationNs in
+      guard let self, let view else { return }
+      self.handleCommandFinished(exitCode: exitCode, durationNs: durationNs, surfaceId: view.id)
     }
     view.bridge.onCloseRequest = { [weak self, weak view] processAlive in
       guard let self, let view else { return }
@@ -803,6 +814,38 @@ final class WorktreeTerminalState {
       emitNotificationIndicatorIfNeeded(previousHasUnseen: previousHasUnseen)
     }
     onNotificationReceived?(trimmedTitle, trimmedBody)
+  }
+
+  private func handleCommandFinished(exitCode: Int?, durationNs: UInt64, surfaceId: UUID) {
+    guard commandFinishedNotificationEnabled else { return }
+    let durationSeconds = Int(durationNs / 1_000_000_000)
+    guard durationSeconds >= commandFinishedNotificationThreshold else { return }
+    // Skip user-initiated termination (Ctrl+C / kill signal)
+    if let code = exitCode, code == 130 || code == 143 { return }
+
+    let title = (exitCode == nil || exitCode == 0) ? "Command finished" : "Command failed"
+    let formattedDuration = Self.formatDuration(durationSeconds)
+    let body: String
+    if let code = exitCode, code != 0 {
+      body = "Failed (exit code \(code)) after \(formattedDuration)"
+    } else {
+      body = "Completed in \(formattedDuration)"
+    }
+    appendNotification(title: title, body: body, surfaceId: surfaceId)
+  }
+
+  private static func formatDuration(_ seconds: Int) -> String {
+    if seconds < 60 {
+      return "\(seconds)s"
+    }
+    let minutes = seconds / 60
+    let remainingSeconds = seconds % 60
+    if minutes < 60 {
+      return remainingSeconds > 0 ? "\(minutes)m \(remainingSeconds)s" : "\(minutes)m"
+    }
+    let hours = minutes / 60
+    let remainingMinutes = minutes % 60
+    return remainingMinutes > 0 ? "\(hours)h \(remainingMinutes)m" : "\(hours)h"
   }
 
   private func removeTree(for tabId: TerminalTabID) {

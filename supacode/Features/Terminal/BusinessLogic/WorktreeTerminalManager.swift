@@ -9,6 +9,8 @@ final class WorktreeTerminalManager {
   private let runtime: GhosttyRuntime
   private var states: [Worktree.ID: WorktreeTerminalState] = [:]
   private var notificationsEnabled = true
+  private var commandFinishedNotificationEnabled = true
+  private var commandFinishedNotificationThreshold = 10
   private var lastNotificationIndicatorCount: Int?
   private var eventContinuation: AsyncStream<TerminalClient.Event>.Continuation?
   private var pendingEvents: [TerminalClient.Event] = []
@@ -103,6 +105,8 @@ final class WorktreeTerminalManager {
       prune(keeping: ids)
     case .setNotificationsEnabled(let enabled):
       setNotificationsEnabled(enabled)
+    case .setCommandFinishedNotification(let enabled, let threshold):
+      setCommandFinishedNotification(enabled: enabled, threshold: threshold)
     case .setSelectedWorktreeID(let id):
       guard id != selectedWorktreeID else { return }
       if let previousID = selectedWorktreeID, let previousState = states[previousID] {
@@ -151,6 +155,10 @@ final class WorktreeTerminalManager {
       runSetupScript: runSetupScript
     )
     state.setNotificationsEnabled(notificationsEnabled)
+    state.setCommandFinishedNotification(
+      enabled: commandFinishedNotificationEnabled,
+      threshold: commandFinishedNotificationThreshold
+    )
     state.isSelected = { [weak self] in
       self?.selectedWorktreeID == worktree.id
     }
@@ -252,6 +260,14 @@ final class WorktreeTerminalManager {
       state.setNotificationsEnabled(enabled)
     }
     emitNotificationIndicatorCountIfNeeded()
+  }
+
+  func setCommandFinishedNotification(enabled: Bool, threshold: Int) {
+    commandFinishedNotificationEnabled = enabled
+    commandFinishedNotificationThreshold = threshold
+    for state in states.values {
+      state.setCommandFinishedNotification(enabled: enabled, threshold: threshold)
+    }
   }
 
   func hasUnseenNotifications(for worktreeID: Worktree.ID) -> Bool {

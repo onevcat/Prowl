@@ -23,6 +23,7 @@ struct TerminalClient {
     case endSearch(Worktree)
     case prune(Set<Worktree.ID>)
     case setNotificationsEnabled(Bool)
+    case setCommandFinishedNotification(enabled: Bool, threshold: Int)
     case setSelectedWorktreeID(Worktree.ID?)
   }
 

@@ -9,6 +9,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var notificationSoundEnabled: Bool
   var systemNotificationsEnabled: Bool
   var moveNotifiedWorktreeToTop: Bool
+  var commandFinishedNotificationEnabled: Bool
+  var commandFinishedNotificationThreshold: Int
   var analyticsEnabled: Bool
   var crashReportsEnabled: Bool
   var githubIntegrationEnabled: Bool
@@ -28,6 +30,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     notificationSoundEnabled: true,
     systemNotificationsEnabled: false,
     moveNotifiedWorktreeToTop: true,
+    commandFinishedNotificationEnabled: true,
+    commandFinishedNotificationThreshold: 10,
     analyticsEnabled: true,
     crashReportsEnabled: true,
     githubIntegrationEnabled: true,
@@ -48,6 +52,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     notificationSoundEnabled: Bool,
     systemNotificationsEnabled: Bool = false,
     moveNotifiedWorktreeToTop: Bool,
+    commandFinishedNotificationEnabled: Bool = true,
+    commandFinishedNotificationThreshold: Int = 10,
     analyticsEnabled: Bool,
     crashReportsEnabled: Bool,
     githubIntegrationEnabled: Bool,
@@ -66,6 +72,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     self.notificationSoundEnabled = notificationSoundEnabled
     self.systemNotificationsEnabled = systemNotificationsEnabled
     self.moveNotifiedWorktreeToTop = moveNotifiedWorktreeToTop
+    self.commandFinishedNotificationEnabled = commandFinishedNotificationEnabled
+    self.commandFinishedNotificationThreshold = commandFinishedNotificationThreshold
     self.analyticsEnabled = analyticsEnabled
     self.crashReportsEnabled = crashReportsEnabled
     self.githubIntegrationEnabled = githubIntegrationEnabled
@@ -101,6 +109,12 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     moveNotifiedWorktreeToTop =
       try container.decodeIfPresent(Bool.self, forKey: .moveNotifiedWorktreeToTop)
       ?? Self.default.moveNotifiedWorktreeToTop
+    commandFinishedNotificationEnabled =
+      try container.decodeIfPresent(Bool.self, forKey: .commandFinishedNotificationEnabled)
+      ?? Self.default.commandFinishedNotificationEnabled
+    commandFinishedNotificationThreshold =
+      try container.decodeIfPresent(Int.self, forKey: .commandFinishedNotificationThreshold)
+      ?? Self.default.commandFinishedNotificationThreshold
     analyticsEnabled =
       try container.decodeIfPresent(Bool.self, forKey: .analyticsEnabled)
       ?? Self.default.analyticsEnabled
