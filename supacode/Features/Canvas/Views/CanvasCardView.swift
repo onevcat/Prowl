@@ -3,7 +3,8 @@ import SwiftUI
 
 struct CanvasCardView: View {
   let repositoryName: String
-  let worktreeName: String
+  let currentDirectory: String?
+  let worktreeName: String?
   /// User-pinned icon for this card's repository, drawn before the
   /// repo name in the title bar. `nil` keeps the historical text-only
   /// title bar.
@@ -141,10 +142,28 @@ struct CanvasCardView: View {
       Text(repositoryName)
         .font(.caption.bold())
         .lineLimit(1)
-      Text("/ \(worktreeName)")
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .lineLimit(1)
+        .truncationMode(.tail)
+        .layoutPriority(CanvasCardTitleLayoutPriority.repositoryName)
+      if let currentDirectory {
+        titleSeparator
+        Text(currentDirectory)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+          .truncationMode(.tail)
+          .layoutPriority(CanvasCardTitleLayoutPriority.currentDirectory)
+      }
+      if let worktreeName,
+        !worktreeName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      {
+        titleSeparator
+        Text(worktreeName)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+          .truncationMode(.tail)
+          .layoutPriority(CanvasCardTitleLayoutPriority.worktreeName)
+      }
       Spacer()
       titleBarActions
     }
@@ -239,6 +258,11 @@ struct CanvasCardView: View {
     }
   }
 
+  private var titleSeparator: some View {
+    Text("|")
+      .font(.caption)
+      .foregroundStyle(.secondary)
+  }
   private var terminalContent: some View {
     AnimatedTerminalSplitTreeView(
       tree: tree,

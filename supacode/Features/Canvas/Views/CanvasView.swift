@@ -40,6 +40,15 @@ struct CanvasView: View {
   @State var focusViewportAnimationID = 0
   @State var wrapToastDismissTask: Task<Void, Never>?
   @State var canvasWrapToastMessage: String?
+  @State var directoryDisplayCache: [TerminalTabID: CanvasDirectoryDisplayCacheEntry] = [:]
+  @State var directoryLatestTokens: [TerminalTabID: CanvasDirectoryShorteningCoordinator.Token] = [:]
+  @State var directoryInFlightTasks: [TerminalTabID: Task<Void, Never>] = [:]
+  @State var directoryLastRequestedPath: [TerminalTabID: String] = [:]
+  @State var directoryShorteningService = CanvasDirectoryShorteningService(
+    fileSystem: LiveCanvasDirectoryFileSystem(),
+    policy: CanvasDirectoryShorteningPolicy(),
+    homePath: ProcessInfo.processInfo.environment["HOME"] ?? "/"
+  )
   /// The tab currently expanded in place (near-fullscreen overlay) on canvas,
   /// or nil when no card is expanded.
   @State var expandedTabID: TerminalTabID?
@@ -142,11 +151,13 @@ struct CanvasView: View {
           }
           .onChange(of: allTabIDs) { oldTabIDs, _ in
             let latestStates = terminalManager.activeWorktreeStates
+            ensureLayouts(for: collectCardKeys(from: latestStates))
             let latestTabIDs = collectVisibleTabIDs(from: latestStates)
             pruneSelection(previousOrder: oldTabIDs, currentOrder: latestTabIDs, states: latestStates)
             if let expandedTabID, !latestTabIDs.contains(expandedTabID) {
               cancelExpandForRelayout()
             }
+            pruneDirectoryShorteningState(keeping: latestStates)
             recoverCanvasFocusIfNeeded(states: latestStates)
             fulfillPendingFocusRequest(focusRequest, states: latestStates)
           }
@@ -250,6 +261,7 @@ struct CanvasView: View {
     .onDisappear {
       deactivateCanvas()
       cancelWrapToastTask()
+      cancelAllDirectoryShorteningRequests()
     }
     .focusedSceneValue(\.canvasMoveLeftAction) { focusAdjacentCanvasTab(direction: .left) }
     .focusedSceneValue(\.canvasMoveDownAction) { focusAdjacentCanvasTab(direction: .down) }
@@ -336,6 +348,15 @@ struct CanvasView: View {
     let splitDivider = terminalManager.splitDividerAppearance()
     let repositoryAppearance = appearance(for: state.repositoryRootURL)
     let resolvedRepositoryName = repositoryDisplayName(for: state.repositoryRootURL)
+    let currentDirectoryPath = state.surfaceView(for: tab.id)?.bridge.state.pwd
+      ?? state.repositoryRootURL.path(percentEncoded: false)
+    let normalizedDisplayPath = CanvasCurrentDirectoryFormatter.displayPath(for: currentDirectoryPath)
+    let titleSegments = canvasCardTitleSegments(
+      currentDirectoryPath: currentDirectoryPath,
+      tabTitle: tab.displayTitle,
+      fallbackWorktreeName: state.worktreeName,
+      cachedDirectoryEntry: directoryDisplayCache[tab.id]
+    )
 
     AnimatedExpandableCard(
       progress: isCardExpanded ? 1 : 0,
@@ -345,7 +366,8 @@ struct CanvasView: View {
     ) { renderSize in
       CanvasCardView(
         repositoryName: resolvedRepositoryName,
-        worktreeName: tab.displayTitle,
+        currentDirectory: titleSegments.currentDirectory,
+        worktreeName: titleSegments.worktreeName,
         repositoryIcon: repositoryAppearance.icon,
         repositoryColor: repositoryAppearance.color?.color,
         repositoryRootURL: state.repositoryRootURL,
@@ -417,6 +439,12 @@ struct CanvasView: View {
     // value changes, so the rest stay put.
     .animation(expandAnimation, value: isCardExpanded)
     .zIndex(zIndex(for: tab.id, cardKey: cardKey))
+    .onAppear {
+      requestDirectoryShortening(for: tab.id, normalizedDisplayPath: normalizedDisplayPath)
+    }
+    .onChange(of: normalizedDisplayPath) { _, newDisplayPath in
+      requestDirectoryShortening(for: tab.id, normalizedDisplayPath: newDisplayPath)
+    }
   }
 
   // MARK: - Canvas Gestures
@@ -815,6 +843,94 @@ struct CanvasView: View {
       return 9_000 + base
     }
     return base
+  }
+
+  func requestDirectoryShortening(for tabID: TerminalTabID, normalizedDisplayPath: String?) {
+    guard let normalizedDisplayPath else {
+      if let existing = directoryInFlightTasks.removeValue(forKey: tabID) {
+        existing.cancel()
+      }
+      directoryLatestTokens.removeValue(forKey: tabID)
+      directoryLastRequestedPath.removeValue(forKey: tabID)
+      directoryDisplayCache.removeValue(forKey: tabID)
+      return
+    }
+
+    guard directoryLastRequestedPath[tabID] != normalizedDisplayPath else { return }
+    directoryLastRequestedPath[tabID] = normalizedDisplayPath
+    directoryDisplayCache.removeValue(forKey: tabID)
+
+    let token = CanvasDirectoryShorteningCoordinator.nextToken(for: tabID, tokens: &directoryLatestTokens)
+    let service = directoryShorteningService
+    let task = Task {
+      let shortened = await service.shortenedDisplayPath(for: normalizedDisplayPath) ?? normalizedDisplayPath
+      guard !Task.isCancelled else { return }
+      await MainActor.run {
+        guard
+          CanvasDirectoryShorteningCoordinator.shouldApply(
+            token: token,
+            for: tabID,
+            latestTokens: directoryLatestTokens
+          )
+        else { return }
+        directoryDisplayCache[tabID] = CanvasDirectoryDisplayCacheEntry(
+          normalizedDisplayPath: normalizedDisplayPath,
+          shortenedDisplayPath: shortened
+        )
+        directoryInFlightTasks.removeValue(forKey: tabID)
+      }
+    }
+
+    let previousTask = CanvasDirectoryShorteningCoordinator.replaceInFlightRequest(
+      for: tabID,
+      with: task,
+      requests: &directoryInFlightTasks
+    )
+    previousTask?.cancel()
+  }
+
+  func pruneDirectoryShorteningState(keeping states: [WorktreeTerminalState]) {
+    let activeTabIDs = activeCanvasTabIDs(from: states)
+    let cancelled = CanvasDirectoryShorteningCoordinator.pruneRequests(
+      keeping: activeTabIDs,
+      requests: &directoryInFlightTasks
+    )
+    for task in cancelled {
+      task.cancel()
+    }
+    pruneDictionary(keeping: activeTabIDs, dictionary: &directoryLatestTokens)
+    pruneDictionary(keeping: activeTabIDs, dictionary: &directoryLastRequestedPath)
+    pruneDictionary(keeping: activeTabIDs, dictionary: &directoryDisplayCache)
+  }
+
+  func activeCanvasTabIDs(from states: [WorktreeTerminalState]) -> Set<TerminalTabID> {
+    Set(
+      states.flatMap { state in
+        state.tabManager.tabs.compactMap { tab in
+          state.surfaceView(for: tab.id) != nil ? tab.id : nil
+        }
+      }
+    )
+  }
+
+  func pruneDictionary<Value>(
+    keeping activeTabIDs: Set<TerminalTabID>,
+    dictionary: inout [TerminalTabID: Value]
+  ) {
+    let staleIDs = dictionary.keys.filter { !activeTabIDs.contains($0) }
+    for staleID in staleIDs {
+      dictionary.removeValue(forKey: staleID)
+    }
+  }
+
+  func cancelAllDirectoryShorteningRequests() {
+    for task in directoryInFlightTasks.values {
+      task.cancel()
+    }
+    directoryInFlightTasks.removeAll()
+    directoryLatestTokens.removeAll()
+    directoryLastRequestedPath.removeAll()
+    directoryDisplayCache.removeAll()
   }
 
   var canvasWrapToast: some View {
@@ -1231,4 +1347,164 @@ struct CanvasView: View {
       expandCard(tabID, states: terminalManager.activeWorktreeStates)
     }
   }
+}
+
+struct CanvasDirectoryDisplayCacheEntry: Equatable, Sendable {
+  let normalizedDisplayPath: String
+  let shortenedDisplayPath: String
+}
+
+struct CanvasCardTitleSegments: Equatable, Sendable {
+  let currentDirectory: String?
+  let worktreeName: String?
+}
+
+func canvasDisplayedDirectory(
+  normalizedDisplayPath: String?,
+  cachedEntry: CanvasDirectoryDisplayCacheEntry?
+) -> String? {
+  guard let normalizedDisplayPath else { return nil }
+  guard
+    let cachedEntry,
+    cachedEntry.normalizedDisplayPath == normalizedDisplayPath
+  else {
+    return normalizedDisplayPath
+  }
+  return cachedEntry.shortenedDisplayPath
+}
+
+func canvasCardTitleSegments(
+  currentDirectoryPath: String?,
+  tabTitle: String?,
+  fallbackWorktreeName: String? = nil,
+  cachedDirectoryEntry: CanvasDirectoryDisplayCacheEntry?
+) -> CanvasCardTitleSegments {
+  let normalizedDisplayPath = CanvasCurrentDirectoryFormatter.displayPath(for: currentDirectoryPath)
+  return CanvasCardTitleSegments(
+    currentDirectory: canvasDisplayedDirectory(
+      normalizedDisplayPath: normalizedDisplayPath,
+      cachedEntry: cachedDirectoryEntry
+    ),
+    worktreeName: canvasCardWorktreeNameSegment(
+      tabTitle: tabTitle,
+      fallbackWorktreeName: fallbackWorktreeName,
+      currentDirectoryPath: currentDirectoryPath
+    )
+  )
+}
+
+private func canvasCardWorktreeNameSegment(
+  tabTitle: String?,
+  fallbackWorktreeName: String?,
+  currentDirectoryPath: String?
+) -> String? {
+  let fallback = trimmedNonEmpty(fallbackWorktreeName)
+  guard let title = trimmedNonEmpty(tabTitle) else { return fallback }
+  if CanvasCurrentDirectoryFormatter.isDuplicateDirectoryTitle(title, currentDirectoryPath: currentDirectoryPath) {
+    return nil
+  }
+  if isHostnameLikeCanvasTitle(title) {
+    return fallback
+  }
+  return title
+}
+
+private func isHostnameLikeCanvasTitle(_ title: String) -> Bool {
+  let normalized = title.lowercased()
+  return normalized.hasSuffix(CanvasTitleHostnamePattern.localSuffix)
+    || normalized.hasSuffix(CanvasTitleHostnamePattern.computeInternalSuffix)
+    || (normalized.hasPrefix(CanvasTitleHostnamePattern.ipHostnamePrefix)
+      && normalized.contains(CanvasTitleHostnamePattern.domainSeparator))
+}
+
+private func trimmedNonEmpty(_ value: String?) -> String? {
+  guard let value else { return nil }
+  let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+  return trimmed.isEmpty ? nil : trimmed
+}
+
+private enum CanvasTitleHostnamePattern {
+  static let localSuffix = ".local"
+  static let computeInternalSuffix = ".compute.internal"
+  static let ipHostnamePrefix = "ip-"
+  static let domainSeparator = "."
+}
+
+func shouldShowCanvasSelectionShield(
+  selectionModifierPressed: Bool,
+  isSelecting: Bool,
+  isBroadcasting: Bool,
+  isPrimaryTab: Bool
+) -> Bool {
+  if isSelecting { return true }
+  if isBroadcasting && !isPrimaryTab { return true }
+  if selectionModifierPressed { return true }
+  return false
+}
+
+func canvasCurrentVisibleTabID(
+  focusedTabID: TerminalTabID?,
+  visibleTabIDs: [TerminalTabID],
+  selectedTabIDs: [TerminalTabID]
+) -> TerminalTabID? {
+  guard !visibleTabIDs.isEmpty else { return nil }
+  if let focusedTabID, visibleTabIDs.contains(focusedTabID) {
+    return focusedTabID
+  }
+  if let selectedTabID = selectedTabIDs.first(where: { visibleTabIDs.contains($0) }) {
+    return selectedTabID
+  }
+  return visibleTabIDs.first
+}
+
+func canvasRestoredFocusTabID(
+  wasSuspended: Bool,
+  isSuspended: Bool,
+  focusedTabID: TerminalTabID?
+) -> TerminalTabID? {
+  guard wasSuspended, !isSuspended else { return nil }
+  return focusedTabID
+}
+
+struct CanvasActivationFocusCandidate: Equatable {
+  let worktreeID: Worktree.ID
+  let selectedTabID: TerminalTabID
+}
+
+func canvasActivationFocusTarget(
+  selectedWorktreeID: Worktree.ID?,
+  canvasReturnWorktreeID: Worktree.ID?,
+  candidates: [CanvasActivationFocusCandidate]
+) -> CanvasRestoreFocusTarget? {
+  let targetWorktreeIDs = [selectedWorktreeID, canvasReturnWorktreeID]
+  for targetWorktreeID in targetWorktreeIDs.compactMap(\.self) {
+    guard let candidate = candidates.first(where: { $0.worktreeID == targetWorktreeID }) else {
+      continue
+    }
+    return CanvasRestoreFocusTarget(worktreeID: candidate.worktreeID, tabID: candidate.selectedTabID)
+  }
+  return nil
+}
+
+func canvasFocusVisibilityBounds(
+  viewportSize: CGSize,
+  horizontalInset: CGFloat,
+  verticalInset: CGFloat,
+  bottomReservedInset: CGFloat
+) -> CGRect {
+  let clampedHorizontalInset = min(max(0, horizontalInset), viewportSize.width / 2)
+  let clampedVerticalInset = min(max(0, verticalInset), viewportSize.height / 2)
+  let minX = clampedHorizontalInset
+  let maxX = max(minX, viewportSize.width - clampedHorizontalInset)
+  let minY = clampedVerticalInset
+  let maxY = max(
+    minY,
+    viewportSize.height - clampedVerticalInset - bottomReservedInset
+  )
+  return CGRect(
+    x: minX,
+    y: minY,
+    width: max(0, maxX - minX),
+    height: max(0, maxY - minY)
+  )
 }
