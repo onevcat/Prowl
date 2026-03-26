@@ -66,6 +66,34 @@ struct CanvasFocusFallbackSelectionTests {
     #expect(result == "selected-near")
   }
 
+  @Test func prioritizesPendingCreatedTabWhenAvailable() {
+    let candidates = [
+      CanvasFocusFallbackCandidate(
+        id: "selected-near",
+        center: CGPoint(x: 520, y: 360),
+        size: CGSize(width: 300, height: 200),
+        isSelected: true
+      ),
+      CanvasFocusFallbackCandidate(
+        id: "pending-created",
+        center: CGPoint(x: 1_600, y: 1_200),
+        size: CGSize(width: 300, height: 200),
+        isSelected: true
+      ),
+    ]
+
+    let result = canvasFallbackFocusID(
+      focusedID: nil,
+      pendingCreatedID: "pending-created",
+      viewportSize: CGSize(width: 1_000, height: 700),
+      canvasOffset: .zero,
+      canvasScale: 1.0,
+      candidates: candidates
+    )
+
+    #expect(result == "pending-created")
+  }
+
   @Test func choosesNearestVisibleWhenNoFocusedOrSelected() {
     let candidates = [
       CanvasFocusFallbackCandidate(

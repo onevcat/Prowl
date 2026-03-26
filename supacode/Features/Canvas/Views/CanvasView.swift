@@ -37,6 +37,7 @@ struct CanvasView: View {
   @State var canvasScale: CGFloat = 1.0
   @State var lastCanvasScale: CGFloat = 1.0
   @State var selectionState = CanvasSelectionState()
+  @State var pendingCreatedTabID: TerminalTabID?
   @State var lastTitleBarTapDate: Date = .distantPast
   @State var activeResize: [TerminalTabID: ActiveResize] = [:]
   @State var hasPerformedInitialFit = false
@@ -187,7 +188,15 @@ struct CanvasView: View {
             recoverCanvasFocusIfNeeded(states: latestStates)
             fulfillPendingFocusRequest(focusRequest, states: latestStates)
           }
-          .onChange(of: allTabIDs) { oldTabIDs, _ in
+          .onChange(of: allTabIDs) { oldTabIDs, newTabIDs in
+            if let createdTabID = newlyCreatedCanvasTabID(
+              previousTabIDs: oldTabIDs,
+              currentTabIDs: newTabIDs
+            ) {
+              pendingCreatedTabID = createdTabID
+            } else if let pendingCreatedTabID, !newTabIDs.contains(pendingCreatedTabID) {
+              self.pendingCreatedTabID = nil
+            }
             let latestStates = terminalManager.activeWorktreeStates
             ensureLayouts(for: collectCanvasCards(from: latestStates))
             let latestTabIDs = collectVisibleTabIDs(from: latestStates)
@@ -413,7 +422,9 @@ struct CanvasView: View {
       titleBarHeight: titleBarHeight
     ) { renderSize in
       CanvasCardView(
-        repositoryName: resolvedRepositoryName,
+        repositoryName: state.worktreeID == FreestyleTerminal.worktreeID
+          ? FreestyleTerminal.repositoryName
+          : resolvedRepositoryName,
         currentDirectory: titleSegments.currentDirectory,
         worktreeName: titleSegments.worktreeName,
         repositoryIcon: repositoryAppearance.icon,
@@ -653,6 +664,14 @@ struct CanvasView: View {
         state.surfaceView(for: tab.id) != nil ? tab.id : nil
       }
     }
+  }
+
+  func newlyCreatedCanvasTabID(
+    previousTabIDs: [TerminalTabID],
+    currentTabIDs: [TerminalTabID]
+  ) -> TerminalTabID? {
+    let previousTabIDSet = Set(previousTabIDs)
+    return currentTabIDs.first(where: { !previousTabIDSet.contains($0) })
   }
 
   func collectFocusCandidates(from states: [WorktreeTerminalState]) -> [CanvasFocusCandidate] {
@@ -1010,13 +1029,7 @@ struct CanvasView: View {
   }
 
   func activeCanvasTabIDs(from states: [WorktreeTerminalState]) -> Set<TerminalTabID> {
-    Set(
-      states.flatMap { state in
-        state.tabManager.tabs.compactMap { tab in
-          state.surfaceView(for: tab.id) != nil ? tab.id : nil
-        }
-      }
-    )
+    Set(collectVisibleTabIDs(from: states))
   }
 
   func pruneDictionary<Value>(
@@ -1301,6 +1314,7 @@ struct CanvasView: View {
     }
     guard let targetTabID = canvasFallbackFocusID(
       focusedID: selectionState.primaryTabID,
+      pendingCreatedID: pendingCreatedTabID,
       viewportSize: viewportSize,
       canvasOffset: canvasOffset,
       canvasScale: canvasScale,
@@ -1312,6 +1326,9 @@ struct CanvasView: View {
       return
     }
     guard selectionState.primaryTabID != targetTabID else { return }
+    if pendingCreatedTabID == targetTabID {
+      pendingCreatedTabID = nil
+    }
     guard let target = tabs.first(where: { $0.tabID == targetTabID }) else { return }
     focusCanvasTab(target, states: states)
   }
@@ -1357,6 +1374,9 @@ struct CanvasView: View {
     layoutStore.moveToFront(tabID.rawValue.uuidString)
     mutateSelection(states: states) { state in
       state.focusSingle(tabID)
+    }
+    if pendingCreatedTabID == tabID {
+      pendingCreatedTabID = nil
     }
     if ensureVisibleInViewport {
       ensureTabVisibleInViewport(

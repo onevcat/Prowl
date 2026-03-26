@@ -301,7 +301,7 @@ extension RepositoriesFeature {
       shouldPruneArchivedWorktrees
       ? pruneArchivedWorktrees(availableWorktreeIDs: availableWorktreeIDs, state: &state)
       : false
-    if !state.isShowingArchivedWorktrees, !state.isShowingCanvas,
+    if !state.isShowingArchivedWorktrees, !state.isShowingCanvas, !state.isShowingFreestyle,
       !isSidebarSelectionValid(state.selection, state: state)
     {
       state.selection = nil

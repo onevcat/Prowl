@@ -642,12 +642,16 @@ struct CanvasFocusFallbackCandidate<ID: Hashable> {
 
 func canvasFallbackFocusID<ID: Hashable>(
   focusedID: ID?,
+  pendingCreatedID: ID? = nil,
   viewportSize: CGSize,
   canvasOffset: CGSize,
   canvasScale: CGFloat,
   candidates: [CanvasFocusFallbackCandidate<ID>]
 ) -> ID? {
   guard !candidates.isEmpty else { return nil }
+  if let pendingCreatedID, candidates.contains(where: { $0.id == pendingCreatedID }) {
+    return pendingCreatedID
+  }
   if let focusedID, candidates.contains(where: { $0.id == focusedID }) {
     return focusedID
   }

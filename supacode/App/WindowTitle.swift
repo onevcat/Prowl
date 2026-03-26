@@ -32,6 +32,8 @@ enum WindowTitle {
       return archivedWorktreesTitle
     case .canvas:
       return canvasTitle
+    case .freestyle:
+      return FreestyleTerminal.displayName
     case .repository(let repositoryID):
       return repositoryTitle(repositoryID: repositoryID, repositories: repositories, terminalState: terminalState)
     case .worktree(let worktreeID):

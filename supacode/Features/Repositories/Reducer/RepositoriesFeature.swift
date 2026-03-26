@@ -341,6 +341,7 @@ struct RepositoriesFeature {
     case selectCanvas
     case selectShelf
     case selectTabbed
+    case selectFreestyle
     case setTopSegment(TopSegment)
     case toggleCanvas
     case toggleShelf

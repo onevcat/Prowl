@@ -80,6 +80,13 @@ extension AppFeature {
     return canvasFocusedTerminalWorktree(repositories: repositories)
   }
 
+  func terminalCommandWorktree(repositories: RepositoriesFeature.State) -> Worktree? {
+    if repositories.isShowingFreestyle {
+      return FreestyleTerminal.worktree()
+    }
+    return actionTargetWorktree(repositories: repositories)
+  }
+
   func canvasFocusedTerminalWorktree(repositories: RepositoriesFeature.State) -> Worktree? {
     guard repositories.isShowingCanvas,
       let worktreeID = terminalClient.canvasFocusedWorktreeID()

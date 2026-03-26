@@ -65,6 +65,8 @@ struct AppFeature {
     case toggleLeftSidebar
     case showLeftSidebar
     case setLeftSidebarVisibility(NavigationSplitViewVisibility)
+    case newTerminalFromCanvas(focusedWorktreeID: Worktree.ID?)
+    case newTerminalFromCanvasUsingPWD(focusedWorktreeID: Worktree.ID?)
     case runScript
     case runCustomCommand(Int)
     case canvasFocusedWorktreeChanged(Worktree.ID?)
@@ -166,6 +168,12 @@ struct AppFeature {
           state.repositories.selectedRepository?.capabilities.supportsRunnableFolderActions == true
           && state.repositories.selectedRepository?.capabilities.supportsWorktrees == false
         guard let worktree else {
+          let selectedTerminalWorktreeID: Worktree.ID? =
+            if state.repositories.isShowingFreestyle {
+              FreestyleTerminal.worktreeID
+            } else {
+              nil
+            }
           state.openActionSelection = .finder
           state.selectedRunScript = ""
           state.selectedCustomCommands = []
@@ -177,13 +185,16 @@ struct AppFeature {
           state.isRunScriptPromptPresented = false
           var effects: [Effect<Action>] = [
             .run { _ in
-              await terminalClient.send(.setSelectedWorktreeID(nil))
+              await terminalClient.send(.setSelectedWorktreeID(selectedTerminalWorktreeID))
             },
             .run { _ in
               await worktreeInfoWatcher.send(.setSelectedWorktreeID(nil))
             },
           ]
-          if !state.repositories.isShowingArchivedWorktrees, !state.repositories.isShowingCanvas {
+          if !state.repositories.isShowingArchivedWorktrees,
+            !state.repositories.isShowingCanvas,
+            !state.repositories.isShowingFreestyle
+          {
             effects.insert(
               .run { _ in
                 await repositoryPersistence.saveLastFocusedWorktreeID(lastFocusedWorktreeID)
@@ -592,7 +603,7 @@ struct AppFeature {
         return .none
 
       case .newTerminal:
-        guard let worktree = actionTargetWorktree(repositories: state.repositories) else {
+        guard let worktree = terminalCommandWorktree(repositories: state.repositories) else {
           return .none
         }
         analyticsClient.capture("terminal_tab_created", nil)
@@ -630,6 +641,49 @@ struct AppFeature {
       case .setLeftSidebarVisibility(let visibility):
         state.leftSidebarVisibility = visibility
         return .none
+
+      case .newTerminalFromCanvas(let focusedWorktreeID):
+        let worktree =
+          if let focusedWorktreeID,
+            let focusedWorktree = state.repositories.worktree(for: focusedWorktreeID)
+          {
+            focusedWorktree
+          } else {
+            FreestyleTerminal.worktree()
+          }
+        analyticsClient.capture("terminal_tab_created", nil)
+        let shouldRunSetupScript = state.repositories.pendingSetupScriptWorktreeIDs.contains(worktree.id)
+        let inheritFromFocusedSurface = worktree.id == FreestyleTerminal.worktreeID
+        return .run { _ in
+          await terminalClient.send(
+            .createTabFromCanvas(
+              worktree,
+              runSetupScriptIfNew: shouldRunSetupScript,
+              inheritFromFocusedSurface: inheritFromFocusedSurface
+            )
+          )
+        }
+
+      case .newTerminalFromCanvasUsingPWD(let focusedWorktreeID):
+        let worktree =
+          if let focusedWorktreeID,
+            let focusedWorktree = state.repositories.worktree(for: focusedWorktreeID)
+          {
+            focusedWorktree
+          } else {
+            FreestyleTerminal.worktree()
+          }
+        analyticsClient.capture("terminal_tab_created", nil)
+        let shouldRunSetupScript = state.repositories.pendingSetupScriptWorktreeIDs.contains(worktree.id)
+        return .run { _ in
+          await terminalClient.send(
+            .createTabFromCanvas(
+              worktree,
+              runSetupScriptIfNew: shouldRunSetupScript,
+              inheritFromFocusedSurface: true
+            )
+          )
+        }
 
       case .runScript:
         guard let worktree = actionTargetWorktree(repositories: state.repositories) else {
@@ -784,7 +838,7 @@ struct AppFeature {
         }
 
       case .closeTab:
-        guard let worktree = state.repositories.selectedTerminalWorktree else {
+        guard let worktree = terminalCommandWorktree(repositories: state.repositories) else {
           return .none
         }
         analyticsClient.capture("terminal_tab_closed", nil)
@@ -793,7 +847,7 @@ struct AppFeature {
         }
 
       case .closeSurface:
-        guard let worktree = state.repositories.selectedTerminalWorktree else {
+        guard let worktree = terminalCommandWorktree(repositories: state.repositories) else {
           return .none
         }
         return .run { _ in
@@ -801,7 +855,7 @@ struct AppFeature {
         }
 
       case .startSearch:
-        guard let worktree = state.repositories.selectedTerminalWorktree else {
+        guard let worktree = terminalCommandWorktree(repositories: state.repositories) else {
           return .none
         }
         return .run { _ in
@@ -809,7 +863,7 @@ struct AppFeature {
         }
 
       case .searchSelection:
-        guard let worktree = state.repositories.selectedTerminalWorktree else {
+        guard let worktree = terminalCommandWorktree(repositories: state.repositories) else {
           return .none
         }
         return .run { _ in
@@ -817,7 +871,7 @@ struct AppFeature {
         }
 
       case .navigateSearchNext:
-        guard let worktree = state.repositories.selectedTerminalWorktree else {
+        guard let worktree = terminalCommandWorktree(repositories: state.repositories) else {
           return .none
         }
         return .run { _ in
@@ -825,7 +879,7 @@ struct AppFeature {
         }
 
       case .navigateSearchPrevious:
-        guard let worktree = state.repositories.selectedTerminalWorktree else {
+        guard let worktree = terminalCommandWorktree(repositories: state.repositories) else {
           return .none
         }
         return .run { _ in
@@ -833,7 +887,7 @@ struct AppFeature {
         }
 
       case .endSearch:
-        guard let worktree = state.repositories.selectedTerminalWorktree else {
+        guard let worktree = terminalCommandWorktree(repositories: state.repositories) else {
           return .none
         }
         return .run { _ in

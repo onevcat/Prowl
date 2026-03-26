@@ -58,6 +58,14 @@ final class WorktreeTerminalManager {
     switch command {
     case .createTab(let worktree, let runSetupScriptIfNew):
       Task { createTabAsync(in: worktree, runSetupScriptIfNew: runSetupScriptIfNew) }
+    case .createTabFromCanvas(let worktree, let runSetupScriptIfNew, let inheritFromFocusedSurface):
+      Task {
+        createTabAsync(
+          in: worktree,
+          runSetupScriptIfNew: runSetupScriptIfNew,
+          inheritFromFocusedSurface: inheritFromFocusedSurface
+        )
+      }
     case .createTabWithInput(
       let worktree, let input, let runSetupScriptIfNew, let autoCloseOnSuccess, let customCommandName,
       let customCommandIcon):
@@ -292,6 +300,7 @@ final class WorktreeTerminalManager {
     in worktree: Worktree,
     runSetupScriptIfNew: Bool,
     initialInput: String? = nil,
+    inheritFromFocusedSurface: Bool = true,
     workingDirectory: URL? = nil,
     autoCloseOnSuccess: Bool = false,
     customCommandName: String? = nil,
@@ -311,6 +320,7 @@ final class WorktreeTerminalManager {
     let tabId = state.createTab(
       setupScript: setupScript,
       initialInput: initialInput,
+      inheritFromFocusedSurface: inheritFromFocusedSurface,
       workingDirectoryOverride: workingDirectory
     )
     if let tabId, let surfaceId = state.focusedSurfaceId(in: tabId) {
@@ -367,9 +377,13 @@ final class WorktreeTerminalManager {
   }
 
   func prune(keeping worktreeIDs: Set<Worktree.ID>) {
+    var retainedWorktreeIDs = worktreeIDs
+    if states[FreestyleTerminal.worktreeID]?.tabManager.tabs.isEmpty == false {
+      retainedWorktreeIDs.insert(FreestyleTerminal.worktreeID)
+    }
     var removed: [WorktreeTerminalState] = []
     var removedIDs: Set<Worktree.ID> = []
-    for (id, state) in states where !worktreeIDs.contains(id) {
+    for (id, state) in states where !retainedWorktreeIDs.contains(id) {
       removed.append(state)
       removedIDs.insert(id)
     }
@@ -379,7 +393,7 @@ final class WorktreeTerminalManager {
     if !removed.isEmpty {
       terminalLogger.info("Pruned \(removed.count) terminal state(s)")
     }
-    states = states.filter { worktreeIDs.contains($0.key) }
+    states = states.filter { retainedWorktreeIDs.contains($0.key) }
     eventCoalescer.forget(worktreeIDs: removedIDs)
     emitNotificationIndicatorCountIfNeeded()
   }

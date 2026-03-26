@@ -383,6 +383,13 @@ extension RepositoriesFeature {
       if state.isShowingShelf {
         return .send(.toggleShelf)
       }
+      if state.isShowingFreestyle {
+        let targetID =
+          state.lastFocusedWorktreeID
+          ?? state.orderedWorktreeRows().first?.id
+        guard let targetID else { return .none }
+        return .send(.selectWorktree(targetID, focusTerminal: true))
+      }
       return .none
 
     case .setTopSegment(let segment):
@@ -391,9 +398,17 @@ extension RepositoriesFeature {
         return .send(.selectTabbed)
       case .canvas:
         return .send(.selectCanvas)
+      case .freestyle:
+        return .send(.selectFreestyle)
       case .shelf:
         return .send(.selectShelf)
       }
+
+    case .selectFreestyle:
+      state.isShelfActive = false
+      state.selection = .freestyle
+      state.sidebarSelectedWorktreeIDs = []
+      return .send(.delegate(.selectedWorktreeChanged(nil)))
 
     case .toggleCanvas:
       if state.isShowingCanvas {
@@ -406,6 +421,10 @@ extension RepositoriesFeature {
           ?? state.lastFocusedWorktreeID
           ?? state.orderedWorktreeRows().first?.id
         guard let targetID else { return .none }
+        state.canvasReturnWorktreeID = targetID
+        if targetID == FreestyleTerminal.worktreeID {
+          return .send(.selectFreestyle)
+        }
         if state.worktree(for: targetID) == nil,
           let repository = state.repositories[id: targetID],
           repository.kind == .plain

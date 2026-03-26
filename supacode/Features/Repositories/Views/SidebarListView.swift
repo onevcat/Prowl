@@ -222,6 +222,7 @@ struct SidebarListView: View {
         shortcutCommandID: AppShortcuts.CommandID.toggleCanvas,
         requiresRepository: true
       )
+      topSegmentButton(.freestyle, systemImage: "terminal", title: "Freestyle")
       topSegmentButton(
         .shelf,
         systemImage: "distribute.horizontal.fill",

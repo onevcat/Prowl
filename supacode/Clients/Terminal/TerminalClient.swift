@@ -16,6 +16,7 @@ struct TerminalClient {
 
   enum Command: Equatable {
     case createTab(Worktree, runSetupScriptIfNew: Bool)
+    case createTabFromCanvas(Worktree, runSetupScriptIfNew: Bool, inheritFromFocusedSurface: Bool)
     case createTabWithInput(
       Worktree,
       input: String,

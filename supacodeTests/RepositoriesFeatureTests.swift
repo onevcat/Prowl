@@ -1547,6 +1547,24 @@ struct RepositoriesFeatureTests {
     await store.receive(\.delegate.selectedWorktreeChanged)
   }
 
+  @Test func selectFreestyleClearsSidebarSelectionAndSendsNilDelegate() async {
+    let worktree1 = makeWorktree(id: "/tmp/repo/wt1", name: "wt1", repoRoot: "/tmp/repo")
+    let worktree2 = makeWorktree(id: "/tmp/repo/wt2", name: "wt2", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree1, worktree2])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .worktree(worktree1.id)
+    initialState.sidebarSelectedWorktreeIDs = [worktree1.id, worktree2.id]
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectFreestyle) {
+      $0.selection = .freestyle
+      $0.sidebarSelectedWorktreeIDs = []
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
   @Test func toggleCanvasSwitchesBetweenCanvasAndWorktree() async {
     let worktree = makeWorktree(id: "/tmp/repo/wt1", name: "wt1", repoRoot: "/tmp/repo")
     let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
@@ -1588,6 +1606,45 @@ struct RepositoriesFeatureTests {
       $0.canvasReturnWorktreeID = worktree1.id
     }
     await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func toggleCanvasRestoresFocusedFreestyleSelection() async {
+    var initialState = RepositoriesFeature.State()
+    initialState.selection = .canvas
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.terminalClient.canvasFocusedWorktreeID = { FreestyleTerminal.worktreeID }
+    }
+
+    await store.send(.toggleCanvas) {
+      $0.selection = .freestyle
+      $0.sidebarSelectedWorktreeIDs = []
+      $0.canvasReturnWorktreeID = FreestyleTerminal.worktreeID
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func repositoriesLoadedPreservesFreestyleSelection() async {
+    let worktree = makeWorktree(id: "/tmp/repo/wt1", name: "wt1", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .freestyle
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(
+      .repositoriesLoaded(
+        [repository],
+        failures: [],
+        roots: [repository.rootURL],
+        animated: false
+      )
+    ) {
+      $0.isInitialLoadComplete = true
+    }
+    #expect(store.state.selection == .freestyle)
   }
 
   @Test func createRandomWorktreeWithoutRepositoriesShowsAlert() async {

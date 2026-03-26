@@ -221,6 +221,7 @@ extension CanvasView {
 
   func activateCanvas() {
     cleanStaleLayouts()
+    pendingCreatedTabID = nil
 
     let activeStates = terminalManager.activeWorktreeStates
 
@@ -264,6 +265,9 @@ extension CanvasView {
     }
     clearBroadcastCallbacks(states: activeStates)
     selectionState.clear()
+    pendingCreatedTabID = nil
+    terminalManager.canvasFocusedWorktreeID = nil
+    onFocusedWorktreeChanged(nil)
     // Don't occlude surfaces here. In SwiftUI's if/else view swap,
     // onAppear fires before onDisappear, so occluding here would undo
     // WorktreeTerminalTabsView.onAppear's syncFocus() and cause blank

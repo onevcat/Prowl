@@ -294,10 +294,18 @@ final class WorktreeTerminalState {
     setupScript: String? = nil,
     initialInput: String? = nil,
     inheritingFromSurfaceId: UUID? = nil,
+    inheritFromFocusedSurface: Bool = true,
     workingDirectoryOverride: URL? = nil
   ) -> TerminalTabID? {
-    let context = GHOSTTY_SURFACE_CONTEXT_TAB
-    let resolvedInheritanceSurfaceId = inheritingFromSurfaceId ?? currentFocusedSurfaceId()
+    let context: ghostty_surface_context_e =
+      tabManager.tabs.isEmpty
+      ? GHOSTTY_SURFACE_CONTEXT_WINDOW
+      : GHOSTTY_SURFACE_CONTEXT_TAB
+    let resolvedInheritanceSurfaceId = Self.resolveInheritanceSurfaceID(
+      inheritingFromSurfaceId: inheritingFromSurfaceId,
+      focusedSurfaceId: currentFocusedSurfaceId(),
+      inheritFromFocusedSurface: inheritFromFocusedSurface
+    )
     let title = "\(worktree.name) \(nextTabIndex())"
     let setupInput = setupScriptInput(setupScript: setupScript)
     let commandInput = initialInput.flatMap { runScriptInput($0) }
@@ -332,6 +340,17 @@ final class WorktreeTerminalState {
       onSetupScriptConsumed?()
     }
     return tabId
+  }
+
+  static func resolveInheritanceSurfaceID(
+    inheritingFromSurfaceId: UUID?,
+    focusedSurfaceId: UUID?,
+    inheritFromFocusedSurface: Bool
+  ) -> UUID? {
+    if let inheritingFromSurfaceId {
+      return inheritingFromSurfaceId
+    }
+    return inheritFromFocusedSurface ? focusedSurfaceId : nil
   }
 
   @discardableResult

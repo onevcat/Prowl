@@ -575,6 +575,21 @@ struct WorktreeTerminalManagerTests {
     #expect(clearCount.value == 1)
   }
 
+  @Test func pruneKeepsFreestyleStateWhenItHasOpenTabs() {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktree = makeWorktree()
+    let freestyle = FreestyleTerminal.worktree(homeDirectory: URL(fileURLWithPath: "/tmp"))
+    let standardState = manager.state(for: worktree)
+    let freestyleState = manager.state(for: freestyle)
+    _ = standardState.tabManager.createTab(title: "repo", icon: nil)
+    _ = freestyleState.tabManager.createTab(title: "freestyle", icon: nil)
+
+    manager.prune(keeping: [])
+
+    #expect(manager.stateIfExists(for: worktree.id) == nil)
+    #expect(manager.stateIfExists(for: FreestyleTerminal.worktreeID) != nil)
+  }
+
   private func makeWorktree(
     id: Worktree.ID = "/tmp/repo/wt-1",
     name: String = "wt-1"

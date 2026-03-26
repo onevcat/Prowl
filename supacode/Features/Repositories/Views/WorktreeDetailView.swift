@@ -74,6 +74,7 @@ struct WorktreeDetailView: View {
       actionTargetWorktree != nil
       && loadingInfo == nil
       && !showsMultiSelectionSummary
+    let isShowingFreestyle = repositories.isShowingFreestyle
     let runScriptEnabled = hasActiveTerminalTarget
     let runScriptIsRunning = actionTargetWorktree.flatMap { state.runScriptStatusByWorktreeID[$0.id] } == true
     let customCommands = state.selectedCustomCommands
@@ -145,12 +146,15 @@ struct WorktreeDetailView: View {
     let actions = makeFocusedActions(
       repositories: repositories,
       hasActiveWorktree: hasActiveTerminalTarget,
+      isShowingCanvas: repositories.isShowingCanvas,
+      isShowingFreestyle: isShowingFreestyle,
       runScriptEnabled: runScriptEnabled,
       runScriptIsRunning: runScriptIsRunning
     )
     let actionToken = WorktreeActionContext(
       selectedWorktreeID: selectedTerminalWorktree?.id,
       isShowingCanvas: repositories.isShowingCanvas,
+      isShowingFreestyle: isShowingFreestyle,
       canvasFocusedWorktreeID: repositories.isShowingCanvas ? terminalManager.canvasFocusedWorktreeID : nil
     )
     return applyFocusedActions(content: content, actions: actions, token: actionToken)
@@ -436,6 +440,17 @@ struct WorktreeDetailView: View {
       // floating cards don't read against a colored band. The card title
       // bars still carry their own per-repo color.
       .windowChromeTint(chromeFill(repositories: repositories, context: .canvas), edges: [.leading])
+    } else if repositories.isShowingFreestyle {
+      WorktreeTerminalTabsView(
+        worktree: FreestyleTerminal.worktree(),
+        manager: terminalManager,
+        shouldRunSetupScript: false,
+        forceAutoFocus: true,
+        createTab: { store.send(.newTerminal) },
+        barTint: nil
+      )
+      .id(FreestyleTerminal.worktreeID)
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
     } else if repositories.isShowingShelf {
       // Shelf manages its own chrome bands (and its always-repo-colored
       // spine) inside `ShelfView`, so no tint modifier is applied here.
@@ -555,6 +570,8 @@ struct WorktreeDetailView: View {
     content
       .focusedSceneValue(\.openSelectedWorktreeAction, actions.openSelectedWorktree.asFocusedAction(token: token))
       .focusedSceneValue(\.newTerminalAction, actions.newTerminal.asFocusedAction(token: token))
+      .focusedSceneValue(\.canvasNewTerminalAction, actions.canvasNewTerminal)
+      .focusedSceneValue(\.canvasNewTerminalUsingPWDAction, actions.canvasNewTerminalUsingPWD)
       .focusedSceneValue(\.closeTabAction, actions.closeTab.asFocusedAction(token: token))
       .focusedSceneValue(\.closeSurfaceAction, actions.closeSurface.asFocusedAction(token: token))
       .focusedSceneValue(\.resetFontSizeAction, actions.resetFontSize.asFocusedAction(token: token))
@@ -588,15 +605,23 @@ struct WorktreeDetailView: View {
   private func makeFocusedActions(
     repositories: RepositoriesFeature.State,
     hasActiveWorktree: Bool,
+    isShowingCanvas: Bool,
+    isShowingFreestyle: Bool,
     runScriptEnabled: Bool,
     runScriptIsRunning: Bool
   ) -> FocusedActions {
+    let allowsTerminalCommands = hasActiveWorktree || isShowingFreestyle
+
     func action(_ appAction: AppFeature.Action) -> (() -> Void)? {
       hasActiveWorktree ? { store.send(appAction) } : nil
     }
 
+    func terminalAction(_ appAction: AppFeature.Action) -> (() -> Void)? {
+      allowsTerminalCommands ? { store.send(appAction) } : nil
+    }
+
     func canvasAction(_ perform: @escaping (WorktreeTerminalState) -> Bool) -> (() -> Void)? {
-      guard repositories.isShowingCanvas else { return nil }
+      guard isShowingCanvas else { return nil }
       return {
         guard let worktreeID = terminalManager.canvasFocusedWorktreeID,
           let state = terminalManager.stateIfExists(for: worktreeID)
@@ -608,7 +633,7 @@ struct WorktreeDetailView: View {
     }
 
     func fontSizeAction(_ bindingAction: String) -> (() -> Void)? {
-      if repositories.isShowingCanvas {
+      if isShowingCanvas {
         return {
           guard let worktreeID = terminalManager.canvasFocusedWorktreeID,
             let state = terminalManager.stateIfExists(for: worktreeID)
@@ -617,11 +642,12 @@ struct WorktreeDetailView: View {
           terminalManager.syncPreferredFontSize(from: worktreeID)
         }
       }
-      guard hasActiveWorktree, let selectedWorktree = repositories.selectedTerminalWorktree else { return nil }
+      let worktreeID = isShowingFreestyle ? FreestyleTerminal.worktreeID : repositories.selectedTerminalWorktree?.id
+      guard let worktreeID else { return nil }
       return {
-        guard let state = terminalManager.stateIfExists(for: selectedWorktree.id) else { return }
+        guard let state = terminalManager.stateIfExists(for: worktreeID) else { return }
         _ = state.performBindingActionOnFocusedSurface(bindingAction)
-        terminalManager.syncPreferredFontSize(from: selectedWorktree.id)
+        terminalManager.syncPreferredFontSize(from: worktreeID)
       }
     }
 
@@ -629,15 +655,16 @@ struct WorktreeDetailView: View {
       if let action = canvasAction({ $0.performBindingActionOnFocusedSurface(bindingAction) }) {
         return action
       }
-      guard hasActiveWorktree, let selectedWorktree = repositories.selectedTerminalWorktree else { return nil }
+      let worktreeID = isShowingFreestyle ? FreestyleTerminal.worktreeID : repositories.selectedTerminalWorktree?.id
+      guard let worktreeID else { return nil }
       return {
-        guard let state = terminalManager.stateIfExists(for: selectedWorktree.id) else { return }
+        guard let state = terminalManager.stateIfExists(for: worktreeID) else { return }
         _ = state.performBindingActionOnFocusedSurface(bindingAction)
       }
     }
 
     func closeTabAction() -> (() -> Void)? {
-      if repositories.isShowingCanvas {
+      if isShowingCanvas {
         guard let worktreeID = terminalManager.canvasFocusedWorktreeID,
           let state = terminalManager.stateIfExists(for: worktreeID),
           state.canCloseFocusedTab
@@ -646,8 +673,9 @@ struct WorktreeDetailView: View {
         }
         return { _ = state.closeFocusedTab() }
       }
-      guard hasActiveWorktree, let selectedWorktree = repositories.selectedTerminalWorktree,
-        terminalManager.stateIfExists(for: selectedWorktree.id)?.canCloseFocusedTab == true
+      let worktreeID = isShowingFreestyle ? FreestyleTerminal.worktreeID : repositories.selectedTerminalWorktree?.id
+      guard let worktreeID,
+        terminalManager.stateIfExists(for: worktreeID)?.canCloseFocusedTab == true
       else {
         return nil
       }
@@ -655,7 +683,7 @@ struct WorktreeDetailView: View {
     }
 
     func closeSurfaceAction() -> (() -> Void)? {
-      if repositories.isShowingCanvas {
+      if isShowingCanvas {
         guard let worktreeID = terminalManager.canvasFocusedWorktreeID,
           let state = terminalManager.stateIfExists(for: worktreeID),
           state.canCloseFocusedSurface
@@ -664,27 +692,40 @@ struct WorktreeDetailView: View {
         }
         return { _ = state.closeFocusedSurface() }
       }
-      guard hasActiveWorktree, let selectedWorktree = repositories.selectedTerminalWorktree,
-        terminalManager.stateIfExists(for: selectedWorktree.id)?.canCloseFocusedSurface == true
+      let worktreeID = isShowingFreestyle ? FreestyleTerminal.worktreeID : repositories.selectedTerminalWorktree?.id
+      guard let worktreeID,
+        terminalManager.stateIfExists(for: worktreeID)?.canCloseFocusedSurface == true
       else {
         return nil
       }
       return { store.send(.closeSurface) }
     }
 
+    let canvasNewTerminal: (() -> Void)? = isShowingCanvas
+      ? { store.send(.newTerminalFromCanvas(focusedWorktreeID: terminalManager.canvasFocusedWorktreeID)) }
+      : nil
+    let canvasNewTerminalUsingPWD: (() -> Void)? = isShowingCanvas
+      ? { store.send(.newTerminalFromCanvasUsingPWD(focusedWorktreeID: terminalManager.canvasFocusedWorktreeID)) }
+      : nil
+    let newTerminal: (() -> Void)? = isShowingCanvas
+      ? nil
+      : terminalAction(.newTerminal)
+
     return FocusedActions(
       openSelectedWorktree: action(.openSelectedWorktree),
-      newTerminal: action(.newTerminal),
+      newTerminal: newTerminal,
+      canvasNewTerminal: canvasNewTerminal,
+      canvasNewTerminalUsingPWD: canvasNewTerminalUsingPWD,
       closeTab: closeTabAction(),
       closeSurface: closeSurfaceAction(),
       resetFontSize: fontSizeAction("reset_font_size"),
       increaseFontSize: fontSizeAction("increase_font_size:1"),
       decreaseFontSize: fontSizeAction("decrease_font_size:1"),
-      startSearch: action(.startSearch),
-      searchSelection: action(.searchSelection),
-      navigateSearchNext: action(.navigateSearchNext),
-      navigateSearchPrevious: action(.navigateSearchPrevious),
-      endSearch: action(.endSearch),
+      startSearch: terminalAction(.startSearch),
+      searchSelection: terminalAction(.searchSelection),
+      navigateSearchNext: terminalAction(.navigateSearchNext),
+      navigateSearchPrevious: terminalAction(.navigateSearchPrevious),
+      endSearch: terminalAction(.endSearch),
       selectPreviousTerminalTab: terminalBindingAction("previous_tab"),
       selectNextTerminalTab: terminalBindingAction("next_tab"),
       selectPreviousTerminalPane: terminalBindingAction("goto_split:previous"),
@@ -794,6 +835,7 @@ struct WorktreeDetailView: View {
   private struct WorktreeActionContext: Hashable {
     let selectedWorktreeID: Worktree.ID?
     let isShowingCanvas: Bool
+    let isShowingFreestyle: Bool
     let canvasFocusedWorktreeID: Worktree.ID?
   }
 
@@ -806,6 +848,8 @@ struct WorktreeDetailView: View {
   private struct FocusedActions {
     let openSelectedWorktree: (() -> Void)?
     let newTerminal: (() -> Void)?
+    let canvasNewTerminal: (() -> Void)?
+    let canvasNewTerminalUsingPWD: (() -> Void)?
     let closeTab: (() -> Void)?
     let closeSurface: (() -> Void)?
     let resetFontSize: (() -> Void)?

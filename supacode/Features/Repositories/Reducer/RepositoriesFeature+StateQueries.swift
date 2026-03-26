@@ -86,6 +86,10 @@ extension RepositoriesFeature.State {
     selection == .canvas
   }
 
+  var isShowingFreestyle: Bool {
+    selection == .freestyle
+  }
+
   var isShowingShelf: Bool {
     // Shelf needs at least one repository to render. Guarding here (not just
     // on entry) also covers the launch race where the repository snapshot
@@ -98,6 +102,7 @@ extension RepositoriesFeature.State {
 
   var topSegment: TopSegment {
     if isShowingCanvas { return .canvas }
+    if isShowingFreestyle { return .freestyle }
     if isShowingShelf { return .shelf }
     return .tabbed
   }
@@ -107,7 +112,7 @@ extension RepositoriesFeature.State {
     // anchor. With selection on `.repository`, `.archivedWorktrees`, or `nil`,
     // there is no "current" position to step away from, so the menu items
     // (and their shortcuts) must be disabled.
-    !isShowingShelf && !isShowingCanvas && selectedWorktreeID != nil
+    !isShowingShelf && !isShowingCanvas && !isShowingFreestyle && selectedWorktreeID != nil
   }
 
   var archivedWorktreeIDSet: Set<Worktree.ID> {

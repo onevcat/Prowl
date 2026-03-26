@@ -125,7 +125,7 @@ func isSidebarSelectionValid(
     return isSelectionValid(id, state: state)
   case .repository(let id):
     return state.repositories[id: id] != nil
-  case .archivedWorktrees, .canvas:
+  case .archivedWorktrees, .canvas, .freestyle:
     return true
   case nil:
     return false
@@ -159,7 +159,7 @@ func navigateWorktreeHistory(
   direction: WorktreeHistoryDirection,
   state: inout RepositoriesFeature.State
 ) -> Effect<RepositoriesFeature.Action> {
-  guard !state.isShowingShelf, !state.isShowingCanvas else { return .none }
+  guard !state.isShowingShelf, !state.isShowingCanvas, !state.isShowingFreestyle else { return .none }
   guard let currentID = state.selectedWorktreeID else { return .none }
   var sourceStack =
     direction == .backward
@@ -196,7 +196,7 @@ func recordWorktreeHistoryTransition(
 ) {
   // Shelf / Canvas are mode switches, not worktree navigation — leave
   // history frozen so users can resume Back/Forward where they left off.
-  guard !state.isShowingShelf, !state.isShowingCanvas else { return }
+  guard !state.isShowingShelf, !state.isShowingCanvas, !state.isShowingFreestyle else { return }
   // No-op transitions (same worktree, or both endpoints nil) leave history alone.
   if previousID == nextID { return }
   // Any user-initiated selection change invalidates the redo path. Crucially
