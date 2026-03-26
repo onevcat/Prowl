@@ -19,6 +19,7 @@ struct WindowCommands: Commands {
   @FocusedValue(\.selectTerminalPaneBelowAction) private var selectTerminalPaneBelowAction
   @FocusedValue(\.selectTerminalPaneLeftAction) private var selectTerminalPaneLeftAction
   @FocusedValue(\.selectTerminalPaneRightAction) private var selectTerminalPaneRightAction
+  @FocusedValue(\.canvasCloseTabAction) private var canvasCloseTabAction
 
   var body: some Commands {
     let mainWindowOpenerRegistered = MainWindowOpener.shared.register(openWindow: openWindow)
@@ -26,16 +27,25 @@ struct WindowCommands: Commands {
     let closeTabHotkey = ghosttyShortcuts.keyboardShortcut(for: "close_tab")
     let shelfHasOpenBooks =
       store.repositories.isShelfActive && !store.repositories.openedWorktreeIDs.isEmpty
-    let closeWindowShortcut = WindowCloseShortcutPolicy.closeWindowShortcut(
-      closeSurfaceShortcut: closeSurfaceHotkey,
-      closeTabShortcut: closeTabHotkey,
-      hasTerminalCloseTarget: closeTabAction != nil || closeSurfaceAction != nil,
-      shelfHasOpenBooks: shelfHasOpenBooks
-    )
+    let closeWindowShortcut =
+      if canvasCloseTabAction != nil {
+        KeyboardShortcut("w")
+      } else {
+        WindowCloseShortcutPolicy.closeWindowShortcut(
+          closeSurfaceShortcut: closeSurfaceHotkey,
+          closeTabShortcut: closeTabHotkey,
+          hasTerminalCloseTarget: closeTabAction != nil || closeSurfaceAction != nil,
+          shelfHasOpenBooks: shelfHasOpenBooks
+        )
+      }
 
     CommandGroup(replacing: .saveItem) {
-      Button("Close Window", systemImage: "xmark") {
-        NSApplication.shared.keyWindow?.performClose(nil)
+      Button(canvasCloseTabAction == nil ? "Close Window" : "Close Tab", systemImage: "xmark") {
+        if let canvasCloseTabAction {
+          canvasCloseTabAction()
+        } else {
+          NSApplication.shared.keyWindow?.performClose(nil)
+        }
       }
       .modifier(
         KeyboardShortcutModifier(
@@ -174,6 +184,17 @@ enum WindowCloseShortcutPolicy {
 
   private static func isCommandW(_ shortcut: KeyboardShortcut?) -> Bool {
     shortcut?.key == "w" && shortcut?.modifiers == .command
+  }
+}
+
+private struct CanvasCloseTabActionKey: FocusedValueKey {
+  typealias Value = () -> Void
+}
+
+extension FocusedValues {
+  var canvasCloseTabAction: (() -> Void)? {
+    get { self[CanvasCloseTabActionKey.self] }
+    set { self[CanvasCloseTabActionKey.self] = newValue }
   }
 }
 

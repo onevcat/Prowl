@@ -76,6 +76,7 @@ struct AppFeature {
     case saveRunScriptAndRun
     case stopRunScript
     case closeTab
+    case closeTabFromCanvas(focusedWorktreeID: Worktree.ID?)
     case closeSurface
     case startSearch
     case searchSelection
@@ -862,6 +863,15 @@ struct AppFeature {
 
       case .closeTab:
         guard let worktree = terminalCommandWorktree(repositories: state.repositories) else {
+          return .none
+        }
+        analyticsClient.capture("terminal_tab_closed", nil)
+        return .run { _ in
+          await terminalClient.send(.closeFocusedTab(worktree))
+        }
+
+      case .closeTabFromCanvas(let focusedWorktreeID):
+        guard let worktree = canvasFocusedWorktree(focusedWorktreeID: focusedWorktreeID, state: state) else {
           return .none
         }
         analyticsClient.capture("terminal_tab_closed", nil)

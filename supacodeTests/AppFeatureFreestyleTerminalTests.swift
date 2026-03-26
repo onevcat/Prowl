@@ -131,6 +131,55 @@ struct AppFeatureFreestyleTerminalTests {
     )
   }
 
+  @Test(.dependencies) func closeTabFromCanvasUsesFocusedWorktree() async {
+    let worktree = makeWorktreeFixture()
+    let repository = makeRepository(worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State(repositories: [repository])
+    repositoriesState.selection = .canvas
+    let sentCommands = LockIsolated<[TerminalClient.Command]>([])
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositoriesState,
+        settings: SettingsFeature.State(),
+      )
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sentCommands.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.closeTabFromCanvas(focusedWorktreeID: worktree.id))
+    await store.finish()
+
+    #expect(sentCommands.value == [.closeFocusedTab(worktree)])
+  }
+
+  @Test(.dependencies) func closeTabFromCanvasUsesFreestyleWorktreeWhenFocusedIsFreestyle() async {
+    let repository = makeRepository()
+    var repositoriesState = RepositoriesFeature.State(repositories: [repository])
+    repositoriesState.selection = .canvas
+    let sentCommands = LockIsolated<[TerminalClient.Command]>([])
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositoriesState,
+        settings: SettingsFeature.State(),
+      )
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sentCommands.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.closeTabFromCanvas(focusedWorktreeID: FreestyleTerminal.worktreeID))
+    await store.finish()
+
+    #expect(sentCommands.value == [.closeFocusedTab(FreestyleTerminal.worktree())])
+  }
+
   @Test(.dependencies) func selectedWorktreeChangedNilInFreestyleSetsTerminalSelectionToFreestyle() async {
     let worktree = makeWorktreeFixture()
     let repository = makeRepository(worktrees: [worktree])

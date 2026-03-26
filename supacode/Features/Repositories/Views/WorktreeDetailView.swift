@@ -576,6 +576,7 @@ struct WorktreeDetailView: View {
       .focusedSceneValue(\.newTerminalAction, actions.newTerminal.asFocusedAction(token: token))
       .focusedSceneValue(\.canvasNewTerminalAction, actions.canvasNewTerminal)
       .focusedSceneValue(\.canvasNewTerminalUsingPWDAction, actions.canvasNewTerminalUsingPWD)
+      .focusedSceneValue(\.canvasCloseTabAction, actions.canvasCloseTab)
       .focusedSceneValue(\.closeTabAction, actions.closeTab.asFocusedAction(token: token))
       .focusedSceneValue(\.closeSurfaceAction, actions.closeSurface.asFocusedAction(token: token))
       .focusedSceneValue(\.resetFontSizeAction, actions.resetFontSize.asFocusedAction(token: token))
@@ -711,6 +712,9 @@ struct WorktreeDetailView: View {
     let canvasNewTerminalUsingPWD: (() -> Void)? = isShowingCanvas
       ? { store.send(.newTerminalFromCanvasUsingPWD(focusedWorktreeID: terminalManager.canvasFocusedWorktreeID)) }
       : nil
+    let canvasCloseTab: (() -> Void)? = isShowingCanvas
+      ? { store.send(.closeTabFromCanvas(focusedWorktreeID: terminalManager.canvasFocusedWorktreeID)) }
+      : nil
     let newTerminal: (() -> Void)? = isShowingCanvas
       ? nil
       : terminalAction(.newTerminal)
@@ -720,6 +724,7 @@ struct WorktreeDetailView: View {
       newTerminal: newTerminal,
       canvasNewTerminal: canvasNewTerminal,
       canvasNewTerminalUsingPWD: canvasNewTerminalUsingPWD,
+      canvasCloseTab: canvasCloseTab,
       closeTab: closeTabAction(),
       closeSurface: closeSurfaceAction(),
       resetFontSize: fontSizeAction("reset_font_size"),
@@ -854,6 +859,7 @@ struct WorktreeDetailView: View {
     let newTerminal: (() -> Void)?
     let canvasNewTerminal: (() -> Void)?
     let canvasNewTerminalUsingPWD: (() -> Void)?
+    let canvasCloseTab: (() -> Void)?
     let closeTab: (() -> Void)?
     let closeSurface: (() -> Void)?
     let resetFontSize: (() -> Void)?
