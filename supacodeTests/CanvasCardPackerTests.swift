@@ -56,6 +56,16 @@ struct CanvasCardPackerTests {
     #expect(card2.position.y > card0.position.y)
   }
 
+  @Test func threeTallCardsPreferBalancedTwoRowLayout() {
+    // Extremely tall cards can make a single row win by pure scale.
+    // We still prefer a more balanced overall arrangement for usability.
+    let cards = (0..<3).map { card("card\($0)", width: 800, height: 900) }
+    let result = packer.pack(cards: cards, targetRatio: 16.0 / 9.0)
+
+    let uniqueRowCenters = Set(result.layouts.values.map(\.position.y))
+    #expect(uniqueRowCenters.count == 2)
+  }
+
   @Test func fourUniformCardsFormTwoByTwo() throws {
     // 4 equal cards, square target → 2 columns, 2 per column.
     let cards = (0..<4).map { card("card\($0)", width: 400, height: 400) }

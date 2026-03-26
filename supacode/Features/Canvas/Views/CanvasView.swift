@@ -45,6 +45,7 @@ struct CanvasView: View {
   @State var showsCanvasHelp = false
   @State var configReloadCounter = 0
   @State var focusViewportAnimationID = 0
+  @State var arrangeAutoScaleTask: Task<Void, Never>?
   @State var wrapToastDismissTask: Task<Void, Never>?
   @State var canvasWrapToastMessage: String?
   @State var directoryDisplayCache: [TerminalTabID: CanvasDirectoryDisplayCacheEntry] = [:]
@@ -148,7 +149,8 @@ struct CanvasView: View {
     ) {
       GeometryReader { _ in
         let activeStates = terminalManager.activeWorktreeStates
-        let allCardKeys = collectCardKeys(from: activeStates)
+        let canvasCards = collectCanvasCards(from: activeStates)
+        let allCardKeys = canvasCards.map(\.key)
         let allTabIDs = collectVisibleTabIDs(from: activeStates)
 
         // Background layer: handles canvas pan and tap-to-clear.
@@ -157,7 +159,7 @@ struct CanvasView: View {
             if !allCardKeys.isEmpty {
               hasSeenCanvasCards = true
             }
-            ensureLayouts(for: allCardKeys)
+            ensureLayouts(for: canvasCards)
             if !allCardKeys.isEmpty {
               layoutStore.ensureZOrder(for: allCardKeys)
             }
@@ -167,7 +169,8 @@ struct CanvasView: View {
           }
           .onChange(of: allCardKeys) { _, _ in
             let latestStates = terminalManager.activeWorktreeStates
-            let latestKeys = collectCardKeys(from: latestStates)
+            let latestCards = collectCanvasCards(from: latestStates)
+            let latestKeys = latestCards.map(\.key)
             if latestKeys.isEmpty {
               CanvasLayoutStore.hasAutoArrangedInSession = false
               if hasSeenCanvasCards {
@@ -176,7 +179,7 @@ struct CanvasView: View {
             } else {
               hasSeenCanvasCards = true
             }
-            ensureLayouts(for: latestKeys)
+            ensureLayouts(for: latestCards)
             if !latestKeys.isEmpty {
               layoutStore.ensureZOrder(for: latestKeys)
             }
@@ -186,7 +189,7 @@ struct CanvasView: View {
           }
           .onChange(of: allTabIDs) { oldTabIDs, _ in
             let latestStates = terminalManager.activeWorktreeStates
-            ensureLayouts(for: collectCardKeys(from: latestStates))
+            ensureLayouts(for: collectCanvasCards(from: latestStates))
             let latestTabIDs = collectVisibleTabIDs(from: latestStates)
             pruneSelection(previousOrder: oldTabIDs, currentOrder: latestTabIDs, states: latestStates)
             if let expandedTabID, !latestTabIDs.contains(expandedTabID) {
@@ -304,6 +307,7 @@ struct CanvasView: View {
     }
     .onDisappear {
       deactivateCanvas()
+      cancelArrangeAutoScaleTask()
       cancelWrapToastTask()
       cancelAllDirectoryShorteningRequests()
     }
@@ -509,19 +513,14 @@ struct CanvasView: View {
   var canvasZoomGesture: some Gesture {
     MagnifyGesture()
       .onChanged { value in
-        let newScale = max(0.25, min(2.0, lastCanvasScale * value.magnification))
+        let newScale = CanvasViewportMath.clampedScale(lastCanvasScale * value.magnification)
         let anchor = value.startLocation
 
-        // Keep the canvas point under the pinch center fixed:
-        // screenPos = canvasPoint * scale + offset
-        // → canvasPoint = (anchor - lastOffset) / lastScale
-        // → newOffset  = anchor - canvasPoint * newScale
-        let canvasX = (anchor.x - lastCanvasOffset.width) / lastCanvasScale
-        let canvasY = (anchor.y - lastCanvasOffset.height) / lastCanvasScale
-
-        canvasOffset = CGSize(
-          width: anchor.x - canvasX * newScale,
-          height: anchor.y - canvasY * newScale
+        canvasOffset = CanvasViewportMath.offsetKeepingAnchorStable(
+          currentOffset: lastCanvasOffset,
+          currentScale: lastCanvasScale,
+          newScale: newScale,
+          anchor: anchor
         )
         canvasScale = newScale
       }
@@ -533,29 +532,40 @@ struct CanvasView: View {
 
   // MARK: - Layout
 
-  /// Batch-position all cards that don't have stored layouts yet.
-  /// Uses a single, consistent column count to avoid overlap between
-  /// cards positioned in different passes.
-  func ensureLayouts(for cardKeys: [String]) {
-    let unpositioned = cardKeys.filter { layoutStore.cardLayouts[$0] == nil }
+  struct CanvasCardDescriptor: Equatable {
+    let key: String
+    let worktreeID: Worktree.ID
+  }
+
+  /// Batch-position cards that don't have stored layouts yet.
+  /// Placement order:
+  /// 1) Current worktree region
+  /// 2) Global bounding rectangle interior
+  /// 3) Global growth by the smaller dimension
+  func ensureLayouts(for cards: [CanvasCardDescriptor]) {
+    let unpositioned = cards.filter { layoutStore.cardLayouts[$0.key] == nil }
     guard !unpositioned.isEmpty else { return }
 
-    // Count only VISIBLE cards that already have layouts (ignores stale entries).
-    let positionedCount = cardKeys.count - unpositioned.count
-    // For incremental adds, preserve the existing grid shape.
-    // For initial layout, use total count for a balanced grid.
-    let columns =
-      positionedCount > 0
-      ? gridColumns(for: positionedCount)
-      : gridColumns(for: cardKeys.count)
-
-    // Build locally, assign once to trigger a single save.
     let cardSize = adaptiveDefaultCardSize
     var layouts = layoutStore.cardLayouts
-    for (offset, key) in unpositioned.enumerated() {
-      layouts[key] = CanvasCardLayout(
-        position: gridPosition(index: positionedCount + offset, columns: columns, cardSize: cardSize),
-        size: cardSize
+    let placementCards = cards.map {
+      CanvasCardPlacementStrategy.CardDescriptor(
+        key: $0.key,
+        worktreeID: $0.worktreeID
+      )
+    }
+    for card in unpositioned {
+      let target = CanvasCardPlacementStrategy.CardDescriptor(
+        key: card.key,
+        worktreeID: card.worktreeID
+      )
+      layouts[card.key] = CanvasCardPlacementStrategy.nextLayout(
+        for: target,
+        cards: placementCards,
+        layouts: layouts,
+        defaultSize: cardSize,
+        titleBarHeight: titleBarHeight,
+        spacing: cardSpacing
       )
     }
     layoutStore.setCardLayouts(layouts)
@@ -624,9 +634,15 @@ struct CanvasView: View {
   // MARK: - Organize & Fit
 
   func collectCardKeys(from states: [WorktreeTerminalState]) -> [String] {
+    collectCanvasCards(from: states).map(\.key)
+  }
+
+  func collectCanvasCards(from states: [WorktreeTerminalState]) -> [CanvasCardDescriptor] {
     states.flatMap { state in
       state.tabManager.tabs.compactMap { tab in
-        state.surfaceView(for: tab.id) != nil ? tab.id.rawValue.uuidString : nil
+        state.surfaceView(for: tab.id) != nil
+          ? CanvasCardDescriptor(key: tab.id.rawValue.uuidString, worktreeID: state.worktreeID)
+          : nil
       }
     }
   }
@@ -735,7 +751,10 @@ struct CanvasView: View {
     let bboxCenterX = (minX + maxX) / 2
     let bboxCenterY = (minY + maxY) / 2
 
-    let newScale = max(0.25, min(1.0, min(canvasSize.width / bboxW, canvasSize.height / bboxH)))
+    let newScale = CanvasViewportMath.clampedScale(
+      min(canvasSize.width / bboxW, canvasSize.height / bboxH),
+      max: 1.0
+    )
 
     canvasOffset = CGSize(
       width: canvasSize.width / 2 - bboxCenterX * newScale,
@@ -868,6 +887,22 @@ struct CanvasView: View {
         ))
 
       Button {
+        // Intentionally no-op. Double-click resets zoom to 100%.
+      } label: {
+        Text(CanvasViewportMath.percentageString(for: canvasScale))
+          .font(.caption.monospacedDigit())
+          .multilineTextAlignment(.center)
+          .accessibilityLabel("Canvas zoom \(CanvasViewportMath.percentageString(for: canvasScale))")
+      }
+      .buttonStyle(.bordered)
+      .simultaneousGesture(
+        TapGesture(count: 2).onEnded {
+          setCanvasScaleTo100Percent()
+        }
+      )
+      .help("Double-click to set canvas zoom to 100%")
+
+      Button {
         arrangeCardsWithFit()
       } label: {
         Image(systemName: "rectangle.3.group")
@@ -881,6 +916,11 @@ struct CanvasView: View {
           commandID: AppShortcuts.CommandID.arrangeCanvasCards,
           in: resolvedKeybindings
         ))
+      .simultaneousGesture(
+        TapGesture(count: 2).onEnded {
+          scheduleArrangeAutoScaleTo100Percent()
+        }
+      )
 
       Button {
         organizeCardsWithFit()
@@ -1058,6 +1098,51 @@ struct CanvasView: View {
     wrapToastDismissTask = nil
   }
 
+  func setCanvasScaleTo100Percent() {
+    let newScale = CanvasViewportMath.clampedScale(1.0)
+    guard newScale != canvasScale else { return }
+
+    guard viewportSize.width > 0, viewportSize.height > 0 else {
+      canvasScale = newScale
+      lastCanvasScale = newScale
+      return
+    }
+
+    let anchor = CGPoint(x: viewportSize.width / 2, y: viewportSize.height / 2)
+    let targetOffset = CanvasViewportMath.offsetKeepingAnchorStable(
+      currentOffset: canvasOffset,
+      currentScale: canvasScale,
+      newScale: newScale,
+      anchor: anchor
+    )
+    canvasScale = newScale
+    lastCanvasScale = newScale
+    canvasOffset = targetOffset
+    lastCanvasOffset = targetOffset
+  }
+
+  func scheduleArrangeAutoScaleTo100Percent() {
+    cancelArrangeAutoScaleTask()
+    arrangeAutoScaleTask = Task { @MainActor in
+      do {
+        try await Task.sleep(for: .seconds(2))
+      } catch {
+        return
+      }
+      guard !Task.isCancelled else { return }
+      withAnimation(.easeInOut(duration: 0.2)) {
+        setCanvasScaleTo100Percent()
+        ensureCurrentCanvasTabVisible()
+      }
+      arrangeAutoScaleTask = nil
+    }
+  }
+
+  func cancelArrangeAutoScaleTask() {
+    arrangeAutoScaleTask?.cancel()
+    arrangeAutoScaleTask = nil
+  }
+
   // MARK: - Drag
 
   func commitDrag(for cardKey: String, translation: CGSize) {
@@ -1086,7 +1171,7 @@ struct CanvasView: View {
 
   func focusAdjacentCanvasTab(direction: CanvasNavigationDirection) {
     let states = terminalManager.activeWorktreeStates
-    ensureLayouts(for: collectCardKeys(from: states))
+    ensureLayouts(for: collectCanvasCards(from: states))
     let tabs = visibleCanvasTabs(from: states)
     guard !tabs.isEmpty else { return }
     guard let current = currentCanvasTab(from: tabs) else { return }
@@ -1131,15 +1216,25 @@ struct CanvasView: View {
   }
 
   func currentCanvasTab(from tabs: [CanvasTabTarget]) -> CanvasTabTarget? {
-    if let primaryTabID = selectionState.primaryTabID,
-      let focused = tabs.first(where: { $0.tabID == primaryTabID })
-    {
-      return focused
+    let focusedTabID = selectionState.primaryTabID
+    let visibleTabIDs = tabs.map(\.tabID)
+    let selectedTabIDs = tabs.compactMap { tab in
+      tab.state.tabManager.selectedTabId == tab.tabID ? tab.tabID : nil
     }
-    if let selected = tabs.first(where: { $0.state.tabManager.selectedTabId == $0.tabID }) {
-      return selected
-    }
-    return tabs.first
+    guard
+      let currentTabID = canvasCurrentVisibleTabID(
+        focusedTabID: focusedTabID,
+        visibleTabIDs: visibleTabIDs,
+        selectedTabIDs: selectedTabIDs
+      )
+    else { return nil }
+    return tabs.first { $0.tabID == currentTabID }
+  }
+
+  func ensureCurrentCanvasTabVisible() {
+    let tabs = visibleCanvasTabs(from: terminalManager.activeWorktreeStates)
+    guard let current = currentCanvasTab(from: tabs) else { return }
+    ensureTabVisibleInViewport(current.tabID, minimumInset: focusVisibleInset)
   }
 
   func candidateCanvasTab(
@@ -1573,4 +1668,19 @@ func canvasFocusVisibilityBounds(
     width: max(0, maxX - minX),
     height: max(0, maxY - minY)
   )
+}
+
+func canvasCurrentVisibleTabID(
+  focusedTabID: TerminalTabID?,
+  visibleTabIDs: [TerminalTabID],
+  selectedTabIDs: [TerminalTabID]
+) -> TerminalTabID? {
+  guard !visibleTabIDs.isEmpty else { return nil }
+  if let focusedTabID, visibleTabIDs.contains(focusedTabID) {
+    return focusedTabID
+  }
+  if let selectedTabID = selectedTabIDs.first(where: { visibleTabIDs.contains($0) }) {
+    return selectedTabID
+  }
+  return visibleTabIDs.first
 }

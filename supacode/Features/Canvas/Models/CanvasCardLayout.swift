@@ -78,48 +78,89 @@ struct CanvasCardPacker {
 
   /// The maximum card count for exhaustive row-break enumeration.
   private static let exhaustiveLimit = 20
+  /// Permit a bounded scale tradeoff for more balanced overall layout shapes.
+  private static let balanceScaleSlack: CGFloat = 0.30
+  /// Only apply balance preference when card heights are relatively uniform.
+  private static let balanceHeightSpreadLimit: CGFloat = 0.20
+  private static let floatEpsilon: CGFloat = 0.000_001
 
-  /// Pack cards to maximize the fitToView scale — cards appear as large as
-  /// possible on screen.
+  /// Pack cards to maximize fit while avoiding overly long single-row layouts.
   ///
   /// Two strategies compete: **waterfall** (equal-width columns, cards drop
   /// into the shortest column — great for varying heights) and **row-break**
   /// (cards flow left-to-right with centered rows — great for varying widths).
-  /// The configuration with the highest `min(vW/bW, vH/bH)` wins.
+  ///
+  /// Selection policy:
+  /// 1) Find global best scale `min(vW/bW, vH/bH)`.
+  /// 2) Keep candidates within a bounded scale slack.
+  /// 3) Prefer the most balanced (closest to square) bounding box.
+  /// 4) Tie-break by scale, then area.
   func pack(cards: [CardInfo], targetRatio: CGFloat) -> PackResult {
     guard !cards.isEmpty, targetRatio > 0 else {
       return PackResult(layouts: [:], boundingSize: .zero)
     }
 
     let columnWidth = cards.map(\.size.width).max()!
-    var bestScale: CGFloat = -1
-    var bestArea = CGFloat.infinity
     // Positive = waterfall column count, negative = row-break mask (offset by -1).
-    var bestTag = 1
+    let enumerateCandidates: (@escaping (_ tag: Int, _ boxW: CGFloat, _ boxH: CGFloat, _ scale: CGFloat, _ area: CGFloat) ->
+      Void) -> Void = { visit in
+      // Strategy 1: Waterfall — try all column counts.
+      for cols in 1...cards.count {
+        let (boxW, boxH) = waterfallBoundingSize(cards: cards, columns: cols, columnWidth: columnWidth)
+        let scale = min(targetRatio / boxW, 1.0 / boxH)
+        visit(cols, boxW, boxH, scale, boxW * boxH)
+      }
 
-    // Strategy 1: Waterfall — try all column counts.
-    for cols in 1...cards.count {
-      let (boxW, boxH) = waterfallBoundingSize(cards: cards, columns: cols, columnWidth: columnWidth)
-      let scale = min(targetRatio / boxW, 1.0 / boxH)
-      let area = boxW * boxH
-      if scale > bestScale || (scale == bestScale && area < bestArea) {
-        bestScale = scale
-        bestArea = area
-        bestTag = cols
+      // Strategy 2: Row-break — try all row configurations (exhaustive for small N).
+      if cards.count <= Self.exhaustiveLimit {
+        for mask in 0..<(1 << (cards.count - 1)) {
+          let (boxW, boxH) = rowBreakBoundingSize(cards: cards, breakMask: mask)
+          let scale = min(targetRatio / boxW, 1.0 / boxH)
+          visit(-(mask + 1), boxW, boxH, scale, boxW * boxH)
+        }
       }
     }
 
-    // Strategy 2: Row-break — try all row configurations (exhaustive for small N).
-    if cards.count <= Self.exhaustiveLimit {
-      for mask in 0..<(1 << (cards.count - 1)) {
-        let (boxW, boxH) = rowBreakBoundingSize(cards: cards, breakMask: mask)
-        let scale = min(targetRatio / boxW, 1.0 / boxH)
-        let area = boxW * boxH
-        if scale > bestScale || (scale == bestScale && area < bestArea) {
-          bestScale = scale
-          bestArea = area
-          bestTag = -(mask + 1)
-        }
+    var maxScale: CGFloat = 0
+    enumerateCandidates { _, _, _, scale, _ in
+      maxScale = max(maxScale, scale)
+    }
+
+    let cardHeights = cards.map { $0.size.height + titleBarHeight }
+    let heightSpread: CGFloat
+    if let maxHeight = cardHeights.max(), let minHeight = cardHeights.min(), maxHeight > 0 {
+      heightSpread = (maxHeight - minHeight) / maxHeight
+    } else {
+      heightSpread = 0
+    }
+
+    let balanceScaleSlack = heightSpread <= Self.balanceHeightSpreadLimit ? Self.balanceScaleSlack : 0
+    let minAcceptedScale = maxScale * (1.0 - balanceScaleSlack)
+
+    var bestTag = 1
+    var bestScale: CGFloat = -1
+    var bestArea = CGFloat.infinity
+    var bestImbalance = CGFloat.infinity
+    enumerateCandidates { tag, boxW, boxH, scale, area in
+      guard scale + Self.floatEpsilon >= minAcceptedScale else {
+        return
+      }
+
+      let imbalance = abs(CGFloat(log(Double(boxW / boxH))))
+      let isBetterBalance = imbalance < bestImbalance - Self.floatEpsilon
+      let isSameBalance = abs(imbalance - bestImbalance) <= Self.floatEpsilon
+      let isBetterScale = scale > bestScale + Self.floatEpsilon
+      let isSameScale = abs(scale - bestScale) <= Self.floatEpsilon
+      let isBetterArea = area < bestArea - Self.floatEpsilon
+
+      if isBetterBalance
+        || (isSameBalance && isBetterScale)
+        || (isSameBalance && isSameScale && isBetterArea)
+      {
+        bestTag = tag
+        bestScale = scale
+        bestArea = area
+        bestImbalance = imbalance
       }
     }
 
