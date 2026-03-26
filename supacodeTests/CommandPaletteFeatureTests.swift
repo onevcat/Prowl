@@ -979,7 +979,7 @@ struct CommandPaletteFeatureTests {
     expectNoDifference(selectIDs, [mainB.id, mainA.id])
   }
 
-  @Test func showsGlobalItemsWhenQueryEmpty() {
+  @Test func emptyQueryShowsWorktreeSelectionItems() {
     let openSettings = makeItem(
       id: "global.open-settings",
       title: "Open Settings",
@@ -1015,8 +1015,33 @@ struct CommandPaletteFeatureTests {
       items: [openSettings, newWorktree, selectFox, deleteFox, changeFoxIcon],
       query: ""
     )
-    expectNoDifference(result.map(\.id), [openSettings.id, newWorktree.id])
+    expectNoDifference(result.map(\.id), [selectFox.id])
   }
+
+  #if DEBUG
+    @Test func emptyQueryHidesDebugToastActions() {
+      let debugInProgress = CommandPaletteItem(
+        id: "debug.toast.inProgress",
+        title: "[Debug] Toast: In Progress",
+        subtitle: "Simulates an in-progress toast",
+        kind: .debugTestToast(.inProgress("Merging pull request…"))
+      )
+      let worktreeSelect = CommandPaletteItem(
+        id: "worktree.fox.select",
+        title: "Repo / fox",
+        subtitle: nil,
+        kind: .worktreeSelect("wt-fox")
+      )
+
+      let result = CommandPaletteFeature.filterItems(
+        items: [debugInProgress, worktreeSelect],
+        query: ""
+      )
+
+      #expect(result.contains { $0.id == debugInProgress.id } == false)
+      #expect(result.contains { $0.id == worktreeSelect.id })
+    }
+  #endif
 
   @Test func queryKeepsSelectionWhenEmpty() async {
     var state = CommandPaletteFeature.State()
@@ -1516,7 +1541,7 @@ struct CommandPaletteFeatureTests {
     #expect(result.first?.id == worktreeItem.id)
   }
 
-  @Test func emptyQueryShowsSuggestionItemsAndHidesContextualOnes() {
+  @Test func emptyQueryHidesRootActionsAndShowsWorktreeSelections() {
     let checkForUpdates = makeItem(
       id: "global.check-for-updates",
       title: "Check for Updates",
@@ -1542,8 +1567,8 @@ struct CommandPaletteFeatureTests {
       query: ""
     )
 
-    #expect(result.contains { $0.id == checkForUpdates.id })
-    #expect(!result.contains { $0.id == worktreeFox.id })
+    #expect(!result.contains { $0.id == checkForUpdates.id })
+    #expect(result.contains { $0.id == worktreeFox.id })
     #expect(result.contains { $0.id == prAction.id })
   }
 

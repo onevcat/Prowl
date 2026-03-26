@@ -90,7 +90,8 @@ struct WorktreeDetailView: View {
       loadingInfo: loadingInfo,
       selectedWorktree: selectedWorktree,
       selectedTerminalWorktree: selectedTerminalWorktree,
-      selectedWorktreeSummaries: selectedWorktreeSummaries
+      selectedWorktreeSummaries: selectedWorktreeSummaries,
+      commandPalettePresented: state.commandPalette.isPresented
     )
     .navigationTitle(WindowTitle.compute(repositories: repositories, terminalManager: terminalManager))
     .toolbar(removing: repositories.isShowingCanvas ? nil : .title)
@@ -411,7 +412,8 @@ struct WorktreeDetailView: View {
     loadingInfo: WorktreeLoadingInfo?,
     selectedWorktree: Worktree?,
     selectedTerminalWorktree: Worktree?,
-    selectedWorktreeSummaries: [MultiSelectedWorktreeSummary]
+    selectedWorktreeSummaries: [MultiSelectedWorktreeSummary],
+    commandPalettePresented: Bool
   ) -> some View {
     if repositories.isShowingCanvas {
       CanvasView(
@@ -446,6 +448,7 @@ struct WorktreeDetailView: View {
         manager: terminalManager,
         shouldRunSetupScript: false,
         forceAutoFocus: true,
+        suspendTerminalFocus: commandPalettePresented,
         createTab: { store.send(.newTerminal) },
         barTint: nil
       )
@@ -504,6 +507,7 @@ struct WorktreeDetailView: View {
         manager: terminalManager,
         shouldRunSetupScript: shouldRunSetupScript,
         forceAutoFocus: shouldFocusTerminal,
+        suspendTerminalFocus: commandPalettePresented,
         createTab: { store.send(.newTerminal) },
         barTint: barTint
       )

@@ -137,6 +137,26 @@ func commandPaletteRecencyScore(
   return pow(0.5, cappedAgeDays / 7)
 }
 
+func prioritizeItems(
+  items: [CommandPaletteItem],
+  recencyByID: [CommandPaletteItem.ID: TimeInterval],
+  now: Date
+) -> [CommandPaletteItem] {
+  let scored = items.enumerated().map { index, item in
+    (item: item, index: index, recency: commandPaletteRecencyScore(item, recencyByID: recencyByID, now: now))
+  }
+  let sorted = scored.sorted { left, right in
+    if left.item.priorityTier != right.item.priorityTier {
+      return left.item.priorityTier < right.item.priorityTier
+    }
+    if left.item.priorityTier < CommandPaletteItem.defaultPriorityTier, left.recency != right.recency {
+      return left.recency > right.recency
+    }
+    return left.index < right.index
+  }
+  return sorted.map(\.item)
+}
+
 func delegateAction(for kind: CommandPaletteItem.Kind) -> CommandPaletteFeature.Delegate {
   if let appAction = appDelegateAction(for: kind) {
     return appAction

@@ -215,6 +215,10 @@ private struct CommandPaletteCard: View {
         activate(id)
       }
 
+      CommandPaletteExitShortcut {
+        onEvent(.exit)
+      }
+
       CommandPaletteList(
         rows: items,
         sections: sections,
@@ -859,6 +863,22 @@ private struct CommandPaletteShortcutHandler: View {
     }
     .buttonStyle(.plain)
     .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: .command)
+  }
+}
+
+private struct CommandPaletteExitShortcut: View {
+  let exit: () -> Void
+
+  var body: some View {
+    Button {
+      exit()
+    } label: {
+      Color.clear
+    }
+    .buttonStyle(.plain)
+    .keyboardShortcut(.cancelAction)
+    .frame(width: 0, height: 0)
+    .accessibilityHidden(true)
   }
 }
 

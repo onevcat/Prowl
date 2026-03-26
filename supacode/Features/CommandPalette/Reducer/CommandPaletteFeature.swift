@@ -211,7 +211,16 @@ struct CommandPaletteFeature {
   ) -> [CommandPaletteItem] {
     let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else {
-      return suggestions(items: items, recencyByID: recencyByID, now: now).allItems
+      let defaultItems = items.filter { item in
+        if item.isGlobal {
+          return !item.isRootAction
+        }
+        if case .worktreeSelect = item.kind {
+          return true
+        }
+        return false
+      }
+      return prioritizeItems(items: defaultItems, recencyByID: recencyByID, now: now)
     }
     let scorer = CommandPaletteFuzzyScorer(query: trimmed, recencyByID: recencyByID, now: now)
     return scorer.rankedItems(from: items)

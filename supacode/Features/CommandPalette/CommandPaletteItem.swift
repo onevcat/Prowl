@@ -99,6 +99,93 @@ struct CommandPaletteItem: Identifiable, Equatable {
     #endif
   }
 
+  var isGlobal: Bool {
+    switch kind {
+    case .checkForUpdates, .openRepository, .openSettings, .newWorktree, .viewArchivedWorktrees,
+      .refreshWorktrees, .installCLI, .jumpToLatestUnread:
+      return true
+    case .openPullRequest,
+      .markPullRequestReady,
+      .mergePullRequest,
+      .closePullRequest,
+      .copyFailingJobURL,
+      .copyCiFailureLogs,
+      .rerunFailedJobs,
+      .openFailingCheckDetails:
+      return true
+    case .toggleLeftSidebar,
+      .toggleActiveAgentsPanel,
+      .toggleCanvas,
+      .toggleShelf,
+      .showDiff,
+      .revealInFinder,
+      .copyPath,
+      .revealInSidebar,
+      .runScript,
+      .stopRunScript:
+      return true
+    case .ghosttyCommand,
+      .openRepositoryOnCodeHost,
+      .worktreeSelect,
+      .changeFocusedTabIcon,
+      .togglePinWorktree,
+      .deleteWorktree,
+      .renameBranch,
+      .openRepositorySettings,
+      .runCustomCommand:
+      return false
+    #if DEBUG
+      case .debugTestToast:
+        return false
+      case .debugSimulateUpdateFound, .debugLightDockNotificationDot:
+        return true
+    #endif
+    }
+  }
+
+  var isRootAction: Bool {
+    switch kind {
+    case .checkForUpdates, .openRepository, .openSettings, .newWorktree, .viewArchivedWorktrees,
+      .refreshWorktrees, .installCLI, .jumpToLatestUnread:
+      return true
+    case .ghosttyCommand:
+      return false
+    case .openPullRequest,
+      .openRepositoryOnCodeHost,
+      .markPullRequestReady,
+      .mergePullRequest,
+      .closePullRequest,
+      .copyFailingJobURL,
+      .copyCiFailureLogs,
+      .rerunFailedJobs,
+      .openFailingCheckDetails,
+      .worktreeSelect,
+      .changeFocusedTabIcon,
+      .toggleLeftSidebar,
+      .toggleActiveAgentsPanel,
+      .toggleCanvas,
+      .toggleShelf,
+      .showDiff,
+      .revealInFinder,
+      .copyPath,
+      .revealInSidebar,
+      .runScript,
+      .stopRunScript,
+      .togglePinWorktree,
+      .deleteWorktree,
+      .renameBranch,
+      .openRepositorySettings,
+      .runCustomCommand:
+      return false
+    #if DEBUG
+      case .debugTestToast:
+        return true
+      case .debugSimulateUpdateFound, .debugLightDockNotificationDot:
+        return false
+    #endif
+    }
+  }
+
   var appShortcutCommandID: String? {
     switch kind {
     case .checkForUpdates:

@@ -1,11 +1,14 @@
 import AppKit
 import SwiftUI
 
+private let terminalTabsLogger = SupaLogger("TerminalTabs")
+
 struct WorktreeTerminalTabsView: View {
   let worktree: Worktree
   let manager: WorktreeTerminalManager
   let shouldRunSetupScript: Bool
   let forceAutoFocus: Bool
+  let suspendTerminalFocus: Bool
   let createTab: () -> Void
   /// Chrome tint for the tab bar background, matching the toolbar / nav
   /// bands so the bar reads as part of the same tinted chrome. `nil` keeps
@@ -36,23 +39,42 @@ struct WorktreeTerminalTabsView: View {
     .background(
       WindowFocusObserverView { activity in
         windowActivity = activity
-        state.syncFocus(windowIsKey: activity.isKeyWindow, windowIsVisible: activity.isVisible)
+        syncFocus(state: state, activity: activity)
       }
     )
     .onAppear {
       state.ensureInitialTab(focusing: false)
-      if shouldAutoFocusTerminal {
+      if shouldAutoFocusTerminal && !suspendTerminalFocus {
         state.focusSelectedTab()
       }
       let activity = resolvedWindowActivity
-      state.syncFocus(windowIsKey: activity.isKeyWindow, windowIsVisible: activity.isVisible)
+      terminalTabsLogger.info(
+        "[CanvasExit] onAppear worktree=\(worktree.id) "
+          + "selectedTab=\(state.tabManager.selectedTabId?.rawValue.uuidString ?? "nil") "
+          + "autoFocus=\(shouldAutoFocusTerminal) "
+          + "windowKey=\(activity.isKeyWindow) windowVisible=\(activity.isVisible)"
+      )
+      syncFocus(state: state, activity: activity)
     }
-    .onChange(of: state.tabManager.selectedTabId) { _, _ in
-      if shouldAutoFocusTerminal {
+    .onChange(of: state.tabManager.selectedTabId) { _, newValue in
+      if shouldAutoFocusTerminal && !suspendTerminalFocus {
         state.focusSelectedTab()
       }
       let activity = resolvedWindowActivity
-      state.syncFocus(windowIsKey: activity.isKeyWindow, windowIsVisible: activity.isVisible)
+      terminalTabsLogger.info(
+        "[CanvasExit] selectedTabChanged worktree=\(worktree.id) "
+          + "selectedTab=\(newValue?.rawValue.uuidString ?? "nil") "
+          + "autoFocus=\(shouldAutoFocusTerminal) "
+          + "windowKey=\(activity.isKeyWindow) windowVisible=\(activity.isVisible)"
+      )
+      syncFocus(state: state, activity: activity)
+    }
+    .onChange(of: suspendTerminalFocus) { _, isSuspended in
+      let activity = resolvedWindowActivity
+      if !isSuspended {
+        state.focusSelectedTab()
+      }
+      syncFocus(state: state, activity: activity)
     }
     .onReceive(NotificationCenter.default.publisher(for: .ghosttyRuntimeConfigDidChange)) { _ in
       configReloadCounter &+= 1
@@ -150,5 +172,15 @@ struct WorktreeTerminalTabsView: View {
       )
     }
     return windowActivity
+  }
+
+  private func syncFocus(
+    state: WorktreeTerminalState,
+    activity: WindowActivityState
+  ) {
+    state.syncFocus(
+      windowIsKey: activity.isKeyWindow && !suspendTerminalFocus,
+      windowIsVisible: activity.isVisible
+    )
   }
 }
