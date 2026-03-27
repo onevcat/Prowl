@@ -7,13 +7,26 @@ enum CanvasCardPlacementStrategy {
     let worktreeID: String
   }
 
+  enum Direction: Equatable, Sendable {
+    case left
+    case down
+    case up
+    case right
+  }
+
+  struct DirectionalHint: Equatable, Sendable {
+    let anchorKey: String
+    let direction: Direction
+  }
+
   static func nextLayout(
     for target: CardDescriptor,
     cards: [CardDescriptor],
     layouts: [String: CanvasCardLayout],
     defaultSize: CGSize,
     titleBarHeight: CGFloat,
-    spacing: CGFloat
+    spacing: CGFloat,
+    directionalHint: DirectionalHint? = nil
   ) -> CanvasCardLayout {
     let visibleKeys = Set(cards.map(\.key))
     let positionedKeys = visibleKeys.filter { layouts[$0] != nil }
@@ -27,6 +40,20 @@ enum CanvasCardPlacementStrategy {
     }
 
     let targetSize = CGSize(width: defaultSize.width, height: defaultSize.height + titleBarHeight)
+    if let directionalHint,
+      let placement = placeByDirectionalHint(
+        for: target,
+        hint: directionalHint,
+        positionedLayouts: positionedLayouts,
+        occupiedRects: occupiedRects,
+        titleBarHeight: titleBarHeight,
+        targetSize: targetSize,
+        spacing: spacing
+      )
+    {
+      return CanvasCardLayout(position: placement, size: defaultSize)
+    }
+
     if let placement = placeInWorktreeRegion(
       target: target,
       cards: cards,
@@ -70,6 +97,63 @@ enum CanvasCardPlacementStrategy {
       ),
       size: defaultSize
     )
+  }
+
+  private static func placeByDirectionalHint(
+    for target: CardDescriptor,
+    hint: DirectionalHint,
+    positionedLayouts: [String: CanvasCardLayout],
+    occupiedRects: [CGRect],
+    titleBarHeight: CGFloat,
+    targetSize: CGSize,
+    spacing: CGFloat
+  ) -> CGPoint? {
+    guard target.key != hint.anchorKey else { return nil }
+    guard let anchorLayout = positionedLayouts[hint.anchorKey] else { return nil }
+
+    let anchorRect = cardRect(layout: anchorLayout, titleBarHeight: titleBarHeight)
+    let halfW = targetSize.width / 2
+    let halfH = targetSize.height / 2
+    let stepX = targetSize.width + spacing
+    let stepY = targetSize.height + spacing
+    let paddedOccupied = occupiedRects.map { $0.insetBy(dx: -spacing, dy: -spacing) }
+
+    for index in 0..<64 {
+      let distanceX = CGFloat(index) * stepX
+      let distanceY = CGFloat(index) * stepY
+      let center: CGPoint = switch hint.direction {
+      case .left:
+        CGPoint(
+          x: anchorRect.minX - spacing - halfW - distanceX,
+          y: anchorRect.midY
+        )
+      case .right:
+        CGPoint(
+          x: anchorRect.maxX + spacing + halfW + distanceX,
+          y: anchorRect.midY
+        )
+      case .up:
+        CGPoint(
+          x: anchorRect.midX,
+          y: anchorRect.minY - spacing - halfH - distanceY
+        )
+      case .down:
+        CGPoint(
+          x: anchorRect.midX,
+          y: anchorRect.maxY + spacing + halfH + distanceY
+        )
+      }
+      let rect = CGRect(
+        x: center.x - halfW,
+        y: center.y - halfH,
+        width: targetSize.width,
+        height: targetSize.height
+      )
+      if paddedOccupied.allSatisfy({ !$0.intersects(rect) }) {
+        return center
+      }
+    }
+    return nil
   }
 
   private static func placeInWorktreeRegion(

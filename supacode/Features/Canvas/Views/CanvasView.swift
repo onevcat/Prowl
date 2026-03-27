@@ -9,6 +9,30 @@ struct CanvasView: View {
     var hasPerformedInitialFit = false
   }
 
+  enum DirectionalNewTerminalDirectoryMode: Equatable {
+    case currentDirectory
+    case worktreeDirectory
+  }
+
+  private enum CanvasToastStyle: Equatable {
+    case wrap
+    case directional
+
+    var iconSystemName: String {
+      switch self {
+      case .wrap:
+        "arrow.triangle.2.circlepath"
+      case .directional:
+        "arrow.up.and.down.and.arrow.left.and.right"
+      }
+    }
+  }
+
+  struct DirectionalNewTerminalInput: Equatable {
+    let direction: CanvasCardPlacementStrategy.Direction
+    let directoryMode: DirectionalNewTerminalDirectoryMode
+  }
+
   @Environment(CommandKeyObserver.self) var commandKeyObserver
   @Environment(\.resolvedKeybindings) var resolvedKeybindings
 
@@ -29,6 +53,7 @@ struct CanvasView: View {
   /// Reports whether a card is currently expanded in place, so the parent can
   /// give the window toolbar a matching scrim (it can't be covered from here).
   var onExpandedChange: (Bool) -> Void = { _ in }
+  var onDirectionalNewTerminalRequested: ((Worktree.ID?, DirectionalNewTerminalDirectoryMode) -> Void)?
   @State var layoutStore = CanvasLayoutStore()
   @Shared(.repositoryAppearances) var repositoryAppearances
 
@@ -49,6 +74,11 @@ struct CanvasView: View {
   @State var arrangeAutoScaleTask: Task<Void, Never>?
   @State var wrapToastDismissTask: Task<Void, Never>?
   @State var canvasWrapToastMessage: String?
+  @State var canvasWrapToastStyle: CanvasToastStyle = .wrap
+  @State var directionalPlacementHint: PendingDirectionalPlacement?
+  @State var isAwaitingDirectionalNewTerminalKey = false
+  @State var directionalChordPreviousFocusedTabID: TerminalTabID?
+  @State var directionalNewTerminalTimeoutTask: Task<Void, Never>?
   @State var directoryDisplayCache: [TerminalTabID: CanvasDirectoryDisplayCacheEntry] = [:]
   @State var directoryLatestTokens: [TerminalTabID: CanvasDirectoryShorteningCoordinator.Token] = [:]
   @State var directoryInFlightTasks: [TerminalTabID: Task<Void, Never>] = [:]
@@ -95,6 +125,9 @@ struct CanvasView: View {
     CanvasCardLayout.adaptiveDefaultSize(forScreenWidth: hostScreenWidth)
   }
 
+  let directionalNewTerminalTimeout: Duration = .seconds(2)
+  let directionalNewTerminalChordCoordinator = CanvasDirectionalNewTerminalChordCoordinator.shared
+
   init(
     terminalManager: WorktreeTerminalManager,
     repositoryCustomTitles: [Repository.ID: String] = [:],
@@ -105,7 +138,8 @@ struct CanvasView: View {
     onCommandConsumed: @escaping (Int) -> Void = { _ in },
     viewportState: ViewportState = .init(),
     onViewportStateChanged: ((ViewportState) -> Void)? = nil,
-    onExpandedChange: @escaping (Bool) -> Void = { _ in }
+    onExpandedChange: @escaping (Bool) -> Void = { _ in },
+    onDirectionalNewTerminalRequested: ((Worktree.ID?, DirectionalNewTerminalDirectoryMode) -> Void)? = nil
   ) {
     self.terminalManager = terminalManager
     self.repositoryCustomTitles = repositoryCustomTitles
@@ -116,6 +150,7 @@ struct CanvasView: View {
     self.onCommandConsumed = onCommandConsumed
     self.onViewportStateChanged = onViewportStateChanged
     self.onExpandedChange = onExpandedChange
+    self.onDirectionalNewTerminalRequested = onDirectionalNewTerminalRequested
     _canvasOffset = State(initialValue: viewportState.offset)
     _lastCanvasOffset = State(initialValue: viewportState.offset)
     _canvasScale = State(initialValue: viewportState.scale)
@@ -146,7 +181,8 @@ struct CanvasView: View {
       lastOffset: $lastCanvasOffset,
       scale: $canvasScale,
       lastScale: $lastCanvasScale,
-      isInteractionEnabled: expandedTabID == nil
+      isInteractionEnabled: expandedTabID == nil,
+      onKeyDown: handleDirectionalNewTerminalKeyDown
     ) {
       GeometryReader { _ in
         let activeStates = terminalManager.activeWorktreeStates
@@ -318,12 +354,19 @@ struct CanvasView: View {
       deactivateCanvas()
       cancelArrangeAutoScaleTask()
       cancelWrapToastTask()
+      cancelDirectionalNewTerminalTimeoutTask()
+      isAwaitingDirectionalNewTerminalKey = false
+      directionalChordPreviousFocusedTabID = nil
+      directionalPlacementHint = nil
       cancelAllDirectoryShorteningRequests()
     }
     .focusedSceneValue(\.canvasMoveLeftAction) { focusAdjacentCanvasTab(direction: .left) }
     .focusedSceneValue(\.canvasMoveDownAction) { focusAdjacentCanvasTab(direction: .down) }
     .focusedSceneValue(\.canvasMoveUpAction) { focusAdjacentCanvasTab(direction: .up) }
     .focusedSceneValue(\.canvasMoveRightAction) { focusAdjacentCanvasTab(direction: .right) }
+    .focusedSceneValue(\.canvasDirectionalNewTerminalLeaderAction) {
+      armDirectionalNewTerminalChord()
+    }
   }
 
   func showsSelectionShield(for tabID: TerminalTabID) -> Bool {
@@ -548,6 +591,12 @@ struct CanvasView: View {
     let worktreeID: Worktree.ID
   }
 
+  struct PendingDirectionalPlacement: Equatable {
+    let anchorKey: String
+    let worktreeID: Worktree.ID
+    let direction: CanvasCardPlacementStrategy.Direction
+  }
+
   /// Batch-position cards that don't have stored layouts yet.
   /// Placement order:
   /// 1) Current worktree region
@@ -559,6 +608,7 @@ struct CanvasView: View {
 
     let cardSize = adaptiveDefaultCardSize
     var layouts = layoutStore.cardLayouts
+    var remainingDirectionalHint = directionalPlacementHint
     let placementCards = cards.map {
       CanvasCardPlacementStrategy.CardDescriptor(
         key: $0.key,
@@ -570,16 +620,26 @@ struct CanvasView: View {
         key: card.key,
         worktreeID: card.worktreeID
       )
+      var directionalHint: CanvasCardPlacementStrategy.DirectionalHint?
+      if let hint = remainingDirectionalHint, hint.worktreeID == card.worktreeID {
+        directionalHint = CanvasCardPlacementStrategy.DirectionalHint(
+          anchorKey: hint.anchorKey,
+          direction: hint.direction
+        )
+        remainingDirectionalHint = nil
+      }
       layouts[card.key] = CanvasCardPlacementStrategy.nextLayout(
         for: target,
         cards: placementCards,
         layouts: layouts,
         defaultSize: cardSize,
         titleBarHeight: titleBarHeight,
-        spacing: cardSpacing
+        spacing: cardSpacing,
+        directionalHint: directionalHint
       )
     }
     layoutStore.setCardLayouts(layouts)
+    directionalPlacementHint = remainingDirectionalHint
   }
 
   /// Balanced grid: columns ≈ sqrt(N). No viewport constraint — the canvas
@@ -1056,7 +1116,7 @@ struct CanvasView: View {
     Group {
       if let message = canvasWrapToastMessage {
         HStack(spacing: 8) {
-          Image(systemName: "arrow.triangle.2.circlepath")
+          Image(systemName: canvasWrapToastStyle.iconSystemName)
             .font(.headline.weight(.semibold))
             .symbolRenderingMode(.hierarchical)
             .foregroundStyle(.secondary)
@@ -1080,6 +1140,7 @@ struct CanvasView: View {
 
   func showWrapToast(for direction: CanvasNavigationDirection) {
     cancelWrapToastTask()
+    canvasWrapToastStyle = .wrap
     withAnimation(.easeInOut(duration: 0.2)) {
       canvasWrapToastMessage = wrapToastMessage(for: direction)
     }
@@ -1154,6 +1215,218 @@ struct CanvasView: View {
   func cancelArrangeAutoScaleTask() {
     arrangeAutoScaleTask?.cancel()
     arrangeAutoScaleTask = nil
+  }
+
+  // MARK: - Directional New Terminal
+
+  func armDirectionalNewTerminalChord() {
+    cancelWrapToastTask()
+    cancelDirectionalNewTerminalTimeoutTask()
+    isAwaitingDirectionalNewTerminalKey = true
+    directionalNewTerminalChordCoordinator.setAwaitingDirectionalChordKey(true)
+    directionalChordPreviousFocusedTabID = selectionState.primaryTabID
+    suspendCanvasTerminalFirstResponderForDirectionalChord()
+    canvasWrapToastStyle = .directional
+    withAnimation(.easeInOut(duration: 0.2)) {
+      canvasWrapToastMessage = "Directional new terminal: h/j/k/l current dir, H/J/K/L worktree dir, n freestyle"
+    }
+    directionalNewTerminalTimeoutTask = Task { @MainActor in
+      do {
+        try await Task.sleep(for: directionalNewTerminalTimeout)
+      } catch {
+        return
+      }
+      guard !Task.isCancelled else { return }
+      cancelDirectionalNewTerminalChord()
+    }
+  }
+
+  func handleDirectionalNewTerminalKeyDown(_ event: NSEvent) -> NSEvent? {
+    if matchesDirectionalNewTerminalLeaderShortcut(event) {
+      armDirectionalNewTerminalChord()
+      return nil
+    }
+    guard directionalNewTerminalChordCoordinator.isAwaitingDirectionalChordKey else { return event }
+    if event.keyCode == kVK_Escape {
+      cancelDirectionalNewTerminalChord()
+      return nil
+    }
+    if matchesFreestyleNewTerminalShortcut(event) {
+      completeFreestyleNewTerminalChord()
+      return nil
+    }
+    guard let input = directionalNewTerminalInput(for: event) else { return nil }
+    completeDirectionalNewTerminalChord(input)
+    return nil
+  }
+
+  func matchesDirectionalNewTerminalLeaderShortcut(_ event: NSEvent) -> Bool {
+    Self.isDirectionalNewTerminalLeaderShortcut(
+      keyCode: event.keyCode,
+      charactersIgnoringModifiers: event.charactersIgnoringModifiers,
+      modifierFlags: event.modifierFlags
+    )
+  }
+
+  func directionalNewTerminalInput(for event: NSEvent) -> DirectionalNewTerminalInput? {
+    Self.directionalNewTerminalInput(
+      keyCode: event.keyCode,
+      characters: event.characters,
+      charactersIgnoringModifiers: event.charactersIgnoringModifiers,
+      modifierFlags: event.modifierFlags
+    )
+  }
+
+  func matchesFreestyleNewTerminalShortcut(_ event: NSEvent) -> Bool {
+    Self.matchesFreestyleNewTerminalShortcut(
+      keyCode: event.keyCode,
+      charactersIgnoringModifiers: event.charactersIgnoringModifiers
+    )
+  }
+
+  static func isDirectionalNewTerminalLeaderShortcut(
+    keyCode: UInt16,
+    charactersIgnoringModifiers: String?,
+    modifierFlags: NSEvent.ModifierFlags
+  ) -> Bool {
+    let relevantModifiers = modifierFlags.intersection([.command, .shift, .option, .control])
+    guard relevantModifiers == [.command, .control] else { return false }
+    if Int(keyCode) == kVK_ANSI_T { return true }
+    guard let charactersIgnoringModifiers else { return false }
+    let normalized = charactersIgnoringModifiers.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard normalized.count == 1 else { return false }
+    return normalized == "t"
+  }
+
+  static func directionalNewTerminalInput(
+    keyCode: UInt16,
+    characters: String?,
+    charactersIgnoringModifiers: String?,
+    modifierFlags: NSEvent.ModifierFlags
+  ) -> DirectionalNewTerminalInput? {
+    guard let direction = directionalPlacementDirection(
+      keyCode: keyCode,
+      charactersIgnoringModifiers: charactersIgnoringModifiers
+    )
+    else {
+      return nil
+    }
+    let usesWorktreeDirectory = usesWorktreeDirectory(
+      characters: characters,
+      modifierFlags: modifierFlags
+    )
+    return DirectionalNewTerminalInput(
+      direction: direction,
+      directoryMode: usesWorktreeDirectory ? .worktreeDirectory : .currentDirectory
+    )
+  }
+
+  static func matchesFreestyleNewTerminalShortcut(
+    keyCode: UInt16,
+    charactersIgnoringModifiers: String?
+  ) -> Bool {
+    if Int(keyCode) == kVK_ANSI_N { return true }
+    guard let charactersIgnoringModifiers else { return false }
+    let normalized = charactersIgnoringModifiers.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard normalized.count == 1 else { return false }
+    return normalized == "n"
+  }
+
+  private static func directionalPlacementDirection(
+    keyCode: UInt16,
+    charactersIgnoringModifiers: String?
+  ) -> CanvasCardPlacementStrategy.Direction? {
+    switch Int(keyCode) {
+    case kVK_ANSI_H:
+      return .left
+    case kVK_ANSI_J:
+      return .down
+    case kVK_ANSI_K:
+      return .up
+    case kVK_ANSI_L:
+      return .right
+    default:
+      break
+    }
+    guard let charactersIgnoringModifiers else { return nil }
+    let normalized = charactersIgnoringModifiers.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard normalized.count == 1 else { return nil }
+    return switch normalized {
+    case "h":
+      .left
+    case "j":
+      .down
+    case "k":
+      .up
+    case "l":
+      .right
+    default:
+      nil
+    }
+  }
+
+  private static func usesWorktreeDirectory(
+    characters: String?,
+    modifierFlags: NSEvent.ModifierFlags
+  ) -> Bool {
+    if let characters, characters.rangeOfCharacter(from: .uppercaseLetters) != nil {
+      return true
+    }
+    return modifierFlags.contains(.shift)
+  }
+
+  func completeDirectionalNewTerminalChord(_ input: DirectionalNewTerminalInput) {
+    let states = terminalManager.activeWorktreeStates
+    ensureLayouts(for: collectCanvasCards(from: states))
+    if let anchorTab = currentCanvasTab(from: visibleCanvasTabs(from: states)) {
+      directionalPlacementHint = PendingDirectionalPlacement(
+        anchorKey: anchorTab.tabID.rawValue.uuidString,
+        worktreeID: anchorTab.state.worktreeID,
+        direction: input.direction
+      )
+      onDirectionalNewTerminalRequested?(anchorTab.state.worktreeID, input.directoryMode)
+    } else {
+      onDirectionalNewTerminalRequested?(terminalManager.canvasFocusedWorktreeID, input.directoryMode)
+    }
+    cancelDirectionalNewTerminalChord(restoreFocus: false)
+  }
+
+  func completeFreestyleNewTerminalChord() {
+    directionalPlacementHint = nil
+    onDirectionalNewTerminalRequested?(FreestyleTerminal.worktreeID, .worktreeDirectory)
+    cancelDirectionalNewTerminalChord(restoreFocus: false)
+  }
+
+  func cancelDirectionalNewTerminalChord(restoreFocus: Bool = true) {
+    let tabIDToRestore = directionalChordPreviousFocusedTabID
+    directionalChordPreviousFocusedTabID = nil
+    isAwaitingDirectionalNewTerminalKey = false
+    directionalNewTerminalChordCoordinator.setAwaitingDirectionalChordKey(false)
+    cancelDirectionalNewTerminalTimeoutTask()
+    withAnimation(.easeInOut(duration: 0.2)) {
+      canvasWrapToastMessage = nil
+    }
+    guard restoreFocus else { return }
+    restoreCanvasTerminalFocusAfterDirectionalChord(to: tabIDToRestore)
+  }
+
+  func suspendCanvasTerminalFirstResponderForDirectionalChord() {
+    guard let keyWindow = NSApp.keyWindow else { return }
+    guard keyWindow.firstResponder is GhosttySurfaceView else { return }
+    _ = keyWindow.makeFirstResponder(nil)
+  }
+
+  func restoreCanvasTerminalFocusAfterDirectionalChord(to tabID: TerminalTabID?) {
+    guard let tabID else { return }
+    let states = terminalManager.activeWorktreeStates
+    guard let state = states.first(where: { $0.surfaceView(for: tabID) != nil }) else { return }
+    guard let surface = state.surfaceView(for: tabID) else { return }
+    surface.requestFocus()
+  }
+
+  func cancelDirectionalNewTerminalTimeoutTask() {
+    directionalNewTerminalTimeoutTask?.cancel()
+    directionalNewTerminalTimeoutTask = nil
   }
 
   // MARK: - Drag

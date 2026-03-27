@@ -11,6 +11,7 @@ nonisolated let worktreeCreationProgressUpdateStride = 20
 nonisolated let archiveScriptProgressLineLimit = 200
 let secondsPerDay: Double = 86_400
 let repositoriesLogger = SupaLogger("RepositoriesFeature")
+nonisolated let restoreCanvasModeOnLaunchAppStorageKey = "restoreCanvasModeOnLaunch"
 
 nonisolated struct WorktreeCreationProgressUpdateThrottle {
   private let stride: Int
@@ -254,6 +255,7 @@ struct RepositoriesFeature {
     /// The Shelf's book list is derived from this set so a sidebar
     /// worktree that's never been touched does not appear as a spine.
     var openedWorktreeIDs: Set<Worktree.ID> = []
+    var shouldCenterRestoredCanvasSoloTab = false
     var launchRestoreMode: LaunchRestoreMode = .lastFocusedWorktree
     var shouldRestoreLastFocusedWorktree = false
     var shouldSelectFirstAfterReload = false
@@ -350,6 +352,7 @@ struct RepositoriesFeature {
     case selectShelfBook(Int)
     case markWorktreeOpened(Worktree.ID)
     case markWorktreeClosed(Worktree.ID)
+    case consumeRestoredCanvasSoloTabCentering
     case setSidebarSelectedWorktreeIDs(Set<Worktree.ID>)
     case selectRepository(Repository.ID?)
     case selectWorktree(Worktree.ID?, focusTerminal: Bool = false, recordHistory: Bool = true)
@@ -399,6 +402,8 @@ struct RepositoriesFeature {
     let didPruneRepositoryOrder: Bool
     let didPruneWorktreeOrder: Bool
     let didPruneArchivedWorktrees: Bool
+    let didRestoreCanvasModeOnLaunch: Bool
+    let restoredCanvasTerminalTarget: Worktree?
   }
 
   enum StatusToast: Equatable {

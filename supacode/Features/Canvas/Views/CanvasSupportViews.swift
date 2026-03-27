@@ -18,6 +18,7 @@ struct CanvasScrollContainer<Content: View>: NSViewRepresentable {
   @Binding var scale: CGFloat
   @Binding var lastScale: CGFloat
   var isInteractionEnabled: Bool
+  var onKeyDown: ((NSEvent) -> NSEvent?)?
   @ViewBuilder var content: Content
 
   func makeCoordinator() -> CanvasScrollCoordinator {
@@ -44,6 +45,7 @@ struct CanvasScrollContainer<Content: View>: NSViewRepresentable {
     context.coordinator.lastOffset = $lastOffset
     context.coordinator.scale = $scale
     context.coordinator.lastScale = $lastScale
+    context.coordinator.onKeyDown = onKeyDown
     nsView.isInteractionEnabled = isInteractionEnabled
     if let hosting = nsView.subviews.first as? NSHostingView<Content> {
       hosting.rootView = content
@@ -56,6 +58,7 @@ class CanvasScrollCoordinator {
   var lastOffset: Binding<CGSize> = .constant(.zero)
   var scale: Binding<CGFloat> = .constant(1.0)
   var lastScale: Binding<CGFloat> = .constant(1.0)
+  var onKeyDown: ((NSEvent) -> NSEvent?)?
 
   func handleScroll(deltaX: CGFloat, deltaY: CGFloat) {
     let current = offset.wrappedValue
@@ -84,6 +87,10 @@ class CanvasScrollCoordinator {
   func setOffset(_ newOffset: CGSize) {
     offset.wrappedValue = newOffset
     lastOffset.wrappedValue = newOffset
+  }
+
+  func handleKeyDown(_ event: NSEvent) -> NSEvent? {
+    onKeyDown?(event) ?? event
   }
 }
 
@@ -143,6 +150,7 @@ struct CanvasOptionScrollRouter {
 class CanvasScrollContainerView: NSView {
   var scrollCoordinator: CanvasScrollCoordinator?
   var localScrollMonitor: Any?
+  var localKeyDownMonitor: Any?
   /// When false (a card is expanded), the container ignores scroll/zoom/
   /// middle-drag so the canvas can't pan or zoom behind the expanded card.
   var isInteractionEnabled = true {
@@ -311,6 +319,7 @@ class CanvasScrollContainerView: NSView {
   override func viewWillMove(toWindow newWindow: NSWindow?) {
     if newWindow == nil {
       removeLocalScrollMonitor()
+      removeLocalKeyDownMonitor()
       tearDownMiddleButtonMonitor()
     }
     super.viewWillMove(toWindow: newWindow)
@@ -319,11 +328,18 @@ class CanvasScrollContainerView: NSView {
   func updateLocalScrollMonitor() {
     guard window != nil else {
       removeLocalScrollMonitor()
+      removeLocalKeyDownMonitor()
       return
     }
-    guard localScrollMonitor == nil else { return }
-    localScrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
-      self?.handleOptionScroll(event) ?? event
+    if localScrollMonitor == nil {
+      localScrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+        self?.handleOptionScroll(event) ?? event
+      }
+    }
+    if localKeyDownMonitor == nil {
+      localKeyDownMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+        self?.handleKeyDown(event) ?? event
+      }
     }
   }
 
@@ -353,6 +369,17 @@ class CanvasScrollContainerView: NSView {
     if let localScrollMonitor {
       NSEvent.removeMonitor(localScrollMonitor)
       self.localScrollMonitor = nil
+    }
+  }
+
+  func handleKeyDown(_ event: NSEvent) -> NSEvent? {
+    scrollCoordinator?.handleKeyDown(event) ?? event
+  }
+
+  func removeLocalKeyDownMonitor() {
+    if let localKeyDownMonitor {
+      NSEvent.removeMonitor(localKeyDownMonitor)
+      self.localKeyDownMonitor = nil
     }
   }
 
@@ -423,6 +450,7 @@ class CanvasScrollContainerView: NSView {
   override func removeFromSuperview() {
     tearDownMonitor()
     removeLocalScrollMonitor()
+    removeLocalKeyDownMonitor()
     tearDownMiddleButtonMonitor()
     super.removeFromSuperview()
   }

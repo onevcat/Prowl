@@ -1565,6 +1565,42 @@ struct RepositoriesFeatureTests {
     await store.receive(\.delegate.selectedWorktreeChanged)
   }
 
+  @Test(.dependencies) func selectingCanvasPersistsLaunchModeAndSelectingWorktreeClearsIt() async {
+    let launchModeKey = "restoreCanvasModeOnLaunch"
+    let suiteName = "RepositoriesFeatureTests.selectingCanvasPersistsLaunchModeAndSelectingWorktreeClearsIt"
+    let defaults = UserDefaults(suiteName: suiteName)!
+    defaults.removePersistentDomain(forName: suiteName)
+
+    let worktree = makeWorktree(id: "/tmp/repo/wt1", name: "wt1", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .worktree(worktree.id)
+    initialState.sidebarSelectedWorktreeIDs = [worktree.id]
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.defaultAppStorage = defaults
+    }
+
+    await store.send(.selectCanvas) {
+      $0.preCanvasWorktreeID = worktree.id
+      $0.preCanvasTerminalTargetID = worktree.id
+      $0.canvasReturnWorktreeID = worktree.id
+      $0.selection = .canvas
+      $0.sidebarSelectedWorktreeIDs = []
+    }
+    #expect(defaults.bool(forKey: launchModeKey))
+
+    await store.send(.selectWorktree(worktree.id)) {
+      $0.selection = .worktree(worktree.id)
+      $0.sidebarSelectedWorktreeIDs = [worktree.id]
+      $0.canvasReturnWorktreeID = worktree.id
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+
+    #expect(defaults.bool(forKey: launchModeKey) == false)
+  }
+
   @Test func toggleCanvasSwitchesBetweenCanvasAndWorktree() async {
     let worktree = makeWorktree(id: "/tmp/repo/wt1", name: "wt1", repoRoot: "/tmp/repo")
     let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
@@ -1645,6 +1681,69 @@ struct RepositoriesFeatureTests {
       $0.isInitialLoadComplete = true
     }
     #expect(store.state.selection == .freestyle)
+  }
+
+  @Test(.dependencies) func repositoriesLoadedRestoresCanvasModeOnLaunchWhenPersisted() async {
+    let launchModeKey = "restoreCanvasModeOnLaunch"
+    let suiteName = "RepositoriesFeatureTests.repositoriesLoadedRestoresCanvasModeOnLaunchWhenPersisted"
+    let defaults = UserDefaults(suiteName: suiteName)!
+    defaults.removePersistentDomain(forName: suiteName)
+    defaults.set(true, forKey: launchModeKey)
+
+    let worktree = makeWorktree(id: "/tmp/repo/wt1", name: "wt1", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var initialState = RepositoriesFeature.State()
+    initialState.lastFocusedWorktreeID = worktree.id
+    initialState.shouldRestoreLastFocusedWorktree = true
+    let sentCommands = LockIsolated<[TerminalClient.Command]>([])
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.defaultAppStorage = defaults
+      $0.terminalClient.send = { command in
+        sentCommands.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(
+      .repositoriesLoaded(
+        [repository],
+        failures: [],
+        roots: [repository.rootURL],
+        animated: false
+      )
+    ) {
+      $0.repositories = [repository]
+      $0.repositoryRoots = [repository.rootURL]
+      $0.selection = .canvas
+      $0.preCanvasWorktreeID = worktree.id
+      $0.preCanvasTerminalTargetID = worktree.id
+      $0.canvasReturnWorktreeID = worktree.id
+      $0.shouldCenterRestoredCanvasSoloTab = true
+      $0.shouldRestoreLastFocusedWorktree = false
+      $0.isInitialLoadComplete = true
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
+
+    #expect(
+      sentCommands.value == [
+        .ensureInitialTab(worktree, runSetupScriptIfNew: false, focusing: false),
+        .setCanvasMode(true),
+      ]
+    )
+  }
+
+  @Test func consumeRestoredCanvasSoloTabCenteringClearsLaunchRestoreFlag() async {
+    var initialState = RepositoriesFeature.State()
+    initialState.shouldCenterRestoredCanvasSoloTab = true
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.consumeRestoredCanvasSoloTabCentering) {
+      $0.shouldCenterRestoredCanvasSoloTab = false
+    }
   }
 
   @Test func createRandomWorktreeWithoutRepositoriesShowsAlert() async {

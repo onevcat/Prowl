@@ -4,7 +4,7 @@ struct TerminalCommands: Commands {
   let ghosttyShortcuts: GhosttyShortcutManager
   @FocusedValue(\.newTerminalAction) private var newTerminalAction
   @FocusedValue(\.canvasNewTerminalAction) private var canvasNewTerminalAction
-  @FocusedValue(\.canvasNewTerminalUsingPWDAction) private var canvasNewTerminalUsingPWDAction
+  @FocusedValue(\.canvasDirectionalNewTerminalLeaderAction) private var canvasDirectionalNewTerminalLeaderAction
   @FocusedValue(\.closeSurfaceAction) private var closeSurfaceAction
   @FocusedValue(\.closeTabAction) private var closeTabAction
   @FocusedValue(\.resetFontSizeAction) private var resetFontSizeAction
@@ -23,19 +23,20 @@ struct TerminalCommands: Commands {
   var body: some Commands {
     CommandGroup(after: .newItem) {
       Button("New Terminal") {
-        if let canvasNewTerminalAction {
+        if let canvasDirectionalNewTerminalLeaderAction {
+          canvasDirectionalNewTerminalLeaderAction()
+        } else if let canvasNewTerminalAction {
           canvasNewTerminalAction()
         } else {
           newTerminalAction?()
         }
       }
       .modifier(KeyboardShortcutModifier(shortcut: ghosttyShortcuts.keyboardShortcut(for: "new_tab")))
-      .disabled(newTerminalAction == nil && canvasNewTerminalAction == nil)
-      Button("New Terminal in Current Directory") {
-        canvasNewTerminalUsingPWDAction?()
-      }
-      .keyboardShortcut("t", modifiers: [.command, .control])
-      .disabled(canvasNewTerminalUsingPWDAction == nil)
+      .disabled(
+        newTerminalAction == nil
+          && canvasNewTerminalAction == nil
+          && canvasDirectionalNewTerminalLeaderAction == nil
+      )
       Button("Close Terminal") {
         closeSurfaceAction?()
       }
@@ -167,6 +168,17 @@ extension FocusedValues {
   var canvasNewTerminalAction: (() -> Void)? {
     get { self[CanvasNewTerminalActionKey.self] }
     set { self[CanvasNewTerminalActionKey.self] = newValue }
+  }
+}
+
+private struct CanvasDirectionalNewTerminalLeaderActionKey: FocusedValueKey {
+  typealias Value = () -> Void
+}
+
+extension FocusedValues {
+  var canvasDirectionalNewTerminalLeaderAction: (() -> Void)? {
+    get { self[CanvasDirectionalNewTerminalLeaderActionKey.self] }
+    set { self[CanvasDirectionalNewTerminalLeaderActionKey.self] = newValue }
   }
 }
 

@@ -5,6 +5,9 @@ import SwiftUI
 
 extension GhosttySurfaceView {
   override func keyDown(with event: NSEvent) {
+    if CanvasDirectionalNewTerminalChordCoordinator.shared.shouldBlockTerminalInput(event) {
+      return
+    }
     if shouldPreferMenuHandling(for: event),
       let menu = NSApp.mainMenu,
       menu.performKeyEquivalent(with: event)
@@ -210,6 +213,15 @@ extension GhosttySurfaceView {
 
   func shouldPreferMenuHandling(for event: NSEvent) -> Bool {
     if UserCustomShortcutRegistry.shared.matches(event: event) {
+      return true
+    }
+    if CanvasDirectionalNewTerminalChordCoordinator.shared.isCanvasActive,
+      CanvasView.isDirectionalNewTerminalLeaderShortcut(
+        keyCode: event.keyCode,
+        charactersIgnoringModifiers: event.charactersIgnoringModifiers,
+        modifierFlags: event.modifierFlags
+      )
+    {
       return true
     }
     return matchesCanvasNavigationShortcut(event)

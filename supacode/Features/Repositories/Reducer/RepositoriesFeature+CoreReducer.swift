@@ -1,6 +1,7 @@
 import ComposableArchitecture
 import Foundation
 import IdentifiedCollections
+import Sharing
 import SwiftUI
 
 extension RepositoriesFeature {
@@ -235,6 +236,22 @@ extension RepositoriesFeature {
       if repositoriesChanged || wasRestoringSnapshot {
         allEffects.append(.send(.delegate(.repositoriesChanged(state.repositories))))
       }
+      if applyResult.didRestoreCanvasModeOnLaunch {
+        allEffects.append(
+          .run { _ in
+            if let terminalTarget = applyResult.restoredCanvasTerminalTarget {
+              await terminalClient.send(
+                .ensureInitialTab(
+                  terminalTarget,
+                  runSetupScriptIfNew: false,
+                  focusing: false
+                )
+              )
+            }
+            await terminalClient.send(.setCanvasMode(true))
+          }
+        )
+      }
       if selectionChanged {
         allEffects.append(.send(.delegate(.selectedWorktreeChanged(selectedWorktree))))
       }
@@ -343,11 +360,16 @@ extension RepositoriesFeature {
     case .selectArchivedWorktrees:
       state.isShelfActive = false
       recordWorktreeHistoryTransition(from: state.selectedWorktreeID, to: nil, state: &state)
+      @Shared(.appStorage(restoreCanvasModeOnLaunchAppStorageKey)) var restoreCanvasModeOnLaunch = false
+      $restoreCanvasModeOnLaunch.withLock { $0 = false }
       state.selection = .archivedWorktrees
       state.sidebarSelectedWorktreeIDs = []
       return .send(.delegate(.selectedWorktreeChanged(nil)))
 
     case .selectCanvas:
+      @Shared(.appStorage(restoreCanvasModeOnLaunchAppStorageKey)) var restoreCanvasModeOnLaunch = false
+      $restoreCanvasModeOnLaunch.withLock { $0 = true }
+      state.shouldCenterRestoredCanvasSoloTab = false
       // Remember the current worktree so toggleCanvas can restore it.
       let canvasSeedWorktree = state.selectedTerminalWorktree
       state.preCanvasWorktreeID = state.selectedWorktreeID
@@ -405,6 +427,8 @@ extension RepositoriesFeature {
       }
 
     case .selectFreestyle:
+      @Shared(.appStorage(restoreCanvasModeOnLaunchAppStorageKey)) var restoreCanvasModeOnLaunch = false
+      $restoreCanvasModeOnLaunch.withLock { $0 = false }
       state.isShelfActive = false
       state.selection = .freestyle
       state.sidebarSelectedWorktreeIDs = []
@@ -412,6 +436,7 @@ extension RepositoriesFeature {
 
     case .toggleCanvas:
       if state.isShowingCanvas {
+        state.shouldCenterRestoredCanvasSoloTab = false
         // Exit canvas: prefer the card focused in canvas, then the worktree
         // we came from, then the first available worktree.
         let targetID =
@@ -472,6 +497,10 @@ extension RepositoriesFeature {
       if let replacement {
         return shelfBookSelectionEffect(for: replacement)
       }
+      return .none
+
+    case .consumeRestoredCanvasSoloTabCentering:
+      state.shouldCenterRestoredCanvasSoloTab = false
       return .none
 
     case .toggleShelf:
@@ -553,6 +582,8 @@ extension RepositoriesFeature {
       // begin/end token API rather than the `interval` helper.
       let selectRepoToken = repositoriesLogger.beginInterval("reducer.selectRepository")
       defer { repositoriesLogger.endInterval(selectRepoToken) }
+      @Shared(.appStorage(restoreCanvasModeOnLaunchAppStorageKey)) var restoreCanvasModeOnLaunch = false
+      $restoreCanvasModeOnLaunch.withLock { $0 = false }
       guard let repositoryID, state.repositories[id: repositoryID] != nil else { return .none }
       recordWorktreeHistoryTransition(from: state.selectedWorktreeID, to: nil, state: &state)
       state.selection = .repository(repositoryID)
@@ -566,6 +597,8 @@ extension RepositoriesFeature {
     case .selectWorktree(let worktreeID, let focusTerminal, let recordHistory):
       let selectWtToken = repositoriesLogger.beginInterval("reducer.selectWorktree")
       defer { repositoriesLogger.endInterval(selectWtToken) }
+      @Shared(.appStorage(restoreCanvasModeOnLaunchAppStorageKey)) var restoreCanvasModeOnLaunch = false
+      $restoreCanvasModeOnLaunch.withLock { $0 = false }
       setSingleWorktreeSelection(worktreeID, state: &state, recordHistory: recordHistory)
       if focusTerminal, let worktreeID {
         state.pendingTerminalFocusWorktreeIDs.insert(worktreeID)

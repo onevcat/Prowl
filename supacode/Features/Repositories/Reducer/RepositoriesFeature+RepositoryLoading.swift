@@ -1,5 +1,6 @@
 import ComposableArchitecture
 import Foundation
+import Sharing
 import IdentifiedCollections
 import SwiftUI
 
@@ -233,6 +234,7 @@ extension RepositoriesFeature {
     state: inout State,
     animated: Bool
   ) -> ApplyRepositoriesResult {
+    @Shared(.appStorage(restoreCanvasModeOnLaunchAppStorageKey)) var restoreCanvasModeOnLaunch = false
     let previousCounts = Dictionary(
       uniqueKeysWithValues: state.repositories.map { ($0.id, $0.worktrees.count) }
     )
@@ -306,6 +308,31 @@ extension RepositoriesFeature {
     {
       state.selection = nil
     }
+    var didRestoreCanvasModeOnLaunch = false
+    var restoredCanvasTerminalTarget: Worktree?
+    if state.shouldRestoreLastFocusedWorktree,
+      state.selection == nil,
+      restoreCanvasModeOnLaunch,
+      !state.orderedWorktreeRows().isEmpty
+    {
+      let fallbackWorktreeID =
+        if isSelectionValid(state.lastFocusedWorktreeID, state: state) {
+          state.lastFocusedWorktreeID
+        } else {
+          state.orderedWorktreeRows().first?.id
+        }
+      state.preCanvasWorktreeID = fallbackWorktreeID
+      state.preCanvasTerminalTargetID = fallbackWorktreeID
+      if let fallbackWorktreeID {
+        state.canvasReturnWorktreeID = fallbackWorktreeID
+      }
+      restoredCanvasTerminalTarget = terminalTarget(for: fallbackWorktreeID, state: state)
+      state.selection = .canvas
+      state.sidebarSelectedWorktreeIDs = []
+      state.shouldCenterRestoredCanvasSoloTab = true
+      state.shouldRestoreLastFocusedWorktree = false
+      didRestoreCanvasModeOnLaunch = true
+    }
     if state.shouldRestoreLastFocusedWorktree {
       state.shouldRestoreLastFocusedWorktree = false
       if state.selection == nil,
@@ -323,7 +350,32 @@ extension RepositoriesFeature {
       didPrunePinned: didPrunePinned,
       didPruneRepositoryOrder: didPruneRepositoryOrder,
       didPruneWorktreeOrder: didPruneWorktreeOrder,
-      didPruneArchivedWorktrees: didPruneArchivedWorktrees
+      didPruneArchivedWorktrees: didPruneArchivedWorktrees,
+      didRestoreCanvasModeOnLaunch: didRestoreCanvasModeOnLaunch,
+      restoredCanvasTerminalTarget: restoredCanvasTerminalTarget
+    )
+  }
+
+  func terminalTarget(
+    for worktreeID: Worktree.ID?,
+    state: State
+  ) -> Worktree? {
+    guard let worktreeID else { return nil }
+    if let worktree = state.worktree(for: worktreeID) {
+      return worktree
+    }
+    guard let repository = state.repositories[id: worktreeID],
+      repository.capabilities.supportsRunnableFolderActions,
+      !repository.capabilities.supportsWorktrees
+    else {
+      return nil
+    }
+    return Worktree(
+      id: repository.id,
+      name: repository.name,
+      detail: repository.rootURL.path(percentEncoded: false),
+      workingDirectory: repository.rootURL,
+      repositoryRootURL: repository.rootURL
     )
   }
 

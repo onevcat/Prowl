@@ -220,6 +220,7 @@ extension CanvasView {
   // MARK: - Occlusion
 
   func activateCanvas() {
+    directionalNewTerminalChordCoordinator.setCanvasActive(true)
     cleanStaleLayouts()
     pendingCreatedTabID = nil
 
@@ -264,6 +265,7 @@ extension CanvasView {
       state.isCanvasManaged = false
     }
     clearBroadcastCallbacks(states: activeStates)
+    directionalNewTerminalChordCoordinator.setCanvasActive(false)
     selectionState.clear()
     pendingCreatedTabID = nil
     terminalManager.canvasFocusedWorktreeID = nil

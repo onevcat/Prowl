@@ -51,6 +51,24 @@ struct WorktreeDetailView: View {
       .onChange(of: store.state.repositories.selection) { oldSelection, newSelection in
         handleSelectionTransition(from: oldSelection, to: newSelection)
       }
+      .onChange(of: store.state.repositories.shouldCenterRestoredCanvasSoloTab) { _, _ in
+        handleLaunchRestoreSoloCenteringIfNeeded(
+          repositories: store.state.repositories,
+          visibleSnapshots: canvasVisibleSelectionSnapshots()
+        )
+      }
+      .onChange(of: canvasViewportState.hasPerformedInitialFit) { _, _ in
+        handleLaunchRestoreSoloCenteringIfNeeded(
+          repositories: store.state.repositories,
+          visibleSnapshots: canvasVisibleSelectionSnapshots()
+        )
+      }
+      .onChange(of: canvasVisibleSelectionSnapshots()) { _, newSnapshots in
+        handleLaunchRestoreSoloCenteringIfNeeded(
+          repositories: store.state.repositories,
+          visibleSnapshots: newSnapshots
+        )
+      }
   }
 
   private func detailBody(state: AppFeature.State) -> some View {
@@ -436,6 +454,14 @@ struct WorktreeDetailView: View {
         },
         onExpandedChange: { expanded in
           isCanvasCardExpanded = expanded
+        },
+        onDirectionalNewTerminalRequested: { worktreeID, directoryMode in
+          switch directoryMode {
+          case .currentDirectory:
+            store.send(.newTerminalFromCanvasUsingPWD(focusedWorktreeID: worktreeID))
+          case .worktreeDirectory:
+            store.send(.newTerminalFromCanvas(focusedWorktreeID: worktreeID))
+          }
         }
       )
       // Canvas tints the nav (leading) only; the toolbar is left untinted so
@@ -789,6 +815,10 @@ struct WorktreeDetailView: View {
 
     guard !wasCanvas, isCanvas else { return }
     queueCanvasFocusOnEntryIfNeeded(repositories: repositories)
+    handleLaunchRestoreSoloCenteringIfNeeded(
+      repositories: repositories,
+      visibleSnapshots: canvasVisibleSelectionSnapshots()
+    )
   }
 
   private func queueCanvasFocusOnEntryIfNeeded(repositories: RepositoriesFeature.State) {
@@ -802,6 +832,46 @@ struct WorktreeDetailView: View {
           tabID: currentSnapshot.tabID,
           shouldCenterInViewport: true
         )))
+  }
+
+  private func handleLaunchRestoreSoloCenteringIfNeeded(
+    repositories: RepositoriesFeature.State,
+    visibleSnapshots: [CanvasSelectionSnapshot]
+  ) {
+    guard repositories.shouldCenterRestoredCanvasSoloTab else { return }
+    guard repositories.isShowingCanvas else { return }
+    guard canvasViewportState.hasPerformedInitialFit else { return }
+    guard !visibleSnapshots.isEmpty else { return }
+    guard visibleSnapshots.count == 1 else {
+      store.send(.repositories(.consumeRestoredCanvasSoloTabCentering))
+      return
+    }
+    let snapshot = visibleSnapshots[0]
+    store.send(
+      .repositories(
+        .focusCanvasTab(
+          worktreeID: snapshot.worktreeID,
+          tabID: snapshot.tabID,
+          shouldCenterInViewport: true
+        )))
+    store.send(.repositories(.consumeRestoredCanvasSoloTabCentering))
+  }
+
+  private func canvasVisibleSelectionSnapshots() -> [CanvasSelectionSnapshot] {
+    var snapshots: [CanvasSelectionSnapshot] = []
+    for state in terminalManager.activeWorktreeStates {
+      for tab in state.tabManager.tabs {
+        guard let surfaceID = state.surfaceView(for: tab.id)?.id else { continue }
+        snapshots.append(
+          CanvasSelectionSnapshot(
+            worktreeID: state.worktreeID,
+            tabID: tab.id,
+            surfaceID: surfaceID
+          )
+        )
+      }
+    }
+    return snapshots
   }
 
   private func currentCanvasReturnSnapshot(

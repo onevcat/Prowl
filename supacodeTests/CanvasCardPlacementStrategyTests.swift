@@ -140,6 +140,54 @@ struct CanvasCardPlacementStrategyTests {
     #expect(third.position.y == 1019)
   }
 
+  @Test func directionalHintPlacesCardNextToAnchor() {
+    let cards = [
+      CanvasCardPlacementStrategy.CardDescriptor(key: "anchor", worktreeID: "w1"),
+      CanvasCardPlacementStrategy.CardDescriptor(key: "new", worktreeID: "w1"),
+    ]
+    let layouts: [String: CanvasCardLayout] = [
+      "anchor": layout(centerX: 400, centerY: 289)
+    ]
+
+    let placement = CanvasCardPlacementStrategy.nextLayout(
+      for: .init(key: "new", worktreeID: "w1"),
+      cards: cards,
+      layouts: layouts,
+      defaultSize: defaultSize,
+      titleBarHeight: titleBarHeight,
+      spacing: spacing,
+      directionalHint: .init(anchorKey: "anchor", direction: .right)
+    )
+
+    #expect(placement.position.x == 1220)
+    #expect(placement.position.y == 289)
+  }
+
+  @Test func directionalHintSkipsBlockedSlotInChosenDirection() {
+    let cards = [
+      CanvasCardPlacementStrategy.CardDescriptor(key: "anchor", worktreeID: "w1"),
+      CanvasCardPlacementStrategy.CardDescriptor(key: "blocker", worktreeID: "w1"),
+      CanvasCardPlacementStrategy.CardDescriptor(key: "new", worktreeID: "w1"),
+    ]
+    let layouts: [String: CanvasCardLayout] = [
+      "anchor": layout(centerX: 400, centerY: 289),
+      "blocker": layout(centerX: 1220, centerY: 289),
+    ]
+
+    let placement = CanvasCardPlacementStrategy.nextLayout(
+      for: .init(key: "new", worktreeID: "w1"),
+      cards: cards,
+      layouts: layouts,
+      defaultSize: defaultSize,
+      titleBarHeight: titleBarHeight,
+      spacing: spacing,
+      directionalHint: .init(anchorKey: "anchor", direction: .right)
+    )
+
+    #expect(placement.position.x == 2040)
+    #expect(placement.position.y == 289)
+  }
+
   private func layout(centerX: CGFloat, centerY: CGFloat) -> CanvasCardLayout {
     CanvasCardLayout(
       position: CGPoint(x: centerX, y: centerY),
