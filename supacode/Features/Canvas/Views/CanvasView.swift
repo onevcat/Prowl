@@ -369,11 +369,14 @@ struct CanvasView: View {
     }
   }
 
-  func showsSelectionShield(for tabID: TerminalTabID) -> Bool {
-    if commandKeyObserver.isPressed { return true }
-    if selectionState.isSelecting { return true }
-    if selectionState.isBroadcasting, selectionState.primaryTabID != tabID { return true }
-    return false
+  func showsSelectionShield(for tabID: TerminalTabID, in state: WorktreeTerminalState) -> Bool {
+    shouldShowCanvasSelectionShield(
+      commandKeyPressed: commandKeyObserver.isPressed,
+      isSelecting: selectionState.isSelecting,
+      isBroadcasting: selectionState.isBroadcasting,
+      isPrimaryTab: selectionState.primaryTabID == tabID,
+      mouseOverLink: state.surfaceView(for: tabID)?.bridge.state.mouseOverLink
+    )
   }
 
   // MARK: - Cards Layer
@@ -484,7 +487,7 @@ struct CanvasView: View {
         isExpanded: isCardExpanded,
         expandHelp: expandHelp,
         canvasScale: isCardExpanded ? 1 : canvasScale,
-        showsSelectionShield: showsSelectionShield(for: tab.id),
+        showsSelectionShield: showsSelectionShield(for: tab.id, in: state),
         onTap: {
           let cmdHeld = NSEvent.modifierFlags.contains(.command)
           if cmdHeld {
@@ -1961,6 +1964,19 @@ func canvasFocusVisibilityBounds(
     width: max(0, maxX - minX),
     height: max(0, maxY - minY)
   )
+}
+
+func shouldShowCanvasSelectionShield(
+  commandKeyPressed: Bool,
+  isSelecting: Bool,
+  isBroadcasting: Bool,
+  isPrimaryTab: Bool,
+  mouseOverLink: String?
+) -> Bool {
+  if isSelecting { return true }
+  if isBroadcasting && !isPrimaryTab { return true }
+  if commandKeyPressed, mouseOverLink == nil { return true }
+  return false
 }
 
 func canvasCurrentVisibleTabID(

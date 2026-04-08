@@ -1,4 +1,5 @@
 import Clocks
+import Foundation
 import GhosttyKit
 import Testing
 
@@ -211,6 +212,36 @@ struct GhosttySurfaceBridgeTests {
     #expect(bridge.state.progressState == nil)
     #expect(bridge.state.progressValue == nil)
     #expect(states == [GHOSTTY_PROGRESS_STATE_SET, GHOSTTY_PROGRESS_STATE_REMOVE])
+  }
+
+  @Test func openUrlUsesOpenURLHandler() {
+    let bridge = GhosttySurfaceBridge()
+    var openedURL: URL?
+    var openedKind: ghostty_action_open_url_kind_e?
+    bridge.openURLHandler = { url, kind in
+      openedURL = url
+      openedKind = kind
+      return true
+    }
+
+    var action = ghostty_action_s()
+    action.tag = GHOSTTY_ACTION_OPEN_URL
+    let target = ghostty_target_s()
+    let rawURL = "https://example.com/docs"
+
+    rawURL.withCString { urlPtr in
+      var openURLAction = ghostty_action_open_url_s()
+      openURLAction.kind = GHOSTTY_ACTION_OPEN_URL_KIND_HTML
+      openURLAction.url = urlPtr
+      openURLAction.len = UInt(rawURL.utf8.count)
+      action.action.open_url = openURLAction
+      _ = bridge.handleAction(target: target, action: action)
+    }
+
+    #expect(openedURL == URL(string: rawURL))
+    #expect(openedKind == GHOSTTY_ACTION_OPEN_URL_KIND_HTML)
+    #expect(bridge.state.openUrl == rawURL)
+    #expect(bridge.state.openUrlKind == GHOSTTY_ACTION_OPEN_URL_KIND_HTML)
   }
 
   private func advanceProgressClock(_ clock: TestClock<Duration>, by duration: Duration) async {

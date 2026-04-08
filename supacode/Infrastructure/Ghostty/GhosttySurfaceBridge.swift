@@ -4,6 +4,8 @@ import GhosttyKit
 
 @MainActor
 final class GhosttySurfaceBridge {
+  typealias OpenURLHandler = (URL, ghostty_action_open_url_kind_e) -> Bool
+
   let state = GhosttySurfaceState()
   var surface: ghostty_surface_t?
   weak var surfaceView: GhosttySurfaceView?
@@ -21,6 +23,7 @@ final class GhosttySurfaceBridge {
   var onDesktopNotification: ((String, String) -> Void)?
   var onCommandFinished: ((Int?, UInt64) -> Void)?
   var onPromptTitle: ((ghostty_action_prompt_title_e) -> Void)?
+  var openURLHandler: OpenURLHandler?
 
   // Coalesce OSC-9 progress: a flush task applies the latest value at the
   // throttle cadence while it moves, and a slow stale-watch clears a bar whose
@@ -415,10 +418,7 @@ final class GhosttySurfaceBridge {
       return true
 
     case GHOSTTY_ACTION_OPEN_URL:
-      let openUrl = action.action.open_url
-      state.openUrlKind = openUrl.kind
-      state.openUrl = string(from: openUrl.url, length: openUrl.len)
-      return true
+      return handleOpenURL(action.action.open_url)
 
     case GHOSTTY_ACTION_COLOR_CHANGE:
       let change = action.action.color_change
@@ -431,6 +431,25 @@ final class GhosttySurfaceBridge {
     default:
       return false
     }
+  }
+
+  private func handleOpenURL(_ action: ghostty_action_open_url_s) -> Bool {
+    state.openUrlKind = action.kind
+    state.openUrl = string(from: action.url, length: action.len)
+    guard let rawURL = state.openUrl, !rawURL.isEmpty else { return true }
+    let resolvedURL = resolvedOpenURL(from: rawURL)
+    if let openURLHandler {
+      return openURLHandler(resolvedURL, action.kind)
+    }
+    return NSWorkspace.shared.open(resolvedURL)
+  }
+
+  private func resolvedOpenURL(from rawURL: String) -> URL {
+    if let candidate = URL(string: rawURL), candidate.scheme != nil {
+      return candidate
+    }
+    let expandedPath = NSString(string: rawURL).standardizingPath
+    return URL(filePath: expandedPath)
   }
 
   private func handleSearchAndScroll(_ action: ghostty_action_s) -> Bool {
