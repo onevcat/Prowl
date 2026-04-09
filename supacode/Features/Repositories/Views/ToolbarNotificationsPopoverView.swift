@@ -10,6 +10,8 @@ struct ToolbarNotificationsPopoverView: View {
       count + repository.notificationCount
     }
     let notificationLabel = notificationCount == 1 ? "notification" : "notifications"
+    let unreadGroups = groups.unreadNotificationGroups
+    let remainingGroups = groups.remainingNotificationGroups
 
     ScrollView {
       VStack(alignment: .leading, spacing: 12) {
@@ -29,47 +31,34 @@ struct ToolbarNotificationsPopoverView: View {
           .help("Dismiss all notifications")
         }
 
-        ForEach(groups) { repository in
+        if !unreadGroups.isEmpty {
+          Divider()
+          VStack(alignment: .leading, spacing: 8) {
+            Text("Highlighted")
+              .font(.subheadline)
+            Text("Unread notifications")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+            ForEach(unreadGroups) { repository in
+              VStack(alignment: .leading, spacing: 6) {
+                Text(repository.name)
+                  .font(.caption)
+                  .foregroundStyle(.secondary)
+                ForEach(repository.worktrees) { worktree in
+                  worktreeSection(worktree)
+                }
+              }
+            }
+          }
+        }
+
+        ForEach(remainingGroups) { repository in
           VStack(alignment: .leading, spacing: 8) {
             Divider()
             Text(repository.name)
               .font(.subheadline)
             ForEach(repository.worktrees) { worktree in
-              VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
-                  Text(worktree.name)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                  if worktree.hasUnseenNotifications {
-                    Circle()
-                      .fill(.orange)
-                      .frame(width: 6, height: 6)
-                      .accessibilityHidden(true)
-                  }
-                }
-                ForEach(worktree.notifications) { notification in
-                  Button {
-                    onSelectNotification(worktree.id, notification)
-                  } label: {
-                    HStack(alignment: .top, spacing: 8) {
-                      Image(systemName: "bell")
-                        .foregroundStyle(notification.isRead ? Color.secondary : Color.orange)
-                        .accessibilityHidden(true)
-                      Text(notification.content)
-                        .font(.caption)
-                        .foregroundStyle(notification.isRead ? Color.secondary : Color.primary)
-                        .lineLimit(2)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                  }
-                  .buttonStyle(.plain)
-                  .help(
-                    notification.content.isEmpty
-                      ? "Select worktree and focus terminal"
-                      : notification.content
-                  )
-                }
-              }
+              worktreeSection(worktree)
             }
           }
         }
@@ -77,5 +66,52 @@ struct ToolbarNotificationsPopoverView: View {
       .padding()
     }
     .frame(minWidth: 320, maxWidth: 520, maxHeight: 440)
+  }
+
+  @ViewBuilder
+  private func worktreeSection(_ worktree: ToolbarNotificationWorktreeGroup) -> some View {
+    VStack(alignment: .leading, spacing: 6) {
+      HStack(spacing: 6) {
+        Text(worktree.name)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+        if worktree.hasUnseenNotifications {
+          Circle()
+            .fill(.orange)
+            .frame(width: 6, height: 6)
+            .accessibilityHidden(true)
+        }
+      }
+      ForEach(worktree.notifications) { notification in
+        notificationButton(worktreeID: worktree.id, notification: notification)
+      }
+    }
+  }
+
+  @ViewBuilder
+  private func notificationButton(
+    worktreeID: Worktree.ID,
+    notification: WorktreeTerminalNotification
+  ) -> some View {
+    Button {
+      onSelectNotification(worktreeID, notification)
+    } label: {
+      HStack(alignment: .top, spacing: 8) {
+        Image(systemName: "bell")
+          .foregroundStyle(notification.isRead ? Color.secondary : Color.orange)
+          .accessibilityHidden(true)
+        Text(notification.content)
+          .font(.caption)
+          .foregroundStyle(notification.isRead ? Color.secondary : Color.primary)
+          .lineLimit(2)
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    .buttonStyle(.plain)
+    .help(
+      notification.content.isEmpty
+        ? "Select worktree and focus terminal"
+        : notification.content
+    )
   }
 }

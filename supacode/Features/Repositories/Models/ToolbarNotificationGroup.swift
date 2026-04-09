@@ -23,6 +23,30 @@ struct ToolbarNotificationWorktreeGroup: Identifiable, Equatable {
   let name: String
   let notifications: [WorktreeTerminalNotification]
   let hasUnseenNotifications: Bool
+
+  var unreadNotificationGroup: ToolbarNotificationWorktreeGroup? {
+    filteredNotifications({ !$0.isRead }, hasUnseenNotifications: true)
+  }
+
+  var remainingNotificationGroup: ToolbarNotificationWorktreeGroup? {
+    filteredNotifications({ $0.isRead }, hasUnseenNotifications: false)
+  }
+
+  private func filteredNotifications(
+    _ isIncluded: (WorktreeTerminalNotification) -> Bool,
+    hasUnseenNotifications: Bool
+  ) -> ToolbarNotificationWorktreeGroup? {
+    let filteredNotifications = notifications.filter(isIncluded)
+    guard !filteredNotifications.isEmpty else {
+      return nil
+    }
+    return ToolbarNotificationWorktreeGroup(
+      id: id,
+      name: name,
+      notifications: filteredNotifications,
+      hasUnseenNotifications: hasUnseenNotifications
+    )
+  }
 }
 
 extension RepositoriesFeature.State {
@@ -78,5 +102,39 @@ extension RepositoriesFeature.State {
       )
     }
     return result
+  }
+}
+
+extension Array where Element == ToolbarNotificationRepositoryGroup {
+  var unreadNotificationGroups: [ToolbarNotificationRepositoryGroup] {
+    compactMap(\.unreadNotificationGroup)
+  }
+
+  var remainingNotificationGroups: [ToolbarNotificationRepositoryGroup] {
+    compactMap(\.remainingNotificationGroup)
+  }
+}
+
+private extension ToolbarNotificationRepositoryGroup {
+  var unreadNotificationGroup: ToolbarNotificationRepositoryGroup? {
+    filteredWorktrees(\.unreadNotificationGroup)
+  }
+
+  var remainingNotificationGroup: ToolbarNotificationRepositoryGroup? {
+    filteredWorktrees(\.remainingNotificationGroup)
+  }
+
+  func filteredWorktrees(
+    _ transform: (ToolbarNotificationWorktreeGroup) -> ToolbarNotificationWorktreeGroup?
+  ) -> ToolbarNotificationRepositoryGroup? {
+    let filteredWorktrees = worktrees.compactMap(transform)
+    guard !filteredWorktrees.isEmpty else {
+      return nil
+    }
+    return ToolbarNotificationRepositoryGroup(
+      id: id,
+      name: name,
+      worktrees: filteredWorktrees
+    )
   }
 }
