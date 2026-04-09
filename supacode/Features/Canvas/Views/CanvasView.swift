@@ -72,6 +72,8 @@ struct CanvasView: View {
   @State var configReloadCounter = 0
   @State var focusViewportAnimationID = 0
   @State var arrangeAutoScaleTask: Task<Void, Never>?
+  @State var overviewRestoreTask: Task<Void, Never>?
+  @State var activeOverviewRestoreSnapshot: CanvasOverviewRestoreSnapshot?
   @State var wrapToastDismissTask: Task<Void, Never>?
   @State var canvasWrapToastMessage: String?
   @State var canvasWrapToastStyle: CanvasToastStyle = .wrap
@@ -126,6 +128,7 @@ struct CanvasView: View {
   }
 
   let directionalNewTerminalTimeout: Duration = .seconds(2)
+  let overviewPreviewDuration: Duration = .seconds(3)
   let directionalNewTerminalChordCoordinator = CanvasDirectionalNewTerminalChordCoordinator.shared
 
   init(
@@ -346,13 +349,18 @@ struct CanvasView: View {
     .onChange(of: commandRequest) { _, newRequest in
       fulfillCommandRequest(newRequest)
     }
-    .task { activateCanvas() }
+    .task {
+      activateCanvas()
+      fulfillCommandRequest(commandRequest)
+    }
     .onReceive(NotificationCenter.default.publisher(for: .ghosttyRuntimeConfigDidChange)) { _ in
       configReloadCounter &+= 1
     }
     .onDisappear {
       deactivateCanvas()
       cancelArrangeAutoScaleTask()
+      cancelOverviewRestoreTask()
+      activeOverviewRestoreSnapshot = nil
       cancelWrapToastTask()
       cancelDirectionalNewTerminalTimeoutTask()
       isAwaitingDirectionalNewTerminalKey = false

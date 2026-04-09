@@ -446,6 +446,30 @@ struct CommandPaletteFeatureTests {
     #expect(items.contains(where: { $0.title == "Reveal in Finder" }))
   }
 
+  @Test func commandPaletteItems_includeOpenInForkWhenWorktreeSelected() {
+    let rootPath = "/tmp/repo"
+    let worktree = makeWorktree(id: rootPath, name: "repo", repoRoot: rootPath)
+    let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .worktree(worktree.id)
+
+    let items = CommandPaletteFeature.commandPaletteItems(from: state)
+
+    #expect(items.contains(where: { $0.title == "Open in Fork" }))
+  }
+
+  @Test func commandPaletteItems_includeCopyPathWhenWorktreeSelected() {
+    let rootPath = "/tmp/repo"
+    let worktree = makeWorktree(id: rootPath, name: "repo", repoRoot: rootPath)
+    let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .worktree(worktree.id)
+
+    let items = CommandPaletteFeature.commandPaletteItems(from: state)
+
+    #expect(items.contains(where: { $0.title == "Copy Path" }))
+  }
+
   @Test func commandPaletteItems_includeRevealInFinderWhenCanvasHasFocusedWorktree() {
     let rootPath = "/tmp/repo"
     let worktree = makeWorktree(id: rootPath, name: "repo", repoRoot: rootPath)
@@ -459,6 +483,108 @@ struct CommandPaletteFeatureTests {
     )
 
     #expect(items.contains(where: { $0.title == "Reveal in Finder" }))
+  }
+
+  @Test func commandPaletteItems_includeOpenInForkWhenCanvasHasFocusedWorktree() {
+    let rootPath = "/tmp/repo"
+    let worktree = makeWorktree(id: rootPath, name: "repo", repoRoot: rootPath)
+    let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .canvas
+
+    let items = CommandPaletteFeature.commandPaletteItems(
+      from: state,
+      actionTargetWorktreeID: worktree.id
+    )
+
+    #expect(items.contains(where: { $0.title == "Open in Fork" }))
+  }
+
+  @Test func commandPaletteItems_includeCopyPathWhenCanvasHasFocusedWorktree() {
+    let rootPath = "/tmp/repo"
+    let worktree = makeWorktree(id: rootPath, name: "repo", repoRoot: rootPath)
+    let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .canvas
+
+    let items = CommandPaletteFeature.commandPaletteItems(
+      from: state,
+      actionTargetWorktreeID: worktree.id
+    )
+
+    #expect(items.contains(where: { $0.title == "Copy Path" }))
+  }
+
+  @Test func commandPaletteItems_includeLayoutCenterWhenCanvasSelected() {
+    let rootPath = "/tmp/repo"
+    let worktree = makeWorktree(id: rootPath, name: "repo", repoRoot: rootPath)
+    let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .canvas
+
+    let items = CommandPaletteFeature.commandPaletteItems(from: state)
+
+    #expect(items.contains(where: { $0.title == "Layout: Center" }))
+  }
+
+  @Test func commandPaletteItems_omitLayoutCenterOutsideCanvas() {
+    let rootPath = "/tmp/repo"
+    let worktree = makeWorktree(id: rootPath, name: "repo", repoRoot: rootPath)
+    let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .worktree(worktree.id)
+
+    let items = CommandPaletteFeature.commandPaletteItems(from: state)
+
+    #expect(items.contains(where: { $0.title == "Layout: Center" }) == false)
+  }
+
+  @Test func commandPaletteItems_includeLayoutArrangeWhenCanvasSelected() {
+    let rootPath = "/tmp/repo"
+    let worktree = makeWorktree(id: rootPath, name: "repo", repoRoot: rootPath)
+    let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .canvas
+
+    let items = CommandPaletteFeature.commandPaletteItems(from: state)
+
+    #expect(items.contains(where: { $0.title == "Layout: Arrange" }))
+  }
+
+  @Test func commandPaletteItems_omitLayoutArrangeOutsideCanvas() {
+    let rootPath = "/tmp/repo"
+    let worktree = makeWorktree(id: rootPath, name: "repo", repoRoot: rootPath)
+    let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .worktree(worktree.id)
+
+    let items = CommandPaletteFeature.commandPaletteItems(from: state)
+
+    #expect(items.contains(where: { $0.title == "Layout: Arrange" }) == false)
+  }
+
+  @Test func commandPaletteItems_includeLayoutOverviewWhenCanvasSelected() {
+    let rootPath = "/tmp/repo"
+    let worktree = makeWorktree(id: rootPath, name: "repo", repoRoot: rootPath)
+    let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .canvas
+
+    let items = CommandPaletteFeature.commandPaletteItems(from: state)
+
+    #expect(items.contains(where: { $0.title == "Layout: Overview" }))
+  }
+
+  @Test func commandPaletteItems_omitLayoutOverviewOutsideCanvas() {
+    let rootPath = "/tmp/repo"
+    let worktree = makeWorktree(id: rootPath, name: "repo", repoRoot: rootPath)
+    let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .worktree(worktree.id)
+
+    let items = CommandPaletteFeature.commandPaletteItems(from: state)
+
+    #expect(items.contains(where: { $0.title == "Layout: Overview" }) == false)
   }
 
   @Test func commandPaletteItems_filtersUnsupportedGhosttyCommands() {
@@ -1148,6 +1274,76 @@ struct CommandPaletteFeatureTests {
 
     expectNoDifference(
       CommandPaletteFeature.filterItems(items: [item], query: "repo main"),
+      [item]
+    )
+  }
+
+  @Test func fuzzyMatchesOpenInForkByTitle() {
+    let item = CommandPaletteItem(
+      id: "terminal.open-in-fork",
+      title: "Open in Fork",
+      subtitle: nil,
+      kind: .openInFork
+    )
+
+    expectNoDifference(
+      CommandPaletteFeature.filterItems(items: [item], query: "fork"),
+      [item]
+    )
+  }
+
+  @Test func fuzzyMatchesCopyPathByTitle() {
+    let item = CommandPaletteItem(
+      id: "terminal.copy-path",
+      title: "Copy Path",
+      subtitle: nil,
+      kind: .copyPath
+    )
+
+    expectNoDifference(
+      CommandPaletteFeature.filterItems(items: [item], query: "path"),
+      [item]
+    )
+  }
+
+  @Test func fuzzyMatchesLayoutCenterByTitle() {
+    let item = CommandPaletteItem(
+      id: "canvas.layout-center",
+      title: "Layout: Center",
+      subtitle: nil,
+      kind: .layoutCenter
+    )
+
+    expectNoDifference(
+      CommandPaletteFeature.filterItems(items: [item], query: "center"),
+      [item]
+    )
+  }
+
+  @Test func fuzzyMatchesLayoutArrangeByTitle() {
+    let item = CommandPaletteItem(
+      id: "canvas.layout-arrange",
+      title: "Layout: Arrange",
+      subtitle: nil,
+      kind: .layoutArrange
+    )
+
+    expectNoDifference(
+      CommandPaletteFeature.filterItems(items: [item], query: "arrange"),
+      [item]
+    )
+  }
+
+  @Test func fuzzyMatchesLayoutOverviewByTitle() {
+    let item = CommandPaletteItem(
+      id: "canvas.layout-overview",
+      title: "Layout: Overview",
+      subtitle: nil,
+      kind: .layoutOverview
+    )
+
+    expectNoDifference(
+      CommandPaletteFeature.filterItems(items: [item], query: "overview"),
       [item]
     )
   }

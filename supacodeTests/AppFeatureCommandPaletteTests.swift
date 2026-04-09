@@ -450,6 +450,254 @@ struct AppFeatureCommandPaletteTests {
     )
   }
 
+  @Test(.dependencies) func openInForkOpensSelectedWorktree() async {
+    let worktree = makeWorktree(
+      id: "/tmp/repo-fork-open/wt-1",
+      name: "wt-1",
+      repoRoot: "/tmp/repo-fork-open"
+    )
+    let repository = makeRepository(id: "/tmp/repo-fork-open", worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    repositoriesState.selection = .worktree(worktree.id)
+    let captured = LockIsolated<[(OpenWorktreeAction, Worktree)]>([])
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositoriesState,
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.workspaceClient.open = { action, worktree, _ in
+        captured.withValue { $0.append((action, worktree)) }
+      }
+    }
+
+    await store.send(.commandPalette(.delegate(.openInFork)))
+    await store.finish()
+
+    #expect(captured.value.count == 1)
+    #expect(captured.value.first?.0 == .fork)
+    #expect(captured.value.first?.1 == worktree)
+  }
+
+  @Test(.dependencies) func openInForkUsesCanvasFocusedWorktree() async {
+    let worktree = makeWorktree(
+      id: "/tmp/repo-fork-canvas/wt-1",
+      name: "wt-1",
+      repoRoot: "/tmp/repo-fork-canvas"
+    )
+    let repository = makeRepository(id: "/tmp/repo-fork-canvas", worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    repositoriesState.selection = .canvas
+    let captured = LockIsolated<[(OpenWorktreeAction, Worktree)]>([])
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositoriesState,
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.canvasFocusedWorktreeID = {
+        worktree.id
+      }
+      $0.workspaceClient.open = { action, worktree, _ in
+        captured.withValue { $0.append((action, worktree)) }
+      }
+    }
+
+    await store.send(.commandPalette(.delegate(.openInFork)))
+    await store.finish()
+
+    #expect(captured.value.count == 1)
+    #expect(captured.value.first?.0 == .fork)
+    #expect(captured.value.first?.1 == worktree)
+  }
+
+  @Test(.dependencies) func copyPathCopiesFocusedDirectory() async {
+    let worktree = makeWorktree(
+      id: "/tmp/repo-copy-path/wt-1",
+      name: "wt-1",
+      repoRoot: "/tmp/repo-copy-path"
+    )
+    let repository = makeRepository(id: "/tmp/repo-copy-path", worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    repositoriesState.selection = .worktree(worktree.id)
+    let copiedPath = LockIsolated<String?>(nil)
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositoriesState,
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.focusedDirectoryPath = { _ in
+        "/tmp/repo-copy-path/wt-1/current"
+      }
+      $0.clipboardClient.copyString = { value in
+        copiedPath.setValue(value)
+      }
+    }
+
+    await store.send(.commandPalette(.delegate(.copyPath)))
+    await store.finish()
+
+    #expect(copiedPath.value == "/tmp/repo-copy-path/wt-1/current")
+  }
+
+  @Test(.dependencies) func copyPathFallsBackToWorktreeRoot() async {
+    let worktree = makeWorktree(
+      id: "/tmp/repo-copy-path-fallback/wt-1",
+      name: "wt-1",
+      repoRoot: "/tmp/repo-copy-path-fallback"
+    )
+    let repository = makeRepository(id: "/tmp/repo-copy-path-fallback", worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    repositoriesState.selection = .worktree(worktree.id)
+    let copiedPath = LockIsolated<String?>(nil)
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositoriesState,
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.focusedDirectoryPath = { _ in nil }
+      $0.clipboardClient.copyString = { value in
+        copiedPath.setValue(value)
+      }
+    }
+
+    await store.send(.commandPalette(.delegate(.copyPath)))
+    await store.finish()
+
+    #expect(copiedPath.value == worktree.workingDirectory.path(percentEncoded: false))
+  }
+
+  @Test(.dependencies) func copyPathUsesCanvasFocusedWorktree() async {
+    let worktree = makeWorktree(
+      id: "/tmp/repo-copy-path-canvas/wt-1",
+      name: "wt-1",
+      repoRoot: "/tmp/repo-copy-path-canvas"
+    )
+    let repository = makeRepository(id: "/tmp/repo-copy-path-canvas", worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    repositoriesState.selection = .canvas
+    let copiedPath = LockIsolated<String?>(nil)
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositoriesState,
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.canvasFocusedWorktreeID = {
+        worktree.id
+      }
+      $0.terminalClient.focusedDirectoryPath = { _ in
+        "/tmp/repo-copy-path-canvas/wt-1/tab"
+      }
+      $0.clipboardClient.copyString = { value in
+        copiedPath.setValue(value)
+      }
+    }
+
+    await store.send(.commandPalette(.delegate(.copyPath)))
+    await store.finish()
+
+    #expect(copiedPath.value == "/tmp/repo-copy-path-canvas/wt-1/tab")
+  }
+
+  @Test(.dependencies) func layoutCenterQueuesCanvasLayoutCommand() async {
+    let worktree = makeWorktree(
+      id: "/tmp/repo-layout-center/wt-1",
+      name: "wt-1",
+      repoRoot: "/tmp/repo-layout-center"
+    )
+    let repository = makeRepository(id: "/tmp/repo-layout-center", worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    repositoriesState.selection = .canvas
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositoriesState,
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    }
+    store.exhaustivity = .off
+
+    await store.send(.commandPalette(.delegate(.layoutCenter)))
+    await store.receive(\.repositories.requestCanvasCommand) {
+      $0.repositories.nextCanvasCommandRequestID = 1
+      $0.repositories.pendingCanvasCommandRequest = CanvasCommandRequest(id: 1, command: .center)
+    }
+  }
+
+  @Test(.dependencies) func layoutArrangeQueuesCanvasLayoutCommand() async {
+    let worktree = makeWorktree(
+      id: "/tmp/repo-layout-arrange/wt-1",
+      name: "wt-1",
+      repoRoot: "/tmp/repo-layout-arrange"
+    )
+    let repository = makeRepository(id: "/tmp/repo-layout-arrange", worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    repositoriesState.selection = .canvas
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositoriesState,
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    }
+    store.exhaustivity = .off
+
+    await store.send(.commandPalette(.delegate(.layoutArrange)))
+    await store.receive(\.repositories.requestCanvasCommand) {
+      $0.repositories.nextCanvasCommandRequestID = 1
+      $0.repositories.pendingCanvasCommandRequest = CanvasCommandRequest(id: 1, command: .arrange)
+    }
+  }
+
+  @Test(.dependencies) func layoutOverviewQueuesCanvasLayoutCommand() async {
+    let worktree = makeWorktree(
+      id: "/tmp/repo-layout-overview/wt-1",
+      name: "wt-1",
+      repoRoot: "/tmp/repo-layout-overview"
+    )
+    let repository = makeRepository(id: "/tmp/repo-layout-overview", worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    repositoriesState.selection = .canvas
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositoriesState,
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    }
+    store.exhaustivity = .off
+
+    await store.send(.commandPalette(.delegate(.layoutOverview)))
+    await store.receive(\.repositories.requestCanvasCommand) {
+      $0.repositories.nextCanvasCommandRequestID = 1
+      $0.repositories.pendingCanvasCommandRequest = CanvasCommandRequest(id: 1, command: .overview)
+    }
+  }
+
   @Test(.dependencies) func refreshWorktreesDispatchesRefresh() async {
     let store = TestStore(initialState: AppFeature.State()) {
       AppFeature()

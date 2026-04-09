@@ -98,6 +98,7 @@ struct AppFeature {
   @Dependency(\.date.now) var now
   @Dependency(RepositoryPersistenceClient.self) var repositoryPersistence
   @Dependency(WorkspaceClient.self) var workspaceClient
+  @Dependency(ClipboardClient.self) var clipboardClient
   @Dependency(SettingsWindowClient.self) var settingsWindowClient
   @Dependency(AppLifecycleClient.self) var appLifecycleClient
   @Dependency(NotificationSoundClient.self) var notificationSoundClient

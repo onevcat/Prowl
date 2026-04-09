@@ -14,6 +14,21 @@ enum CanvasViewportMath {
     "\(Int((scale * 100).rounded()))%"
   }
 
+  static func centeredViewport(
+    viewportSize: CGSize,
+    canvasPoint: CGPoint,
+    scale targetScale: CGFloat = 1.0
+  ) -> (offset: CGSize, scale: CGFloat) {
+    let scale = clampedScale(targetScale)
+    return (
+      offset: CGSize(
+        width: viewportSize.width / 2 - canvasPoint.x * scale,
+        height: viewportSize.height / 2 - canvasPoint.y * scale
+      ),
+      scale: scale
+    )
+  }
+
   static func offsetKeepingAnchorStable(
     currentOffset: CGSize,
     currentScale: CGFloat,

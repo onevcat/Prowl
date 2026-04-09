@@ -519,7 +519,8 @@ private struct CommandPaletteRowView: View {
 
   private var badge: String? {
     switch row.kind {
-    case .checkForUpdates, .openRepository, .revealInFinder, .openSettings, .newWorktree, .viewArchivedWorktrees,
+    case .checkForUpdates, .openRepository, .layoutCenter, .layoutArrange, .layoutOverview,
+      .openInFork, .copyPath, .revealInFinder, .openSettings, .newWorktree, .viewArchivedWorktrees,
       .refreshWorktrees, .installCLI, .jumpToLatestUnread, .ghosttyCommand,
       .openPullRequest, .openRepositoryOnCodeHost, .markPullRequestReady, .mergePullRequest, .closePullRequest,
       .copyFailingJobURL,
@@ -547,6 +548,16 @@ private struct CommandPaletteRowView: View {
       return "arrow.down.circle"
     case .openRepository:
       return "folder"
+    case .layoutCenter:
+      return "scope"
+    case .layoutArrange:
+      return "rectangle.3.group"
+    case .layoutOverview:
+      return "binoculars"
+    case .openInFork:
+      return "arrow.triangle.branch"
+    case .copyPath:
+      return "doc.on.doc"
     case .revealInFinder:
       return "folder.badge.gearshape"
     case .openSettings:
@@ -634,7 +645,8 @@ private struct CommandPaletteRowView: View {
 
   private var emphasis: Bool {
     switch row.kind {
-    case .checkForUpdates, .openRepository, .revealInFinder, .openSettings, .newWorktree, .viewArchivedWorktrees,
+    case .checkForUpdates, .openRepository, .layoutCenter, .layoutArrange, .layoutOverview,
+      .openInFork, .copyPath, .revealInFinder, .openSettings, .newWorktree, .viewArchivedWorktrees,
       .refreshWorktrees, .installCLI, .jumpToLatestUnread, .ghosttyCommand,
       .openPullRequest, .openRepositoryOnCodeHost, .markPullRequestReady, .mergePullRequest, .closePullRequest,
       .copyFailingJobURL,
@@ -734,6 +746,16 @@ private struct CommandPaletteRowView: View {
       base = "Check for Updates"
     case .openRepository:
       base = "Open Repository"
+    case .layoutCenter:
+      base = "Layout: Center"
+    case .layoutArrange:
+      base = "Layout: Arrange"
+    case .layoutOverview:
+      base = "Layout: Overview"
+    case .openInFork:
+      base = "Open in Fork"
+    case .copyPath:
+      base = "Copy Path"
     case .revealInFinder:
       base = "Reveal in Finder"
     case .openSettings:

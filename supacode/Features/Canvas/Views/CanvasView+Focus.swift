@@ -7,16 +7,97 @@ extension CanvasView {
   func fulfillCommandRequest(_ request: CanvasCommandRequest?) {
     guard let request else { return }
     switch request.command {
+    case .center:
+      cancelOverviewRestoreTask()
+      activeOverviewRestoreSnapshot = nil
+      centerCurrentCanvasTabAtScaleOne()
     case .toggleExpand:
       toggleExpandFocusedCard()
     case .arrange:
+      cancelOverviewRestoreTask()
+      activeOverviewRestoreSnapshot = nil
       arrangeCardsWithFit()
     case .organize:
+      cancelOverviewRestoreTask()
+      activeOverviewRestoreSnapshot = nil
       organizeCardsWithFit()
+    case .overview:
+      previewCanvasOverview()
     case .selectAll:
       selectAllCards()
     }
     onCommandConsumed(request.id)
+  }
+
+  var currentViewportState: ViewportState {
+    ViewportState(
+      offset: canvasOffset,
+      scale: canvasScale,
+      hasPerformedInitialFit: hasPerformedInitialFit
+    )
+  }
+
+  func applyViewportState(_ state: ViewportState) {
+    canvasOffset = state.offset
+    lastCanvasOffset = state.offset
+    canvasScale = state.scale
+    lastCanvasScale = state.scale
+    hasPerformedInitialFit = state.hasPerformedInitialFit
+  }
+
+  func centerCurrentCanvasTabAtScaleOne() {
+    let tabs = visibleCanvasTabs(from: terminalManager.activeWorktreeStates)
+    guard let current = currentCanvasTab(from: tabs) else { return }
+    focusSingleCard(current.tabID, states: terminalManager.activeWorktreeStates)
+    let centered = CanvasViewportMath.centeredViewport(
+      viewportSize: viewportSize,
+      canvasPoint: current.center
+    )
+    canvasScale = centered.scale
+    lastCanvasScale = centered.scale
+    canvasOffset = centered.offset
+    lastCanvasOffset = centered.offset
+  }
+
+  func previewCanvasOverview() {
+    let commandToken = UUID()
+    let snapshot = canvasOverviewRestoreSnapshot(
+      existingSnapshot: activeOverviewRestoreSnapshot,
+      currentViewportState: currentViewportState,
+      commandToken: commandToken
+    )
+
+    cancelOverviewRestoreTask()
+    activeOverviewRestoreSnapshot = snapshot
+
+    withAnimation(.easeInOut(duration: 0.2)) {
+      fitToView(canvasSize: viewportSize)
+    }
+
+    overviewRestoreTask = Task { @MainActor in
+      do {
+        try await Task.sleep(for: overviewPreviewDuration)
+      } catch {
+        return
+      }
+
+      guard !Task.isCancelled else { return }
+      if let restoredState = canvasOverviewRestoreViewportState(
+        snapshot: snapshot,
+        latestCommandToken: activeOverviewRestoreSnapshot?.commandToken
+      ) {
+        withAnimation(.easeInOut(duration: 0.2)) {
+          applyViewportState(restoredState)
+        }
+        activeOverviewRestoreSnapshot = nil
+      }
+      overviewRestoreTask = nil
+    }
+  }
+
+  func cancelOverviewRestoreTask() {
+    overviewRestoreTask?.cancel()
+    overviewRestoreTask = nil
   }
 
   /// Expand a card in place: raise it to the top, then flip `expandedTabID`

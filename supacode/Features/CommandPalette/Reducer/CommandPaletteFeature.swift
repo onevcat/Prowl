@@ -37,6 +37,10 @@ struct CommandPaletteFeature {
     case newWorktree
     case openRepository
     case deleteWorktree(Worktree.ID, Repository.ID)
+    case layoutCenter
+    case layoutArrange
+    case layoutOverview
+    case openInFork
     case viewArchivedWorktrees
     case refreshWorktrees
     case jumpToLatestUnread
@@ -239,6 +243,7 @@ struct CommandPaletteFeature {
     var items = globalCommandItems(showsNewWorktreeAction: showsNewWorktreeAction)
     if repositories.isShowingCanvas {
       items.append(contentsOf: canvasCommandItems())
+      items.append(contentsOf: canvasLayoutItems())
     }
     let worktreeActionTargetID = actionTargetWorktreeID ?? repositories.selectedWorktreeID
     if repositories.selectedWorktreeID != nil {
@@ -252,6 +257,7 @@ struct CommandPaletteFeature {
         )
       )
       items.append(contentsOf: worktreeNavigationCommandItems())
+      items.append(contentsOf: worktreeTargetItems(includeFileActions: false))
       items.append(
         contentsOf: worktreeActionCommandItems(
           repositories: repositories,
@@ -268,6 +274,11 @@ struct CommandPaletteFeature {
           includeSelectionScopedItems: false
         )
       )
+    }
+    if repositories.selectedWorktreeID == nil,
+      worktreeActionTargetID != nil || repositories.isShowingFreestyle
+    {
+      items.append(contentsOf: worktreeTargetItems(includeFileActions: true))
     }
     items.append(contentsOf: customCommandItems(customCommands))
     if let terminalWorktree = repositories.selectedTerminalWorktree {
@@ -563,6 +574,42 @@ private func worktreeNavigationCommandItems() -> [CommandPaletteItem] {
   ]
 }
 
+private func worktreeTargetItems(includeFileActions: Bool) -> [CommandPaletteItem] {
+  var items: [CommandPaletteItem] = [
+    .appShortcut(
+      id: CommandPaletteItemID.terminalOpenInFork,
+      title: "Open in Fork",
+      category: .navigation,
+      kind: .openInFork,
+      keywords: ["fork", "open", "workspace"],
+      priorityTier: 1
+    ),
+  ]
+  if includeFileActions {
+    items.append(
+      .appShortcut(
+        id: CommandPaletteItemID.globalCopyPath,
+        title: "Copy Path",
+        category: .navigation,
+        kind: .copyPath,
+        keywords: ["copy", "path", "clipboard"],
+        priorityTier: 1
+      )
+    )
+    items.append(
+      .appShortcut(
+        id: CommandPaletteItemID.globalRevealInFinder,
+        title: "Reveal in Finder",
+        category: .navigation,
+        kind: .revealInFinder,
+        keywords: ["finder", "open", "show"],
+        priorityTier: 1
+      )
+    )
+  }
+  return items
+}
+
 private func viewToggleCommandItems() -> [CommandPaletteItem] {
   [
     .appShortcut(
@@ -625,6 +672,35 @@ private func canvasCommandItems() -> [CommandPaletteItem] {
       category: .view,
       kind: .selectAllCanvasCards,
       keywords: ["canvas", "select all", "broadcast"]
+    ),
+  ]
+}
+
+private func canvasLayoutItems() -> [CommandPaletteItem] {
+  [
+    .appShortcut(
+      id: CommandPaletteItemID.canvasLayoutCenter,
+      title: "Layout: Center",
+      category: .view,
+      kind: .layoutCenter,
+      keywords: ["layout", "center", "canvas"],
+      priorityTier: 1
+    ),
+    .appShortcut(
+      id: CommandPaletteItemID.canvasLayoutArrange,
+      title: "Layout: Arrange",
+      category: .view,
+      kind: .layoutArrange,
+      keywords: ["layout", "arrange", "canvas"],
+      priorityTier: 1
+    ),
+    .appShortcut(
+      id: CommandPaletteItemID.canvasLayoutOverview,
+      title: "Layout: Overview",
+      category: .view,
+      kind: .layoutOverview,
+      keywords: ["layout", "overview", "canvas"],
+      priorityTier: 1
     ),
   ]
 }

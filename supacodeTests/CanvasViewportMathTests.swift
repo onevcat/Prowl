@@ -37,4 +37,14 @@ struct CanvasViewportMathTests {
     #expect(abs(projectedX - anchor.x) < 0.001)
     #expect(abs(projectedY - anchor.y) < 0.001)
   }
+
+  @Test func centeredViewportMovesCanvasPointToViewportCenterAtScaleOne() {
+    let result = CanvasViewportMath.centeredViewport(
+      viewportSize: CGSize(width: 1_000, height: 700),
+      canvasPoint: CGPoint(x: 400, y: 200)
+    )
+
+    #expect(result.scale == 1.0)
+    #expect(result.offset == CGSize(width: 100, height: 150))
+  }
 }

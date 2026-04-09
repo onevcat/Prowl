@@ -28,6 +28,10 @@ enum CommandPaletteItemID {
   static let globalTogglePinWorktree = "global.toggle-pin-worktree"
   static let globalRenameBranch = "global.rename-branch"
   static let globalDeleteWorktree = "global.delete-worktree"
+  static let canvasLayoutCenter = "canvas.layout-center"
+  static let canvasLayoutArrange = "canvas.layout-arrange"
+  static let canvasLayoutOverview = "canvas.layout-overview"
+  static let terminalOpenInFork = "terminal.open-in-fork"
 
   static func openRepositorySettings(_ repositoryID: Repository.ID) -> CommandPaletteItem.ID {
     "repo.\(repositoryID).open-settings"
@@ -64,6 +68,10 @@ enum CommandPaletteItemID {
       globalTogglePinWorktree,
       globalRenameBranch,
       globalDeleteWorktree,
+      canvasLayoutCenter,
+      canvasLayoutArrange,
+      canvasLayoutOverview,
+      terminalOpenInFork,
     ]
   }
 
@@ -207,10 +215,14 @@ func delegateAction(for kind: CommandPaletteItem.Kind) -> CommandPaletteFeature.
     .toggleCanvas,
     .expandCanvasCard,
     .arrangeCanvasCards,
+    .layoutCenter,
+    .layoutArrange,
+    .layoutOverview,
     .organizeCanvasCards,
     .selectAllCanvasCards,
     .toggleShelf,
     .showDiff,
+    .openInFork,
     .revealInFinder,
     .copyPath,
     .revealInSidebar,
@@ -262,6 +274,8 @@ func navigationDelegateAction(for kind: CommandPaletteItem.Kind) -> CommandPalet
     return .revealInFinder
   case .copyPath:
     return .copyPath
+  case .openInFork:
+    return .openInFork
   case .revealInSidebar:
     return .revealInSidebar
   default:
@@ -281,6 +295,12 @@ func viewDelegateAction(for kind: CommandPaletteItem.Kind) -> CommandPaletteFeat
     return .expandCanvasCard
   case .arrangeCanvasCards:
     return .arrangeCanvasCards
+  case .layoutCenter:
+    return .layoutCenter
+  case .layoutArrange:
+    return .layoutArrange
+  case .layoutOverview:
+    return .layoutOverview
   case .organizeCanvasCards:
     return .organizeCanvasCards
   case .selectAllCanvasCards:
@@ -320,6 +340,10 @@ func pullRequestDelegateAction(
     .openSettings,
     .newWorktree,
     .openRepository,
+    .layoutCenter,
+    .layoutArrange,
+    .layoutOverview,
+    .openInFork,
     .viewArchivedWorktrees,
     .refreshWorktrees,
     .jumpToLatestUnread,

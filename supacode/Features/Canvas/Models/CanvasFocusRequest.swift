@@ -22,9 +22,11 @@ struct CanvasFocusCandidate: Equatable, Sendable {
 /// the id back to clear it (the same one-shot pattern as `CanvasFocusRequest`).
 struct CanvasCommandRequest: Equatable, Sendable {
   enum Command: Equatable, Sendable {
+    case center
     case toggleExpand
     case arrange
     case organize
+    case overview
     case selectAll
   }
 

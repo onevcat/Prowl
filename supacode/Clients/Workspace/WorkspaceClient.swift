@@ -26,3 +26,23 @@ extension DependencyValues {
     set { self[WorkspaceClient.self] = newValue }
   }
 }
+
+struct ClipboardClient {
+  var copyString: @MainActor @Sendable (_ value: String) -> Void
+}
+
+extension ClipboardClient: DependencyKey {
+  static let liveValue = ClipboardClient { value in
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(value, forType: .string)
+  }
+
+  static let testValue = ClipboardClient { _ in }
+}
+
+extension DependencyValues {
+  var clipboardClient: ClipboardClient {
+    get { self[ClipboardClient.self] }
+    set { self[ClipboardClient.self] = newValue }
+  }
+}

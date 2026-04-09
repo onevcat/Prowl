@@ -122,6 +122,15 @@ extension AppFeature {
     case .arrangeCanvasCards:
       return .send(.repositories(.requestCanvasCommand(.arrange)))
 
+    case .layoutCenter:
+      return .send(.repositories(.requestCanvasCommand(.center)))
+
+    case .layoutArrange:
+      return .send(.repositories(.requestCanvasCommand(.arrange)))
+
+    case .layoutOverview:
+      return .send(.repositories(.requestCanvasCommand(.overview)))
+
     case .organizeCanvasCards:
       return .send(.repositories(.requestCanvasCommand(.organize)))
 
@@ -158,12 +167,21 @@ extension AppFeature {
         }
       }
 
+    case .openInFork:
+      guard let worktree = terminalCommandWorktree(repositories: state.repositories) else {
+        return .none
+      }
+      return .run { send in
+        await workspaceClient.open(.fork, worktree) { error in
+          send(.openWorktreeFailed(error))
+        }
+      }
+
     case .revealInFinder:
       guard let worktree = terminalCommandWorktree(repositories: state.repositories) else {
         return .none
       }
-      let resolvedPath = terminalClient.focusedDirectoryPath(worktree.id)
-        ?? worktree.workingDirectory.path(percentEncoded: false)
+      let resolvedPath = commandPaletteResolvedPath(for: worktree)
       let resolvedURL = URL(fileURLWithPath: resolvedPath).standardizedFileURL
       let revealWorktree = Worktree(
         id: worktree.id,
@@ -179,15 +197,12 @@ extension AppFeature {
       }
 
     case .copyPath:
-      guard let worktree = state.repositories.selectedTerminalWorktree else {
+      guard let worktree = terminalCommandWorktree(repositories: state.repositories) else {
         return .none
       }
-      let path = worktree.workingDirectory.path
+      let path = commandPaletteResolvedPath(for: worktree)
       return .run { _ in
-        await MainActor.run {
-          NSPasteboard.general.clearContents()
-          NSPasteboard.general.setString(path, forType: .string)
-        }
+        await clipboardClient.copyString(path)
       }
 
     case .revealInSidebar:
@@ -315,4 +330,9 @@ extension AppFeature {
       }
     }
   #endif
+
+  func commandPaletteResolvedPath(for worktree: Worktree) -> String {
+    terminalClient.focusedDirectoryPath(worktree.id)
+      ?? worktree.workingDirectory.path(percentEncoded: false)
+  }
 }
