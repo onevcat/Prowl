@@ -75,6 +75,7 @@ Resources/docs
 .env
 build/
 .DS_Store
+.worktrees/
 
 # Release-only credentials (analytics, crash reporting)
 Config/Secrets.env
