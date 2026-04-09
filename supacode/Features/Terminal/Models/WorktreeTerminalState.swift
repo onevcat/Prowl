@@ -200,6 +200,53 @@ final class WorktreeTerminalState {
     currentFocusedSurfaceId()
   }
 
+  static func preferredRevealInFinderPath(
+    runtimePWD: String?,
+    inheritedWorkingDirectory: String?,
+    worktreeDirectory: String
+  ) -> String {
+    if let runtimePath = runtimePWD?.trimmingCharacters(in: .whitespacesAndNewlines),
+      !runtimePath.isEmpty
+    {
+      return runtimePath
+    }
+    if let inheritedWorkingDirectory,
+      !inheritedWorkingDirectory.isEmpty
+    {
+      return inheritedWorkingDirectory
+    }
+    return worktreeDirectory
+  }
+
+  func focusedDirectoryPathForRevealInFinder() -> String {
+    let worktreeDirectory = worktree.workingDirectory.path(percentEncoded: false)
+    guard let surface = revealInFinderSurface() else {
+      return worktreeDirectory
+    }
+    let inheritedWorkingDirectory = inheritedSurfaceConfig(
+      fromSurfaceId: surface.id,
+      context: GHOSTTY_SURFACE_CONTEXT_TAB
+    ).workingDirectory?.path(percentEncoded: false)
+    return Self.preferredRevealInFinderPath(
+      runtimePWD: surface.bridge.state.pwd,
+      inheritedWorkingDirectory: inheritedWorkingDirectory,
+      worktreeDirectory: worktreeDirectory
+    )
+  }
+
+  private func revealInFinderSurface() -> GhosttySurfaceView? {
+    if let activeSurfaceView {
+      return activeSurfaceView
+    }
+    guard let selectedTabId = tabManager.selectedTabId else { return nil }
+    if let focusedSurfaceId = focusedSurfaceIdByTab[selectedTabId],
+      let focusedSurface = surfaces[focusedSurfaceId]
+    {
+      return focusedSurface
+    }
+    return trees[selectedTabId]?.root?.leftmostLeaf()
+  }
+
   func surfaceView(for tabId: TerminalTabID) -> GhosttySurfaceView? {
     guard let surfaceId = focusedSurfaceIdByTab[tabId] else { return nil }
     return surfaces[surfaceId]

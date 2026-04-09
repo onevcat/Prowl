@@ -43,6 +43,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
   enum Kind: Equatable {
     case checkForUpdates
     case openRepository
+    case revealInFinder
     case worktreeSelect(Worktree.ID)
     case openSettings
     case newWorktree
@@ -101,7 +102,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
 
   var isGlobal: Bool {
     switch kind {
-    case .checkForUpdates, .openRepository, .openSettings, .newWorktree, .viewArchivedWorktrees,
+    case .checkForUpdates, .openRepository, .revealInFinder, .openSettings, .newWorktree, .viewArchivedWorktrees,
       .refreshWorktrees, .installCLI, .jumpToLatestUnread:
       return true
     case .openPullRequest,
@@ -148,7 +149,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
     case .checkForUpdates, .openRepository, .openSettings, .newWorktree, .viewArchivedWorktrees,
       .refreshWorktrees, .installCLI, .jumpToLatestUnread:
       return true
-    case .ghosttyCommand:
+    case .ghosttyCommand, .revealInFinder:
       return false
     case .openPullRequest,
       .openRepositoryOnCodeHost,
@@ -232,6 +233,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
     case .renameBranch:
       return AppShortcuts.CommandID.renameBranch
     case .ghosttyCommand,
+      .revealInFinder,
       .markPullRequestReady,
       .mergePullRequest,
       .closePullRequest,

@@ -13,6 +13,7 @@ struct TerminalClient {
   var focusSurface: @MainActor @Sendable (Worktree.ID, UUID) -> Bool
   var markNotificationRead: @MainActor @Sendable (Worktree.ID, UUID) -> Void
   var markNotificationsReadForSurface: @MainActor @Sendable (Worktree.ID, UUID) -> Void
+  var focusedDirectoryPath: @MainActor @Sendable (_ worktreeID: Worktree.ID) -> String?
 
   enum Command: Equatable {
     case createTab(Worktree, runSetupScriptIfNew: Bool)
@@ -86,7 +87,8 @@ extension TerminalClient: DependencyKey {
     latestUnreadNotification: { nil },
     focusSurface: { _, _ in false },
     markNotificationRead: { _, _ in },
-    markNotificationsReadForSurface: { _, _ in }
+    markNotificationsReadForSurface: { _, _ in },
+    focusedDirectoryPath: { _ in nil }
   )
 
   static let testValue = TerminalClient(
@@ -97,7 +99,8 @@ extension TerminalClient: DependencyKey {
     latestUnreadNotification: { nil },
     focusSurface: { _, _ in false },
     markNotificationRead: { _, _ in },
-    markNotificationsReadForSurface: { _, _ in }
+    markNotificationsReadForSurface: { _, _ in },
+    focusedDirectoryPath: { _ in nil }
   )
 }
 

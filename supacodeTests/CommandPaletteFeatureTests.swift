@@ -434,6 +434,33 @@ struct CommandPaletteFeatureTests {
     #expect(ghosttyItem?.subtitle == "Open a new tab.")
   }
 
+  @Test func commandPaletteItems_includeRevealInFinderWhenWorktreeSelected() {
+    let rootPath = "/tmp/repo"
+    let worktree = makeWorktree(id: rootPath, name: "repo", repoRoot: rootPath)
+    let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .worktree(worktree.id)
+
+    let items = CommandPaletteFeature.commandPaletteItems(from: state)
+
+    #expect(items.contains(where: { $0.title == "Reveal in Finder" }))
+  }
+
+  @Test func commandPaletteItems_includeRevealInFinderWhenCanvasHasFocusedWorktree() {
+    let rootPath = "/tmp/repo"
+    let worktree = makeWorktree(id: rootPath, name: "repo", repoRoot: rootPath)
+    let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .canvas
+
+    let items = CommandPaletteFeature.commandPaletteItems(
+      from: state,
+      actionTargetWorktreeID: worktree.id
+    )
+
+    #expect(items.contains(where: { $0.title == "Reveal in Finder" }))
+  }
+
   @Test func commandPaletteItems_filtersUnsupportedGhosttyCommands() {
     let rootPath = "/tmp/repo"
     let worktree = makeWorktree(id: rootPath, name: "repo", repoRoot: rootPath)

@@ -369,6 +369,87 @@ struct AppFeatureCommandPaletteTests {
     }
   }
 
+  @Test(.dependencies) func revealInFinderOpensFocusedPaneDirectory() async {
+    let worktree = makeWorktree(
+      id: "/tmp/repo-reveal-open/wt-1",
+      name: "wt-1",
+      repoRoot: "/tmp/repo-reveal-open"
+    )
+    let repository = makeRepository(id: "/tmp/repo-reveal-open", worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    repositoriesState.selection = .worktree(worktree.id)
+    let captured = LockIsolated<[(OpenWorktreeAction, Worktree)]>([])
+    let requestedWorktreeIDs = LockIsolated<[Worktree.ID]>([])
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositoriesState,
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.focusedDirectoryPath = { worktreeID in
+        requestedWorktreeIDs.withValue { $0.append(worktreeID) }
+        return "/tmp/repo-reveal-open/wt-1/deep/nested"
+      }
+      $0.workspaceClient.open = { action, worktree, _ in
+        captured.withValue { $0.append((action, worktree)) }
+      }
+    }
+
+    await store.send(.commandPalette(.delegate(.revealInFinder)))
+    await store.finish()
+
+    #expect(requestedWorktreeIDs.value == [worktree.id])
+    #expect(captured.value.count == 1)
+    #expect(captured.value.first?.0 == .finder)
+    #expect(
+      captured.value.first?.1.workingDirectory.path(percentEncoded: false) == "/tmp/repo-reveal-open/wt-1/deep/nested"
+    )
+  }
+
+  @Test(.dependencies) func revealInFinderFallsBackToWorktreeDirectoryWhenFocusedDirectoryMissing() async {
+    let worktree = makeWorktree(
+      id: "/tmp/repo-reveal-fallback/wt-2",
+      name: "wt-2",
+      repoRoot: "/tmp/repo-reveal-fallback"
+    )
+    let repository = makeRepository(id: "/tmp/repo-reveal-fallback", worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    repositoriesState.selection = .worktree(worktree.id)
+    let captured = LockIsolated<[(OpenWorktreeAction, Worktree)]>([])
+    let requestedWorktreeIDs = LockIsolated<[Worktree.ID]>([])
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositoriesState,
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.focusedDirectoryPath = { worktreeID in
+        requestedWorktreeIDs.withValue { $0.append(worktreeID) }
+        return nil
+      }
+      $0.workspaceClient.open = { action, worktree, _ in
+        captured.withValue { $0.append((action, worktree)) }
+      }
+    }
+
+    await store.send(.commandPalette(.delegate(.revealInFinder)))
+    await store.finish()
+
+    #expect(requestedWorktreeIDs.value == [worktree.id])
+    #expect(captured.value.count == 1)
+    #expect(captured.value.first?.0 == .finder)
+    #expect(
+      captured.value.first?.1.workingDirectory.path(percentEncoded: false)
+        == worktree.workingDirectory.path(percentEncoded: false)
+    )
+  }
+
   @Test(.dependencies) func refreshWorktreesDispatchesRefresh() async {
     let store = TestStore(initialState: AppFeature.State()) {
       AppFeature()
@@ -577,30 +658,6 @@ struct AppFeatureCommandPaletteTests {
     await store.finish()
 
     #expect(!sent.value.contains(.focusSelectedTab(worktree)))
-  }
-
-  @Test(.dependencies) func revealInFinderDispatchesOpenWorktreeFinder() async {
-    let worktree = makeWorktree(
-      id: "/tmp/repo-finder/wt-1",
-      name: "wt-1",
-      repoRoot: "/tmp/repo-finder"
-    )
-    let repository = makeRepository(id: "/tmp/repo-finder", worktrees: [worktree])
-    var repositoriesState = RepositoriesFeature.State()
-    repositoriesState.repositories = [repository]
-    repositoriesState.selection = .worktree(worktree.id)
-    let store = TestStore(
-      initialState: AppFeature.State(
-        repositories: repositoriesState,
-        settings: SettingsFeature.State()
-      )
-    ) {
-      AppFeature()
-    }
-    store.exhaustivity = .off
-
-    await store.send(.commandPalette(.delegate(.revealInFinder)))
-    await store.receive(\.openWorktree)
   }
 
   @Test(.dependencies) func copyPathWritesWorktreePathToPasteboard() async {

@@ -40,4 +40,34 @@ struct WorktreeTerminalStateTests {
 
     #expect(resolved == nil)
   }
+
+  @Test func preferredRevealInFinderPathPrefersRuntimePWD() {
+    let path = WorktreeTerminalState.preferredRevealInFinderPath(
+      runtimePWD: " /tmp/repo/wt/deep \n",
+      inheritedWorkingDirectory: "/tmp/repo/wt",
+      worktreeDirectory: "/tmp/repo"
+    )
+
+    #expect(path == "/tmp/repo/wt/deep")
+  }
+
+  @Test func preferredRevealInFinderPathFallsBackToInheritedWorkingDirectory() {
+    let path = WorktreeTerminalState.preferredRevealInFinderPath(
+      runtimePWD: " \n ",
+      inheritedWorkingDirectory: "/tmp/repo/wt",
+      worktreeDirectory: "/tmp/repo"
+    )
+
+    #expect(path == "/tmp/repo/wt")
+  }
+
+  @Test func preferredRevealInFinderPathFallsBackToWorktreeDirectory() {
+    let path = WorktreeTerminalState.preferredRevealInFinderPath(
+      runtimePWD: nil,
+      inheritedWorkingDirectory: nil,
+      worktreeDirectory: "/tmp/repo"
+    )
+
+    #expect(path == "/tmp/repo")
+  }
 }

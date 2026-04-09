@@ -341,6 +341,9 @@ struct SupacodeApp: App {
       },
       markNotificationsReadForSurface: { worktreeID, surfaceID in
         terminalManager.markNotificationsRead(worktreeID: worktreeID, surfaceID: surfaceID)
+      },
+      focusedDirectoryPath: { worktreeID in
+        terminalManager.focusedDirectoryPath(for: worktreeID)
       }
     )
   }

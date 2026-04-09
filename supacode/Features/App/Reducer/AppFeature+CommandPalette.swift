@@ -159,7 +159,24 @@ extension AppFeature {
       }
 
     case .revealInFinder:
-      return .send(.openWorktree(.finder))
+      guard let worktree = terminalCommandWorktree(repositories: state.repositories) else {
+        return .none
+      }
+      let resolvedPath = terminalClient.focusedDirectoryPath(worktree.id)
+        ?? worktree.workingDirectory.path(percentEncoded: false)
+      let resolvedURL = URL(fileURLWithPath: resolvedPath).standardizedFileURL
+      let revealWorktree = Worktree(
+        id: worktree.id,
+        name: worktree.name,
+        detail: worktree.detail,
+        workingDirectory: resolvedURL,
+        repositoryRootURL: worktree.repositoryRootURL
+      )
+      return .run { send in
+        await workspaceClient.open(.finder, revealWorktree) { error in
+          send(.openWorktreeFailed(error))
+        }
+      }
 
     case .copyPath:
       guard let worktree = state.repositories.selectedTerminalWorktree else {

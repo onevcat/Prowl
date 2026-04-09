@@ -296,6 +296,10 @@ final class WorktreeTerminalManager {
     return state
   }
 
+  func focusedDirectoryPath(for worktreeID: Worktree.ID) -> String? {
+    stateIfExists(for: worktreeID)?.focusedDirectoryPathForRevealInFinder()
+  }
+
   private func createTabAsync(
     in worktree: Worktree,
     runSetupScriptIfNew: Bool,
