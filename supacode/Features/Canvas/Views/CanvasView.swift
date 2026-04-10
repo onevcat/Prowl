@@ -46,6 +46,7 @@ struct CanvasView: View {
   /// A one-shot, reducer-driven request to run a view-local canvas command
   /// (expand/arrange/organize/select-all), e.g. from the command palette.
   var commandRequest: CanvasCommandRequest?
+  var suspendTerminalFocus = false
   var onFocusedWorktreeChanged: (Worktree.ID?) -> Void = { _ in }
   var onFocusRequestConsumed: (Int) -> Void = { _ in }
   var onCommandConsumed: (Int) -> Void = { _ in }
@@ -136,6 +137,7 @@ struct CanvasView: View {
     repositoryCustomTitles: [Repository.ID: String] = [:],
     focusRequest: CanvasFocusRequest? = nil,
     commandRequest: CanvasCommandRequest? = nil,
+    suspendTerminalFocus: Bool = false,
     onFocusedWorktreeChanged: @escaping (Worktree.ID?) -> Void = { _ in },
     onFocusRequestConsumed: @escaping (Int) -> Void = { _ in },
     onCommandConsumed: @escaping (Int) -> Void = { _ in },
@@ -148,6 +150,7 @@ struct CanvasView: View {
     self.repositoryCustomTitles = repositoryCustomTitles
     self.focusRequest = focusRequest
     self.commandRequest = commandRequest
+    self.suspendTerminalFocus = suspendTerminalFocus
     self.onFocusedWorktreeChanged = onFocusedWorktreeChanged
     self.onFocusRequestConsumed = onFocusRequestConsumed
     self.onCommandConsumed = onCommandConsumed
@@ -348,6 +351,13 @@ struct CanvasView: View {
     }
     .onChange(of: commandRequest) { _, newRequest in
       fulfillCommandRequest(newRequest)
+    }
+    .onChange(of: suspendTerminalFocus) { wasSuspended, isSuspended in
+      handleTerminalFocusSuspensionChange(
+        from: wasSuspended,
+        to: isSuspended,
+        states: terminalManager.activeWorktreeStates
+      )
     }
     .task {
       activateCanvas()
@@ -1428,11 +1438,7 @@ struct CanvasView: View {
   }
 
   func restoreCanvasTerminalFocusAfterDirectionalChord(to tabID: TerminalTabID?) {
-    guard let tabID else { return }
-    let states = terminalManager.activeWorktreeStates
-    guard let state = states.first(where: { $0.surfaceView(for: tabID) != nil }) else { return }
-    guard let surface = state.surfaceView(for: tabID) else { return }
-    surface.requestFocus()
+    restoreCanvasTerminalFocus(to: tabID, states: terminalManager.activeWorktreeStates)
   }
 
   func cancelDirectionalNewTerminalTimeoutTask() {
@@ -2000,4 +2006,13 @@ func canvasCurrentVisibleTabID(
     return selectedTabID
   }
   return visibleTabIDs.first
+}
+
+func canvasRestoredFocusTabID(
+  wasSuspended: Bool,
+  isSuspended: Bool,
+  focusedTabID: TerminalTabID?
+) -> TerminalTabID? {
+  guard wasSuspended, !isSuspended else { return nil }
+  return focusedTabID
 }

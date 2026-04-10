@@ -439,6 +439,7 @@ struct WorktreeDetailView: View {
         repositoryCustomTitles: repositories.repositoryCustomTitles,
         focusRequest: repositories.pendingCanvasFocusRequest,
         commandRequest: repositories.pendingCanvasCommandRequest,
+        suspendTerminalFocus: commandPalettePresented,
         onFocusedWorktreeChanged: { worktreeID in
           store.send(.canvasFocusedWorktreeChanged(worktreeID))
         },

@@ -258,6 +258,41 @@ extension CanvasView {
     }
   }
 
+  func restoreCanvasTerminalFocus(
+    to tabID: TerminalTabID?,
+    states: [WorktreeTerminalState]
+  ) {
+    guard let tabID else { return }
+    guard let state = states.first(where: { $0.surfaceView(for: tabID) != nil }) else { return }
+    guard let surface = state.surfaceView(for: tabID) else { return }
+    state.tabManager.selectTab(tabID)
+    terminalManager.canvasFocusedWorktreeID = state.worktreeID
+    setFocusedWorktreeID(state.worktreeID)
+    surface.focusDidChange(true)
+    surface.requestFocus()
+  }
+
+  func handleTerminalFocusSuspensionChange(
+    from wasSuspended: Bool,
+    to isSuspended: Bool,
+    states: [WorktreeTerminalState]
+  ) {
+    if isSuspended, let focusedTabID = selectionState.primaryTabID {
+      unfocusTab(focusedTabID, states: states)
+      return
+    }
+    guard
+      let restoreTabID = canvasRestoredFocusTabID(
+        wasSuspended: wasSuspended,
+        isSuspended: isSuspended,
+        focusedTabID: selectionState.primaryTabID
+      )
+    else {
+      return
+    }
+    restoreCanvasTerminalFocus(to: restoreTabID, states: states)
+  }
+
   func syncBroadcastCallbacks(states: [WorktreeTerminalState]) {
     clearBroadcastCallbacks(states: states)
 
