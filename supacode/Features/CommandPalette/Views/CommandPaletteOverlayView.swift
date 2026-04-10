@@ -509,6 +509,22 @@ private struct CommandPaletteSectionHeader: View {
   }
 }
 
+@MainActor
+private enum CommandPaletteAppIcons {
+  static let openInFork = appImage(for: .fork)
+  static let revealInFinder = appImage(for: .finder)
+
+  private static func appImage(for action: OpenWorktreeAction) -> NSImage? {
+    guard let menuIcon = action.menuIcon else { return nil }
+    switch menuIcon {
+    case .app(let image):
+      return image
+    case .symbol:
+      return nil
+    }
+  }
+}
+
 private struct CommandPaletteRowView: View {
   let row: CommandPaletteItem
   let resolvedKeybindings: ResolvedKeybindingMap
@@ -520,7 +536,7 @@ private struct CommandPaletteRowView: View {
   private var badge: String? {
     switch row.kind {
     case .checkForUpdates, .openRepository, .layoutCenter, .layoutArrange, .layoutOverview,
-      .openInFork, .copyPath, .revealInFinder, .openSettings, .newWorktree, .viewArchivedWorktrees,
+      .openInFork, .openSettings, .newWorktree, .viewArchivedWorktrees,
       .refreshWorktrees, .installCLI, .jumpToLatestUnread, .ghosttyCommand,
       .openPullRequest, .openRepositoryOnCodeHost, .markPullRequestReady, .mergePullRequest, .closePullRequest,
       .copyFailingJobURL,
@@ -556,10 +572,6 @@ private struct CommandPaletteRowView: View {
       return "binoculars"
     case .openInFork:
       return "arrow.triangle.branch"
-    case .copyPath:
-      return "doc.on.doc"
-    case .revealInFinder:
-      return "folder.badge.gearshape"
     case .openSettings:
       return "gearshape"
     case .newWorktree:
@@ -643,10 +655,32 @@ private struct CommandPaletteRowView: View {
     }
   }
 
+  private var appIcon: NSImage? {
+    switch row.kind {
+    case .openInFork:
+      return CommandPaletteAppIcons.openInFork
+    case .revealInFinder:
+      return CommandPaletteAppIcons.revealInFinder
+    case .checkForUpdates, .openRepository, .layoutCenter, .layoutArrange, .layoutOverview,
+      .copyPath, .openSettings, .newWorktree, .viewArchivedWorktrees, .refreshWorktrees,
+      .jumpToLatestUnread, .installCLI, .ghosttyCommand, .openPullRequest, .openRepositoryOnCodeHost,
+      .markPullRequestReady, .mergePullRequest, .closePullRequest, .copyFailingJobURL, .copyCiFailureLogs,
+      .rerunFailedJobs, .openFailingCheckDetails, .worktreeSelect, .changeFocusedTabIcon,
+      .toggleLeftSidebar, .toggleActiveAgentsPanel, .toggleCanvas, .toggleShelf, .showDiff,
+      .revealInSidebar, .runScript, .stopRunScript, .togglePinWorktree, .renameBranch,
+      .openRepositorySettings, .deleteWorktree, .runCustomCommand:
+      return nil
+    #if DEBUG
+      case .debugTestToast, .debugSimulateUpdateFound, .debugLightDockNotificationDot:
+        return nil
+    #endif
+    }
+  }
+
   private var emphasis: Bool {
     switch row.kind {
     case .checkForUpdates, .openRepository, .layoutCenter, .layoutArrange, .layoutOverview,
-      .openInFork, .copyPath, .revealInFinder, .openSettings, .newWorktree, .viewArchivedWorktrees,
+      .openInFork, .openSettings, .newWorktree, .viewArchivedWorktrees,
       .refreshWorktrees, .installCLI, .jumpToLatestUnread, .ghosttyCommand,
       .openPullRequest, .openRepositoryOnCodeHost, .markPullRequestReady, .mergePullRequest, .closePullRequest,
       .copyFailingJobURL,
@@ -670,11 +704,22 @@ private struct CommandPaletteRowView: View {
   }
 
   var body: some View {
+    let foregroundColors = commandPaletteRowForegroundColors(isSelected: isSelected)
+    let primaryForeground = Color(nsColor: foregroundColors.primary)
+    let secondaryForeground = Color(nsColor: foregroundColors.secondary)
+
     Button(action: activate) {
       HStack(spacing: 8) {
-        if let leadingIcon {
+        if let appIcon {
+          Image(nsImage: appIcon)
+            .resizable()
+            .interpolation(.high)
+            .scaledToFit()
+            .frame(width: 16, height: 16, alignment: .center)
+            .accessibilityHidden(true)
+        } else if let leadingIcon {
           Image(systemName: leadingIcon)
-            .foregroundStyle(emphasis ? .primary : .secondary)
+            .foregroundStyle(emphasis ? primaryForeground : secondaryForeground)
             .font(.subheadline.weight(.medium))
             .frame(width: 16, height: 16, alignment: .center)
             .accessibilityHidden(true)
@@ -683,11 +728,12 @@ private struct CommandPaletteRowView: View {
         VStack(alignment: .leading, spacing: 2) {
           Text(titleText)
             .fontWeight(emphasis ? .medium : .regular)
+            .foregroundStyle(primaryForeground)
 
           if let subtitle = row.subtitle {
             Text(subtitle)
               .font(.caption)
-              .foregroundStyle(.secondary)
+              .foregroundStyle(secondaryForeground)
           }
         }
 
@@ -701,12 +747,12 @@ private struct CommandPaletteRowView: View {
             .background(
               Capsule().fill(Color(nsColor: .quaternaryLabelColor))
             )
-            .foregroundStyle(.secondary)
+            .foregroundStyle(secondaryForeground)
         }
 
         if let shortcutIndex {
           ShortcutSymbolsView(symbols: commandPaletteShortcutSymbols(for: shortcutIndex))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(secondaryForeground)
         }
       }
       .padding(8)
@@ -808,10 +854,6 @@ private struct CommandPaletteRowView: View {
       base = "Toggle Shelf"
     case .showDiff:
       base = "Show Diff"
-    case .revealInFinder:
-      base = "Reveal in Finder"
-    case .copyPath:
-      base = "Copy Path"
     case .revealInSidebar:
       base = "Reveal in Sidebar"
     case .runScript:
@@ -852,6 +894,24 @@ private struct CommandPaletteRowView: View {
   private var explicitShortcutLabel: String? {
     row.appShortcutLabel(in: resolvedKeybindings)
   }
+}
+
+struct CommandPaletteRowForegroundColors {
+  let primary: NSColor
+  let secondary: NSColor
+}
+
+func commandPaletteRowForegroundColors(isSelected: Bool) -> CommandPaletteRowForegroundColors {
+  if isSelected {
+    return CommandPaletteRowForegroundColors(
+      primary: .alternateSelectedControlTextColor,
+      secondary: .alternateSelectedControlTextColor
+    )
+  }
+  return CommandPaletteRowForegroundColors(
+    primary: .labelColor,
+    secondary: .secondaryLabelColor
+  )
 }
 
 private struct ShortcutSymbolsView: View {
