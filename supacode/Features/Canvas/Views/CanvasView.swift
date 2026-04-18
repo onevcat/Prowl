@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import Sharing
 import SwiftUI
 
@@ -48,6 +49,7 @@ struct CanvasView: View {
   var commandRequest: CanvasCommandRequest?
   var suspendTerminalFocus = false
   var onFocusedWorktreeChanged: (Worktree.ID?) -> Void = { _ in }
+  var onFocusedTabChanged: (TerminalTabID?) -> Void = { _ in }
   var onFocusRequestConsumed: (Int) -> Void = { _ in }
   var onCommandConsumed: (Int) -> Void = { _ in }
   var onViewportStateChanged: ((ViewportState) -> Void)?
@@ -139,6 +141,7 @@ struct CanvasView: View {
     commandRequest: CanvasCommandRequest? = nil,
     suspendTerminalFocus: Bool = false,
     onFocusedWorktreeChanged: @escaping (Worktree.ID?) -> Void = { _ in },
+    onFocusedTabChanged: @escaping (TerminalTabID?) -> Void = { _ in },
     onFocusRequestConsumed: @escaping (Int) -> Void = { _ in },
     onCommandConsumed: @escaping (Int) -> Void = { _ in },
     viewportState: ViewportState = .init(),
@@ -152,6 +155,7 @@ struct CanvasView: View {
     self.commandRequest = commandRequest
     self.suspendTerminalFocus = suspendTerminalFocus
     self.onFocusedWorktreeChanged = onFocusedWorktreeChanged
+    self.onFocusedTabChanged = onFocusedTabChanged
     self.onFocusRequestConsumed = onFocusRequestConsumed
     self.onCommandConsumed = onCommandConsumed
     self.onViewportStateChanged = onViewportStateChanged

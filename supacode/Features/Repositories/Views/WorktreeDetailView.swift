@@ -3,6 +3,8 @@ import ComposableArchitecture
 import Sharing
 import SwiftUI
 
+private let canvasLaunchRestoreLogger = SupaLogger("CanvasLaunchRestore")
+
 struct WorktreeDetailView: View {
   private struct ToolbarStateInput {
     let repositories: RepositoriesFeature.State
@@ -43,8 +45,13 @@ struct WorktreeDetailView: View {
   /// True while a Canvas card is expanded in place, so the otherwise-transparent
   /// Canvas toolbar gets a matching material scrim instead of showing through.
   @State private var isCanvasCardExpanded = false
+  @State private var canvasFocusedWorktreeID: Worktree.ID?
+  @State private var canvasFocusedTabID: TerminalTabID?
   @State private var canvasViewportState = CanvasView.ViewportState()
   @State private var nonCanvasSnapshotAtCanvasExit: CanvasSelectionSnapshot?
+  @State private var pendingLaunchRestoreTarget: CanvasRestoreFocusTarget?
+  @AppStorage(lastCanvasFocusedWorktreeIDAppStorageKey) private var lastCanvasFocusedWorktreeID = ""
+  @AppStorage(lastCanvasFocusedTabIDAppStorageKey) private var lastCanvasFocusedTabID = ""
 
   var body: some View {
     detailBody(state: store.state)
@@ -58,15 +65,24 @@ struct WorktreeDetailView: View {
         )
       }
       .onChange(of: canvasViewportState.hasPerformedInitialFit) { _, _ in
+        queueCanvasFocusOnEntryIfNeeded(repositories: store.state.repositories)
         handleLaunchRestoreSoloCenteringIfNeeded(
           repositories: store.state.repositories,
           visibleSnapshots: canvasVisibleSelectionSnapshots()
         )
       }
       .onChange(of: canvasVisibleSelectionSnapshots()) { _, newSnapshots in
+        queueCanvasFocusOnEntryIfNeeded(repositories: store.state.repositories)
         handleLaunchRestoreSoloCenteringIfNeeded(
           repositories: store.state.repositories,
           visibleSnapshots: newSnapshots
+        )
+      }
+      .onChange(of: terminalManager.lastFocusChange) { _, focusChange in
+        handleCanvasTerminalFocusChange(
+          focusChange,
+          repositories: store.state.repositories,
+          isTerminalFocusSuspended: store.state.commandPalette.isPresented
         )
       }
   }
@@ -109,6 +125,7 @@ struct WorktreeDetailView: View {
       selectedWorktree: selectedWorktree,
       selectedTerminalWorktree: selectedTerminalWorktree,
       selectedWorktreeSummaries: selectedWorktreeSummaries,
+      isAwaitingLaunchLayoutRestore: state.isAwaitingLaunchLayoutRestore,
       commandPalettePresented: state.commandPalette.isPresented
     )
     .navigationTitle(WindowTitle.compute(repositories: repositories, terminalManager: terminalManager))
@@ -431,6 +448,7 @@ struct WorktreeDetailView: View {
     selectedWorktree: Worktree?,
     selectedTerminalWorktree: Worktree?,
     selectedWorktreeSummaries: [MultiSelectedWorktreeSummary],
+    isAwaitingLaunchLayoutRestore: Bool,
     commandPalettePresented: Bool
   ) -> some View {
     if repositories.isShowingCanvas {
@@ -441,9 +459,28 @@ struct WorktreeDetailView: View {
         commandRequest: repositories.pendingCanvasCommandRequest,
         suspendTerminalFocus: commandPalettePresented,
         onFocusedWorktreeChanged: { worktreeID in
+          canvasFocusedWorktreeID = worktreeID
+          if pendingLaunchRestoreTarget == nil, let worktreeID {
+            lastCanvasFocusedWorktreeID = worktreeID
+          }
           store.send(.canvasFocusedWorktreeChanged(worktreeID))
         },
+        onFocusedTabChanged: { tabID in
+          canvasFocusedTabID = tabID
+          if pendingLaunchRestoreTarget == nil, let tabID {
+            lastCanvasFocusedTabID = tabID.rawValue.uuidString
+          }
+        },
         onFocusRequestConsumed: { requestID in
+          if let pendingLaunchRestoreTarget,
+            let request = store.state.repositories.pendingCanvasFocusRequest,
+            request.id == requestID,
+            request.target == .tab(pendingLaunchRestoreTarget.tabID)
+          {
+            lastCanvasFocusedWorktreeID = pendingLaunchRestoreTarget.worktreeID
+            lastCanvasFocusedTabID = pendingLaunchRestoreTarget.tabID.rawValue.uuidString
+            self.pendingLaunchRestoreTarget = nil
+          }
           store.send(.repositories(.consumeCanvasFocusRequest(requestID)))
         },
         onCommandConsumed: { requestID in
@@ -490,6 +527,8 @@ struct WorktreeDetailView: View {
         createTab: { store.send(.newTerminal) }
       )
       .frame(maxWidth: .infinity, maxHeight: .infinity)
+    } else if isAwaitingLaunchLayoutRestore {
+      LaunchRestorePlaceholderView()
     } else {
       // Normal view mode (terminal, archived list, multi-selection, loading,
       // repository detail, empty): tint the toolbar (top) and nav (leading)
@@ -810,11 +849,16 @@ struct WorktreeDetailView: View {
     let repositories = store.state.repositories
 
     if wasCanvas && !isCanvas {
+      canvasFocusedWorktreeID = nil
+      canvasFocusedTabID = nil
       nonCanvasSnapshotAtCanvasExit = currentCanvasReturnSnapshot(from: repositories)
+      pendingLaunchRestoreTarget = nil
       return
     }
 
     guard !wasCanvas, isCanvas else { return }
+    canvasFocusedWorktreeID = nil
+    canvasFocusedTabID = nil
     queueCanvasFocusOnEntryIfNeeded(repositories: repositories)
     handleLaunchRestoreSoloCenteringIfNeeded(
       repositories: repositories,
@@ -824,14 +868,93 @@ struct WorktreeDetailView: View {
 
   private func queueCanvasFocusOnEntryIfNeeded(repositories: RepositoriesFeature.State) {
     guard canvasViewportState.hasPerformedInitialFit else { return }
-    guard let currentSnapshot = currentCanvasReturnSnapshot(from: repositories) else { return }
-    guard currentSnapshot != nonCanvasSnapshotAtCanvasExit else { return }
+    let visibleSnapshots = canvasVisibleSelectionSnapshots()
+    let fallbackSnapshot = currentCanvasReturnSnapshot(from: repositories)
+    if pendingLaunchRestoreTarget == nil,
+      let initialTarget = restoredCanvasFocusTarget(
+        savedWorktreeID: lastCanvasFocusedWorktreeID.isEmpty ? nil : lastCanvasFocusedWorktreeID,
+        savedTabID: lastCanvasFocusedTabID.isEmpty ? nil : lastCanvasFocusedTabID,
+        fallbackWorktreeID: fallbackSnapshot?.worktreeID,
+        fallbackTabID: fallbackSnapshot?.tabID
+      )
+    {
+      pendingLaunchRestoreTarget = initialTarget
+    }
+    if let pendingLaunchRestoreTarget,
+      !visibleSnapshots.isEmpty,
+      !visibleSnapshots.contains(where: {
+        $0.worktreeID == pendingLaunchRestoreTarget.worktreeID && $0.tabID == pendingLaunchRestoreTarget.tabID
+      })
+    {
+      if let fallbackSnapshot {
+        self.pendingLaunchRestoreTarget = CanvasRestoreFocusTarget(
+          worktreeID: fallbackSnapshot.worktreeID,
+          tabID: fallbackSnapshot.tabID
+        )
+      } else {
+        self.pendingLaunchRestoreTarget = nil
+      }
+    }
+    guard let requestedSnapshot = self.pendingLaunchRestoreTarget ?? restoredCanvasFocusTarget(
+      savedWorktreeID: lastCanvasFocusedWorktreeID.isEmpty ? nil : lastCanvasFocusedWorktreeID,
+      savedTabID: lastCanvasFocusedTabID.isEmpty ? nil : lastCanvasFocusedTabID,
+      fallbackWorktreeID: fallbackSnapshot?.worktreeID,
+      fallbackTabID: fallbackSnapshot?.tabID
+    ) else { return }
+    let currentSnapshot =
+      if visibleSnapshots.contains(where: {
+        $0.worktreeID == requestedSnapshot.worktreeID && $0.tabID == requestedSnapshot.tabID
+      }) {
+        requestedSnapshot
+      } else if let fallbackSnapshot {
+        CanvasRestoreFocusTarget(worktreeID: fallbackSnapshot.worktreeID, tabID: fallbackSnapshot.tabID)
+      } else {
+        requestedSnapshot
+      }
+    if let nonCanvasSnapshotAtCanvasExit,
+      currentSnapshot.worktreeID == nonCanvasSnapshotAtCanvasExit.worktreeID,
+      currentSnapshot.tabID == nonCanvasSnapshotAtCanvasExit.tabID
+    {
+      return
+    }
     store.send(
       .repositories(
         .focusCanvasTab(
           worktreeID: currentSnapshot.worktreeID,
           tabID: currentSnapshot.tabID,
           shouldCenterInViewport: true
+        )))
+  }
+
+  private func handleCanvasTerminalFocusChange(
+    _ focusChange: WorktreeTerminalManager.FocusChange?,
+    repositories: RepositoriesFeature.State,
+    isTerminalFocusSuspended: Bool
+  ) {
+    guard let focusChange else { return }
+    guard
+      let tabID = terminalManager.stateIfExists(for: focusChange.worktreeID)?.tabID(containing: focusChange.surfaceID)
+    else {
+      return
+    }
+    guard let target = canvasFocusTargetForTerminalFocusChange(
+      isShowingCanvas: repositories.isShowingCanvas,
+      isTerminalFocusSuspended: isTerminalFocusSuspended,
+      focusTarget: CanvasExternalFocusTarget(
+        worktreeID: focusChange.worktreeID,
+        tabID: tabID
+      ),
+      currentFocusedWorktreeID: canvasFocusedWorktreeID,
+      currentFocusedTabID: canvasFocusedTabID
+    )
+    else {
+      return
+    }
+    store.send(
+      .repositories(
+        .focusCanvasTab(
+          worktreeID: target.worktreeID,
+          tabID: target.tabID
         )))
   }
 
@@ -1239,4 +1362,71 @@ struct WorktreeDetailView: View {
     }
     return nil
   }
+}
+
+private struct LaunchRestorePlaceholderView: View {
+  @Environment(\.surfaceBackgroundOpacity) private var surfaceBackgroundOpacity
+
+  var body: some View {
+    VStack(spacing: 10) {
+      ProgressView()
+      Text("Restoring saved tabs")
+        .font(.headline)
+      Text("Loading the last terminal layout and workspace selection.")
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
+        .multilineTextAlignment(.center)
+    }
+    .frame(maxWidth: 480)
+    .padding(.horizontal, 16)
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+    .background(Color(nsColor: .windowBackgroundColor).opacity(surfaceBackgroundOpacity))
+  }
+}
+
+struct CanvasRestoreFocusTarget: Equatable {
+  let worktreeID: Worktree.ID
+  let tabID: TerminalTabID
+}
+
+struct CanvasExternalFocusTarget: Equatable {
+  let worktreeID: Worktree.ID
+  let tabID: TerminalTabID
+}
+
+func restoredCanvasFocusTarget(
+  savedWorktreeID: Worktree.ID?,
+  savedTabID: String?,
+  fallbackWorktreeID: Worktree.ID?,
+  fallbackTabID: TerminalTabID?
+) -> CanvasRestoreFocusTarget? {
+  if let savedWorktreeID,
+    let savedTabID,
+    let savedTabUUID = UUID(uuidString: savedTabID)
+  {
+    return CanvasRestoreFocusTarget(
+      worktreeID: savedWorktreeID,
+      tabID: TerminalTabID(rawValue: savedTabUUID)
+    )
+  }
+
+  guard let fallbackWorktreeID, let fallbackTabID else { return nil }
+  return CanvasRestoreFocusTarget(worktreeID: fallbackWorktreeID, tabID: fallbackTabID)
+}
+
+func canvasFocusTargetForTerminalFocusChange(
+  isShowingCanvas: Bool,
+  isTerminalFocusSuspended: Bool,
+  focusTarget: CanvasExternalFocusTarget?,
+  currentFocusedWorktreeID: Worktree.ID?,
+  currentFocusedTabID: TerminalTabID?
+) -> CanvasExternalFocusTarget? {
+  guard isShowingCanvas, let focusTarget else { return nil }
+  guard !isTerminalFocusSuspended else { return nil }
+  guard
+    focusTarget.worktreeID != currentFocusedWorktreeID || focusTarget.tabID != currentFocusedTabID
+  else {
+    return nil
+  }
+  return focusTarget
 }

@@ -114,6 +114,21 @@ extension AppFeature {
     return terminalWorktree(for: worktreeID, repositories: repositories)
   }
 
+  func canvasFocusedWorktree(
+    focusedWorktreeID: Worktree.ID?,
+    state: State
+  ) -> Worktree? {
+    if let focusedWorktreeID {
+      if focusedWorktreeID == FreestyleTerminal.worktreeID {
+        return FreestyleTerminal.worktree()
+      }
+      if let worktree = terminalWorktree(for: focusedWorktreeID, repositories: state.repositories) {
+        return worktree
+      }
+    }
+    return canvasFocusedTerminalWorktree(repositories: state.repositories)
+  }
+
   func terminalWorktree(
     for worktreeID: Worktree.ID,
     repositories: RepositoriesFeature.State

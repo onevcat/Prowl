@@ -103,6 +103,7 @@ extension AppFeature {
       return layoutRestoredEffect(selectedWorktreeID: selectedWorktreeID, state: &state)
 
     case .layoutRestoreFailed(let message):
+      state.isAwaitingLaunchLayoutRestore = false
       appLogger.warning("[LayoutRestore] layoutRestoreFailed: \(message)")
       return .merge(
         .send(.repositories(.showToast(.warning(message)))),
@@ -218,20 +219,32 @@ extension AppFeature {
     selectedWorktreeID: Worktree.ID?,
     state: inout State
   ) -> Effect<Action> {
-    appLogger.info("[LayoutRestore] layoutRestored: selectedWorktreeID=\(selectedWorktreeID ?? "nil")")
+    state.isAwaitingLaunchLayoutRestore = false
+    appLogger.info(
+      "[LayoutRestore] layoutRestored: selectedWorktreeID=\(selectedWorktreeID ?? "nil")"
+        + " repositoriesSelection(before)=\(String(describing: state.repositories.selection))"
+    )
+    @Shared(.appStorage(restoreCanvasModeOnLaunchAppStorageKey)) var restoreCanvasModeOnLaunch = false
+    let restoreTargetWorktreeID =
+      selectedWorktreeID
+      ?? state.repositories.lastFocusedWorktreeID
+      ?? state.repositories.orderedWorktreeRows().first?.id
+    if restoreCanvasModeOnLaunch {
+      return .send(.repositories(.restoreCanvasOnLaunch(restoreTargetWorktreeID)))
+    }
     // Layout restore has settled: tabs are re-created, selection is set.
     // Now apply the default view preference, which was deferred in
     // `repositoriesChanged` (via `shouldDeferDefaultView`) to avoid
     // stray spines and a selection flash.
     var effects: [Effect<Action>] = []
-    if let selectedWorktreeID {
+    if let restoreTargetWorktreeID {
       // Plain folders use .repository selection, not .worktree
-      if let repo = state.repositories.repositories[id: selectedWorktreeID],
+      if let repo = state.repositories.repositories[id: restoreTargetWorktreeID],
         repo.kind == .plain
       {
-        effects.append(.send(.repositories(.selectRepository(selectedWorktreeID))))
+        effects.append(.send(.repositories(.selectRepository(restoreTargetWorktreeID))))
       } else {
-        effects.append(.send(.repositories(.selectWorktree(selectedWorktreeID))))
+        effects.append(.send(.repositories(.selectWorktree(restoreTargetWorktreeID))))
       }
     }
     return .concatenate([.merge(effects), applyDefaultViewMode(into: &state)])

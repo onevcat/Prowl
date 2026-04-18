@@ -12,6 +12,8 @@ nonisolated let archiveScriptProgressLineLimit = 200
 let secondsPerDay: Double = 86_400
 let repositoriesLogger = SupaLogger("RepositoriesFeature")
 nonisolated let restoreCanvasModeOnLaunchAppStorageKey = "restoreCanvasModeOnLaunch"
+nonisolated let lastCanvasFocusedWorktreeIDAppStorageKey = "lastCanvasFocusedWorktreeID"
+nonisolated let lastCanvasFocusedTabIDAppStorageKey = "lastCanvasFocusedTabID"
 
 nonisolated struct WorktreeCreationProgressUpdateThrottle {
   private let stride: Int
@@ -246,6 +248,7 @@ struct RepositoriesFeature {
     var lastFocusedWorktreeID: Worktree.ID?
     var preCanvasWorktreeID: Worktree.ID?
     var preCanvasTerminalTargetID: Worktree.ID?
+    var canvasReturnWorktreeID: Worktree.ID?
     var isShelfActive: Bool = false
     var worktreeHistoryBackStack: [Worktree.ID] = []
     var worktreeHistoryForwardStack: [Worktree.ID] = []
@@ -341,6 +344,7 @@ struct RepositoriesFeature {
     case codeHostsDetected([Repository.ID: CodeHost])
     case selectArchivedWorktrees
     case selectCanvas
+    case restoreCanvasOnLaunch(Worktree.ID?)
     case selectShelf
     case selectTabbed
     case selectFreestyle

@@ -9,6 +9,12 @@ private let layoutRestoreFailureMessage = "Saved terminal layout was invalid and
 @MainActor
 @Observable
 final class WorktreeTerminalManager {
+  struct FocusChange: Equatable {
+    let token: UUID
+    let worktreeID: Worktree.ID
+    let surfaceID: UUID
+  }
+
   private let runtime: GhosttyRuntime?
   private let layoutPersistence: TerminalLayoutPersistenceClient
   private var states: [Worktree.ID: WorktreeTerminalState] = [:]
@@ -29,6 +35,7 @@ final class WorktreeTerminalManager {
   /// The worktree+tab focused in Canvas, updated by CanvasView on card tap.
   /// Used by toggleCanvas to know which worktree to return to.
   var canvasFocusedWorktreeID: Worktree.ID?
+  var lastFocusChange: FocusChange?
 
   init(
     runtime: GhosttyRuntime,
@@ -265,6 +272,11 @@ final class WorktreeTerminalManager {
       emit(.tabClosed(worktreeID: worktree.id, remainingTabs: remaining))
     }
     state.onFocusChanged = { [weak self] surfaceID in
+      self?.lastFocusChange = FocusChange(
+        token: UUID(),
+        worktreeID: worktree.id,
+        surfaceID: surfaceID
+      )
       self?.emit(.focusChanged(worktreeID: worktree.id, surfaceID: surfaceID))
     }
     state.onTaskStatusChanged = { [weak self] status in
@@ -634,6 +646,7 @@ final class WorktreeTerminalManager {
 
   private func makeLayoutSnapshotPayload() -> TerminalLayoutSnapshotPayload? {
     let activeStates = activeWorktreeStates.sorted { $0.worktreeID < $1.worktreeID }
+    let snapshotSelectedWorktreeID = snapshotSelectedWorktreeID(from: activeStates)
     terminalLogger.info(
       "[LayoutRestore] makePayload: activeWorktreeStates=\(activeStates.count)"
         + " totalStates=\(states.count)"
@@ -654,9 +667,23 @@ final class WorktreeTerminalManager {
       snapshotWorktrees.append(snapshot)
     }
     return TerminalLayoutSnapshotPayload(
-      selectedWorktreeID: selectedWorktreeID,
+      selectedWorktreeID: snapshotSelectedWorktreeID,
       worktrees: snapshotWorktrees
     )
+  }
+
+  private func snapshotSelectedWorktreeID(from activeStates: [WorktreeTerminalState]) -> Worktree.ID? {
+    if let selectedWorktreeID,
+      activeStates.contains(where: { $0.worktreeID == selectedWorktreeID })
+    {
+      return selectedWorktreeID
+    }
+    if let canvasFocusedWorktreeID,
+      activeStates.contains(where: { $0.worktreeID == canvasFocusedWorktreeID })
+    {
+      return canvasFocusedWorktreeID
+    }
+    return activeStates.first?.worktreeID
   }
 
   private func applyLayoutSnapshotPayload(

@@ -27,6 +27,7 @@ struct AppFeature {
     var lastKnownSystemNotificationsEnabled: Bool
     var launchRestoreMode: LaunchRestoreMode
     var hasAppliedInitialViewMode = false
+    var isAwaitingLaunchLayoutRestore = false
     var suppressLayoutSaveUntilRelaunch = false
     var launchedAt: Date?
     @Shared(.appStorage("leftSidebarHidden")) var isLeftSidebarHidden = false
@@ -312,17 +313,27 @@ struct AppFeature {
         )
         let worktrees = state.repositories.worktreesForInfoWatcher()
         let openedWorktreeIDs = openedWorktreeIDsForInfoWatcher(from: state.repositories)
+        let canRestoreFromCachedRepositories =
+          state.repositories.snapshotPersistencePhase == .restoring
+          && state.repositories.isInitialLoadComplete
+          && !repositories.isEmpty
         let shouldRestoreLayout =
           state.launchRestoreMode == .restoreLayout
-          && state.repositories.snapshotPersistencePhase == .active
+          && (
+            state.repositories.snapshotPersistencePhase == .active
+              || canRestoreFromCachedRepositories
+          )
         let shouldDeferDefaultView = state.launchRestoreMode == .restoreLayout
         appLogger.info(
           "[LayoutRestore] repositoriesChanged: mode=\(String(describing: state.launchRestoreMode))"
             + " phase=\(String(describing: state.repositories.snapshotPersistencePhase))"
+            + " isInitialLoadComplete=\(state.repositories.isInitialLoadComplete)"
+            + " fastPathReady=\(canRestoreFromCachedRepositories)"
             + " → shouldRestore=\(shouldRestoreLayout)"
         )
         if shouldRestoreLayout {
           state.launchRestoreMode = .lastFocusedWorktree
+          state.isAwaitingLaunchLayoutRestore = true
           state.repositories.selection = nil
         }
         state.runScriptStatusByWorktreeID = state.runScriptStatusByWorktreeID.filter { ids.contains($0.key) }

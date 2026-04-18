@@ -1601,6 +1601,33 @@ struct RepositoriesFeatureTests {
     #expect(defaults.bool(forKey: launchModeKey) == false)
   }
 
+  @Test(.dependencies) func restoreCanvasOnLaunchUsesCanvasSelectionWithoutWorktreeHop() async {
+    let worktree = makeWorktree(id: "/tmp/repo/wt1", name: "wt1", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = nil
+    let sentCommands = LockIsolated<[TerminalClient.Command]>([])
+
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sentCommands.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.restoreCanvasOnLaunch(worktree.id)) {
+      $0.preCanvasWorktreeID = worktree.id
+      $0.preCanvasTerminalTargetID = worktree.id
+      $0.canvasReturnWorktreeID = worktree.id
+      $0.selection = .canvas
+      $0.sidebarSelectedWorktreeIDs = []
+    }
+    await store.finish()
+
+    #expect(sentCommands.value == [.setCanvasMode(true)])
+  }
+
   @Test func toggleCanvasSwitchesBetweenCanvasAndWorktree() async {
     let worktree = makeWorktree(id: "/tmp/repo/wt1", name: "wt1", repoRoot: "/tmp/repo")
     let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])

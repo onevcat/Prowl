@@ -47,4 +47,26 @@ struct CanvasViewportMathTests {
     #expect(result.scale == 1.0)
     #expect(result.offset == CGSize(width: 100, height: 150))
   }
+
+  @Test func focusVisibilityBoundsCanReserveWiderHorizontalGutter() {
+    let baselineBounds = canvasFocusVisibilityBounds(
+      viewportSize: CGSize(width: 1_000, height: 700),
+      horizontalInset: 20,
+      verticalInset: 20,
+      bottomReservedInset: 36
+    )
+    let widenedBounds = canvasFocusVisibilityBounds(
+      viewportSize: CGSize(width: 1_000, height: 700),
+      horizontalInset: 44,
+      verticalInset: 20,
+      bottomReservedInset: 36
+    )
+
+    #expect(widenedBounds.minX == 44)
+    #expect(widenedBounds.maxX == 956)
+    #expect(widenedBounds.minX > baselineBounds.minX)
+    #expect(widenedBounds.maxX < baselineBounds.maxX)
+    #expect(widenedBounds.minY == baselineBounds.minY)
+    #expect(widenedBounds.maxY == baselineBounds.maxY)
+  }
 }

@@ -32,6 +32,7 @@ struct AppFeatureTerminalLayoutRestoreTests {
 
     await store.send(.repositories(.delegate(.repositoriesChanged([repository])))) {
       $0.launchRestoreMode = .lastFocusedWorktree
+      $0.isAwaitingLaunchLayoutRestore = true
       $0.repositories.selection = nil
     }
     await store.finish()
@@ -64,8 +65,8 @@ struct AppFeatureTerminalLayoutRestoreTests {
     }
     store.exhaustivity = .off
 
-    // repositoriesChanged arrives while phase is still .restoring (from snapshot load).
-    // Layout restore must NOT trigger yet — only after phase becomes .active.
+    // repositoriesChanged can still arrive while phase is .restoring for states that are
+    // not yet backed by a loaded repository snapshot. Layout restore must stay blocked there.
     await store.send(.repositories(.delegate(.repositoriesChanged([repository]))))
     await store.finish()
 
@@ -80,6 +81,42 @@ struct AppFeatureTerminalLayoutRestoreTests {
     // launchRestoreMode should remain .restoreLayout so the next repositoriesChanged
     // (after phase → .active) still has a chance to trigger the restore.
     #expect(store.state.launchRestoreMode == .restoreLayout)
+  }
+
+  @Test(.dependencies) func repositoriesChangedDuringRestoringPhaseTriggersFastPathAfterSnapshotLoad() async {
+    let worktree = makeWorktree()
+    let repository = makeRepository(worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State(repositories: [repository])
+    repositoriesState.snapshotPersistencePhase = .restoring
+    repositoriesState.isInitialLoadComplete = true
+    var settings = SettingsFeature.State()
+    settings.restoreTerminalLayoutOnLaunch = true
+    let sentCommands = LockIsolated<[TerminalClient.Command]>([])
+
+    let store = TestStore(
+      initialState: AppFeature.State(repositories: repositoriesState, settings: settings)
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sentCommands.withValue { $0.append(command) }
+      }
+      $0.worktreeInfoWatcher.send = { _ in }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.repositories(.delegate(.repositoriesChanged([repository])))) {
+      $0.launchRestoreMode = .lastFocusedWorktree
+      $0.isAwaitingLaunchLayoutRestore = true
+      $0.repositories.selection = nil
+    }
+    await store.finish()
+
+    #expect(
+      sentCommands.value.contains(
+        .restoreLayoutSnapshot(worktrees: [worktree])
+      )
+    )
   }
 
   @Test(.dependencies) func repositoriesChangedSkipsRestoreWhenDisabled() async {
@@ -138,6 +175,7 @@ struct AppFeatureTerminalLayoutRestoreTests {
     // First repositoriesChanged triggers restore and flips mode
     await store.send(.repositories(.delegate(.repositoriesChanged([repository])))) {
       $0.launchRestoreMode = .lastFocusedWorktree
+      $0.isAwaitingLaunchLayoutRestore = true
       $0.repositories.selection = nil
     }
     await store.finish()
@@ -191,38 +229,133 @@ struct AppFeatureTerminalLayoutRestoreTests {
   }
 
   @Test(.dependencies) func layoutRestoredEventSelectsWorktree() async {
-    let store = TestStore(initialState: AppFeature.State()) {
+    var initialState = AppFeature.State()
+    initialState.isAwaitingLaunchLayoutRestore = true
+    let store = TestStore(initialState: initialState) {
       AppFeature()
     }
     store.exhaustivity = .off
 
-    await store.send(.terminalEvent(.layoutRestored(selectedWorktreeID: "/tmp/repo/wt-1")))
+    await store.send(.terminalEvent(.layoutRestored(selectedWorktreeID: "/tmp/repo/wt-1"))) {
+      $0.isAwaitingLaunchLayoutRestore = false
+    }
     await store.receive(\.repositories.selectWorktree)
+  }
+
+  @Test(.dependencies) func layoutRestoredEventFallsBackToLastFocusedWorktreeWhenSelectedWorktreeMissing() async {
+    let firstWorktree = Worktree(
+      id: "/tmp/repo/wt-1",
+      name: "wt-1",
+      detail: "",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repo/wt-1"),
+      repositoryRootURL: URL(fileURLWithPath: "/tmp/repo")
+    )
+    let fallbackWorktree = Worktree(
+      id: "/tmp/repo/wt-2",
+      name: "wt-2",
+      detail: "",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repo/wt-2"),
+      repositoryRootURL: URL(fileURLWithPath: "/tmp/repo")
+    )
+    var repositoriesState = RepositoriesFeature.State(
+      repositories: [makeRepository(worktrees: [firstWorktree, fallbackWorktree])]
+    )
+    repositoriesState.lastFocusedWorktreeID = fallbackWorktree.id
+    let store = TestStore(
+      initialState: {
+        var state = AppFeature.State(repositories: repositoriesState)
+        state.isAwaitingLaunchLayoutRestore = true
+        return state
+      }()
+    ) {
+      AppFeature()
+    }
+    store.exhaustivity = .off
+
+    await store.send(.terminalEvent(.layoutRestored(selectedWorktreeID: nil))) {
+      $0.isAwaitingLaunchLayoutRestore = false
+    }
+    await store.receive(\.repositories.selectWorktree)
+  }
+
+  @Test(.dependencies) func layoutRestoredEventReentersCanvasWhenPersisted() async {
+    let suiteName = "AppFeatureTerminalLayoutRestoreTests.layoutRestoredEventReentersCanvasWhenPersisted"
+    let defaults = UserDefaults(suiteName: suiteName)!
+    defaults.removePersistentDomain(forName: suiteName)
+    defaults.set(true, forKey: restoreCanvasModeOnLaunchAppStorageKey)
+
+    let firstWorktree = Worktree(
+      id: "/tmp/repo/wt-1",
+      name: "wt-1",
+      detail: "",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repo/wt-1"),
+      repositoryRootURL: URL(fileURLWithPath: "/tmp/repo")
+    )
+    let fallbackWorktree = Worktree(
+      id: "/tmp/repo/wt-2",
+      name: "wt-2",
+      detail: "",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repo/wt-2"),
+      repositoryRootURL: URL(fileURLWithPath: "/tmp/repo")
+    )
+    let repository = makeRepository(worktrees: [firstWorktree, fallbackWorktree])
+    var repositoriesState = RepositoriesFeature.State(repositories: [repository])
+    repositoriesState.lastFocusedWorktreeID = fallbackWorktree.id
+    let store = TestStore(
+      initialState: AppFeature.State(repositories: repositoriesState)
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.defaultAppStorage = defaults
+    }
+    store.exhaustivity = .off
+
+    await store.send(.terminalEvent(.layoutRestored(selectedWorktreeID: nil))) {
+      $0.isAwaitingLaunchLayoutRestore = false
+    }
+    await store.receive(\.repositories.restoreCanvasOnLaunch) {
+      $0.repositories.shouldCenterRestoredCanvasSoloTab = false
+      $0.repositories.preCanvasWorktreeID = fallbackWorktree.id
+      $0.repositories.preCanvasTerminalTargetID = fallbackWorktree.id
+      $0.repositories.canvasReturnWorktreeID = fallbackWorktree.id
+      $0.repositories.selection = .canvas
+      $0.repositories.sidebarSelectedWorktreeIDs = []
+    }
   }
 
   @Test(.dependencies) func layoutRestoredEventSelectsRepositoryForPlainFolder() async {
     let plainRepo = makePlainRepository()
     let repositoriesState = RepositoriesFeature.State(repositories: [plainRepo])
     let store = TestStore(
-      initialState: AppFeature.State(repositories: repositoriesState)
+      initialState: {
+        var state = AppFeature.State(repositories: repositoriesState)
+        state.isAwaitingLaunchLayoutRestore = true
+        return state
+      }()
     ) {
       AppFeature()
     }
     store.exhaustivity = .off
 
-    await store.send(.terminalEvent(.layoutRestored(selectedWorktreeID: plainRepo.id)))
+    await store.send(.terminalEvent(.layoutRestored(selectedWorktreeID: plainRepo.id))) {
+      $0.isAwaitingLaunchLayoutRestore = false
+    }
     await store.receive(\.repositories.selectRepository)
   }
 
   @Test(.dependencies) func layoutRestoreFailedEventShowsWarningToast() async {
-    let store = TestStore(initialState: AppFeature.State()) {
+    var initialState = AppFeature.State()
+    initialState.isAwaitingLaunchLayoutRestore = true
+    let store = TestStore(initialState: initialState) {
       AppFeature()
     }
     store.exhaustivity = .off
 
     await store.send(
       .terminalEvent(.layoutRestoreFailed(message: "Saved terminal layout was invalid and has been reset"))
-    )
+    ) {
+      $0.isAwaitingLaunchLayoutRestore = false
+    }
     await store.receive(\.repositories.showToast) {
       $0.repositories.statusToast = .warning("Saved terminal layout was invalid and has been reset")
     }

@@ -240,6 +240,7 @@ extension CanvasView {
     else {
       terminalManager.canvasFocusedWorktreeID = nil
       onFocusedWorktreeChanged(nil)
+      onFocusedTabChanged(nil)
       return
     }
 
@@ -247,6 +248,7 @@ extension CanvasView {
     ownerState.tabManager.selectTab(newTabID)
     terminalManager.canvasFocusedWorktreeID = ownerState.worktreeID
     onFocusedWorktreeChanged(ownerState.worktreeID)
+    onFocusedTabChanged(newTabID)
     surfaceView.focusDidChange(true)
     surfaceView.requestFocus()
   }
@@ -268,6 +270,7 @@ extension CanvasView {
     state.tabManager.selectTab(tabID)
     terminalManager.canvasFocusedWorktreeID = state.worktreeID
     setFocusedWorktreeID(state.worktreeID)
+    onFocusedTabChanged(tabID)
     surface.focusDidChange(true)
     surface.requestFocus()
   }

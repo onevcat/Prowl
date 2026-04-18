@@ -394,6 +394,18 @@ extension RepositoriesFeature {
         await terminalClient.send(.setCanvasMode(true))
       }
 
+    case .restoreCanvasOnLaunch(let worktreeID):
+      state.shouldCenterRestoredCanvasSoloTab = false
+      state.preCanvasWorktreeID = worktreeID
+      state.preCanvasTerminalTargetID = worktreeID
+      state.canvasReturnWorktreeID = worktreeID
+      state.isShelfActive = false
+      state.selection = .canvas
+      state.sidebarSelectedWorktreeIDs = []
+      return .run { _ in
+        await terminalClient.send(.setCanvasMode(true))
+      }
+
     case .selectShelf:
       guard !state.isShelfActive else { return .none }
       return .send(.toggleShelf)
