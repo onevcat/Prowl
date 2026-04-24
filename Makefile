@@ -29,7 +29,7 @@ PROWL_POSTHOG_API_KEY ?=
 PROWL_POSTHOG_HOST ?=
 
 .DEFAULT_GOAL := help
-.PHONY: build-ghostty-xcframework ensure-ghostty sync-ghostty _check-ghostty-hash _record-ghostty-hash build-app build-cli build-cli-release embed-cli-debug embed-cli embed-docs run-app install-dev-build install-release archive export-archive format format-changed format-lint lint check test test-app test-cli-smoke test-cli-integration bump-version bump-and-release log-stream
+.PHONY: build-ghostty-xcframework ensure-ghostty sync-ghostty _check-ghostty-hash _record-ghostty-hash ensure-spm-cache build-app build-cli build-cli-release embed-cli-debug embed-cli embed-docs run-app install-dev-build install-release archive export-archive format format-changed format-lint lint check test test-app test-cli-smoke test-cli-integration bump-version bump-and-release log-stream
 
 help:  # Display this help.
 	@-+echo "Run make with one of the following targets:"
@@ -99,7 +99,28 @@ embed-docs: # Stage docs/ into Resources for bundling into the app (.app/Content
 	rsync -a --delete --exclude '.sync-meta.json' "$$src/" "$$dst/"; \
 	echo "embedded docs at $$dst"
 
-build-app: ensure-ghostty embed-cli-debug embed-docs # Build the macOS app (Debug)
+ensure-spm-cache: # Ensure the shared SwiftPM cache is usable before building
+	@cache_root="$(SPM_CACHE_DIR)"; \
+	checkouts_dir="$$cache_root/checkouts"; \
+	if [ ! -d "$$checkouts_dir" ]; then \
+		mkdir -p "$$cache_root"; \
+		exit 0; \
+	fi; \
+	needs_reset=0; \
+	while IFS= read -r checkout_dir; do \
+		if [ ! -f "$$checkout_dir/Package.swift" ]; then \
+			echo "Resetting corrupt SwiftPM cache at $$cache_root"; \
+			echo "Missing Package.swift in $$checkout_dir"; \
+			needs_reset=1; \
+			break; \
+		fi; \
+	done < <(find "$$checkouts_dir" -mindepth 1 -maxdepth 1 -type d -print); \
+	if [ "$$needs_reset" -eq 1 ]; then \
+		rm -rf "$$cache_root"; \
+	fi; \
+	mkdir -p "$$cache_root"
+
+build-app: ensure-ghostty ensure-spm-cache embed-cli-debug embed-docs # Build the macOS app (Debug)
 	bash -o pipefail -c 'xcodebuild -project supacode.xcodeproj -scheme supacode -configuration Debug build -skipMacroValidation -clonedSourcePackagesDirPath $(SPM_CACHE_DIR) 2>&1 | mise exec -- xcsift -w --format toon'
 
 sync-cli-version: # Sync app MARKETING_VERSION into ProwlCLIShared/ProwlVersion.swift
