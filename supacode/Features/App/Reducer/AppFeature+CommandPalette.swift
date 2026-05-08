@@ -171,8 +171,9 @@ extension AppFeature {
       guard let worktree = terminalCommandWorktree(repositories: state.repositories) else {
         return .none
       }
+      let resolvedWorktree = commandPaletteResolvedWorktree(for: worktree)
       return .run { send in
-        await workspaceClient.open(.fork, worktree) { error in
+        await workspaceClient.open(.fork, resolvedWorktree) { error in
           send(.openWorktreeFailed(error))
         }
       }
@@ -181,15 +182,7 @@ extension AppFeature {
       guard let worktree = terminalCommandWorktree(repositories: state.repositories) else {
         return .none
       }
-      let resolvedPath = commandPaletteResolvedPath(for: worktree)
-      let resolvedURL = URL(fileURLWithPath: resolvedPath).standardizedFileURL
-      let revealWorktree = Worktree(
-        id: worktree.id,
-        name: worktree.name,
-        detail: worktree.detail,
-        workingDirectory: resolvedURL,
-        repositoryRootURL: worktree.repositoryRootURL
-      )
+      let revealWorktree = commandPaletteResolvedWorktree(for: worktree)
       return .run { send in
         await workspaceClient.open(.finder, revealWorktree) { error in
           send(.openWorktreeFailed(error))
@@ -334,5 +327,19 @@ extension AppFeature {
   func commandPaletteResolvedPath(for worktree: Worktree) -> String {
     terminalClient.focusedDirectoryPath(worktree.id)
       ?? worktree.workingDirectory.path(percentEncoded: false)
+  }
+
+  func commandPaletteResolvedWorktree(for worktree: Worktree) -> Worktree {
+    let resolvedURL = URL(
+      fileURLWithPath: commandPaletteResolvedPath(for: worktree)
+    ).standardizedFileURL
+    return Worktree(
+      id: worktree.id,
+      name: worktree.name,
+      detail: worktree.detail,
+      workingDirectory: resolvedURL,
+      repositoryRootURL: worktree.repositoryRootURL,
+      createdAt: worktree.createdAt
+    )
   }
 }

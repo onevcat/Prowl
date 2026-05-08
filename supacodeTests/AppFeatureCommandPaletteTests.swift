@@ -450,7 +450,7 @@ struct AppFeatureCommandPaletteTests {
     )
   }
 
-  @Test(.dependencies) func openInForkOpensSelectedWorktree() async {
+  @Test(.dependencies) func openInForkOpensFocusedDirectory() async {
     let worktree = makeWorktree(
       id: "/tmp/repo-fork-open/wt-1",
       name: "wt-1",
@@ -469,6 +469,9 @@ struct AppFeatureCommandPaletteTests {
     ) {
       AppFeature()
     } withDependencies: {
+      $0.terminalClient.focusedDirectoryPath = { _ in
+        "/tmp/repo-fork-open/wt-1/deep/nested"
+      }
       $0.workspaceClient.open = { action, worktree, _ in
         captured.withValue { $0.append((action, worktree)) }
       }
@@ -479,7 +482,10 @@ struct AppFeatureCommandPaletteTests {
 
     #expect(captured.value.count == 1)
     #expect(captured.value.first?.0 == .fork)
-    #expect(captured.value.first?.1 == worktree)
+    #expect(
+      captured.value.first?.1.workingDirectory.path(percentEncoded: false)
+        == "/tmp/repo-fork-open/wt-1/deep/nested"
+    )
   }
 
   @Test(.dependencies) func openInForkUsesCanvasFocusedWorktree() async {
@@ -515,6 +521,40 @@ struct AppFeatureCommandPaletteTests {
     #expect(captured.value.count == 1)
     #expect(captured.value.first?.0 == .fork)
     #expect(captured.value.first?.1 == worktree)
+  }
+
+  @Test(.dependencies) func openInForkUsesFreestyleFocusedDirectory() async {
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.selection = .freestyle
+    let captured = LockIsolated<[(OpenWorktreeAction, Worktree)]>([])
+    let requestedWorktreeIDs = LockIsolated<[Worktree.ID]>([])
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositoriesState,
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.focusedDirectoryPath = { worktreeID in
+        requestedWorktreeIDs.withValue { $0.append(worktreeID) }
+        return "/tmp/freestyle/current"
+      }
+      $0.workspaceClient.open = { action, worktree, _ in
+        captured.withValue { $0.append((action, worktree)) }
+      }
+    }
+
+    await store.send(.commandPalette(.delegate(.openInFork)))
+    await store.finish()
+
+    #expect(requestedWorktreeIDs.value == [FreestyleTerminal.worktreeID])
+    #expect(captured.value.count == 1)
+    #expect(captured.value.first?.0 == .fork)
+    #expect(
+      captured.value.first?.1.workingDirectory.path(percentEncoded: false)
+        == "/tmp/freestyle/current"
+    )
   }
 
   @Test(.dependencies) func copyPathCopiesFocusedDirectory() async {
