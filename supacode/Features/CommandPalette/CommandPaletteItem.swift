@@ -46,6 +46,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
     case layoutCenter
     case layoutArrange
     case layoutOverview
+    case openInVSCode
     case openInFork
     case worktreeSelect(Worktree.ID)
     case openSettings
@@ -106,8 +107,8 @@ struct CommandPaletteItem: Identifiable, Equatable {
   var isGlobal: Bool {
     switch kind {
     case .checkForUpdates, .openRepository, .layoutCenter, .layoutArrange, .layoutOverview,
-      .openInFork, .openSettings, .newWorktree, .viewArchivedWorktrees,
-      .refreshWorktrees, .installCLI, .jumpToLatestUnread:
+      .openInVSCode, .openInFork, .openSettings, .newWorktree,
+      .viewArchivedWorktrees, .refreshWorktrees, .installCLI, .jumpToLatestUnread:
       return true
     case .openPullRequest,
       .markPullRequestReady,
@@ -153,7 +154,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
     case .checkForUpdates, .openRepository, .openSettings, .newWorktree, .viewArchivedWorktrees,
       .refreshWorktrees, .installCLI, .jumpToLatestUnread:
       return true
-    case .ghosttyCommand, .layoutCenter, .layoutArrange, .layoutOverview, .openInFork:
+    case .ghosttyCommand, .layoutCenter, .layoutArrange, .layoutOverview, .openInVSCode, .openInFork:
       return false
     case .openPullRequest,
       .openRepositoryOnCodeHost,
@@ -240,6 +241,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
       .layoutCenter,
       .layoutArrange,
       .layoutOverview,
+      .openInVSCode,
       .openInFork,
       .markPullRequestReady,
       .mergePullRequest,

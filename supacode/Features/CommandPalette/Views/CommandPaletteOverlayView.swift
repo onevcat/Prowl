@@ -511,6 +511,7 @@ private struct CommandPaletteSectionHeader: View {
 
 @MainActor
 private enum CommandPaletteAppIcons {
+  static let openInVSCode = appImage(for: .vscode)
   static let openInFork = appImage(for: .fork)
   static let revealInFinder = appImage(for: .finder)
 
@@ -536,8 +537,8 @@ private struct CommandPaletteRowView: View {
   private var badge: String? {
     switch row.kind {
     case .checkForUpdates, .openRepository, .layoutCenter, .layoutArrange, .layoutOverview,
-      .openInFork, .openSettings, .newWorktree, .viewArchivedWorktrees,
-      .refreshWorktrees, .installCLI, .jumpToLatestUnread, .ghosttyCommand,
+      .openInVSCode, .openInFork, .openSettings, .newWorktree,
+      .viewArchivedWorktrees, .refreshWorktrees, .installCLI, .jumpToLatestUnread, .ghosttyCommand,
       .openPullRequest, .openRepositoryOnCodeHost, .markPullRequestReady, .mergePullRequest, .closePullRequest,
       .copyFailingJobURL,
       .copyCiFailureLogs,
@@ -570,6 +571,8 @@ private struct CommandPaletteRowView: View {
       return "rectangle.3.group"
     case .layoutOverview:
       return "binoculars"
+    case .openInVSCode:
+      return "chevron.left.forwardslash.chevron.right"
     case .openInFork:
       return "arrow.triangle.branch"
     case .openSettings:
@@ -657,6 +660,8 @@ private struct CommandPaletteRowView: View {
 
   private var appIcon: NSImage? {
     switch row.kind {
+    case .openInVSCode:
+      return CommandPaletteAppIcons.openInVSCode
     case .openInFork:
       return CommandPaletteAppIcons.openInFork
     case .revealInFinder:
@@ -680,8 +685,8 @@ private struct CommandPaletteRowView: View {
   private var emphasis: Bool {
     switch row.kind {
     case .checkForUpdates, .openRepository, .layoutCenter, .layoutArrange, .layoutOverview,
-      .openInFork, .openSettings, .newWorktree, .viewArchivedWorktrees,
-      .refreshWorktrees, .installCLI, .jumpToLatestUnread, .ghosttyCommand,
+      .openInVSCode, .openInFork, .openSettings, .newWorktree,
+      .viewArchivedWorktrees, .refreshWorktrees, .installCLI, .jumpToLatestUnread, .ghosttyCommand,
       .openPullRequest, .openRepositoryOnCodeHost, .markPullRequestReady, .mergePullRequest, .closePullRequest,
       .copyFailingJobURL,
       .copyCiFailureLogs,
@@ -798,6 +803,8 @@ private struct CommandPaletteRowView: View {
       base = "Layout: Arrange"
     case .layoutOverview:
       base = "Layout: Overview"
+    case .openInVSCode:
+      base = "Open in VS Code"
     case .openInFork:
       base = "Open in Fork"
     case .copyPath:

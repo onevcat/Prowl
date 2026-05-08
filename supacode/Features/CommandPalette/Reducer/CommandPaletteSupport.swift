@@ -31,6 +31,7 @@ enum CommandPaletteItemID {
   static let canvasLayoutCenter = "canvas.layout-center"
   static let canvasLayoutArrange = "canvas.layout-arrange"
   static let canvasLayoutOverview = "canvas.layout-overview"
+  static let terminalOpenInVSCode = "terminal.open-in-vscode"
   static let terminalOpenInFork = "terminal.open-in-fork"
 
   static func openRepositorySettings(_ repositoryID: Repository.ID) -> CommandPaletteItem.ID {
@@ -71,6 +72,7 @@ enum CommandPaletteItemID {
       canvasLayoutCenter,
       canvasLayoutArrange,
       canvasLayoutOverview,
+      terminalOpenInVSCode,
       terminalOpenInFork,
     ]
   }
@@ -218,6 +220,7 @@ func delegateAction(for kind: CommandPaletteItem.Kind) -> CommandPaletteFeature.
     .layoutCenter,
     .layoutArrange,
     .layoutOverview,
+    .openInVSCode,
     .organizeCanvasCards,
     .selectAllCanvasCards,
     .toggleShelf,
@@ -276,6 +279,8 @@ func navigationDelegateAction(for kind: CommandPaletteItem.Kind) -> CommandPalet
     return .copyPath
   case .openInFork:
     return .openInFork
+  case .openInVSCode:
+    return .openInVSCode
   case .revealInSidebar:
     return .revealInSidebar
   default:
@@ -343,6 +348,7 @@ func pullRequestDelegateAction(
     .layoutCenter,
     .layoutArrange,
     .layoutOverview,
+    .openInVSCode,
     .openInFork,
     .viewArchivedWorktrees,
     .refreshWorktrees,

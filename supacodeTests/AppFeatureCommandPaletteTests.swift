@@ -450,6 +450,44 @@ struct AppFeatureCommandPaletteTests {
     )
   }
 
+  @Test(.dependencies) func openInVSCodeOpensFocusedDirectory() async {
+    let worktree = makeWorktree(
+      id: "/tmp/repo-vscode-open/wt-1",
+      name: "wt-1",
+      repoRoot: "/tmp/repo-vscode-open"
+    )
+    let repository = makeRepository(id: "/tmp/repo-vscode-open", worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    repositoriesState.selection = .worktree(worktree.id)
+    let captured = LockIsolated<[(OpenWorktreeAction, Worktree)]>([])
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositoriesState,
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.focusedDirectoryPath = { _ in
+        "/tmp/repo-vscode-open/wt-1/deep/nested"
+      }
+      $0.workspaceClient.open = { action, worktree, _ in
+        captured.withValue { $0.append((action, worktree)) }
+      }
+    }
+
+    await store.send(.commandPalette(.delegate(.openInVSCode)))
+    await store.finish()
+
+    #expect(captured.value.count == 1)
+    #expect(captured.value.first?.0 == .vscode)
+    #expect(
+      captured.value.first?.1.workingDirectory.path(percentEncoded: false)
+        == "/tmp/repo-vscode-open/wt-1/deep/nested"
+    )
+  }
+
   @Test(.dependencies) func openInForkOpensFocusedDirectory() async {
     let worktree = makeWorktree(
       id: "/tmp/repo-fork-open/wt-1",

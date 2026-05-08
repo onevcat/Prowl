@@ -178,6 +178,17 @@ extension AppFeature {
         }
       }
 
+    case .openInVSCode:
+      guard let worktree = terminalCommandWorktree(repositories: state.repositories) else {
+        return .none
+      }
+      let resolvedWorktree = commandPaletteResolvedWorktree(for: worktree)
+      return .run { send in
+        await workspaceClient.open(.vscode, resolvedWorktree) { error in
+          send(.openWorktreeFailed(error))
+        }
+      }
+
     case .revealInFinder:
       guard let worktree = terminalCommandWorktree(repositories: state.repositories) else {
         return .none

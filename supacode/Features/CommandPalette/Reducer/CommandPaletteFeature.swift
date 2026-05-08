@@ -40,6 +40,7 @@ struct CommandPaletteFeature {
     case layoutCenter
     case layoutArrange
     case layoutOverview
+    case openInVSCode
     case openInFork
     case viewArchivedWorktrees
     case refreshWorktrees
@@ -576,6 +577,14 @@ private func worktreeNavigationCommandItems() -> [CommandPaletteItem] {
 
 private func worktreeTargetItems(includeFileActions: Bool) -> [CommandPaletteItem] {
   var items: [CommandPaletteItem] = [
+    .appShortcut(
+      id: CommandPaletteItemID.terminalOpenInVSCode,
+      title: "Open in VS Code",
+      category: .navigation,
+      kind: .openInVSCode,
+      keywords: ["code", "vscode", "workspace"],
+      priorityTier: 1
+    ),
     .appShortcut(
       id: CommandPaletteItemID.terminalOpenInFork,
       title: "Open in Fork",

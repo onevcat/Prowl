@@ -446,6 +446,18 @@ struct CommandPaletteFeatureTests {
     #expect(items.contains(where: { $0.title == "Reveal in Finder" }))
   }
 
+  @Test func commandPaletteItems_includeOpenInVSCodeWhenWorktreeSelected() {
+    let rootPath = "/tmp/repo"
+    let worktree = makeWorktree(id: rootPath, name: "repo", repoRoot: rootPath)
+    let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .worktree(worktree.id)
+
+    let items = CommandPaletteFeature.commandPaletteItems(from: state)
+
+    #expect(items.contains(where: { $0.title == "Open in VS Code" }))
+  }
+
   @Test func commandPaletteItems_includeOpenInForkWhenWorktreeSelected() {
     let rootPath = "/tmp/repo"
     let worktree = makeWorktree(id: rootPath, name: "repo", repoRoot: rootPath)
@@ -483,6 +495,21 @@ struct CommandPaletteFeatureTests {
     )
 
     #expect(items.contains(where: { $0.title == "Reveal in Finder" }))
+  }
+
+  @Test func commandPaletteItems_includeOpenInVSCodeWhenCanvasHasFocusedWorktree() {
+    let rootPath = "/tmp/repo"
+    let worktree = makeWorktree(id: rootPath, name: "repo", repoRoot: rootPath)
+    let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .canvas
+
+    let items = CommandPaletteFeature.commandPaletteItems(
+      from: state,
+      actionTargetWorktreeID: worktree.id
+    )
+
+    #expect(items.contains(where: { $0.title == "Open in VS Code" }))
   }
 
   @Test func commandPaletteItems_includeOpenInForkWhenCanvasHasFocusedWorktree() {
@@ -1288,6 +1315,20 @@ struct CommandPaletteFeatureTests {
 
     expectNoDifference(
       CommandPaletteFeature.filterItems(items: [item], query: "fork"),
+      [item]
+    )
+  }
+
+  @Test func fuzzyMatchesOpenInVSCodeByTitle() {
+    let item = CommandPaletteItem(
+      id: "terminal.open-in-vscode",
+      title: "Open in VS Code",
+      subtitle: nil,
+      kind: .openInVSCode
+    )
+
+    expectNoDifference(
+      CommandPaletteFeature.filterItems(items: [item], query: "code"),
       [item]
     )
   }
