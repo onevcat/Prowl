@@ -148,6 +148,36 @@ final class GhosttySurfaceScrollView: NSView {
     ensureSurfaceAttached()
   }
 
+  func updateHostedSurface(pinnedSize newPinnedSize: CGSize?) {
+    let pinnedSizeChanged = pinnedSize != newPinnedSize
+    pinnedSize = newPinnedSize
+
+    let wasAttached = isSurfaceAttachedToDocumentView
+    switch hostKind {
+    case .canvas:
+      if !wasAttached {
+        surfaceView.removeFromSuperview()
+        documentView.addSubview(surfaceView)
+      }
+    case .terminal:
+      ensureSurfaceAttached(requiresLiveHost: false)
+    }
+
+    let isAttached = isSurfaceAttachedToDocumentView
+    let needsSurfaceReattachment = !wasAttached && isAttached
+    let needsWrapperUpdate = isAttached && surfaceView.scrollWrapper !== self
+    if needsWrapperUpdate {
+      surfaceView.scrollWrapper = self
+    }
+
+    guard pinnedSizeChanged || needsSurfaceReattachment || needsWrapperUpdate else { return }
+    needsLayout = true
+    surfaceView.needsLayout = true
+    surfaceView.needsDisplay = true
+    layoutSubtreeIfNeeded()
+    surfaceView.updateSurfaceSize()
+  }
+
   func updateSurfaceSize() {
     surfaceView.updateSurfaceSize()
     needsLayout = true

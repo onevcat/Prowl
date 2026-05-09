@@ -19,15 +19,14 @@ struct GhosttyTerminalView: NSViewRepresentable {
     // us if AppKit/Metal initialization is on the hot path.
     return terminalHostLogger.interval("Ghostty.makeNSView") {
       let view = GhosttySurfaceScrollView(surfaceView: surfaceView, hostKind: hostKind)
-      view.pinnedSize = pinnedSize
+      view.updateHostedSurface(pinnedSize: pinnedSize)
       return view
     }
   }
 
   func updateNSView(_ view: GhosttySurfaceScrollView, context: Context) {
     terminalHostLogger.interval("Ghostty.updateNSView") {
-      view.pinnedSize = pinnedSize
-      view.ensureSurfaceAttached()
+      view.updateHostedSurface(pinnedSize: pinnedSize)
     }
   }
 
