@@ -2,6 +2,51 @@ import AppKit
 import ComposableArchitecture
 import SwiftUI
 
+nonisolated enum ShortcutRowAction: Equatable {
+  case reset
+  case clear
+
+  static func resolve(
+    hasOverride: Bool,
+    resolvedBinding: Keybinding?
+  ) -> ShortcutRowAction? {
+    if hasOverride {
+      return .reset
+    }
+    if resolvedBinding != nil {
+      return .clear
+    }
+    return nil
+  }
+
+  var systemImageName: String {
+    switch self {
+    case .reset:
+      return "arrow.counterclockwise"
+    case .clear:
+      return "xmark.circle"
+    }
+  }
+
+  var helpText: String {
+    switch self {
+    case .reset:
+      return "Reset to default"
+    case .clear:
+      return "Clear shortcut"
+    }
+  }
+
+  var accessibilityLabel: String {
+    switch self {
+    case .reset:
+      return "Reset shortcut to default"
+    case .clear:
+      return "Clear shortcut"
+    }
+  }
+}
+
 struct ShortcutsSettingsView: View {
   private enum ShortcutTableLayout {
     static let commandColumnMinWidth: CGFloat = 180
@@ -164,6 +209,7 @@ struct ShortcutsSettingsView: View {
     let source = resolvedBindings.binding(for: command.id)?.source ?? .appDefault
     let hasOverride = store.keybindingUserOverrides.overrides[command.id] != nil
     let isHoveringRecorder = hoveredRecorderCommandID == command.id
+    let rowAction = ShortcutRowAction.resolve(hasOverride: hasOverride, resolvedBinding: resolvedBinding)
 
     VStack(alignment: .leading, spacing: 6) {
       HStack(alignment: .center, spacing: 12) {
@@ -189,19 +235,8 @@ struct ShortcutsSettingsView: View {
           alignment: .leading
         )
 
-        if hasOverride {
-          Button {
-            requestResetOverride(for: command.id)
-          } label: {
-            Image(systemName: "arrow.counterclockwise")
-              .font(.caption.weight(.semibold))
-              .foregroundStyle(.secondary)
-              .accessibilityHidden(true)
-          }
-          .buttonStyle(.plain)
-          .help("Reset to default")
-          .accessibilityLabel("Reset shortcut to default")
-          .frame(width: ShortcutTableLayout.actionColumnWidth, height: ShortcutTableLayout.actionColumnWidth)
+        if let rowAction {
+          shortcutRowActionButton(rowAction, commandID: command.id)
         } else {
           Color.clear
             .frame(width: ShortcutTableLayout.actionColumnWidth, height: ShortcutTableLayout.actionColumnWidth)
@@ -282,6 +317,29 @@ struct ShortcutsSettingsView: View {
       }
     }
     .help(isRecording ? "Recording shortcut. Press Esc to cancel." : "Click to record a shortcut.")
+  }
+
+  private func shortcutRowActionButton(
+    _ action: ShortcutRowAction,
+    commandID: String
+  ) -> some View {
+    Button {
+      switch action {
+      case .reset:
+        requestResetOverride(for: commandID)
+      case .clear:
+        clearShortcut(for: commandID)
+      }
+    } label: {
+      Image(systemName: action.systemImageName)
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(.secondary)
+        .accessibilityHidden(true)
+    }
+    .buttonStyle(.plain)
+    .help(action.helpText)
+    .accessibilityLabel(action.accessibilityLabel)
+    .frame(width: ShortcutTableLayout.actionColumnWidth, height: ShortcutTableLayout.actionColumnWidth)
   }
 
   private func shortcutRecorderTitle(resolvedBinding: Keybinding?, isRecording: Bool) -> String {
@@ -603,6 +661,21 @@ struct ShortcutsSettingsView: View {
     }
 
     $store.keybindingUserOverrides.wrappedValue = overrides
+  }
+
+  private func clearShortcut(for commandID: String) {
+    var overrides = store.keybindingUserOverrides
+    overrides.overrides[commandID] = KeybindingUserOverride(binding: nil, isEnabled: false)
+    invalidMessageByCommandID.removeValue(forKey: commandID)
+    $store.keybindingUserOverrides.wrappedValue = overrides
+
+    if recordingCommandID == commandID {
+      stopRecording()
+    }
+    if focusedConflictCommandID == commandID {
+      focusedConflictCommandID = nil
+    }
+    clearPendingResetConflict()
   }
 
   private func requestResetOverride(for commandID: String) {
