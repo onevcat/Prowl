@@ -147,7 +147,7 @@ struct SidebarView: View {
       return [.canvas]
     }
     if state.isShowingFreestyle {
-      return [.freestyle]
+      return []
     }
     if state.isShowingArchivedWorktrees {
       return [.archivedWorktrees]
