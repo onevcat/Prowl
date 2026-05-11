@@ -8,6 +8,20 @@ import Testing
 
 @MainActor
 struct GhosttySurfaceViewTests {
+  @Test func transparentWindowBackgroundUsesClearColorForCanvasHostOnly() {
+    let terminalColor = GhosttySurfaceView.transparentWindowBackgroundColor(
+      for: NSAppearance(named: .darkAqua) ?? NSApp.effectiveAppearance,
+      hostKind: .terminal
+    )
+    let canvasColor = GhosttySurfaceView.transparentWindowBackgroundColor(
+      for: NSAppearance(named: .darkAqua) ?? NSApp.effectiveAppearance,
+      hostKind: .canvas
+    )
+
+    #expect(alphaComponent(of: terminalColor) == 0.7)
+    #expect(alphaComponent(of: canvasColor) == 0.001)
+  }
+
   @Test func mainMenuExactMatchRejectsShiftVariantOfCommandComma() throws {
     let menu = NSMenu()
     let item = NSMenuItem(title: "Settings", action: nil, keyEquivalent: ",")
@@ -553,5 +567,11 @@ struct GhosttySurfaceViewTests {
         keyCode: keyCode
       )
     )
+  }
+
+  private func alphaComponent(of color: NSColor) -> Double {
+    var alpha: CGFloat = 0
+    color.usingColorSpace(.sRGB)?.getRed(nil, green: nil, blue: nil, alpha: &alpha)
+    return Double(alpha)
   }
 }

@@ -536,8 +536,10 @@ final class GhosttySurfaceView: NSView, Identifiable {
     window.titlebarAppearsTransparent = true
     if !isBackgroundOpaqueOverride, !window.styleMask.contains(.fullScreen), opacity < 1 {
       window.isOpaque = false
-      let isDark = window.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-      window.backgroundColor = GhosttyRuntime.chromeBackgroundColor(for: isDark ? .black : .white)
+      window.backgroundColor = Self.transparentWindowBackgroundColor(
+        for: window.effectiveAppearance,
+        hostKind: scrollWrapper?.hostKind
+      )
       if let app = runtime.app {
         ghostty_set_window_background_blur(
           app,
@@ -548,6 +550,17 @@ final class GhosttySurfaceView: NSView, Identifiable {
     }
     window.isOpaque = true
     window.backgroundColor = runtime.backgroundColor().withAlphaComponent(1)
+  }
+
+  static func transparentWindowBackgroundColor(
+    for appearance: NSAppearance,
+    hostKind: GhosttySurfaceScrollView.HostKind?
+  ) -> NSColor {
+    if hostKind == .canvas {
+      return .white.withAlphaComponent(0.001)
+    }
+    let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+    return GhosttyRuntime.chromeBackgroundColor(for: isDark ? .black : .white)
   }
 
   func focusDidChange(_ focused: Bool) {
