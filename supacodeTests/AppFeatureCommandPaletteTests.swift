@@ -526,6 +526,118 @@ struct AppFeatureCommandPaletteTests {
     )
   }
 
+  @Test(.dependencies) func openWebOpensRepositoryURL() async {
+    let worktree = makeWorktree(
+      id: "/tmp/repo-web-open/wt-1",
+      name: "wt-1",
+      repoRoot: "/tmp/repo-web-open"
+    )
+    let repository = makeRepository(id: "/tmp/repo-web-open", worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    repositoriesState.selection = .worktree(worktree.id)
+    let openedURLs = LockIsolated<[URL]>([])
+    let requestedRoots = LockIsolated<[URL]>([])
+    let repositoryURL = URL(string: "https://git.example.com:8443/scm/platform/repo")!
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositoriesState,
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.gitClient.repositoryWebURL = { rootURL in
+        requestedRoots.withValue { $0.append(rootURL) }
+        return repositoryURL
+      }
+      $0.openURLClient.open = { url in
+        openedURLs.withValue { $0.append(url) }
+      }
+    }
+
+    await store.send(.commandPalette(.delegate(.openWeb)))
+    await store.finish()
+
+    #expect(requestedRoots.value == [worktree.repositoryRootURL])
+    #expect(openedURLs.value == [repositoryURL])
+  }
+
+  @Test(.dependencies) func openWebUsesCanvasFocusedWorktree() async {
+    let worktree = makeWorktree(
+      id: "/tmp/repo-web-canvas/wt-1",
+      name: "wt-1",
+      repoRoot: "/tmp/repo-web-canvas"
+    )
+    let repository = makeRepository(id: "/tmp/repo-web-canvas", worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    repositoriesState.selection = .canvas
+    let requestedRoots = LockIsolated<[URL]>([])
+    let openedURLs = LockIsolated<[URL]>([])
+    let repositoryURL = URL(string: "https://gitlab.internal.example.com/group/subgroup/repo")!
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositoriesState,
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.canvasFocusedWorktreeID = {
+        worktree.id
+      }
+      $0.gitClient.repositoryWebURL = { rootURL in
+        requestedRoots.withValue { $0.append(rootURL) }
+        return repositoryURL
+      }
+      $0.openURLClient.open = { url in
+        openedURLs.withValue { $0.append(url) }
+      }
+    }
+
+    await store.send(.commandPalette(.delegate(.openWeb)))
+    await store.finish()
+
+    #expect(requestedRoots.value == [worktree.repositoryRootURL])
+    #expect(openedURLs.value == [repositoryURL])
+  }
+
+  @Test(.dependencies) func openWebShowsAlertWhenRepositoryURLUnavailable() async {
+    let worktree = makeWorktree(
+      id: "/tmp/repo-web-missing/wt-1",
+      name: "wt-1",
+      repoRoot: "/tmp/repo-web-missing"
+    )
+    let repository = makeRepository(id: "/tmp/repo-web-missing", worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    repositoriesState.selection = .worktree(worktree.id)
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositoriesState,
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.gitClient.repositoryWebURL = { _ in nil }
+    }
+
+    await store.send(.commandPalette(.delegate(.openWeb)))
+    await store.receive(\.repositoryWebURLUnavailable) {
+      $0.alert = AlertState<AppFeature.Alert> {
+        TextState("Repository URL not available")
+      } actions: {
+        ButtonState(role: .cancel, action: .dismiss) {
+          TextState("OK")
+        }
+      } message: {
+        TextState("Prowl could not determine a web URL for this repository.")
+      }
+    }
+  }
+
   @Test(.dependencies) func openInForkUsesCanvasFocusedWorktree() async {
     let worktree = makeWorktree(
       id: "/tmp/repo-fork-canvas/wt-1",
@@ -712,6 +824,8 @@ struct AppFeatureCommandPaletteTests {
       )
     ) {
       AppFeature()
+    } withDependencies: {
+      $0.uuid = .incrementing
     }
     store.exhaustivity = .off
 
@@ -739,6 +853,8 @@ struct AppFeatureCommandPaletteTests {
       )
     ) {
       AppFeature()
+    } withDependencies: {
+      $0.uuid = .incrementing
     }
     store.exhaustivity = .off
 
@@ -766,6 +882,8 @@ struct AppFeatureCommandPaletteTests {
       )
     ) {
       AppFeature()
+    } withDependencies: {
+      $0.uuid = .incrementing
     }
     store.exhaustivity = .off
 

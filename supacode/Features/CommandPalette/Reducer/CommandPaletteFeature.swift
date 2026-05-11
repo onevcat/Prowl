@@ -593,6 +593,14 @@ private func worktreeTargetItems(includeFileActions: Bool) -> [CommandPaletteIte
       keywords: ["fork", "open", "workspace"],
       priorityTier: 1
     ),
+    .appShortcut(
+      id: CommandPaletteItemID.terminalOpenWeb,
+      title: "Open Web",
+      category: .navigation,
+      kind: .openWeb,
+      keywords: ["web", "browser", "remote", "repository"],
+      priorityTier: 1
+    ),
   ]
   if includeFileActions {
     items.append(

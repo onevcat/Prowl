@@ -470,6 +470,18 @@ struct CommandPaletteFeatureTests {
     #expect(items.contains(where: { $0.title == "Open in Fork" }))
   }
 
+  @Test func commandPaletteItems_includeOpenWebWhenWorktreeSelected() {
+    let rootPath = "/tmp/repo"
+    let worktree = makeWorktree(id: rootPath, name: "repo", repoRoot: rootPath)
+    let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .worktree(worktree.id)
+
+    let items = CommandPaletteFeature.commandPaletteItems(from: state)
+
+    #expect(items.contains(where: { $0.title == "Open Web" }))
+  }
+
   @Test func commandPaletteItems_includeCopyPathWhenWorktreeSelected() {
     let rootPath = "/tmp/repo"
     let worktree = makeWorktree(id: rootPath, name: "repo", repoRoot: rootPath)
@@ -525,6 +537,21 @@ struct CommandPaletteFeatureTests {
     )
 
     #expect(items.contains(where: { $0.title == "Open in Fork" }))
+  }
+
+  @Test func commandPaletteItems_includeOpenWebWhenCanvasHasFocusedWorktree() {
+    let rootPath = "/tmp/repo"
+    let worktree = makeWorktree(id: rootPath, name: "repo", repoRoot: rootPath)
+    let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .canvas
+
+    let items = CommandPaletteFeature.commandPaletteItems(
+      from: state,
+      actionTargetWorktreeID: worktree.id
+    )
+
+    #expect(items.contains(where: { $0.title == "Open Web" }))
   }
 
   @Test func commandPaletteItems_includeCopyPathWhenCanvasHasFocusedWorktree() {
@@ -1315,6 +1342,20 @@ struct CommandPaletteFeatureTests {
 
     expectNoDifference(
       CommandPaletteFeature.filterItems(items: [item], query: "fork"),
+      [item]
+    )
+  }
+
+  @Test func fuzzyMatchesOpenWebByTitle() {
+    let item = CommandPaletteItem(
+      id: "terminal.open-web",
+      title: "Open Web",
+      subtitle: nil,
+      kind: .openWeb
+    )
+
+    expectNoDifference(
+      CommandPaletteFeature.filterItems(items: [item], query: "web"),
       [item]
     )
   }

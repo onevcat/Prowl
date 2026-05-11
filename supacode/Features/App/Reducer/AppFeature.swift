@@ -4,6 +4,9 @@ import Foundation
 import PostHog
 import SwiftUI
 
+private let repositoryWebURLUnavailableTitle = "Repository URL not available"
+private let repositoryWebURLUnavailableMessage = "Prowl could not determine a web URL for this repository."
+
 @Reducer
 struct AppFeature {
   @ObservableState
@@ -60,6 +63,7 @@ struct AppFeature {
     case openSelectedWorktree
     case openWorktree(OpenWorktreeAction)
     case openWorktreeFailed(OpenActionError)
+    case repositoryWebURLUnavailable
     case requestQuit
     case newTerminal
     case jumpToLatestUnread
@@ -99,6 +103,8 @@ struct AppFeature {
   @Dependency(\.date.now) var now
   @Dependency(RepositoryPersistenceClient.self) var repositoryPersistence
   @Dependency(WorkspaceClient.self) var workspaceClient
+  @Dependency(GitClientDependency.self) var gitClient
+  @Dependency(OpenURLClient.self) var openURLClient
   @Dependency(ClipboardClient.self) var clipboardClient
   @Dependency(SettingsWindowClient.self) var settingsWindowClient
   @Dependency(AppLifecycleClient.self) var appLifecycleClient
@@ -625,6 +631,18 @@ struct AppFeature {
           }
         } message: {
           TextState(error.message)
+        }
+        return .none
+
+      case .repositoryWebURLUnavailable:
+        state.alert = AlertState {
+          TextState(repositoryWebURLUnavailableTitle)
+        } actions: {
+          ButtonState(role: .cancel, action: .dismiss) {
+            TextState("OK")
+          }
+        } message: {
+          TextState(repositoryWebURLUnavailableMessage)
         }
         return .none
 

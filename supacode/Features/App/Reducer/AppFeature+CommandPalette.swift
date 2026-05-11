@@ -189,6 +189,21 @@ extension AppFeature {
         }
       }
 
+    case .openWeb:
+      guard let worktree = terminalCommandWorktree(repositories: state.repositories) else {
+        return .none
+      }
+      let repositoryRootURL = worktree.repositoryRootURL
+      let gitClient = gitClient
+      let openURLClient = openURLClient
+      return .run { send in
+        guard let url = await gitClient.repositoryWebURL(repositoryRootURL) else {
+          await send(.repositoryWebURLUnavailable)
+          return
+        }
+        await openURLClient.open(url)
+      }
+
     case .revealInFinder:
       guard let worktree = terminalCommandWorktree(repositories: state.repositories) else {
         return .none

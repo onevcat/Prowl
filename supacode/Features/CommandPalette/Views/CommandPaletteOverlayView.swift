@@ -537,7 +537,7 @@ private struct CommandPaletteRowView: View {
   private var badge: String? {
     switch row.kind {
     case .checkForUpdates, .openRepository, .layoutCenter, .layoutArrange, .layoutOverview,
-      .openInVSCode, .openInFork, .openSettings, .newWorktree,
+      .openInVSCode, .openInFork, .openWeb, .openSettings, .newWorktree,
       .viewArchivedWorktrees, .refreshWorktrees, .installCLI, .jumpToLatestUnread, .ghosttyCommand,
       .openPullRequest, .openRepositoryOnCodeHost, .markPullRequestReady, .mergePullRequest, .closePullRequest,
       .copyFailingJobURL,
@@ -575,6 +575,8 @@ private struct CommandPaletteRowView: View {
       return "chevron.left.forwardslash.chevron.right"
     case .openInFork:
       return "arrow.triangle.branch"
+    case .openWeb:
+      return "globe"
     case .openSettings:
       return "gearshape"
     case .newWorktree:
@@ -667,8 +669,8 @@ private struct CommandPaletteRowView: View {
     case .revealInFinder:
       return CommandPaletteAppIcons.revealInFinder
     case .checkForUpdates, .openRepository, .layoutCenter, .layoutArrange, .layoutOverview,
-      .copyPath, .openSettings, .newWorktree, .viewArchivedWorktrees, .refreshWorktrees,
-      .jumpToLatestUnread, .installCLI, .ghosttyCommand, .openPullRequest, .openRepositoryOnCodeHost,
+      .openWeb, .copyPath, .openSettings, .newWorktree, .viewArchivedWorktrees, .refreshWorktrees, .installCLI,
+      .jumpToLatestUnread, .ghosttyCommand, .openPullRequest, .openRepositoryOnCodeHost,
       .markPullRequestReady, .mergePullRequest, .closePullRequest, .copyFailingJobURL, .copyCiFailureLogs,
       .rerunFailedJobs, .openFailingCheckDetails, .worktreeSelect, .changeFocusedTabIcon,
       .toggleLeftSidebar, .toggleActiveAgentsPanel, .toggleCanvas, .toggleShelf, .showDiff,
@@ -685,7 +687,7 @@ private struct CommandPaletteRowView: View {
   private var emphasis: Bool {
     switch row.kind {
     case .checkForUpdates, .openRepository, .layoutCenter, .layoutArrange, .layoutOverview,
-      .openInVSCode, .openInFork, .openSettings, .newWorktree,
+      .openInVSCode, .openInFork, .openWeb, .openSettings, .newWorktree,
       .viewArchivedWorktrees, .refreshWorktrees, .installCLI, .jumpToLatestUnread, .ghosttyCommand,
       .openPullRequest, .openRepositoryOnCodeHost, .markPullRequestReady, .mergePullRequest, .closePullRequest,
       .copyFailingJobURL,
@@ -823,6 +825,8 @@ private struct CommandPaletteRowView: View {
       base = "Jump to Latest Unread"
     case .ghosttyCommand:
       base = row.title
+    case .openWeb:
+      base = "Open repository web URL"
     case .openPullRequest, .openRepositoryOnCodeHost:
       base = row.title
     case .markPullRequestReady:
