@@ -93,6 +93,10 @@ final class GhosttyRuntime {
     currentColorScheme
   }
 
+  var currentSurfaceRefreshColorSchemeForTesting: ghostty_color_scheme_e? {
+    lastColorScheme
+  }
+
   func registerNotificationObservers() {
     let center = NotificationCenter.default
     observers.append(
@@ -230,6 +234,11 @@ final class GhosttyRuntime {
     return ref
   }
 
+  func reapplyCurrentColorScheme(to surface: ghostty_surface_t) {
+    guard let lastColorScheme else { return }
+    ghostty_surface_set_color_scheme(surface, lastColorScheme)
+  }
+
   func unregisterSurface(_ ref: SurfaceReference) {
     ref.invalidate()
     surfaceRefs = surfaceRefs.filter { $0.isValid }
@@ -272,6 +281,40 @@ final class GhosttyRuntime {
     default:
       return
     }
+  }
+
+  func makeConfig(appendingRuntimeOverrideContents additionalOverrideContents: String?) -> ghostty_config_t? {
+    guard let updated = ghostty_config_new() else { return nil }
+    ghostty_config_load_default_files(updated)
+    ghostty_config_load_recursive_files(updated)
+    ghostty_config_load_cli_args(updated)
+
+    let overrideContents = [
+      appKeybindOverrideContents,
+      themeFallbackOverrideContents,
+      additionalOverrideContents ?? "",
+    ]
+    .filter { !$0.isEmpty }
+    .joined(separator: "\n")
+
+    if !overrideContents.isEmpty {
+      let url = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("prowl-ghostty-surface-overrides-\(UUID().uuidString).conf")
+      do {
+        try overrideContents.write(to: url, atomically: true, encoding: .utf8)
+        url.path.withCString { path in
+          ghostty_config_load_file(updated, path)
+        }
+        try? FileManager.default.removeItem(at: url)
+      } catch {
+        ghosttyLogger.warning("Failed to write ghostty surface override file: \(error.localizedDescription)")
+        ghostty_config_free(updated)
+        return nil
+      }
+    }
+
+    ghostty_config_finalize(updated)
+    return updated
   }
 
   func applyColorSchemeToSurfaces(_ scheme: ghostty_color_scheme_e) {

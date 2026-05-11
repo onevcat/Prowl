@@ -58,6 +58,7 @@ struct CanvasView: View {
   var onExpandedChange: (Bool) -> Void = { _ in }
   var onDirectionalNewTerminalRequested: ((Worktree.ID?, DirectionalNewTerminalDirectoryMode) -> Void)?
   @State var layoutStore = CanvasLayoutStore()
+  @State var cardDebugStyleStore = CanvasCardDebugStyleStore()
   @Shared(.repositoryAppearances) var repositoryAppearances
 
   @State var canvasOffset: CGSize = .zero
@@ -364,6 +365,7 @@ struct CanvasView: View {
       )
     }
     .task {
+      cardDebugStyleStore.startWatching()
       activateCanvas()
       fulfillCommandRequest(commandRequest)
     }
@@ -371,6 +373,7 @@ struct CanvasView: View {
       configReloadCounter &+= 1
     }
     .onDisappear {
+      cardDebugStyleStore.stopWatching()
       deactivateCanvas()
       cancelArrangeAutoScaleTask()
       cancelOverviewRestoreTask()
@@ -505,6 +508,7 @@ struct CanvasView: View {
         isFocused: selectionState.primaryTabID == tab.id,
         isSelected: selectionState.selectedTabIDs.contains(tab.id),
         hasUnseenNotification: state.hasUnseenNotification(for: tab.id),
+        debugStyle: cardDebugStyleStore.configuration,
         cardSize: renderSize,
         isExpanded: isCardExpanded,
         expandHelp: expandHelp,

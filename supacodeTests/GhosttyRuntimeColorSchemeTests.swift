@@ -1,6 +1,7 @@
 import SwiftUI
 import Testing
 
+import GhosttyKit
 @testable import supacode
 
 @MainActor
@@ -15,5 +16,11 @@ struct GhosttyRuntimeColorSchemeTests {
     let runtime = GhosttyRuntime()
 
     #expect(runtime.appliedColorSchemeForTesting == nil)
+  }
+
+  @Test func initialColorSchemeIsAvailableForSurfaceConfigRefresh() {
+    let runtime = GhosttyRuntime(initialColorScheme: .dark)
+
+    #expect(runtime.currentSurfaceRefreshColorSchemeForTesting == GHOSTTY_COLOR_SCHEME_DARK)
   }
 }

@@ -5,6 +5,7 @@ private let terminalHostLogger = SupaLogger("TerminalHost")
 struct GhosttyTerminalView: NSViewRepresentable {
   let surfaceView: GhosttySurfaceView
   var pinnedSize: CGSize?
+  var debugStyle: CanvasCardDebugStyleConfiguration?
 
   private var hostKind: GhosttySurfaceScrollView.HostKind {
     pinnedSize == nil ? .terminal : .canvas
@@ -20,6 +21,7 @@ struct GhosttyTerminalView: NSViewRepresentable {
     return terminalHostLogger.interval("Ghostty.makeNSView") {
       let view = GhosttySurfaceScrollView(surfaceView: surfaceView, hostKind: hostKind)
       view.updateHostedSurface(pinnedSize: pinnedSize)
+      view.applyCanvasDebugStyle(debugStyle)
       return view
     }
   }
@@ -27,6 +29,7 @@ struct GhosttyTerminalView: NSViewRepresentable {
   func updateNSView(_ view: GhosttySurfaceScrollView, context: Context) {
     terminalHostLogger.interval("Ghostty.updateNSView") {
       view.updateHostedSurface(pinnedSize: pinnedSize)
+      view.applyCanvasDebugStyle(debugStyle)
     }
   }
 

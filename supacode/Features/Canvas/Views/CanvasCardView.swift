@@ -23,6 +23,7 @@ struct CanvasCardView: View {
   let isFocused: Bool
   let isSelected: Bool
   let hasUnseenNotification: Bool
+  let debugStyle: CanvasCardDebugStyleConfiguration
   let cardSize: CGSize
   /// Whether this card is currently expanded in place (near-fullscreen). When
   /// true the title-bar button restores instead of expands, resize handles and
@@ -122,10 +123,11 @@ struct CanvasCardView: View {
 
   @ViewBuilder
   private var cardBackground: some View {
-    if isSelected && !isFocused {
-      Color.accentColor.opacity(0.08)
-    } else {
-      Color.clear
+    ZStack {
+      CanvasCardBackdropView(backdrop: debugStyle.cardBackdrop, cornerRadius: cornerRadius)
+      if isSelected && !isFocused {
+        Color.accentColor.opacity(debugStyle.selectedCardTintOpacity)
+      }
     }
   }
 
@@ -235,7 +237,7 @@ struct CanvasCardView: View {
     //
     //  1. selected-but-unfocused accent (subtle, sits under the bar
     //     material — same behavior as before this feature shipped)
-    //  2. `.bar` material substrate
+    //  2. debug-configurable material substrate
     //  3. **either** the notification orange **or** the repo color
     //     identity strip — never both. Without this mutual exclusion
     //     the orange used to muddle into the repo color (e.g. a blue
@@ -244,14 +246,12 @@ struct CanvasCardView: View {
     //     on top with a much higher alpha (0.55) than the previous
     //     under-bar 0.3 so the unread signal actually pops.
     ZStack {
+      CanvasCardBackdropView(backdrop: debugStyle.titleBarBackdrop, cornerRadius: nil)
       if isSelected && !isFocused {
-        Color.accentColor.opacity(0.12)
+        Color.accentColor.opacity(debugStyle.selectedTitleBarTintOpacity)
       }
-      Rectangle()
-        .fill(.bar)
-        .opacity(0.9)
       if hasUnseenNotification {
-        Color.orange.opacity(0.55)
+        Color.orange.opacity(debugStyle.notificationTintOpacity)
       } else if let repositoryColor {
         repositoryColor.opacity(isFocused ? 0.18 : 0.10)
       }
@@ -270,6 +270,7 @@ struct CanvasCardView: View {
       activeSurfaceID: activeSurfaceID,
       unfocusedSplitOverlay: unfocusedSplitOverlay,
       splitDivider: splitDivider,
+      debugStyle: debugStyle,
       hasNotification: { _ in false },
       action: onSplitOperation
     )

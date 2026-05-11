@@ -9,6 +9,7 @@ struct TerminalSplitTreeView: View {
   var activeSurfaceID: UUID?
   var unfocusedSplitOverlay: (fill: Color?, opacity: Double)
   var splitDivider: (color: Color?, width: CGFloat?) = (nil, nil)
+  var debugStyle: CanvasCardDebugStyleConfiguration?
   let hasNotification: (UUID) -> Bool
   let action: (Operation) -> Void
 
@@ -36,6 +37,7 @@ struct TerminalSplitTreeView: View {
         activeSurfaceID: activeSurfaceID,
         unfocusedSplitOverlay: unfocusedSplitOverlay,
         splitDivider: splitDivider,
+        debugStyle: debugStyle,
         hasNotification: hasNotification,
         action: action
       )
@@ -58,6 +60,7 @@ struct TerminalSplitTreeView: View {
     var activeSurfaceID: UUID?
     var unfocusedSplitOverlay: (fill: Color?, opacity: Double)
     var splitDivider: (color: Color?, width: CGFloat?) = (nil, nil)
+    var debugStyle: CanvasCardDebugStyleConfiguration?
     let hasNotification: (UUID) -> Bool
     let action: (Operation) -> Void
 
@@ -70,6 +73,7 @@ struct TerminalSplitTreeView: View {
           isZoomed: zoomedNode == node,
           isFocused: leafView.id == activeSurfaceID,
           unfocusedSplitOverlay: unfocusedSplitOverlay,
+          debugStyle: debugStyle,
           hasNotification: hasNotification(leafView.id),
           pinnedSize: pinnedSize,
           action: action
@@ -104,6 +108,7 @@ struct TerminalSplitTreeView: View {
               activeSurfaceID: activeSurfaceID,
               unfocusedSplitOverlay: unfocusedSplitOverlay,
               splitDivider: splitDivider,
+              debugStyle: debugStyle,
               hasNotification: hasNotification,
               action: action
             )
@@ -116,6 +121,7 @@ struct TerminalSplitTreeView: View {
               activeSurfaceID: activeSurfaceID,
               unfocusedSplitOverlay: unfocusedSplitOverlay,
               splitDivider: splitDivider,
+              debugStyle: debugStyle,
               hasNotification: hasNotification,
               action: action
             )
@@ -145,6 +151,7 @@ struct TerminalSplitTreeView: View {
     var isZoomed: Bool = false
     var isFocused: Bool = true
     var unfocusedSplitOverlay: (fill: Color?, opacity: Double)
+    var debugStyle: CanvasCardDebugStyleConfiguration?
     let hasNotification: Bool
     var pinnedSize: CGSize?
     let action: (Operation) -> Void
@@ -164,7 +171,7 @@ struct TerminalSplitTreeView: View {
 
     var body: some View {
       GeometryReader { geometry in
-        GhosttyTerminalView(surfaceView: surfaceView, pinnedSize: pinnedSize)
+        GhosttyTerminalView(surfaceView: surfaceView, pinnedSize: pinnedSize, debugStyle: debugStyle)
           .frame(maxWidth: .infinity, maxHeight: .infinity)
           .overlay {
             unfocusedSplitOverlay.fill
