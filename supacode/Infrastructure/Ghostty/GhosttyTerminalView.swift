@@ -6,6 +6,7 @@ struct GhosttyTerminalView: NSViewRepresentable {
   let surfaceView: GhosttySurfaceView
   var pinnedSize: CGSize?
   var debugStyle: CanvasCardDebugStyleConfiguration?
+  var configReloadGeneration = 0
 
   private var hostKind: GhosttySurfaceScrollView.HostKind {
     pinnedSize == nil ? .terminal : .canvas
@@ -21,7 +22,7 @@ struct GhosttyTerminalView: NSViewRepresentable {
     return terminalHostLogger.interval("Ghostty.makeNSView") {
       let view = GhosttySurfaceScrollView(surfaceView: surfaceView, hostKind: hostKind)
       view.updateHostedSurface(pinnedSize: pinnedSize)
-      view.applyCanvasDebugStyle(debugStyle)
+      view.applyCanvasDebugStyle(debugStyle, configReloadGeneration: configReloadGeneration)
       return view
     }
   }
@@ -29,7 +30,7 @@ struct GhosttyTerminalView: NSViewRepresentable {
   func updateNSView(_ view: GhosttySurfaceScrollView, context: Context) {
     terminalHostLogger.interval("Ghostty.updateNSView") {
       view.updateHostedSurface(pinnedSize: pinnedSize)
-      view.applyCanvasDebugStyle(debugStyle)
+      view.applyCanvasDebugStyle(debugStyle, configReloadGeneration: configReloadGeneration)
     }
   }
 

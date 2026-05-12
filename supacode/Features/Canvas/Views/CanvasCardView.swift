@@ -24,6 +24,7 @@ struct CanvasCardView: View {
   let isSelected: Bool
   let hasUnseenNotification: Bool
   let debugStyle: CanvasCardDebugStyleConfiguration
+  let configReloadGeneration: Int
   let cardSize: CGSize
   /// Whether this card is currently expanded in place (near-fullscreen). When
   /// true the title-bar button restores instead of expands, resize handles and
@@ -70,6 +71,7 @@ struct CanvasCardView: View {
   // Gesture-driven drag state: does NOT trigger body re-evaluation
   @GestureState private var dragTranslation: CGSize = .zero
   @State private var isHoveringTitleBar: Bool = false
+  @Environment(\.colorScheme) private var colorScheme
 
   var body: some View {
     VStack(spacing: 0) {
@@ -125,6 +127,7 @@ struct CanvasCardView: View {
   private var cardBackground: some View {
     ZStack {
       CanvasCardBackdropView(backdrop: debugStyle.cardBackdrop, cornerRadius: cornerRadius)
+      Color.white.opacity(debugStyle.cardGlassTintOpacity.clampedOpacity)
       if isSelected && !isFocused {
         Color.accentColor.opacity(debugStyle.selectedCardTintOpacity)
       }
@@ -264,21 +267,33 @@ struct CanvasCardView: View {
       .foregroundStyle(.secondary)
   }
   private var terminalContent: some View {
-    AnimatedTerminalSplitTreeView(
-      tree: tree,
-      size: cardSize,
-      activeSurfaceID: activeSurfaceID,
-      unfocusedSplitOverlay: unfocusedSplitOverlay,
-      splitDivider: splitDivider,
-      debugStyle: debugStyle,
-      hasNotification: { _ in false },
-      action: onSplitOperation
-    )
+    ZStack {
+      terminalReadabilityScrimColor.opacity(debugStyle.terminalReadabilityScrimOpacity.clampedOpacity)
+      AnimatedTerminalSplitTreeView(
+        tree: tree,
+        size: cardSize,
+        activeSurfaceID: activeSurfaceID,
+        unfocusedSplitOverlay: unfocusedSplitOverlay,
+        splitDivider: splitDivider,
+        debugStyle: debugStyle,
+        configReloadGeneration: configReloadGeneration,
+        hasNotification: { _ in false },
+        action: onSplitOperation
+      )
+    }
     // No own size animation: the canvas drives every size change inside a
     // withAnimation (expand/restore, resize commit, arrange), so the terminal
     // refit stays in lock-step with the card's offset/scale. Without a wrapping
     // animation (live resize drag) the size tracks the gesture 1:1.
     .allowsHitTesting(isFocused && !showsSelectionShield)
+  }
+
+  private var terminalReadabilityScrimColor: Color {
+    let configuredColor =
+      colorScheme == .dark
+      ? debugStyle.terminalReadabilityScrimDarkColor
+      : debugStyle.terminalReadabilityScrimLightColor
+    return configuredColor.map(Color.init(canvasDebugHexColor:)) ?? (colorScheme == .dark ? .black : .white)
   }
 
   private var selectionShield: some View {
@@ -416,6 +431,8 @@ private struct AnimatedTerminalSplitTreeView: View, Animatable {
   let activeSurfaceID: UUID?
   let unfocusedSplitOverlay: (fill: Color?, opacity: Double)
   var splitDivider: (color: Color?, width: CGFloat?)
+  var debugStyle: CanvasCardDebugStyleConfiguration?
+  var configReloadGeneration = 0
   let hasNotification: (UUID) -> Bool
   let action: (TerminalSplitTreeView.Operation) -> Void
 
@@ -433,10 +450,29 @@ private struct AnimatedTerminalSplitTreeView: View, Animatable {
       activeSurfaceID: activeSurfaceID,
       unfocusedSplitOverlay: unfocusedSplitOverlay,
       splitDivider: splitDivider,
+      debugStyle: debugStyle,
+      configReloadGeneration: configReloadGeneration,
       hasNotification: hasNotification,
       action: action
     )
     .frame(width: size.width, height: size.height)
+  }
+}
+
+private extension Double {
+  var clampedOpacity: Double {
+    min(max(self, 0), 1)
+  }
+}
+
+private extension Color {
+  init(canvasDebugHexColor color: CanvasCardDebugStyleConfiguration.HexColor) {
+    self.init(
+      red: color.red,
+      green: color.green,
+      blue: color.blue,
+      opacity: color.alpha
+    )
   }
 }
 

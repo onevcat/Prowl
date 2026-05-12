@@ -515,6 +515,7 @@ struct CanvasView: View {
         isSelected: selectionState.selectedTabIDs.contains(tab.id),
         hasUnseenNotification: state.hasUnseenNotification(for: tab.id),
         debugStyle: cardDebugStyleStore.configuration,
+        configReloadGeneration: configReloadCounter,
         cardSize: renderSize,
         isExpanded: isCardExpanded,
         expandHelp: expandHelp,

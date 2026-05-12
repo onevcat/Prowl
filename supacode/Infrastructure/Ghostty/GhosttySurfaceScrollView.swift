@@ -183,8 +183,14 @@ final class GhosttySurfaceScrollView: NSView {
     needsLayout = true
   }
 
-  func applyCanvasDebugStyle(_ style: CanvasCardDebugStyleConfiguration?) {
-    surfaceView.applyCanvasDebugTerminalStyle(hostKind == .canvas ? style : nil)
+  func applyCanvasDebugStyle(
+    _ style: CanvasCardDebugStyleConfiguration?,
+    configReloadGeneration: Int
+  ) {
+    surfaceView.applyCanvasDebugTerminalStyle(
+      hostKind == .canvas ? style : nil,
+      configReloadGeneration: configReloadGeneration
+    )
   }
 
   var isSurfaceAttachedToDocumentView: Bool {

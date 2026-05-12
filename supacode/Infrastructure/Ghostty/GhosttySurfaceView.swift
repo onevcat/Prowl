@@ -154,6 +154,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
   var prevPressureStage: Int = 0
   private var isBackgroundOpaqueOverride = false
   private var canvasDebugTerminalOverrideSignature: String?
+  private var canvasDebugTerminalOverrideConfigGeneration = 0
   lazy var cachedScreenContents = CachedValue<String>(duration: .milliseconds(500)) {
     [weak self] in
     self?.readScreenContents() ?? ""
@@ -531,9 +532,17 @@ final class GhosttySurfaceView: NSView, Identifiable {
     applyWindowBackgroundAppearance()
   }
 
-  func applyCanvasDebugTerminalStyle(_ style: CanvasCardDebugStyleConfiguration?) {
+  func applyCanvasDebugTerminalStyle(
+    _ style: CanvasCardDebugStyleConfiguration?,
+    configReloadGeneration: Int
+  ) {
     let signature = style?.terminalOverrideSignature
-    guard signature != canvasDebugTerminalOverrideSignature else { return }
+    guard
+      signature != canvasDebugTerminalOverrideSignature
+        || configReloadGeneration != canvasDebugTerminalOverrideConfigGeneration
+    else {
+      return
+    }
     guard let surface else { return }
     guard let config = runtime.makeConfig(appendingRuntimeOverrideContents: style?.terminalOverrideContents) else {
       return
@@ -543,6 +552,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
     runtime.reapplyCurrentColorScheme(to: surface)
     ghostty_config_free(config)
     canvasDebugTerminalOverrideSignature = signature
+    canvasDebugTerminalOverrideConfigGeneration = configReloadGeneration
     needsDisplay = true
   }
 

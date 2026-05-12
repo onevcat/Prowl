@@ -75,41 +75,7 @@ extension GhosttyRuntime {
     let nextSignature = [appKeybindOverrideContents, themeFallbackOverrideContents].joined(separator: "\n---\n")
     guard nextSignature != runtimeOverrideSignature else { return }
 
-    var overrideURLs: [URL] = []
-    if !appKeybindOverrideContents.isEmpty {
-      let url = URL(fileURLWithPath: NSTemporaryDirectory())
-        .appendingPathComponent("prowl-ghostty-keybind-overrides.conf")
-      do {
-        try appKeybindOverrideContents.write(to: url, atomically: true, encoding: .utf8)
-        overrideURLs.append(url)
-      } catch {
-        ghosttyLogger.warning("Failed to write ghostty keybind override file: \(error.localizedDescription)")
-        return
-      }
-    }
-
-    if !themeFallbackOverrideContents.isEmpty {
-      let url = URL(fileURLWithPath: NSTemporaryDirectory())
-        .appendingPathComponent("prowl-ghostty-theme-overrides.conf")
-      do {
-        try themeFallbackOverrideContents.write(to: url, atomically: true, encoding: .utf8)
-        overrideURLs.append(url)
-      } catch {
-        ghosttyLogger.warning("Failed to write ghostty theme override file: \(error.localizedDescription)")
-        return
-      }
-    }
-
-    guard let updated = ghostty_config_new() else { return }
-    ghostty_config_load_default_files(updated)
-    ghostty_config_load_recursive_files(updated)
-    ghostty_config_load_cli_args(updated)
-    for url in overrideURLs {
-      url.path.withCString { path in
-        ghostty_config_load_file(updated, path)
-      }
-    }
-    ghostty_config_finalize(updated)
+    guard let updated = makeConfig(appendingRuntimeOverrideContents: nil) else { return }
     ghostty_app_update_config(app, updated)
     if let clone = ghostty_config_clone(updated) {
       setConfig(clone)

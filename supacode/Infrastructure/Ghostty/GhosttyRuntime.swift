@@ -244,15 +244,9 @@ final class GhosttyRuntime {
     surfaceRefs = surfaceRefs.filter { $0.isValid }
   }
 
-  func reloadConfig(soft: Bool, target: ghostty_target_s) {
+  func reloadConfig(soft _: Bool, target: ghostty_target_s) {
     guard let app else { return }
-    if soft, let config {
-      guard let clone = ghostty_config_clone(config) else { return }
-      applyConfig(clone, target: target, app: app)
-      ghostty_config_free(clone)
-      return
-    }
-    guard let config = Self.loadConfig() else { return }
+    guard let config = makeConfig(appendingRuntimeOverrideContents: nil) else { return }
     applyConfig(config, target: target, app: app)
     ghostty_config_free(config)
   }
@@ -284,11 +278,10 @@ final class GhosttyRuntime {
   }
 
   func makeConfig(appendingRuntimeOverrideContents additionalOverrideContents: String?) -> ghostty_config_t? {
-    guard let updated = ghostty_config_new() else { return nil }
-    ghostty_config_load_default_files(updated)
-    ghostty_config_load_recursive_files(updated)
-    ghostty_config_load_cli_args(updated)
+    Self.loadConfig(appendingOverrideContents: runtimeOverrideContents(appending: additionalOverrideContents))
+  }
 
+  func runtimeOverrideContents(appending additionalOverrideContents: String?) -> String? {
     let overrideContents = [
       appKeybindOverrideContents,
       themeFallbackOverrideContents,
@@ -296,25 +289,7 @@ final class GhosttyRuntime {
     ]
     .filter { !$0.isEmpty }
     .joined(separator: "\n")
-
-    if !overrideContents.isEmpty {
-      let url = URL(fileURLWithPath: NSTemporaryDirectory())
-        .appendingPathComponent("prowl-ghostty-surface-overrides-\(UUID().uuidString).conf")
-      do {
-        try overrideContents.write(to: url, atomically: true, encoding: .utf8)
-        url.path.withCString { path in
-          ghostty_config_load_file(updated, path)
-        }
-        try? FileManager.default.removeItem(at: url)
-      } catch {
-        ghosttyLogger.warning("Failed to write ghostty surface override file: \(error.localizedDescription)")
-        ghostty_config_free(updated)
-        return nil
-      }
-    }
-
-    ghostty_config_finalize(updated)
-    return updated
+    return overrideContents.isEmpty ? nil : overrideContents
   }
 
   func applyColorSchemeToSurfaces(_ scheme: ghostty_color_scheme_e) {
@@ -375,11 +350,26 @@ final class GhosttyRuntime {
     return trigger.isEmpty ? nil : trigger
   }
 
-  static func loadConfig() -> ghostty_config_t? {
+  static func loadConfig(appendingOverrideContents overrideContents: String? = nil) -> ghostty_config_t? {
     guard let config = ghostty_config_new() else { return nil }
     ghostty_config_load_default_files(config)
     ghostty_config_load_recursive_files(config)
     ghostty_config_load_cli_args(config)
+    if let overrideContents, !overrideContents.isEmpty {
+      let url = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("prowl-ghostty-runtime-overrides-\(UUID().uuidString).conf")
+      do {
+        try overrideContents.write(to: url, atomically: true, encoding: .utf8)
+        url.path.withCString { path in
+          ghostty_config_load_file(config, path)
+        }
+        try? FileManager.default.removeItem(at: url)
+      } catch {
+        ghosttyLogger.warning("Failed to write ghostty runtime override file: \(error.localizedDescription)")
+        ghostty_config_free(config)
+        return nil
+      }
+    }
     ghostty_config_finalize(config)
     return config
   }
