@@ -259,6 +259,7 @@ struct RepositoriesFeature {
     /// worktree that's never been touched does not appear as a spine.
     var openedWorktreeIDs: Set<Worktree.ID> = []
     var shouldCenterRestoredCanvasSoloTab = false
+    var shouldFocusRestoredCanvasAtScaleOne = false
     var launchRestoreMode: LaunchRestoreMode = .lastFocusedWorktree
     var shouldRestoreLastFocusedWorktree = false
     var shouldSelectFirstAfterReload = false
@@ -357,6 +358,7 @@ struct RepositoriesFeature {
     case markWorktreeOpened(Worktree.ID)
     case markWorktreeClosed(Worktree.ID)
     case consumeRestoredCanvasSoloTabCentering
+    case consumeRestoredCanvasScaleOneFocus
     case setSidebarSelectedWorktreeIDs(Set<Worktree.ID>)
     case selectRepository(Repository.ID?)
     case selectWorktree(Worktree.ID?, focusTerminal: Bool = false, recordHistory: Bool = true)

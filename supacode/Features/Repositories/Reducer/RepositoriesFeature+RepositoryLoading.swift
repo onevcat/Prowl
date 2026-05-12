@@ -330,6 +330,7 @@ extension RepositoriesFeature {
       state.selection = .canvas
       state.sidebarSelectedWorktreeIDs = []
       state.shouldCenterRestoredCanvasSoloTab = true
+      state.shouldFocusRestoredCanvasAtScaleOne = true
       state.shouldRestoreLastFocusedWorktree = false
       didRestoreCanvasModeOnLaunch = true
     }

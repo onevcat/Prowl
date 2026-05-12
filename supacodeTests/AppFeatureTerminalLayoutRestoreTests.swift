@@ -315,6 +315,7 @@ struct AppFeatureTerminalLayoutRestoreTests {
     }
     await store.receive(\.repositories.restoreCanvasOnLaunch) {
       $0.repositories.shouldCenterRestoredCanvasSoloTab = false
+      $0.repositories.shouldFocusRestoredCanvasAtScaleOne = true
       $0.repositories.preCanvasWorktreeID = fallbackWorktree.id
       $0.repositories.preCanvasTerminalTargetID = fallbackWorktree.id
       $0.repositories.canvasReturnWorktreeID = fallbackWorktree.id

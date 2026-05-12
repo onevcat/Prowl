@@ -75,6 +75,7 @@ struct CanvasView: View {
   @State var showsCanvasHelp = false
   @State var configReloadCounter = 0
   @State var focusViewportAnimationID = 0
+  @State var pendingCenterRequest: PendingCenterRequest?
   @State var arrangeAutoScaleTask: Task<Void, Never>?
   @State var overviewRestoreTask: Task<Void, Never>?
   @State var activeOverviewRestoreSnapshot: CanvasOverviewRestoreSnapshot?
@@ -282,6 +283,11 @@ struct CanvasView: View {
             }
           }
           fitToView(canvasSize: newSize)
+        }
+        if let pendingCenterRequest,
+          centerCanvas(on: pendingCenterRequest.tabID, scale: pendingCenterRequest.scale)
+        {
+          self.pendingCenterRequest = nil
         }
       }
     }
@@ -626,6 +632,11 @@ struct CanvasView: View {
     let direction: CanvasCardPlacementStrategy.Direction
   }
 
+  struct PendingCenterRequest: Equatable {
+    let tabID: TerminalTabID
+    let scale: CGFloat?
+  }
+
   /// Batch-position cards that don't have stored layouts yet.
   /// Placement order:
   /// 1) Current worktree region
@@ -873,14 +884,21 @@ struct CanvasView: View {
     lastCanvasOffset = canvasOffset
   }
 
-  func centerCanvas(on tabID: TerminalTabID) -> Bool {
+  func centerCanvas(
+    on tabID: TerminalTabID,
+    scale targetScale: CGFloat? = nil
+  ) -> Bool {
     guard viewportSize.width > 0, viewportSize.height > 0 else { return false }
     let key = tabID.rawValue.uuidString
     guard let layout = layoutStore.cardLayouts[key] else { return false }
-    canvasOffset = CGSize(
-      width: viewportSize.width / 2 - layout.position.x * canvasScale,
-      height: viewportSize.height / 2 - layout.position.y * canvasScale
+    let centered = CanvasViewportMath.centeredViewport(
+      viewportSize: viewportSize,
+      canvasPoint: layout.position,
+      scale: targetScale ?? canvasScale
     )
+    canvasScale = centered.scale
+    lastCanvasScale = centered.scale
+    canvasOffset = centered.offset
     lastCanvasOffset = canvasOffset
     return true
   }

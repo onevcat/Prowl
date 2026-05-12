@@ -362,6 +362,7 @@ extension RepositoriesFeature {
       recordWorktreeHistoryTransition(from: state.selectedWorktreeID, to: nil, state: &state)
       @Shared(.appStorage(restoreCanvasModeOnLaunchAppStorageKey)) var restoreCanvasModeOnLaunch = false
       $restoreCanvasModeOnLaunch.withLock { $0 = false }
+      state.shouldFocusRestoredCanvasAtScaleOne = false
       state.selection = .archivedWorktrees
       state.sidebarSelectedWorktreeIDs = []
       return .send(.delegate(.selectedWorktreeChanged(nil)))
@@ -370,6 +371,7 @@ extension RepositoriesFeature {
       @Shared(.appStorage(restoreCanvasModeOnLaunchAppStorageKey)) var restoreCanvasModeOnLaunch = false
       $restoreCanvasModeOnLaunch.withLock { $0 = true }
       state.shouldCenterRestoredCanvasSoloTab = false
+      state.shouldFocusRestoredCanvasAtScaleOne = false
       // Remember the current worktree so toggleCanvas can restore it.
       let canvasSeedWorktree = state.selectedTerminalWorktree
       state.preCanvasWorktreeID = state.selectedWorktreeID
@@ -396,6 +398,7 @@ extension RepositoriesFeature {
 
     case .restoreCanvasOnLaunch(let worktreeID):
       state.shouldCenterRestoredCanvasSoloTab = false
+      state.shouldFocusRestoredCanvasAtScaleOne = true
       state.preCanvasWorktreeID = worktreeID
       state.preCanvasTerminalTargetID = worktreeID
       state.canvasReturnWorktreeID = worktreeID
@@ -441,6 +444,7 @@ extension RepositoriesFeature {
     case .selectFreestyle:
       @Shared(.appStorage(restoreCanvasModeOnLaunchAppStorageKey)) var restoreCanvasModeOnLaunch = false
       $restoreCanvasModeOnLaunch.withLock { $0 = false }
+      state.shouldFocusRestoredCanvasAtScaleOne = false
       state.isShelfActive = false
       state.selection = .freestyle
       state.sidebarSelectedWorktreeIDs = []
@@ -449,6 +453,7 @@ extension RepositoriesFeature {
     case .toggleCanvas:
       if state.isShowingCanvas {
         state.shouldCenterRestoredCanvasSoloTab = false
+        state.shouldFocusRestoredCanvasAtScaleOne = false
         // Exit canvas: prefer the card focused in canvas, then the worktree
         // we came from, then the first available worktree.
         let targetID =
@@ -515,6 +520,10 @@ extension RepositoriesFeature {
       state.shouldCenterRestoredCanvasSoloTab = false
       return .none
 
+    case .consumeRestoredCanvasScaleOneFocus:
+      state.shouldFocusRestoredCanvasAtScaleOne = false
+      return .none
+
     case .toggleShelf:
       if state.isShelfActive {
         state.isShelfActive = false
@@ -531,6 +540,7 @@ extension RepositoriesFeature {
       case .some(.canvas), .some(.archivedWorktrees), .none:
         needsRedirect = true
       }
+      state.shouldFocusRestoredCanvasAtScaleOne = false
       state.isShelfActive = true
       if !needsRedirect {
         // The current selection is the open book — make sure it's
@@ -596,6 +606,7 @@ extension RepositoriesFeature {
       defer { repositoriesLogger.endInterval(selectRepoToken) }
       @Shared(.appStorage(restoreCanvasModeOnLaunchAppStorageKey)) var restoreCanvasModeOnLaunch = false
       $restoreCanvasModeOnLaunch.withLock { $0 = false }
+      state.shouldFocusRestoredCanvasAtScaleOne = false
       guard let repositoryID, state.repositories[id: repositoryID] != nil else { return .none }
       recordWorktreeHistoryTransition(from: state.selectedWorktreeID, to: nil, state: &state)
       state.selection = .repository(repositoryID)
@@ -611,6 +622,7 @@ extension RepositoriesFeature {
       defer { repositoriesLogger.endInterval(selectWtToken) }
       @Shared(.appStorage(restoreCanvasModeOnLaunchAppStorageKey)) var restoreCanvasModeOnLaunch = false
       $restoreCanvasModeOnLaunch.withLock { $0 = false }
+      state.shouldFocusRestoredCanvasAtScaleOne = false
       setSingleWorktreeSelection(worktreeID, state: &state, recordHistory: recordHistory)
       if focusTerminal, let worktreeID {
         state.pendingTerminalFocusWorktreeIDs.insert(worktreeID)
@@ -653,6 +665,7 @@ extension RepositoriesFeature {
         .tab(tabID),
         openedWorktreeID: worktree.id,
         shouldCenterInViewport: shouldCenterInViewport,
+        centerScale: state.shouldFocusRestoredCanvasAtScaleOne ? 1.0 : nil,
         state: &state
       )
       return .run { _ in

@@ -143,7 +143,11 @@ extension CanvasView {
     guard let tabID else { return }
     focusSingleCard(tabID, states: states)
     if request.shouldCenterInViewport {
-      _ = centerCanvas(on: tabID)
+      if !centerCanvas(on: tabID, scale: request.centerScale) {
+        pendingCenterRequest = PendingCenterRequest(tabID: tabID, scale: request.centerScale)
+      } else {
+        pendingCenterRequest = nil
+      }
     } else {
       ensureTabVisibleInViewport(tabID, minimumInset: focusVisibleInset)
     }
@@ -389,6 +393,7 @@ extension CanvasView {
     pendingCreatedTabID = nil
     terminalManager.canvasFocusedWorktreeID = nil
     onFocusedWorktreeChanged(nil)
+    pendingCenterRequest = nil
     // Don't occlude surfaces here. In SwiftUI's if/else view swap,
     // onAppear fires before onDisappear, so occluding here would undo
     // WorktreeTerminalTabsView.onAppear's syncFocus() and cause blank

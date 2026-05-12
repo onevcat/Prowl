@@ -1617,6 +1617,7 @@ struct RepositoriesFeatureTests {
     }
 
     await store.send(.restoreCanvasOnLaunch(worktree.id)) {
+      $0.shouldFocusRestoredCanvasAtScaleOne = true
       $0.preCanvasWorktreeID = worktree.id
       $0.preCanvasTerminalTargetID = worktree.id
       $0.canvasReturnWorktreeID = worktree.id
@@ -1747,6 +1748,7 @@ struct RepositoriesFeatureTests {
       $0.preCanvasTerminalTargetID = worktree.id
       $0.canvasReturnWorktreeID = worktree.id
       $0.shouldCenterRestoredCanvasSoloTab = true
+      $0.shouldFocusRestoredCanvasAtScaleOne = true
       $0.shouldRestoreLastFocusedWorktree = false
       $0.isInitialLoadComplete = true
     }
@@ -1770,6 +1772,18 @@ struct RepositoriesFeatureTests {
 
     await store.send(.consumeRestoredCanvasSoloTabCentering) {
       $0.shouldCenterRestoredCanvasSoloTab = false
+    }
+  }
+
+  @Test func consumeRestoredCanvasScaleOneFocusClearsLaunchRestoreFlag() async {
+    var initialState = RepositoriesFeature.State()
+    initialState.shouldFocusRestoredCanvasAtScaleOne = true
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.consumeRestoredCanvasScaleOneFocus) {
+      $0.shouldFocusRestoredCanvasAtScaleOne = false
     }
   }
 

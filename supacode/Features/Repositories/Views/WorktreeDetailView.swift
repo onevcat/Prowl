@@ -481,6 +481,9 @@ struct WorktreeDetailView: View {
             lastCanvasFocusedTabID = pendingLaunchRestoreTarget.tabID.rawValue.uuidString
             self.pendingLaunchRestoreTarget = nil
           }
+          if store.state.repositories.shouldFocusRestoredCanvasAtScaleOne {
+            store.send(.repositories(.consumeRestoredCanvasScaleOneFocus))
+          }
           store.send(.repositories(.consumeCanvasFocusRequest(requestID)))
         },
         onCommandConsumed: { requestID in

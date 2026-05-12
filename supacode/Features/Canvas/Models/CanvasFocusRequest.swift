@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 struct CanvasFocusRequest: Equatable, Sendable {
@@ -9,6 +10,7 @@ struct CanvasFocusRequest: Equatable, Sendable {
   let id: Int
   let target: Target
   var shouldCenterInViewport = false
+  var centerScale: CGFloat?
 }
 
 struct CanvasFocusCandidate: Equatable, Sendable {
