@@ -84,6 +84,15 @@ struct CLISocketServerTests {
     #expect(!CLISocketServer.isAllowedPeerUID(502, currentUID: 501))
   }
 
+  @Test func acceptErrorClassificationKeepsRecoverableFailuresAlive() {
+    #expect(CLISocketServer.shouldRetryAccept(after: EINTR))
+    #expect(CLISocketServer.shouldRetryAccept(after: EMFILE))
+
+    #expect(!CLISocketServer.shouldRetryAccept(after: EBADF))
+    #expect(!CLISocketServer.shouldRetryAccept(after: EINVAL))
+    #expect(!CLISocketServer.shouldRetryAccept(after: ENOTSOCK))
+  }
+
   private func temporarySocketPath(suffix: String) -> String {
     URL(fileURLWithPath: "/tmp", isDirectory: true)
       .appending(path: "prowl-cli-tests-\(UUID().uuidString.prefix(8))", directoryHint: .isDirectory)

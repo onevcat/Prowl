@@ -11,6 +11,8 @@ import Foundation
 
 @MainActor
 final class CLISocketServer {
+  nonisolated private static let acceptFailureBackoffSeconds: TimeInterval = 0.25
+
   private let router: CLICommandRouter
   private let socketPath: String
   private let lockPath: String
@@ -172,20 +174,46 @@ final class CLISocketServer {
   // MARK: - Accept loop (runs on acceptQueue, NOT in Swift concurrency)
 
   private nonisolated static func acceptLoop(serverFD: Int32, server: CLISocketServer?) {
+    let logger = SupaLogger("CLIService")
     while true {
       let clientFD = Darwin.accept(serverFD, nil, nil)
-      guard clientFD >= 0 else {
-        // serverFD was closed (stop() called) or an error occurred – exit.
+      if clientFD < 0 {
+        let errorNumber = errno
+        guard shouldRetryAccept(after: errorNumber) else {
+          logger.info("CLI socket accept loop stopped: \(acceptErrorDescription(errorNumber))")
+          return
+        }
+        if errorNumber != EINTR {
+          logger.warning("CLI socket accept failed; retrying: \(acceptErrorDescription(errorNumber))")
+          Thread.sleep(forTimeInterval: acceptFailureBackoffSeconds)
+        }
+        continue
+      }
+      guard let server else {
+        Darwin.close(clientFD)
         return
       }
-      if let server {
-        Task { @MainActor in
-          await server.handleClient(clientFD: clientFD)
-        }
-      } else {
-        Darwin.close(clientFD)
+
+      Task { @MainActor in
+        await server.handleClient(clientFD: clientFD)
       }
     }
+  }
+
+  nonisolated static func shouldRetryAccept(after errorNumber: Int32) -> Bool {
+    switch errorNumber {
+    case EINTR:
+      true
+    case EBADF, EINVAL, ENOTSOCK:
+      false
+    default:
+      true
+    }
+  }
+
+  private nonisolated static func acceptErrorDescription(_ errorNumber: Int32) -> String {
+    let message = strerror(errorNumber).map { String(cString: $0) } ?? "Unknown error"
+    return "errno=\(errorNumber) (\(message))"
   }
 
   private func handleClient(clientFD: Int32) async {
