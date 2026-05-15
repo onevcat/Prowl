@@ -67,6 +67,35 @@ struct WorktreeTerminalManagerTests {
     #expect(state.onFontSizeAdjusted != nil)
   }
 
+  @Test func performFontSizeBindingActionRunsOnEveryExistingSurface() {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktreeA = makeWorktree(id: "/tmp/repo/wt-a", name: "wt-a")
+    let worktreeB = makeWorktree(id: "/tmp/repo/wt-b", name: "wt-b")
+    let stateA = manager.state(for: worktreeA)
+    let stateB = manager.state(for: worktreeB)
+    let tabA1 = stateA.createTab()!
+    let tabA2 = stateA.createTab()!
+    let tabB = stateB.createTab()!
+    let surfaces = [
+      stateA.surfaceView(for: tabA1)!,
+      stateA.surfaceView(for: tabA2)!,
+      stateB.surfaceView(for: tabB)!,
+    ]
+    var actionsBySurfaceID: [UUID: [String]] = [:]
+    for surface in surfaces {
+      surface.onBindingActionForTesting = { action in
+        actionsBySurfaceID[surface.id, default: []].append(action)
+      }
+    }
+
+    let didPerform = manager.performFontSizeBindingAction("increase_font_size:1", from: worktreeA.id)
+
+    #expect(didPerform == true)
+    for surface in surfaces {
+      #expect(actionsBySurfaceID[surface.id] == ["increase_font_size:1"])
+    }
+  }
+
   @Test func closeTargetAvailabilityFollowsTerminalModelState() {
     let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
     let worktree = makeWorktree()

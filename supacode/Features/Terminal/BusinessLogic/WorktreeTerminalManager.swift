@@ -539,6 +539,17 @@ final class WorktreeTerminalManager {
     return (runtime.splitDividerColor(), runtime.splitDividerWidth())
   }
 
+  @discardableResult
+  func performFontSizeBindingAction(_ action: String, from worktreeID: Worktree.ID) -> Bool {
+    guard states[worktreeID]?.hasFocusedSurface == true else { return false }
+    var didPerform = false
+    for worktreeState in states.values {
+      didPerform = worktreeState.performBindingActionOnAllSurfaces(action) || didPerform
+    }
+    syncPreferredFontSize(from: worktreeID)
+    return didPerform
+  }
+
   func syncPreferredFontSize(from worktreeID: Worktree.ID) {
     guard let state = states[worktreeID] else { return }
     let fontSize = state.focusedFontSize()

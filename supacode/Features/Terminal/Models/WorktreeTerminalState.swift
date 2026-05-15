@@ -602,6 +602,24 @@ final class WorktreeTerminalState {
   }
 
   @discardableResult
+  func performBindingActionOnAllSurfaces(_ action: String) -> Bool {
+    guard !surfaces.isEmpty else { return false }
+    for surface in surfaces.values {
+      surface.performBindingAction(action)
+    }
+    return true
+  }
+
+  var hasFocusedSurface: Bool {
+    guard let tabId = tabManager.selectedTabId,
+      let focusedId = focusedSurfaceIdByTab[tabId]
+    else {
+      return false
+    }
+    return surfaces[focusedId] != nil
+  }
+
+  @discardableResult
   func performBindingAction(_ action: String, onSurfaceID surfaceID: UUID) -> Bool {
     guard let surface = surfaces[surfaceID] else { return false }
     surface.performBindingAction(action)

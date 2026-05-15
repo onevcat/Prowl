@@ -186,6 +186,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
   var onCommittedText: ((String) -> Void)?
   var onMirroredKey: ((MirroredTerminalKey) -> Void)?
   var onFontSizeShortcut: (() -> Void)?
+  var onBindingActionForTesting: ((String) -> Void)?
   var onOcclusionAppliedForTesting: ((Bool) -> Void)?
   var attachmentStateForTesting: (() -> (hasSuperview: Bool, hasWindow: Bool))?
 

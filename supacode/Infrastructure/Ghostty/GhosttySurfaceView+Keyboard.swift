@@ -543,6 +543,7 @@ extension GhosttySurfaceView {
   }
 
   func performBindingAction(_ action: String) {
+    onBindingActionForTesting?(action)
     guard let surface else { return }
     _ = action.withCString { ptr in
       ghostty_surface_binding_action(surface, ptr, UInt(action.lengthOfBytes(using: .utf8)))

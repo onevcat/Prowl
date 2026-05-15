@@ -709,19 +709,14 @@ struct WorktreeDetailView: View {
     func fontSizeAction(_ bindingAction: String) -> (() -> Void)? {
       if isShowingCanvas {
         return {
-          guard let worktreeID = terminalManager.canvasFocusedWorktreeID,
-            let state = terminalManager.stateIfExists(for: worktreeID)
-          else { return }
-          _ = state.performBindingActionOnFocusedSurface(bindingAction)
-          terminalManager.syncPreferredFontSize(from: worktreeID)
+          guard let worktreeID = canvasFocusedWorktreeID ?? terminalManager.canvasFocusedWorktreeID else { return }
+          terminalManager.performFontSizeBindingAction(bindingAction, from: worktreeID)
         }
       }
       let worktreeID = isShowingFreestyle ? FreestyleTerminal.worktreeID : repositories.selectedTerminalWorktree?.id
       guard let worktreeID else { return nil }
       return {
-        guard let state = terminalManager.stateIfExists(for: worktreeID) else { return }
-        _ = state.performBindingActionOnFocusedSurface(bindingAction)
-        terminalManager.syncPreferredFontSize(from: worktreeID)
+        terminalManager.performFontSizeBindingAction(bindingAction, from: worktreeID)
       }
     }
 
