@@ -63,9 +63,11 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
     WindowLifecycleDiagnostics.logWithWindows(
       "applicationDidBecomeActive hasVisibleMainWindow=\(hasVisibleMainWindow)"
     )
-    guard !hasVisibleMainWindow else { return }
-    WindowLifecycleDiagnostics.log("applicationDidBecomeActive -> surfaceMainWindow()")
-    app.surfaceMainWindow()
+    if !hasVisibleMainWindow {
+      WindowLifecycleDiagnostics.log("applicationDidBecomeActive -> surfaceMainWindow()")
+      _ = app.surfaceMainWindow()
+    }
+    terminalManager?.reevaluateInputSourceForActiveSurface(reason: .appBecameActive)
   }
 
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {

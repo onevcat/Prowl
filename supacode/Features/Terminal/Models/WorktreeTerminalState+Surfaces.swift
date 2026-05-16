@@ -405,6 +405,7 @@ extension WorktreeTerminalState {
     view.bridge.onCommandFinished = { [weak self, weak view] exitCode, durationNs in
       guard let self, let view else { return }
       self.handleCommandFinished(exitCode: exitCode, durationNs: durationNs, surfaceId: view.id)
+      self.onInputContextMayHaveChanged?(view.id)
     }
     view.bridge.onCloseRequest = { [weak self, weak view] processAlive in
       guard let self, let view else { return }

@@ -155,6 +155,7 @@ final class WorktreeTerminalState {
   var onTabCreated: (() -> Void)?
   var onTabClosed: (() -> Void)?
   var onFocusChanged: ((UUID) -> Void)?
+  internal var onInputContextMayHaveChanged: ((UUID) -> Void)?
   var onTaskStatusChanged: ((WorktreeTaskStatus) -> Void)?
   var onAgentEntryChanged: ((ActiveAgentEntry) -> Void)?
   var onAgentEntryRemoved: ((ActiveAgentEntry.ID) -> Void)?

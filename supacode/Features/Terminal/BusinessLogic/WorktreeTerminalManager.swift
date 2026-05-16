@@ -15,6 +15,12 @@ final class WorktreeTerminalManager {
     let surfaceID: UUID
   }
 
+  private struct InputSourceFocusRequest: Equatable {
+    let token: UUID
+    let worktreeID: Worktree.ID
+    let surfaceID: UUID
+  }
+
   private let runtime: GhosttyRuntime?
   private let layoutPersistence: TerminalLayoutPersistenceClient
   private var states: [Worktree.ID: WorktreeTerminalState] = [:]
@@ -23,6 +29,8 @@ final class WorktreeTerminalManager {
   private var commandFinishedNotificationThreshold = 10
   private var preferredFontSize: Float32?
   private let baselineFontSize: Float32
+  private let inputSourceCoordinator = TerminalInputSourceCoordinator()
+  private var latestInputSourceFocusRequest: InputSourceFocusRequest?
   private var lastNotificationIndicatorCount: Int?
   private var eventContinuation: AsyncStream<TerminalClient.Event>.Continuation?
   private var pendingEvents: [TerminalClient.Event] = []
@@ -34,7 +42,12 @@ final class WorktreeTerminalManager {
   var selectedWorktreeID: Worktree.ID?
   /// The worktree+tab focused in Canvas, updated by CanvasView on card tap.
   /// Used by toggleCanvas to know which worktree to return to.
-  var canvasFocusedWorktreeID: Worktree.ID?
+  var canvasFocusedWorktreeID: Worktree.ID? {
+    didSet {
+      guard canvasFocusedWorktreeID != oldValue, selectedWorktreeID == nil else { return }
+      reevaluateCanvasInputSource(reason: .focusChanged)
+    }
+  }
   var lastFocusChange: FocusChange?
 
   init(
@@ -174,6 +187,7 @@ final class WorktreeTerminalManager {
       if enabled {
         terminalLogger.info("[CanvasExit] enteringCanvas previousSelectedWorktree=\(selectedWorktreeID ?? "nil")")
         selectedWorktreeID = nil
+        reevaluateCanvasInputSource(reason: .focusChanged)
       }
     case .setSelectedWorktreeID(let id):
       guard id != selectedWorktreeID else { return }
@@ -188,6 +202,7 @@ final class WorktreeTerminalManager {
         }
       }
       selectedWorktreeID = id
+      reevaluateSelectedWorktreeInputSource(reason: .focusChanged)
       terminalLogger.info(
         "[CanvasExit] setSelectedWorktreeID previous=\(previousSelectedWorktreeID ?? "nil") "
           + "next=\(id ?? "nil") leavingCanvas=\(leavingCanvas) states=\(states.count)"
@@ -271,13 +286,20 @@ final class WorktreeTerminalManager {
       let remaining = state?.tabManager.tabs.count ?? 0
       emit(.tabClosed(worktreeID: worktree.id, remainingTabs: remaining))
     }
-    state.onFocusChanged = { [weak self] surfaceID in
-      self?.lastFocusChange = FocusChange(
+    state.onFocusChanged = { [weak self, weak state] surfaceID in
+      guard let self, let state else { return }
+      self.lastFocusChange = FocusChange(
         token: UUID(),
         worktreeID: worktree.id,
         surfaceID: surfaceID
       )
-      self?.emit(.focusChanged(worktreeID: worktree.id, surfaceID: surfaceID))
+      self.reevaluateInputSource(state: state, surfaceID: surfaceID, reason: .focusChanged)
+      self.emit(.focusChanged(worktreeID: worktree.id, surfaceID: surfaceID))
+    }
+    state.onInputContextMayHaveChanged = { [weak self, weak state] surfaceID in
+      guard let self, let state else { return }
+      guard self.isInputSourceActiveTarget(state: state, surfaceID: surfaceID) else { return }
+      self.reevaluateInputSource(state: state, surfaceID: surfaceID, reason: .processContextChanged)
     }
     state.onTaskStatusChanged = { [weak self] status in
       self?.emit(.taskStatusChanged(worktreeID: worktree.id, status: status))
@@ -420,6 +442,80 @@ final class WorktreeTerminalManager {
 
   func stateIfExists(for worktreeID: Worktree.ID) -> WorktreeTerminalState? {
     states[worktreeID]
+  }
+
+  internal func reevaluateInputSourceForActiveSurface(
+    reason: TerminalInputSourceCoordinator.Reason = .appBecameActive
+  ) {
+    if selectedWorktreeID != nil {
+      reevaluateSelectedWorktreeInputSource(reason: reason)
+      return
+    }
+
+    reevaluateCanvasInputSource(reason: reason)
+  }
+
+  private func reevaluateInputSource(
+    state: WorktreeTerminalState,
+    surfaceID: UUID,
+    reason: TerminalInputSourceCoordinator.Reason
+  ) {
+    let request = InputSourceFocusRequest(token: UUID(), worktreeID: state.worktreeID, surfaceID: surfaceID)
+    latestInputSourceFocusRequest = request
+    guard let surface = state.surfaceView(for: surfaceID) else { return }
+    Task { @MainActor [weak self, weak surface] in
+      guard let self, let surface else { return }
+      let childPID = surface.bridge.childPID()
+      let processGroupID = surface.bridge.foregroundProcessGroupID()
+      let job = await AgentProcessProbe.shared.foregroundJob(
+        processGroupID: processGroupID,
+        childPID: childPID
+      )
+      guard self.shouldApplyInputSourceContext(for: request) else { return }
+      let viewportText = surface.bridge.readViewportText() ?? ""
+      let context = TerminalInputContextClassifier.context(job: job, viewportText: viewportText)
+      self.inputSourceCoordinator.applyFocusedContext(context, surfaceID: surfaceID, reason: reason)
+    }
+  }
+
+  private func reevaluateSelectedWorktreeInputSource(reason: TerminalInputSourceCoordinator.Reason) {
+    guard
+      let selectedWorktreeID,
+      let state = states[selectedWorktreeID],
+      let surfaceID = state.activeSurfaceID
+    else {
+      latestInputSourceFocusRequest = nil
+      return
+    }
+    reevaluateInputSource(state: state, surfaceID: surfaceID, reason: reason)
+  }
+
+  private func reevaluateCanvasInputSource(reason: TerminalInputSourceCoordinator.Reason) {
+    guard
+      selectedWorktreeID == nil,
+      let canvasFocusedWorktreeID,
+      let state = states[canvasFocusedWorktreeID],
+      let surfaceID = state.activeSurfaceID
+    else {
+      latestInputSourceFocusRequest = nil
+      return
+    }
+    reevaluateInputSource(state: state, surfaceID: surfaceID, reason: reason)
+  }
+
+  private func shouldApplyInputSourceContext(for request: InputSourceFocusRequest) -> Bool {
+    guard latestInputSourceFocusRequest == request else { return false }
+    guard let state = states[request.worktreeID] else { return false }
+    return isInputSourceActiveTarget(state: state, surfaceID: request.surfaceID)
+  }
+
+  private func isInputSourceActiveTarget(state: WorktreeTerminalState, surfaceID: UUID) -> Bool {
+    guard states[state.worktreeID] === state else { return false }
+    guard state.activeSurfaceID == surfaceID else { return false }
+    if let selectedWorktreeID {
+      return selectedWorktreeID == state.worktreeID
+    }
+    return canvasFocusedWorktreeID == state.worktreeID
   }
 
   func stateContaining(tabId: TerminalTabID) -> WorktreeTerminalState? {

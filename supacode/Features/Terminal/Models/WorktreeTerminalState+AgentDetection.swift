@@ -151,6 +151,7 @@ extension WorktreeTerminalState {
     guard next != previous else { return true }
     surfaceAgentStates[surfaceID] = next
     emitAgentEntry(surfaceID: surfaceID, tabId: tabId, state: next)
+    onInputContextMayHaveChanged?(surfaceID)
     return true
   }
 
@@ -168,6 +169,7 @@ extension WorktreeTerminalState {
     surfaceAgentStates[surfaceID] = PaneAgentState(lastChangedAt: Date())
     lastWorkingAtBySurface.removeValue(forKey: surfaceID)
     onAgentEntryRemoved?(surfaceID)
+    onInputContextMayHaveChanged?(surfaceID)
   }
 
   /// Re-emit Active Agents entries for every pane in `tabId` so the panel picks
