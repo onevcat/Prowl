@@ -40,17 +40,45 @@ struct KeybindingSchemaTests {
     let commandIDs = Set(schema.commands.map(\.id))
     #expect(commandIDs.contains("new_worktree"))
     #expect(commandIDs.contains("command_palette"))
+    #expect(commandIDs.contains("toggle_canvas_zoom"))
+    #expect(commandIDs.contains(AppShortcuts.CommandID.toggleCanvasMaxMode))
     #expect(commandIDs.contains("select_all_canvas_cards"))
 
     let commandPalette = schema.commands.first(where: { $0.id == "command_palette" })
+    let toggleCanvasMaxMode = schema.commands.first(where: { $0.id == AppShortcuts.CommandID.toggleCanvasMaxMode })
     let renameBranch = schema.commands.first(where: { $0.id == "rename_branch" })
     let selectAllCanvasCards = schema.commands.first(where: { $0.id == "select_all_canvas_cards" })
     #expect(commandPalette?.allowUserOverride == true)
     #expect(commandPalette?.conflictPolicy == .warnAndPreferUserOverride)
+    #expect(toggleCanvasMaxMode?.allowUserOverride == true)
+    #expect(toggleCanvasMaxMode?.conflictPolicy == .warnAndPreferUserOverride)
+    #expect(toggleCanvasMaxMode?.defaultBinding == nil)
     #expect(renameBranch?.allowUserOverride == true)
     #expect(renameBranch?.conflictPolicy == .localOnly)
     #expect(selectAllCanvasCards?.allowUserOverride == true)
     #expect(selectAllCanvasCards?.conflictPolicy == .localOnly)
+  }
+
+  @Test func commandWithoutDefaultShortcutResolvesOnlyAfterUserOverride() {
+    let defaults = ResolvedKeybindingMap.appDefaults
+
+    #expect(defaults.display(for: AppShortcuts.CommandID.toggleCanvasMaxMode) == nil)
+    #expect(defaults.keyboardShortcut(for: AppShortcuts.CommandID.toggleCanvasMaxMode) == nil)
+
+    let overrides = KeybindingUserOverrideStore(
+      overrides: [
+        AppShortcuts.CommandID.toggleCanvasMaxMode: KeybindingUserOverride(
+          binding: Keybinding(key: "return", modifiers: KeybindingModifiers(command: true, shift: true))
+        )
+      ]
+    )
+    let resolved = KeybindingResolver.resolve(
+      schema: .appResolverSchema(),
+      userOverrides: overrides
+    )
+
+    #expect(resolved.display(for: AppShortcuts.CommandID.toggleCanvasMaxMode) == "⌘⇧↩")
+    #expect(resolved.keyboardShortcut(for: AppShortcuts.CommandID.toggleCanvasMaxMode) != nil)
   }
 
   @Test func worktreeHistoryShortcutsDoNotConflictWithShelfBookNavigation() {

@@ -3,17 +3,20 @@ import SwiftUI
 struct AppShortcut: Equatable {
   let keyEquivalent: KeyEquivalent
   let modifiers: EventModifiers
+  private let keyTokenName: String
   private let ghosttyKeyName: String
 
   init(key: Character, modifiers: EventModifiers) {
     self.keyEquivalent = KeyEquivalent(key)
     self.modifiers = modifiers
-    self.ghosttyKeyName = String(key).lowercased()
+    self.keyTokenName = String(key).lowercased()
+    self.ghosttyKeyName = self.keyTokenName
   }
 
   init(keyEquivalent: KeyEquivalent, ghosttyKeyName: String, modifiers: EventModifiers) {
     self.keyEquivalent = keyEquivalent
     self.modifiers = modifiers
+    self.keyTokenName = Self.keyTokenName(for: keyEquivalent, fallback: ghosttyKeyName)
     self.ghosttyKeyName = ghosttyKeyName
   }
 
@@ -22,7 +25,7 @@ struct AppShortcut: Equatable {
   }
 
   var keyToken: String {
-    ghosttyKeyName
+    keyTokenName
   }
 
   var ghosttyKeybind: String {
@@ -80,6 +83,23 @@ struct AppShortcut: Equatable {
     guard value.count == 1, let character = value.first, character.isNumber else { return nil }
     return "digit_\(value)"
   }
+
+  private static func keyTokenName(for keyEquivalent: KeyEquivalent, fallback: String) -> String {
+    switch keyEquivalent {
+    case .return:
+      return "return"
+    case .upArrow:
+      return "arrow_up"
+    case .downArrow:
+      return "arrow_down"
+    case .leftArrow:
+      return "arrow_left"
+    case .rightArrow:
+      return "arrow_right"
+    default:
+      return fallback
+    }
+  }
 }
 
 enum AppShortcuts {
@@ -102,6 +122,8 @@ enum AppShortcuts {
     static let checkForUpdates = "check_for_updates"
     static let showDiff = "show_diff"
     static let toggleCanvas = "toggle_canvas"
+    static let toggleCanvasZoom = "toggle_canvas_zoom"
+    static let toggleCanvasMaxMode = "toggle_canvas_max_mode"
     static let toggleShelf = "toggle_shelf"
     static let selectNextShelfBook = "select_next_shelf_book"
     static let selectPreviousShelfBook = "select_previous_shelf_book"
@@ -164,7 +186,7 @@ enum AppShortcuts {
     let id: String
     let title: String
     let scope: Scope
-    let shortcut: AppShortcut
+    let shortcut: AppShortcut?
   }
 
   struct CustomCommandOverrideConflict: Equatable {
@@ -201,10 +223,13 @@ enum AppShortcuts {
   static let checkForUpdates = AppShortcut(key: "u", modifiers: [.command, .shift])
   static let showDiff = AppShortcut(key: "y", modifiers: [.command, .shift])
   static let toggleCanvas = AppShortcut(
-    keyEquivalent: .return, ghosttyKeyName: "return", modifiers: [.command, .option]
+    keyEquivalent: .return, ghosttyKeyName: "enter", modifiers: [.command, .option]
+  )
+  static let toggleCanvasZoom = AppShortcut(
+    keyEquivalent: .return, ghosttyKeyName: "enter", modifiers: [.command, .control]
   )
   static let toggleShelf = AppShortcut(
-    keyEquivalent: .return, ghosttyKeyName: "return", modifiers: [.command, .shift]
+    keyEquivalent: .return, ghosttyKeyName: "enter", modifiers: [.command, .shift]
   )
   static let selectNextShelfBook = AppShortcut(
     keyEquivalent: .rightArrow, ghosttyKeyName: "arrow_right", modifiers: [.command, .control]
@@ -356,6 +381,7 @@ enum AppShortcuts {
     .init(actionTitle: "Stop Script", shortcut: stopRunScript),
     .init(actionTitle: "Check for Updates", shortcut: checkForUpdates),
     .init(actionTitle: "Show Diff", shortcut: showDiff),
+    .init(actionTitle: "Toggle Canvas Zoom", shortcut: toggleCanvasZoom),
     .init(actionTitle: "Open Worktree", shortcut: openFinder),
     .init(actionTitle: "Open Repository", shortcut: openRepository),
     .init(actionTitle: "Select Terminal Tab 1", shortcut: selectTerminalTab1),
@@ -474,6 +500,18 @@ enum AppShortcuts {
       title: "Toggle Canvas",
       scope: .configurableAppAction,
       shortcut: toggleCanvas
+    ),
+    .init(
+      id: CommandID.toggleCanvasZoom,
+      title: "Toggle Canvas Zoom",
+      scope: .configurableAppAction,
+      shortcut: toggleCanvasZoom
+    ),
+    .init(
+      id: CommandID.toggleCanvasMaxMode,
+      title: "Toggle Canvas Max Mode",
+      scope: .configurableAppAction,
+      shortcut: nil
     ),
     .init(
       id: CommandID.toggleShelf,
@@ -899,6 +937,10 @@ enum AppShortcuts {
     (CommandID.toggleSplitZoom, "toggle_split_zoom"),
   ]
 
+  static func isGhosttyManagedActionCommandID(_ commandID: String) -> Bool {
+    ghosttyManagedActionBindings.contains { $0.commandID == commandID }
+  }
+
   static func ghosttyCLIKeybindArguments(from resolvedKeybindings: ResolvedKeybindingMap) -> [String] {
     var unbindArguments: [String] = []
     var seenUnbindArguments = Set<String>()
@@ -915,7 +957,7 @@ enum AppShortcuts {
     }
 
     for (commandID, _) in ghosttyManagedActionBindings {
-      if let defaultUnbind = binding(for: commandID)?.shortcut.ghosttyUnbindArgument {
+      if let defaultUnbind = binding(for: commandID)?.shortcut?.ghosttyUnbindArgument {
         appendUnbindArgument(defaultUnbind)
       }
     }
@@ -951,6 +993,7 @@ enum AppShortcuts {
     checkForUpdates,
     showDiff,
     toggleCanvas,
+    toggleCanvasZoom,
     toggleShelf,
     selectNextShelfBook,
     selectPreviousShelfBook,

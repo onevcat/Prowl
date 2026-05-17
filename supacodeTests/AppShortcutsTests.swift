@@ -36,6 +36,12 @@ struct AppShortcutsTests {
     )
   }
 
+  @Test func ghosttyManagedActionCommandIDsAreIdentified() {
+    #expect(AppShortcuts.isGhosttyManagedActionCommandID(AppShortcuts.CommandID.selectTerminalTab1))
+    #expect(AppShortcuts.isGhosttyManagedActionCommandID(AppShortcuts.CommandID.selectNextTerminalPane))
+    #expect(!AppShortcuts.isGhosttyManagedActionCommandID(AppShortcuts.CommandID.toggleCanvasZoom))
+  }
+
   @Test func selectionDisplayUsesResolvedOverrides() {
     let overrides = KeybindingUserOverrideStore(
       overrides: [
@@ -97,6 +103,7 @@ struct AppShortcutsTests {
         "stopRunScript=\(AppShortcuts.stopRunScript.display)",
         "checkForUpdates=\(AppShortcuts.checkForUpdates.display)",
         "showDiff=\(AppShortcuts.showDiff.display)",
+        "toggleCanvasZoom=\(AppShortcuts.toggleCanvasZoom.display)",
         "openFinder=\(AppShortcuts.openFinder.display)",
         "openRepository=\(AppShortcuts.openRepository.display)",
         "selectTerminalTab1=\(AppShortcuts.selectTerminalTab1.display)",
@@ -125,6 +132,7 @@ struct AppShortcutsTests {
         "stopRunScript=⌘.",
         "checkForUpdates=⌘⇧U",
         "showDiff=⌘⇧Y",
+        "toggleCanvasZoom=⌘⌃↩",
         "openFinder=⌘O",
         "openRepository=⌘⇧O",
         "selectTerminalTab1=⌘1",
@@ -149,7 +157,11 @@ struct AppShortcutsTests {
   }
 
   @Test func configurableSystemFixedAndLocalInteractionShortcutsAreDefinedInRegistry() {
-    let idToDisplay = Dictionary(uniqueKeysWithValues: AppShortcuts.bindings.map { ($0.id, $0.shortcut.display) })
+    let idToDisplay = Dictionary(
+      uniqueKeysWithValues: AppShortcuts.bindings.compactMap { binding in
+        binding.shortcut.map { (binding.id, $0.display) }
+      }
+    )
     let idToScope = Dictionary(uniqueKeysWithValues: AppShortcuts.bindings.map { ($0.id, $0.scope) })
 
     expectNoDifference(
@@ -160,6 +172,11 @@ struct AppShortcutsTests {
       idToDisplay["toggle_active_agents_panel"],
       AppShortcuts.toggleActiveAgentsPanel.display
     )
+    expectNoDifference(
+      idToDisplay["toggle_canvas_zoom"],
+      AppShortcuts.toggleCanvasZoom.display
+    )
+    #expect(idToDisplay[AppShortcuts.CommandID.toggleCanvasMaxMode] == nil)
     expectNoDifference(
       idToDisplay["quit_application"],
       AppShortcuts.quitApplication.display
@@ -183,6 +200,8 @@ struct AppShortcutsTests {
 
     #expect(idToScope["command_palette"] == .configurableAppAction)
     #expect(idToScope["toggle_active_agents_panel"] == .configurableAppAction)
+    #expect(idToScope["toggle_canvas_zoom"] == .configurableAppAction)
+    #expect(idToScope[AppShortcuts.CommandID.toggleCanvasMaxMode] == .configurableAppAction)
     #expect(idToScope["quit_application"] == .systemFixedAppAction)
     #expect(idToScope["rename_branch"] == .localInteraction)
     #expect(idToScope["select_all_canvas_cards"] == .localInteraction)
@@ -286,6 +305,35 @@ struct AppShortcutsTests {
     ] {
       #expect(arguments.contains(argument))
     }
+  }
+
+  @Test func ghosttyCLIArgumentsUseEnterForReturnShortcuts() {
+    let arguments = AppShortcuts.ghosttyCLIKeybindArguments
+
+    #expect(arguments.contains("--keybind=alt+super+enter=unbind"))
+    #expect(arguments.contains("--keybind=ctrl+super+enter=unbind"))
+    #expect(arguments.contains("--keybind=shift+super+enter=unbind"))
+    #expect(arguments.contains("--keybind=alt+super+return=unbind") == false)
+    #expect(arguments.contains("--keybind=ctrl+super+return=unbind") == false)
+    #expect(arguments.contains("--keybind=shift+super+return=unbind") == false)
+  }
+
+  @Test func ghosttyCLIArgumentsMapUserOverrideReturnTokenToEnter() {
+    let overrides = KeybindingUserOverrideStore(
+      overrides: [
+        AppShortcuts.CommandID.toggleCanvasMaxMode: KeybindingUserOverride(
+          binding: Keybinding(key: "return", modifiers: .init(command: true, control: true))
+        )
+      ]
+    )
+    let resolved = KeybindingResolver.resolve(
+      schema: .appResolverSchema(),
+      userOverrides: overrides
+    )
+
+    let arguments = AppShortcuts.ghosttyCLIKeybindArguments(from: resolved)
+    #expect(arguments.contains("--keybind=ctrl+super+enter=unbind"))
+    #expect(arguments.contains("--keybind=ctrl+super+return=unbind") == false)
   }
 
   @Test func managedGhosttyActionOverrideRebindsAndUnbindsDefaults() {

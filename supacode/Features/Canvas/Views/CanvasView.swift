@@ -18,6 +18,7 @@ struct CanvasView: View {
   private enum CanvasToastStyle: Equatable {
     case wrap
     case directional
+    case zoomBlocked
 
     var iconSystemName: String {
       switch self {
@@ -25,6 +26,8 @@ struct CanvasView: View {
         "arrow.triangle.2.circlepath"
       case .directional:
         "arrow.up.and.down.and.arrow.left.and.right"
+      case .zoomBlocked:
+        "magnifyingglass"
       }
     }
   }
@@ -36,6 +39,7 @@ struct CanvasView: View {
 
   @Environment(CommandKeyObserver.self) var commandKeyObserver
   @Environment(\.resolvedKeybindings) var resolvedKeybindings
+  @Environment(\.canvasMaxModeActive) var canvasMaxModeActive
 
   let terminalManager: WorktreeTerminalManager
   /// Per-repo display titles resolved by the parent reducer. Used to
@@ -82,6 +86,10 @@ struct CanvasView: View {
   @State var wrapToastDismissTask: Task<Void, Never>?
   @State var canvasWrapToastMessage: String?
   @State var canvasWrapToastStyle: CanvasToastStyle = .wrap
+  @State var isZoomPopoverPresented = false
+  @State var isCustomZoomInputPresented = false
+  @State var customZoomText = ""
+  @State var customZoomErrorMessage: String?
   @State var directionalPlacementHint: PendingDirectionalPlacement?
   @State var isAwaitingDirectionalNewTerminalKey = false
   @State var directionalChordPreviousFocusedTabID: TerminalTabID?
@@ -98,8 +106,11 @@ struct CanvasView: View {
   /// The tab currently expanded in place (near-fullscreen overlay) on canvas,
   /// or nil when no card is expanded.
   @State var expandedTabID: TerminalTabID?
+  @FocusState var isCustomZoomFieldFocused: Bool
 
   let focusVisibleInset: CGFloat = 20
+  let focusVisibleHorizontalInset: CGFloat = 44
+  let focusVisibleVerticalInset: CGFloat = 20
   let focusBottomReservedInset: CGFloat = 36
   let minCardWidth: CGFloat = 300
   let minCardHeight: CGFloat = 200
@@ -134,6 +145,9 @@ struct CanvasView: View {
 
   let directionalNewTerminalTimeout: Duration = .seconds(2)
   let overviewPreviewDuration: Duration = .seconds(3)
+  let unsupportedZoomInputMessage = "Unsupported zoom value. Enter a number like 67 or 67%."
+  let maxModeZoomBlockedMessage = "Exit max mode to zoom."
+  let maxModeSwitchBlockedMessage = "Exit max mode to switch modes."
   let directionalNewTerminalChordCoordinator = CanvasDirectionalNewTerminalChordCoordinator.shared
 
   init(
@@ -194,7 +208,9 @@ struct CanvasView: View {
       scale: $canvasScale,
       lastScale: $lastCanvasScale,
       isInteractionEnabled: expandedTabID == nil,
-      onKeyDown: handleDirectionalNewTerminalKeyDown
+      onKeyDown: handleDirectionalNewTerminalKeyDown,
+      canZoom: { expandedTabID == nil },
+      onZoomBlocked: showMaxModeZoomBlockedToast
     ) {
       GeometryReader { _ in
         let activeStates = terminalManager.activeWorktreeStates
@@ -292,10 +308,10 @@ struct CanvasView: View {
       }
     }
     .overlay(alignment: .bottomTrailing) {
-      canvasToolbar
+      canvasBottomTrailingOverlay
     }
     .overlay(alignment: .bottomLeading) {
-      canvasHelpButton
+      canvasBottomLeadingOverlay
     }
     .overlay {
       canvasWrapToast
@@ -348,6 +364,13 @@ struct CanvasView: View {
       toggleExpandFocusedCard()
       return .handled
     }
+    .modifier(
+      CanvasMaxModeStateModifier(
+        isActive: expandedTabID != nil,
+        externalIsActive: canvasMaxModeActive,
+        onExit: collapseExpand,
+        onBlockedModeSwitch: showMaxModeSwitchBlockedToast
+      ))
     .onChange(of: expandedTabID) { _, newValue in
       onExpandedChange(newValue != nil)
     }
@@ -389,6 +412,8 @@ struct CanvasView: View {
       isAwaitingDirectionalNewTerminalKey = false
       directionalChordPreviousFocusedTabID = nil
       directionalPlacementHint = nil
+      canvasMaxModeActive.wrappedValue = false
+      resetCustomZoomInput()
       cancelAllDirectoryShorteningRequests()
     }
     .focusedSceneValue(\.canvasMoveLeftAction) { focusAdjacentCanvasTab(direction: .left) }
@@ -397,6 +422,12 @@ struct CanvasView: View {
     .focusedSceneValue(\.canvasMoveRightAction) { focusAdjacentCanvasTab(direction: .right) }
     .focusedSceneValue(\.canvasDirectionalNewTerminalLeaderAction) {
       armDirectionalNewTerminalChord()
+    }
+    .focusedSceneValue(\.toggleCanvasZoomAction) {
+      toggleFocusedCanvasZoom()
+    }
+    .focusedSceneValue(\.toggleCanvasMaxModeAction) {
+      toggleCanvasMaxMode()
     }
   }
 
@@ -1014,7 +1045,8 @@ struct CanvasView: View {
         ))
 
       Button {
-        // Intentionally no-op. Double-click resets zoom to 100%.
+        resetCustomZoomInput()
+        isZoomPopoverPresented.toggle()
       } label: {
         Text(CanvasViewportMath.percentageString(for: canvasScale))
           .font(.caption.monospacedDigit())
@@ -1024,10 +1056,14 @@ struct CanvasView: View {
       .buttonStyle(.bordered)
       .simultaneousGesture(
         TapGesture(count: 2).onEnded {
-          setCanvasScaleTo100Percent()
+          isZoomPopoverPresented = false
+          toggleFocusedCanvasZoom()
         }
       )
-      .help("Double-click to set canvas zoom to 100%")
+      .popover(isPresented: $isZoomPopoverPresented, arrowEdge: .bottom) {
+        canvasZoomPopover
+      }
+      .help("Click to choose canvas zoom. Double-click toggles 100% and 67%")
 
       Button {
         arrangeCardsWithFit()
@@ -1065,6 +1101,72 @@ struct CanvasView: View {
         ))
     }
     .padding()
+  }
+
+  @ViewBuilder
+  var canvasBottomTrailingOverlay: some View {
+    if expandedTabID == nil {
+      canvasToolbar
+    }
+  }
+
+  @ViewBuilder
+  var canvasBottomLeadingOverlay: some View {
+    if expandedTabID == nil {
+      canvasHelpButton
+    }
+  }
+
+  var canvasZoomPopover: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      Text("Canvas Zoom")
+        .font(.headline)
+
+      HStack(spacing: 6) {
+        ForEach(CanvasViewportMath.zoomPresetScales, id: \.self) { scale in
+          Button {
+            setCanvasScale(to: scale)
+            isZoomPopoverPresented = false
+          } label: {
+            Text(CanvasViewportMath.percentageString(for: scale))
+              .font(.callout.monospacedDigit())
+          }
+          .help("Set canvas zoom to \(CanvasViewportMath.percentageString(for: scale))")
+        }
+      }
+
+      Divider()
+
+      Button {
+        isCustomZoomInputPresented = true
+        customZoomText = CanvasViewportMath.percentageString(for: canvasScale)
+        customZoomErrorMessage = nil
+        isCustomZoomFieldFocused = true
+      } label: {
+        Label("Custom", systemImage: "number")
+      }
+      .help("Enter a custom canvas zoom percentage")
+
+      if isCustomZoomInputPresented {
+        VStack(alignment: .leading, spacing: 6) {
+          TextField("67 or 67%", text: $customZoomText)
+            .textFieldStyle(.roundedBorder)
+            .focused($isCustomZoomFieldFocused)
+            .onSubmit {
+              applyCustomZoomInput()
+            }
+
+          if let customZoomErrorMessage {
+            Label(customZoomErrorMessage, systemImage: "exclamationmark.triangle")
+              .font(.caption)
+              .foregroundStyle(.red)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+        }
+      }
+    }
+    .padding()
+    .frame(width: 280, alignment: .leading)
   }
 
   func zIndex(for tabID: TerminalTabID, cardKey: String) -> Double {
@@ -1187,10 +1289,22 @@ struct CanvasView: View {
   }
 
   func showWrapToast(for direction: CanvasNavigationDirection) {
+    showCanvasToast(message: wrapToastMessage(for: direction), style: .wrap)
+  }
+
+  func showMaxModeZoomBlockedToast() {
+    showCanvasToast(message: maxModeZoomBlockedMessage, style: .zoomBlocked)
+  }
+
+  func showMaxModeSwitchBlockedToast() {
+    showCanvasToast(message: maxModeSwitchBlockedMessage, style: .zoomBlocked)
+  }
+
+  func showCanvasToast(message: String, style: CanvasToastStyle) {
     cancelWrapToastTask()
-    canvasWrapToastStyle = .wrap
+    canvasWrapToastStyle = style
     withAnimation(.easeInOut(duration: 0.2)) {
-      canvasWrapToastMessage = wrapToastMessage(for: direction)
+      canvasWrapToastMessage = message
     }
     wrapToastDismissTask = Task { @MainActor in
       try? await Task.sleep(for: .seconds(2))
@@ -1220,8 +1334,29 @@ struct CanvasView: View {
     wrapToastDismissTask = nil
   }
 
-  func setCanvasScaleTo100Percent() {
-    let newScale = CanvasViewportMath.clampedScale(1.0)
+  func applyCustomZoomInput() {
+    guard let scale = CanvasViewportMath.scaleFromPercentageInput(customZoomText) else {
+      customZoomErrorMessage = unsupportedZoomInputMessage
+      return
+    }
+    customZoomErrorMessage = nil
+    setCanvasScale(to: scale)
+    isZoomPopoverPresented = false
+    resetCustomZoomInput()
+  }
+
+  func resetCustomZoomInput() {
+    isCustomZoomInputPresented = false
+    customZoomText = ""
+    customZoomErrorMessage = nil
+  }
+
+  func setCanvasScale(to targetScale: CGFloat) {
+    guard expandedTabID == nil else {
+      showMaxModeZoomBlockedToast()
+      return
+    }
+    let newScale = CanvasViewportMath.clampedScale(targetScale)
     guard newScale != canvasScale else { return }
 
     guard viewportSize.width > 0, viewportSize.height > 0 else {
@@ -1239,6 +1374,97 @@ struct CanvasView: View {
     )
     canvasScale = newScale
     lastCanvasScale = newScale
+    canvasOffset = targetOffset
+    lastCanvasOffset = targetOffset
+  }
+
+  func setCanvasScaleTo100Percent() {
+    setCanvasScale(to: CanvasViewportMath.fullDoubleClickScale)
+  }
+
+  func toggleFocusedCanvasZoom() {
+    guard expandedTabID == nil else {
+      showMaxModeZoomBlockedToast()
+      return
+    }
+    if abs(canvasScale - CanvasViewportMath.fullDoubleClickScale) < 0.001 {
+      focusCurrentCanvasTabAtCompactScale()
+    } else {
+      focusCurrentCanvasTabAtScaleOne()
+    }
+  }
+
+  func toggleCanvasMaxMode() {
+    if expandedTabID != nil {
+      collapseExpand()
+      return
+    }
+
+    let states = terminalManager.activeWorktreeStates
+    let tabs = visibleCanvasTabs(from: states)
+    guard let current = currentCanvasTab(from: tabs) else { return }
+    focusSingleCard(current.tabID, states: states)
+    showsCanvasHelp = false
+    isZoomPopoverPresented = false
+    resetCustomZoomInput()
+    expandCard(current.tabID, states: states)
+  }
+
+  func focusCurrentCanvasTabAtScaleOne() {
+    let states = terminalManager.activeWorktreeStates
+    let tabs = visibleCanvasTabs(from: states)
+    guard let current = currentCanvasTab(from: tabs) else {
+      setCanvasScale(to: CanvasViewportMath.fullDoubleClickScale)
+      return
+    }
+    focusSingleCard(current.tabID, states: states)
+    setCanvasScale(to: CanvasViewportMath.fullDoubleClickScale)
+    ensureTabVisibleInViewport(current.tabID, minimumInset: focusVisibleInset)
+  }
+
+  func focusCurrentCanvasTabAtCompactScale() {
+    let states = terminalManager.activeWorktreeStates
+    let tabs = visibleCanvasTabs(from: states)
+    guard let current = currentCanvasTab(from: tabs) else {
+      setCanvasScale(to: CanvasViewportMath.compactDoubleClickScale)
+      return
+    }
+
+    focusSingleCard(current.tabID, states: states)
+
+    let targetScale = CanvasViewportMath.compactDoubleClickScale
+    let viewportBounds = canvasFocusVisibilityBounds(
+      viewportSize: viewportSize,
+      horizontalInset: focusVisibleHorizontalInset,
+      verticalInset: focusVisibleVerticalInset,
+      bottomReservedInset: focusBottomReservedInset
+    )
+    let entries = tabs.map { tab in
+      CanvasViewportMath.CardVisibilityEntry(
+        id: tab.tabID,
+        frame: CGRect(
+          x: tab.center.x - tab.size.width / 2,
+          y: tab.center.y - tab.size.height / 2,
+          width: tab.size.width,
+          height: tab.size.height
+        )
+      )
+    }
+    guard
+      let targetOffset = CanvasViewportMath.offsetMaximizingCardVisibility(
+        viewportBounds: viewportBounds,
+        centeringBounds: CGRect(origin: .zero, size: viewportSize),
+        entries: entries,
+        focusedID: current.tabID,
+        scale: targetScale
+      )
+    else {
+      setCanvasScale(to: targetScale)
+      return
+    }
+
+    canvasScale = targetScale
+    lastCanvasScale = targetScale
     canvasOffset = targetOffset
     lastCanvasOffset = targetOffset
   }
@@ -1847,6 +2073,28 @@ struct CanvasView: View {
   }
 }
 
+private struct CanvasMaxModeStateModifier: ViewModifier {
+  let isActive: Bool
+  @Binding var externalIsActive: Bool
+  let onExit: () -> Void
+  let onBlockedModeSwitch: () -> Void
+
+  func body(content: Content) -> some View {
+    content
+      .focusedSceneValue(\.canvasModeSwitchBlockedAction, isActive ? onBlockedModeSwitch : nil)
+      .onAppear {
+        externalIsActive = isActive
+      }
+      .onChange(of: isActive) { _, newValue in
+        externalIsActive = newValue
+      }
+      .onChange(of: externalIsActive) { _, newValue in
+        guard !newValue, isActive else { return }
+        onExit()
+      }
+  }
+}
+
 struct CanvasDirectoryDisplayCacheEntry: Equatable, Sendable {
   let normalizedDisplayPath: String
   let shortenedDisplayPath: String
@@ -2042,4 +2290,27 @@ func canvasRestoredFocusTabID(
 ) -> TerminalTabID? {
   guard wasSuspended, !isSuspended else { return nil }
   return focusedTabID
+}
+
+func canvasFocusVisibilityBounds(
+  viewportSize: CGSize,
+  horizontalInset: CGFloat,
+  verticalInset: CGFloat,
+  bottomReservedInset: CGFloat
+) -> CGRect {
+  let clampedHorizontalInset = min(max(0, horizontalInset), viewportSize.width / 2)
+  let clampedVerticalInset = min(max(0, verticalInset), viewportSize.height / 2)
+  let minX = clampedHorizontalInset
+  let maxX = max(minX, viewportSize.width - clampedHorizontalInset)
+  let minY = clampedVerticalInset
+  let maxY = max(
+    minY,
+    viewportSize.height - clampedVerticalInset - bottomReservedInset
+  )
+  return CGRect(
+    x: minX,
+    y: minY,
+    width: max(0, maxX - minX),
+    height: max(0, maxY - minY)
+  )
 }

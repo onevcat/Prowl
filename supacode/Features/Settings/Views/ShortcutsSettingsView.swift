@@ -999,6 +999,8 @@ private enum ShortcutGroup: String, CaseIterable, Identifiable {
       AppShortcuts.CommandID.stopScript,
       AppShortcuts.CommandID.showDiff,
       AppShortcuts.CommandID.toggleCanvas,
+      AppShortcuts.CommandID.toggleCanvasZoom,
+      AppShortcuts.CommandID.toggleCanvasMaxMode,
       AppShortcuts.CommandID.toggleShelf,
       AppShortcuts.CommandID.selectNextShelfBook,
       AppShortcuts.CommandID.selectPreviousShelfBook,

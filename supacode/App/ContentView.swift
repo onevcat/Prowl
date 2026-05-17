@@ -16,6 +16,7 @@ struct ContentView: View {
   @Environment(\.scenePhase) private var scenePhase
   @Environment(GhosttyShortcutManager.self) private var ghosttyShortcuts
   @State private var leftSidebarVisibility: NavigationSplitViewVisibility
+  @State private var isCanvasMaxModeActive = false
 
   init(store: StoreOf<AppFeature>, terminalManager: WorktreeTerminalManager) {
     self.store = store
@@ -48,8 +49,16 @@ struct ContentView: View {
         NavigationSplitView(columnVisibility: sidebarColumnVisibility) {
           SidebarView(store: repositoriesStore, terminalManager: terminalManager)
             .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 320)
+            .modifier(
+              CanvasMaxModeSidebarToolbarModifier(
+                isActive: isCanvasMaxModeActive,
+                resolvedKeybindings: store.resolvedKeybindings,
+                onToggleSidebar: toggleLeftSidebar,
+                onExitMaxMode: exitCanvasMaxMode
+              ))
         } detail: {
           WorktreeDetailView(store: store, terminalManager: terminalManager)
+            .environment(\.canvasMaxModeActive, $isCanvasMaxModeActive)
         }
         .navigationSplitViewStyle(.automatic)
       } else {
@@ -67,6 +76,10 @@ struct ContentView: View {
     }
     .onChange(of: store.isLeftSidebarHidden) { _, isHidden in
       syncSidebarVisibility(isHidden: isHidden)
+    }
+    .onChange(of: store.repositories.isShowingCanvas) { _, isShowingCanvas in
+      guard !isShowingCanvas else { return }
+      isCanvasMaxModeActive = false
     }
     .fileImporter(
       isPresented: $repositoriesStore.isOpenPanelPresented.sending(\.setOpenPanelPresented),
@@ -146,6 +159,10 @@ struct ContentView: View {
     store.send(.toggleLeftSidebar)
   }
 
+  private func exitCanvasMaxMode() {
+    isCanvasMaxModeActive = false
+  }
+
   private var sidebarColumnVisibility: Binding<NavigationSplitViewVisibility> {
     Binding(
       get: { leftSidebarVisibility },
@@ -177,11 +194,61 @@ struct ContentView: View {
 
 }
 
+private struct CanvasMaxModeSidebarToolbarModifier: ViewModifier {
+  private let buttonSize: CGFloat = 28
+  let isActive: Bool
+  let resolvedKeybindings: ResolvedKeybindingMap
+  let onToggleSidebar: () -> Void
+  let onExitMaxMode: () -> Void
+
+  func body(content: Content) -> some View {
+    content
+      .toolbar(removing: .sidebarToggle)
+      .toolbar {
+        ToolbarItem(placement: .navigation) {
+          Button {
+            if isActive {
+              onExitMaxMode()
+            } else {
+              onToggleSidebar()
+            }
+          } label: {
+            Image(systemName: isActive ? "xmark" : "sidebar.left")
+              .frame(width: buttonSize, height: buttonSize)
+              .contentShape(.rect)
+              .accessibilityLabel(isActive ? "Exit Max Mode" : "Toggle Sidebar")
+          }
+          .help(toolbarButtonHelpText)
+        }
+      }
+  }
+
+  private var toolbarButtonHelpText: String {
+    if isActive {
+      return AppShortcuts.helpText(
+        title: "Exit Max Mode",
+        commandID: AppShortcuts.CommandID.toggleCanvasMaxMode,
+        in: resolvedKeybindings
+      )
+    }
+    return AppShortcuts.helpText(
+      title: "Toggle Sidebar",
+      commandID: AppShortcuts.CommandID.toggleLeftSidebar,
+      in: resolvedKeybindings
+    )
+  }
+}
+
 private struct SurfaceBackgroundOpacityKey: EnvironmentKey {
   static let defaultValue: Double = 1
 }
 
 extension EnvironmentValues {
+  var canvasMaxModeActive: Binding<Bool> {
+    get { self[CanvasMaxModeActiveKey.self] }
+    set { self[CanvasMaxModeActiveKey.self] = newValue }
+  }
+
   var surfaceBackgroundOpacity: Double {
     get { self[SurfaceBackgroundOpacityKey.self] }
     set { self[SurfaceBackgroundOpacityKey.self] = newValue }
@@ -212,6 +279,10 @@ extension EnvironmentValues {
       surfaceBackgroundOpacity = newValue
     }
   }
+}
+
+private struct CanvasMaxModeActiveKey: EnvironmentKey {
+  static let defaultValue: Binding<Bool> = .constant(false)
 }
 
 private struct RunScriptPromptView: View {

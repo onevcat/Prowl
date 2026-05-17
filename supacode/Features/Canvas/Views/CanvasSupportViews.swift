@@ -19,6 +19,8 @@ struct CanvasScrollContainer<Content: View>: NSViewRepresentable {
   @Binding var lastScale: CGFloat
   var isInteractionEnabled: Bool
   var onKeyDown: ((NSEvent) -> NSEvent?)?
+  var canZoom: () -> Bool = { true }
+  var onZoomBlocked: () -> Void = {}
   @ViewBuilder var content: Content
 
   func makeCoordinator() -> CanvasScrollCoordinator {
@@ -46,6 +48,8 @@ struct CanvasScrollContainer<Content: View>: NSViewRepresentable {
     context.coordinator.scale = $scale
     context.coordinator.lastScale = $lastScale
     context.coordinator.onKeyDown = onKeyDown
+    context.coordinator.canZoom = canZoom
+    context.coordinator.onZoomBlocked = onZoomBlocked
     nsView.isInteractionEnabled = isInteractionEnabled
     if let hosting = nsView.subviews.first as? NSHostingView<Content> {
       hosting.rootView = content
@@ -59,6 +63,8 @@ class CanvasScrollCoordinator {
   var scale: Binding<CGFloat> = .constant(1.0)
   var lastScale: Binding<CGFloat> = .constant(1.0)
   var onKeyDown: ((NSEvent) -> NSEvent?)?
+  var canZoom: () -> Bool = { true }
+  var onZoomBlocked: () -> Void = {}
 
   func handleScroll(deltaX: CGFloat, deltaY: CGFloat) {
     let current = offset.wrappedValue
@@ -71,6 +77,10 @@ class CanvasScrollCoordinator {
   }
 
   func handleZoom(deltaY: CGFloat, anchor: CGPoint, isPrecise: Bool) {
+    guard canZoom() else {
+      onZoomBlocked()
+      return
+    }
     let result = CanvasZoomMath.zoom(
       currentScale: scale.wrappedValue,
       currentOffset: offset.wrappedValue,
@@ -181,6 +191,7 @@ class CanvasScrollContainerView: NSView {
 
   override func scrollWheel(with event: NSEvent) {
     guard isInteractionEnabled else {
+      if handleZoomEventIfNeeded(event) { return }
       super.scrollWheel(with: event)
       return
     }
@@ -199,7 +210,6 @@ class CanvasScrollContainerView: NSView {
   /// Used by both the direct `scrollWheel` override and the local monitor so
   /// pressing Cmd mid-gesture switches behavior immediately.
   fileprivate func handleZoomEventIfNeeded(_ event: NSEvent) -> Bool {
-    guard isInteractionEnabled else { return false }
     guard event.modifierFlags.contains(.command), event.scrollingDeltaY != 0 else { return false }
     let viewLocation = convert(event.locationInWindow, from: nil)
     let anchor = CGPoint(x: viewLocation.x, y: bounds.height - viewLocation.y)
@@ -226,7 +236,10 @@ class CanvasScrollContainerView: NSView {
   func installMonitor() {
     scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
       guard let self, event.window === self.window else { return event }
-      guard self.isInteractionEnabled else { return event }
+      guard self.isInteractionEnabled else {
+        if self.handleZoomEventIfNeeded(event) { return nil }
+        return event
+      }
 
       // Cmd toggled mid-gesture — switch to zoom for this event.
       if self.handleZoomEventIfNeeded(event) { return nil }

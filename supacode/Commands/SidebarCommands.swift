@@ -5,10 +5,17 @@ struct SidebarCommands: Commands {
   @Bindable var store: StoreOf<AppFeature>
   @FocusedValue(\.toggleLeftSidebarAction) private var toggleLeftSidebarAction
   @FocusedValue(\.revealInSidebarAction) private var revealInSidebarAction
+  @FocusedValue(\.toggleCanvasZoomAction) private var toggleCanvasZoomAction
+  @FocusedValue(\.toggleCanvasMaxModeAction) private var toggleCanvasMaxModeAction
+  @FocusedValue(\.canvasModeSwitchBlockedAction) private var canvasModeSwitchBlockedAction
 
   var body: some Commands {
     CommandGroup(replacing: .sidebar) {
       Button("Toggle Left Sidebar") {
+        if let canvasModeSwitchBlockedAction {
+          canvasModeSwitchBlockedAction()
+          return
+        }
         toggleLeftSidebarAction?()
       }
       .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.toggleLeftSidebar)))
@@ -45,11 +52,31 @@ struct SidebarCommands: Commands {
       )
       .help(helpText(title: "Select Previous Agent", commandID: AppShortcuts.CommandID.selectPreviousActiveAgent))
       Button("Canvas") {
+        if let canvasModeSwitchBlockedAction {
+          canvasModeSwitchBlockedAction()
+          return
+        }
         store.send(.repositories(.toggleCanvas))
       }
       .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.toggleCanvas)))
       .help(helpText(title: "Canvas", commandID: AppShortcuts.CommandID.toggleCanvas))
+      Button("Toggle Canvas Zoom") {
+        toggleCanvasZoomAction?()
+      }
+      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.toggleCanvasZoom)))
+      .help(helpText(title: "Toggle Canvas Zoom", commandID: AppShortcuts.CommandID.toggleCanvasZoom))
+      .disabled(toggleCanvasZoomAction == nil)
+      Button("Toggle Canvas Max Mode") {
+        toggleCanvasMaxModeAction?()
+      }
+      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.toggleCanvasMaxMode)))
+      .help(helpText(title: "Toggle Canvas Max Mode", commandID: AppShortcuts.CommandID.toggleCanvasMaxMode))
+      .disabled(toggleCanvasMaxModeAction == nil)
       Button("Shelf") {
+        if let canvasModeSwitchBlockedAction {
+          canvasModeSwitchBlockedAction()
+          return
+        }
         store.send(.repositories(.toggleShelf))
       }
       .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.toggleShelf)))
@@ -120,6 +147,18 @@ private struct RevealInSidebarActionKey: FocusedValueKey {
   typealias Value = FocusedAction<Void>
 }
 
+private struct ToggleCanvasZoomActionKey: FocusedValueKey {
+  typealias Value = () -> Void
+}
+
+private struct ToggleCanvasMaxModeActionKey: FocusedValueKey {
+  typealias Value = () -> Void
+}
+
+private struct CanvasModeSwitchBlockedActionKey: FocusedValueKey {
+  typealias Value = () -> Void
+}
+
 extension FocusedValues {
   var toggleLeftSidebarAction: FocusedAction<Void>? {
     get { self[ToggleLeftSidebarActionKey.self] }
@@ -129,5 +168,20 @@ extension FocusedValues {
   var revealInSidebarAction: FocusedAction<Void>? {
     get { self[RevealInSidebarActionKey.self] }
     set { self[RevealInSidebarActionKey.self] = newValue }
+  }
+
+  var toggleCanvasZoomAction: (() -> Void)? {
+    get { self[ToggleCanvasZoomActionKey.self] }
+    set { self[ToggleCanvasZoomActionKey.self] = newValue }
+  }
+
+  var toggleCanvasMaxModeAction: (() -> Void)? {
+    get { self[ToggleCanvasMaxModeActionKey.self] }
+    set { self[ToggleCanvasMaxModeActionKey.self] = newValue }
+  }
+
+  var canvasModeSwitchBlockedAction: (() -> Void)? {
+    get { self[CanvasModeSwitchBlockedActionKey.self] }
+    set { self[CanvasModeSwitchBlockedActionKey.self] = newValue }
   }
 }

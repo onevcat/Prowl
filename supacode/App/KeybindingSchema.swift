@@ -381,7 +381,7 @@ extension KeybindingSchemaDocument {
           platform: .macOS,
           allowUserOverride: binding.scope != .systemFixedAppAction,
           conflictPolicy: binding.scope.conflictPolicy,
-          defaultBinding: binding.shortcut.keybinding
+          defaultBinding: binding.shortcut?.keybinding
         )
       }
     )
@@ -451,7 +451,7 @@ extension Keybinding {
     if let specialKeyEquivalent {
       return AppShortcut(
         keyEquivalent: specialKeyEquivalent,
-        ghosttyKeyName: key,
+        ghosttyKeyName: ghosttyKeyName,
         modifiers: modifiers.eventModifiers
       )
     }
@@ -462,6 +462,15 @@ extension Keybinding {
       return AppShortcut(key: physicalDigitCharacter, modifiers: modifiers.eventModifiers)
     }
     return nil
+  }
+
+  private var ghosttyKeyName: String {
+    switch key {
+    case "return":
+      return "enter"
+    default:
+      return key
+    }
   }
 
   var userCustomShortcut: UserCustomShortcut? {
