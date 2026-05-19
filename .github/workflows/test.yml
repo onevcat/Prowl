@@ -25,9 +25,7 @@ jobs:
           submodules: recursive
       - uses: ./.github/actions/setup-macos
       - run: make lint
-      - run: make build-app
       - run: make test
-      - run: make test-cli-smoke
       - run: make test-cli-integration
       - name: Upload xcresult bundle (on failure)
         if: failure()

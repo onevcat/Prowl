@@ -71,7 +71,7 @@ _check-ghostty-hash:
 	done; \
 	if [ "$$current_sha" != "$$last_sha" ] || [ "$$artifacts_ok" -ne 1 ]; then \
 		echo "Syncing GhosttyKit for submodule $$current_sha"; \
-		$(MAKE) -B build-ghostty-xcframework; \
+		$(MAKE) -B build-ghostty-xcframework || exit $$?; \
 		if [ "$$current_sha" != "$$last_sha" ]; then \
 			rm -rf ~/Library/Developer/Xcode/DerivedData/supacode-*; \
 			echo "Cleared Xcode DerivedData for ghostty header/module changes"; \
@@ -276,7 +276,7 @@ archive: build-ghostty-xcframework embed-cli # Archive Release build for distrib
 export-archive: # Export xarchive
 	bash -o pipefail -c 'xcodebuild -exportArchive -archivePath build/supacode.xcarchive -exportPath build/export -exportOptionsPlist build/ExportOptions.plist 2>&1 | mise exec -- xcsift -qw --format toon'
 
-test: ensure-ghostty
+test: ensure-ghostty embed-cli-debug
 	@set -euo pipefail; \
 	result_bundle="$(CURRENT_MAKEFILE_DIR)/build/test-results/supacode-tests.xcresult"; \
 	mkdir -p "$$(dirname "$$result_bundle")"; \
