@@ -1,3 +1,5 @@
+import AppKit
+import Carbon
 import CustomDump
 import SwiftUI
 import Testing
@@ -62,6 +64,26 @@ struct AppShortcutsTests {
     #expect(AppShortcuts.terminalTabSelectionDisplay(at: 0, in: resolved) == "⌘J")
     #expect(AppShortcuts.worktreeSelectionDisplay(at: 10, in: resolved) == nil)
     #expect(AppShortcuts.terminalTabSelectionDisplay(at: 10, in: resolved) == nil)
+  }
+
+  @Test func keybindingMatchesSpecialKeyEvents() throws {
+    let event = try #require(
+      NSEvent.keyEvent(
+        with: .keyDown,
+        location: .zero,
+        modifierFlags: [.command, .control],
+        timestamp: 0,
+        windowNumber: 0,
+        context: nil,
+        characters: "\r",
+        charactersIgnoringModifiers: "\r",
+        isARepeat: false,
+        keyCode: UInt16(kVK_Return)
+      )
+    )
+
+    #expect(Keybinding(key: "return", modifiers: .init(command: true, control: true)).matches(event: event))
+    #expect(!Keybinding(key: "return", modifiers: .init(command: true, shift: true)).matches(event: event))
   }
 
   @Test func helpTextUsesResolvedShortcutAndHandlesDisabledBinding() {

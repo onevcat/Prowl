@@ -124,7 +124,7 @@ struct AppFeaturePlainFolderTerminalTests {
 
   @Test(.dependencies) func conflictingCustomShortcutOverridesAppShortcutOnlyForSelectedRepository() async {
     let repository = makePlainRepository()
-    let registeredShortcuts = LockIsolated<[UserCustomShortcut]>([])
+    let registeredShortcuts = LockIsolated<[Keybinding]>([])
     var state = AppFeature.State(
       repositories: makeRepositoriesState(repository: repository, selected: true),
       settings: SettingsFeature.State()
@@ -163,7 +163,7 @@ struct AppFeaturePlainFolderTerminalTests {
 
     let expectedShortcut = conflicted.customCommands[0].shortcut?.normalized()
     #expect(store.state.selectedCustomCommands == conflicted.customCommands)
-    #expect(registeredShortcuts.value == [expectedShortcut].compactMap { $0 })
+    #expect(registeredShortcuts.value == [expectedShortcut?.keybinding].compactMap { $0 })
     let customCommandID = LegacyCustomCommandShortcutMigration.customCommandBindingID(
       for: conflicted.customCommands[0].id
     )

@@ -1,13 +1,13 @@
 import ComposableArchitecture
 
 struct CustomShortcutRegistryClient {
-  var setShortcuts: @MainActor @Sendable ([UserCustomShortcut]) -> Void
+  var setShortcuts: @MainActor @Sendable ([Keybinding]) -> Void
 }
 
 extension CustomShortcutRegistryClient: DependencyKey {
   static let liveValue = Self(
-    setShortcuts: { shortcuts in
-      UserCustomShortcutRegistry.shared.setShortcuts(shortcuts)
+    setShortcuts: { keybindings in
+      UserCustomShortcutRegistry.shared.setKeybindings(keybindings)
     }
   )
 

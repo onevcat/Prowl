@@ -4,24 +4,21 @@ import AppKit
 final class UserCustomShortcutRegistry {
   static let shared = UserCustomShortcutRegistry()
 
-  private var shortcuts: [UserCustomShortcut] = []
+  private var keybindings: [Keybinding] = []
 
   private init() {}
 
-  func setShortcuts(_ shortcuts: [UserCustomShortcut]) {
-    self.shortcuts = shortcuts.compactMap { shortcut in
-      let normalized = shortcut.normalized()
-      return normalized.isValid ? normalized : nil
-    }
+  func setKeybindings(_ keybindings: [Keybinding]) {
+    self.keybindings = keybindings.filter(\.isValid)
   }
 
   func matches(event: NSEvent) -> Bool {
-    shortcuts.contains { $0.matches(event: event) }
+    keybindings.contains { $0.matches(event: event) }
   }
 
   #if DEBUG
-    var registeredShortcutsForTesting: [UserCustomShortcut] {
-      shortcuts
+    var registeredShortcutsForTesting: [Keybinding] {
+      keybindings
     }
   #endif
 }

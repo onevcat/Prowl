@@ -223,10 +223,10 @@ extension AppFeature {
       customCommands: state.selectedCustomCommands
     )
     let userOverrideConflicts = AppShortcuts.userOverrideConflicts(in: state.selectedCustomCommands)
-    let shortcuts: [UserCustomShortcut] = state.selectedCustomCommands.compactMap { command in
-      let commandID = LegacyCustomCommandShortcutMigration.customCommandBindingID(for: command.id)
-      return state.resolvedKeybindings.keybinding(for: commandID)?.userCustomShortcut
-    }
+    let keybindings = menuPreferredKeybindings(
+      resolvedKeybindings: state.resolvedKeybindings,
+      customCommands: state.selectedCustomCommands
+    )
     return .run { _ in
       let logger = SupaLogger("Shortcuts")
       for conflict in userOverrideConflicts {
@@ -236,8 +236,32 @@ extension AppFeature {
             + "custom_shortcut=\(conflict.commandShortcutDisplay) result=customOverride"
         )
       }
-      await customShortcutRegistryClient.setShortcuts(shortcuts)
+      await customShortcutRegistryClient.setShortcuts(keybindings)
     }
+  }
+
+  func menuPreferredKeybindings(
+    resolvedKeybindings: ResolvedKeybindingMap,
+    customCommands: [UserCustomCommand]
+  ) -> [Keybinding] {
+    var keybindings: [Keybinding] = []
+    func append(_ keybinding: Keybinding?) {
+      guard let keybinding, !keybindings.contains(keybinding) else { return }
+      keybindings.append(keybinding)
+    }
+
+    for binding in AppShortcuts.bindings
+    where binding.scope == .configurableAppAction
+      && !AppShortcuts.isGhosttyManagedActionCommandID(binding.id)
+    {
+      append(resolvedKeybindings.keybinding(for: binding.id))
+    }
+
+    for command in customCommands {
+      let commandID = LegacyCustomCommandShortcutMigration.customCommandBindingID(for: command.id)
+      append(resolvedKeybindings.keybinding(for: commandID))
+    }
+    return keybindings
   }
 
   func applyDefaultViewMode(into state: inout State) -> Effect<Action> {

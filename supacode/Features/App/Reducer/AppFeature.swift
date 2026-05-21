@@ -246,10 +246,14 @@ struct AppFeature {
               at: 0
             )
           }
+          let keybindings = menuPreferredKeybindings(
+            resolvedKeybindings: state.resolvedKeybindings,
+            customCommands: state.selectedCustomCommands
+          )
           return .merge(
             .merge(effects),
             .run { _ in
-              await customShortcutRegistryClient.setShortcuts([])
+              await customShortcutRegistryClient.setShortcuts(keybindings)
             }
           )
         }
@@ -284,9 +288,13 @@ struct AppFeature {
             await worktreeInfoWatcher.send(.setSelectedWorktreeID(isPlainFolderSelection ? nil : worktree.id))
           }
         )
+        let keybindings = menuPreferredKeybindings(
+          resolvedKeybindings: state.resolvedKeybindings,
+          customCommands: state.selectedCustomCommands
+        )
         effects.append(
           .run { _ in
-            await customShortcutRegistryClient.setShortcuts([])
+            await customShortcutRegistryClient.setShortcuts(keybindings)
           }
         )
         effects.append(
@@ -461,6 +469,10 @@ struct AppFeature {
           customCommands: state.selectedCustomCommands
         )
         let badgeCount = settings.showNotificationDotOnDock ? state.notificationIndicatorCount : 0
+        let keybindings = menuPreferredKeybindings(
+          resolvedKeybindings: state.resolvedKeybindings,
+          customCommands: state.selectedCustomCommands
+        )
         return .merge(
           .send(.repositories(.githubIntegration(.setGithubIntegrationEnabled(settings.githubIntegrationEnabled)))),
           .send(
@@ -511,6 +523,9 @@ struct AppFeature {
             await worktreeInfoWatcher.send(
               .setPullRequestTrackingEnabled(settings.githubIntegrationEnabled)
             )
+          },
+          .run { _ in
+            await customShortcutRegistryClient.setShortcuts(keybindings)
           },
           .run { send in
             guard shouldCheckSystemNotificationPermission else { return }
@@ -830,8 +845,12 @@ struct AppFeature {
           )
           state.runScriptDraft = ""
           state.isRunScriptPromptPresented = false
+          let keybindings = menuPreferredKeybindings(
+            resolvedKeybindings: state.resolvedKeybindings,
+            customCommands: state.selectedCustomCommands
+          )
           return .run { _ in
-            await customShortcutRegistryClient.setShortcuts([])
+            await customShortcutRegistryClient.setShortcuts(keybindings)
           }
         }
         let rootURL = worktree.repositoryRootURL

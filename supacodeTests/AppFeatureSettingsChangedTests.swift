@@ -156,6 +156,89 @@ struct AppFeatureSettingsChangedTests {
     )
   }
 
+  @Test(.dependencies) func settingsChangedRegistersUserOverrideAppShortcutsForMenuPreference() async {
+    let registeredShortcuts = LockIsolated<[[Keybinding]]>([])
+    var settings = GlobalSettings.default
+    settings.keybindingUserOverrides = KeybindingUserOverrideStore(
+      overrides: [
+        AppShortcuts.CommandID.toggleCanvasMaxMode: KeybindingUserOverride(
+          binding: Keybinding(key: "return", modifiers: .init(command: true, control: true))
+        )
+      ]
+    )
+
+    let store = TestStore(initialState: AppFeature.State()) {
+      AppFeature()
+    } withDependencies: {
+      $0.customShortcutRegistryClient.setShortcuts = { shortcuts in
+        registeredShortcuts.withValue { $0.append(shortcuts) }
+      }
+    }
+
+    await store.send(.settings(.delegate(.settingsChanged(settings)))) {
+      $0.settings.keybindingUserOverrides = settings.keybindingUserOverrides
+      $0.resolvedKeybindings = KeybindingResolver.resolve(
+        schema: .appResolverSchema(),
+        userOverrides: settings.keybindingUserOverrides
+      )
+    }
+    await store.receive(\.repositories.githubIntegration.setGithubIntegrationEnabled)
+    await store.receive(\.repositories.githubIntegration.setMergedWorktreeAction)
+    await store.receive(\.repositories.setArchivedAutoDeletePeriod)
+    await store.receive(\.repositories.worktreeOrdering.setMoveNotifiedWorktreeToTop)
+    await store.receive(\.updates.applySettings) {
+      $0.updates.didConfigureUpdates = true
+    }
+    await store.receive(\.repositories.githubIntegration.refreshGithubIntegrationAvailability) {
+      $0.repositories.githubIntegrationAvailability = .checking
+    }
+    await store.receive(\.repositories.githubIntegration.githubIntegrationAvailabilityUpdated) {
+      $0.repositories.githubIntegrationAvailability = .available
+      $0.repositories.queuedPullRequestRefreshByRepositoryID = [:]
+      $0.repositories.inFlightPullRequestRefreshRepositoryIDs = []
+    }
+    await store.finish()
+
+    let registeredDisplays = registeredShortcuts.value.flatMap { $0 }.map(\.display)
+    #expect(registeredDisplays.contains("⌘⌃↩"))
+    #expect(registeredDisplays.contains("⌘1") == false)
+  }
+
+  @Test(.dependencies) func settingsChangedRegistersDefaultAppShortcutsForMenuPreference() async {
+    let registeredShortcuts = LockIsolated<[[Keybinding]]>([])
+    let settings = GlobalSettings.default
+
+    let store = TestStore(initialState: AppFeature.State()) {
+      AppFeature()
+    } withDependencies: {
+      $0.customShortcutRegistryClient.setShortcuts = { shortcuts in
+        registeredShortcuts.withValue { $0.append(shortcuts) }
+      }
+    }
+
+    await store.send(.settings(.delegate(.settingsChanged(settings))))
+    await store.receive(\.repositories.githubIntegration.setGithubIntegrationEnabled)
+    await store.receive(\.repositories.githubIntegration.setMergedWorktreeAction)
+    await store.receive(\.repositories.setArchivedAutoDeletePeriod)
+    await store.receive(\.repositories.worktreeOrdering.setMoveNotifiedWorktreeToTop)
+    await store.receive(\.updates.applySettings) {
+      $0.updates.didConfigureUpdates = true
+    }
+    await store.receive(\.repositories.githubIntegration.refreshGithubIntegrationAvailability) {
+      $0.repositories.githubIntegrationAvailability = .checking
+    }
+    await store.receive(\.repositories.githubIntegration.githubIntegrationAvailabilityUpdated) {
+      $0.repositories.githubIntegrationAvailability = .available
+      $0.repositories.queuedPullRequestRefreshByRepositoryID = [:]
+      $0.repositories.inFlightPullRequestRefreshRepositoryIDs = []
+    }
+    await store.finish()
+
+    let registeredDisplays = registeredShortcuts.value.flatMap { $0 }.map(\.display)
+    #expect(registeredDisplays.contains("⌘⌃↩"))
+    #expect(registeredDisplays.contains("⌘1") == false)
+  }
+
   @Test(.dependencies) func clearTerminalLayoutSnapshotShowsSuccessToast() async {
     let store = TestStore(initialState: AppFeature.State()) {
       AppFeature()
