@@ -1026,12 +1026,16 @@ struct AppFeature {
           notificationJumpLogger.warning("Tapped notification worktree vanished: \(worktreeID)")
           return .none
         }
+        let focusNotificationSurface = Effect<Action>.run { _ in
+          _ = await terminalClient.focusSurface(worktreeID, surfaceID)
+          await terminalClient.markNotificationsReadForSurface(worktreeID, surfaceID)
+        }
+        guard !state.repositories.isShowingCanvas else {
+          return focusNotificationSurface
+        }
         return .merge(
           .send(.repositories(.selectWorktree(worktreeID, focusTerminal: true))),
-          .run { _ in
-            _ = await terminalClient.focusSurface(worktreeID, surfaceID)
-            await terminalClient.markNotificationsReadForSurface(worktreeID, surfaceID)
-          }
+          focusNotificationSurface
         )
 
       case .alert(.dismiss):

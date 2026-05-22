@@ -84,6 +84,36 @@ struct AppFeatureJumpToLatestUnreadTests {
     #expect(readSurfaces.value.map { "\($0.0)|\($0.1.uuidString)" } == ["\(worktree.id)|\(surfaceID.uuidString)"])
   }
 
+  @Test func systemNotificationTappedKeepsCanvasModeAndFocusesSurface() async {
+    let worktree = makeWorktree()
+    let repository = makeRepository(worktrees: [worktree])
+    let surfaceID = UUID()
+    var repositoriesState = RepositoriesFeature.State(repositories: [repository])
+    repositoriesState.selection = .canvas
+    repositoriesState.snapshotPersistencePhase = .active
+    let focusedSurfaces = LockIsolated<[(Worktree.ID, UUID)]>([])
+    let readSurfaces = LockIsolated<[(Worktree.ID, UUID)]>([])
+    let store = TestStore(
+      initialState: AppFeature.State(repositories: repositoriesState)
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.focusSurface = { worktreeID, targetSurfaceID in
+        focusedSurfaces.withValue { $0.append((worktreeID, targetSurfaceID)) }
+        return true
+      }
+      $0.terminalClient.markNotificationsReadForSurface = { worktreeID, targetSurfaceID in
+        readSurfaces.withValue { $0.append((worktreeID, targetSurfaceID)) }
+      }
+    }
+    await store.send(.systemNotificationTapped(worktreeID: worktree.id, surfaceID: surfaceID))
+    await store.finish()
+
+    #expect(store.state.repositories.selection == .canvas)
+    #expect(focusedSurfaces.value.map { "\($0.0)|\($0.1.uuidString)" } == ["\(worktree.id)|\(surfaceID.uuidString)"])
+    #expect(readSurfaces.value.map { "\($0.0)|\($0.1.uuidString)" } == ["\(worktree.id)|\(surfaceID.uuidString)"])
+  }
+
   private func makeWorktree() -> Worktree {
     Worktree(
       id: "/tmp/repo/wt-1",
