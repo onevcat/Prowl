@@ -10,8 +10,7 @@ struct ToolbarNotificationsPopoverView: View {
       count + repository.notificationCount
     }
     let notificationLabel = notificationCount == 1 ? "notification" : "notifications"
-    let unreadGroups = groups.unreadNotificationGroups
-    let remainingGroups = groups.remainingNotificationGroups
+    let notificationRows = makeNotificationRows()
 
     ScrollView {
       VStack(alignment: .leading, spacing: 12) {
@@ -31,34 +30,14 @@ struct ToolbarNotificationsPopoverView: View {
           .help("Dismiss all notifications")
         }
 
-        if !unreadGroups.isEmpty {
-          Divider()
-          VStack(alignment: .leading, spacing: 8) {
-            Text("Highlighted")
-              .font(.subheadline)
-            Text("Unread notifications")
-              .font(.caption)
-              .foregroundStyle(.secondary)
-            ForEach(unreadGroups) { repository in
-              VStack(alignment: .leading, spacing: 6) {
-                Text(repository.name)
-                  .font(.caption)
-                  .foregroundStyle(.secondary)
-                ForEach(repository.worktrees) { worktree in
-                  worktreeSection(worktree)
-                }
-              }
-            }
-          }
-        }
+        Divider()
 
-        ForEach(remainingGroups) { repository in
-          VStack(alignment: .leading, spacing: 8) {
-            Divider()
-            Text(repository.name)
-              .font(.subheadline)
-            ForEach(repository.worktrees) { worktree in
-              worktreeSection(worktree)
+        VStack(alignment: .leading, spacing: 0) {
+          ForEach(notificationRows) { row in
+            notificationButton(row)
+            if row.id != notificationRows.last?.id {
+              Divider()
+                .padding(.leading, 20)
             }
           }
         }
@@ -68,50 +47,78 @@ struct ToolbarNotificationsPopoverView: View {
     .frame(minWidth: 320, maxWidth: 520, maxHeight: 440)
   }
 
-  @ViewBuilder
-  private func worktreeSection(_ worktree: ToolbarNotificationWorktreeGroup) -> some View {
-    VStack(alignment: .leading, spacing: 6) {
-      HStack(spacing: 6) {
-        Text(worktree.name)
-          .font(.caption)
-          .foregroundStyle(.secondary)
-        if worktree.hasUnseenNotifications {
-          Circle()
-            .fill(.orange)
-            .frame(width: 6, height: 6)
-            .accessibilityHidden(true)
+  private func makeNotificationRows() -> [ToolbarNotificationRow] {
+    let rows = groups.flatMap { repository in
+      repository.worktrees.flatMap { worktree in
+        worktree.notifications.map { notification in
+          ToolbarNotificationRow(
+            repositoryName: repository.name,
+            worktreeID: worktree.id,
+            worktreeName: worktree.name,
+            notification: notification
+          )
         }
       }
-      ForEach(worktree.notifications) { notification in
-        notificationButton(worktreeID: worktree.id, notification: notification)
-      }
     }
+
+    return rows.filter(\.isUnread) + rows.filter { !$0.isUnread }
   }
 
   @ViewBuilder
-  private func notificationButton(
-    worktreeID: Worktree.ID,
-    notification: WorktreeTerminalNotification
-  ) -> some View {
+  private func notificationButton(_ row: ToolbarNotificationRow) -> some View {
     Button {
-      onSelectNotification(worktreeID, notification)
+      onSelectNotification(row.worktreeID, row.notification)
     } label: {
       HStack(alignment: .top, spacing: 8) {
-        Image(systemName: "bell")
-          .foregroundStyle(notification.isRead ? Color.secondary : Color.orange)
+        Circle()
+          .fill(row.isUnread ? Color.orange : Color.clear)
+          .frame(width: 6, height: 6)
+          .padding(.top, 5)
           .accessibilityHidden(true)
-        Text(notification.content)
-          .font(.caption)
-          .foregroundStyle(notification.isRead ? Color.secondary : Color.primary)
-          .lineLimit(2)
+        VStack(alignment: .leading, spacing: 4) {
+          Text(row.notification.content)
+            .font(.caption)
+            .fontWeight(row.isUnread ? .semibold : .regular)
+            .foregroundStyle(row.notification.isRead ? Color.secondary : Color.primary)
+            .lineLimit(2)
+          HStack(spacing: 5) {
+            Text(row.repositoryName)
+              .lineLimit(1)
+            Circle()
+              .fill(Color.secondary)
+              .frame(width: 3, height: 3)
+              .accessibilityHidden(true)
+            Text(row.worktreeName)
+              .lineLimit(1)
+          }
+          .font(.caption2.weight(.regular))
+          .foregroundStyle(.tertiary)
+          .padding(.top, 1)
+        }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(.vertical, 8)
     }
     .buttonStyle(.plain)
     .help(
-      notification.content.isEmpty
+      row.notification.content.isEmpty
         ? "Select worktree and focus terminal"
-        : notification.content
+        : row.notification.content
     )
+  }
+}
+
+private struct ToolbarNotificationRow: Identifiable {
+  let repositoryName: String
+  let worktreeID: Worktree.ID
+  let worktreeName: String
+  let notification: WorktreeTerminalNotification
+
+  var id: WorktreeTerminalNotification.ID {
+    notification.id
+  }
+
+  var isUnread: Bool {
+    !notification.isRead
   }
 }

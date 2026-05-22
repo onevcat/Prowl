@@ -10,6 +10,7 @@ struct ToolbarNotificationsPopoverButton: View {
   @State private var isHoveringButton = false
   @State private var isHoveringPopover = false
   @State private var closeTask: Task<Void, Never>?
+  @State private var notificationBounceValue = 0
 
   private var notificationCount: Int {
     groups.reduce(0) { count, repository in
@@ -27,6 +28,7 @@ struct ToolbarNotificationsPopoverButton: View {
       HStack(spacing: 6) {
         Image(systemName: unseenWorktreeCount > 0 ? "bell.badge.fill" : "bell.fill")
           .foregroundStyle(unseenWorktreeCount > 0 ? .orange : .secondary)
+          .symbolEffect(.bounce, value: notificationBounceValue)
           .accessibilityHidden(true)
         if notificationCount > 0 {
           Text(notificationCount, format: .number)
@@ -34,7 +36,6 @@ struct ToolbarNotificationsPopoverButton: View {
         }
       }
     }
-    .help("Notifications. Hover or click to show all notifications.")
     .accessibilityLabel("Notifications")
     .onHover { hovering in
       isHoveringButton = hovering
@@ -65,6 +66,10 @@ struct ToolbarNotificationsPopoverButton: View {
       if newValue.isEmpty {
         closePopover()
       }
+    }
+    .onChange(of: notificationCount) { oldValue, newValue in
+      guard newValue > oldValue else { return }
+      notificationBounceValue += 1
     }
     .onDisappear {
       closeTask?.cancel()
