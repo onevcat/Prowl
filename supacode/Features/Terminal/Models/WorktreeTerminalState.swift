@@ -155,6 +155,7 @@ final class WorktreeTerminalState {
   var onTabCreated: (() -> Void)?
   var onTabClosed: (() -> Void)?
   var onFocusChanged: ((UUID) -> Void)?
+  var onFocusedCommandSurfaceCreated: ((UUID) -> Void)?
   internal var onInputContextMayHaveChanged: ((UUID) -> Void)?
   var onTaskStatusChanged: ((WorktreeTaskStatus) -> Void)?
   var onAgentEntryChanged: ((ActiveAgentEntry) -> Void)?
@@ -462,6 +463,7 @@ final class WorktreeTerminalState {
     tabIsRunningById[tabId] = false
     if creation.focusing, let surface = tree.root?.leftmostLeaf() {
       focusSurface(surface, in: tabId)
+      onFocusedCommandSurfaceCreated?(surface.id)
     }
     onTabCreated?()
     return tabId

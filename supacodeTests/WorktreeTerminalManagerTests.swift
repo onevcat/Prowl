@@ -6,6 +6,25 @@ import Testing
 
 @testable import supacode
 
+private final class MockTerminalInputSourceSelector: KeyboardInputSourceSelecting {
+  var currentID = "com.example.inputmethod.Chinese"
+  var selectedIDs: [String] = []
+
+  func currentInputSourceID() -> String? {
+    currentID
+  }
+
+  func selectInputSource(id: String) -> Bool {
+    currentID = id
+    selectedIDs.append(id)
+    return true
+  }
+
+  func selectABC() -> Bool {
+    selectInputSource(id: KeyboardInputSourceSelector.abcInputSourceID)
+  }
+}
+
 @MainActor
 struct WorktreeTerminalManagerTests {
   @Test func buffersEventsUntilStreamCreated() async {
@@ -220,6 +239,35 @@ struct WorktreeTerminalManagerTests {
     #expect(state.surfaceView(for: surfaceId) == nil)
     #expect(state.tabManager.tabs.isEmpty)
     #expect(state.closeSurface(id: surfaceId, confirmation: .skip) == false)
+  }
+
+  @Test func creatingFocusedTabDefaultsInputSourceToABCBeforeProcessProbeCompletes() {
+    let selector = MockTerminalInputSourceSelector()
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      inputSourceCoordinator: TerminalInputSourceCoordinator(selector: selector)
+    )
+    let worktree = makeWorktree()
+    let state = manager.state(for: worktree)
+    manager.handleCommand(.setSelectedWorktreeID(worktree.id))
+
+    _ = state.createTab()
+
+    #expect(selector.selectedIDs == [KeyboardInputSourceSelector.abcInputSourceID])
+  }
+
+  @Test func worktreeStateReportsFocusedCommandSurfaceCreationSynchronously() {
+    let state = WorktreeTerminalState(runtime: GhosttyRuntime(), worktree: makeWorktree())
+    var createdSurfaceID: UUID?
+
+    state.onFocusedCommandSurfaceCreated = { surfaceID in
+      createdSurfaceID = surfaceID
+    }
+
+    let tabID = state.createTab()
+
+    #expect(tabID != nil)
+    #expect(createdSurfaceID == tabID.flatMap { state.focusedSurfaceId(in: $0) })
   }
 
   @Test func notificationIndicatorUsesCurrentCountOnStreamStart() async {

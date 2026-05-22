@@ -29,7 +29,7 @@ final class WorktreeTerminalManager {
   private var commandFinishedNotificationThreshold = 10
   private var preferredFontSize: Float32?
   private let baselineFontSize: Float32
-  private let inputSourceCoordinator = TerminalInputSourceCoordinator()
+  private let inputSourceCoordinator: TerminalInputSourceCoordinator
   private var latestInputSourceFocusRequest: InputSourceFocusRequest?
   private var lastNotificationIndicatorCount: Int?
   private var eventContinuation: AsyncStream<TerminalClient.Event>.Continuation?
@@ -53,11 +53,13 @@ final class WorktreeTerminalManager {
   init(
     runtime: GhosttyRuntime,
     preferredFontSize: Float32? = nil,
-    layoutPersistence: TerminalLayoutPersistenceClient = .liveValue
+    layoutPersistence: TerminalLayoutPersistenceClient = .liveValue,
+    inputSourceCoordinator: TerminalInputSourceCoordinator = TerminalInputSourceCoordinator()
   ) {
     self.runtime = runtime
     self.layoutPersistence = layoutPersistence
     self.preferredFontSize = preferredFontSize
+    self.inputSourceCoordinator = inputSourceCoordinator
     baselineFontSize = runtime.defaultFontSize()
   }
 
@@ -295,6 +297,11 @@ final class WorktreeTerminalManager {
       )
       self.reevaluateInputSource(state: state, surfaceID: surfaceID, reason: .focusChanged)
       self.emit(.focusChanged(worktreeID: worktree.id, surfaceID: surfaceID))
+    }
+    state.onFocusedCommandSurfaceCreated = { [weak self, weak state] surfaceID in
+      guard let self, let state else { return }
+      guard self.isInputSourceActiveTarget(state: state, surfaceID: surfaceID) else { return }
+      self.inputSourceCoordinator.applyFocusedContext(.commandLike, surfaceID: surfaceID, reason: .focusChanged)
     }
     state.onInputContextMayHaveChanged = { [weak self, weak state] surfaceID in
       guard let self, let state else { return }
@@ -840,6 +847,7 @@ final class WorktreeTerminalManager {
       self.layoutPersistence = .liveValue
       self.preferredFontSize = nil
       self.baselineFontSize = 13
+      self.inputSourceCoordinator = TerminalInputSourceCoordinator()
     }
   #endif
 }
