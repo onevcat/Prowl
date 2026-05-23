@@ -91,6 +91,23 @@ struct CanvasFocusRestoreSelectionTests {
     #expect(result == nil)
   }
 
+  @Test func activationFocusFallsBackToCanvasReturnWorktreeWhenTerminalSelectionIsCleared() {
+    let selectedTabID = TerminalTabID(rawValue: UUID(uuidString: "00000000-0000-0000-0000-000000000204")!)
+    let otherTabID = TerminalTabID(rawValue: UUID(uuidString: "00000000-0000-0000-0000-000000000205")!)
+
+    let result = canvasActivationFocusTarget(
+      selectedWorktreeID: nil,
+      canvasReturnWorktreeID: "/tmp/repo/wt-2",
+      candidates: [
+        CanvasActivationFocusCandidate(worktreeID: "/tmp/repo/wt-1", selectedTabID: otherTabID),
+        CanvasActivationFocusCandidate(worktreeID: "/tmp/repo/wt-2", selectedTabID: selectedTabID),
+      ]
+    )
+
+    #expect(result?.worktreeID == "/tmp/repo/wt-2")
+    #expect(result?.tabID == selectedTabID)
+  }
+
   @Test func queuesCanvasFocusTargetWhenExternalTabChanges() {
     let target = CanvasExternalFocusTarget(
       worktreeID: "/tmp/repo/wt-1",

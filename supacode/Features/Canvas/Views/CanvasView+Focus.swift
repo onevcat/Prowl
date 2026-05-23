@@ -356,13 +356,17 @@ extension CanvasView {
       state.isCanvasManaged = true
     }
 
-    // Auto-focus the card that was active before entering canvas.
-    if let selectedID = terminalManager.selectedWorktreeID,
-      let state = activeStates.first(where: { $0.worktreeID == selectedID }),
-      let tabID = state.tabManager.selectedTabId
-    {
-      selectionState.focusSingle(tabID)
-      syncPrimaryFocus(from: nil, to: tabID, states: activeStates)
+    let candidates = activeStates.compactMap { state -> CanvasActivationFocusCandidate? in
+      guard let selectedTabID = state.tabManager.selectedTabId else { return nil }
+      return CanvasActivationFocusCandidate(worktreeID: state.worktreeID, selectedTabID: selectedTabID)
+    }
+
+    if let target = canvasActivationFocusTarget(
+      selectedWorktreeID: terminalManager.selectedWorktreeID,
+      canvasReturnWorktreeID: initialFocusWorktreeID,
+      candidates: candidates
+    ) {
+      focusSingleCard(target.tabID, states: activeStates)
     } else {
       selectionState.clear()
       syncBroadcastCallbacks(states: activeStates)

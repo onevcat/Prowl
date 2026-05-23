@@ -42,6 +42,7 @@ struct CanvasView: View {
   @Environment(\.canvasMaxModeActive) var canvasMaxModeActive
 
   let terminalManager: WorktreeTerminalManager
+  let initialFocusWorktreeID: Worktree.ID?
   /// Per-repo display titles resolved by the parent reducer. Used to
   /// override the folder-derived `Repository.name` on each card title
   /// bar without subscribing to per-repo settings files on the
@@ -152,6 +153,7 @@ struct CanvasView: View {
 
   init(
     terminalManager: WorktreeTerminalManager,
+    initialFocusWorktreeID: Worktree.ID? = nil,
     repositoryCustomTitles: [Repository.ID: String] = [:],
     focusRequest: CanvasFocusRequest? = nil,
     commandRequest: CanvasCommandRequest? = nil,
@@ -166,6 +168,7 @@ struct CanvasView: View {
     onDirectionalNewTerminalRequested: ((Worktree.ID?, DirectionalNewTerminalDirectoryMode) -> Void)? = nil
   ) {
     self.terminalManager = terminalManager
+    self.initialFocusWorktreeID = initialFocusWorktreeID
     self.repositoryCustomTitles = repositoryCustomTitles
     self.focusRequest = focusRequest
     self.commandRequest = commandRequest
@@ -2290,6 +2293,26 @@ func canvasRestoredFocusTabID(
 ) -> TerminalTabID? {
   guard wasSuspended, !isSuspended else { return nil }
   return focusedTabID
+}
+
+struct CanvasActivationFocusCandidate: Equatable {
+  let worktreeID: Worktree.ID
+  let selectedTabID: TerminalTabID
+}
+
+func canvasActivationFocusTarget(
+  selectedWorktreeID: Worktree.ID?,
+  canvasReturnWorktreeID: Worktree.ID?,
+  candidates: [CanvasActivationFocusCandidate]
+) -> CanvasRestoreFocusTarget? {
+  let targetWorktreeIDs = [selectedWorktreeID, canvasReturnWorktreeID]
+  for targetWorktreeID in targetWorktreeIDs.compactMap(\.self) {
+    guard let candidate = candidates.first(where: { $0.worktreeID == targetWorktreeID }) else {
+      continue
+    }
+    return CanvasRestoreFocusTarget(worktreeID: candidate.worktreeID, tabID: candidate.selectedTabID)
+  }
+  return nil
 }
 
 func canvasFocusVisibilityBounds(

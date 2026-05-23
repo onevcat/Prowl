@@ -454,6 +454,7 @@ struct WorktreeDetailView: View {
     if repositories.isShowingCanvas {
       CanvasView(
         terminalManager: terminalManager,
+        initialFocusWorktreeID: repositories.canvasReturnWorktreeID,
         repositoryCustomTitles: repositories.repositoryCustomTitles,
         focusRequest: repositories.pendingCanvasFocusRequest,
         commandRequest: repositories.pendingCanvasCommandRequest,
