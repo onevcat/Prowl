@@ -281,6 +281,48 @@ describe("CLI transport", () => {
       server.stop();
     }
   });
+
+  test("rate-limits control messages over the daemon unix socket", async () => {
+    const token = "test-token";
+    const socketPath = `/tmp/prowld-ipc-rate-limit-test-${crypto.randomUUID()}.sock`;
+    const server = startServer(
+      {
+        port: 0,
+        bind: "127.0.0.1",
+        token,
+        allowedOrigins: ["http://127.0.0.1:5173"],
+        requireTLS: false,
+      },
+      { socketPath, statePath: ":memory:", spawnProcesses: false },
+    );
+
+    try {
+      await Bun.sleep(50);
+      const responses = await sendRawJsonSequence(socketPath, [
+        {
+          v: 1,
+          type: "hello",
+          id: makeMessageId(),
+          token,
+          clientVersion: "0.0.0",
+          protocolVersion,
+        },
+        ...Array.from({ length: 100 }, () => ({
+          v: 1,
+          type: "ping",
+          id: makeMessageId(),
+        })),
+      ]);
+
+      const last = responses.at(-1);
+      expect(last?.type).toBe("error");
+      if (last?.type === "error") {
+        expect(last.code).toBe("RATE_LIMITED");
+      }
+    } finally {
+      server.stop();
+    }
+  });
 });
 
 async function sendRawJson(socketPath: string, value: unknown): Promise<ReturnType<typeof JSON.parse>> {
@@ -321,6 +363,68 @@ async function sendRawJson(socketPath: string, value: unknown): Promise<ReturnTy
         },
       },
     }).catch(reject);
+  });
+}
+
+async function sendRawJsonSequence(socketPath: string, values: unknown[]): Promise<ReturnType<typeof JSON.parse>[]> {
+  return new Promise((resolve, reject) => {
+    const responses: ReturnType<typeof JSON.parse>[] = [];
+    let buffer: Uint8Array<ArrayBufferLike> = new Uint8Array();
+    const timeout = setTimeout(() => {
+      reject(new Error("Timed out waiting for daemon response sequence"));
+    }, 3000);
+    void Bun.connect({
+      unix: socketPath,
+      socket: {
+        open(socket) {
+          for (const value of values) {
+            socket.write(encodeJsonFrame(value));
+          }
+        },
+        data(socket, data) {
+          buffer = concat(buffer, data);
+          while (buffer.byteLength >= 5) {
+            const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+            if (view.getUint8(0) !== protocolTags.json) {
+              clearTimeout(timeout);
+              socket.end();
+              reject(new Error("Expected JSON frame"));
+              return;
+            }
+            const frameLength = 5 + view.getUint32(1, false);
+            if (buffer.byteLength < frameLength) {
+              return;
+            }
+            const decoded = decodeFrame(buffer.subarray(0, frameLength));
+            buffer = buffer.subarray(frameLength);
+            if (decoded.tag !== protocolTags.json) {
+              clearTimeout(timeout);
+              socket.end();
+              reject(new Error("Expected JSON response"));
+              return;
+            }
+            responses.push(JSON.parse(decoded.payload));
+            if (responses.at(-1)?.type === "error") {
+              clearTimeout(timeout);
+              socket.end();
+              resolve(responses);
+              return;
+            }
+          }
+        },
+        close() {
+          clearTimeout(timeout);
+          resolve(responses);
+        },
+        error(_socket, error) {
+          clearTimeout(timeout);
+          reject(error);
+        },
+      },
+    }).catch((error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
   });
 }
 

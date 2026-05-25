@@ -31,16 +31,16 @@ export function startIPCServer(
   rmSync(socketPath, { force: true });
 
   const buffers = new WeakMap<object, Uint8Array>();
-  const sessions = new WeakMap<object, { authenticated: boolean; ownedPaneIds: Set<string> }>();
+  const sessions = new WeakMap<object, IPCSession>();
   const server = Bun.listen({
     unix: socketPath,
     socket: {
       open(socket) {
-        sessions.set(socket, { authenticated: false, ownedPaneIds: new Set() });
+        sessions.set(socket, newIPCSession());
       },
       data(socket, data) {
         const current = buffers.get(socket) ?? new Uint8Array();
-        const session = sessions.get(socket) ?? { authenticated: false, ownedPaneIds: new Set<string>() };
+        const session = sessions.get(socket) ?? newIPCSession();
         sessions.set(socket, session);
         let buffer = concat(current, data);
         while (buffer.byteLength >= 5) {
@@ -101,6 +101,11 @@ export function startIPCServer(
             writeInvalidControlError(socket, error);
             return;
           }
+          if (!allowIPCControlMessage(session)) {
+            socket.write(encodeJsonFrame(errorResponse(control.id, "RATE_LIMITED", "Control rate limit exceeded")));
+            socket.end();
+            return;
+          }
           if (!session.authenticated && control.type !== "hello") {
             socket.write(
               encodeJsonFrame(errorResponse(control.id, "UNAUTHORIZED", "Send hello before other control messages")),
@@ -135,6 +140,33 @@ export function startIPCServer(
       rmSync(socketPath, { force: true });
     },
   };
+}
+
+type IPCSession = {
+  authenticated: boolean;
+  ownedPaneIds: Set<string>;
+  controlWindowStartedAt: number;
+  controlMessagesInWindow: number;
+};
+
+const maxControlMessagesPerSecond = 100;
+
+function newIPCSession(): IPCSession {
+  return {
+    authenticated: false,
+    ownedPaneIds: new Set(),
+    controlWindowStartedAt: Date.now(),
+    controlMessagesInWindow: 0,
+  };
+}
+
+function allowIPCControlMessage(session: IPCSession, now = Date.now()): boolean {
+  if (now - session.controlWindowStartedAt >= 1_000) {
+    session.controlWindowStartedAt = now;
+    session.controlMessagesInWindow = 0;
+  }
+  session.controlMessagesInWindow += 1;
+  return session.controlMessagesInWindow <= maxControlMessagesPerSecond;
 }
 
 function errorResponse(id: string, code: string, message: string): Extract<ServerControlMessage, { type: "error" }> {
