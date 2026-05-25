@@ -153,6 +153,11 @@ export class AppState {
     return this.selectedPaneId ? (this.panes.get(this.selectedPaneId) ?? null) : null;
   }
 
+  get runnableCustomActions(): CustomAction[] {
+    const repoId = this.selectedWorktree?.repoId;
+    return this.customActions.filter((action) => !action.repoId || action.repoId === repoId);
+  }
+
   get visiblePanes(): Pane[] {
     if (this.view === "canvas") {
       return Array.from(this.panes.values());

@@ -9,6 +9,8 @@
   const appState = getContext<AppState>(appStateKey);
   let draggedWorktree = $state<{ repoId: string; worktreeId: string } | null>(null);
   let draggedPane = $state<{ worktreeId: string; paneId: string } | null>(null);
+  let actionMenuOpen = $state(false);
+  let runnableActions = $derived(appState.runnableCustomActions);
 </script>
 
 <main class="shell">
@@ -18,6 +20,35 @@
       <Button label="▦" title="Show Canvas" onclick={() => appState.setView("canvas")} />
       <Button label="+" title="New Tab (Command T)" onclick={() => appState.createPane()} />
       <Button label="Δ" title="Show Diff" disabled={!appState.selectedWorktreeId || appState.diffBusy} onclick={() => appState.showDiff()} />
+      <div class="action-menu">
+        <Button
+          label="▶"
+          title="Run Custom Action"
+          disabled={!appState.selectedPaneId || runnableActions.length === 0}
+          onclick={() => {
+            actionMenuOpen = !actionMenuOpen;
+          }}
+        />
+        {#if actionMenuOpen && runnableActions.length > 0}
+          <div class="action-popover" role="menu">
+            {#each runnableActions as action (action.id)}
+              <button
+                type="button"
+                role="menuitem"
+                title={`Run ${action.name}`}
+                onclick={() => {
+                  actionMenuOpen = false;
+                  void appState.runCustomAction(action.id);
+                }}
+              >
+                <span>{action.icon || "▶"}</span>
+                <strong>{action.name}</strong>
+                <small>{action.outputMode === "newPane" ? "New pane" : "Current pane"}</small>
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
       <Button label="⚙" title="Open Settings" onclick={() => appState.setView("settings")} />
     </div>
 
@@ -131,6 +162,55 @@
     padding: 0.65rem;
     border-bottom: 1px solid color-mix(in srgb, CanvasText 10%, transparent);
     background: Canvas;
+  }
+
+  .action-menu {
+    position: relative;
+  }
+
+  .action-popover {
+    position: absolute;
+    top: calc(100% + 0.35rem);
+    left: 0;
+    z-index: 5;
+    display: grid;
+    min-width: 13rem;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, CanvasText 16%, transparent);
+    border-radius: 6px;
+    background: Canvas;
+    box-shadow: 0 0.75rem 2rem rgb(0 0 0 / 0.2);
+  }
+
+  .action-popover button {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 0.5rem;
+    align-items: center;
+    min-height: 2.25rem;
+    padding: 0.35rem 0.55rem;
+    border: 0;
+    background: transparent;
+    color: CanvasText;
+    font: inherit;
+    text-align: left;
+  }
+
+  .action-popover button:hover {
+    background: color-mix(in srgb, AccentColor 18%, Canvas);
+  }
+
+  .action-popover strong {
+    overflow: hidden;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .action-popover small {
+    color: color-mix(in srgb, CanvasText 58%, Canvas);
+    font-size: 0.72rem;
   }
 
   h2 {
