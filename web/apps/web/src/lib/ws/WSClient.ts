@@ -7,6 +7,8 @@ type BinaryListener = (channelId: number, payload: Uint8Array) => void;
 type StatusListener = (state: "connecting" | "open" | "closed") => void;
 type BackpressureListener = (buffering: boolean) => void;
 
+const reconnectDelayMs = 100;
+
 export class ProtocolError extends Error {
   constructor(
     readonly code: string,
@@ -198,7 +200,7 @@ export class WSClient {
         return;
       }
       this.#openSocket(generation);
-    }, 500);
+    }, reconnectDelayMs);
   }
 
   #updateBackpressure(bufferedAmount: number): boolean {

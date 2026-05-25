@@ -32,6 +32,7 @@ export type AdvancedSettings = {
 export type PerformanceMetrics = {
   inputLatencySamples: number[];
   wsRttSamples: number[];
+  wsReconnectSamples: number[];
   worktreeSwitchSamples: number[];
   paletteOpenSamples: number[];
   lastWsRtt: number | null;

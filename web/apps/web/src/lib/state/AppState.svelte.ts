@@ -102,6 +102,7 @@ export class AppState {
   #bootstrapPromise: Promise<void> | null = null;
   #metricTimer: ReturnType<typeof setInterval> | null = null;
   #inputStartedByChannel = new Map<number, PerformanceInteraction[]>();
+  #reconnectInteraction: PerformanceInteraction | null = null;
   #decoderByChannel = new Map<number, TextDecoder>();
   #paneSizeById = new Map<string, { cols: number; rows: number }>();
   #renderedPaneIds = new Set<string>();
@@ -137,6 +138,7 @@ export class AppState {
   metrics = $state<PerformanceMetrics>({
     inputLatencySamples: [],
     wsRttSamples: [],
+    wsReconnectSamples: [],
     worktreeSwitchSamples: [],
     paletteOpenSamples: [],
     lastWsRtt: null,
@@ -987,9 +989,20 @@ export class AppState {
     this.daemonURL = new URL(url.searchParams.get("daemon") ?? defaultDaemonURL).toString();
     this.#connectDaemon(token);
     this.ws.onStatus((state) => {
+      if (state === "closed" && this.sessionId && !this.#reconnectInteraction) {
+        this.#reconnectInteraction = startPerformanceInteraction(interactionMeasureNames.wsReconnect);
+      }
       if (state === "open") {
         this.#prepareResumeAttach();
-        void this.#bootstrapOnce(this.#authToken);
+        void this.#bootstrapOnce(this.#authToken).then(
+          () => {
+            this.#recordWsReconnect(finishPerformanceInteraction(this.#reconnectInteraction));
+            this.#reconnectInteraction = null;
+          },
+          () => {
+            this.#reconnectInteraction = null;
+          },
+        );
       }
     });
   }
@@ -1431,6 +1444,16 @@ export class AppState {
       ...this.metrics,
       wsRttSamples: appendSample(this.metrics.wsRttSamples, value),
       lastWsRtt: value,
+    };
+  }
+
+  #recordWsReconnect(value: number | null): void {
+    if (value === null) {
+      return;
+    }
+    this.metrics = {
+      ...this.metrics,
+      wsReconnectSamples: appendSample(this.metrics.wsReconnectSamples, value),
     };
   }
 

@@ -128,6 +128,7 @@ test("re-attaches visible panes after a websocket reconnect", async ({ page, req
   await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}&token=${token}`);
   await expect(page.locator(".connection.open")).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Shell" })).toBeVisible();
+  await page.evaluate(() => performance.clearMeasures("prowl.ws.reconnect"));
 
   const before = await debugStats(request);
   await request.post(`${daemonHTTPURL}/debug/close-websockets`);
@@ -137,6 +138,8 @@ test("re-attaches visible panes after a websocket reconnect", async ({ page, req
   await expect
     .poll(async () => (await debugStats(request)).paneAttachRequests)
     .toBeGreaterThan(before.paneAttachRequests);
+  const reconnectDurations = await reconnectDurationsMs(page);
+  expect(reconnectDurations.at(-1)).toBeLessThanOrEqual(500);
 });
 
 test("recreates visible panes that disappeared from the daemon", async ({ page, request }) => {
@@ -233,4 +236,8 @@ function percentile(samples: number[], percentileValue: number): number {
   const sorted = [...samples].sort((a, b) => a - b);
   const index = Math.min(sorted.length - 1, Math.ceil((percentileValue / 100) * sorted.length) - 1);
   return sorted[index] ?? Number.POSITIVE_INFINITY;
+}
+
+async function reconnectDurationsMs(page: Page): Promise<number[]> {
+  return page.evaluate(() => performance.getEntriesByName("prowl.ws.reconnect").map((entry) => entry.duration));
 }
