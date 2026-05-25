@@ -208,6 +208,49 @@ describe("CLI transport", () => {
     }
   });
 
+  test("returns protocol errors for unsupported settings keys over the daemon unix socket", async () => {
+    const token = "test-token";
+    const socketPath = `/tmp/prowld-invalid-settings-key-test-${crypto.randomUUID()}.sock`;
+    const server = startServer(
+      {
+        port: 0,
+        bind: "127.0.0.1",
+        token,
+        allowedOrigins: ["http://127.0.0.1:5173"],
+        requireTLS: false,
+      },
+      { socketPath, statePath: ":memory:", spawnProcesses: false },
+    );
+
+    try {
+      await Bun.sleep(50);
+      await requestDaemon(
+        {
+          v: 1,
+          type: "hello",
+          id: makeMessageId(),
+          token,
+          clientVersion: "0.0.0",
+          protocolVersion,
+        },
+        socketPath,
+      );
+      await expect(
+        requestDaemon(
+          {
+            v: 1,
+            type: "settings.get",
+            id: makeMessageId(),
+            keys: ["panes"],
+          },
+          socketPath,
+        ),
+      ).rejects.toThrow("INVALID_SETTINGS");
+    } finally {
+      server.stop();
+    }
+  });
+
   test("rejects control messages before hello over the daemon unix socket", async () => {
     const token = "test-token";
     const socketPath = `/tmp/prowld-unauthorized-control-test-${crypto.randomUUID()}.sock`;

@@ -42,6 +42,8 @@ type ServerClient = {
 };
 
 const maxControlMessagesPerSecond = 100;
+const settingsKeys = ["appearance", "shortcuts", "advanced"] as const;
+const allowedSettingsKeys = new Set<string>(settingsKeys);
 
 export type ServerHandle = {
   stop: () => void;
@@ -643,6 +645,10 @@ export function handleControl(
   }
 
   if (message.type === "settings.get") {
+    const validationError = validateSettingsKeys(message.id, message.keys);
+    if (validationError) {
+      return [validationError];
+    }
     return [{ v: 1, type: "settings.snapshot", id: message.id, settings: state.settingsSnapshot(message.keys) }];
   }
 
@@ -1064,6 +1070,11 @@ function validateSettingsPatch(id: string, patch: Record<string, unknown>): Erro
     }
   }
   return null;
+}
+
+function validateSettingsKeys(id: string, keys: string[] | undefined): ErrorControlMessage | null {
+  const unsupportedKey = keys?.find((key) => !allowedSettingsKeys.has(key));
+  return unsupportedKey ? errorResponse(id, "INVALID_SETTINGS", `Unsupported settings key: ${unsupportedKey}`) : null;
 }
 
 function firstUnknownKey(record: Record<string, unknown>, allowedKeys: string[]): string | null {

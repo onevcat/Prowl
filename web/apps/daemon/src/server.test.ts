@@ -589,6 +589,36 @@ describe("daemon scaffold", () => {
     expect(rejected[0].code).toBe("INVALID_SETTINGS");
   });
 
+  test("rejects unsupported settings snapshot keys", () => {
+    const root = mkdtempSync(join(tmpdir(), "prowl-settings-key-validation-test-"));
+    const state = new InMemoryState(root, { statePath: ":memory:", spawnProcesses: false });
+    const config = {
+      port: 0,
+      bind: "127.0.0.1",
+      token: "test-token",
+      allowedOrigins: ["http://127.0.0.1:5173"],
+      requireTLS: false,
+    };
+
+    const rejected = handleControl(
+      {
+        v: 1,
+        type: "settings.get",
+        id: makeMessageId(),
+        keys: ["panes"],
+      },
+      state,
+      config,
+    );
+
+    expect(rejected[0]?.type).toBe("error");
+    if (rejected[0]?.type !== "error") {
+      throw new Error("Expected settings key validation error");
+    }
+    expect(rejected[0].code).toBe("INVALID_SETTINGS");
+    expect(rejected[0].message).toContain("panes");
+  });
+
   test("rejects pane operations outside the session ownership set", () => {
     const root = mkdtempSync(join(tmpdir(), "prowl-pane-ownership-test-"));
     const state = new InMemoryState(root, { statePath: ":memory:", spawnProcesses: false });
