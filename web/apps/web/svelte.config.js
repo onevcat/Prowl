@@ -10,6 +10,21 @@ const config = {
     alias: {
       $lib: "src/lib",
     },
+    csp: {
+      mode: "hash",
+      directives: {
+        "default-src": ["'self'"],
+        "script-src": ["'self'", "'wasm-unsafe-eval'"],
+        "style-src": ["'self'", "'unsafe-inline'"],
+        "connect-src": ["'self'", "ws://127.0.0.1:*", "ws://localhost:*", "wss:"],
+        "img-src": ["'self'", "data:", "blob:"],
+        "worker-src": ["'self'", "blob:"],
+        "font-src": ["'self'"],
+        "object-src": ["'none'"],
+        "base-uri": ["'self'"],
+        "frame-ancestors": ["'none'"],
+      },
+    },
   },
 };
 

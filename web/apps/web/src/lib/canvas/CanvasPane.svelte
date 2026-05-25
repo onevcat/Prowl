@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Pane } from "$lib/state/Pane";
+  import type { Pane } from "$lib/state/Pane.svelte";
   import type { TaskStatus } from "$lib/state/types";
   import TerminalView from "$lib/terminal/TerminalView.svelte";
 

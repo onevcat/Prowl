@@ -9,8 +9,8 @@ import type {
 } from "@prowl/protocol";
 import { makeMessageId, protocolVersion } from "@prowl/protocol";
 import { get, set } from "idb-keyval";
-import { Pane } from "./Pane";
-import { WorktreeView } from "./WorktreeView";
+import { Pane } from "./Pane.svelte";
+import { WorktreeView } from "./WorktreeView.svelte";
 import { defaultShortcuts, normalizeKeyChord } from "./shortcuts";
 import type {
   ActionId,
@@ -320,7 +320,7 @@ export class AppState {
       targetId,
     );
     this.worktreeOrderByRepo = { ...this.worktreeOrderByRepo, [repoId]: reordered };
-    void set(worktreeOrderKey, this.worktreeOrderByRepo);
+    persistJSONValue(worktreeOrderKey, this.worktreeOrderByRepo);
   }
 
   reorderPane(worktreeId: string, draggedId: string, targetId: string): void {
@@ -331,7 +331,7 @@ export class AppState {
       targetId,
     );
     this.paneOrderByWorktree = { ...this.paneOrderByWorktree, [worktreeId]: reordered };
-    void set(paneOrderKey, this.paneOrderByWorktree);
+    persistJSONValue(paneOrderKey, this.paneOrderByWorktree);
   }
 
   async createPane(): Promise<void> {
@@ -982,7 +982,7 @@ export class AppState {
       next[repoId] = order.filter((worktreeId) => worktreeIds.has(worktreeId));
     }
     this.worktreeOrderByRepo = next;
-    void set(worktreeOrderKey, this.worktreeOrderByRepo);
+    persistJSONValue(worktreeOrderKey, this.worktreeOrderByRepo);
   }
 
   #prunePaneOrder(): void {
@@ -992,7 +992,7 @@ export class AppState {
       next[worktreeId] = order.filter((paneId) => paneIds.has(paneId));
     }
     this.paneOrderByWorktree = next;
-    void set(paneOrderKey, this.paneOrderByWorktree);
+    persistJSONValue(paneOrderKey, this.paneOrderByWorktree);
   }
 
   #mergeSettings(snapshot: Record<string, unknown>): void {
@@ -1001,7 +1001,7 @@ export class AppState {
       shortcuts: sanitizeShortcuts(snapshot.shortcuts, this.settings.shortcuts),
       advanced: sanitizeAdvanced(snapshot.advanced, this.settings.advanced),
     };
-    void set(appearanceSettingsKey, this.settings.appearance);
+    persistJSONValue(appearanceSettingsKey, this.settings.appearance);
     this.#applyAppearanceSettings();
   }
 
@@ -1042,7 +1042,7 @@ export class AppState {
       section: item.section,
     };
     this.paletteHistory = [entry, ...this.paletteHistory.filter((candidate) => candidate.id !== entry.id)].slice(0, 10);
-    void set(paletteHistoryKey, this.paletteHistory);
+    persistJSONValue(paletteHistoryKey, this.paletteHistory);
   }
 
   #startMetricLoop(): void {
@@ -1187,6 +1187,10 @@ function isStringArrayRecord(value: unknown): value is Record<string, string[]> 
 
 function appendSample(samples: number[], value: number): number[] {
   return [...samples, value].slice(-maxMetricSamples);
+}
+
+function persistJSONValue(key: string, value: unknown): void {
+  void set(key, JSON.parse(JSON.stringify(value))).catch(() => {});
 }
 
 function orderByIds<T>(items: T[], order: string[] | undefined, getId: (item: T) => string): T[] {

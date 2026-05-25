@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Pane } from "$lib/state/Pane";
+  import type { Pane } from "$lib/state/Pane.svelte";
 
   type Props = {
     pane: Pane;
