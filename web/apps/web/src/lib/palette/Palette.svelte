@@ -16,8 +16,10 @@
   });
 
   function invokeSelected(): void {
-    results[selectedIndex]?.invoke();
-    appState.perform("palette.close");
+    const item = results[selectedIndex];
+    if (item) {
+      appState.invokePaletteItem(item);
+    }
   }
 </script>
 
@@ -63,7 +65,7 @@
 
       <div class="results">
         {#each results as item, index (item.id)}
-          <button class:selected={index === selectedIndex} type="button" onclick={() => item.invoke()}>
+          <button class:selected={index === selectedIndex} type="button" onclick={() => appState.invokePaletteItem(item)}>
             <span>{item.title}</span>
             <small>{item.section} · {item.subtitle}</small>
           </button>

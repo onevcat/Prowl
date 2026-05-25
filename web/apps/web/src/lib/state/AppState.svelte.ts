@@ -12,12 +12,21 @@ import { get, set } from "idb-keyval";
 import { Pane } from "./Pane";
 import { WorktreeView } from "./WorktreeView";
 import { defaultShortcuts, normalizeKeyChord } from "./shortcuts";
-import type { ActionId, AppSettings, AppView, ConnectionState, PaletteItem, PerformanceMetrics } from "./types";
+import type {
+  ActionId,
+  AppSettings,
+  AppView,
+  ConnectionState,
+  PaletteHistoryEntry,
+  PaletteItem,
+  PerformanceMetrics,
+} from "./types";
 
 export const appStateKey = Symbol("ProwlAppState");
 
 const uiViewKey = "prowl:ui.view";
 const selectedWorktreeKey = "prowl:ui.selectedWorktreeId";
+const paletteHistoryKey = "prowl:palette.history";
 const appearanceSettingsKey = "prowl:settings.appearance";
 const sessionTokenKey = "prowl:token";
 const defaultDaemonURL = "ws://127.0.0.1:7878/ws";
@@ -56,6 +65,7 @@ export class AppState {
   diff = $state<WorktreeDiff | null>(null);
   paletteOpen = $state(false);
   paletteQuery = $state("");
+  paletteHistory = $state<PaletteHistoryEntry[]>([]);
   connection = $state<ConnectionState>("closed");
   errorMessage = $state<string | null>(null);
   sessionId = $state<string | null>(null);
@@ -100,6 +110,97 @@ export class AppState {
   }
 
   get paletteItems(): PaletteItem[] {
+    const baseItems = this.#basePaletteItems();
+    const baseIds = new Set(baseItems.map((item) => item.id));
+    const recentItems = this.paletteHistory
+      .filter((entry) => baseIds.has(entry.id))
+      .map((entry) => ({
+        id: `recent:${entry.id}`,
+        sourceId: entry.id,
+        title: entry.title,
+        subtitle: entry.subtitle,
+        section: "Recent" as const,
+        invoke: () => {
+          baseItems.find((item) => item.id === entry.id)?.invoke();
+        },
+      }));
+
+    return [...recentItems, ...baseItems];
+  }
+
+  handleKeydown(event: KeyboardEvent): void {
+    this.#requestNotificationPermission();
+    const chord = normalizeKeyChord(event);
+    const action = this.#shortcutMap().get(chord);
+    if (action) {
+      event.preventDefault();
+      this.perform(action);
+      return;
+    }
+
+    const customAction = this.customActions.find((candidate) => candidate.shortcut?.trim() === chord);
+    if (customAction) {
+      event.preventDefault();
+      void this.runCustomAction(customAction.id);
+    }
+  }
+
+  perform(action: ActionId): void {
+    switch (action) {
+      case "view.shelf":
+        this.setView("shelf");
+        break;
+      case "view.canvas":
+        this.setView("canvas");
+        break;
+      case "view.settings":
+        this.setView("settings");
+        break;
+      case "palette.open":
+        this.paletteOpen = true;
+        break;
+      case "palette.close":
+        this.paletteOpen = false;
+        this.paletteQuery = "";
+        break;
+      case "performance.toggle":
+        void this.updateSettings({
+          advanced: {
+            ...this.settings.advanced,
+            performanceHUD: !this.settings.advanced.performanceHUD,
+          },
+        });
+        break;
+      case "pane.new":
+        void this.createPane();
+        break;
+      case "pane.close":
+        void this.closeSelectedPane();
+        break;
+      case "worktree.next":
+        this.cycleWorktree(1);
+        break;
+      case "worktree.previous":
+        this.cycleWorktree(-1);
+        break;
+      case "tab.next":
+        this.cyclePane(1);
+        break;
+      case "tab.previous":
+        this.cyclePane(-1);
+        break;
+    }
+  }
+
+  invokePaletteItem(item: PaletteItem): void {
+    const sourceId = item.sourceId ?? item.id;
+    const sourceItem = this.#basePaletteItems().find((candidate) => candidate.id === sourceId) ?? item;
+    this.#recordPaletteHistory(sourceItem);
+    sourceItem.invoke();
+    this.perform("palette.close");
+  }
+
+  #basePaletteItems(): PaletteItem[] {
     const tabItems = Array.from(this.panes.values()).map((pane) => ({
       id: `pane:${pane.id}`,
       title: pane.title,
@@ -161,56 +262,6 @@ export class AppState {
       ...tabItems,
       ...worktreeItems,
     ];
-  }
-
-  handleKeydown(event: KeyboardEvent): void {
-    this.#requestNotificationPermission();
-    const action = this.#shortcutMap().get(normalizeKeyChord(event));
-    if (!action) {
-      return;
-    }
-
-    event.preventDefault();
-    this.perform(action);
-  }
-
-  perform(action: ActionId): void {
-    switch (action) {
-      case "view.shelf":
-        this.setView("shelf");
-        break;
-      case "view.canvas":
-        this.setView("canvas");
-        break;
-      case "view.settings":
-        this.setView("settings");
-        break;
-      case "palette.open":
-        this.paletteOpen = true;
-        break;
-      case "palette.close":
-        this.paletteOpen = false;
-        this.paletteQuery = "";
-        break;
-      case "pane.new":
-        void this.createPane();
-        break;
-      case "pane.close":
-        void this.closeSelectedPane();
-        break;
-      case "worktree.next":
-        this.cycleWorktree(1);
-        break;
-      case "worktree.previous":
-        this.cycleWorktree(-1);
-        break;
-      case "tab.next":
-        this.cyclePane(1);
-        break;
-      case "tab.previous":
-        this.cyclePane(-1);
-        break;
-    }
   }
 
   setView(view: AppView): void {
@@ -518,10 +569,11 @@ export class AppState {
   }
 
   async #restoreUIState(): Promise<void> {
-    const [view, selectedWorktreeId, appearance] = await Promise.all([
+    const [view, selectedWorktreeId, appearance, paletteHistory] = await Promise.all([
       get<AppView>(uiViewKey),
       get<string>(selectedWorktreeKey),
       get<AppSettings["appearance"]>(appearanceSettingsKey),
+      get<PaletteHistoryEntry[]>(paletteHistoryKey),
     ]);
     if (view === "shelf" || view === "canvas" || view === "settings" || view === "diff") {
       this.view = view;
@@ -529,6 +581,9 @@ export class AppState {
     if (appearance) {
       this.settings = { ...this.settings, appearance: { ...this.settings.appearance, ...appearance } };
       this.#applyAppearanceSettings();
+    }
+    if (Array.isArray(paletteHistory)) {
+      this.paletteHistory = paletteHistory.filter(isPaletteHistoryEntry).slice(0, 10);
     }
     if (selectedWorktreeId && this.worktrees.some((worktree) => worktree.id === selectedWorktreeId)) {
       this.selectWorktree(selectedWorktreeId);
@@ -845,6 +900,20 @@ export class AppState {
     return window.confirm(message);
   }
 
+  #recordPaletteHistory(item: PaletteItem): void {
+    if (item.section === "Recent") {
+      return;
+    }
+    const entry: PaletteHistoryEntry = {
+      id: item.id,
+      title: item.title,
+      subtitle: item.subtitle,
+      section: item.section,
+    };
+    this.paletteHistory = [entry, ...this.paletteHistory.filter((candidate) => candidate.id !== entry.id)].slice(0, 10);
+    void set(paletteHistoryKey, this.paletteHistory);
+  }
+
   #startMetricLoop(): void {
     this.#metricTimer ??= setInterval(() => {
       if (this.connection !== "open") {
@@ -958,6 +1027,22 @@ function sanitizeAdvanced(value: unknown, fallback: AppSettings["advanced"]): Ap
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isPaletteHistoryEntry(value: unknown): value is PaletteHistoryEntry {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    typeof value.id === "string" &&
+    typeof value.title === "string" &&
+    typeof value.subtitle === "string" &&
+    (value.section === "Tabs" ||
+      value.section === "Worktrees" ||
+      value.section === "Repos" ||
+      value.section === "Actions" ||
+      value.section === "Settings")
+  );
 }
 
 function appendSample(samples: number[], value: number): number[] {

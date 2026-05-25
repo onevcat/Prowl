@@ -8,9 +8,10 @@ export type ConnectionState = "connecting" | "open" | "closed";
 
 export type PaletteItem = {
   id: string;
+  sourceId?: string;
   title: string;
   subtitle: string;
-  section: "Tabs" | "Worktrees" | "Repos" | "Actions" | "Settings";
+  section: "Tabs" | "Worktrees" | "Repos" | "Actions" | "Settings" | "Recent";
   invoke: () => void;
 };
 
@@ -34,6 +35,13 @@ export type PerformanceMetrics = {
   lastWsRtt: number | null;
 };
 
+export type PaletteHistoryEntry = {
+  id: string;
+  title: string;
+  subtitle: string;
+  section: Exclude<PaletteItem["section"], "Recent">;
+};
+
 export type AppSettings = {
   appearance: AppearanceSettings;
   shortcuts: ShortcutSettings;
@@ -46,6 +54,7 @@ export type ActionId =
   | "view.settings"
   | "palette.open"
   | "palette.close"
+  | "performance.toggle"
   | "pane.new"
   | "pane.close"
   | "worktree.next"
