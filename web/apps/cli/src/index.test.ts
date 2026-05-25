@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { appVersion } from "@prowl/protocol";
 import { startServer } from "../../daemon/src/server";
-import { daemonStart, daemonStatus, daemonStop, renderDaemonStatus } from "./commands/daemon";
+import { daemonBinaryCandidates, daemonStart, daemonStatus, daemonStop, renderDaemonStatus } from "./commands/daemon";
 import { cliVersion, renderVersion } from "./commands/version";
 import { hello, requestDaemon } from "./transport";
 
@@ -30,6 +30,18 @@ describe("prowl cli scaffold", () => {
 
     expect(text).toMatch(/running|stopped/);
     expect(text).toContain("prowld.sock");
+  });
+
+  test("resolves platform-specific daemon release binaries", () => {
+    const candidates = daemonBinaryCandidates("/release/prowl");
+
+    expect(candidates).toContain("/release/prowl/dist/bin/prowld");
+    if (process.platform === "linux" && process.arch === "x64") {
+      expect(candidates).toContain("/release/prowl/dist/bin/prowld-linux-x64");
+    }
+    if (process.platform === "darwin" && process.arch === "arm64") {
+      expect(candidates).toContain("/release/prowl/dist/bin/prowld-darwin-arm64");
+    }
   });
 
   test("reads daemon status from configured CLI paths", async () => {

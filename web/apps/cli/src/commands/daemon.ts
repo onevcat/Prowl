@@ -102,11 +102,34 @@ function daemonCommand(): string[] {
   if (Bun.env.PROWL_DAEMON_BIN) {
     return [Bun.env.PROWL_DAEMON_BIN];
   }
-  const binary = join(webRoot(), "dist", "bin", "prowld");
-  if (existsSync(binary)) {
-    return [binary];
+  for (const binary of daemonBinaryCandidates(webRoot())) {
+    if (existsSync(binary)) {
+      return [binary];
+    }
   }
   return ["bun", "run", "apps/daemon/src/index.ts"];
+}
+
+export function daemonBinaryCandidates(root: string): string[] {
+  const platformBinary = platformDaemonBinaryName();
+  const binDirectory = join(root, "dist", "bin");
+  const executableDirectory = dirname(Bun.argv[0] ?? process.execPath);
+  return [
+    join(binDirectory, "prowld"),
+    ...(platformBinary ? [join(binDirectory, platformBinary)] : []),
+    join(executableDirectory, "prowld"),
+    ...(platformBinary ? [join(executableDirectory, platformBinary)] : []),
+  ];
+}
+
+function platformDaemonBinaryName(): string | null {
+  if (process.platform === "darwin" && process.arch === "arm64") {
+    return "prowld-darwin-arm64";
+  }
+  if (process.platform === "linux" && process.arch === "x64") {
+    return "prowld-linux-x64";
+  }
+  return null;
 }
 
 async function waitForDaemonReady(pid: number): Promise<void> {
