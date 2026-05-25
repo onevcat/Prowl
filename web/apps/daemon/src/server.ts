@@ -1,5 +1,12 @@
 import type { ClientControlMessage, ServerControlMessage } from "@prowl/protocol";
-import { decodeFrame, encodeJsonFrame, protocolTags, protocolVersion } from "@prowl/protocol";
+import {
+  decodeFrame,
+  encodeJsonFrame,
+  encodePtyFrame,
+  maxBinaryPayloadBytes,
+  protocolTags,
+  protocolVersion,
+} from "@prowl/protocol";
 import type { DaemonConfig } from "./auth/config";
 import { isAllowedOrigin } from "./auth/config";
 import { InMemoryState } from "./state/InMemoryState";
@@ -9,7 +16,17 @@ export type ServerHandle = {
 };
 
 export function startServer(config: DaemonConfig): ServerHandle {
-  const state = new InMemoryState(process.env.PROWL_REPO_ROOT ?? process.cwd());
+  const clients = new Set<{ send: (payload: ArrayBuffer) => void }>();
+  const state = new InMemoryState(process.env.PROWL_REPO_ROOT ?? process.cwd(), {
+    onPaneData: (channelId, payload) => {
+      for (let offset = 0; offset < payload.byteLength; offset += maxBinaryPayloadBytes) {
+        const frame = encodePtyFrame(channelId, payload.subarray(offset, offset + maxBinaryPayloadBytes));
+        for (const client of clients) {
+          client.send(frame);
+        }
+      }
+    },
+  });
   const server = Bun.serve({
     hostname: config.bind,
     port: config.port,
@@ -37,6 +54,12 @@ export function startServer(config: DaemonConfig): ServerHandle {
       }
     },
     websocket: {
+      open(ws) {
+        clients.add(ws);
+      },
+      close(ws) {
+        clients.delete(ws);
+      },
       message(ws, message) {
         if (typeof message === "string") {
           return;
@@ -44,6 +67,7 @@ export function startServer(config: DaemonConfig): ServerHandle {
 
         const frame = decodeFrame(message);
         if (frame.tag === protocolTags.pty) {
+          state.writeToChannel(frame.channelId, frame.payload);
           return;
         }
 
@@ -106,7 +130,7 @@ function handleControl(
   }
 
   if (message.type === "pane.create") {
-    const pane = state.createPane(message.worktreeId, message.command ?? "Shell");
+    const pane = state.createPane(message.worktreeId, "Shell", message.command);
     return [
       {
         v: 1,

@@ -58,11 +58,13 @@
         lastOutputLine={appState.selectedPane.lastOutputLine}
         focused={true}
         onInput={(text) => {
-          appState.selectedPane!.lastOutputLine += text;
-          appState.selectedPane!.updatedAt = Date.now();
+          appState.sendInputToSelectedPane(text);
         }}
         onStatus={(status) => {
-          appState.selectedPane!.taskStatus = status;
+          const pane = appState.selectedPane;
+          if (pane) {
+            pane.taskStatus = status;
+          }
         }}
       />
     {:else}

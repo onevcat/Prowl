@@ -3,7 +3,7 @@ import { InMemoryState } from "./InMemoryState";
 
 describe("InMemoryState", () => {
   test("seeds a repository, worktree, and pane", () => {
-    const state = new InMemoryState("/tmp/prowl");
+    const state = new InMemoryState("/tmp/prowl", { spawnProcesses: false });
     const [repository] = state.repositories;
     expect(repository).toBeDefined();
 
@@ -13,7 +13,7 @@ describe("InMemoryState", () => {
   });
 
   test("creates and closes panes", () => {
-    const state = new InMemoryState("/tmp/prowl");
+    const state = new InMemoryState("/tmp/prowl", { spawnProcesses: false });
     const repository = state.repositories[0];
     expect(repository).toBeDefined();
     const [worktree] = repository ? (state.worktreesByRepo.get(repository.id) ?? []) : [];

@@ -23,7 +23,6 @@
     if (event.key.length === 1 || event.key === "Enter" || event.key === "Backspace") {
       event.preventDefault();
       const text = event.key === "Enter" ? "\n" : event.key === "Backspace" ? "\b" : event.key;
-      buffer += text;
       onInput?.(text);
       onStatus?.(detectAgentTaskStatus(buffer));
     }
@@ -39,7 +38,7 @@
   onkeydown={handleKeydown}
 >
   <div class="screen">
-    <span class="muted">$</span> {buffer || "Waiting for daemon-backed terminal"}
+    {buffer || "Waiting for daemon-backed terminal"}
   </div>
 </div>
 
@@ -65,9 +64,5 @@
   .screen {
     padding: 0.75rem;
     white-space: pre-wrap;
-  }
-
-  .muted {
-    color: #9ad;
   }
 </style>

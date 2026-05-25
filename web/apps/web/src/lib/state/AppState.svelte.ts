@@ -13,6 +13,8 @@ const uiViewKey = "prowl:ui.view";
 const selectedWorktreeKey = "prowl:ui.selectedWorktreeId";
 const sessionTokenKey = "prowl:token";
 const defaultDaemonURL = "ws://127.0.0.1:7878/ws";
+const textDecoder = new TextDecoder();
+const textEncoder = new TextEncoder();
 
 export class AppState {
   readonly ws = new WSClient();
@@ -37,6 +39,7 @@ export class AppState {
       this.connection = connection;
     });
     this.ws.onMessage((message) => this.#handleServerMessage(message));
+    this.ws.onBinary((channelId, payload) => this.#handlePaneOutput(channelId, payload));
     this.#restoreUIState();
     this.#connectFromLocation();
   }
@@ -202,6 +205,14 @@ export class AppState {
     }
   }
 
+  sendInputToSelectedPane(text: string): void {
+    const pane = this.selectedPane;
+    if (!pane) {
+      return;
+    }
+    this.ws.sendBinary(pane.channelId, textEncoder.encode(text));
+  }
+
   cycleWorktree(direction: 1 | -1): void {
     const worktrees = this.worktrees;
     if (!this.selectedWorktreeId || worktrees.length === 0) {
@@ -338,6 +349,17 @@ export class AppState {
       case "pong":
         break;
     }
+  }
+
+  #handlePaneOutput(channelId: number, payload: Uint8Array): void {
+    const pane = Array.from(this.panes.values()).find((candidate) => candidate.channelId === channelId);
+    if (!pane) {
+      return;
+    }
+    const text = textDecoder.decode(payload, { stream: true });
+    pane.lastOutputLine = `${pane.lastOutputLine}${text}`;
+    pane.updatedAt = Date.now();
+    pane.unread = pane.id !== this.selectedPaneId;
   }
 
   #upsertRepository(repository: Repository): void {
