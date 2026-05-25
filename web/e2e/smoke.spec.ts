@@ -313,6 +313,27 @@ test("runs custom actions from the command palette", async ({ page }) => {
   await expect(page.getByRole("textbox", { name: "Shell" })).toContainText(output);
 });
 
+test("runs custom actions from a shortcut", async ({ page }) => {
+  const suffix = crypto.randomUUID().slice(0, 8);
+  const actionName = `Shortcut ${suffix}`;
+  const output = `shortcut-action-${suffix}`;
+  await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}&token=${token}`);
+  await expect(page.locator(".connection.open")).toBeVisible();
+
+  await page.getByRole("button", { name: "Open Settings" }).click();
+  await page.getByLabel("Action name").fill(actionName);
+  await page.getByLabel("Action command").fill(`printf ${output}`);
+  await page.getByLabel("Action shortcut").fill("Mod+Alt+R");
+  await page.getByRole("button", { name: "Add Custom Action" }).click();
+  await expect(page.getByRole("heading", { name: actionName })).toBeVisible();
+
+  await page.getByRole("button", { name: "Back to Shelf" }).click();
+  await page.getByRole("button", { name: "Run Custom Action" }).focus();
+  await page.keyboard.press("Control+Alt+R");
+
+  await expect(page.getByRole("textbox", { name: "Shell" })).toContainText(output);
+});
+
 async function debugStats(request: APIRequestContext): Promise<{
   paneAttachRequests: number;
   paneCreateRequests: number;
