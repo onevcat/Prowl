@@ -111,7 +111,7 @@ test("logs in with a daemon token", async ({ page }) => {
 
   await expect(page.locator(".connection.open")).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Shell" })).toBeVisible();
-  await expect.poll(() => page.evaluate(() => sessionStorage.getItem("prowl:token"))).toBeNull();
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem("prowl:token"))).toBe(token);
   await expect.poll(() => page.evaluate(() => location.href)).not.toContain("token=");
   await expect
     .poll(() =>
@@ -122,6 +122,19 @@ test("logs in with a daemon token", async ({ page }) => {
       ),
     )
     .toBe(false);
+});
+
+test("remembers login through the daemon auth cookie when requested", async ({ page }) => {
+  await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}`);
+
+  await expect(page.getByRole("heading", { name: "Connect to prowld" })).toBeVisible();
+  await page.getByLabel("Token").fill(token);
+  await page.getByLabel("Remember this browser").check();
+  await page.getByRole("button", { name: "Connect" }).click();
+
+  await expect(page.locator(".connection.open")).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Shell" })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem("prowl:token"))).toBeNull();
 });
 
 test("connects to the daemon and writes through the terminal", async ({ page }) => {

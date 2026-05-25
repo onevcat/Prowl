@@ -143,6 +143,7 @@ export class AppState {
   sessionId = $state<string | null>(null);
   daemonURL = $state(defaultDaemonURL);
   loginToken = $state("");
+  loginRemember = $state(false);
   loginBusy = $state(false);
   loginError = $state<string | null>(null);
   settings = $state<AppSettings>(structuredClone(defaultSettings));
@@ -380,6 +381,10 @@ export class AppState {
 
   setLoginToken(token: string): void {
     this.loginToken = token;
+  }
+
+  setLoginRemember(remember: boolean): void {
+    this.loginRemember = remember;
   }
 
   #basePaletteItems(): PaletteItem[] {
@@ -799,20 +804,25 @@ export class AppState {
     this.loginBusy = true;
     this.loginError = null;
     try {
-      const response = await fetch(httpURLForWebSocket(this.daemonURL, "/auth/login"), {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ token }),
-      });
-      if (!response.ok) {
-        throw new Error(response.status === 401 ? "Invalid token." : `Login failed (${response.status}).`);
+      if (this.loginRemember) {
+        const response = await fetch(httpURLForWebSocket(this.daemonURL, "/auth/login"), {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ token }),
+        });
+        if (!response.ok) {
+          throw new Error(response.status === 401 ? "Invalid token." : `Login failed (${response.status}).`);
+        }
+        sessionStorage.removeItem(sessionTokenKey);
+        this.#connectDaemon("");
+      } else {
+        sessionStorage.setItem(sessionTokenKey, token);
+        this.#connectDaemon(token);
       }
-      sessionStorage.removeItem(sessionTokenKey);
       this.loginToken = "";
-      this.#connectDaemon("");
     } catch (error) {
       this.loginError = redactSensitiveText(error);
     } finally {

@@ -41,6 +41,15 @@
       />
     </label>
 
+    <label class="check">
+      <input
+        type="checkbox"
+        checked={appState.loginRemember}
+        onchange={(event) => appState.setLoginRemember(event.currentTarget.checked)}
+      />
+      <span>Remember this browser</span>
+    </label>
+
     {#if appState.loginError || appState.errorMessage}
       <p class="error">{appState.loginError ?? appState.errorMessage}</p>
     {/if}
@@ -96,12 +105,18 @@
     gap: 0.4rem;
   }
 
+  .check {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+  }
+
   label span {
     color: color-mix(in srgb, CanvasText 68%, transparent);
     font-size: 0.9rem;
   }
 
-  input {
+  input:not([type="checkbox"]) {
     width: 100%;
     min-height: 2.5rem;
     padding: 0 0.7rem;
@@ -109,6 +124,12 @@
     border-radius: 6px;
     background: Canvas;
     color: CanvasText;
+  }
+
+  input[type="checkbox"] {
+    width: 1rem;
+    height: 1rem;
+    accent-color: AccentColor;
   }
 
   input:focus {

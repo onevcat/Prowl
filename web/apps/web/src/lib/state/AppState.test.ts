@@ -491,9 +491,11 @@ describe("AppState view mutation methods", () => {
 
     state.setDaemonURL("ws://127.0.0.1:9999/ws");
     state.setLoginToken("secret");
+    state.setLoginRemember(true);
 
     expect(state.daemonURL).toBe("ws://127.0.0.1:9999/ws");
     expect(state.loginToken).toBe("secret");
+    expect(state.loginRemember).toBe(true);
   });
 });
 
