@@ -211,6 +211,34 @@ describe("InMemoryState", () => {
     expect(second.customAction(action.id)?.command).toBe("git status --short");
   });
 
+  test("emits pane status callbacks when pane status changes", async () => {
+    let resolveStatus: (pane: ReturnType<InMemoryState["listPanes"]>[number]) => void = () => {};
+    const statusUpdated = new Promise<ReturnType<InMemoryState["listPanes"]>[number]>((resolve) => {
+      resolveStatus = resolve;
+    });
+    const state = new InMemoryState("/tmp/prowl", {
+      statePath: ":memory:",
+      spawnProcesses: false,
+      onPaneStatus: (pane) => {
+        resolveStatus(pane);
+      },
+    });
+    const [pane] = state.listPanes();
+    if (!pane) {
+      throw new Error("Expected seeded pane");
+    }
+
+    state.updatePaneStatus(pane.id, "running");
+
+    const updated = await Promise.race([
+      statusUpdated,
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Timed out waiting for status")), 2_000)),
+    ]);
+
+    expect(updated.id).toBe(pane.id);
+    expect(updated.taskStatus).toBe("running");
+  });
+
   test("emits pane status callbacks when custom actions finish", async () => {
     let resolveStatus: (pane: ReturnType<InMemoryState["listPanes"]>[number]) => void = () => {};
     const statusUpdated = new Promise<ReturnType<InMemoryState["listPanes"]>[number]>((resolve) => {

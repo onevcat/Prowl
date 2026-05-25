@@ -397,6 +397,7 @@ export class InMemoryState {
     }
     pane.taskStatus = taskStatus;
     pane.updatedAt = Date.now();
+    this.#options.onPaneStatus({ ...pane });
     return pane;
   }
 

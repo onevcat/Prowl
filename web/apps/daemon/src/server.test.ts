@@ -4,12 +4,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   appVersion,
+  decodeFrame,
+  encodeJsonFrame,
   makeMessageId,
   maxBinaryPayloadBytes,
   maxJsonPayloadBytes,
   protocolTags,
   protocolVersion,
 } from "@prowl/protocol";
+import type { ServerControlMessage } from "@prowl/protocol";
 import {
   allowControlMessage,
   authenticateUpgradeToken,
@@ -422,6 +425,48 @@ describe("daemon scaffold", () => {
     expect(shouldSendPaneEvent({ authenticated: false, ownedPaneIds: new Set(["pane-1"]) }, "pane-1")).toBe(false);
     expect(shouldSendPaneEvent({ authenticated: true, ownedPaneIds: new Set(["pane-2"]) }, "pane-1")).toBe(false);
     expect(shouldSendPaneEvent({ authenticated: true, ownedPaneIds: new Set(["pane-1"]) }, "pane-1")).toBe(true);
+  });
+
+  test("broadcasts pane status updates to owning websocket sessions", async () => {
+    const root = mkdtempSync(join(tmpdir(), "prowl-pane-status-broadcast-test-"));
+    const server = startServer(
+      {
+        port: 0,
+        bind: "127.0.0.1",
+        token: "test-token",
+        allowedOrigins: ["http://127.0.0.1:5173"],
+        requireTLS: false,
+      },
+      { socketPath: false, statePath: join(root, "state.sqlite"), spawnProcesses: false },
+    );
+    try {
+      const socket = await openSocket(new URL("/ws?token=test-token", server.url));
+      const [pane] = server.state.listPanes();
+      if (!pane) {
+        throw new Error("Expected seeded pane");
+      }
+      const updated = nextControlMessage(socket, (message) => message.type === "pane.updated");
+
+      socket.send(
+        encodeJsonFrame({
+          v: 1,
+          type: "pane.status",
+          id: makeMessageId(),
+          paneId: pane.id,
+          taskStatus: "running",
+        }),
+      );
+
+      const message = await updated;
+      expect(message.type).toBe("pane.updated");
+      if (message.type === "pane.updated") {
+        expect(message.pane.id).toBe(pane.id);
+        expect(message.pane.taskStatus).toBe("running");
+      }
+      socket.close();
+    } finally {
+      server.stop();
+    }
   });
 
   test("validates repository paths before adding them", () => {
@@ -1358,4 +1403,45 @@ function closeEvent(socket: WebSocket): Promise<CloseEvent> {
   return new Promise((resolve) => {
     socket.addEventListener("close", resolve, { once: true });
   });
+}
+
+function nextControlMessage(
+  socket: WebSocket,
+  predicate: (message: ServerControlMessage) => boolean,
+): Promise<ServerControlMessage> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      socket.removeEventListener("message", onMessage);
+      reject(new Error("Timed out waiting for websocket control message"));
+    }, 2_000);
+    const onMessage = (event: MessageEvent) => {
+      let message: ServerControlMessage;
+      try {
+        message = parseServerMessage(event.data);
+      } catch (error) {
+        clearTimeout(timeout);
+        socket.removeEventListener("message", onMessage);
+        reject(error instanceof Error ? error : new Error(String(error)));
+        return;
+      }
+      if (!predicate(message)) {
+        return;
+      }
+      clearTimeout(timeout);
+      socket.removeEventListener("message", onMessage);
+      resolve(message);
+    };
+    socket.addEventListener("message", onMessage);
+  });
+}
+
+function parseServerMessage(data: unknown): ServerControlMessage {
+  if (!(data instanceof ArrayBuffer) && !(data instanceof Uint8Array)) {
+    throw new Error("Expected binary websocket message");
+  }
+  const frame = decodeFrame(data);
+  if (frame.tag !== protocolTags.json) {
+    throw new Error("Expected JSON websocket message");
+  }
+  return JSON.parse(frame.payload) as ServerControlMessage;
 }
