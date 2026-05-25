@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { encodeTerminalKey } from "./keyEncoding";
+
   type Props = {
     title: string;
     lastOutputLine: string;
@@ -36,12 +38,9 @@
   });
 
   function handleKeydown(event: KeyboardEvent): void {
-    if (event.metaKey || event.ctrlKey || event.altKey) {
-      return;
-    }
-    if (event.key.length === 1 || event.key === "Enter" || event.key === "Backspace") {
+    const text = encodeTerminalKey(event);
+    if (text) {
       event.preventDefault();
-      const text = event.key === "Enter" ? "\n" : event.key === "Backspace" ? "\b" : event.key;
       onInput?.(text);
     }
   }
