@@ -1,6 +1,7 @@
 <script lang="ts">
   import { getContext, tick } from "svelte";
   import { appStateKey, type AppState } from "$lib/state/AppState.svelte";
+  import { clampPaletteIndex, nextPaletteIndex } from "./navigation";
   import { filterPaletteItems } from "./results";
 
   const appState = getContext<AppState>(appStateKey);
@@ -13,6 +14,10 @@
       selectedIndex = 0;
       void tick().then(() => input?.focus());
     }
+  });
+
+  $effect(() => {
+    selectedIndex = clampPaletteIndex(selectedIndex, results.length);
   });
 
   function invokeSelected(): void {
@@ -50,10 +55,10 @@
         onkeydown={(event) => {
           if (event.key === "ArrowDown") {
             event.preventDefault();
-            selectedIndex = Math.min(selectedIndex + 1, results.length - 1);
+            selectedIndex = nextPaletteIndex(selectedIndex, results.length, 1);
           } else if (event.key === "ArrowUp") {
             event.preventDefault();
-            selectedIndex = Math.max(selectedIndex - 1, 0);
+            selectedIndex = nextPaletteIndex(selectedIndex, results.length, -1);
           } else if (event.key === "Enter") {
             event.preventDefault();
             invokeSelected();
