@@ -35,6 +35,8 @@ type StateOptions = {
 const replayBufferBytes = 64 * 1024;
 const minReplayBufferBytes = 16 * 1024;
 const maxReplayBufferBytes = 1024 * 1024;
+export const systemPaneId = "system";
+export const systemChannelId = 0;
 
 type RepoRow = {
   id: string;
@@ -104,6 +106,7 @@ export class InMemoryState {
     this.#database.exec(schemaSql);
     migrateDatabase(this.#database);
     this.#loadReplayBufferSetting();
+    this.#replayByPane.set(systemPaneId, new Uint8Array());
     this.#ensureSeedRepository(repoPath);
     this.#reloadRepositories();
     this.#reloadWorktrees();
@@ -242,10 +245,13 @@ export class InMemoryState {
   }
 
   hasPane(paneId: string): boolean {
-    return this.#panes.has(paneId);
+    return paneId === systemPaneId || this.#panes.has(paneId);
   }
 
   paneForChannel(channelId: number): PaneDescriptor | null {
+    if (channelId === systemChannelId) {
+      return systemPaneDescriptor();
+    }
     const paneId = this.#paneIdByChannel.get(channelId);
     return paneId ? (this.#panes.get(paneId) ?? null) : null;
   }
@@ -362,10 +368,15 @@ export class InMemoryState {
   }
 
   replayForPane(paneId: string): Uint8Array | null {
-    if (!this.#panes.has(paneId)) {
+    if (!this.hasPane(paneId)) {
       return null;
     }
     return this.#replayByPane.get(paneId) ?? new Uint8Array();
+  }
+
+  recordSystemOutput(data: Uint8Array): void {
+    this.#appendReplay(systemPaneId, data);
+    this.#options.onPaneData(systemChannelId, data);
   }
 
   writeToChannel(channelId: number, payload: Uint8Array): boolean {
@@ -616,6 +627,19 @@ export class InMemoryState {
         $createdAt: Date.now(),
       });
   }
+}
+
+function systemPaneDescriptor(): PaneDescriptor {
+  return {
+    id: systemPaneId,
+    channelId: systemChannelId,
+    worktreeId: systemPaneId,
+    title: "System",
+    taskStatus: "idle",
+    unread: false,
+    lastOutputLine: "System output",
+    updatedAt: Date.now(),
+  };
 }
 
 function lastNonEmptyLine(text: string): string | null {

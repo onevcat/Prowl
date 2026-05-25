@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { InMemoryState } from "./InMemoryState";
+import { InMemoryState, systemChannelId, systemPaneId } from "./InMemoryState";
 
 describe("InMemoryState", () => {
   test("seeds a repository, worktree, and pane", () => {
@@ -110,6 +110,27 @@ describe("InMemoryState", () => {
     const state = testState();
 
     expect(state.replayForPane("missing")).toBeNull();
+  });
+
+  test("keeps the hidden system pane out of pane lists while retaining replay", () => {
+    const outputByChannel = new Map<number, string>();
+    const state = new InMemoryState("/tmp/prowl", {
+      spawnProcesses: false,
+      statePath: ":memory:",
+      onPaneData: (channelId, payload) => {
+        outputByChannel.set(channelId, `${outputByChannel.get(channelId) ?? ""}${new TextDecoder().decode(payload)}`);
+      },
+    });
+
+    state.recordSystemOutput(new TextEncoder().encode("git worktree output\n"));
+
+    expect(state.hasPane(systemPaneId)).toBe(true);
+    expect(state.listPanes().some((pane) => pane.id === systemPaneId)).toBe(false);
+    expect(state.paneForChannel(systemChannelId)?.id).toBe(systemPaneId);
+    expect(new TextDecoder().decode(state.replayForPane(systemPaneId) ?? new Uint8Array())).toContain(
+      "git worktree output",
+    );
+    expect(outputByChannel.get(systemChannelId)).toContain("git worktree output");
   });
 
   test("keeps pane replay within the default 64 KiB ring", () => {

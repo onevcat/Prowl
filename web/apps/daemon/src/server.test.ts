@@ -23,7 +23,7 @@ import {
   startServer,
   tokenFromRequest,
 } from "./server";
-import { InMemoryState } from "./state/InMemoryState";
+import { InMemoryState, systemChannelId, systemPaneId } from "./state/InMemoryState";
 
 describe("daemon scaffold", () => {
   test("exports protocol version", () => {
@@ -1051,6 +1051,83 @@ exit 0
       const log = readFileSync(logPath, "utf8");
       expect(log).toContain(`${repoPath}\tadd -b feature/git-wt-branch ${join(root, "git-wt-branch")} main\n`);
       expect(log).toContain(`${repoPath}\tremove --force ${join(root, "git-wt-branch")}\n`);
+    } finally {
+      if (previousGitWt === undefined) {
+        Bun.env.PROWL_GIT_WT_BIN = undefined;
+      } else {
+        Bun.env.PROWL_GIT_WT_BIN = previousGitWt;
+      }
+    }
+  });
+
+  test("records git worktree output in the hidden system pane", () => {
+    const root = mkdtempSync(join(tmpdir(), "prowl-git-output-test-"));
+    const repoPath = join(root, "repo");
+    const fakeGitWt = join(root, "git-wt");
+    mkdirSync(repoPath);
+    writeFileSync(
+      fakeGitWt,
+      `#!/bin/sh
+printf "git-wt stdout %s\\n" "$*"
+printf "git-wt stderr %s\\n" "$*" >&2
+exit 0
+`,
+    );
+    chmodSync(fakeGitWt, 0o755);
+    const streamed: string[] = [];
+    const previousGitWt = Bun.env.PROWL_GIT_WT_BIN;
+    Bun.env.PROWL_GIT_WT_BIN = fakeGitWt;
+    try {
+      const state = new InMemoryState(repoPath, {
+        statePath: ":memory:",
+        spawnProcesses: false,
+        onPaneData: (channelId, payload) => {
+          if (channelId === systemChannelId) {
+            streamed.push(new TextDecoder().decode(payload));
+          }
+        },
+      });
+      const config = {
+        port: 0,
+        bind: "127.0.0.1",
+        token: "test-token",
+        allowedOrigins: ["http://127.0.0.1:5173"],
+        requireTLS: false,
+      };
+
+      const created = handleControl(
+        {
+          v: 1,
+          type: "worktree.create",
+          id: makeMessageId(),
+          repoId: "repo-default",
+          branch: "feature/system-output",
+        },
+        state,
+        config,
+      );
+      expect(created[0]?.type).toBe("worktree.updated");
+
+      const replay = handleControl(
+        {
+          v: 1,
+          type: "pane.attach",
+          id: makeMessageId(),
+          paneId: systemPaneId,
+        },
+        state,
+        config,
+        { authenticated: true, ownedPaneIds: new Set() },
+      );
+      expect(replay[0]?.type).toBe("pane.replay");
+      if (replay[0]?.type !== "pane.replay") {
+        throw new Error("Expected system pane replay");
+      }
+      const replayText = Buffer.from(replay[0].bytes, "base64").toString("utf8");
+      expect(replayText).toContain("git-wt stdout add -b feature/system-output");
+      expect(replayText).toContain("git-wt stderr add -b feature/system-output");
+      expect(streamed.join("")).toContain("git-wt stdout add -b feature/system-output");
+      expect(streamed.join("")).toContain("git-wt stderr add -b feature/system-output");
     } finally {
       if (previousGitWt === undefined) {
         Bun.env.PROWL_GIT_WT_BIN = undefined;

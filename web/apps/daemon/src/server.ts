@@ -18,7 +18,7 @@ import { GitOperationQueue } from "./git/OperationQueue";
 import { type IPCServerHandle, startIPCServer } from "./ipc/socket";
 import { type Logger, createLogger } from "./logging/logger";
 import { OutputCoalescer } from "./pty/OutputCoalescer";
-import { InMemoryState } from "./state/InMemoryState";
+import { InMemoryState, systemChannelId, systemPaneId } from "./state/InMemoryState";
 
 type ErrorControlMessage = Extract<ServerControlMessage, { type: "error" }>;
 type WorktreeResult =
@@ -343,16 +343,24 @@ function updateAttachedChannels(
   }
 
   if (control.type === "pane.attach" && responses.some((response) => response.type === "pane.replay")) {
-    const pane = state.listPanes().find((candidate) => candidate.id === control.paneId);
-    if (pane) {
-      session.attachedChannelIds.add(pane.channelId);
+    if (control.paneId === systemPaneId) {
+      session.attachedChannelIds.add(systemChannelId);
+    } else {
+      const pane = state.listPanes().find((candidate) => candidate.id === control.paneId);
+      if (pane) {
+        session.attachedChannelIds.add(pane.channelId);
+      }
     }
   }
 
   if (control.type === "pane.detach" && responses.some((response) => response.type === "pane.detached")) {
-    const pane = state.listPanes().find((candidate) => candidate.id === control.paneId);
-    if (pane) {
-      session.attachedChannelIds.delete(pane.channelId);
+    if (control.paneId === systemPaneId) {
+      session.attachedChannelIds.delete(systemChannelId);
+    } else {
+      const pane = state.listPanes().find((candidate) => candidate.id === control.paneId);
+      if (pane) {
+        session.attachedChannelIds.delete(pane.channelId);
+      }
     }
   }
 }
@@ -830,6 +838,9 @@ function authorizePane(
   state: InMemoryState,
   ownedPaneIds: Set<string> | undefined,
 ): ErrorControlMessage | null {
+  if (paneId === systemPaneId) {
+    return null;
+  }
   if (!state.hasPane(paneId)) {
     return errorResponse(id, "PANE_GONE", "Pane is no longer available");
   }
@@ -983,9 +994,10 @@ function createGitWorktree(
   ) {
     return errorResponse(message.id, "DUPLICATE_WORKTREE", "Worktree path is already registered");
   }
-  const gitError = runGitWorktreeAdd(repository.path, pathValidation.path, branch, message.baseRef);
-  if (gitError) {
-    return errorResponse(message.id, "GIT_WORKTREE_FAILED", gitError);
+  const result = runGitWorktreeAdd(repository.path, pathValidation.path, branch, message.baseRef);
+  recordGitCommandOutput(state, result);
+  if (result.exitCode !== 0) {
+    return errorResponse(message.id, "GIT_WORKTREE_FAILED", commandError(result));
   }
   return { type: "ok", worktree: state.createWorktree(repository.id, pathValidation.path, branch) };
 }
@@ -999,9 +1011,10 @@ function archiveGitWorktree(id: string, worktreeId: string, state: InMemoryState
   if (!repository) {
     return errorResponse(id, "REPO_NOT_FOUND", "Repository is no longer registered");
   }
-  const gitError = runGitWorktreeRemove(repository.path, worktree.path);
-  if (gitError) {
-    return errorResponse(id, "GIT_WORKTREE_FAILED", gitError);
+  const result = runGitWorktreeRemove(repository.path, worktree.path);
+  recordGitCommandOutput(state, result);
+  if (result.exitCode !== 0) {
+    return errorResponse(id, "GIT_WORKTREE_FAILED", commandError(result));
   }
   const archived = state.archiveWorktree(worktreeId);
   if (!archived) {
@@ -1185,9 +1198,9 @@ function validateWorktreeTargetPath(
   return { type: "ok", path: join(targetParentRealPath.path, basename(targetPath)) };
 }
 
-function runGitWorktreeAdd(repoPath: string, targetPath: string, branch: string, baseRef?: string): string | null {
+function runGitWorktreeAdd(repoPath: string, targetPath: string, branch: string, baseRef?: string): SyncCommandResult {
   const gitWt = bundledGitWtCommand();
-  const result = gitWt
+  return gitWt
     ? Bun.spawnSync([gitWt, "add", "-b", branch, targetPath, baseRef?.trim() || "HEAD"], {
         cwd: repoPath,
         stdout: "pipe",
@@ -1197,12 +1210,11 @@ function runGitWorktreeAdd(repoPath: string, targetPath: string, branch: string,
         stdout: "pipe",
         stderr: "pipe",
       });
-  return result.exitCode === 0 ? null : commandError(result);
 }
 
-function runGitWorktreeRemove(repoPath: string, worktreePath: string): string | null {
+function runGitWorktreeRemove(repoPath: string, worktreePath: string): SyncCommandResult {
   const gitWt = bundledGitWtCommand();
-  const result = gitWt
+  return gitWt
     ? Bun.spawnSync([gitWt, "remove", "--force", worktreePath], {
         cwd: repoPath,
         stdout: "pipe",
@@ -1212,7 +1224,6 @@ function runGitWorktreeRemove(repoPath: string, worktreePath: string): string | 
         stdout: "pipe",
         stderr: "pipe",
       });
-  return result.exitCode === 0 ? null : commandError(result);
 }
 
 function bundledGitWtCommand(): string | null {
@@ -1248,4 +1259,13 @@ function commandError(result: SyncCommandResult): string {
   const stderr = new TextDecoder().decode(result.stderr).trim();
   const stdout = new TextDecoder().decode(result.stdout).trim();
   return stderr || stdout || `git exited with ${result.exitCode}`;
+}
+
+function recordGitCommandOutput(state: InMemoryState, result: SyncCommandResult): void {
+  if (result.stdout.byteLength > 0) {
+    state.recordSystemOutput(result.stdout);
+  }
+  if (result.stderr.byteLength > 0) {
+    state.recordSystemOutput(result.stderr);
+  }
 }
