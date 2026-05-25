@@ -1,15 +1,18 @@
 <script lang="ts">
   import type { Pane } from "$lib/state/Pane";
+  import type { TaskStatus } from "$lib/state/types";
   import TerminalView from "$lib/terminal/TerminalView.svelte";
 
   type Props = {
     pane: Pane;
     focused: boolean;
     onclick: () => void;
+    onInput: (text: string) => void;
+    onStatus: (status: TaskStatus) => void;
     ondblclick: () => void;
   };
 
-  let { pane, focused, onclick, ondblclick }: Props = $props();
+  let { pane, focused, onclick, onInput, onStatus, ondblclick }: Props = $props();
 
   const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
 
@@ -40,7 +43,7 @@
     <span>{relativeTime(pane.updatedAt)}</span>
     <span class={`badge ${pane.taskStatus}`}>{pane.taskStatus}</span>
   </header>
-  <TerminalView title={pane.title} lastOutputLine={pane.lastOutputLine} {focused} />
+  <TerminalView title={pane.title} lastOutputLine={pane.lastOutputLine} {focused} {onInput} {onStatus} />
 </div>
 
 <style>

@@ -8,10 +8,10 @@
   let broadcast = $state("");
 
   function sendBroadcast(): void {
-    for (const pane of appState.visiblePanes) {
-      pane.lastOutputLine = `${pane.lastOutputLine}\n${broadcast}`.trim();
-      pane.updatedAt = Date.now();
+    if (!broadcast) {
+      return;
     }
+    appState.sendInputToVisiblePanes(`${broadcast}\n`);
     broadcast = "";
   }
 </script>
@@ -37,6 +37,10 @@
     panes={appState.visiblePanes}
     selectedPaneId={appState.selectedPaneId}
     selectPane={(paneId) => appState.selectPane(paneId)}
+    sendInput={(paneId, text) => appState.sendInputToPane(paneId, text)}
+    updateStatus={(paneId, status) => {
+      void appState.updatePaneStatus(paneId, status);
+    }}
     zoomPane={(paneId) => {
       appState.selectPane(paneId);
       appState.setView("shelf");

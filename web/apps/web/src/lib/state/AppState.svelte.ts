@@ -576,12 +576,25 @@ export class AppState {
   }
 
   sendInputToSelectedPane(text: string): void {
-    const pane = this.selectedPane;
+    if (!this.selectedPaneId) {
+      return;
+    }
+    this.sendInputToPane(this.selectedPaneId, text);
+  }
+
+  sendInputToPane(paneId: string, text: string): void {
+    const pane = this.panes.get(paneId);
     if (!pane) {
       return;
     }
     this.#inputStartedByChannel.set(pane.channelId, performance.now());
     this.ws.sendBinary(pane.channelId, textEncoder.encode(text));
+  }
+
+  sendInputToVisiblePanes(text: string): void {
+    for (const pane of this.visiblePanes) {
+      this.sendInputToPane(pane.id, text);
+    }
   }
 
   cycleWorktree(direction: 1 | -1): void {
