@@ -2,12 +2,37 @@
   import { getContext, tick } from "svelte";
   import { appStateKey, type AppState } from "$lib/state/AppState.svelte";
   import { clampPaletteIndex, nextPaletteIndex } from "./navigation";
-  import { filterPaletteItems } from "./results";
+  import { filterPaletteItems, filterPaletteItemsAsync, fuzzyWorkerThreshold } from "./results";
 
   const appState = getContext<AppState>(appStateKey);
   let selectedIndex = $state(0);
   let input = $state<HTMLInputElement>();
-  let results = $derived(filterPaletteItems(appState.paletteItems, appState.paletteQuery));
+  let results = $state(filterPaletteItems(appState.paletteItems, appState.paletteQuery));
+  let searching = $state(false);
+  let searchRequestId = 0;
+
+  $effect(() => {
+    const items = appState.paletteItems;
+    const query = appState.paletteQuery;
+    const requestId = ++searchRequestId;
+    searching = items.length > fuzzyWorkerThreshold && query.trim().length > 0;
+    void filterPaletteItemsAsync(items, query)
+      .then((nextResults) => {
+        if (requestId === searchRequestId) {
+          results = nextResults;
+        }
+      })
+      .catch(() => {
+        if (requestId === searchRequestId) {
+          results = filterPaletteItems(items, query);
+        }
+      })
+      .finally(() => {
+        if (requestId === searchRequestId) {
+          searching = false;
+        }
+      });
+  });
 
   $effect(() => {
     if (appState.paletteOpen) {
@@ -70,6 +95,9 @@
       />
 
       <div class="results">
+        {#if searching}
+          <p class="searching">Searching...</p>
+        {/if}
         {#each results as item, index (item.id)}
           <button class:selected={index === selectedIndex} type="button" onclick={() => appState.invokePaletteItem(item)}>
             <span>{item.title}</span>
@@ -136,6 +164,13 @@
   button.selected,
   button:hover {
     background: color-mix(in srgb, AccentColor 18%, Canvas);
+  }
+
+  .searching {
+    margin: 0;
+    padding: 0.5rem 0.65rem;
+    color: color-mix(in srgb, CanvasText 58%, Canvas);
+    font-size: 0.82rem;
   }
 
   small {
