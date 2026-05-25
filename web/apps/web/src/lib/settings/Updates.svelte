@@ -1,13 +1,24 @@
 <script lang="ts">
   import { Button } from "@prowl/ui";
+  import { onMount } from "svelte";
+  import { registerWebUpdatePrompt } from "$lib/pwa/update";
+
+  let updateReady = $state(false);
+
+  onMount(() => {
+    const update = registerWebUpdatePrompt(() => {
+      updateReady = true;
+    });
+    return update.cleanup;
+  });
 </script>
 
 <section id="settings-updates">
   <div>
     <h2>Updates</h2>
-    <p>Web builds update when the running daemon serves a new bundle.</p>
+    <p>{updateReady ? "A new web bundle is ready." : "Web builds update when the running daemon serves a new bundle."}</p>
   </div>
-  <Button label="↻" title="Reload Web Client" onclick={() => location.reload()} />
+  <Button label="↻" title={updateReady ? "Reload to Apply Update" : "Reload Web Client"} onclick={() => location.reload()} />
 </section>
 
 <style>

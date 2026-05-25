@@ -23,6 +23,16 @@ test("declares the PWA manifest and install icons", async ({ page, request }) =>
   expect(manifest.icons?.some((icon) => icon.src === "/icon-512.png" && icon.purpose?.includes("maskable"))).toBe(true);
 });
 
+test("ships a service worker for PWA bundle updates", async ({ request }) => {
+  const response = await request.get("/service-worker.js");
+  expect(response.ok()).toBe(true);
+  const worker = await response.text();
+  expect(worker).toContain("prowl-web-");
+  expect(worker).toContain("install");
+  expect(worker).toContain("activate");
+  expect(worker).toContain("fetch");
+});
+
 test("ships the browser content security policy", async ({ page }) => {
   const response = await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}&token=${token}`);
   const csp = response?.headers()["content-security-policy"] ?? "";
