@@ -756,6 +756,7 @@ export class AppState {
     this.#connectDaemon(token);
     this.ws.onStatus((state) => {
       if (state === "open") {
+        this.#prepareResumeAttach();
         void this.#bootstrapOnce(this.#authToken);
       }
     });
@@ -778,6 +779,13 @@ export class AppState {
       this.#bootstrapPromise = null;
     });
     return this.#bootstrapPromise;
+  }
+
+  #prepareResumeAttach(): void {
+    if (!this.sessionId && this.#renderedPaneIds.size === 0) {
+      return;
+    }
+    this.#renderedPaneIds.clear();
   }
 
   async #bootstrap(token: string): Promise<void> {

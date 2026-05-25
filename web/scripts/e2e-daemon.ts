@@ -21,6 +21,7 @@ const server = startServer(
     socketPath: false,
     statePath: resolve(stateDir, "state.sqlite"),
     spawnProcesses: true,
+    debugEndpoints: true,
   },
 );
 

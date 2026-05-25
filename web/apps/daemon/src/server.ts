@@ -39,13 +39,25 @@ export type ServerHandle = {
   port: number;
 };
 
-export function startServer(
-  config: DaemonConfig,
-  options: { socketPath?: string | false; statePath?: string; spawnProcesses?: boolean; logger?: Logger } = {},
-): ServerHandle {
+type ServerOptions = {
+  socketPath?: string | false;
+  statePath?: string;
+  spawnProcesses?: boolean;
+  logger?: Logger;
+  debugEndpoints?: boolean;
+};
+
+type DebugStats = {
+  paneAttachRequests: number;
+};
+
+export function startServer(config: DaemonConfig, options: ServerOptions = {}): ServerHandle {
   const tls = tlsOptions(config);
   const logger = options.logger ?? createLogger();
-  const clients = new Set<{ send: (payload: ArrayBuffer) => void }>();
+  const clients = new Set<{ send: (payload: ArrayBuffer) => void; close: (code?: number, reason?: string) => void }>();
+  const debugStats: DebugStats = {
+    paneAttachRequests: 0,
+  };
   const state = new InMemoryState(process.env.PROWL_REPO_ROOT ?? process.cwd(), {
     spawnProcesses: options.spawnProcesses,
     statePath: options.statePath,
@@ -84,6 +96,17 @@ export function startServer(
       const url = new URL(request.url);
       if (url.pathname === "/health") {
         return Response.json({ ok: true, protocolVersion });
+      }
+
+      if (options.debugEndpoints && url.pathname === "/debug/close-websockets") {
+        for (const client of clients) {
+          client.close(1012, "Debug reconnect test");
+        }
+        return Response.json({ closed: true });
+      }
+
+      if (options.debugEndpoints && url.pathname === "/debug/stats") {
+        return Response.json(debugStats);
       }
 
       if (url.pathname === "/auth/login") {
@@ -152,6 +175,9 @@ export function startServer(
         }
 
         const control = JSON.parse(frame.payload) as ClientControlMessage;
+        if (control.type === "pane.attach") {
+          debugStats.paneAttachRequests += 1;
+        }
         const responses = handleControl(control, state, config, { authenticated: ws.data.authenticated });
         for (const response of responses) {
           ws.send(encodeJsonFrame(response));
