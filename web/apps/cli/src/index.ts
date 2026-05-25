@@ -5,7 +5,7 @@ const [, , command = "help", ...args] = Bun.argv;
 
 switch (command) {
   case "list":
-    process.stdout.write(`${renderList()}\n`);
+    process.stdout.write(`${await renderList()}\n`);
     break;
   case "version":
   case "--version":

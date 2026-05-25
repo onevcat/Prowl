@@ -9,15 +9,22 @@ import {
 } from "@prowl/protocol";
 import type { DaemonConfig } from "./auth/config";
 import { isAllowedOrigin } from "./auth/config";
+import { type IPCServerHandle, startIPCServer } from "./ipc/socket";
 import { InMemoryState } from "./state/InMemoryState";
 
 export type ServerHandle = {
   stop: () => void;
+  state: InMemoryState;
 };
 
-export function startServer(config: DaemonConfig): ServerHandle {
+export function startServer(
+  config: DaemonConfig,
+  options: { socketPath?: string | false; statePath?: string; spawnProcesses?: boolean } = {},
+): ServerHandle {
   const clients = new Set<{ send: (payload: ArrayBuffer) => void }>();
   const state = new InMemoryState(process.env.PROWL_REPO_ROOT ?? process.cwd(), {
+    spawnProcesses: options.spawnProcesses,
+    statePath: options.statePath,
     onPaneData: (channelId, payload) => {
       for (let offset = 0; offset < payload.byteLength; offset += maxBinaryPayloadBytes) {
         const frame = encodePtyFrame(channelId, payload.subarray(offset, offset + maxBinaryPayloadBytes));
@@ -27,6 +34,10 @@ export function startServer(config: DaemonConfig): ServerHandle {
       }
     },
   });
+  let ipc: IPCServerHandle | null = null;
+  if (options.socketPath !== false) {
+    ipc = startIPCServer(config, state, options.socketPath);
+  }
   const server = Bun.serve({
     hostname: config.bind,
     port: config.port,
@@ -81,11 +92,15 @@ export function startServer(config: DaemonConfig): ServerHandle {
   });
 
   return {
-    stop: () => server.stop(true),
+    state,
+    stop: () => {
+      ipc?.close();
+      server.stop(true);
+    },
   };
 }
 
-function handleControl(
+export function handleControl(
   message: ClientControlMessage,
   state: InMemoryState,
   config: DaemonConfig,
