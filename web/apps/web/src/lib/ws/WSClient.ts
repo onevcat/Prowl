@@ -224,7 +224,9 @@ export class WSClient {
         this.#emitBackpressure(false);
         return;
       }
-      this.#updateBackpressure(socket.bufferedAmount);
+      if (this.#updateBackpressure(socket.bufferedAmount)) {
+        this.#scheduleBackpressureCheck();
+      }
     }, defaultBackpressureDelayMs);
   }
 
