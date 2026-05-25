@@ -21,6 +21,8 @@ type StateOptions = {
     shell: string;
     args: string[];
     cwd: string;
+    cols: number;
+    rows: number;
     onData: (data: Uint8Array) => void;
   }) => PaneProcess;
   onPaneData?: (channelId: number, payload: Uint8Array) => void;
@@ -313,7 +315,13 @@ export class InMemoryState {
     return result.changes > 0;
   }
 
-  createPane(worktreeId: string, title = "Shell", command?: string, cwd?: string): PaneDescriptor {
+  createPane(
+    worktreeId: string,
+    title = "Shell",
+    command?: string,
+    cwd?: string,
+    size: { cols: number; rows: number } = { cols: 120, rows: 32 },
+  ): PaneDescriptor {
     const pane: PaneDescriptor = {
       id: crypto.randomUUID(),
       channelId: this.#nextChannelId++,
@@ -328,7 +336,7 @@ export class InMemoryState {
     this.#replayByPane.set(pane.id, new Uint8Array());
     this.#paneIdByChannel.set(pane.channelId, pane.id);
     if (this.#options.spawnProcesses) {
-      this.#spawnRuntime(pane, command, cwd);
+      this.#spawnRuntime(pane, command, cwd, size);
     }
     return pane;
   }
@@ -436,13 +444,15 @@ export class InMemoryState {
     }
   }
 
-  #spawnRuntime(pane: PaneDescriptor, command?: string, cwd?: string): void {
+  #spawnRuntime(pane: PaneDescriptor, command?: string, cwd?: string, size = { cols: 120, rows: 32 }): void {
     const worktree = this.#worktreeForPane(pane);
     const args = command ? ["-lc", command] : ["-i"];
     const child = this.#options.spawnPaneProcess({
       shell: this.#options.shell,
       args,
       cwd: cwd ?? worktree?.path ?? process.cwd(),
+      cols: size.cols,
+      rows: size.rows,
       onData: (data) => {
         this.#recordPaneOutput(pane.id, data);
       },
@@ -579,13 +589,15 @@ function spawnTerminalProcess(options: {
   shell: string;
   args: string[];
   cwd: string;
+  cols: number;
+  rows: number;
   onData: (data: Uint8Array) => void;
 }): PaneProcess {
   return Bun.spawn([options.shell, ...options.args], {
     cwd: options.cwd,
     terminal: {
-      cols: 120,
-      rows: 32,
+      cols: options.cols,
+      rows: options.rows,
       data: (_terminal, data) => {
         options.onData(data);
       },

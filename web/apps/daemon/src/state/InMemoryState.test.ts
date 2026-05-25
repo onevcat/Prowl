@@ -28,6 +28,34 @@ describe("InMemoryState", () => {
     expect(state.listPanes().some((candidate) => candidate.id === pane.id)).toBe(false);
   });
 
+  test("uses requested pane dimensions when spawning PTYs", () => {
+    const spawnOptions: Array<{ cols: number; rows: number }> = [];
+    const state = new InMemoryState("/tmp/prowl", {
+      statePath: ":memory:",
+      spawnPaneProcess: (options) => {
+        spawnOptions.push({ cols: options.cols, rows: options.rows });
+        return {
+          kill: () => {},
+          exited: new Promise(() => {}),
+          terminal: {
+            close: () => {},
+            resize: () => {},
+            write: () => {},
+          },
+        };
+      },
+    });
+    const repository = state.repositories[0];
+    const [worktree] = repository ? (state.worktreesByRepo.get(repository.id) ?? []) : [];
+    if (!worktree) {
+      throw new Error("Expected seeded worktree");
+    }
+
+    state.createPane(worktree.id, "Sized", undefined, undefined, { cols: 101, rows: 43 });
+
+    expect(spawnOptions.at(-1)).toEqual({ cols: 101, rows: 43 });
+  });
+
   test("returns null replay for missing panes", () => {
     const state = testState();
 

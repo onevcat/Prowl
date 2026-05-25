@@ -581,7 +581,10 @@ export function handleControl(
     if (cwd.type === "error") {
       return [cwd];
     }
-    const pane = state.createPane(message.worktreeId, "Shell", message.command, cwd.path);
+    const pane = state.createPane(message.worktreeId, "Shell", message.command, cwd.path, {
+      cols: message.cols,
+      rows: message.rows,
+    });
     options.ownedPaneIds?.add(pane.id);
     return [
       {
