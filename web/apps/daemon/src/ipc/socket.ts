@@ -41,7 +41,16 @@ export function startIPCServer(
           const tag = view.getUint8(0);
           const length = view.getUint32(1, false);
           if (tag === protocolTags.pty) {
-            const frame = decodeFrame(buffer);
+            if (buffer.byteLength === 5) {
+              break;
+            }
+            let frame: ReturnType<typeof decodeFrame>;
+            try {
+              frame = decodeFrame(buffer);
+            } catch (error) {
+              writeInvalidControlError(socket, error);
+              return;
+            }
             if (frame.tag === protocolTags.pty) {
               state.writeToChannel(frame.channelId, frame.payload);
             }
