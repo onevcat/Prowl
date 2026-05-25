@@ -28,18 +28,25 @@ describe("WSClient backpressure", () => {
     socket.bufferedAmount = 256 * 1024 + 1;
 
     expect(client.sendBinary(1, new TextEncoder().encode("input"))).toBe(false);
-    await sleep(220);
+    await waitUntil(() => bufferingStates.at(-1) === true);
 
     expect(bufferingStates.at(-1)).toBe(true);
     socket.bufferedAmount = 0;
-    await sleep(220);
+    await waitUntil(() => bufferingStates.at(-1) === false);
 
     expect(bufferingStates.at(-1)).toBe(false);
   });
 });
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+async function waitUntil(done: () => boolean): Promise<void> {
+  const deadline = performance.now() + 1_000;
+  while (performance.now() < deadline) {
+    if (done()) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error("Timed out waiting for backpressure state");
 }
 
 function installFakeWebSocket(): void {

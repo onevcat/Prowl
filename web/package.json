@@ -14,6 +14,7 @@
     "lint": "biome check .",
     "format": "biome format --write .",
     "test": "bun test apps packages scripts",
+    "test:web": "bun run --filter @prowl/web test",
     "typecheck": "bun run --filter '*' typecheck"
   },
   "devDependencies": {
