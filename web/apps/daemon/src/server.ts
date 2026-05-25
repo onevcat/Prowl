@@ -1,3 +1,4 @@
+import { statSync } from "node:fs";
 import type { ClientControlMessage, ServerControlMessage } from "@prowl/protocol";
 import {
   decodeFrame,
@@ -129,7 +130,12 @@ export function handleControl(
   }
 
   if (message.type === "repo.add") {
-    const { repository, worktree } = state.addRepository(message.path);
+    const path = message.path.trim();
+    const validationError = validateRepositoryPath(message.id, path, state);
+    if (validationError) {
+      return [validationError];
+    }
+    const { repository, worktree } = state.addRepository(path);
     return [
       { v: 1, type: "repo.updated", id: message.id, repository },
       { v: 1, type: "worktree.updated", id: message.id, worktree },
@@ -228,4 +234,22 @@ export function handleControl(
 
 function errorResponse(id: string, code: string, message: string): ServerControlMessage {
   return { v: 1, type: "error", id, code, message };
+}
+
+function validateRepositoryPath(id: string, path: string, state: InMemoryState): ServerControlMessage | null {
+  const normalizedPath = path.trim();
+  if (!normalizedPath) {
+    return errorResponse(id, "INVALID_REPOSITORY", "Repository path is required");
+  }
+  try {
+    if (!statSync(normalizedPath).isDirectory()) {
+      return errorResponse(id, "INVALID_REPOSITORY", "Repository path must be a directory");
+    }
+  } catch {
+    return errorResponse(id, "INVALID_REPOSITORY", "Repository path does not exist");
+  }
+  if (state.hasRepositoryPath(normalizedPath)) {
+    return errorResponse(id, "DUPLICATE_REPOSITORY", "Repository is already registered");
+  }
+  return null;
 }

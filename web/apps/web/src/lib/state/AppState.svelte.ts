@@ -26,6 +26,7 @@ export class AppState {
   selectedWorktreeId = $state<string | null>(null);
   selectedPaneId = $state<string | null>(null);
   view = $state<AppView>("shelf");
+  repoBusy = $state(false);
   paletteOpen = $state(false);
   paletteQuery = $state("");
   connection = $state<ConnectionState>("closed");
@@ -96,6 +97,13 @@ export class AppState {
         section: "Actions" as const,
         invoke: () => this.setView("canvas"),
       },
+      {
+        id: "view:settings",
+        title: "Open Settings",
+        subtitle: "Manage repositories and preferences",
+        section: "Settings" as const,
+        invoke: () => this.setView("settings"),
+      },
       ...tabItems,
       ...worktreeItems,
     ];
@@ -118,6 +126,9 @@ export class AppState {
         break;
       case "view.canvas":
         this.setView("canvas");
+        break;
+      case "view.settings":
+        this.setView("settings");
         break;
       case "palette.open":
         this.paletteOpen = true;
@@ -206,6 +217,47 @@ export class AppState {
     }
   }
 
+  async addRepository(path: string): Promise<void> {
+    const normalizedPath = path.trim();
+    if (!normalizedPath) {
+      return;
+    }
+    this.repoBusy = true;
+    this.errorMessage = null;
+    try {
+      await this.ws.request({
+        v: 1,
+        type: "repo.add",
+        id: makeMessageId(),
+        path: normalizedPath,
+      });
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    } finally {
+      this.repoBusy = false;
+    }
+  }
+
+  async removeRepository(repoId: string): Promise<void> {
+    if (!repoId) {
+      return;
+    }
+    this.repoBusy = true;
+    this.errorMessage = null;
+    try {
+      await this.ws.request({
+        v: 1,
+        type: "repo.remove",
+        id: makeMessageId(),
+        repoId,
+      });
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    } finally {
+      this.repoBusy = false;
+    }
+  }
+
   sendInputToSelectedPane(text: string): void {
     const pane = this.selectedPane;
     if (!pane) {
@@ -242,7 +294,7 @@ export class AppState {
 
   async #restoreUIState(): Promise<void> {
     const [view, selectedWorktreeId] = await Promise.all([get<AppView>(uiViewKey), get<string>(selectedWorktreeKey)]);
-    if (view === "shelf" || view === "canvas") {
+    if (view === "shelf" || view === "canvas" || view === "settings") {
       this.view = view;
     }
     if (selectedWorktreeId && this.worktrees.some((worktree) => worktree.id === selectedWorktreeId)) {
@@ -314,6 +366,8 @@ export class AppState {
         break;
       case "repo.listed":
         this.repositories = message.repositories;
+        this.#removeMissingRepositoryWorktrees(message.repositories);
+        this.#ensureSelection();
         break;
       case "repo.updated":
         this.#upsertRepository(message.repository);
@@ -411,6 +465,17 @@ export class AppState {
     this.worktreesByRepo = next;
     this.#ensureWorktreeViews(worktrees);
     this.#ensureSelection();
+  }
+
+  #removeMissingRepositoryWorktrees(repositories: Repository[]): void {
+    const ids = new Set(repositories.map((repository) => repository.id));
+    const next = new Map(this.worktreesByRepo);
+    for (const repoId of next.keys()) {
+      if (!ids.has(repoId)) {
+        next.delete(repoId);
+      }
+    }
+    this.worktreesByRepo = next;
   }
 
   #upsertWorktree(worktree: Worktree): void {

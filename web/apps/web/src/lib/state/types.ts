@@ -2,7 +2,7 @@ import type { PaneDescriptor, Repository, TaskStatus, Worktree } from "@prowl/pr
 
 export type { PaneDescriptor, Repository, TaskStatus, Worktree };
 
-export type AppView = "shelf" | "canvas";
+export type AppView = "shelf" | "canvas" | "settings";
 
 export type ConnectionState = "connecting" | "open" | "closed";
 
@@ -17,6 +17,7 @@ export type PaletteItem = {
 export type ActionId =
   | "view.shelf"
   | "view.canvas"
+  | "view.settings"
   | "palette.open"
   | "palette.close"
   | "pane.new"

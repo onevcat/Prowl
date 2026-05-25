@@ -101,6 +101,10 @@ export class InMemoryState {
     return { repository, worktree };
   }
 
+  hasRepositoryPath(path: string): boolean {
+    return this.repositories.some((repository) => repository.path === path);
+  }
+
   removeRepository(repoId: string): boolean {
     const result = this.#database.query("DELETE FROM repos WHERE id = $id").run({ $id: repoId });
     this.#reloadRepositories();

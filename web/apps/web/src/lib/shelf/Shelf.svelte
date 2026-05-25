@@ -15,6 +15,7 @@
       <Button label="⌘K" title="Open Command Palette (Command K)" onclick={() => (appState.paletteOpen = true)} />
       <Button label="▦" title="Show Canvas" onclick={() => appState.setView("canvas")} />
       <Button label="+" title="New Tab (Command T)" onclick={() => appState.createPane()} />
+      <Button label="⚙" title="Open Settings" onclick={() => appState.setView("settings")} />
     </div>
 
     {#each appState.repositories as repository (repository.id)}
