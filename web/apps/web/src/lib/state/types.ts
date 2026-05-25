@@ -28,6 +28,12 @@ export type AdvancedSettings = {
   replayBufferKiB: number;
 };
 
+export type PerformanceMetrics = {
+  inputLatencySamples: number[];
+  wsRttSamples: number[];
+  lastWsRtt: number | null;
+};
+
 export type AppSettings = {
   appearance: AppearanceSettings;
   shortcuts: ShortcutSettings;

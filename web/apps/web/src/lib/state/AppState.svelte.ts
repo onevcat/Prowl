@@ -12,7 +12,7 @@ import { get, set } from "idb-keyval";
 import { Pane } from "./Pane";
 import { WorktreeView } from "./WorktreeView";
 import { defaultShortcuts, normalizeKeyChord } from "./shortcuts";
-import type { ActionId, AppSettings, AppView, ConnectionState, PaletteItem } from "./types";
+import type { ActionId, AppSettings, AppView, ConnectionState, PaletteItem, PerformanceMetrics } from "./types";
 
 export const appStateKey = Symbol("ProwlAppState");
 
@@ -23,6 +23,7 @@ const sessionTokenKey = "prowl:token";
 const defaultDaemonURL = "ws://127.0.0.1:7878/ws";
 const textDecoder = new TextDecoder();
 const textEncoder = new TextEncoder();
+const maxMetricSamples = 100;
 const defaultSettings: AppSettings = {
   appearance: {
     theme: "system",
@@ -40,6 +41,8 @@ const defaultSettings: AppSettings = {
 export class AppState {
   readonly ws = new WSClient();
   #bootstrapPromise: Promise<void> | null = null;
+  #metricTimer: ReturnType<typeof setInterval> | null = null;
+  #inputStartedByChannel = new Map<number, number>();
   repositories = $state<Repository[]>([]);
   customActions = $state<CustomAction[]>([]);
   worktreesByRepo = $state<Map<string, Worktree[]>>(new Map());
@@ -57,6 +60,11 @@ export class AppState {
   errorMessage = $state<string | null>(null);
   sessionId = $state<string | null>(null);
   settings = $state<AppSettings>(structuredClone(defaultSettings));
+  metrics = $state<PerformanceMetrics>({
+    inputLatencySamples: [],
+    wsRttSamples: [],
+    lastWsRtt: null,
+  });
 
   constructor() {
     if (typeof window === "undefined") {
@@ -69,6 +77,7 @@ export class AppState {
     this.ws.onBinary((channelId, payload) => this.#handlePaneOutput(channelId, payload));
     this.#restoreUIState();
     this.#connectFromLocation();
+    this.#startMetricLoop();
   }
 
   get worktrees(): Worktree[] {
@@ -478,6 +487,7 @@ export class AppState {
     if (!pane) {
       return;
     }
+    this.#inputStartedByChannel.set(pane.channelId, performance.now());
     this.ws.sendBinary(pane.channelId, textEncoder.encode(text));
   }
 
@@ -675,6 +685,11 @@ export class AppState {
     if (!pane) {
       return;
     }
+    const inputStartedAt = this.#inputStartedByChannel.get(channelId);
+    if (inputStartedAt !== undefined) {
+      this.#inputStartedByChannel.delete(channelId);
+      this.#recordInputLatency(performance.now() - inputStartedAt);
+    }
     const text = textDecoder.decode(payload, { stream: true });
     pane.lastOutputLine = `${pane.lastOutputLine}${text}`;
     pane.updatedAt = Date.now();
@@ -830,6 +845,42 @@ export class AppState {
     return window.confirm(message);
   }
 
+  #startMetricLoop(): void {
+    this.#metricTimer ??= setInterval(() => {
+      if (this.connection !== "open") {
+        return;
+      }
+      void this.#sampleWsRtt();
+    }, 2_000);
+  }
+
+  async #sampleWsRtt(): Promise<void> {
+    const startedAt = performance.now();
+    try {
+      const response = await this.ws.request({ v: 1, type: "ping", id: makeMessageId() }, 2_000);
+      if (response.type === "pong") {
+        this.#recordWsRtt(performance.now() - startedAt);
+      }
+    } catch {
+      this.metrics = { ...this.metrics, lastWsRtt: null };
+    }
+  }
+
+  #recordInputLatency(value: number): void {
+    this.metrics = {
+      ...this.metrics,
+      inputLatencySamples: appendSample(this.metrics.inputLatencySamples, value),
+    };
+  }
+
+  #recordWsRtt(value: number): void {
+    this.metrics = {
+      ...this.metrics,
+      wsRttSamples: appendSample(this.metrics.wsRttSamples, value),
+      lastWsRtt: value,
+    };
+  }
+
   #requestNotificationPermission(): void {
     if (typeof Notification === "undefined" || Notification.permission !== "default") {
       return;
@@ -907,4 +958,8 @@ function sanitizeAdvanced(value: unknown, fallback: AppSettings["advanced"]): Ap
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function appendSample(samples: number[], value: number): number[] {
+  return [...samples, value].slice(-maxMetricSamples);
 }

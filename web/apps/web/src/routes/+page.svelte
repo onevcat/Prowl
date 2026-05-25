@@ -2,6 +2,7 @@
   import Canvas from "$lib/canvas/Canvas.svelte";
   import DiffView from "$lib/diff/DiffView.svelte";
   import Palette from "$lib/palette/Palette.svelte";
+  import PerformanceHUD from "$lib/performance/PerformanceHUD.svelte";
   import Settings from "$lib/settings/Settings.svelte";
   import Shelf from "$lib/shelf/Shelf.svelte";
   import { appStateKey, createAppState } from "$lib/state/AppState.svelte";
@@ -32,3 +33,4 @@
 {/if}
 
 <Palette />
+<PerformanceHUD />
