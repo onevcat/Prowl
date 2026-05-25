@@ -104,6 +104,18 @@
       </div>
     {/each}
   </div>
+
+  {#if appState.systemOutput}
+    <div class="system-output">
+      <div>
+        <strong>System</strong>
+        {#if appState.systemLastOutputLine}
+          <small>{appState.systemLastOutputLine}</small>
+        {/if}
+      </div>
+      <pre>{appState.systemOutput}</pre>
+    </div>
+  {/if}
 </section>
 
 <style>
@@ -172,6 +184,34 @@
   .repos {
     display: grid;
     gap: 0.5rem;
+  }
+
+  .system-output {
+    display: grid;
+    gap: 0.35rem;
+    padding-top: 0.65rem;
+    border-top: 1px solid color-mix(in srgb, CanvasText 12%, transparent);
+  }
+
+  .system-output > div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  pre {
+    overflow: auto;
+    max-height: 10rem;
+    margin: 0;
+    padding: 0.65rem;
+    border: 1px solid color-mix(in srgb, CanvasText 10%, transparent);
+    border-radius: 6px;
+    background: color-mix(in srgb, CanvasText 4%, Canvas);
+    color: CanvasText;
+    font: inherit;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    white-space: pre-wrap;
   }
 
   .worktrees {

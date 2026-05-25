@@ -13,6 +13,7 @@ import {
   openTabsKey,
   paneDescriptorsByWorktree,
   paneIdsOutsideWorktrees,
+  systemPaneId,
 } from "./AppState.svelte";
 import { Pane } from "./Pane.svelte";
 import type { Repository, Worktree } from "./types";
@@ -522,6 +523,39 @@ describe("AppState view mutation methods", () => {
     });
     expect(state.latestArchiveProgress).toEqual(state.archiveProgressByWorktree["worktree-1"]);
     expect(state.errorMessage).toBeNull();
+  });
+
+  test("subscribes to the hidden system pane before git worktree operations", async () => {
+    const state = appStateFixture();
+    const requests: string[] = [];
+    state.ws.request = ((message) => {
+      requests.push(message.type);
+      if (message.type === "pane.attach") {
+        expect(message.paneId).toBe(systemPaneId);
+        return Promise.resolve({
+          v: 1,
+          type: "pane.replay",
+          id: message.id,
+          paneId: systemPaneId,
+          bytes: btoa("git output from daemon\n"),
+        });
+      }
+      if (message.type === "worktree.create") {
+        return Promise.resolve({
+          v: 1,
+          type: "worktree.updated",
+          id: message.id,
+          worktree: worktree("worktree-3", "three"),
+        });
+      }
+      return Promise.resolve({ v: 1, type: "pong", id: message.id });
+    }) as AppState["ws"]["request"];
+
+    await state.createWorktree("repo-1", "feature/system-output");
+
+    expect(requests).toEqual(["pane.attach", "worktree.create"]);
+    expect(state.systemOutput).toContain("git output from daemon");
+    expect(state.systemLastOutputLine).toBe("git output from daemon");
   });
 
   test("prevents browser defaults for unmatched terminal key events", () => {

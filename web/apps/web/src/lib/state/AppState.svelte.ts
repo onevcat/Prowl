@@ -58,6 +58,8 @@ const legacyCommandHistoryKey = "prowl:command.history";
 const appearanceSettingsKey = "prowl:settings.appearance";
 const sessionTokenKey = "prowl:token";
 const defaultDaemonURL = "ws://127.0.0.1:7878/ws";
+export const systemPaneId = "system";
+const systemChannelId = 0;
 export const bootstrapSettingsKeys = ["appearance", "shortcuts", "advanced"] as const;
 const textEncoder = new TextEncoder();
 const maxMetricSamples = 100;
@@ -123,6 +125,7 @@ export class AppState {
   #paneIdsToResume = new Set<string>();
   #restoredOpenTabsWorktreeIds = new Set<string>();
   #preferredSelectedWorktreeId: string | null = null;
+  #systemPaneAttached = false;
   #coldStartRecorded = false;
   #authToken = "";
   appFocused = $state(true);
@@ -141,6 +144,9 @@ export class AppState {
   diff = $state<WorktreeDiff | null>(null);
   archiveProgressByWorktree = $state<Record<string, WorktreeArchiveProgress>>({});
   latestArchiveProgress = $state<WorktreeArchiveProgress | null>(null);
+  systemOutput = $state("");
+  systemLastOutputLine = $state("");
+  systemOutputUpdatedAt = $state(0);
   paletteOpen = $state(false);
   paletteQuery = $state("");
   paletteHistory = $state<PaletteHistoryEntry[]>([]);
@@ -172,6 +178,9 @@ export class AppState {
     }
     this.ws.onStatus((connection) => {
       this.connection = connection;
+      if (connection !== "open") {
+        this.#systemPaneAttached = false;
+      }
     });
     this.ws.onMessage((message) => this.#handleServerMessage(message));
     this.ws.onBinary((channelId, payload) => this.#handlePaneOutput(channelId, payload));
@@ -666,6 +675,7 @@ export class AppState {
     this.repoBusy = true;
     this.errorMessage = null;
     try {
+      await this.#ensureSystemPaneAttached();
       await this.ws.request({
         v: 1,
         type: "worktree.create",
@@ -691,6 +701,7 @@ export class AppState {
     this.repoBusy = true;
     this.errorMessage = null;
     try {
+      await this.#ensureSystemPaneAttached();
       await this.ws.request({
         v: 1,
         type: "worktree.archive",
@@ -1284,6 +1295,10 @@ export class AppState {
   }
 
   #handlePaneOutput(channelId: number, payload: Uint8Array): void {
+    if (channelId === systemChannelId) {
+      this.#appendSystemOutput(payload);
+      return;
+    }
     const pane = Array.from(this.panes.values()).find((candidate) => candidate.channelId === channelId);
     if (!pane) {
       return;
@@ -1306,6 +1321,10 @@ export class AppState {
   }
 
   #applyPaneReplay(paneId: string, base64: string): void {
+    if (paneId === systemPaneId) {
+      this.#applySystemReplay(base64);
+      return;
+    }
     const pane = this.panes.get(paneId);
     if (!pane) {
       return;
@@ -1317,6 +1336,41 @@ export class AppState {
     pane.lastOutputLine = snapshot.lastOutputLine || pane.lastOutputLine;
     pane.updatedAt = Date.now();
     this.#recordColdStartIfReady(paneId);
+  }
+
+  async #ensureSystemPaneAttached(): Promise<void> {
+    if (this.#systemPaneAttached) {
+      return;
+    }
+    const response = await this.ws.request({
+      v: 1,
+      type: "pane.attach",
+      id: makeMessageId(),
+      paneId: systemPaneId,
+    });
+    if (response.type === "pane.replay") {
+      this.#systemPaneAttached = true;
+      this.#applySystemReplay(response.bytes);
+    }
+  }
+
+  #applySystemReplay(base64: string): void {
+    const binary = atob(base64);
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    const snapshot = terminalOutputSnapshot(new TextDecoder().decode(bytes));
+    this.systemOutput = snapshot.text;
+    this.systemLastOutputLine = snapshot.lastOutputLine || this.systemLastOutputLine;
+    this.systemOutputUpdatedAt = Date.now();
+  }
+
+  #appendSystemOutput(payload: Uint8Array): void {
+    const decoder = this.#decoderByChannel.get(systemChannelId) ?? new TextDecoder();
+    this.#decoderByChannel.set(systemChannelId, decoder);
+    const text = decoder.decode(payload, { stream: true });
+    const snapshot = appendTerminalOutput(this.systemOutput, text);
+    this.systemOutput = snapshot.text;
+    this.systemLastOutputLine = snapshot.lastOutputLine || this.systemLastOutputLine;
+    this.systemOutputUpdatedAt = Date.now();
   }
 
   #upsertRepository(repository: Repository): void {
