@@ -40,13 +40,8 @@ switch (command) {
       const sendArgs = args.filter((arg) => arg !== "--capture");
       const paneId = sendArgs[0];
       const commandText = sendArgs.slice(1).join(" ");
-      await writeOutput(
-        () => sendPaneCommandWithOptions(paneId, commandText, { capture }),
-        () =>
-          sendPaneCommandWithOptions(paneId, commandText, { capture }).then(
-            (result) => result.output ?? `sent\t${result.paneId}`,
-          ),
-      );
+      const result = await sendPaneCommandWithOptions(paneId, commandText, { capture });
+      writeValue(result, result.output ?? `sent\t${result.paneId}`);
     }
     break;
   case "read":
