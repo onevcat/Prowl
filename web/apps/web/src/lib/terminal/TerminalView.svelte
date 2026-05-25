@@ -6,14 +6,35 @@
     lastOutputLine: string;
     focused: boolean;
     onInput?: (text: string) => void;
+    onResize?: (cols: number, rows: number) => void;
     onStatus?: (status: "idle" | "running" | "done" | "failed") => void;
   };
 
-  let { title, lastOutputLine, focused, onInput, onStatus }: Props = $props();
+  let { title, lastOutputLine, focused, onInput, onResize, onStatus }: Props = $props();
   let buffer = $state("");
+  let element = $state<HTMLElement>();
 
   $effect(() => {
     buffer = lastOutputLine;
+  });
+
+  $effect(() => {
+    if (!element || !onResize) {
+      return;
+    }
+    const terminal = element;
+    const observer = new ResizeObserver(([entry]) => {
+      if (!entry) {
+        return;
+      }
+      const style = getComputedStyle(terminal);
+      const fontSize = Number.parseFloat(style.fontSize) || 13;
+      const cols = Math.max(1, Math.floor(entry.contentRect.width / (fontSize * 0.62)));
+      const rows = Math.max(1, Math.floor(entry.contentRect.height / (fontSize * 1.35)));
+      onResize(cols, rows);
+    });
+    observer.observe(terminal);
+    return () => observer.disconnect();
   });
 
   function handleKeydown(event: KeyboardEvent): void {
@@ -30,6 +51,7 @@
 </script>
 
 <div
+  bind:this={element}
   class:focused
   class="terminal mono"
   role="textbox"

@@ -54,6 +54,7 @@ export class AppState {
   #bootstrapPromise: Promise<void> | null = null;
   #metricTimer: ReturnType<typeof setInterval> | null = null;
   #inputStartedByChannel = new Map<number, number>();
+  #paneSizeById = new Map<string, { cols: number; rows: number }>();
   repositories = $state<Repository[]>([]);
   customActions = $state<CustomAction[]>([]);
   worktreesByRepo = $state<Map<string, Worktree[]>>(new Map());
@@ -595,6 +596,26 @@ export class AppState {
     for (const pane of this.visiblePanes) {
       this.sendInputToPane(pane.id, text);
     }
+  }
+
+  resizePane(paneId: string, cols: number, rows: number): void {
+    const pane = this.panes.get(paneId);
+    if (!pane || cols < 1 || rows < 1) {
+      return;
+    }
+    const previous = this.#paneSizeById.get(paneId);
+    if (previous?.cols === cols && previous.rows === rows) {
+      return;
+    }
+    this.#paneSizeById.set(paneId, { cols, rows });
+    this.ws.send({
+      v: 1,
+      type: "pane.resize",
+      id: makeMessageId(),
+      paneId,
+      cols,
+      rows,
+    });
   }
 
   cycleWorktree(direction: 1 | -1): void {

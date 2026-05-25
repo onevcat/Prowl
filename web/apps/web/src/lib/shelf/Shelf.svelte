@@ -94,6 +94,12 @@
         onInput={(text) => {
           appState.sendInputToSelectedPane(text);
         }}
+        onResize={(cols, rows) => {
+          const pane = appState.selectedPane;
+          if (pane) {
+            appState.resizePane(pane.id, cols, rows);
+          }
+        }}
         onStatus={(status) => {
           const pane = appState.selectedPane;
           if (pane) {

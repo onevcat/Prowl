@@ -38,6 +38,7 @@
     selectedPaneId={appState.selectedPaneId}
     selectPane={(paneId) => appState.selectPane(paneId)}
     sendInput={(paneId, text) => appState.sendInputToPane(paneId, text)}
+    resizePane={(paneId, cols, rows) => appState.resizePane(paneId, cols, rows)}
     updateStatus={(paneId, status) => {
       void appState.updatePaneStatus(paneId, status);
     }}
