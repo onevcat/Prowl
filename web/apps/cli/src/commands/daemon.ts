@@ -10,6 +10,9 @@ export type DaemonStatus = {
   message: string;
 };
 
+const daemonStartTimeoutMs = 3000;
+const daemonStartPollIntervalMs = 50;
+
 export async function daemonStatus(): Promise<DaemonStatus> {
   const socketPath = defaultSocketPath();
   const pid = readPid();
@@ -39,12 +42,24 @@ export async function daemonStart(): Promise<DaemonStatus> {
 
   const child = Bun.spawn(daemonCommand(), {
     cwd: webRoot(),
+    env: Bun.env,
     stdout: "ignore",
     stderr: "ignore",
     stdin: "ignore",
   });
   writeFileSync(defaultPidPath(), `${child.pid}\n`);
   child.unref();
+  try {
+    await waitForDaemonReady(child.pid);
+  } catch (error) {
+    try {
+      process.kill(child.pid, "SIGTERM");
+    } catch {
+      // The child may have already exited while the readiness check was polling.
+    }
+    rmSync(defaultPidPath(), { force: true });
+    throw error;
+  }
   return { running: true, pid: child.pid, socketPath, message: "started" };
 }
 
@@ -92,6 +107,18 @@ function daemonCommand(): string[] {
     return [binary];
   }
   return ["bun", "run", "apps/daemon/src/index.ts"];
+}
+
+async function waitForDaemonReady(pid: number): Promise<void> {
+  const deadline = performance.now() + daemonStartTimeoutMs;
+  while (performance.now() < deadline) {
+    const status = await daemonStatus();
+    if (status.running && status.pid === pid) {
+      return;
+    }
+    await Bun.sleep(daemonStartPollIntervalMs);
+  }
+  throw new Error("Timed out waiting for daemon to start");
 }
 
 function webRoot(): string {

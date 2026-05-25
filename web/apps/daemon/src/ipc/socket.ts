@@ -18,7 +18,7 @@ export type IPCServerHandle = {
 };
 
 export function defaultSocketPath(): string {
-  return join(homedir(), ".prowl", "prowld.sock");
+  return Bun.env.PROWL_SOCKET_PATH ?? join(homedir(), ".prowl", "prowld.sock");
 }
 
 export function startIPCServer(

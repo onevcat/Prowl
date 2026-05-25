@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startServer } from "../../daemon/src/server";
-import { daemonStatus, renderDaemonStatus } from "./commands/daemon";
+import { daemonStart, daemonStatus, daemonStop, renderDaemonStatus } from "./commands/daemon";
 import { renderVersion } from "./commands/version";
 import { requestDaemon } from "./transport";
 
@@ -78,6 +78,73 @@ describe("prowl cli scaffold", () => {
         Bun.env.PROWL_SOCKET_PATH = undefined;
       } else {
         Bun.env.PROWL_SOCKET_PATH = previousSocketPath;
+      }
+    }
+  });
+
+  test("starts the daemon only after the local socket is ready", async () => {
+    const token = "test-token";
+    const previousConfigPath = Bun.env.PROWL_CONFIG_PATH;
+    const previousSocketPath = Bun.env.PROWL_SOCKET_PATH;
+    const previousRepoRoot = Bun.env.PROWL_REPO_ROOT;
+    const previousDaemonBin = Bun.env.PROWL_DAEMON_BIN;
+    const home = mkdtempSync(join(tmpdir(), "prowl-cli-start-home-"));
+    const prowlHome = join(home, ".prowl");
+    const repoRoot = join(home, "repo");
+    const daemonShim = join(home, "prowld-source.sh");
+    mkdirSync(prowlHome, { recursive: true });
+    mkdirSync(repoRoot);
+    writeFileSync(
+      daemonShim,
+      `#!/bin/sh
+exec bun run apps/daemon/src/index.ts
+`,
+    );
+    chmodSync(daemonShim, 0o755);
+    writeFileSync(
+      join(prowlHome, "config.json"),
+      JSON.stringify({
+        port: 0,
+        bind: "127.0.0.1",
+        token,
+        allowedOrigins: ["http://127.0.0.1:5173"],
+        requireTLS: false,
+      }),
+    );
+    Bun.env.PROWL_CONFIG_PATH = join(prowlHome, "config.json");
+    Bun.env.PROWL_SOCKET_PATH = join(prowlHome, "prowld.sock");
+    Bun.env.PROWL_REPO_ROOT = repoRoot;
+    Bun.env.PROWL_DAEMON_BIN = daemonShim;
+
+    try {
+      const started = await daemonStart();
+      const status = await daemonStatus();
+
+      expect(started.running).toBe(true);
+      expect(started.message).toBe("started");
+      expect(status.running).toBe(true);
+      expect(status.pid).toBe(started.pid);
+    } finally {
+      await daemonStop();
+      if (previousConfigPath === undefined) {
+        Bun.env.PROWL_CONFIG_PATH = undefined;
+      } else {
+        Bun.env.PROWL_CONFIG_PATH = previousConfigPath;
+      }
+      if (previousSocketPath === undefined) {
+        Bun.env.PROWL_SOCKET_PATH = undefined;
+      } else {
+        Bun.env.PROWL_SOCKET_PATH = previousSocketPath;
+      }
+      if (previousRepoRoot === undefined) {
+        Bun.env.PROWL_REPO_ROOT = undefined;
+      } else {
+        Bun.env.PROWL_REPO_ROOT = previousRepoRoot;
+      }
+      if (previousDaemonBin === undefined) {
+        Bun.env.PROWL_DAEMON_BIN = undefined;
+      } else {
+        Bun.env.PROWL_DAEMON_BIN = previousDaemonBin;
       }
     }
   });
