@@ -2,7 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { findForbiddenDaemonRuntimeDependencies, findForbiddenDaemonRuntimeUses } from "./check-daemon-runtime";
+import {
+  findBunTerminalApiViolations,
+  findForbiddenDaemonRuntimeDependencies,
+  findForbiddenDaemonRuntimeUses,
+} from "./check-daemon-runtime";
 
 describe("daemon runtime checks", () => {
   test("rejects node-pty-style daemon dependencies", () => {
@@ -49,5 +53,38 @@ describe("daemon runtime checks", () => {
     writeFileSync(join(root, "node_modules", "node-pty", "index.js"), 'import "node-pty";\n');
 
     expect(findForbiddenDaemonRuntimeUses(root)).toEqual([]);
+  });
+
+  test("requires daemon source to configure Bun Terminal API", () => {
+    const root = mkdtempSync(join(tmpdir(), "prowl-daemon-terminal-api-"));
+    mkdirSync(join(root, "state"), { recursive: true });
+    writeFileSync(
+      join(root, "state", "InMemoryState.ts"),
+      `export function spawnPane() {
+        return Bun.spawn(["sh"], {
+          terminal: {
+            cols: 120,
+            rows: 32,
+            data: (_terminal, data) => process.stdout.write(data),
+          },
+        });
+      }
+`,
+    );
+
+    expect(findBunTerminalApiViolations(root)).toEqual([]);
+  });
+
+  test("rejects daemon source without Bun Terminal API PTY configuration", () => {
+    const root = mkdtempSync(join(tmpdir(), "prowl-daemon-terminal-api-missing-"));
+    writeFileSync(
+      join(root, "InMemoryState.ts"),
+      `export function spawnPane() {
+        return Bun.spawn(["sh"], { stdout: "pipe" });
+      }
+`,
+    );
+
+    expect(findBunTerminalApiViolations(root)).toEqual(["daemon source does not configure Bun.spawn terminal PTY"]);
   });
 });

@@ -15,6 +15,7 @@ function main(): void {
   const violations = [
     ...findForbiddenDaemonRuntimeDependencies(join(root, "apps", "daemon", "package.json")),
     ...findForbiddenDaemonRuntimeUses(join(root, "apps", "daemon", "src")),
+    ...findBunTerminalApiViolations(join(root, "apps", "daemon", "src")),
   ];
   if (violations.length === 0) {
     process.stdout.write("Forbidden daemon runtime patterns: none\n");
@@ -45,6 +46,16 @@ export function findForbiddenDaemonRuntimeUses(root: string): string[] {
   return matches.sort();
 }
 
+export function findBunTerminalApiViolations(root: string): string[] {
+  if (!existsSync(root)) {
+    throw new Error(`Directory not found: ${root}`);
+  }
+  const sources = collectSourceFiles(root).map((path) => readFileSync(path, "utf8"));
+  const usesBunSpawn = sources.some((source) => /\bBun\.spawn\s*\(/.test(source));
+  const usesTerminalOption = sources.some((source) => /\bterminal\s*:\s*\{/.test(source));
+  return usesBunSpawn && usesTerminalOption ? [] : ["daemon source does not configure Bun.spawn terminal PTY"];
+}
+
 function dependencyViolations(
   dependencies: Record<string, string>,
   packageJsonPath: string,
@@ -56,22 +67,33 @@ function dependencyViolations(
 }
 
 function visit(root: string, current: string, matches: string[]): void {
-  for (const entry of readdirSync(current, { withFileTypes: true })) {
-    const path = join(current, entry.name);
-    if (entry.isDirectory()) {
-      if (!ignoredDirectories.has(entry.name)) {
-        visit(root, path, matches);
-      }
-      continue;
-    }
-    if (!entry.isFile() || !sourceExtensions.has(fileExtension(entry.name))) {
-      continue;
-    }
+  for (const path of collectSourceFiles(current)) {
     const source = readFileSync(path, "utf8");
     for (const packageName of forbiddenPtyPackages) {
       if (forbiddenPackageUsePattern(packageName).test(source)) {
         matches.push(`${relative(root, path)} imports ${packageName}`);
       }
+    }
+  }
+}
+
+function collectSourceFiles(root: string): string[] {
+  const files: string[] = [];
+  collectSourceFilesInto(root, files);
+  return files;
+}
+
+function collectSourceFilesInto(current: string, files: string[]): void {
+  for (const entry of readdirSync(current, { withFileTypes: true })) {
+    const path = join(current, entry.name);
+    if (entry.isDirectory()) {
+      if (!ignoredDirectories.has(entry.name)) {
+        collectSourceFilesInto(path, files);
+      }
+      continue;
+    }
+    if (entry.isFile() && sourceExtensions.has(fileExtension(entry.name))) {
+      files.push(path);
     }
   }
 }
