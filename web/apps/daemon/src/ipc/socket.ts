@@ -1,8 +1,13 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import type { ClientControlMessage } from "@prowl/protocol";
-import { decodeFrame, encodeJsonFrame, protocolTags } from "@prowl/protocol";
+import {
+  ControlMessageParseError,
+  decodeFrame,
+  encodeJsonFrame,
+  parseClientControlMessage,
+  protocolTags,
+} from "@prowl/protocol";
 import type { DaemonConfig } from "../auth/config";
 import { handleControl } from "../server";
 import type { InMemoryState } from "../state/InMemoryState";
@@ -54,11 +59,23 @@ export function startIPCServer(
           }
           const frame = buffer.subarray(0, frameLength);
           buffer = buffer.subarray(frameLength);
-          const decoded = decodeFrame(frame);
+          let decoded: ReturnType<typeof decodeFrame>;
+          try {
+            decoded = decodeFrame(frame);
+          } catch (error) {
+            writeInvalidControlError(socket, error);
+            return;
+          }
           if (decoded.tag !== protocolTags.json) {
             continue;
           }
-          const control = JSON.parse(decoded.payload) as ClientControlMessage;
+          let control: ReturnType<typeof parseClientControlMessage>;
+          try {
+            control = parseClientControlMessage(decoded.payload);
+          } catch (error) {
+            writeInvalidControlError(socket, error);
+            return;
+          }
           for (const response of handleControl(control, state, config)) {
             socket.write(encodeJsonFrame(response));
           }
@@ -85,4 +102,21 @@ function concat(left: Uint8Array, right: Uint8Array): Uint8Array {
   next.set(left, 0);
   next.set(right, left.byteLength);
   return next;
+}
+
+function writeInvalidControlError(
+  socket: { write: (payload: ArrayBuffer) => void; end: () => void },
+  error: unknown,
+): void {
+  const message = error instanceof ControlMessageParseError ? error.message : "Invalid control message";
+  socket.write(
+    encodeJsonFrame({
+      v: 1,
+      type: "error",
+      id: "invalid",
+      code: "INVALID_CONTROL_MESSAGE",
+      message,
+    }),
+  );
+  socket.end();
 }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { makeMessageId, protocolVersion } from "@prowl/protocol";
+import { decodeFrame, encodeJsonFrame, makeMessageId, protocolTags, protocolVersion } from "@prowl/protocol";
 import { startServer } from "../../daemon/src/server";
 import { requestDaemon, sendPtyInput } from "./transport";
 
@@ -108,4 +108,80 @@ describe("CLI transport", () => {
       server.stop();
     }
   });
+
+  test("returns protocol errors for malformed control messages over the daemon unix socket", async () => {
+    const token = "test-token";
+    const socketPath = `/tmp/prowld-invalid-control-test-${crypto.randomUUID()}.sock`;
+    const server = startServer(
+      {
+        port: 0,
+        bind: "127.0.0.1",
+        token,
+        allowedOrigins: ["http://127.0.0.1:5173"],
+        requireTLS: false,
+      },
+      { socketPath, statePath: ":memory:", spawnProcesses: false },
+    );
+
+    try {
+      await Bun.sleep(50);
+      const response = await sendRawJson(socketPath, { v: 1, type: "pane.resize", id: "bad-request" });
+
+      expect(response.type).toBe("error");
+      if (response.type === "error") {
+        expect(response.code).toBe("INVALID_CONTROL_MESSAGE");
+        expect(response.message).toContain("paneId must be a string");
+      }
+    } finally {
+      server.stop();
+    }
+  });
 });
+
+async function sendRawJson(socketPath: string, value: unknown): Promise<ReturnType<typeof JSON.parse>> {
+  return new Promise((resolve, reject) => {
+    let buffer: Uint8Array<ArrayBufferLike> = new Uint8Array();
+    void Bun.connect({
+      unix: socketPath,
+      socket: {
+        open(socket) {
+          socket.write(encodeJsonFrame(value));
+        },
+        data(socket, data) {
+          buffer = concat(buffer, data);
+          if (buffer.byteLength < 5) {
+            return;
+          }
+          const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+          if (view.getUint8(0) !== protocolTags.json) {
+            socket.end();
+            reject(new Error("Expected JSON frame"));
+            return;
+          }
+          const frameLength = 5 + view.getUint32(1, false);
+          if (buffer.byteLength < frameLength) {
+            return;
+          }
+          const decoded = decodeFrame(buffer.subarray(0, frameLength));
+          socket.end();
+          if (decoded.tag !== protocolTags.json) {
+            reject(new Error("Expected JSON response"));
+            return;
+          }
+          resolve(JSON.parse(decoded.payload));
+        },
+        close() {},
+        error(_socket, error) {
+          reject(error);
+        },
+      },
+    }).catch(reject);
+  });
+}
+
+function concat(left: Uint8Array, right: Uint8Array<ArrayBufferLike>): Uint8Array {
+  const next = new Uint8Array(left.byteLength + right.byteLength);
+  next.set(left, 0);
+  next.set(new Uint8Array(right), left.byteLength);
+  return next;
+}

@@ -1,7 +1,15 @@
 import { statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import type { BaseControlMessage, ClientControlMessage, ServerControlMessage } from "@prowl/protocol";
-import { decodeFrame, encodeJsonFrame, encodePtyFrame, protocolTags, protocolVersion } from "@prowl/protocol";
+import {
+  ControlMessageParseError,
+  decodeFrame,
+  encodeJsonFrame,
+  encodePtyFrame,
+  parseClientControlMessage,
+  protocolTags,
+  protocolVersion,
+} from "@prowl/protocol";
 import type { DaemonConfig } from "./auth/config";
 import { isAllowedOrigin } from "./auth/config";
 import { type IPCServerHandle, startIPCServer } from "./ipc/socket";
@@ -180,7 +188,15 @@ export function startServer(config: DaemonConfig, options: ServerOptions = {}): 
           return;
         }
 
-        const control = JSON.parse(frame.payload) as ClientControlMessage;
+        let control: ClientControlMessage;
+        try {
+          control = parseClientControlMessage(frame.payload);
+        } catch (error) {
+          const message = error instanceof ControlMessageParseError ? error.message : "Invalid control message";
+          logger.warn(`closing websocket after invalid control message: ${message}`);
+          ws.close(1008, message);
+          return;
+        }
         if (control.type === "pane.attach") {
           debugStats.paneAttachRequests += 1;
         }

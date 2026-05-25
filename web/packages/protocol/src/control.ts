@@ -140,3 +140,161 @@ export type ControlMessage = ClientControlMessage | ServerControlMessage;
 export function makeMessageId(): string {
   return crypto.randomUUID();
 }
+
+export class ControlMessageParseError extends Error {
+  readonly code = "INVALID_CONTROL_MESSAGE";
+
+  constructor(message: string) {
+    super(message);
+    this.name = "ControlMessageParseError";
+  }
+}
+
+export function parseClientControlMessage(payload: string): ClientControlMessage {
+  let value: unknown;
+  try {
+    value = JSON.parse(payload);
+  } catch {
+    throw new ControlMessageParseError("Control message must be valid JSON");
+  }
+  if (!isRecord(value)) {
+    throw new ControlMessageParseError("Control message must be an object");
+  }
+  if (value.v !== 1) {
+    throw new ControlMessageParseError("Control message version must be 1");
+  }
+  if (typeof value.id !== "string" || !value.id) {
+    throw new ControlMessageParseError("Control message id is required");
+  }
+  if (typeof value.type !== "string" || !value.type) {
+    throw new ControlMessageParseError("Control message type is required");
+  }
+
+  switch (value.type) {
+    case "hello":
+      requireString(value, "token");
+      requireString(value, "clientVersion");
+      requireNumber(value, "protocolVersion");
+      break;
+    case "pane.create":
+      requireString(value, "worktreeId");
+      requireNumber(value, "cols");
+      requireNumber(value, "rows");
+      optionalString(value, "cwd");
+      optionalString(value, "command");
+      break;
+    case "pane.close":
+    case "pane.attach":
+    case "pane.detach":
+      requireString(value, "paneId");
+      break;
+    case "pane.resize":
+      requireString(value, "paneId");
+      requireNumber(value, "cols");
+      requireNumber(value, "rows");
+      break;
+    case "pane.status":
+      requireString(value, "paneId");
+      if (!isTaskStatus(value.taskStatus)) {
+        throw new ControlMessageParseError("pane.status taskStatus is invalid");
+      }
+      break;
+    case "worktree.list":
+      requireString(value, "repoId");
+      break;
+    case "worktree.create":
+      requireString(value, "repoId");
+      requireString(value, "branch");
+      optionalString(value, "baseRef");
+      optionalString(value, "directory");
+      break;
+    case "worktree.archive":
+    case "worktree.diff":
+      requireString(value, "worktreeId");
+      break;
+    case "repo.add":
+      requireString(value, "path");
+      break;
+    case "repo.remove":
+      requireString(value, "repoId");
+      break;
+    case "action.list":
+      optionalString(value, "repoId");
+      break;
+    case "action.upsert":
+      validateAction(value.action);
+      break;
+    case "action.delete":
+      requireString(value, "actionId");
+      break;
+    case "action.run":
+      requireString(value, "paneId");
+      requireString(value, "actionId");
+      break;
+    case "settings.get":
+      if (value.keys !== undefined && !isStringArray(value.keys)) {
+        throw new ControlMessageParseError("settings.get keys must be an array of strings");
+      }
+      break;
+    case "settings.set":
+      if (!isRecord(value.patch)) {
+        throw new ControlMessageParseError("settings.set patch must be an object");
+      }
+      break;
+    case "repo.list":
+    case "ping":
+      break;
+    default:
+      throw new ControlMessageParseError(`Unsupported control message type: ${value.type}`);
+  }
+
+  return value as unknown as ClientControlMessage;
+}
+
+function validateAction(value: unknown): void {
+  if (!isRecord(value)) {
+    throw new ControlMessageParseError("action.upsert action must be an object");
+  }
+  optionalString(value, "id");
+  if (value.repoId !== null) {
+    optionalString(value, "repoId");
+  }
+  requireString(value, "name");
+  requireString(value, "command");
+  optionalString(value, "shortcut");
+  optionalString(value, "icon");
+  if (value.outputMode !== "currentPane" && value.outputMode !== "newPane") {
+    throw new ControlMessageParseError("action.upsert action outputMode is invalid");
+  }
+  requireNumber(value, "ordering");
+}
+
+function requireString(value: Record<string, unknown>, key: string): void {
+  if (typeof value[key] !== "string") {
+    throw new ControlMessageParseError(`${key} must be a string`);
+  }
+}
+
+function optionalString(value: Record<string, unknown>, key: string): void {
+  if (value[key] !== undefined && typeof value[key] !== "string") {
+    throw new ControlMessageParseError(`${key} must be a string`);
+  }
+}
+
+function requireNumber(value: Record<string, unknown>, key: string): void {
+  if (typeof value[key] !== "number" || !Number.isFinite(value[key])) {
+    throw new ControlMessageParseError(`${key} must be a finite number`);
+  }
+}
+
+function isTaskStatus(value: unknown): value is TaskStatus {
+  return value === "idle" || value === "running" || value === "done" || value === "failed";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
