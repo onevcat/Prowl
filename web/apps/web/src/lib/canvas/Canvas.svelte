@@ -35,6 +35,7 @@
 
   <Grid
     panes={appState.visiblePanes}
+    renderablePaneIds={appState.renderablePaneIds}
     selectedPaneId={appState.selectedPaneId}
     buffering={appState.terminalBuffering}
     selectPane={(paneId) => appState.selectPane(paneId)}

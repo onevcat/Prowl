@@ -1,4 +1,5 @@
 import { NotificationPermissionRequester } from "$lib/notifications/permission";
+import { RendererPool } from "$lib/terminal/RendererPool";
 import { inferAgentTaskStatus } from "$lib/terminal/detectAgent";
 import { appendTerminalOutput, lastNonEmptyLine, terminalOutputSnapshot } from "$lib/terminal/outputBuffer";
 import { ProtocolError, WSClient } from "$lib/ws/WSClient";
@@ -85,6 +86,7 @@ const defaultSettings: AppSettings = {
 
 export class AppState {
   readonly ws = new WSClient();
+  readonly rendererPool = new RendererPool();
   readonly #notificationPermission = new NotificationPermissionRequester();
   #bootstrapPromise: Promise<void> | null = null;
   #metricTimer: ReturnType<typeof setInterval> | null = null;
@@ -110,6 +112,7 @@ export class AppState {
   paletteOpen = $state(false);
   paletteQuery = $state("");
   paletteHistory = $state<PaletteHistoryEntry[]>([]);
+  renderablePaneIds = $state<Set<string>>(new Set());
   connection = $state<ConnectionState>("closed");
   terminalBuffering = $state(false);
   errorMessage = $state<string | null>(null);
@@ -164,6 +167,10 @@ export class AppState {
       return Array.from(this.panes.values());
     }
     return this.selectedWorktreeId ? this.orderedPanes(this.selectedWorktreeId) : [];
+  }
+
+  get activeRendererCount(): number {
+    return this.renderablePaneIds.size;
   }
 
   get needsAuthentication(): boolean {
@@ -762,7 +769,9 @@ export class AppState {
   }
 
   syncRenderedPanes(): void {
-    const visibleIds = new Set(this.visiblePanes.map((pane) => pane.id));
+    const visiblePanes = this.visiblePanes;
+    const visibleIds = new Set(visiblePanes.map((pane) => pane.id));
+    this.#syncRendererPool(visiblePanes, visibleIds);
     for (const paneId of this.#renderedPaneIds) {
       if (!visibleIds.has(paneId)) {
         this.#renderedPaneIds.delete(paneId);
@@ -788,6 +797,18 @@ export class AppState {
           });
       }
     }
+  }
+
+  #syncRendererPool(visiblePanes: Pane[], visibleIds: Set<string>): void {
+    this.rendererPool.releaseMissing(visibleIds);
+    const selectedPane = this.selectedPaneId ? visiblePanes.find((pane) => pane.id === this.selectedPaneId) : undefined;
+    const acquisitionOrder = selectedPane
+      ? [...visiblePanes.filter((pane) => pane.id !== selectedPane.id), selectedPane]
+      : visiblePanes;
+    for (const pane of acquisitionOrder) {
+      this.rendererPool.acquire(pane.id);
+    }
+    this.renderablePaneIds = new Set(this.rendererPool.activeIds);
   }
 
   async #recreateGonePane(paneId: string): Promise<void> {

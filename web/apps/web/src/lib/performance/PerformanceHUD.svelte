@@ -50,8 +50,7 @@
   const inputP99 = $derived(percentile(appState.metrics.inputLatencySamples, 99));
   const wsP50 = $derived(percentile(appState.metrics.wsRttSamples, 50));
   const wsP99 = $derived(percentile(appState.metrics.wsRttSamples, 99));
-  const visiblePaneCount = $derived(appState.visiblePanes.length);
-  const rendererCount = $derived(Math.min(visiblePaneCount, 8));
+  const rendererCount = $derived(appState.activeRendererCount);
 </script>
 
 {#if import.meta.env.DEV && appState.settings.advanced.performanceHUD}

@@ -5,6 +5,7 @@
   type Props = {
     pane: Pane;
     focused: boolean;
+    renderTerminal: boolean;
     buffering: boolean;
     onclick: () => void;
     onInput: (text: string) => void;
@@ -12,7 +13,7 @@
     ondblclick: () => void;
   };
 
-  let { pane, focused, buffering, onclick, onInput, onResize, ondblclick }: Props = $props();
+  let { pane, focused, renderTerminal, buffering, onclick, onInput, onResize, ondblclick }: Props = $props();
 
   const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
 
@@ -43,7 +44,14 @@
     <span>{relativeTime(pane.updatedAt)}</span>
     <span class={`badge ${pane.taskStatus}`}>{pane.taskStatus}</span>
   </header>
-  <TerminalView title={pane.title} output={pane.output} {focused} {buffering} {onInput} {onResize} />
+  {#if renderTerminal}
+    <TerminalView title={pane.title} output={pane.output} {focused} {buffering} {onInput} {onResize} />
+  {:else}
+    <section class="renderer-idle" aria-label={`${pane.title} renderer idle`}>
+      <strong>{pane.title}</strong>
+      <p>{pane.lastOutputLine || "Renderer paused"}</p>
+    </section>
+  {/if}
 </div>
 
 <style>
@@ -69,6 +77,29 @@
     min-width: 0;
     padding: 0 0.55rem;
     border-bottom: 1px solid color-mix(in srgb, CanvasText 12%, transparent);
+  }
+
+  .renderer-idle {
+    display: grid;
+    align-content: center;
+    gap: 0.35rem;
+    min-height: 12rem;
+    padding: 1rem;
+    border: 1px solid color-mix(in srgb, CanvasText 12%, transparent);
+    border-radius: 6px;
+    background: color-mix(in srgb, CanvasText 5%, Canvas);
+  }
+
+  .renderer-idle strong,
+  .renderer-idle p {
+    overflow: hidden;
+    margin: 0;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .renderer-idle p {
+    color: color-mix(in srgb, CanvasText 58%, Canvas);
   }
 
   strong {

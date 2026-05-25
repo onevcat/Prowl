@@ -22,7 +22,19 @@ export class RendererPool {
     this.#holders.delete(paneId);
   }
 
+  releaseMissing(paneIds: Set<string>): void {
+    for (const paneId of this.#holders.keys()) {
+      if (!paneIds.has(paneId)) {
+        this.#holders.delete(paneId);
+      }
+    }
+  }
+
   get activeCount(): number {
     return this.#holders.size;
+  }
+
+  get activeIds(): string[] {
+    return Array.from(this.#holders.keys());
   }
 }
