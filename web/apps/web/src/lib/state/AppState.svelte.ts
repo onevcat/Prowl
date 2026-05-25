@@ -815,6 +815,21 @@ export class AppState {
     this.#notify(message.title, message.body, message.paneId ? `prowl-pane-${message.paneId}` : undefined);
   }
 
+  handleServerPaneUpdate(descriptor: PaneDescriptor): void {
+    const existing = this.panes.get(descriptor.id);
+    const shouldNotify =
+      existing !== undefined &&
+      descriptor.taskStatus === "done" &&
+      existing.taskStatus !== "done" &&
+      !this.isPaneFocused(descriptor.id);
+    this.#applyPaneDescriptor(descriptor);
+    const pane = this.panes.get(descriptor.id);
+    if (shouldNotify && pane) {
+      pane.unread = true;
+      this.#notifyPaneDone(pane, descriptor.lastOutputLine);
+    }
+  }
+
   detectPaneStatusFromTerminal(paneId: string, parsedOutput: string): void {
     const pane = this.panes.get(paneId);
     if (!pane) {
@@ -1276,7 +1291,7 @@ export class AppState {
         this.#replacePanes(message.panes);
         break;
       case "pane.updated":
-        this.#applyPaneDescriptor(message.pane);
+        this.handleServerPaneUpdate(message.pane);
         break;
       case "pane.created":
         this.#upsertPane({

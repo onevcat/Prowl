@@ -335,6 +335,50 @@ describe("AppState focus-aware notifications", () => {
     expect(notifications).toEqual([{ title: "pane-2", body: "pane-2: Tests passed" }]);
   });
 
+  test("notifies when an unfocused daemon pane update transitions to done", () => {
+    const notifications = installNotificationFakes();
+    const state = appStateFixture();
+    const pane = state.panes.get("pane-2");
+    expect(pane).toBeDefined();
+    if (!pane) {
+      return;
+    }
+    pane.taskStatus = "running";
+
+    state.handleServerPaneUpdate({
+      ...pane.descriptor,
+      taskStatus: "done",
+      unread: false,
+      lastOutputLine: "custom action finished",
+    });
+
+    expect(notifications).toEqual([{ title: "pane-2", body: "pane-2: custom action finished" }]);
+    expect(pane.taskStatus).toBe("done");
+    expect(pane.unread).toBe(true);
+  });
+
+  test("does not notify when the focused daemon pane update transitions to done", () => {
+    const notifications = installNotificationFakes();
+    const state = appStateFixture();
+    const pane = state.panes.get("pane-1");
+    expect(pane).toBeDefined();
+    if (!pane) {
+      return;
+    }
+    pane.taskStatus = "running";
+
+    state.handleServerPaneUpdate({
+      ...pane.descriptor,
+      taskStatus: "done",
+      unread: false,
+      lastOutputLine: "focused action finished",
+    });
+
+    expect(notifications).toEqual([]);
+    expect(pane.taskStatus).toBe("done");
+    expect(pane.unread).toBe(false);
+  });
+
   test("detects task status from terminal parsed output", () => {
     const state = appStateFixture();
     const pane = state.panes.get("pane-1");
