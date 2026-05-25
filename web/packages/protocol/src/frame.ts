@@ -44,6 +44,9 @@ export function decodeFrame(input: ArrayBuffer | Uint8Array): DecodedFrame {
   const payload = bytes.subarray(headerBytes);
 
   if (tag === protocolTags.pty) {
+    if (payload.byteLength > maxBinaryPayloadBytes) {
+      throw new RangeError(`PTY payload exceeds ${maxBinaryPayloadBytes} bytes`);
+    }
     return { tag, channelId: view.getUint32(1, false), payload };
   }
 
@@ -51,6 +54,9 @@ export function decodeFrame(input: ArrayBuffer | Uint8Array): DecodedFrame {
     const length = view.getUint32(1, false);
     if (length !== payload.byteLength) {
       throw new RangeError(`JSON frame length mismatch: header=${length}, actual=${payload.byteLength}`);
+    }
+    if (payload.byteLength > maxJsonPayloadBytes) {
+      throw new RangeError(`JSON payload exceeds ${maxJsonPayloadBytes} bytes`);
     }
     return { tag, payload: textDecoder.decode(payload) };
   }

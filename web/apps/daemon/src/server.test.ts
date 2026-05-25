@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { makeMessageId, protocolVersion } from "@prowl/protocol";
-import { handleControl, startServer } from "./server";
+import { allowControlMessage, handleControl, startServer } from "./server";
 import { InMemoryState } from "./state/InMemoryState";
 
 describe("daemon scaffold", () => {
@@ -81,6 +81,20 @@ describe("daemon scaffold", () => {
     );
 
     expect(response[0]?.type).toBe("welcome");
+  });
+
+  test("rate-limits control messages per session", () => {
+    const session = {
+      authenticated: true,
+      controlWindowStartedAt: 1_000,
+      controlMessagesInWindow: 0,
+    };
+
+    for (let count = 0; count < 100; count += 1) {
+      expect(allowControlMessage(session, 1_500)).toBe(true);
+    }
+    expect(allowControlMessage(session, 1_500)).toBe(false);
+    expect(allowControlMessage(session, 2_001)).toBe(true);
   });
 
   test("validates repository paths before adding them", () => {

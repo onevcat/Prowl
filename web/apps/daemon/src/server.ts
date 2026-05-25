@@ -25,7 +25,11 @@ type SyncCommandResult = {
 };
 type WebSocketData = {
   authenticated: boolean;
+  controlWindowStartedAt: number;
+  controlMessagesInWindow: number;
 };
+
+const maxControlMessagesPerSecond = 100;
 
 export type ServerHandle = {
   stop: () => void;
@@ -83,7 +87,15 @@ export function startServer(
         return new Response("Unauthorized", { status: 401 });
       }
 
-      if (!server.upgrade(request, { data: { authenticated: true } })) {
+      if (
+        !server.upgrade(request, {
+          data: {
+            authenticated: true,
+            controlWindowStartedAt: Date.now(),
+            controlMessagesInWindow: 0,
+          },
+        })
+      ) {
         return new Response("Upgrade failed", { status: 400 });
       }
     },
@@ -99,9 +111,20 @@ export function startServer(
           return;
         }
 
-        const frame = decodeFrame(message);
+        let frame: ReturnType<typeof decodeFrame>;
+        try {
+          frame = decodeFrame(message);
+        } catch {
+          ws.close(1009, "Invalid frame");
+          return;
+        }
         if (frame.tag === protocolTags.pty) {
           state.writeToChannel(frame.channelId, frame.payload);
+          return;
+        }
+
+        if (!allowControlMessage(ws.data)) {
+          ws.close(1008, "Control rate limit exceeded");
           return;
         }
 
@@ -123,6 +146,15 @@ export function startServer(
       server.stop(true);
     },
   };
+}
+
+export function allowControlMessage(session: WebSocketData, now = Date.now()): boolean {
+  if (now - session.controlWindowStartedAt >= 1_000) {
+    session.controlWindowStartedAt = now;
+    session.controlMessagesInWindow = 0;
+  }
+  session.controlMessagesInWindow += 1;
+  return session.controlMessagesInWindow <= maxControlMessagesPerSecond;
 }
 
 async function handleLogin(request: Request, config: DaemonConfig, secureCookie: boolean): Promise<Response> {
