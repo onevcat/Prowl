@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startServer } from "../../daemon/src/server";
-import { renderDaemonStatus } from "./commands/daemon";
+import { daemonStatus, renderDaemonStatus } from "./commands/daemon";
 import { renderVersion } from "./commands/version";
 import { requestDaemon } from "./transport";
 
@@ -28,6 +28,58 @@ describe("prowl cli scaffold", () => {
 
     expect(text).toMatch(/running|stopped/);
     expect(text).toContain("prowld.sock");
+  });
+
+  test("reads daemon status from configured CLI paths", async () => {
+    const token = "test-token";
+    const previousConfigPath = Bun.env.PROWL_CONFIG_PATH;
+    const previousSocketPath = Bun.env.PROWL_SOCKET_PATH;
+    const home = mkdtempSync(join(tmpdir(), "prowl-cli-status-home-"));
+    const prowlHome = join(home, ".prowl");
+    mkdirSync(prowlHome, { recursive: true });
+    writeFileSync(
+      join(prowlHome, "config.json"),
+      JSON.stringify({
+        port: 0,
+        bind: "127.0.0.1",
+        token,
+        allowedOrigins: ["http://127.0.0.1:5173"],
+        requireTLS: false,
+      }),
+    );
+    const socketPath = join(prowlHome, "prowld.sock");
+    Bun.env.PROWL_CONFIG_PATH = join(prowlHome, "config.json");
+    Bun.env.PROWL_SOCKET_PATH = socketPath;
+    const server = startServer(
+      {
+        port: 0,
+        bind: "127.0.0.1",
+        token,
+        allowedOrigins: ["http://127.0.0.1:5173"],
+        requireTLS: false,
+      },
+      { socketPath, statePath: join(prowlHome, "state.sqlite"), spawnProcesses: false },
+    );
+
+    try {
+      await Bun.sleep(50);
+      const status = await daemonStatus();
+
+      expect(status.running).toBe(true);
+      expect(status.socketPath).toBe(socketPath);
+    } finally {
+      server.stop();
+      if (previousConfigPath === undefined) {
+        Bun.env.PROWL_CONFIG_PATH = undefined;
+      } else {
+        Bun.env.PROWL_CONFIG_PATH = previousConfigPath;
+      }
+      if (previousSocketPath === undefined) {
+        Bun.env.PROWL_SOCKET_PATH = undefined;
+      } else {
+        Bun.env.PROWL_SOCKET_PATH = previousSocketPath;
+      }
+    }
   });
 
   test("adds and removes repositories through the CLI", async () => {
