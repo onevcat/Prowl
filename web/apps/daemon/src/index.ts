@@ -23,6 +23,20 @@ for (let index = 2; index < Bun.argv.length; index += 1) {
   }
 }
 
+if (args.has("help")) {
+  process.stdout.write(`Usage:
+  prowld
+  prowld --port 7878
+  prowld --bind 0.0.0.0
+  prowld --tls-cert <path> --tls-key <path>
+  prowld --print-token
+  prowld --rotate-token
+  prowld --log-level <debug|info|warn|error>
+  prowld --version
+`);
+  process.exit(0);
+}
+
 if (args.has("version")) {
   process.stdout.write("prowld 0.0.0\n");
   process.exit(0);
