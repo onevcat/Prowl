@@ -208,6 +208,29 @@ test("runs custom actions from the shelf toolbar", async ({ page }) => {
   await expect(page.getByRole("textbox", { name: "Shell" })).toContainText(output);
 });
 
+test("runs custom actions from the command palette", async ({ page }) => {
+  const suffix = crypto.randomUUID().slice(0, 8);
+  const actionName = `Palette ${suffix}`;
+  const output = `palette-action-${suffix}`;
+  await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}&token=${token}`);
+  await expect(page.locator(".connection.open")).toBeVisible();
+
+  await page.getByRole("button", { name: "Open Settings" }).click();
+  await page.getByLabel("Action name").fill(actionName);
+  await page.getByLabel("Action command").fill(`printf ${output}`);
+  await page.getByRole("button", { name: "Add Custom Action" }).click();
+  await expect(page.getByRole("heading", { name: actionName })).toBeVisible();
+
+  await page.getByRole("button", { name: "Back to Shelf" }).click();
+  await page.getByRole("button", { name: "Open Command Palette" }).click();
+  const palette = page.getByRole("textbox", { name: "Command Palette" });
+  await expect(palette).toBeVisible();
+  await palette.fill(actionName);
+  await page.keyboard.press("Enter");
+
+  await expect(page.getByRole("textbox", { name: "Shell" })).toContainText(output);
+});
+
 async function debugStats(request: APIRequestContext): Promise<{
   paneAttachRequests: number;
   paneCreateRequests: number;
