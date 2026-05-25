@@ -74,14 +74,21 @@ export function startServer(config: DaemonConfig, options: ServerOptions = {}): 
     paneAttachRequests: 0,
     paneCreateRequests: 0,
   };
-  const outputCoalescer = new OutputCoalescer((channelId, payload) => {
-    const frame = encodePtyFrame(channelId, payload);
-    for (const client of clients) {
-      if (shouldSendPtyOutput(client.data, channelId)) {
-        client.send(frame);
+  const outputCoalescer = new OutputCoalescer(
+    (channelId, payload) => {
+      const frame = encodePtyFrame(channelId, payload);
+      for (const client of clients) {
+        if (shouldSendPtyOutput(client.data, channelId)) {
+          client.send(frame);
+        }
       }
-    }
-  });
+    },
+    {
+      onBackpressureChange: (channelId, backpressured) => {
+        logger.debug(`pty output ${backpressured ? "backpressured" : "drained"} channelId=${channelId}`);
+      },
+    },
+  );
   const state = new InMemoryState(process.env.PROWL_REPO_ROOT ?? process.cwd(), {
     spawnProcesses: options.spawnProcesses,
     statePath: options.statePath,
