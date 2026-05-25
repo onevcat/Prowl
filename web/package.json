@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "bun run scripts/dev.ts",
     "build": "bun run --filter '*' build",
+    "build:binaries": "bun run scripts/build-binaries.ts",
     "check:bundle": "bun run scripts/check-bundle-size.ts",
     "check:deps": "bun run scripts/check-lockfiles.ts && bun run scripts/check-dependency-budget.ts",
     "check:locks": "bun run scripts/check-lockfiles.ts",

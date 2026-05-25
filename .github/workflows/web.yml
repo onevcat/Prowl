@@ -27,6 +27,7 @@ jobs:
       - run: nix develop ./web -c bash -lc "cd web && bun run lint"
       - run: nix develop ./web -c bash -lc "cd web && bun run test"
       - run: nix develop ./web -c bash -lc "cd web && bun run build"
+      - run: nix develop ./web -c bash -lc "cd web && bun run build:binaries"
       - run: nix develop ./web -c bash -lc "cd web && bun run check:bundle"
       - run: nix develop ./web -c bash -lc "cd web && bun run e2e"
       - uses: actions/upload-artifact@v4
