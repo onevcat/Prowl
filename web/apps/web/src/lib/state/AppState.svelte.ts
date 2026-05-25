@@ -1238,6 +1238,7 @@ export class AppState {
   #replacePanes(panes: PaneDescriptor[]): void {
     this.panes = new Map(panes.map((pane) => [pane.id, new Pane(pane)]));
     this.#prunePaneOrder();
+    this.#persistOpenTabs();
     this.#ensureSelection();
   }
 
@@ -1246,6 +1247,7 @@ export class AppState {
     next.set(descriptor.id, new Pane(descriptor));
     this.panes = next;
     this.#prunePaneOrder();
+    this.#persistOpenTabs([descriptor.worktreeId]);
   }
 
   #removePane(paneId: string): void {
@@ -1260,6 +1262,7 @@ export class AppState {
       this.#decoderByChannel.delete(pane.channelId);
     }
     this.#prunePaneOrder();
+    this.#persistOpenTabs(pane ? [pane.worktreeId] : undefined);
     this.#ensureSelection();
   }
 
@@ -1293,6 +1296,15 @@ export class AppState {
     }
     this.paneOrderByWorktree = next;
     persistJSONValue(paneOrderKey, this.paneOrderByWorktree);
+  }
+
+  #persistOpenTabs(
+    worktreeIds = Array.from(new Set(Array.from(this.panes.values()).map((pane) => pane.worktreeId))),
+  ): void {
+    const panesByWorktree = paneDescriptorsByWorktree(Array.from(this.panes.values()));
+    for (const worktreeId of worktreeIds) {
+      persistJSONValue(openTabsKey(worktreeId), panesByWorktree.get(worktreeId) ?? []);
+    }
   }
 
   #mergeSettings(snapshot: Record<string, unknown>): void {
@@ -1495,6 +1507,18 @@ function persistJSONValue(key: string, value: unknown): void {
     return;
   }
   void set(key, JSON.parse(JSON.stringify(value))).catch(() => {});
+}
+
+export function openTabsKey(worktreeId: string): string {
+  return `prowl:ui.openTabs.${worktreeId}`;
+}
+
+export function paneDescriptorsByWorktree(panes: Pane[]): Map<string, PaneDescriptor[]> {
+  const grouped = new Map<string, PaneDescriptor[]>();
+  for (const pane of panes) {
+    grouped.set(pane.worktreeId, [...(grouped.get(pane.worktreeId) ?? []), pane.descriptor]);
+  }
+  return grouped;
 }
 
 function orderByIds<T>(items: T[], order: string[] | undefined, getId: (item: T) => string): T[] {

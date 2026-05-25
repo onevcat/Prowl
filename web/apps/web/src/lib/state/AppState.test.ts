@@ -1,6 +1,6 @@
 import type { CustomAction } from "@prowl/protocol";
 import { describe, expect, test } from "vitest";
-import { AppState } from "./AppState.svelte";
+import { AppState, openTabsKey, paneDescriptorsByWorktree } from "./AppState.svelte";
 import { Pane } from "./Pane.svelte";
 import type { Repository, Worktree } from "./types";
 
@@ -33,6 +33,29 @@ describe("AppState ordering", () => {
     state.selectWorktree("worktree-1");
 
     expect(state.selectedPaneId).toBe("pane-2");
+  });
+});
+
+describe("AppState pane persistence helpers", () => {
+  test("builds the WEB.md open tabs key for a worktree", () => {
+    expect(openTabsKey("worktree-1")).toBe("prowl:ui.openTabs.worktree-1");
+  });
+
+  test("groups pane descriptors by worktree for IndexedDB persistence", () => {
+    const first = pane("pane-1", 1);
+    const second = pane("pane-2", 2);
+    const third = new Pane({
+      ...second.descriptor,
+      id: "pane-3",
+      channelId: 3,
+      worktreeId: "worktree-2",
+      title: "third",
+    });
+
+    const grouped = paneDescriptorsByWorktree([first, second, third]);
+
+    expect(grouped.get("worktree-1")?.map((descriptor) => descriptor.id)).toEqual(["pane-1", "pane-2"]);
+    expect(grouped.get("worktree-2")?.map((descriptor) => descriptor.id)).toEqual(["pane-3"]);
   });
 });
 
