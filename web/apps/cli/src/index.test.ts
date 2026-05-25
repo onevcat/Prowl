@@ -228,6 +228,97 @@ describe("prowl cli scaffold", () => {
     }
   });
 
+  test("archives a worktree through the CLI", async () => {
+    const token = "test-token";
+    const home = mkdtempSync(join(tmpdir(), "prowl-cli-archive-home-"));
+    const prowlHome = join(home, ".prowl");
+    const repoPath = join(home, "repo");
+    mkdirSync(prowlHome, { recursive: true });
+    mkdirSync(repoPath);
+    runGit(repoPath, "init");
+    writeFileSync(join(repoPath, "README.md"), "archive\n");
+    runGit(repoPath, "add", "README.md");
+    runGit(repoPath, "-c", "user.name=Prowl Test", "-c", "user.email=prowl@example.com", "commit", "-m", "initial");
+    writeFileSync(
+      join(prowlHome, "config.json"),
+      JSON.stringify({
+        port: 0,
+        bind: "127.0.0.1",
+        token,
+        allowedOrigins: ["http://127.0.0.1:5173"],
+        requireTLS: false,
+      }),
+    );
+    const previousRepoRoot = Bun.env.PROWL_REPO_ROOT;
+    const socketPath = join(prowlHome, "prowld.sock");
+    Bun.env.PROWL_REPO_ROOT = repoPath;
+    const server = startServer(
+      {
+        port: 0,
+        bind: "127.0.0.1",
+        token,
+        allowedOrigins: ["http://127.0.0.1:5173"],
+        requireTLS: false,
+      },
+      { socketPath, statePath: join(prowlHome, "state.sqlite"), spawnProcesses: false },
+    );
+
+    try {
+      await Bun.sleep(50);
+      const createResult = Bun.spawn(
+        ["bun", "run", "src/index.ts", "--json", "worktree", "create", "repo-default", "feature/archive"],
+        {
+          cwd: new URL("..", import.meta.url).pathname,
+          env: {
+            ...Bun.env,
+            PROWL_CONFIG_PATH: join(prowlHome, "config.json"),
+            PROWL_SOCKET_PATH: socketPath,
+          },
+          stdout: "pipe",
+          stderr: "pipe",
+        },
+      );
+      const [createExitCode, createStdout, createStderr] = await Promise.all([
+        createResult.exited,
+        new Response(createResult.stdout).text(),
+        new Response(createResult.stderr).text(),
+      ]);
+      expect(createExitCode).toBe(0);
+      expect(createStderr).toBe("");
+      const created = JSON.parse(createStdout) as { id: string; status: string };
+
+      const archiveResult = Bun.spawn(["bun", "run", "src/index.ts", "--json", "worktree", "archive", created.id], {
+        cwd: new URL("..", import.meta.url).pathname,
+        env: {
+          ...Bun.env,
+          PROWL_CONFIG_PATH: join(prowlHome, "config.json"),
+          PROWL_SOCKET_PATH: socketPath,
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [archiveExitCode, archiveStdout, archiveStderr] = await Promise.all([
+        archiveResult.exited,
+        new Response(archiveResult.stdout).text(),
+        new Response(archiveResult.stderr).text(),
+      ]);
+
+      expect(archiveExitCode).toBe(0);
+      expect(archiveStderr).toBe("");
+      const archived = JSON.parse(archiveStdout) as { id: string; status: string; taskStatus: string };
+      expect(archived.id).toBe(created.id);
+      expect(archived.status).toBe("archived");
+      expect(archived.taskStatus).toBe("done");
+    } finally {
+      server.stop();
+      if (previousRepoRoot === undefined) {
+        Bun.env.PROWL_REPO_ROOT = undefined;
+      } else {
+        Bun.env.PROWL_REPO_ROOT = previousRepoRoot;
+      }
+    }
+  });
+
   test("captures send output in JSON mode", async () => {
     const token = "test-token";
     const home = mkdtempSync(join(tmpdir(), "prowl-cli-home-"));

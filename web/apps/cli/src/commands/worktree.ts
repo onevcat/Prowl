@@ -53,6 +53,28 @@ export async function createWorktree(repoId: string | undefined, branch: string 
   return response.worktree;
 }
 
+export async function renderWorktreeArchive(worktreeId: string | undefined): Promise<string> {
+  return formatWorktree(await archiveWorktree(worktreeId));
+}
+
+export async function archiveWorktree(worktreeId: string | undefined): Promise<Worktree> {
+  if (!worktreeId) {
+    throw new Error("Usage: prowl worktree archive <worktreeId>");
+  }
+  const config = await loadCLIConfig();
+  await hello(config.token);
+  const response = await requestDaemon({
+    v: 1,
+    type: "worktree.archive",
+    id: makeMessageId(),
+    worktreeId,
+  });
+  if (response.type !== "worktree.updated") {
+    throw new Error(`Unexpected daemon response: ${response.type}`);
+  }
+  return response.worktree;
+}
+
 export async function renderWorktreeDiff(worktreeId: string | undefined): Promise<string> {
   return (await getWorktreeDiff(worktreeId)).text;
 }

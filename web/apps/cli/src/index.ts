@@ -28,9 +28,11 @@ import {
 } from "./commands/repo";
 import { renderVersion } from "./commands/version";
 import {
+  archiveWorktree,
   createWorktree,
   getWorktreeDiff,
   getWorktreeList,
+  renderWorktreeArchive,
   renderWorktreeCreate,
   renderWorktreeDiff,
   renderWorktreeList,
@@ -121,6 +123,13 @@ switch (command) {
       );
       break;
     }
+    if (args[0] === "archive") {
+      await writeOutput(
+        () => archiveWorktree(args[1]),
+        () => renderWorktreeArchive(args[1]),
+      );
+      break;
+    }
     if (args[0] === "diff") {
       await writeOutput(
         () => getWorktreeDiff(args[1]),
@@ -158,6 +167,7 @@ switch (command) {
   prowl close <paneId>
   prowl worktree list [--repo <id>]
   prowl worktree create <repoId> <branch>
+  prowl worktree archive <worktreeId>
   prowl worktree diff <worktreeId>
   prowl repo list
   prowl repo add <path>
