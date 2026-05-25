@@ -799,17 +799,20 @@ function createGitWorktree(
     return branchError;
   }
   const targetPath = resolveWorktreePath(repository.path, branch, message.directory);
-  if (!targetPath.startsWith(`${resolve(dirname(repository.path))}/`)) {
-    return errorResponse(message.id, "INVALID_WORKTREE_PATH", "Worktree directory must stay beside the repository");
+  const pathValidation = validateWorktreeTargetPath(message.id, repository.path, targetPath);
+  if (pathValidation.type === "error") {
+    return pathValidation;
   }
-  if (state.worktreesByRepo.get(repository.id)?.some((worktree) => resolve(worktree.path) === targetPath)) {
+  if (
+    state.worktreesByRepo.get(repository.id)?.some((worktree) => canonicalPath(worktree.path) === pathValidation.path)
+  ) {
     return errorResponse(message.id, "DUPLICATE_WORKTREE", "Worktree path is already registered");
   }
-  const gitError = runGitWorktreeAdd(repository.path, targetPath, branch, message.baseRef);
+  const gitError = runGitWorktreeAdd(repository.path, pathValidation.path, branch, message.baseRef);
   if (gitError) {
     return errorResponse(message.id, "GIT_WORKTREE_FAILED", gitError);
   }
-  return { type: "ok", worktree: state.createWorktree(repository.id, targetPath, branch) };
+  return { type: "ok", worktree: state.createWorktree(repository.id, pathValidation.path, branch) };
 }
 
 function archiveGitWorktree(id: string, worktreeId: string, state: InMemoryState): WorktreeResult {
@@ -892,6 +895,36 @@ function resolveWorktreePath(repoPath: string, branch: string, directory?: strin
   }
   const trimmed = directory.trim();
   return isAbsolute(trimmed) ? resolve(trimmed) : resolve(base, trimmed);
+}
+
+function validateWorktreeTargetPath(
+  id: string,
+  repoPath: string,
+  targetPath: string,
+): { type: "ok"; path: string } | ErrorControlMessage {
+  const repoParent = canonicalDirectoryPath(
+    id,
+    dirname(repoPath),
+    "INVALID_WORKTREE_PATH",
+    "Repository parent does not exist",
+  );
+  if (repoParent.type === "error") {
+    return repoParent;
+  }
+  const targetParent = dirname(targetPath);
+  const targetParentRealPath = canonicalDirectoryPath(
+    id,
+    targetParent,
+    "INVALID_WORKTREE_PATH",
+    "Worktree parent directory does not exist",
+  );
+  if (targetParentRealPath.type === "error") {
+    return targetParentRealPath;
+  }
+  if (targetParentRealPath.path !== repoParent.path) {
+    return errorResponse(id, "INVALID_WORKTREE_PATH", "Worktree directory must stay beside the repository");
+  }
+  return { type: "ok", path: join(targetParentRealPath.path, basename(targetPath)) };
 }
 
 function runGitWorktreeAdd(repoPath: string, targetPath: string, branch: string, baseRef?: string): string | null {

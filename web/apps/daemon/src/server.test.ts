@@ -543,6 +543,40 @@ describe("daemon scaffold", () => {
     );
   });
 
+  test("rejects worktree directories that escape through symlinks", () => {
+    const root = mkdtempSync(join(tmpdir(), "prowl-worktree-path-test-"));
+    const outside = mkdtempSync(join(tmpdir(), "prowl-worktree-path-outside-"));
+    const repoPath = join(root, "repo");
+    mkdirSync(repoPath);
+    symlinkSync(outside, join(root, "outside-link"), "dir");
+    const state = new InMemoryState(repoPath, { statePath: ":memory:", spawnProcesses: false });
+    const config = {
+      port: 0,
+      bind: "127.0.0.1",
+      token: "test-token",
+      allowedOrigins: ["http://127.0.0.1:5173"],
+      requireTLS: false,
+    };
+
+    const response = handleControl(
+      {
+        v: 1,
+        type: "worktree.create",
+        id: makeMessageId(),
+        repoId: "repo-default",
+        branch: "feature/symlink-escape",
+        directory: "outside-link/escaped",
+      },
+      state,
+      config,
+    );
+
+    expect(response[0]?.type).toBe("error");
+    if (response[0]?.type === "error") {
+      expect(response[0].code).toBe("INVALID_WORKTREE_PATH");
+    }
+  });
+
   test("prefers bundled git-wt for worktree operations when available", () => {
     const root = mkdtempSync(join(tmpdir(), "prowl-git-wt-test-"));
     const repoPath = join(root, "repo");
