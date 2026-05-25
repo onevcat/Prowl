@@ -10,10 +10,62 @@
   let draggedWorktree = $state<{ repoId: string; worktreeId: string } | null>(null);
   let draggedPane = $state<{ worktreeId: string; paneId: string } | null>(null);
   let actionMenuOpen = $state(false);
+  let worktreeMenu = $state<{ worktreeId: string; x: number; y: number } | null>(null);
   let runnableActions = $derived(appState.runnableCustomActions);
+
+  function openWorktreeMenu(event: MouseEvent, worktreeId: string): void {
+    event.preventDefault();
+    appState.selectWorktree(worktreeId);
+    worktreeMenu = { worktreeId, x: event.clientX, y: event.clientY };
+  }
+
+  function closeMenus(): void {
+    actionMenuOpen = false;
+    worktreeMenu = null;
+  }
 </script>
 
 <main class="shell">
+  {#if worktreeMenu}
+    <button class="menu-backdrop" type="button" aria-label="Close worktree menu" onclick={closeMenus}></button>
+    <div
+      class="worktree-menu"
+      role="menu"
+      aria-label="Worktree Actions"
+      style={`left: ${worktreeMenu.x}px; top: ${worktreeMenu.y}px`}
+    >
+      <button
+        type="button"
+        role="menuitem"
+        onclick={() => {
+          const worktreeId = worktreeMenu?.worktreeId;
+          closeMenus();
+          if (worktreeId) {
+            void appState.showDiff(worktreeId);
+          }
+        }}
+      >
+        <span>Δ</span>
+        <strong>Show Diff</strong>
+      </button>
+      <button
+        type="button"
+        role="menuitem"
+        onclick={() => {
+          const worktreeId = worktreeMenu?.worktreeId;
+          closeMenus();
+          if (worktreeId) {
+            appState.selectWorktree(worktreeId);
+            void appState.createPane();
+          }
+        }}
+      >
+        <span>+</span>
+        <strong>New Tab</strong>
+      </button>
+    </div>
+  {/if}
+
   <aside class="sidebar" aria-label="Worktrees and tabs">
     <div class="toolbar">
       <Button label="⌘K" title="Open Command Palette (Command K)" onclick={() => (appState.paletteOpen = true)} />
@@ -61,8 +113,10 @@
             color={repository.color}
             selected={worktree.id === appState.selectedWorktreeId}
             onclick={() => appState.selectWorktree(worktree.id)}
+            oncontextmenu={(event) => openWorktreeMenu(event, worktree.id)}
             ondragstart={() => {
               draggedWorktree = { repoId: repository.id, worktreeId: worktree.id };
+              worktreeMenu = null;
             }}
             ondragover={() => {}}
             ondrop={() => {
@@ -141,10 +195,54 @@
 
 <style>
   .shell {
+    position: relative;
     display: grid;
     grid-template-columns: 20rem minmax(0, 1fr);
     width: 100vw;
     height: 100vh;
+  }
+
+  .menu-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 4;
+    border: 0;
+    background: transparent;
+  }
+
+  .worktree-menu {
+    position: fixed;
+    z-index: 6;
+    display: grid;
+    min-width: 10rem;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, CanvasText 16%, transparent);
+    border-radius: 6px;
+    background: Canvas;
+    box-shadow: 0 0.75rem 2rem rgb(0 0 0 / 0.2);
+  }
+
+  .worktree-menu button {
+    display: grid;
+    grid-template-columns: 1.25rem minmax(0, 1fr);
+    gap: 0.45rem;
+    align-items: center;
+    min-height: 2.25rem;
+    padding: 0.35rem 0.55rem;
+    border: 0;
+    background: transparent;
+    color: CanvasText;
+    font: inherit;
+    text-align: left;
+  }
+
+  .worktree-menu button:hover {
+    background: color-mix(in srgb, AccentColor 18%, Canvas);
+  }
+
+  .worktree-menu strong {
+    font-size: 0.85rem;
+    font-weight: 600;
   }
 
   .sidebar {

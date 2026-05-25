@@ -92,6 +92,18 @@ test("connects to the daemon and writes through the terminal", async ({ page }) 
   await expect(terminal).toContainText("e2e-smoke");
 });
 
+test("opens a worktree diff from the shelf context menu", async ({ page }) => {
+  await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}&token=${token}`);
+  await expect(page.locator(".connection.open")).toBeVisible();
+
+  await page.getByRole("button", { name: "default" }).click({ button: "right" });
+  await expect(page.getByRole("menu", { name: "Worktree Actions" })).toBeVisible();
+  await page.getByRole("menuitem", { name: "Show Diff" }).click();
+
+  await expect(page.getByRole("heading", { name: "default" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Toggle Unified or Side-by-side Diff" })).toBeVisible();
+});
+
 test("re-attaches visible panes after a websocket reconnect", async ({ page, request }) => {
   await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}&token=${token}`);
   await expect(page.locator(".connection.open")).toBeVisible();

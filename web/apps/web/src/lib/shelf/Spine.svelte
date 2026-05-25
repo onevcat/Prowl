@@ -6,13 +6,15 @@
     color: string;
     selected: boolean;
     onclick: () => void;
+    oncontextmenu: (event: MouseEvent) => void;
     ondragstart: () => void;
     ondragover: () => void;
     ondrop: () => void;
     ondragend: () => void;
   };
 
-  let { worktree, color, selected, onclick, ondragstart, ondragover, ondrop, ondragend }: Props = $props();
+  let { worktree, color, selected, onclick, oncontextmenu, ondragstart, ondragover, ondrop, ondragend }: Props =
+    $props();
 </script>
 
 <button
@@ -21,6 +23,7 @@
   style={`--repo-color: ${color}`}
   type="button"
   {onclick}
+  {oncontextmenu}
   title={`Select ${worktree.name}`}
   ondragstart={(event) => {
     event.dataTransfer?.setData("text/plain", worktree.id);
