@@ -427,8 +427,12 @@ describe("daemon scaffold", () => {
   test("validates repository paths before adding them", () => {
     const root = mkdtempSync(join(tmpdir(), "prowl-server-test-"));
     const nonGitRoot = mkdtempSync(join(tmpdir(), "prowl-server-non-git-test-"));
+    const nestedRepoRoot = mkdtempSync(join(tmpdir(), "prowl-server-nested-repo-test-"));
+    const nestedRepoChild = join(nestedRepoRoot, "Sources");
     const rootLink = join(tmpdir(), `prowl-server-test-link-${crypto.randomUUID()}`);
     runGit(root, "init");
+    mkdirSync(nestedRepoChild);
+    runGit(nestedRepoRoot, "init");
     symlinkSync(root, rootLink, "dir");
     const state = new InMemoryState(root, { statePath: ":memory:", spawnProcesses: false });
     const config = {
@@ -459,6 +463,16 @@ describe("daemon scaffold", () => {
       state,
       config,
     );
+    const nestedRepo = handleControl(
+      {
+        v: 1,
+        type: "repo.add",
+        id: makeMessageId(),
+        path: nestedRepoChild,
+      },
+      state,
+      config,
+    );
     const duplicate = handleControl(
       {
         v: 1,
@@ -483,6 +497,8 @@ describe("daemon scaffold", () => {
     expect(missing[0]?.type).toBe("error");
     expect(nonGit[0]?.type).toBe("error");
     expect(nonGit[0]?.type === "error" ? nonGit[0].message : "").toContain("Git work tree");
+    expect(nestedRepo[0]?.type).toBe("repo.updated");
+    expect(nestedRepo[0]?.type === "repo.updated" ? nestedRepo[0].repository.path : "").toBe(nestedRepoRoot);
     expect(duplicate[0]?.type).toBe("error");
     expect(symlinkDuplicate[0]?.type).toBe("error");
   });

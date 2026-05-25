@@ -186,7 +186,9 @@ exec bun run apps/daemon/src/index.ts
     );
     const socketPath = join(prowlHome, "prowld.sock");
     const repositoryPath = mkdtempSync(join(tmpdir(), "prowl-cli-repo-"));
+    const repositoryChildPath = join(repositoryPath, "Sources");
     runGit(repositoryPath, "init");
+    mkdirSync(repositoryChildPath);
     const server = startServer(
       {
         port: 0,
@@ -200,7 +202,7 @@ exec bun run apps/daemon/src/index.ts
 
     try {
       await Bun.sleep(50);
-      const addResult = Bun.spawn(["bun", "run", "src/index.ts", "--json", "repo", "add", repositoryPath], {
+      const addResult = Bun.spawn(["bun", "run", "src/index.ts", "--json", "repo", "add", repositoryChildPath], {
         cwd: new URL("..", import.meta.url).pathname,
         env: {
           ...Bun.env,

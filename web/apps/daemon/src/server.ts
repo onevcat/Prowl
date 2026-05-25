@@ -865,27 +865,37 @@ function validateRepositoryPath(
   if (canonical.type === "error") {
     return canonical;
   }
-  if (state.repositories.some((repository) => canonicalPath(repository.path) === canonical.path)) {
+  const gitRoot = gitRepositoryRoot(canonical.path);
+  if (gitRoot.type === "error") {
+    return errorResponse(id, "INVALID_REPOSITORY", gitRoot.message);
+  }
+  if (state.repositories.some((repository) => canonicalPath(repository.path) === gitRoot.path)) {
     return errorResponse(id, "DUPLICATE_REPOSITORY", "Repository is already registered");
   }
-  const gitError = validateGitRepository(canonical.path);
-  if (gitError) {
-    return errorResponse(id, "INVALID_REPOSITORY", gitError);
-  }
-  return canonical;
+  return { type: "ok", path: gitRoot.path };
 }
 
-function validateGitRepository(path: string): string | null {
-  const result = Bun.spawnSync(["git", "-C", path, "rev-parse", "--is-inside-work-tree"], {
+function gitRepositoryRoot(path: string): { type: "ok"; path: string } | { type: "error"; message: string } {
+  const result = Bun.spawnSync(["git", "-C", path, "rev-parse", "--show-toplevel"], {
     stdout: "pipe",
     stderr: "pipe",
   });
   if (result.exitCode !== 0) {
-    return "Repository path must be inside a Git work tree";
+    return { type: "error", message: "Repository path must be inside a Git work tree" };
   }
-  return new TextDecoder().decode(result.stdout).trim() === "true"
-    ? null
-    : "Repository path must be inside a Git work tree";
+  const root = new TextDecoder().decode(result.stdout).trim();
+  if (!root) {
+    return { type: "error", message: "Repository path must be inside a Git work tree" };
+  }
+  try {
+    const path = realpathSync(resolve(root));
+    if (!statSync(path).isDirectory()) {
+      return { type: "error", message: "Git repository root must be a directory" };
+    }
+    return { type: "ok", path };
+  } catch {
+    return { type: "error", message: "Git repository root does not exist" };
+  }
 }
 
 function canonicalDirectoryPath(
