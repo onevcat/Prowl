@@ -100,6 +100,40 @@ describe("AppState focus-aware notifications", () => {
 
     expect(selectedPane.unread).toBe(false);
   });
+
+  test("notifies when an unfocused pane transitions to done", async () => {
+    const notifications = installNotificationFakes();
+    const state = appStateFixture();
+    const pane = state.panes.get("pane-2");
+    expect(pane).toBeDefined();
+    if (!pane) {
+      return;
+    }
+    pane.taskStatus = "running";
+    pane.lastOutputLine = "Tests passed";
+    state.ws.request = (() => Promise.resolve({ v: 1, type: "pong", id: "test" })) as AppState["ws"]["request"];
+
+    await state.updatePaneStatus("pane-2", "done");
+
+    expect(notifications).toEqual([{ title: "pane-2", body: "pane-2: Tests passed" }]);
+  });
+
+  test("does not notify when the focused pane transitions to done", async () => {
+    const notifications = installNotificationFakes();
+    const state = appStateFixture();
+    const pane = state.panes.get("pane-1");
+    expect(pane).toBeDefined();
+    if (!pane) {
+      return;
+    }
+    pane.taskStatus = "running";
+    pane.lastOutputLine = "Done";
+    state.ws.request = (() => Promise.resolve({ v: 1, type: "pong", id: "test" })) as AppState["ws"]["request"];
+
+    await state.updatePaneStatus("pane-1", "done");
+
+    expect(notifications).toEqual([]);
+  });
 });
 
 describe("AppState custom action shortcuts", () => {
@@ -253,4 +287,28 @@ function shortcutEvent(overrides: Partial<KeyboardEvent> = {}): ShortcutEvent {
     },
     ...overrides,
   } as ShortcutEvent;
+}
+
+function installNotificationFakes(): Array<{ title: string; body: string }> {
+  const notifications: Array<{ title: string; body: string }> = [];
+  class TestNotification {
+    static permission: NotificationPermission = "granted";
+
+    constructor(title: string, options?: NotificationOptions) {
+      notifications.push({ title, body: options?.body ?? "" });
+    }
+  }
+  Object.defineProperty(globalThis, "Notification", {
+    configurable: true,
+    value: TestNotification,
+  });
+  Object.defineProperty(globalThis, "Audio", {
+    configurable: true,
+    value: class {
+      play(): Promise<void> {
+        return Promise.resolve();
+      }
+    },
+  });
+  return notifications;
 }

@@ -691,8 +691,12 @@ export class AppState {
     if (!pane || pane.taskStatus === taskStatus) {
       return;
     }
+    const shouldNotify = taskStatus === "done" && pane.taskStatus !== "done" && !this.isPaneFocused(pane.id);
     pane.taskStatus = taskStatus;
     pane.updatedAt = Date.now();
+    if (shouldNotify) {
+      this.#notifyPaneDone(pane);
+    }
     try {
       await this.ws.request({
         v: 1,
@@ -1116,12 +1120,6 @@ export class AppState {
         this.errorMessage = `${message.code}: ${redactSensitiveText(message.message)}`;
         break;
       case "notification":
-        if (message.paneId) {
-          const pane = this.panes.get(message.paneId);
-          if (pane && !this.isPaneFocused(pane.id)) {
-            this.#notifyPaneDone(pane, message.body);
-          }
-        }
         this.errorMessage = null;
         break;
       case "pane.resized":
