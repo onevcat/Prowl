@@ -19,6 +19,10 @@ describe("global shortcut handling", () => {
   test("keeps app-level shortcuts active for terminal containers", () => {
     expect(shouldHandleGlobalShortcut(shortcutEvent({ target: nonEditableTarget() }))).toBe(true);
   });
+
+  test("keeps app-level shortcuts active inside terminal input widgets", () => {
+    expect(shouldHandleGlobalShortcut(shortcutEvent({ target: terminalInputTarget() }))).toBe(true);
+  });
 });
 
 describe("shortcut aliases", () => {
@@ -35,11 +39,17 @@ describe("shortcut aliases", () => {
 });
 
 class ShortcutTarget extends EventTarget {
-  constructor(private readonly editable: boolean) {
+  constructor(
+    private readonly editable: boolean,
+    private readonly insideTerminal = false,
+  ) {
     super();
   }
 
-  closest(): ShortcutTarget | null {
+  closest(selector = ""): ShortcutTarget | null {
+    if (selector === ".terminal") {
+      return this.insideTerminal ? this : null;
+    }
     return this.editable ? this : null;
   }
 }
@@ -50,6 +60,10 @@ function editableTarget(): ShortcutTarget {
 
 function nonEditableTarget(): ShortcutTarget {
   return new ShortcutTarget(false);
+}
+
+function terminalInputTarget(): ShortcutTarget {
+  return new ShortcutTarget(true, true);
 }
 
 function shortcutEvent(overrides: Partial<Pick<KeyboardEvent, "defaultPrevented" | "target">> = {}) {

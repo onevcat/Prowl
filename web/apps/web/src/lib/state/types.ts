@@ -46,6 +46,11 @@ export type PaletteHistoryEntry = {
   section: Exclude<PaletteItem["section"], "Recent">;
 };
 
+export type CommandHistoryEntry = {
+  command: string;
+  lastUsedAt: number;
+};
+
 export type AppSettings = {
   appearance: AppearanceSettings;
   shortcuts: ShortcutSettings;

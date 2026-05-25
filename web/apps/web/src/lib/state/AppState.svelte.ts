@@ -31,6 +31,7 @@ import type {
   ActionId,
   AppSettings,
   AppView,
+  CommandHistoryEntry,
   ConnectionState,
   PaletteHistoryEntry,
   PaletteItem,
@@ -45,12 +46,14 @@ const selectedWorktreeKey = "prowl:ui.selectedWorktreeId";
 const worktreeOrderKey = "prowl:ui.worktreeOrderByRepo";
 const paneOrderKey = "prowl:ui.paneOrderByWorktree";
 const paletteHistoryKey = "prowl:palette.history";
+export const commandHistoryKey = "prowl:command.history";
 const appearanceSettingsKey = "prowl:settings.appearance";
 const sessionTokenKey = "prowl:token";
 const defaultDaemonURL = "ws://127.0.0.1:7878/ws";
 export const bootstrapSettingsKeys = ["appearance", "shortcuts", "advanced"] as const;
 const textEncoder = new TextEncoder();
 const maxMetricSamples = 100;
+const maxCommandHistoryEntries = 50;
 const settingsSections = [
   {
     id: "repositories",
@@ -107,6 +110,7 @@ export class AppState {
   #reconnectInteraction: PerformanceInteraction | null = null;
   #decoderByChannel = new Map<number, TextDecoder>();
   #paneSizeById = new Map<string, { cols: number; rows: number }>();
+  #pendingCommandInputByPane = new Map<string, string>();
   #renderedPaneIds = new Set<string>();
   #paneIdsToResume = new Set<string>();
   #restoredOpenTabsWorktreeIds = new Set<string>();
@@ -130,6 +134,7 @@ export class AppState {
   paletteOpen = $state(false);
   paletteQuery = $state("");
   paletteHistory = $state<PaletteHistoryEntry[]>([]);
+  commandHistory = $state<CommandHistoryEntry[]>([]);
   renderablePaneIds = $state<Set<string>>(new Set());
   connection = $state<ConnectionState>("closed");
   terminalBuffering = $state(false);
@@ -245,6 +250,15 @@ export class AppState {
   get paletteItems(): PaletteItem[] {
     const baseItems = this.#basePaletteItems();
     const baseIds = new Set(baseItems.map((item) => item.id));
+    const commandItems = this.commandHistory.map((entry) => ({
+      id: commandPaletteItemId(entry.command),
+      title: entry.command,
+      subtitle: "Command history",
+      section: "Recent" as const,
+      invoke: () => {
+        this.sendInputToSelectedPane(`${entry.command}\n`);
+      },
+    }));
     const recentItems = this.paletteHistory
       .filter((entry) => baseIds.has(entry.id))
       .map((entry) => ({
@@ -258,7 +272,7 @@ export class AppState {
         },
       }));
 
-    return [...recentItems, ...baseItems];
+    return [...commandItems, ...recentItems, ...baseItems];
   }
 
   handleKeydown(event: KeyboardEvent): void {
@@ -842,6 +856,7 @@ export class AppState {
       return;
     }
     if (this.ws.sendBinary(pane.channelId, textEncoder.encode(text))) {
+      this.#recordCommandInput(paneId, text);
       const interaction = startPerformanceInteraction(interactionMeasureNames.inputLatency);
       if (interaction) {
         this.#inputStartedByChannel.set(pane.channelId, [
@@ -978,14 +993,16 @@ export class AppState {
     if (typeof indexedDB === "undefined") {
       return;
     }
-    const [view, selectedWorktreeId, worktreeOrder, paneOrder, appearance, paletteHistory] = await Promise.all([
-      get<AppView>(uiViewKey),
-      get<string>(selectedWorktreeKey),
-      get<Record<string, string[]>>(worktreeOrderKey),
-      get<Record<string, string[]>>(paneOrderKey),
-      get<AppSettings["appearance"]>(appearanceSettingsKey),
-      get<PaletteHistoryEntry[]>(paletteHistoryKey),
-    ]);
+    const [view, selectedWorktreeId, worktreeOrder, paneOrder, appearance, paletteHistory, commandHistory] =
+      await Promise.all([
+        get<AppView>(uiViewKey),
+        get<string>(selectedWorktreeKey),
+        get<Record<string, string[]>>(worktreeOrderKey),
+        get<Record<string, string[]>>(paneOrderKey),
+        get<AppSettings["appearance"]>(appearanceSettingsKey),
+        get<PaletteHistoryEntry[]>(paletteHistoryKey),
+        get<CommandHistoryEntry[]>(commandHistoryKey),
+      ]);
     if (view === "shelf" || view === "canvas" || view === "settings" || view === "diff") {
       this.view = view;
     }
@@ -1001,6 +1018,9 @@ export class AppState {
     }
     if (Array.isArray(paletteHistory)) {
       this.paletteHistory = paletteHistory.filter(isPaletteHistoryEntry).slice(0, 10);
+    }
+    if (Array.isArray(commandHistory)) {
+      this.commandHistory = commandHistory.filter(isCommandHistoryEntry).slice(0, maxCommandHistoryEntries);
     }
     this.#preferredSelectedWorktreeId = selectedWorktreeId ?? null;
     this.#applyPreferredSelection();
@@ -1505,6 +1525,52 @@ export class AppState {
     persistJSONValue(paletteHistoryKey, this.paletteHistory);
   }
 
+  #recordCommandInput(paneId: string, text: string): void {
+    let pending = this.#pendingCommandInputByPane.get(paneId) ?? "";
+    let skippingEscapeSequence = false;
+    for (const character of text) {
+      if (character === "\x1b") {
+        skippingEscapeSequence = true;
+        continue;
+      }
+      if (skippingEscapeSequence) {
+        if (/^[A-Za-z~]$/.test(character)) {
+          skippingEscapeSequence = false;
+        }
+        continue;
+      }
+      if (character === "\r" || character === "\n") {
+        this.#recordCommandHistory(pending);
+        pending = "";
+      } else if (character === "\b" || character === "\x7f") {
+        pending = pending.slice(0, -1);
+      } else if (character >= " ") {
+        pending += character;
+      }
+    }
+    if (pending) {
+      this.#pendingCommandInputByPane.set(paneId, pending);
+    } else {
+      this.#pendingCommandInputByPane.delete(paneId);
+    }
+  }
+
+  #recordCommandHistory(command: string): void {
+    const trimmed = command.trim();
+    if (!trimmed) {
+      return;
+    }
+    const entry: CommandHistoryEntry = {
+      command: trimmed,
+      lastUsedAt: Date.now(),
+    };
+    this.commandHistory = [entry, ...this.commandHistory.filter((candidate) => candidate.command !== trimmed)].slice(
+      0,
+      maxCommandHistoryEntries,
+    );
+    persistJSONValue(commandHistoryKey, this.commandHistory);
+  }
+
   #startMetricLoop(): void {
     this.#metricTimer ??= setInterval(() => {
       if (this.connection !== "open") {
@@ -1684,6 +1750,13 @@ function isPaletteHistoryEntry(value: unknown): value is PaletteHistoryEntry {
   );
 }
 
+function isCommandHistoryEntry(value: unknown): value is CommandHistoryEntry {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return typeof value.command === "string" && typeof value.lastUsedAt === "number";
+}
+
 function isTaskStatus(value: unknown): value is TaskStatus {
   return value === "idle" || value === "running" || value === "done" || value === "failed";
 }
@@ -1710,6 +1783,10 @@ function persistJSONValue(key: string, value: unknown): void {
 
 export function openTabsKey(worktreeId: string): string {
   return `prowl:ui.openTabs.${worktreeId}`;
+}
+
+export function commandPaletteItemId(command: string): string {
+  return `command:${encodeURIComponent(command)}`;
 }
 
 export function paneDescriptorsByWorktree(panes: Pane[]): Map<string, PaneDescriptor[]> {

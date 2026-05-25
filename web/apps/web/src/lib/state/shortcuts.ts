@@ -66,9 +66,9 @@ function isEditableShortcutTarget(target: EventTarget | null): boolean {
   if (!target || typeof (target as { closest?: unknown }).closest !== "function") {
     return false;
   }
-  return Boolean(
-    (target as unknown as { closest: (selector: string) => unknown }).closest(
-      "input, textarea, select, [contenteditable=''], [contenteditable='true']",
-    ),
-  );
+  const element = target as unknown as { closest: (selector: string) => unknown };
+  if (element.closest(".terminal")) {
+    return false;
+  }
+  return Boolean(element.closest("input, textarea, select, [contenteditable=''], [contenteditable='true']"));
 }

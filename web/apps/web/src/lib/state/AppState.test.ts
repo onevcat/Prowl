@@ -5,6 +5,8 @@ import {
   AppState,
   bootstrapSettingsKeys,
   cachedPaneDescriptorsForWorktrees,
+  commandHistoryKey,
+  commandPaletteItemId,
   customActionsForRepositories,
   openTabsKey,
   paneDescriptorsByWorktree,
@@ -300,6 +302,68 @@ describe("AppState custom action palette items", () => {
       section: "Actions",
       title: "action-repo",
     });
+  });
+});
+
+describe("AppState command history search", () => {
+  test("builds the WEB.md command history storage key", () => {
+    expect(commandHistoryKey).toBe("prowl:command.history");
+  });
+
+  test("records completed terminal commands and exposes them to palette search", () => {
+    const state = appStateFixture();
+    const sentInputs: string[] = [];
+    state.ws.sendBinary = ((channelId: number, payload: Uint8Array) => {
+      sentInputs.push(`${channelId}:${new TextDecoder().decode(payload)}`);
+      return true;
+    }) as AppState["ws"]["sendBinary"];
+
+    state.sendInputToPane("pane-1", "printf command-history");
+    expect(state.commandHistory).toEqual([]);
+
+    state.sendInputToPane("pane-1", "\r");
+
+    expect(state.commandHistory.map((entry) => entry.command)).toEqual(["printf command-history"]);
+    const historyItem = state.paletteItems.find((item) => item.id === commandPaletteItemId("printf command-history"));
+
+    expect(historyItem).toMatchObject({
+      section: "Recent",
+      subtitle: "Command history",
+      title: "printf command-history",
+    });
+
+    historyItem?.invoke();
+
+    expect(sentInputs.at(-1)).toBe("1:printf command-history\n");
+  });
+
+  test("deduplicates broadcast command history across visible panes", () => {
+    const state = appStateFixture();
+    state.view = "canvas";
+    state.ws.sendBinary = (() => true) as AppState["ws"]["sendBinary"];
+
+    state.sendInputToVisiblePanes("printf all-panes\n");
+
+    expect(state.commandHistory.map((entry) => entry.command)).toEqual(["printf all-panes"]);
+  });
+
+  test("honors terminal backspace while recording command history", () => {
+    const state = appStateFixture();
+    state.ws.sendBinary = (() => true) as AppState["ws"]["sendBinary"];
+
+    state.sendInputToPane("pane-1", "printf typo");
+    state.sendInputToPane("pane-1", "\x7f\x7f\x7fok\n");
+
+    expect(state.commandHistory.map((entry) => entry.command)).toEqual(["printf tok"]);
+  });
+
+  test("ignores terminal escape sequences while recording command history", () => {
+    const state = appStateFixture();
+    state.ws.sendBinary = (() => true) as AppState["ws"]["sendBinary"];
+
+    state.sendInputToPane("pane-1", "\x1b[Aprintf clean\n");
+
+    expect(state.commandHistory.map((entry) => entry.command)).toEqual(["printf clean"]);
   });
 });
 
