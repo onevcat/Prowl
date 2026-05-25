@@ -43,6 +43,7 @@ import type {
   PaletteItem,
   PerformanceMetrics,
   TaskStatus,
+  WorktreeArchiveProgress,
 } from "./types";
 
 export const appStateKey = Symbol("ProwlAppState");
@@ -138,6 +139,8 @@ export class AppState {
   repoBusy = $state(false);
   diffBusy = $state(false);
   diff = $state<WorktreeDiff | null>(null);
+  archiveProgressByWorktree = $state<Record<string, WorktreeArchiveProgress>>({});
+  latestArchiveProgress = $state<WorktreeArchiveProgress | null>(null);
   paletteOpen = $state(false);
   paletteQuery = $state("");
   paletteHistory = $state<PaletteHistoryEntry[]>([]);
@@ -867,6 +870,24 @@ export class AppState {
     }
   }
 
+  applyWorktreeArchiveProgress(
+    message: Extract<ServerControlMessage, { type: "worktree.archiveProgress" }>,
+    updatedAt = Date.now(),
+  ): void {
+    const progress = {
+      worktreeId: message.worktreeId,
+      step: message.step,
+      message: message.message,
+      updatedAt,
+    };
+    this.archiveProgressByWorktree = {
+      ...this.archiveProgressByWorktree,
+      [message.worktreeId]: progress,
+    };
+    this.latestArchiveProgress = progress;
+    this.errorMessage = null;
+  }
+
   sendInputToSelectedPane(text: string): void {
     if (!this.selectedPaneId) {
       return;
@@ -1217,7 +1238,7 @@ export class AppState {
         this.diff = message.diff;
         break;
       case "worktree.archiveProgress":
-        this.errorMessage = null;
+        this.applyWorktreeArchiveProgress(message);
         break;
       case "pane.listed":
         this.#replacePanes(message.panes);
@@ -1353,6 +1374,8 @@ export class AppState {
       current.filter((candidate) => candidate.id !== worktree.id),
     );
     this.#removePanesForWorktrees(new Set([worktree.id]));
+    const { [worktree.id]: _removed, ...remainingProgress } = this.archiveProgressByWorktree;
+    this.archiveProgressByWorktree = remainingProgress;
   }
 
   #ensureWorktreeViews(worktrees: Worktree[]): void {

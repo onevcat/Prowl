@@ -499,6 +499,31 @@ describe("AppState view mutation methods", () => {
     expect(closed).toBe(true);
   });
 
+  test("records streaming archive progress from the daemon", () => {
+    const state = appStateFixture();
+
+    state.applyWorktreeArchiveProgress(
+      {
+        v: 1,
+        type: "worktree.archiveProgress",
+        id: "archive-1",
+        worktreeId: "worktree-1",
+        step: "removing",
+        message: "Removing worktree",
+      },
+      1234,
+    );
+
+    expect(state.archiveProgressByWorktree["worktree-1"]).toEqual({
+      worktreeId: "worktree-1",
+      step: "removing",
+      message: "Removing worktree",
+      updatedAt: 1234,
+    });
+    expect(state.latestArchiveProgress).toEqual(state.archiveProgressByWorktree["worktree-1"]);
+    expect(state.errorMessage).toBeNull();
+  });
+
   test("prevents browser defaults for unmatched terminal key events", () => {
     const state = appStateFixture();
     const event = shortcutEvent({ key: "l", ctrlKey: true, target: terminalInputTarget() });

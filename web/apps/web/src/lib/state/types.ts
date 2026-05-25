@@ -51,6 +51,13 @@ export type CommandHistoryEntry = {
   lastUsedAt: number;
 };
 
+export type WorktreeArchiveProgress = {
+  worktreeId: string;
+  step: string;
+  message: string;
+  updatedAt: number;
+};
+
 export type AppSettings = {
   appearance: AppearanceSettings;
   shortcuts: ShortcutSettings;

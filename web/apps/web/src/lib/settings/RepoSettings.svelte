@@ -29,6 +29,9 @@
     <div>
       <h2>Repositories</h2>
       <p>{appState.repositories.length} registered</p>
+      {#if appState.latestArchiveProgress}
+        <small class="archive-progress">{appState.latestArchiveProgress.message}</small>
+      {/if}
     </div>
     <span class={`connection ${appState.connection}`}>{appState.connection}</span>
   </div>
@@ -61,10 +64,14 @@
       </article>
       <div class="worktrees">
         {#each appState.worktreesByRepo.get(repository.id) ?? [] as worktree (worktree.id)}
+          {@const archiveProgress = appState.archiveProgressByWorktree[worktree.id]}
           <div class="worktree-row">
             <div>
               <strong>{worktree.name}</strong>
               <p>{worktree.branch} · {worktree.path}</p>
+              {#if archiveProgress}
+                <small class="archive-progress">{archiveProgress.message}</small>
+              {/if}
             </div>
             <Button
               label="×"
@@ -134,6 +141,12 @@
   p,
   small {
     color: color-mix(in srgb, CanvasText 58%, Canvas);
+  }
+
+  .archive-progress {
+    display: block;
+    margin-top: 0.15rem;
+    color: color-mix(in srgb, Highlight 76%, CanvasText);
   }
 
   form {
