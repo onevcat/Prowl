@@ -104,4 +104,43 @@ describe("prowld CLI", () => {
       await rm(directory, { force: true, recursive: true });
     }
   });
+
+  test("writes command-line allowed origins into generated config", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "prowld-allowed-origin-"));
+    const configPath = join(directory, "config.json");
+
+    try {
+      const result = Bun.spawnSync(
+        [
+          "bun",
+          "run",
+          "src/index.ts",
+          "--print-token",
+          "--allowed-origin",
+          "https://prowl.example.com",
+          "--allowed-origin=https://backup.example.com,https://team.example.com",
+        ],
+        {
+          cwd: daemonRoot,
+          env: {
+            ...Bun.env,
+            PROWL_CONFIG_PATH: configPath,
+          },
+          stdout: "pipe",
+          stderr: "pipe",
+        },
+      );
+      const config = JSON.parse(readFileSync(configPath, "utf8")) as { allowedOrigins: string[] };
+
+      expect(result.exitCode).toBe(0);
+      expect(new TextDecoder().decode(result.stderr)).toBe("");
+      expect(config.allowedOrigins).toEqual([
+        "https://prowl.example.com",
+        "https://backup.example.com",
+        "https://team.example.com",
+      ]);
+    } finally {
+      await rm(directory, { force: true, recursive: true });
+    }
+  });
 });

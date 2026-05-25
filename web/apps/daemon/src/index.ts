@@ -29,6 +29,7 @@ if (args.has("help")) {
   prowld
   prowld --port 7878
   prowld --bind 0.0.0.0
+  prowld --allowed-origin https://prowl.example.com
   prowld --tls-cert <path> --tls-key <path>
   prowld --print-token
   prowld --rotate-token
@@ -49,6 +50,15 @@ if (args.has("port")) {
 }
 if (args.has("bind")) {
   overrides.bind = String(args.get("bind"));
+}
+const allowedOrigins = collectArgValues("allowed-origin").flatMap((value) =>
+  value
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
+);
+if (allowedOrigins.length > 0) {
+  overrides.allowedOrigins = allowedOrigins;
 }
 if (args.has("tls-cert")) {
   overrides.tlsCertPath = String(args.get("tls-cert"));
@@ -88,3 +98,21 @@ if (loadedConfig.created) {
 }
 process.stdout.write(`prowld listening on ${scheme}://${config.bind}:${config.port}\n`);
 logger.info(`daemon listening on ${scheme}://${config.bind}:${config.port}`);
+
+function collectArgValues(name: string): string[] {
+  const values: string[] = [];
+  for (let index = 2; index < Bun.argv.length; index += 1) {
+    const arg = Bun.argv[index];
+    if (arg === `--${name}`) {
+      const next = Bun.argv[index + 1];
+      if (next && !next.startsWith("--")) {
+        values.push(next);
+      }
+      continue;
+    }
+    if (arg?.startsWith(`--${name}=`)) {
+      values.push(arg.slice(name.length + 3));
+    }
+  }
+  return values;
+}
