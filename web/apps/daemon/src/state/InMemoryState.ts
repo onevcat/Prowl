@@ -228,6 +228,11 @@ export class InMemoryState {
     return this.#panes.has(paneId);
   }
 
+  paneForChannel(channelId: number): PaneDescriptor | null {
+    const paneId = this.#paneIdByChannel.get(channelId);
+    return paneId ? (this.#panes.get(paneId) ?? null) : null;
+  }
+
   settingsSnapshot(keys?: string[]): SettingsSnapshot {
     const snapshot: SettingsSnapshot = {};
     if (!keys || keys.includes("panes")) {

@@ -28,6 +28,8 @@ type SyncCommandResult = {
 };
 type WebSocketData = {
   authenticated: boolean;
+  sessionId: string;
+  ownedPaneIds: Set<string>;
   controlWindowStartedAt: number;
   controlMessagesInWindow: number;
 };
@@ -152,6 +154,8 @@ export function startServer(config: DaemonConfig, options: ServerOptions = {}): 
         !server.upgrade(request, {
           data: {
             authenticated: true,
+            sessionId: crypto.randomUUID(),
+            ownedPaneIds: new Set(state.listPanes().map((pane) => pane.id)),
             controlWindowStartedAt: Date.now(),
             controlMessagesInWindow: 0,
           },
@@ -181,6 +185,11 @@ export function startServer(config: DaemonConfig, options: ServerOptions = {}): 
           return;
         }
         if (frame.tag === protocolTags.pty) {
+          const pane = state.paneForChannel(frame.channelId);
+          if (!pane || !ws.data.ownedPaneIds.has(pane.id)) {
+            logger.warn(`rejected pty input for unauthorized channel=${frame.channelId}`);
+            return;
+          }
           state.writeToChannel(frame.channelId, frame.payload);
           return;
         }
@@ -206,7 +215,11 @@ export function startServer(config: DaemonConfig, options: ServerOptions = {}): 
         if (control.type === "pane.create") {
           debugStats.paneCreateRequests += 1;
         }
-        const responses = handleControl(control, state, config, { authenticated: ws.data.authenticated });
+        const responses = handleControl(control, state, config, {
+          authenticated: ws.data.authenticated,
+          sessionId: ws.data.sessionId,
+          ownedPaneIds: ws.data.ownedPaneIds,
+        });
         for (const response of responses) {
           ws.send(encodeJsonFrame(response));
         }
@@ -349,7 +362,7 @@ export function handleControl(
   message: ClientControlMessage,
   state: InMemoryState,
   config: DaemonConfig,
-  options: { authenticated?: boolean } = {},
+  options: { authenticated?: boolean; sessionId?: string; ownedPaneIds?: Set<string> } = {},
 ): ServerControlMessage[] {
   if (message.type === "hello") {
     if (!options.authenticated && message.token !== config.token) {
@@ -363,7 +376,7 @@ export function handleControl(
         v: 1,
         type: "welcome",
         id: message.id,
-        sessionId: crypto.randomUUID(),
+        sessionId: options.sessionId ?? crypto.randomUUID(),
         serverVersion: "0.0.0",
         capabilities: [
           "repo.list",
@@ -433,6 +446,10 @@ export function handleControl(
   }
 
   if (message.type === "action.run") {
+    const authorizationError = authorizePane(message.id, message.paneId, state, options.ownedPaneIds);
+    if (authorizationError) {
+      return [authorizationError];
+    }
     const result = state.runCustomAction(message.paneId, message.actionId);
     if (!result) {
       return [errorResponse(message.id, "ACTION_NOT_FOUND", "Custom action or pane is no longer available")];
@@ -448,6 +465,7 @@ export function handleControl(
         worktreeId: result.pane.worktreeId,
         title: result.pane.title,
       });
+      options.ownedPaneIds?.add(result.pane.id);
     }
     responses.push({
       v: 1,
@@ -518,6 +536,7 @@ export function handleControl(
       return [cwd];
     }
     const pane = state.createPane(message.worktreeId, "Shell", message.command, cwd.path);
+    options.ownedPaneIds?.add(pane.id);
     return [
       {
         v: 1,
@@ -532,9 +551,14 @@ export function handleControl(
   }
 
   if (message.type === "pane.close") {
+    const authorizationError = authorizePane(message.id, message.paneId, state, options.ownedPaneIds);
+    if (authorizationError) {
+      return [authorizationError];
+    }
     if (!state.closePane(message.paneId)) {
       return [errorResponse(message.id, "PANE_GONE", "Pane is no longer available")];
     }
+    options.ownedPaneIds?.delete(message.paneId);
     return [
       {
         v: 1,
@@ -547,6 +571,10 @@ export function handleControl(
   }
 
   if (message.type === "pane.attach") {
+    const authorizationError = authorizePane(message.id, message.paneId, state, options.ownedPaneIds);
+    if (authorizationError) {
+      return [authorizationError];
+    }
     const replay = state.replayForPane(message.paneId);
     if (!replay) {
       return [errorResponse(message.id, "PANE_GONE", "Pane is no longer available")];
@@ -563,6 +591,10 @@ export function handleControl(
   }
 
   if (message.type === "pane.detach") {
+    const authorizationError = authorizePane(message.id, message.paneId, state, options.ownedPaneIds);
+    if (authorizationError) {
+      return [authorizationError];
+    }
     if (!state.hasPane(message.paneId)) {
       return [errorResponse(message.id, "PANE_GONE", "Pane is no longer available")];
     }
@@ -570,6 +602,10 @@ export function handleControl(
   }
 
   if (message.type === "pane.resize") {
+    const authorizationError = authorizePane(message.id, message.paneId, state, options.ownedPaneIds);
+    if (authorizationError) {
+      return [authorizationError];
+    }
     if (!state.resizePane(message.paneId, message.cols, message.rows)) {
       return [errorResponse(message.id, "PANE_GONE", "Pane is no longer available")];
     }
@@ -586,6 +622,10 @@ export function handleControl(
   }
 
   if (message.type === "pane.status") {
+    const authorizationError = authorizePane(message.id, message.paneId, state, options.ownedPaneIds);
+    if (authorizationError) {
+      return [authorizationError];
+    }
     const pane = state.updatePaneStatus(message.paneId, message.taskStatus);
     if (!pane) {
       return [errorResponse(message.id, "PANE_GONE", "Pane is no longer available")];
@@ -616,6 +656,21 @@ export function handleControl(
 
 function errorResponse(id: string, code: string, message: string): ErrorControlMessage {
   return { v: 1, type: "error", id, code, message };
+}
+
+function authorizePane(
+  id: string,
+  paneId: string,
+  state: InMemoryState,
+  ownedPaneIds: Set<string> | undefined,
+): ErrorControlMessage | null {
+  if (!state.hasPane(paneId)) {
+    return errorResponse(id, "PANE_GONE", "Pane is no longer available");
+  }
+  if (ownedPaneIds && !ownedPaneIds.has(paneId)) {
+    return errorResponse(id, "PANE_FORBIDDEN", "Pane does not belong to this session");
+  }
+  return null;
 }
 
 function resolvePaneCwd(

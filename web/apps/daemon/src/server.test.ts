@@ -133,6 +133,8 @@ describe("daemon scaffold", () => {
   test("rate-limits control messages per session", () => {
     const session = {
       authenticated: true,
+      sessionId: crypto.randomUUID(),
+      ownedPaneIds: new Set<string>(),
       controlWindowStartedAt: 1_000,
       controlMessagesInWindow: 0,
     };
@@ -221,6 +223,72 @@ describe("daemon scaffold", () => {
     expect(resized[0]?.type).toBe("error");
     expect(closed[0]?.type).toBe("error");
     expect(removed[0]?.type).toBe("error");
+  });
+
+  test("rejects pane operations outside the session ownership set", () => {
+    const root = mkdtempSync(join(tmpdir(), "prowl-pane-ownership-test-"));
+    const state = new InMemoryState(root, { statePath: ":memory:", spawnProcesses: false });
+    const config = {
+      port: 0,
+      bind: "127.0.0.1",
+      token: "test-token",
+      allowedOrigins: ["http://127.0.0.1:5173"],
+      requireTLS: false,
+    };
+    const [ownedPane] = state.listPanes();
+    if (!ownedPane) {
+      throw new Error("Expected seeded pane");
+    }
+    const unownedPane = state.createPane(ownedPane.worktreeId);
+
+    const attached = handleControl(
+      {
+        v: 1,
+        type: "pane.attach",
+        id: makeMessageId(),
+        paneId: unownedPane.id,
+      },
+      state,
+      config,
+      { ownedPaneIds: new Set([ownedPane.id]) },
+    );
+
+    expect(attached[0]?.type).toBe("error");
+    if (attached[0]?.type === "error") {
+      expect(attached[0].code).toBe("PANE_FORBIDDEN");
+    }
+  });
+
+  test("records session ownership for panes created by that session", () => {
+    const root = mkdtempSync(join(tmpdir(), "prowl-pane-create-ownership-test-"));
+    const state = new InMemoryState(root, { statePath: ":memory:", spawnProcesses: false });
+    const config = {
+      port: 0,
+      bind: "127.0.0.1",
+      token: "test-token",
+      allowedOrigins: ["http://127.0.0.1:5173"],
+      requireTLS: false,
+    };
+    const ownedPaneIds = new Set<string>();
+
+    const created = handleControl(
+      {
+        v: 1,
+        type: "pane.create",
+        id: makeMessageId(),
+        worktreeId: "worktree-default",
+        cols: 120,
+        rows: 32,
+      },
+      state,
+      config,
+      { ownedPaneIds },
+    );
+
+    expect(created[0]?.type).toBe("pane.created");
+    if (created[0]?.type === "pane.created") {
+      expect(ownedPaneIds.has(created[0].paneId)).toBe(true);
+    }
   });
 
   test("validates pane cwd stays inside the worktree", () => {
