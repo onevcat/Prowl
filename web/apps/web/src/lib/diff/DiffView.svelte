@@ -4,8 +4,11 @@
   import { appStateKey, type AppState } from "$lib/state/AppState.svelte";
   import { highlightDiffFilesInWorker } from "./highlight";
   import { splitDiffRows, type DiffFile, type DiffLine } from "./model";
+  import { visibleRange } from "./virtual";
   import { parseGitDiffInWorker } from "./worker";
 
+  const diffRowHeight = 22;
+  const diffOverscan = 16;
   const appState = getContext<AppState>(appStateKey);
   let mode = $state<"unified" | "split">("unified");
   let selectedPath = $state<string | null>(null);
@@ -14,10 +17,21 @@
   let parsing = $state(false);
   let highlighting = $state(false);
   let parseError = $state<string | null>(null);
+  let scrollTop = $state(0);
+  let viewportHeight = $state(0);
+  let scrollViewport = $state<HTMLElement | null>(null);
   let parseRequestId = 0;
   let highlightRequestId = 0;
   let selectedFile = $derived(files.find((file) => file.path === selectedPath) ?? files[0] ?? null);
   let splitRows = $derived(selectedFile ? splitDiffRows(selectedFile.lines) : []);
+  let unifiedRange = $derived(
+    visibleRange(selectedFile?.lines.length ?? 0, scrollTop, viewportHeight, diffRowHeight, diffOverscan),
+  );
+  let splitRange = $derived(visibleRange(splitRows.length, scrollTop, viewportHeight, diffRowHeight, diffOverscan));
+  let visibleUnifiedLines = $derived(
+    selectedFile ? selectedFile.lines.slice(unifiedRange.start, unifiedRange.end) : [],
+  );
+  let visibleSplitRows = $derived(splitRows.slice(splitRange.start, splitRange.end));
 
   $effect(() => {
     const diffText = appState.diff?.text ?? "";
@@ -59,6 +73,16 @@
     }
   });
 
+  $effect(() => {
+    selectedFile?.path;
+    mode;
+    scrollTop = 0;
+    if (scrollViewport) {
+      scrollViewport.scrollTop = 0;
+      viewportHeight = scrollViewport.clientHeight;
+    }
+  });
+
   function lineNumber(line: DiffLine | null, side: "old" | "new"): string {
     const value = side === "old" ? line?.oldLine : line?.newLine;
     return value === null || value === undefined ? "" : String(value);
@@ -74,6 +98,14 @@
     }
     const index = file.lines.indexOf(line);
     return index === -1 ? escapeHtml(line.text) : highlightedLine(file, line, index);
+  }
+
+  function syncScrollMetrics(): void {
+    if (!scrollViewport) {
+      return;
+    }
+    scrollTop = scrollViewport.scrollTop;
+    viewportHeight = scrollViewport.clientHeight;
   }
 
   async function highlightParsedFiles(parsedFiles: DiffFile[]): Promise<void> {
@@ -141,24 +173,34 @@
       {/if}
     </aside>
 
-    <article>
+    <article bind:this={scrollViewport} onscroll={syncScrollMetrics}>
       {#if selectedFile}
         {#if mode === "split"}
-          <div class="split-view" aria-label="Side-by-side diff">
-            {#each splitRows as row, index (`${selectedFile.path}-split-${index}`)}
+          <div class="virtual-space" aria-label="Side-by-side diff">
+            <div
+              class="split-view virtual-window"
+              style={`padding-top: ${splitRange.offsetTop}px; padding-bottom: ${splitRange.offsetBottom}px;`}
+            >
+            {#each visibleSplitRows as row, index (`${selectedFile.path}-split-${splitRange.start + index}`)}
               <div class={`cell gutter ${row.oldLine?.kind ?? ""}`}>{lineNumber(row.oldLine, "old")}</div>
               <pre class={`cell ${row.oldLine?.kind ?? ""}`}>{@html highlightedSplitLine(selectedFile, row.oldLine)}</pre>
               <div class={`cell gutter ${row.newLine?.kind ?? ""}`}>{lineNumber(row.newLine, "new")}</div>
               <pre class={`cell ${row.newLine?.kind ?? ""}`}>{@html highlightedSplitLine(selectedFile, row.newLine)}</pre>
             {/each}
+            </div>
           </div>
         {:else}
-          <div class="unified-view" aria-label="Unified diff">
-            {#each selectedFile.lines as line, index (`${selectedFile.path}-${index}`)}
+          <div class="virtual-space" aria-label="Unified diff">
+            <div
+              class="unified-view virtual-window"
+              style={`padding-top: ${unifiedRange.offsetTop}px; padding-bottom: ${unifiedRange.offsetBottom}px;`}
+            >
+            {#each visibleUnifiedLines as line, index (`${selectedFile.path}-${unifiedRange.start + index}`)}
               <div class={`gutter ${line.kind}`}>{lineNumber(line, "old")}</div>
               <div class={`gutter ${line.kind}`}>{lineNumber(line, "new")}</div>
-              <pre class={line.kind}>{@html highlightedLine(selectedFile, line, index)}</pre>
+              <pre class={line.kind}>{@html highlightedLine(selectedFile, line, unifiedRange.start + index)}</pre>
             {/each}
+            </div>
           </div>
         {/if}
       {:else}
@@ -253,6 +295,10 @@
     background: Canvas;
   }
 
+  .virtual-space {
+    min-width: max-content;
+  }
+
   .unified-view {
     display: grid;
     grid-template-columns: 3rem 3rem minmax(0, 1fr);
@@ -264,24 +310,26 @@
   }
 
   pre {
-    min-height: 1.35rem;
+    height: 22px;
     margin: 0;
     padding: 0.08rem 0.5rem;
-    overflow: visible;
+    overflow: hidden;
     border-left: 3px solid transparent;
     font: 0.82rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-    white-space: pre-wrap;
+    line-height: 1.15rem;
+    white-space: pre;
   }
 
   .cell {
-    min-height: 1.35rem;
+    height: 22px;
   }
 
   .gutter {
-    min-height: 1.35rem;
+    height: 22px;
     padding: 0.08rem 0.4rem;
     color: color-mix(in srgb, CanvasText 45%, Canvas);
     font: 0.82rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    line-height: 1.15rem;
     text-align: right;
     user-select: none;
   }
