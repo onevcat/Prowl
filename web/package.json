@@ -7,6 +7,7 @@
     "dev": "bun run scripts/dev.ts",
     "build": "bun run --filter '*' build",
     "check:bundle": "bun run scripts/check-bundle-size.ts",
+    "check:deps": "bun run scripts/check-dependency-budget.ts",
     "e2e": "bun --bun playwright test",
     "lint": "biome check .",
     "format": "biome format --write .",
