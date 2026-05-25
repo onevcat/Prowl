@@ -2,5 +2,8 @@
   "packages": {
     "baselineCount": 330,
     "maxNewPackages": 50
+  },
+  "directRuntimeDependencies": {
+    "maxPerPackage": 12
   }
 }
