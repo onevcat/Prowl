@@ -319,6 +319,96 @@ describe("prowl cli scaffold", () => {
     }
   });
 
+  test("creates a pane with an initial command through the CLI", async () => {
+    const token = "test-token";
+    const home = mkdtempSync(join(tmpdir(), "prowl-cli-new-home-"));
+    const prowlHome = join(home, ".prowl");
+    mkdirSync(prowlHome, { recursive: true });
+    writeFileSync(
+      join(prowlHome, "config.json"),
+      JSON.stringify({
+        port: 0,
+        bind: "127.0.0.1",
+        token,
+        allowedOrigins: ["http://127.0.0.1:5173"],
+        requireTLS: false,
+      }),
+    );
+    const socketPath = join(prowlHome, "prowld.sock");
+    const server = startServer(
+      {
+        port: 0,
+        bind: "127.0.0.1",
+        token,
+        allowedOrigins: ["http://127.0.0.1:5173"],
+        requireTLS: false,
+      },
+      { socketPath, statePath: join(prowlHome, "state.sqlite"), spawnProcesses: true },
+    );
+
+    try {
+      await Bun.sleep(50);
+      const newResult = Bun.spawn(
+        [
+          "bun",
+          "run",
+          "src/index.ts",
+          "--json",
+          "new",
+          "--worktree",
+          "worktree-default",
+          "--command",
+          "printf cli-new-pane",
+        ],
+        {
+          cwd: new URL("..", import.meta.url).pathname,
+          env: {
+            ...Bun.env,
+            PROWL_CONFIG_PATH: join(prowlHome, "config.json"),
+            PROWL_SOCKET_PATH: socketPath,
+          },
+          stdout: "pipe",
+          stderr: "pipe",
+        },
+      );
+      const [newExitCode, newStdout, newStderr] = await Promise.all([
+        newResult.exited,
+        new Response(newResult.stdout).text(),
+        new Response(newResult.stderr).text(),
+      ]);
+
+      expect(newExitCode).toBe(0);
+      expect(newStderr).toBe("");
+      const pane = JSON.parse(newStdout) as { paneId: string; worktreeId: string; channelId: number };
+      expect(pane.worktreeId).toBe("worktree-default");
+      expect(pane.channelId).toBeGreaterThan(0);
+
+      await Bun.sleep(250);
+      const readResult = Bun.spawn(["bun", "run", "src/index.ts", "--json", "read", pane.paneId], {
+        cwd: new URL("..", import.meta.url).pathname,
+        env: {
+          ...Bun.env,
+          PROWL_CONFIG_PATH: join(prowlHome, "config.json"),
+          PROWL_SOCKET_PATH: socketPath,
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [readExitCode, readStdout, readStderr] = await Promise.all([
+        readResult.exited,
+        new Response(readResult.stdout).text(),
+        new Response(readResult.stderr).text(),
+      ]);
+
+      expect(readExitCode).toBe(0);
+      expect(readStderr).toBe("");
+      const replay = JSON.parse(readStdout) as { output: string };
+      expect(replay.output).toContain("cli-new-pane");
+    } finally {
+      server.stop();
+    }
+  });
+
   test("captures send output in JSON mode", async () => {
     const token = "test-token";
     const home = mkdtempSync(join(tmpdir(), "prowl-cli-home-"));
