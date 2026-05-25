@@ -26,6 +26,8 @@ export const appStateKey = Symbol("ProwlAppState");
 
 const uiViewKey = "prowl:ui.view";
 const selectedWorktreeKey = "prowl:ui.selectedWorktreeId";
+const worktreeOrderKey = "prowl:ui.worktreeOrderByRepo";
+const paneOrderKey = "prowl:ui.paneOrderByWorktree";
 const paletteHistoryKey = "prowl:palette.history";
 const appearanceSettingsKey = "prowl:settings.appearance";
 const sessionTokenKey = "prowl:token";
@@ -56,6 +58,8 @@ export class AppState {
   customActions = $state<CustomAction[]>([]);
   worktreesByRepo = $state<Map<string, Worktree[]>>(new Map());
   panes = $state<Map<string, Pane>>(new Map());
+  worktreeOrderByRepo = $state<Record<string, string[]>>({});
+  paneOrderByWorktree = $state<Record<string, string[]>>({});
   worktreeViews = $state<Map<string, WorktreeView>>(new Map());
   selectedWorktreeId = $state<string | null>(null);
   selectedPaneId = $state<string | null>(null);
@@ -106,7 +110,23 @@ export class AppState {
     if (this.view === "canvas") {
       return Array.from(this.panes.values());
     }
-    return Array.from(this.panes.values()).filter((pane) => pane.worktreeId === this.selectedWorktreeId);
+    return this.selectedWorktreeId ? this.orderedPanes(this.selectedWorktreeId) : [];
+  }
+
+  orderedWorktrees(repoId: string): Worktree[] {
+    return orderByIds(
+      this.worktreesByRepo.get(repoId) ?? [],
+      this.worktreeOrderByRepo[repoId],
+      (worktree) => worktree.id,
+    );
+  }
+
+  orderedPanes(worktreeId: string): Pane[] {
+    return orderByIds(
+      Array.from(this.panes.values()).filter((pane) => pane.worktreeId === worktreeId),
+      this.paneOrderByWorktree[worktreeId],
+      (pane) => pane.id,
+    );
   }
 
   get paletteItems(): PaletteItem[] {
@@ -285,6 +305,28 @@ export class AppState {
     this.selectedPaneId = paneId;
     this.selectedWorktreeId = pane.worktreeId;
     this.paletteOpen = false;
+  }
+
+  reorderWorktree(repoId: string, draggedId: string, targetId: string): void {
+    const worktrees = this.orderedWorktrees(repoId);
+    const reordered = reorderIds(
+      worktrees.map((worktree) => worktree.id),
+      draggedId,
+      targetId,
+    );
+    this.worktreeOrderByRepo = { ...this.worktreeOrderByRepo, [repoId]: reordered };
+    void set(worktreeOrderKey, this.worktreeOrderByRepo);
+  }
+
+  reorderPane(worktreeId: string, draggedId: string, targetId: string): void {
+    const panes = this.orderedPanes(worktreeId);
+    const reordered = reorderIds(
+      panes.map((pane) => pane.id),
+      draggedId,
+      targetId,
+    );
+    this.paneOrderByWorktree = { ...this.paneOrderByWorktree, [worktreeId]: reordered };
+    void set(paneOrderKey, this.paneOrderByWorktree);
   }
 
   async createPane(): Promise<void> {
@@ -543,7 +585,7 @@ export class AppState {
   }
 
   cycleWorktree(direction: 1 | -1): void {
-    const worktrees = this.worktrees;
+    const worktrees = this.repositories.flatMap((repository) => this.orderedWorktrees(repository.id));
     if (!this.selectedWorktreeId || worktrees.length === 0) {
       return;
     }
@@ -556,7 +598,7 @@ export class AppState {
   }
 
   cyclePane(direction: 1 | -1): void {
-    const panes = Array.from(this.panes.values()).filter((pane) => pane.worktreeId === this.selectedWorktreeId);
+    const panes = this.selectedWorktreeId ? this.orderedPanes(this.selectedWorktreeId) : [];
     if (!this.selectedPaneId || panes.length === 0) {
       return;
     }
@@ -569,9 +611,11 @@ export class AppState {
   }
 
   async #restoreUIState(): Promise<void> {
-    const [view, selectedWorktreeId, appearance, paletteHistory] = await Promise.all([
+    const [view, selectedWorktreeId, worktreeOrder, paneOrder, appearance, paletteHistory] = await Promise.all([
       get<AppView>(uiViewKey),
       get<string>(selectedWorktreeKey),
+      get<Record<string, string[]>>(worktreeOrderKey),
+      get<Record<string, string[]>>(paneOrderKey),
       get<AppSettings["appearance"]>(appearanceSettingsKey),
       get<PaletteHistoryEntry[]>(paletteHistoryKey),
     ]);
@@ -581,6 +625,12 @@ export class AppState {
     if (appearance) {
       this.settings = { ...this.settings, appearance: { ...this.settings.appearance, ...appearance } };
       this.#applyAppearanceSettings();
+    }
+    if (isStringArrayRecord(worktreeOrder)) {
+      this.worktreeOrderByRepo = worktreeOrder;
+    }
+    if (isStringArrayRecord(paneOrder)) {
+      this.paneOrderByWorktree = paneOrder;
     }
     if (Array.isArray(paletteHistory)) {
       this.paletteHistory = paletteHistory.filter(isPaletteHistoryEntry).slice(0, 10);
@@ -796,6 +846,7 @@ export class AppState {
     const next = new Map(this.worktreesByRepo);
     next.set(repoId, worktrees);
     this.worktreesByRepo = next;
+    this.#pruneWorktreeOrder();
     this.#ensureWorktreeViews(worktrees);
     this.#ensureSelection();
   }
@@ -809,6 +860,7 @@ export class AppState {
       }
     }
     this.worktreesByRepo = next;
+    this.#pruneWorktreeOrder();
   }
 
   #upsertWorktree(worktree: Worktree): void {
@@ -838,6 +890,7 @@ export class AppState {
 
   #replacePanes(panes: PaneDescriptor[]): void {
     this.panes = new Map(panes.map((pane) => [pane.id, new Pane(pane)]));
+    this.#prunePaneOrder();
     this.#ensureSelection();
   }
 
@@ -845,23 +898,47 @@ export class AppState {
     const next = new Map(this.panes);
     next.set(descriptor.id, new Pane(descriptor));
     this.panes = next;
+    this.#prunePaneOrder();
   }
 
   #removePane(paneId: string): void {
     const next = new Map(this.panes);
     next.delete(paneId);
     this.panes = next;
+    this.#prunePaneOrder();
     this.#ensureSelection();
   }
 
   #ensureSelection(): void {
-    if (!this.selectedWorktreeId || !this.worktrees.some((worktree) => worktree.id === this.selectedWorktreeId)) {
-      this.selectedWorktreeId = this.worktrees[0]?.id ?? null;
+    const orderedWorktrees = this.repositories.flatMap((repository) => this.orderedWorktrees(repository.id));
+    if (!this.selectedWorktreeId || !orderedWorktrees.some((worktree) => worktree.id === this.selectedWorktreeId)) {
+      this.selectedWorktreeId = orderedWorktrees[0]?.id ?? null;
     }
     if (!this.selectedPaneId || !this.panes.has(this.selectedPaneId)) {
-      this.selectedPaneId =
-        Array.from(this.panes.values()).find((pane) => pane.worktreeId === this.selectedWorktreeId)?.id ?? null;
+      this.selectedPaneId = this.selectedWorktreeId
+        ? (this.orderedPanes(this.selectedWorktreeId)[0]?.id ?? null)
+        : null;
     }
+  }
+
+  #pruneWorktreeOrder(): void {
+    const next: Record<string, string[]> = {};
+    for (const [repoId, order] of Object.entries(this.worktreeOrderByRepo)) {
+      const worktreeIds = new Set((this.worktreesByRepo.get(repoId) ?? []).map((worktree) => worktree.id));
+      next[repoId] = order.filter((worktreeId) => worktreeIds.has(worktreeId));
+    }
+    this.worktreeOrderByRepo = next;
+    void set(worktreeOrderKey, this.worktreeOrderByRepo);
+  }
+
+  #prunePaneOrder(): void {
+    const next: Record<string, string[]> = {};
+    for (const [worktreeId, order] of Object.entries(this.paneOrderByWorktree)) {
+      const paneIds = new Set(this.orderedPanes(worktreeId).map((pane) => pane.id));
+      next[worktreeId] = order.filter((paneId) => paneIds.has(paneId));
+    }
+    this.paneOrderByWorktree = next;
+    void set(paneOrderKey, this.paneOrderByWorktree);
   }
 
   #mergeSettings(snapshot: Record<string, unknown>): void {
@@ -1045,6 +1122,39 @@ function isPaletteHistoryEntry(value: unknown): value is PaletteHistoryEntry {
   );
 }
 
+function isStringArrayRecord(value: unknown): value is Record<string, string[]> {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return Object.values(value).every(
+    (entry) => Array.isArray(entry) && entry.every((candidate) => typeof candidate === "string"),
+  );
+}
+
 function appendSample(samples: number[], value: number): number[] {
   return [...samples, value].slice(-maxMetricSamples);
+}
+
+function orderByIds<T>(items: T[], order: string[] | undefined, getId: (item: T) => string): T[] {
+  if (!order || order.length === 0) {
+    return items;
+  }
+  const indexById = new Map(order.map((id, index) => [id, index]));
+  return [...items].sort((a, b) => {
+    const aIndex = indexById.get(getId(a)) ?? Number.MAX_SAFE_INTEGER;
+    const bIndex = indexById.get(getId(b)) ?? Number.MAX_SAFE_INTEGER;
+    return aIndex - bIndex;
+  });
+}
+
+function reorderIds(ids: string[], draggedId: string, targetId: string): string[] {
+  if (draggedId === targetId) {
+    return ids;
+  }
+  const withoutDragged = ids.filter((id) => id !== draggedId);
+  const targetIndex = withoutDragged.indexOf(targetId);
+  if (targetIndex === -1 || !ids.includes(draggedId)) {
+    return ids;
+  }
+  return [...withoutDragged.slice(0, targetIndex), draggedId, ...withoutDragged.slice(targetIndex)];
 }

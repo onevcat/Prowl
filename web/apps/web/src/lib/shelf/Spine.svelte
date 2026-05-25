@@ -6,12 +6,36 @@
     color: string;
     selected: boolean;
     onclick: () => void;
+    ondragstart: () => void;
+    ondragover: () => void;
+    ondrop: () => void;
+    ondragend: () => void;
   };
 
-  let { worktree, color, selected, onclick }: Props = $props();
+  let { worktree, color, selected, onclick, ondragstart, ondragover, ondrop, ondragend }: Props = $props();
 </script>
 
-<button class:selected style={`--repo-color: ${color}`} type="button" {onclick} title={`Select ${worktree.name}`}>
+<button
+  class:selected
+  draggable="true"
+  style={`--repo-color: ${color}`}
+  type="button"
+  {onclick}
+  title={`Select ${worktree.name}`}
+  ondragstart={(event) => {
+    event.dataTransfer?.setData("text/plain", worktree.id);
+    ondragstart();
+  }}
+  ondragover={(event) => {
+    event.preventDefault();
+    ondragover();
+  }}
+  ondrop={(event) => {
+    event.preventDefault();
+    ondrop();
+  }}
+  ondragend={ondragend}
+>
   <span class={`status ${worktree.taskStatus}`}></span>
   <span class="name">{worktree.name}</span>
   {#if worktree.unreadCount > 0}

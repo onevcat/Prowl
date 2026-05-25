@@ -7,6 +7,8 @@
   import TabRow from "./TabRow.svelte";
 
   const appState = getContext<AppState>(appStateKey);
+  let draggedWorktree = $state<{ repoId: string; worktreeId: string } | null>(null);
+  let draggedPane = $state<{ worktreeId: string; paneId: string } | null>(null);
 </script>
 
 <main class="shell">
@@ -22,17 +24,47 @@
     {#each appState.repositories as repository (repository.id)}
       <section>
         <h2>{repository.displayName}</h2>
-        {#each appState.worktreesByRepo.get(repository.id) ?? [] as worktree (worktree.id)}
+        {#each appState.orderedWorktrees(repository.id) as worktree (worktree.id)}
           <Spine
             {worktree}
             color={repository.color}
             selected={worktree.id === appState.selectedWorktreeId}
             onclick={() => appState.selectWorktree(worktree.id)}
+            ondragstart={() => {
+              draggedWorktree = { repoId: repository.id, worktreeId: worktree.id };
+            }}
+            ondragover={() => {}}
+            ondrop={() => {
+              if (draggedWorktree?.repoId === repository.id) {
+                appState.reorderWorktree(repository.id, draggedWorktree.worktreeId, worktree.id);
+              }
+              draggedWorktree = null;
+            }}
+            ondragend={() => {
+              draggedWorktree = null;
+            }}
           />
           {#if worktree.id === appState.selectedWorktreeId}
             <div class="tabs">
-              {#each Array.from(appState.panes.values()).filter((pane) => pane.worktreeId === worktree.id) as pane (pane.id)}
-                <TabRow {pane} selected={pane.id === appState.selectedPaneId} onclick={() => appState.selectPane(pane.id)} />
+              {#each appState.orderedPanes(worktree.id) as pane (pane.id)}
+                <TabRow
+                  {pane}
+                  selected={pane.id === appState.selectedPaneId}
+                  onclick={() => appState.selectPane(pane.id)}
+                  ondragstart={() => {
+                    draggedPane = { worktreeId: worktree.id, paneId: pane.id };
+                  }}
+                  ondragover={() => {}}
+                  ondrop={() => {
+                    if (draggedPane?.worktreeId === worktree.id) {
+                      appState.reorderPane(worktree.id, draggedPane.paneId, pane.id);
+                    }
+                    draggedPane = null;
+                  }}
+                  ondragend={() => {
+                    draggedPane = null;
+                  }}
+                />
               {/each}
             </div>
           {/if}

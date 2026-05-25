@@ -5,12 +5,35 @@
     pane: Pane;
     selected: boolean;
     onclick: () => void;
+    ondragstart: () => void;
+    ondragover: () => void;
+    ondrop: () => void;
+    ondragend: () => void;
   };
 
-  let { pane, selected, onclick }: Props = $props();
+  let { pane, selected, onclick, ondragstart, ondragover, ondrop, ondragend }: Props = $props();
 </script>
 
-<button class:selected type="button" {onclick} title={`Select ${pane.title}`}>
+<button
+  class:selected
+  draggable="true"
+  type="button"
+  {onclick}
+  title={`Select ${pane.title}`}
+  ondragstart={(event) => {
+    event.dataTransfer?.setData("text/plain", pane.id);
+    ondragstart();
+  }}
+  ondragover={(event) => {
+    event.preventDefault();
+    ondragover();
+  }}
+  ondrop={(event) => {
+    event.preventDefault();
+    ondrop();
+  }}
+  ondragend={ondragend}
+>
   <span class={`dot ${pane.taskStatus}`}></span>
   <span class="title">{pane.title}</span>
   {#if pane.unread}
