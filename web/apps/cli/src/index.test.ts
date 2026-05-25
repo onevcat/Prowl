@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { startServer } from "../../daemon/src/server";
 import { daemonStart, daemonStatus, daemonStop, renderDaemonStatus } from "./commands/daemon";
 import { renderVersion } from "./commands/version";
-import { requestDaemon } from "./transport";
+import { hello, requestDaemon } from "./transport";
 
 describe("prowl cli scaffold", () => {
   test("renders version", () => {
@@ -625,6 +625,7 @@ exec bun run apps/daemon/src/index.ts
 
     try {
       await Bun.sleep(50);
+      await hello(token, socketPath);
       const panes = await requestDaemon(
         {
           v: 1,
@@ -697,6 +698,7 @@ exec bun run apps/daemon/src/index.ts
 
     try {
       await Bun.sleep(50);
+      await hello(token, socketPath);
       const panes = await requestDaemon(
         {
           v: 1,
@@ -770,6 +772,7 @@ exec bun run apps/daemon/src/index.ts
 
     try {
       await Bun.sleep(50);
+      await hello(token, socketPath);
       const panes = await requestDaemon(
         {
           v: 1,

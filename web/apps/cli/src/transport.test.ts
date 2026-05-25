@@ -204,6 +204,38 @@ describe("CLI transport", () => {
       server.stop();
     }
   });
+
+  test("rejects control messages before hello over the daemon unix socket", async () => {
+    const token = "test-token";
+    const socketPath = `/tmp/prowld-unauthorized-control-test-${crypto.randomUUID()}.sock`;
+    const server = startServer(
+      {
+        port: 0,
+        bind: "127.0.0.1",
+        token,
+        allowedOrigins: ["http://127.0.0.1:5173"],
+        requireTLS: false,
+      },
+      { socketPath, statePath: ":memory:", spawnProcesses: false },
+    );
+
+    try {
+      await Bun.sleep(50);
+      const response = await sendRawJson(socketPath, {
+        v: 1,
+        type: "settings.get",
+        id: crypto.randomUUID(),
+        keys: ["panes"],
+      });
+
+      expect(response.type).toBe("error");
+      if (response.type === "error") {
+        expect(response.code).toBe("UNAUTHORIZED");
+      }
+    } finally {
+      server.stop();
+    }
+  });
 });
 
 async function sendRawJson(socketPath: string, value: unknown): Promise<ReturnType<typeof JSON.parse>> {
@@ -254,6 +286,16 @@ async function sendSplitPtyInput(channelId: number, payload: Uint8Array, socketP
       unix: socketPath,
       socket: {
         open(socket) {
+          socket.write(
+            encodeJsonFrame({
+              v: 1,
+              type: "hello",
+              id: makeMessageId(),
+              token: "test-token",
+              clientVersion: "0.0.0",
+              protocolVersion,
+            }),
+          );
           socket.write(frame.subarray(0, 5));
           setTimeout(() => {
             socket.write(frame.subarray(5));

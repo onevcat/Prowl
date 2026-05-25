@@ -8,6 +8,7 @@ import {
   parseClientControlMessage,
   protocolTags,
 } from "@prowl/protocol";
+import type { ServerControlMessage } from "@prowl/protocol";
 import type { DaemonConfig } from "../auth/config";
 import { handleControl } from "../server";
 import type { InMemoryState } from "../state/InMemoryState";
@@ -30,11 +31,17 @@ export function startIPCServer(
   rmSync(socketPath, { force: true });
 
   const buffers = new WeakMap<object, Uint8Array>();
+  const sessions = new WeakMap<object, { authenticated: boolean; ownedPaneIds: Set<string> }>();
   const server = Bun.listen({
     unix: socketPath,
     socket: {
+      open(socket) {
+        sessions.set(socket, { authenticated: false, ownedPaneIds: new Set() });
+      },
       data(socket, data) {
         const current = buffers.get(socket) ?? new Uint8Array();
+        const session = sessions.get(socket) ?? { authenticated: false, ownedPaneIds: new Set<string>() };
+        sessions.set(socket, session);
         let buffer = concat(current, data);
         while (buffer.byteLength >= 5) {
           const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
@@ -52,6 +59,15 @@ export function startIPCServer(
               return;
             }
             if (frame.tag === protocolTags.pty) {
+              if (!session.authenticated) {
+                socket.end();
+                return;
+              }
+              const pane = state.paneForChannel(frame.channelId);
+              if (!pane || !session.ownedPaneIds.has(pane.id)) {
+                socket.end();
+                return;
+              }
               state.writeToChannel(frame.channelId, frame.payload);
             }
             buffer = new Uint8Array();
@@ -85,7 +101,21 @@ export function startIPCServer(
             writeInvalidControlError(socket, error);
             return;
           }
-          for (const response of handleControl(control, state, config)) {
+          if (!session.authenticated && control.type !== "hello") {
+            socket.write(
+              encodeJsonFrame(errorResponse(control.id, "UNAUTHORIZED", "Send hello before other control messages")),
+            );
+            continue;
+          }
+          const responses = handleControl(control, state, config, {
+            authenticated: session.authenticated,
+            ownedPaneIds: session.ownedPaneIds,
+          });
+          if (control.type === "hello" && responses.some((response) => response.type === "welcome")) {
+            session.authenticated = true;
+            session.ownedPaneIds = new Set(state.listPanes().map((pane) => pane.id));
+          }
+          for (const response of responses) {
             socket.write(encodeJsonFrame(response));
           }
         }
@@ -93,6 +123,7 @@ export function startIPCServer(
       },
       close(socket) {
         buffers.delete(socket);
+        sessions.delete(socket);
       },
     },
   });
@@ -104,6 +135,10 @@ export function startIPCServer(
       rmSync(socketPath, { force: true });
     },
   };
+}
+
+function errorResponse(id: string, code: string, message: string): Extract<ServerControlMessage, { type: "error" }> {
+  return { v: 1, type: "error", id, code, message };
 }
 
 function concat(left: Uint8Array, right: Uint8Array): Uint8Array {

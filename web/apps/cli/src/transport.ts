@@ -15,6 +15,8 @@ export type CLIConfig = {
   token: string;
 };
 
+const authenticatedTokenBySocketPath = new Map<string, string>();
+
 export function defaultSocketPath(): string {
   return Bun.env.PROWL_SOCKET_PATH ?? join(homedir(), ".prowl", "prowld.sock");
 }
@@ -31,6 +33,7 @@ export async function requestDaemon(
   message: ClientControlMessage,
   socketPath = defaultSocketPath(),
 ): Promise<ServerControlMessage> {
+  const authToken = message.type === "hello" ? undefined : await tokenForSocketPath(socketPath);
   return new Promise((resolve, reject) => {
     let settled = false;
     let buffer: Uint8Array<ArrayBuffer> = new Uint8Array();
@@ -42,11 +45,17 @@ export async function requestDaemon(
       if (settled) {
         return;
       }
+      if (authToken && response.type === "welcome") {
+        return;
+      }
       settled = true;
       clearTimeout(timer);
       if (response.type === "error") {
         reject(new Error(`${response.code}: ${response.message}`));
       } else {
+        if (message.type === "hello" && response.type === "welcome") {
+          authenticatedTokenBySocketPath.set(socketPath, message.token);
+        }
         resolve(response);
       }
     }
@@ -64,6 +73,18 @@ export async function requestDaemon(
       unix: socketPath,
       socket: {
         open(socket) {
+          if (authToken) {
+            socket.write(
+              encodeJsonFrame({
+                v: 1,
+                type: "hello",
+                id: makeMessageId(),
+                token: authToken,
+                clientVersion: "0.0.0",
+                protocolVersion,
+              }),
+            );
+          }
           socket.write(encodeJsonFrame(message));
         },
         data(socket, data) {
@@ -90,8 +111,10 @@ export async function requestDaemon(
               return;
             }
             finish(JSON.parse(decoded.payload) as ServerControlMessage);
-            socket.end();
-            return;
+            if (settled) {
+              socket.end();
+              return;
+            }
           }
         },
         close() {
@@ -112,6 +135,7 @@ export async function sendPtyInput(
   payload: Uint8Array,
   socketPath = defaultSocketPath(),
 ): Promise<void> {
+  const authToken = await tokenForSocketPath(socketPath);
   await new Promise<void>((resolve, reject) => {
     let settled = false;
     const timer = setTimeout(() => {
@@ -140,6 +164,18 @@ export async function sendPtyInput(
       unix: socketPath,
       socket: {
         open(socket) {
+          if (authToken) {
+            socket.write(
+              encodeJsonFrame({
+                v: 1,
+                type: "hello",
+                id: makeMessageId(),
+                token: authToken,
+                clientVersion: "0.0.0",
+                protocolVersion,
+              }),
+            );
+          }
           socket.write(encodePtyFrame(channelId, payload));
           socket.end();
           finish();
@@ -170,6 +206,21 @@ export async function hello(token: string, socketPath = defaultSocketPath()): Pr
     },
     socketPath,
   );
+  authenticatedTokenBySocketPath.set(socketPath, token);
+}
+
+async function tokenForSocketPath(socketPath: string): Promise<string | undefined> {
+  const cached = authenticatedTokenBySocketPath.get(socketPath);
+  if (cached) {
+    return cached;
+  }
+  try {
+    const config = await loadCLIConfig();
+    authenticatedTokenBySocketPath.set(socketPath, config.token);
+    return config.token;
+  } catch {
+    return undefined;
+  }
 }
 
 function concat(left: Uint8Array<ArrayBuffer>, right: Uint8Array<ArrayBufferLike>): Uint8Array<ArrayBuffer> {
