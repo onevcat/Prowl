@@ -30,7 +30,7 @@
       }}
     />
     <Button label="↵" title="Send Broadcast" onclick={sendBroadcast} />
-    <Button label="⌘K" title="Open Command Palette (Command K)" onclick={() => (appState.paletteOpen = true)} />
+    <Button label="⌘K" title="Open Command Palette (Command K)" onclick={() => appState.perform("palette.open")} />
   </header>
 
   <Grid

@@ -49,9 +49,10 @@
     >
       <input
         bind:this={input}
-        bind:value={appState.paletteQuery}
         aria-label="Command Palette"
         placeholder="Search tabs, worktrees, repos, settings, actions"
+        value={appState.paletteQuery}
+        oninput={(event) => appState.setPaletteQuery(event.currentTarget.value)}
         onkeydown={(event) => {
           if (event.key === "ArrowDown") {
             event.preventDefault();

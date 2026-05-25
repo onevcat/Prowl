@@ -68,7 +68,7 @@
 
   <aside class="sidebar" aria-label="Worktrees and tabs">
     <div class="toolbar">
-      <Button label="⌘K" title="Open Command Palette (Command K)" onclick={() => (appState.paletteOpen = true)} />
+      <Button label="⌘K" title="Open Command Palette (Command K)" onclick={() => appState.perform("palette.open")} />
       <Button label="▦" title="Show Canvas" onclick={() => appState.setView("canvas")} />
       <Button label="+" title="New Tab (Command T)" onclick={() => appState.createPane()} />
       <Button label="Δ" title="Show Diff" disabled={!appState.selectedWorktreeId || appState.diffBusy} onclick={() => appState.showDiff()} />

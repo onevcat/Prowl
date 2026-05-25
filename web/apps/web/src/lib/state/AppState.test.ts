@@ -68,6 +68,32 @@ describe("AppState custom action shortcuts", () => {
   });
 });
 
+describe("AppState view mutation methods", () => {
+  test("opens and closes the palette through actions", () => {
+    const state = appStateFixture();
+
+    state.perform("palette.open");
+    expect(state.paletteOpen).toBe(true);
+
+    state.setPaletteQuery("repo");
+    expect(state.paletteQuery).toBe("repo");
+
+    state.perform("palette.close");
+    expect(state.paletteOpen).toBe(false);
+    expect(state.paletteQuery).toBe("");
+  });
+
+  test("updates auth form state through methods", () => {
+    const state = appStateFixture();
+
+    state.setDaemonURL("ws://127.0.0.1:9999/ws");
+    state.setLoginToken("secret");
+
+    expect(state.daemonURL).toBe("ws://127.0.0.1:9999/ws");
+    expect(state.loginToken).toBe("secret");
+  });
+});
+
 function appStateFixture(): AppState {
   const state = new AppState();
   const repository: Repository = {

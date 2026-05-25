@@ -23,12 +23,22 @@
 
     <label>
       <span>Daemon URL</span>
-      <input bind:value={appState.daemonURL} autocomplete="off" spellcheck="false" />
+      <input
+        autocomplete="off"
+        spellcheck="false"
+        value={appState.daemonURL}
+        oninput={(event) => appState.setDaemonURL(event.currentTarget.value)}
+      />
     </label>
 
     <label>
       <span>Token</span>
-      <input bind:value={appState.loginToken} autocomplete="current-password" type="password" />
+      <input
+        autocomplete="current-password"
+        type="password"
+        value={appState.loginToken}
+        oninput={(event) => appState.setLoginToken(event.currentTarget.value)}
+      />
     </label>
 
     {#if appState.loginError || appState.errorMessage}

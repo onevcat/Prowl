@@ -297,6 +297,18 @@ export class AppState {
     this.perform("palette.close");
   }
 
+  setPaletteQuery(query: string): void {
+    this.paletteQuery = query;
+  }
+
+  setDaemonURL(url: string): void {
+    this.daemonURL = url;
+  }
+
+  setLoginToken(token: string): void {
+    this.loginToken = token;
+  }
+
   #basePaletteItems(): PaletteItem[] {
     const tabItems = Array.from(this.panes.values()).map((pane) => ({
       id: `pane:${pane.id}`,
