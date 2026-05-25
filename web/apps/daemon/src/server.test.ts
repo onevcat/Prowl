@@ -203,6 +203,33 @@ describe("daemon scaffold", () => {
     expect(authenticateUpgradeToken("wrong-token", config)).toEqual({ allowed: false, authenticated: false });
   });
 
+  test("rejects websocket upgrades from disallowed or missing origins", async () => {
+    const root = mkdtempSync(join(tmpdir(), "prowl-ws-origin-test-"));
+    const server = startServer(
+      {
+        port: 0,
+        bind: "127.0.0.1",
+        token: "test-token",
+        allowedOrigins: ["http://127.0.0.1:5173"],
+        requireTLS: false,
+      },
+      { socketPath: false, statePath: join(root, "state.sqlite"), spawnProcesses: false },
+    );
+    try {
+      await expect(openSocket(new URL("/ws?token=test-token", server.url), "http://evil.example")).rejects.toThrow(
+        "WebSocket failed to open",
+      );
+      await expect(openSocket(new URL("/ws?token=test-token", server.url), null)).rejects.toThrow(
+        "WebSocket failed to open",
+      );
+      const allowed = await openSocket(new URL("/ws?token=test-token", server.url));
+
+      allowed.close();
+    } finally {
+      server.stop();
+    }
+  });
+
   test("reads websocket token from authorization bearer header", () => {
     const request = new Request("http://127.0.0.1/ws", {
       headers: {
@@ -1288,9 +1315,9 @@ function runGit(cwd: string, ...args: string[]): void {
   }
 }
 
-function openSocket(url: URL): Promise<WebSocket> {
+function openSocket(url: URL, origin: string | null = "http://127.0.0.1:5173"): Promise<WebSocket> {
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  const socket = new WebSocket(url, { headers: { Origin: "http://127.0.0.1:5173" } });
+  const socket = new WebSocket(url, origin === null ? undefined : { headers: { Origin: origin } });
   return new Promise((resolve, reject) => {
     socket.addEventListener("open", () => resolve(socket), { once: true });
     socket.addEventListener("error", () => reject(new Error("WebSocket failed to open")), { once: true });
