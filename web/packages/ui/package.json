@@ -1,0 +1,23 @@
+{
+  "name": "@prowl/ui",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./Button.svelte": "./src/Button.svelte",
+    "./Tooltip.svelte": "./src/Tooltip.svelte"
+  },
+  "scripts": {
+    "build": "svelte-check --tsconfig ./tsconfig.json",
+    "dev": "svelte-check --watch --tsconfig ./tsconfig.json",
+    "typecheck": "svelte-check --tsconfig ./tsconfig.json"
+  },
+  "dependencies": {
+    "svelte": "^5.0.0"
+  },
+  "devDependencies": {
+    "svelte-check": "^4.1.0",
+    "typescript": "^5.6.3"
+  }
+}

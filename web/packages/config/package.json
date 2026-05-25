@@ -1,0 +1,10 @@
+{
+  "name": "@prowl/config",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./tsconfig": "./tsconfig.base.json",
+    "./biome": "./biome.base.json",
+    "./vitest": "./vitest.base.ts"
+  }
+}

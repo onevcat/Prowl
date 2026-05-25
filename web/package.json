@@ -1,0 +1,19 @@
+{
+  "name": "prowl-web-workspace",
+  "private": true,
+  "packageManager": "bun@1.2.15",
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev": "bun run --filter '*' dev",
+    "build": "bun run --filter '*' build",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "test": "bun test",
+    "typecheck": "bun run --filter '*' typecheck"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.9"
+  }
+}
