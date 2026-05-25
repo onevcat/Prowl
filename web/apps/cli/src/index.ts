@@ -1,3 +1,11 @@
+import {
+  daemonStart,
+  daemonStatus,
+  daemonStop,
+  renderDaemonStart,
+  renderDaemonStatus,
+  renderDaemonStop,
+} from "./commands/daemon";
 import { getPaneList, renderList } from "./commands/list";
 import {
   closePane,
@@ -83,6 +91,22 @@ switch (command) {
       break;
     }
     process.stderr.write(`Unknown worktree command: ${args[0] ?? ""}\n`);
+    process.exit(64);
+    break;
+  case "daemon":
+    if (args[0] === "start") {
+      await writeOutput(daemonStart, renderDaemonStart);
+      break;
+    }
+    if (args[0] === "stop") {
+      await writeOutput(daemonStop, renderDaemonStop);
+      break;
+    }
+    if (args[0] === "status") {
+      await writeOutput(daemonStatus, renderDaemonStatus);
+      break;
+    }
+    process.stderr.write(`Unknown daemon command: ${args[0] ?? ""}\n`);
     process.exit(64);
     break;
   case "help":

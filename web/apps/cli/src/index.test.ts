@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { renderDaemonStatus } from "./commands/daemon";
 import { renderVersion } from "./commands/version";
 
 describe("prowl cli scaffold", () => {
@@ -15,5 +16,12 @@ describe("prowl cli scaffold", () => {
 
     expect(result.exitCode).toBe(0);
     expect(JSON.parse(new TextDecoder().decode(result.stdout))).toEqual({ name: "prowl", version: "0.0.0" });
+  });
+
+  test("renders daemon status", async () => {
+    const text = await renderDaemonStatus();
+
+    expect(text).toMatch(/running|stopped/);
+    expect(text).toContain("prowld.sock");
   });
 });
