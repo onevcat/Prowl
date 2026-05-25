@@ -20,8 +20,25 @@ export const daemonBinaryTargets: BinaryTarget[] = [
   },
 ];
 
+export const cliBinaryTargets: BinaryTarget[] = [
+  {
+    name: "prowl-darwin-arm64",
+    entrypoint: "apps/cli/src/index.ts",
+    bunTarget: "bun-darwin-arm64",
+    outfile: "dist/bin/prowl-darwin-arm64",
+  },
+  {
+    name: "prowl-linux-x64",
+    entrypoint: "apps/cli/src/index.ts",
+    bunTarget: "bun-linux-x64",
+    outfile: "dist/bin/prowl-linux-x64",
+  },
+];
+
+export const releaseBinaryTargets: BinaryTarget[] = [...daemonBinaryTargets, ...cliBinaryTargets];
+
 async function main(): Promise<void> {
-  for (const target of daemonBinaryTargets) {
+  for (const target of releaseBinaryTargets) {
     await buildBinary(target);
   }
 }
