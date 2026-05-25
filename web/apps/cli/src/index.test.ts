@@ -632,6 +632,102 @@ describe("prowl cli scaffold", () => {
       server.stop();
     }
   });
+
+  test("sends pane keystrokes through the CLI", async () => {
+    const token = "test-token";
+    const home = mkdtempSync(join(tmpdir(), "prowl-cli-key-home-"));
+    const prowlHome = join(home, ".prowl");
+    mkdirSync(prowlHome, { recursive: true });
+    writeFileSync(
+      join(prowlHome, "config.json"),
+      JSON.stringify({
+        port: 0,
+        bind: "127.0.0.1",
+        token,
+        allowedOrigins: ["http://127.0.0.1:5173"],
+        requireTLS: false,
+      }),
+    );
+    const socketPath = join(prowlHome, "prowld.sock");
+    const server = startServer(
+      {
+        port: 0,
+        bind: "127.0.0.1",
+        token,
+        allowedOrigins: ["http://127.0.0.1:5173"],
+        requireTLS: false,
+      },
+      { socketPath, statePath: join(prowlHome, "state.sqlite"), spawnProcesses: true },
+    );
+    const cliEnv = {
+      ...Bun.env,
+      PROWL_CONFIG_PATH: join(prowlHome, "config.json"),
+      PROWL_SOCKET_PATH: socketPath,
+    };
+
+    try {
+      await Bun.sleep(50);
+      const panes = await requestDaemon(
+        {
+          v: 1,
+          type: "settings.get",
+          id: crypto.randomUUID(),
+          keys: ["panes"],
+        },
+        socketPath,
+      );
+      if (panes.type !== "settings.snapshot" || !Array.isArray(panes.settings.panes)) {
+        throw new Error("Expected panes");
+      }
+      const pane = panes.settings.panes[0];
+      const typed = Bun.spawn(["bun", "run", "src/index.ts", "--json", "key", pane.id, "printf cli-key"], {
+        cwd: new URL("..", import.meta.url).pathname,
+        env: cliEnv,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [typedExitCode, typedStdout, typedStderr] = await Promise.all([
+        typed.exited,
+        new Response(typed.stdout).text(),
+        new Response(typed.stderr).text(),
+      ]);
+
+      expect(typedExitCode).toBe(0);
+      expect(typedStderr).toBe("");
+      expect(JSON.parse(typedStdout)).toEqual({ paneId: pane.id, status: "sent", key: "printf cli-key" });
+
+      const entered = Bun.spawn(["bun", "run", "src/index.ts", "--json", "key", pane.id, "Enter"], {
+        cwd: new URL("..", import.meta.url).pathname,
+        env: cliEnv,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [enteredExitCode, enteredStderr] = await Promise.all([entered.exited, new Response(entered.stderr).text()]);
+
+      expect(enteredExitCode).toBe(0);
+      expect(enteredStderr).toBe("");
+
+      await Bun.sleep(250);
+      const readResult = Bun.spawn(["bun", "run", "src/index.ts", "--json", "read", pane.id], {
+        cwd: new URL("..", import.meta.url).pathname,
+        env: cliEnv,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [readExitCode, readStdout, readStderr] = await Promise.all([
+        readResult.exited,
+        new Response(readResult.stdout).text(),
+        new Response(readResult.stderr).text(),
+      ]);
+
+      expect(readExitCode).toBe(0);
+      expect(readStderr).toBe("");
+      const replay = JSON.parse(readStdout) as { output: string };
+      expect(replay.output).toContain("cli-key");
+    } finally {
+      server.stop();
+    }
+  });
 });
 
 function runGit(cwd: string, ...args: string[]): void {
