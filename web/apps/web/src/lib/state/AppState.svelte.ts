@@ -253,6 +253,9 @@ export class AppState {
       case "view.settings":
         this.setView("settings");
         break;
+      case "view.diff":
+        void this.showDiff();
+        break;
       case "palette.open":
         this.paletteOpen = true;
         break;

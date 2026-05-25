@@ -83,6 +83,20 @@ describe("AppState view mutation methods", () => {
     expect(state.paletteQuery).toBe("");
   });
 
+  test("runs the diff action through the native-aligned shortcut", () => {
+    const state = appStateFixture();
+    const event = shortcutEvent({ key: "y", ctrlKey: true, shiftKey: true });
+    let diffWorktreeId: string | null = null;
+    state.showDiff = (async (worktreeId = state.selectedWorktreeId) => {
+      diffWorktreeId = worktreeId;
+    }) as AppState["showDiff"];
+
+    state.handleKeydown(event);
+
+    expect(event.prevented).toBe(true);
+    expect(diffWorktreeId).toBe("worktree-1");
+  });
+
   test("updates auth form state through methods", () => {
     const state = appStateFixture();
 

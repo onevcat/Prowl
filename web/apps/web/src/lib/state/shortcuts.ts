@@ -6,6 +6,7 @@ export const defaultShortcuts: Array<[ActionId, KeyChord]> = [
   ["palette.open", "Mod+K"],
   ["palette.close", "Escape"],
   ["performance.toggle", "Mod+Shift+P"],
+  ["view.diff", "Mod+Shift+Y"],
   ["pane.new", "Mod+T"],
   ["pane.close", "Mod+W"],
   ["worktree.previous", "Mod+Control+ArrowLeft"],

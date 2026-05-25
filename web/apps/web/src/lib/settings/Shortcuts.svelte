@@ -9,6 +9,7 @@
     { action: "palette.open", label: "Open palette" },
     { action: "palette.close", label: "Close palette" },
     { action: "performance.toggle", label: "Performance HUD" },
+    { action: "view.diff", label: "Show diff" },
     { action: "pane.new", label: "New pane" },
     { action: "pane.close", label: "Close pane" },
     { action: "worktree.previous", label: "Previous worktree" },

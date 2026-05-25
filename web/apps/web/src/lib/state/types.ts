@@ -52,6 +52,7 @@ export type ActionId =
   | "view.shelf"
   | "view.canvas"
   | "view.settings"
+  | "view.diff"
   | "palette.open"
   | "palette.close"
   | "performance.toggle"
