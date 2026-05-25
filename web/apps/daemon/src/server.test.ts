@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { makeMessageId, protocolVersion } from "@prowl/protocol";
@@ -512,6 +512,73 @@ describe("daemon scaffold", () => {
     expect(state.worktreesByRepo.get("repo-default")?.some((worktree) => worktree.id === createdWorktree.id)).toBe(
       false,
     );
+  });
+
+  test("prefers bundled git-wt for worktree operations when available", () => {
+    const root = mkdtempSync(join(tmpdir(), "prowl-git-wt-test-"));
+    const repoPath = join(root, "repo");
+    const logPath = join(root, "git-wt.log");
+    const fakeGitWt = join(root, "git-wt");
+    mkdirSync(repoPath);
+    writeFileSync(
+      fakeGitWt,
+      `#!/bin/sh
+printf "%s\\t%s\\n" "$(pwd)" "$*" >> ${JSON.stringify(logPath)}
+exit 0
+`,
+    );
+    chmodSync(fakeGitWt, 0o755);
+    const previousGitWt = Bun.env.PROWL_GIT_WT_BIN;
+    Bun.env.PROWL_GIT_WT_BIN = fakeGitWt;
+    try {
+      const state = new InMemoryState(repoPath, { statePath: ":memory:", spawnProcesses: false });
+      const config = {
+        port: 0,
+        bind: "127.0.0.1",
+        token: "test-token",
+        allowedOrigins: ["http://127.0.0.1:5173"],
+        requireTLS: false,
+      };
+
+      const created = handleControl(
+        {
+          v: 1,
+          type: "worktree.create",
+          id: makeMessageId(),
+          repoId: "repo-default",
+          branch: "feature/git-wt-branch",
+          baseRef: "main",
+        },
+        state,
+        config,
+      );
+      expect(created[0]?.type).toBe("worktree.updated");
+      if (created[0]?.type !== "worktree.updated") {
+        throw new Error("Expected worktree.updated");
+      }
+
+      const archived = handleControl(
+        {
+          v: 1,
+          type: "worktree.archive",
+          id: makeMessageId(),
+          worktreeId: created[0].worktree.id,
+        },
+        state,
+        config,
+      );
+      expect(archived[0]?.type).toBe("worktree.updated");
+
+      const log = readFileSync(logPath, "utf8");
+      expect(log).toContain(`${repoPath}\tadd -b feature/git-wt-branch ${join(root, "git-wt-branch")} main\n`);
+      expect(log).toContain(`${repoPath}\tremove --force ${join(root, "git-wt-branch")}\n`);
+    } finally {
+      if (previousGitWt === undefined) {
+        Bun.env.PROWL_GIT_WT_BIN = undefined;
+      } else {
+        Bun.env.PROWL_GIT_WT_BIN = previousGitWt;
+      }
+    }
   });
 
   test("creates and lists custom actions", () => {

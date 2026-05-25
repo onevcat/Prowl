@@ -863,17 +863,62 @@ function resolveWorktreePath(repoPath: string, branch: string, directory?: strin
 }
 
 function runGitWorktreeAdd(repoPath: string, targetPath: string, branch: string, baseRef?: string): string | null {
-  const args = ["-C", repoPath, "worktree", "add", "-b", branch, targetPath, baseRef?.trim() || "HEAD"];
-  const result = Bun.spawnSync(["git", ...args], { stdout: "pipe", stderr: "pipe" });
+  const gitWt = bundledGitWtCommand();
+  const result = gitWt
+    ? Bun.spawnSync([gitWt, "add", "-b", branch, targetPath, baseRef?.trim() || "HEAD"], {
+        cwd: repoPath,
+        stdout: "pipe",
+        stderr: "pipe",
+      })
+    : Bun.spawnSync(["git", "-C", repoPath, "worktree", "add", "-b", branch, targetPath, baseRef?.trim() || "HEAD"], {
+        stdout: "pipe",
+        stderr: "pipe",
+      });
   return result.exitCode === 0 ? null : commandError(result);
 }
 
 function runGitWorktreeRemove(repoPath: string, worktreePath: string): string | null {
-  const result = Bun.spawnSync(["git", "-C", repoPath, "worktree", "remove", "--force", worktreePath], {
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  const gitWt = bundledGitWtCommand();
+  const result = gitWt
+    ? Bun.spawnSync([gitWt, "remove", "--force", worktreePath], {
+        cwd: repoPath,
+        stdout: "pipe",
+        stderr: "pipe",
+      })
+    : Bun.spawnSync(["git", "-C", repoPath, "worktree", "remove", "--force", worktreePath], {
+        stdout: "pipe",
+        stderr: "pipe",
+      });
   return result.exitCode === 0 ? null : commandError(result);
+}
+
+function bundledGitWtCommand(): string | null {
+  const override = Bun.env.PROWL_GIT_WT_BIN?.trim();
+  if (override && isExecutableFile(override)) {
+    return override;
+  }
+  for (const candidate of [
+    join(repoRootFromSource(), "Resources", "git-wt", "git-wt"),
+    join(repoRootFromSource(), "Resources", "git-wt", "wt"),
+  ]) {
+    if (isExecutableFile(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function repoRootFromSource(): string {
+  return resolve(dirname(new URL(import.meta.url).pathname), "../../../..");
+}
+
+function isExecutableFile(path: string): boolean {
+  try {
+    const stats = statSync(path);
+    return stats.isFile() && (stats.mode & 0o111) !== 0;
+  } catch {
+    return false;
+  }
 }
 
 function commandError(result: SyncCommandResult): string {
