@@ -3,7 +3,7 @@ import { InMemoryState } from "./InMemoryState";
 
 describe("InMemoryState", () => {
   test("seeds a repository, worktree, and pane", () => {
-    const state = new InMemoryState("/tmp/prowl", { spawnProcesses: false });
+    const state = testState();
     const [repository] = state.repositories;
     expect(repository).toBeDefined();
 
@@ -13,7 +13,7 @@ describe("InMemoryState", () => {
   });
 
   test("creates and closes panes", () => {
-    const state = new InMemoryState("/tmp/prowl", { spawnProcesses: false });
+    const state = testState();
     const repository = state.repositories[0];
     expect(repository).toBeDefined();
     const [worktree] = repository ? (state.worktreesByRepo.get(repository.id) ?? []) : [];
@@ -29,8 +29,24 @@ describe("InMemoryState", () => {
   });
 
   test("returns null replay for missing panes", () => {
-    const state = new InMemoryState("/tmp/prowl", { spawnProcesses: false });
+    const state = testState();
 
     expect(state.replayForPane("missing")).toBeNull();
   });
+
+  test("persists repositories and settings in sqlite", () => {
+    const statePath = `/tmp/prowl-test-${crypto.randomUUID()}.sqlite`;
+    const first = new InMemoryState("/tmp/prowl", { spawnProcesses: false, statePath });
+    const { repository } = first.addRepository("/tmp/other-repo");
+    first.updateSettings({ theme: "dark" });
+
+    const second = new InMemoryState("/tmp/prowl", { spawnProcesses: false, statePath });
+
+    expect(second.repositories.some((candidate) => candidate.id === repository.id)).toBe(true);
+    expect(second.settingsSnapshot(["theme"]).theme).toBe("dark");
+  });
 });
+
+function testState(): InMemoryState {
+  return new InMemoryState("/tmp/prowl", { spawnProcesses: false, statePath: ":memory:" });
+}

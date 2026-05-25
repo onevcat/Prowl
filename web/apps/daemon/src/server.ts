@@ -113,6 +113,19 @@ function handleControl(
     return [{ v: 1, type: "repo.listed", id: message.id, repositories: state.repositories }];
   }
 
+  if (message.type === "repo.add") {
+    const { repository, worktree } = state.addRepository(message.path);
+    return [
+      { v: 1, type: "repo.updated", id: message.id, repository },
+      { v: 1, type: "worktree.updated", id: message.id, worktree },
+    ];
+  }
+
+  if (message.type === "repo.remove") {
+    state.removeRepository(message.repoId);
+    return [{ v: 1, type: "repo.listed", id: message.id, repositories: state.repositories }];
+  }
+
   if (message.type === "worktree.list") {
     return [
       {
@@ -127,6 +140,10 @@ function handleControl(
 
   if (message.type === "settings.get") {
     return [{ v: 1, type: "settings.snapshot", id: message.id, settings: state.settingsSnapshot(message.keys) }];
+  }
+
+  if (message.type === "settings.set") {
+    return [{ v: 1, type: "settings.snapshot", id: message.id, settings: state.updateSettings(message.patch) }];
   }
 
   if (message.type === "pane.create") {
