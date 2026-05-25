@@ -76,7 +76,7 @@ export async function daemonStop(): Promise<DaemonStatus> {
   }
   try {
     process.kill(pid, "SIGTERM");
-    rmSync(defaultPidPath(), { force: true });
+    await waitForDaemonStopped();
     return { running: false, pid, socketPath, message: "stopped" };
   } catch {
     rmSync(defaultPidPath(), { force: true });
@@ -142,6 +142,19 @@ async function waitForDaemonReady(pid: number): Promise<void> {
     await Bun.sleep(daemonStartPollIntervalMs);
   }
   throw new Error("Timed out waiting for daemon to start");
+}
+
+async function waitForDaemonStopped(): Promise<void> {
+  const deadline = performance.now() + daemonStartTimeoutMs;
+  while (performance.now() < deadline) {
+    const status = await daemonStatus();
+    if (!status.running) {
+      rmSync(defaultPidPath(), { force: true });
+      return;
+    }
+    await Bun.sleep(daemonStartPollIntervalMs);
+  }
+  throw new Error("Timed out waiting for daemon to stop");
 }
 
 function webRoot(): string {

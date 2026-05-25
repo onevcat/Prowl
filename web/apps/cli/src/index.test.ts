@@ -138,6 +138,12 @@ exec bun run apps/daemon/src/index.ts
       expect(started.message).toBe("started");
       expect(status.running).toBe(true);
       expect(status.pid).toBe(started.pid);
+
+      const stopped = await daemonStop();
+      const afterStop = await daemonStatus();
+
+      expect(stopped.message).toBe("stopped");
+      expect(afterStop.running).toBe(false);
     } finally {
       await daemonStop();
       if (previousConfigPath === undefined) {
