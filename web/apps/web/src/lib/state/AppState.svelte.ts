@@ -835,10 +835,10 @@ export class AppState {
         sessionStorage.setItem(sessionTokenKey, token);
         this.#connectDaemon(token);
       }
-      this.loginToken = "";
     } catch (error) {
       this.loginError = redactSensitiveText(error);
     } finally {
+      this.loginToken = "";
       this.loginBusy = false;
     }
   }

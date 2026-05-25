@@ -29,9 +29,14 @@ Object.defineProperty(globalThis, "navigator", {
 });
 
 const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+const originalFetch = globalThis.fetch;
 
 afterEach(() => {
   performance.clearMeasures();
+  Object.defineProperty(globalThis, "fetch", {
+    configurable: true,
+    value: originalFetch,
+  });
   if (originalRequestAnimationFrame) {
     Object.defineProperty(globalThis, "requestAnimationFrame", {
       configurable: true,
@@ -513,6 +518,23 @@ describe("AppState view mutation methods", () => {
     expect(state.daemonURL).toBe("ws://127.0.0.1:9999/ws");
     expect(state.loginToken).toBe("secret");
     expect(state.loginRemember).toBe(true);
+  });
+
+  test("clears typed login tokens after remember-me failures", async () => {
+    const state = appStateFixture();
+    state.setDaemonURL("ws://127.0.0.1:7878/ws");
+    state.setLoginToken("super-secret-token");
+    state.setLoginRemember(true);
+    Object.defineProperty(globalThis, "fetch", {
+      configurable: true,
+      value: () => Promise.resolve(new Response("Unauthorized", { status: 401 })),
+    });
+
+    await state.login();
+
+    expect(state.loginToken).toBe("");
+    expect(state.loginError).toBe("Invalid token.");
+    expect(state.loginError).not.toContain("super-secret-token");
   });
 });
 
