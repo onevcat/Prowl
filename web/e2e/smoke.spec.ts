@@ -6,6 +6,16 @@ const token = "e2e-token";
 
 test.describe.configure({ mode: "serial" });
 
+test("ships the browser content security policy", async ({ page }) => {
+  const response = await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}&token=${token}`);
+  const csp = response?.headers()["content-security-policy"] ?? "";
+
+  expect(csp).toContain("connect-src 'self' http://127.0.0.1:* http://localhost:* https:");
+  expect(csp).toContain("ws://127.0.0.1:* ws://localhost:* wss:");
+  expect(csp).toContain("worker-src 'self' blob:");
+  await expect(page.locator(".connection.open")).toBeVisible();
+});
+
 test("logs in with a daemon token", async ({ page }) => {
   await installWebSocketURLRecorder(page);
   await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}`);
