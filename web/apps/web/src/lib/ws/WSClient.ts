@@ -7,6 +7,10 @@ type StatusListener = (state: "connecting" | "open" | "closed") => void;
 
 export class WSClient {
   #socket: WebSocket | null = null;
+  #url: string | null = null;
+  #connectGeneration = 0;
+  #manualClose = false;
+  #reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   #listeners = new Set<Listener>();
   #binaryListeners = new Set<BinaryListener>();
   #statusListeners = new Set<StatusListener>();
@@ -24,19 +28,54 @@ export class WSClient {
   }
 
   connect(url: string): void {
+    this.#url = url;
+    this.#manualClose = false;
+    this.#openSocket(++this.#connectGeneration);
+  }
+
+  disconnect(): void {
+    this.#manualClose = true;
+    this.#connectGeneration += 1;
+    if (this.#reconnectTimer) {
+      clearTimeout(this.#reconnectTimer);
+      this.#reconnectTimer = null;
+    }
+    this.#socket?.close();
+    this.#socket = null;
+    this.#rejectPending(new Error("WebSocket disconnected"));
+    this.#emitStatus("closed");
+  }
+
+  #openSocket(generation: number): void {
+    if (!this.#url) {
+      return;
+    }
     this.#socket?.close();
     this.#emitStatus("connecting");
-    const socket = new WebSocket(url);
+    const socket = new WebSocket(this.#url);
     socket.binaryType = "arraybuffer";
-    socket.onopen = () => this.#emitStatus("open");
+    socket.onopen = () => {
+      if (generation !== this.#connectGeneration) {
+        return;
+      }
+      this.#emitStatus("open");
+    };
     socket.onmessage = (event) => this.#handleMessage(event.data);
     socket.onclose = () => {
+      if (generation !== this.#connectGeneration) {
+        return;
+      }
       this.#rejectPending(new Error("WebSocket closed"));
       this.#emitStatus("closed");
+      this.#scheduleReconnect(generation);
     };
     socket.onerror = () => {
+      if (generation !== this.#connectGeneration) {
+        return;
+      }
       this.#rejectPending(new Error("WebSocket error"));
       this.#emitStatus("closed");
+      this.#scheduleReconnect(generation);
     };
     this.#socket = socket;
   }
@@ -90,7 +129,7 @@ export class WSClient {
   }
 
   #handleMessage(data: unknown): void {
-    if (!(data instanceof ArrayBuffer)) {
+    if (!(data instanceof ArrayBuffer) && !(data instanceof Uint8Array)) {
       return;
     }
     const frame = decodeFrame(data);
@@ -121,6 +160,19 @@ export class WSClient {
     for (const listener of this.#statusListeners) {
       listener(state);
     }
+  }
+
+  #scheduleReconnect(generation: number): void {
+    if (this.#manualClose || generation !== this.#connectGeneration || this.#reconnectTimer) {
+      return;
+    }
+    this.#reconnectTimer = setTimeout(() => {
+      this.#reconnectTimer = null;
+      if (this.#manualClose || generation !== this.#connectGeneration) {
+        return;
+      }
+      this.#openSocket(generation);
+    }, 500);
   }
 
   #rejectPending(error: Error): void {

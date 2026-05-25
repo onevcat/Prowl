@@ -18,6 +18,7 @@ const textEncoder = new TextEncoder();
 
 export class AppState {
   readonly ws = new WSClient();
+  #bootstrapPromise: Promise<void> | null = null;
   repositories = $state<Repository[]>([]);
   worktreesByRepo = $state<Map<string, Worktree[]>>(new Map());
   panes = $state<Map<string, Pane>>(new Map());
@@ -267,9 +268,16 @@ export class AppState {
     this.ws.connect(daemonURL.toString());
     this.ws.onStatus((state) => {
       if (state === "open") {
-        void this.#bootstrap(token);
+        void this.#bootstrapOnce(token);
       }
     });
+  }
+
+  #bootstrapOnce(token: string): Promise<void> {
+    this.#bootstrapPromise ??= this.#bootstrap(token).finally(() => {
+      this.#bootstrapPromise = null;
+    });
+    return this.#bootstrapPromise;
   }
 
   async #bootstrap(token: string): Promise<void> {
