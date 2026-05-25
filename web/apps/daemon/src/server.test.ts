@@ -2,7 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { makeMessageId, protocolVersion } from "@prowl/protocol";
+import {
+  makeMessageId,
+  maxBinaryPayloadBytes,
+  maxJsonPayloadBytes,
+  protocolTags,
+  protocolVersion,
+} from "@prowl/protocol";
 import {
   allowControlMessage,
   authenticateUpgradeToken,
@@ -266,6 +272,66 @@ describe("daemon scaffold", () => {
     }
     expect(allowControlMessage(session, 1_500)).toBe(false);
     expect(allowControlMessage(session, 2_001)).toBe(true);
+  });
+
+  test("closes websocket connections that send oversized PTY frames", async () => {
+    const root = mkdtempSync(join(tmpdir(), "prowl-oversized-pty-frame-test-"));
+    const server = startServer(
+      {
+        port: 0,
+        bind: "127.0.0.1",
+        token: "test-token",
+        allowedOrigins: ["http://127.0.0.1:5173"],
+        requireTLS: false,
+      },
+      { socketPath: false, statePath: join(root, "state.sqlite"), spawnProcesses: false },
+    );
+    try {
+      const socket = await openSocket(new URL("/ws?token=test-token", server.url));
+      const frame = new Uint8Array(5 + maxBinaryPayloadBytes + 1);
+      const view = new DataView(frame.buffer);
+      view.setUint8(0, protocolTags.pty);
+      view.setUint32(1, 1, false);
+
+      const closed = closeEvent(socket);
+      socket.send(frame);
+
+      const event = await closed;
+      expect(event.code).toBe(1009);
+      expect(event.reason).toBe("Invalid frame");
+    } finally {
+      server.stop();
+    }
+  });
+
+  test("closes websocket connections that send oversized JSON frames", async () => {
+    const root = mkdtempSync(join(tmpdir(), "prowl-oversized-json-frame-test-"));
+    const server = startServer(
+      {
+        port: 0,
+        bind: "127.0.0.1",
+        token: "test-token",
+        allowedOrigins: ["http://127.0.0.1:5173"],
+        requireTLS: false,
+      },
+      { socketPath: false, statePath: join(root, "state.sqlite"), spawnProcesses: false },
+    );
+    try {
+      const socket = await openSocket(new URL("/ws?token=test-token", server.url));
+      const frame = new Uint8Array(5 + maxJsonPayloadBytes + 1);
+      const view = new DataView(frame.buffer);
+      view.setUint8(0, protocolTags.json);
+      view.setUint32(1, maxJsonPayloadBytes + 1, false);
+
+      const closed = closeEvent(socket);
+      socket.send(frame);
+
+      const event = await closed;
+      expect(event.code).toBe(1009);
+      expect(event.reason).toBe("Invalid frame");
+    } finally {
+      server.stop();
+    }
   });
 
   test("only sends PTY output to attached sessions", () => {
@@ -1042,4 +1108,19 @@ function runGit(cwd: string, ...args: string[]): void {
   if (result.exitCode !== 0) {
     throw new Error(new TextDecoder().decode(result.stderr) || new TextDecoder().decode(result.stdout));
   }
+}
+
+function openSocket(url: URL): Promise<WebSocket> {
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  const socket = new WebSocket(url, { headers: { Origin: "http://127.0.0.1:5173" } });
+  return new Promise((resolve, reject) => {
+    socket.addEventListener("open", () => resolve(socket), { once: true });
+    socket.addEventListener("error", () => reject(new Error("WebSocket failed to open")), { once: true });
+  });
+}
+
+function closeEvent(socket: WebSocket): Promise<CloseEvent> {
+  return new Promise((resolve) => {
+    socket.addEventListener("close", resolve, { once: true });
+  });
 }
