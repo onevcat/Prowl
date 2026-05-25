@@ -102,6 +102,33 @@ test("connects to the daemon and writes through the terminal", async ({ page }) 
   await expect(terminal).toContainText("e2e-smoke");
 });
 
+test("persists appearance settings through the daemon", async ({ page }) => {
+  await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}&token=${token}`);
+  await expect(page.locator(".connection.open")).toBeVisible();
+
+  await page.getByRole("button", { name: "Open Settings" }).click();
+  await page.getByLabel("Theme").selectOption("dark");
+  await page.getByLabel("Terminal density").selectOption("compact");
+  await page.getByLabel("Show unread badges").uncheck();
+  await page.getByRole("button", { name: "Save Appearance Settings" }).click();
+
+  await expect.poll(() => htmlDataset(page, "theme")).toBe("dark");
+  await expect.poll(() => htmlDataset(page, "terminalDensity")).toBe("compact");
+  await expect.poll(() => htmlDataset(page, "unreadBadges")).toBe("false");
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+  await expect(page.getByLabel("Theme")).toHaveValue("dark");
+  await expect(page.getByLabel("Terminal density")).toHaveValue("compact");
+  await expect(page.getByLabel("Show unread badges")).not.toBeChecked();
+
+  await page.getByLabel("Theme").selectOption("system");
+  await page.getByLabel("Terminal density").selectOption("comfortable");
+  await page.getByLabel("Show unread badges").check();
+  await page.getByRole("button", { name: "Save Appearance Settings" }).click();
+  await page.getByRole("button", { name: "Back to Shelf" }).click();
+});
+
 test("keeps terminal input p99 latency under the regression gate", async ({ page }) => {
   await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}&token=${token}`);
   await expect(page.locator(".connection.open")).toBeVisible();
@@ -288,4 +315,8 @@ async function reconnectDurationsMs(page: Page): Promise<number[]> {
 
 async function coldStartDurationsMs(page: Page): Promise<number[]> {
   return page.evaluate(() => performance.getEntriesByName("prowl.cold-start").map((entry) => entry.duration));
+}
+
+async function htmlDataset(page: Page, key: string): Promise<string | undefined> {
+  return page.evaluate((datasetKey) => document.documentElement.dataset[datasetKey], key);
 }
