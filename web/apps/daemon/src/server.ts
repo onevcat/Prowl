@@ -87,6 +87,9 @@ export function startServer(
       }
 
       if (url.pathname === "/auth/login") {
+        if (request.method === "OPTIONS") {
+          return handleLoginPreflight(request, config, logger);
+        }
         return handleLogin(request, config, Boolean(tls), logger);
       }
 
@@ -193,10 +196,11 @@ async function handleLogin(
     return new Response("Forbidden origin", { status: 403 });
   }
 
+  const headers = loginCorsHeaders(request, config);
   const token = await tokenFromLoginBody(request);
   if (token !== config.token) {
     logger.warn("rejected login unauthorized token");
-    return new Response("Unauthorized", { status: 401 });
+    return new Response("Unauthorized", { status: 401, headers });
   }
 
   logger.info("issued auth session cookie");
@@ -204,10 +208,33 @@ async function handleLogin(
     { ok: true },
     {
       headers: {
+        ...headers,
         "Set-Cookie": sessionCookie(config.token, secureCookie),
       },
     },
   );
+}
+
+function handleLoginPreflight(request: Request, config: DaemonConfig, logger: Logger): Response {
+  if (!isAllowedOrigin(config, request.headers.get("Origin"))) {
+    logger.warn(`rejected login preflight origin=${request.headers.get("Origin") ?? "missing"}`);
+    return new Response("Forbidden origin", { status: 403 });
+  }
+  return new Response(null, { status: 204, headers: loginCorsHeaders(request, config) });
+}
+
+function loginCorsHeaders(request: Request, config: DaemonConfig): Record<string, string> {
+  const origin = request.headers.get("Origin");
+  if (!origin || !isAllowedOrigin(config, origin)) {
+    return {};
+  }
+  return {
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Origin": origin,
+    Vary: "Origin",
+  };
 }
 
 async function tokenFromLoginBody(request: Request): Promise<string> {

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import AuthGate from "$lib/auth/AuthGate.svelte";
   import Canvas from "$lib/canvas/Canvas.svelte";
   import DiffView from "$lib/diff/DiffView.svelte";
   import Palette from "$lib/palette/Palette.svelte";
@@ -30,7 +31,9 @@
   }}
 />
 
-{#if appState.view === "canvas"}
+{#if appState.needsAuthentication}
+  <AuthGate {appState} />
+{:else if appState.view === "canvas"}
   <Canvas />
 {:else if appState.view === "settings"}
   <Settings />

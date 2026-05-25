@@ -56,6 +56,7 @@ export class AppState {
   #inputStartedByChannel = new Map<number, number>();
   #paneSizeById = new Map<string, { cols: number; rows: number }>();
   #renderedPaneIds = new Set<string>();
+  #authToken = "";
   repositories = $state<Repository[]>([]);
   customActions = $state<CustomAction[]>([]);
   worktreesByRepo = $state<Map<string, Worktree[]>>(new Map());
@@ -75,6 +76,10 @@ export class AppState {
   connection = $state<ConnectionState>("closed");
   errorMessage = $state<string | null>(null);
   sessionId = $state<string | null>(null);
+  daemonURL = $state(defaultDaemonURL);
+  loginToken = $state("");
+  loginBusy = $state(false);
+  loginError = $state<string | null>(null);
   settings = $state<AppSettings>(structuredClone(defaultSettings));
   metrics = $state<PerformanceMetrics>({
     inputLatencySamples: [],
@@ -113,6 +118,10 @@ export class AppState {
       return Array.from(this.panes.values());
     }
     return this.selectedWorktreeId ? this.orderedPanes(this.selectedWorktreeId) : [];
+  }
+
+  get needsAuthentication(): boolean {
+    return !this.sessionId && this.connection !== "open";
   }
 
   orderedWorktrees(repoId: string): Worktree[] {
@@ -556,6 +565,36 @@ export class AppState {
     }
   }
 
+  async login(): Promise<void> {
+    const token = this.loginToken.trim();
+    if (!token) {
+      this.loginError = "Token is required.";
+      return;
+    }
+    this.loginBusy = true;
+    this.loginError = null;
+    try {
+      const response = await fetch(httpURLForWebSocket(this.daemonURL, "/auth/login"), {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ token }),
+      });
+      if (!response.ok) {
+        throw new Error(response.status === 401 ? "Invalid token." : `Login failed (${response.status}).`);
+      }
+      sessionStorage.setItem(sessionTokenKey, token);
+      this.loginToken = "";
+      this.#connectDaemon(token);
+    } catch (error) {
+      this.loginError = error instanceof Error ? error.message : String(error);
+    } finally {
+      this.loginBusy = false;
+    }
+  }
+
   async showDiff(worktreeId = this.selectedWorktreeId): Promise<void> {
     if (!worktreeId) {
       return;
@@ -713,17 +752,25 @@ export class AppState {
     }
 
     const token = tokenFromURL ?? sessionStorage.getItem(sessionTokenKey) ?? "";
-    const daemonURL = new URL(url.searchParams.get("daemon") ?? defaultDaemonURL);
+    this.daemonURL = new URL(url.searchParams.get("daemon") ?? defaultDaemonURL).toString();
+    this.#connectDaemon(token);
+    this.ws.onStatus((state) => {
+      if (state === "open") {
+        void this.#bootstrapOnce(this.#authToken);
+      }
+    });
+  }
+
+  #connectDaemon(token: string): void {
+    this.#authToken = token;
+    const daemonURL = new URL(this.daemonURL);
     if (token) {
       daemonURL.searchParams.set("token", token);
+    } else {
+      daemonURL.searchParams.delete("token");
     }
 
     this.ws.connect(daemonURL.toString());
-    this.ws.onStatus((state) => {
-      if (state === "open") {
-        void this.#bootstrapOnce(token);
-      }
-    });
   }
 
   #bootstrapOnce(token: string): Promise<void> {
@@ -1112,6 +1159,14 @@ function lastNonEmptyLine(text: string): string {
       .filter(Boolean)
       .at(-1) ?? ""
   );
+}
+
+function httpURLForWebSocket(wsURL: string, pathname: string): string {
+  const url = new URL(wsURL);
+  url.protocol = url.protocol === "wss:" ? "https:" : "http:";
+  url.pathname = pathname;
+  url.search = "";
+  return url.toString();
 }
 
 function sanitizeAppearance(value: unknown, fallback: AppSettings["appearance"]): AppSettings["appearance"] {

@@ -50,6 +50,38 @@ describe("daemon scaffold", () => {
 
       expect(response.status).toBe(200);
       expect(response.headers.get("Set-Cookie")).toContain("prowl_session=test-token; HttpOnly");
+      expect(response.headers.get("Access-Control-Allow-Origin")).toBe("http://127.0.0.1:5173");
+      expect(response.headers.get("Access-Control-Allow-Credentials")).toBe("true");
+    } finally {
+      server.stop();
+    }
+  });
+
+  test("answers login CORS preflight for allowed origins", async () => {
+    const root = mkdtempSync(join(tmpdir(), "prowl-login-preflight-test-"));
+    const server = startServer(
+      {
+        port: 0,
+        bind: "127.0.0.1",
+        token: "test-token",
+        allowedOrigins: ["http://127.0.0.1:5173"],
+        requireTLS: false,
+      },
+      { socketPath: false, statePath: join(root, "state.sqlite"), spawnProcesses: false },
+    );
+    try {
+      const response = await fetch(new URL("/auth/login", server.url), {
+        method: "OPTIONS",
+        headers: {
+          Origin: "http://127.0.0.1:5173",
+          "Access-Control-Request-Method": "POST",
+          "Access-Control-Request-Headers": "Content-Type",
+        },
+      });
+
+      expect(response.status).toBe(204);
+      expect(response.headers.get("Access-Control-Allow-Origin")).toBe("http://127.0.0.1:5173");
+      expect(response.headers.get("Access-Control-Allow-Methods")).toContain("POST");
     } finally {
       server.stop();
     }

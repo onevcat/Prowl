@@ -3,6 +3,19 @@ import { expect, test } from "@playwright/test";
 const daemonURL = "ws://127.0.0.1:7879/ws";
 const token = "e2e-token";
 
+test.describe.configure({ mode: "serial" });
+
+test("logs in with a daemon token", async ({ page }) => {
+  await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}`);
+
+  await expect(page.getByRole("heading", { name: "Connect to prowld" })).toBeVisible();
+  await page.getByLabel("Token").fill(token);
+  await page.getByRole("button", { name: "Connect" }).click();
+
+  await expect(page.locator(".connection.open")).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Shell" })).toBeVisible();
+});
+
 test("connects to the daemon and writes through the terminal", async ({ page }) => {
   await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}&token=${token}`);
 
