@@ -180,6 +180,37 @@ describe("daemon scaffold", () => {
     expect(rejected[0]?.type).toBe("error");
   });
 
+  test("rejects newer client protocol versions before accepting hello", () => {
+    const root = mkdtempSync(join(tmpdir(), "prowl-protocol-mismatch-test-"));
+    const state = new InMemoryState(root, { statePath: ":memory:", spawnProcesses: false });
+    const config = {
+      port: 0,
+      bind: "127.0.0.1",
+      token: "test-token",
+      allowedOrigins: ["http://127.0.0.1:5173"],
+      requireTLS: false,
+    };
+
+    const response = handleControl(
+      {
+        v: 1,
+        type: "hello",
+        id: makeMessageId(),
+        token: "wrong-token",
+        clientVersion: "0.0.0",
+        protocolVersion: protocolVersion + 1,
+      },
+      state,
+      config,
+      { authenticated: false },
+    );
+
+    expect(response[0]?.type).toBe("error");
+    if (response[0]?.type === "error") {
+      expect(response[0].code).toBe("PROTOCOL_MISMATCH");
+    }
+  });
+
   test("rate-limits control messages per session", () => {
     const session = {
       authenticated: true,

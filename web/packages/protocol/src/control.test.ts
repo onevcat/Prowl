@@ -18,6 +18,19 @@ describe("control message parsing", () => {
     expect(message.type).toBe("hello");
   });
 
+  test("ignores unknown fields for forward compatibility", () => {
+    const message = parseClientControlMessage(
+      JSON.stringify({
+        v: 1,
+        type: "ping",
+        id: makeMessageId(),
+        futureField: "ignored",
+      }),
+    );
+
+    expect(message.type).toBe("ping");
+  });
+
   test("rejects invalid JSON and missing envelope fields", () => {
     expect(() => parseClientControlMessage("{")).toThrow("valid JSON");
     expect(() => parseClientControlMessage(JSON.stringify({ v: 1, type: "ping" }))).toThrow("id is required");

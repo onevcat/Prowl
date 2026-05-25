@@ -385,11 +385,11 @@ export function handleControl(
   options: { authenticated?: boolean; sessionId?: string; ownedPaneIds?: Set<string> } = {},
 ): ServerControlMessage[] {
   if (message.type === "hello") {
-    if (!options.authenticated && message.token !== config.token) {
-      return [errorResponse(message.id, "UNAUTHORIZED", "Invalid token")];
-    }
     if (message.protocolVersion > protocolVersion) {
       return [errorResponse(message.id, "PROTOCOL_MISMATCH", "Client protocol is newer than daemon")];
+    }
+    if (!options.authenticated && message.token !== config.token) {
+      return [errorResponse(message.id, "UNAUTHORIZED", "Invalid token")];
     }
     return [
       {
