@@ -26,6 +26,21 @@ describe("daemon scaffold", () => {
     ).toThrow("TLS is required");
   });
 
+  test("refuses to start with an empty auth token", () => {
+    expect(() =>
+      startServer(
+        {
+          port: 0,
+          bind: "127.0.0.1",
+          token: "",
+          allowedOrigins: ["http://127.0.0.1:5173"],
+          requireTLS: false,
+        },
+        { socketPath: false, statePath: ":memory:", spawnProcesses: false },
+      ),
+    ).toThrow("auth token must not be empty");
+  });
+
   test("issues an HttpOnly session cookie from the login endpoint", async () => {
     const root = mkdtempSync(join(tmpdir(), "prowl-login-test-"));
     const server = startServer(

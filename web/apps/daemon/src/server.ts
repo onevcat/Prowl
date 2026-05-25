@@ -11,7 +11,7 @@ import {
   protocolVersion,
 } from "@prowl/protocol";
 import type { DaemonConfig } from "./auth/config";
-import { isAllowedOrigin } from "./auth/config";
+import { hasUsableToken, isAllowedOrigin } from "./auth/config";
 import { type IPCServerHandle, startIPCServer } from "./ipc/socket";
 import { type Logger, createLogger } from "./logging/logger";
 import { OutputCoalescer } from "./pty/OutputCoalescer";
@@ -55,6 +55,9 @@ type DebugStats = {
 };
 
 export function startServer(config: DaemonConfig, options: ServerOptions = {}): ServerHandle {
+  if (!hasUsableToken(config.token)) {
+    throw new Error("Daemon auth token must not be empty.");
+  }
   const tls = tlsOptions(config);
   const logger = options.logger ?? createLogger();
   const clients = new Set<{ send: (payload: ArrayBuffer) => void; close: (code?: number, reason?: string) => void }>();

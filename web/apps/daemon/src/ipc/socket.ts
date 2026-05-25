@@ -113,7 +113,7 @@ function writeInvalidControlError(
     encodeJsonFrame({
       v: 1,
       type: "error",
-      id: "invalid",
+      id: crypto.randomUUID(),
       code: "INVALID_CONTROL_MESSAGE",
       message,
     }),

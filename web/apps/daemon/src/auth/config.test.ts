@@ -16,6 +16,14 @@ describe("daemon config", () => {
     expect(isLoopbackBind("0.0.0.0")).toBe(false);
   });
 
+  test("generates a 256-bit token when config token is missing or empty", () => {
+    const generated = normalizeConfig({ token: "" });
+    const overrideGenerated = normalizeConfig({ token: "saved-token" }, { token: "   " });
+
+    expect(generated.token).toMatch(/^[0-9a-f]{64}$/);
+    expect(overrideGenerated.token).toMatch(/^[0-9a-f]{64}$/);
+  });
+
   test("requires TLS when a bind override exposes the daemon remotely", () => {
     const config = normalizeConfig(
       {

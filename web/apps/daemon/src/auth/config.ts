@@ -66,7 +66,7 @@ export function normalizeConfig(raw: Partial<DaemonConfig>, overrides: Partial<D
   const requireTLS =
     overrides.requireTLS ??
     (bindChangedByOverride ? defaultRequireTLS(bind) : (raw.requireTLS ?? defaultRequireTLS(bind)));
-  const token = overrides.token ?? raw.token ?? generateToken();
+  const token = usableToken(overrides.token ?? raw.token);
   return {
     port: overrides.port ?? raw.port ?? 7878,
     bind,
@@ -85,6 +85,14 @@ export function defaultRequireTLS(bind: string): boolean {
 export function isLoopbackBind(bind: string): boolean {
   const normalized = bind.trim().toLowerCase();
   return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1" || normalized === "[::1]";
+}
+
+export function hasUsableToken(token: string): boolean {
+  return token.trim().length > 0;
+}
+
+function usableToken(token: string | undefined): string {
+  return token && hasUsableToken(token) ? token : generateToken();
 }
 
 function generateToken(): string {
