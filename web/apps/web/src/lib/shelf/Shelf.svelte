@@ -175,10 +175,12 @@
 
     {#if appState.selectedPane}
       <TerminalView
+        paneId={appState.selectedPane.id}
         title={appState.selectedPane.title}
         output={appState.selectedPane.output}
         focused={true}
         buffering={appState.terminalBuffering}
+        renderTerminal={appState.renderablePaneIds.has(appState.selectedPane.id)}
         onInput={(text) => {
           appState.sendInputToSelectedPane(text);
         }}

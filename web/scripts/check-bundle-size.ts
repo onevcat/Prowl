@@ -17,6 +17,10 @@ type BundleBudget = {
     maxGzipBytes: number;
     maxGrowthPercent: number;
   };
+  ghosttyWasm?: {
+    vendorPath: string;
+    maxBytes: number;
+  };
 };
 
 const outputDir = "apps/web/.svelte-kit/output/client";
@@ -39,20 +43,31 @@ function main(): void {
   }, 0);
   const growthLimit = Math.floor(budget.initialJs.baselineGzipBytes * (1 + budget.initialJs.maxGrowthPercent / 100));
   const allowedBytes = Math.min(budget.initialJs.maxGzipBytes, growthLimit);
+  const ghosttyWasm = budget.ghosttyWasm ? measureGhosttyWasm(root, budget.ghosttyWasm) : null;
 
-  process.stdout.write(
-    [
-      `Initial JS gzip: ${formatBytes(totalGzipBytes)}`,
-      `Baseline: ${formatBytes(budget.initialJs.baselineGzipBytes)}`,
-      `Allowed: ${formatBytes(allowedBytes)} (${budget.initialJs.maxGrowthPercent}% growth cap, ${formatBytes(budget.initialJs.maxGzipBytes)} absolute cap)`,
-      `Files: ${files.length}`,
-    ].join("\n"),
-  );
+  const lines = [
+    `Initial JS gzip: ${formatBytes(totalGzipBytes)}`,
+    `Baseline: ${formatBytes(budget.initialJs.baselineGzipBytes)}`,
+    `Allowed: ${formatBytes(allowedBytes)} (${budget.initialJs.maxGrowthPercent}% growth cap, ${formatBytes(budget.initialJs.maxGzipBytes)} absolute cap)`,
+    `Files: ${files.length}`,
+  ];
+  if (ghosttyWasm) {
+    lines.push(
+      `Ghostty WASM: ${formatBytes(ghosttyWasm.bytes)}`,
+      `Ghostty WASM allowed: ${formatBytes(ghosttyWasm.maxBytes)}`,
+    );
+  }
+  process.stdout.write(lines.join("\n"));
   process.stdout.write("\n");
 
   if (totalGzipBytes > allowedBytes) {
     throw new Error(
       `Initial JS gzip ${formatBytes(totalGzipBytes)} exceeds budget ${formatBytes(allowedBytes)}. Update ${budgetPath} only after reviewing the bundle delta.`,
+    );
+  }
+  if (ghosttyWasm && ghosttyWasm.bytes > ghosttyWasm.maxBytes) {
+    throw new Error(
+      `Ghostty WASM ${formatBytes(ghosttyWasm.bytes)} exceeds budget ${formatBytes(ghosttyWasm.maxBytes)}. Review the terminal core before updating ${budgetPath}.`,
     );
   }
 }
@@ -95,6 +110,20 @@ function readJson<T>(path: string): T {
     throw new Error(`Required file not found: ${path}`);
   }
   return JSON.parse(readFileSync(path, "utf8")) as T;
+}
+
+function measureGhosttyWasm(
+  root: string,
+  budget: NonNullable<BundleBudget["ghosttyWasm"]>,
+): { bytes: number; maxBytes: number } {
+  const path = join(root, budget.vendorPath);
+  if (!existsSync(path)) {
+    throw new Error(`Required Ghostty WASM asset not found: ${budget.vendorPath}`);
+  }
+  return {
+    bytes: readFileSync(path).byteLength,
+    maxBytes: budget.maxBytes,
+  };
 }
 
 function formatBytes(bytes: number): string {

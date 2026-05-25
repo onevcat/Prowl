@@ -3,5 +3,9 @@
     "baselineGzipBytes": 66556,
     "maxGzipBytes": 409600,
     "maxGrowthPercent": 10
+  },
+  "ghosttyWasm": {
+    "vendorPath": "apps/web/node_modules/ghostty-web/ghostty-vt.wasm",
+    "maxBytes": 460800
   }
 }

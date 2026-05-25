@@ -9,6 +9,7 @@ import {
   startPerformanceInteraction,
 } from "$lib/performance/marks";
 import { redactSensitiveText } from "$lib/security/redaction";
+import { disposeTerminalAdapterForPane } from "$lib/terminal/GhosttyAdapter";
 import { RendererPool } from "$lib/terminal/RendererPool";
 import { inferAgentTaskStatus } from "$lib/terminal/detectAgent";
 import { appendTerminalOutput, terminalOutputSnapshot } from "$lib/terminal/outputBuffer";
@@ -1256,6 +1257,12 @@ export class AppState {
   }
 
   #replacePanes(panes: PaneDescriptor[]): void {
+    const nextPaneIds = new Set(panes.map((pane) => pane.id));
+    for (const paneId of this.panes.keys()) {
+      if (!nextPaneIds.has(paneId)) {
+        disposeTerminalAdapterForPane(paneId);
+      }
+    }
     this.panes = new Map(panes.map((pane) => [pane.id, new Pane(pane)]));
     this.#prunePaneOrder();
     this.#persistOpenTabs();
@@ -1278,6 +1285,7 @@ export class AppState {
     this.#renderedPaneIds.delete(paneId);
     this.#paneIdsToResume.delete(paneId);
     this.#paneSizeById.delete(paneId);
+    disposeTerminalAdapterForPane(paneId);
     if (pane) {
       this.#decoderByChannel.delete(pane.channelId);
     }

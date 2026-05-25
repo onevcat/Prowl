@@ -1,63 +1,99 @@
 <script lang="ts">
-  import { encodeTerminalKey } from "./keyEncoding";
+  import { onDestroy } from "svelte";
+  import { terminalAdapterForPane } from "./GhosttyAdapter";
 
   type Props = {
+    paneId: string;
     title: string;
     output: string;
     focused: boolean;
     buffering?: boolean;
+    renderTerminal?: boolean;
     onInput?: (text: string) => void;
     onResize?: (cols: number, rows: number) => void;
+    onTitleChange?: (title: string) => void;
   };
 
-  let { title, output, focused, buffering = false, onInput, onResize }: Props = $props();
-  let buffer = $state("");
+  let {
+    paneId,
+    title,
+    output,
+    focused,
+    buffering = false,
+    renderTerminal = true,
+    onInput,
+    onResize,
+    onTitleChange,
+  }: Props = $props();
   let element = $state<HTMLElement>();
+  let status = $state<"loading" | "ready" | "failed">("loading");
+  let openGeneration = 0;
+  const adapter = $derived(terminalAdapterForPane(paneId));
 
   $effect(() => {
-    buffer = output;
+    adapter.syncOutput(output);
   });
 
   $effect(() => {
-    if (!element || !onResize) {
+    if (!element || !renderTerminal) {
       return;
     }
-    const terminal = element;
-    const observer = new ResizeObserver(([entry]) => {
-      if (!entry) {
-        return;
-      }
-      const style = getComputedStyle(terminal);
-      const fontSize = Number.parseFloat(style.fontSize) || 13;
-      const cols = Math.max(1, Math.floor(entry.contentRect.width / (fontSize * 0.62)));
-      const rows = Math.max(1, Math.floor(entry.contentRect.height / (fontSize * 1.35)));
-      onResize(cols, rows);
-    });
-    observer.observe(terminal);
-    return () => observer.disconnect();
+    const generation = ++openGeneration;
+    status = "loading";
+    adapter
+      .open(element, {
+        label: title,
+        onInput: (text) => onInput?.(text),
+        onResize: (cols, rows) => onResize?.(cols, rows),
+        onTitleChange: (nextTitle) => onTitleChange?.(nextTitle),
+      })
+      .then(() => {
+        if (generation === openGeneration) {
+          status = "ready";
+          if (focused) {
+            adapter.focus();
+          }
+        }
+      })
+      .catch(() => {
+        if (generation === openGeneration) {
+          status = "failed";
+        }
+      });
+    return () => {
+      openGeneration += 1;
+      adapter.detach();
+    };
   });
 
-  function handleKeydown(event: KeyboardEvent): void {
-    const text = encodeTerminalKey(event);
-    if (text) {
-      event.preventDefault();
-      onInput?.(text);
+  $effect(() => {
+    if (focused) {
+      adapter.focus();
     }
-  }
+  });
+
+  onDestroy(() => {
+    openGeneration += 1;
+    adapter.detach();
+  });
 </script>
 
 <div
   bind:this={element}
   class:focused
-  class="terminal mono"
-  role="textbox"
+  class:render-suspended={!renderTerminal}
+  class="terminal"
+  role="application"
   aria-label={title}
-  tabindex="0"
-  onkeydown={handleKeydown}
 >
-  <div class="screen">
-    {buffer || "Waiting for daemon-backed terminal"}
-  </div>
+  {#if !renderTerminal}
+    <div class="placeholder">Renderer parked</div>
+  {:else if status === "loading"}
+    <div class="placeholder">Starting terminal</div>
+  {:else if status === "failed"}
+    <div class="placeholder">Terminal failed to initialize</div>
+  {/if}
+  <pre class="screen-reader-output">{output}</pre>
   {#if buffering}
     <div class="buffering" role="status">buffering...</div>
   {/if}
@@ -66,7 +102,6 @@
 <style>
   .terminal {
     position: relative;
-    display: grid;
     width: 100%;
     height: 100%;
     min-height: 12rem;
@@ -83,9 +118,32 @@
     box-shadow: inset 0 0 0 1px AccentColor;
   }
 
-  .screen {
-    padding: var(--terminal-padding, 0.75rem);
+  .terminal :global(canvas) {
+    width: 100%;
+    height: 100%;
+  }
+
+  .placeholder {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 0.75rem;
+    color: color-mix(in srgb, CanvasText 58%, transparent);
+    font-size: 0.82rem;
+  }
+
+  .screen-reader-output {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
     white-space: pre-wrap;
+  }
+
+  .render-suspended {
+    background: color-mix(in srgb, CanvasText 8%, Canvas);
   }
 
   .buffering {

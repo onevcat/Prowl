@@ -45,7 +45,7 @@
     <span class={`badge ${pane.taskStatus}`}>{pane.taskStatus}</span>
   </header>
   {#if renderTerminal}
-    <TerminalView title={pane.title} output={pane.output} {focused} {buffering} {onInput} {onResize} />
+    <TerminalView paneId={pane.id} title={pane.title} output={pane.output} {focused} {buffering} {onInput} {onResize} />
   {:else}
     <section class="renderer-idle" aria-label={`${pane.title} renderer idle`}>
       <strong>{pane.title}</strong>
