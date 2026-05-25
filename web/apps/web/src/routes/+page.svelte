@@ -4,6 +4,7 @@
   import DiffView from "$lib/diff/DiffView.svelte";
   import Palette from "$lib/palette/Palette.svelte";
   import PerformanceHUD from "$lib/performance/PerformanceHUD.svelte";
+  import UpdatePrompt from "$lib/pwa/UpdatePrompt.svelte";
   import Settings from "$lib/settings/Settings.svelte";
   import Shelf from "$lib/shelf/Shelf.svelte";
   import { appStateKey, createAppState } from "$lib/state/AppState.svelte";
@@ -47,3 +48,4 @@
 
 <Palette />
 <PerformanceHUD />
+<UpdatePrompt />
