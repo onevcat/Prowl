@@ -6,6 +6,7 @@
   type Props = {
     pane: Pane;
     focused: boolean;
+    buffering: boolean;
     onclick: () => void;
     onInput: (text: string) => void;
     onResize: (cols: number, rows: number) => void;
@@ -13,7 +14,7 @@
     ondblclick: () => void;
   };
 
-  let { pane, focused, onclick, onInput, onResize, onStatus, ondblclick }: Props = $props();
+  let { pane, focused, buffering, onclick, onInput, onResize, onStatus, ondblclick }: Props = $props();
 
   const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
 
@@ -44,7 +45,7 @@
     <span>{relativeTime(pane.updatedAt)}</span>
     <span class={`badge ${pane.taskStatus}`}>{pane.taskStatus}</span>
   </header>
-  <TerminalView title={pane.title} lastOutputLine={pane.lastOutputLine} {focused} {onInput} {onResize} {onStatus} />
+  <TerminalView title={pane.title} lastOutputLine={pane.lastOutputLine} {focused} {buffering} {onInput} {onResize} {onStatus} />
 </div>
 
 <style>

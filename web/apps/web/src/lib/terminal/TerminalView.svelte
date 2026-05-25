@@ -5,12 +5,13 @@
     title: string;
     lastOutputLine: string;
     focused: boolean;
+    buffering?: boolean;
     onInput?: (text: string) => void;
     onResize?: (cols: number, rows: number) => void;
     onStatus?: (status: "idle" | "running" | "done" | "failed") => void;
   };
 
-  let { title, lastOutputLine, focused, onInput, onResize, onStatus }: Props = $props();
+  let { title, lastOutputLine, focused, buffering = false, onInput, onResize, onStatus }: Props = $props();
   let buffer = $state("");
   let element = $state<HTMLElement>();
 
@@ -62,10 +63,14 @@
   <div class="screen">
     {buffer || "Waiting for daemon-backed terminal"}
   </div>
+  {#if buffering}
+    <div class="buffering" role="status">buffering...</div>
+  {/if}
 </div>
 
 <style>
   .terminal {
+    position: relative;
     display: grid;
     width: 100%;
     height: 100%;
@@ -86,5 +91,17 @@
   .screen {
     padding: var(--terminal-padding, 0.75rem);
     white-space: pre-wrap;
+  }
+
+  .buffering {
+    position: absolute;
+    right: 0.5rem;
+    bottom: 0.5rem;
+    padding: 0.18rem 0.45rem;
+    border: 1px solid color-mix(in srgb, AccentColor 45%, CanvasText);
+    border-radius: 4px;
+    background: color-mix(in srgb, AccentColor 22%, Canvas);
+    color: CanvasText;
+    font-size: 0.75rem;
   }
 </style>

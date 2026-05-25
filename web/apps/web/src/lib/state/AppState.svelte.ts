@@ -74,6 +74,7 @@ export class AppState {
   paletteQuery = $state("");
   paletteHistory = $state<PaletteHistoryEntry[]>([]);
   connection = $state<ConnectionState>("closed");
+  terminalBuffering = $state(false);
   errorMessage = $state<string | null>(null);
   sessionId = $state<string | null>(null);
   daemonURL = $state(defaultDaemonURL);
@@ -96,6 +97,9 @@ export class AppState {
     });
     this.ws.onMessage((message) => this.#handleServerMessage(message));
     this.ws.onBinary((channelId, payload) => this.#handlePaneOutput(channelId, payload));
+    this.ws.onBackpressure((buffering) => {
+      this.terminalBuffering = buffering;
+    });
     this.#restoreUIState();
     this.#connectFromLocation();
     this.#startMetricLoop();
@@ -631,8 +635,9 @@ export class AppState {
     if (!pane) {
       return;
     }
-    this.#inputStartedByChannel.set(pane.channelId, performance.now());
-    this.ws.sendBinary(pane.channelId, textEncoder.encode(text));
+    if (this.ws.sendBinary(pane.channelId, textEncoder.encode(text))) {
+      this.#inputStartedByChannel.set(pane.channelId, performance.now());
+    }
   }
 
   sendInputToVisiblePanes(text: string): void {

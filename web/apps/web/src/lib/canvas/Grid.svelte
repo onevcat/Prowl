@@ -6,6 +6,7 @@
   type Props = {
     panes: Pane[];
     selectedPaneId: string | null;
+    buffering: boolean;
     selectPane: (paneId: string) => void;
     sendInput: (paneId: string, text: string) => void;
     resizePane: (paneId: string, cols: number, rows: number) => void;
@@ -13,7 +14,7 @@
     zoomPane: (paneId: string) => void;
   };
 
-  let { panes, selectedPaneId, selectPane, sendInput, resizePane, updateStatus, zoomPane }: Props = $props();
+  let { panes, selectedPaneId, buffering, selectPane, sendInput, resizePane, updateStatus, zoomPane }: Props = $props();
 </script>
 
 <div class="grid">
@@ -21,6 +22,7 @@
     <CanvasPane
       {pane}
       focused={pane.id === selectedPaneId}
+      {buffering}
       onclick={() => selectPane(pane.id)}
       onInput={(text) => sendInput(pane.id, text)}
       onResize={(cols, rows) => resizePane(pane.id, cols, rows)}

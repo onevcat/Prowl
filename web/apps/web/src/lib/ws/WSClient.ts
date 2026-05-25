@@ -1,9 +1,11 @@
 import type { ClientControlMessage, ServerControlMessage } from "@prowl/protocol";
 import { decodeFrame, encodeJsonFrame, encodePtyFrame, protocolTags } from "@prowl/protocol";
+import { BackpressureMonitor, defaultBackpressureDelayMs } from "./BackpressureMonitor";
 
 type Listener = (message: ServerControlMessage) => void;
 type BinaryListener = (channelId: number, payload: Uint8Array) => void;
 type StatusListener = (state: "connecting" | "open" | "closed") => void;
+type BackpressureListener = (buffering: boolean) => void;
 
 export class WSClient {
   #socket: WebSocket | null = null;
@@ -22,6 +24,9 @@ export class WSClient {
       timer: ReturnType<typeof setTimeout>;
     }
   >();
+  #backpressure = new BackpressureMonitor();
+  #backpressureListeners = new Set<BackpressureListener>();
+  #backpressureTimer: ReturnType<typeof setTimeout> | null = null;
 
   get readyState(): number {
     return this.#socket?.readyState ?? WebSocket.CLOSED;
@@ -40,6 +45,9 @@ export class WSClient {
       clearTimeout(this.#reconnectTimer);
       this.#reconnectTimer = null;
     }
+    this.#clearBackpressureTimer();
+    this.#backpressure.update(0, performance.now());
+    this.#emitBackpressure(false);
     this.#socket?.close();
     this.#socket = null;
     this.#rejectPending(new Error("WebSocket disconnected"));
@@ -95,6 +103,11 @@ export class WSClient {
     return () => this.#statusListeners.delete(listener);
   }
 
+  onBackpressure(listener: BackpressureListener): () => void {
+    this.#backpressureListeners.add(listener);
+    return () => this.#backpressureListeners.delete(listener);
+  }
+
   send(message: ClientControlMessage): void {
     if (this.#socket?.readyState !== WebSocket.OPEN) {
       return;
@@ -118,14 +131,17 @@ export class WSClient {
     return promise;
   }
 
-  sendBinary(channelId: number, payload: Uint8Array): void {
-    if (this.#socket?.readyState !== WebSocket.OPEN) {
-      return;
+  sendBinary(channelId: number, payload: Uint8Array): boolean {
+    const socket = this.#socket;
+    if (socket?.readyState !== WebSocket.OPEN) {
+      return false;
     }
-    if ((this.#socket?.bufferedAmount ?? 0) > 256 * 1024) {
-      return;
+    if (this.#updateBackpressure(socket.bufferedAmount)) {
+      this.#scheduleBackpressureCheck();
+      return false;
     }
-    this.#socket.send(encodePtyFrame(channelId, payload));
+    socket.send(encodePtyFrame(channelId, payload));
+    return true;
   }
 
   #handleMessage(data: unknown): void {
@@ -173,6 +189,45 @@ export class WSClient {
       }
       this.#openSocket(generation);
     }, 500);
+  }
+
+  #updateBackpressure(bufferedAmount: number): boolean {
+    const buffering = this.#backpressure.update(bufferedAmount, performance.now());
+    this.#emitBackpressure(buffering);
+    if (!buffering && bufferedAmount <= this.#backpressure.thresholdBytes) {
+      this.#clearBackpressureTimer();
+    }
+    return bufferedAmount > this.#backpressure.thresholdBytes;
+  }
+
+  #scheduleBackpressureCheck(): void {
+    if (this.#backpressureTimer) {
+      return;
+    }
+    this.#backpressureTimer = setTimeout(() => {
+      this.#backpressureTimer = null;
+      const socket = this.#socket;
+      if (socket?.readyState !== WebSocket.OPEN) {
+        this.#backpressure.update(0, performance.now());
+        this.#emitBackpressure(false);
+        return;
+      }
+      this.#updateBackpressure(socket.bufferedAmount);
+    }, defaultBackpressureDelayMs);
+  }
+
+  #clearBackpressureTimer(): void {
+    if (!this.#backpressureTimer) {
+      return;
+    }
+    clearTimeout(this.#backpressureTimer);
+    this.#backpressureTimer = null;
+  }
+
+  #emitBackpressure(buffering: boolean): void {
+    for (const listener of this.#backpressureListeners) {
+      listener(buffering);
+    }
   }
 
   #rejectPending(error: Error): void {

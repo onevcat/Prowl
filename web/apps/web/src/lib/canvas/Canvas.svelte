@@ -36,6 +36,7 @@
   <Grid
     panes={appState.visiblePanes}
     selectedPaneId={appState.selectedPaneId}
+    buffering={appState.terminalBuffering}
     selectPane={(paneId) => appState.selectPane(paneId)}
     sendInput={(paneId, text) => appState.sendInputToPane(paneId, text)}
     resizePane={(paneId, cols, rows) => appState.resizePane(paneId, cols, rows)}

@@ -91,6 +91,7 @@
         title={appState.selectedPane.title}
         lastOutputLine={appState.selectedPane.lastOutputLine}
         focused={true}
+        buffering={appState.terminalBuffering}
         onInput={(text) => {
           appState.sendInputToSelectedPane(text);
         }}
