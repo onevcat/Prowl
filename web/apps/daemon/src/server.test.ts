@@ -351,6 +351,62 @@ describe("daemon scaffold", () => {
     expect(removed[0]?.type).toBe("error");
   });
 
+  test("validates settings patches before persisting them", () => {
+    const root = mkdtempSync(join(tmpdir(), "prowl-settings-validation-test-"));
+    const state = new InMemoryState(root, { statePath: ":memory:", spawnProcesses: false });
+    const config = {
+      port: 0,
+      bind: "127.0.0.1",
+      token: "test-token",
+      allowedOrigins: ["http://127.0.0.1:5173"],
+      requireTLS: false,
+    };
+
+    const accepted = handleControl(
+      {
+        v: 1,
+        type: "settings.set",
+        id: makeMessageId(),
+        patch: {
+          appearance: {
+            theme: "dark",
+            terminalDensity: "compact",
+            showUnreadBadges: false,
+          },
+          advanced: {
+            performanceHUD: true,
+            confirmDestructiveActions: false,
+            replayBufferKiB: 128,
+          },
+          shortcuts: {
+            "palette.open": "Mod+K",
+          },
+        },
+      },
+      state,
+      config,
+    );
+    const rejected = handleControl(
+      {
+        v: 1,
+        type: "settings.set",
+        id: makeMessageId(),
+        patch: {
+          panes: [],
+        },
+      },
+      state,
+      config,
+    );
+
+    expect(accepted[0]?.type).toBe("settings.snapshot");
+    expect(rejected[0]?.type).toBe("error");
+    if (rejected[0]?.type !== "error") {
+      throw new Error("Expected settings validation error");
+    }
+    expect(rejected[0].code).toBe("INVALID_SETTINGS");
+  });
+
   test("rejects pane operations outside the session ownership set", () => {
     const root = mkdtempSync(join(tmpdir(), "prowl-pane-ownership-test-"));
     const state = new InMemoryState(root, { statePath: ":memory:", spawnProcesses: false });

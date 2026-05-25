@@ -565,6 +565,10 @@ export function handleControl(
   }
 
   if (message.type === "settings.set") {
+    const validationError = validateSettingsPatch(message.id, message.patch);
+    if (validationError) {
+      return [validationError];
+    }
     return [{ v: 1, type: "settings.snapshot", id: message.id, settings: state.updateSettings(message.patch) }];
   }
 
@@ -869,6 +873,84 @@ function validateBranchName(id: string, branch: string): ErrorControlMessage | n
     return errorResponse(id, "INVALID_BRANCH", "Branch name contains unsupported characters");
   }
   return null;
+}
+
+function validateSettingsPatch(id: string, patch: Record<string, unknown>): ErrorControlMessage | null {
+  for (const [key, value] of Object.entries(patch)) {
+    switch (key) {
+      case "appearance": {
+        if (!isRecord(value)) {
+          return errorResponse(id, "INVALID_SETTINGS", "Appearance settings must be an object");
+        }
+        const unknownKey = firstUnknownKey(value, ["theme", "terminalDensity", "showUnreadBadges"]);
+        if (unknownKey) {
+          return errorResponse(id, "INVALID_SETTINGS", `Unsupported appearance setting: ${unknownKey}`);
+        }
+        if (
+          value.theme !== undefined &&
+          value.theme !== "system" &&
+          value.theme !== "light" &&
+          value.theme !== "dark"
+        ) {
+          return errorResponse(id, "INVALID_SETTINGS", "Appearance theme is invalid");
+        }
+        if (
+          value.terminalDensity !== undefined &&
+          value.terminalDensity !== "compact" &&
+          value.terminalDensity !== "comfortable"
+        ) {
+          return errorResponse(id, "INVALID_SETTINGS", "Terminal density is invalid");
+        }
+        if (value.showUnreadBadges !== undefined && typeof value.showUnreadBadges !== "boolean") {
+          return errorResponse(id, "INVALID_SETTINGS", "Unread badge setting must be a boolean");
+        }
+        break;
+      }
+      case "shortcuts":
+        if (!isRecord(value)) {
+          return errorResponse(id, "INVALID_SETTINGS", "Shortcut settings must be an object");
+        }
+        if (Object.values(value).some((shortcut) => typeof shortcut !== "string")) {
+          return errorResponse(id, "INVALID_SETTINGS", "Shortcut bindings must be strings");
+        }
+        break;
+      case "advanced": {
+        if (!isRecord(value)) {
+          return errorResponse(id, "INVALID_SETTINGS", "Advanced settings must be an object");
+        }
+        const unknownKey = firstUnknownKey(value, ["performanceHUD", "confirmDestructiveActions", "replayBufferKiB"]);
+        if (unknownKey) {
+          return errorResponse(id, "INVALID_SETTINGS", `Unsupported advanced setting: ${unknownKey}`);
+        }
+        if (value.performanceHUD !== undefined && typeof value.performanceHUD !== "boolean") {
+          return errorResponse(id, "INVALID_SETTINGS", "Performance HUD setting must be a boolean");
+        }
+        if (value.confirmDestructiveActions !== undefined && typeof value.confirmDestructiveActions !== "boolean") {
+          return errorResponse(id, "INVALID_SETTINGS", "Destructive action confirmation setting must be a boolean");
+        }
+        if (value.replayBufferKiB !== undefined) {
+          const replayBufferKiB = value.replayBufferKiB;
+          if (
+            typeof replayBufferKiB !== "number" ||
+            !Number.isInteger(replayBufferKiB) ||
+            replayBufferKiB < 16 ||
+            replayBufferKiB > 1024
+          ) {
+            return errorResponse(id, "INVALID_SETTINGS", "Replay buffer must be an integer from 16 to 1024 KiB");
+          }
+        }
+        break;
+      }
+      default:
+        return errorResponse(id, "INVALID_SETTINGS", `Unsupported settings key: ${key}`);
+    }
+  }
+  return null;
+}
+
+function firstUnknownKey(record: Record<string, unknown>, allowedKeys: string[]): string | null {
+  const allowed = new Set(allowedKeys);
+  return Object.keys(record).find((key) => !allowed.has(key)) ?? null;
 }
 
 function validateCustomAction(
