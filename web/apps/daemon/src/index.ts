@@ -30,6 +30,7 @@ if (args.has("help")) {
   prowld --port 7878
   prowld --bind 0.0.0.0
   prowld --allowed-origin https://prowl.example.com
+  prowld --require-tls | --no-require-tls
   prowld --tls-cert <path> --tls-key <path>
   prowld --print-token
   prowld --rotate-token

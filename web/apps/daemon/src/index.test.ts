@@ -24,7 +24,10 @@ describe("prowld CLI", () => {
       });
 
       expect(result.exitCode).toBe(0);
-      expect(new TextDecoder().decode(result.stdout)).toContain("prowld --print-token");
+      const stdout = new TextDecoder().decode(result.stdout);
+      expect(stdout).toContain("prowld --allowed-origin https://prowl.example.com");
+      expect(stdout).toContain("prowld --require-tls | --no-require-tls");
+      expect(stdout).toContain("prowld --print-token");
       expect(new TextDecoder().decode(result.stderr)).toBe("");
       expect(existsSync(configPath)).toBe(false);
     } finally {
