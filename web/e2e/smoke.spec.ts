@@ -46,6 +46,23 @@ test("re-attaches visible panes after a websocket reconnect", async ({ page, req
     .toBeGreaterThan(before.paneAttachRequests);
 });
 
+test("broadcasts canvas input to every visible pane", async ({ page }) => {
+  await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}&token=${token}`);
+  await expect(page.locator(".connection.open")).toBeVisible();
+
+  await page.getByRole("button", { name: "New Tab (Command T)" }).click();
+  await page.getByRole("button", { name: "Show Canvas" }).click();
+
+  const terminals = page.getByRole("textbox", { name: "Shell" });
+  await expect(terminals).toHaveCount(2);
+
+  await page.getByLabel("Broadcast input").fill("printf canvas-broadcast");
+  await page.keyboard.press("Enter");
+
+  await expect(terminals.nth(0)).toContainText("canvas-broadcast");
+  await expect(terminals.nth(1)).toContainText("canvas-broadcast");
+});
+
 async function debugStats(request: APIRequestContext): Promise<{
   paneAttachRequests: number;
 }> {
