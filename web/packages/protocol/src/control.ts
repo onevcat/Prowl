@@ -31,6 +31,8 @@ export interface PaneDescriptor {
   updatedAt: number;
 }
 
+export type SettingsSnapshot = Record<string, unknown>;
+
 export interface BaseControlMessage {
   v: 1;
   type: string;
@@ -88,11 +90,15 @@ export type ServerControlMessage =
       worktreeId: string;
       title?: string;
     })
+  | (BaseControlMessage & { type: "pane.listed"; panes: PaneDescriptor[] })
   | (BaseControlMessage & { type: "pane.exited"; paneId: string; exitCode: number; signal?: string })
   | (BaseControlMessage & { type: "pane.resized"; paneId: string; cols: number; rows: number })
   | (BaseControlMessage & { type: "pane.replay"; paneId: string; bytes: string })
+  | (BaseControlMessage & { type: "repo.listed"; repositories: Repository[] })
+  | (BaseControlMessage & { type: "worktree.listed"; repoId: string; worktrees: Worktree[] })
   | (BaseControlMessage & { type: "worktree.updated"; worktree: Worktree })
   | (BaseControlMessage & { type: "repo.updated"; repository: Repository })
+  | (BaseControlMessage & { type: "settings.snapshot"; settings: SettingsSnapshot })
   | (BaseControlMessage & {
       type: "notification";
       severity: "info" | "warning" | "error";

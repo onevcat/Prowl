@@ -48,6 +48,10 @@
       <span class={`connection ${appState.connection}`}>{appState.connection}</span>
     </header>
 
+    {#if appState.errorMessage}
+      <p class="error">{appState.errorMessage}</p>
+    {/if}
+
     {#if appState.selectedPane}
       <TerminalView
         title={appState.selectedPane.title}
@@ -139,6 +143,15 @@
     border-radius: 999px;
     background: color-mix(in srgb, CanvasText 10%, Canvas);
     font-size: 0.78rem;
+  }
+
+  .error {
+    margin: 0;
+    padding: 0.5rem 0.65rem;
+    border: 1px solid color-mix(in srgb, #ff3b30 45%, Canvas);
+    border-radius: 6px;
+    background: color-mix(in srgb, #ff3b30 12%, Canvas);
+    color: CanvasText;
   }
 
   .empty {

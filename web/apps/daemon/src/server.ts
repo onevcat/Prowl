@@ -2,14 +2,14 @@ import type { ClientControlMessage, ServerControlMessage } from "@prowl/protocol
 import { decodeFrame, encodeJsonFrame, protocolTags, protocolVersion } from "@prowl/protocol";
 import type { DaemonConfig } from "./auth/config";
 import { isAllowedOrigin } from "./auth/config";
-import { PaneManager } from "./pty/PaneManager";
+import { InMemoryState } from "./state/InMemoryState";
 
 export type ServerHandle = {
   stop: () => void;
 };
 
 export function startServer(config: DaemonConfig): ServerHandle {
-  const paneManager = new PaneManager();
+  const state = new InMemoryState(process.env.PROWL_REPO_ROOT ?? process.cwd());
   const server = Bun.serve({
     hostname: config.bind,
     port: config.port,
@@ -38,7 +38,7 @@ export function startServer(config: DaemonConfig): ServerHandle {
     },
     websocket: {
       message(ws, message) {
-        if (!(message instanceof ArrayBuffer)) {
+        if (typeof message === "string") {
           return;
         }
 
@@ -48,8 +48,8 @@ export function startServer(config: DaemonConfig): ServerHandle {
         }
 
         const control = JSON.parse(frame.payload) as ClientControlMessage;
-        const response = handleControl(control, paneManager, config);
-        if (response) {
+        const responses = handleControl(control, state, config);
+        for (const response of responses) {
           ws.send(encodeJsonFrame(response));
         }
       },
@@ -63,55 +63,81 @@ export function startServer(config: DaemonConfig): ServerHandle {
 
 function handleControl(
   message: ClientControlMessage,
-  paneManager: PaneManager,
+  state: InMemoryState,
   config: DaemonConfig,
-): ServerControlMessage | null {
+): ServerControlMessage[] {
   if (message.type === "hello") {
     if (message.token !== config.token) {
-      return errorResponse(message.id, "UNAUTHORIZED", "Invalid token");
+      return [errorResponse(message.id, "UNAUTHORIZED", "Invalid token")];
     }
     if (message.protocolVersion > protocolVersion) {
-      return errorResponse(message.id, "PROTOCOL_MISMATCH", "Client protocol is newer than daemon");
+      return [errorResponse(message.id, "PROTOCOL_MISMATCH", "Client protocol is newer than daemon")];
     }
-    return {
-      v: 1,
-      type: "welcome",
-      id: message.id,
-      sessionId: crypto.randomUUID(),
-      serverVersion: "0.0.0",
-      capabilities: ["pane.create", "pane.close", "ping"],
-    };
+    return [
+      {
+        v: 1,
+        type: "welcome",
+        id: message.id,
+        sessionId: crypto.randomUUID(),
+        serverVersion: "0.0.0",
+        capabilities: ["repo.list", "worktree.list", "pane.create", "pane.close", "settings.get", "ping"],
+      },
+    ];
+  }
+
+  if (message.type === "repo.list") {
+    return [{ v: 1, type: "repo.listed", id: message.id, repositories: state.repositories }];
+  }
+
+  if (message.type === "worktree.list") {
+    return [
+      {
+        v: 1,
+        type: "worktree.listed",
+        id: message.id,
+        repoId: message.repoId,
+        worktrees: state.worktreesByRepo.get(message.repoId) ?? [],
+      },
+    ];
+  }
+
+  if (message.type === "settings.get") {
+    return [{ v: 1, type: "settings.snapshot", id: message.id, settings: state.settingsSnapshot(message.keys) }];
   }
 
   if (message.type === "pane.create") {
-    const pane = paneManager.create(message.worktreeId);
-    return {
-      v: 1,
-      type: "pane.created",
-      id: message.id,
-      paneId: pane.id,
-      channelId: pane.channelId,
-      worktreeId: pane.worktreeId,
-      title: pane.title,
-    };
+    const pane = state.createPane(message.worktreeId, message.command ?? "Shell");
+    return [
+      {
+        v: 1,
+        type: "pane.created",
+        id: message.id,
+        paneId: pane.id,
+        channelId: pane.channelId,
+        worktreeId: pane.worktreeId,
+        title: pane.title,
+      },
+    ];
   }
 
   if (message.type === "pane.close") {
-    paneManager.close(message.paneId);
-    return {
-      v: 1,
-      type: "pane.exited",
-      id: message.id,
-      paneId: message.paneId,
-      exitCode: 0,
-    };
+    state.closePane(message.paneId);
+    return [
+      {
+        v: 1,
+        type: "pane.exited",
+        id: message.id,
+        paneId: message.paneId,
+        exitCode: 0,
+      },
+    ];
   }
 
   if (message.type === "ping") {
-    return { v: 1, type: "pong", id: message.id };
+    return [{ v: 1, type: "pong", id: message.id }];
   }
 
-  return errorResponse(message.id, "NOT_IMPLEMENTED", `${message.type} is not implemented yet`);
+  return [errorResponse(message.id, "NOT_IMPLEMENTED", `${message.type} is not implemented yet`)];
 }
 
 function errorResponse(id: string, code: string, message: string): ServerControlMessage {

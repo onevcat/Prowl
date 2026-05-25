@@ -1,4 +1,6 @@
-import type { PaneDescriptor, Repository, Worktree } from "@prowl/protocol";
+import { WSClient } from "$lib/ws/WSClient";
+import type { PaneDescriptor, Repository, ServerControlMessage, Worktree } from "@prowl/protocol";
+import { makeMessageId, protocolVersion } from "@prowl/protocol";
 import { get, set } from "idb-keyval";
 import { Pane } from "./Pane";
 import { WorktreeView } from "./WorktreeView";
@@ -9,89 +11,34 @@ export const appStateKey = Symbol("ProwlAppState");
 
 const uiViewKey = "prowl:ui.view";
 const selectedWorktreeKey = "prowl:ui.selectedWorktreeId";
-
-const demoRepositories: Repository[] = [
-  {
-    id: "repo-prowl",
-    path: "/home/bubu/Prowl",
-    displayName: "Prowl",
-    color: "#0a84ff",
-  },
-];
-
-const demoWorktrees: Worktree[] = [
-  {
-    id: "wt-main",
-    repoId: "repo-prowl",
-    path: "/home/bubu/Prowl",
-    name: "main",
-    branch: "main",
-    status: "dirty",
-    taskStatus: "running",
-    unreadCount: 1,
-  },
-  {
-    id: "wt-web",
-    repoId: "repo-prowl",
-    path: "/home/bubu/Prowl-web",
-    name: "web-sveltekit-implementation",
-    branch: "web-sveltekit-implementation",
-    status: "loading",
-    taskStatus: "idle",
-    unreadCount: 0,
-  },
-];
-
-const demoPanes: PaneDescriptor[] = [
-  {
-    id: "pane-main-1",
-    channelId: 1,
-    worktreeId: "wt-main",
-    title: "Codex",
-    taskStatus: "running",
-    unread: true,
-    lastOutputLine: "Implementing web workspace scaffold",
-    updatedAt: Date.now() - 40_000,
-  },
-  {
-    id: "pane-main-2",
-    channelId: 2,
-    worktreeId: "wt-main",
-    title: "Tests",
-    taskStatus: "idle",
-    unread: false,
-    lastOutputLine: "bun test",
-    updatedAt: Date.now() - 300_000,
-  },
-  {
-    id: "pane-web-1",
-    channelId: 3,
-    worktreeId: "wt-web",
-    title: "Daemon",
-    taskStatus: "idle",
-    unread: false,
-    lastOutputLine: "prowld --port 7878",
-    updatedAt: Date.now() - 120_000,
-  },
-];
+const sessionTokenKey = "prowl:token";
+const defaultDaemonURL = "ws://127.0.0.1:7878/ws";
 
 export class AppState {
-  repositories = $state<Repository[]>(demoRepositories);
-  worktreesByRepo = $state<Map<string, Worktree[]>>(new Map([["repo-prowl", demoWorktrees]]));
-  panes = $state<Map<string, Pane>>(new Map(demoPanes.map((pane) => [pane.id, new Pane(pane)])));
+  readonly ws = new WSClient();
+  repositories = $state<Repository[]>([]);
+  worktreesByRepo = $state<Map<string, Worktree[]>>(new Map());
+  panes = $state<Map<string, Pane>>(new Map());
   worktreeViews = $state<Map<string, WorktreeView>>(new Map());
-  selectedWorktreeId = $state<string | null>("wt-main");
-  selectedPaneId = $state<string | null>("pane-main-1");
+  selectedWorktreeId = $state<string | null>(null);
+  selectedPaneId = $state<string | null>(null);
   view = $state<AppView>("shelf");
   paletteOpen = $state(false);
   paletteQuery = $state("");
   connection = $state<ConnectionState>("closed");
+  errorMessage = $state<string | null>(null);
+  sessionId = $state<string | null>(null);
 
   constructor() {
-    for (const worktree of demoWorktrees) {
-      this.worktreeViews.set(worktree.id, new WorktreeView(worktree.id));
+    if (typeof window === "undefined") {
+      return;
     }
+    this.ws.onStatus((connection) => {
+      this.connection = connection;
+    });
+    this.ws.onMessage((message) => this.#handleServerMessage(message));
     this.#restoreUIState();
+    this.#connectFromLocation();
   }
 
   get worktrees(): Worktree[] {
@@ -176,10 +123,10 @@ export class AppState {
         this.paletteQuery = "";
         break;
       case "pane.new":
-        this.createPane();
+        void this.createPane();
         break;
       case "pane.close":
-        this.closeSelectedPane();
+        void this.closeSelectedPane();
         break;
       case "worktree.next":
         this.cycleWorktree(1);
@@ -219,38 +166,40 @@ export class AppState {
     this.paletteOpen = false;
   }
 
-  createPane(): void {
+  async createPane(): Promise<void> {
     const worktreeId = this.selectedWorktreeId ?? this.worktrees[0]?.id;
     if (!worktreeId) {
       return;
     }
 
-    const descriptor: PaneDescriptor = {
-      id: crypto.randomUUID(),
-      channelId: this.panes.size + 1,
-      worktreeId,
-      title: "New terminal",
-      taskStatus: "idle",
-      unread: false,
-      lastOutputLine: "Waiting for daemon-backed PTY",
-      updatedAt: Date.now(),
-    };
-    const next = new Map(this.panes);
-    next.set(descriptor.id, new Pane(descriptor));
-    this.panes = next;
-    this.selectedPaneId = descriptor.id;
+    try {
+      await this.ws.request({
+        v: 1,
+        type: "pane.create",
+        id: makeMessageId(),
+        worktreeId,
+        cols: 120,
+        rows: 32,
+      });
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    }
   }
 
-  closeSelectedPane(): void {
+  async closeSelectedPane(): Promise<void> {
     if (!this.selectedPaneId) {
       return;
     }
-    const closing = this.selectedPaneId;
-    const next = new Map(this.panes);
-    next.delete(closing);
-    this.panes = next;
-    this.selectedPaneId =
-      Array.from(next.values()).find((pane) => pane.worktreeId === this.selectedWorktreeId)?.id ?? null;
+    try {
+      await this.ws.request({
+        v: 1,
+        type: "pane.close",
+        id: makeMessageId(),
+        paneId: this.selectedPaneId,
+      });
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    }
   }
 
   cycleWorktree(direction: 1 | -1): void {
@@ -286,6 +235,170 @@ export class AppState {
     }
     if (selectedWorktreeId && this.worktrees.some((worktree) => worktree.id === selectedWorktreeId)) {
       this.selectWorktree(selectedWorktreeId);
+    }
+  }
+
+  #connectFromLocation(): void {
+    const url = new URL(window.location.href);
+    const tokenFromURL = url.searchParams.get("token");
+    if (tokenFromURL) {
+      sessionStorage.setItem(sessionTokenKey, tokenFromURL);
+      url.searchParams.delete("token");
+      window.history.replaceState({}, "", url);
+    }
+
+    const token = tokenFromURL ?? sessionStorage.getItem(sessionTokenKey) ?? "";
+    const daemonURL = new URL(url.searchParams.get("daemon") ?? defaultDaemonURL);
+    if (token) {
+      daemonURL.searchParams.set("token", token);
+    }
+
+    this.ws.connect(daemonURL.toString());
+    this.ws.onStatus((state) => {
+      if (state === "open") {
+        void this.#bootstrap(token);
+      }
+    });
+  }
+
+  async #bootstrap(token: string): Promise<void> {
+    try {
+      await this.ws.request({
+        v: 1,
+        type: "hello",
+        id: makeMessageId(),
+        token,
+        clientVersion: "0.0.0",
+        protocolVersion,
+      });
+      await this.ws.request({ v: 1, type: "repo.list", id: makeMessageId() });
+      for (const repository of this.repositories) {
+        await this.ws.request({
+          v: 1,
+          type: "worktree.list",
+          id: makeMessageId(),
+          repoId: repository.id,
+        });
+      }
+      await this.ws.request({ v: 1, type: "settings.get", id: makeMessageId(), keys: ["panes"] });
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  #handleServerMessage(message: ServerControlMessage): void {
+    switch (message.type) {
+      case "welcome":
+        this.sessionId = message.sessionId;
+        this.errorMessage = null;
+        break;
+      case "repo.listed":
+        this.repositories = message.repositories;
+        break;
+      case "repo.updated":
+        this.#upsertRepository(message.repository);
+        break;
+      case "worktree.listed":
+        this.#replaceWorktrees(message.repoId, message.worktrees);
+        break;
+      case "worktree.updated":
+        this.#upsertWorktree(message.worktree);
+        break;
+      case "pane.listed":
+        this.#replacePanes(message.panes);
+        break;
+      case "pane.created":
+        this.#upsertPane({
+          id: message.paneId,
+          channelId: message.channelId,
+          worktreeId: message.worktreeId,
+          title: message.title ?? "Shell",
+          taskStatus: "idle",
+          unread: false,
+          lastOutputLine: "Connected to daemon-backed pane",
+          updatedAt: Date.now(),
+        });
+        this.selectedPaneId = message.paneId;
+        this.selectedWorktreeId = message.worktreeId;
+        break;
+      case "pane.exited":
+        this.#removePane(message.paneId);
+        break;
+      case "settings.snapshot":
+        if (Array.isArray(message.settings.panes)) {
+          this.#replacePanes(message.settings.panes as PaneDescriptor[]);
+        }
+        break;
+      case "error":
+        this.errorMessage = `${message.code}: ${message.message}`;
+        break;
+      case "notification":
+      case "pane.replay":
+      case "pane.resized":
+      case "pong":
+        break;
+    }
+  }
+
+  #upsertRepository(repository: Repository): void {
+    const index = this.repositories.findIndex((candidate) => candidate.id === repository.id);
+    if (index === -1) {
+      this.repositories = [...this.repositories, repository];
+      return;
+    }
+    this.repositories = this.repositories.with(index, repository);
+  }
+
+  #replaceWorktrees(repoId: string, worktrees: Worktree[]): void {
+    const next = new Map(this.worktreesByRepo);
+    next.set(repoId, worktrees);
+    this.worktreesByRepo = next;
+    this.#ensureWorktreeViews(worktrees);
+    this.#ensureSelection();
+  }
+
+  #upsertWorktree(worktree: Worktree): void {
+    const current = this.worktreesByRepo.get(worktree.repoId) ?? [];
+    const index = current.findIndex((candidate) => candidate.id === worktree.id);
+    const updated = index === -1 ? [...current, worktree] : current.with(index, worktree);
+    this.#replaceWorktrees(worktree.repoId, updated);
+  }
+
+  #ensureWorktreeViews(worktrees: Worktree[]): void {
+    const next = new Map(this.worktreeViews);
+    for (const worktree of worktrees) {
+      if (!next.has(worktree.id)) {
+        next.set(worktree.id, new WorktreeView(worktree.id));
+      }
+    }
+    this.worktreeViews = next;
+  }
+
+  #replacePanes(panes: PaneDescriptor[]): void {
+    this.panes = new Map(panes.map((pane) => [pane.id, new Pane(pane)]));
+    this.#ensureSelection();
+  }
+
+  #upsertPane(descriptor: PaneDescriptor): void {
+    const next = new Map(this.panes);
+    next.set(descriptor.id, new Pane(descriptor));
+    this.panes = next;
+  }
+
+  #removePane(paneId: string): void {
+    const next = new Map(this.panes);
+    next.delete(paneId);
+    this.panes = next;
+    this.#ensureSelection();
+  }
+
+  #ensureSelection(): void {
+    if (!this.selectedWorktreeId || !this.worktrees.some((worktree) => worktree.id === this.selectedWorktreeId)) {
+      this.selectedWorktreeId = this.worktrees[0]?.id ?? null;
+    }
+    if (!this.selectedPaneId || !this.panes.has(this.selectedPaneId)) {
+      this.selectedPaneId =
+        Array.from(this.panes.values()).find((pane) => pane.worktreeId === this.selectedWorktreeId)?.id ?? null;
     }
   }
 }
