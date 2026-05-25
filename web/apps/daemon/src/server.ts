@@ -98,7 +98,9 @@ export function startServer(config: DaemonConfig, options: ServerOptions = {}): 
         exitCode,
       } satisfies ServerControlMessage);
       for (const client of clients) {
-        client.send(frame);
+        if (shouldSendPaneEvent(client.data, paneId)) {
+          client.send(frame);
+        }
       }
     },
   });
@@ -276,6 +278,13 @@ export function shouldSendPtyOutput(
   channelId: number,
 ): boolean {
   return session.authenticated && session.attachedChannelIds.has(channelId);
+}
+
+export function shouldSendPaneEvent(
+  session: Pick<WebSocketData, "authenticated" | "ownedPaneIds">,
+  paneId: string,
+): boolean {
+  return session.authenticated && session.ownedPaneIds.has(paneId);
 }
 
 function updateAttachedChannels(

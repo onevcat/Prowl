@@ -7,6 +7,7 @@ import {
   allowControlMessage,
   authenticateUpgradeToken,
   handleControl,
+  shouldSendPaneEvent,
   shouldSendPtyOutput,
   startServer,
   tokenFromRequest,
@@ -271,6 +272,12 @@ describe("daemon scaffold", () => {
     expect(shouldSendPtyOutput({ authenticated: false, attachedChannelIds: new Set([7]) }, 7)).toBe(false);
     expect(shouldSendPtyOutput({ authenticated: true, attachedChannelIds: new Set([8]) }, 7)).toBe(false);
     expect(shouldSendPtyOutput({ authenticated: true, attachedChannelIds: new Set([7]) }, 7)).toBe(true);
+  });
+
+  test("only sends pane events to owning sessions", () => {
+    expect(shouldSendPaneEvent({ authenticated: false, ownedPaneIds: new Set(["pane-1"]) }, "pane-1")).toBe(false);
+    expect(shouldSendPaneEvent({ authenticated: true, ownedPaneIds: new Set(["pane-2"]) }, "pane-1")).toBe(false);
+    expect(shouldSendPaneEvent({ authenticated: true, ownedPaneIds: new Set(["pane-1"]) }, "pane-1")).toBe(true);
   });
 
   test("validates repository paths before adding them", () => {
