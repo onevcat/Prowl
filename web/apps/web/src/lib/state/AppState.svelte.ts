@@ -1,5 +1,6 @@
 import { formatPaneNotificationBody } from "$lib/notifications/message";
 import { NotificationPermissionRequester } from "$lib/notifications/permission";
+import { redactSensitiveText } from "$lib/security/redaction";
 import { RendererPool } from "$lib/terminal/RendererPool";
 import { inferAgentTaskStatus } from "$lib/terminal/detectAgent";
 import { appendTerminalOutput, terminalOutputSnapshot } from "$lib/terminal/outputBuffer";
@@ -466,7 +467,7 @@ export class AppState {
         rows: 32,
       });
     } catch (error) {
-      this.errorMessage = error instanceof Error ? error.message : String(error);
+      this.errorMessage = redactSensitiveText(error);
     }
   }
 
@@ -482,7 +483,7 @@ export class AppState {
         paneId: this.selectedPaneId,
       });
     } catch (error) {
-      this.errorMessage = error instanceof Error ? error.message : String(error);
+      this.errorMessage = redactSensitiveText(error);
     }
   }
 
@@ -501,7 +502,7 @@ export class AppState {
         path: normalizedPath,
       });
     } catch (error) {
-      this.errorMessage = error instanceof Error ? error.message : String(error);
+      this.errorMessage = redactSensitiveText(error);
     } finally {
       this.repoBusy = false;
     }
@@ -524,7 +525,7 @@ export class AppState {
         repoId,
       });
     } catch (error) {
-      this.errorMessage = error instanceof Error ? error.message : String(error);
+      this.errorMessage = redactSensitiveText(error);
     } finally {
       this.repoBusy = false;
     }
@@ -547,7 +548,7 @@ export class AppState {
         directory: directory?.trim() || undefined,
       });
     } catch (error) {
-      this.errorMessage = error instanceof Error ? error.message : String(error);
+      this.errorMessage = redactSensitiveText(error);
     } finally {
       this.repoBusy = false;
     }
@@ -570,7 +571,7 @@ export class AppState {
         worktreeId,
       });
     } catch (error) {
-      this.errorMessage = error instanceof Error ? error.message : String(error);
+      this.errorMessage = redactSensitiveText(error);
     } finally {
       this.repoBusy = false;
     }
@@ -587,7 +588,7 @@ export class AppState {
         action,
       });
     } catch (error) {
-      this.errorMessage = error instanceof Error ? error.message : String(error);
+      this.errorMessage = redactSensitiveText(error);
     } finally {
       this.repoBusy = false;
     }
@@ -607,7 +608,7 @@ export class AppState {
         actionId,
       });
     } catch (error) {
-      this.errorMessage = error instanceof Error ? error.message : String(error);
+      this.errorMessage = redactSensitiveText(error);
     } finally {
       this.repoBusy = false;
     }
@@ -627,7 +628,7 @@ export class AppState {
         actionId,
       });
     } catch (error) {
-      this.errorMessage = error instanceof Error ? error.message : String(error);
+      this.errorMessage = redactSensitiveText(error);
     }
   }
 
@@ -647,7 +648,7 @@ export class AppState {
         taskStatus,
       });
     } catch (error) {
-      this.errorMessage = error instanceof Error ? error.message : String(error);
+      this.errorMessage = redactSensitiveText(error);
     }
   }
 
@@ -664,7 +665,7 @@ export class AppState {
         this.#mergeSettings(response.settings);
       }
     } catch (error) {
-      this.errorMessage = error instanceof Error ? error.message : String(error);
+      this.errorMessage = redactSensitiveText(error);
     }
   }
 
@@ -692,7 +693,7 @@ export class AppState {
       this.loginToken = "";
       this.#connectDaemon("");
     } catch (error) {
-      this.loginError = error instanceof Error ? error.message : String(error);
+      this.loginError = redactSensitiveText(error);
     } finally {
       this.loginBusy = false;
     }
@@ -716,7 +717,7 @@ export class AppState {
         this.setView("diff");
       }
     } catch (error) {
-      this.errorMessage = error instanceof Error ? error.message : String(error);
+      this.errorMessage = redactSensitiveText(error);
     } finally {
       this.diffBusy = false;
     }
@@ -790,7 +791,7 @@ export class AppState {
               void this.#recreateGonePane(paneId);
               return;
             }
-            this.errorMessage = error instanceof Error ? error.message : String(error);
+            this.errorMessage = redactSensitiveText(error);
           });
       }
     }
@@ -831,7 +832,7 @@ export class AppState {
       this.#removePane(paneId);
       this.syncRenderedPanes();
     } catch (error) {
-      this.errorMessage = error instanceof Error ? error.message : String(error);
+      this.errorMessage = redactSensitiveText(error);
     }
   }
 
@@ -963,7 +964,7 @@ export class AppState {
       });
       this.syncRenderedPanes();
     } catch (error) {
-      this.errorMessage = error instanceof Error ? error.message : String(error);
+      this.errorMessage = redactSensitiveText(error);
     }
   }
 
@@ -982,7 +983,7 @@ export class AppState {
           await this.#recreateGonePane(paneId);
           continue;
         }
-        this.errorMessage = error instanceof Error ? error.message : String(error);
+        this.errorMessage = redactSensitiveText(error);
       }
     }
   }
@@ -1058,7 +1059,7 @@ export class AppState {
         }
         break;
       case "error":
-        this.errorMessage = `${message.code}: ${message.message}`;
+        this.errorMessage = `${message.code}: ${redactSensitiveText(message.message)}`;
         break;
       case "notification":
         if (message.paneId) {
