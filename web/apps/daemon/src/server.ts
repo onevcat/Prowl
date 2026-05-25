@@ -23,10 +23,15 @@ type SyncCommandResult = {
   stdout: Uint8Array;
   stderr: Uint8Array;
 };
+type WebSocketData = {
+  authenticated: boolean;
+};
 
 export type ServerHandle = {
   stop: () => void;
   state: InMemoryState;
+  url: URL;
+  port: number;
 };
 
 export function startServer(
@@ -51,7 +56,7 @@ export function startServer(
   if (options.socketPath !== false) {
     ipc = startIPCServer(config, state, options.socketPath);
   }
-  const server = Bun.serve({
+  const server = Bun.serve<WebSocketData>({
     hostname: config.bind,
     port: config.port,
     ...(tls ? { tls } : {}),
@@ -59,6 +64,10 @@ export function startServer(
       const url = new URL(request.url);
       if (url.pathname === "/health") {
         return Response.json({ ok: true, protocolVersion });
+      }
+
+      if (url.pathname === "/auth/login") {
+        return handleLogin(request, config, Boolean(tls));
       }
 
       if (url.pathname !== "/ws") {
@@ -69,12 +78,12 @@ export function startServer(
         return new Response("Forbidden origin", { status: 403 });
       }
 
-      const token = url.searchParams.get("token");
+      const token = tokenFromRequest(request, url);
       if (token !== config.token) {
         return new Response("Unauthorized", { status: 401 });
       }
 
-      if (!server.upgrade(request)) {
+      if (!server.upgrade(request, { data: { authenticated: true } })) {
         return new Response("Upgrade failed", { status: 400 });
       }
     },
@@ -97,7 +106,7 @@ export function startServer(
         }
 
         const control = JSON.parse(frame.payload) as ClientControlMessage;
-        const responses = handleControl(control, state, config);
+        const responses = handleControl(control, state, config, { authenticated: ws.data.authenticated });
         for (const response of responses) {
           ws.send(encodeJsonFrame(response));
         }
@@ -107,11 +116,72 @@ export function startServer(
 
   return {
     state,
+    url: server.url,
+    port: server.port ?? config.port,
     stop: () => {
       ipc?.close();
       server.stop(true);
     },
   };
+}
+
+async function handleLogin(request: Request, config: DaemonConfig, secureCookie: boolean): Promise<Response> {
+  if (request.method !== "POST") {
+    return new Response("Method not allowed", { status: 405 });
+  }
+
+  if (!isAllowedOrigin(config, request.headers.get("Origin"))) {
+    return new Response("Forbidden origin", { status: 403 });
+  }
+
+  const token = await tokenFromLoginBody(request);
+  if (token !== config.token) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
+  return Response.json(
+    { ok: true },
+    {
+      headers: {
+        "Set-Cookie": sessionCookie(config.token, secureCookie),
+      },
+    },
+  );
+}
+
+async function tokenFromLoginBody(request: Request): Promise<string> {
+  const contentType = request.headers.get("Content-Type") ?? "";
+  if (contentType.includes("application/json")) {
+    const body = await request.json().catch(() => null);
+    return isRecord(body) && typeof body.token === "string" ? body.token : "";
+  }
+  return (await request.text()).trim();
+}
+
+function tokenFromRequest(request: Request, url: URL): string | null {
+  return url.searchParams.get("token") ?? cookieValue(request.headers.get("Cookie"), "prowl_session");
+}
+
+function cookieValue(cookieHeader: string | null, name: string): string | null {
+  if (!cookieHeader) {
+    return null;
+  }
+  for (const cookie of cookieHeader.split(";")) {
+    const [rawName, ...rawValue] = cookie.trim().split("=");
+    if (rawName === name) {
+      return decodeURIComponent(rawValue.join("="));
+    }
+  }
+  return null;
+}
+
+function sessionCookie(token: string, secure: boolean): string {
+  const secureAttribute = secure ? "; Secure" : "";
+  return `prowl_session=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000${secureAttribute}`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function tlsOptions(config: DaemonConfig): Bun.TLSOptions | null {
@@ -136,9 +206,10 @@ export function handleControl(
   message: ClientControlMessage,
   state: InMemoryState,
   config: DaemonConfig,
+  options: { authenticated?: boolean } = {},
 ): ServerControlMessage[] {
   if (message.type === "hello") {
-    if (message.token !== config.token) {
+    if (!options.authenticated && message.token !== config.token) {
       return [errorResponse(message.id, "UNAUTHORIZED", "Invalid token")];
     }
     if (message.protocolVersion > protocolVersion) {

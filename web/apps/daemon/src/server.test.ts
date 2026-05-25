@@ -26,6 +26,63 @@ describe("daemon scaffold", () => {
     ).toThrow("TLS is required");
   });
 
+  test("issues an HttpOnly session cookie from the login endpoint", async () => {
+    const root = mkdtempSync(join(tmpdir(), "prowl-login-test-"));
+    const server = startServer(
+      {
+        port: 0,
+        bind: "127.0.0.1",
+        token: "test-token",
+        allowedOrigins: ["http://127.0.0.1:5173"],
+        requireTLS: false,
+      },
+      { socketPath: false, statePath: join(root, "state.sqlite"), spawnProcesses: false },
+    );
+    try {
+      const response = await fetch(new URL("/auth/login", server.url), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: "http://127.0.0.1:5173",
+        },
+        body: JSON.stringify({ token: "test-token" }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("Set-Cookie")).toContain("prowl_session=test-token; HttpOnly");
+    } finally {
+      server.stop();
+    }
+  });
+
+  test("allows hello on a connection already authenticated during upgrade", () => {
+    const root = mkdtempSync(join(tmpdir(), "prowl-authenticated-hello-test-"));
+    const state = new InMemoryState(root, { statePath: ":memory:", spawnProcesses: false });
+    const config = {
+      port: 0,
+      bind: "127.0.0.1",
+      token: "test-token",
+      allowedOrigins: ["http://127.0.0.1:5173"],
+      requireTLS: false,
+    };
+
+    const response = handleControl(
+      {
+        v: 1,
+        type: "hello",
+        id: makeMessageId(),
+        token: "",
+        clientVersion: "0.0.0",
+        protocolVersion,
+      },
+      state,
+      config,
+      { authenticated: true },
+    );
+
+    expect(response[0]?.type).toBe("welcome");
+  });
+
   test("validates repository paths before adding them", () => {
     const root = mkdtempSync(join(tmpdir(), "prowl-server-test-"));
     const state = new InMemoryState(root, { statePath: ":memory:", spawnProcesses: false });

@@ -1,4 +1,4 @@
-import { type DaemonConfig, loadConfig } from "./auth/config";
+import { type DaemonConfig, loadConfig, rotateConfigToken } from "./auth/config";
 import { startServer } from "./server";
 
 const args = new Map<string, string | boolean>();
@@ -51,6 +51,12 @@ const config = await loadConfig(overrides);
 
 if (args.has("print-token")) {
   process.stdout.write(`${config.token}\n`);
+  process.exit(0);
+}
+
+if (args.has("rotate-token")) {
+  const rotated = await rotateConfigToken(overrides);
+  process.stdout.write(`${rotated.token}\n`);
   process.exit(0);
 }
 

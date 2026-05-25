@@ -40,6 +40,19 @@ export async function loadConfig(overrides: Partial<DaemonConfig> = {}): Promise
   }
 }
 
+export async function writeConfig(config: DaemonConfig): Promise<void> {
+  const path = configPath();
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, `${JSON.stringify(config, null, 2)}\n`);
+}
+
+export async function rotateConfigToken(overrides: Partial<DaemonConfig> = {}): Promise<DaemonConfig> {
+  const config = await loadConfig(overrides);
+  const rotated = { ...config, token: generateToken() };
+  await writeConfig(rotated);
+  return rotated;
+}
+
 export function isAllowedOrigin(config: DaemonConfig, origin: string | null): boolean {
   if (!origin) {
     return false;
