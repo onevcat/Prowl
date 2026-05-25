@@ -1,6 +1,7 @@
-import type { PaneDescriptor, ServerControlMessage } from "@prowl/protocol";
+import type { PaneDescriptor } from "@prowl/protocol";
 import { makeMessageId } from "@prowl/protocol";
 import { hello, loadCLIConfig, requestDaemon, sendPtyInput } from "../transport";
+import { getPaneList } from "./list";
 
 const textEncoder = new TextEncoder();
 const escapeCharacter = String.fromCharCode(27);
@@ -136,8 +137,6 @@ async function requirePane(paneId: string | undefined): Promise<PaneDescriptor> 
   if (!paneId) {
     throw new Error("Pane id is required");
   }
-  const config = await loadCLIConfig();
-  await hello(config.token);
   const panes = await listPanes();
   const pane = panes.find((candidate) => candidate.id === paneId);
   if (!pane) {
@@ -191,20 +190,7 @@ function escapeForRegExp(text: string): string {
 }
 
 async function listPanes(): Promise<PaneDescriptor[]> {
-  const response = await requestDaemon({
-    v: 1,
-    type: "settings.get",
-    id: makeMessageId(),
-    keys: ["panes"],
-  });
-  return panesFromResponse(response);
-}
-
-function panesFromResponse(response: ServerControlMessage): PaneDescriptor[] {
-  if (response.type !== "settings.snapshot" || !Array.isArray(response.settings.panes)) {
-    return [];
-  }
-  return response.settings.panes as PaneDescriptor[];
+  return getPaneList();
 }
 
 function keyBytes(key: string): Uint8Array {
