@@ -55,6 +55,18 @@ export function startServer(
         }
       }
     },
+    onPaneExit: (paneId, exitCode) => {
+      const frame = encodeJsonFrame({
+        v: 1,
+        type: "pane.exited",
+        id: crypto.randomUUID(),
+        paneId,
+        exitCode,
+      } satisfies ServerControlMessage);
+      for (const client of clients) {
+        client.send(frame);
+      }
+    },
   });
   let ipc: IPCServerHandle | null = null;
   if (options.socketPath !== false) {

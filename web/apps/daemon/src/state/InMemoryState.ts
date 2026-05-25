@@ -5,9 +5,26 @@ import { dirname, join } from "node:path";
 import type { CustomAction, PaneDescriptor, Repository, SettingsSnapshot, Worktree } from "@prowl/protocol";
 import { schemaSql } from "./schema";
 
+type PaneProcess = {
+  kill: () => void;
+  exited: Promise<number>;
+  terminal?: {
+    write: (payload: string | Uint8Array) => void;
+    resize: (cols: number, rows: number) => void;
+    close: () => void;
+  };
+};
+
 type StateOptions = {
   spawnProcesses?: boolean;
+  spawnPaneProcess?: (options: {
+    shell: string;
+    args: string[];
+    cwd: string;
+    onData: (data: Uint8Array) => void;
+  }) => PaneProcess;
   onPaneData?: (channelId: number, payload: Uint8Array) => void;
+  onPaneExit?: (paneId: string, exitCode: number) => void;
   shell?: string;
   statePath?: string;
 };
@@ -48,15 +65,7 @@ type CustomActionRow = {
 };
 
 type PaneRuntime = {
-  process: {
-    kill: () => void;
-    exited: Promise<number>;
-    terminal?: {
-      write: (payload: string | Uint8Array) => void;
-      resize: (cols: number, rows: number) => void;
-      close: () => void;
-    };
-  };
+  process: PaneProcess;
 };
 
 export type RunCustomActionResult = {
@@ -78,7 +87,9 @@ export class InMemoryState {
   constructor(repoPath = process.cwd(), options: StateOptions = {}) {
     this.#options = {
       spawnProcesses: options.spawnProcesses ?? true,
+      spawnPaneProcess: options.spawnPaneProcess ?? spawnTerminalProcess,
       onPaneData: options.onPaneData ?? (() => {}),
+      onPaneExit: options.onPaneExit ?? (() => {}),
       shell: options.shell ?? "/bin/sh",
       statePath: options.statePath ?? defaultStatePath(),
     };
@@ -423,18 +434,12 @@ export class InMemoryState {
   #spawnRuntime(pane: PaneDescriptor, command?: string, cwd?: string): void {
     const worktree = this.#worktreeForPane(pane);
     const args = command ? ["-lc", command] : ["-i"];
-    const child = Bun.spawn([this.#options.shell, ...args], {
+    const child = this.#options.spawnPaneProcess({
+      shell: this.#options.shell,
+      args,
       cwd: cwd ?? worktree?.path ?? process.cwd(),
-      terminal: {
-        cols: 120,
-        rows: 32,
-        data: (_terminal, data) => {
-          this.#recordPaneOutput(pane.id, data);
-        },
-      },
-      env: {
-        ...process.env,
-        TERM: "xterm-256color",
+      onData: (data) => {
+        this.#recordPaneOutput(pane.id, data);
       },
     });
     this.#runtimesByPane.set(pane.id, {
@@ -445,6 +450,7 @@ export class InMemoryState {
       if (current) {
         current.taskStatus = exitCode === 0 ? "done" : "failed";
         current.updatedAt = Date.now();
+        this.#options.onPaneExit(pane.id, exitCode);
       }
       this.#runtimesByPane.delete(pane.id);
     });
@@ -562,6 +568,28 @@ function lastNonEmptyLine(text: string): string | null {
 
 function defaultStatePath(): string {
   return join(homedir(), ".prowl", "state.sqlite");
+}
+
+function spawnTerminalProcess(options: {
+  shell: string;
+  args: string[];
+  cwd: string;
+  onData: (data: Uint8Array) => void;
+}): PaneProcess {
+  return Bun.spawn([options.shell, ...options.args], {
+    cwd: options.cwd,
+    terminal: {
+      cols: 120,
+      rows: 32,
+      data: (_terminal, data) => {
+        options.onData(data);
+      },
+    },
+    env: {
+      ...process.env,
+      TERM: "xterm-256color",
+    },
+  });
 }
 
 function openDatabase(path: string): Database {
