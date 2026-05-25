@@ -2,6 +2,7 @@
   import { Button } from "@prowl/ui";
   import { getContext } from "svelte";
   import { appStateKey, type AppState } from "$lib/state/AppState.svelte";
+  import { highlightDiffFilesInWorker } from "./highlight";
   import { splitDiffRows, type DiffFile, type DiffLine } from "./model";
   import { parseGitDiffInWorker } from "./worker";
 
@@ -9,9 +10,12 @@
   let mode = $state<"unified" | "split">("unified");
   let selectedPath = $state<string | null>(null);
   let files = $state<DiffFile[]>([]);
+  let highlightedLinesByPath = $state<Map<string, string[]>>(new Map());
   let parsing = $state(false);
+  let highlighting = $state(false);
   let parseError = $state<string | null>(null);
   let parseRequestId = 0;
+  let highlightRequestId = 0;
   let selectedFile = $derived(files.find((file) => file.path === selectedPath) ?? files[0] ?? null);
   let splitRows = $derived(selectedFile ? splitDiffRows(selectedFile.lines) : []);
 
@@ -20,7 +24,9 @@
     const requestId = ++parseRequestId;
     if (!diffText) {
       files = [];
+      highlightedLinesByPath = new Map();
       parsing = false;
+      highlighting = false;
       parseError = null;
       return;
     }
@@ -30,12 +36,14 @@
       .then((parsedFiles) => {
         if (requestId === parseRequestId) {
           files = parsedFiles;
+          void highlightParsedFiles(parsedFiles);
         }
       })
       .catch((error) => {
         if (requestId === parseRequestId) {
           parseError = error instanceof Error ? error.message : String(error);
           files = [];
+          highlightedLinesByPath = new Map();
         }
       })
       .finally(() => {
@@ -56,8 +64,43 @@
     return value === null || value === undefined ? "" : String(value);
   }
 
-  function displayLine(line: DiffLine | null): string {
-    return line?.text ?? "";
+  function highlightedLine(file: DiffFile, line: DiffLine, index: number): string {
+    return highlightedLinesByPath.get(file.path)?.[index] ?? escapeHtml(line.text);
+  }
+
+  function highlightedSplitLine(file: DiffFile, line: DiffLine | null): string {
+    if (!line) {
+      return "";
+    }
+    const index = file.lines.indexOf(line);
+    return index === -1 ? escapeHtml(line.text) : highlightedLine(file, line, index);
+  }
+
+  async function highlightParsedFiles(parsedFiles: DiffFile[]): Promise<void> {
+    const requestId = ++highlightRequestId;
+    highlighting = parsedFiles.length > 0;
+    try {
+      const highlighted = await highlightDiffFilesInWorker(parsedFiles);
+      if (requestId === highlightRequestId) {
+        highlightedLinesByPath = highlighted;
+      }
+    } catch {
+      if (requestId === highlightRequestId) {
+        highlightedLinesByPath = new Map();
+      }
+    } finally {
+      if (requestId === highlightRequestId) {
+        highlighting = false;
+      }
+    }
+  }
+
+  function escapeHtml(value: string): string {
+    return value
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;");
   }
 </script>
 
@@ -68,6 +111,8 @@
       <p>
         {#if parsing}
           Parsing diff...
+        {:else if highlighting}
+          Highlighting diff...
         {:else}
           {appState.diff ? `${files.length} files · ${new Date(appState.diff.generatedAt).toLocaleTimeString()}` : "No diff loaded"}
         {/if}
@@ -102,9 +147,9 @@
           <div class="split-view" aria-label="Side-by-side diff">
             {#each splitRows as row, index (`${selectedFile.path}-split-${index}`)}
               <div class={`cell gutter ${row.oldLine?.kind ?? ""}`}>{lineNumber(row.oldLine, "old")}</div>
-              <pre class={`cell ${row.oldLine?.kind ?? ""}`}>{displayLine(row.oldLine)}</pre>
+              <pre class={`cell ${row.oldLine?.kind ?? ""}`}>{@html highlightedSplitLine(selectedFile, row.oldLine)}</pre>
               <div class={`cell gutter ${row.newLine?.kind ?? ""}`}>{lineNumber(row.newLine, "new")}</div>
-              <pre class={`cell ${row.newLine?.kind ?? ""}`}>{displayLine(row.newLine)}</pre>
+              <pre class={`cell ${row.newLine?.kind ?? ""}`}>{@html highlightedSplitLine(selectedFile, row.newLine)}</pre>
             {/each}
           </div>
         {:else}
@@ -112,7 +157,7 @@
             {#each selectedFile.lines as line, index (`${selectedFile.path}-${index}`)}
               <div class={`gutter ${line.kind}`}>{lineNumber(line, "old")}</div>
               <div class={`gutter ${line.kind}`}>{lineNumber(line, "new")}</div>
-              <pre class={line.kind}>{line.text}</pre>
+              <pre class={line.kind}>{@html highlightedLine(selectedFile, line, index)}</pre>
             {/each}
           </div>
         {/if}
