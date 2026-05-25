@@ -7,6 +7,20 @@ const token = "e2e-token";
 test.describe.configure({ mode: "serial" });
 
 test("logs in with a daemon token", async ({ page }) => {
+  await page.addInitScript(() => {
+    const socketURLs: string[] = [];
+    const trackedWebSocket = new Proxy(window.WebSocket, {
+      construct(target, args) {
+        socketURLs.push(String(args[0]));
+        return Reflect.construct(target, args);
+      },
+    });
+
+    Object.defineProperty(window, "__prowlWebSocketURLs", {
+      value: socketURLs,
+    });
+    window.WebSocket = trackedWebSocket;
+  });
   await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}`);
 
   await expect(page.getByRole("heading", { name: "Connect to prowld" })).toBeVisible();
@@ -15,6 +29,17 @@ test("logs in with a daemon token", async ({ page }) => {
 
   await expect(page.locator(".connection.open")).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Shell" })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem("prowl:token"))).toBeNull();
+  await expect.poll(() => page.evaluate(() => location.href)).not.toContain("token=");
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        ((window as unknown as { __prowlWebSocketURLs?: string[] }).__prowlWebSocketURLs ?? []).some((url) =>
+          url.includes("token="),
+        ),
+      ),
+    )
+    .toBe(false);
 });
 
 test("connects to the daemon and writes through the terminal", async ({ page }) => {

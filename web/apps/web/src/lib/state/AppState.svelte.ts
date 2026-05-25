@@ -611,9 +611,9 @@ export class AppState {
       if (!response.ok) {
         throw new Error(response.status === 401 ? "Invalid token." : `Login failed (${response.status}).`);
       }
-      sessionStorage.setItem(sessionTokenKey, token);
+      sessionStorage.removeItem(sessionTokenKey);
       this.loginToken = "";
-      this.#connectDaemon(token);
+      this.#connectDaemon("");
     } catch (error) {
       this.loginError = error instanceof Error ? error.message : String(error);
     } finally {
