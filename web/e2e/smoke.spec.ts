@@ -1,9 +1,11 @@
-import { type APIRequestContext, type Page, expect, test } from "@playwright/test";
+import { readFileSync } from "node:fs";
+import { type APIRequestContext, type Browser, type CDPSession, type Page, expect, test } from "@playwright/test";
 
 const daemonURL = "ws://127.0.0.1:7879/ws";
 const daemonHTTPURL = "http://127.0.0.1:7879";
 const token = "e2e-token";
 const daemonRssBudgetBytes = 120 * 1024 * 1024;
+const clientRendererRssBudgetBytes = 350 * 1024 * 1024;
 
 test.describe.configure({ mode: "serial" });
 
@@ -66,6 +68,33 @@ test("keeps daemon RSS under budget with ten idle panes", async ({ page, request
     await expect.poll(() => debugStats(request).then((stats) => stats.paneCount)).toBeGreaterThanOrEqual(10);
     const stats = await debugStats(request);
     expect(stats.rssBytes).toBeLessThanOrEqual(daemonRssBudgetBytes);
+  } finally {
+    await closePanesThroughBrowser(page, createdPaneIds);
+    await expect.poll(() => debugStats(request).then((stats) => stats.paneCount)).toBe(before.paneCount);
+  }
+});
+
+test("keeps Chrome renderer RSS under budget with ten idle panes", async ({ browser, page, request }) => {
+  test.setTimeout(30_000);
+  test.skip(process.platform !== "linux", "Chromium renderer RSS is read from /proc on Linux.");
+
+  const before = await debugStats(request);
+  let createdPaneIds: string[] = [];
+  try {
+    await page.goto("/manifest.webmanifest");
+    createdPaneIds = await createIdlePanesThroughBrowser(page, before.paneCount, 10);
+
+    await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}&token=${token}`);
+    await expect(page.locator(".connection.open")).toBeVisible();
+    await expect(page.locator(".tabs > button")).toHaveCount(10);
+    await page.getByRole("button", { name: "Show Canvas" }).click();
+
+    await expect(page.locator(".grid > div")).toHaveCount(10);
+    await expect(page.getByRole("textbox", { name: "Shell" })).toHaveCount(8);
+    await expect(page.locator("section.renderer-idle")).toHaveCount(2);
+
+    const rendererRssBytes = await chromeRendererRssBytes(browser);
+    expect(rendererRssBytes).toBeLessThanOrEqual(clientRendererRssBudgetBytes);
   } finally {
     await closePanesThroughBrowser(page, createdPaneIds);
     await expect.poll(() => debugStats(request).then((stats) => stats.paneCount)).toBe(before.paneCount);
@@ -431,6 +460,31 @@ async function debugStats(request: APIRequestContext): Promise<{
     paneCount: number;
     rssBytes: number;
   };
+}
+
+async function chromeRendererRssBytes(browser: Browser): Promise<number> {
+  type ChromiumBrowserWithCDP = Browser & { newBrowserCDPSession(): Promise<CDPSession> };
+  type ProcessInfoResponse = {
+    processInfo: Array<{
+      type: string;
+      id: number;
+    }>;
+  };
+
+  const session = await (browser as ChromiumBrowserWithCDP).newBrowserCDPSession();
+  const { processInfo } = (await session.send("SystemInfo.getProcessInfo")) as ProcessInfoResponse;
+  return processInfo
+    .filter((process) => process.type === "renderer")
+    .reduce((total, process) => total + processRssBytes(process.id), 0);
+}
+
+function processRssBytes(pid: number): number {
+  const status = readFileSync(`/proc/${pid}/status`, "utf8");
+  const match = /^VmRSS:\s+(\d+)\s+kB$/m.exec(status);
+  if (!match) {
+    throw new Error(`Could not read RSS for process ${pid}`);
+  }
+  return Number(match[1]) * 1024;
 }
 
 async function createIdlePanesThroughBrowser(
