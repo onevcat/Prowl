@@ -1,4 +1,5 @@
 import { type DaemonConfig, loadConfig, rotateConfigToken } from "./auth/config";
+import { createLogger, parseLogLevel } from "./logging/logger";
 import { startServer } from "./server";
 
 const args = new Map<string, string | boolean>();
@@ -48,18 +49,22 @@ if (args.has("no-require-tls")) {
 }
 
 const config = await loadConfig(overrides);
+const logger = createLogger({ level: parseLogLevel(args.get("log-level")) });
 
 if (args.has("print-token")) {
+  logger.info("printed daemon bearer token");
   process.stdout.write(`${config.token}\n`);
   process.exit(0);
 }
 
 if (args.has("rotate-token")) {
   const rotated = await rotateConfigToken(overrides);
+  logger.warn("rotated daemon bearer token");
   process.stdout.write(`${rotated.token}\n`);
   process.exit(0);
 }
 
-startServer(config);
+startServer(config, { logger });
 const scheme = config.tlsCertPath && config.tlsKeyPath ? "https" : "http";
 process.stdout.write(`prowld listening on ${scheme}://${config.bind}:${config.port}\n`);
+logger.info(`daemon listening on ${scheme}://${config.bind}:${config.port}`);

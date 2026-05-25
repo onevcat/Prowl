@@ -12,6 +12,7 @@ import {
 import type { DaemonConfig } from "./auth/config";
 import { isAllowedOrigin } from "./auth/config";
 import { type IPCServerHandle, startIPCServer } from "./ipc/socket";
+import { type Logger, createLogger } from "./logging/logger";
 import { InMemoryState } from "./state/InMemoryState";
 
 type ErrorControlMessage = Extract<ServerControlMessage, { type: "error" }>;
@@ -40,9 +41,10 @@ export type ServerHandle = {
 
 export function startServer(
   config: DaemonConfig,
-  options: { socketPath?: string | false; statePath?: string; spawnProcesses?: boolean } = {},
+  options: { socketPath?: string | false; statePath?: string; spawnProcesses?: boolean; logger?: Logger } = {},
 ): ServerHandle {
   const tls = tlsOptions(config);
+  const logger = options.logger ?? createLogger();
   const clients = new Set<{ send: (payload: ArrayBuffer) => void }>();
   const state = new InMemoryState(process.env.PROWL_REPO_ROOT ?? process.cwd(), {
     spawnProcesses: options.spawnProcesses,
@@ -56,6 +58,7 @@ export function startServer(
       }
     },
     onPaneExit: (paneId, exitCode) => {
+      logger.info(`pane exited paneId=${paneId} exitCode=${exitCode}`);
       const frame = encodeJsonFrame({
         v: 1,
         type: "pane.exited",
@@ -71,6 +74,7 @@ export function startServer(
   let ipc: IPCServerHandle | null = null;
   if (options.socketPath !== false) {
     ipc = startIPCServer(config, state, options.socketPath);
+    logger.debug(`ipc listening on ${ipc.socketPath}`);
   }
   const server = Bun.serve<WebSocketData>({
     hostname: config.bind,
@@ -83,7 +87,7 @@ export function startServer(
       }
 
       if (url.pathname === "/auth/login") {
-        return handleLogin(request, config, Boolean(tls));
+        return handleLogin(request, config, Boolean(tls), logger);
       }
 
       if (url.pathname !== "/ws") {
@@ -91,11 +95,13 @@ export function startServer(
       }
 
       if (!isAllowedOrigin(config, request.headers.get("Origin"))) {
+        logger.warn(`rejected websocket origin=${request.headers.get("Origin") ?? "missing"}`);
         return new Response("Forbidden origin", { status: 403 });
       }
 
       const token = tokenFromRequest(request, url);
       if (token !== config.token) {
+        logger.warn("rejected websocket unauthorized token");
         return new Response("Unauthorized", { status: 401 });
       }
 
@@ -127,6 +133,7 @@ export function startServer(
         try {
           frame = decodeFrame(message);
         } catch {
+          logger.warn("closing websocket after invalid frame");
           ws.close(1009, "Invalid frame");
           return;
         }
@@ -136,6 +143,7 @@ export function startServer(
         }
 
         if (!allowControlMessage(ws.data)) {
+          logger.warn("closing websocket after control rate limit");
           ws.close(1008, "Control rate limit exceeded");
           return;
         }
@@ -156,6 +164,7 @@ export function startServer(
     stop: () => {
       ipc?.close();
       server.stop(true);
+      logger.info("daemon stopped");
     },
   };
 }
@@ -169,20 +178,28 @@ export function allowControlMessage(session: WebSocketData, now = Date.now()): b
   return session.controlMessagesInWindow <= maxControlMessagesPerSecond;
 }
 
-async function handleLogin(request: Request, config: DaemonConfig, secureCookie: boolean): Promise<Response> {
+async function handleLogin(
+  request: Request,
+  config: DaemonConfig,
+  secureCookie: boolean,
+  logger: Logger,
+): Promise<Response> {
   if (request.method !== "POST") {
     return new Response("Method not allowed", { status: 405 });
   }
 
   if (!isAllowedOrigin(config, request.headers.get("Origin"))) {
+    logger.warn(`rejected login origin=${request.headers.get("Origin") ?? "missing"}`);
     return new Response("Forbidden origin", { status: 403 });
   }
 
   const token = await tokenFromLoginBody(request);
   if (token !== config.token) {
+    logger.warn("rejected login unauthorized token");
     return new Response("Unauthorized", { status: 401 });
   }
 
+  logger.info("issued auth session cookie");
   return Response.json(
     { ok: true },
     {
