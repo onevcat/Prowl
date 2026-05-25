@@ -227,7 +227,7 @@ export class AppState {
       return;
     }
 
-    const customAction = this.customActions.find((candidate) => candidate.shortcut?.trim() === chord);
+    const customAction = this.runnableCustomActions.find((candidate) => candidate.shortcut?.trim() === chord);
     if (customAction) {
       event.preventDefault();
       void this.runCustomAction(customAction.id);

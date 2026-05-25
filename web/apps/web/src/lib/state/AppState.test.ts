@@ -1,3 +1,4 @@
+import type { CustomAction } from "@prowl/protocol";
 import { describe, expect, test } from "vitest";
 import { AppState } from "./AppState.svelte";
 import { Pane } from "./Pane.svelte";
@@ -8,6 +9,11 @@ const globalWithRunes = globalThis as typeof globalThis & {
 };
 
 globalWithRunes.$state = ((value: unknown) => value) as typeof globalWithRunes.$state;
+
+Object.defineProperty(globalThis, "navigator", {
+  configurable: true,
+  value: { platform: "Linux" },
+});
 
 describe("AppState ordering", () => {
   test("orders worktrees and panes according to drag reorder state", () => {
@@ -27,6 +33,38 @@ describe("AppState ordering", () => {
     state.selectWorktree("worktree-1");
 
     expect(state.selectedPaneId).toBe("pane-2");
+  });
+});
+
+describe("AppState custom action shortcuts", () => {
+  test("ignores repo-scoped custom action shortcuts outside the selected repo", () => {
+    const state = appStateFixture();
+    state.customActions = [customAction("action-other", "repo-2", "Mod+R")];
+    const event = shortcutEvent({ key: "r", ctrlKey: true });
+    let ranActionId: string | null = null;
+    state.runCustomAction = (async (actionId: string) => {
+      ranActionId = actionId;
+    }) as AppState["runCustomAction"];
+
+    state.handleKeydown(event);
+
+    expect(event.prevented).toBe(false);
+    expect(ranActionId).toBeNull();
+  });
+
+  test("runs global custom action shortcuts", () => {
+    const state = appStateFixture();
+    state.customActions = [customAction("action-global", null, "Mod+R")];
+    const event = shortcutEvent({ key: "r", ctrlKey: true });
+    let ranActionId: string | null = null;
+    state.runCustomAction = (async (actionId: string) => {
+      ranActionId = actionId;
+    }) as AppState["runCustomAction"];
+
+    state.handleKeydown(event);
+
+    expect(event.prevented).toBe(true);
+    expect(ranActionId).toBe("action-global");
   });
 });
 
@@ -76,4 +114,37 @@ function pane(id: string, channelId: number): Pane {
     lastOutputLine: "",
     updatedAt: 0,
   });
+}
+
+function customAction(id: string, repoId: string | null, shortcut: string): CustomAction {
+  return {
+    id,
+    repoId,
+    name: id,
+    command: "printf action",
+    shortcut,
+    outputMode: "currentPane",
+    ordering: 0,
+  };
+}
+
+type ShortcutEvent = KeyboardEvent & {
+  prevented: boolean;
+};
+
+function shortcutEvent(overrides: Partial<KeyboardEvent> = {}): ShortcutEvent {
+  return {
+    altKey: false,
+    ctrlKey: false,
+    defaultPrevented: false,
+    key: "r",
+    metaKey: false,
+    prevented: false,
+    shiftKey: false,
+    target: null,
+    preventDefault() {
+      this.prevented = true;
+    },
+    ...overrides,
+  } as ShortcutEvent;
 }
