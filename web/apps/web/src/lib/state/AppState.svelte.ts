@@ -2,6 +2,7 @@ import { runViewTransition } from "$lib/animation/viewTransition";
 import { formatPaneNotificationBody } from "$lib/notifications/message";
 import { NotificationPermissionRequester } from "$lib/notifications/permission";
 import {
+  type PerformanceInteraction,
   finishPerformanceInteraction,
   finishPerformanceInteractionAfterNextFrame,
   interactionMeasureNames,
@@ -99,7 +100,7 @@ export class AppState {
   readonly #notificationPermission = new NotificationPermissionRequester();
   #bootstrapPromise: Promise<void> | null = null;
   #metricTimer: ReturnType<typeof setInterval> | null = null;
-  #inputStartedByChannel = new Map<number, number>();
+  #inputStartedByChannel = new Map<number, PerformanceInteraction[]>();
   #decoderByChannel = new Map<number, TextDecoder>();
   #paneSizeById = new Map<string, { cols: number; rows: number }>();
   #renderedPaneIds = new Set<string>();
@@ -810,7 +811,13 @@ export class AppState {
       return;
     }
     if (this.ws.sendBinary(pane.channelId, textEncoder.encode(text))) {
-      this.#inputStartedByChannel.set(pane.channelId, performance.now());
+      const interaction = startPerformanceInteraction(interactionMeasureNames.inputLatency);
+      if (interaction) {
+        this.#inputStartedByChannel.set(pane.channelId, [
+          ...(this.#inputStartedByChannel.get(pane.channelId) ?? []),
+          interaction,
+        ]);
+      }
     }
   }
 
@@ -1150,10 +1157,12 @@ export class AppState {
     if (!pane) {
       return;
     }
-    const inputStartedAt = this.#inputStartedByChannel.get(channelId);
-    if (inputStartedAt !== undefined) {
+    const inputInteractions = this.#inputStartedByChannel.get(channelId);
+    if (inputInteractions?.length) {
       this.#inputStartedByChannel.delete(channelId);
-      this.#recordInputLatency(performance.now() - inputStartedAt);
+      for (const interaction of inputInteractions) {
+        this.#recordInputLatency(finishPerformanceInteraction(interaction));
+      }
     }
     const decoder = this.#decoderByChannel.get(channelId) ?? new TextDecoder();
     this.#decoderByChannel.set(channelId, decoder);
@@ -1399,7 +1408,10 @@ export class AppState {
     }
   }
 
-  #recordInputLatency(value: number): void {
+  #recordInputLatency(value: number | null): void {
+    if (value === null) {
+      return;
+    }
     this.metrics = {
       ...this.metrics,
       inputLatencySamples: appendSample(this.metrics.inputLatencySamples, value),

@@ -1,11 +1,12 @@
 export const interactionMeasureNames = {
+  inputLatency: "prowl.input.latency",
   paletteOpen: "prowl.palette.open",
   worktreeSwitch: "prowl.worktree.switch",
 } as const;
 
-type InteractionMeasureName = (typeof interactionMeasureNames)[keyof typeof interactionMeasureNames];
+export type InteractionMeasureName = (typeof interactionMeasureNames)[keyof typeof interactionMeasureNames];
 
-type PerformanceInteraction = {
+export type PerformanceInteraction = {
   name: InteractionMeasureName;
   startMark: string;
   endMark: string;

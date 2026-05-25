@@ -92,6 +92,26 @@ test("connects to the daemon and writes through the terminal", async ({ page }) 
   await expect(terminal).toContainText("e2e-smoke");
 });
 
+test("keeps terminal input p99 latency under the regression gate", async ({ page }) => {
+  await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}&token=${token}`);
+  await expect(page.locator(".connection.open")).toBeVisible();
+  const terminal = page.getByRole("textbox", { name: "Shell" });
+  await expect(terminal).toBeVisible();
+  await page.evaluate(() => performance.clearMeasures("prowl.input.latency"));
+
+  await terminal.click();
+  const input = "x".repeat(100);
+  await page.keyboard.type(input, { delay: 20 });
+
+  await expect.poll(() => echoedCharacterCount(terminal, "x")).toBeGreaterThanOrEqual(100);
+  await expect
+    .poll(() => inputLatencyDurations(page).then((durations) => durations.length))
+    .toBeGreaterThanOrEqual(100);
+
+  const durations = await inputLatencyDurations(page);
+  expect(percentile(durations, 99)).toBeLessThanOrEqual(20);
+});
+
 test("opens a worktree diff from the shelf context menu", async ({ page }) => {
   await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}&token=${token}`);
   await expect(page.locator(".connection.open")).toBeVisible();
@@ -198,4 +218,19 @@ async function installWebSocketURLRecorder(page: Page): Promise<void> {
     });
     window.WebSocket = trackedWebSocket;
   });
+}
+
+async function inputLatencyDurations(page: Page): Promise<number[]> {
+  return page.evaluate(() => performance.getEntriesByName("prowl.input.latency").map((entry) => entry.duration));
+}
+
+async function echoedCharacterCount(locator: ReturnType<Page["getByRole"]>, character: string): Promise<number> {
+  const text = (await locator.textContent()) ?? "";
+  return [...text].filter((candidate) => candidate === character).length;
+}
+
+function percentile(samples: number[], percentileValue: number): number {
+  const sorted = [...samples].sort((a, b) => a - b);
+  const index = Math.min(sorted.length - 1, Math.ceil((percentileValue / 100) * sorted.length) - 1);
+  return sorted[index] ?? Number.POSITIVE_INFINITY;
 }
