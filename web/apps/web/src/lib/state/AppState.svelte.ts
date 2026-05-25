@@ -98,6 +98,7 @@ export class AppState {
   #renderedPaneIds = new Set<string>();
   #paneIdsToResume = new Set<string>();
   #authToken = "";
+  appFocused = $state(true);
   repositories = $state<Repository[]>([]);
   customActions = $state<CustomAction[]>([]);
   worktreesByRepo = $state<Map<string, Worktree[]>>(new Map());
@@ -144,6 +145,7 @@ export class AppState {
     });
     this.#restoreUIState();
     this.#connectFromLocation();
+    this.#registerFocusTracking();
     this.#startMetricLoop();
   }
 
@@ -454,6 +456,21 @@ export class AppState {
     this.selectedWorktreeId = pane.worktreeId;
     this.paletteOpen = false;
     this.syncRenderedPanes();
+  }
+
+  isPaneFocused(paneId: string): boolean {
+    return this.appFocused && this.selectedPaneId === paneId;
+  }
+
+  setAppFocused(focused: boolean): void {
+    this.appFocused = focused;
+    if (!focused || !this.selectedPaneId) {
+      return;
+    }
+    const pane = this.panes.get(this.selectedPaneId);
+    if (pane) {
+      pane.unread = false;
+    }
   }
 
   reorderWorktree(repoId: string, draggedId: string, targetId: string): void {
@@ -1101,7 +1118,7 @@ export class AppState {
       case "notification":
         if (message.paneId) {
           const pane = this.panes.get(message.paneId);
-          if (pane && pane.id !== this.selectedPaneId) {
+          if (pane && !this.isPaneFocused(pane.id)) {
             this.#notifyPaneDone(pane, message.body);
           }
         }
@@ -1131,7 +1148,7 @@ export class AppState {
     pane.output = snapshot.text;
     pane.lastOutputLine = snapshot.lastOutputLine || pane.lastOutputLine;
     pane.updatedAt = Date.now();
-    pane.unread = pane.id !== this.selectedPaneId;
+    pane.unread = !this.isPaneFocused(pane.id);
     const detectedStatus = inferAgentTaskStatus(pane.output);
     if (detectedStatus && detectedStatus !== pane.taskStatus) {
       void this.updatePaneStatus(pane.id, detectedStatus);
@@ -1294,6 +1311,16 @@ export class AppState {
     document.documentElement.dataset.terminalDensity = this.settings.appearance.terminalDensity;
     document.documentElement.dataset.unreadBadges = String(this.settings.appearance.showUnreadBadges);
     document.documentElement.style.colorScheme = theme === "system" ? "light dark" : theme;
+  }
+
+  #registerFocusTracking(): void {
+    const updateFocus = () => {
+      this.setAppFocused(document.visibilityState !== "hidden" && document.hasFocus());
+    };
+    updateFocus();
+    window.addEventListener("focus", updateFocus);
+    window.addEventListener("blur", updateFocus);
+    document.addEventListener("visibilitychange", updateFocus);
   }
 
   #shortcutMap(): Map<string, ActionId> {

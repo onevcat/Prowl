@@ -74,6 +74,34 @@ describe("AppState worktree spine state", () => {
   });
 });
 
+describe("AppState focus-aware notifications", () => {
+  test("treats the selected pane as focused only while the app is focused", () => {
+    const state = appStateFixture();
+
+    expect(state.isPaneFocused("pane-1")).toBe(true);
+
+    state.setAppFocused(false);
+
+    expect(state.isPaneFocused("pane-1")).toBe(false);
+    expect(state.isPaneFocused("pane-2")).toBe(false);
+  });
+
+  test("clears selected pane unread state when focus returns", () => {
+    const state = appStateFixture();
+    const selectedPane = state.panes.get("pane-1");
+    expect(selectedPane).toBeDefined();
+    if (!selectedPane) {
+      return;
+    }
+    selectedPane.unread = true;
+    state.setAppFocused(false);
+
+    state.setAppFocused(true);
+
+    expect(selectedPane.unread).toBe(false);
+  });
+});
+
 describe("AppState custom action shortcuts", () => {
   test("ignores repo-scoped custom action shortcuts outside the selected repo", () => {
     const state = appStateFixture();
