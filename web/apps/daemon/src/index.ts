@@ -1,3 +1,4 @@
+import { appVersion } from "@prowl/protocol";
 import { type DaemonConfig, loadConfigWithMetadata, rotateConfigToken } from "./auth/config";
 import { createLogger, parseLogLevel } from "./logging/logger";
 import { startServer } from "./server";
@@ -38,7 +39,7 @@ if (args.has("help")) {
 }
 
 if (args.has("version")) {
-  process.stdout.write("prowld 0.0.0\n");
+  process.stdout.write(`prowld ${appVersion}\n`);
   process.exit(0);
 }
 

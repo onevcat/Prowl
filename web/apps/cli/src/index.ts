@@ -26,7 +26,7 @@ import {
   renderRepoList,
   renderRepoRemove,
 } from "./commands/repo";
-import { renderVersion } from "./commands/version";
+import { cliVersion, renderVersion } from "./commands/version";
 import {
   archiveWorktree,
   createWorktree,
@@ -49,7 +49,7 @@ switch (command) {
     break;
   case "version":
   case "--version":
-    writeValue({ name: "prowl", version: "0.0.0" }, renderVersion());
+    writeValue(cliVersion(), renderVersion());
     break;
   case "send":
     {

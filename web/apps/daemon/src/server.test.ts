@@ -3,6 +3,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFile
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  appVersion,
   makeMessageId,
   maxBinaryPayloadBytes,
   maxJsonPayloadBytes,
@@ -188,6 +189,10 @@ describe("daemon scaffold", () => {
     );
 
     expect(response[0]?.type).toBe("welcome");
+    if (response[0]?.type === "welcome") {
+      expect(response[0].serverVersion).toBe(appVersion);
+      expect(response[0].capabilities).toContain("pane.status");
+    }
   });
 
   test("allows websocket upgrade without a token for hello-first authentication", () => {

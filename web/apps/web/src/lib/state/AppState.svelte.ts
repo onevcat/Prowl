@@ -22,7 +22,7 @@ import type {
   Worktree,
   WorktreeDiff,
 } from "@prowl/protocol";
-import { makeMessageId, protocolVersion } from "@prowl/protocol";
+import { appVersion, makeMessageId, protocolVersion } from "@prowl/protocol";
 import { get, set } from "idb-keyval";
 import { Pane } from "./Pane.svelte";
 import { WorktreeView } from "./WorktreeView.svelte";
@@ -1059,7 +1059,7 @@ export class AppState {
         type: "hello",
         id: makeMessageId(),
         token,
-        clientVersion: "0.0.0",
+        clientVersion: appVersion,
         protocolVersion,
       });
       await this.#resumeRenderedPanes();

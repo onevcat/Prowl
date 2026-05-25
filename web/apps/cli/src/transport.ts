@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ClientControlMessage, ServerControlMessage } from "@prowl/protocol";
 import {
+  appVersion,
   decodeFrame,
   encodeJsonFrame,
   encodePtyFrame,
@@ -80,7 +81,7 @@ export async function requestDaemon(
                 type: "hello",
                 id: makeMessageId(),
                 token: authToken,
-                clientVersion: "0.0.0",
+                clientVersion: appVersion,
                 protocolVersion,
               }),
             );
@@ -171,7 +172,7 @@ export async function sendPtyInput(
                 type: "hello",
                 id: makeMessageId(),
                 token: authToken,
-                clientVersion: "0.0.0",
+                clientVersion: appVersion,
                 protocolVersion,
               }),
             );
@@ -201,7 +202,7 @@ export async function hello(token: string, socketPath = defaultSocketPath()): Pr
       type: "hello",
       id: makeMessageId(),
       token,
-      clientVersion: "0.0.0",
+      clientVersion: appVersion,
       protocolVersion,
     },
     socketPath,

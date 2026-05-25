@@ -2,14 +2,16 @@ import { describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { appVersion } from "@prowl/protocol";
 import { startServer } from "../../daemon/src/server";
 import { daemonStart, daemonStatus, daemonStop, renderDaemonStatus } from "./commands/daemon";
-import { renderVersion } from "./commands/version";
+import { cliVersion, renderVersion } from "./commands/version";
 import { hello, requestDaemon } from "./transport";
 
 describe("prowl cli scaffold", () => {
   test("renders version", () => {
-    expect(renderVersion()).toBe("prowl 0.0.0");
+    expect(cliVersion()).toEqual({ name: "prowl", version: appVersion });
+    expect(renderVersion()).toBe(`prowl ${appVersion}`);
   });
 
   test("renders JSON output for machine consumers", () => {
@@ -20,7 +22,7 @@ describe("prowl cli scaffold", () => {
     });
 
     expect(result.exitCode).toBe(0);
-    expect(JSON.parse(new TextDecoder().decode(result.stdout))).toEqual({ name: "prowl", version: "0.0.0" });
+    expect(JSON.parse(new TextDecoder().decode(result.stdout))).toEqual({ name: "prowl", version: appVersion });
   });
 
   test("renders daemon status", async () => {

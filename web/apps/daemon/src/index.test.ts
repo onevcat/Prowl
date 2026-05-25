@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { appVersion } from "@prowl/protocol";
 
 const daemonRoot = new URL("..", import.meta.url).pathname;
 
@@ -24,6 +25,30 @@ describe("prowld CLI", () => {
 
       expect(result.exitCode).toBe(0);
       expect(new TextDecoder().decode(result.stdout)).toContain("prowld --print-token");
+      expect(new TextDecoder().decode(result.stderr)).toBe("");
+      expect(existsSync(configPath)).toBe(false);
+    } finally {
+      await rm(directory, { force: true, recursive: true });
+    }
+  });
+
+  test("prints version without creating a config file", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "prowld-version-"));
+    const configPath = join(directory, "config.json");
+
+    try {
+      const result = Bun.spawnSync(["bun", "run", "src/index.ts", "--version"], {
+        cwd: daemonRoot,
+        env: {
+          ...Bun.env,
+          PROWL_CONFIG_PATH: configPath,
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(new TextDecoder().decode(result.stdout)).toBe(`prowld ${appVersion}\n`);
       expect(new TextDecoder().decode(result.stderr)).toBe("");
       expect(existsSync(configPath)).toBe(false);
     } finally {

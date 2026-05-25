@@ -3,6 +3,7 @@ import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import type { BaseControlMessage, ClientControlMessage, ServerControlMessage } from "@prowl/protocol";
 import {
   ControlMessageParseError,
+  appVersion,
   decodeFrame,
   encodeJsonFrame,
   encodePtyFrame,
@@ -486,7 +487,7 @@ export function handleControl(
         type: "welcome",
         id: message.id,
         sessionId: options.sessionId ?? crypto.randomUUID(),
-        serverVersion: "0.0.0",
+        serverVersion: appVersion,
         capabilities: [
           "repo.list",
           "repo.add",
@@ -505,6 +506,7 @@ export function handleControl(
           "pane.attach",
           "pane.detach",
           "pane.resize",
+          "pane.status",
           "settings.get",
           "settings.set",
           "ping",
