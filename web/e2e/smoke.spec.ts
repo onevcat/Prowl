@@ -3,6 +3,7 @@ import { type APIRequestContext, type Page, expect, test } from "@playwright/tes
 const daemonURL = "ws://127.0.0.1:7879/ws";
 const daemonHTTPURL = "http://127.0.0.1:7879";
 const token = "e2e-token";
+const daemonRssBudgetBytes = 120 * 1024 * 1024;
 
 test.describe.configure({ mode: "serial" });
 
@@ -51,6 +52,24 @@ test("cold starts to the first interactive pane within budget", async ({ page })
 
   const durations = await coldStartDurationsMs(page);
   expect(durations.at(-1)).toBeLessThanOrEqual(1_500);
+});
+
+test("keeps daemon RSS under budget with ten idle panes", async ({ page, request }) => {
+  await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}&token=${token}`);
+  await expect(page.locator(".connection.open")).toBeVisible();
+
+  const before = await debugStats(request);
+  let createdPaneIds: string[] = [];
+  try {
+    createdPaneIds = await createIdlePanesThroughBrowser(page, before.paneCount, 10);
+
+    await expect.poll(() => debugStats(request).then((stats) => stats.paneCount)).toBeGreaterThanOrEqual(10);
+    const stats = await debugStats(request);
+    expect(stats.rssBytes).toBeLessThanOrEqual(daemonRssBudgetBytes);
+  } finally {
+    await closePanesThroughBrowser(page, createdPaneIds);
+    await expect.poll(() => debugStats(request).then((stats) => stats.paneCount)).toBe(before.paneCount);
+  }
 });
 
 test("logs in with a daemon token", async ({ page }) => {
@@ -402,9 +421,204 @@ test("reorders worktrees and tabs with drag and drop", async ({ page }) => {
 async function debugStats(request: APIRequestContext): Promise<{
   paneAttachRequests: number;
   paneCreateRequests: number;
+  paneCount: number;
+  rssBytes: number;
 }> {
   const response = await request.get(`${daemonHTTPURL}/debug/stats`);
-  return (await response.json()) as { paneAttachRequests: number; paneCreateRequests: number };
+  return (await response.json()) as {
+    paneAttachRequests: number;
+    paneCreateRequests: number;
+    paneCount: number;
+    rssBytes: number;
+  };
+}
+
+async function createIdlePanesThroughBrowser(
+  page: Page,
+  currentPaneCount: number,
+  targetPaneCount: number,
+): Promise<string[]> {
+  return page.evaluate(
+    async ({ daemonURL, token, currentPaneCount, targetPaneCount }) => {
+      type ControlMessage = Record<string, unknown>;
+      type RepositorySnapshot = { id?: string };
+      type WorktreeSnapshot = { id?: string };
+
+      const socket = new WebSocket(`${daemonURL}?token=${encodeURIComponent(token)}`);
+      socket.binaryType = "arraybuffer";
+      const pending = new Map<string, (message: ControlMessage) => void>();
+
+      function encodeJsonControlFrame(value: unknown): ArrayBuffer {
+        const payload = new TextEncoder().encode(JSON.stringify(value));
+        const frame = new Uint8Array(5 + payload.byteLength);
+        const view = new DataView(frame.buffer);
+        view.setUint8(0, 0x02);
+        view.setUint32(1, payload.byteLength, false);
+        frame.set(payload, 5);
+        return frame.buffer;
+      }
+
+      function decodeJsonControlFrame(frame: ArrayBuffer): ControlMessage {
+        const bytes = new Uint8Array(frame);
+        const view = new DataView(frame);
+        const tag = view.getUint8(0);
+        const length = view.getUint32(1, false);
+        if (tag !== 0x02 || length !== bytes.byteLength - 5) {
+          throw new Error("Invalid JSON control frame");
+        }
+        return JSON.parse(new TextDecoder().decode(bytes.slice(5))) as ControlMessage;
+      }
+
+      function request(type: string, payload: Record<string, unknown>): Promise<ControlMessage> {
+        return new Promise((resolve, reject) => {
+          const id = crypto.randomUUID();
+          const timeout = setTimeout(() => {
+            pending.delete(id);
+            reject(new Error(`Timed out waiting for ${type}`));
+          }, 5_000);
+          pending.set(id, (message) => {
+            clearTimeout(timeout);
+            resolve(message);
+          });
+          socket.send(encodeJsonControlFrame({ v: 1, id, type, ...payload }));
+        });
+      }
+
+      socket.addEventListener("message", (event) => {
+        if (!(event.data instanceof ArrayBuffer)) {
+          return;
+        }
+        const message = decodeJsonControlFrame(event.data);
+        const resolve = pending.get(String(message.id));
+        if (resolve) {
+          pending.delete(String(message.id));
+          resolve(message);
+        }
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        socket.addEventListener("open", () => resolve(), { once: true });
+        socket.addEventListener("error", () => reject(new Error("Failed to open daemon websocket")), { once: true });
+      });
+
+      try {
+        const createdPaneIds: string[] = [];
+        const welcome = await request("hello", { token, clientVersion: "e2e", protocolVersion: 1 });
+        if (welcome.type !== "welcome") {
+          throw new Error(`Unexpected hello response: ${welcome.type}`);
+        }
+        const repositories = await request("repo.list", {});
+        const repoSnapshots = repositories.repositories as RepositorySnapshot[] | undefined;
+        const repoId = repoSnapshots?.[0]?.id;
+        if (repositories.type !== "repo.listed" || !repoId) {
+          throw new Error("Expected at least one repository");
+        }
+        const worktrees = await request("worktree.list", { repoId });
+        const worktreeSnapshots = worktrees.worktrees as WorktreeSnapshot[] | undefined;
+        const worktreeId = worktreeSnapshots?.[0]?.id;
+        if (worktrees.type !== "worktree.listed" || !worktreeId) {
+          throw new Error("Expected at least one worktree");
+        }
+        for (let index = currentPaneCount; index < targetPaneCount; index += 1) {
+          const response = await request("pane.create", { worktreeId, cols: 120, rows: 32 });
+          const paneId = response.paneId;
+          if (response.type !== "pane.created" || typeof paneId !== "string") {
+            throw new Error(`Unexpected pane.create response: ${response.type}`);
+          }
+          createdPaneIds.push(paneId);
+        }
+        return createdPaneIds;
+      } finally {
+        socket.close();
+      }
+    },
+    { daemonURL, token, currentPaneCount, targetPaneCount },
+  );
+}
+
+async function closePanesThroughBrowser(page: Page, paneIds: string[]): Promise<void> {
+  if (paneIds.length === 0) {
+    return;
+  }
+
+  await page.evaluate(
+    async ({ daemonURL, token, paneIds }) => {
+      type ControlMessage = Record<string, unknown>;
+
+      const socket = new WebSocket(`${daemonURL}?token=${encodeURIComponent(token)}`);
+      socket.binaryType = "arraybuffer";
+      const pending = new Map<string, (message: ControlMessage) => void>();
+
+      function encodeJsonControlFrame(value: unknown): ArrayBuffer {
+        const payload = new TextEncoder().encode(JSON.stringify(value));
+        const frame = new Uint8Array(5 + payload.byteLength);
+        const view = new DataView(frame.buffer);
+        view.setUint8(0, 0x02);
+        view.setUint32(1, payload.byteLength, false);
+        frame.set(payload, 5);
+        return frame.buffer;
+      }
+
+      function decodeJsonControlFrame(frame: ArrayBuffer): ControlMessage {
+        const bytes = new Uint8Array(frame);
+        const view = new DataView(frame);
+        const tag = view.getUint8(0);
+        const length = view.getUint32(1, false);
+        if (tag !== 0x02 || length !== bytes.byteLength - 5) {
+          throw new Error("Invalid JSON control frame");
+        }
+        return JSON.parse(new TextDecoder().decode(bytes.slice(5))) as ControlMessage;
+      }
+
+      function request(type: string, payload: Record<string, unknown>): Promise<ControlMessage> {
+        return new Promise((resolve, reject) => {
+          const id = crypto.randomUUID();
+          const timeout = setTimeout(() => {
+            pending.delete(id);
+            reject(new Error(`Timed out waiting for ${type}`));
+          }, 5_000);
+          pending.set(id, (message) => {
+            clearTimeout(timeout);
+            resolve(message);
+          });
+          socket.send(encodeJsonControlFrame({ v: 1, id, type, ...payload }));
+        });
+      }
+
+      socket.addEventListener("message", (event) => {
+        if (!(event.data instanceof ArrayBuffer)) {
+          return;
+        }
+        const message = decodeJsonControlFrame(event.data);
+        const resolve = pending.get(String(message.id));
+        if (resolve) {
+          pending.delete(String(message.id));
+          resolve(message);
+        }
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        socket.addEventListener("open", () => resolve(), { once: true });
+        socket.addEventListener("error", () => reject(new Error("Failed to open daemon websocket")), { once: true });
+      });
+
+      try {
+        const welcome = await request("hello", { token, clientVersion: "e2e", protocolVersion: 1 });
+        if (welcome.type !== "welcome") {
+          throw new Error(`Unexpected hello response: ${welcome.type}`);
+        }
+        for (const paneId of paneIds) {
+          const response = await request("pane.close", { paneId });
+          if (response.type !== "pane.exited") {
+            throw new Error(`Unexpected pane.close response: ${response.type}`);
+          }
+        }
+      } finally {
+        socket.close();
+      }
+    },
+    { daemonURL, token, paneIds },
+  );
 }
 
 async function installWebSocketURLRecorder(page: Page): Promise<void> {

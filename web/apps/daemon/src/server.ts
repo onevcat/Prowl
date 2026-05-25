@@ -61,6 +61,8 @@ type ServerOptions = {
 type DebugStats = {
   paneAttachRequests: number;
   paneCreateRequests: number;
+  paneCount: number;
+  rssBytes: number;
 };
 
 export function startServer(config: DaemonConfig, options: ServerOptions = {}): ServerHandle {
@@ -73,6 +75,8 @@ export function startServer(config: DaemonConfig, options: ServerOptions = {}): 
   const debugStats: DebugStats = {
     paneAttachRequests: 0,
     paneCreateRequests: 0,
+    paneCount: 0,
+    rssBytes: 0,
   };
   const outputCoalescer = new OutputCoalescer(
     (channelId, payload) => {
@@ -134,7 +138,7 @@ export function startServer(config: DaemonConfig, options: ServerOptions = {}): 
       }
 
       if (options.debugEndpoints && url.pathname === "/debug/stats") {
-        return Response.json(debugStats);
+        return Response.json(debugStatsSnapshot(debugStats, state));
       }
 
       if (options.debugEndpoints && url.pathname === "/debug/drop-first-pane") {
@@ -268,6 +272,14 @@ export function startServer(config: DaemonConfig, options: ServerOptions = {}): 
       server.stop(true);
       logger.info("daemon stopped");
     },
+  };
+}
+
+function debugStatsSnapshot(stats: DebugStats, state: InMemoryState): DebugStats {
+  return {
+    ...stats,
+    paneCount: state.listPanes().length,
+    rssBytes: process.memoryUsage().rss,
   };
 }
 

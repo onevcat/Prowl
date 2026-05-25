@@ -116,6 +116,52 @@ describe("daemon scaffold", () => {
     }
   });
 
+  test("exposes debug memory stats only when enabled", async () => {
+    const root = mkdtempSync(join(tmpdir(), "prowl-debug-stats-test-"));
+    const config = {
+      port: 0,
+      bind: "127.0.0.1",
+      token: "test-token",
+      allowedOrigins: ["http://127.0.0.1:5173"],
+      requireTLS: false,
+    };
+    const disabled = startServer(config, {
+      socketPath: false,
+      statePath: join(root, "disabled.sqlite"),
+      spawnProcesses: false,
+    });
+    try {
+      const response = await fetch(new URL("/debug/stats", disabled.url));
+      expect(response.status).toBe(404);
+    } finally {
+      disabled.stop();
+    }
+
+    const enabled = startServer(config, {
+      socketPath: false,
+      statePath: join(root, "enabled.sqlite"),
+      spawnProcesses: false,
+      debugEndpoints: true,
+    });
+    try {
+      const response = await fetch(new URL("/debug/stats", enabled.url));
+      const stats = (await response.json()) as {
+        paneAttachRequests?: number;
+        paneCreateRequests?: number;
+        paneCount?: number;
+        rssBytes?: number;
+      };
+
+      expect(response.status).toBe(200);
+      expect(stats.paneAttachRequests).toBe(0);
+      expect(stats.paneCreateRequests).toBe(0);
+      expect(stats.paneCount).toBe(1);
+      expect(stats.rssBytes).toBeGreaterThan(0);
+    } finally {
+      enabled.stop();
+    }
+  });
+
   test("allows hello on a connection already authenticated during upgrade", () => {
     const root = mkdtempSync(join(tmpdir(), "prowl-authenticated-hello-test-"));
     const state = new InMemoryState(root, { statePath: ":memory:", spawnProcesses: false });
