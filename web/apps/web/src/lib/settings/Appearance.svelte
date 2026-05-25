@@ -16,7 +16,7 @@
   }
 </script>
 
-<section>
+<section id="settings-appearance">
   <div class="heading">
     <div>
       <h2>Appearance</h2>

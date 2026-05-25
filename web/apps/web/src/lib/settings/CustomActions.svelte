@@ -50,7 +50,7 @@
   }
 </script>
 
-<section>
+<section id="settings-custom-actions">
   <div class="heading">
     <div>
       <h2>Custom Actions</h2>

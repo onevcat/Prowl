@@ -27,7 +27,7 @@
   }
 </script>
 
-<section>
+<section id="settings-shortcuts">
   <div class="heading">
     <div>
       <h2>Shortcuts</h2>

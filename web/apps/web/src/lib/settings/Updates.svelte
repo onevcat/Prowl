@@ -2,7 +2,7 @@
   import { Button } from "@prowl/ui";
 </script>
 
-<section>
+<section id="settings-updates">
   <div>
     <h2>Updates</h2>
     <p>Web builds update when the running daemon serves a new bundle.</p>

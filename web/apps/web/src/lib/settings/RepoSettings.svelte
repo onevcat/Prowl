@@ -24,7 +24,7 @@
   }
 </script>
 
-<section>
+<section id="settings-repositories">
   <div class="heading">
     <div>
       <h2>Repositories</h2>

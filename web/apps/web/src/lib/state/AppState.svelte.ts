@@ -37,6 +37,38 @@ const defaultDaemonURL = "ws://127.0.0.1:7878/ws";
 const textDecoder = new TextDecoder();
 const textEncoder = new TextEncoder();
 const maxMetricSamples = 100;
+const settingsSections = [
+  {
+    id: "repositories",
+    title: "Repositories",
+    subtitle: "Manage registered repos and worktrees",
+  },
+  {
+    id: "custom-actions",
+    title: "Custom Actions",
+    subtitle: "Create and edit user-defined commands",
+  },
+  {
+    id: "appearance",
+    title: "Appearance",
+    subtitle: "Theme and terminal presentation",
+  },
+  {
+    id: "shortcuts",
+    title: "Shortcuts",
+    subtitle: "Keyboard command bindings",
+  },
+  {
+    id: "advanced",
+    title: "Advanced",
+    subtitle: "Debug and daemon-facing options",
+  },
+  {
+    id: "updates",
+    title: "Updates",
+    subtitle: "Reload the web client",
+  },
+] as const;
 const defaultSettings: AppSettings = {
   appearance: {
     theme: "system",
@@ -274,6 +306,26 @@ export class AppState {
       },
     }));
 
+    const repoItems = this.repositories.map((repository) => ({
+      id: `repo:${repository.id}`,
+      title: repository.displayName,
+      subtitle: repository.path,
+      section: "Repos" as const,
+      invoke: () => {
+        this.openSettingsSection("repositories");
+      },
+    }));
+
+    const settingsItems = settingsSections.map((section) => ({
+      id: `settings:${section.id}`,
+      title: section.title,
+      subtitle: section.subtitle,
+      section: "Settings" as const,
+      invoke: () => {
+        this.openSettingsSection(section.id);
+      },
+    }));
+
     return [
       {
         id: "view:shelf",
@@ -305,6 +357,8 @@ export class AppState {
           void this.showDiff();
         },
       },
+      ...settingsItems,
+      ...repoItems,
       ...actionItems,
       ...tabItems,
       ...worktreeItems,
@@ -315,6 +369,16 @@ export class AppState {
     this.view = view;
     void set(uiViewKey, view);
     this.syncRenderedPanes();
+  }
+
+  openSettingsSection(sectionId: (typeof settingsSections)[number]["id"]): void {
+    this.setView("settings");
+    if (typeof document === "undefined") {
+      return;
+    }
+    requestAnimationFrame(() => {
+      document.getElementById(`settings-${sectionId}`)?.scrollIntoView({ block: "start", behavior: "smooth" });
+    });
   }
 
   selectWorktree(worktreeId: string): void {
