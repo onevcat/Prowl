@@ -2,6 +2,7 @@
   import { Button } from "@prowl/ui";
   import { getContext } from "svelte";
   import { appStateKey, type AppState } from "$lib/state/AppState.svelte";
+  import { encodeBroadcastKey } from "./broadcast";
   import Grid from "./Grid.svelte";
 
   const appState = getContext<AppState>(appStateKey);
@@ -14,6 +15,26 @@
     appState.sendInputToVisiblePanes(`${broadcast}\n`);
     broadcast = "";
   }
+
+  function handleBroadcastKeydown(event: KeyboardEvent): void {
+    const input = encodeBroadcastKey(event);
+    if (!input) {
+      return;
+    }
+    event.preventDefault();
+    appState.sendInputToVisiblePanes(input);
+    broadcast = "";
+  }
+
+  function handleBroadcastPaste(event: ClipboardEvent): void {
+    const text = event.clipboardData?.getData("text");
+    if (!text) {
+      return;
+    }
+    event.preventDefault();
+    appState.sendInputToVisiblePanes(text);
+    broadcast = "";
+  }
 </script>
 
 <main class="canvas">
@@ -23,11 +44,8 @@
       bind:value={broadcast}
       aria-label="Broadcast input"
       placeholder="Broadcast to visible panes"
-      onkeydown={(event) => {
-        if (event.key === "Enter") {
-          sendBroadcast();
-        }
-      }}
+      onkeydown={handleBroadcastKeydown}
+      onpaste={handleBroadcastPaste}
     />
     <Button label="↵" title="Send Broadcast" onclick={sendBroadcast} />
     <Button label="⌘K" title="Open Command Palette (Command K)" onclick={() => appState.perform("palette.open")} />
