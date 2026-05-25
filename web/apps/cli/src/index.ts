@@ -27,7 +27,14 @@ import {
   renderRepoRemove,
 } from "./commands/repo";
 import { renderVersion } from "./commands/version";
-import { createWorktree, getWorktreeList, renderWorktreeCreate, renderWorktreeList } from "./commands/worktree";
+import {
+  createWorktree,
+  getWorktreeDiff,
+  getWorktreeList,
+  renderWorktreeCreate,
+  renderWorktreeDiff,
+  renderWorktreeList,
+} from "./commands/worktree";
 
 const rawArgs = Bun.argv.slice(2);
 const json = rawArgs.includes("--json");
@@ -114,6 +121,13 @@ switch (command) {
       );
       break;
     }
+    if (args[0] === "diff") {
+      await writeOutput(
+        () => getWorktreeDiff(args[1]),
+        () => renderWorktreeDiff(args[1]),
+      );
+      break;
+    }
     process.stderr.write(`Unknown worktree command: ${args[0] ?? ""}\n`);
     process.exit(64);
     break;
@@ -144,6 +158,7 @@ switch (command) {
   prowl close <paneId>
   prowl worktree list [--repo <id>]
   prowl worktree create <repoId> <branch>
+  prowl worktree diff <worktreeId>
   prowl repo list
   prowl repo add <path>
   prowl repo remove <repoId>

@@ -1,4 +1,4 @@
-import type { Repository, ServerControlMessage, Worktree } from "@prowl/protocol";
+import type { Repository, Worktree, WorktreeDiff } from "@prowl/protocol";
 import { makeMessageId } from "@prowl/protocol";
 import { formatWorktree } from "../output";
 import { hello, loadCLIConfig, requestDaemon } from "../transport";
@@ -51,6 +51,28 @@ export async function createWorktree(repoId: string | undefined, branch: string 
     throw new Error(`Unexpected daemon response: ${response.type}`);
   }
   return response.worktree;
+}
+
+export async function renderWorktreeDiff(worktreeId: string | undefined): Promise<string> {
+  return (await getWorktreeDiff(worktreeId)).text;
+}
+
+export async function getWorktreeDiff(worktreeId: string | undefined): Promise<WorktreeDiff> {
+  if (!worktreeId) {
+    throw new Error("Usage: prowl worktree diff <worktreeId>");
+  }
+  const config = await loadCLIConfig();
+  await hello(config.token);
+  const response = await requestDaemon({
+    v: 1,
+    type: "worktree.diff",
+    id: makeMessageId(),
+    worktreeId,
+  });
+  if (response.type !== "worktree.diffed") {
+    throw new Error(`Unexpected daemon response: ${response.type}`);
+  }
+  return response.diff;
 }
 
 async function listRepositories(): Promise<Array<Pick<Repository, "id">>> {
