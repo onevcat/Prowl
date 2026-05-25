@@ -1,5 +1,7 @@
 import { renderList } from "./commands/list";
+import { renderRepoList } from "./commands/repo";
 import { renderVersion } from "./commands/version";
+import { renderWorktreeCreate, renderWorktreeList } from "./commands/worktree";
 
 const [, , command = "help", ...args] = Bun.argv;
 
@@ -16,6 +18,27 @@ switch (command) {
     break;
   case "read":
     process.stdout.write(`read ${args[0] ?? ""}\n`);
+    break;
+  case "repo":
+    if (args[0] === "list") {
+      process.stdout.write(`${await renderRepoList()}\n`);
+      break;
+    }
+    process.stderr.write(`Unknown repo command: ${args[0] ?? ""}\n`);
+    process.exit(64);
+    break;
+  case "worktree":
+    if (args[0] === "list") {
+      const repoIndex = args.indexOf("--repo");
+      process.stdout.write(`${await renderWorktreeList(repoIndex === -1 ? undefined : args[repoIndex + 1])}\n`);
+      break;
+    }
+    if (args[0] === "create") {
+      process.stdout.write(`${await renderWorktreeCreate(args[1], args[2])}\n`);
+      break;
+    }
+    process.stderr.write(`Unknown worktree command: ${args[0] ?? ""}\n`);
+    process.exit(64);
     break;
   case "help":
   case "--help":

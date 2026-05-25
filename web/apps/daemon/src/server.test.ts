@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { makeMessageId, protocolVersion } from "@prowl/protocol";
@@ -46,4 +46,70 @@ describe("daemon scaffold", () => {
     expect(missing[0]?.type).toBe("error");
     expect(duplicate[0]?.type).toBe("error");
   });
+
+  test("creates and archives git worktrees", () => {
+    const root = mkdtempSync(join(tmpdir(), "prowl-git-test-"));
+    const repoPath = join(root, "repo");
+    mkdirSync(repoPath);
+    runGit(repoPath, "init");
+    writeFileSync(join(repoPath, "README.md"), "test\n");
+    runGit(repoPath, "add", "README.md");
+    runGit(repoPath, "-c", "user.name=Prowl Test", "-c", "user.email=prowl@example.com", "commit", "-m", "initial");
+
+    const state = new InMemoryState(repoPath, { statePath: ":memory:", spawnProcesses: false });
+    const config = {
+      port: 0,
+      bind: "127.0.0.1",
+      token: "test-token",
+      allowedOrigins: ["http://127.0.0.1:5173"],
+      requireTLS: false,
+    };
+
+    const created = handleControl(
+      {
+        v: 1,
+        type: "worktree.create",
+        id: makeMessageId(),
+        repoId: "repo-default",
+        branch: "feature/web",
+      },
+      state,
+      config,
+    );
+    expect(created[0]?.type).toBe("worktree.updated");
+    if (created[0]?.type !== "worktree.updated") {
+      throw new Error("Expected worktree.updated");
+    }
+    const createdWorktree = created[0].worktree;
+    expect(createdWorktree.branch).toBe("feature/web");
+    expect(state.worktreesByRepo.get("repo-default")?.some((worktree) => worktree.id === createdWorktree.id)).toBe(
+      true,
+    );
+
+    const archived = handleControl(
+      {
+        v: 1,
+        type: "worktree.archive",
+        id: makeMessageId(),
+        worktreeId: createdWorktree.id,
+      },
+      state,
+      config,
+    );
+    expect(archived[0]?.type).toBe("worktree.updated");
+    if (archived[0]?.type !== "worktree.updated") {
+      throw new Error("Expected archived worktree.updated");
+    }
+    expect(archived[0].worktree.status).toBe("archived");
+    expect(state.worktreesByRepo.get("repo-default")?.some((worktree) => worktree.id === createdWorktree.id)).toBe(
+      false,
+    );
+  });
 });
+
+function runGit(cwd: string, ...args: string[]): void {
+  const result = Bun.spawnSync(["git", ...args], { cwd, stdout: "pipe", stderr: "pipe" });
+  if (result.exitCode !== 0) {
+    throw new Error(new TextDecoder().decode(result.stderr) || new TextDecoder().decode(result.stdout));
+  }
+}

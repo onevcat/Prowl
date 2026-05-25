@@ -105,6 +105,49 @@ export class InMemoryState {
     return this.repositories.some((repository) => repository.path === path);
   }
 
+  repository(repoId: string): Repository | null {
+    return this.repositories.find((repository) => repository.id === repoId) ?? null;
+  }
+
+  worktree(worktreeId: string): Worktree | null {
+    for (const worktrees of this.worktreesByRepo.values()) {
+      const worktree = worktrees.find((candidate) => candidate.id === worktreeId);
+      if (worktree) {
+        return worktree;
+      }
+    }
+    return null;
+  }
+
+  createWorktree(repoId: string, path: string, branch: string): Worktree {
+    const worktree: Worktree = {
+      id: crypto.randomUUID(),
+      repoId,
+      path,
+      name: displayName(path),
+      branch,
+      status: "clean",
+      taskStatus: "idle",
+      unreadCount: 0,
+    };
+    this.#insertWorktree(worktree);
+    this.#reloadWorktrees();
+    return worktree;
+  }
+
+  archiveWorktree(worktreeId: string): Worktree | null {
+    const worktree = this.worktree(worktreeId);
+    if (!worktree) {
+      return null;
+    }
+    for (const pane of this.listPanes().filter((pane) => pane.worktreeId === worktreeId)) {
+      this.closePane(pane.id);
+    }
+    this.#database.query("DELETE FROM worktrees WHERE id = $id").run({ $id: worktreeId });
+    this.#reloadWorktrees();
+    return { ...worktree, status: "archived", taskStatus: "done" };
+  }
+
   removeRepository(repoId: string): boolean {
     const result = this.#database.query("DELETE FROM repos WHERE id = $id").run({ $id: repoId });
     this.#reloadRepositories();

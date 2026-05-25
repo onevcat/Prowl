@@ -258,6 +258,49 @@ export class AppState {
     }
   }
 
+  async createWorktree(repoId: string, branch: string, directory?: string): Promise<void> {
+    const normalizedBranch = branch.trim();
+    if (!repoId || !normalizedBranch) {
+      return;
+    }
+    this.repoBusy = true;
+    this.errorMessage = null;
+    try {
+      await this.ws.request({
+        v: 1,
+        type: "worktree.create",
+        id: makeMessageId(),
+        repoId,
+        branch: normalizedBranch,
+        directory: directory?.trim() || undefined,
+      });
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    } finally {
+      this.repoBusy = false;
+    }
+  }
+
+  async archiveWorktree(worktreeId: string): Promise<void> {
+    if (!worktreeId) {
+      return;
+    }
+    this.repoBusy = true;
+    this.errorMessage = null;
+    try {
+      await this.ws.request({
+        v: 1,
+        type: "worktree.archive",
+        id: makeMessageId(),
+        worktreeId,
+      });
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    } finally {
+      this.repoBusy = false;
+    }
+  }
+
   sendInputToSelectedPane(text: string): void {
     const pane = this.selectedPane;
     if (!pane) {
@@ -376,6 +419,10 @@ export class AppState {
         this.#replaceWorktrees(message.repoId, message.worktrees);
         break;
       case "worktree.updated":
+        if (message.worktree.status === "archived") {
+          this.#removeWorktree(message.worktree);
+          break;
+        }
         this.#upsertWorktree(message.worktree);
         break;
       case "pane.listed":
@@ -483,6 +530,14 @@ export class AppState {
     const index = current.findIndex((candidate) => candidate.id === worktree.id);
     const updated = index === -1 ? [...current, worktree] : current.with(index, worktree);
     this.#replaceWorktrees(worktree.repoId, updated);
+  }
+
+  #removeWorktree(worktree: Worktree): void {
+    const current = this.worktreesByRepo.get(worktree.repoId) ?? [];
+    this.#replaceWorktrees(
+      worktree.repoId,
+      current.filter((candidate) => candidate.id !== worktree.id),
+    );
   }
 
   #ensureWorktreeViews(worktrees: Worktree[]): void {

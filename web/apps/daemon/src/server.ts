@@ -1,4 +1,5 @@
 import { statSync } from "node:fs";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import type { ClientControlMessage, ServerControlMessage } from "@prowl/protocol";
 import {
   decodeFrame,
@@ -12,6 +13,16 @@ import type { DaemonConfig } from "./auth/config";
 import { isAllowedOrigin } from "./auth/config";
 import { type IPCServerHandle, startIPCServer } from "./ipc/socket";
 import { InMemoryState } from "./state/InMemoryState";
+
+type ErrorControlMessage = Extract<ServerControlMessage, { type: "error" }>;
+type WorktreeResult =
+  | { type: "ok"; worktree: NonNullable<ReturnType<InMemoryState["worktree"]>> }
+  | ErrorControlMessage;
+type SyncCommandResult = {
+  exitCode: number | null;
+  stdout: Uint8Array;
+  stderr: Uint8Array;
+};
 
 export type ServerHandle = {
   stop: () => void;
@@ -120,7 +131,19 @@ export function handleControl(
         id: message.id,
         sessionId: crypto.randomUUID(),
         serverVersion: "0.0.0",
-        capabilities: ["repo.list", "worktree.list", "pane.create", "pane.close", "settings.get", "ping"],
+        capabilities: [
+          "repo.list",
+          "repo.add",
+          "repo.remove",
+          "worktree.list",
+          "worktree.create",
+          "worktree.archive",
+          "pane.create",
+          "pane.close",
+          "settings.get",
+          "settings.set",
+          "ping",
+        ],
       },
     ];
   }
@@ -157,6 +180,22 @@ export function handleControl(
         worktrees: state.worktreesByRepo.get(message.repoId) ?? [],
       },
     ];
+  }
+
+  if (message.type === "worktree.create") {
+    const result = createGitWorktree(message, state);
+    if (result.type === "error") {
+      return [result];
+    }
+    return [{ v: 1, type: "worktree.updated", id: message.id, worktree: result.worktree }];
+  }
+
+  if (message.type === "worktree.archive") {
+    const result = archiveGitWorktree(message.id, message.worktreeId, state);
+    if (result.type === "error") {
+      return [result];
+    }
+    return [{ v: 1, type: "worktree.updated", id: message.id, worktree: result.worktree }];
   }
 
   if (message.type === "settings.get") {
@@ -232,11 +271,11 @@ export function handleControl(
   return [errorResponse(message.id, "NOT_IMPLEMENTED", `${message.type} is not implemented yet`)];
 }
 
-function errorResponse(id: string, code: string, message: string): ServerControlMessage {
+function errorResponse(id: string, code: string, message: string): ErrorControlMessage {
   return { v: 1, type: "error", id, code, message };
 }
 
-function validateRepositoryPath(id: string, path: string, state: InMemoryState): ServerControlMessage | null {
+function validateRepositoryPath(id: string, path: string, state: InMemoryState): ErrorControlMessage | null {
   const normalizedPath = path.trim();
   if (!normalizedPath) {
     return errorResponse(id, "INVALID_REPOSITORY", "Repository path is required");
@@ -252,4 +291,90 @@ function validateRepositoryPath(id: string, path: string, state: InMemoryState):
     return errorResponse(id, "DUPLICATE_REPOSITORY", "Repository is already registered");
   }
   return null;
+}
+
+function createGitWorktree(
+  message: Extract<ClientControlMessage, { type: "worktree.create" }>,
+  state: InMemoryState,
+): WorktreeResult {
+  const repository = state.repository(message.repoId);
+  if (!repository) {
+    return errorResponse(message.id, "REPO_NOT_FOUND", "Repository is no longer registered");
+  }
+  const branch = message.branch.trim();
+  const branchError = validateBranchName(message.id, branch);
+  if (branchError) {
+    return branchError;
+  }
+  const targetPath = resolveWorktreePath(repository.path, branch, message.directory);
+  if (!targetPath.startsWith(`${resolve(dirname(repository.path))}/`)) {
+    return errorResponse(message.id, "INVALID_WORKTREE_PATH", "Worktree directory must stay beside the repository");
+  }
+  if (state.worktreesByRepo.get(repository.id)?.some((worktree) => resolve(worktree.path) === targetPath)) {
+    return errorResponse(message.id, "DUPLICATE_WORKTREE", "Worktree path is already registered");
+  }
+  const gitError = runGitWorktreeAdd(repository.path, targetPath, branch, message.baseRef);
+  if (gitError) {
+    return errorResponse(message.id, "GIT_WORKTREE_FAILED", gitError);
+  }
+  return { type: "ok", worktree: state.createWorktree(repository.id, targetPath, branch) };
+}
+
+function archiveGitWorktree(id: string, worktreeId: string, state: InMemoryState): WorktreeResult {
+  const worktree = state.worktree(worktreeId);
+  if (!worktree) {
+    return errorResponse(id, "WORKTREE_NOT_FOUND", "Worktree is no longer registered");
+  }
+  const repository = state.repository(worktree.repoId);
+  if (!repository) {
+    return errorResponse(id, "REPO_NOT_FOUND", "Repository is no longer registered");
+  }
+  const gitError = runGitWorktreeRemove(repository.path, worktree.path);
+  if (gitError) {
+    return errorResponse(id, "GIT_WORKTREE_FAILED", gitError);
+  }
+  const archived = state.archiveWorktree(worktreeId);
+  if (!archived) {
+    return errorResponse(id, "WORKTREE_NOT_FOUND", "Worktree is no longer registered");
+  }
+  return { type: "ok", worktree: archived };
+}
+
+function validateBranchName(id: string, branch: string): ErrorControlMessage | null {
+  if (!branch) {
+    return errorResponse(id, "INVALID_BRANCH", "Branch name is required");
+  }
+  if (!/^[A-Za-z0-9._/-]+$/.test(branch) || branch.includes("..") || branch.startsWith("/") || branch.endsWith("/")) {
+    return errorResponse(id, "INVALID_BRANCH", "Branch name contains unsupported characters");
+  }
+  return null;
+}
+
+function resolveWorktreePath(repoPath: string, branch: string, directory?: string): string {
+  const base = resolve(dirname(repoPath));
+  if (!directory?.trim()) {
+    return join(base, basename(branch));
+  }
+  const trimmed = directory.trim();
+  return isAbsolute(trimmed) ? resolve(trimmed) : resolve(base, trimmed);
+}
+
+function runGitWorktreeAdd(repoPath: string, targetPath: string, branch: string, baseRef?: string): string | null {
+  const args = ["-C", repoPath, "worktree", "add", "-b", branch, targetPath, baseRef?.trim() || "HEAD"];
+  const result = Bun.spawnSync(["git", ...args], { stdout: "pipe", stderr: "pipe" });
+  return result.exitCode === 0 ? null : commandError(result);
+}
+
+function runGitWorktreeRemove(repoPath: string, worktreePath: string): string | null {
+  const result = Bun.spawnSync(["git", "-C", repoPath, "worktree", "remove", "--force", worktreePath], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  return result.exitCode === 0 ? null : commandError(result);
+}
+
+function commandError(result: SyncCommandResult): string {
+  const stderr = new TextDecoder().decode(result.stderr).trim();
+  const stdout = new TextDecoder().decode(result.stdout).trim();
+  return stderr || stdout || `git exited with ${result.exitCode}`;
 }

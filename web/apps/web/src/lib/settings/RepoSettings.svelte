@@ -5,11 +5,21 @@
 
   const appState = getContext<AppState>(appStateKey);
   let path = $state("");
+  let branchByRepo = $state<Record<string, string>>({});
+  let directoryByRepo = $state<Record<string, string>>({});
 
   async function addRepository(): Promise<void> {
     await appState.addRepository(path);
     if (!appState.errorMessage) {
       path = "";
+    }
+  }
+
+  async function createWorktree(repoId: string): Promise<void> {
+    await appState.createWorktree(repoId, branchByRepo[repoId] ?? "", directoryByRepo[repoId]);
+    if (!appState.errorMessage) {
+      branchByRepo = { ...branchByRepo, [repoId]: "" };
+      directoryByRepo = { ...directoryByRepo, [repoId]: "" };
     }
   }
 </script>
@@ -49,6 +59,42 @@
           onclick={() => appState.removeRepository(repository.id)}
         />
       </article>
+      <div class="worktrees">
+        {#each appState.worktreesByRepo.get(repository.id) ?? [] as worktree (worktree.id)}
+          <div class="worktree-row">
+            <div>
+              <strong>{worktree.name}</strong>
+              <p>{worktree.branch} · {worktree.path}</p>
+            </div>
+            <Button
+              label="×"
+              title={`Archive ${worktree.name}`}
+              disabled={appState.repoBusy}
+              onclick={() => appState.archiveWorktree(worktree.id)}
+            />
+          </div>
+        {/each}
+        <form
+          class="worktree-form"
+          onsubmit={(event) => {
+            event.preventDefault();
+            void createWorktree(repository.id);
+          }}
+        >
+          <input bind:value={branchByRepo[repository.id]} aria-label={`${repository.displayName} branch`} placeholder="branch" />
+          <input
+            bind:value={directoryByRepo[repository.id]}
+            aria-label={`${repository.displayName} worktree directory`}
+            placeholder="directory"
+          />
+          <Button
+            label="+"
+            title={`Create Worktree for ${repository.displayName}`}
+            disabled={appState.repoBusy || !(branchByRepo[repository.id] ?? "").trim()}
+            onclick={() => createWorktree(repository.id)}
+          />
+        </form>
+      </div>
     {/each}
   </div>
 </section>
@@ -96,6 +142,11 @@
     gap: 0.5rem;
   }
 
+  .worktree-form {
+    grid-template-columns: minmax(8rem, 0.7fr) minmax(10rem, 1fr) auto;
+    padding-left: 1.5rem;
+  }
+
   input {
     min-height: 2rem;
     padding: 0 0.65rem;
@@ -108,6 +159,35 @@
   .repos {
     display: grid;
     gap: 0.5rem;
+  }
+
+  .worktrees {
+    display: grid;
+    gap: 0.35rem;
+    margin-top: -0.35rem;
+  }
+
+  .worktree-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    min-height: 2.75rem;
+    padding: 0.45rem 0.65rem 0.45rem 1.5rem;
+    border-left: 1px solid color-mix(in srgb, CanvasText 12%, transparent);
+    color: CanvasText;
+  }
+
+  strong {
+    display: block;
+    font-size: 0.9rem;
+  }
+
+  .worktree-row p {
+    overflow: hidden;
+    max-width: 52rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   article {
