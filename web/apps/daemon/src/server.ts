@@ -470,6 +470,9 @@ export function handleControl(
   }
 
   if (message.type === "action.delete") {
+    if (!state.customAction(message.actionId)) {
+      return [errorResponse(message.id, "ACTION_NOT_FOUND", "Custom action is no longer available")];
+    }
     state.deleteCustomAction(message.actionId);
     return [{ v: 1, type: "action.deleted", id: message.id, actionId: message.actionId }];
   }

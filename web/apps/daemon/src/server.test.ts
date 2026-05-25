@@ -682,6 +682,35 @@ exit 0
     expect(listed[0].actions[0]?.command).toBe("echo hello");
   });
 
+  test("rejects deleting missing custom actions", () => {
+    const root = mkdtempSync(join(tmpdir(), "prowl-action-delete-test-"));
+    const state = new InMemoryState(root, { statePath: ":memory:", spawnProcesses: false });
+    const config = {
+      port: 0,
+      bind: "127.0.0.1",
+      token: "test-token",
+      allowedOrigins: ["http://127.0.0.1:5173"],
+      requireTLS: false,
+    };
+
+    const deleted = handleControl(
+      {
+        v: 1,
+        type: "action.delete",
+        id: makeMessageId(),
+        actionId: "missing-action",
+      },
+      state,
+      config,
+    );
+
+    expect(deleted[0]?.type).toBe("error");
+    if (deleted[0]?.type !== "error") {
+      throw new Error("Expected error");
+    }
+    expect(deleted[0].code).toBe("ACTION_NOT_FOUND");
+  });
+
   test("rejects repo-scoped custom actions from another repo pane", () => {
     const root = mkdtempSync(join(tmpdir(), "prowl-action-scope-test-"));
     const otherRepo = join(root, "other");
