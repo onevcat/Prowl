@@ -1,5 +1,12 @@
 import { WSClient } from "$lib/ws/WSClient";
-import type { CustomAction, PaneDescriptor, Repository, ServerControlMessage, Worktree } from "@prowl/protocol";
+import type {
+  CustomAction,
+  PaneDescriptor,
+  Repository,
+  ServerControlMessage,
+  Worktree,
+  WorktreeDiff,
+} from "@prowl/protocol";
 import { makeMessageId, protocolVersion } from "@prowl/protocol";
 import { get, set } from "idb-keyval";
 import { Pane } from "./Pane";
@@ -28,6 +35,8 @@ export class AppState {
   selectedPaneId = $state<string | null>(null);
   view = $state<AppView>("shelf");
   repoBusy = $state(false);
+  diffBusy = $state(false);
+  diff = $state<WorktreeDiff | null>(null);
   paletteOpen = $state(false);
   paletteQuery = $state("");
   connection = $state<ConnectionState>("closed");
@@ -114,6 +123,15 @@ export class AppState {
         subtitle: "Manage repositories and preferences",
         section: "Settings" as const,
         invoke: () => this.setView("settings"),
+      },
+      {
+        id: "view:diff",
+        title: "Show Diff",
+        subtitle: this.selectedWorktree?.name ?? "Selected worktree",
+        section: "Actions" as const,
+        invoke: () => {
+          void this.showDiff();
+        },
       },
       ...actionItems,
       ...tabItems,
@@ -365,6 +383,30 @@ export class AppState {
     }
   }
 
+  async showDiff(worktreeId = this.selectedWorktreeId): Promise<void> {
+    if (!worktreeId) {
+      return;
+    }
+    this.diffBusy = true;
+    this.errorMessage = null;
+    try {
+      const response = await this.ws.request({
+        v: 1,
+        type: "worktree.diff",
+        id: makeMessageId(),
+        worktreeId,
+      });
+      if (response.type === "worktree.diffed") {
+        this.diff = response.diff;
+        this.setView("diff");
+      }
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    } finally {
+      this.diffBusy = false;
+    }
+  }
+
   sendInputToSelectedPane(text: string): void {
     const pane = this.selectedPane;
     if (!pane) {
@@ -401,7 +443,7 @@ export class AppState {
 
   async #restoreUIState(): Promise<void> {
     const [view, selectedWorktreeId] = await Promise.all([get<AppView>(uiViewKey), get<string>(selectedWorktreeKey)]);
-    if (view === "shelf" || view === "canvas" || view === "settings") {
+    if (view === "shelf" || view === "canvas" || view === "settings" || view === "diff") {
       this.view = view;
     }
     if (selectedWorktreeId && this.worktrees.some((worktree) => worktree.id === selectedWorktreeId)) {
@@ -498,6 +540,9 @@ export class AppState {
           break;
         }
         this.#upsertWorktree(message.worktree);
+        break;
+      case "worktree.diffed":
+        this.diff = message.diff;
         break;
       case "pane.listed":
         this.#replacePanes(message.panes);

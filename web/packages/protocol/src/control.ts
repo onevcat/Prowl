@@ -42,6 +42,12 @@ export interface CustomAction {
   ordering: number;
 }
 
+export interface WorktreeDiff {
+  worktreeId: string;
+  text: string;
+  generatedAt: number;
+}
+
 export type SettingsSnapshot = Record<string, unknown>;
 
 export interface BaseControlMessage {
@@ -79,6 +85,7 @@ export type ClientControlMessage =
       directory?: string;
     })
   | (BaseControlMessage & { type: "worktree.archive"; worktreeId: string })
+  | (BaseControlMessage & { type: "worktree.diff"; worktreeId: string })
   | (BaseControlMessage & { type: "repo.list" })
   | (BaseControlMessage & { type: "repo.add"; path: string })
   | (BaseControlMessage & { type: "repo.remove"; repoId: string })
@@ -114,6 +121,7 @@ export type ServerControlMessage =
   | (BaseControlMessage & { type: "action.deleted"; actionId: string })
   | (BaseControlMessage & { type: "worktree.listed"; repoId: string; worktrees: Worktree[] })
   | (BaseControlMessage & { type: "worktree.updated"; worktree: Worktree })
+  | (BaseControlMessage & { type: "worktree.diffed"; diff: WorktreeDiff })
   | (BaseControlMessage & { type: "repo.updated"; repository: Repository })
   | (BaseControlMessage & { type: "settings.snapshot"; settings: SettingsSnapshot })
   | (BaseControlMessage & {

@@ -1,8 +1,8 @@
-import type { PaneDescriptor, Repository, TaskStatus, Worktree } from "@prowl/protocol";
+import type { PaneDescriptor, Repository, TaskStatus, Worktree, WorktreeDiff } from "@prowl/protocol";
 
-export type { PaneDescriptor, Repository, TaskStatus, Worktree };
+export type { PaneDescriptor, Repository, TaskStatus, Worktree, WorktreeDiff };
 
-export type AppView = "shelf" | "canvas" | "settings";
+export type AppView = "shelf" | "canvas" | "settings" | "diff";
 
 export type ConnectionState = "connecting" | "open" | "closed";
 

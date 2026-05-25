@@ -138,6 +138,7 @@ export function handleControl(
           "worktree.list",
           "worktree.create",
           "worktree.archive",
+          "worktree.diff",
           "action.list",
           "action.upsert",
           "action.delete",
@@ -246,6 +247,14 @@ export function handleControl(
       return [result];
     }
     return [{ v: 1, type: "worktree.updated", id: message.id, worktree: result.worktree }];
+  }
+
+  if (message.type === "worktree.diff") {
+    const result = readWorktreeDiff(message.id, message.worktreeId, state);
+    if (result.type === "error") {
+      return [result];
+    }
+    return [{ v: 1, type: "worktree.diffed", id: message.id, diff: result.diff }];
   }
 
   if (message.type === "settings.get") {
@@ -388,6 +397,29 @@ function archiveGitWorktree(id: string, worktreeId: string, state: InMemoryState
     return errorResponse(id, "WORKTREE_NOT_FOUND", "Worktree is no longer registered");
   }
   return { type: "ok", worktree: archived };
+}
+
+function readWorktreeDiff(
+  id: string,
+  worktreeId: string,
+  state: InMemoryState,
+): { type: "ok"; diff: { worktreeId: string; text: string; generatedAt: number } } | ErrorControlMessage {
+  const worktree = state.worktree(worktreeId);
+  if (!worktree) {
+    return errorResponse(id, "WORKTREE_NOT_FOUND", "Worktree is no longer registered");
+  }
+  const result = Bun.spawnSync(["git", "-C", worktree.path, "diff", "--no-color"], { stdout: "pipe", stderr: "pipe" });
+  if (result.exitCode !== 0) {
+    return errorResponse(id, "GIT_DIFF_FAILED", commandError(result));
+  }
+  return {
+    type: "ok",
+    diff: {
+      worktreeId,
+      text: new TextDecoder().decode(result.stdout),
+      generatedAt: Date.now(),
+    },
+  };
 }
 
 function validateBranchName(id: string, branch: string): ErrorControlMessage | null {

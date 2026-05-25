@@ -143,6 +143,44 @@ describe("daemon scaffold", () => {
     expect(listed[0].actions).toHaveLength(1);
     expect(listed[0].actions[0]?.command).toBe("echo hello");
   });
+
+  test("reads git diff for a worktree", () => {
+    const root = mkdtempSync(join(tmpdir(), "prowl-diff-test-"));
+    const repoPath = join(root, "repo");
+    mkdirSync(repoPath);
+    runGit(repoPath, "init");
+    writeFileSync(join(repoPath, "README.md"), "before\n");
+    runGit(repoPath, "add", "README.md");
+    runGit(repoPath, "-c", "user.name=Prowl Test", "-c", "user.email=prowl@example.com", "commit", "-m", "initial");
+    writeFileSync(join(repoPath, "README.md"), "after\n");
+
+    const state = new InMemoryState(repoPath, { statePath: ":memory:", spawnProcesses: false });
+    const config = {
+      port: 0,
+      bind: "127.0.0.1",
+      token: "test-token",
+      allowedOrigins: ["http://127.0.0.1:5173"],
+      requireTLS: false,
+    };
+
+    const diff = handleControl(
+      {
+        v: 1,
+        type: "worktree.diff",
+        id: makeMessageId(),
+        worktreeId: "worktree-default",
+      },
+      state,
+      config,
+    );
+
+    expect(diff[0]?.type).toBe("worktree.diffed");
+    if (diff[0]?.type !== "worktree.diffed") {
+      throw new Error("Expected worktree.diffed");
+    }
+    expect(diff[0].diff.text).toContain("-before");
+    expect(diff[0].diff.text).toContain("+after");
+  });
 });
 
 function runGit(cwd: string, ...args: string[]): void {
