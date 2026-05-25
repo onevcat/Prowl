@@ -129,6 +129,29 @@ test("persists appearance settings through the daemon", async ({ page }) => {
   await page.getByRole("button", { name: "Back to Shelf" }).click();
 });
 
+test("persists shortcut settings through the daemon", async ({ page }) => {
+  await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}&token=${token}`);
+  await expect(page.locator(".connection.open")).toBeVisible();
+
+  await page.getByRole("button", { name: "Open Settings" }).click();
+  await page.getByLabel("Open palette shortcut").fill("Mod+Shift+K");
+  await page.getByRole("button", { name: "Save Shortcut Settings" }).click();
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+  await expect(page.getByLabel("Open palette shortcut")).toHaveValue("Mod+Shift+K");
+
+  await page.getByRole("button", { name: "Back to Shelf" }).click();
+  await page.keyboard.press("Control+Shift+K");
+  await expect(page.getByRole("textbox", { name: "Command Palette" })).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Open Settings" }).click();
+  await page.getByLabel("Open palette shortcut").fill("Mod+K");
+  await page.getByRole("button", { name: "Save Shortcut Settings" }).click();
+  await page.getByRole("button", { name: "Back to Shelf" }).click();
+});
+
 test("keeps terminal input p99 latency under the regression gate", async ({ page }) => {
   await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}&token=${token}`);
   await expect(page.locator(".connection.open")).toBeVisible();
