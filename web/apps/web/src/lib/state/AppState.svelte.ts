@@ -110,6 +110,7 @@ export class AppState {
   #paneIdsToResume = new Set<string>();
   #restoredOpenTabsWorktreeIds = new Set<string>();
   #preferredSelectedWorktreeId: string | null = null;
+  #coldStartRecorded = false;
   #authToken = "";
   appFocused = $state(true);
   repositories = $state<Repository[]>([]);
@@ -139,6 +140,7 @@ export class AppState {
   loginError = $state<string | null>(null);
   settings = $state<AppSettings>(structuredClone(defaultSettings));
   metrics = $state<PerformanceMetrics>({
+    coldStartSamples: [],
     inputLatencySamples: [],
     wsRttSamples: [],
     wsReconnectSamples: [],
@@ -1213,6 +1215,7 @@ export class AppState {
     pane.output = snapshot.text;
     pane.lastOutputLine = snapshot.lastOutputLine || pane.lastOutputLine;
     pane.updatedAt = Date.now();
+    this.#recordColdStartIfReady(paneId);
   }
 
   #upsertRepository(repository: Repository): void {
@@ -1537,6 +1540,26 @@ export class AppState {
     this.metrics = {
       ...this.metrics,
       paletteOpenSamples: appendSample(this.metrics.paletteOpenSamples, value),
+    };
+  }
+
+  #recordColdStartIfReady(paneId: string): void {
+    if (this.#coldStartRecorded || this.connection !== "open" || paneId !== this.selectedPaneId) {
+      return;
+    }
+    this.#coldStartRecorded = true;
+    if (typeof performance === "undefined") {
+      return;
+    }
+    const duration = performance.now();
+    try {
+      performance.measure(interactionMeasureNames.coldStart, { start: 0, end: duration });
+    } catch {
+      // Keep the sample even on engines that do not support numeric measure options.
+    }
+    this.metrics = {
+      ...this.metrics,
+      coldStartSamples: appendSample(this.metrics.coldStartSamples, duration),
     };
   }
 

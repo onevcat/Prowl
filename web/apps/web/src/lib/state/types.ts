@@ -30,6 +30,7 @@ export type AdvancedSettings = {
 };
 
 export type PerformanceMetrics = {
+  coldStartSamples: number[];
   inputLatencySamples: number[];
   wsRttSamples: number[];
   wsReconnectSamples: number[];

@@ -48,6 +48,8 @@
 
   const inputP50 = $derived(percentile(appState.metrics.inputLatencySamples, 50));
   const inputP99 = $derived(percentile(appState.metrics.inputLatencySamples, 99));
+  const coldStartP50 = $derived(percentile(appState.metrics.coldStartSamples, 50));
+  const coldStartP99 = $derived(percentile(appState.metrics.coldStartSamples, 99));
   const wsP50 = $derived(percentile(appState.metrics.wsRttSamples, 50));
   const wsP99 = $derived(percentile(appState.metrics.wsRttSamples, 99));
   const reconnectP50 = $derived(percentile(appState.metrics.wsReconnectSamples, 50));
@@ -64,6 +66,10 @@
     <div>
       <span>Input</span>
       <strong>{formatMs(inputP50)} / {formatMs(inputP99)}</strong>
+    </div>
+    <div>
+      <span>Cold</span>
+      <strong>{formatMs(coldStartP50)} / {formatMs(coldStartP99)}</strong>
     </div>
     <div>
       <span>WS RTT</span>
@@ -103,7 +109,7 @@
     bottom: 0.75rem;
     z-index: 20;
     display: grid;
-    grid-template-columns: repeat(8, auto);
+    grid-template-columns: repeat(9, auto);
     gap: 0.6rem;
     align-items: center;
     padding: 0.55rem 0.65rem;

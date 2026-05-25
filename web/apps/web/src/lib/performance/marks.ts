@@ -1,4 +1,5 @@
 export const interactionMeasureNames = {
+  coldStart: "prowl.cold-start",
   inputLatency: "prowl.input.latency",
   paletteOpen: "prowl.palette.open",
   wsReconnect: "prowl.ws.reconnect",

@@ -43,6 +43,16 @@ test("ships the browser content security policy", async ({ page }) => {
   await expect(page.locator(".connection.open")).toBeVisible();
 });
 
+test("cold starts to the first interactive pane within budget", async ({ page }) => {
+  await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}&token=${token}`);
+  await expect(page.locator(".connection.open")).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Shell" })).toBeVisible();
+  await expect.poll(() => coldStartDurationsMs(page).then((durations) => durations.length)).toBeGreaterThanOrEqual(1);
+
+  const durations = await coldStartDurationsMs(page);
+  expect(durations.at(-1)).toBeLessThanOrEqual(1_500);
+});
+
 test("logs in with a daemon token", async ({ page }) => {
   await installWebSocketURLRecorder(page);
   await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}`);
@@ -240,4 +250,8 @@ function percentile(samples: number[], percentileValue: number): number {
 
 async function reconnectDurationsMs(page: Page): Promise<number[]> {
   return page.evaluate(() => performance.getEntriesByName("prowl.ws.reconnect").map((entry) => entry.duration));
+}
+
+async function coldStartDurationsMs(page: Page): Promise<number[]> {
+  return page.evaluate(() => performance.getEntriesByName("prowl.cold-start").map((entry) => entry.duration));
 }
