@@ -456,7 +456,7 @@ function cookieValue(cookieHeader: string | null, name: string): string | null {
   return null;
 }
 
-function sessionCookie(token: string, secure: boolean): string {
+export function sessionCookie(token: string, secure: boolean): string {
   const secureAttribute = secure ? "; Secure" : "";
   return `prowl_session=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000${secureAttribute}`;
 }

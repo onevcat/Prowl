@@ -17,6 +17,7 @@ import {
   allowControlMessage,
   authenticateUpgradeToken,
   handleControl,
+  sessionCookie,
   shouldSendPaneEvent,
   shouldSendPtyOutput,
   startServer,
@@ -82,12 +83,24 @@ describe("daemon scaffold", () => {
       });
 
       expect(response.status).toBe(200);
-      expect(response.headers.get("Set-Cookie")).toContain("prowl_session=test-token; HttpOnly");
+      expect(response.headers.get("Set-Cookie")).toBe(
+        "prowl_session=test-token; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000",
+      );
       expect(response.headers.get("Access-Control-Allow-Origin")).toBe("http://127.0.0.1:5173");
       expect(response.headers.get("Access-Control-Allow-Credentials")).toBe("true");
     } finally {
       server.stop();
     }
+  });
+
+  test("scopes remember-me cookies to the daemon origin and marks TLS sessions secure", () => {
+    expect(sessionCookie("test token", false)).toBe(
+      "prowl_session=test%20token; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000",
+    );
+    expect(sessionCookie("test-token", true)).toBe(
+      "prowl_session=test-token; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000; Secure",
+    );
+    expect(sessionCookie("test-token", true)).not.toContain("Domain=");
   });
 
   test("answers login CORS preflight for allowed origins", async () => {
