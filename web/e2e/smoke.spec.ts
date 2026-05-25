@@ -14,6 +14,9 @@ test("declares the PWA manifest and install icons", async ({ page, request }) =>
   await expect(page.locator('link[rel="manifest"]')).toHaveAttribute("href", "/manifest.webmanifest");
   await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#0a84ff");
 
+  const faviconResponse = await request.get("/favicon.ico");
+  expect(faviconResponse.ok()).toBe(true);
+
   const response = await request.get("/manifest.webmanifest");
   expect(response.ok()).toBe(true);
   const manifest = (await response.json()) as {
