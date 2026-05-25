@@ -14,6 +14,26 @@ export type PaletteItem = {
   invoke: () => void;
 };
 
+export type AppearanceSettings = {
+  theme: "system" | "light" | "dark";
+  terminalDensity: "compact" | "comfortable";
+  showUnreadBadges: boolean;
+};
+
+export type ShortcutSettings = Partial<Record<ActionId, string>>;
+
+export type AdvancedSettings = {
+  performanceHUD: boolean;
+  confirmDestructiveActions: boolean;
+  replayBufferKiB: number;
+};
+
+export type AppSettings = {
+  appearance: AppearanceSettings;
+  shortcuts: ShortcutSettings;
+  advanced: AdvancedSettings;
+};
+
 export type ActionId =
   | "view.shelf"
   | "view.canvas"

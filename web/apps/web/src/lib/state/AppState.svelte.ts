@@ -11,17 +11,31 @@ import { makeMessageId, protocolVersion } from "@prowl/protocol";
 import { get, set } from "idb-keyval";
 import { Pane } from "./Pane";
 import { WorktreeView } from "./WorktreeView";
-import { normalizeKeyChord, shortcuts } from "./shortcuts";
-import type { ActionId, AppView, ConnectionState, PaletteItem } from "./types";
+import { defaultShortcuts, normalizeKeyChord } from "./shortcuts";
+import type { ActionId, AppSettings, AppView, ConnectionState, PaletteItem } from "./types";
 
 export const appStateKey = Symbol("ProwlAppState");
 
 const uiViewKey = "prowl:ui.view";
 const selectedWorktreeKey = "prowl:ui.selectedWorktreeId";
+const appearanceSettingsKey = "prowl:settings.appearance";
 const sessionTokenKey = "prowl:token";
 const defaultDaemonURL = "ws://127.0.0.1:7878/ws";
 const textDecoder = new TextDecoder();
 const textEncoder = new TextEncoder();
+const defaultSettings: AppSettings = {
+  appearance: {
+    theme: "system",
+    terminalDensity: "comfortable",
+    showUnreadBadges: true,
+  },
+  shortcuts: Object.fromEntries(defaultShortcuts),
+  advanced: {
+    performanceHUD: false,
+    confirmDestructiveActions: true,
+    replayBufferKiB: 64,
+  },
+};
 
 export class AppState {
   readonly ws = new WSClient();
@@ -42,6 +56,7 @@ export class AppState {
   connection = $state<ConnectionState>("closed");
   errorMessage = $state<string | null>(null);
   sessionId = $state<string | null>(null);
+  settings = $state<AppSettings>(structuredClone(defaultSettings));
 
   constructor() {
     if (typeof window === "undefined") {
@@ -141,7 +156,7 @@ export class AppState {
 
   handleKeydown(event: KeyboardEvent): void {
     this.#requestNotificationPermission();
-    const action = shortcuts.get(normalizeKeyChord(event));
+    const action = this.#shortcutMap().get(normalizeKeyChord(event));
     if (!action) {
       return;
     }
@@ -273,6 +288,9 @@ export class AppState {
     if (!repoId) {
       return;
     }
+    if (!this.#confirmDestructiveAction("Remove this repository from Prowl?")) {
+      return;
+    }
     this.repoBusy = true;
     this.errorMessage = null;
     try {
@@ -316,6 +334,9 @@ export class AppState {
     if (!worktreeId) {
       return;
     }
+    if (!this.#confirmDestructiveAction("Archive this worktree?")) {
+      return;
+    }
     this.repoBusy = true;
     this.errorMessage = null;
     try {
@@ -350,6 +371,9 @@ export class AppState {
   }
 
   async deleteCustomAction(actionId: string): Promise<void> {
+    if (!this.#confirmDestructiveAction("Delete this custom action?")) {
+      return;
+    }
     this.repoBusy = true;
     this.errorMessage = null;
     try {
@@ -405,6 +429,23 @@ export class AppState {
     }
     if (taskStatus === "done" && previousStatus !== "done" && pane.id !== this.selectedPaneId) {
       this.#notifyPaneDone(pane);
+    }
+  }
+
+  async updateSettings(patch: Partial<AppSettings>): Promise<void> {
+    this.errorMessage = null;
+    try {
+      const response = await this.ws.request({
+        v: 1,
+        type: "settings.set",
+        id: makeMessageId(),
+        patch,
+      });
+      if (response.type === "settings.snapshot") {
+        this.#mergeSettings(response.settings);
+      }
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : String(error);
     }
   }
 
@@ -467,9 +508,17 @@ export class AppState {
   }
 
   async #restoreUIState(): Promise<void> {
-    const [view, selectedWorktreeId] = await Promise.all([get<AppView>(uiViewKey), get<string>(selectedWorktreeKey)]);
+    const [view, selectedWorktreeId, appearance] = await Promise.all([
+      get<AppView>(uiViewKey),
+      get<string>(selectedWorktreeKey),
+      get<AppSettings["appearance"]>(appearanceSettingsKey),
+    ]);
     if (view === "shelf" || view === "canvas" || view === "settings" || view === "diff") {
       this.view = view;
+    }
+    if (appearance) {
+      this.settings = { ...this.settings, appearance: { ...this.settings.appearance, ...appearance } };
+      this.#applyAppearanceSettings();
     }
     if (selectedWorktreeId && this.worktrees.some((worktree) => worktree.id === selectedWorktreeId)) {
       this.selectWorktree(selectedWorktreeId);
@@ -526,7 +575,12 @@ export class AppState {
           repoId: repository.id,
         });
       }
-      await this.ws.request({ v: 1, type: "settings.get", id: makeMessageId(), keys: ["panes"] });
+      await this.ws.request({
+        v: 1,
+        type: "settings.get",
+        id: makeMessageId(),
+        keys: ["appearance", "shortcuts", "advanced", "panes"],
+      });
       await this.#attachExistingPanes();
     } catch (error) {
       this.errorMessage = error instanceof Error ? error.message : String(error);
@@ -593,6 +647,7 @@ export class AppState {
         this.#applyPaneReplay(message.paneId, message.bytes);
         break;
       case "settings.snapshot":
+        this.#mergeSettings(message.settings);
         if (Array.isArray(message.settings.panes)) {
           this.#replacePanes(message.settings.panes as PaneDescriptor[]);
         }
@@ -739,6 +794,42 @@ export class AppState {
     }
   }
 
+  #mergeSettings(snapshot: Record<string, unknown>): void {
+    this.settings = {
+      appearance: sanitizeAppearance(snapshot.appearance, this.settings.appearance),
+      shortcuts: sanitizeShortcuts(snapshot.shortcuts, this.settings.shortcuts),
+      advanced: sanitizeAdvanced(snapshot.advanced, this.settings.advanced),
+    };
+    void set(appearanceSettingsKey, this.settings.appearance);
+    this.#applyAppearanceSettings();
+  }
+
+  #applyAppearanceSettings(): void {
+    if (typeof document === "undefined") {
+      return;
+    }
+    const theme = this.settings.appearance.theme;
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.dataset.terminalDensity = this.settings.appearance.terminalDensity;
+    document.documentElement.dataset.unreadBadges = String(this.settings.appearance.showUnreadBadges);
+    document.documentElement.style.colorScheme = theme === "system" ? "light dark" : theme;
+  }
+
+  #shortcutMap(): Map<string, ActionId> {
+    return new Map(
+      Object.entries(this.settings.shortcuts)
+        .filter((entry): entry is [ActionId, string] => Boolean(entry[1]?.trim()))
+        .map(([action, chord]) => [chord.trim(), action]),
+    );
+  }
+
+  #confirmDestructiveAction(message: string): boolean {
+    if (!this.settings.advanced.confirmDestructiveActions || typeof window === "undefined") {
+      return true;
+    }
+    return window.confirm(message);
+  }
+
   #requestNotificationPermission(): void {
     if (typeof Notification === "undefined" || Notification.permission !== "default") {
       return;
@@ -770,4 +861,50 @@ function lastNonEmptyLine(text: string): string {
       .filter(Boolean)
       .at(-1) ?? ""
   );
+}
+
+function sanitizeAppearance(value: unknown, fallback: AppSettings["appearance"]): AppSettings["appearance"] {
+  if (!isRecord(value)) {
+    return fallback;
+  }
+  const theme =
+    value.theme === "light" || value.theme === "dark" || value.theme === "system" ? value.theme : fallback.theme;
+  const terminalDensity =
+    value.terminalDensity === "compact" || value.terminalDensity === "comfortable"
+      ? value.terminalDensity
+      : fallback.terminalDensity;
+  const showUnreadBadges =
+    typeof value.showUnreadBadges === "boolean" ? value.showUnreadBadges : fallback.showUnreadBadges;
+  return { theme, terminalDensity, showUnreadBadges };
+}
+
+function sanitizeShortcuts(value: unknown, fallback: AppSettings["shortcuts"]): AppSettings["shortcuts"] {
+  if (!isRecord(value)) {
+    return fallback;
+  }
+  const shortcuts: AppSettings["shortcuts"] = { ...defaultSettings.shortcuts };
+  for (const action of Object.keys(defaultSettings.shortcuts) as ActionId[]) {
+    const chord = value[action];
+    shortcuts[action] = typeof chord === "string" ? chord : fallback[action];
+  }
+  return shortcuts;
+}
+
+function sanitizeAdvanced(value: unknown, fallback: AppSettings["advanced"]): AppSettings["advanced"] {
+  if (!isRecord(value)) {
+    return fallback;
+  }
+  const replayBufferKiB = typeof value.replayBufferKiB === "number" ? value.replayBufferKiB : fallback.replayBufferKiB;
+  return {
+    performanceHUD: typeof value.performanceHUD === "boolean" ? value.performanceHUD : fallback.performanceHUD,
+    confirmDestructiveActions:
+      typeof value.confirmDestructiveActions === "boolean"
+        ? value.confirmDestructiveActions
+        : fallback.confirmDestructiveActions,
+    replayBufferKiB: Math.min(Math.max(Math.round(replayBufferKiB), 16), 1024),
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

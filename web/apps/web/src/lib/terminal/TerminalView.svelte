@@ -62,7 +62,7 @@
   }
 
   .screen {
-    padding: 0.75rem;
+    padding: var(--terminal-padding, 0.75rem);
     white-space: pre-wrap;
   }
 </style>

@@ -2,9 +2,12 @@
   import { Button } from "@prowl/ui";
   import { getContext } from "svelte";
   import { appStateKey, type AppState } from "$lib/state/AppState.svelte";
+  import Advanced from "./Advanced.svelte";
   import Appearance from "./Appearance.svelte";
   import CustomActions from "./CustomActions.svelte";
   import RepoSettings from "./RepoSettings.svelte";
+  import Shortcuts from "./Shortcuts.svelte";
+  import Updates from "./Updates.svelte";
 
   const appState = getContext<AppState>(appStateKey);
 </script>
@@ -25,12 +28,15 @@
   <RepoSettings />
   <CustomActions />
   <Appearance />
+  <Shortcuts />
+  <Advanced />
+  <Updates />
 </main>
 
 <style>
   .settings {
     display: grid;
-    grid-template-rows: auto auto auto 1fr;
+    align-content: start;
     gap: 1rem;
     width: 100vw;
     min-height: 100vh;

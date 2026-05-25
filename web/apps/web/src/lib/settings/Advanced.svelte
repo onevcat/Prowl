@@ -2,48 +2,41 @@
   import { Button } from "@prowl/ui";
   import { getContext } from "svelte";
   import { appStateKey, type AppState } from "$lib/state/AppState.svelte";
-  import type { AppearanceSettings } from "$lib/state/types";
+  import type { AdvancedSettings } from "$lib/state/types";
 
   const appState = getContext<AppState>(appStateKey);
-  let local = $state<AppearanceSettings>({ ...appState.settings.appearance });
+  let local = $state<AdvancedSettings>({ ...appState.settings.advanced });
 
   $effect(() => {
-    local = { ...appState.settings.appearance };
+    local = { ...appState.settings.advanced };
   });
 
   async function save(): Promise<void> {
-    await appState.updateSettings({ appearance: local });
+    await appState.updateSettings({ advanced: local });
   }
 </script>
 
 <section>
   <div class="heading">
     <div>
-      <h2>Appearance</h2>
-      <p>Theme and terminal presentation</p>
+      <h2>Advanced</h2>
+      <p>Debug and daemon-facing options</p>
     </div>
-    <Button label="✓" title="Save Appearance Settings" onclick={save} />
+    <Button label="✓" title="Save Advanced Settings" onclick={save} />
   </div>
 
   <div class="grid">
-    <label>
-      Theme
-      <select bind:value={local.theme}>
-        <option value="system">System</option>
-        <option value="light">Light</option>
-        <option value="dark">Dark</option>
-      </select>
-    </label>
-    <label>
-      Terminal density
-      <select bind:value={local.terminalDensity}>
-        <option value="comfortable">Comfortable</option>
-        <option value="compact">Compact</option>
-      </select>
+    <label class="check">
+      <input type="checkbox" bind:checked={local.performanceHUD} />
+      Performance HUD
     </label>
     <label class="check">
-      <input type="checkbox" bind:checked={local.showUnreadBadges} />
-      Show unread badges
+      <input type="checkbox" bind:checked={local.confirmDestructiveActions} />
+      Confirm destructive actions
+    </label>
+    <label>
+      Replay buffer
+      <input type="number" min="16" max="1024" step="16" bind:value={local.replayBufferKiB} />
     </label>
   </div>
 </section>
@@ -91,7 +84,7 @@
     font-size: 0.85rem;
   }
 
-  select {
+  input[type="number"] {
     min-height: 2rem;
     padding: 0 0.65rem;
     border: 1px solid color-mix(in srgb, CanvasText 16%, transparent);

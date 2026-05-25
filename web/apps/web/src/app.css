@@ -5,6 +5,28 @@
   color: CanvasText;
 }
 
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+:root[data-terminal-density="compact"] {
+  --terminal-padding: 0.45rem;
+}
+
+:root[data-terminal-density="comfortable"],
+:root:not([data-terminal-density]) {
+  --terminal-padding: 0.75rem;
+}
+
+:root[data-unread-badges="false"] .unread,
+:root[data-unread-badges="false"] .count {
+  display: none;
+}
+
 * {
   box-sizing: border-box;
 }

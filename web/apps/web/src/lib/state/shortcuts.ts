@@ -2,16 +2,18 @@ import type { ActionId } from "./types";
 
 export type KeyChord = string;
 
-export const shortcuts = new Map<KeyChord, ActionId>([
-  ["Mod+K", "palette.open"],
-  ["Escape", "palette.close"],
-  ["Mod+T", "pane.new"],
-  ["Mod+W", "pane.close"],
-  ["Mod+Control+ArrowLeft", "worktree.previous"],
-  ["Mod+Control+ArrowRight", "worktree.next"],
-  ["Mod+Control+ArrowUp", "tab.previous"],
-  ["Mod+Control+ArrowDown", "tab.next"],
-]);
+export const defaultShortcuts: Array<[ActionId, KeyChord]> = [
+  ["palette.open", "Mod+K"],
+  ["palette.close", "Escape"],
+  ["pane.new", "Mod+T"],
+  ["pane.close", "Mod+W"],
+  ["worktree.previous", "Mod+Control+ArrowLeft"],
+  ["worktree.next", "Mod+Control+ArrowRight"],
+  ["tab.previous", "Mod+Control+ArrowUp"],
+  ["tab.next", "Mod+Control+ArrowDown"],
+];
+
+export const shortcuts = new Map<KeyChord, ActionId>(defaultShortcuts.map(([action, chord]) => [chord, action]));
 
 export function normalizeKeyChord(event: KeyboardEvent): KeyChord {
   const parts: string[] = [];
