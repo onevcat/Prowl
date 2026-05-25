@@ -4,7 +4,7 @@
   "packageManager": "bun@1.3.13",
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
-    "dev": "bun run --filter '*' dev",
+    "dev": "bun run scripts/dev.ts",
     "build": "bun run --filter '*' build",
     "lint": "biome check .",
     "format": "biome format --write .",
