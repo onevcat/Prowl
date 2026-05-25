@@ -31,6 +31,20 @@ describe("InMemoryState", () => {
     expect(state.listPanes().some((candidate) => candidate.id === pane.id)).toBe(false);
   });
 
+  test("closes panes that belong to a removed repository", () => {
+    const state = testState();
+    const { repository, worktree } = state.addRepository("/tmp/removed-repo");
+    const pane = state.createPane(worktree.id);
+
+    expect(state.listPanes().some((candidate) => candidate.id === pane.id)).toBe(true);
+
+    expect(state.removeRepository(repository.id)).toBe(true);
+
+    expect(state.repositories.some((candidate) => candidate.id === repository.id)).toBe(false);
+    expect(state.worktreesByRepo.get(repository.id)).toBeUndefined();
+    expect(state.listPanes().some((candidate) => candidate.id === pane.id)).toBe(false);
+  });
+
   test("uses requested pane dimensions when spawning PTYs", () => {
     const spawnOptions: Array<{ cols: number; rows: number }> = [];
     const state = new InMemoryState("/tmp/prowl", {

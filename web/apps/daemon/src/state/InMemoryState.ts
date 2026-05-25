@@ -183,6 +183,12 @@ export class InMemoryState {
   }
 
   removeRepository(repoId: string): boolean {
+    const worktreeIds = new Set((this.worktreesByRepo.get(repoId) ?? []).map((worktree) => worktree.id));
+    for (const pane of this.listPanes()) {
+      if (worktreeIds.has(pane.worktreeId)) {
+        this.closePane(pane.id);
+      }
+    }
     const result = this.#database.query("DELETE FROM repos WHERE id = $id").run({ $id: repoId });
     this.#reloadRepositories();
     this.#reloadWorktrees();
@@ -648,7 +654,9 @@ function openDatabase(path: string): Database {
   if (path !== ":memory:") {
     mkdirSync(dirname(path), { recursive: true });
   }
-  return new Database(path);
+  const database = new Database(path);
+  database.exec("PRAGMA foreign_keys = ON");
+  return database;
 }
 
 function migrateDatabase(database: Database): void {
