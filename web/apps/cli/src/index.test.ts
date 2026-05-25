@@ -536,7 +536,7 @@ describe("prowl cli scaffold", () => {
       }
       const pane = panes.settings.panes[0];
       const result = Bun.spawn(
-        ["bun", "run", "src/index.ts", "--json", "send", pane.id, "printf capture-smoke", "--capture"],
+        ["bun", "run", "src/index.ts", "--json", "send", pane.id, "sleep 0.4; printf capture-smoke", "--capture"],
         {
           cwd: new URL("..", import.meta.url).pathname,
           env: {

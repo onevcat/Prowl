@@ -3,6 +3,16 @@ import { makeMessageId } from "@prowl/protocol";
 import { hello, loadCLIConfig, requestDaemon, sendPtyInput } from "../transport";
 
 const textEncoder = new TextEncoder();
+const escapeCharacter = String.fromCharCode(27);
+const bellCharacter = String.fromCharCode(7);
+const csiPattern = new RegExp(`${escapeForRegExp(escapeCharacter)}\\[[0-?]*[ -/]*[@-~]`, "g");
+const oscPattern = new RegExp(
+  `${escapeForRegExp(escapeCharacter)}\\][^${escapeForRegExp(bellCharacter)}]*(?:${escapeForRegExp(bellCharacter)}|${escapeForRegExp(escapeCharacter)}\\\\)`,
+  "g",
+);
+const captureTimeoutMs = 3000;
+const capturePollIntervalMs = 50;
+const promptReadyPatterns = [/(^|\r?\n)[^\r\n]*[$%#❯>]\s*$/m, /tokens used/i, /\b(done|complete|finished)\b/i];
 
 export type PaneReadResult = { paneId: string; output: string };
 export type PaneSendResult = { paneId: string; status: "sent"; command: string; output?: string };
@@ -43,12 +53,12 @@ export async function sendPaneCommandWithOptions(
     throw new Error('Usage: prowl send <paneId> "<command>" [--capture]');
   }
   const pane = await requirePane(paneId);
+  const before = options.capture ? await replayForPane(pane.id) : "";
   await sendPtyInput(pane.channelId, textEncoder.encode(`${command}\r`));
   if (!options.capture) {
     return { paneId: pane.id, status: "sent", command };
   }
-  await Bun.sleep(250);
-  return { paneId: pane.id, status: "sent", command, output: await replayForPane(pane.id) };
+  return { paneId: pane.id, status: "sent", command, output: await capturePaneOutput(pane.id, before) };
 }
 
 export async function sendPaneKey(paneId: string | undefined, key: string | undefined): Promise<string> {
@@ -147,6 +157,37 @@ async function replayForPane(paneId: string): Promise<string> {
     throw new Error(`Unexpected daemon response: ${response.type}`);
   }
   return Buffer.from(response.bytes, "base64").toString("utf8");
+}
+
+async function capturePaneOutput(paneId: string, previousOutput: string): Promise<string> {
+  const deadline = performance.now() + captureTimeoutMs;
+  let latest = previousOutput;
+  while (performance.now() < deadline) {
+    latest = await replayForPane(paneId);
+    const captured = outputSince(latest, previousOutput);
+    if (captured && isPromptReady(captured)) {
+      return latest;
+    }
+    await Bun.sleep(capturePollIntervalMs);
+  }
+  return latest;
+}
+
+function outputSince(current: string, previous: string): string {
+  return current.startsWith(previous) ? current.slice(previous.length) : current;
+}
+
+function isPromptReady(output: string): boolean {
+  const tail = stripTerminalControls(output.slice(-4096));
+  return promptReadyPatterns.some((pattern) => pattern.test(tail));
+}
+
+function stripTerminalControls(text: string): string {
+  return text.replace(csiPattern, "").replace(oscPattern, "").replace(/\r/g, "\n");
+}
+
+function escapeForRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 async function listPanes(): Promise<PaneDescriptor[]> {
