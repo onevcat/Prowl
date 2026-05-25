@@ -786,7 +786,7 @@ export function handleControl(
         },
       ];
     }
-    return [{ v: 1, type: "pane.listed", id: message.id, panes: state.listPanes() }];
+    return [{ v: 1, type: "pane.listed", id: message.id, panes: listOwnedPanes(state, options.ownedPaneIds) }];
   }
 
   if (message.type === "ping") {

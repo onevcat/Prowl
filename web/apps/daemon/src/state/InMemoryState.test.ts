@@ -137,6 +137,13 @@ describe("InMemoryState", () => {
     expect(second.settingsSnapshot(["theme"]).theme).toBe("dark");
   });
 
+  test("does not expose pane metadata through settings snapshots", () => {
+    const state = new InMemoryState("/tmp/prowl", { spawnProcesses: false, statePath: ":memory:" });
+
+    expect(state.settingsSnapshot().panes).toBeUndefined();
+    expect(state.settingsSnapshot(["panes"]).panes).toBeUndefined();
+  });
+
   test("persists custom actions in sqlite", () => {
     const statePath = `/tmp/prowl-actions-test-${crypto.randomUUID()}.sqlite`;
     const first = new InMemoryState("/tmp/prowl", { spawnProcesses: false, statePath });

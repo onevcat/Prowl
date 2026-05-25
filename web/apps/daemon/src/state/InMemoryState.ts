@@ -244,9 +244,6 @@ export class InMemoryState {
 
   settingsSnapshot(keys?: string[]): SettingsSnapshot {
     const snapshot: SettingsSnapshot = {};
-    if (!keys || keys.includes("panes")) {
-      snapshot.panes = this.listPanes();
-    }
     const rows = this.#database.query("SELECT key, value_json FROM settings").all() as SettingRow[];
     for (const row of rows) {
       if (!keys || keys.includes(row.key)) {

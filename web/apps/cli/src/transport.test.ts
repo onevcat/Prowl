@@ -41,15 +41,14 @@ describe("CLI transport", () => {
       const panes = await requestDaemon(
         {
           v: 1,
-          type: "settings.get",
+          type: "pane.list",
           id: makeMessageId(),
-          keys: ["panes"],
         },
         socketPath,
       );
 
       expect(welcome.type).toBe("welcome");
-      expect(panes.type).toBe("settings.snapshot");
+      expect(panes.type).toBe("pane.listed");
     } finally {
       server.stop();
     }
@@ -85,16 +84,18 @@ describe("CLI transport", () => {
       const panes = await requestDaemon(
         {
           v: 1,
-          type: "settings.get",
+          type: "pane.list",
           id: makeMessageId(),
-          keys: ["panes"],
         },
         socketPath,
       );
-      if (panes.type !== "settings.snapshot" || !Array.isArray(panes.settings.panes)) {
-        throw new Error("Expected pane snapshot");
+      if (panes.type !== "pane.listed") {
+        throw new Error("Expected pane list");
       }
-      const pane = panes.settings.panes[0];
+      const pane = panes.panes[0];
+      if (!pane) {
+        throw new Error("Expected pane");
+      }
       await sendPtyInput(pane.channelId, new TextEncoder().encode("printf cli-pty-smoke\r"), socketPath);
       await Bun.sleep(200);
       const replay = await requestDaemon(
@@ -146,16 +147,18 @@ describe("CLI transport", () => {
       const panes = await requestDaemon(
         {
           v: 1,
-          type: "settings.get",
+          type: "pane.list",
           id: makeMessageId(),
-          keys: ["panes"],
         },
         socketPath,
       );
-      if (panes.type !== "settings.snapshot" || !Array.isArray(panes.settings.panes)) {
-        throw new Error("Expected pane snapshot");
+      if (panes.type !== "pane.listed") {
+        throw new Error("Expected pane list");
       }
-      const pane = panes.settings.panes[0];
+      const pane = panes.panes[0];
+      if (!pane) {
+        throw new Error("Expected pane");
+      }
       await sendSplitPtyInput(pane.channelId, new TextEncoder().encode("printf cli-split-pty\r"), socketPath);
       await Bun.sleep(200);
       const replay = await requestDaemon(
@@ -223,9 +226,8 @@ describe("CLI transport", () => {
       await Bun.sleep(50);
       const response = await sendRawJson(socketPath, {
         v: 1,
-        type: "settings.get",
+        type: "ping",
         id: crypto.randomUUID(),
-        keys: ["panes"],
       });
 
       expect(response.type).toBe("error");

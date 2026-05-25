@@ -629,16 +629,18 @@ exec bun run apps/daemon/src/index.ts
       const panes = await requestDaemon(
         {
           v: 1,
-          type: "settings.get",
+          type: "pane.list",
           id: crypto.randomUUID(),
-          keys: ["panes"],
         },
         socketPath,
       );
-      if (panes.type !== "settings.snapshot" || !Array.isArray(panes.settings.panes)) {
+      if (panes.type !== "pane.listed") {
         throw new Error("Expected panes");
       }
-      const pane = panes.settings.panes[0];
+      const pane = panes.panes[0];
+      if (!pane) {
+        throw new Error("Expected pane");
+      }
       const result = Bun.spawn(
         ["bun", "run", "src/index.ts", "--json", "send", pane.id, "sleep 0.4; printf capture-smoke", "--capture"],
         {
@@ -702,16 +704,18 @@ exec bun run apps/daemon/src/index.ts
       const panes = await requestDaemon(
         {
           v: 1,
-          type: "settings.get",
+          type: "pane.list",
           id: crypto.randomUUID(),
-          keys: ["panes"],
         },
         socketPath,
       );
-      if (panes.type !== "settings.snapshot" || !Array.isArray(panes.settings.panes)) {
+      if (panes.type !== "pane.listed") {
         throw new Error("Expected panes");
       }
-      const pane = panes.settings.panes[0];
+      const pane = panes.panes[0];
+      if (!pane) {
+        throw new Error("Expected pane");
+      }
       const result = Bun.spawn(["bun", "run", "src/index.ts", "send", pane.id, `printf x >> ${outputPath}`], {
         cwd: new URL("..", import.meta.url).pathname,
         env: {
@@ -776,16 +780,18 @@ exec bun run apps/daemon/src/index.ts
       const panes = await requestDaemon(
         {
           v: 1,
-          type: "settings.get",
+          type: "pane.list",
           id: crypto.randomUUID(),
-          keys: ["panes"],
         },
         socketPath,
       );
-      if (panes.type !== "settings.snapshot" || !Array.isArray(panes.settings.panes)) {
+      if (panes.type !== "pane.listed") {
         throw new Error("Expected panes");
       }
-      const pane = panes.settings.panes[0];
+      const pane = panes.panes[0];
+      if (!pane) {
+        throw new Error("Expected pane");
+      }
       const typed = Bun.spawn(["bun", "run", "src/index.ts", "--json", "key", pane.id, "printf cli-key"], {
         cwd: new URL("..", import.meta.url).pathname,
         env: cliEnv,

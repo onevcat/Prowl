@@ -1172,10 +1172,6 @@ export class AppState {
         break;
       case "settings.snapshot":
         this.#mergeSettings(message.settings);
-        if (Array.isArray(message.settings.panes)) {
-          this.#replacePanes(message.settings.panes as PaneDescriptor[]);
-          this.syncRenderedPanes();
-        }
         break;
       case "error":
         this.errorMessage = `${message.code}: ${redactSensitiveText(message.message)}`;

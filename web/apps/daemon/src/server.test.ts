@@ -1169,6 +1169,7 @@ exit 0
     if (!pane) {
       throw new Error("Expected seeded pane");
     }
+    const unownedPane = state.createPane(pane.worktreeId);
 
     const running = handleControl(
       {
@@ -1180,6 +1181,7 @@ exit 0
       },
       state,
       config,
+      { ownedPaneIds: new Set([pane.id]) },
     );
     const done = handleControl(
       {
@@ -1194,6 +1196,11 @@ exit 0
     );
 
     expect(running[0]?.type).toBe("pane.listed");
+    if (running[0]?.type !== "pane.listed") {
+      throw new Error("Expected pane.listed");
+    }
+    expect(running[0].panes.map((candidate) => candidate.id)).toEqual([pane.id]);
+    expect(running[0].panes.some((candidate) => candidate.id === unownedPane.id)).toBe(false);
     expect(state.listPanes()[0]?.taskStatus).toBe("done");
     expect(done[0]?.type).toBe("notification");
   });
