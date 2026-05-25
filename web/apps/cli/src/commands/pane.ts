@@ -72,7 +72,7 @@ export async function sendPaneKeyResult(paneId: string | undefined, key: string 
     throw new Error("Usage: prowl key <paneId> <keystroke>");
   }
   const pane = await requirePane(paneId);
-  await sendPtyInput(pane.channelId, keyBytes(key));
+  await sendPtyInput(pane.channelId, encodePaneKey(key));
   return { paneId: pane.id, status: "sent", key };
 }
 
@@ -193,24 +193,57 @@ async function listPanes(): Promise<PaneDescriptor[]> {
   return getPaneList();
 }
 
-function keyBytes(key: string): Uint8Array {
-  const normalized = key.toLowerCase();
-  if (normalized === "enter") {
-    return textEncoder.encode("\r");
+export function encodePaneKey(key: string): Uint8Array {
+  return textEncoder.encode(paneKeySequence(key));
+}
+
+function paneKeySequence(key: string): string {
+  const normalized = key.trim().toLowerCase();
+  const namedKey = namedKeySequences[normalized];
+  if (namedKey) {
+    return namedKey;
   }
-  if (normalized === "tab") {
-    return textEncoder.encode("\t");
-  }
-  if (normalized === "escape" || normalized === "esc") {
-    return textEncoder.encode("\x1b");
-  }
-  if (normalized === "backspace") {
-    return textEncoder.encode("\x7f");
-  }
-  const control = normalized.match(/^c-([a-z])$/);
+  const control = normalized.match(/^(?:c|ctrl|control)-(.+)$/);
   const controlKey = control?.[1];
   if (controlKey) {
-    return Uint8Array.of(controlKey.charCodeAt(0) - 96);
+    return controlKeySequence(controlKey) ?? key;
   }
-  return textEncoder.encode(key);
+  return key;
 }
+
+function controlKeySequence(key: string): string | null {
+  const namedControl = controlKeySequences[key];
+  if (namedControl) {
+    return namedControl;
+  }
+  if (/^[a-z]$/.test(key)) {
+    return String.fromCharCode(key.charCodeAt(0) - 96);
+  }
+  return null;
+}
+
+const namedKeySequences: Record<string, string> = {
+  backspace: "\x7f",
+  delete: "\x1b[3~",
+  down: "\x1b[B",
+  end: "\x1b[F",
+  enter: "\r",
+  esc: "\x1b",
+  escape: "\x1b",
+  home: "\x1b[H",
+  insert: "\x1b[2~",
+  left: "\x1b[D",
+  pagedown: "\x1b[6~",
+  pageup: "\x1b[5~",
+  right: "\x1b[C",
+  tab: "\t",
+  up: "\x1b[A",
+};
+
+const controlKeySequences: Record<string, string> = {
+  "[": "\x1b",
+  "\\": "\x1c",
+  "]": "\x1d",
+  "^": "\x1e",
+  _: "\x1f",
+};
