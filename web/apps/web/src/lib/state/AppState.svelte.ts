@@ -124,6 +124,7 @@ export class AppState {
   #renderedPaneIds = new Set<string>();
   #paneIdsToResume = new Set<string>();
   #restoredOpenTabsWorktreeIds = new Set<string>();
+  #locallyHandledNotificationIds = new Set<string>();
   #preferredSelectedWorktreeId: string | null = null;
   #systemPaneAttached = false;
   #coldStartRecorded = false;
@@ -781,17 +782,37 @@ export class AppState {
     if (shouldNotify) {
       this.#notifyPaneDone(pane);
     }
+    const id = makeMessageId();
+    if (shouldNotify) {
+      this.#locallyHandledNotificationIds.add(id);
+    }
     try {
       await this.ws.request({
         v: 1,
         type: "pane.status",
-        id: makeMessageId(),
+        id,
         paneId,
         taskStatus,
       });
     } catch (error) {
       this.errorMessage = redactSensitiveText(error);
+    } finally {
+      this.#locallyHandledNotificationIds.delete(id);
     }
+  }
+
+  handleServerNotification(message: Extract<ServerControlMessage, { type: "notification" }>): void {
+    if (this.#locallyHandledNotificationIds.delete(message.id)) {
+      return;
+    }
+    const pane = message.paneId ? (this.panes.get(message.paneId) ?? null) : null;
+    if (pane && this.isPaneFocused(pane.id)) {
+      return;
+    }
+    if (pane) {
+      pane.unread = true;
+    }
+    this.#notify(message.title, message.body, message.paneId ? `prowl-pane-${message.paneId}` : undefined);
   }
 
   detectPaneStatusFromTerminal(paneId: string, parsedOutput: string): void {
@@ -1285,6 +1306,7 @@ export class AppState {
         this.errorMessage = `${message.code}: ${redactSensitiveText(message.message)}`;
         break;
       case "notification":
+        this.handleServerNotification(message);
         this.errorMessage = null;
         break;
       case "pane.resized":
@@ -1799,13 +1821,14 @@ export class AppState {
   }
 
   #notifyPaneDone(pane: Pane, body = pane.lastOutputLine): void {
+    this.#notify(pane.title, formatPaneNotificationBody(pane.title, body), `prowl-pane-${pane.id}`);
+  }
+
+  #notify(title: string, body: string, tag?: string): void {
     if (typeof Notification === "undefined" || Notification.permission !== "granted") {
       return;
     }
-    new Notification(pane.title, {
-      body: formatPaneNotificationBody(pane.title, body),
-      tag: `prowl-pane-${pane.id}`,
-    });
+    new Notification(title, { body, tag });
     void new Audio("/notification.wav").play().catch(() => {});
   }
 }

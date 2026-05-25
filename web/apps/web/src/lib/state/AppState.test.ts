@@ -261,6 +261,80 @@ describe("AppState focus-aware notifications", () => {
     expect(notifications).toEqual([]);
   });
 
+  test("shows daemon notifications for unfocused panes", () => {
+    const notifications = installNotificationFakes();
+    const state = appStateFixture();
+    const pane = state.panes.get("pane-2");
+    expect(pane).toBeDefined();
+    if (!pane) {
+      return;
+    }
+
+    state.handleServerNotification({
+      v: 1,
+      type: "notification",
+      id: "8b8e9af6-56b8-4da4-8146-4a9319216522",
+      severity: "info",
+      title: "Task finished",
+      body: "pane-2: Tests passed",
+      paneId: "pane-2",
+    });
+
+    expect(notifications).toEqual([{ title: "Task finished", body: "pane-2: Tests passed" }]);
+    expect(pane.unread).toBe(true);
+  });
+
+  test("ignores daemon notifications for the focused pane", () => {
+    const notifications = installNotificationFakes();
+    const state = appStateFixture();
+    const pane = state.panes.get("pane-1");
+    expect(pane).toBeDefined();
+    if (!pane) {
+      return;
+    }
+
+    state.handleServerNotification({
+      v: 1,
+      type: "notification",
+      id: "4c64c9b3-7395-462c-98d9-e48890830ee1",
+      severity: "info",
+      title: "Task finished",
+      body: "pane-1: Done",
+      paneId: "pane-1",
+    });
+
+    expect(notifications).toEqual([]);
+    expect(pane.unread).toBe(false);
+  });
+
+  test("deduplicates daemon notifications already handled locally", async () => {
+    const notifications = installNotificationFakes();
+    const state = appStateFixture();
+    const pane = state.panes.get("pane-2");
+    expect(pane).toBeDefined();
+    if (!pane) {
+      return;
+    }
+    pane.taskStatus = "running";
+    pane.lastOutputLine = "Tests passed";
+    state.ws.request = (async (message) => {
+      state.handleServerNotification({
+        v: 1,
+        type: "notification",
+        id: message.id,
+        severity: "info",
+        title: "Task finished",
+        body: "pane-2: Tests passed",
+        paneId: "pane-2",
+      });
+      return { v: 1, type: "pong", id: message.id };
+    }) as AppState["ws"]["request"];
+
+    await state.updatePaneStatus("pane-2", "done");
+
+    expect(notifications).toEqual([{ title: "pane-2", body: "pane-2: Tests passed" }]);
+  });
+
   test("detects task status from terminal parsed output", () => {
     const state = appStateFixture();
     const pane = state.panes.get("pane-1");
