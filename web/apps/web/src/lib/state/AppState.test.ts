@@ -270,6 +270,39 @@ describe("AppState custom action shortcuts", () => {
   });
 });
 
+describe("AppState custom action palette items", () => {
+  test("runs only runnable custom actions from the command palette", () => {
+    const state = appStateFixture();
+    state.customActions = [
+      customAction("action-global", null, "Mod+G"),
+      customAction("action-repo", "repo-1", "Mod+R"),
+      customAction("action-other", "repo-2", "Mod+O"),
+    ];
+    let ranActionId: string | null = null;
+    state.runCustomAction = (async (actionId: string) => {
+      ranActionId = actionId;
+    }) as AppState["runCustomAction"];
+
+    const actionItems = state.paletteItems.filter((item) => item.id.startsWith("action:"));
+    const repoAction = actionItems.find((item) => item.id === "action:action-repo");
+
+    expect(actionItems.map((item) => item.id)).toEqual(["action:action-global", "action:action-repo"]);
+    expect(repoAction).toBeDefined();
+    if (!repoAction) {
+      return;
+    }
+
+    state.invokePaletteItem(repoAction);
+
+    expect(ranActionId).toBe("action-repo");
+    expect(state.paletteHistory[0]).toMatchObject({
+      id: "action:action-repo",
+      section: "Actions",
+      title: "action-repo",
+    });
+  });
+});
+
 describe("AppState view mutation methods", () => {
   test("opens and closes the palette through actions", () => {
     const state = appStateFixture();
