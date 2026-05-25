@@ -1,5 +1,6 @@
+import { interactionMeasureNames } from "$lib/performance/marks";
 import type { CustomAction } from "@prowl/protocol";
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 import { AppState, openTabsKey, paneDescriptorsByWorktree } from "./AppState.svelte";
 import { Pane } from "./Pane.svelte";
 import type { Repository, Worktree } from "./types";
@@ -13,6 +14,20 @@ globalWithRunes.$state = ((value: unknown) => value) as typeof globalWithRunes.$
 Object.defineProperty(globalThis, "navigator", {
   configurable: true,
   value: { platform: "Linux" },
+});
+
+const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+
+afterEach(() => {
+  performance.clearMeasures();
+  if (originalRequestAnimationFrame) {
+    Object.defineProperty(globalThis, "requestAnimationFrame", {
+      configurable: true,
+      value: originalRequestAnimationFrame,
+    });
+    return;
+  }
+  Reflect.deleteProperty(globalThis, "requestAnimationFrame");
 });
 
 describe("AppState ordering", () => {
@@ -204,6 +219,32 @@ describe("AppState view mutation methods", () => {
     state.perform("palette.close");
     expect(state.paletteOpen).toBe(false);
     expect(state.paletteQuery).toBe("");
+  });
+
+  test("records worktree switch performance measures", () => {
+    const state = appStateFixture();
+
+    state.selectWorktree("worktree-1");
+
+    expect(state.metrics.worktreeSwitchSamples).toHaveLength(1);
+    expect(performance.getEntriesByName(interactionMeasureNames.worktreeSwitch)).toHaveLength(1);
+  });
+
+  test("records palette open performance after the next frame", async () => {
+    Object.defineProperty(globalThis, "requestAnimationFrame", {
+      configurable: true,
+      value: (callback: FrameRequestCallback) => {
+        queueMicrotask(() => callback(performance.now()));
+        return 1;
+      },
+    });
+    const state = appStateFixture();
+
+    state.perform("palette.open");
+    await Promise.resolve();
+
+    expect(state.metrics.paletteOpenSamples).toHaveLength(1);
+    expect(performance.getEntriesByName(interactionMeasureNames.paletteOpen)).toHaveLength(1);
   });
 
   test("runs the diff action through the native-aligned shortcut", () => {

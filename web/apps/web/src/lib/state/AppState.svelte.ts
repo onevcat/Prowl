@@ -1,6 +1,12 @@
 import { runViewTransition } from "$lib/animation/viewTransition";
 import { formatPaneNotificationBody } from "$lib/notifications/message";
 import { NotificationPermissionRequester } from "$lib/notifications/permission";
+import {
+  finishPerformanceInteraction,
+  finishPerformanceInteractionAfterNextFrame,
+  interactionMeasureNames,
+  startPerformanceInteraction,
+} from "$lib/performance/marks";
 import { redactSensitiveText } from "$lib/security/redaction";
 import { RendererPool } from "$lib/terminal/RendererPool";
 import { inferAgentTaskStatus } from "$lib/terminal/detectAgent";
@@ -129,6 +135,8 @@ export class AppState {
   metrics = $state<PerformanceMetrics>({
     inputLatencySamples: [],
     wsRttSamples: [],
+    worktreeSwitchSamples: [],
+    paletteOpenSamples: [],
     lastWsRtt: null,
   });
 
@@ -282,6 +290,7 @@ export class AppState {
         void this.showDiff();
         break;
       case "palette.open":
+        this.#markPaletteOpen();
         this.paletteOpen = true;
         break;
       case "palette.close":
@@ -440,6 +449,7 @@ export class AppState {
   }
 
   selectWorktree(worktreeId: string): void {
+    const interaction = startPerformanceInteraction(interactionMeasureNames.worktreeSwitch);
     runViewTransition(() => {
       this.selectedWorktreeId = worktreeId;
       const firstPane = this.orderedPanes(worktreeId)[0];
@@ -447,6 +457,7 @@ export class AppState {
       persistJSONValue(selectedWorktreeKey, worktreeId);
       this.syncRenderedPanes();
     });
+    this.#recordWorktreeSwitch(finishPerformanceInteraction(interaction));
   }
 
   selectPane(paneId: string): void {
@@ -1400,6 +1411,30 @@ export class AppState {
       ...this.metrics,
       wsRttSamples: appendSample(this.metrics.wsRttSamples, value),
       lastWsRtt: value,
+    };
+  }
+
+  #markPaletteOpen(): void {
+    const interaction = startPerformanceInteraction(interactionMeasureNames.paletteOpen);
+    finishPerformanceInteractionAfterNextFrame(interaction, (duration) => {
+      this.#recordPaletteOpen(duration);
+    });
+  }
+
+  #recordWorktreeSwitch(value: number | null): void {
+    if (value === null) {
+      return;
+    }
+    this.metrics = {
+      ...this.metrics,
+      worktreeSwitchSamples: appendSample(this.metrics.worktreeSwitchSamples, value),
+    };
+  }
+
+  #recordPaletteOpen(value: number): void {
+    this.metrics = {
+      ...this.metrics,
+      paletteOpenSamples: appendSample(this.metrics.paletteOpenSamples, value),
     };
   }
 

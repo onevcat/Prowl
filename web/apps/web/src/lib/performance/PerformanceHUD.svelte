@@ -50,6 +50,10 @@
   const inputP99 = $derived(percentile(appState.metrics.inputLatencySamples, 99));
   const wsP50 = $derived(percentile(appState.metrics.wsRttSamples, 50));
   const wsP99 = $derived(percentile(appState.metrics.wsRttSamples, 99));
+  const switchP50 = $derived(percentile(appState.metrics.worktreeSwitchSamples, 50));
+  const switchP99 = $derived(percentile(appState.metrics.worktreeSwitchSamples, 99));
+  const paletteP50 = $derived(percentile(appState.metrics.paletteOpenSamples, 50));
+  const paletteP99 = $derived(percentile(appState.metrics.paletteOpenSamples, 99));
   const rendererCount = $derived(appState.activeRendererCount);
 </script>
 
@@ -62,6 +66,14 @@
     <div>
       <span>WS RTT</span>
       <strong>{formatMs(wsP50)} / {formatMs(wsP99)}</strong>
+    </div>
+    <div>
+      <span>Switch</span>
+      <strong>{formatMs(switchP50)} / {formatMs(switchP99)}</strong>
+    </div>
+    <div>
+      <span>Palette</span>
+      <strong>{formatMs(paletteP50)} / {formatMs(paletteP99)}</strong>
     </div>
     <div>
       <span>Renderers</span>
@@ -85,7 +97,7 @@
     bottom: 0.75rem;
     z-index: 20;
     display: grid;
-    grid-template-columns: repeat(5, auto);
+    grid-template-columns: repeat(7, auto);
     gap: 0.6rem;
     align-items: center;
     padding: 0.55rem 0.65rem;
