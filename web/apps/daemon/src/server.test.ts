@@ -981,6 +981,68 @@ exit 0
     expect(run[0]?.type).toBe("error");
   });
 
+  test("runs custom actions in a new pane when configured", async () => {
+    const root = mkdtempSync(join(tmpdir(), "prowl-action-new-pane-test-"));
+    const state = new InMemoryState(root, { statePath: ":memory:", spawnProcesses: false });
+    const config = {
+      port: 0,
+      bind: "127.0.0.1",
+      token: "test-token",
+      allowedOrigins: ["http://127.0.0.1:5173"],
+      requireTLS: false,
+    };
+    const [sourcePane] = state.listPanes();
+    if (!sourcePane) {
+      throw new Error("Expected seeded pane");
+    }
+
+    const updated = handleControl(
+      {
+        v: 1,
+        type: "action.upsert",
+        id: makeMessageId(),
+        action: {
+          repoId: null,
+          name: "New pane action",
+          command: "printf new-pane-action",
+          outputMode: "newPane",
+          ordering: 1,
+        },
+      },
+      state,
+      config,
+    );
+    if (updated[0]?.type !== "action.updated") {
+      throw new Error("Expected action.updated");
+    }
+
+    const ownedPaneIds = new Set([sourcePane.id]);
+    const run = handleControl(
+      {
+        v: 1,
+        type: "action.run",
+        id: makeMessageId(),
+        paneId: sourcePane.id,
+        actionId: updated[0].action.id,
+      },
+      state,
+      config,
+      { ownedPaneIds },
+    );
+
+    expect(run[0]?.type).toBe("pane.created");
+    expect(run[1]?.type).toBe("notification");
+    if (run[0]?.type !== "pane.created") {
+      throw new Error("Expected pane.created");
+    }
+    expect(run[0].paneId).not.toBe(sourcePane.id);
+    expect(ownedPaneIds.has(run[0].paneId)).toBe(true);
+
+    await Bun.sleep(50);
+    const replay = state.replayForPane(run[0].paneId);
+    expect(new TextDecoder().decode(replay ?? new Uint8Array())).toContain("new-pane-action");
+  });
+
   test("reads git diff for a worktree", () => {
     const root = mkdtempSync(join(tmpdir(), "prowl-diff-test-"));
     const repoPath = join(root, "repo");
