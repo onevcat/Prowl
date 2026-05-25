@@ -24,7 +24,7 @@ let nextRequestId = 1;
 export function filterPaletteItems(items: PaletteItem[], query: string): PaletteItem[] {
   const normalized = query.trim().toLowerCase();
   if (!normalized) {
-    return items.slice(0, 50);
+    return items;
   }
   return runFuzzySearch(items, normalized);
 }

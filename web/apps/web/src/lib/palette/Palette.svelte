@@ -1,15 +1,25 @@
 <script lang="ts">
   import { getContext, tick } from "svelte";
+  import { visibleRange } from "$lib/diff/virtual";
   import { appStateKey, type AppState } from "$lib/state/AppState.svelte";
   import { clampPaletteIndex, nextPaletteIndex } from "./navigation";
   import { filterPaletteItems, filterPaletteItemsAsync, fuzzyWorkerThreshold } from "./results";
 
+  const resultRowHeight = 48;
+  const resultOverscan = 8;
   const appState = getContext<AppState>(appStateKey);
   let selectedIndex = $state(0);
   let input = $state<HTMLInputElement>();
+  let resultsElement = $state<HTMLDivElement | null>(null);
   let results = $state(filterPaletteItems(appState.paletteItems, appState.paletteQuery));
+  let resultsScrollTop = $state(0);
+  let resultsViewportHeight = $state(0);
   let searching = $state(false);
   let searchRequestId = 0;
+  let resultRange = $derived(
+    visibleRange(results.length, resultsScrollTop, resultsViewportHeight, resultRowHeight, resultOverscan),
+  );
+  let visibleResults = $derived(results.slice(resultRange.start, resultRange.end));
 
   $effect(() => {
     const items = appState.paletteItems;
@@ -44,6 +54,35 @@
   $effect(() => {
     selectedIndex = clampPaletteIndex(selectedIndex, results.length);
   });
+
+  $effect(() => {
+    results.length;
+    if (resultsElement) {
+      resultsViewportHeight = resultsElement.clientHeight;
+    }
+  });
+
+  $effect(() => {
+    if (!resultsElement) {
+      return;
+    }
+    const selectedTop = selectedIndex * resultRowHeight;
+    const selectedBottom = selectedTop + resultRowHeight;
+    if (selectedTop < resultsElement.scrollTop) {
+      resultsElement.scrollTop = selectedTop;
+    } else if (selectedBottom > resultsElement.scrollTop + resultsElement.clientHeight) {
+      resultsElement.scrollTop = selectedBottom - resultsElement.clientHeight;
+    }
+    syncResultsMetrics();
+  });
+
+  function syncResultsMetrics(): void {
+    if (!resultsElement) {
+      return;
+    }
+    resultsScrollTop = resultsElement.scrollTop;
+    resultsViewportHeight = resultsElement.clientHeight;
+  }
 
   function invokeSelected(): void {
     const item = results[selectedIndex];
@@ -99,16 +138,26 @@
         }}
       />
 
-      <div class="results">
+      <div bind:this={resultsElement} class="results" onscroll={syncResultsMetrics}>
         {#if searching}
           <p class="searching">Searching...</p>
         {/if}
-        {#each results as item, index (item.id)}
-          <button class:selected={index === selectedIndex} type="button" onclick={() => appState.invokePaletteItem(item)}>
-            <span>{item.title}</span>
-            <small>{item.section} · {item.subtitle}</small>
-          </button>
-        {/each}
+        <div
+          class="result-window"
+          style={`padding-top: ${resultRange.offsetTop}px; padding-bottom: ${resultRange.offsetBottom}px;`}
+        >
+          {#each visibleResults as item, index (item.id)}
+            {@const resultIndex = resultRange.start + index}
+            <button
+              class:selected={resultIndex === selectedIndex}
+              type="button"
+              onclick={() => appState.invokePaletteItem(item)}
+            >
+              <span>{item.title}</span>
+              <small>{item.section} · {item.subtitle}</small>
+            </button>
+          {/each}
+        </div>
       </div>
     </section>
   </div>
@@ -152,6 +201,10 @@
   .results {
     overflow: auto;
     padding: 0.4rem;
+  }
+
+  .result-window {
+    min-height: 100%;
   }
 
   button {

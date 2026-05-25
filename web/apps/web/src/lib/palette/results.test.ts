@@ -25,6 +25,12 @@ describe("palette results", () => {
     ]);
   });
 
+  test("returns the full unfiltered list so the palette can virtualize long histories", () => {
+    const manyItems = Array.from({ length: 75 }, (_, index) => item(`pane:${index}`, `Pane ${index}`, "Tabs", "shell"));
+
+    expect(filterPaletteItems(manyItems, "")).toHaveLength(75);
+  });
+
   test("uses fzf matching across titles, subtitles, and sections", () => {
     expect(filterPaletteItems(items, "term pres").map((result) => result.id)).toEqual(["settings:appearance"]);
     expect(filterPaletteItems(items, "repos").map((result) => result.id)[0]).toBe("repo:prowl");
