@@ -808,6 +808,35 @@ exit 0
     expect(listed[0].actions[0]?.command).toBe("echo hello");
   });
 
+  test("rejects listing repo-scoped actions for missing repositories", () => {
+    const root = mkdtempSync(join(tmpdir(), "prowl-action-list-repo-test-"));
+    const state = new InMemoryState(root, { statePath: ":memory:", spawnProcesses: false });
+    const config = {
+      port: 0,
+      bind: "127.0.0.1",
+      token: "test-token",
+      allowedOrigins: ["http://127.0.0.1:5173"],
+      requireTLS: false,
+    };
+
+    const listed = handleControl(
+      {
+        v: 1,
+        type: "action.list",
+        id: makeMessageId(),
+        repoId: "missing-repo",
+      },
+      state,
+      config,
+    );
+
+    expect(listed[0]?.type).toBe("error");
+    if (listed[0]?.type !== "error") {
+      throw new Error("Expected action list error");
+    }
+    expect(listed[0].code).toBe("REPO_NOT_FOUND");
+  });
+
   test("rejects deleting missing custom actions", () => {
     const root = mkdtempSync(join(tmpdir(), "prowl-action-delete-test-"));
     const state = new InMemoryState(root, { statePath: ":memory:", spawnProcesses: false });

@@ -517,6 +517,9 @@ export function handleControl(
   }
 
   if (message.type === "action.list") {
+    if (message.repoId && !state.repository(message.repoId)) {
+      return [errorResponse(message.id, "REPO_NOT_FOUND", "Repository is no longer registered")];
+    }
     return [{ v: 1, type: "action.listed", id: message.id, actions: state.listCustomActions(message.repoId) }];
   }
 
