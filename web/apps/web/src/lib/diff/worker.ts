@@ -20,7 +20,7 @@ export function parseGitDiffInWorker(
   createWorker: DiffWorkerFactory = createDiffWorker,
 ): Promise<DiffFile[]> {
   if (typeof Worker === "undefined") {
-    return Promise.resolve(parseGitDiff(diff));
+    return parseGitDiffWithoutWorker(diff);
   }
 
   const id = nextRequestId++;
@@ -43,6 +43,11 @@ export function parseGitDiffInWorker(
     };
     worker.postMessage({ id, diff } satisfies DiffWorkerRequest);
   });
+}
+
+async function parseGitDiffWithoutWorker(diff: string): Promise<DiffFile[]> {
+  const { annotateDiffFilesWithInlineChanges } = await import("./inline");
+  return annotateDiffFilesWithInlineChanges(parseGitDiff(diff));
 }
 
 function createDiffWorker(): Worker {

@@ -105,6 +105,9 @@
   }
 
   function highlightedLine(file: DiffFile, line: DiffLine, index: number): string {
+    if (line.inlineSegments) {
+      return renderInlineSegments(line);
+    }
     return highlightedLinesByPath.get(file.path)?.[index] ?? escapeHtml(line.text);
   }
 
@@ -112,8 +115,22 @@
     if (!line) {
       return "";
     }
+    if (line.inlineSegments) {
+      return renderInlineSegments(line);
+    }
     const index = file.lines.indexOf(line);
     return index === -1 ? escapeHtml(line.text) : highlightedLine(file, line, index);
+  }
+
+  function renderInlineSegments(line: DiffLine): string {
+    return (
+      line.inlineSegments
+        ?.map((segment) => {
+          const text = escapeHtml(segment.text);
+          return segment.changed ? `<span class="changed">${text}</span>` : text;
+        })
+        .join("") ?? escapeHtml(line.text)
+    );
   }
 
   function syncScrollMetrics(): void {
@@ -391,6 +408,11 @@
 
   pre.meta {
     color: color-mix(in srgb, CanvasText 58%, Canvas);
+  }
+
+  pre :global(span.changed) {
+    border-radius: 3px;
+    background: color-mix(in srgb, AccentColor 24%, transparent);
   }
 
   .empty {

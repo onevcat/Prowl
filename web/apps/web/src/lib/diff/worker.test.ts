@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { annotateDiffFilesWithInlineChanges } from "./inline";
 import { parseGitDiff } from "./model";
 import type { DiffWorkerRequest, DiffWorkerResponse } from "./worker";
 import { parseGitDiffInWorker } from "./worker";
@@ -20,6 +21,7 @@ describe("diff worker bridge", () => {
     expect(files[0]?.path).toBe("src/app.ts");
     expect(files[0]?.added).toBe(2);
     expect(files[0]?.removed).toBe(1);
+    expect(files[0]?.lines.find((line) => line.text === "-old")?.inlineSegments).toBeDefined();
   });
 });
 
@@ -33,7 +35,7 @@ class InlineDiffWorker {
         new MessageEvent("message", {
           data: {
             id: message.id,
-            files: parseGitDiff(message.diff),
+            files: annotateDiffFilesWithInlineChanges(parseGitDiff(message.diff)),
           } satisfies DiffWorkerResponse,
         }),
       );

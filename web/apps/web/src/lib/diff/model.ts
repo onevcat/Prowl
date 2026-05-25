@@ -1,10 +1,16 @@
 export type DiffLineKind = "meta" | "context" | "added" | "removed";
 
+export type DiffInlineSegment = {
+  text: string;
+  changed: boolean;
+};
+
 export type DiffLine = {
   kind: DiffLineKind;
   text: string;
   oldLine: number | null;
   newLine: number | null;
+  inlineSegments?: DiffInlineSegment[];
 };
 
 export type SplitDiffRow = {
