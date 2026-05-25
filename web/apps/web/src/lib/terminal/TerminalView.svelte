@@ -1,6 +1,4 @@
 <script lang="ts">
-  import { detectAgentTaskStatus } from "./detectAgent";
-
   type Props = {
     title: string;
     lastOutputLine: string;
@@ -8,10 +6,9 @@
     buffering?: boolean;
     onInput?: (text: string) => void;
     onResize?: (cols: number, rows: number) => void;
-    onStatus?: (status: "idle" | "running" | "done" | "failed") => void;
   };
 
-  let { title, lastOutputLine, focused, buffering = false, onInput, onResize, onStatus }: Props = $props();
+  let { title, lastOutputLine, focused, buffering = false, onInput, onResize }: Props = $props();
   let buffer = $state("");
   let element = $state<HTMLElement>();
 
@@ -46,7 +43,6 @@
       event.preventDefault();
       const text = event.key === "Enter" ? "\n" : event.key === "Backspace" ? "\b" : event.key;
       onInput?.(text);
-      onStatus?.(detectAgentTaskStatus(buffer));
     }
   }
 </script>

@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { Pane } from "$lib/state/Pane.svelte";
-  import type { TaskStatus } from "$lib/state/types";
   import CanvasPane from "./CanvasPane.svelte";
 
   type Props = {
@@ -10,11 +9,10 @@
     selectPane: (paneId: string) => void;
     sendInput: (paneId: string, text: string) => void;
     resizePane: (paneId: string, cols: number, rows: number) => void;
-    updateStatus: (paneId: string, status: TaskStatus) => void;
     zoomPane: (paneId: string) => void;
   };
 
-  let { panes, selectedPaneId, buffering, selectPane, sendInput, resizePane, updateStatus, zoomPane }: Props = $props();
+  let { panes, selectedPaneId, buffering, selectPane, sendInput, resizePane, zoomPane }: Props = $props();
 </script>
 
 <div class="grid">
@@ -26,7 +24,6 @@
       onclick={() => selectPane(pane.id)}
       onInput={(text) => sendInput(pane.id, text)}
       onResize={(cols, rows) => resizePane(pane.id, cols, rows)}
-      onStatus={(status) => updateStatus(pane.id, status)}
       ondblclick={() => zoomPane(pane.id)}
     />
   {/each}

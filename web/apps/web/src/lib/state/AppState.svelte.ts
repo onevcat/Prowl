@@ -1,3 +1,4 @@
+import { inferAgentTaskStatus } from "$lib/terminal/detectAgent";
 import { WSClient } from "$lib/ws/WSClient";
 import type {
   CustomAction,
@@ -925,6 +926,10 @@ export class AppState {
     pane.lastOutputLine = `${pane.lastOutputLine}${text}`;
     pane.updatedAt = Date.now();
     pane.unread = pane.id !== this.selectedPaneId;
+    const detectedStatus = inferAgentTaskStatus(pane.lastOutputLine);
+    if (detectedStatus && detectedStatus !== pane.taskStatus) {
+      void this.updatePaneStatus(pane.id, detectedStatus);
+    }
   }
 
   #applyPaneReplay(paneId: string, base64: string): void {

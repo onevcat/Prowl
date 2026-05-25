@@ -40,9 +40,6 @@
     selectPane={(paneId) => appState.selectPane(paneId)}
     sendInput={(paneId, text) => appState.sendInputToPane(paneId, text)}
     resizePane={(paneId, cols, rows) => appState.resizePane(paneId, cols, rows)}
-    updateStatus={(paneId, status) => {
-      void appState.updatePaneStatus(paneId, status);
-    }}
     zoomPane={(paneId) => {
       appState.selectPane(paneId);
       appState.setView("shelf");

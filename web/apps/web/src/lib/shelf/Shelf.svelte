@@ -101,12 +101,6 @@
             appState.resizePane(pane.id, cols, rows);
           }
         }}
-        onStatus={(status) => {
-          const pane = appState.selectedPane;
-          if (pane) {
-            void appState.updatePaneStatus(pane.id, status);
-          }
-        }}
       />
     {:else}
       <div class="empty">No terminals open</div>
