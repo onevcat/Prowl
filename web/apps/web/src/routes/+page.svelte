@@ -19,6 +19,8 @@
     appState.panes.size;
     appState.syncRenderedPanes();
   });
+
+  $effect(() => appState.registerFirstUserGestureNotifications());
 </script>
 
 <svelte:head>

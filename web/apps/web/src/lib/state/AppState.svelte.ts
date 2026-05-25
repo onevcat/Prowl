@@ -1,3 +1,4 @@
+import { NotificationPermissionRequester } from "$lib/notifications/permission";
 import { inferAgentTaskStatus } from "$lib/terminal/detectAgent";
 import { ProtocolError, WSClient } from "$lib/ws/WSClient";
 import type {
@@ -52,6 +53,7 @@ const defaultSettings: AppSettings = {
 
 export class AppState {
   readonly ws = new WSClient();
+  readonly #notificationPermission = new NotificationPermissionRequester();
   #bootstrapPromise: Promise<void> | null = null;
   #metricTimer: ReturnType<typeof setInterval> | null = null;
   #inputStartedByChannel = new Map<number, number>();
@@ -166,7 +168,7 @@ export class AppState {
   }
 
   handleKeydown(event: KeyboardEvent): void {
-    this.#requestNotificationPermission();
+    this.requestNotificationPermission();
     const chord = normalizeKeyChord(event);
     const action = this.#shortcutMap().get(chord);
     if (action) {
@@ -180,6 +182,14 @@ export class AppState {
       event.preventDefault();
       void this.runCustomAction(customAction.id);
     }
+  }
+
+  registerFirstUserGestureNotifications(target: EventTarget = window): () => void {
+    return this.#notificationPermission.registerFirstGesture(target);
+  }
+
+  requestNotificationPermission(): void {
+    this.#notificationPermission.request();
   }
 
   perform(action: ActionId): void {
@@ -1211,13 +1221,6 @@ export class AppState {
       wsRttSamples: appendSample(this.metrics.wsRttSamples, value),
       lastWsRtt: value,
     };
-  }
-
-  #requestNotificationPermission(): void {
-    if (typeof Notification === "undefined" || Notification.permission !== "default") {
-      return;
-    }
-    void Notification.requestPermission();
   }
 
   #notifyPaneDone(pane: Pane, body = pane.lastOutputLine): void {
