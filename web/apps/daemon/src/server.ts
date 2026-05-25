@@ -14,6 +14,7 @@ import {
 } from "@prowl/protocol";
 import type { DaemonConfig } from "./auth/config";
 import { hasUsableToken, isAllowedOrigin } from "./auth/config";
+import { GitOperationQueue } from "./git/OperationQueue";
 import { type IPCServerHandle, startIPCServer } from "./ipc/socket";
 import { type Logger, createLogger } from "./logging/logger";
 import { OutputCoalescer } from "./pty/OutputCoalescer";
@@ -76,6 +77,7 @@ export function startServer(config: DaemonConfig, options: ServerOptions = {}): 
   const tls = tlsOptions(config);
   const logger = options.logger ?? createLogger();
   const clients = new Set<ServerClient>();
+  const gitOperationQueue = new GitOperationQueue();
   const debugStats: DebugStats = {
     paneAttachRequests: 0,
     paneCreateRequests: 0,
@@ -135,7 +137,7 @@ export function startServer(config: DaemonConfig, options: ServerOptions = {}): 
   });
   let ipc: IPCServerHandle | null = null;
   if (options.socketPath !== false) {
-    ipc = startIPCServer(config, state, options.socketPath);
+    ipc = startIPCServer(config, state, options.socketPath, gitOperationQueue);
     logger.debug(`ipc listening on ${ipc.socketPath}`);
   }
   const server = Bun.serve<WebSocketData>({
@@ -212,7 +214,7 @@ export function startServer(config: DaemonConfig, options: ServerOptions = {}): 
       close(ws) {
         clients.delete(ws);
       },
-      message(ws, message) {
+      async message(ws, message) {
         if (typeof message === "string") {
           return;
         }
@@ -262,7 +264,7 @@ export function startServer(config: DaemonConfig, options: ServerOptions = {}): 
         if (control.type === "pane.create") {
           debugStats.paneCreateRequests += 1;
         }
-        const responses = handleControl(control, state, config, {
+        const responses = await handleControlQueued(control, state, config, gitOperationQueue, {
           authenticated: ws.data.authenticated,
           sessionId: ws.data.sessionId,
           ownedPaneIds: ws.data.ownedPaneIds,
@@ -796,6 +798,26 @@ export function handleControl(
 
   const unknownMessage = message as BaseControlMessage;
   return [errorResponse(unknownMessage.id, "NOT_IMPLEMENTED", `${unknownMessage.type} is not implemented yet`)];
+}
+
+export async function handleControlQueued(
+  message: ClientControlMessage,
+  state: InMemoryState,
+  config: DaemonConfig,
+  gitOperationQueue: GitOperationQueue,
+  options: { authenticated?: boolean; sessionId?: string; ownedPaneIds?: Set<string> } = {},
+): Promise<ServerControlMessage[]> {
+  if (message.type === "worktree.create") {
+    return gitOperationQueue.run(message.repoId, () => handleControl(message, state, config, options));
+  }
+  if (message.type === "worktree.archive") {
+    const worktree = state.worktree(message.worktreeId);
+    if (!worktree) {
+      return handleControl(message, state, config, options);
+    }
+    return gitOperationQueue.run(worktree.repoId, () => handleControl(message, state, config, options));
+  }
+  return handleControl(message, state, config, options);
 }
 
 function errorResponse(id: string, code: string, message: string): ErrorControlMessage {

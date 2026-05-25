@@ -8,9 +8,10 @@ import {
   parseClientControlMessage,
   protocolTags,
 } from "@prowl/protocol";
-import type { ServerControlMessage } from "@prowl/protocol";
+import type { DecodedFrame, ServerControlMessage } from "@prowl/protocol";
 import type { DaemonConfig } from "../auth/config";
-import { handleControl } from "../server";
+import { GitOperationQueue } from "../git/OperationQueue";
+import { handleControlQueued } from "../server";
 import type { InMemoryState } from "../state/InMemoryState";
 
 export type IPCServerHandle = {
@@ -26,6 +27,7 @@ export function startIPCServer(
   config: DaemonConfig,
   state: InMemoryState,
   socketPath = defaultSocketPath(),
+  gitOperationQueue = new GitOperationQueue(),
 ): IPCServerHandle {
   mkdirSync(dirname(socketPath), { recursive: true });
   rmSync(socketPath, { force: true });
@@ -59,19 +61,9 @@ export function startIPCServer(
               return;
             }
             if (frame.tag === protocolTags.pty) {
-              if (!session.authenticated) {
-                socket.end();
-                return;
-              }
-              const pane = state.paneForChannel(frame.channelId);
-              if (!pane || !session.ownedPaneIds.has(pane.id)) {
-                socket.end();
-                return;
-              }
-              state.writeToChannel(frame.channelId, frame.payload);
+              session.pending = enqueueSessionTask(session, () => handleIPCPtyFrame(socket, frame, session, state));
             }
             buffer = new Uint8Array();
-            socket.end();
             break;
           }
           if (tag !== protocolTags.json) {
@@ -106,23 +98,9 @@ export function startIPCServer(
             socket.end();
             return;
           }
-          if (!session.authenticated && control.type !== "hello") {
-            socket.write(
-              encodeJsonFrame(errorResponse(control.id, "UNAUTHORIZED", "Send hello before other control messages")),
-            );
-            continue;
-          }
-          const responses = handleControl(control, state, config, {
-            authenticated: session.authenticated,
-            ownedPaneIds: session.ownedPaneIds,
-          });
-          if (control.type === "hello" && responses.some((response) => response.type === "welcome")) {
-            session.authenticated = true;
-            session.ownedPaneIds = new Set(state.listPanes().map((pane) => pane.id));
-          }
-          for (const response of responses) {
-            socket.write(encodeJsonFrame(response));
-          }
+          session.pending = enqueueSessionTask(session, () =>
+            handleIPCControl(socket, control, session, state, config, gitOperationQueue),
+          );
         }
         buffers.set(socket, buffer);
       },
@@ -147,6 +125,7 @@ type IPCSession = {
   ownedPaneIds: Set<string>;
   controlWindowStartedAt: number;
   controlMessagesInWindow: number;
+  pending: Promise<void>;
 };
 
 const maxControlMessagesPerSecond = 100;
@@ -157,7 +136,59 @@ function newIPCSession(): IPCSession {
     ownedPaneIds: new Set(),
     controlWindowStartedAt: Date.now(),
     controlMessagesInWindow: 0,
+    pending: Promise.resolve(),
   };
+}
+
+function enqueueSessionTask(session: IPCSession, task: () => Promise<void> | void): Promise<void> {
+  const next = session.pending.catch(() => {}).then(task);
+  return next.catch(() => {});
+}
+
+async function handleIPCControl(
+  socket: { write: (payload: ArrayBuffer) => void },
+  control: ReturnType<typeof parseClientControlMessage>,
+  session: IPCSession,
+  state: InMemoryState,
+  config: DaemonConfig,
+  gitOperationQueue: GitOperationQueue,
+): Promise<void> {
+  if (!session.authenticated && control.type !== "hello") {
+    socket.write(
+      encodeJsonFrame(errorResponse(control.id, "UNAUTHORIZED", "Send hello before other control messages")),
+    );
+    return;
+  }
+  const responses = await handleControlQueued(control, state, config, gitOperationQueue, {
+    authenticated: session.authenticated,
+    ownedPaneIds: session.ownedPaneIds,
+  });
+  if (control.type === "hello" && responses.some((response) => response.type === "welcome")) {
+    session.authenticated = true;
+    session.ownedPaneIds = new Set(state.listPanes().map((pane) => pane.id));
+  }
+  for (const response of responses) {
+    socket.write(encodeJsonFrame(response));
+  }
+}
+
+function handleIPCPtyFrame(
+  socket: { end: () => void },
+  frame: Extract<DecodedFrame, { tag: typeof protocolTags.pty }>,
+  session: IPCSession,
+  state: InMemoryState,
+): void {
+  if (!session.authenticated) {
+    socket.end();
+    return;
+  }
+  const pane = state.paneForChannel(frame.channelId);
+  if (!pane || !session.ownedPaneIds.has(pane.id)) {
+    socket.end();
+    return;
+  }
+  state.writeToChannel(frame.channelId, frame.payload);
+  socket.end();
 }
 
 function allowIPCControlMessage(session: IPCSession, now = Date.now()): boolean {
