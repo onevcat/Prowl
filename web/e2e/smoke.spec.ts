@@ -334,6 +334,51 @@ test("runs custom actions from a shortcut", async ({ page }) => {
   await expect(page.getByRole("textbox", { name: "Shell" })).toContainText(output);
 });
 
+test("reorders worktrees and tabs with drag and drop", async ({ page }) => {
+  const suffix = crypto.randomUUID().slice(0, 8);
+  const worktreeName = `dnd-worktree-${suffix}`;
+  const actionName = `Drag Tab ${suffix}`;
+  const output = `drag-tab-${suffix}`;
+  await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}&token=${token}`);
+  await expect(page.locator(".connection.open")).toBeVisible();
+
+  await page.getByRole("button", { name: "Open Settings" }).click();
+  await page.getByLabel("e2e-repo branch").fill(`dnd-${suffix}`);
+  await page.getByLabel("e2e-repo worktree directory").fill(worktreeName);
+  await page.getByRole("button", { name: "Create Worktree for e2e-repo" }).click();
+  await expect(page.getByText(worktreeName, { exact: true })).toBeVisible();
+
+  await page.getByLabel("Action name").fill(actionName);
+  await page.getByLabel("Action command").fill(`printf ${output}`);
+  await page.getByLabel("Action output").selectOption("newPane");
+  await page.getByRole("button", { name: "Add Custom Action" }).click();
+  await expect(page.getByRole("heading", { name: actionName })).toBeVisible();
+
+  await page.getByRole("button", { name: "Back to Shelf" }).click();
+  const sidebar = page.getByLabel("Worktrees and tabs");
+  const defaultWorktree = sidebar.getByRole("button", { name: "default" });
+  const createdWorktree = sidebar.getByRole("button", { name: worktreeName });
+  await expect(defaultWorktree).toBeVisible();
+  await expect(createdWorktree).toBeVisible();
+  await expect(worktreeNames(page)).resolves.toEqual(["default", worktreeName]);
+
+  await createdWorktree.dragTo(defaultWorktree);
+  await expect(worktreeNames(page)).resolves.toEqual([worktreeName, "default"]);
+
+  await defaultWorktree.click();
+  await page.getByRole("button", { name: "Run Custom Action" }).click();
+  await page.getByRole("menuitem", { name: new RegExp(actionName) }).click();
+  await expect(page.getByRole("textbox", { name: actionName })).toContainText(output);
+
+  const tabs = page.locator(".tabs > button");
+  const actionTab = page.locator(".tabs").getByRole("button", { name: actionName });
+  await expect(actionTab).toBeVisible();
+  await expect(tabTitles(page)).resolves.toContain(`Select ${actionName}`);
+
+  await actionTab.dragTo(tabs.first());
+  await expect.poll(async () => (await tabTitles(page))[0]).toBe(`Select ${actionName}`);
+});
+
 async function debugStats(request: APIRequestContext): Promise<{
   paneAttachRequests: number;
   paneCreateRequests: number;
@@ -384,4 +429,14 @@ async function coldStartDurationsMs(page: Page): Promise<number[]> {
 
 async function htmlDataset(page: Page, key: string): Promise<string | undefined> {
   return page.evaluate((datasetKey) => document.documentElement.dataset[datasetKey], key);
+}
+
+async function worktreeNames(page: Page): Promise<string[]> {
+  return page.locator("aside[aria-label='Worktrees and tabs'] > section > button > .name").allTextContents();
+}
+
+async function tabTitles(page: Page): Promise<string[]> {
+  return page
+    .locator(".tabs > button")
+    .evaluateAll((buttons) => buttons.map((button) => button.getAttribute("title") ?? ""));
 }
