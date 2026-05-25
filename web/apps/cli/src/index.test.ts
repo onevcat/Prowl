@@ -319,6 +319,90 @@ describe("prowl cli scaffold", () => {
     }
   });
 
+  test("creates a worktree with CLI directory and base ref options", async () => {
+    const token = "test-token";
+    const home = mkdtempSync(join(tmpdir(), "prowl-cli-worktree-options-home-"));
+    const prowlHome = join(home, ".prowl");
+    const repoPath = join(home, "repo");
+    mkdirSync(prowlHome, { recursive: true });
+    mkdirSync(repoPath);
+    runGit(repoPath, "init");
+    writeFileSync(join(repoPath, "README.md"), "options\n");
+    runGit(repoPath, "add", "README.md");
+    runGit(repoPath, "-c", "user.name=Prowl Test", "-c", "user.email=prowl@example.com", "commit", "-m", "initial");
+    writeFileSync(
+      join(prowlHome, "config.json"),
+      JSON.stringify({
+        port: 0,
+        bind: "127.0.0.1",
+        token,
+        allowedOrigins: ["http://127.0.0.1:5173"],
+        requireTLS: false,
+      }),
+    );
+    const previousRepoRoot = Bun.env.PROWL_REPO_ROOT;
+    const socketPath = join(prowlHome, "prowld.sock");
+    Bun.env.PROWL_REPO_ROOT = repoPath;
+    const server = startServer(
+      {
+        port: 0,
+        bind: "127.0.0.1",
+        token,
+        allowedOrigins: ["http://127.0.0.1:5173"],
+        requireTLS: false,
+      },
+      { socketPath, statePath: join(prowlHome, "state.sqlite"), spawnProcesses: false },
+    );
+
+    try {
+      await Bun.sleep(50);
+      const result = Bun.spawn(
+        [
+          "bun",
+          "run",
+          "src/index.ts",
+          "--json",
+          "worktree",
+          "create",
+          "repo-default",
+          "feature/options",
+          "--base-ref",
+          "HEAD",
+          "--directory",
+          "custom-worktree",
+        ],
+        {
+          cwd: new URL("..", import.meta.url).pathname,
+          env: {
+            ...Bun.env,
+            PROWL_CONFIG_PATH: join(prowlHome, "config.json"),
+            PROWL_SOCKET_PATH: socketPath,
+          },
+          stdout: "pipe",
+          stderr: "pipe",
+        },
+      );
+      const [exitCode, stdout, stderr] = await Promise.all([
+        result.exited,
+        new Response(result.stdout).text(),
+        new Response(result.stderr).text(),
+      ]);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toBe("");
+      const created = JSON.parse(stdout) as { branch: string; path: string };
+      expect(created.branch).toBe("feature/options");
+      expect(created.path).toBe(join(home, "custom-worktree"));
+    } finally {
+      server.stop();
+      if (previousRepoRoot === undefined) {
+        Bun.env.PROWL_REPO_ROOT = undefined;
+      } else {
+        Bun.env.PROWL_REPO_ROOT = previousRepoRoot;
+      }
+    }
+  });
+
   test("creates a pane with an initial command through the CLI", async () => {
     const token = "test-token";
     const home = mkdtempSync(join(tmpdir(), "prowl-cli-new-home-"));

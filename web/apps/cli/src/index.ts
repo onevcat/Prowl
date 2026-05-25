@@ -32,6 +32,7 @@ import {
   createWorktree,
   getWorktreeDiff,
   getWorktreeList,
+  parseWorktreeCreateOptions,
   renderWorktreeArchive,
   renderWorktreeCreate,
   renderWorktreeDiff,
@@ -118,7 +119,7 @@ switch (command) {
     }
     if (args[0] === "create") {
       await writeOutput(
-        () => createWorktree(args[1], args[2]),
+        () => createWorktree(args[1], args[2], parseWorktreeCreateOptions(args.slice(3))),
         () => renderWorktreeCreate(args[1], args[2]),
       );
       break;
@@ -166,7 +167,7 @@ switch (command) {
   prowl new --worktree <id> [--command]
   prowl close <paneId>
   prowl worktree list [--repo <id>]
-  prowl worktree create <repoId> <branch>
+  prowl worktree create <repoId> <branch> [--base-ref <ref>] [--directory <path>]
   prowl worktree archive <worktreeId>
   prowl worktree diff <worktreeId>
   prowl repo list
