@@ -48,6 +48,7 @@ const paletteHistoryKey = "prowl:palette.history";
 const appearanceSettingsKey = "prowl:settings.appearance";
 const sessionTokenKey = "prowl:token";
 const defaultDaemonURL = "ws://127.0.0.1:7878/ws";
+export const bootstrapSettingsKeys = ["appearance", "shortcuts", "advanced"] as const;
 const textEncoder = new TextEncoder();
 const maxMetricSamples = 100;
 const settingsSections = [
@@ -1076,8 +1077,9 @@ export class AppState {
         v: 1,
         type: "settings.get",
         id: makeMessageId(),
-        keys: ["appearance", "shortcuts", "advanced", "panes"],
+        keys: [...bootstrapSettingsKeys],
       });
+      await this.ws.request({ v: 1, type: "pane.list", id: makeMessageId() });
       this.syncRenderedPanes();
     } catch (error) {
       this.errorMessage = redactSensitiveText(error);

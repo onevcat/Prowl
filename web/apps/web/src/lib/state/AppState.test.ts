@@ -1,7 +1,13 @@
 import { interactionMeasureNames } from "$lib/performance/marks";
 import type { CustomAction } from "@prowl/protocol";
 import { afterEach, describe, expect, test } from "vitest";
-import { AppState, cachedPaneDescriptorsForWorktrees, openTabsKey, paneDescriptorsByWorktree } from "./AppState.svelte";
+import {
+  AppState,
+  bootstrapSettingsKeys,
+  cachedPaneDescriptorsForWorktrees,
+  openTabsKey,
+  paneDescriptorsByWorktree,
+} from "./AppState.svelte";
 import { Pane } from "./Pane.svelte";
 import type { Repository, Worktree } from "./types";
 
@@ -87,6 +93,13 @@ describe("AppState pane persistence helpers", () => {
     );
 
     expect(cached.map((descriptor) => descriptor.id)).toEqual(["pane-1"]);
+  });
+});
+
+describe("AppState bootstrap protocol", () => {
+  test("keeps pane listing out of the settings snapshot request", () => {
+    expect(bootstrapSettingsKeys).toEqual(["appearance", "shortcuts", "advanced"]);
+    expect(bootstrapSettingsKeys).not.toContain("panes");
   });
 });
 
