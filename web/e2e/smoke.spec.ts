@@ -1,4 +1,4 @@
-import { type APIRequestContext, expect, test } from "@playwright/test";
+import { type APIRequestContext, type Page, expect, test } from "@playwright/test";
 
 const daemonURL = "ws://127.0.0.1:7879/ws";
 const daemonHTTPURL = "http://127.0.0.1:7879";
@@ -7,20 +7,7 @@ const token = "e2e-token";
 test.describe.configure({ mode: "serial" });
 
 test("logs in with a daemon token", async ({ page }) => {
-  await page.addInitScript(() => {
-    const socketURLs: string[] = [];
-    const trackedWebSocket = new Proxy(window.WebSocket, {
-      construct(target, args) {
-        socketURLs.push(String(args[0]));
-        return Reflect.construct(target, args);
-      },
-    });
-
-    Object.defineProperty(window, "__prowlWebSocketURLs", {
-      value: socketURLs,
-    });
-    window.WebSocket = trackedWebSocket;
-  });
+  await installWebSocketURLRecorder(page);
   await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}`);
 
   await expect(page.getByRole("heading", { name: "Connect to prowld" })).toBeVisible();
@@ -43,11 +30,23 @@ test("logs in with a daemon token", async ({ page }) => {
 });
 
 test("connects to the daemon and writes through the terminal", async ({ page }) => {
+  await installWebSocketURLRecorder(page);
   await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}&token=${token}`);
 
   await expect(page.locator(".connection.open")).toBeVisible();
   const terminal = page.getByRole("textbox", { name: "Shell" });
   await expect(terminal).toBeVisible();
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem("prowl:token"))).toBe(token);
+  await expect.poll(() => page.evaluate(() => location.href)).not.toContain("token=");
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        ((window as unknown as { __prowlWebSocketURLs?: string[] }).__prowlWebSocketURLs ?? []).some((url) =>
+          url.includes("token="),
+        ),
+      ),
+    )
+    .toBe(false);
 
   await terminal.click();
   await page.keyboard.type("printf e2e-smoke");
@@ -113,4 +112,21 @@ async function debugStats(request: APIRequestContext): Promise<{
 }> {
   const response = await request.get(`${daemonHTTPURL}/debug/stats`);
   return (await response.json()) as { paneAttachRequests: number; paneCreateRequests: number };
+}
+
+async function installWebSocketURLRecorder(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const socketURLs: string[] = [];
+    const trackedWebSocket = new Proxy(window.WebSocket, {
+      construct(target, args) {
+        socketURLs.push(String(args[0]));
+        return Reflect.construct(target, args);
+      },
+    });
+
+    Object.defineProperty(window, "__prowlWebSocketURLs", {
+      value: socketURLs,
+    });
+    window.WebSocket = trackedWebSocket;
+  });
 }

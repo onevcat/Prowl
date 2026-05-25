@@ -823,11 +823,7 @@ export class AppState {
   #connectDaemon(token: string): void {
     this.#authToken = token;
     const daemonURL = new URL(this.daemonURL);
-    if (token) {
-      daemonURL.searchParams.set("token", token);
-    } else {
-      daemonURL.searchParams.delete("token");
-    }
+    daemonURL.searchParams.delete("token");
 
     this.ws.connect(daemonURL.toString());
   }
