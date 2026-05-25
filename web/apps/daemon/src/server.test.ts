@@ -501,6 +501,14 @@ describe("daemon scaffold", () => {
       throw new Error("Expected archived worktree.updated");
     }
     expect(archived[0].worktree.status).toBe("archived");
+    expect(archived[1]).toEqual({
+      v: 1,
+      type: "worktree.archiveProgress",
+      id: archived[0].id,
+      worktreeId: createdWorktree.id,
+      step: "completed",
+      message: "Worktree archived",
+    });
     expect(state.worktreesByRepo.get("repo-default")?.some((worktree) => worktree.id === createdWorktree.id)).toBe(
       false,
     );

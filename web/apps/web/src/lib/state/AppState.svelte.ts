@@ -1001,6 +1001,9 @@ export class AppState {
       case "worktree.diffed":
         this.diff = message.diff;
         break;
+      case "worktree.archiveProgress":
+        this.errorMessage = null;
+        break;
       case "pane.listed":
         this.#replacePanes(message.panes);
         break;

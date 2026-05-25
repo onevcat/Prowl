@@ -122,6 +122,7 @@ export type ServerControlMessage =
   | (BaseControlMessage & { type: "action.deleted"; actionId: string })
   | (BaseControlMessage & { type: "worktree.listed"; repoId: string; worktrees: Worktree[] })
   | (BaseControlMessage & { type: "worktree.updated"; worktree: Worktree })
+  | (BaseControlMessage & { type: "worktree.archiveProgress"; worktreeId: string; step: string; message: string })
   | (BaseControlMessage & { type: "worktree.diffed"; diff: WorktreeDiff })
   | (BaseControlMessage & { type: "repo.updated"; repository: Repository })
   | (BaseControlMessage & { type: "settings.snapshot"; settings: SettingsSnapshot })

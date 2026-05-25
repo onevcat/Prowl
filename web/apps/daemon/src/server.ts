@@ -536,7 +536,17 @@ export function handleControl(
     if (result.type === "error") {
       return [result];
     }
-    return [{ v: 1, type: "worktree.updated", id: message.id, worktree: result.worktree }];
+    return [
+      { v: 1, type: "worktree.updated", id: message.id, worktree: result.worktree },
+      {
+        v: 1,
+        type: "worktree.archiveProgress",
+        id: message.id,
+        worktreeId: result.worktree.id,
+        step: "completed",
+        message: "Worktree archived",
+      },
+    ];
   }
 
   if (message.type === "worktree.diff") {
