@@ -3,14 +3,18 @@ import { makeMessageId } from "@prowl/protocol";
 import { hello, loadCLIConfig, requestDaemon } from "../transport";
 
 export async function renderRepoList(): Promise<string> {
-  const config = await loadCLIConfig();
-  await hello(config.token);
-  const response = await requestDaemon({ v: 1, type: "repo.list", id: makeMessageId() });
-  const repositories = response.type === "repo.listed" ? response.repositories : [];
+  const repositories = await getRepositoryList();
   if (repositories.length === 0) {
     return "No repositories reported.";
   }
   return repositories.map(formatRepository).join("\n");
+}
+
+export async function getRepositoryList(): Promise<Repository[]> {
+  const config = await loadCLIConfig();
+  await hello(config.token);
+  const response = await requestDaemon({ v: 1, type: "repo.list", id: makeMessageId() });
+  return response.type === "repo.listed" ? response.repositories : [];
 }
 
 function formatRepository(repository: Repository): string {

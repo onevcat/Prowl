@@ -1,37 +1,65 @@
-import { renderList } from "./commands/list";
-import { closePane, renderPaneNew, renderPaneRead, sendPaneCommand, sendPaneKey } from "./commands/pane";
-import { renderRepoList } from "./commands/repo";
+import { getPaneList, renderList } from "./commands/list";
+import {
+  closePane,
+  closePaneResult,
+  createPane,
+  readPane,
+  renderPaneNew,
+  renderPaneRead,
+  sendPaneCommand,
+  sendPaneCommandResult,
+  sendPaneKey,
+  sendPaneKeyResult,
+} from "./commands/pane";
+import { getRepositoryList, renderRepoList } from "./commands/repo";
 import { renderVersion } from "./commands/version";
-import { renderWorktreeCreate, renderWorktreeList } from "./commands/worktree";
+import { createWorktree, getWorktreeList, renderWorktreeCreate, renderWorktreeList } from "./commands/worktree";
 
-const [, , command = "help", ...args] = Bun.argv;
+const rawArgs = Bun.argv.slice(2);
+const json = rawArgs.includes("--json");
+const [command = "help", ...args] = rawArgs.filter((arg) => arg !== "--json");
 
 switch (command) {
   case "list":
-    process.stdout.write(`${await renderList()}\n`);
+    await writeOutput(() => getPaneList(), renderList);
     break;
   case "version":
   case "--version":
-    process.stdout.write(`${renderVersion()}\n`);
+    writeValue({ name: "prowl", version: "0.0.0" }, renderVersion());
     break;
   case "send":
-    process.stdout.write(`${await sendPaneCommand(args[0], args.slice(1).join(" "))}\n`);
+    await writeOutput(
+      () => sendPaneCommandResult(args[0], args.slice(1).join(" ")),
+      () => sendPaneCommand(args[0], args.slice(1).join(" ")),
+    );
     break;
   case "read":
-    process.stdout.write(`${await renderPaneRead(args[0])}\n`);
+    await writeOutput(
+      () => readPane(args[0]),
+      () => renderPaneRead(args[0]),
+    );
     break;
   case "key":
-    process.stdout.write(`${await sendPaneKey(args[0], args[1])}\n`);
+    await writeOutput(
+      () => sendPaneKeyResult(args[0], args[1]),
+      () => sendPaneKey(args[0], args[1]),
+    );
     break;
   case "new":
-    process.stdout.write(`${await renderPaneNew(args)}\n`);
+    await writeOutput(
+      () => createPane(args),
+      () => renderPaneNew(args),
+    );
     break;
   case "close":
-    process.stdout.write(`${await closePane(args[0])}\n`);
+    await writeOutput(
+      () => closePaneResult(args[0]),
+      () => closePane(args[0]),
+    );
     break;
   case "repo":
     if (args[0] === "list") {
-      process.stdout.write(`${await renderRepoList()}\n`);
+      await writeOutput(() => getRepositoryList(), renderRepoList);
       break;
     }
     process.stderr.write(`Unknown repo command: ${args[0] ?? ""}\n`);
@@ -40,11 +68,18 @@ switch (command) {
   case "worktree":
     if (args[0] === "list") {
       const repoIndex = args.indexOf("--repo");
-      process.stdout.write(`${await renderWorktreeList(repoIndex === -1 ? undefined : args[repoIndex + 1])}\n`);
+      const repoId = repoIndex === -1 ? undefined : args[repoIndex + 1];
+      await writeOutput(
+        () => getWorktreeList(repoId),
+        () => renderWorktreeList(repoId),
+      );
       break;
     }
     if (args[0] === "create") {
-      process.stdout.write(`${await renderWorktreeCreate(args[1], args[2])}\n`);
+      await writeOutput(
+        () => createWorktree(args[1], args[2]),
+        () => renderWorktreeCreate(args[1], args[2]),
+      );
       break;
     }
     process.stderr.write(`Unknown worktree command: ${args[0] ?? ""}\n`);
@@ -68,4 +103,16 @@ switch (command) {
   default:
     process.stderr.write(`Unknown command: ${command}\n`);
     process.exit(64);
+}
+
+async function writeOutput(value: () => Promise<unknown>, render: () => Promise<string>): Promise<void> {
+  if (json) {
+    writeValue(await value());
+    return;
+  }
+  process.stdout.write(`${await render()}\n`);
+}
+
+function writeValue(value: unknown, text?: string): void {
+  process.stdout.write(`${json ? JSON.stringify(value) : text}\n`);
 }

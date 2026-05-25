@@ -3,10 +3,18 @@ import { makeMessageId } from "@prowl/protocol";
 import { hello, loadCLIConfig, requestDaemon } from "../transport";
 
 export async function renderWorktreeList(repoId?: string): Promise<string> {
+  const worktrees = await getWorktreeList(repoId);
+  if (worktrees.length === 0) {
+    return "No worktrees reported.";
+  }
+  return worktrees.map(formatWorktree).join("\n");
+}
+
+export async function getWorktreeList(repoId?: string): Promise<Worktree[]> {
   const config = await loadCLIConfig();
   await hello(config.token);
   const repositories = repoId ? [{ id: repoId }] : await listRepositories();
-  const worktrees = (
+  return (
     await Promise.all(
       repositories.map(async (repository) => {
         const response = await requestDaemon({
@@ -19,13 +27,13 @@ export async function renderWorktreeList(repoId?: string): Promise<string> {
       }),
     )
   ).flat();
-  if (worktrees.length === 0) {
-    return "No worktrees reported.";
-  }
-  return worktrees.map(formatWorktree).join("\n");
 }
 
 export async function renderWorktreeCreate(repoId: string | undefined, branch: string | undefined): Promise<string> {
+  return formatWorktree(await createWorktree(repoId, branch));
+}
+
+export async function createWorktree(repoId: string | undefined, branch: string | undefined): Promise<Worktree> {
   if (!repoId || !branch) {
     throw new Error("Usage: prowl worktree create <repoId> <branch>");
   }
@@ -41,7 +49,7 @@ export async function renderWorktreeCreate(repoId: string | undefined, branch: s
   if (response.type !== "worktree.updated") {
     throw new Error(`Unexpected daemon response: ${response.type}`);
   }
-  return formatWorktree(response.worktree);
+  return response.worktree;
 }
 
 async function listRepositories(): Promise<Array<Pick<Repository, "id">>> {
