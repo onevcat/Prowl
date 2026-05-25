@@ -385,7 +385,7 @@ export class AppState {
 
   setView(view: AppView): void {
     this.view = view;
-    void set(uiViewKey, view);
+    persistJSONValue(uiViewKey, view);
     this.syncRenderedPanes();
   }
 
@@ -401,9 +401,9 @@ export class AppState {
 
   selectWorktree(worktreeId: string): void {
     this.selectedWorktreeId = worktreeId;
-    const firstPane = Array.from(this.panes.values()).find((pane) => pane.worktreeId === worktreeId);
+    const firstPane = this.orderedPanes(worktreeId)[0];
     this.selectedPaneId = firstPane?.id ?? null;
-    void set(selectedWorktreeKey, worktreeId);
+    persistJSONValue(selectedWorktreeKey, worktreeId);
     this.syncRenderedPanes();
   }
 
@@ -1424,6 +1424,9 @@ function appendSample(samples: number[], value: number): number[] {
 }
 
 function persistJSONValue(key: string, value: unknown): void {
+  if (typeof indexedDB === "undefined") {
+    return;
+  }
   void set(key, JSON.parse(JSON.stringify(value))).catch(() => {});
 }
 
