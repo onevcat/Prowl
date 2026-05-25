@@ -1,18 +1,12 @@
 import { statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import type { BaseControlMessage, ClientControlMessage, ServerControlMessage } from "@prowl/protocol";
-import {
-  decodeFrame,
-  encodeJsonFrame,
-  encodePtyFrame,
-  maxBinaryPayloadBytes,
-  protocolTags,
-  protocolVersion,
-} from "@prowl/protocol";
+import { decodeFrame, encodeJsonFrame, encodePtyFrame, protocolTags, protocolVersion } from "@prowl/protocol";
 import type { DaemonConfig } from "./auth/config";
 import { isAllowedOrigin } from "./auth/config";
 import { type IPCServerHandle, startIPCServer } from "./ipc/socket";
 import { type Logger, createLogger } from "./logging/logger";
+import { OutputCoalescer } from "./pty/OutputCoalescer";
 import { InMemoryState } from "./state/InMemoryState";
 
 type ErrorControlMessage = Extract<ServerControlMessage, { type: "error" }>;
@@ -60,16 +54,17 @@ export function startServer(config: DaemonConfig, options: ServerOptions = {}): 
     paneAttachRequests: 0,
     paneCreateRequests: 0,
   };
+  const outputCoalescer = new OutputCoalescer((channelId, payload) => {
+    const frame = encodePtyFrame(channelId, payload);
+    for (const client of clients) {
+      client.send(frame);
+    }
+  });
   const state = new InMemoryState(process.env.PROWL_REPO_ROOT ?? process.cwd(), {
     spawnProcesses: options.spawnProcesses,
     statePath: options.statePath,
     onPaneData: (channelId, payload) => {
-      for (let offset = 0; offset < payload.byteLength; offset += maxBinaryPayloadBytes) {
-        const frame = encodePtyFrame(channelId, payload.subarray(offset, offset + maxBinaryPayloadBytes));
-        for (const client of clients) {
-          client.send(frame);
-        }
-      }
+      outputCoalescer.write(channelId, payload);
     },
     onPaneExit: (paneId, exitCode) => {
       logger.info(`pane exited paneId=${paneId} exitCode=${exitCode}`);
@@ -205,6 +200,7 @@ export function startServer(config: DaemonConfig, options: ServerOptions = {}): 
     url: server.url,
     port: server.port ?? config.port,
     stop: () => {
+      outputCoalescer.flushAll();
       ipc?.close();
       server.stop(true);
       logger.info("daemon stopped");
