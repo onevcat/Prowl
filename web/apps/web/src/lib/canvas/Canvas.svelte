@@ -17,6 +17,11 @@
   }
 
   function handleBroadcastKeydown(event: KeyboardEvent): void {
+    if (event.key === "Enter" && broadcast) {
+      event.preventDefault();
+      sendBroadcast();
+      return;
+    }
     const input = encodeBroadcastKey(event);
     if (!input) {
       return;

@@ -9,7 +9,7 @@ import {
   startPerformanceInteraction,
 } from "$lib/performance/marks";
 import { redactSensitiveText } from "$lib/security/redaction";
-import { disposeTerminalAdapterForPane } from "$lib/terminal/GhosttyAdapter";
+import { disposeTerminalAdapterForPane, syncTerminalThemeForPreference } from "$lib/terminal/GhosttyAdapter";
 import { RendererPool } from "$lib/terminal/RendererPool";
 import { inferAgentTaskStatus } from "$lib/terminal/detectAgent";
 import { appendTerminalOutput, terminalOutputSnapshot } from "$lib/terminal/outputBuffer";
@@ -262,6 +262,11 @@ export class AppState {
   }
 
   handleKeydown(event: KeyboardEvent): void {
+    if (this.paletteOpen && normalizeKeyChord(event) === "Escape") {
+      event.preventDefault();
+      this.perform("palette.close");
+      return;
+    }
     if (!shouldHandleGlobalShortcut(event)) {
       return;
     }
@@ -1456,6 +1461,7 @@ export class AppState {
     document.documentElement.dataset.terminalDensity = this.settings.appearance.terminalDensity;
     document.documentElement.dataset.unreadBadges = String(this.settings.appearance.showUnreadBadges);
     document.documentElement.style.colorScheme = theme === "system" ? "light dark" : theme;
+    syncTerminalThemeForPreference(theme);
   }
 
   #registerFocusTracking(): void {

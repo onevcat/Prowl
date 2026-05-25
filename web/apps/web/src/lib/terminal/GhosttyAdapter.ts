@@ -2,6 +2,12 @@ type Disposable = { dispose(): void };
 type GhosttyWebModule = typeof import("ghostty-web");
 type GhosttyTerminal = InstanceType<GhosttyWebModule["Terminal"]>;
 type GhosttyFitAddon = InstanceType<GhosttyWebModule["FitAddon"]>;
+type TerminalTheme = {
+  background: string;
+  foreground: string;
+  cursor: string;
+  selectionBackground: string;
+};
 
 export type TerminalAdapter = {
   open(element: HTMLElement, callbacks: TerminalAdapterCallbacks): Promise<void>;
@@ -20,15 +26,22 @@ export type TerminalAdapterCallbacks = {
   onTitleChange?: (title: string) => void;
 };
 
-const terminalTheme = {
+const darkTerminalTheme: TerminalTheme = {
   background: "#111111",
   foreground: "#f5f5f5",
   cursor: "#f5f5f5",
   selectionBackground: "#3b82f6",
 };
+const lightTerminalTheme: TerminalTheme = {
+  background: "#ffffff",
+  foreground: "#1f1f1f",
+  cursor: "#1f1f1f",
+  selectionBackground: "#0a84ff",
+};
 
 let ghosttyInitPromise: Promise<void> | null = null;
 let ghosttyModulePromise: Promise<GhosttyWebModule> | null = null;
+let currentTerminalTheme = darkTerminalTheme;
 const adapters = new Map<string, GhosttyTerminalAdapter>();
 
 export function terminalAdapterForPane(paneId: string): GhosttyTerminalAdapter {
@@ -51,6 +64,30 @@ export function resetTerminalAdaptersForTests(): void {
     adapter.dispose();
   }
   adapters.clear();
+  currentTerminalTheme = darkTerminalTheme;
+}
+
+export function syncTerminalThemeForPreference(
+  preference: "system" | "light" | "dark",
+  prefersDark = systemPrefersDark(),
+): void {
+  currentTerminalTheme = terminalThemeForPreference(preference, prefersDark);
+  for (const adapter of adapters.values()) {
+    adapter.applyTheme(currentTerminalTheme);
+  }
+}
+
+export function terminalThemeForPreference(
+  preference: "system" | "light" | "dark",
+  prefersDark = systemPrefersDark(),
+): TerminalTheme {
+  if (preference === "light") {
+    return lightTerminalTheme;
+  }
+  if (preference === "dark") {
+    return darkTerminalTheme;
+  }
+  return prefersDark ? darkTerminalTheme : lightTerminalTheme;
 }
 
 export class GhosttyTerminalAdapter implements TerminalAdapter {
@@ -61,6 +98,7 @@ export class GhosttyTerminalAdapter implements TerminalAdapter {
   #renderedText = "";
   #callbacks: TerminalAdapterCallbacks | null = null;
   #openGeneration = 0;
+  #theme = currentTerminalTheme;
 
   async open(element: HTMLElement, callbacks: TerminalAdapterCallbacks): Promise<void> {
     this.#callbacks = callbacks;
@@ -107,6 +145,14 @@ export class GhosttyTerminalAdapter implements TerminalAdapter {
     this.#term?.focus();
   }
 
+  applyTheme(theme: TerminalTheme): void {
+    this.#theme = theme;
+    const term = this.#term;
+    if (term && "options" in term) {
+      (term as GhosttyTerminal & { options: { theme?: TerminalTheme } }).options.theme = theme;
+    }
+  }
+
   detach(): void {
     this.#openGeneration += 1;
   }
@@ -149,7 +195,7 @@ export class GhosttyTerminalAdapter implements TerminalAdapter {
       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
       fontSize: 13,
       scrollback: 4096,
-      theme: terminalTheme,
+      theme: this.#theme,
     });
     const fitAddon = new ghosttyWeb.FitAddon();
     term.loadAddon(fitAddon);
@@ -180,4 +226,8 @@ function initializeGhostty(): Promise<void> {
 function loadGhosttyWeb(): Promise<GhosttyWebModule> {
   ghosttyModulePromise ??= import("ghostty-web");
   return ghosttyModulePromise;
+}
+
+function systemPrefersDark(): boolean {
+  return typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches === true;
 }

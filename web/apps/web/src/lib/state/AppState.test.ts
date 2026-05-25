@@ -318,6 +318,24 @@ describe("AppState view mutation methods", () => {
     expect(state.paletteQuery).toBe("");
   });
 
+  test("closes the palette with Escape even when terminal input has focus", () => {
+    const state = appStateFixture();
+    const event = shortcutEvent({
+      key: "Escape",
+      target: {
+        closest: (selector: string) => (selector.includes("input") ? {} : null),
+      } as unknown as EventTarget,
+    });
+
+    state.perform("palette.open");
+    state.setPaletteQuery("repo");
+    state.handleKeydown(event);
+
+    expect(event.prevented).toBe(true);
+    expect(state.paletteOpen).toBe(false);
+    expect(state.paletteQuery).toBe("");
+  });
+
   test("records worktree switch performance measures", () => {
     const state = appStateFixture();
 
