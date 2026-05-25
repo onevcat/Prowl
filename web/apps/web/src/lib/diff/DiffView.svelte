@@ -2,14 +2,48 @@
   import { Button } from "@prowl/ui";
   import { getContext } from "svelte";
   import { appStateKey, type AppState } from "$lib/state/AppState.svelte";
-  import { parseGitDiff, splitDiffRows, type DiffLine } from "./model";
+  import { splitDiffRows, type DiffFile, type DiffLine } from "./model";
+  import { parseGitDiffInWorker } from "./worker";
 
   const appState = getContext<AppState>(appStateKey);
   let mode = $state<"unified" | "split">("unified");
   let selectedPath = $state<string | null>(null);
-  let files = $derived(parseGitDiff(appState.diff?.text ?? ""));
+  let files = $state<DiffFile[]>([]);
+  let parsing = $state(false);
+  let parseError = $state<string | null>(null);
+  let parseRequestId = 0;
   let selectedFile = $derived(files.find((file) => file.path === selectedPath) ?? files[0] ?? null);
   let splitRows = $derived(selectedFile ? splitDiffRows(selectedFile.lines) : []);
+
+  $effect(() => {
+    const diffText = appState.diff?.text ?? "";
+    const requestId = ++parseRequestId;
+    if (!diffText) {
+      files = [];
+      parsing = false;
+      parseError = null;
+      return;
+    }
+    parsing = true;
+    parseError = null;
+    void parseGitDiffInWorker(diffText)
+      .then((parsedFiles) => {
+        if (requestId === parseRequestId) {
+          files = parsedFiles;
+        }
+      })
+      .catch((error) => {
+        if (requestId === parseRequestId) {
+          parseError = error instanceof Error ? error.message : String(error);
+          files = [];
+        }
+      })
+      .finally(() => {
+        if (requestId === parseRequestId) {
+          parsing = false;
+        }
+      });
+  });
 
   $effect(() => {
     if (!selectedPath || !files.some((file) => file.path === selectedPath)) {
@@ -31,7 +65,13 @@
   <header>
     <div>
       <h1>{appState.selectedWorktree?.name ?? "Diff"}</h1>
-      <p>{appState.diff ? `${files.length} files · ${new Date(appState.diff.generatedAt).toLocaleTimeString()}` : "No diff loaded"}</p>
+      <p>
+        {#if parsing}
+          Parsing diff...
+        {:else}
+          {appState.diff ? `${files.length} files · ${new Date(appState.diff.generatedAt).toLocaleTimeString()}` : "No diff loaded"}
+        {/if}
+      </p>
     </div>
     <div class="actions">
       <Button label="↻" title="Refresh Diff" disabled={appState.diffBusy} onclick={() => appState.showDiff()} />
@@ -42,7 +82,9 @@
 
   <section class="body">
     <aside aria-label="Changed files">
-      {#if files.length === 0}
+      {#if parseError}
+        <p class="empty">{parseError}</p>
+      {:else if files.length === 0}
         <p class="empty">No changes</p>
       {:else}
         {#each files as file (file.path)}
