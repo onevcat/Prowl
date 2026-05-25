@@ -1,5 +1,5 @@
 import { inferAgentTaskStatus } from "$lib/terminal/detectAgent";
-import { WSClient } from "$lib/ws/WSClient";
+import { ProtocolError, WSClient } from "$lib/ws/WSClient";
 import type {
   CustomAction,
   PaneDescriptor,
@@ -57,6 +57,7 @@ export class AppState {
   #inputStartedByChannel = new Map<number, number>();
   #paneSizeById = new Map<string, { cols: number; rows: number }>();
   #renderedPaneIds = new Set<string>();
+  #paneIdsToResume = new Set<string>();
   #authToken = "";
   repositories = $state<Repository[]>([]);
   customActions = $state<CustomAction[]>([]);
@@ -345,6 +346,16 @@ export class AppState {
       targetId,
     );
     this.paneOrderByWorktree = { ...this.paneOrderByWorktree, [worktreeId]: reordered };
+    persistJSONValue(paneOrderKey, this.paneOrderByWorktree);
+  }
+
+  #replacePaneInOrder(worktreeId: string, previousPaneId: string, nextPaneId: string): void {
+    const order = this.paneOrderByWorktree[worktreeId];
+    if (!order?.includes(previousPaneId)) {
+      return;
+    }
+    const replaced = order.map((paneId) => (paneId === previousPaneId ? nextPaneId : paneId));
+    this.paneOrderByWorktree = { ...this.paneOrderByWorktree, [worktreeId]: replaced };
     persistJSONValue(paneOrderKey, this.paneOrderByWorktree);
   }
 
@@ -686,9 +697,40 @@ export class AppState {
             }
           })
           .catch((error) => {
+            if (error instanceof ProtocolError && error.code === "PANE_GONE") {
+              void this.#recreateGonePane(paneId);
+              return;
+            }
             this.errorMessage = error instanceof Error ? error.message : String(error);
           });
       }
+    }
+  }
+
+  async #recreateGonePane(paneId: string): Promise<void> {
+    const stalePane = this.panes.get(paneId);
+    if (!stalePane) {
+      return;
+    }
+    this.errorMessage = null;
+    this.#renderedPaneIds.delete(paneId);
+    try {
+      const response = await this.ws.request({
+        v: 1,
+        type: "pane.create",
+        id: makeMessageId(),
+        worktreeId: stalePane.worktreeId,
+        cols: this.#paneSizeById.get(paneId)?.cols ?? 120,
+        rows: this.#paneSizeById.get(paneId)?.rows ?? 32,
+      });
+      if (response.type === "pane.created") {
+        this.#replacePaneInOrder(stalePane.worktreeId, paneId, response.paneId);
+        this.#paneSizeById.delete(paneId);
+      }
+      this.#removePane(paneId);
+      this.syncRenderedPanes();
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : String(error);
     }
   }
 
@@ -791,6 +833,7 @@ export class AppState {
     if (!this.sessionId && this.#renderedPaneIds.size === 0) {
       return;
     }
+    this.#paneIdsToResume = new Set(this.#renderedPaneIds);
     this.#renderedPaneIds.clear();
   }
 
@@ -804,6 +847,7 @@ export class AppState {
         clientVersion: "0.0.0",
         protocolVersion,
       });
+      await this.#resumeRenderedPanes();
       await this.ws.request({ v: 1, type: "repo.list", id: makeMessageId() });
       await this.ws.request({ v: 1, type: "action.list", id: makeMessageId() });
       for (const repository of this.repositories) {
@@ -823,6 +867,26 @@ export class AppState {
       this.syncRenderedPanes();
     } catch (error) {
       this.errorMessage = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  async #resumeRenderedPanes(): Promise<void> {
+    const paneIds = Array.from(this.#paneIdsToResume);
+    this.#paneIdsToResume.clear();
+    for (const paneId of paneIds) {
+      try {
+        const response = await this.ws.request({ v: 1, type: "pane.attach", id: makeMessageId(), paneId });
+        if (response.type === "pane.replay") {
+          this.#renderedPaneIds.add(paneId);
+          this.#applyPaneReplay(response.paneId, response.bytes);
+        }
+      } catch (error) {
+        if (error instanceof ProtocolError && error.code === "PANE_GONE") {
+          await this.#recreateGonePane(paneId);
+          continue;
+        }
+        this.errorMessage = error instanceof Error ? error.message : String(error);
+      }
     }
   }
 
@@ -1024,6 +1088,9 @@ export class AppState {
     const next = new Map(this.panes);
     next.delete(paneId);
     this.panes = next;
+    this.#renderedPaneIds.delete(paneId);
+    this.#paneIdsToResume.delete(paneId);
+    this.#paneSizeById.delete(paneId);
     this.#prunePaneOrder();
     this.#ensureSelection();
   }

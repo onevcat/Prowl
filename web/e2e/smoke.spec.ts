@@ -46,6 +46,25 @@ test("re-attaches visible panes after a websocket reconnect", async ({ page, req
     .toBeGreaterThan(before.paneAttachRequests);
 });
 
+test("recreates visible panes that disappeared from the daemon", async ({ page, request }) => {
+  await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}&token=${token}`);
+  await expect(page.locator(".connection.open")).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Shell" })).toBeVisible();
+
+  const before = await debugStats(request);
+  const dropped = await request.post(`${daemonHTTPURL}/debug/drop-first-pane`);
+  await expect(dropped).toBeOK();
+  await request.post(`${daemonHTTPURL}/debug/close-websockets`);
+
+  await expect(page.locator(".connection.closed")).toBeVisible();
+  await expect(page.locator(".connection.open")).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Shell" })).toBeVisible();
+  await expect
+    .poll(async () => (await debugStats(request)).paneCreateRequests)
+    .toBeGreaterThan(before.paneCreateRequests);
+  await expect(page.locator(".error")).toHaveCount(0);
+});
+
 test("broadcasts canvas input to every visible pane", async ({ page }) => {
   await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}&token=${token}`);
   await expect(page.locator(".connection.open")).toBeVisible();
@@ -65,7 +84,8 @@ test("broadcasts canvas input to every visible pane", async ({ page }) => {
 
 async function debugStats(request: APIRequestContext): Promise<{
   paneAttachRequests: number;
+  paneCreateRequests: number;
 }> {
   const response = await request.get(`${daemonHTTPURL}/debug/stats`);
-  return (await response.json()) as { paneAttachRequests: number };
+  return (await response.json()) as { paneAttachRequests: number; paneCreateRequests: number };
 }

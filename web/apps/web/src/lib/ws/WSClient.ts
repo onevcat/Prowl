@@ -7,6 +7,16 @@ type BinaryListener = (channelId: number, payload: Uint8Array) => void;
 type StatusListener = (state: "connecting" | "open" | "closed") => void;
 type BackpressureListener = (buffering: boolean) => void;
 
+export class ProtocolError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ProtocolError";
+  }
+}
+
 export class WSClient {
   #socket: WebSocket | null = null;
   #url: string | null = null;
@@ -156,10 +166,10 @@ export class WSClient {
         clearTimeout(pending.timer);
         this.#pending.delete(message.id);
         if (message.type === "error") {
-          pending.reject(new Error(`${message.code}: ${message.message}`));
-        } else {
-          pending.resolve(message);
+          pending.reject(new ProtocolError(message.code, message.message));
+          return;
         }
+        pending.resolve(message);
       }
       for (const listener of this.#listeners) {
         listener(message);

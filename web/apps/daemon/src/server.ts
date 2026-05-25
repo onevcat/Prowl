@@ -49,6 +49,7 @@ type ServerOptions = {
 
 type DebugStats = {
   paneAttachRequests: number;
+  paneCreateRequests: number;
 };
 
 export function startServer(config: DaemonConfig, options: ServerOptions = {}): ServerHandle {
@@ -57,6 +58,7 @@ export function startServer(config: DaemonConfig, options: ServerOptions = {}): 
   const clients = new Set<{ send: (payload: ArrayBuffer) => void; close: (code?: number, reason?: string) => void }>();
   const debugStats: DebugStats = {
     paneAttachRequests: 0,
+    paneCreateRequests: 0,
   };
   const state = new InMemoryState(process.env.PROWL_REPO_ROOT ?? process.cwd(), {
     spawnProcesses: options.spawnProcesses,
@@ -107,6 +109,15 @@ export function startServer(config: DaemonConfig, options: ServerOptions = {}): 
 
       if (options.debugEndpoints && url.pathname === "/debug/stats") {
         return Response.json(debugStats);
+      }
+
+      if (options.debugEndpoints && url.pathname === "/debug/drop-first-pane") {
+        const pane = state.listPanes()[0];
+        if (!pane) {
+          return Response.json({ dropped: false });
+        }
+        state.closePane(pane.id);
+        return Response.json({ dropped: true, paneId: pane.id });
       }
 
       if (url.pathname === "/auth/login") {
@@ -177,6 +188,9 @@ export function startServer(config: DaemonConfig, options: ServerOptions = {}): 
         const control = JSON.parse(frame.payload) as ClientControlMessage;
         if (control.type === "pane.attach") {
           debugStats.paneAttachRequests += 1;
+        }
+        if (control.type === "pane.create") {
+          debugStats.paneCreateRequests += 1;
         }
         const responses = handleControl(control, state, config, { authenticated: ws.data.authenticated });
         for (const response of responses) {
