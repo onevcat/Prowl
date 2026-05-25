@@ -141,6 +141,10 @@ export function makeMessageId(): string {
   return crypto.randomUUID();
 }
 
+export function isUUID(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 export class ControlMessageParseError extends Error {
   readonly code = "INVALID_CONTROL_MESSAGE";
 
@@ -165,6 +169,9 @@ export function parseClientControlMessage(payload: string): ClientControlMessage
   }
   if (typeof value.id !== "string" || !value.id) {
     throw new ControlMessageParseError("Control message id is required");
+  }
+  if (!isUUID(value.id)) {
+    throw new ControlMessageParseError("Control message id must be a UUID");
   }
   if (typeof value.type !== "string" || !value.type) {
     throw new ControlMessageParseError("Control message type is required");

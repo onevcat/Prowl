@@ -125,7 +125,7 @@ describe("CLI transport", () => {
 
     try {
       await Bun.sleep(50);
-      const response = await sendRawJson(socketPath, { v: 1, type: "pane.resize", id: "bad-request" });
+      const response = await sendRawJson(socketPath, { v: 1, type: "pane.resize", id: crypto.randomUUID() });
 
       expect(response.type).toBe("error");
       if (response.type === "error") {
