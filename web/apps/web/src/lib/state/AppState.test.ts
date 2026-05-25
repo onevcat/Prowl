@@ -1,7 +1,7 @@
 import { interactionMeasureNames } from "$lib/performance/marks";
 import type { CustomAction } from "@prowl/protocol";
 import { afterEach, describe, expect, test } from "vitest";
-import { AppState, openTabsKey, paneDescriptorsByWorktree } from "./AppState.svelte";
+import { AppState, cachedPaneDescriptorsForWorktrees, openTabsKey, paneDescriptorsByWorktree } from "./AppState.svelte";
 import { Pane } from "./Pane.svelte";
 import type { Repository, Worktree } from "./types";
 
@@ -71,6 +71,22 @@ describe("AppState pane persistence helpers", () => {
 
     expect(grouped.get("worktree-1")?.map((descriptor) => descriptor.id)).toEqual(["pane-1", "pane-2"]);
     expect(grouped.get("worktree-2")?.map((descriptor) => descriptor.id)).toEqual(["pane-3"]);
+  });
+
+  test("filters cached open tab descriptors to known worktrees", () => {
+    const cached = cachedPaneDescriptorsForWorktrees(
+      [
+        [
+          pane("pane-1", 1).descriptor,
+          { ...pane("pane-2", 2).descriptor, worktreeId: "missing-worktree" },
+          { ...pane("pane-3", 3).descriptor, channelId: 0 },
+        ],
+        "not an array",
+      ],
+      new Set(["worktree-1"]),
+    );
+
+    expect(cached.map((descriptor) => descriptor.id)).toEqual(["pane-1"]);
   });
 });
 

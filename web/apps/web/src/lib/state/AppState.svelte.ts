@@ -35,6 +35,7 @@ import type {
   PaletteHistoryEntry,
   PaletteItem,
   PerformanceMetrics,
+  TaskStatus,
 } from "./types";
 
 export const appStateKey = Symbol("ProwlAppState");
@@ -107,6 +108,8 @@ export class AppState {
   #paneSizeById = new Map<string, { cols: number; rows: number }>();
   #renderedPaneIds = new Set<string>();
   #paneIdsToResume = new Set<string>();
+  #restoredOpenTabsWorktreeIds = new Set<string>();
+  #preferredSelectedWorktreeId: string | null = null;
   #authToken = "";
   appFocused = $state(true);
   repositories = $state<Repository[]>([]);
@@ -982,9 +985,8 @@ export class AppState {
     if (Array.isArray(paletteHistory)) {
       this.paletteHistory = paletteHistory.filter(isPaletteHistoryEntry).slice(0, 10);
     }
-    if (selectedWorktreeId && this.worktrees.some((worktree) => worktree.id === selectedWorktreeId)) {
-      this.selectWorktree(selectedWorktreeId);
-    }
+    this.#preferredSelectedWorktreeId = selectedWorktreeId ?? null;
+    this.#applyPreferredSelection();
   }
 
   #connectFromLocation(): void {
@@ -1119,6 +1121,7 @@ export class AppState {
         break;
       case "worktree.listed":
         this.#replaceWorktrees(message.repoId, message.worktrees);
+        void this.#restoreOpenTabsForWorktrees(message.worktrees.map((worktree) => worktree.id));
         break;
       case "worktree.updated":
         if (message.worktree.status === "archived") {
@@ -1237,6 +1240,7 @@ export class AppState {
     this.#pruneWorktreeOrder();
     this.#ensureWorktreeViews(worktrees);
     this.#ensureSelection();
+    this.#applyPreferredSelection();
   }
 
   #removeMissingRepositoryWorktrees(repositories: Repository[]): void {
@@ -1274,6 +1278,45 @@ export class AppState {
       }
     }
     this.worktreeViews = next;
+  }
+
+  async #restoreOpenTabsForWorktrees(worktreeIds: string[]): Promise<void> {
+    if (typeof indexedDB === "undefined") {
+      return;
+    }
+    const pendingWorktreeIds = worktreeIds.filter((worktreeId) => !this.#restoredOpenTabsWorktreeIds.has(worktreeId));
+    if (pendingWorktreeIds.length === 0) {
+      return;
+    }
+    for (const worktreeId of pendingWorktreeIds) {
+      this.#restoredOpenTabsWorktreeIds.add(worktreeId);
+    }
+    const snapshots = await Promise.all(
+      pendingWorktreeIds.map((worktreeId) => get<unknown>(openTabsKey(worktreeId)).catch(() => null)),
+    );
+    const descriptors = cachedPaneDescriptorsForWorktrees(
+      snapshots,
+      new Set(this.worktrees.map((worktree) => worktree.id)),
+    );
+    if (descriptors.length === 0) {
+      return;
+    }
+    const next = new Map(this.panes);
+    let changed = false;
+    for (const descriptor of descriptors) {
+      if (next.has(descriptor.id)) {
+        continue;
+      }
+      next.set(descriptor.id, new Pane(descriptor));
+      changed = true;
+    }
+    if (!changed) {
+      return;
+    }
+    this.panes = next;
+    this.#prunePaneOrder();
+    this.#ensureSelection();
+    this.syncRenderedPanes();
   }
 
   #replacePanes(panes: PaneDescriptor[]): void {
@@ -1324,6 +1367,15 @@ export class AppState {
         ? (this.orderedPanes(this.selectedWorktreeId)[0]?.id ?? null)
         : null;
     }
+  }
+
+  #applyPreferredSelection(): void {
+    const preferred = this.#preferredSelectedWorktreeId;
+    if (!preferred || !this.worktrees.some((worktree) => worktree.id === preferred)) {
+      return;
+    }
+    this.selectWorktree(preferred);
+    this.#preferredSelectedWorktreeId = null;
   }
 
   #pruneWorktreeOrder(): void {
@@ -1574,6 +1626,10 @@ function isPaletteHistoryEntry(value: unknown): value is PaletteHistoryEntry {
   );
 }
 
+function isTaskStatus(value: unknown): value is TaskStatus {
+  return value === "idle" || value === "running" || value === "done" || value === "failed";
+}
+
 function isStringArrayRecord(value: unknown): value is Record<string, string[]> {
   if (!isRecord(value)) {
     return false;
@@ -1604,6 +1660,43 @@ export function paneDescriptorsByWorktree(panes: Pane[]): Map<string, PaneDescri
     grouped.set(pane.worktreeId, [...(grouped.get(pane.worktreeId) ?? []), pane.descriptor]);
   }
   return grouped;
+}
+
+export function cachedPaneDescriptorsForWorktrees(
+  snapshots: Iterable<unknown>,
+  knownWorktreeIds: Set<string>,
+): PaneDescriptor[] {
+  const descriptors: PaneDescriptor[] = [];
+  for (const snapshot of snapshots) {
+    if (!Array.isArray(snapshot)) {
+      continue;
+    }
+    for (const candidate of snapshot) {
+      if (isPaneDescriptor(candidate) && knownWorktreeIds.has(candidate.worktreeId)) {
+        descriptors.push(candidate);
+      }
+    }
+  }
+  return descriptors;
+}
+
+function isPaneDescriptor(value: unknown): value is PaneDescriptor {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    typeof value.id === "string" &&
+    typeof value.channelId === "number" &&
+    Number.isInteger(value.channelId) &&
+    value.channelId > 0 &&
+    typeof value.worktreeId === "string" &&
+    typeof value.title === "string" &&
+    isTaskStatus(value.taskStatus) &&
+    typeof value.unread === "boolean" &&
+    typeof value.lastOutputLine === "string" &&
+    typeof value.updatedAt === "number" &&
+    Number.isFinite(value.updatedAt)
+  );
 }
 
 function orderByIds<T>(items: T[], order: string[] | undefined, getId: (item: T) => string): T[] {
