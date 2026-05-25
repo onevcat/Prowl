@@ -297,6 +297,9 @@ export function handleControl(
   }
 
   if (message.type === "repo.remove") {
+    if (!state.repository(message.repoId)) {
+      return [errorResponse(message.id, "REPO_NOT_FOUND", "Repository is no longer registered")];
+    }
     state.removeRepository(message.repoId);
     return [{ v: 1, type: "repo.listed", id: message.id, repositories: state.repositories }];
   }
@@ -348,6 +351,9 @@ export function handleControl(
   }
 
   if (message.type === "worktree.list") {
+    if (!state.repository(message.repoId)) {
+      return [errorResponse(message.id, "REPO_NOT_FOUND", "Repository is no longer registered")];
+    }
     return [
       {
         v: 1,
@@ -392,7 +398,15 @@ export function handleControl(
   }
 
   if (message.type === "pane.create") {
-    const pane = state.createPane(message.worktreeId, "Shell", message.command);
+    const worktree = state.worktree(message.worktreeId);
+    if (!worktree) {
+      return [errorResponse(message.id, "WORKTREE_NOT_FOUND", "Worktree is no longer registered")];
+    }
+    const cwd = resolvePaneCwd(message.id, worktree.path, message.cwd);
+    if (cwd.type === "error") {
+      return [cwd];
+    }
+    const pane = state.createPane(message.worktreeId, "Shell", message.command, cwd.path);
     return [
       {
         v: 1,
@@ -407,7 +421,9 @@ export function handleControl(
   }
 
   if (message.type === "pane.close") {
-    state.closePane(message.paneId);
+    if (!state.closePane(message.paneId)) {
+      return [errorResponse(message.id, "PANE_GONE", "Pane is no longer available")];
+    }
     return [
       {
         v: 1,
@@ -443,7 +459,9 @@ export function handleControl(
   }
 
   if (message.type === "pane.resize") {
-    state.resizePane(message.paneId, message.cols, message.rows);
+    if (!state.resizePane(message.paneId, message.cols, message.rows)) {
+      return [errorResponse(message.id, "PANE_GONE", "Pane is no longer available")];
+    }
     return [
       {
         v: 1,
@@ -487,6 +505,29 @@ export function handleControl(
 
 function errorResponse(id: string, code: string, message: string): ErrorControlMessage {
   return { v: 1, type: "error", id, code, message };
+}
+
+function resolvePaneCwd(
+  id: string,
+  worktreePath: string,
+  cwd?: string,
+): { type: "ok"; path: string | undefined } | ErrorControlMessage {
+  if (!cwd?.trim()) {
+    return { type: "ok", path: undefined };
+  }
+  const worktreeRoot = resolve(worktreePath);
+  const requestedPath = isAbsolute(cwd) ? resolve(cwd) : resolve(worktreeRoot, cwd);
+  if (requestedPath !== worktreeRoot && !requestedPath.startsWith(`${worktreeRoot}/`)) {
+    return errorResponse(id, "INVALID_PANE_CWD", "Pane cwd must stay inside the worktree");
+  }
+  try {
+    if (!statSync(requestedPath).isDirectory()) {
+      return errorResponse(id, "INVALID_PANE_CWD", "Pane cwd must be a directory");
+    }
+  } catch {
+    return errorResponse(id, "INVALID_PANE_CWD", "Pane cwd does not exist");
+  }
+  return { type: "ok", path: requestedPath };
 }
 
 function validateRepositoryPath(id: string, path: string, state: InMemoryState): ErrorControlMessage | null {

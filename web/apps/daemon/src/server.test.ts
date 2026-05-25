@@ -133,6 +133,92 @@ describe("daemon scaffold", () => {
     expect(duplicate[0]?.type).toBe("error");
   });
 
+  test("rejects control messages for missing target objects", () => {
+    const root = mkdtempSync(join(tmpdir(), "prowl-target-validation-test-"));
+    const state = new InMemoryState(root, { statePath: ":memory:", spawnProcesses: false });
+    const config = {
+      port: 0,
+      bind: "127.0.0.1",
+      token: "test-token",
+      allowedOrigins: ["http://127.0.0.1:5173"],
+      requireTLS: false,
+    };
+
+    const worktrees = handleControl(
+      { v: 1, type: "worktree.list", id: makeMessageId(), repoId: "missing" },
+      state,
+      config,
+    );
+    const pane = handleControl(
+      {
+        v: 1,
+        type: "pane.create",
+        id: makeMessageId(),
+        worktreeId: "missing",
+        cols: 120,
+        rows: 32,
+      },
+      state,
+      config,
+    );
+    const resized = handleControl(
+      { v: 1, type: "pane.resize", id: makeMessageId(), paneId: "missing", cols: 120, rows: 32 },
+      state,
+      config,
+    );
+    const closed = handleControl({ v: 1, type: "pane.close", id: makeMessageId(), paneId: "missing" }, state, config);
+    const removed = handleControl({ v: 1, type: "repo.remove", id: makeMessageId(), repoId: "missing" }, state, config);
+
+    expect(worktrees[0]?.type).toBe("error");
+    expect(pane[0]?.type).toBe("error");
+    expect(resized[0]?.type).toBe("error");
+    expect(closed[0]?.type).toBe("error");
+    expect(removed[0]?.type).toBe("error");
+  });
+
+  test("validates pane cwd stays inside the worktree", () => {
+    const root = mkdtempSync(join(tmpdir(), "prowl-pane-cwd-test-"));
+    mkdirSync(join(root, "inside"));
+    const state = new InMemoryState(root, { statePath: ":memory:", spawnProcesses: false });
+    const config = {
+      port: 0,
+      bind: "127.0.0.1",
+      token: "test-token",
+      allowedOrigins: ["http://127.0.0.1:5173"],
+      requireTLS: false,
+    };
+
+    const accepted = handleControl(
+      {
+        v: 1,
+        type: "pane.create",
+        id: makeMessageId(),
+        worktreeId: "worktree-default",
+        cols: 120,
+        rows: 32,
+        cwd: "inside",
+      },
+      state,
+      config,
+    );
+    const rejected = handleControl(
+      {
+        v: 1,
+        type: "pane.create",
+        id: makeMessageId(),
+        worktreeId: "worktree-default",
+        cols: 120,
+        rows: 32,
+        cwd: "..",
+      },
+      state,
+      config,
+    );
+
+    expect(accepted[0]?.type).toBe("pane.created");
+    expect(rejected[0]?.type).toBe("error");
+  });
+
   test("creates and archives git worktrees", () => {
     const root = mkdtempSync(join(tmpdir(), "prowl-git-test-"));
     const repoPath = join(root, "repo");
@@ -228,6 +314,55 @@ describe("daemon scaffold", () => {
     }
     expect(listed[0].actions).toHaveLength(1);
     expect(listed[0].actions[0]?.command).toBe("echo hello");
+  });
+
+  test("rejects repo-scoped custom actions from another repo pane", () => {
+    const root = mkdtempSync(join(tmpdir(), "prowl-action-scope-test-"));
+    const otherRepo = join(root, "other");
+    mkdirSync(otherRepo);
+    const state = new InMemoryState(root, { statePath: ":memory:", spawnProcesses: false });
+    const config = {
+      port: 0,
+      bind: "127.0.0.1",
+      token: "test-token",
+      allowedOrigins: ["http://127.0.0.1:5173"],
+      requireTLS: false,
+    };
+    const { worktree } = state.addRepository(otherRepo);
+    const pane = state.createPane(worktree.id);
+
+    const updated = handleControl(
+      {
+        v: 1,
+        type: "action.upsert",
+        id: makeMessageId(),
+        action: {
+          repoId: "repo-default",
+          name: "Repo only",
+          command: "echo scoped",
+          outputMode: "currentPane",
+          ordering: 1,
+        },
+      },
+      state,
+      config,
+    );
+    if (updated[0]?.type !== "action.updated") {
+      throw new Error("Expected action.updated");
+    }
+    const run = handleControl(
+      {
+        v: 1,
+        type: "action.run",
+        id: makeMessageId(),
+        paneId: pane.id,
+        actionId: updated[0].action.id,
+      },
+      state,
+      config,
+    );
+
+    expect(run[0]?.type).toBe("error");
   });
 
   test("reads git diff for a worktree", () => {

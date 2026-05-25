@@ -297,7 +297,7 @@ export class InMemoryState {
     return result.changes > 0;
   }
 
-  createPane(worktreeId: string, title = "Shell", command?: string): PaneDescriptor {
+  createPane(worktreeId: string, title = "Shell", command?: string, cwd?: string): PaneDescriptor {
     const pane: PaneDescriptor = {
       id: crypto.randomUUID(),
       channelId: this.#nextChannelId++,
@@ -312,7 +312,7 @@ export class InMemoryState {
     this.#replayByPane.set(pane.id, new Uint8Array());
     this.#paneIdByChannel.set(pane.channelId, pane.id);
     if (this.#options.spawnProcesses) {
-      this.#spawnRuntime(pane, command);
+      this.#spawnRuntime(pane, command, cwd);
     }
     return pane;
   }
@@ -375,6 +375,10 @@ export class InMemoryState {
     if (!pane || !action) {
       return null;
     }
+    const sourceWorktree = this.#worktreeForPane(pane);
+    if (action.repoId && sourceWorktree?.repoId !== action.repoId) {
+      return null;
+    }
     const targetPane = action.outputMode === "newPane" ? this.createPane(pane.worktreeId, action.name) : pane;
     const worktree = this.#worktreeForPane(targetPane);
     this.#recordPaneOutput(targetPane.id, new TextEncoder().encode(`\r\n$ ${action.command}\r\n`));
@@ -416,11 +420,11 @@ export class InMemoryState {
     }
   }
 
-  #spawnRuntime(pane: PaneDescriptor, command?: string): void {
+  #spawnRuntime(pane: PaneDescriptor, command?: string, cwd?: string): void {
     const worktree = this.#worktreeForPane(pane);
     const args = command ? ["-lc", command] : ["-i"];
     const child = Bun.spawn([this.#options.shell, ...args], {
-      cwd: worktree?.path ?? process.cwd(),
+      cwd: cwd ?? worktree?.path ?? process.cwd(),
       terminal: {
         cols: 120,
         rows: 32,
