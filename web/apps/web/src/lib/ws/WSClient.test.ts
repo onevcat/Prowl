@@ -13,7 +13,6 @@ afterEach(() => {
 
 describe("WSClient backpressure", () => {
   test("keeps polling while blocked and clears buffering after the socket drains", async () => {
-    vi.useFakeTimers();
     installFakeWebSocket();
     const client = new WSClient();
     const bufferingStates: boolean[] = [];
@@ -29,15 +28,19 @@ describe("WSClient backpressure", () => {
     socket.bufferedAmount = 256 * 1024 + 1;
 
     expect(client.sendBinary(1, new TextEncoder().encode("input"))).toBe(false);
-    vi.advanceTimersByTime(200);
+    await sleep(220);
 
     expect(bufferingStates.at(-1)).toBe(true);
     socket.bufferedAmount = 0;
-    vi.advanceTimersByTime(200);
+    await sleep(220);
 
     expect(bufferingStates.at(-1)).toBe(false);
   });
 });
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function installFakeWebSocket(): void {
   FakeWebSocket.instances = [];

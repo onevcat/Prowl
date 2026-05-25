@@ -395,6 +395,7 @@ function appStateFixture(): AppState {
   ]);
   state.selectedWorktreeId = "worktree-1";
   state.selectedPaneId = "pane-1";
+  state.setAppFocused(true);
 
   return state;
 }

@@ -970,6 +970,9 @@ export class AppState {
   }
 
   async #restoreUIState(): Promise<void> {
+    if (typeof indexedDB === "undefined") {
+      return;
+    }
     const [view, selectedWorktreeId, worktreeOrder, paneOrder, appearance, paletteHistory] = await Promise.all([
       get<AppView>(uiViewKey),
       get<string>(selectedWorktreeKey),

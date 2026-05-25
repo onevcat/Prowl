@@ -13,10 +13,12 @@ index 1111111..2222222 100644
 
 describe("highlightDiffFilesInWorker", () => {
   test("returns highlighted lines by file path", async () => {
+    const restoreWorker = installWorkerGlobal();
     const highlighted = await highlightDiffFilesInWorker(
       parseGitDiff(sampleDiff),
       () => new InlineShikiWorker() as unknown as Worker,
     );
+    restoreWorker();
 
     expect(highlighted.get("src/app.ts")).toEqual(["<span>meta</span>", "<span>removed</span>", "<span>added</span>"]);
   });
@@ -43,4 +45,18 @@ class InlineShikiWorker {
   }
 
   terminate(): void {}
+}
+
+function installWorkerGlobal(): () => void {
+  const previous = globalThis.Worker;
+  Object.defineProperty(globalThis, "Worker", {
+    configurable: true,
+    value: class {},
+  });
+  return () => {
+    Object.defineProperty(globalThis, "Worker", {
+      configurable: true,
+      value: previous,
+    });
+  };
 }
