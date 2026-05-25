@@ -1,8 +1,36 @@
 import { describe, expect, test } from "bun:test";
-import { makeMessageId, parseClientControlMessage } from "./control";
+import { clientControlMessageTypes, daemonCapabilities, makeMessageId, parseClientControlMessage } from "./control";
 import { protocolVersion } from "./version";
 
 describe("control message parsing", () => {
+  test("declares every v1 client control message in capability order", () => {
+    expect(clientControlMessageTypes).toEqual([
+      "hello",
+      "pane.create",
+      "pane.close",
+      "pane.list",
+      "pane.resize",
+      "pane.attach",
+      "pane.detach",
+      "pane.status",
+      "worktree.list",
+      "worktree.create",
+      "worktree.archive",
+      "worktree.diff",
+      "repo.list",
+      "repo.add",
+      "repo.remove",
+      "action.list",
+      "action.upsert",
+      "action.delete",
+      "action.run",
+      "settings.get",
+      "settings.set",
+      "ping",
+    ]);
+    expect(daemonCapabilities).toEqual(clientControlMessageTypes.filter((type) => type !== "hello"));
+  });
+
   test("accepts valid client control messages", () => {
     const message = parseClientControlMessage(
       JSON.stringify({

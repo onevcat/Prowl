@@ -139,6 +139,33 @@ export type ServerControlMessage =
 
 export type ControlMessage = ClientControlMessage | ServerControlMessage;
 
+export const clientControlMessageTypes = [
+  "hello",
+  "pane.create",
+  "pane.close",
+  "pane.list",
+  "pane.resize",
+  "pane.attach",
+  "pane.detach",
+  "pane.status",
+  "worktree.list",
+  "worktree.create",
+  "worktree.archive",
+  "worktree.diff",
+  "repo.list",
+  "repo.add",
+  "repo.remove",
+  "action.list",
+  "action.upsert",
+  "action.delete",
+  "action.run",
+  "settings.get",
+  "settings.set",
+  "ping",
+] as const satisfies readonly ClientControlMessage["type"][];
+
+export const daemonCapabilities = clientControlMessageTypes.filter((type) => type !== "hello");
+
 export function makeMessageId(): string {
   return crypto.randomUUID();
 }
