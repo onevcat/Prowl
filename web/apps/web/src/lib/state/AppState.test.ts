@@ -5,6 +5,7 @@ import {
   AppState,
   bootstrapSettingsKeys,
   cachedPaneDescriptorsForWorktrees,
+  customActionsForRepositories,
   openTabsKey,
   paneDescriptorsByWorktree,
   paneIdsOutsideWorktrees,
@@ -100,6 +101,19 @@ describe("AppState pane persistence helpers", () => {
     const panes = [pane("pane-1", 1).descriptor, { ...pane("pane-2", 2).descriptor, worktreeId: "missing-worktree" }];
 
     expect(paneIdsOutsideWorktrees(panes, [worktree("worktree-1", "one")])).toEqual(["pane-2"]);
+  });
+
+  test("filters repo-scoped custom actions to registered repositories", () => {
+    const actions = [
+      customAction("global", null, "Mod+G"),
+      customAction("repo", "repo-1", "Mod+R"),
+      customAction("missing", "missing-repo", "Mod+M"),
+    ];
+
+    expect(customActionsForRepositories(actions, [{ id: "repo-1" }]).map((action) => action.id)).toEqual([
+      "global",
+      "repo",
+    ]);
   });
 });
 

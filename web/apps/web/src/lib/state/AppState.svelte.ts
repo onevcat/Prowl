@@ -379,7 +379,7 @@ export class AppState {
       invoke: () => this.selectWorktree(worktree.id),
     }));
 
-    const actionItems = this.customActions.map((action) => ({
+    const actionItems = this.runnableCustomActions.map((action) => ({
       id: `action:${action.id}`,
       title: action.name,
       subtitle: action.command,
@@ -1115,13 +1115,14 @@ export class AppState {
       case "repo.listed":
         this.repositories = message.repositories;
         this.#removeMissingRepositoryWorktrees(message.repositories);
+        this.customActions = customActionsForRepositories(this.customActions, message.repositories);
         this.#ensureSelection();
         break;
       case "repo.updated":
         this.#upsertRepository(message.repository);
         break;
       case "action.listed":
-        this.customActions = message.actions;
+        this.customActions = customActionsForRepositories(message.actions, this.repositories);
         break;
       case "action.updated":
         this.#upsertCustomAction(message.action);
@@ -1736,6 +1737,14 @@ export function paneIdsOutsideWorktrees(
   return Array.from(panes)
     .filter((pane) => !knownWorktreeIds.has(pane.worktreeId))
     .map((pane) => pane.id);
+}
+
+export function customActionsForRepositories(
+  actions: Iterable<CustomAction>,
+  repositories: Iterable<Pick<Repository, "id">>,
+): CustomAction[] {
+  const repositoryIds = new Set(Array.from(repositories, (repository) => repository.id));
+  return Array.from(actions).filter((action) => action.repoId === null || repositoryIds.has(action.repoId));
 }
 
 function isPaneDescriptor(value: unknown): value is PaneDescriptor {
