@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { InMemoryState } from "./InMemoryState";
 
 describe("InMemoryState", () => {
@@ -54,6 +57,38 @@ describe("InMemoryState", () => {
     state.createPane(worktree.id, "Sized", undefined, undefined, { cols: 101, rows: 43 });
 
     expect(spawnOptions.at(-1)).toEqual({ cols: 101, rows: 43 });
+  });
+
+  test("spawns pane processes with a Bun Terminal PTY", async () => {
+    const root = mkdtempSync(join(tmpdir(), "prowl-pty-state-"));
+    const outputByChannel = new Map<number, string>();
+    const state = new InMemoryState(root, {
+      statePath: ":memory:",
+      onPaneData: (channelId, payload) => {
+        outputByChannel.set(channelId, `${outputByChannel.get(channelId) ?? ""}${new TextDecoder().decode(payload)}`);
+      },
+    });
+    for (const pane of state.listPanes()) {
+      state.closePane(pane.id);
+    }
+    const repository = state.repositories[0];
+    const [worktree] = repository ? (state.worktreesByRepo.get(repository.id) ?? []) : [];
+    if (!worktree) {
+      throw new Error("Expected seeded worktree");
+    }
+
+    const pane = state.createPane(worktree.id, "TTY", "if test -t 1; then printf prowl-tty-yes; fi");
+
+    try {
+      const output = await poll(
+        () => outputByChannel.get(pane.channelId) ?? "",
+        (value) => value.includes("prowl-tty-yes"),
+      );
+
+      expect(output).toContain("prowl-tty-yes");
+    } finally {
+      state.closePane(pane.id);
+    }
   });
 
   test("returns null replay for missing panes", () => {
@@ -237,4 +272,16 @@ function stateWithCapturedPtyOutput(): {
 
 function repeatedBytes(length: number, byte: number): Uint8Array {
   return new Uint8Array(length).fill(byte);
+}
+
+async function poll<T>(read: () => T, done: (value: T) => boolean): Promise<T> {
+  const deadline = Date.now() + 2_000;
+  while (Date.now() < deadline) {
+    const value = read();
+    if (done(value)) {
+      return value;
+    }
+    await Bun.sleep(20);
+  }
+  throw new Error("Timed out waiting for condition");
 }
