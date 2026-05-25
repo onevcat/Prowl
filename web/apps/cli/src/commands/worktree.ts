@@ -1,5 +1,6 @@
 import type { Repository, ServerControlMessage, Worktree } from "@prowl/protocol";
 import { makeMessageId } from "@prowl/protocol";
+import { formatWorktree } from "../output";
 import { hello, loadCLIConfig, requestDaemon } from "../transport";
 
 export async function renderWorktreeList(repoId?: string): Promise<string> {
@@ -55,8 +56,4 @@ export async function createWorktree(repoId: string | undefined, branch: string 
 async function listRepositories(): Promise<Array<Pick<Repository, "id">>> {
   const response = await requestDaemon({ v: 1, type: "repo.list", id: makeMessageId() });
   return response.type === "repo.listed" ? response.repositories : [];
-}
-
-function formatWorktree(worktree: Worktree): string {
-  return `${worktree.id}\t${worktree.repoId}\t${worktree.branch}\t${worktree.status}\t${worktree.path}`;
 }

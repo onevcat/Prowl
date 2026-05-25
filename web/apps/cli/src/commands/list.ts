@@ -1,5 +1,6 @@
 import type { PaneDescriptor, ServerControlMessage } from "@prowl/protocol";
 import { makeMessageId } from "@prowl/protocol";
+import { formatPane } from "../output";
 import { hello, loadCLIConfig, requestDaemon } from "../transport";
 
 export async function renderList(): Promise<string> {
@@ -7,7 +8,7 @@ export async function renderList(): Promise<string> {
   if (panes.length === 0) {
     return "No panes reported.";
   }
-  return panes.map((pane) => `${pane.id}\t${pane.worktreeId}\t${pane.taskStatus}\t${pane.title}`).join("\n");
+  return panes.map(formatPane).join("\n");
 }
 
 export async function getPaneList(): Promise<PaneDescriptor[]> {
