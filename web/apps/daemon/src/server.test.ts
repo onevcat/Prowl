@@ -105,6 +105,44 @@ describe("daemon scaffold", () => {
       false,
     );
   });
+
+  test("creates and lists custom actions", () => {
+    const root = mkdtempSync(join(tmpdir(), "prowl-action-test-"));
+    const state = new InMemoryState(root, { statePath: ":memory:", spawnProcesses: false });
+    const config = {
+      port: 0,
+      bind: "127.0.0.1",
+      token: "test-token",
+      allowedOrigins: ["http://127.0.0.1:5173"],
+      requireTLS: false,
+    };
+
+    const updated = handleControl(
+      {
+        v: 1,
+        type: "action.upsert",
+        id: makeMessageId(),
+        action: {
+          repoId: null,
+          name: "Echo",
+          command: "echo hello",
+          outputMode: "currentPane",
+          ordering: 1,
+        },
+      },
+      state,
+      config,
+    );
+    expect(updated[0]?.type).toBe("action.updated");
+    const listed = handleControl({ v: 1, type: "action.list", id: makeMessageId() }, state, config);
+
+    expect(listed[0]?.type).toBe("action.listed");
+    if (listed[0]?.type !== "action.listed") {
+      throw new Error("Expected action.listed");
+    }
+    expect(listed[0].actions).toHaveLength(1);
+    expect(listed[0].actions[0]?.command).toBe("echo hello");
+  });
 });
 
 function runGit(cwd: string, ...args: string[]): void {

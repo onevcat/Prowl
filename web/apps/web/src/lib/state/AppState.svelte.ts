@@ -1,5 +1,5 @@
 import { WSClient } from "$lib/ws/WSClient";
-import type { PaneDescriptor, Repository, ServerControlMessage, Worktree } from "@prowl/protocol";
+import type { CustomAction, PaneDescriptor, Repository, ServerControlMessage, Worktree } from "@prowl/protocol";
 import { makeMessageId, protocolVersion } from "@prowl/protocol";
 import { get, set } from "idb-keyval";
 import { Pane } from "./Pane";
@@ -20,6 +20,7 @@ export class AppState {
   readonly ws = new WSClient();
   #bootstrapPromise: Promise<void> | null = null;
   repositories = $state<Repository[]>([]);
+  customActions = $state<CustomAction[]>([]);
   worktreesByRepo = $state<Map<string, Worktree[]>>(new Map());
   panes = $state<Map<string, Pane>>(new Map());
   worktreeViews = $state<Map<string, WorktreeView>>(new Map());
@@ -82,6 +83,16 @@ export class AppState {
       invoke: () => this.selectWorktree(worktree.id),
     }));
 
+    const actionItems = this.customActions.map((action) => ({
+      id: `action:${action.id}`,
+      title: action.name,
+      subtitle: action.command,
+      section: "Actions" as const,
+      invoke: () => {
+        void this.runCustomAction(action.id);
+      },
+    }));
+
     return [
       {
         id: "view:shelf",
@@ -104,6 +115,7 @@ export class AppState {
         section: "Settings" as const,
         invoke: () => this.setView("settings"),
       },
+      ...actionItems,
       ...tabItems,
       ...worktreeItems,
     ];
@@ -301,6 +313,58 @@ export class AppState {
     }
   }
 
+  async saveCustomAction(action: Omit<CustomAction, "id"> & { id?: string }): Promise<void> {
+    this.repoBusy = true;
+    this.errorMessage = null;
+    try {
+      await this.ws.request({
+        v: 1,
+        type: "action.upsert",
+        id: makeMessageId(),
+        action,
+      });
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    } finally {
+      this.repoBusy = false;
+    }
+  }
+
+  async deleteCustomAction(actionId: string): Promise<void> {
+    this.repoBusy = true;
+    this.errorMessage = null;
+    try {
+      await this.ws.request({
+        v: 1,
+        type: "action.delete",
+        id: makeMessageId(),
+        actionId,
+      });
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    } finally {
+      this.repoBusy = false;
+    }
+  }
+
+  async runCustomAction(actionId: string): Promise<void> {
+    if (!this.selectedPaneId) {
+      this.errorMessage = "Select a pane before running a custom action.";
+      return;
+    }
+    try {
+      await this.ws.request({
+        v: 1,
+        type: "action.run",
+        id: makeMessageId(),
+        paneId: this.selectedPaneId,
+        actionId,
+      });
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    }
+  }
+
   sendInputToSelectedPane(text: string): void {
     const pane = this.selectedPane;
     if (!pane) {
@@ -386,6 +450,7 @@ export class AppState {
         protocolVersion,
       });
       await this.ws.request({ v: 1, type: "repo.list", id: makeMessageId() });
+      await this.ws.request({ v: 1, type: "action.list", id: makeMessageId() });
       for (const repository of this.repositories) {
         await this.ws.request({
           v: 1,
@@ -414,6 +479,15 @@ export class AppState {
         break;
       case "repo.updated":
         this.#upsertRepository(message.repository);
+        break;
+      case "action.listed":
+        this.customActions = message.actions;
+        break;
+      case "action.updated":
+        this.#upsertCustomAction(message.action);
+        break;
+      case "action.deleted":
+        this.customActions = this.customActions.filter((action) => action.id !== message.actionId);
         break;
       case "worktree.listed":
         this.#replaceWorktrees(message.repoId, message.worktrees);
@@ -457,6 +531,8 @@ export class AppState {
         this.errorMessage = `${message.code}: ${message.message}`;
         break;
       case "notification":
+        this.errorMessage = null;
+        break;
       case "pane.resized":
       case "pong":
         break;
@@ -504,6 +580,15 @@ export class AppState {
       return;
     }
     this.repositories = this.repositories.with(index, repository);
+  }
+
+  #upsertCustomAction(action: CustomAction): void {
+    const index = this.customActions.findIndex((candidate) => candidate.id === action.id);
+    if (index === -1) {
+      this.customActions = [...this.customActions, action];
+      return;
+    }
+    this.customActions = this.customActions.with(index, action);
   }
 
   #replaceWorktrees(repoId: string, worktrees: Worktree[]): void {

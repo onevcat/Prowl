@@ -45,6 +45,23 @@ describe("InMemoryState", () => {
     expect(second.repositories.some((candidate) => candidate.id === repository.id)).toBe(true);
     expect(second.settingsSnapshot(["theme"]).theme).toBe("dark");
   });
+
+  test("persists custom actions in sqlite", () => {
+    const statePath = `/tmp/prowl-actions-test-${crypto.randomUUID()}.sqlite`;
+    const first = new InMemoryState("/tmp/prowl", { spawnProcesses: false, statePath });
+    const action = first.upsertCustomAction({
+      repoId: null,
+      name: "Status",
+      command: "git status --short",
+      outputMode: "currentPane",
+      ordering: 1,
+    });
+
+    const second = new InMemoryState("/tmp/prowl", { spawnProcesses: false, statePath });
+
+    expect(second.listCustomActions().some((candidate) => candidate.id === action.id)).toBe(true);
+    expect(second.customAction(action.id)?.command).toBe("git status --short");
+  });
 });
 
 function testState(): InMemoryState {

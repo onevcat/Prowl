@@ -31,6 +31,17 @@ export interface PaneDescriptor {
   updatedAt: number;
 }
 
+export interface CustomAction {
+  id: string;
+  repoId: string | null;
+  name: string;
+  command: string;
+  shortcut?: string;
+  icon?: string;
+  outputMode: "currentPane" | "newPane";
+  ordering: number;
+}
+
 export type SettingsSnapshot = Record<string, unknown>;
 
 export interface BaseControlMessage {
@@ -71,6 +82,9 @@ export type ClientControlMessage =
   | (BaseControlMessage & { type: "repo.list" })
   | (BaseControlMessage & { type: "repo.add"; path: string })
   | (BaseControlMessage & { type: "repo.remove"; repoId: string })
+  | (BaseControlMessage & { type: "action.list"; repoId?: string })
+  | (BaseControlMessage & { type: "action.upsert"; action: Omit<CustomAction, "id"> & { id?: string } })
+  | (BaseControlMessage & { type: "action.delete"; actionId: string })
   | (BaseControlMessage & { type: "action.run"; paneId: string; actionId: string })
   | (BaseControlMessage & { type: "settings.get"; keys?: string[] })
   | (BaseControlMessage & { type: "settings.set"; patch: Record<string, unknown> })
@@ -95,6 +109,9 @@ export type ServerControlMessage =
   | (BaseControlMessage & { type: "pane.resized"; paneId: string; cols: number; rows: number })
   | (BaseControlMessage & { type: "pane.replay"; paneId: string; bytes: string })
   | (BaseControlMessage & { type: "repo.listed"; repositories: Repository[] })
+  | (BaseControlMessage & { type: "action.listed"; actions: CustomAction[] })
+  | (BaseControlMessage & { type: "action.updated"; action: CustomAction })
+  | (BaseControlMessage & { type: "action.deleted"; actionId: string })
   | (BaseControlMessage & { type: "worktree.listed"; repoId: string; worktrees: Worktree[] })
   | (BaseControlMessage & { type: "worktree.updated"; worktree: Worktree })
   | (BaseControlMessage & { type: "repo.updated"; repository: Repository })

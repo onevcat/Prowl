@@ -3,6 +3,7 @@
   import { getContext } from "svelte";
   import { appStateKey, type AppState } from "$lib/state/AppState.svelte";
   import Appearance from "./Appearance.svelte";
+  import CustomActions from "./CustomActions.svelte";
   import RepoSettings from "./RepoSettings.svelte";
 
   const appState = getContext<AppState>(appStateKey);
@@ -22,6 +23,7 @@
   {/if}
 
   <RepoSettings />
+  <CustomActions />
   <Appearance />
 </main>
 

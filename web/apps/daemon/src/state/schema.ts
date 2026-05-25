@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS custom_actions (
   name TEXT NOT NULL,
   command TEXT NOT NULL,
   shortcut TEXT,
+  icon TEXT,
+  output_mode TEXT NOT NULL DEFAULT 'currentPane',
   ordering INTEGER NOT NULL DEFAULT 0
 );
 

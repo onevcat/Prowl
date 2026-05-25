@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import type { PaneDescriptor, Repository, SettingsSnapshot, Worktree } from "@prowl/protocol";
+import type { CustomAction, PaneDescriptor, Repository, SettingsSnapshot, Worktree } from "@prowl/protocol";
 import { schemaSql } from "./schema";
 
 type StateOptions = {
@@ -36,6 +36,17 @@ type SettingRow = {
   value_json: string;
 };
 
+type CustomActionRow = {
+  id: string;
+  repo_id: string | null;
+  name: string;
+  command: string;
+  shortcut: string | null;
+  icon: string | null;
+  output_mode: string | null;
+  ordering: number;
+};
+
 type PaneRuntime = {
   process: {
     kill: () => void;
@@ -46,6 +57,11 @@ type PaneRuntime = {
       close: () => void;
     };
   };
+};
+
+export type RunCustomActionResult = {
+  action: CustomAction;
+  pane?: PaneDescriptor;
 };
 
 export class InMemoryState {
@@ -68,6 +84,7 @@ export class InMemoryState {
     };
     this.#database = openDatabase(this.#options.statePath);
     this.#database.exec(schemaSql);
+    migrateDatabase(this.#database);
     this.#ensureSeedRepository(repoPath);
     this.#reloadRepositories();
     this.#reloadWorktrees();
@@ -210,6 +227,72 @@ export class InMemoryState {
     return snapshot;
   }
 
+  listCustomActions(repoId?: string): CustomAction[] {
+    const rows = repoId
+      ? (this.#database
+          .query(
+            "SELECT id, repo_id, name, command, shortcut, icon, output_mode, ordering FROM custom_actions WHERE repo_id IS NULL OR repo_id = $repoId ORDER BY ordering, name",
+          )
+          .all({ $repoId: repoId }) as CustomActionRow[])
+      : (this.#database
+          .query(
+            "SELECT id, repo_id, name, command, shortcut, icon, output_mode, ordering FROM custom_actions ORDER BY ordering, name",
+          )
+          .all() as CustomActionRow[]);
+    return rows.map(actionFromRow);
+  }
+
+  customAction(actionId: string): CustomAction | null {
+    const row = this.#database
+      .query(
+        "SELECT id, repo_id, name, command, shortcut, icon, output_mode, ordering FROM custom_actions WHERE id = $id",
+      )
+      .get({ $id: actionId }) as CustomActionRow | null;
+    return row ? actionFromRow(row) : null;
+  }
+
+  upsertCustomAction(action: Omit<CustomAction, "id"> & { id?: string }): CustomAction {
+    const next: CustomAction = {
+      id: action.id || crypto.randomUUID(),
+      repoId: action.repoId,
+      name: action.name.trim(),
+      command: action.command.trim(),
+      shortcut: action.shortcut?.trim() || undefined,
+      icon: action.icon?.trim() || undefined,
+      outputMode: action.outputMode,
+      ordering: action.ordering,
+    };
+    this.#database
+      .query(`
+        INSERT INTO custom_actions (id, repo_id, name, command, shortcut, icon, output_mode, ordering)
+        VALUES ($id, $repoId, $name, $command, $shortcut, $icon, $outputMode, $ordering)
+        ON CONFLICT(id) DO UPDATE SET
+          repo_id = excluded.repo_id,
+          name = excluded.name,
+          command = excluded.command,
+          shortcut = excluded.shortcut,
+          icon = excluded.icon,
+          output_mode = excluded.output_mode,
+          ordering = excluded.ordering
+      `)
+      .run({
+        $id: next.id,
+        $repoId: next.repoId,
+        $name: next.name,
+        $command: next.command,
+        $shortcut: next.shortcut ?? null,
+        $icon: next.icon ?? null,
+        $outputMode: next.outputMode,
+        $ordering: next.ordering,
+      });
+    return next;
+  }
+
+  deleteCustomAction(actionId: string): boolean {
+    const result = this.#database.query("DELETE FROM custom_actions WHERE id = $id").run({ $id: actionId });
+    return result.changes > 0;
+  }
+
   createPane(worktreeId: string, title = "Shell", command?: string): PaneDescriptor {
     const pane: PaneDescriptor = {
       id: crypto.randomUUID(),
@@ -270,6 +353,53 @@ export class InMemoryState {
     }
     runtime.process.terminal.resize(cols, rows);
     return true;
+  }
+
+  runCustomAction(paneId: string, actionId: string): RunCustomActionResult | null {
+    const pane = this.#panes.get(paneId);
+    const action = this.customAction(actionId);
+    if (!pane || !action) {
+      return null;
+    }
+    const targetPane = action.outputMode === "newPane" ? this.createPane(pane.worktreeId, action.name) : pane;
+    const worktree = this.#worktreeForPane(targetPane);
+    this.#recordPaneOutput(targetPane.id, new TextEncoder().encode(`\r\n$ ${action.command}\r\n`));
+    const child = Bun.spawn([this.#options.shell, "-lc", action.command], {
+      cwd: worktree?.path ?? process.cwd(),
+      stdout: "pipe",
+      stderr: "pipe",
+      env: {
+        ...process.env,
+        TERM: "xterm-256color",
+      },
+    });
+    void this.#pipeActionOutput(targetPane.id, child);
+    return { action, pane: targetPane.id === pane.id ? undefined : targetPane };
+  }
+
+  async #pipeActionOutput(paneId: string, child: Bun.Subprocess<"ignore", "pipe", "pipe">): Promise<void> {
+    await Promise.all([this.#readActionStream(paneId, child.stdout), this.#readActionStream(paneId, child.stderr)]);
+    const exitCode = await child.exited;
+    const pane = this.#panes.get(paneId);
+    if (pane) {
+      pane.taskStatus = exitCode === 0 ? "done" : "failed";
+      pane.updatedAt = Date.now();
+    }
+  }
+
+  async #readActionStream(paneId: string, stream: ReadableStream<Uint8Array>): Promise<void> {
+    const reader = stream.getReader();
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          return;
+        }
+        this.#recordPaneOutput(paneId, value);
+      }
+    } finally {
+      reader.releaseLock();
+    }
   }
 
   #spawnRuntime(pane: PaneDescriptor, command?: string): void {
@@ -423,6 +553,19 @@ function openDatabase(path: string): Database {
   return new Database(path);
 }
 
+function migrateDatabase(database: Database): void {
+  for (const statement of [
+    "ALTER TABLE custom_actions ADD COLUMN icon TEXT",
+    "ALTER TABLE custom_actions ADD COLUMN output_mode TEXT NOT NULL DEFAULT 'currentPane'",
+  ]) {
+    try {
+      database.exec(statement);
+    } catch {
+      // Column already exists.
+    }
+  }
+}
+
 function displayName(path: string): string {
   return path.split("/").filter(Boolean).at(-1) ?? "Repository";
 }
@@ -445,4 +588,17 @@ function isWorktreeStatus(value: string | null): value is Worktree["status"] {
 
 function isTaskStatus(value: string | null): value is Worktree["taskStatus"] {
   return value === "idle" || value === "running" || value === "done" || value === "failed";
+}
+
+function actionFromRow(row: CustomActionRow): CustomAction {
+  return {
+    id: row.id,
+    repoId: row.repo_id,
+    name: row.name,
+    command: row.command,
+    shortcut: row.shortcut ?? undefined,
+    icon: row.icon ?? undefined,
+    outputMode: row.output_mode === "newPane" ? "newPane" : "currentPane",
+    ordering: row.ordering,
+  };
 }

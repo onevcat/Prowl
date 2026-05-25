@@ -138,6 +138,10 @@ export function handleControl(
           "worktree.list",
           "worktree.create",
           "worktree.archive",
+          "action.list",
+          "action.upsert",
+          "action.delete",
+          "action.run",
           "pane.create",
           "pane.close",
           "settings.get",
@@ -168,6 +172,52 @@ export function handleControl(
   if (message.type === "repo.remove") {
     state.removeRepository(message.repoId);
     return [{ v: 1, type: "repo.listed", id: message.id, repositories: state.repositories }];
+  }
+
+  if (message.type === "action.list") {
+    return [{ v: 1, type: "action.listed", id: message.id, actions: state.listCustomActions(message.repoId) }];
+  }
+
+  if (message.type === "action.upsert") {
+    const validationError = validateCustomAction(message.id, message.action, state);
+    if (validationError) {
+      return [validationError];
+    }
+    return [{ v: 1, type: "action.updated", id: message.id, action: state.upsertCustomAction(message.action) }];
+  }
+
+  if (message.type === "action.delete") {
+    state.deleteCustomAction(message.actionId);
+    return [{ v: 1, type: "action.deleted", id: message.id, actionId: message.actionId }];
+  }
+
+  if (message.type === "action.run") {
+    const result = state.runCustomAction(message.paneId, message.actionId);
+    if (!result) {
+      return [errorResponse(message.id, "ACTION_NOT_FOUND", "Custom action or pane is no longer available")];
+    }
+    const responses: ServerControlMessage[] = [];
+    if (result.pane) {
+      responses.push({
+        v: 1,
+        type: "pane.created",
+        id: message.id,
+        paneId: result.pane.id,
+        channelId: result.pane.channelId,
+        worktreeId: result.pane.worktreeId,
+        title: result.pane.title,
+      });
+    }
+    responses.push({
+      v: 1,
+      type: "notification",
+      id: message.id,
+      severity: "info",
+      title: "Action started",
+      body: result.action.name,
+      paneId: result.pane?.id ?? message.paneId,
+    });
+    return responses;
   }
 
   if (message.type === "worktree.list") {
@@ -346,6 +396,26 @@ function validateBranchName(id: string, branch: string): ErrorControlMessage | n
   }
   if (!/^[A-Za-z0-9._/-]+$/.test(branch) || branch.includes("..") || branch.startsWith("/") || branch.endsWith("/")) {
     return errorResponse(id, "INVALID_BRANCH", "Branch name contains unsupported characters");
+  }
+  return null;
+}
+
+function validateCustomAction(
+  id: string,
+  action: Extract<ClientControlMessage, { type: "action.upsert" }>["action"],
+  state: InMemoryState,
+): ErrorControlMessage | null {
+  if (!action.name.trim()) {
+    return errorResponse(id, "INVALID_ACTION", "Action name is required");
+  }
+  if (!action.command.trim()) {
+    return errorResponse(id, "INVALID_ACTION", "Action command is required");
+  }
+  if (action.repoId && !state.repository(action.repoId)) {
+    return errorResponse(id, "REPO_NOT_FOUND", "Repository is no longer registered");
+  }
+  if (action.outputMode !== "currentPane" && action.outputMode !== "newPane") {
+    return errorResponse(id, "INVALID_ACTION", "Unsupported action output mode");
   }
   return null;
 }
