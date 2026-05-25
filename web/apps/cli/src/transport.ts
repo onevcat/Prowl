@@ -16,12 +16,15 @@ export type CLIConfig = {
 };
 
 export function defaultSocketPath(): string {
-  return join(homedir(), ".prowl", "prowld.sock");
+  return Bun.env.PROWL_SOCKET_PATH ?? join(homedir(), ".prowl", "prowld.sock");
+}
+
+export function defaultConfigPath(): string {
+  return Bun.env.PROWL_CONFIG_PATH ?? join(homedir(), ".prowl", "config.json");
 }
 
 export async function loadCLIConfig(): Promise<CLIConfig> {
-  const path = join(homedir(), ".prowl", "config.json");
-  return JSON.parse(await readFile(path, "utf8")) as CLIConfig;
+  return JSON.parse(await readFile(defaultConfigPath(), "utf8")) as CLIConfig;
 }
 
 export async function requestDaemon(

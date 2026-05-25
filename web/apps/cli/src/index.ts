@@ -14,8 +14,7 @@ import {
   readPane,
   renderPaneNew,
   renderPaneRead,
-  sendPaneCommand,
-  sendPaneCommandResult,
+  sendPaneCommandWithOptions,
   sendPaneKey,
   sendPaneKeyResult,
 } from "./commands/pane";
@@ -36,10 +35,19 @@ switch (command) {
     writeValue({ name: "prowl", version: "0.0.0" }, renderVersion());
     break;
   case "send":
-    await writeOutput(
-      () => sendPaneCommandResult(args[0], args.slice(1).join(" ")),
-      () => sendPaneCommand(args[0], args.slice(1).join(" ")),
-    );
+    {
+      const capture = args.includes("--capture");
+      const sendArgs = args.filter((arg) => arg !== "--capture");
+      const paneId = sendArgs[0];
+      const commandText = sendArgs.slice(1).join(" ");
+      await writeOutput(
+        () => sendPaneCommandWithOptions(paneId, commandText, { capture }),
+        () =>
+          sendPaneCommandWithOptions(paneId, commandText, { capture }).then(
+            (result) => result.output ?? `sent\t${result.paneId}`,
+          ),
+      );
+    }
     break;
   case "read":
     await writeOutput(
@@ -113,7 +121,7 @@ switch (command) {
   case "--help":
     process.stdout.write(`Usage:
   prowl list
-  prowl send <paneId> "<command>"
+  prowl send <paneId> "<command>" [--capture]
   prowl read <paneId>
   prowl key <paneId> <keystroke>
   prowl new --worktree <id> [--command]

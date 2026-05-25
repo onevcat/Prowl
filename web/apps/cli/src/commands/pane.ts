@@ -5,7 +5,7 @@ import { hello, loadCLIConfig, requestDaemon, sendPtyInput } from "../transport"
 const textEncoder = new TextEncoder();
 
 export type PaneReadResult = { paneId: string; output: string };
-export type PaneSendResult = { paneId: string; status: "sent"; command: string };
+export type PaneSendResult = { paneId: string; status: "sent"; command: string; output?: string };
 export type PaneKeyResult = { paneId: string; status: "sent"; key: string };
 export type PaneNewResult = { paneId: string; worktreeId: string; channelId: number; title: string };
 export type PaneCloseResult = { paneId: string; status: "closed"; exitCode: number };
@@ -16,20 +16,14 @@ export async function renderPaneRead(paneId: string | undefined): Promise<string
 
 export async function readPane(paneId: string | undefined): Promise<PaneReadResult> {
   const pane = await requirePane(paneId);
-  const response = await requestDaemon({
-    v: 1,
-    type: "pane.attach",
-    id: makeMessageId(),
-    paneId: pane.id,
-  });
-  if (response.type !== "pane.replay") {
-    throw new Error(`Unexpected daemon response: ${response.type}`);
-  }
-  return { paneId: pane.id, output: Buffer.from(response.bytes, "base64").toString("utf8") };
+  return { paneId: pane.id, output: await replayForPane(pane.id) };
 }
 
 export async function sendPaneCommand(paneId: string | undefined, command: string | undefined): Promise<string> {
   const result = await sendPaneCommandResult(paneId, command);
+  if (result.output !== undefined) {
+    return result.output;
+  }
   return `sent\t${result.paneId}`;
 }
 
@@ -37,12 +31,24 @@ export async function sendPaneCommandResult(
   paneId: string | undefined,
   command: string | undefined,
 ): Promise<PaneSendResult> {
+  return sendPaneCommandWithOptions(paneId, command, { capture: false });
+}
+
+export async function sendPaneCommandWithOptions(
+  paneId: string | undefined,
+  command: string | undefined,
+  options: { capture: boolean },
+): Promise<PaneSendResult> {
   if (!command) {
-    throw new Error('Usage: prowl send <paneId> "<command>"');
+    throw new Error('Usage: prowl send <paneId> "<command>" [--capture]');
   }
   const pane = await requirePane(paneId);
   await sendPtyInput(pane.channelId, textEncoder.encode(`${command}\r`));
-  return { paneId: pane.id, status: "sent", command };
+  if (!options.capture) {
+    return { paneId: pane.id, status: "sent", command };
+  }
+  await Bun.sleep(250);
+  return { paneId: pane.id, status: "sent", command, output: await replayForPane(pane.id) };
 }
 
 export async function sendPaneKey(paneId: string | undefined, key: string | undefined): Promise<string> {
@@ -128,6 +134,19 @@ async function requirePane(paneId: string | undefined): Promise<PaneDescriptor> 
     throw new Error(`Pane not found: ${paneId}`);
   }
   return pane;
+}
+
+async function replayForPane(paneId: string): Promise<string> {
+  const response = await requestDaemon({
+    v: 1,
+    type: "pane.attach",
+    id: makeMessageId(),
+    paneId,
+  });
+  if (response.type !== "pane.replay") {
+    throw new Error(`Unexpected daemon response: ${response.type}`);
+  }
+  return Buffer.from(response.bytes, "base64").toString("utf8");
 }
 
 async function listPanes(): Promise<PaneDescriptor[]> {
