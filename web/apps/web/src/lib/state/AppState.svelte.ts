@@ -14,7 +14,7 @@ import { makeMessageId, protocolVersion } from "@prowl/protocol";
 import { get, set } from "idb-keyval";
 import { Pane } from "./Pane.svelte";
 import { WorktreeView } from "./WorktreeView.svelte";
-import { defaultShortcuts, normalizeKeyChord } from "./shortcuts";
+import { defaultShortcuts, normalizeKeyChord, shouldHandleGlobalShortcut } from "./shortcuts";
 import type {
   ActionId,
   AppSettings,
@@ -206,6 +206,9 @@ export class AppState {
   }
 
   handleKeydown(event: KeyboardEvent): void {
+    if (!shouldHandleGlobalShortcut(event)) {
+      return;
+    }
     this.requestNotificationPermission();
     const chord = normalizeKeyChord(event);
     const action = this.#shortcutMap().get(chord);

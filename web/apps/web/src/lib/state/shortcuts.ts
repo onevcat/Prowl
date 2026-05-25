@@ -37,3 +37,21 @@ export function normalizeKeyChord(event: KeyboardEvent): KeyChord {
   parts.push(event.key.length === 1 ? event.key.toUpperCase() : event.key);
   return parts.join("+");
 }
+
+export function shouldHandleGlobalShortcut(event: Pick<KeyboardEvent, "defaultPrevented" | "target">): boolean {
+  if (event.defaultPrevented) {
+    return false;
+  }
+  return !isEditableShortcutTarget(event.target);
+}
+
+function isEditableShortcutTarget(target: EventTarget | null): boolean {
+  if (!target || typeof (target as { closest?: unknown }).closest !== "function") {
+    return false;
+  }
+  return Boolean(
+    (target as unknown as { closest: (selector: string) => unknown }).closest(
+      "input, textarea, select, [contenteditable=''], [contenteditable='true']",
+    ),
+  );
+}
