@@ -9,6 +9,7 @@ import {
   commandHistoryKey,
   commandPaletteItemId,
   customActionsForRepositories,
+  isPersistableAppView,
   openTabsKey,
   paneDescriptorsByWorktree,
   paneIdsOutsideWorktrees,
@@ -145,6 +146,13 @@ describe("AppState bootstrap protocol", () => {
   test("keeps pane listing out of the settings snapshot request", () => {
     expect(bootstrapSettingsKeys).toEqual(["appearance", "shortcuts", "advanced"]);
     expect(bootstrapSettingsKeys).not.toContain("panes");
+  });
+
+  test("persists only WEB.md workspace views", () => {
+    expect(isPersistableAppView("shelf")).toBe(true);
+    expect(isPersistableAppView("canvas")).toBe(true);
+    expect(isPersistableAppView("settings")).toBe(false);
+    expect(isPersistableAppView("diff")).toBe(false);
   });
 });
 

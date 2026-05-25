@@ -178,7 +178,8 @@ test("persists appearance settings through the daemon", async ({ page }) => {
   await expect.poll(() => htmlDataset(page, "unreadBadges")).toBe("false");
 
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+  await expect(page.locator(".connection.open")).toBeVisible();
+  await page.getByRole("button", { name: "Open Settings", exact: true }).click();
   await expect(page.getByLabel("Theme")).toHaveValue("dark");
   await expect(page.getByLabel("Terminal density")).toHaveValue("compact");
   await expect(page.getByLabel("Show unread badges")).not.toBeChecked();
@@ -195,15 +196,18 @@ test("persists shortcut settings through the daemon", async ({ page }) => {
   await expect(page.locator(".connection.open")).toBeVisible();
 
   await page.getByRole("button", { name: "Open Settings", exact: true }).click();
-  await page.getByLabel("Open palette shortcut").fill("Mod+Shift+K");
+  await page.getByLabel("Open palette shortcut").fill("Alt+K");
   await page.getByRole("button", { name: "Save Shortcut Settings" }).click();
 
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
-  await expect(page.getByLabel("Open palette shortcut")).toHaveValue("Mod+Shift+K");
+  await expect(page.locator(".connection.open")).toBeVisible();
+  await page.getByRole("button", { name: "Open Settings", exact: true }).click();
+  await expect(page.getByLabel("Open palette shortcut")).toHaveValue("Alt+K");
 
   await page.getByRole("button", { name: "Back to Shelf" }).click();
-  await page.keyboard.press("Control+Shift+K");
+  await expect(page.getByRole("textbox", { name: "Shell" })).toBeVisible();
+  await page.locator("main.shell").click({ position: { x: 20, y: 20 } });
+  await page.keyboard.press("Alt+K");
   await expect(page.getByRole("textbox", { name: "Command Palette" })).toBeVisible();
 
   await page.keyboard.press("Escape");

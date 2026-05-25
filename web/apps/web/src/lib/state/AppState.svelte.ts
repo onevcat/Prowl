@@ -475,7 +475,9 @@ export class AppState {
 
   setView(view: AppView): void {
     this.view = view;
-    persistJSONValue(uiViewKey, view);
+    if (isPersistableAppView(view)) {
+      persistJSONValue(uiViewKey, view);
+    }
     this.syncRenderedPanes();
   }
 
@@ -1014,7 +1016,7 @@ export class AppState {
       commandHistory,
       legacyCommandHistory,
     ] = await Promise.all([
-      get<AppView>(uiViewKey),
+      get<unknown>(uiViewKey),
       get<string>(selectedWorktreeKey),
       get<Record<string, string[]>>(worktreeOrderKey),
       get<Record<string, string[]>>(paneOrderKey),
@@ -1023,7 +1025,7 @@ export class AppState {
       get<CommandHistoryEntry[] | PaletteHistoryEntry[]>(commandHistoryKey),
       get<CommandHistoryEntry[]>(legacyCommandHistoryKey),
     ]);
-    if (view === "shelf" || view === "canvas" || view === "settings" || view === "diff") {
+    if (isPersistableAppView(view)) {
       this.view = view;
     }
     if (appearance) {
@@ -1883,6 +1885,10 @@ export function applyPaneDescriptor(pane: Pane, descriptor: PaneDescriptor): voi
   pane.unread = descriptor.unread;
   pane.lastOutputLine = descriptor.lastOutputLine;
   pane.updatedAt = descriptor.updatedAt;
+}
+
+export function isPersistableAppView(view: unknown): view is Extract<AppView, "shelf" | "canvas"> {
+  return view === "shelf" || view === "canvas";
 }
 
 function isPaneDescriptor(value: unknown): value is PaneDescriptor {
