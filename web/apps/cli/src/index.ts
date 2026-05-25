@@ -18,7 +18,14 @@ import {
   sendPaneKey,
   sendPaneKeyResult,
 } from "./commands/pane";
-import { getRepositoryList, renderRepoList } from "./commands/repo";
+import {
+  addRepository,
+  getRepositoryList,
+  removeRepository,
+  renderRepoAdd,
+  renderRepoList,
+  renderRepoRemove,
+} from "./commands/repo";
 import { renderVersion } from "./commands/version";
 import { createWorktree, getWorktreeList, renderWorktreeCreate, renderWorktreeList } from "./commands/worktree";
 
@@ -73,6 +80,20 @@ switch (command) {
       await writeOutput(() => getRepositoryList(), renderRepoList);
       break;
     }
+    if (args[0] === "add") {
+      await writeOutput(
+        () => addRepository(args[1]),
+        () => renderRepoAdd(args[1]),
+      );
+      break;
+    }
+    if (args[0] === "remove") {
+      await writeOutput(
+        () => removeRepository(args[1]),
+        () => renderRepoRemove(args[1]),
+      );
+      break;
+    }
     process.stderr.write(`Unknown repo command: ${args[0] ?? ""}\n`);
     process.exit(64);
     break;
@@ -122,7 +143,10 @@ switch (command) {
   prowl new --worktree <id> [--command]
   prowl close <paneId>
   prowl worktree list [--repo <id>]
+  prowl worktree create <repoId> <branch>
   prowl repo list
+  prowl repo add <path>
+  prowl repo remove <repoId>
   prowl daemon start|stop|status
   prowl version
 `);
