@@ -39,6 +39,22 @@ export function normalizeKeyChord(event: KeyboardEvent): KeyChord {
   return parts.join("+");
 }
 
+export function shortcutAliases(chord: KeyChord, platform = navigator.platform): KeyChord[] {
+  const normalized = chord.trim();
+  if (!normalized) {
+    return [];
+  }
+
+  const aliases = [normalized];
+  if (!/Mac|iPhone|iPad/.test(platform)) {
+    const parts = normalized.split("+");
+    if (parts.includes("Mod") && parts.includes("Control") && !parts.includes("Alt")) {
+      aliases.push(parts.map((part) => (part === "Control" ? "Alt" : part)).join("+"));
+    }
+  }
+  return aliases;
+}
+
 export function shouldHandleGlobalShortcut(event: Pick<KeyboardEvent, "defaultPrevented" | "target">): boolean {
   if (event.defaultPrevented) {
     return false;

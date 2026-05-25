@@ -291,6 +291,30 @@ describe("AppState view mutation methods", () => {
     expect(diffWorktreeId).toBe("worktree-1");
   });
 
+  test("runs native Mod-Control actions through non-Apple aliases", () => {
+    const state = appStateFixture();
+    const event = shortcutEvent({ key: "ArrowDown", ctrlKey: true, altKey: true });
+
+    state.handleKeydown(event);
+
+    expect(event.prevented).toBe(true);
+    expect(state.selectedPaneId).toBe("pane-2");
+  });
+
+  test("runs pane close through the shortcut action", () => {
+    const state = appStateFixture();
+    const event = shortcutEvent({ key: "w", ctrlKey: true });
+    let closed = false;
+    state.closeSelectedPane = (async () => {
+      closed = true;
+    }) as AppState["closeSelectedPane"];
+
+    state.handleKeydown(event);
+
+    expect(event.prevented).toBe(true);
+    expect(closed).toBe(true);
+  });
+
   test("updates auth form state through methods", () => {
     const state = appStateFixture();
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { shouldHandleGlobalShortcut } from "./shortcuts";
+import { shortcutAliases, shouldHandleGlobalShortcut } from "./shortcuts";
 
 describe("global shortcut handling", () => {
   test("ignores events that a focused widget already handled", () => {
@@ -18,6 +18,19 @@ describe("global shortcut handling", () => {
 
   test("keeps app-level shortcuts active for terminal containers", () => {
     expect(shouldHandleGlobalShortcut(shortcutEvent({ target: nonEditableTarget() }))).toBe(true);
+  });
+});
+
+describe("shortcut aliases", () => {
+  test("keeps native Mod+Control chords on Apple platforms", () => {
+    expect(shortcutAliases("Mod+Control+ArrowDown", "MacIntel")).toEqual(["Mod+Control+ArrowDown"]);
+  });
+
+  test("maps native Mod+Control chords to triggerable non-Apple chords", () => {
+    expect(shortcutAliases("Mod+Control+ArrowDown", "Linux x86_64")).toEqual([
+      "Mod+Control+ArrowDown",
+      "Mod+Alt+ArrowDown",
+    ]);
   });
 });
 

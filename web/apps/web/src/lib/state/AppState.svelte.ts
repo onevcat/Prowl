@@ -26,7 +26,7 @@ import { makeMessageId, protocolVersion } from "@prowl/protocol";
 import { get, set } from "idb-keyval";
 import { Pane } from "./Pane.svelte";
 import { WorktreeView } from "./WorktreeView.svelte";
-import { defaultShortcuts, normalizeKeyChord, shouldHandleGlobalShortcut } from "./shortcuts";
+import { defaultShortcuts, normalizeKeyChord, shortcutAliases, shouldHandleGlobalShortcut } from "./shortcuts";
 import type {
   ActionId,
   AppSettings,
@@ -273,7 +273,9 @@ export class AppState {
       return;
     }
 
-    const customAction = this.runnableCustomActions.find((candidate) => candidate.shortcut?.trim() === chord);
+    const customAction = this.runnableCustomActions.find((candidate) =>
+      shortcutAliases(candidate.shortcut ?? "").includes(chord),
+    );
     if (customAction) {
       event.preventDefault();
       void this.runCustomAction(customAction.id);
@@ -1446,11 +1448,13 @@ export class AppState {
   }
 
   #shortcutMap(): Map<string, ActionId> {
-    return new Map(
-      Object.entries(this.settings.shortcuts)
-        .filter((entry): entry is [ActionId, string] => Boolean(entry[1]?.trim()))
-        .map(([action, chord]) => [chord.trim(), action]),
-    );
+    const map = new Map<string, ActionId>();
+    for (const [action, chord] of Object.entries(this.settings.shortcuts)) {
+      for (const alias of shortcutAliases(chord)) {
+        map.set(alias, action as ActionId);
+      }
+    }
+    return map;
   }
 
   #confirmDestructiveAction(message: string): boolean {

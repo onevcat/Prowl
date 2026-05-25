@@ -106,7 +106,7 @@ test("persists appearance settings through the daemon", async ({ page }) => {
   await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}&token=${token}`);
   await expect(page.locator(".connection.open")).toBeVisible();
 
-  await page.getByRole("button", { name: "Open Settings" }).click();
+  await page.getByRole("button", { name: "Open Settings", exact: true }).click();
   await page.getByLabel("Theme").selectOption("dark");
   await page.getByLabel("Terminal density").selectOption("compact");
   await page.getByLabel("Show unread badges").uncheck();
@@ -133,7 +133,7 @@ test("persists shortcut settings through the daemon", async ({ page }) => {
   await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}&token=${token}`);
   await expect(page.locator(".connection.open")).toBeVisible();
 
-  await page.getByRole("button", { name: "Open Settings" }).click();
+  await page.getByRole("button", { name: "Open Settings", exact: true }).click();
   await page.getByLabel("Open palette shortcut").fill("Mod+Shift+K");
   await page.getByRole("button", { name: "Save Shortcut Settings" }).click();
 
@@ -146,7 +146,7 @@ test("persists shortcut settings through the daemon", async ({ page }) => {
   await expect(page.getByRole("textbox", { name: "Command Palette" })).toBeVisible();
 
   await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "Open Settings" }).click();
+  await page.getByRole("button", { name: "Open Settings", exact: true }).click();
   await page.getByLabel("Open palette shortcut").fill("Mod+K");
   await page.getByRole("button", { name: "Save Shortcut Settings" }).click();
   await page.getByRole("button", { name: "Back to Shelf" }).click();
@@ -256,7 +256,7 @@ test("runs custom actions from the shelf toolbar", async ({ page }) => {
   await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}&token=${token}`);
   await expect(page.locator(".connection.open")).toBeVisible();
 
-  await page.getByRole("button", { name: "Open Settings" }).click();
+  await page.getByRole("button", { name: "Open Settings", exact: true }).click();
   await page.getByLabel("Action name").fill(actionName);
   await page.getByLabel("Action command").fill(`printf ${output}`);
   await page.getByRole("button", { name: "Add Custom Action" }).click();
@@ -276,7 +276,7 @@ test("runs custom actions in a new pane from the shelf toolbar", async ({ page }
   await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}&token=${token}`);
   await expect(page.locator(".connection.open")).toBeVisible();
 
-  await page.getByRole("button", { name: "Open Settings" }).click();
+  await page.getByRole("button", { name: "Open Settings", exact: true }).click();
   await page.getByLabel("Action name").fill(actionName);
   await page.getByLabel("Action command").fill(`printf ${output}`);
   await page.getByLabel("Action output").selectOption("newPane");
@@ -297,7 +297,7 @@ test("runs custom actions from the command palette", async ({ page }) => {
   await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}&token=${token}`);
   await expect(page.locator(".connection.open")).toBeVisible();
 
-  await page.getByRole("button", { name: "Open Settings" }).click();
+  await page.getByRole("button", { name: "Open Settings", exact: true }).click();
   await page.getByLabel("Action name").fill(actionName);
   await page.getByLabel("Action command").fill(`printf ${output}`);
   await page.getByRole("button", { name: "Add Custom Action" }).click();
@@ -320,7 +320,7 @@ test("runs custom actions from a shortcut", async ({ page }) => {
   await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}&token=${token}`);
   await expect(page.locator(".connection.open")).toBeVisible();
 
-  await page.getByRole("button", { name: "Open Settings" }).click();
+  await page.getByRole("button", { name: "Open Settings", exact: true }).click();
   await page.getByLabel("Action name").fill(actionName);
   await page.getByLabel("Action command").fill(`printf ${output}`);
   await page.getByLabel("Action shortcut").fill("Mod+Alt+R");
@@ -334,6 +334,26 @@ test("runs custom actions from a shortcut", async ({ page }) => {
   await expect(page.getByRole("textbox", { name: "Shell" })).toContainText(output);
 });
 
+test("cycles worktrees through native shortcut aliases", async ({ page }) => {
+  const suffix = crypto.randomUUID().slice(0, 8);
+  const worktreeName = `shortcut-worktree-${suffix}`;
+  await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}&token=${token}`);
+  await expect(page.locator(".connection.open")).toBeVisible();
+
+  await page.getByRole("button", { name: "Open Settings", exact: true }).click();
+  await page.getByLabel("e2e-repo branch").fill(`shortcut-${suffix}`);
+  await page.getByLabel("e2e-repo worktree directory").fill(worktreeName);
+  await page.getByRole("button", { name: "Create Worktree for e2e-repo" }).click();
+  await expect(page.getByText(worktreeName, { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Back to Shelf" }).click();
+  await page.getByRole("button", { name: "Open Settings", exact: true }).focus();
+  await page.keyboard.press("Control+Alt+ArrowRight");
+  await expect(page.getByRole("heading", { name: worktreeName })).toBeVisible();
+  await page.keyboard.press("Control+Alt+ArrowLeft");
+  await expect(page.getByRole("heading", { name: "default" })).toBeVisible();
+});
+
 test("reorders worktrees and tabs with drag and drop", async ({ page }) => {
   const suffix = crypto.randomUUID().slice(0, 8);
   const worktreeName = `dnd-worktree-${suffix}`;
@@ -342,7 +362,7 @@ test("reorders worktrees and tabs with drag and drop", async ({ page }) => {
   await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}&token=${token}`);
   await expect(page.locator(".connection.open")).toBeVisible();
 
-  await page.getByRole("button", { name: "Open Settings" }).click();
+  await page.getByRole("button", { name: "Open Settings", exact: true }).click();
   await page.getByLabel("e2e-repo branch").fill(`dnd-${suffix}`);
   await page.getByLabel("e2e-repo worktree directory").fill(worktreeName);
   await page.getByRole("button", { name: "Create Worktree for e2e-repo" }).click();
@@ -360,10 +380,10 @@ test("reorders worktrees and tabs with drag and drop", async ({ page }) => {
   const createdWorktree = sidebar.getByRole("button", { name: worktreeName });
   await expect(defaultWorktree).toBeVisible();
   await expect(createdWorktree).toBeVisible();
-  await expect(worktreeNames(page)).resolves.toEqual(["default", worktreeName]);
+  await expect.poll(() => worktreeOrder(page, "default", worktreeName)).toBeLessThan(0);
 
   await createdWorktree.dragTo(defaultWorktree);
-  await expect(worktreeNames(page)).resolves.toEqual([worktreeName, "default"]);
+  await expect.poll(() => worktreeOrder(page, worktreeName, "default")).toBeLessThan(0);
 
   await defaultWorktree.click();
   await page.getByRole("button", { name: "Run Custom Action" }).click();
@@ -433,6 +453,11 @@ async function htmlDataset(page: Page, key: string): Promise<string | undefined>
 
 async function worktreeNames(page: Page): Promise<string[]> {
   return page.locator("aside[aria-label='Worktrees and tabs'] > section > button > .name").allTextContents();
+}
+
+async function worktreeOrder(page: Page, before: string, after: string): Promise<number> {
+  const names = await worktreeNames(page);
+  return names.indexOf(before) - names.indexOf(after);
 }
 
 async function tabTitles(page: Page): Promise<string[]> {
