@@ -111,6 +111,8 @@
           <Spine
             {worktree}
             color={repository.color}
+            taskStatus={appState.worktreeTaskStatus(worktree.id)}
+            unreadCount={appState.worktreeUnreadCount(worktree.id)}
             selected={worktree.id === appState.selectedWorktreeId}
             onclick={() => appState.selectWorktree(worktree.id)}
             oncontextmenu={(event) => openWorktreeMenu(event, worktree.id)}

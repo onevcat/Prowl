@@ -1,9 +1,11 @@
 <script lang="ts">
-  import type { Worktree } from "$lib/state/types";
+  import type { TaskStatus, Worktree } from "$lib/state/types";
 
   type Props = {
     worktree: Worktree;
     color: string;
+    taskStatus: TaskStatus;
+    unreadCount: number;
     selected: boolean;
     onclick: () => void;
     oncontextmenu: (event: MouseEvent) => void;
@@ -13,8 +15,19 @@
     ondragend: () => void;
   };
 
-  let { worktree, color, selected, onclick, oncontextmenu, ondragstart, ondragover, ondrop, ondragend }: Props =
-    $props();
+  let {
+    worktree,
+    color,
+    taskStatus,
+    unreadCount,
+    selected,
+    onclick,
+    oncontextmenu,
+    ondragstart,
+    ondragover,
+    ondrop,
+    ondragend,
+  }: Props = $props();
 </script>
 
 <button
@@ -39,10 +52,10 @@
   }}
   ondragend={ondragend}
 >
-  <span class={`status ${worktree.taskStatus}`}></span>
+  <span class={`status ${taskStatus}`}></span>
   <span class="name">{worktree.name}</span>
-  {#if worktree.unreadCount > 0}
-    <span class="count">{worktree.unreadCount}</span>
+  {#if unreadCount > 0}
+    <span class="count">{unreadCount}</span>
   {/if}
 </button>
 

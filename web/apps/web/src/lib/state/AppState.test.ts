@@ -36,6 +36,44 @@ describe("AppState ordering", () => {
   });
 });
 
+describe("AppState worktree spine state", () => {
+  test("derives unread count from panes when pane metadata is loaded", () => {
+    const state = appStateFixture();
+    const secondPane = state.panes.get("pane-2");
+    expect(secondPane).toBeDefined();
+    if (!secondPane) {
+      return;
+    }
+    secondPane.unread = true;
+
+    expect(state.worktreeUnreadCount("worktree-1")).toBe(1);
+
+    state.selectPane("pane-2");
+
+    expect(state.worktreeUnreadCount("worktree-1")).toBe(0);
+  });
+
+  test("derives task status from pane severity before falling back to worktree metadata", () => {
+    const state = appStateFixture();
+    const firstPane = state.panes.get("pane-1");
+    const secondPane = state.panes.get("pane-2");
+    expect(firstPane).toBeDefined();
+    expect(secondPane).toBeDefined();
+    if (!firstPane || !secondPane) {
+      return;
+    }
+    firstPane.taskStatus = "done";
+    secondPane.taskStatus = "running";
+
+    expect(state.worktreeTaskStatus("worktree-1")).toBe("running");
+
+    secondPane.taskStatus = "failed";
+
+    expect(state.worktreeTaskStatus("worktree-1")).toBe("failed");
+    expect(state.worktreeTaskStatus("worktree-2")).toBe("idle");
+  });
+});
+
 describe("AppState custom action shortcuts", () => {
   test("ignores repo-scoped custom action shortcuts outside the selected repo", () => {
     const state = appStateFixture();

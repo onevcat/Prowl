@@ -195,6 +195,28 @@ export class AppState {
     );
   }
 
+  worktreeUnreadCount(worktreeId: string): number {
+    const panes = this.orderedPanes(worktreeId);
+    if (panes.length === 0) {
+      return this.worktrees.find((worktree) => worktree.id === worktreeId)?.unreadCount ?? 0;
+    }
+    return panes.filter((pane) => pane.unread).length;
+  }
+
+  worktreeTaskStatus(worktreeId: string): PaneDescriptor["taskStatus"] {
+    const panes = this.orderedPanes(worktreeId);
+    if (panes.some((pane) => pane.taskStatus === "failed")) {
+      return "failed";
+    }
+    if (panes.some((pane) => pane.taskStatus === "running")) {
+      return "running";
+    }
+    if (panes.some((pane) => pane.taskStatus === "done")) {
+      return "done";
+    }
+    return this.worktrees.find((worktree) => worktree.id === worktreeId)?.taskStatus ?? "idle";
+  }
+
   get paletteItems(): PaletteItem[] {
     const baseItems = this.#basePaletteItems();
     const baseIds = new Set(baseItems.map((item) => item.id));
