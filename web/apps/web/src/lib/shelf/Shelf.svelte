@@ -37,6 +37,7 @@
       <button
         type="button"
         role="menuitem"
+        title="Show Diff (Command Shift Y)"
         onclick={() => {
           const worktreeId = worktreeMenu?.worktreeId;
           closeMenus();
@@ -51,6 +52,7 @@
       <button
         type="button"
         role="menuitem"
+        title="New Tab (Command T)"
         onclick={() => {
           const worktreeId = worktreeMenu?.worktreeId;
           closeMenus();
@@ -71,7 +73,12 @@
       <Button label="⌘K" title="Open Command Palette (Command K)" onclick={() => appState.perform("palette.open")} />
       <Button label="▦" title="Show Canvas" onclick={() => appState.setView("canvas")} />
       <Button label="+" title="New Tab (Command T)" onclick={() => appState.createPane()} />
-      <Button label="Δ" title="Show Diff" disabled={!appState.selectedWorktreeId || appState.diffBusy} onclick={() => appState.showDiff()} />
+      <Button
+        label="Δ"
+        title="Show Diff (Command Shift Y)"
+        disabled={!appState.selectedWorktreeId || appState.diffBusy}
+        onclick={() => appState.showDiff()}
+      />
       <div class="action-menu">
         <Button
           label="▶"
@@ -87,7 +94,9 @@
               <button
                 type="button"
                 role="menuitem"
-                title={`Run ${action.name}`}
+                title={
+                  action.shortcut ? `Run ${action.name} (${action.shortcut})` : `Run ${action.name}`
+                }
                 onclick={() => {
                   actionMenuOpen = false;
                   void appState.runCustomAction(action.id);
