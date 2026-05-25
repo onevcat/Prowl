@@ -129,7 +129,7 @@ export class AppState {
   }
 
   get needsAuthentication(): boolean {
-    return !this.sessionId && this.connection !== "open";
+    return !this.sessionId && (this.connection !== "open" || this.errorMessage !== null);
   }
 
   orderedWorktrees(repoId: string): Worktree[] {

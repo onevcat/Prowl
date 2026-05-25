@@ -144,8 +144,8 @@ export function startServer(config: DaemonConfig, options: ServerOptions = {}): 
         return new Response("Forbidden origin", { status: 403 });
       }
 
-      const token = tokenFromRequest(request, url);
-      if (token !== config.token) {
+      const upgradeAuth = authenticateUpgradeToken(tokenFromRequest(request, url), config);
+      if (!upgradeAuth.allowed) {
         logger.warn("rejected websocket unauthorized token");
         return new Response("Unauthorized", { status: 401 });
       }
@@ -153,9 +153,9 @@ export function startServer(config: DaemonConfig, options: ServerOptions = {}): 
       if (
         !server.upgrade(request, {
           data: {
-            authenticated: true,
+            authenticated: upgradeAuth.authenticated,
             sessionId: crypto.randomUUID(),
-            ownedPaneIds: new Set(state.listPanes().map((pane) => pane.id)),
+            ownedPaneIds: upgradeAuth.authenticated ? new Set(state.listPanes().map((pane) => pane.id)) : new Set(),
             controlWindowStartedAt: Date.now(),
             controlMessagesInWindow: 0,
           },
@@ -186,7 +186,7 @@ export function startServer(config: DaemonConfig, options: ServerOptions = {}): 
         }
         if (frame.tag === protocolTags.pty) {
           const pane = state.paneForChannel(frame.channelId);
-          if (!pane || !ws.data.ownedPaneIds.has(pane.id)) {
+          if (!ws.data.authenticated || !pane || !ws.data.ownedPaneIds.has(pane.id)) {
             logger.warn(`rejected pty input for unauthorized channel=${frame.channelId}`);
             return;
           }
@@ -209,6 +209,12 @@ export function startServer(config: DaemonConfig, options: ServerOptions = {}): 
           ws.close(1008, message);
           return;
         }
+        if (!ws.data.authenticated && control.type !== "hello") {
+          ws.send(
+            encodeJsonFrame(errorResponse(control.id, "UNAUTHORIZED", "Send hello before other control messages")),
+          );
+          return;
+        }
         if (control.type === "pane.attach") {
           debugStats.paneAttachRequests += 1;
         }
@@ -220,6 +226,10 @@ export function startServer(config: DaemonConfig, options: ServerOptions = {}): 
           sessionId: ws.data.sessionId,
           ownedPaneIds: ws.data.ownedPaneIds,
         });
+        if (control.type === "hello" && responses.some((response) => response.type === "welcome")) {
+          ws.data.authenticated = true;
+          ws.data.ownedPaneIds = new Set(state.listPanes().map((pane) => pane.id));
+        }
         for (const response of responses) {
           ws.send(encodeJsonFrame(response));
         }
@@ -247,6 +257,16 @@ export function allowControlMessage(session: WebSocketData, now = Date.now()): b
   }
   session.controlMessagesInWindow += 1;
   return session.controlMessagesInWindow <= maxControlMessagesPerSecond;
+}
+
+export function authenticateUpgradeToken(
+  token: string | null,
+  config: Pick<DaemonConfig, "token">,
+): { allowed: boolean; authenticated: boolean } {
+  if (token === null) {
+    return { allowed: true, authenticated: false };
+  }
+  return token === config.token ? { allowed: true, authenticated: true } : { allowed: false, authenticated: false };
 }
 
 async function handleLogin(

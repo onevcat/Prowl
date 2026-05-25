@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { makeMessageId, protocolVersion } from "@prowl/protocol";
-import { allowControlMessage, handleControl, startServer } from "./server";
+import { allowControlMessage, authenticateUpgradeToken, handleControl, startServer } from "./server";
 import { InMemoryState } from "./state/InMemoryState";
 
 describe("daemon scaffold", () => {
@@ -128,6 +128,56 @@ describe("daemon scaffold", () => {
     );
 
     expect(response[0]?.type).toBe("welcome");
+  });
+
+  test("allows websocket upgrade without a token for hello-first authentication", () => {
+    const config = { token: "test-token" };
+
+    expect(authenticateUpgradeToken(null, config)).toEqual({ allowed: true, authenticated: false });
+    expect(authenticateUpgradeToken("test-token", config)).toEqual({ allowed: true, authenticated: true });
+    expect(authenticateUpgradeToken("wrong-token", config)).toEqual({ allowed: false, authenticated: false });
+  });
+
+  test("accepts hello token on an unauthenticated connection", () => {
+    const root = mkdtempSync(join(tmpdir(), "prowl-hello-first-test-"));
+    const state = new InMemoryState(root, { statePath: ":memory:", spawnProcesses: false });
+    const config = {
+      port: 0,
+      bind: "127.0.0.1",
+      token: "test-token",
+      allowedOrigins: ["http://127.0.0.1:5173"],
+      requireTLS: false,
+    };
+
+    const accepted = handleControl(
+      {
+        v: 1,
+        type: "hello",
+        id: makeMessageId(),
+        token: "test-token",
+        clientVersion: "0.0.0",
+        protocolVersion,
+      },
+      state,
+      config,
+      { authenticated: false },
+    );
+    const rejected = handleControl(
+      {
+        v: 1,
+        type: "hello",
+        id: makeMessageId(),
+        token: "wrong-token",
+        clientVersion: "0.0.0",
+        protocolVersion,
+      },
+      state,
+      config,
+      { authenticated: false },
+    );
+
+    expect(accepted[0]?.type).toBe("welcome");
+    expect(rejected[0]?.type).toBe("error");
   });
 
   test("rate-limits control messages per session", () => {
