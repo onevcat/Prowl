@@ -118,9 +118,10 @@ switch (command) {
       break;
     }
     if (args[0] === "create") {
+      const options = parseWorktreeCreateOptions(args.slice(3));
       await writeOutput(
-        () => createWorktree(args[1], args[2], parseWorktreeCreateOptions(args.slice(3))),
-        () => renderWorktreeCreate(args[1], args[2]),
+        () => createWorktree(args[1], args[2], options),
+        () => renderWorktreeCreate(args[1], args[2], options),
       );
       break;
     }

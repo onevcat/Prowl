@@ -460,6 +460,42 @@ exec bun run apps/daemon/src/index.ts
       const created = JSON.parse(stdout) as { branch: string; path: string };
       expect(created.branch).toBe("feature/options");
       expect(created.path).toBe(join(home, "custom-worktree"));
+
+      const humanResult = Bun.spawn(
+        [
+          "bun",
+          "run",
+          "src/index.ts",
+          "worktree",
+          "create",
+          "repo-default",
+          "feature/options-human",
+          "--base-ref",
+          "HEAD",
+          "--directory",
+          "custom-worktree-human",
+        ],
+        {
+          cwd: new URL("..", import.meta.url).pathname,
+          env: {
+            ...Bun.env,
+            PROWL_CONFIG_PATH: join(prowlHome, "config.json"),
+            PROWL_SOCKET_PATH: socketPath,
+          },
+          stdout: "pipe",
+          stderr: "pipe",
+        },
+      );
+      const [humanExitCode, humanStdout, humanStderr] = await Promise.all([
+        humanResult.exited,
+        new Response(humanResult.stdout).text(),
+        new Response(humanResult.stderr).text(),
+      ]);
+
+      expect(humanExitCode).toBe(0);
+      expect(humanStderr).toBe("");
+      expect(Bun.stripANSI(humanStdout)).toContain("feature/options-human");
+      expect(Bun.stripANSI(humanStdout)).toContain(join(home, "custom-worktree-human"));
     } finally {
       server.stop();
       if (previousRepoRoot === undefined) {

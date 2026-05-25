@@ -35,8 +35,12 @@ export async function getWorktreeList(repoId?: string): Promise<Worktree[]> {
   ).flat();
 }
 
-export async function renderWorktreeCreate(repoId: string | undefined, branch: string | undefined): Promise<string> {
-  return formatWorktree(await createWorktree(repoId, branch));
+export async function renderWorktreeCreate(
+  repoId: string | undefined,
+  branch: string | undefined,
+  options: WorktreeCreateOptions = {},
+): Promise<string> {
+  return formatWorktree(await createWorktree(repoId, branch, options));
 }
 
 export async function createWorktree(
