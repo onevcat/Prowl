@@ -329,7 +329,7 @@ describe("AppState custom action palette items", () => {
 
 describe("AppState command history search", () => {
   test("builds the WEB.md command history storage key", () => {
-    expect(commandHistoryKey).toBe("prowl:command.history");
+    expect(commandHistoryKey).toBe("prowl:palette.history");
   });
 
   test("records completed terminal commands and exposes them to palette search", () => {

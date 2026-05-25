@@ -45,8 +45,9 @@ const uiViewKey = "prowl:ui.view";
 const selectedWorktreeKey = "prowl:ui.selectedWorktreeId";
 const worktreeOrderKey = "prowl:ui.worktreeOrderByRepo";
 const paneOrderKey = "prowl:ui.paneOrderByWorktree";
-const paletteHistoryKey = "prowl:palette.history";
-export const commandHistoryKey = "prowl:command.history";
+const paletteInvocationHistoryKey = "prowl:palette.invocations";
+export const commandHistoryKey = "prowl:palette.history";
+const legacyCommandHistoryKey = "prowl:command.history";
 const appearanceSettingsKey = "prowl:settings.appearance";
 const sessionTokenKey = "prowl:token";
 const defaultDaemonURL = "ws://127.0.0.1:7878/ws";
@@ -993,16 +994,25 @@ export class AppState {
     if (typeof indexedDB === "undefined") {
       return;
     }
-    const [view, selectedWorktreeId, worktreeOrder, paneOrder, appearance, paletteHistory, commandHistory] =
-      await Promise.all([
-        get<AppView>(uiViewKey),
-        get<string>(selectedWorktreeKey),
-        get<Record<string, string[]>>(worktreeOrderKey),
-        get<Record<string, string[]>>(paneOrderKey),
-        get<AppSettings["appearance"]>(appearanceSettingsKey),
-        get<PaletteHistoryEntry[]>(paletteHistoryKey),
-        get<CommandHistoryEntry[]>(commandHistoryKey),
-      ]);
+    const [
+      view,
+      selectedWorktreeId,
+      worktreeOrder,
+      paneOrder,
+      appearance,
+      paletteInvocationHistory,
+      commandHistory,
+      legacyCommandHistory,
+    ] = await Promise.all([
+      get<AppView>(uiViewKey),
+      get<string>(selectedWorktreeKey),
+      get<Record<string, string[]>>(worktreeOrderKey),
+      get<Record<string, string[]>>(paneOrderKey),
+      get<AppSettings["appearance"]>(appearanceSettingsKey),
+      get<PaletteHistoryEntry[]>(paletteInvocationHistoryKey),
+      get<CommandHistoryEntry[] | PaletteHistoryEntry[]>(commandHistoryKey),
+      get<CommandHistoryEntry[]>(legacyCommandHistoryKey),
+    ]);
     if (view === "shelf" || view === "canvas" || view === "settings" || view === "diff") {
       this.view = view;
     }
@@ -1016,11 +1026,22 @@ export class AppState {
     if (isStringArrayRecord(paneOrder)) {
       this.paneOrderByWorktree = paneOrder;
     }
-    if (Array.isArray(paletteHistory)) {
-      this.paletteHistory = paletteHistory.filter(isPaletteHistoryEntry).slice(0, 10);
+    const legacyPaletteInvocationHistory = Array.isArray(commandHistory)
+      ? commandHistory.filter(isPaletteHistoryEntry)
+      : [];
+    if (Array.isArray(paletteInvocationHistory)) {
+      this.paletteHistory = paletteInvocationHistory.filter(isPaletteHistoryEntry).slice(0, 10);
+    } else if (legacyPaletteInvocationHistory.length > 0) {
+      this.paletteHistory = legacyPaletteInvocationHistory.slice(0, 10);
     }
-    if (Array.isArray(commandHistory)) {
-      this.commandHistory = commandHistory.filter(isCommandHistoryEntry).slice(0, maxCommandHistoryEntries);
+    const restoredCommandHistory = Array.isArray(commandHistory) ? commandHistory.filter(isCommandHistoryEntry) : [];
+    const restoredLegacyCommandHistory = Array.isArray(legacyCommandHistory)
+      ? legacyCommandHistory.filter(isCommandHistoryEntry)
+      : [];
+    if (restoredCommandHistory.length > 0 || restoredLegacyCommandHistory.length > 0) {
+      this.commandHistory = (
+        restoredCommandHistory.length > 0 ? restoredCommandHistory : restoredLegacyCommandHistory
+      ).slice(0, maxCommandHistoryEntries);
     }
     this.#preferredSelectedWorktreeId = selectedWorktreeId ?? null;
     this.#applyPreferredSelection();
@@ -1535,7 +1556,7 @@ export class AppState {
       section: item.section,
     };
     this.paletteHistory = [entry, ...this.paletteHistory.filter((candidate) => candidate.id !== entry.id)].slice(0, 10);
-    persistJSONValue(paletteHistoryKey, this.paletteHistory);
+    persistJSONValue(paletteInvocationHistoryKey, this.paletteHistory);
   }
 
   #recordCommandInput(paneId: string, text: string): void {
