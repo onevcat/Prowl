@@ -868,7 +868,24 @@ function validateRepositoryPath(
   if (state.repositories.some((repository) => canonicalPath(repository.path) === canonical.path)) {
     return errorResponse(id, "DUPLICATE_REPOSITORY", "Repository is already registered");
   }
+  const gitError = validateGitRepository(canonical.path);
+  if (gitError) {
+    return errorResponse(id, "INVALID_REPOSITORY", gitError);
+  }
   return canonical;
+}
+
+function validateGitRepository(path: string): string | null {
+  const result = Bun.spawnSync(["git", "-C", path, "rev-parse", "--is-inside-work-tree"], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  if (result.exitCode !== 0) {
+    return "Repository path must be inside a Git work tree";
+  }
+  return new TextDecoder().decode(result.stdout).trim() === "true"
+    ? null
+    : "Repository path must be inside a Git work tree";
 }
 
 function canonicalDirectoryPath(

@@ -426,7 +426,9 @@ describe("daemon scaffold", () => {
 
   test("validates repository paths before adding them", () => {
     const root = mkdtempSync(join(tmpdir(), "prowl-server-test-"));
+    const nonGitRoot = mkdtempSync(join(tmpdir(), "prowl-server-non-git-test-"));
     const rootLink = join(tmpdir(), `prowl-server-test-link-${crypto.randomUUID()}`);
+    runGit(root, "init");
     symlinkSync(root, rootLink, "dir");
     const state = new InMemoryState(root, { statePath: ":memory:", spawnProcesses: false });
     const config = {
@@ -443,6 +445,16 @@ describe("daemon scaffold", () => {
         type: "repo.add",
         id: makeMessageId(),
         path: join(root, "missing"),
+      },
+      state,
+      config,
+    );
+    const nonGit = handleControl(
+      {
+        v: 1,
+        type: "repo.add",
+        id: makeMessageId(),
+        path: nonGitRoot,
       },
       state,
       config,
@@ -469,6 +481,8 @@ describe("daemon scaffold", () => {
     );
 
     expect(missing[0]?.type).toBe("error");
+    expect(nonGit[0]?.type).toBe("error");
+    expect(nonGit[0]?.type === "error" ? nonGit[0].message : "").toContain("Git work tree");
     expect(duplicate[0]?.type).toBe("error");
     expect(symlinkDuplicate[0]?.type).toBe("error");
   });

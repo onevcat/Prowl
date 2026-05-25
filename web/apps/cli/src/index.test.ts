@@ -186,6 +186,7 @@ exec bun run apps/daemon/src/index.ts
     );
     const socketPath = join(prowlHome, "prowld.sock");
     const repositoryPath = mkdtempSync(join(tmpdir(), "prowl-cli-repo-"));
+    runGit(repositoryPath, "init");
     const server = startServer(
       {
         port: 0,
