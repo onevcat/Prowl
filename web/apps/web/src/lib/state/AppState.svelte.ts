@@ -1260,6 +1260,7 @@ export class AppState {
     }
     this.worktreesByRepo = next;
     this.#pruneWorktreeOrder();
+    this.#removePanesOutsideKnownWorktrees();
   }
 
   #upsertWorktree(worktree: Worktree): void {
@@ -1275,6 +1276,7 @@ export class AppState {
       worktree.repoId,
       current.filter((candidate) => candidate.id !== worktree.id),
     );
+    this.#removePanesForWorktrees(new Set([worktree.id]));
   }
 
   #ensureWorktreeViews(worktrees: Worktree[]): void {
@@ -1362,6 +1364,23 @@ export class AppState {
     this.#prunePaneOrder();
     this.#persistOpenTabs(pane ? [pane.worktreeId] : undefined);
     this.#ensureSelection();
+  }
+
+  #removePanesOutsideKnownWorktrees(): void {
+    for (const paneId of paneIdsOutsideWorktrees(this.panes.values(), this.worktrees)) {
+      this.#removePane(paneId);
+    }
+  }
+
+  #removePanesForWorktrees(worktreeIds: Set<string>): void {
+    if (worktreeIds.size === 0) {
+      return;
+    }
+    for (const pane of Array.from(this.panes.values())) {
+      if (worktreeIds.has(pane.worktreeId)) {
+        this.#removePane(pane.id);
+      }
+    }
   }
 
   #ensureSelection(): void {
@@ -1707,6 +1726,16 @@ export function cachedPaneDescriptorsForWorktrees(
     }
   }
   return descriptors;
+}
+
+export function paneIdsOutsideWorktrees(
+  panes: Iterable<Pick<PaneDescriptor, "id" | "worktreeId">>,
+  worktrees: Iterable<Pick<Worktree, "id">>,
+): string[] {
+  const knownWorktreeIds = new Set(Array.from(worktrees, (worktree) => worktree.id));
+  return Array.from(panes)
+    .filter((pane) => !knownWorktreeIds.has(pane.worktreeId))
+    .map((pane) => pane.id);
 }
 
 function isPaneDescriptor(value: unknown): value is PaneDescriptor {

@@ -7,6 +7,7 @@ import {
   cachedPaneDescriptorsForWorktrees,
   openTabsKey,
   paneDescriptorsByWorktree,
+  paneIdsOutsideWorktrees,
 } from "./AppState.svelte";
 import { Pane } from "./Pane.svelte";
 import type { Repository, Worktree } from "./types";
@@ -93,6 +94,12 @@ describe("AppState pane persistence helpers", () => {
     );
 
     expect(cached.map((descriptor) => descriptor.id)).toEqual(["pane-1"]);
+  });
+
+  test("identifies panes whose worktrees disappeared", () => {
+    const panes = [pane("pane-1", 1).descriptor, { ...pane("pane-2", 2).descriptor, worktreeId: "missing-worktree" }];
+
+    expect(paneIdsOutsideWorktrees(panes, [worktree("worktree-1", "one")])).toEqual(["pane-2"]);
   });
 });
 
