@@ -132,6 +132,17 @@ test("opens a worktree diff from the shelf context menu", async ({ page }) => {
 
   await expect(page.getByRole("heading", { name: "default" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Toggle Unified or Side-by-side Diff" })).toBeVisible();
+  await expect(
+    page.getByRole("complementary", { name: "Changed files" }).getByRole("button", { name: /README.md/ }),
+  ).toBeVisible();
+  const unifiedDiff = page.getByLabel("Unified diff", { exact: true });
+  await expect(unifiedDiff).toContainText("-e2e baseline");
+  await expect(unifiedDiff).toContainText("+e2e changed");
+
+  await page.getByRole("button", { name: "Toggle Unified or Side-by-side Diff" }).click();
+  const splitDiff = page.getByLabel("Side-by-side diff", { exact: true });
+  await expect(splitDiff).toContainText("-e2e baseline");
+  await expect(splitDiff).toContainText("+e2e changed");
 });
 
 test("re-attaches visible panes after a websocket reconnect", async ({ page, request }) => {
