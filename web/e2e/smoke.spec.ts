@@ -6,6 +6,23 @@ const token = "e2e-token";
 
 test.describe.configure({ mode: "serial" });
 
+test("declares the PWA manifest and install icons", async ({ page, request }) => {
+  await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}&token=${token}`);
+  await expect(page.locator('link[rel="manifest"]')).toHaveAttribute("href", "/manifest.webmanifest");
+  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#0a84ff");
+
+  const response = await request.get("/manifest.webmanifest");
+  expect(response.ok()).toBe(true);
+  const manifest = (await response.json()) as {
+    name?: string;
+    display?: string;
+    icons?: Array<{ src?: string; sizes?: string; purpose?: string }>;
+  };
+  expect(manifest.name).toBe("Prowl Web");
+  expect(manifest.display).toBe("standalone");
+  expect(manifest.icons?.some((icon) => icon.src === "/icon-512.png" && icon.purpose?.includes("maskable"))).toBe(true);
+});
+
 test("ships the browser content security policy", async ({ page }) => {
   const response = await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}&token=${token}`);
   const csp = response?.headers()["content-security-policy"] ?? "";
