@@ -1,7 +1,8 @@
+import { formatPaneNotificationBody } from "$lib/notifications/message";
 import { NotificationPermissionRequester } from "$lib/notifications/permission";
 import { RendererPool } from "$lib/terminal/RendererPool";
 import { inferAgentTaskStatus } from "$lib/terminal/detectAgent";
-import { appendTerminalOutput, lastNonEmptyLine, terminalOutputSnapshot } from "$lib/terminal/outputBuffer";
+import { appendTerminalOutput, terminalOutputSnapshot } from "$lib/terminal/outputBuffer";
 import { ProtocolError, WSClient } from "$lib/ws/WSClient";
 import type {
   CustomAction,
@@ -635,7 +636,6 @@ export class AppState {
     if (!pane || pane.taskStatus === taskStatus) {
       return;
     }
-    const previousStatus = pane.taskStatus;
     pane.taskStatus = taskStatus;
     pane.updatedAt = Date.now();
     try {
@@ -648,9 +648,6 @@ export class AppState {
       });
     } catch (error) {
       this.errorMessage = error instanceof Error ? error.message : String(error);
-    }
-    if (taskStatus === "done" && previousStatus !== "done" && pane.id !== this.selectedPaneId) {
-      this.#notifyPaneDone(pane);
     }
   }
 
@@ -1331,7 +1328,7 @@ export class AppState {
       return;
     }
     new Notification(pane.title, {
-      body: lastNonEmptyLine(body),
+      body: formatPaneNotificationBody(pane.title, body),
       tag: `prowl-pane-${pane.id}`,
     });
     void new Audio("/notification.wav").play().catch(() => {});
