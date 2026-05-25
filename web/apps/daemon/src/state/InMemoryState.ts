@@ -32,6 +32,8 @@ type StateOptions = {
 };
 
 const replayBufferBytes = 64 * 1024;
+const minReplayBufferBytes = 16 * 1024;
+const maxReplayBufferBytes = 1024 * 1024;
 
 type RepoRow = {
   id: string;
@@ -84,6 +86,7 @@ export class InMemoryState {
   #runtimesByPane = new Map<string, PaneRuntime>();
   #paneIdByChannel = new Map<number, string>();
   #nextChannelId = 1;
+  #replayBufferBytes = replayBufferBytes;
   #options: Required<StateOptions>;
 
   constructor(repoPath = process.cwd(), options: StateOptions = {}) {
@@ -98,6 +101,7 @@ export class InMemoryState {
     this.#database = openDatabase(this.#options.statePath);
     this.#database.exec(schemaSql);
     migrateDatabase(this.#database);
+    this.#loadReplayBufferSetting();
     this.#ensureSeedRepository(repoPath);
     this.#reloadRepositories();
     this.#reloadWorktrees();
@@ -193,6 +197,9 @@ export class InMemoryState {
     `);
     for (const [key, value] of Object.entries(patch)) {
       statement.run({ $key: key, $valueJson: JSON.stringify(value) });
+      if (key === "advanced") {
+        this.#applyReplayBufferSetting(value);
+      }
     }
     return this.settingsSnapshot(Object.keys(patch));
   }
@@ -489,13 +496,39 @@ export class InMemoryState {
 
   #appendReplay(paneId: string, data: Uint8Array): void {
     const current = this.#replayByPane.get(paneId) ?? new Uint8Array();
-    const combined = new Uint8Array(Math.min(replayBufferBytes, current.byteLength + data.byteLength));
+    const combined = new Uint8Array(Math.min(this.#replayBufferBytes, current.byteLength + data.byteLength));
     const keepFromCurrent = Math.max(0, combined.byteLength - data.byteLength);
     if (keepFromCurrent > 0) {
       combined.set(current.subarray(current.byteLength - keepFromCurrent), 0);
     }
     combined.set(data.subarray(Math.max(0, data.byteLength - combined.byteLength)), keepFromCurrent);
     this.#replayByPane.set(paneId, combined);
+  }
+
+  #loadReplayBufferSetting(): void {
+    const row = this.#database
+      .query("SELECT value_json FROM settings WHERE key = 'advanced'")
+      .get() as SettingRow | null;
+    if (!row) {
+      return;
+    }
+    this.#applyReplayBufferSetting(safeJson(row.value_json));
+  }
+
+  #applyReplayBufferSetting(value: unknown): void {
+    if (!isRecord(value) || typeof value.replayBufferKiB !== "number") {
+      return;
+    }
+    this.#setReplayBufferBytes(clampReplayBufferKiB(value.replayBufferKiB) * 1024);
+  }
+
+  #setReplayBufferBytes(bytes: number): void {
+    this.#replayBufferBytes = bytes;
+    for (const [paneId, replay] of this.#replayByPane) {
+      if (replay.byteLength > bytes) {
+        this.#replayByPane.set(paneId, replay.subarray(replay.byteLength - bytes));
+      }
+    }
   }
 
   #worktreeForPane(pane: PaneDescriptor): Worktree | undefined {
@@ -648,6 +681,15 @@ function safeJson(raw: string | null): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+function clampReplayBufferKiB(value: number): number {
+  const bytes = Math.round(value) * 1024;
+  return Math.min(Math.max(bytes, minReplayBufferBytes), maxReplayBufferBytes) / 1024;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isWorktreeStatus(value: string | null): value is Worktree["status"] {
