@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createLogger, parseLogLevel } from "./logger";
@@ -35,6 +35,26 @@ describe("daemon logger", () => {
     expect(parseLogLevel("warn")).toBe("warn");
     expect(parseLogLevel(true)).toBe("info");
     expect(parseLogLevel("verbose")).toBe("info");
+  });
+
+  test("keeps only the most recent seven daily logs", () => {
+    const directory = mkdtempSync(join(tmpdir(), "prowl-retained-logs-"));
+    writeFileSync(join(directory, "prowld-2026-05-18.log"), "old\n");
+    writeFileSync(join(directory, "prowld-2026-05-19.log"), "keep\n");
+    writeFileSync(join(directory, "prowld-2026-05-20.log"), "keep\n");
+    writeFileSync(join(directory, "notes.log"), "unrelated\n");
+    const logger = createLogger({
+      directory,
+      now: () => new Date("2026-05-25T12:00:00.000Z"),
+    });
+
+    logger.info("rotating");
+
+    expect(existsSync(join(directory, "prowld-2026-05-18.log"))).toBe(false);
+    expect(existsSync(join(directory, "prowld-2026-05-19.log"))).toBe(true);
+    expect(existsSync(join(directory, "prowld-2026-05-20.log"))).toBe(true);
+    expect(existsSync(join(directory, "prowld-2026-05-25.log"))).toBe(true);
+    expect(existsSync(join(directory, "notes.log"))).toBe(true);
   });
 });
 
