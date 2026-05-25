@@ -62,13 +62,21 @@ export function shouldHandleGlobalShortcut(event: Pick<KeyboardEvent, "defaultPr
   return !isEditableShortcutTarget(event.target);
 }
 
-function isEditableShortcutTarget(target: EventTarget | null): boolean {
+export function isTerminalShortcutTarget(target: EventTarget | null): boolean {
   if (!target || typeof (target as { closest?: unknown }).closest !== "function") {
     return false;
   }
   const element = target as unknown as { closest: (selector: string) => unknown };
-  if (element.closest(".terminal")) {
+  return Boolean(element.closest(".terminal"));
+}
+
+function isEditableShortcutTarget(target: EventTarget | null): boolean {
+  if (!target || typeof (target as { closest?: unknown }).closest !== "function") {
     return false;
   }
+  if (isTerminalShortcutTarget(target)) {
+    return false;
+  }
+  const element = target as unknown as { closest: (selector: string) => unknown };
   return Boolean(element.closest("input, textarea, select, [contenteditable=''], [contenteditable='true']"));
 }

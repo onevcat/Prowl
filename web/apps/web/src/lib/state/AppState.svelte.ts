@@ -26,7 +26,13 @@ import { appVersion, makeMessageId, protocolVersion } from "@prowl/protocol";
 import { get, set } from "idb-keyval";
 import { Pane } from "./Pane.svelte";
 import { WorktreeView } from "./WorktreeView.svelte";
-import { defaultShortcuts, normalizeKeyChord, shortcutAliases, shouldHandleGlobalShortcut } from "./shortcuts";
+import {
+  defaultShortcuts,
+  isTerminalShortcutTarget,
+  normalizeKeyChord,
+  shortcutAliases,
+  shouldHandleGlobalShortcut,
+} from "./shortcuts";
 import type {
   ActionId,
   AppSettings,
@@ -301,6 +307,11 @@ export class AppState {
     if (customAction) {
       event.preventDefault();
       void this.runCustomAction(customAction.id);
+      return;
+    }
+
+    if (isTerminalShortcutTarget(event.target)) {
+      event.preventDefault();
     }
   }
 

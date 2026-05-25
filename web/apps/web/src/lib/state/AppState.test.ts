@@ -494,6 +494,15 @@ describe("AppState view mutation methods", () => {
     expect(closed).toBe(true);
   });
 
+  test("prevents browser defaults for unmatched terminal key events", () => {
+    const state = appStateFixture();
+    const event = shortcutEvent({ key: "l", ctrlKey: true, target: terminalInputTarget() });
+
+    state.handleKeydown(event);
+
+    expect(event.prevented).toBe(true);
+  });
+
   test("updates auth form state through methods", () => {
     const state = appStateFixture();
 
@@ -604,6 +613,14 @@ function shortcutEvent(overrides: Partial<KeyboardEvent> = {}): ShortcutEvent {
     },
     ...overrides,
   } as ShortcutEvent;
+}
+
+function terminalInputTarget(): EventTarget {
+  return new (class extends EventTarget {
+    closest(selector = ""): unknown {
+      return selector === ".terminal" ? this : null;
+    }
+  })();
 }
 
 function installNotificationFakes(): Array<{ title: string; body: string }> {

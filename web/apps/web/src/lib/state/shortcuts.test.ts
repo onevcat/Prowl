@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { shortcutAliases, shouldHandleGlobalShortcut } from "./shortcuts";
+import { isTerminalShortcutTarget, shortcutAliases, shouldHandleGlobalShortcut } from "./shortcuts";
 
 describe("global shortcut handling", () => {
   test("ignores events that a focused widget already handled", () => {
@@ -22,6 +22,12 @@ describe("global shortcut handling", () => {
 
   test("keeps app-level shortcuts active inside terminal input widgets", () => {
     expect(shouldHandleGlobalShortcut(shortcutEvent({ target: terminalInputTarget() }))).toBe(true);
+  });
+
+  test("detects terminal shortcut targets separately from editable controls", () => {
+    expect(isTerminalShortcutTarget(terminalInputTarget())).toBe(true);
+    expect(isTerminalShortcutTarget(editableTarget())).toBe(false);
+    expect(isTerminalShortcutTarget(null)).toBe(false);
   });
 });
 
