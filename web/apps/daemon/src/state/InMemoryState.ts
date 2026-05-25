@@ -26,6 +26,7 @@ type StateOptions = {
     onData: (data: Uint8Array) => void;
   }) => PaneProcess;
   onPaneData?: (channelId: number, payload: Uint8Array) => void;
+  onPaneStatus?: (pane: PaneDescriptor) => void;
   onPaneExit?: (paneId: string, exitCode: number) => void;
   shell?: string;
   statePath?: string;
@@ -94,8 +95,9 @@ export class InMemoryState {
       spawnProcesses: options.spawnProcesses ?? true,
       spawnPaneProcess: options.spawnPaneProcess ?? spawnTerminalProcess,
       onPaneData: options.onPaneData ?? (() => {}),
+      onPaneStatus: options.onPaneStatus ?? (() => {}),
       onPaneExit: options.onPaneExit ?? (() => {}),
-      shell: options.shell ?? "/bin/sh",
+      shell: options.shell ?? defaultShell(),
       statePath: options.statePath ?? defaultStatePath(),
     };
     this.#database = openDatabase(this.#options.statePath);
@@ -431,6 +433,7 @@ export class InMemoryState {
     if (pane) {
       pane.taskStatus = exitCode === 0 ? "done" : "failed";
       pane.updatedAt = Date.now();
+      this.#options.onPaneStatus({ ...pane });
     }
   }
 
@@ -624,6 +627,10 @@ function lastNonEmptyLine(text: string): string | null {
 
 function defaultStatePath(): string {
   return join(homedir(), ".prowl", "state.sqlite");
+}
+
+function defaultShell(): string {
+  return "sh";
 }
 
 function spawnTerminalProcess(options: {

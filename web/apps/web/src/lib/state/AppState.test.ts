@@ -3,6 +3,7 @@ import type { CustomAction } from "@prowl/protocol";
 import { afterEach, describe, expect, test } from "vitest";
 import {
   AppState,
+  applyPaneDescriptor,
   bootstrapSettingsKeys,
   cachedPaneDescriptorsForWorktrees,
   commandHistoryKey,
@@ -116,6 +117,27 @@ describe("AppState pane persistence helpers", () => {
       "global",
       "repo",
     ]);
+  });
+
+  test("applies pane metadata updates without replacing buffered output", () => {
+    const existing = pane("pane-1", 1);
+    existing.output = "first line\nsecond line";
+
+    applyPaneDescriptor(existing, {
+      ...existing.descriptor,
+      title: "Updated action",
+      taskStatus: "done",
+      unread: true,
+      lastOutputLine: "completed",
+      updatedAt: 42,
+    });
+
+    expect(existing.output).toBe("first line\nsecond line");
+    expect(existing.title).toBe("Updated action");
+    expect(existing.taskStatus).toBe("done");
+    expect(existing.unread).toBe(true);
+    expect(existing.lastOutputLine).toBe("completed");
+    expect(existing.updatedAt).toBe(42);
   });
 });
 

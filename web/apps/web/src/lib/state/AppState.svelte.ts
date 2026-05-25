@@ -1178,6 +1178,9 @@ export class AppState {
       case "pane.listed":
         this.#replacePanes(message.panes);
         break;
+      case "pane.updated":
+        this.#applyPaneDescriptor(message.pane);
+        break;
       case "pane.created":
         this.#upsertPane({
           id: message.paneId,
@@ -1375,6 +1378,16 @@ export class AppState {
     next.set(descriptor.id, new Pane(descriptor));
     this.panes = next;
     this.#prunePaneOrder();
+    this.#persistOpenTabs([descriptor.worktreeId]);
+  }
+
+  #applyPaneDescriptor(descriptor: PaneDescriptor): void {
+    const pane = this.panes.get(descriptor.id);
+    if (!pane) {
+      this.#upsertPane(descriptor);
+      return;
+    }
+    applyPaneDescriptor(pane, descriptor);
     this.#persistOpenTabs([descriptor.worktreeId]);
   }
 
@@ -1831,6 +1844,14 @@ export function customActionsForRepositories(
 ): CustomAction[] {
   const repositoryIds = new Set(Array.from(repositories, (repository) => repository.id));
   return Array.from(actions).filter((action) => action.repoId === null || repositoryIds.has(action.repoId));
+}
+
+export function applyPaneDescriptor(pane: Pane, descriptor: PaneDescriptor): void {
+  pane.title = descriptor.title;
+  pane.taskStatus = descriptor.taskStatus;
+  pane.unread = descriptor.unread;
+  pane.lastOutputLine = descriptor.lastOutputLine;
+  pane.updatedAt = descriptor.updatedAt;
 }
 
 function isPaneDescriptor(value: unknown): value is PaneDescriptor {

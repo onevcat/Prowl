@@ -1,6 +1,6 @@
 import { realpathSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
-import type { BaseControlMessage, ClientControlMessage, ServerControlMessage } from "@prowl/protocol";
+import type { BaseControlMessage, ClientControlMessage, PaneDescriptor, ServerControlMessage } from "@prowl/protocol";
 import {
   ControlMessageParseError,
   appVersion,
@@ -97,12 +97,26 @@ export function startServer(config: DaemonConfig, options: ServerOptions = {}): 
       },
     },
   );
+  const sendPaneUpdated = (pane: PaneDescriptor) => {
+    const frame = encodeJsonFrame({
+      v: 1,
+      type: "pane.updated",
+      id: crypto.randomUUID(),
+      pane,
+    } satisfies ServerControlMessage);
+    for (const client of clients) {
+      if (shouldSendPaneEvent(client.data, pane.id)) {
+        client.send(frame);
+      }
+    }
+  };
   const state = new InMemoryState(process.env.PROWL_REPO_ROOT ?? process.cwd(), {
     spawnProcesses: options.spawnProcesses,
     statePath: options.statePath,
     onPaneData: (channelId, payload) => {
       outputCoalescer.write(channelId, payload);
     },
+    onPaneStatus: sendPaneUpdated,
     onPaneExit: (paneId, exitCode) => {
       logger.info(`pane exited paneId=${paneId} exitCode=${exitCode}`);
       const frame = encodeJsonFrame({

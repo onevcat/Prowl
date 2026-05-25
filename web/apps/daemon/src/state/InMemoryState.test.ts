@@ -47,7 +47,8 @@ describe("InMemoryState", () => {
 
   test("uses requested pane dimensions when spawning PTYs", () => {
     const spawnOptions: Array<{ cols: number; rows: number }> = [];
-    const state = new InMemoryState("/tmp/prowl", {
+    const root = mkdtempSync(join(tmpdir(), "prowl-pane-size-test-"));
+    const state = new InMemoryState(root, {
       statePath: ":memory:",
       spawnPaneProcess: (options) => {
         spawnOptions.push({ cols: options.cols, rows: options.rows });
@@ -208,6 +209,43 @@ describe("InMemoryState", () => {
 
     expect(second.listCustomActions().some((candidate) => candidate.id === action.id)).toBe(true);
     expect(second.customAction(action.id)?.command).toBe("git status --short");
+  });
+
+  test("emits pane status callbacks when custom actions finish", async () => {
+    let resolveStatus: (pane: ReturnType<InMemoryState["listPanes"]>[number]) => void = () => {};
+    const statusUpdated = new Promise<ReturnType<InMemoryState["listPanes"]>[number]>((resolve) => {
+      resolveStatus = resolve;
+    });
+    const root = mkdtempSync(join(tmpdir(), "prowl-action-status-test-"));
+    const state = new InMemoryState(root, {
+      statePath: ":memory:",
+      spawnProcesses: false,
+      onPaneStatus: (pane) => {
+        resolveStatus(pane);
+      },
+    });
+    const [pane] = state.listPanes();
+    if (!pane) {
+      throw new Error("Expected seeded pane");
+    }
+    const action = state.upsertCustomAction({
+      repoId: null,
+      name: "Finish",
+      command: "printf custom-action-finished",
+      outputMode: "currentPane",
+      ordering: 1,
+    });
+
+    state.runCustomAction(pane.id, action.id);
+
+    const updated = await Promise.race([
+      statusUpdated,
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Timed out waiting for status")), 2_000)),
+    ]);
+
+    expect(updated.id).toBe(pane.id);
+    expect(updated.taskStatus).toBe("done");
+    expect(updated.lastOutputLine).toBe("custom-action-finished");
   });
 
   test("emits pane exit callbacks when PTY processes end", async () => {

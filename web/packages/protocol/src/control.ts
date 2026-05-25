@@ -113,6 +113,7 @@ export type ServerControlMessage =
       title?: string;
     })
   | (BaseControlMessage & { type: "pane.listed"; panes: PaneDescriptor[] })
+  | (BaseControlMessage & { type: "pane.updated"; pane: PaneDescriptor })
   | (BaseControlMessage & { type: "pane.exited"; paneId: string; exitCode: number; signal?: string })
   | (BaseControlMessage & { type: "pane.resized"; paneId: string; cols: number; rows: number })
   | (BaseControlMessage & { type: "pane.replay"; paneId: string; bytes: string })
