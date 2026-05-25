@@ -9,12 +9,22 @@
     buffering: boolean;
     selectPane: (paneId: string) => void;
     sendInput: (paneId: string, text: string) => void;
+    onParsedOutput: (paneId: string, text: string) => void;
     resizePane: (paneId: string, cols: number, rows: number) => void;
     zoomPane: (paneId: string) => void;
   };
 
-  let { panes, renderablePaneIds, selectedPaneId, buffering, selectPane, sendInput, resizePane, zoomPane }: Props =
-    $props();
+  let {
+    panes,
+    renderablePaneIds,
+    selectedPaneId,
+    buffering,
+    selectPane,
+    sendInput,
+    onParsedOutput,
+    resizePane,
+    zoomPane,
+  }: Props = $props();
 </script>
 
 <div class="grid">
@@ -26,6 +36,7 @@
       {buffering}
       onclick={() => selectPane(pane.id)}
       onInput={(text) => sendInput(pane.id, text)}
+      onParsedOutput={(text) => onParsedOutput(pane.id, text)}
       onResize={(cols, rows) => resizePane(pane.id, cols, rows)}
       ondblclick={() => zoomPane(pane.id)}
     />

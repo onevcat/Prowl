@@ -730,6 +730,17 @@ export class AppState {
     }
   }
 
+  detectPaneStatusFromTerminal(paneId: string, parsedOutput: string): void {
+    const pane = this.panes.get(paneId);
+    if (!pane) {
+      return;
+    }
+    const detectedStatus = inferAgentTaskStatus(`${pane.output}\n${parsedOutput}`);
+    if (detectedStatus && detectedStatus !== pane.taskStatus) {
+      void this.updatePaneStatus(pane.id, detectedStatus);
+    }
+  }
+
   async updateSettings(patch: Partial<AppSettings>): Promise<void> {
     this.errorMessage = null;
     try {
@@ -1186,10 +1197,6 @@ export class AppState {
     pane.lastOutputLine = snapshot.lastOutputLine || pane.lastOutputLine;
     pane.updatedAt = Date.now();
     pane.unread = !this.isPaneFocused(pane.id);
-    const detectedStatus = inferAgentTaskStatus(pane.output);
-    if (detectedStatus && detectedStatus !== pane.taskStatus) {
-      void this.updatePaneStatus(pane.id, detectedStatus);
-    }
   }
 
   #applyPaneReplay(paneId: string, base64: string): void {

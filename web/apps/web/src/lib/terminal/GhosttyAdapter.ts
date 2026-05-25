@@ -15,6 +15,7 @@ export type TerminalAdapter = {
 export type TerminalAdapterCallbacks = {
   label: string;
   onInput: (text: string) => void;
+  onParsedOutput?: (text: string) => void;
   onResize: (cols: number, rows: number) => void;
   onTitleChange?: (title: string) => void;
 };
@@ -129,10 +130,13 @@ export class GhosttyTerminalAdapter implements TerminalAdapter {
       return;
     }
     if (text.startsWith(this.#renderedText)) {
-      term.write(text.slice(this.#renderedText.length));
+      const chunk = text.slice(this.#renderedText.length);
+      term.write(chunk);
+      this.#callbacks?.onParsedOutput?.(chunk);
     } else {
       term.reset();
       term.write(text);
+      this.#callbacks?.onParsedOutput?.(text);
     }
     this.#renderedText = text;
   }

@@ -10,6 +10,7 @@
     buffering?: boolean;
     renderTerminal?: boolean;
     onInput?: (text: string) => void;
+    onParsedOutput?: (text: string) => void;
     onResize?: (cols: number, rows: number) => void;
     onTitleChange?: (title: string) => void;
   };
@@ -22,6 +23,7 @@
     buffering = false,
     renderTerminal = true,
     onInput,
+    onParsedOutput,
     onResize,
     onTitleChange,
   }: Props = $props();
@@ -44,6 +46,7 @@
       .open(element, {
         label: title,
         onInput: (text) => onInput?.(text),
+        onParsedOutput: (text) => onParsedOutput?.(text),
         onResize: (cols, rows) => onResize?.(cols, rows),
         onTitleChange: (nextTitle) => onTitleChange?.(nextTitle),
       })

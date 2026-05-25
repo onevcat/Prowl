@@ -184,6 +184,12 @@
         onInput={(text) => {
           appState.sendInputToSelectedPane(text);
         }}
+        onParsedOutput={(text) => {
+          const paneId = appState.selectedPane?.id;
+          if (paneId) {
+            appState.detectPaneStatusFromTerminal(paneId, text);
+          }
+        }}
         onResize={(cols, rows) => {
           const pane = appState.selectedPane;
           if (pane) {

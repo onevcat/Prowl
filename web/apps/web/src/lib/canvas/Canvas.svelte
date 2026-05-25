@@ -40,6 +40,7 @@
     buffering={appState.terminalBuffering}
     selectPane={(paneId) => appState.selectPane(paneId)}
     sendInput={(paneId, text) => appState.sendInputToPane(paneId, text)}
+    onParsedOutput={(paneId, text) => appState.detectPaneStatusFromTerminal(paneId, text)}
     resizePane={(paneId, cols, rows) => appState.resizePane(paneId, cols, rows)}
     zoomPane={(paneId) => {
       appState.selectPane(paneId);

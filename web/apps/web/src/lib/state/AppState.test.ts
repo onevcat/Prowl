@@ -172,6 +172,20 @@ describe("AppState focus-aware notifications", () => {
 
     expect(notifications).toEqual([]);
   });
+
+  test("detects task status from terminal parsed output", () => {
+    const state = appStateFixture();
+    const pane = state.panes.get("pane-1");
+    expect(pane).toBeDefined();
+    if (!pane) {
+      return;
+    }
+    state.ws.request = (() => Promise.resolve({ v: 1, type: "pong", id: "test" })) as AppState["ws"]["request"];
+
+    state.detectPaneStatusFromTerminal("pane-1", "Thinking about the next edit");
+
+    expect(pane.taskStatus).toBe("running");
+  });
 });
 
 describe("AppState custom action shortcuts", () => {
