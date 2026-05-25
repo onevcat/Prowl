@@ -1,4 +1,5 @@
 import { renderList } from "./commands/list";
+import { closePane, renderPaneNew, renderPaneRead, sendPaneCommand, sendPaneKey } from "./commands/pane";
 import { renderRepoList } from "./commands/repo";
 import { renderVersion } from "./commands/version";
 import { renderWorktreeCreate, renderWorktreeList } from "./commands/worktree";
@@ -14,10 +15,19 @@ switch (command) {
     process.stdout.write(`${renderVersion()}\n`);
     break;
   case "send":
-    process.stdout.write(`send ${args[0] ?? ""}: ${args.slice(1).join(" ")}\n`);
+    process.stdout.write(`${await sendPaneCommand(args[0], args.slice(1).join(" "))}\n`);
     break;
   case "read":
-    process.stdout.write(`read ${args[0] ?? ""}\n`);
+    process.stdout.write(`${await renderPaneRead(args[0])}\n`);
+    break;
+  case "key":
+    process.stdout.write(`${await sendPaneKey(args[0], args[1])}\n`);
+    break;
+  case "new":
+    process.stdout.write(`${await renderPaneNew(args)}\n`);
+    break;
+  case "close":
+    process.stdout.write(`${await closePane(args[0])}\n`);
     break;
   case "repo":
     if (args[0] === "list") {

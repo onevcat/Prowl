@@ -2,7 +2,14 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ClientControlMessage, ServerControlMessage } from "@prowl/protocol";
-import { decodeFrame, encodeJsonFrame, makeMessageId, protocolTags, protocolVersion } from "@prowl/protocol";
+import {
+  decodeFrame,
+  encodeJsonFrame,
+  encodePtyFrame,
+  makeMessageId,
+  protocolTags,
+  protocolVersion,
+} from "@prowl/protocol";
 
 export type CLIConfig = {
   token: string;
@@ -89,6 +96,57 @@ export async function requestDaemon(
         },
         error(_socket, error) {
           fail(error);
+        },
+      },
+    }).catch((error: unknown) => {
+      fail(error instanceof Error ? error : new Error(String(error)));
+    });
+  });
+}
+
+export async function sendPtyInput(
+  channelId: number,
+  payload: Uint8Array,
+  socketPath = defaultSocketPath(),
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      fail(new Error("Timed out sending PTY input to daemon"));
+    }, 3000);
+
+    function finish(): void {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      resolve();
+    }
+
+    function fail(error: Error): void {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      reject(error);
+    }
+
+    void Bun.connect({
+      unix: socketPath,
+      socket: {
+        open(socket) {
+          socket.write(encodePtyFrame(channelId, payload));
+          socket.end();
+          finish();
+        },
+        data() {},
+        error(_socket, error) {
+          fail(error);
+        },
+        close() {
+          finish();
         },
       },
     }).catch((error: unknown) => {

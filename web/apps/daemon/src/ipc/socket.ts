@@ -35,6 +35,15 @@ export function startIPCServer(
           const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
           const tag = view.getUint8(0);
           const length = view.getUint32(1, false);
+          if (tag === protocolTags.pty) {
+            const frame = decodeFrame(buffer);
+            if (frame.tag === protocolTags.pty) {
+              state.writeToChannel(frame.channelId, frame.payload);
+            }
+            buffer = new Uint8Array();
+            socket.end();
+            break;
+          }
           if (tag !== protocolTags.json) {
             socket.end();
             return;
