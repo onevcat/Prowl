@@ -424,6 +424,9 @@ export class InMemoryState {
     }
     const targetPane = action.outputMode === "newPane" ? this.createPane(pane.worktreeId, action.name) : pane;
     const worktree = this.#worktreeForPane(targetPane);
+    targetPane.taskStatus = "running";
+    targetPane.updatedAt = Date.now();
+    this.#options.onPaneStatus({ ...targetPane });
     this.#recordPaneOutput(targetPane.id, new TextEncoder().encode(`\r\n$ ${action.command}\r\n`));
     const child = Bun.spawn([this.#options.shell, "-lc", action.command], {
       cwd: worktree?.path ?? process.cwd(),

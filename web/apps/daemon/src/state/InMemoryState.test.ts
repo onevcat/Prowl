@@ -261,16 +261,13 @@ describe("InMemoryState", () => {
   });
 
   test("emits pane status callbacks when custom actions finish", async () => {
-    let resolveStatus: (pane: ReturnType<InMemoryState["listPanes"]>[number]) => void = () => {};
-    const statusUpdated = new Promise<ReturnType<InMemoryState["listPanes"]>[number]>((resolve) => {
-      resolveStatus = resolve;
-    });
+    const statusUpdates: ReturnType<InMemoryState["listPanes"]>[number][] = [];
     const root = mkdtempSync(join(tmpdir(), "prowl-action-status-test-"));
     const state = new InMemoryState(root, {
       statePath: ":memory:",
       spawnProcesses: false,
       onPaneStatus: (pane) => {
-        resolveStatus(pane);
+        statusUpdates.push(pane);
       },
     });
     const [pane] = state.listPanes();
@@ -287,14 +284,73 @@ describe("InMemoryState", () => {
 
     state.runCustomAction(pane.id, action.id);
 
-    const updated = await Promise.race([
-      statusUpdated,
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Timed out waiting for status")), 2_000)),
-    ]);
+    const updated = await poll(
+      () => statusUpdates.find((candidate) => candidate.id === pane.id && candidate.taskStatus === "done") ?? null,
+      (value) => value !== null,
+    );
 
-    expect(updated.id).toBe(pane.id);
-    expect(updated.taskStatus).toBe("done");
-    expect(updated.lastOutputLine).toBe("custom-action-finished");
+    expect(updated?.id).toBe(pane.id);
+    expect(updated?.taskStatus).toBe("done");
+    expect(updated?.lastOutputLine).toBe("custom-action-finished");
+  });
+
+  test("marks the target pane as running when a custom action starts", async () => {
+    const statusUpdates: ReturnType<InMemoryState["listPanes"]>[number][] = [];
+    const root = mkdtempSync(join(tmpdir(), "prowl-action-running-test-"));
+    const state = new InMemoryState(root, {
+      statePath: ":memory:",
+      spawnProcesses: false,
+      onPaneStatus: (pane) => {
+        statusUpdates.push(pane);
+      },
+    });
+    const [pane] = state.listPanes();
+    if (!pane) {
+      throw new Error("Expected seeded pane");
+    }
+    const action = state.upsertCustomAction({
+      repoId: null,
+      name: "Run",
+      command: "printf custom-action-running",
+      outputMode: "currentPane",
+      ordering: 1,
+    });
+
+    state.runCustomAction(pane.id, action.id);
+    const running = statusUpdates.find((candidate) => candidate.id === pane.id && candidate.taskStatus === "running");
+
+    expect(running).toBeDefined();
+  });
+
+  test("marks new custom action panes as running", () => {
+    const statusUpdates: ReturnType<InMemoryState["listPanes"]>[number][] = [];
+    const root = mkdtempSync(join(tmpdir(), "prowl-action-new-pane-running-test-"));
+    const state = new InMemoryState(root, {
+      statePath: ":memory:",
+      spawnProcesses: false,
+      onPaneStatus: (pane) => {
+        statusUpdates.push(pane);
+      },
+    });
+    const [pane] = state.listPanes();
+    if (!pane) {
+      throw new Error("Expected seeded pane");
+    }
+    const action = state.upsertCustomAction({
+      repoId: null,
+      name: "New Pane Action",
+      command: "printf custom-action-new-pane",
+      outputMode: "newPane",
+      ordering: 1,
+    });
+
+    const result = state.runCustomAction(pane.id, action.id);
+
+    expect(result?.pane?.title).toBe("New Pane Action");
+    expect(result?.pane?.taskStatus).toBe("running");
+    expect(
+      statusUpdates.some((candidate) => candidate.id === result?.pane?.id && candidate.taskStatus === "running"),
+    ).toBe(true);
   });
 
   test("emits pane exit callbacks when PTY processes end", async () => {
