@@ -9,6 +9,8 @@
 
   const diffRowHeight = 22;
   const diffOverscan = 16;
+  const fileRowHeight = 36;
+  const fileOverscan = 8;
   const appState = getContext<AppState>(appStateKey);
   let mode = $state<"unified" | "split">("unified");
   let selectedPath = $state<string | null>(null);
@@ -19,11 +21,18 @@
   let parseError = $state<string | null>(null);
   let scrollTop = $state(0);
   let viewportHeight = $state(0);
+  let fileListScrollTop = $state(0);
+  let fileListViewportHeight = $state(0);
   let scrollViewport = $state<HTMLElement | null>(null);
+  let fileListViewport = $state<HTMLElement | null>(null);
   let parseRequestId = 0;
   let highlightRequestId = 0;
   let selectedFile = $derived(files.find((file) => file.path === selectedPath) ?? files[0] ?? null);
   let splitRows = $derived(selectedFile ? splitDiffRows(selectedFile.lines) : []);
+  let fileRange = $derived(
+    visibleRange(files.length, fileListScrollTop, fileListViewportHeight, fileRowHeight, fileOverscan),
+  );
+  let visibleFiles = $derived(files.slice(fileRange.start, fileRange.end));
   let unifiedRange = $derived(
     visibleRange(selectedFile?.lines.length ?? 0, scrollTop, viewportHeight, diffRowHeight, diffOverscan),
   );
@@ -83,6 +92,13 @@
     }
   });
 
+  $effect(() => {
+    files.length;
+    if (fileListViewport) {
+      fileListViewportHeight = fileListViewport.clientHeight;
+    }
+  });
+
   function lineNumber(line: DiffLine | null, side: "old" | "new"): string {
     const value = side === "old" ? line?.oldLine : line?.newLine;
     return value === null || value === undefined ? "" : String(value);
@@ -106,6 +122,14 @@
     }
     scrollTop = scrollViewport.scrollTop;
     viewportHeight = scrollViewport.clientHeight;
+  }
+
+  function syncFileListMetrics(): void {
+    if (!fileListViewport) {
+      return;
+    }
+    fileListScrollTop = fileListViewport.scrollTop;
+    fileListViewportHeight = fileListViewport.clientHeight;
   }
 
   async function highlightParsedFiles(parsedFiles: DiffFile[]): Promise<void> {
@@ -158,18 +182,27 @@
   </header>
 
   <section class="body">
-    <aside aria-label="Changed files">
+    <aside bind:this={fileListViewport} aria-label="Changed files" onscroll={syncFileListMetrics}>
       {#if parseError}
         <p class="empty">{parseError}</p>
       {:else if files.length === 0}
         <p class="empty">No changes</p>
       {:else}
-        {#each files as file (file.path)}
-          <button class:selected={file.path === selectedFile?.path} type="button" onclick={() => (selectedPath = file.path)}>
-            <span>{file.path}</span>
-            <small>+{file.added} -{file.removed}</small>
-          </button>
-        {/each}
+        <div
+          class="file-window"
+          style={`padding-top: ${fileRange.offsetTop}px; padding-bottom: ${fileRange.offsetBottom}px;`}
+        >
+          {#each visibleFiles as file (file.path)}
+            <button
+              class:selected={file.path === selectedFile?.path}
+              type="button"
+              onclick={() => (selectedPath = file.path)}
+            >
+              <span>{file.path}</span>
+              <small>+{file.added} -{file.removed}</small>
+            </button>
+          {/each}
+        </div>
       {/if}
     </aside>
 
@@ -259,12 +292,16 @@
     background: color-mix(in srgb, CanvasText 3%, Canvas);
   }
 
+  .file-window {
+    min-height: 100%;
+  }
+
   aside button {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 0.5rem;
     width: 100%;
-    min-height: 2.25rem;
+    height: 36px;
     padding: 0.35rem 0.65rem;
     border: 0;
     background: transparent;
