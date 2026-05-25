@@ -195,6 +195,10 @@ export class AppState {
     return this.renderablePaneIds.size;
   }
 
+  get rendererLimit(): number {
+    return this.rendererPool.limit;
+  }
+
   get needsAuthentication(): boolean {
     return !this.sessionId && (this.connection !== "open" || this.errorMessage !== null);
   }

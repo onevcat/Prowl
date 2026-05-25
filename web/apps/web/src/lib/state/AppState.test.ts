@@ -302,6 +302,23 @@ describe("AppState view mutation methods", () => {
   });
 });
 
+describe("AppState renderer pool", () => {
+  test("keeps fifty visible panes under the WebGL context limit while preserving the focused pane", () => {
+    const state = appStateFixture();
+    const panes = Array.from({ length: 50 }, (_, index) => pane(`pane-${index + 1}`, index + 1));
+    state.panes = new Map(panes.map((candidate) => [candidate.id, candidate]));
+    state.view = "canvas";
+    state.selectedPaneId = "pane-50";
+    state.ws.request = (() => Promise.resolve({ v: 1, type: "pong", id: "test" })) as AppState["ws"]["request"];
+
+    state.syncRenderedPanes();
+
+    expect(state.visiblePanes).toHaveLength(50);
+    expect(state.activeRendererCount).toBe(state.rendererLimit);
+    expect(state.renderablePaneIds.has("pane-50")).toBe(true);
+  });
+});
+
 function appStateFixture(): AppState {
   const state = new AppState();
   const repository: Repository = {

@@ -59,6 +59,7 @@
   const paletteP50 = $derived(percentile(appState.metrics.paletteOpenSamples, 50));
   const paletteP99 = $derived(percentile(appState.metrics.paletteOpenSamples, 99));
   const rendererCount = $derived(appState.activeRendererCount);
+  const rendererLimit = $derived(appState.rendererLimit);
 </script>
 
 {#if import.meta.env.DEV && appState.settings.advanced.performanceHUD}
@@ -89,7 +90,7 @@
     </div>
     <div>
       <span>Renderers</span>
-      <strong>{rendererCount} / 8</strong>
+      <strong>{rendererCount} / {rendererLimit}</strong>
     </div>
     <div>
       <span>FPS</span>
