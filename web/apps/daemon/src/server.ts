@@ -33,6 +33,7 @@ export function startServer(
   config: DaemonConfig,
   options: { socketPath?: string | false; statePath?: string; spawnProcesses?: boolean } = {},
 ): ServerHandle {
+  const tls = tlsOptions(config);
   const clients = new Set<{ send: (payload: ArrayBuffer) => void }>();
   const state = new InMemoryState(process.env.PROWL_REPO_ROOT ?? process.cwd(), {
     spawnProcesses: options.spawnProcesses,
@@ -53,6 +54,7 @@ export function startServer(
   const server = Bun.serve({
     hostname: config.bind,
     port: config.port,
+    ...(tls ? { tls } : {}),
     fetch(request, server) {
       const url = new URL(request.url);
       if (url.pathname === "/health") {
@@ -68,7 +70,7 @@ export function startServer(
       }
 
       const token = url.searchParams.get("token");
-      if (token && token !== config.token) {
+      if (token !== config.token) {
         return new Response("Unauthorized", { status: 401 });
       }
 
@@ -109,6 +111,24 @@ export function startServer(
       ipc?.close();
       server.stop(true);
     },
+  };
+}
+
+function tlsOptions(config: DaemonConfig): Bun.TLSOptions | null {
+  if (!config.tlsCertPath && !config.tlsKeyPath) {
+    if (config.requireTLS) {
+      throw new Error("TLS is required for this bind; provide --tls-cert and --tls-key or bind to loopback.");
+    }
+    return null;
+  }
+
+  if (!config.tlsCertPath || !config.tlsKeyPath) {
+    throw new Error("Both --tls-cert and --tls-key are required to enable TLS.");
+  }
+
+  return {
+    cert: Bun.file(config.tlsCertPath),
+    key: Bun.file(config.tlsKeyPath),
   };
 }
 

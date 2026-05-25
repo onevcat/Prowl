@@ -3,12 +3,27 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { makeMessageId, protocolVersion } from "@prowl/protocol";
-import { handleControl } from "./server";
+import { handleControl, startServer } from "./server";
 import { InMemoryState } from "./state/InMemoryState";
 
 describe("daemon scaffold", () => {
   test("exports protocol version", () => {
     expect(protocolVersion).toBe(1);
+  });
+
+  test("refuses to start remote mode without TLS material", () => {
+    expect(() =>
+      startServer(
+        {
+          port: 0,
+          bind: "0.0.0.0",
+          token: "test-token",
+          allowedOrigins: ["https://example.com"],
+          requireTLS: true,
+        },
+        { socketPath: false, statePath: ":memory:", spawnProcesses: false },
+      ),
+    ).toThrow("TLS is required");
   });
 
   test("validates repository paths before adding them", () => {

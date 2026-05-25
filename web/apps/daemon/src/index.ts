@@ -1,4 +1,4 @@
-import { loadConfig } from "./auth/config";
+import { type DaemonConfig, loadConfig } from "./auth/config";
 import { startServer } from "./server";
 
 const args = new Map<string, string | boolean>();
@@ -27,12 +27,24 @@ if (args.has("version")) {
   process.exit(0);
 }
 
-const overrides: { port?: number; bind?: string } = {};
+const overrides: Partial<DaemonConfig> = {};
 if (args.has("port")) {
   overrides.port = Number(args.get("port"));
 }
 if (args.has("bind")) {
   overrides.bind = String(args.get("bind"));
+}
+if (args.has("tls-cert")) {
+  overrides.tlsCertPath = String(args.get("tls-cert"));
+}
+if (args.has("tls-key")) {
+  overrides.tlsKeyPath = String(args.get("tls-key"));
+}
+if (args.has("require-tls")) {
+  overrides.requireTLS = true;
+}
+if (args.has("no-require-tls")) {
+  overrides.requireTLS = false;
 }
 
 const config = await loadConfig(overrides);
@@ -43,4 +55,5 @@ if (args.has("print-token")) {
 }
 
 startServer(config);
-process.stdout.write(`prowld listening on ${config.bind}:${config.port}\n`);
+const scheme = config.tlsCertPath && config.tlsKeyPath ? "https" : "http";
+process.stdout.write(`prowld listening on ${scheme}://${config.bind}:${config.port}\n`);
