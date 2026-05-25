@@ -72,6 +72,7 @@ export type ClientControlMessage =
       command?: string;
     })
   | (BaseControlMessage & { type: "pane.close"; paneId: string })
+  | (BaseControlMessage & { type: "pane.list" })
   | (BaseControlMessage & { type: "pane.resize"; paneId: string; cols: number; rows: number })
   | (BaseControlMessage & { type: "pane.attach"; paneId: string })
   | (BaseControlMessage & { type: "pane.detach"; paneId: string })
@@ -250,6 +251,7 @@ export function parseClientControlMessage(payload: string): ClientControlMessage
       }
       break;
     case "repo.list":
+    case "pane.list":
     case "ping":
       break;
     default:

@@ -655,6 +655,34 @@ describe("daemon scaffold", () => {
     }
   });
 
+  test("lists only panes owned by the requesting session", () => {
+    const root = mkdtempSync(join(tmpdir(), "prowl-pane-list-ownership-test-"));
+    const state = new InMemoryState(root, { statePath: ":memory:", spawnProcesses: false });
+    const config = {
+      port: 0,
+      bind: "127.0.0.1",
+      token: "test-token",
+      allowedOrigins: ["http://127.0.0.1:5173"],
+      requireTLS: false,
+    };
+    const [ownedPane] = state.listPanes();
+    if (!ownedPane) {
+      throw new Error("Expected seeded pane");
+    }
+    const unownedPane = state.createPane(ownedPane.worktreeId);
+
+    const listed = handleControl({ v: 1, type: "pane.list", id: makeMessageId() }, state, config, {
+      ownedPaneIds: new Set([ownedPane.id]),
+    });
+
+    expect(listed[0]?.type).toBe("pane.listed");
+    if (listed[0]?.type !== "pane.listed") {
+      throw new Error("Expected pane.listed");
+    }
+    expect(listed[0].panes.map((pane) => pane.id)).toEqual([ownedPane.id]);
+    expect(listed[0].panes.some((pane) => pane.id === unownedPane.id)).toBe(false);
+  });
+
   test("validates pane cwd stays inside the worktree", () => {
     const root = mkdtempSync(join(tmpdir(), "prowl-pane-cwd-test-"));
     const outside = mkdtempSync(join(tmpdir(), "prowl-pane-cwd-outside-"));

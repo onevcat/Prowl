@@ -16,16 +16,15 @@ export async function getPaneList(): Promise<PaneDescriptor[]> {
   await hello(config.token);
   const response = await requestDaemon({
     v: 1,
-    type: "settings.get",
+    type: "pane.list",
     id: makeMessageId(),
-    keys: ["panes"],
   });
   return panesFromResponse(response);
 }
 
 function panesFromResponse(response: ServerControlMessage): PaneDescriptor[] {
-  if (response.type !== "settings.snapshot" || !Array.isArray(response.settings.panes)) {
+  if (response.type !== "pane.listed") {
     return [];
   }
-  return response.settings.panes as PaneDescriptor[];
+  return response.panes;
 }

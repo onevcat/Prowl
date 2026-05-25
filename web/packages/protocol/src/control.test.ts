@@ -18,6 +18,18 @@ describe("control message parsing", () => {
     expect(message.type).toBe("hello");
   });
 
+  test("accepts pane list requests without payload fields", () => {
+    const message = parseClientControlMessage(
+      JSON.stringify({
+        v: 1,
+        type: "pane.list",
+        id: makeMessageId(),
+      }),
+    );
+
+    expect(message.type).toBe("pane.list");
+  });
+
   test("ignores unknown fields for forward compatibility", () => {
     const message = parseClientControlMessage(
       JSON.stringify({

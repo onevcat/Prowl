@@ -499,6 +499,7 @@ export function handleControl(
           "action.run",
           "pane.create",
           "pane.close",
+          "pane.list",
           "pane.attach",
           "pane.detach",
           "pane.resize",
@@ -651,6 +652,10 @@ export function handleControl(
       return [validationError];
     }
     return [{ v: 1, type: "settings.snapshot", id: message.id, settings: state.updateSettings(message.patch) }];
+  }
+
+  if (message.type === "pane.list") {
+    return [{ v: 1, type: "pane.listed", id: message.id, panes: listOwnedPanes(state, options.ownedPaneIds) }];
   }
 
   if (message.type === "pane.create") {
@@ -809,6 +814,17 @@ function authorizePane(
     return errorResponse(id, "PANE_FORBIDDEN", "Pane does not belong to this session");
   }
   return null;
+}
+
+function listOwnedPanes(
+  state: InMemoryState,
+  ownedPaneIds: Set<string> | undefined,
+): ReturnType<InMemoryState["listPanes"]> {
+  const panes = state.listPanes();
+  if (!ownedPaneIds) {
+    return panes;
+  }
+  return panes.filter((pane) => ownedPaneIds.has(pane.id));
 }
 
 function resolvePaneCwd(
