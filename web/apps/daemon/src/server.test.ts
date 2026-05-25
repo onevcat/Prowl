@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { makeMessageId, protocolVersion } from "@prowl/protocol";
@@ -261,6 +261,8 @@ describe("daemon scaffold", () => {
 
   test("validates repository paths before adding them", () => {
     const root = mkdtempSync(join(tmpdir(), "prowl-server-test-"));
+    const rootLink = join(tmpdir(), `prowl-server-test-link-${crypto.randomUUID()}`);
+    symlinkSync(root, rootLink, "dir");
     const state = new InMemoryState(root, { statePath: ":memory:", spawnProcesses: false });
     const config = {
       port: 0,
@@ -290,9 +292,20 @@ describe("daemon scaffold", () => {
       state,
       config,
     );
+    const symlinkDuplicate = handleControl(
+      {
+        v: 1,
+        type: "repo.add",
+        id: makeMessageId(),
+        path: rootLink,
+      },
+      state,
+      config,
+    );
 
     expect(missing[0]?.type).toBe("error");
     expect(duplicate[0]?.type).toBe("error");
+    expect(symlinkDuplicate[0]?.type).toBe("error");
   });
 
   test("rejects control messages for missing target objects", () => {
@@ -406,7 +419,9 @@ describe("daemon scaffold", () => {
 
   test("validates pane cwd stays inside the worktree", () => {
     const root = mkdtempSync(join(tmpdir(), "prowl-pane-cwd-test-"));
+    const outside = mkdtempSync(join(tmpdir(), "prowl-pane-cwd-outside-"));
     mkdirSync(join(root, "inside"));
+    symlinkSync(outside, join(root, "outside-link"), "dir");
     const state = new InMemoryState(root, { statePath: ":memory:", spawnProcesses: false });
     const config = {
       port: 0,
@@ -442,9 +457,23 @@ describe("daemon scaffold", () => {
       state,
       config,
     );
+    const symlinkRejected = handleControl(
+      {
+        v: 1,
+        type: "pane.create",
+        id: makeMessageId(),
+        worktreeId: "worktree-default",
+        cols: 120,
+        rows: 32,
+        cwd: "outside-link",
+      },
+      state,
+      config,
+    );
 
     expect(accepted[0]?.type).toBe("pane.created");
     expect(rejected[0]?.type).toBe("error");
+    expect(symlinkRejected[0]?.type).toBe("error");
   });
 
   test("creates and archives git worktrees", () => {

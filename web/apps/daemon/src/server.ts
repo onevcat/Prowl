@@ -1,4 +1,4 @@
-import { statSync } from "node:fs";
+import { realpathSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import type { BaseControlMessage, ClientControlMessage, ServerControlMessage } from "@prowl/protocol";
 import {
@@ -438,11 +438,11 @@ export function handleControl(
 
   if (message.type === "repo.add") {
     const path = message.path.trim();
-    const validationError = validateRepositoryPath(message.id, path, state);
-    if (validationError) {
-      return [validationError];
+    const validation = validateRepositoryPath(message.id, path, state);
+    if (validation.type === "error") {
+      return [validation];
     }
-    const { repository, worktree } = state.addRepository(path);
+    const { repository, worktree } = state.addRepository(validation.path);
     return [
       { v: 1, type: "repo.updated", id: message.id, repository },
       { v: 1, type: "worktree.updated", id: message.id, worktree },
@@ -720,37 +720,69 @@ function resolvePaneCwd(
   if (!cwd?.trim()) {
     return { type: "ok", path: undefined };
   }
-  const worktreeRoot = resolve(worktreePath);
-  const requestedPath = isAbsolute(cwd) ? resolve(cwd) : resolve(worktreeRoot, cwd);
-  if (requestedPath !== worktreeRoot && !requestedPath.startsWith(`${worktreeRoot}/`)) {
-    return errorResponse(id, "INVALID_PANE_CWD", "Pane cwd must stay inside the worktree");
+  const worktreeRoot = canonicalDirectoryPath(id, worktreePath, "INVALID_PANE_CWD", "Worktree path does not exist");
+  if (worktreeRoot.type === "error") {
+    return worktreeRoot;
   }
+  const requestedPath = isAbsolute(cwd) ? resolve(cwd) : resolve(worktreeRoot.path, cwd);
+  let requestedRealPath: string;
   try {
-    if (!statSync(requestedPath).isDirectory()) {
+    requestedRealPath = realpathSync(requestedPath);
+    if (!statSync(requestedRealPath).isDirectory()) {
       return errorResponse(id, "INVALID_PANE_CWD", "Pane cwd must be a directory");
     }
   } catch {
     return errorResponse(id, "INVALID_PANE_CWD", "Pane cwd does not exist");
   }
-  return { type: "ok", path: requestedPath };
+  if (requestedRealPath !== worktreeRoot.path && !requestedRealPath.startsWith(`${worktreeRoot.path}/`)) {
+    return errorResponse(id, "INVALID_PANE_CWD", "Pane cwd must stay inside the worktree");
+  }
+  return { type: "ok", path: requestedRealPath };
 }
 
-function validateRepositoryPath(id: string, path: string, state: InMemoryState): ErrorControlMessage | null {
+function validateRepositoryPath(
+  id: string,
+  path: string,
+  state: InMemoryState,
+): { type: "ok"; path: string } | ErrorControlMessage {
   const normalizedPath = path.trim();
   if (!normalizedPath) {
     return errorResponse(id, "INVALID_REPOSITORY", "Repository path is required");
   }
-  try {
-    if (!statSync(normalizedPath).isDirectory()) {
-      return errorResponse(id, "INVALID_REPOSITORY", "Repository path must be a directory");
-    }
-  } catch {
-    return errorResponse(id, "INVALID_REPOSITORY", "Repository path does not exist");
+  const canonical = canonicalDirectoryPath(id, normalizedPath, "INVALID_REPOSITORY", "Repository path does not exist");
+  if (canonical.type === "error") {
+    return canonical;
   }
-  if (state.hasRepositoryPath(normalizedPath)) {
+  if (state.repositories.some((repository) => canonicalPath(repository.path) === canonical.path)) {
     return errorResponse(id, "DUPLICATE_REPOSITORY", "Repository is already registered");
   }
-  return null;
+  return canonical;
+}
+
+function canonicalDirectoryPath(
+  id: string,
+  path: string,
+  code: string,
+  missingMessage: string,
+): { type: "ok"; path: string } | ErrorControlMessage {
+  let realPath: string;
+  try {
+    realPath = realpathSync(resolve(path));
+  } catch {
+    return errorResponse(id, code, missingMessage);
+  }
+  if (!statSync(realPath).isDirectory()) {
+    return errorResponse(id, code, "Path must be a directory");
+  }
+  return { type: "ok", path: realPath };
+}
+
+function canonicalPath(path: string): string {
+  try {
+    return realpathSync(resolve(path));
+  } catch {
+    return resolve(path);
+  }
 }
 
 function createGitWorktree(
