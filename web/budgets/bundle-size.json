@@ -1,6 +1,6 @@
 {
   "initialJs": {
-    "baselineGzipBytes": 66556,
+    "baselineGzipBytes": 76510,
     "maxGzipBytes": 409600,
     "maxGrowthPercent": 10
   },

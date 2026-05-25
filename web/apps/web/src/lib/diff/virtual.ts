@@ -1,3 +1,5 @@
+import { Virtualizer } from "@tanstack/virtual-core";
+
 export type VirtualRange = {
   start: number;
   end: number;
@@ -16,16 +18,28 @@ export function visibleRange(
     return { start: 0, end: 0, offsetTop: 0, offsetBottom: 0 };
   }
 
-  const safeScrollTop = Math.max(0, scrollTop);
-  const firstVisible = Math.min(total - 1, Math.floor(safeScrollTop / rowHeight));
-  const visibleCount = Math.ceil(viewportHeight / rowHeight);
-  const start = Math.max(0, firstVisible - overscan);
-  const end = Math.min(total, firstVisible + visibleCount + overscan);
+  const virtualizer = new Virtualizer<HTMLElement, HTMLElement>({
+    count: total,
+    estimateSize: () => rowHeight,
+    getScrollElement: () => null,
+    initialOffset: Math.max(0, scrollTop),
+    initialRect: { width: 0, height: viewportHeight },
+    observeElementOffset: () => {},
+    observeElementRect: () => {},
+    overscan,
+    scrollToFn: () => {},
+  });
+  const items = virtualizer.getVirtualItems();
+  const first = items[0];
+  const last = items.at(-1);
+  if (!first || !last) {
+    return { start: 0, end: 0, offsetTop: 0, offsetBottom: 0 };
+  }
 
   return {
-    start,
-    end,
-    offsetTop: start * rowHeight,
-    offsetBottom: Math.max(0, (total - end) * rowHeight),
+    start: first.index,
+    end: last.index + 1,
+    offsetTop: first.start,
+    offsetBottom: Math.max(0, virtualizer.getTotalSize() - last.end),
   };
 }
