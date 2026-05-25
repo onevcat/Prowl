@@ -70,7 +70,12 @@
       aria-modal="true"
       tabindex="-1"
       onclick={(event) => event.stopPropagation()}
-      onkeydown={(event) => event.stopPropagation()}
+      onkeydown={(event) => {
+        if (event.key === "Escape") {
+          appState.perform("palette.close");
+        }
+        event.stopPropagation();
+      }}
     >
       <input
         bind:this={input}

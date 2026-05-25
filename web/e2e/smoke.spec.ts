@@ -220,6 +220,39 @@ test("keeps terminal input p99 latency under the regression gate", async ({ page
   expect(percentile(durations, 99)).toBeLessThanOrEqual(20);
 });
 
+test("keeps warm navigation interactions under budget", async ({ page }) => {
+  const suffix = crypto.randomUUID().slice(0, 8);
+  const worktreeName = `perf-worktree-${suffix}`;
+  await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}&token=${token}`);
+  await expect(page.locator(".connection.open")).toBeVisible();
+
+  await page.getByRole("button", { name: "Open Settings", exact: true }).click();
+  await page.getByLabel("e2e-repo branch").fill(`perf-${suffix}`);
+  await page.getByLabel("e2e-repo worktree directory").fill(worktreeName);
+  await page.getByRole("button", { name: "Create Worktree for e2e-repo" }).click();
+  await expect(page.getByText(worktreeName, { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Back to Shelf" }).click();
+
+  await page.evaluate(() => {
+    performance.clearMeasures("prowl.palette.open");
+    performance.clearMeasures("prowl.worktree.switch");
+  });
+
+  await page.getByRole("button", { name: "Open Command Palette" }).click();
+  await expect(page.getByRole("textbox", { name: "Command Palette" })).toBeVisible();
+  await expect.poll(() => paletteOpenDurationsMs(page).then((durations) => durations.length)).toBeGreaterThanOrEqual(1);
+  expect((await paletteOpenDurationsMs(page)).at(-1)).toBeLessThanOrEqual(100);
+  await page.keyboard.press("Escape");
+
+  const sidebar = page.getByLabel("Worktrees and tabs");
+  await sidebar.getByRole("button", { name: worktreeName }).click();
+  await expect(page.getByRole("heading", { name: worktreeName })).toBeVisible();
+  await expect
+    .poll(() => worktreeSwitchDurationsMs(page).then((durations) => durations.length))
+    .toBeGreaterThanOrEqual(1);
+  expect((await worktreeSwitchDurationsMs(page)).at(-1)).toBeLessThanOrEqual(50);
+});
+
 test("opens a worktree diff from the shelf context menu", async ({ page }) => {
   await page.goto(`/?daemon=${encodeURIComponent(daemonURL)}&token=${token}`);
   await expect(page.locator(".connection.open")).toBeVisible();
@@ -395,10 +428,12 @@ test("cycles worktrees through native shortcut aliases", async ({ page }) => {
   await expect(page.getByText(worktreeName, { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Back to Shelf" }).click();
+  await page.getByRole("button", { name: "default", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "default" })).toBeVisible();
   await page.getByRole("button", { name: "Open Settings", exact: true }).focus();
-  await page.keyboard.press("Control+Alt+ArrowRight");
-  await expect(page.getByRole("heading", { name: worktreeName })).toBeVisible();
   await page.keyboard.press("Control+Alt+ArrowLeft");
+  await expect(page.getByRole("heading", { name: worktreeName })).toBeVisible();
+  await page.keyboard.press("Control+Alt+ArrowRight");
   await expect(page.getByRole("heading", { name: "default" })).toBeVisible();
 });
 
@@ -713,6 +748,14 @@ async function reconnectDurationsMs(page: Page): Promise<number[]> {
 
 async function coldStartDurationsMs(page: Page): Promise<number[]> {
   return page.evaluate(() => performance.getEntriesByName("prowl.cold-start").map((entry) => entry.duration));
+}
+
+async function paletteOpenDurationsMs(page: Page): Promise<number[]> {
+  return page.evaluate(() => performance.getEntriesByName("prowl.palette.open").map((entry) => entry.duration));
+}
+
+async function worktreeSwitchDurationsMs(page: Page): Promise<number[]> {
+  return page.evaluate(() => performance.getEntriesByName("prowl.worktree.switch").map((entry) => entry.duration));
 }
 
 async function htmlDataset(page: Page, key: string): Promise<string | undefined> {
