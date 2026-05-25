@@ -115,6 +115,7 @@ export type ServerControlMessage =
   | (BaseControlMessage & { type: "pane.exited"; paneId: string; exitCode: number; signal?: string })
   | (BaseControlMessage & { type: "pane.resized"; paneId: string; cols: number; rows: number })
   | (BaseControlMessage & { type: "pane.replay"; paneId: string; bytes: string })
+  | (BaseControlMessage & { type: "pane.detached"; paneId: string })
   | (BaseControlMessage & { type: "repo.listed"; repositories: Repository[] })
   | (BaseControlMessage & { type: "action.listed"; actions: CustomAction[] })
   | (BaseControlMessage & { type: "action.updated"; action: CustomAction })

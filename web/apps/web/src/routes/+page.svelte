@@ -10,6 +10,14 @@
 
   const appState = createAppState();
   setContext(appStateKey, appState);
+
+  $effect(() => {
+    appState.view;
+    appState.selectedWorktreeId;
+    appState.selectedPaneId;
+    appState.panes.size;
+    appState.syncRenderedPanes();
+  });
 </script>
 
 <svelte:head>

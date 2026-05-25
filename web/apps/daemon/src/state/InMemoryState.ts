@@ -213,6 +213,10 @@ export class InMemoryState {
     return Array.from(this.#panes.values());
   }
 
+  hasPane(paneId: string): boolean {
+    return this.#panes.has(paneId);
+  }
+
   settingsSnapshot(keys?: string[]): SettingsSnapshot {
     const snapshot: SettingsSnapshot = {};
     if (!keys || keys.includes("panes")) {

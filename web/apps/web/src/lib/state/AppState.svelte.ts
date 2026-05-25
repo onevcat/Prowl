@@ -55,6 +55,7 @@ export class AppState {
   #metricTimer: ReturnType<typeof setInterval> | null = null;
   #inputStartedByChannel = new Map<number, number>();
   #paneSizeById = new Map<string, { cols: number; rows: number }>();
+  #renderedPaneIds = new Set<string>();
   repositories = $state<Repository[]>([]);
   customActions = $state<CustomAction[]>([]);
   worktreesByRepo = $state<Map<string, Worktree[]>>(new Map());
@@ -288,6 +289,7 @@ export class AppState {
   setView(view: AppView): void {
     this.view = view;
     void set(uiViewKey, view);
+    this.syncRenderedPanes();
   }
 
   selectWorktree(worktreeId: string): void {
@@ -295,6 +297,7 @@ export class AppState {
     const firstPane = Array.from(this.panes.values()).find((pane) => pane.worktreeId === worktreeId);
     this.selectedPaneId = firstPane?.id ?? null;
     void set(selectedWorktreeKey, worktreeId);
+    this.syncRenderedPanes();
   }
 
   selectPane(paneId: string): void {
@@ -306,6 +309,7 @@ export class AppState {
     this.selectedPaneId = paneId;
     this.selectedWorktreeId = pane.worktreeId;
     this.paletteOpen = false;
+    this.syncRenderedPanes();
   }
 
   reorderWorktree(repoId: string, draggedId: string, targetId: string): void {
@@ -618,6 +622,31 @@ export class AppState {
     });
   }
 
+  syncRenderedPanes(): void {
+    const visibleIds = new Set(this.visiblePanes.map((pane) => pane.id));
+    for (const paneId of this.#renderedPaneIds) {
+      if (!visibleIds.has(paneId)) {
+        this.#renderedPaneIds.delete(paneId);
+        this.ws.send({ v: 1, type: "pane.detach", id: makeMessageId(), paneId });
+      }
+    }
+    for (const paneId of visibleIds) {
+      if (!this.#renderedPaneIds.has(paneId)) {
+        this.#renderedPaneIds.add(paneId);
+        void this.ws
+          .request({ v: 1, type: "pane.attach", id: makeMessageId(), paneId })
+          .then((response) => {
+            if (response.type === "pane.replay") {
+              this.#applyPaneReplay(response.paneId, response.bytes);
+            }
+          })
+          .catch((error) => {
+            this.errorMessage = error instanceof Error ? error.message : String(error);
+          });
+      }
+    }
+  }
+
   cycleWorktree(direction: 1 | -1): void {
     const worktrees = this.repositories.flatMap((repository) => this.orderedWorktrees(repository.id));
     if (!this.selectedWorktreeId || worktrees.length === 0) {
@@ -730,7 +759,7 @@ export class AppState {
         id: makeMessageId(),
         keys: ["appearance", "shortcuts", "advanced", "panes"],
       });
-      await this.#attachExistingPanes();
+      this.syncRenderedPanes();
     } catch (error) {
       this.errorMessage = error instanceof Error ? error.message : String(error);
     }
@@ -788,6 +817,7 @@ export class AppState {
         });
         this.selectedPaneId = message.paneId;
         this.selectedWorktreeId = message.worktreeId;
+        this.syncRenderedPanes();
         break;
       case "pane.exited":
         this.#removePane(message.paneId);
@@ -799,6 +829,7 @@ export class AppState {
         this.#mergeSettings(message.settings);
         if (Array.isArray(message.settings.panes)) {
           this.#replacePanes(message.settings.panes as PaneDescriptor[]);
+          this.syncRenderedPanes();
         }
         break;
       case "error":
@@ -814,6 +845,7 @@ export class AppState {
         this.errorMessage = null;
         break;
       case "pane.resized":
+      case "pane.detached":
       case "pong":
         break;
     }
@@ -833,18 +865,6 @@ export class AppState {
     pane.lastOutputLine = `${pane.lastOutputLine}${text}`;
     pane.updatedAt = Date.now();
     pane.unread = pane.id !== this.selectedPaneId;
-  }
-
-  async #attachExistingPanes(): Promise<void> {
-    const panes = Array.from(this.panes.values());
-    for (const pane of panes) {
-      await this.ws.request({
-        v: 1,
-        type: "pane.attach",
-        id: makeMessageId(),
-        paneId: pane.id,
-      });
-    }
   }
 
   #applyPaneReplay(paneId: string, base64: string): void {

@@ -224,6 +224,46 @@ describe("daemon scaffold", () => {
     expect(state.listPanes()[0]?.taskStatus).toBe("done");
     expect(done[0]?.type).toBe("notification");
   });
+
+  test("acknowledges pane detach for existing panes", () => {
+    const root = mkdtempSync(join(tmpdir(), "prowl-detach-test-"));
+    const state = new InMemoryState(root, { statePath: ":memory:", spawnProcesses: false });
+    const config = {
+      port: 0,
+      bind: "127.0.0.1",
+      token: "test-token",
+      allowedOrigins: ["http://127.0.0.1:5173"],
+      requireTLS: false,
+    };
+    const [pane] = state.listPanes();
+    if (!pane) {
+      throw new Error("Expected seeded pane");
+    }
+
+    const detached = handleControl(
+      {
+        v: 1,
+        type: "pane.detach",
+        id: makeMessageId(),
+        paneId: pane.id,
+      },
+      state,
+      config,
+    );
+    const missing = handleControl(
+      {
+        v: 1,
+        type: "pane.detach",
+        id: makeMessageId(),
+        paneId: "missing-pane",
+      },
+      state,
+      config,
+    );
+
+    expect(detached[0]?.type).toBe("pane.detached");
+    expect(missing[0]?.type).toBe("error");
+  });
 });
 
 function runGit(cwd: string, ...args: string[]): void {

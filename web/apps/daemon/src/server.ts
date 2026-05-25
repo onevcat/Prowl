@@ -1,6 +1,6 @@
 import { statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
-import type { ClientControlMessage, ServerControlMessage } from "@prowl/protocol";
+import type { BaseControlMessage, ClientControlMessage, ServerControlMessage } from "@prowl/protocol";
 import {
   decodeFrame,
   encodeJsonFrame,
@@ -145,6 +145,9 @@ export function handleControl(
           "action.run",
           "pane.create",
           "pane.close",
+          "pane.attach",
+          "pane.detach",
+          "pane.resize",
           "settings.get",
           "settings.set",
           "ping",
@@ -309,6 +312,13 @@ export function handleControl(
     ];
   }
 
+  if (message.type === "pane.detach") {
+    if (!state.hasPane(message.paneId)) {
+      return [errorResponse(message.id, "PANE_GONE", "Pane is no longer available")];
+    }
+    return [{ v: 1, type: "pane.detached", id: message.id, paneId: message.paneId }];
+  }
+
   if (message.type === "pane.resize") {
     state.resizePane(message.paneId, message.cols, message.rows);
     return [
@@ -348,7 +358,8 @@ export function handleControl(
     return [{ v: 1, type: "pong", id: message.id }];
   }
 
-  return [errorResponse(message.id, "NOT_IMPLEMENTED", `${message.type} is not implemented yet`)];
+  const unknownMessage = message as BaseControlMessage;
+  return [errorResponse(unknownMessage.id, "NOT_IMPLEMENTED", `${unknownMessage.type} is not implemented yet`)];
 }
 
 function errorResponse(id: string, code: string, message: string): ErrorControlMessage {
