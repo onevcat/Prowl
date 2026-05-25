@@ -27,4 +27,10 @@ describe("InMemoryState", () => {
     expect(state.closePane(pane.id)).toBe(true);
     expect(state.listPanes().some((candidate) => candidate.id === pane.id)).toBe(false);
   });
+
+  test("returns null replay for missing panes", () => {
+    const state = new InMemoryState("/tmp/prowl", { spawnProcesses: false });
+
+    expect(state.replayForPane("missing")).toBeNull();
+  });
 });

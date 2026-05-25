@@ -157,6 +157,22 @@ function handleControl(
     ];
   }
 
+  if (message.type === "pane.attach") {
+    const replay = state.replayForPane(message.paneId);
+    if (!replay) {
+      return [errorResponse(message.id, "PANE_GONE", "Pane is no longer available")];
+    }
+    return [
+      {
+        v: 1,
+        type: "pane.replay",
+        id: message.id,
+        paneId: message.paneId,
+        bytes: Buffer.from(replay).toString("base64"),
+      },
+    ];
+  }
+
   if (message.type === "pane.resize") {
     state.resizePane(message.paneId, message.cols, message.rows);
     return [

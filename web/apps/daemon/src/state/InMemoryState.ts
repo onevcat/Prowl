@@ -6,6 +6,8 @@ type StateOptions = {
   shell?: string;
 };
 
+const replayBufferBytes = 64 * 1024;
+
 type PaneRuntime = {
   process: {
     kill: () => void;
@@ -22,6 +24,7 @@ export class InMemoryState {
   readonly repositories: Repository[];
   readonly worktreesByRepo = new Map<string, Worktree[]>();
   #panes = new Map<string, PaneDescriptor>();
+  #replayByPane = new Map<string, Uint8Array>();
   #runtimesByPane = new Map<string, PaneRuntime>();
   #paneIdByChannel = new Map<number, string>();
   #nextChannelId = 1;
@@ -78,6 +81,7 @@ export class InMemoryState {
       updatedAt: Date.now(),
     };
     this.#panes.set(pane.id, pane);
+    this.#replayByPane.set(pane.id, new Uint8Array());
     this.#paneIdByChannel.set(pane.channelId, pane.id);
     if (this.#options.spawnProcesses) {
       this.#spawnRuntime(pane, command);
@@ -91,10 +95,18 @@ export class InMemoryState {
     runtime?.process.terminal?.close();
     runtime?.process.kill();
     this.#runtimesByPane.delete(paneId);
+    this.#replayByPane.delete(paneId);
     if (pane) {
       this.#paneIdByChannel.delete(pane.channelId);
     }
     return this.#panes.delete(paneId);
+  }
+
+  replayForPane(paneId: string): Uint8Array | null {
+    if (!this.#panes.has(paneId)) {
+      return null;
+    }
+    return this.#replayByPane.get(paneId) ?? new Uint8Array();
   }
 
   writeToChannel(channelId: number, payload: Uint8Array): boolean {
@@ -156,7 +168,19 @@ export class InMemoryState {
     }
     pane.lastOutputLine = lastNonEmptyLine(new TextDecoder().decode(data)) ?? pane.lastOutputLine;
     pane.updatedAt = Date.now();
+    this.#appendReplay(paneId, data);
     this.#options.onPaneData(pane.channelId, data);
+  }
+
+  #appendReplay(paneId: string, data: Uint8Array): void {
+    const current = this.#replayByPane.get(paneId) ?? new Uint8Array();
+    const combined = new Uint8Array(Math.min(replayBufferBytes, current.byteLength + data.byteLength));
+    const keepFromCurrent = Math.max(0, combined.byteLength - data.byteLength);
+    if (keepFromCurrent > 0) {
+      combined.set(current.subarray(current.byteLength - keepFromCurrent), 0);
+    }
+    combined.set(data.subarray(Math.max(0, data.byteLength - combined.byteLength)), keepFromCurrent);
+    this.#replayByPane.set(paneId, combined);
   }
 
   #worktreeForPane(pane: PaneDescriptor): Worktree | undefined {

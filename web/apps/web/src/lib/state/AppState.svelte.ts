@@ -292,6 +292,7 @@ export class AppState {
         });
       }
       await this.ws.request({ v: 1, type: "settings.get", id: makeMessageId(), keys: ["panes"] });
+      await this.#attachExistingPanes();
     } catch (error) {
       this.errorMessage = error instanceof Error ? error.message : String(error);
     }
@@ -335,6 +336,9 @@ export class AppState {
       case "pane.exited":
         this.#removePane(message.paneId);
         break;
+      case "pane.replay":
+        this.#applyPaneReplay(message.paneId, message.bytes);
+        break;
       case "settings.snapshot":
         if (Array.isArray(message.settings.panes)) {
           this.#replacePanes(message.settings.panes as PaneDescriptor[]);
@@ -344,7 +348,6 @@ export class AppState {
         this.errorMessage = `${message.code}: ${message.message}`;
         break;
       case "notification":
-      case "pane.replay":
       case "pane.resized":
       case "pong":
         break;
@@ -360,6 +363,29 @@ export class AppState {
     pane.lastOutputLine = `${pane.lastOutputLine}${text}`;
     pane.updatedAt = Date.now();
     pane.unread = pane.id !== this.selectedPaneId;
+  }
+
+  async #attachExistingPanes(): Promise<void> {
+    const panes = Array.from(this.panes.values());
+    for (const pane of panes) {
+      await this.ws.request({
+        v: 1,
+        type: "pane.attach",
+        id: makeMessageId(),
+        paneId: pane.id,
+      });
+    }
+  }
+
+  #applyPaneReplay(paneId: string, base64: string): void {
+    const pane = this.panes.get(paneId);
+    if (!pane) {
+      return;
+    }
+    const binary = atob(base64);
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    pane.lastOutputLine = textDecoder.decode(bytes);
+    pane.updatedAt = Date.now();
   }
 
   #upsertRepository(repository: Repository): void {
