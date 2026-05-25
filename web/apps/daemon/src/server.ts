@@ -334,8 +334,17 @@ async function tokenFromLoginBody(request: Request): Promise<string> {
   return (await request.text()).trim();
 }
 
-function tokenFromRequest(request: Request, url: URL): string | null {
-  return url.searchParams.get("token") ?? cookieValue(request.headers.get("Cookie"), "prowl_session");
+export function tokenFromRequest(request: Request, url: URL): string | null {
+  return (
+    url.searchParams.get("token") ??
+    bearerToken(request.headers.get("Authorization")) ??
+    cookieValue(request.headers.get("Cookie"), "prowl_session")
+  );
+}
+
+function bearerToken(authorization: string | null): string | null {
+  const match = authorization?.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() || null;
 }
 
 function cookieValue(cookieHeader: string | null, name: string): string | null {

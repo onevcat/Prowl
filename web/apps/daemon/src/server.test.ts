@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { makeMessageId, protocolVersion } from "@prowl/protocol";
-import { allowControlMessage, authenticateUpgradeToken, handleControl, startServer } from "./server";
+import { allowControlMessage, authenticateUpgradeToken, handleControl, startServer, tokenFromRequest } from "./server";
 import { InMemoryState } from "./state/InMemoryState";
 
 describe("daemon scaffold", () => {
@@ -136,6 +136,38 @@ describe("daemon scaffold", () => {
     expect(authenticateUpgradeToken(null, config)).toEqual({ allowed: true, authenticated: false });
     expect(authenticateUpgradeToken("test-token", config)).toEqual({ allowed: true, authenticated: true });
     expect(authenticateUpgradeToken("wrong-token", config)).toEqual({ allowed: false, authenticated: false });
+  });
+
+  test("reads websocket token from authorization bearer header", () => {
+    const request = new Request("http://127.0.0.1/ws", {
+      headers: {
+        Authorization: "Bearer test-token",
+      },
+    });
+
+    expect(tokenFromRequest(request, new URL(request.url))).toBe("test-token");
+  });
+
+  test("prefers explicit websocket query token over authorization and cookie tokens", () => {
+    const request = new Request("http://127.0.0.1/ws?token=query-token", {
+      headers: {
+        Authorization: "Bearer header-token",
+        Cookie: "prowl_session=cookie-token",
+      },
+    });
+
+    expect(tokenFromRequest(request, new URL(request.url))).toBe("query-token");
+  });
+
+  test("ignores non-bearer authorization headers when reading websocket token", () => {
+    const request = new Request("http://127.0.0.1/ws", {
+      headers: {
+        Authorization: "Basic test-token",
+        Cookie: "prowl_session=cookie-token",
+      },
+    });
+
+    expect(tokenFromRequest(request, new URL(request.url))).toBe("cookie-token");
   });
 
   test("accepts hello token on an unauthenticated connection", () => {
