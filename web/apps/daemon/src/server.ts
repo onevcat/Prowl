@@ -30,8 +30,15 @@ type WebSocketData = {
   authenticated: boolean;
   sessionId: string;
   ownedPaneIds: Set<string>;
+  attachedChannelIds: Set<number>;
   controlWindowStartedAt: number;
   controlMessagesInWindow: number;
+};
+
+type ServerClient = {
+  data: WebSocketData;
+  send: (payload: ArrayBuffer) => void;
+  close: (code?: number, reason?: string) => void;
 };
 
 const maxControlMessagesPerSecond = 100;
@@ -62,7 +69,7 @@ export function startServer(config: DaemonConfig, options: ServerOptions = {}): 
   }
   const tls = tlsOptions(config);
   const logger = options.logger ?? createLogger();
-  const clients = new Set<{ send: (payload: ArrayBuffer) => void; close: (code?: number, reason?: string) => void }>();
+  const clients = new Set<ServerClient>();
   const debugStats: DebugStats = {
     paneAttachRequests: 0,
     paneCreateRequests: 0,
@@ -70,7 +77,9 @@ export function startServer(config: DaemonConfig, options: ServerOptions = {}): 
   const outputCoalescer = new OutputCoalescer((channelId, payload) => {
     const frame = encodePtyFrame(channelId, payload);
     for (const client of clients) {
-      client.send(frame);
+      if (shouldSendPtyOutput(client.data, channelId)) {
+        client.send(frame);
+      }
     }
   });
   const state = new InMemoryState(process.env.PROWL_REPO_ROOT ?? process.cwd(), {
@@ -156,6 +165,7 @@ export function startServer(config: DaemonConfig, options: ServerOptions = {}): 
             authenticated: upgradeAuth.authenticated,
             sessionId: crypto.randomUUID(),
             ownedPaneIds: upgradeAuth.authenticated ? new Set(state.listPanes().map((pane) => pane.id)) : new Set(),
+            attachedChannelIds: new Set(),
             controlWindowStartedAt: Date.now(),
             controlMessagesInWindow: 0,
           },
@@ -229,7 +239,9 @@ export function startServer(config: DaemonConfig, options: ServerOptions = {}): 
         if (control.type === "hello" && responses.some((response) => response.type === "welcome")) {
           ws.data.authenticated = true;
           ws.data.ownedPaneIds = new Set(state.listPanes().map((pane) => pane.id));
+          ws.data.attachedChannelIds.clear();
         }
+        updateAttachedChannels(control, responses, state, ws.data);
         for (const response of responses) {
           ws.send(encodeJsonFrame(response));
         }
@@ -257,6 +269,44 @@ export function allowControlMessage(session: WebSocketData, now = Date.now()): b
   }
   session.controlMessagesInWindow += 1;
   return session.controlMessagesInWindow <= maxControlMessagesPerSecond;
+}
+
+export function shouldSendPtyOutput(
+  session: Pick<WebSocketData, "authenticated" | "attachedChannelIds">,
+  channelId: number,
+): boolean {
+  return session.authenticated && session.attachedChannelIds.has(channelId);
+}
+
+function updateAttachedChannels(
+  control: ClientControlMessage,
+  responses: ServerControlMessage[],
+  state: InMemoryState,
+  session: WebSocketData,
+): void {
+  if (!session.authenticated || responses.some((response) => response.type === "error")) {
+    return;
+  }
+
+  for (const response of responses) {
+    if (response.type === "pane.created") {
+      session.attachedChannelIds.add(response.channelId);
+    }
+  }
+
+  if (control.type === "pane.attach" && responses.some((response) => response.type === "pane.replay")) {
+    const pane = state.listPanes().find((candidate) => candidate.id === control.paneId);
+    if (pane) {
+      session.attachedChannelIds.add(pane.channelId);
+    }
+  }
+
+  if (control.type === "pane.detach" && responses.some((response) => response.type === "pane.detached")) {
+    const pane = state.listPanes().find((candidate) => candidate.id === control.paneId);
+    if (pane) {
+      session.attachedChannelIds.delete(pane.channelId);
+    }
+  }
 }
 
 export function authenticateUpgradeToken(

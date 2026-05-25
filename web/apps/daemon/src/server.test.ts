@@ -3,7 +3,14 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFile
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { makeMessageId, protocolVersion } from "@prowl/protocol";
-import { allowControlMessage, authenticateUpgradeToken, handleControl, startServer, tokenFromRequest } from "./server";
+import {
+  allowControlMessage,
+  authenticateUpgradeToken,
+  handleControl,
+  shouldSendPtyOutput,
+  startServer,
+  tokenFromRequest,
+} from "./server";
 import { InMemoryState } from "./state/InMemoryState";
 
 describe("daemon scaffold", () => {
@@ -248,6 +255,7 @@ describe("daemon scaffold", () => {
       authenticated: true,
       sessionId: crypto.randomUUID(),
       ownedPaneIds: new Set<string>(),
+      attachedChannelIds: new Set<number>(),
       controlWindowStartedAt: 1_000,
       controlMessagesInWindow: 0,
     };
@@ -257,6 +265,12 @@ describe("daemon scaffold", () => {
     }
     expect(allowControlMessage(session, 1_500)).toBe(false);
     expect(allowControlMessage(session, 2_001)).toBe(true);
+  });
+
+  test("only sends PTY output to attached sessions", () => {
+    expect(shouldSendPtyOutput({ authenticated: false, attachedChannelIds: new Set([7]) }, 7)).toBe(false);
+    expect(shouldSendPtyOutput({ authenticated: true, attachedChannelIds: new Set([8]) }, 7)).toBe(false);
+    expect(shouldSendPtyOutput({ authenticated: true, attachedChannelIds: new Set([7]) }, 7)).toBe(true);
   });
 
   test("validates repository paths before adding them", () => {
