@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { defaultRequireTLS, isLoopbackBind, normalizeConfig } from "./config";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { configPath, defaultRequireTLS, isLoopbackBind, loadConfigWithMetadata, normalizeConfig } from "./config";
 
 describe("daemon config", () => {
   test("defaults TLS requirement to loopback safety", () => {
@@ -52,5 +55,32 @@ describe("daemon config", () => {
     );
 
     expect(config.requireTLS).toBe(false);
+  });
+
+  test("reports when a config file is created for the first launch", async () => {
+    const previousConfigPath = Bun.env.PROWL_CONFIG_PATH;
+    const directory = await mkdtemp(join(tmpdir(), "prowld-config-"));
+    const path = join(directory, "config.json");
+    Bun.env.PROWL_CONFIG_PATH = path;
+
+    try {
+      const firstLoad = await loadConfigWithMetadata();
+      const written = JSON.parse(await readFile(path, "utf8")) as { token: string };
+      const secondLoad = await loadConfigWithMetadata();
+
+      expect(configPath()).toBe(path);
+      expect(firstLoad.created).toBe(true);
+      expect(firstLoad.config.token).toMatch(/^[0-9a-f]{64}$/);
+      expect(written.token).toBe(firstLoad.config.token);
+      expect(secondLoad.created).toBe(false);
+      expect(secondLoad.config.token).toBe(firstLoad.config.token);
+    } finally {
+      if (previousConfigPath === undefined) {
+        Bun.env.PROWL_CONFIG_PATH = undefined;
+      } else {
+        Bun.env.PROWL_CONFIG_PATH = previousConfigPath;
+      }
+      await rm(directory, { force: true, recursive: true });
+    }
   });
 });

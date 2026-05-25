@@ -1,4 +1,4 @@
-import { type DaemonConfig, loadConfig, rotateConfigToken } from "./auth/config";
+import { type DaemonConfig, loadConfigWithMetadata, rotateConfigToken } from "./auth/config";
 import { createLogger, parseLogLevel } from "./logging/logger";
 import { startServer } from "./server";
 
@@ -48,8 +48,9 @@ if (args.has("no-require-tls")) {
   overrides.requireTLS = false;
 }
 
-const config = await loadConfig(overrides);
 const logger = createLogger({ level: parseLogLevel(args.get("log-level")) });
+const loadedConfig = await loadConfigWithMetadata(overrides);
+const config = loadedConfig.config;
 
 if (args.has("print-token")) {
   logger.info("printed daemon bearer token");
@@ -66,5 +67,9 @@ if (args.has("rotate-token")) {
 
 startServer(config, { logger });
 const scheme = config.tlsCertPath && config.tlsKeyPath ? "https" : "http";
+if (loadedConfig.created) {
+  process.stdout.write(`prowld token: ${config.token}\n`);
+  logger.info("printed newly generated daemon bearer token");
+}
 process.stdout.write(`prowld listening on ${scheme}://${config.bind}:${config.port}\n`);
 logger.info(`daemon listening on ${scheme}://${config.bind}:${config.port}`);

@@ -12,18 +12,30 @@ export type DaemonConfig = {
   tlsKeyPath?: string;
 };
 
+export type LoadedDaemonConfig = {
+  config: DaemonConfig;
+  created: boolean;
+};
+
 const defaultBind = "127.0.0.1";
 const defaultAllowedOrigins = ["http://localhost:5173", "http://127.0.0.1:5173"];
 
 export function configPath(): string {
-  return join(homedir(), ".prowl", "config.json");
+  return Bun.env.PROWL_CONFIG_PATH ?? join(homedir(), ".prowl", "config.json");
 }
 
 export async function loadConfig(overrides: Partial<DaemonConfig> = {}): Promise<DaemonConfig> {
+  return (await loadConfigWithMetadata(overrides)).config;
+}
+
+export async function loadConfigWithMetadata(overrides: Partial<DaemonConfig> = {}): Promise<LoadedDaemonConfig> {
   const path = configPath();
   try {
     const raw = await readFile(path, "utf8");
-    return normalizeConfig(JSON.parse(raw) as Partial<DaemonConfig>, overrides);
+    return {
+      config: normalizeConfig(JSON.parse(raw) as Partial<DaemonConfig>, overrides),
+      created: false,
+    };
   } catch {
     const config = normalizeConfig(
       {
@@ -36,7 +48,7 @@ export async function loadConfig(overrides: Partial<DaemonConfig> = {}): Promise
     );
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, `${JSON.stringify(config, null, 2)}\n`);
-    return config;
+    return { config, created: true };
   }
 }
 
