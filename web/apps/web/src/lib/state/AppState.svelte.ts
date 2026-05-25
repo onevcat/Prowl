@@ -1,3 +1,4 @@
+import { runViewTransition } from "$lib/animation/viewTransition";
 import { formatPaneNotificationBody } from "$lib/notifications/message";
 import { NotificationPermissionRequester } from "$lib/notifications/permission";
 import { redactSensitiveText } from "$lib/security/redaction";
@@ -439,11 +440,13 @@ export class AppState {
   }
 
   selectWorktree(worktreeId: string): void {
-    this.selectedWorktreeId = worktreeId;
-    const firstPane = this.orderedPanes(worktreeId)[0];
-    this.selectedPaneId = firstPane?.id ?? null;
-    persistJSONValue(selectedWorktreeKey, worktreeId);
-    this.syncRenderedPanes();
+    runViewTransition(() => {
+      this.selectedWorktreeId = worktreeId;
+      const firstPane = this.orderedPanes(worktreeId)[0];
+      this.selectedPaneId = firstPane?.id ?? null;
+      persistJSONValue(selectedWorktreeKey, worktreeId);
+      this.syncRenderedPanes();
+    });
   }
 
   selectPane(paneId: string): void {
@@ -451,11 +454,13 @@ export class AppState {
     if (!pane) {
       return;
     }
-    pane.unread = false;
-    this.selectedPaneId = paneId;
-    this.selectedWorktreeId = pane.worktreeId;
-    this.paletteOpen = false;
-    this.syncRenderedPanes();
+    runViewTransition(() => {
+      pane.unread = false;
+      this.selectedPaneId = paneId;
+      this.selectedWorktreeId = pane.worktreeId;
+      this.paletteOpen = false;
+      this.syncRenderedPanes();
+    });
   }
 
   isPaneFocused(paneId: string): boolean {
