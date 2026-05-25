@@ -346,12 +346,7 @@ export class InMemoryState {
     const runtime = this.#runtimesByPane.get(paneId);
     runtime?.process.terminal?.close();
     runtime?.process.kill();
-    this.#runtimesByPane.delete(paneId);
-    this.#replayByPane.delete(paneId);
-    if (pane) {
-      this.#paneIdByChannel.delete(pane.channelId);
-    }
-    return this.#panes.delete(paneId);
+    return this.#removePane(paneId, pane);
   }
 
   replayForPane(paneId: string): Uint8Array | null {
@@ -446,7 +441,7 @@ export class InMemoryState {
 
   #spawnRuntime(pane: PaneDescriptor, command?: string, cwd?: string, size = { cols: 120, rows: 32 }): void {
     const worktree = this.#worktreeForPane(pane);
-    const args = command ? ["-lc", command] : ["-i"];
+    const args = ["-i"];
     const child = this.#options.spawnPaneProcess({
       shell: this.#options.shell,
       args,
@@ -460,15 +455,25 @@ export class InMemoryState {
     this.#runtimesByPane.set(pane.id, {
       process: child,
     });
+    if (command) {
+      child.terminal?.write(`${command}\r`);
+    }
     void child.exited.then((exitCode) => {
       const current = this.#panes.get(pane.id);
       if (current) {
-        current.taskStatus = exitCode === 0 ? "done" : "failed";
-        current.updatedAt = Date.now();
+        this.#removePane(pane.id, current);
         this.#options.onPaneExit(pane.id, exitCode);
       }
-      this.#runtimesByPane.delete(pane.id);
     });
+  }
+
+  #removePane(paneId: string, pane = this.#panes.get(paneId)): boolean {
+    this.#runtimesByPane.delete(paneId);
+    this.#replayByPane.delete(paneId);
+    if (pane) {
+      this.#paneIdByChannel.delete(pane.channelId);
+    }
+    return this.#panes.delete(paneId);
   }
 
   #recordPaneOutput(paneId: string, data: Uint8Array): void {

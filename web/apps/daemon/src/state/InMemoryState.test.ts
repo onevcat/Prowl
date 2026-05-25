@@ -132,7 +132,9 @@ describe("InMemoryState", () => {
     ]);
 
     expect(event).toEqual({ paneId: pane.id, exitCode: 7 });
-    expect(state.listPanes().find((candidate) => candidate.id === pane.id)?.taskStatus).toBe("failed");
+    expect(state.listPanes().some((candidate) => candidate.id === pane.id)).toBe(false);
+    expect(state.replayForPane(pane.id)).toBeNull();
+    expect(state.paneForChannel(pane.channelId)).toBeNull();
   });
 });
 
