@@ -2,17 +2,14 @@
   import { Button } from "@prowl/ui";
   import { getContext } from "svelte";
   import { appStateKey, type AppState } from "$lib/state/AppState.svelte";
-
-  type DiffFile = {
-    path: string;
-    lines: string[];
-  };
+  import { parseGitDiff, splitDiffRows, type DiffLine } from "./model";
 
   const appState = getContext<AppState>(appStateKey);
   let mode = $state<"unified" | "split">("unified");
   let selectedPath = $state<string | null>(null);
-  let files = $derived(parseDiff(appState.diff?.text ?? ""));
+  let files = $derived(parseGitDiff(appState.diff?.text ?? ""));
   let selectedFile = $derived(files.find((file) => file.path === selectedPath) ?? files[0] ?? null);
+  let splitRows = $derived(selectedFile ? splitDiffRows(selectedFile.lines) : []);
 
   $effect(() => {
     if (!selectedPath || !files.some((file) => file.path === selectedPath)) {
@@ -20,31 +17,13 @@
     }
   });
 
-  function parseDiff(diff: string): DiffFile[] {
-    const parsed: DiffFile[] = [];
-    let current: DiffFile | null = null;
-    for (const line of diff.split("\n")) {
-      if (line.startsWith("diff --git ")) {
-        current = { path: line.split(" b/")[1] ?? line, lines: [line] };
-        parsed.push(current);
-        continue;
-      }
-      current?.lines.push(line);
-    }
-    return parsed;
+  function lineNumber(line: DiffLine | null, side: "old" | "new"): string {
+    const value = side === "old" ? line?.oldLine : line?.newLine;
+    return value === null || value === undefined ? "" : String(value);
   }
 
-  function lineClass(line: string): string {
-    if (line.startsWith("+") && !line.startsWith("+++")) {
-      return "added";
-    }
-    if (line.startsWith("-") && !line.startsWith("---")) {
-      return "removed";
-    }
-    if (line.startsWith("@@") || line.startsWith("diff --git") || line.startsWith("index ")) {
-      return "meta";
-    }
-    return "";
+  function displayLine(line: DiffLine | null): string {
+    return line?.text ?? "";
   }
 </script>
 
@@ -68,17 +47,33 @@
       {:else}
         {#each files as file (file.path)}
           <button class:selected={file.path === selectedFile?.path} type="button" onclick={() => (selectedPath = file.path)}>
-            {file.path}
+            <span>{file.path}</span>
+            <small>+{file.added} -{file.removed}</small>
           </button>
         {/each}
       {/if}
     </aside>
 
-    <article class:split={mode === "split"}>
+    <article>
       {#if selectedFile}
-        {#each selectedFile.lines as line, index (`${selectedFile.path}-${index}`)}
-          <pre class={lineClass(line)}>{line}</pre>
-        {/each}
+        {#if mode === "split"}
+          <div class="split-view" aria-label="Side-by-side diff">
+            {#each splitRows as row, index (`${selectedFile.path}-split-${index}`)}
+              <div class={`cell gutter ${row.oldLine?.kind ?? ""}`}>{lineNumber(row.oldLine, "old")}</div>
+              <pre class={`cell ${row.oldLine?.kind ?? ""}`}>{displayLine(row.oldLine)}</pre>
+              <div class={`cell gutter ${row.newLine?.kind ?? ""}`}>{lineNumber(row.newLine, "new")}</div>
+              <pre class={`cell ${row.newLine?.kind ?? ""}`}>{displayLine(row.newLine)}</pre>
+            {/each}
+          </div>
+        {:else}
+          <div class="unified-view" aria-label="Unified diff">
+            {#each selectedFile.lines as line, index (`${selectedFile.path}-${index}`)}
+              <div class={`gutter ${line.kind}`}>{lineNumber(line, "old")}</div>
+              <div class={`gutter ${line.kind}`}>{lineNumber(line, "new")}</div>
+              <pre class={line.kind}>{line.text}</pre>
+            {/each}
+          </div>
+        {/if}
       {:else}
         <div class="empty">No diff content</div>
       {/if}
@@ -136,7 +131,9 @@
   }
 
   aside button {
-    display: block;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.5rem;
     width: 100%;
     min-height: 2.25rem;
     padding: 0.35rem 0.65rem;
@@ -147,6 +144,15 @@
     text-align: left;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  aside button span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  aside button small {
+    color: color-mix(in srgb, CanvasText 58%, Canvas);
   }
 
   aside button:hover,
@@ -160,9 +166,14 @@
     background: Canvas;
   }
 
-  article.split {
-    columns: 2 32rem;
-    column-gap: 1rem;
+  .unified-view {
+    display: grid;
+    grid-template-columns: 3rem 3rem minmax(0, 1fr);
+  }
+
+  .split-view {
+    display: grid;
+    grid-template-columns: 3rem minmax(0, 1fr) 3rem minmax(0, 1fr);
   }
 
   pre {
@@ -175,14 +186,35 @@
     white-space: pre-wrap;
   }
 
+  .cell {
+    min-height: 1.35rem;
+  }
+
+  .gutter {
+    min-height: 1.35rem;
+    padding: 0.08rem 0.4rem;
+    color: color-mix(in srgb, CanvasText 45%, Canvas);
+    font: 0.82rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    text-align: right;
+    user-select: none;
+  }
+
   pre.added {
     border-color: color-mix(in srgb, #34c759 70%, CanvasText);
     background: color-mix(in srgb, #34c759 14%, Canvas);
   }
 
+  .gutter.added {
+    background: color-mix(in srgb, #34c759 10%, Canvas);
+  }
+
   pre.removed {
     border-color: color-mix(in srgb, #ff3b30 70%, CanvasText);
     background: color-mix(in srgb, #ff3b30 13%, Canvas);
+  }
+
+  .gutter.removed {
+    background: color-mix(in srgb, #ff3b30 10%, Canvas);
   }
 
   pre.meta {
