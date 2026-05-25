@@ -1,5 +1,6 @@
 import { NotificationPermissionRequester } from "$lib/notifications/permission";
 import { inferAgentTaskStatus } from "$lib/terminal/detectAgent";
+import { appendTerminalOutput, lastNonEmptyLine, terminalOutputSnapshot } from "$lib/terminal/outputBuffer";
 import { ProtocolError, WSClient } from "$lib/ws/WSClient";
 import type {
   CustomAction,
@@ -34,7 +35,6 @@ const paletteHistoryKey = "prowl:palette.history";
 const appearanceSettingsKey = "prowl:settings.appearance";
 const sessionTokenKey = "prowl:token";
 const defaultDaemonURL = "ws://127.0.0.1:7878/ws";
-const textDecoder = new TextDecoder();
 const textEncoder = new TextEncoder();
 const maxMetricSamples = 100;
 const settingsSections = [
@@ -89,6 +89,7 @@ export class AppState {
   #bootstrapPromise: Promise<void> | null = null;
   #metricTimer: ReturnType<typeof setInterval> | null = null;
   #inputStartedByChannel = new Map<number, number>();
+  #decoderByChannel = new Map<number, TextDecoder>();
   #paneSizeById = new Map<string, { cols: number; rows: number }>();
   #renderedPaneIds = new Set<string>();
   #paneIdsToResume = new Set<string>();
@@ -1064,11 +1065,15 @@ export class AppState {
       this.#inputStartedByChannel.delete(channelId);
       this.#recordInputLatency(performance.now() - inputStartedAt);
     }
-    const text = textDecoder.decode(payload, { stream: true });
-    pane.lastOutputLine = `${pane.lastOutputLine}${text}`;
+    const decoder = this.#decoderByChannel.get(channelId) ?? new TextDecoder();
+    this.#decoderByChannel.set(channelId, decoder);
+    const text = decoder.decode(payload, { stream: true });
+    const snapshot = appendTerminalOutput(pane.output, text);
+    pane.output = snapshot.text;
+    pane.lastOutputLine = snapshot.lastOutputLine || pane.lastOutputLine;
     pane.updatedAt = Date.now();
     pane.unread = pane.id !== this.selectedPaneId;
-    const detectedStatus = inferAgentTaskStatus(pane.lastOutputLine);
+    const detectedStatus = inferAgentTaskStatus(pane.output);
     if (detectedStatus && detectedStatus !== pane.taskStatus) {
       void this.updatePaneStatus(pane.id, detectedStatus);
     }
@@ -1081,7 +1086,9 @@ export class AppState {
     }
     const binary = atob(base64);
     const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
-    pane.lastOutputLine = textDecoder.decode(bytes);
+    const snapshot = terminalOutputSnapshot(new TextDecoder().decode(bytes));
+    pane.output = snapshot.text;
+    pane.lastOutputLine = snapshot.lastOutputLine || pane.lastOutputLine;
     pane.updatedAt = Date.now();
   }
 
@@ -1163,12 +1170,16 @@ export class AppState {
   }
 
   #removePane(paneId: string): void {
+    const pane = this.panes.get(paneId);
     const next = new Map(this.panes);
     next.delete(paneId);
     this.panes = next;
     this.#renderedPaneIds.delete(paneId);
     this.#paneIdsToResume.delete(paneId);
     this.#paneSizeById.delete(paneId);
+    if (pane) {
+      this.#decoderByChannel.delete(pane.channelId);
+    }
     this.#prunePaneOrder();
     this.#ensureSelection();
   }
@@ -1305,16 +1316,6 @@ export class AppState {
 
 export function createAppState(): AppState {
   return new AppState();
-}
-
-function lastNonEmptyLine(text: string): string {
-  return (
-    text
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .at(-1) ?? ""
-  );
 }
 
 function httpURLForWebSocket(wsURL: string, pathname: string): string {

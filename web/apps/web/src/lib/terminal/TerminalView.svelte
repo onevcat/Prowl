@@ -3,19 +3,19 @@
 
   type Props = {
     title: string;
-    lastOutputLine: string;
+    output: string;
     focused: boolean;
     buffering?: boolean;
     onInput?: (text: string) => void;
     onResize?: (cols: number, rows: number) => void;
   };
 
-  let { title, lastOutputLine, focused, buffering = false, onInput, onResize }: Props = $props();
+  let { title, output, focused, buffering = false, onInput, onResize }: Props = $props();
   let buffer = $state("");
   let element = $state<HTMLElement>();
 
   $effect(() => {
-    buffer = lastOutputLine;
+    buffer = output;
   });
 
   $effect(() => {

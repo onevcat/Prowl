@@ -120,7 +120,7 @@
     {#if appState.selectedPane}
       <TerminalView
         title={appState.selectedPane.title}
-        lastOutputLine={appState.selectedPane.lastOutputLine}
+        output={appState.selectedPane.output}
         focused={true}
         buffering={appState.terminalBuffering}
         onInput={(text) => {

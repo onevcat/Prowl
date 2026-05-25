@@ -43,7 +43,7 @@
     <span>{relativeTime(pane.updatedAt)}</span>
     <span class={`badge ${pane.taskStatus}`}>{pane.taskStatus}</span>
   </header>
-  <TerminalView title={pane.title} lastOutputLine={pane.lastOutputLine} {focused} {buffering} {onInput} {onResize} />
+  <TerminalView title={pane.title} output={pane.output} {focused} {buffering} {onInput} {onResize} />
 </div>
 
 <style>

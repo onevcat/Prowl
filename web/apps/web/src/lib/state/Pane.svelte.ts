@@ -8,6 +8,7 @@ export class Pane {
   title = $state("");
   taskStatus = $state<TaskStatus>("idle");
   unread = $state(false);
+  output = $state("");
   lastOutputLine = $state("");
   updatedAt = $state(0);
 
@@ -19,6 +20,7 @@ export class Pane {
     this.title = descriptor.title;
     this.taskStatus = descriptor.taskStatus;
     this.unread = descriptor.unread;
+    this.output = descriptor.lastOutputLine;
     this.lastOutputLine = descriptor.lastOutputLine;
     this.updatedAt = descriptor.updatedAt;
   }
