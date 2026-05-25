@@ -140,6 +140,7 @@ export class AppState {
   }
 
   handleKeydown(event: KeyboardEvent): void {
+    this.#requestNotificationPermission();
     const action = shortcuts.get(normalizeKeyChord(event));
     if (!action) {
       return;
@@ -383,6 +384,30 @@ export class AppState {
     }
   }
 
+  async updatePaneStatus(paneId: string, taskStatus: PaneDescriptor["taskStatus"]): Promise<void> {
+    const pane = this.panes.get(paneId);
+    if (!pane || pane.taskStatus === taskStatus) {
+      return;
+    }
+    const previousStatus = pane.taskStatus;
+    pane.taskStatus = taskStatus;
+    pane.updatedAt = Date.now();
+    try {
+      await this.ws.request({
+        v: 1,
+        type: "pane.status",
+        id: makeMessageId(),
+        paneId,
+        taskStatus,
+      });
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    }
+    if (taskStatus === "done" && previousStatus !== "done" && pane.id !== this.selectedPaneId) {
+      this.#notifyPaneDone(pane);
+    }
+  }
+
   async showDiff(worktreeId = this.selectedWorktreeId): Promise<void> {
     if (!worktreeId) {
       return;
@@ -576,6 +601,12 @@ export class AppState {
         this.errorMessage = `${message.code}: ${message.message}`;
         break;
       case "notification":
+        if (message.paneId) {
+          const pane = this.panes.get(message.paneId);
+          if (pane && pane.id !== this.selectedPaneId) {
+            this.#notifyPaneDone(pane, message.body);
+          }
+        }
         this.errorMessage = null;
         break;
       case "pane.resized":
@@ -707,8 +738,36 @@ export class AppState {
         Array.from(this.panes.values()).find((pane) => pane.worktreeId === this.selectedWorktreeId)?.id ?? null;
     }
   }
+
+  #requestNotificationPermission(): void {
+    if (typeof Notification === "undefined" || Notification.permission !== "default") {
+      return;
+    }
+    void Notification.requestPermission();
+  }
+
+  #notifyPaneDone(pane: Pane, body = pane.lastOutputLine): void {
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") {
+      return;
+    }
+    new Notification(pane.title, {
+      body: lastNonEmptyLine(body),
+      tag: `prowl-pane-${pane.id}`,
+    });
+    void new Audio("/notification.wav").play().catch(() => {});
+  }
 }
 
 export function createAppState(): AppState {
   return new AppState();
+}
+
+function lastNonEmptyLine(text: string): string {
+  return (
+    text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .at(-1) ?? ""
+  );
 }

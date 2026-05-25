@@ -323,6 +323,27 @@ export function handleControl(
     ];
   }
 
+  if (message.type === "pane.status") {
+    const pane = state.updatePaneStatus(message.paneId, message.taskStatus);
+    if (!pane) {
+      return [errorResponse(message.id, "PANE_GONE", "Pane is no longer available")];
+    }
+    if (message.taskStatus === "done") {
+      return [
+        {
+          v: 1,
+          type: "notification",
+          id: message.id,
+          severity: "info",
+          title: "Task finished",
+          body: `${pane.title}: ${pane.lastOutputLine}`,
+          paneId: pane.id,
+        },
+      ];
+    }
+    return [{ v: 1, type: "pane.listed", id: message.id, panes: state.listPanes() }];
+  }
+
   if (message.type === "ping") {
     return [{ v: 1, type: "pong", id: message.id }];
   }

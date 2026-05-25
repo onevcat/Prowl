@@ -355,6 +355,16 @@ export class InMemoryState {
     return true;
   }
 
+  updatePaneStatus(paneId: string, taskStatus: PaneDescriptor["taskStatus"]): PaneDescriptor | null {
+    const pane = this.#panes.get(paneId);
+    if (!pane) {
+      return null;
+    }
+    pane.taskStatus = taskStatus;
+    pane.updatedAt = Date.now();
+    return pane;
+  }
+
   runCustomAction(paneId: string, actionId: string): RunCustomActionResult | null {
     const pane = this.#panes.get(paneId);
     const action = this.customAction(actionId);

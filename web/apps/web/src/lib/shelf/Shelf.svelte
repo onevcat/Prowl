@@ -65,7 +65,7 @@
         onStatus={(status) => {
           const pane = appState.selectedPane;
           if (pane) {
-            pane.taskStatus = status;
+            void appState.updatePaneStatus(pane.id, status);
           }
         }}
       />

@@ -181,6 +181,49 @@ describe("daemon scaffold", () => {
     expect(diff[0].diff.text).toContain("-before");
     expect(diff[0].diff.text).toContain("+after");
   });
+
+  test("updates pane status and emits done notification", () => {
+    const root = mkdtempSync(join(tmpdir(), "prowl-status-test-"));
+    const state = new InMemoryState(root, { statePath: ":memory:", spawnProcesses: false });
+    const config = {
+      port: 0,
+      bind: "127.0.0.1",
+      token: "test-token",
+      allowedOrigins: ["http://127.0.0.1:5173"],
+      requireTLS: false,
+    };
+    const [pane] = state.listPanes();
+    if (!pane) {
+      throw new Error("Expected seeded pane");
+    }
+
+    const running = handleControl(
+      {
+        v: 1,
+        type: "pane.status",
+        id: makeMessageId(),
+        paneId: pane.id,
+        taskStatus: "running",
+      },
+      state,
+      config,
+    );
+    const done = handleControl(
+      {
+        v: 1,
+        type: "pane.status",
+        id: makeMessageId(),
+        paneId: pane.id,
+        taskStatus: "done",
+      },
+      state,
+      config,
+    );
+
+    expect(running[0]?.type).toBe("pane.listed");
+    expect(state.listPanes()[0]?.taskStatus).toBe("done");
+    expect(done[0]?.type).toBe("notification");
+  });
 });
 
 function runGit(cwd: string, ...args: string[]): void {
