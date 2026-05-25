@@ -8,7 +8,7 @@
     "build": "bun run --filter '*' build",
     "build:binaries": "bun run scripts/build-binaries.ts",
     "check:bundle": "bun run scripts/check-bundle-size.ts",
-    "check:deps": "bun run scripts/check-lockfiles.ts && bun run scripts/check-dependency-budget.ts && bun run scripts/check-client-storage.ts && bun run scripts/check-client-runtime.ts",
+    "check:deps": "bun run scripts/check-lockfiles.ts && bun run scripts/check-dependency-budget.ts && bun run scripts/check-client-storage.ts && bun run scripts/check-client-runtime.ts && bun run scripts/check-client-csp.ts",
     "check:locks": "bun run scripts/check-lockfiles.ts",
     "e2e": "bun --bun playwright test",
     "lint": "biome check .",
