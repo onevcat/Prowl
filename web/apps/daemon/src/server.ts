@@ -573,6 +573,10 @@ export function handleControl(
   }
 
   if (message.type === "pane.create") {
+    const sizeError = validatePaneSize(message.id, message.cols, message.rows);
+    if (sizeError) {
+      return [sizeError];
+    }
     const worktree = state.worktree(message.worktreeId);
     if (!worktree) {
       return [errorResponse(message.id, "WORKTREE_NOT_FOUND", "Worktree is no longer registered")];
@@ -651,6 +655,10 @@ export function handleControl(
   }
 
   if (message.type === "pane.resize") {
+    const sizeError = validatePaneSize(message.id, message.cols, message.rows);
+    if (sizeError) {
+      return [sizeError];
+    }
     const authorizationError = authorizePane(message.id, message.paneId, state, options.ownedPaneIds);
     if (authorizationError) {
       return [authorizationError];
@@ -748,6 +756,16 @@ function resolvePaneCwd(
     return errorResponse(id, "INVALID_PANE_CWD", "Pane cwd must stay inside the worktree");
   }
   return { type: "ok", path: requestedRealPath };
+}
+
+function validatePaneSize(id: string, cols: number, rows: number): ErrorControlMessage | null {
+  if (!Number.isInteger(cols) || cols < 1) {
+    return errorResponse(id, "INVALID_PANE_SIZE", "Pane columns must be a positive integer");
+  }
+  if (!Number.isInteger(rows) || rows < 1) {
+    return errorResponse(id, "INVALID_PANE_SIZE", "Pane rows must be a positive integer");
+  }
+  return null;
 }
 
 function validateRepositoryPath(

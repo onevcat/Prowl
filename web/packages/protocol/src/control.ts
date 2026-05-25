@@ -186,8 +186,8 @@ export function parseClientControlMessage(payload: string): ClientControlMessage
       break;
     case "pane.create":
       requireString(value, "worktreeId");
-      requireNumber(value, "cols");
-      requireNumber(value, "rows");
+      requirePositiveInteger(value, "cols");
+      requirePositiveInteger(value, "rows");
       optionalString(value, "cwd");
       optionalString(value, "command");
       break;
@@ -198,8 +198,8 @@ export function parseClientControlMessage(payload: string): ClientControlMessage
       break;
     case "pane.resize":
       requireString(value, "paneId");
-      requireNumber(value, "cols");
-      requireNumber(value, "rows");
+      requirePositiveInteger(value, "cols");
+      requirePositiveInteger(value, "rows");
       break;
     case "pane.status":
       requireString(value, "paneId");
@@ -292,6 +292,14 @@ function optionalString(value: Record<string, unknown>, key: string): void {
 function requireNumber(value: Record<string, unknown>, key: string): void {
   if (typeof value[key] !== "number" || !Number.isFinite(value[key])) {
     throw new ControlMessageParseError(`${key} must be a finite number`);
+  }
+}
+
+function requirePositiveInteger(value: Record<string, unknown>, key: string): void {
+  requireNumber(value, key);
+  const numberValue = value[key];
+  if (typeof numberValue !== "number" || !Number.isInteger(numberValue) || numberValue < 1) {
+    throw new ControlMessageParseError(`${key} must be a positive integer`);
   }
 }
 

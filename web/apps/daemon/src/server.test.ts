@@ -351,6 +351,55 @@ describe("daemon scaffold", () => {
     expect(removed[0]?.type).toBe("error");
   });
 
+  test("rejects invalid pane dimensions", () => {
+    const root = mkdtempSync(join(tmpdir(), "prowl-pane-size-validation-test-"));
+    const state = new InMemoryState(root, { statePath: ":memory:", spawnProcesses: false });
+    const config = {
+      port: 0,
+      bind: "127.0.0.1",
+      token: "test-token",
+      allowedOrigins: ["http://127.0.0.1:5173"],
+      requireTLS: false,
+    };
+    const [pane] = state.listPanes();
+    if (!pane) {
+      throw new Error("Expected seeded pane");
+    }
+
+    const created = handleControl(
+      {
+        v: 1,
+        type: "pane.create",
+        id: makeMessageId(),
+        worktreeId: pane.worktreeId,
+        cols: 0,
+        rows: 32,
+      },
+      state,
+      config,
+    );
+    const resized = handleControl(
+      {
+        v: 1,
+        type: "pane.resize",
+        id: makeMessageId(),
+        paneId: pane.id,
+        cols: 120,
+        rows: -1,
+      },
+      state,
+      config,
+    );
+
+    expect(created[0]?.type).toBe("error");
+    expect(resized[0]?.type).toBe("error");
+    if (created[0]?.type !== "error" || resized[0]?.type !== "error") {
+      throw new Error("Expected pane size validation errors");
+    }
+    expect(created[0].code).toBe("INVALID_PANE_SIZE");
+    expect(resized[0].code).toBe("INVALID_PANE_SIZE");
+  });
+
   test("validates settings patches before persisting them", () => {
     const root = mkdtempSync(join(tmpdir(), "prowl-settings-validation-test-"));
     const state = new InMemoryState(root, { statePath: ":memory:", spawnProcesses: false });

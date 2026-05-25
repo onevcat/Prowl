@@ -45,6 +45,26 @@ describe("control message parsing", () => {
     );
   });
 
+  test("rejects non-positive pane dimensions", () => {
+    expect(() =>
+      parseClientControlMessage(
+        JSON.stringify({ v: 1, type: "pane.resize", id: makeMessageId(), paneId: "pane-1", cols: 0, rows: 32 }),
+      ),
+    ).toThrow("cols must be a positive integer");
+    expect(() =>
+      parseClientControlMessage(
+        JSON.stringify({
+          v: 1,
+          type: "pane.create",
+          id: makeMessageId(),
+          worktreeId: "worktree-1",
+          cols: 80,
+          rows: -1,
+        }),
+      ),
+    ).toThrow("rows must be a positive integer");
+  });
+
   test("rejects unknown control message types", () => {
     expect(() => parseClientControlMessage(JSON.stringify({ v: 1, type: "unknown", id: makeMessageId() }))).toThrow(
       "Unsupported control message type",
