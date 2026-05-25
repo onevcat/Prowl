@@ -157,6 +157,20 @@ function handleControl(
     ];
   }
 
+  if (message.type === "pane.resize") {
+    state.resizePane(message.paneId, message.cols, message.rows);
+    return [
+      {
+        v: 1,
+        type: "pane.resized",
+        id: message.id,
+        paneId: message.paneId,
+        cols: message.cols,
+        rows: message.rows,
+      },
+    ];
+  }
+
   if (message.type === "ping") {
     return [{ v: 1, type: "pong", id: message.id }];
   }

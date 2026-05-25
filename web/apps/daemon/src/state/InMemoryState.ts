@@ -10,11 +10,11 @@ type PaneRuntime = {
   process: {
     kill: () => void;
     exited: Promise<number>;
-  };
-  stdin: {
-    write: (payload: Uint8Array) => number | Promise<number>;
-    flush?: () => number | Promise<number>;
-    end?: () => void;
+    terminal?: {
+      write: (payload: string | Uint8Array) => void;
+      resize: (cols: number, rows: number) => void;
+      close: () => void;
+    };
   };
 };
 
@@ -88,7 +88,7 @@ export class InMemoryState {
   closePane(paneId: string): boolean {
     const pane = this.#panes.get(paneId);
     const runtime = this.#runtimesByPane.get(paneId);
-    runtime?.stdin.end?.();
+    runtime?.process.terminal?.close();
     runtime?.process.kill();
     this.#runtimesByPane.delete(paneId);
     if (pane) {
@@ -106,8 +106,16 @@ export class InMemoryState {
     if (!runtime) {
       return false;
     }
-    void runtime.stdin.write(payload);
-    void runtime.stdin.flush?.();
+    runtime.process.terminal?.write(payload);
+    return true;
+  }
+
+  resizePane(paneId: string, cols: number, rows: number): boolean {
+    const runtime = this.#runtimesByPane.get(paneId);
+    if (!runtime?.process.terminal) {
+      return false;
+    }
+    runtime.process.terminal.resize(cols, rows);
     return true;
   }
 
@@ -116,9 +124,13 @@ export class InMemoryState {
     const args = command ? ["-lc", command] : ["-i"];
     const child = Bun.spawn([this.#options.shell, ...args], {
       cwd: worktree?.path ?? process.cwd(),
-      stdin: "pipe",
-      stdout: "pipe",
-      stderr: "pipe",
+      terminal: {
+        cols: 120,
+        rows: 32,
+        data: (_terminal, data) => {
+          this.#recordPaneOutput(pane.id, data);
+        },
+      },
       env: {
         ...process.env,
         TERM: "xterm-256color",
@@ -126,10 +138,7 @@ export class InMemoryState {
     });
     this.#runtimesByPane.set(pane.id, {
       process: child,
-      stdin: child.stdin,
     });
-    void this.#pumpOutput(pane.id, child.stdout);
-    void this.#pumpOutput(pane.id, child.stderr);
     void child.exited.then((exitCode) => {
       const current = this.#panes.get(pane.id);
       if (current) {
@@ -140,26 +149,14 @@ export class InMemoryState {
     });
   }
 
-  async #pumpOutput(paneId: string, stream: ReadableStream<Uint8Array>): Promise<void> {
-    const reader = stream.getReader();
-    const decoder = new TextDecoder();
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          break;
-        }
-        const pane = this.#panes.get(paneId);
-        if (!pane) {
-          break;
-        }
-        pane.lastOutputLine = lastNonEmptyLine(decoder.decode(value, { stream: true })) ?? pane.lastOutputLine;
-        pane.updatedAt = Date.now();
-        this.#options.onPaneData(pane.channelId, value);
-      }
-    } finally {
-      reader.releaseLock();
+  #recordPaneOutput(paneId: string, data: Uint8Array): void {
+    const pane = this.#panes.get(paneId);
+    if (!pane) {
+      return;
     }
+    pane.lastOutputLine = lastNonEmptyLine(new TextDecoder().decode(data)) ?? pane.lastOutputLine;
+    pane.updatedAt = Date.now();
+    this.#options.onPaneData(pane.channelId, data);
   }
 
   #worktreeForPane(pane: PaneDescriptor): Worktree | undefined {
