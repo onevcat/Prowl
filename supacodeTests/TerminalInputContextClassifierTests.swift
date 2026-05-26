@@ -128,7 +128,7 @@ struct TerminalInputContextClassifierTests {
     #expect(TerminalInputContextClassifier.context(job: job, viewportText: "example approve") == .commandLike)
   }
 
-  @Test func missingJobIsUnknown() {
-    #expect(TerminalInputContextClassifier.context(job: nil, viewportText: "") == .unknown)
+  @Test func missingJobDefaultsToCommandLike() {
+    #expect(TerminalInputContextClassifier.context(job: nil, viewportText: "") == .commandLike)
   }
 }

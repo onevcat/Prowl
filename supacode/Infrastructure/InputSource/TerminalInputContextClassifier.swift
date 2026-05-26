@@ -9,7 +9,7 @@ internal enum TerminalInputContext: Equatable, Sendable {
 internal enum TerminalInputContextClassifier {
   internal static func context(job: ForegroundJob?, viewportText: String) -> TerminalInputContext {
     guard let job else {
-      return .unknown
+      return .commandLike
     }
 
     if canUseViewportFallback(job) {
