@@ -69,23 +69,26 @@ enum CanvasViewportMath {
 
   static func maximizedCardFrame(
     viewportSize: CGSize,
-    margin: CGFloat,
-    titleBarHeight: CGFloat,
-    transformScale: CGFloat = 1
+    horizontalMargin: CGFloat,
+    topMargin: CGFloat,
+    bottomMargin: CGFloat,
+    topSafeAreaInset: CGFloat = 0,
+    titleBarHeight: CGFloat
   ) -> MaximizedCardFrame? {
     guard viewportSize.width > 0, viewportSize.height > 0 else { return nil }
-    guard transformScale > 0 else { return nil }
-    let outerWidth = viewportSize.width - margin * 2
-    let outerHeight = viewportSize.height - margin * 2
-    let untransformedOuterWidth = outerWidth / transformScale
-    let untransformedOuterHeight = outerHeight / transformScale
-    guard untransformedOuterWidth > 0, untransformedOuterHeight > titleBarHeight else { return nil }
+    let windowHeight = viewportSize.height + max(0, topSafeAreaInset)
+    let outerWidth = viewportSize.width - horizontalMargin * 2
+    let outerHeight = windowHeight - topMargin - bottomMargin
+    guard outerWidth > 0, outerHeight > titleBarHeight else { return nil }
     return MaximizedCardFrame(
       cardSize: CGSize(
-        width: untransformedOuterWidth,
-        height: untransformedOuterHeight - titleBarHeight
+        width: outerWidth,
+        height: outerHeight - titleBarHeight
       ),
-      screenCenter: CGPoint(x: viewportSize.width / 2, y: viewportSize.height / 2)
+      screenCenter: CGPoint(
+        x: viewportSize.width / 2,
+        y: topMargin + outerHeight / 2 - max(0, topSafeAreaInset)
+      )
     )
   }
 

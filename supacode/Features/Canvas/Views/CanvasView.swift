@@ -77,6 +77,7 @@ struct CanvasView: View {
   @State var hasPerformedInitialFit = false
   @State var hasSeenCanvasCards = false
   @State var viewportSize: CGSize = .zero
+  @State var viewportTopSafeAreaInset: CGFloat = 0
   @State var showsCanvasHelp = false
   @State var configReloadCounter = 0
   @State var focusViewportAnimationID = 0
@@ -107,12 +108,16 @@ struct CanvasView: View {
   /// The tab currently expanded in place (near-fullscreen overlay) on canvas,
   /// or nil when no card is expanded.
   @State var expandedTabID: TerminalTabID?
+  @State var expandedFontBoostedSurfaceIDs: Set<UUID> = []
   @FocusState var isCustomZoomFieldFocused: Bool
 
   let focusVisibleInset: CGFloat = 20
   let focusVisibleHorizontalInset: CGFloat = 44
   let focusVisibleVerticalInset: CGFloat = 20
   let focusBottomReservedInset: CGFloat = 36
+  let expandHorizontalPadding: CGFloat = 200
+  let expandTopPadding: CGFloat = 20
+  let expandFontSizeDelta = 2
   let minCardWidth: CGFloat = 300
   let minCardHeight: CGFloat = 200
   let maxCardWidth: CGFloat = 2400
@@ -123,8 +128,8 @@ struct CanvasView: View {
   /// layout toolbar so cards don't sit underneath them after auto-fit.
   /// Cards end up shifted upward by half of this amount.
   let bottomToolbarReserve: CGFloat = 50
-  /// Margin kept on every side of a card temporarily expanded to near-fullscreen.
-  let expandPadding: CGFloat = 40
+  /// Bottom margin kept for a card temporarily expanded to near-fullscreen.
+  let expandBottomPadding: CGFloat = 50
   /// Shared animation for expand / restore / relayout. Matches the easeInOut
   /// 0.2s that `CanvasCardView` uses to animate `cardSize`, so the canvas
   /// scale/offset stays in lock-step with the card's terminal size refit.
@@ -309,6 +314,11 @@ struct CanvasView: View {
           self.pendingCenterRequest = nil
         }
       }
+      .onGeometryChange(for: CGFloat.self) { proxy in
+        proxy.safeAreaInsets.top
+      } action: { newInset in
+        viewportTopSafeAreaInset = newInset
+      }
     }
     .overlay(alignment: .bottomTrailing) {
       canvasBottomTrailingOverlay
@@ -406,6 +416,7 @@ struct CanvasView: View {
     }
     .onDisappear {
       cardDebugStyleStore.stopWatching()
+      restoreExpandedFontBoost()
       deactivateCanvas()
       cancelArrangeAutoScaleTask()
       cancelOverviewRestoreTask()
@@ -848,7 +859,7 @@ struct CanvasView: View {
 
     let packer = CanvasCardPacker(spacing: cardSpacing, titleBarHeight: titleBarHeight)
     let targetRatio = viewportSize.width / viewportSize.height
-    let result = packer.pack(cards: cards, targetRatio: targetRatio)
+    let result = packer.pack(cards: cards, currentLayouts: layoutStore.cardLayouts, targetRatio: targetRatio)
 
     guard !result.layouts.isEmpty else { return }
     layoutStore.setCardLayouts(result.layouts, zOrder: keys)
@@ -2016,8 +2027,10 @@ struct CanvasView: View {
 
   var expandMetrics: CanvasExpandGeometry.Metrics {
     CanvasExpandGeometry.Metrics(
-      padding: expandPadding,
-      bottomReserve: bottomToolbarReserve,
+      horizontalPadding: expandHorizontalPadding,
+      topPadding: expandTopPadding,
+      bottomReserve: expandBottomPadding,
+      topSafeAreaInset: viewportTopSafeAreaInset,
       titleBarHeight: titleBarHeight,
       minSize: CGSize(width: minCardWidth, height: minCardHeight)
     )
@@ -2026,7 +2039,7 @@ struct CanvasView: View {
   /// Screen-space center for a fully expanded card: horizontally centered and
   /// within the toolbar-adjusted viewport. Independent of canvas pan/zoom.
   var expandedScreenCenter: CGPoint {
-    CGPoint(x: viewportSize.width / 2, y: (viewportSize.height - bottomToolbarReserve) / 2)
+    CanvasExpandGeometry.expandedCenter(viewport: viewportSize, metrics: expandMetrics)
   }
 
   /// A card's normal (non-expanded) on-screen frame, following the canvas

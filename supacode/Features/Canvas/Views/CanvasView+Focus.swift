@@ -110,7 +110,11 @@ extension CanvasView {
     guard viewportSize.width > 0, viewportSize.height > 0,
       layoutStore.cardLayouts[tabID.rawValue.uuidString] != nil
     else { return }
+    if expandedTabID != nil, expandedTabID != tabID {
+      restoreExpandedFontBoost()
+    }
     focusSingleCard(tabID, states: states)
+    applyExpandedFontBoost(to: tabID, states: states)
     withAnimation(expandAnimation) {
       expandedTabID = tabID
     }
@@ -119,6 +123,7 @@ extension CanvasView {
   /// Restore the expanded card back into the (unchanged) canvas.
   func collapseExpand() {
     guard expandedTabID != nil else { return }
+    restoreExpandedFontBoost()
     withAnimation(expandAnimation) {
       expandedTabID = nil
     }
@@ -127,7 +132,31 @@ extension CanvasView {
   /// Drop expand state without animation — used right before a relayout
   /// (Arrange/Organize) takes over the canvas.
   func cancelExpandForRelayout() {
+    restoreExpandedFontBoost()
     expandedTabID = nil
+  }
+
+  func applyExpandedFontBoost(to tabID: TerminalTabID, states: [WorktreeTerminalState]) {
+    guard expandFontSizeDelta > 0 else { return }
+    guard let state = states.first(where: { $0.surfaceView(for: tabID) != nil }) else { return }
+    for surface in state.splitTree(for: tabID).leaves() {
+      guard expandedFontBoostedSurfaceIDs.insert(surface.id).inserted else { continue }
+      surface.performBindingAction("increase_font_size:\(expandFontSizeDelta)")
+    }
+  }
+
+  func restoreExpandedFontBoost() {
+    guard !expandedFontBoostedSurfaceIDs.isEmpty else { return }
+    for state in terminalManager.activeWorktreeStates {
+      for tab in state.tabManager.tabs {
+        let boostedSurfaces = state.splitTree(for: tab.id).leaves()
+          .filter { expandedFontBoostedSurfaceIDs.contains($0.id) }
+        for surface in boostedSurfaces {
+          surface.performBindingAction("decrease_font_size:\(expandFontSizeDelta)")
+        }
+      }
+    }
+    expandedFontBoostedSurfaceIDs.removeAll()
   }
 
   func fulfillPendingFocusRequest(

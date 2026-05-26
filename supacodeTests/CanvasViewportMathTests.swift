@@ -70,31 +70,49 @@ struct CanvasViewportMathTests {
   @Test func maximizedCardFrameUsesWindowMarginOutsideTitleBarAndContent() {
     let frame = CanvasViewportMath.maximizedCardFrame(
       viewportSize: CGSize(width: 1_200, height: 800),
-      margin: 50,
+      horizontalMargin: 200,
+      topMargin: 10,
+      bottomMargin: 50,
       titleBarHeight: 28
     )
 
-    #expect(frame?.cardSize == CGSize(width: 1_100, height: 672))
-    #expect(frame?.screenCenter == CGPoint(x: 600, y: 400))
+    #expect(frame?.cardSize == CGSize(width: 800, height: 712))
+    #expect(frame?.screenCenter == CGPoint(x: 600, y: 380))
   }
 
-  @Test func maximizedCardFrameAccountsForTransformScale() {
+  @Test func maximizedCardFrameUsesFullAvailableSizeWithoutRenderScale() {
     let frame = CanvasViewportMath.maximizedCardFrame(
       viewportSize: CGSize(width: 1_220, height: 890),
-      margin: 60,
-      titleBarHeight: 28,
-      transformScale: 1.1
+      horizontalMargin: 60,
+      topMargin: 60,
+      bottomMargin: 60,
+      titleBarHeight: 28
     )
 
-    #expect(abs((frame?.cardSize.width ?? 0) - 1_000) < 0.001)
-    #expect(abs((frame?.cardSize.height ?? 0) - 672) < 0.001)
+    #expect(frame?.cardSize == CGSize(width: 1_100, height: 742))
     #expect(frame?.screenCenter == CGPoint(x: 610, y: 445))
+  }
+
+  @Test func maximizedCardFrameCountsTopMarginFromWindowTitleBarTop() {
+    let frame = CanvasViewportMath.maximizedCardFrame(
+      viewportSize: CGSize(width: 1_200, height: 740),
+      horizontalMargin: 200,
+      topMargin: 10,
+      bottomMargin: 50,
+      topSafeAreaInset: 60,
+      titleBarHeight: 28
+    )
+
+    #expect(frame?.cardSize == CGSize(width: 800, height: 712))
+    #expect(frame?.screenCenter == CGPoint(x: 600, y: 320))
   }
 
   @Test func maximizedCardFrameReturnsNilWhenViewportCannotFitMarginsAndTitleBar() {
     let frame = CanvasViewportMath.maximizedCardFrame(
       viewportSize: CGSize(width: 90, height: 120),
-      margin: 50,
+      horizontalMargin: 50,
+      topMargin: 50,
+      bottomMargin: 50,
       titleBarHeight: 28
     )
 

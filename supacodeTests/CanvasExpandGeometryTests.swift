@@ -31,4 +31,39 @@ struct CanvasExpandGeometryTests {
     #expect(size.width == metrics.minSize.width)
     #expect(size.height == metrics.minSize.height)
   }
+
+  @Test func sizeSupportsAsymmetricMaxModeMargins() {
+    let metrics = CanvasExpandGeometry.Metrics(
+      horizontalPadding: 200,
+      topPadding: 20,
+      bottomReserve: 50,
+      titleBarHeight: 28,
+      minSize: CGSize(width: 300, height: 200)
+    )
+
+    let size = CanvasExpandGeometry.expandedSize(
+      viewport: CGSize(width: 1200, height: 800),
+      metrics: metrics
+    )
+
+    #expect(size == CGSize(width: 800, height: 702))
+  }
+
+  @Test func centerCountsTopMarginFromWindowTitlebarTop() {
+    let metrics = CanvasExpandGeometry.Metrics(
+      horizontalPadding: 200,
+      topPadding: 20,
+      bottomReserve: 50,
+      topSafeAreaInset: 60,
+      titleBarHeight: 28,
+      minSize: CGSize(width: 300, height: 200)
+    )
+
+    let center = CanvasExpandGeometry.expandedCenter(
+      viewport: CGSize(width: 1200, height: 740),
+      metrics: metrics
+    )
+
+    #expect(center == CGPoint(x: 600, y: 325))
+  }
 }

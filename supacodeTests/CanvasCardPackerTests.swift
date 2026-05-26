@@ -32,6 +32,24 @@ struct CanvasCardPackerTests {
     #expect(result.layouts["b"]?.size == CGSize(width: 800, height: 300))
   }
 
+  @Test func currentVisualOrderAvoidsSwappingAlreadyArrangedCards() throws {
+    let cards = [
+      card("a", width: 600, height: 400),
+      card("b", width: 600, height: 400),
+    ]
+    let currentLayouts = [
+      "a": CanvasCardLayout(position: CGPoint(x: 930, y: 234), size: CGSize(width: 600, height: 400)),
+      "b": CanvasCardLayout(position: CGPoint(x: 320, y: 234), size: CGSize(width: 600, height: 400)),
+    ]
+
+    let result = packer.pack(cards: cards, currentLayouts: currentLayouts, targetRatio: 3.0)
+
+    let layoutA = try #require(result.layouts["a"])
+    let layoutB = try #require(result.layouts["b"])
+    #expect(layoutA.position.x > layoutB.position.x)
+    #expect(layoutA.position.y == layoutB.position.y)
+  }
+
   @Test func allCardsArePlaced() {
     let cards = (0..<5).map { card("card\($0)") }
     let result = packer.pack(cards: cards, targetRatio: 16.0 / 9.0)

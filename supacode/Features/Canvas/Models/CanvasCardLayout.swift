@@ -171,6 +171,42 @@ struct CanvasCardPacker {
     }
   }
 
+  func pack(
+    cards: [CardInfo],
+    currentLayouts: [String: CanvasCardLayout],
+    targetRatio: CGFloat
+  ) -> PackResult {
+    pack(
+      cards: cards.sorted { lhs, rhs in
+        currentVisualOrderComesBefore(lhs, rhs, currentLayouts: currentLayouts)
+      },
+      targetRatio: targetRatio
+    )
+  }
+
+  private func currentVisualOrderComesBefore(
+    _ lhs: CardInfo,
+    _ rhs: CardInfo,
+    currentLayouts: [String: CanvasCardLayout]
+  ) -> Bool {
+    switch (currentLayouts[lhs.key], currentLayouts[rhs.key]) {
+    case (.some(let lhsLayout), .some(let rhsLayout)):
+      if abs(lhsLayout.position.y - rhsLayout.position.y) > Self.floatEpsilon {
+        return lhsLayout.position.y < rhsLayout.position.y
+      }
+      if abs(lhsLayout.position.x - rhsLayout.position.x) > Self.floatEpsilon {
+        return lhsLayout.position.x < rhsLayout.position.x
+      }
+      return lhs.key < rhs.key
+    case (.some, .none):
+      return true
+    case (.none, .some):
+      return false
+    case (.none, .none):
+      return lhs.key < rhs.key
+    }
+  }
+
   // MARK: - Waterfall layout
 
   /// Compute bounding size for a waterfall layout without building layouts.
