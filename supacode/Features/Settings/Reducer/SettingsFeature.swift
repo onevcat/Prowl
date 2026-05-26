@@ -49,6 +49,8 @@ struct SettingsFeature {
     var showDefaultEditorInToolbar: Bool
     var dockBounceMode: DockBounceMode
     var showNotificationDotOnDock: Bool
+    var useAnonymousTmuxBackedTerminals: Bool
+    var isTmuxAvailable = true
     var cliInstallStatus: CLIInstallStatus = .notInstalled
     var cliInstallShowAlert: Bool = true
     /// Whether macOS will render the Dock notification badge (notification
@@ -102,6 +104,7 @@ struct SettingsFeature {
       showDefaultEditorInToolbar = settings.showDefaultEditorInToolbar
       dockBounceMode = settings.dockBounceMode
       showNotificationDotOnDock = settings.showNotificationDotOnDock
+      useAnonymousTmuxBackedTerminals = settings.useAnonymousTmuxBackedTerminals
     }
 
     var globalSettings: GlobalSettings {
@@ -147,7 +150,8 @@ struct SettingsFeature {
         dockBounceMode: dockBounceMode,
         showNotificationDotOnDock: showNotificationDotOnDock,
         shelfSpineTintFallback: shelfSpineTintFallback,
-        shelfSpineTintFollowsRepositoryColor: shelfSpineTintFollowsRepositoryColor
+        shelfSpineTintFollowsRepositoryColor: shelfSpineTintFollowsRepositoryColor,
+        useAnonymousTmuxBackedTerminals: useAnonymousTmuxBackedTerminals
       )
     }
   }
@@ -196,6 +200,7 @@ struct SettingsFeature {
   @Dependency(SystemNotificationClient.self) private var systemNotificationClient
   @Dependency(TerminalLayoutPersistenceClient.self) private var terminalLayoutPersistence
   @Dependency(CLIInstallClient.self) private var cliInstallClient
+  @Dependency(TmuxAvailabilityClient.self) private var tmuxAvailabilityClient
 
   var body: some Reducer<State, Action> {
     BindingReducer()
@@ -206,18 +211,23 @@ struct SettingsFeature {
         return .send(.settingsLoaded(settingsFile.global))
 
       case .settingsLoaded(let settings):
+        let isTmuxAvailable = tmuxAvailabilityClient.isAvailable()
         let normalizedDefaultEditorID = OpenWorktreeAction.normalizedDefaultEditorID(settings.defaultEditorID)
         let normalizedWorktreeBaseDirPath =
           SupacodePaths.normalizedWorktreeBaseDirectoryPath(settings.defaultWorktreeBaseDirectoryPath)
         let normalizedSettings: GlobalSettings
         if normalizedDefaultEditorID == settings.defaultEditorID,
-          normalizedWorktreeBaseDirPath == settings.defaultWorktreeBaseDirectoryPath
+          normalizedWorktreeBaseDirPath == settings.defaultWorktreeBaseDirectoryPath,
+          isTmuxAvailable || !settings.useAnonymousTmuxBackedTerminals
         {
           normalizedSettings = settings
         } else {
           var updatedSettings = settings
           updatedSettings.defaultEditorID = normalizedDefaultEditorID
           updatedSettings.defaultWorktreeBaseDirectoryPath = normalizedWorktreeBaseDirPath
+          if !isTmuxAvailable {
+            updatedSettings.useAnonymousTmuxBackedTerminals = false
+          }
           normalizedSettings = updatedSettings
           @Shared(.settingsFile) var settingsFile
           $settingsFile.withLock { $0.global = normalizedSettings }
@@ -262,11 +272,16 @@ struct SettingsFeature {
         state.showDefaultEditorInToolbar = normalizedSettings.showDefaultEditorInToolbar
         state.dockBounceMode = normalizedSettings.dockBounceMode
         state.showNotificationDotOnDock = normalizedSettings.showNotificationDotOnDock
+        state.isTmuxAvailable = isTmuxAvailable
+        state.useAnonymousTmuxBackedTerminals = normalizedSettings.useAnonymousTmuxBackedTerminals
         state.syncGlobalDefaults(from: normalizedSettings)
         return .send(.delegate(.settingsChanged(normalizedSettings)))
 
       case .binding:
         state.commandFinishedNotificationThreshold = min(max(state.commandFinishedNotificationThreshold, 0), 600)
+        if !state.isTmuxAvailable {
+          state.useAnonymousTmuxBackedTerminals = false
+        }
         state.syncGlobalDefaults(from: state.globalSettings)
         return persist(state)
 

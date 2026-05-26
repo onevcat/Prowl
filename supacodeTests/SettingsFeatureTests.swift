@@ -431,6 +431,46 @@ struct SettingsFeatureTests {
     #expect(settingsFile.global.showActiveAgentStatusInShelf == false)
   }
 
+  @Test(.dependencies) func anonymousTmuxBackedTerminalsPersistsAsGlobalSetting() async {
+    var initialSettings = GlobalSettings.default
+    initialSettings.useAnonymousTmuxBackedTerminals = false
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = initialSettings }
+
+    let store = TestStore(initialState: SettingsFeature.State(settings: initialSettings)) {
+      SettingsFeature()
+    }
+
+    await store.send(.binding(.set(\.useAnonymousTmuxBackedTerminals, true))) {
+      $0.useAnonymousTmuxBackedTerminals = true
+    }
+    await store.receive(\.delegate.settingsChanged)
+
+    #expect(settingsFile.global.useAnonymousTmuxBackedTerminals == true)
+  }
+
+  @Test(.dependencies) func anonymousTmuxBackedTerminalsCannotEnableWhenTmuxUnavailable() async {
+    var initialSettings = GlobalSettings.default
+    initialSettings.useAnonymousTmuxBackedTerminals = false
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = initialSettings }
+
+    let store = TestStore(initialState: SettingsFeature.State(settings: initialSettings)) {
+      SettingsFeature()
+    } withDependencies: {
+      $0.tmuxAvailabilityClient.isAvailable = { false }
+    }
+
+    await store.send(.settingsLoaded(initialSettings)) {
+      $0.isTmuxAvailable = false
+    }
+    await store.receive(\.delegate.settingsChanged)
+    await store.send(.binding(.set(\.useAnonymousTmuxBackedTerminals, true)))
+    await store.receive(\.delegate.settingsChanged)
+
+    #expect(settingsFile.global.useAnonymousTmuxBackedTerminals == false)
+  }
+
   @Test(.dependencies) func disablingAnalyticsResetsClient() async {
     var initialSettings = GlobalSettings.default
     initialSettings.analyticsEnabled = true

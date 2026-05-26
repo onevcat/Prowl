@@ -9,7 +9,9 @@ nonisolated struct UserRepositorySettings: Codable, Equatable, Sendable {
     case customCommands
   }
 
-  init(customCommands: [UserCustomCommand]) {
+  init(
+    customCommands: [UserCustomCommand]
+  ) {
     self.customCommands = Self.normalizedCommands(customCommands)
   }
 

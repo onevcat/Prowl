@@ -22,11 +22,15 @@ final class WorktreeTerminalManager {
   }
 
   private let runtime: GhosttyRuntime?
+  private let tmuxController: TmuxTerminalController?
+  private var usesAnonymousTmux: Bool
+  private let usesAnonymousTmuxForWorktree: ((Worktree) -> Bool)?
   private let layoutPersistence: TerminalLayoutPersistenceClient
   private var states: [Worktree.ID: WorktreeTerminalState] = [:]
   private var notificationsEnabled = true
   private var commandFinishedNotificationEnabled = true
   private var commandFinishedNotificationThreshold = 10
+  private var agentDetectionEnabled = true
   private var preferredFontSize: Float32?
   private let baselineFontSize: Float32
   private let inputSourceCoordinator: TerminalInputSourceCoordinator
@@ -53,10 +57,16 @@ final class WorktreeTerminalManager {
   init(
     runtime: GhosttyRuntime,
     preferredFontSize: Float32? = nil,
+    tmuxController: TmuxTerminalController? = nil,
+    usesAnonymousTmux: Bool = false,
+    usesAnonymousTmuxForWorktree: ((Worktree) -> Bool)? = nil,
     layoutPersistence: TerminalLayoutPersistenceClient = .liveValue,
     inputSourceCoordinator: TerminalInputSourceCoordinator = TerminalInputSourceCoordinator()
   ) {
     self.runtime = runtime
+    self.tmuxController = tmuxController
+    self.usesAnonymousTmux = usesAnonymousTmux
+    self.usesAnonymousTmuxForWorktree = usesAnonymousTmuxForWorktree
     self.layoutPersistence = layoutPersistence
     self.preferredFontSize = preferredFontSize
     self.inputSourceCoordinator = inputSourceCoordinator
@@ -79,10 +89,10 @@ final class WorktreeTerminalManager {
   private func handleTabCommand(_ command: TerminalClient.Command) -> Bool {
     switch command {
     case .createTab(let worktree, let runSetupScriptIfNew):
-      Task { createTabAsync(in: worktree, runSetupScriptIfNew: runSetupScriptIfNew) }
+      Task { await createTabAsync(in: worktree, runSetupScriptIfNew: runSetupScriptIfNew) }
     case .createTabFromCanvas(let worktree, let runSetupScriptIfNew, let inheritFromFocusedSurface):
       Task {
-        createTabAsync(
+        await createTabAsync(
           in: worktree,
           runSetupScriptIfNew: runSetupScriptIfNew,
           inheritFromFocusedSurface: inheritFromFocusedSurface
@@ -92,7 +102,7 @@ final class WorktreeTerminalManager {
       let worktree, let input, let runSetupScriptIfNew, let autoCloseOnSuccess, let customCommandName,
       let customCommandIcon):
       Task {
-        createTabAsync(
+        await createTabAsync(
           in: worktree,
           runSetupScriptIfNew: runSetupScriptIfNew,
           initialInput: input,
@@ -115,7 +125,7 @@ final class WorktreeTerminalManager {
       }
     case .createTabInDirectory(let worktree, let directory):
       Task {
-        createTabAsync(in: worktree, runSetupScriptIfNew: false, workingDirectory: directory)
+        await createTabAsync(in: worktree, runSetupScriptIfNew: false, workingDirectory: directory)
       }
     case .ensureInitialTab(let worktree, let runSetupScriptIfNew, let focusing):
       let state = state(for: worktree) { runSetupScriptIfNew }
@@ -125,7 +135,7 @@ final class WorktreeTerminalManager {
     case .insertText(let worktree, let text):
       if !state(for: worktree).focusAndRunCommand(text) {
         Task {
-          createTabAsync(
+          await createTabAsync(
             in: worktree,
             runSetupScriptIfNew: false,
             initialInput: text,
@@ -137,6 +147,8 @@ final class WorktreeTerminalManager {
       _ = state(for: worktree).stopRunScript()
     case .closeFocusedTab(let worktree):
       _ = closeFocusedTab(in: worktree)
+    case .killFocusedTab(let worktree):
+      Task { await killFocusedTab(in: worktree) }
     case .closeFocusedSurface(let worktree):
       _ = closeFocusedSurface(in: worktree)
     case .focusSelectedTab(let worktree):
@@ -185,6 +197,12 @@ final class WorktreeTerminalManager {
       setNotificationsEnabled(enabled)
     case .setCommandFinishedNotification(let enabled, let threshold):
       setCommandFinishedNotification(enabled: enabled, threshold: threshold)
+    case .setAgentDetectionEnabled(let enabled):
+      setAgentDetectionEnabled(enabled)
+    case .setAnonymousTmuxBackedTerminalsEnabled(let enabled):
+      setAnonymousTmuxBackedTerminalsEnabled(enabled)
+    case .refreshAnonymousTmuxConfiguration(let worktree):
+      refreshAnonymousTmuxConfiguration(for: worktree)
     case .setCanvasMode(let enabled):
       if enabled {
         terminalLogger.info("[CanvasExit] enteringCanvas previousSelectedWorktree=\(selectedWorktreeID ?? "nil")")
@@ -254,6 +272,7 @@ final class WorktreeTerminalManager {
   ) -> WorktreeTerminalState {
     if let existing = states[worktree.id] {
       existing.setDefaultFontSize(preferredFontSize)
+      existing.setTmuxController(resolvedTmuxController(for: worktree))
       if runSetupScriptIfNew() {
         existing.enableSetupScriptIfNeeded()
       }
@@ -264,13 +283,15 @@ final class WorktreeTerminalManager {
       runtime: runtime!,
       worktree: worktree,
       runSetupScript: runSetupScript,
-      defaultFontSize: preferredFontSize
+      defaultFontSize: preferredFontSize,
+      tmuxController: resolvedTmuxController(for: worktree)
     )
     state.setNotificationsEnabled(notificationsEnabled)
     state.setCommandFinishedNotification(
       enabled: commandFinishedNotificationEnabled,
       threshold: commandFinishedNotificationThreshold
     )
+    state.setAgentDetectionEnabled(agentDetectionEnabled)
     state.isSelected = { [weak self] in
       self?.selectedWorktreeID == worktree.id
     }
@@ -341,6 +362,15 @@ final class WorktreeTerminalManager {
     stateIfExists(for: worktreeID)?.focusedDirectoryPathForRevealInFinder()
   }
 
+  @discardableResult
+  func createTabForTesting(
+    in worktree: Worktree,
+    runSetupScriptIfNew: Bool
+  ) async -> TerminalTabID? {
+    await createTabAsync(in: worktree, runSetupScriptIfNew: runSetupScriptIfNew)
+  }
+
+  @discardableResult
   private func createTabAsync(
     in worktree: Worktree,
     runSetupScriptIfNew: Bool,
@@ -350,7 +380,7 @@ final class WorktreeTerminalManager {
     autoCloseOnSuccess: Bool = false,
     customCommandName: String? = nil,
     customCommandIcon: String? = nil
-  ) {
+  ) async -> TerminalTabID? {
     let state = state(for: worktree) { runSetupScriptIfNew }
     let setupScript: String?
     // Skip setup injection when auto-close is requested so the setup script's
@@ -362,7 +392,7 @@ final class WorktreeTerminalManager {
     } else {
       setupScript = nil
     }
-    let tabId = state.createTab(
+    let tabId = await state.createTabAsync(
       setupScript: setupScript,
       initialInput: initialInput,
       inheritFromFocusedSurface: inheritFromFocusedSurface,
@@ -379,6 +409,7 @@ final class WorktreeTerminalManager {
         state.applyCustomCommandIcon(customCommandIcon, surfaceId: surfaceId)
       }
     }
+    return tabId
   }
 
   private func createSplitAsync(
@@ -413,6 +444,12 @@ final class WorktreeTerminalManager {
   func closeFocusedTab(in worktree: Worktree) -> Bool {
     let state = state(for: worktree)
     return state.closeFocusedTab()
+  }
+
+  @discardableResult
+  func killFocusedTab(in worktree: Worktree) async -> Bool {
+    let state = state(for: worktree)
+    return await state.killFocusedTab()
   }
 
   @discardableResult
@@ -584,6 +621,38 @@ final class WorktreeTerminalManager {
     commandFinishedNotificationThreshold = threshold
     for state in states.values {
       state.setCommandFinishedNotification(enabled: enabled, threshold: threshold)
+    }
+  }
+
+  func setAgentDetectionEnabled(_ enabled: Bool) {
+    agentDetectionEnabled = enabled
+    for state in states.values {
+      state.setAgentDetectionEnabled(enabled)
+    }
+  }
+
+  private func resolvedTmuxController(for worktree: Worktree) -> TmuxTerminalController? {
+    guard usesAnonymousTmuxEnabled(for: worktree) else { return nil }
+    return tmuxController
+  }
+
+  private func usesAnonymousTmuxEnabled(for worktree: Worktree) -> Bool {
+    if let usesAnonymousTmuxForWorktree {
+      return usesAnonymousTmuxForWorktree(worktree)
+    }
+    return usesAnonymousTmux
+  }
+
+  private func refreshAnonymousTmuxConfiguration(for worktree: Worktree) {
+    guard let existing = states[worktree.id] else { return }
+    existing.setTmuxController(resolvedTmuxController(for: worktree))
+  }
+
+  private func setAnonymousTmuxBackedTerminalsEnabled(_ enabled: Bool) {
+    guard usesAnonymousTmux != enabled else { return }
+    usesAnonymousTmux = enabled
+    for state in states.values {
+      state.setTmuxController(enabled ? tmuxController : nil)
     }
   }
 
@@ -844,6 +913,9 @@ final class WorktreeTerminalManager {
 
     private init(preview: Void) {
       self.runtime = nil
+      self.tmuxController = nil
+      self.usesAnonymousTmux = false
+      self.usesAnonymousTmuxForWorktree = nil
       self.layoutPersistence = .liveValue
       self.preferredFontSize = nil
       self.baselineFontSize = 13

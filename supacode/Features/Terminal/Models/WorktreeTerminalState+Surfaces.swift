@@ -74,6 +74,7 @@ extension WorktreeTerminalState {
     inheritingFromSurfaceId: UUID? = nil,
     initialInput: String? = nil,
     workingDirectoryOverride: URL? = nil,
+    launchCommandOverride: String? = nil,
     context: ghostty_surface_context_e = GHOSTTY_SURFACE_CONTEXT_TAB
   ) -> SplitTree<GhosttySurfaceView> {
     guard tabManager.tabs.contains(where: { $0.id == tabId }) else {
@@ -87,6 +88,7 @@ extension WorktreeTerminalState {
       initialInput: initialInput,
       inheritingFromSurfaceId: inheritingFromSurfaceId,
       workingDirectoryOverride: workingDirectoryOverride,
+      launchCommandOverride: launchCommandOverride,
       context: context
     )
     let tree = SplitTree(view: surface)
@@ -317,6 +319,7 @@ extension WorktreeTerminalState {
     }
     surfaces.removeAll()
     trees.removeAll()
+    tmuxTargetsByTabId.removeAll()
     focusedSurfaceIdByTab.removeAll()
     cleanupAllAgentDetectionState()
     tabIsRunningById.removeAll()
@@ -331,6 +334,7 @@ extension WorktreeTerminalState {
     initialInput: String?,
     inheritingFromSurfaceId: UUID?,
     workingDirectoryOverride: URL? = nil,
+    launchCommandOverride: String? = nil,
     context: ghostty_surface_context_e
   ) -> GhosttySurfaceView {
     let inherited = inheritedSurfaceConfig(fromSurfaceId: inheritingFromSurfaceId, context: context)
@@ -343,6 +347,7 @@ extension WorktreeTerminalState {
       runtime: runtime,
       workingDirectory: workingDirectoryOverride ?? inherited.workingDirectory ?? worktree.workingDirectory,
       initialInput: initialInput,
+      command: launchCommandOverride,
       fontSize: resolvedFontSize,
       context: context,
       environment: worktree.scriptEnvironment
@@ -379,6 +384,10 @@ extension WorktreeTerminalState {
     }
     view.bridge.onNewTab = { [weak self, weak view] in
       guard let self, let view else { return false }
+      guard !self.canCreateTmuxBackedPlainTab else {
+        Task { await self.createTabAsync(inheritingFromSurfaceId: view.id) }
+        return true
+      }
       return self.createTab(inheritingFromSurfaceId: view.id) != nil
     }
     view.bridge.onCloseTab = { [weak self] _ in
@@ -618,6 +627,7 @@ extension WorktreeTerminalState {
 
   func removeTree(for tabId: TerminalTabID) {
     guard let tree = trees.removeValue(forKey: tabId) else { return }
+    tmuxTargetsByTabId.removeValue(forKey: tabId)
     for surface in tree.leaves() {
       surface.closeSurface()
       forgetSurface(surface.id)

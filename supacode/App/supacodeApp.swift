@@ -194,9 +194,12 @@ struct SupacodeApp: App {
     _ghostty = State(initialValue: runtime)
     let shortcuts = GhosttyShortcutManager(runtime: runtime)
     _ghosttyShortcuts = State(initialValue: shortcuts)
+    let tmuxController = TmuxTerminalController()
     let terminalManager = WorktreeTerminalManager(
       runtime: runtime,
-      preferredFontSize: initialSettings.terminalFontSize
+      preferredFontSize: initialSettings.terminalFontSize,
+      tmuxController: tmuxController,
+      usesAnonymousTmux: initialSettings.useAnonymousTmuxBackedTerminals
     )
     _terminalManager = State(initialValue: terminalManager)
     let worktreeInfoWatcher = WorktreeInfoWatcherManager()

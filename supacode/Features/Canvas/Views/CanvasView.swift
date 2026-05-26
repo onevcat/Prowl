@@ -548,6 +548,7 @@ struct CanvasView: View {
           ? FreestyleTerminal.repositoryName
           : resolvedRepositoryName,
         currentDirectory: titleSegments.currentDirectory,
+        isTmuxBacked: state.isTmuxBacked(tab.id),
         worktreeName: titleSegments.worktreeName,
         repositoryIcon: repositoryAppearance.icon,
         repositoryColor: repositoryAppearance.color?.color,

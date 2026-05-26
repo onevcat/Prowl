@@ -66,6 +66,26 @@ struct AppFeatureSettingsChangedTests {
     #expect(watcherCommands.value.isEmpty)
   }
 
+  @Test(.dependencies) func settingsChangedPropagatesAnonymousTmuxGlobalSetting() async {
+    let sentTerminalCommands = LockIsolated<[TerminalClient.Command]>([])
+    var settings = GlobalSettings.default
+    settings.useAnonymousTmuxBackedTerminals = true
+
+    let store = TestStore(initialState: AppFeature.State()) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sentTerminalCommands.withValue { $0.append(command) }
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.settings(.delegate(.settingsChanged(settings))))
+    await store.finish()
+
+    #expect(sentTerminalCommands.value.contains(.setAnonymousTmuxBackedTerminalsEnabled(true)))
+  }
+
   @Test(.dependencies) func agentEntryAutoShowsActiveAgentsPanelWhenEnabled() async {
     var settings = SettingsFeature.State()
     settings.autoShowActiveAgentsPanel = true

@@ -112,6 +112,18 @@ struct GhosttySurfaceViewTests {
     #expect(!GhosttySurfaceView.hasKeyEquivalentFocusOwnership(cachedFocused: false, isActualFirstResponder: true))
   }
 
+  @Test func surfaceStoresConfiguredLaunchCommandForTesting() {
+    let surfaceView = GhosttySurfaceView(
+      runtime: GhosttyRuntime(),
+      workingDirectory: URL(fileURLWithPath: "/tmp"),
+      command: "tmux -CC attach-session -t prowl-tab-abc",
+      context: GHOSTTY_SURFACE_CONTEXT_TAB,
+      skipsSurfaceCreationForTesting: true
+    )
+
+    #expect(surfaceView.launchCommandForTesting == "tmux -CC attach-session -t prowl-tab-abc")
+  }
+
   @Test func occlusionStateResendsDesiredValueAfterAttachmentChange() {
     var state = GhosttySurfaceView.OcclusionState()
 

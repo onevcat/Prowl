@@ -81,6 +81,7 @@ struct AppFeature {
     case saveRunScriptAndRun
     case stopRunScript
     case closeTab
+    case killTab
     case closeTabFromCanvas(focusedWorktreeID: Worktree.ID?)
     case closeSurface
     case startSearch
@@ -520,6 +521,14 @@ struct AppFeature {
             )
           },
           .run { _ in
+            await terminalClient.send(.setAgentDetectionEnabled(agentDetectionEnabled))
+          },
+          .run { _ in
+            await terminalClient.send(
+              .setAnonymousTmuxBackedTerminalsEnabled(settings.useAnonymousTmuxBackedTerminals)
+            )
+          },
+          .run { _ in
             await worktreeInfoWatcher.send(
               .setPullRequestTrackingEnabled(settings.githubIntegrationEnabled)
             )
@@ -917,6 +926,15 @@ struct AppFeature {
         analyticsClient.capture("terminal_tab_closed", nil)
         return .run { _ in
           await terminalClient.send(.closeFocusedTab(worktree))
+        }
+
+      case .killTab:
+        guard let worktree = terminalCommandWorktree(state: state) else {
+          return .none
+        }
+        analyticsClient.capture("terminal_tab_killed", nil)
+        return .run { _ in
+          await terminalClient.send(.killFocusedTab(worktree))
         }
 
       case .closeTabFromCanvas(let focusedWorktreeID):

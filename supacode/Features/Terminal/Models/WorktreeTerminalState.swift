@@ -56,6 +56,11 @@ struct AgentDetectionDiagnostic {
 @MainActor
 @Observable
 final class WorktreeTerminalState {
+  enum TmuxTabCreation {
+    static let appNamespace = "prowl"
+    static let socketRoot = SupacodePaths.cacheDirectory.appending(path: "tmux", directoryHint: .isDirectory)
+  }
+
   struct SurfaceActivity: Equatable {
     let isVisible: Bool
     let isFocused: Bool
@@ -64,9 +69,12 @@ final class WorktreeTerminalState {
   let tabManager: TerminalTabManager
   let runtime: GhosttyRuntime
   let worktree: Worktree
+  var tmuxController: TmuxTerminalController?
+  var tmuxBackedTabCreationEnabled: Bool
   @ObservationIgnored
   @SharedReader private var repositorySettings: RepositorySettings
   var trees: [TerminalTabID: SplitTree<GhosttySurfaceView>] = [:]
+  var tmuxTargetsByTabId: [TerminalTabID: TmuxTerminalTarget] = [:]
   var surfaces: [UUID: GhosttySurfaceView] = [:]
   var focusedSurfaceIdByTab: [TerminalTabID: UUID] = [:]
   var surfaceAgentStates: [UUID: PaneAgentState] = [:]
@@ -95,6 +103,7 @@ final class WorktreeTerminalState {
   var notificationsEnabled = true
   var commandFinishedNotificationEnabled = true
   var commandFinishedNotificationThreshold = 10
+  var agentDetectionEnabled = true
   var lastKeyInputTimeBySurface: [UUID: ContinuousClock.Instant] = [:]
   var commandFinishedWaiters: [UUID: AsyncStream<(exitCode: Int?, durationMs: Int)>.Continuation] = [:]
   /// Surfaces that should auto-close on the next `command_finished` event with exit code 0.
@@ -172,10 +181,13 @@ final class WorktreeTerminalState {
     runtime: GhosttyRuntime,
     worktree: Worktree,
     runSetupScript: Bool = false,
-    defaultFontSize: Float32? = nil
+    defaultFontSize: Float32? = nil,
+    tmuxController: TmuxTerminalController? = nil
   ) {
     self.runtime = runtime
     self.worktree = worktree
+    self.tmuxController = tmuxController
+    tmuxBackedTabCreationEnabled = tmuxController != nil
     self.pendingSetupScript = runSetupScript
     self.defaultFontSize = defaultFontSize
     self.tabManager = TerminalTabManager()
@@ -188,6 +200,20 @@ final class WorktreeTerminalState {
   var worktreeID: Worktree.ID { worktree.id }
   var worktreeName: String { worktree.name }
   var repositoryRootURL: URL { worktree.repositoryRootURL }
+
+  func tmuxTargetForTesting(_ tabId: TerminalTabID) -> TmuxTerminalTarget? {
+    tmuxTargetsByTabId[tabId]
+  }
+
+  func isTmuxBacked(_ tabId: TerminalTabID) -> Bool {
+    tmuxTargetsByTabId[tabId] != nil
+  }
+
+  var canCreateTmuxBackedPlainTab: Bool {
+    guard tmuxBackedTabCreationEnabled else { return false }
+    guard let tmuxController else { return false }
+    return tmuxController.isAvailable
+  }
 
   var activeSurfaceView: GhosttySurfaceView? {
     guard let selectedTabId = tabManager.selectedTabId,
@@ -312,6 +338,27 @@ final class WorktreeTerminalState {
     defaultFontSize = fontSize
   }
 
+  func setTmuxController(_ tmuxController: TmuxTerminalController?) {
+    if let tmuxController {
+      self.tmuxController = tmuxController
+    }
+    tmuxBackedTabCreationEnabled = tmuxController != nil
+  }
+
+  func setAgentDetectionEnabled(_ enabled: Bool) {
+    guard agentDetectionEnabled != enabled else { return }
+    agentDetectionEnabled = enabled
+    if enabled {
+      for (tabId, tree) in trees {
+        for surface in tree.leaves() {
+          wakeAgentDetection(for: surface, tabId: tabId)
+        }
+      }
+    } else {
+      cleanupAllAgentDetectionState()
+    }
+  }
+
   func focusedFontSize() -> Float32? {
     guard let surfaceId = currentFocusedSurfaceId() else { return nil }
     return inheritedSurfaceConfig(fromSurfaceId: surfaceId, context: GHOSTTY_SURFACE_CONTEXT_TAB).fontSize
@@ -328,10 +375,10 @@ final class WorktreeTerminalState {
       } else {
         setupScript = nil
       }
+      if tabManager.tabs.isEmpty {
+        _ = await createTabAsync(focusing: focusing, setupScript: setupScript)
+      }
       await MainActor.run {
-        if tabManager.tabs.isEmpty {
-          _ = createTab(focusing: focusing, setupScript: setupScript)
-        }
         isEnsuringInitialTab = false
       }
     }
@@ -382,13 +429,121 @@ final class WorktreeTerminalState {
         focusing: focusing,
         inheritingFromSurfaceId: resolvedInheritanceSurfaceId,
         context: context,
-        workingDirectoryOverride: workingDirectoryOverride
+        workingDirectoryOverride: workingDirectoryOverride,
+        launchCommandOverride: nil
       )
     )
     if shouldConsumeSetupScript, tabId != nil {
       onSetupScriptConsumed?()
     }
     return tabId
+  }
+
+  @discardableResult
+  func createTabAsync(
+    focusing: Bool = true,
+    setupScript: String? = nil,
+    initialInput: String? = nil,
+    inheritingFromSurfaceId: UUID? = nil,
+    inheritFromFocusedSurface: Bool = true,
+    workingDirectoryOverride: URL? = nil
+  ) async -> TerminalTabID? {
+    guard setupScript == nil, initialInput == nil, workingDirectoryOverride == nil else {
+      return createTab(
+        focusing: focusing,
+        setupScript: setupScript,
+        initialInput: initialInput,
+        inheritingFromSurfaceId: inheritingFromSurfaceId,
+        inheritFromFocusedSurface: inheritFromFocusedSurface,
+        workingDirectoryOverride: workingDirectoryOverride
+      )
+    }
+    guard tmuxBackedTabCreationEnabled, let tmuxController, tmuxController.isAvailable else {
+      return createTab(
+        focusing: focusing,
+        setupScript: setupScript,
+        initialInput: initialInput,
+        inheritingFromSurfaceId: inheritingFromSurfaceId,
+        inheritFromFocusedSurface: inheritFromFocusedSurface,
+        workingDirectoryOverride: workingDirectoryOverride
+      )
+    }
+
+    let context: ghostty_surface_context_e =
+      tabManager.tabs.isEmpty
+      ? GHOSTTY_SURFACE_CONTEXT_WINDOW
+      : GHOSTTY_SURFACE_CONTEXT_TAB
+    let resolvedInheritanceSurfaceId = Self.resolveInheritanceSurfaceID(
+      inheritingFromSurfaceId: inheritingFromSurfaceId,
+      focusedSurfaceId: currentFocusedSurfaceId(),
+      inheritFromFocusedSurface: inheritFromFocusedSurface
+    )
+    let inherited = inheritedSurfaceConfig(fromSurfaceId: resolvedInheritanceSurfaceId, context: context)
+    let tmuxWorkingDirectory = inherited.workingDirectory ?? worktree.workingDirectory
+    let title = "\(worktree.name) \(nextTabIndex())"
+    let tabId = tabManager.createTab(title: title, icon: "terminal", isTitleLocked: false)
+    var target = TmuxTerminalTarget.make(
+      appNamespace: TmuxTabCreation.appNamespace,
+      worktreeID: worktree.id,
+      tabID: tabId,
+      socketRoot: TmuxTabCreation.socketRoot
+    )
+
+    do {
+      try FileManager.default.createDirectory(
+        at: TmuxTabCreation.socketRoot,
+        withIntermediateDirectories: true
+      )
+      try await tmuxController.ensureGroup(target: target, cwd: tmuxWorkingDirectory)
+      target = try await tmuxController.createWindow(
+        target: target,
+        cwd: tmuxWorkingDirectory,
+        title: title
+      )
+    } catch {
+      if error is CancellationError || Task.isCancelled {
+        if tabExists(tabId) {
+          tabManager.closeTab(tabId)
+        }
+        return nil
+      }
+      guard tabExists(tabId) else { return nil }
+      terminalStateLogger.warning("tmux tab creation failed for worktree=\(worktree.id) tab=\(tabId): \(error)")
+      tabManager.closeTab(tabId)
+      return createTab(
+        focusing: focusing,
+        setupScript: setupScript,
+        initialInput: initialInput,
+        inheritingFromSurfaceId: inheritingFromSurfaceId,
+        inheritFromFocusedSurface: inheritFromFocusedSurface,
+        workingDirectoryOverride: workingDirectoryOverride
+      )
+    }
+    guard tabExists(tabId) else {
+      try? await tmuxController.killWindow(target: target)
+      return nil
+    }
+
+    let tree = splitTree(
+      for: tabId,
+      inheritingFromSurfaceId: resolvedInheritanceSurfaceId,
+      initialInput: nil,
+      workingDirectoryOverride: tmuxWorkingDirectory,
+      launchCommandOverride: tmuxController.attachCommand(for: target),
+      context: context
+    )
+    tmuxTargetsByTabId[tabId] = target
+    tabIsRunningById[tabId] = false
+    if focusing, let surface = tree.root?.leftmostLeaf() {
+      focusSurface(surface, in: tabId)
+      onFocusedCommandSurfaceCreated?(surface.id)
+    }
+    onTabCreated?()
+    return tabId
+  }
+
+  func tabExists(_ tabId: TerminalTabID) -> Bool {
+    tabManager.tabs.contains { $0.id == tabId }
   }
 
   static func resolveInheritanceSurfaceID(
@@ -417,7 +572,8 @@ final class WorktreeTerminalState {
         focusing: true,
         inheritingFromSurfaceId: currentFocusedSurfaceId(),
         context: GHOSTTY_SURFACE_CONTEXT_TAB,
-        workingDirectoryOverride: nil
+        workingDirectoryOverride: nil,
+        launchCommandOverride: nil
       )
     )
     if let tabId {
@@ -445,6 +601,7 @@ final class WorktreeTerminalState {
     let inheritingFromSurfaceId: UUID?
     let context: ghostty_surface_context_e
     let workingDirectoryOverride: URL?
+    let launchCommandOverride: String?
   }
 
   private func createTab(_ creation: TabCreation) -> TerminalTabID? {
@@ -458,6 +615,7 @@ final class WorktreeTerminalState {
       inheritingFromSurfaceId: creation.inheritingFromSurfaceId,
       initialInput: creation.initialInput,
       workingDirectoryOverride: creation.workingDirectoryOverride,
+      launchCommandOverride: creation.launchCommandOverride,
       context: creation.context
     )
     tabIsRunningById[tabId] = false
@@ -578,6 +736,17 @@ final class WorktreeTerminalState {
   func closeFocusedTab() -> Bool {
     guard let tabId = tabManager.selectedTabId else { return false }
     return closeTab(tabId)
+  }
+
+  @discardableResult
+  func killFocusedTab() async -> Bool {
+    guard let tabId = tabManager.selectedTabId else { return false }
+    if let target = tmuxTargetsByTabId[tabId], let tmuxController {
+      try? await tmuxController.killWindow(target: target)
+      tmuxTargetsByTabId[tabId] = nil
+    }
+    closeTab(tabId)
+    return true
   }
 
   @discardableResult

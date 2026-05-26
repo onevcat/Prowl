@@ -4,6 +4,7 @@ import SwiftUI
 struct CanvasCardView: View {
   let repositoryName: String
   let currentDirectory: String?
+  let isTmuxBacked: Bool
   let worktreeName: String?
   /// User-pinned icon for this card's repository, drawn before the
   /// repo name in the title bar. `nil` keeps the historical text-only
@@ -67,6 +68,7 @@ struct CanvasCardView: View {
 
   private let titleBarHeight: CGFloat = 28
   private let cornerRadius: CGFloat = 8
+  private let tmuxBackedStatusColor = Color(rgbHex: 0x66BB6A)
 
   // Gesture-driven drag state: does NOT trigger body re-evaluation
   @GestureState private var dragTranslation: CGSize = .zero
@@ -169,6 +171,9 @@ struct CanvasCardView: View {
           .truncationMode(.tail)
           .layoutPriority(CanvasCardTitleLayoutPriority.worktreeName)
       }
+      if isTmuxBacked {
+        tmuxBackedStatusIcon
+      }
       Spacer()
       titleBarActions
     }
@@ -226,12 +231,41 @@ struct CanvasCardView: View {
       }
       .buttonStyle(.plain)
       .foregroundStyle(.secondary)
-      .help("Close card")
+      .help(closeCardHelp)
       .accessibilityLabel("Close card")
     }
     .opacity(isExpanded || isHoveringTitleBar ? 1 : 0)
     .allowsHitTesting(isExpanded || isHoveringTitleBar)
     .animation(.easeInOut(duration: 0.15), value: isHoveringTitleBar)
+  }
+
+  private var tmuxBackedStatusIcon: some View {
+    Image(systemName: "checkmark")
+      .font(.caption2.weight(.semibold))
+      .foregroundStyle(tmuxBackedStatusColor)
+      .frame(width: 12, height: 12)
+      .help(tmuxBackedStatusHelp)
+      .accessibilityLabel(tmuxBackedStatusAccessibilityLabel)
+  }
+
+  private var tmuxBackedStatusHelp: String {
+    if isTmuxBacked {
+      "Tmux-backed. Closing this card detaches it and keeps the process running."
+    } else {
+      "Not tmux-backed. Closing this card terminates its terminal process."
+    }
+  }
+
+  private var tmuxBackedStatusAccessibilityLabel: String {
+    isTmuxBacked ? "Tmux-backed terminal" : "Not tmux-backed terminal"
+  }
+
+  private var closeCardHelp: String {
+    if isTmuxBacked {
+      "Close card and detach from tmux"
+    } else {
+      "Close card and terminate the terminal process"
+    }
   }
 
   @ViewBuilder

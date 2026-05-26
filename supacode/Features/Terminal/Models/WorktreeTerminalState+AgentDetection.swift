@@ -12,6 +12,7 @@ extension WorktreeTerminalState {
   }
 
   func wakeAgentDetection(for view: GhosttySurfaceView, tabId: TerminalTabID, now: Date = Date()) {
+    guard agentDetectionEnabled else { return }
     agentDetectionSchedules[view.id] = (agentDetectionSchedules[view.id] ?? .cold).warmed(now: now)
     if surfaceAgentStates[view.id] == nil {
       surfaceAgentStates[view.id] = PaneAgentState(lastChangedAt: now)

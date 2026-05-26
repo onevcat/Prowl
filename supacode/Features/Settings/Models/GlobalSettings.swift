@@ -39,6 +39,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var showNotificationDotOnDock: Bool
   var shelfSpineTintFallback: ShelfSpineTintFallback
   var shelfSpineTintFollowsRepositoryColor: Bool
+  var useAnonymousTmuxBackedTerminals: Bool
 
   static let `default` = GlobalSettings(
     appearanceMode: .dark,
@@ -80,7 +81,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     dockBounceMode: .off,
     showNotificationDotOnDock: false,
     shelfSpineTintFallback: .neutral,
-    shelfSpineTintFollowsRepositoryColor: true
+    shelfSpineTintFollowsRepositoryColor: true,
+    useAnonymousTmuxBackedTerminals: false
   )
 
   init(
@@ -123,7 +125,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     dockBounceMode: DockBounceMode = .off,
     showNotificationDotOnDock: Bool = false,
     shelfSpineTintFallback: ShelfSpineTintFallback = .neutral,
-    shelfSpineTintFollowsRepositoryColor: Bool = true
+    shelfSpineTintFollowsRepositoryColor: Bool = true,
+    useAnonymousTmuxBackedTerminals: Bool = false
   ) {
     self.appearanceMode = appearanceMode
     self.defaultEditorID = defaultEditorID
@@ -165,6 +168,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     self.showNotificationDotOnDock = showNotificationDotOnDock
     self.shelfSpineTintFallback = shelfSpineTintFallback
     self.shelfSpineTintFollowsRepositoryColor = shelfSpineTintFollowsRepositoryColor
+    self.useAnonymousTmuxBackedTerminals = useAnonymousTmuxBackedTerminals
   }
 
   func encode(to encoder: any Encoder) throws {
@@ -209,6 +213,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     try container.encode(showNotificationDotOnDock, forKey: .showNotificationDotOnDock)
     try container.encode(shelfSpineTintFallback, forKey: .shelfSpineTintFallback)
     try container.encode(shelfSpineTintFollowsRepositoryColor, forKey: .shelfSpineTintFollowsRepositoryColor)
+    try container.encode(useAnonymousTmuxBackedTerminals, forKey: .useAnonymousTmuxBackedTerminals)
   }
 
   private enum CodingKeys: String, CodingKey {
@@ -252,6 +257,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     case showNotificationDotOnDock
     case shelfSpineTintFallback
     case shelfSpineTintFollowsRepositoryColor
+    case useAnonymousTmuxBackedTerminals
     // Legacy key for migration
     case automaticallyArchiveMergedWorktrees
   }
@@ -355,6 +361,9 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     showDefaultEditorInToolbar = toolbarAndDock.showDefaultEditorInToolbar
     dockBounceMode = toolbarAndDock.dockBounceMode
     showNotificationDotOnDock = toolbarAndDock.showNotificationDotOnDock
+    useAnonymousTmuxBackedTerminals =
+      try container.decodeIfPresent(Bool.self, forKey: .useAnonymousTmuxBackedTerminals)
+      ?? Self.default.useAnonymousTmuxBackedTerminals
   }
 
   private static func decodeWindowTint(

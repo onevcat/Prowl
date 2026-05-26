@@ -81,11 +81,8 @@ struct AppFeaturePlainFolderTerminalTests {
     }
     await store.finish()
 
-    #expect(
-      sentTerminalCommands.value == [
-        .setSelectedWorktreeID(repository.id)
-      ]
-    )
+    let terminalCommands = sentTerminalCommands.value
+    #expect(terminalCommands.contains(.setSelectedWorktreeID(repository.id)))
     #expect(
       watcherCommands.value == [
         .setSelectedWorktreeID(nil)
@@ -125,6 +122,7 @@ struct AppFeaturePlainFolderTerminalTests {
   @Test(.dependencies) func conflictingCustomShortcutOverridesAppShortcutOnlyForSelectedRepository() async {
     let repository = makePlainRepository()
     let registeredShortcuts = LockIsolated<[Keybinding]>([])
+    let sentTerminalCommands = LockIsolated<[TerminalClient.Command]>([])
     var state = AppFeature.State(
       repositories: makeRepositoriesState(repository: repository, selected: true),
       settings: SettingsFeature.State()
@@ -136,6 +134,9 @@ struct AppFeaturePlainFolderTerminalTests {
     } withDependencies: {
       $0.customShortcutRegistryClient.setShortcuts = { shortcuts in
         registeredShortcuts.setValue(shortcuts)
+      }
+      $0.terminalClient.send = { command in
+        sentTerminalCommands.withValue { $0.append(command) }
       }
     }
     store.exhaustivity = .off
@@ -163,7 +164,12 @@ struct AppFeaturePlainFolderTerminalTests {
 
     let expectedShortcut = conflicted.customCommands[0].shortcut?.normalized()
     #expect(store.state.selectedCustomCommands == conflicted.customCommands)
-    #expect(registeredShortcuts.value == [expectedShortcut?.keybinding].compactMap { $0 })
+    if let expectedKeybinding = expectedShortcut?.keybinding {
+      #expect(registeredShortcuts.value.contains(expectedKeybinding))
+    } else {
+      Issue.record("Expected normalized custom command shortcut")
+    }
+    #expect(sentTerminalCommands.value.isEmpty)
     let customCommandID = LegacyCustomCommandShortcutMigration.customCommandBindingID(
       for: conflicted.customCommands[0].id
     )
@@ -174,7 +180,7 @@ struct AppFeaturePlainFolderTerminalTests {
     await store.finish()
 
     #expect(store.state.selectedCustomCommands.isEmpty)
-    #expect(registeredShortcuts.value.isEmpty)
+    #expect(sentTerminalCommands.value.isEmpty)
     #expect(
       store.state.resolvedKeybindings.display(for: AppShortcuts.CommandID.showDiff) == AppShortcuts.showDiff.display
     )

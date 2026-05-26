@@ -30,6 +30,53 @@ struct TerminalLayoutSnapshotPayloadTests {
     #expect(decoded == payload)
   }
 
+  @Test func decodeValidatedRoundTripsTmuxTarget() throws {
+    let tmuxTarget = TerminalLayoutSnapshotPayload.SnapshotTmuxTarget(
+      socketPath: "/tmp/prowl/tmux/prowl.sock",
+      groupSession: "prowl-wt-abc123",
+      clientSession: "prowl-tab-def456",
+      windowID: "@7",
+      paneID: "%9"
+    )
+    let payload = makePayload(tmuxTarget: tmuxTarget)
+    let data = try JSONEncoder().encode(payload)
+
+    let decoded = TerminalLayoutSnapshotPayload.decodeValidated(from: data)
+
+    #expect(decoded == payload)
+    #expect(decoded?.worktrees.first?.tabs.first?.tmuxTarget == tmuxTarget)
+  }
+
+  @Test func decodeValidatedRejectsTmuxTargetWithEmptySocketPath() throws {
+    let payload = makePayload(
+      tmuxTarget: TerminalLayoutSnapshotPayload.SnapshotTmuxTarget(
+        socketPath: "   ",
+        groupSession: "prowl-wt-abc123",
+        clientSession: "prowl-tab-def456",
+        windowID: "@7",
+        paneID: "%9"
+      )
+    )
+    let data = try JSONEncoder().encode(payload)
+
+    #expect(TerminalLayoutSnapshotPayload.decodeValidated(from: data) == nil)
+  }
+
+  @Test func decodeValidatedRejectsTmuxTargetWithInvalidIDs() throws {
+    let payload = makePayload(
+      tmuxTarget: TerminalLayoutSnapshotPayload.SnapshotTmuxTarget(
+        socketPath: "/tmp/prowl/tmux/prowl.sock",
+        groupSession: "prowl-wt-abc123",
+        clientSession: "prowl-tab-def456",
+        windowID: "7",
+        paneID: "9"
+      )
+    )
+    let data = try JSONEncoder().encode(payload)
+
+    #expect(TerminalLayoutSnapshotPayload.decodeValidated(from: data) == nil)
+  }
+
   @Test func decodeValidatedRejectsOversizedData() {
     let data = Data(
       repeating: 0,
@@ -383,7 +430,8 @@ private func makePayload(
   tabID: String = "tab-1",
   title: String? = nil,
   customTitle: String? = nil,
-  splitRoot: TerminalLayoutSnapshotPayload.SnapshotSplitNode = .leaf(surfaceID: "surface-1")
+  splitRoot: TerminalLayoutSnapshotPayload.SnapshotSplitNode = .leaf(surfaceID: "surface-1"),
+  tmuxTarget: TerminalLayoutSnapshotPayload.SnapshotTmuxTarget? = nil
 ) -> TerminalLayoutSnapshotPayload {
   TerminalLayoutSnapshotPayload(
     version: version,
@@ -392,7 +440,13 @@ private func makePayload(
         worktreeID: worktreeID,
         selectedTabID: tabID,
         tabs: [
-          makeTab(tabID: tabID, title: title, customTitle: customTitle, splitRoot: splitRoot)
+          makeTab(
+            tabID: tabID,
+            title: title,
+            customTitle: customTitle,
+            splitRoot: splitRoot,
+            tmuxTarget: tmuxTarget
+          )
         ]
       )
     ]
@@ -416,14 +470,16 @@ private func makeTab(
   title: String? = nil,
   customTitle: String? = nil,
   icon: String? = nil,
-  splitRoot: TerminalLayoutSnapshotPayload.SnapshotSplitNode = .leaf(surfaceID: "surface-1")
+  splitRoot: TerminalLayoutSnapshotPayload.SnapshotSplitNode = .leaf(surfaceID: "surface-1"),
+  tmuxTarget: TerminalLayoutSnapshotPayload.SnapshotTmuxTarget? = nil
 ) -> TerminalLayoutSnapshotPayload.SnapshotTab {
   TerminalLayoutSnapshotPayload.SnapshotTab(
     tabID: tabID,
     title: title,
     customTitle: customTitle,
     icon: icon,
-    splitRoot: splitRoot
+    splitRoot: splitRoot,
+    tmuxTarget: tmuxTarget
   )
 }
 

@@ -127,6 +127,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
   private var surfaceRef: GhosttyRuntime.SurfaceReference?
   private let workingDirectoryCString: UnsafeMutablePointer<CChar>?
   private let initialInputCString: UnsafeMutablePointer<CChar>?
+  private let commandCString: UnsafeMutablePointer<CChar>?
   private let envVarCStrings: [UnsafeMutablePointer<CChar>]
   private let envVarEntries: UnsafeMutablePointer<ghostty_env_var_s>?
   private let envVarCount: Int
@@ -189,6 +190,9 @@ final class GhosttySurfaceView: NSView, Identifiable {
   var onBindingActionForTesting: ((String) -> Void)?
   var onOcclusionAppliedForTesting: ((Bool) -> Void)?
   var attachmentStateForTesting: (() -> (hasSuperview: Bool, hasWindow: Bool))?
+  var launchCommandForTesting: String? {
+    commandCString.map { String(cString: $0) }
+  }
 
   var accessibilityPaneIndexHelp: String?
 
@@ -264,6 +268,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
     runtime: GhosttyRuntime,
     workingDirectory: URL?,
     initialInput: String? = nil,
+    command: String? = nil,
     fontSize: Float32? = nil,
     context: ghostty_surface_context_e,
     environment: [String: String] = [:],
@@ -286,6 +291,11 @@ final class GhosttySurfaceView: NSView, Identifiable {
       initialInputCString = initialInput.withCString { strdup($0) }
     } else {
       initialInputCString = nil
+    }
+    if let command {
+      commandCString = command.withCString { strdup($0) }
+    } else {
+      commandCString = nil
     }
     let sortedEnv = environment.sorted { $0.key < $1.key }
     var allocatedStrings: [UnsafeMutablePointer<CChar>] = []
@@ -349,6 +359,9 @@ final class GhosttySurfaceView: NSView, Identifiable {
     }
     if let initialInputCString {
       free(initialInputCString)
+    }
+    if let commandCString {
+      free(commandCString)
     }
     if let envVarEntries {
       envVarEntries.deallocate()
@@ -700,6 +713,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
     config.font_size = fontSize
     config.working_directory = workingDirectoryCString.map { UnsafePointer($0) }
     config.initial_input = initialInputCString.map { UnsafePointer($0) }
+    config.command = commandCString.map { UnsafePointer($0) }
     config.context = context
     if let envVarEntries, envVarCount > 0 {
       config.env_vars = envVarEntries

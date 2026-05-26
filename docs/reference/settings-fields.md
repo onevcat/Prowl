@@ -63,6 +63,7 @@ JSON is pretty-printed with sorted keys. Legacy `~/.supacode` is migrated to
 | `showNotificationDotOnDock` | Bool | `false` | Numeric unread badge on the Dock icon. |
 | `shelfSpineTintFallback` | enum (`neutral`/`systemTint`) | `neutral` | Shelf spine color when a repo has no color. |
 | `shelfSpineTintFollowsRepositoryColor` | Bool | `true` | Tint shelf spines by repo color. |
+| `useAnonymousTmuxBackedTerminals` | Bool | `false` | Run new terminal tabs in hidden tmux sessions. Requires `tmux`; when disabled, the command palette hides `Restore Running Tab`. |
 
 ## Per-repository settings (`RepositorySettings`)
 

@@ -7,6 +7,19 @@ import Testing
 @testable import supacode
 
 struct UserRepositorySettingsKeyTests {
+  @Test func decodeLegacyPayloadIgnoresAnonymousTmux() throws {
+    let legacyJSON = """
+      {
+        "customCommands": [],
+        "useAnonymousTmuxBackedTerminals": true
+      }
+      """.data(using: .utf8)!
+
+    let decoded = try JSONDecoder().decode(UserRepositorySettings.self, from: legacyJSON)
+
+    #expect(decoded == .default)
+  }
+
   @Test(.dependencies) func loadMissingFileReturnsDefaultAndCreatesLocalFile() throws {
     let localStorage = RepositoryLocalSettingsTestStorage()
     let rootURL = URL(fileURLWithPath: "/tmp/repo")

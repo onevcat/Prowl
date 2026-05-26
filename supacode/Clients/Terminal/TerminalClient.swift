@@ -40,6 +40,7 @@ struct TerminalClient {
     case insertText(Worktree, text: String)
     case stopRunScript(Worktree)
     case closeFocusedTab(Worktree)
+    case killFocusedTab(Worktree)
     case closeFocusedSurface(Worktree)
     case performBindingAction(Worktree, action: String)
     case performBindingActionOnSurface(Worktree, surfaceID: UUID, action: String)
@@ -52,6 +53,9 @@ struct TerminalClient {
     case prune(Set<Worktree.ID>)
     case setNotificationsEnabled(Bool)
     case setCommandFinishedNotification(enabled: Bool, threshold: Int)
+    case setAgentDetectionEnabled(Bool)
+    case setAnonymousTmuxBackedTerminalsEnabled(Bool)
+    case refreshAnonymousTmuxConfiguration(Worktree)
     case setCanvasMode(Bool)
     case setSelectedWorktreeID(Worktree.ID?)
     case saveLayoutSnapshot

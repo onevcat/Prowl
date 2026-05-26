@@ -270,6 +270,369 @@ struct WorktreeTerminalManagerTests {
     #expect(createdSurfaceID == tabID.flatMap { state.focusedSurfaceId(in: $0) })
   }
 
+  @Test func tmuxBackedTabUsesAttachCommand() async throws {
+    let controller = TmuxTerminalController(
+      executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
+      execute: { _, arguments in
+        if arguments.contains("new-window") {
+          return TmuxCommandResult(stdout: "@7 %9\n", stderr: "", exitCode: 0)
+        }
+        return TmuxCommandResult(stdout: "", stderr: "", exitCode: 0)
+      }
+    )
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      tmuxController: controller,
+      usesAnonymousTmux: true
+    )
+    let worktree = makeWorktree()
+
+    let tabID = try #require(await manager.createTabForTesting(in: worktree, runSetupScriptIfNew: false))
+    let state = try #require(manager.stateIfExists(for: worktree.id))
+    let surface = try #require(state.surfaceView(for: tabID))
+    let launchCommand = try #require(surface.launchCommandForTesting)
+
+    #expect(launchCommand.contains("-S"))
+    #expect(launchCommand.contains("-CC attach-session"))
+    #expect(state.tmuxTargetForTesting(tabID)?.windowID == TmuxWindowID(rawValue: "@7"))
+    #expect(state.isTmuxBacked(tabID) == true)
+  }
+
+  @Test func plainTabReportsNotTmuxBacked() {
+    let state = WorktreeTerminalState(runtime: GhosttyRuntime(), worktree: makeWorktree())
+
+    let tabID = state.createTab()
+
+    #expect(tabID.map { state.isTmuxBacked($0) } == false)
+  }
+
+  @Test func closingTmuxBackedTabDoesNotKillWindow() async throws {
+    let recorder = TmuxCommandRecorder()
+    let controller = TmuxTerminalController(
+      executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
+      execute: { _, arguments in
+        await recorder.record(arguments)
+        if arguments.contains("new-window") {
+          return TmuxCommandResult(stdout: "@7 %9\n", stderr: "", exitCode: 0)
+        }
+        return TmuxCommandResult(stdout: "", stderr: "", exitCode: 0)
+      }
+    )
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      tmuxController: controller,
+      usesAnonymousTmux: true
+    )
+    let worktree = makeWorktree()
+
+    let tabID = try #require(await manager.createTabForTesting(in: worktree, runSetupScriptIfNew: false))
+    let state = try #require(manager.stateIfExists(for: worktree.id))
+    state.closeTab(tabID)
+
+    let arguments = await recorder.arguments
+    #expect(arguments.contains { $0.contains("kill-window") } == false)
+    #expect(state.surfaceView(for: tabID) == nil)
+  }
+
+  @Test func killingTmuxBackedTabKillsWindow() async throws {
+    let recorder = TmuxCommandRecorder()
+    let controller = TmuxTerminalController(
+      executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
+      execute: { _, arguments in
+        await recorder.record(arguments)
+        if arguments.contains("new-window") {
+          return TmuxCommandResult(stdout: "@7 %9\n", stderr: "", exitCode: 0)
+        }
+        return TmuxCommandResult(stdout: "", stderr: "", exitCode: 0)
+      }
+    )
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      tmuxController: controller,
+      usesAnonymousTmux: true
+    )
+    let worktree = makeWorktree()
+
+    let tabID = try #require(await manager.createTabForTesting(in: worktree, runSetupScriptIfNew: false))
+    let didKill = await manager.killFocusedTab(in: worktree)
+
+    let arguments = await recorder.arguments
+    #expect(didKill == true)
+    #expect(arguments.contains { $0.contains("kill-window") && $0.contains("@7") })
+    let state = try #require(manager.stateIfExists(for: worktree.id))
+    #expect(state.surfaceView(for: tabID) == nil)
+  }
+
+  @Test func existingTmuxBackedTabStillKillsWindowAfterTmuxCreationDisabled() async throws {
+    let recorder = TmuxCommandRecorder()
+    let creationEnabled = LockIsolated(true)
+    let controller = TmuxTerminalController(
+      executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
+      execute: { _, arguments in
+        await recorder.record(arguments)
+        if arguments.contains("new-window") {
+          return TmuxCommandResult(stdout: "@7 %9\n", stderr: "", exitCode: 0)
+        }
+        return TmuxCommandResult(stdout: "", stderr: "", exitCode: 0)
+      }
+    )
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      tmuxController: controller,
+      usesAnonymousTmuxForWorktree: { _ in creationEnabled.value }
+    )
+    let worktree = makeWorktree()
+
+    _ = try #require(await manager.createTabForTesting(in: worktree, runSetupScriptIfNew: false))
+    creationEnabled.setValue(false)
+    manager.handleCommand(.refreshAnonymousTmuxConfiguration(worktree))
+
+    let didKill = await manager.killFocusedTab(in: worktree)
+    let arguments = await recorder.arguments
+
+    #expect(didKill == true)
+    #expect(arguments.contains { $0.contains("kill-window") && $0.contains("@7") })
+  }
+
+  @Test func refreshAnonymousTmuxConfigurationUpdatesGhosttyNewTabImmediately() async throws {
+    let creationEnabled = LockIsolated(true)
+    let controller = TmuxTerminalController(
+      executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
+      execute: { _, arguments in
+        if arguments.contains("new-window") {
+          return TmuxCommandResult(stdout: "@7 %9\n", stderr: "", exitCode: 0)
+        }
+        return TmuxCommandResult(stdout: "", stderr: "", exitCode: 0)
+      }
+    )
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      tmuxController: controller,
+      usesAnonymousTmuxForWorktree: { _ in creationEnabled.value }
+    )
+    let worktree = makeWorktree()
+    let firstTabID = try #require(await manager.createTabForTesting(in: worktree, runSetupScriptIfNew: false))
+    let state = try #require(manager.stateIfExists(for: worktree.id))
+    let firstSurface = try #require(state.surfaceView(for: firstTabID))
+
+    creationEnabled.setValue(false)
+    manager.handleCommand(.refreshAnonymousTmuxConfiguration(worktree))
+    #expect(firstSurface.bridge.onNewTab?() == true)
+
+    let secondTabID = try #require(await waitForTabCount(2, in: state).last)
+    let secondSurface = try #require(state.surfaceView(for: secondTabID))
+
+    #expect(secondSurface.launchCommandForTesting == nil)
+    #expect(state.tmuxTargetForTesting(secondTabID) == nil)
+  }
+
+  @Test func refreshAnonymousTmuxConfigurationUpdatesAppLevelNewTabImmediately() async throws {
+    let creationEnabled = LockIsolated(true)
+    let controller = TmuxTerminalController(
+      executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
+      execute: { _, arguments in
+        if arguments.contains("new-window") {
+          return TmuxCommandResult(stdout: "@7 %9\n", stderr: "", exitCode: 0)
+        }
+        return TmuxCommandResult(stdout: "", stderr: "", exitCode: 0)
+      }
+    )
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      tmuxController: controller,
+      usesAnonymousTmuxForWorktree: { _ in creationEnabled.value }
+    )
+    let worktree = makeWorktree()
+
+    _ = try #require(await manager.createTabForTesting(in: worktree, runSetupScriptIfNew: false))
+    let state = try #require(manager.stateIfExists(for: worktree.id))
+
+    creationEnabled.setValue(false)
+    manager.handleCommand(.refreshAnonymousTmuxConfiguration(worktree))
+    let secondTabID = try #require(await manager.createTabForTesting(in: worktree, runSetupScriptIfNew: false))
+    let secondSurface = try #require(state.surfaceView(for: secondTabID))
+
+    #expect(secondSurface.launchCommandForTesting == nil)
+    #expect(state.tmuxTargetForTesting(secondTabID) == nil)
+  }
+
+  @Test func defaultManagerCreatesPlainSurfaceWithoutLaunchCommand() async throws {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktree = makeWorktree()
+
+    let tabID = try #require(await manager.createTabForTesting(in: worktree, runSetupScriptIfNew: false))
+    let state = try #require(manager.stateIfExists(for: worktree.id))
+    let surface = try #require(state.surfaceView(for: tabID))
+
+    #expect(surface.launchCommandForTesting == nil)
+  }
+
+  @Test func perWorktreeAnonymousTmuxResolverControlsNewTabs() async throws {
+    let controller = TmuxTerminalController(
+      executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
+      execute: { _, arguments in
+        if arguments.contains("new-window") {
+          return TmuxCommandResult(stdout: "@7 %9\n", stderr: "", exitCode: 0)
+        }
+        return TmuxCommandResult(stdout: "", stderr: "", exitCode: 0)
+      }
+    )
+    let enabledRoot = URL(fileURLWithPath: "/tmp/repo-enabled")
+    let disabledRoot = URL(fileURLWithPath: "/tmp/repo-disabled")
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      tmuxController: controller,
+      usesAnonymousTmuxForWorktree: { worktree in
+        worktree.repositoryRootURL == enabledRoot
+      }
+    )
+    let enabledWorktree = makeWorktree(
+      id: "/tmp/repo-enabled/wt-1",
+      name: "enabled",
+      repositoryRootURL: enabledRoot
+    )
+    let disabledWorktree = makeWorktree(
+      id: "/tmp/repo-disabled/wt-1",
+      name: "disabled",
+      repositoryRootURL: disabledRoot
+    )
+
+    let enabledTabID = try #require(await manager.createTabForTesting(in: enabledWorktree, runSetupScriptIfNew: false))
+    let disabledTabID = try #require(await manager.createTabForTesting(in: disabledWorktree, runSetupScriptIfNew: false))
+
+    let enabledState = try #require(manager.stateIfExists(for: enabledWorktree.id))
+    let disabledState = try #require(manager.stateIfExists(for: disabledWorktree.id))
+    let enabledSurface = try #require(enabledState.surfaceView(for: enabledTabID))
+    let disabledSurface = try #require(disabledState.surfaceView(for: disabledTabID))
+
+    #expect(enabledSurface.launchCommandForTesting?.contains("-CC attach-session") == true)
+    #expect(disabledSurface.launchCommandForTesting == nil)
+  }
+
+  @Test func ghosttyNewTabActionUsesTmuxBackedCreationWhenEnabled() async throws {
+    let controller = TmuxTerminalController(
+      executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
+      execute: { _, arguments in
+        if arguments.contains("new-window") {
+          return TmuxCommandResult(stdout: "@7 %9\n", stderr: "", exitCode: 0)
+        }
+        return TmuxCommandResult(stdout: "", stderr: "", exitCode: 0)
+      }
+    )
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      tmuxController: controller,
+      usesAnonymousTmux: true
+    )
+    let uniqueWorktreeID = "/tmp/repo/wt-\(UUID().uuidString)"
+    let worktree = makeWorktree(id: uniqueWorktreeID, name: "wt")
+    let firstTabID = try #require(await manager.createTabForTesting(in: worktree, runSetupScriptIfNew: false))
+    let state = try #require(manager.stateIfExists(for: worktree.id))
+    let firstSurface = try #require(state.surfaceView(for: firstTabID))
+
+    #expect(firstSurface.bridge.onNewTab?() == true)
+
+    let secondTabID = try #require(await waitForTmuxBackedTab(in: state, excluding: firstTabID))
+    let secondSurface = try #require(state.surfaceView(for: secondTabID))
+
+    #expect(secondSurface.launchCommandForTesting?.contains("-CC attach-session") == true)
+    #expect(state.tmuxTargetForTesting(secondTabID)?.windowID == TmuxWindowID(rawValue: "@7"))
+  }
+
+  @Test func tmuxCreationDoesNotResurrectClosedPendingTab() async throws {
+    let gate = TmuxNewWindowGate()
+    let controller = TmuxTerminalController(
+      executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
+      execute: { _, arguments in
+        await gate.record(arguments)
+        if arguments.contains("new-window") {
+          await gate.waitForRelease()
+          return TmuxCommandResult(stdout: "@7 %9\n", stderr: "", exitCode: 0)
+        }
+        return TmuxCommandResult(stdout: "", stderr: "", exitCode: 0)
+      }
+    )
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      tmuxController: controller,
+      usesAnonymousTmux: true
+    )
+    let worktree = makeWorktree()
+
+    let createTask = Task {
+      await manager.createTabForTesting(in: worktree, runSetupScriptIfNew: false)
+    }
+    let state = try await waitForState(worktree.id, in: manager)
+    let pendingTabID = try #require(await waitForTabCount(1, in: state).first)
+
+    state.closeTab(pendingTabID)
+    await gate.release()
+
+    let createdTabID = await createTask.value
+
+    #expect(createdTabID == nil)
+    #expect(state.tabManager.tabs.isEmpty)
+    #expect(state.surfaceView(for: pendingTabID) == nil)
+  }
+
+  @Test func tmuxCreationCancellationDoesNotCreateFallbackTab() async throws {
+    let controller = TmuxTerminalController(
+      executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
+      execute: { _, arguments in
+        if arguments.contains("new-window") {
+          throw CancellationError()
+        }
+        return TmuxCommandResult(stdout: "", stderr: "", exitCode: 0)
+      }
+    )
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      tmuxController: controller,
+      usesAnonymousTmux: true
+    )
+    let worktree = makeWorktree()
+
+    let createdTabID = await manager.createTabForTesting(in: worktree, runSetupScriptIfNew: false)
+    let state = try #require(manager.stateIfExists(for: worktree.id))
+
+    #expect(createdTabID == nil)
+    #expect(state.tabManager.tabs.isEmpty)
+  }
+
+  @Test func cancelledTmuxCreationCommandFailureDoesNotCreateFallbackTab() async throws {
+    let gate = TmuxNewWindowGate()
+    let controller = TmuxTerminalController(
+      executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
+      execute: { _, arguments in
+        if arguments.contains("new-window") {
+          await gate.waitForRelease()
+          return TmuxCommandResult(stdout: "", stderr: "cancelled", exitCode: 1)
+        }
+        return TmuxCommandResult(stdout: "", stderr: "", exitCode: 0)
+      }
+    )
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      tmuxController: controller,
+      usesAnonymousTmux: true
+    )
+    let worktree = makeWorktree()
+
+    let createTask = Task {
+      await manager.createTabForTesting(in: worktree, runSetupScriptIfNew: false)
+    }
+    let state = try await waitForState(worktree.id, in: manager)
+    _ = try #require(await waitForTabCount(1, in: state).first)
+
+    createTask.cancel()
+    await gate.release()
+
+    let createdTabID = await createTask.value
+
+    #expect(createdTabID == nil)
+    #expect(state.tabManager.tabs.isEmpty)
+  }
+
   @Test func notificationIndicatorUsesCurrentCountOnStreamStart() async {
     let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
     let worktree = makeWorktree()
@@ -536,6 +899,134 @@ struct WorktreeTerminalManagerTests {
     #expect(snapshot.tabs.first?.customTitle == "Build")
   }
 
+  @Test func tmuxBackedTabSnapshotRestoresAttachCommand() async throws {
+    let controller = TmuxTerminalController(
+      executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
+      execute: { _, arguments in
+        if arguments.contains("new-window") {
+          return TmuxCommandResult(stdout: "@7 %9\n", stderr: "", exitCode: 0)
+        }
+        return TmuxCommandResult(stdout: "", stderr: "", exitCode: 0)
+      }
+    )
+    let worktree = makeWorktree()
+    let sourceManager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      tmuxController: controller,
+      usesAnonymousTmux: true
+    )
+    let sourceTabID = try #require(
+      await sourceManager.createTabForTesting(in: worktree, runSetupScriptIfNew: false)
+    )
+    let sourceState = try #require(sourceManager.stateIfExists(for: worktree.id))
+
+    let snapshot = try #require(sourceState.makeLayoutSnapshotWorktree())
+    let snapshotTarget = try #require(snapshot.tabs.first?.tmuxTarget)
+    let restoreManager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      tmuxController: controller,
+      usesAnonymousTmux: true
+    )
+    let restoreState = restoreManager.state(for: worktree)
+
+    #expect(snapshotTarget.windowID == "@7")
+    #expect(snapshotTarget.paneID == "%9")
+    #expect(restoreState.applyLayoutSnapshot(snapshot))
+
+    let restoredSurface = try #require(restoreState.surfaceView(for: sourceTabID))
+    let restoredTarget = try #require(restoreState.tmuxTargetForTesting(sourceTabID))
+
+    #expect(restoredSurface.launchCommandForTesting?.contains("-CC attach-session") == true)
+    #expect(restoredTarget.windowID == TmuxWindowID(rawValue: "@7"))
+    #expect(restoredTarget.paneID == TmuxPaneID(rawValue: "%9"))
+  }
+
+  @Test func tmuxSnapshotRestoresPlainTabWithSplitRoot() throws {
+    let controller = TmuxTerminalController(
+      executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
+      execute: { _, _ in TmuxCommandResult(stdout: "", stderr: "", exitCode: 0) }
+    )
+    let tabID = UUID()
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      tmuxController: controller,
+      usesAnonymousTmux: true
+    )
+    let worktree = makeWorktree()
+    let state = manager.state(for: worktree)
+    let snapshot = TerminalLayoutSnapshotPayload.SnapshotWorktree(
+      worktreeID: worktree.id,
+      selectedTabID: tabID.uuidString,
+      tabs: [
+        TerminalLayoutSnapshotPayload.SnapshotTab(
+          tabID: tabID.uuidString,
+          title: nil,
+          icon: nil,
+          splitRoot: .split(
+            direction: .horizontal,
+            ratio: 0.5,
+            children: [
+              .leaf(surfaceID: UUID().uuidString),
+              .leaf(surfaceID: UUID().uuidString),
+            ]
+          ),
+          tmuxTarget: TerminalLayoutSnapshotPayload.SnapshotTmuxTarget(
+            socketPath: "/tmp/prowl/tmux/prowl.sock",
+            groupSession: "prowl-wt-abc123",
+            clientSession: "prowl-tab-def456",
+            windowID: "@7",
+            paneID: "%9"
+          )
+        )
+      ]
+    )
+    let terminalTabID = TerminalTabID(rawValue: tabID)
+
+    #expect(state.applyLayoutSnapshot(snapshot))
+
+    let restoredSurface = try #require(state.surfaceView(for: terminalTabID))
+    #expect(restoredSurface.launchCommandForTesting == nil)
+    #expect(state.tmuxTargetForTesting(terminalTabID) == nil)
+  }
+
+  @Test func tmuxSnapshotRestoresPlainTabWithUnavailableController() throws {
+    let tabID = UUID()
+    let controller = TmuxTerminalController(resolveExecutable: { nil })
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      tmuxController: controller,
+      usesAnonymousTmux: true
+    )
+    let worktree = makeWorktree()
+    let state = manager.state(for: worktree)
+    let snapshot = TerminalLayoutSnapshotPayload.SnapshotWorktree(
+      worktreeID: worktree.id,
+      selectedTabID: tabID.uuidString,
+      tabs: [
+        TerminalLayoutSnapshotPayload.SnapshotTab(
+          tabID: tabID.uuidString,
+          title: nil,
+          icon: nil,
+          splitRoot: .leaf(surfaceID: UUID().uuidString),
+          tmuxTarget: TerminalLayoutSnapshotPayload.SnapshotTmuxTarget(
+            socketPath: "/tmp/prowl/tmux/prowl.sock",
+            groupSession: "prowl-wt-abc123",
+            clientSession: "prowl-tab-def456",
+            windowID: "@7",
+            paneID: "%9"
+          )
+        )
+      ]
+    )
+    let terminalTabID = TerminalTabID(rawValue: tabID)
+
+    #expect(state.applyLayoutSnapshot(snapshot))
+
+    let restoredSurface = try #require(state.surfaceView(for: terminalTabID))
+    #expect(restoredSurface.launchCommandForTesting == nil)
+    #expect(state.tmuxTargetForTesting(terminalTabID) == nil)
+  }
+
   @Test func applyLayoutSnapshotRestoresCustomTabTitle() throws {
     let tabID = UUID()
     let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
@@ -669,14 +1160,15 @@ struct WorktreeTerminalManagerTests {
 
   private func makeWorktree(
     id: Worktree.ID = "/tmp/repo/wt-1",
-    name: String = "wt-1"
+    name: String = "wt-1",
+    repositoryRootURL: URL = URL(fileURLWithPath: "/tmp/repo")
   ) -> Worktree {
     Worktree(
       id: id,
       name: name,
       detail: "detail",
       workingDirectory: URL(fileURLWithPath: id),
-      repositoryRootURL: URL(fileURLWithPath: "/tmp/repo")
+      repositoryRootURL: repositoryRootURL
     )
   }
 
@@ -706,4 +1198,118 @@ struct WorktreeTerminalManagerTests {
     )
   }
 
+  private func waitForState(
+    _ worktreeID: Worktree.ID,
+    in manager: WorktreeTerminalManager,
+    fileID: String = #fileID,
+    filePath: String = #filePath,
+    line: Int = #line,
+    column: Int = #column
+  ) async throws -> WorktreeTerminalState {
+    for _ in 0..<100 {
+      if let state = manager.stateIfExists(for: worktreeID) {
+        return state
+      }
+      await Task.yield()
+    }
+    Issue.record("Timed out waiting for terminal state", sourceLocation: SourceLocation(
+      fileID: fileID,
+      filePath: filePath,
+      line: line,
+      column: column
+    ))
+    throw WaitForTestError.timedOut
+  }
+
+  private func waitForTabCount(
+    _ count: Int,
+    in state: WorktreeTerminalState,
+    fileID: String = #fileID,
+    filePath: String = #filePath,
+    line: Int = #line,
+    column: Int = #column
+  ) async throws -> [TerminalTabID] {
+    for _ in 0..<100 {
+      let tabIDs = state.tabManager.tabs.map(\.id)
+      if tabIDs.count == count {
+        return tabIDs
+      }
+      await Task.yield()
+    }
+    Issue.record("Timed out waiting for \(count) tab(s)", sourceLocation: SourceLocation(
+      fileID: fileID,
+      filePath: filePath,
+      line: line,
+      column: column
+    ))
+    throw WaitForTestError.timedOut
+  }
+
+  private func waitForTmuxBackedTab(
+    in state: WorktreeTerminalState,
+    excluding tabID: TerminalTabID,
+    fileID: String = #fileID,
+    filePath: String = #filePath,
+    line: Int = #line,
+    column: Int = #column
+  ) async throws -> TerminalTabID {
+    for _ in 0..<200 {
+      for candidate in state.tabManager.tabs.map(\.id) where candidate != tabID {
+        if state.surfaceView(for: candidate)?.launchCommandForTesting?.contains("-CC attach-session") == true {
+          return candidate
+        }
+      }
+      await Task.yield()
+    }
+    Issue.record("Timed out waiting for tmux-backed tab", sourceLocation: SourceLocation(
+      fileID: fileID,
+      filePath: filePath,
+      line: line,
+      column: column
+    ))
+    throw WaitForTestError.timedOut
+  }
+
+}
+
+private enum WaitForTestError: Error {
+  case timedOut
+}
+
+private actor TmuxNewWindowGate {
+  private var continuations: [CheckedContinuation<Void, Never>] = []
+  private var isReleased = false
+  private(set) var arguments: [[String]] = []
+
+  func record(_ arguments: [String]) {
+    self.arguments.append(arguments)
+  }
+
+  func waitForRelease() async {
+    guard !isReleased else { return }
+    await withCheckedContinuation { continuation in
+      continuations.append(continuation)
+    }
+  }
+
+  func release() {
+    isReleased = true
+    let pendingContinuations = continuations
+    continuations.removeAll()
+    for continuation in pendingContinuations {
+      continuation.resume()
+    }
+  }
+}
+
+private actor TmuxCommandRecorder {
+  private var recordedArguments: [[String]] = []
+
+  var arguments: [[String]] {
+    recordedArguments
+  }
+
+  func record(_ arguments: [String]) {
+    recordedArguments.append(arguments)
+  }
 }

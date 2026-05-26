@@ -2,6 +2,56 @@ import Foundation
 import GhosttyKit
 
 extension WorktreeTerminalState {
+  func makeSnapshotTmuxTarget(for tabID: TerminalTabID) -> TerminalLayoutSnapshotPayload.SnapshotTmuxTarget? {
+    guard
+      let target = tmuxTargetsByTabId[tabID],
+      let windowID = target.windowID,
+      let paneID = target.paneID
+    else {
+      return nil
+    }
+
+    let snapshotTarget = TerminalLayoutSnapshotPayload.SnapshotTmuxTarget(
+      socketPath: target.socketURL.path,
+      groupSession: target.groupSession,
+      clientSession: target.clientSession,
+      windowID: windowID.rawValue,
+      paneID: paneID.rawValue
+    )
+    return snapshotTarget.isValid ? snapshotTarget : nil
+  }
+
+  func makeTmuxTerminalTarget(
+    from snapshotTarget: TerminalLayoutSnapshotPayload.SnapshotTmuxTarget?
+  ) -> TmuxTerminalTarget? {
+    guard let snapshotTarget, let tmuxController, tmuxController.isAvailable, snapshotTarget.isValid else {
+      return nil
+    }
+    guard
+      let windowID = TmuxWindowID(rawValue: snapshotTarget.windowID),
+      let paneID = TmuxPaneID(rawValue: snapshotTarget.paneID)
+    else {
+      return nil
+    }
+
+    return TmuxTerminalTarget(
+      socketURL: URL(fileURLWithPath: snapshotTarget.socketPath, isDirectory: false),
+      groupSession: snapshotTarget.groupSession,
+      clientSession: snapshotTarget.clientSession,
+      windowID: windowID,
+      paneID: paneID
+    )
+  }
+
+  func makeRestorableTmuxTerminalTarget(
+    for snapshotTab: TerminalLayoutSnapshotPayload.SnapshotTab
+  ) -> TmuxTerminalTarget? {
+    guard snapshotTab.splitRoot.kind == .leaf else {
+      return nil
+    }
+    return makeTmuxTerminalTarget(from: snapshotTab.tmuxTarget)
+  }
+
   func makeLayoutSnapshotWorktree() -> TerminalLayoutSnapshotPayload.SnapshotWorktree? {
     terminalStateLogger.info(
       "[LayoutRestore] makeSnapshot: worktree=\(worktree.id) tabs=\(tabManager.tabs.count)"
@@ -31,13 +81,15 @@ extension WorktreeTerminalState {
       // restore should pick up the current default ("terminal") or auto-detection.
       let isBlockingScriptTab = tab.id == runScriptTabId
       let snapshotIcon: String? = (isBlockingScriptTab || tab.iconLock != .user) ? nil : tab.icon
+      let tmuxTarget = isBlockingScriptTab ? nil : makeSnapshotTmuxTarget(for: tab.id)
       snapshotTabs.append(
         TerminalLayoutSnapshotPayload.SnapshotTab(
           tabID: tab.id.rawValue.uuidString,
           title: isBlockingScriptTab ? nil : tab.title,
           customTitle: isBlockingScriptTab ? nil : tab.customTitle,
           icon: snapshotIcon,
-          splitRoot: splitRoot
+          splitRoot: splitRoot,
+          tmuxTarget: tmuxTarget
         )
       )
     }
@@ -104,13 +156,20 @@ extension WorktreeTerminalState {
     var restoredTabs: [TerminalTabItem] = []
     var restoredTrees: [TerminalTabID: SplitTree<GhosttySurfaceView>] = [:]
     var restoredFocusedSurfaceIDs: [TerminalTabID: UUID] = [:]
+    var restoredTmuxTargets: [TerminalTabID: TmuxTerminalTarget] = [:]
 
     for (index, entry) in validatedTabs.enumerated() {
       terminalStateLogger.info(
         "[LayoutRestore] applySnapshot: restoring tab[\(index)] id=\(entry.snapshotTab.tabID)"
       )
+      let restoredTmuxTarget = makeRestorableTmuxTerminalTarget(for: entry.snapshotTab)
       guard
-        let rootNode = restoreSplitNode(from: entry.snapshotTab.splitRoot, tabID: entry.tabID, isRoot: true)
+        let rootNode = restoreSplitNode(
+          from: entry.snapshotTab.splitRoot,
+          tabID: entry.tabID,
+          isRoot: true,
+          launchCommandOverride: restoredTmuxTarget.flatMap { tmuxController?.attachCommand(for: $0) }
+        )
       else {
         terminalStateLogger.warning("[LayoutRestore] applySnapshot: restoreSplitNode failed for tab[\(index)]")
         closeAllSurfaces()
@@ -119,6 +178,9 @@ extension WorktreeTerminalState {
       let tree = SplitTree<GhosttySurfaceView>.restored(root: rootNode)
       restoredTrees[entry.tabID] = tree
       restoredFocusedSurfaceIDs[entry.tabID] = rootNode.leftmostLeaf().id
+      if let restoredTmuxTarget {
+        restoredTmuxTargets[entry.tabID] = restoredTmuxTarget
+      }
       restoredTabs.append(
         TerminalTabItem(
           id: entry.tabID,
@@ -133,6 +195,7 @@ extension WorktreeTerminalState {
 
     trees = restoredTrees
     focusedSurfaceIdByTab = restoredFocusedSurfaceIDs
+    tmuxTargetsByTabId = restoredTmuxTargets
     tabIsRunningById = Dictionary(uniqueKeysWithValues: restoredTabs.map { ($0.id, false) })
     tabManager.tabs = restoredTabs
     tabManager.selectedTabId = selectedTabID
@@ -215,7 +278,8 @@ extension WorktreeTerminalState {
   func restoreSplitNode(
     from snapshotNode: TerminalLayoutSnapshotPayload.SnapshotSplitNode,
     tabID: TerminalTabID,
-    isRoot: Bool
+    isRoot: Bool,
+    launchCommandOverride: String? = nil
   ) -> SplitTree<GhosttySurfaceView>.Node? {
     switch snapshotNode.kind {
     case .leaf:
@@ -234,6 +298,7 @@ extension WorktreeTerminalState {
         initialInput: nil,
         inheritingFromSurfaceId: nil,
         workingDirectoryOverride: restoredWorkingDirectory,
+        launchCommandOverride: isRoot ? launchCommandOverride : nil,
         context: context
       )
       return .leaf(view: view)

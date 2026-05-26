@@ -56,7 +56,8 @@ nonisolated struct TerminalLayoutSnapshotPayload: Codable, Equatable, Sendable {
           title: nil,
           customTitle: title,
           icon: tab.icon,
-          splitRoot: tab.splitRoot
+          splitRoot: tab.splitRoot,
+          tmuxTarget: tab.tmuxTarget
         )
       }
       return SnapshotWorktree(
@@ -134,25 +135,44 @@ extension TerminalLayoutSnapshotPayload {
     }
   }
 
+  nonisolated struct SnapshotTmuxTarget: Codable, Equatable, Sendable {
+    let socketPath: String
+    let groupSession: String
+    let clientSession: String
+    let windowID: String
+    let paneID: String
+
+    var isValid: Bool {
+      hasContent(socketPath)
+        && hasContent(groupSession)
+        && hasContent(clientSession)
+        && isValidTmuxID(windowID, prefix: UInt8(ascii: "@"))
+        && isValidTmuxID(paneID, prefix: UInt8(ascii: "%"))
+    }
+  }
+
   nonisolated struct SnapshotTab: Codable, Equatable, Sendable {
     let tabID: String
     let title: String?
     let customTitle: String?
     let icon: String?
     let splitRoot: SnapshotSplitNode
+    let tmuxTarget: SnapshotTmuxTarget?
 
     init(
       tabID: String,
       title: String?,
       customTitle: String? = nil,
       icon: String?,
-      splitRoot: SnapshotSplitNode
+      splitRoot: SnapshotSplitNode,
+      tmuxTarget: SnapshotTmuxTarget? = nil
     ) {
       self.tabID = tabID
       self.title = title
       self.customTitle = customTitle
       self.icon = icon
       self.splitRoot = splitRoot
+      self.tmuxTarget = tmuxTarget
     }
 
     func isValid(maxSplitNodesPerTab: Int, maxSplitDepth: Int) -> Bool {
@@ -160,6 +180,9 @@ extension TerminalLayoutSnapshotPayload {
         return false
       }
       if let customTitle, !hasContent(customTitle) {
+        return false
+      }
+      if let tmuxTarget, !tmuxTarget.isValid {
         return false
       }
       var nodeCount = 0
@@ -274,4 +297,13 @@ private nonisolated func hasContent(_ value: String?) -> Bool {
     return false
   }
   return !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+}
+
+private nonisolated func isValidTmuxID(_ rawValue: String, prefix: UInt8) -> Bool {
+  let asciiDigitRange = UInt8(ascii: "0")...UInt8(ascii: "9")
+  let bytes = rawValue.utf8
+  guard bytes.first == prefix else { return false }
+
+  let suffix = bytes.dropFirst()
+  return !suffix.isEmpty && suffix.allSatisfy { asciiDigitRange.contains($0) }
 }

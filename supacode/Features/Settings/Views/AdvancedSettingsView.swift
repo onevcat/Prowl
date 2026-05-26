@@ -109,6 +109,30 @@ struct AdvancedSettingsView: View {
             .buttonStyle(.bordered)
           }
           .frame(maxWidth: .infinity, alignment: .leading)
+
+          VStack(alignment: .leading, spacing: 8) {
+            Toggle(
+              "Use anonymous tmux-backed terminals",
+              isOn: $store.useAnonymousTmuxBackedTerminals
+            )
+            .disabled(!store.isTmuxAvailable)
+            .help(
+              store.isTmuxAvailable
+                ? "Run new terminal tabs in hidden tmux sessions"
+                : "Install tmux to enable anonymous tmux-backed terminals"
+            )
+            Text(
+              "New terminal tabs run in hidden tmux sessions. Closing a tab detaches it so programs keep running."
+            )
+              .foregroundStyle(.secondary)
+              .font(.callout)
+            if !store.isTmuxAvailable {
+              Text("tmux is not installed.")
+                .foregroundStyle(.secondary)
+                .font(.callout)
+            }
+          }
+          .frame(maxWidth: .infinity, alignment: .leading)
         }
       }
       .formStyle(.grouped)
