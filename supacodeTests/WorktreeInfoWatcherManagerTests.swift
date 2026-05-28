@@ -33,6 +33,8 @@ struct WorktreeInfoWatcherManagerTests {
     let manager = WorktreeInfoWatcherManager(
       focusedInterval: .milliseconds(80),
       unfocusedInterval: .milliseconds(80),
+      focusedLineChangesRefreshInterval: .milliseconds(80),
+      unfocusedLineChangesRefreshInterval: .milliseconds(80),
       lineChangePhaseOffset: { _, _ in .zero },
       pullRequestPhaseOffset: { _, _ in .zero },
       clock: clock
@@ -70,6 +72,8 @@ struct WorktreeInfoWatcherManagerTests {
     let manager = WorktreeInfoWatcherManager(
       focusedInterval: .milliseconds(80),
       unfocusedInterval: .milliseconds(80),
+      focusedLineChangesRefreshInterval: .milliseconds(80),
+      unfocusedLineChangesRefreshInterval: .milliseconds(80),
       lineChangePhaseOffset: { worktreeID, _ in
         switch worktreeID {
         case secondWorktree.id:
@@ -169,6 +173,70 @@ struct WorktreeInfoWatcherManagerTests {
     await task.value
     try FileManager.default.removeItem(at: firstRepository.tempRoot)
     try FileManager.default.removeItem(at: secondRepository.tempRoot)
+  }
+
+  @Test func usesFocusedAndUnfocusedRepositoryLineChangesRefreshIntervals() async throws {
+    let clock = TestClock()
+    let tempRepository = try makeTempRepository(worktreeNames: ["sparrow", "swift"])
+    let focusedWorktree = try #require(tempRepository.worktrees.first)
+    let unfocusedWorktree = try #require(tempRepository.worktrees.dropFirst().first)
+    let manager = WorktreeInfoWatcherManager(
+      focusedInterval: .seconds(3_600),
+      unfocusedInterval: .seconds(3_600),
+      focusedLineChangesRefreshInterval: .milliseconds(80),
+      unfocusedLineChangesRefreshInterval: .milliseconds(160),
+      lineChangePhaseOffset: { _, _ in .zero },
+      pullRequestPhaseOffset: { _, _ in .zero },
+      clock: clock
+    )
+    let (collector, task) = startCollecting(manager.eventStream())
+
+    manager.handleCommand(.setPullRequestTrackingEnabled(false))
+    manager.handleCommand(.setWorktrees([focusedWorktree, unfocusedWorktree]))
+    manager.handleCommand(.setSelectedWorktreeID(focusedWorktree.id))
+    await drainAsyncEvents(120)
+    #expect(await collector.filesChangedCount(worktreeID: focusedWorktree.id) == 2)
+    #expect(await collector.filesChangedCount(worktreeID: unfocusedWorktree.id) == 1)
+
+    await clock.advance(by: .milliseconds(79))
+    await drainAsyncEvents(120)
+    #expect(await collector.filesChangedCount(worktreeID: focusedWorktree.id) == 2)
+    #expect(await collector.filesChangedCount(worktreeID: unfocusedWorktree.id) == 1)
+
+    await clock.advance(by: .milliseconds(1))
+    await drainAsyncEvents(120)
+    #expect(await collector.filesChangedCount(worktreeID: focusedWorktree.id) == 3)
+    #expect(await collector.filesChangedCount(worktreeID: unfocusedWorktree.id) == 1)
+
+    await clock.advance(by: .milliseconds(80))
+    await drainAsyncEvents(120)
+    #expect(await collector.filesChangedCount(worktreeID: unfocusedWorktree.id) == 2)
+
+    manager.handleCommand(
+      .setLineChangesRefreshIntervals([
+        tempRepository.tempRoot.path(percentEncoded: false): WorktreeInfoWatcherClient.LineChangesRefreshInterval(
+          focusedSeconds: 5,
+          unfocusedSeconds: 10
+        )
+      ])
+    )
+    await clock.advance(by: .seconds(4))
+    await drainAsyncEvents(120)
+    #expect(await collector.filesChangedCount(worktreeID: focusedWorktree.id) == 3)
+    #expect(await collector.filesChangedCount(worktreeID: unfocusedWorktree.id) == 2)
+
+    await clock.advance(by: .seconds(1))
+    await drainAsyncEvents(120)
+    #expect(await collector.filesChangedCount(worktreeID: focusedWorktree.id) == 4)
+    #expect(await collector.filesChangedCount(worktreeID: unfocusedWorktree.id) == 2)
+
+    await clock.advance(by: .seconds(5))
+    await drainAsyncEvents(120)
+    #expect(await collector.filesChangedCount(worktreeID: unfocusedWorktree.id) == 3)
+
+    manager.handleCommand(.stop)
+    await task.value
+    try FileManager.default.removeItem(at: tempRepository.tempRoot)
   }
 
   @Test func selectionRefreshUsesCooldownWithinRepository() async throws {

@@ -34,6 +34,20 @@ private func makeTerminalRestorableWorktrees(from repositories: [Repository]) ->
   return worktrees
 }
 
+private func makeLineChangesRefreshIntervals(
+  from repositories: some Sequence<Repository>
+) -> [String: WorktreeInfoWatcherClient.LineChangesRefreshInterval] {
+  var intervals: [String: WorktreeInfoWatcherClient.LineChangesRefreshInterval] = [:]
+  for repository in repositories where repository.capabilities.supportsWorktrees {
+    @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
+    intervals[repository.id] = WorktreeInfoWatcherClient.LineChangesRefreshInterval(
+      focusedSeconds: repositorySettings.focusedLineChangesRefreshIntervalSeconds,
+      unfocusedSeconds: repositorySettings.unfocusedLineChangesRefreshIntervalSeconds
+    )
+  }
+  return intervals
+}
+
 @Reducer
 struct AppFeature {
   @ObservableState
@@ -381,6 +395,7 @@ struct AppFeature {
           customCommands: state.selectedCustomCommands
         )
         let worktrees = state.repositories.worktreesForInfoWatcher()
+        let lineChangesRefreshIntervals = makeLineChangesRefreshIntervals(from: repositories)
         let shouldRestoreLayout =
           state.launchRestoreMode == .restoreLayout
           && state.repositories.snapshotPersistencePhase == .active
@@ -409,6 +424,9 @@ struct AppFeature {
             .run { _ in
               await worktreeInfoWatcher.send(.setWorktrees(worktrees))
             },
+            .run { _ in
+              await worktreeInfoWatcher.send(.setLineChangesRefreshIntervals(lineChangesRefreshIntervals))
+            },
           ]
           if shouldRestoreLayout {
             effects.append(
@@ -427,6 +445,9 @@ struct AppFeature {
           },
           .run { _ in
             await worktreeInfoWatcher.send(.setWorktrees(worktrees))
+          },
+          .run { _ in
+            await worktreeInfoWatcher.send(.setLineChangesRefreshIntervals(lineChangesRefreshIntervals))
           },
         ]
         if shouldRestoreLayout {
@@ -893,16 +914,21 @@ struct AppFeature {
         // `RepositoriesFeature.State.repositoryCustomTitles` rather
         // than subscribing to the per-repo settings file directly.
         let refreshCustomTitle = Effect<Action>.send(.repositories(.refreshCustomTitle(rootURL)))
+        let lineChangesRefreshIntervals = makeLineChangesRefreshIntervals(from: state.repositories.repositories)
+        let syncLineChangesRefreshIntervals = Effect<Action>.run { _ in
+          await worktreeInfoWatcher.send(.setLineChangesRefreshIntervals(lineChangesRefreshIntervals))
+        }
         guard let selectedWorktree = state.repositories.selectedTerminalWorktree,
           selectedWorktree.repositoryRootURL == rootURL
         else {
-          return refreshCustomTitle
+          return .merge(refreshCustomTitle, syncLineChangesRefreshIntervals)
         }
         let worktreeID = selectedWorktree.id
         @Shared(.repositorySettings(rootURL)) var repositorySettings
         @Shared(.userRepositorySettings(rootURL)) var userRepositorySettings
         return .concatenate(
           refreshCustomTitle,
+          syncLineChangesRefreshIntervals,
           .send(.worktreeSettingsLoaded(repositorySettings, worktreeID: worktreeID)),
           .send(.worktreeUserSettingsLoaded(userRepositorySettings, worktreeID: worktreeID))
         )

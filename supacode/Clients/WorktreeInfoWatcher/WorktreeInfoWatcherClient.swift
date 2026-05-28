@@ -5,8 +5,14 @@ struct WorktreeInfoWatcherClient {
   var send: @MainActor @Sendable (Command) -> Void
   var events: @MainActor @Sendable () -> AsyncStream<Event>
 
+  struct LineChangesRefreshInterval: Equatable, Sendable {
+    var focusedSeconds: Int
+    var unfocusedSeconds: Int
+  }
+
   enum Command: Equatable {
     case setWorktrees([Worktree])
+    case setLineChangesRefreshIntervals([String: LineChangesRefreshInterval])
     case setSelectedWorktreeID(Worktree.ID?)
     case setPullRequestTrackingEnabled(Bool)
     case stop

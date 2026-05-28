@@ -221,6 +221,73 @@ struct RepositorySettingsFeatureTests {
     #expect(decoded.customTitle == nil)
   }
 
+  @Test(.dependencies) func lineChangesRefreshIntervalsPersistToRepositoryFile() async throws {
+    let rootURL = URL(fileURLWithPath: "/tmp/repo-\(UUID().uuidString)")
+    let settingsStorage = SettingsTestStorage()
+    let localStorage = RepositoryLocalSettingsTestStorage()
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json")
+    let repositorySettingsURL = SupacodePaths.repositorySettingsURL(for: rootURL)
+
+    let seedData = try #require(try? JSONEncoder().encode(RepositorySettings.default))
+    try #require(try? localStorage.save(seedData, at: repositorySettingsURL))
+
+    let store = TestStore(
+      initialState: RepositorySettingsFeature.State(
+        rootURL: rootURL,
+        repositoryKind: .git,
+        settings: .default,
+        userSettings: .default
+      )
+    ) {
+      RepositorySettingsFeature()
+    } withDependencies: {
+      $0.settingsFileStorage = settingsStorage.storage
+      $0.settingsFileURL = settingsFileURL
+      $0.repositoryLocalSettingsStorage = localStorage.storage
+    }
+
+    await store.send(.binding(.set(\.settings.focusedLineChangesRefreshIntervalSeconds, 120))) {
+      $0.settings.focusedLineChangesRefreshIntervalSeconds = 120
+    }
+    await store.receive(\.delegate.settingsChanged)
+
+    await store.send(.binding(.set(\.settings.unfocusedLineChangesRefreshIntervalSeconds, 300))) {
+      $0.settings.unfocusedLineChangesRefreshIntervalSeconds = 300
+    }
+    await store.receive(\.delegate.settingsChanged)
+
+    let savedData = try #require(localStorage.data(at: repositorySettingsURL))
+    let decoded = try JSONDecoder().decode(RepositorySettings.self, from: savedData)
+    #expect(decoded.focusedLineChangesRefreshIntervalSeconds == 120)
+    #expect(decoded.unfocusedLineChangesRefreshIntervalSeconds == 300)
+  }
+
+  @Test func lineChangesRefreshIntervalsDecodeWithDefaultAndMinimum() throws {
+    let missingData = Data("{}".utf8)
+    let missing = try JSONDecoder().decode(RepositorySettings.self, from: missingData)
+    #expect(
+      missing.focusedLineChangesRefreshIntervalSeconds
+        == RepositorySettings.defaultFocusedLineChangesRefreshIntervalSeconds
+    )
+    #expect(
+      missing.unfocusedLineChangesRefreshIntervalSeconds
+        == RepositorySettings.defaultUnfocusedLineChangesRefreshIntervalSeconds
+    )
+
+    let lowData = Data(
+      """
+      {
+        "focusedLineChangesRefreshIntervalSeconds": 1,
+        "unfocusedLineChangesRefreshIntervalSeconds": 2
+      }
+      """.utf8
+    )
+    let low = try JSONDecoder().decode(RepositorySettings.self, from: lowData)
+    #expect(low.focusedLineChangesRefreshIntervalSeconds == RepositorySettings.minimumLineChangesRefreshIntervalSeconds)
+    #expect(
+      low.unfocusedLineChangesRefreshIntervalSeconds == RepositorySettings.minimumLineChangesRefreshIntervalSeconds)
+  }
+
   @Test(.dependencies) func taskLoadsLatestUserSettingsAfterAsyncGitProbe() async throws {
     let rootURL = URL(fileURLWithPath: "/tmp/repo-\(UUID().uuidString)")
     let settingsStorage = SettingsTestStorage()

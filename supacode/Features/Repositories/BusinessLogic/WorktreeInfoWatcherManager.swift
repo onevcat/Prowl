@@ -39,6 +39,9 @@ final class WorktreeInfoWatcherManager {
   private let filesChangedDebounceInterval: Duration
   private let pullRequestSelectionRefreshCooldown: Duration
   private let refreshTiming: RefreshTiming
+  private let defaultLineChangesRefreshTiming: RefreshTiming
+  private var lineChangesRefreshIntervalByRepositoryID: [String: WorktreeInfoWatcherClient.LineChangesRefreshInterval] =
+    [:]
   private let lineChangePhaseOffset: WorktreePhaseOffset
   private let pullRequestPhaseOffset: RepositoryPhaseOffset
   private let sleep: @Sendable (Duration) async throws -> Void
@@ -59,6 +62,12 @@ final class WorktreeInfoWatcherManager {
   init<C: Clock<Duration>>(
     focusedInterval: Duration = .seconds(30),
     unfocusedInterval: Duration = .seconds(60),
+    focusedLineChangesRefreshInterval: Duration = .seconds(
+      RepositorySettings.defaultFocusedLineChangesRefreshIntervalSeconds
+    ),
+    unfocusedLineChangesRefreshInterval: Duration = .seconds(
+      RepositorySettings.defaultUnfocusedLineChangesRefreshIntervalSeconds
+    ),
     filesChangedDebounceInterval: Duration = .seconds(5),
     pullRequestSelectionRefreshCooldown: Duration = .seconds(5),
     lineChangePhaseOffset: @escaping WorktreePhaseOffset = WorktreeInfoWatcherManager.defaultLineChangePhaseOffset,
@@ -66,6 +75,10 @@ final class WorktreeInfoWatcherManager {
     clock: C = ContinuousClock()
   ) {
     refreshTiming = RefreshTiming(focused: focusedInterval, unfocused: unfocusedInterval)
+    defaultLineChangesRefreshTiming = RefreshTiming(
+      focused: focusedLineChangesRefreshInterval,
+      unfocused: unfocusedLineChangesRefreshInterval
+    )
     self.filesChangedDebounceInterval = filesChangedDebounceInterval
     self.pullRequestSelectionRefreshCooldown = pullRequestSelectionRefreshCooldown
     self.lineChangePhaseOffset = lineChangePhaseOffset
@@ -79,6 +92,8 @@ final class WorktreeInfoWatcherManager {
     switch command {
     case .setWorktrees(let worktrees):
       setWorktrees(worktrees)
+    case .setLineChangesRefreshIntervals(let intervals):
+      setLineChangesRefreshIntervals(intervals)
     case .setSelectedWorktreeID(let worktreeID):
       setSelectedWorktreeID(worktreeID)
     case .setPullRequestTrackingEnabled(let isEnabled):
@@ -135,6 +150,28 @@ final class WorktreeInfoWatcherManager {
     }
     for repositoryRootURL in obsoleteCooldownRepositories {
       cancelPullRequestSelectionCooldown(for: repositoryRootURL)
+    }
+  }
+
+  private func setLineChangesRefreshIntervals(
+    _ intervals: [String: WorktreeInfoWatcherClient.LineChangesRefreshInterval]
+  ) {
+    let normalized = intervals.mapValues { interval in
+      WorktreeInfoWatcherClient.LineChangesRefreshInterval(
+        focusedSeconds: RepositorySettings.normalizedLineChangesRefreshIntervalSeconds(
+          interval.focusedSeconds
+        ),
+        unfocusedSeconds: RepositorySettings.normalizedLineChangesRefreshIntervalSeconds(
+          interval.unfocusedSeconds
+        )
+      )
+    }
+    guard normalized != lineChangesRefreshIntervalByRepositoryID else {
+      return
+    }
+    lineChangesRefreshIntervalByRepositoryID = normalized
+    for worktreeID in worktrees.keys {
+      updateLineChangeSchedule(worktreeID: worktreeID, immediate: false, forceReschedule: true)
     }
   }
 
@@ -415,10 +452,10 @@ final class WorktreeInfoWatcherManager {
     immediate: Bool,
     forceReschedule: Bool = false
   ) {
-    guard worktrees[worktreeID] != nil else {
+    guard let worktree = worktrees[worktreeID] else {
       return
     }
-    let interval = worktreeID == selectedWorktreeID ? refreshTiming.focused : refreshTiming.unfocused
+    let interval = lineChangesRefreshInterval(for: worktree)
     let shouldEmit = immediate && !deferredLineChangeIDs.contains(worktreeID)
     let request = RepeatingTaskRequest(
       worktreeID: worktreeID,
@@ -432,6 +469,16 @@ final class WorktreeInfoWatcherManager {
       }
     )
     updateRepeatingTask(request, tasks: &lineChangeTasks)
+  }
+
+  private func lineChangesRefreshInterval(for worktree: Worktree) -> Duration {
+    let repositoryID = worktree.repositoryRootURL.standardizedFileURL.path(percentEncoded: false)
+    let isFocused = worktree.id == selectedWorktreeID
+    guard let interval = lineChangesRefreshIntervalByRepositoryID[repositoryID] else {
+      return isFocused ? defaultLineChangesRefreshTiming.focused : defaultLineChangesRefreshTiming.unfocused
+    }
+    let seconds = isFocused ? interval.focusedSeconds : interval.unfocusedSeconds
+    return .seconds(RepositorySettings.normalizedLineChangesRefreshIntervalSeconds(seconds))
   }
 
   private func updateRepeatingTask(

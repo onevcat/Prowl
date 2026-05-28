@@ -185,6 +185,27 @@ struct RepositorySettingsView: View {
         }
       }
 
+      if store.showsWorktreeSettings {
+        Section {
+          lineChangesIntervalRow(
+            title: "Focused interval",
+            value: settings.focusedLineChangesRefreshIntervalSeconds
+          )
+          lineChangesIntervalRow(
+            title: "Unfocused interval",
+            value: settings.unfocusedLineChangesRefreshIntervalSeconds
+          )
+          Text("Increase this for very large repositories to reduce background Git diff work.")
+            .foregroundStyle(.secondary)
+        } header: {
+          VStack(alignment: .leading, spacing: 4) {
+            Text("Performance")
+            Text("Controls repository background checks")
+              .foregroundStyle(.secondary)
+          }
+        }
+      }
+
       if store.showsPullRequestSettings {
         Section {
           Picker(selection: settings.pullRequestMergeStrategy) {
@@ -955,6 +976,28 @@ struct RepositorySettingsView: View {
         }
       }
     )
+  }
+
+  private func lineChangesIntervalRow(title: String, value: Binding<Int>) -> some View {
+    LabeledContent {
+      HStack(spacing: 8) {
+        TextField("", value: value, format: .number)
+          .textFieldStyle(.roundedBorder)
+          .multilineTextAlignment(.trailing)
+          .frame(width: 72)
+        Text("seconds")
+          .foregroundStyle(.secondary)
+        Stepper(
+          title,
+          value: value,
+          in: RepositorySettings.minimumLineChangesRefreshIntervalSeconds...3_600,
+          step: 5
+        )
+        .labelsHidden()
+      }
+    } label: {
+      Text(title)
+    }
   }
 
   private func syncSelectedCommandID(with commands: [UserCustomCommand]) {
