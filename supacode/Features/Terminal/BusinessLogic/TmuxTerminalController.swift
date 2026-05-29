@@ -162,7 +162,7 @@ internal final class TmuxTerminalController {
         ],
         allowFailure: true
       )
-      try await hideStatusBar(in: target)
+      try await configureClientSessionOptions(in: target)
     } catch {
       _ = try await run(
         [
@@ -194,7 +194,7 @@ internal final class TmuxTerminalController {
       ])
     }
 
-    try await hideStatusBar(in: target)
+    try await configureClientSessionOptions(in: target)
   }
 
   private func createIsolatedClientSession(target: TmuxTerminalTarget) async throws {
@@ -215,7 +215,7 @@ internal final class TmuxTerminalController {
     ])
   }
 
-  private func hideStatusBar(in target: TmuxTerminalTarget) async throws {
+  private func configureClientSessionOptions(in target: TmuxTerminalTarget) async throws {
     _ = try await run([
       "-S", target.socketURL.path,
       "set-option",

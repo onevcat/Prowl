@@ -43,7 +43,10 @@ internal struct TmuxTerminalControllerTests {
       )
     )
 
-    #expect(command == "'/tmp/tmux' -S '/tmp/prowl'\"'\"'s.sock' attach-session -t 'prowl-tab-it'\"'\"'s'")
+    #expect(
+      command
+        == "'/tmp/tmux' -S '/tmp/prowl'\"'\"'s.sock' attach-session -t 'prowl-tab-it'\"'\"'s'"
+    )
   }
 
   @Test internal func createWindowWritesProwlMetadataToWindowOptions() async throws {
@@ -87,6 +90,7 @@ internal struct TmuxTerminalControllerTests {
     #expect(arguments.containsSetWindowOption(name: "@prowl.worktree_path", value: "/tmp/repo/wt"))
     #expect(arguments.containsSetWindowOption(name: "@prowl.repository_root", value: "/tmp/repo"))
     #expect(arguments.containsSetWindowOption(name: "@prowl.created_at", value: "2026-05-28T12:00:00Z"))
+    #expect(arguments.containsSetOption(target: "prowl-tab-111111111111", name: "mouse", value: "on"))
   }
 
   @Test internal func createWindowCleansUpWindowWhenMetadataWriteFails() async {
@@ -164,6 +168,7 @@ internal struct TmuxTerminalControllerTests {
     #expect(arguments.contains { $0.contains("new-session") && $0.contains("prowl-tab-222222222222") })
     #expect(arguments.contains { $0.contains("link-window") && $0.contains("@21") })
     #expect(arguments.contains { $0.contains("select-window") && $0.contains("prowl-tab-222222222222:@21") })
+    #expect(arguments.containsSetOption(target: "prowl-tab-222222222222", name: "mouse", value: "on"))
     #expect(
       arguments.contains {
         $0.contains("kill-window") && $0.contains { $0.contains("__prowl_client_bootstrap") }
@@ -401,6 +406,12 @@ private actor TmuxCommandRecorder {
 }
 
 extension [[String]] {
+  fileprivate func containsSetOption(target: String, name: String, value: String) -> Bool {
+    contains {
+      $0.contains("set-option") && $0.contains("-t") && $0.contains(target) && $0.contains(name) && $0.contains(value)
+    }
+  }
+
   fileprivate func containsSetWindowOption(name: String, value: String) -> Bool {
     contains {
       $0 == ["-S", "/tmp/prowl-tmux/prowl.sock", "set-window-option", "-t", "@7", name, value]
