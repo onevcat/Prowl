@@ -137,7 +137,7 @@ struct WorktreeTerminalManagerTests {
     #expect(state.canCloseFocusedSurface == false)
   }
 
-  @Test func firstTabUsesTabSurfaceContext() throws {
+  @Test func firstTabUsesWindowSurfaceContext() throws {
     let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
     let worktree = makeWorktree()
     let state = manager.state(for: worktree)
@@ -146,7 +146,7 @@ struct WorktreeTerminalManagerTests {
     let surfaceId = try #require(state.focusedSurfaceId(in: tabId))
     let surface = try #require(state.surfaceView(for: surfaceId))
 
-    #expect(surface.surfaceContextForTesting == GHOSTTY_SURFACE_CONTEXT_TAB)
+    #expect(surface.surfaceContextForTesting == GHOSTTY_SURFACE_CONTEXT_WINDOW)
   }
 
   @Test func splitTreeDoesNotRecreateSurfaceForClosedTab() throws {

@@ -1,4 +1,5 @@
 import AppKit
+import Clocks
 import ComposableArchitecture
 import DependenciesTestSupport
 import Foundation
@@ -1051,6 +1052,7 @@ struct AppFeatureCommandPaletteTests {
   }
 
   @Test(.dependencies) func toggleCanvasDelegateDoesNotRestoreTerminalFocus() async {
+    let clock = TestClock()
     let worktree = makeWorktree(
       id: "/tmp/repo-canvas-toggle/wt-1",
       name: "wt-1",
@@ -1069,6 +1071,7 @@ struct AppFeatureCommandPaletteTests {
     ) {
       AppFeature()
     } withDependencies: {
+      $0.continuousClock = clock
       $0.terminalClient.send = { command in
         sent.withValue { $0.append(command) }
       }
@@ -1091,6 +1094,7 @@ struct AppFeatureCommandPaletteTests {
     var repositoriesState = RepositoriesFeature.State()
     repositoriesState.repositories = [repository]
     repositoriesState.selection = .worktree(worktree.id)
+    let captured = LockIsolated<[(OpenWorktreeAction, Worktree)]>([])
     let store = TestStore(
       initialState: AppFeature.State(
         repositories: repositoriesState,
@@ -1098,11 +1102,18 @@ struct AppFeatureCommandPaletteTests {
       )
     ) {
       AppFeature()
+    } withDependencies: {
+      $0.workspaceClient.open = { action, worktree, _ in
+        captured.withValue { $0.append((action, worktree)) }
+      }
     }
-    store.exhaustivity = .off
 
     await store.send(.commandPalette(.delegate(.revealInFinder)))
-    await store.receive(\.openWorktree)
+    await store.finish()
+
+    #expect(captured.value.count == 1)
+    #expect(captured.value.first?.0 == .finder)
+    #expect(captured.value.first?.1 == worktree)
   }
 
   @Test(.dependencies) func copyPathWritesWorktreePathToPasteboard() async {
@@ -1115,6 +1126,7 @@ struct AppFeatureCommandPaletteTests {
     var repositoriesState = RepositoriesFeature.State()
     repositoriesState.repositories = [repository]
     repositoriesState.selection = .worktree(worktree.id)
+    let copiedPath = LockIsolated<String?>(nil)
     let store = TestStore(
       initialState: AppFeature.State(
         repositories: repositoriesState,
@@ -1122,15 +1134,16 @@ struct AppFeatureCommandPaletteTests {
       )
     ) {
       AppFeature()
+    } withDependencies: {
+      $0.clipboardClient.copyString = { value in
+        copiedPath.setValue(value)
+      }
     }
-
-    NSPasteboard.general.clearContents()
-    NSPasteboard.general.setString("__sentinel__", forType: .string)
 
     await store.send(.commandPalette(.delegate(.copyPath)))
     await store.finish()
 
-    #expect(NSPasteboard.general.string(forType: .string) == worktree.workingDirectory.path)
+    #expect(copiedPath.value == worktree.workingDirectory.path(percentEncoded: false))
   }
 
   @Test(.dependencies) func copyPathWithoutSelectedWorktreeIsNoop() async {
@@ -1156,7 +1169,7 @@ struct AppFeatureCommandPaletteTests {
       repositories: repositoriesState,
       settings: SettingsFeature.State()
     )
-    appState.leftSidebarVisibility = .detailOnly
+    appState.$isLeftSidebarHidden.withLock { $0 = true }
     let store = TestStore(initialState: appState) {
       AppFeature()
     }
@@ -1164,7 +1177,7 @@ struct AppFeatureCommandPaletteTests {
 
     await store.send(.commandPalette(.delegate(.revealInSidebar)))
     await store.receive(\.showLeftSidebar) {
-      $0.leftSidebarVisibility = .all
+      $0.$isLeftSidebarHidden.withLock { $0 = false }
     }
     await store.receive(\.repositories.revealSelectedWorktreeInSidebar)
   }

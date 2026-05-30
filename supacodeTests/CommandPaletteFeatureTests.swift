@@ -1112,7 +1112,7 @@ struct CommandPaletteFeatureTests {
     )
   }
 
-  @Test func filterItemsEmptyQueryHonorsDefaultSuggestionFlagOnly() {
+  @Test func filterItemsEmptyQueryHidesRootActions() {
     let suggested = CommandPaletteItem(
       id: "suggested",
       title: "Suggested",
@@ -1131,7 +1131,7 @@ struct CommandPaletteFeatureTests {
     )
 
     let result = CommandPaletteFeature.filterItems(items: [suggested, hidden], query: "")
-    expectNoDifference(result.map(\.id), [suggested.id])
+    expectNoDifference(result.map(\.id), [])
   }
 
   @Test func emptyQueryHidesGhosttyCommands() {
@@ -1343,13 +1343,17 @@ struct CommandPaletteFeatureTests {
         id: "debug.toast.inProgress",
         title: "[Debug] Toast: In Progress",
         subtitle: "Simulates an in-progress toast",
-        kind: .debugTestToast(.inProgress("Merging pull request…"))
+        kind: .debugTestToast(.inProgress("Merging pull request…")),
+        category: .debug,
+        defaultSuggestion: true
       )
       let worktreeSelect = CommandPaletteItem(
         id: "worktree.fox.select",
         title: "Repo / fox",
         subtitle: nil,
-        kind: .worktreeSelect("wt-fox")
+        kind: .worktreeSelect("wt-fox"),
+        category: .navigation,
+        defaultSuggestion: false
       )
 
       let result = CommandPaletteFeature.filterItems(
@@ -1445,7 +1449,7 @@ struct CommandPaletteFeatureTests {
   }
 
   @Test func fuzzyMatchesOpenInForkByTitle() {
-    let item = CommandPaletteItem(
+    let item = makeItem(
       id: "terminal.open-in-fork",
       title: "Open in Fork",
       subtitle: nil,
@@ -1459,7 +1463,7 @@ struct CommandPaletteFeatureTests {
   }
 
   @Test func fuzzyMatchesOpenWebByTitle() {
-    let item = CommandPaletteItem(
+    let item = makeItem(
       id: "terminal.open-web",
       title: "Open Web",
       subtitle: nil,
@@ -1473,7 +1477,7 @@ struct CommandPaletteFeatureTests {
   }
 
   @Test func fuzzyMatchesOpenInVSCodeByTitle() {
-    let item = CommandPaletteItem(
+    let item = makeItem(
       id: "terminal.open-in-vscode",
       title: "Open in VS Code",
       subtitle: nil,
@@ -1487,7 +1491,7 @@ struct CommandPaletteFeatureTests {
   }
 
   @Test func fuzzyMatchesCopyPathByTitle() {
-    let item = CommandPaletteItem(
+    let item = makeItem(
       id: "terminal.copy-path",
       title: "Copy Path",
       subtitle: nil,
@@ -1501,7 +1505,7 @@ struct CommandPaletteFeatureTests {
   }
 
   @Test func fuzzyMatchesLayoutCenterByTitle() {
-    let item = CommandPaletteItem(
+    let item = makeItem(
       id: "canvas.layout-center",
       title: "Layout: Center",
       subtitle: nil,
@@ -1515,7 +1519,7 @@ struct CommandPaletteFeatureTests {
   }
 
   @Test func fuzzyMatchesLayoutArrangeByTitle() {
-    let item = CommandPaletteItem(
+    let item = makeItem(
       id: "canvas.layout-arrange",
       title: "Layout: Arrange",
       subtitle: nil,
@@ -1529,7 +1533,7 @@ struct CommandPaletteFeatureTests {
   }
 
   @Test func fuzzyMatchesLayoutOverviewByTitle() {
-    let item = CommandPaletteItem(
+    let item = makeItem(
       id: "canvas.layout-overview",
       title: "Layout: Overview",
       subtitle: nil,
@@ -2203,8 +2207,11 @@ private func testCategory(for kind: CommandPaletteItem.Kind) -> CommandPaletteIt
     return .terminal
   case .toggleLeftSidebar, .toggleActiveAgentsPanel, .toggleCanvas,
     .expandCanvasCard, .arrangeCanvasCards, .organizeCanvasCards, .selectAllCanvasCards,
-    .toggleShelf, .showDiff:
+    .toggleShelf, .showDiff,
+    .layoutCenter, .layoutArrange, .layoutOverview:
     return .view
+  case .openInVSCode, .openInFork, .openWeb:
+    return .navigation
   #if DEBUG
     case .debugTestToast, .debugSimulateUpdateFound, .debugLightDockNotificationDot:
       return .debug
@@ -2222,6 +2229,8 @@ private func testDefaultSuggestion(for kind: CommandPaletteItem.Kind) -> Bool {
     .expandCanvasCard, .arrangeCanvasCards, .organizeCanvasCards, .selectAllCanvasCards,
     .toggleShelf, .showDiff,
     .revealInFinder, .copyPath, .revealInSidebar,
+    .layoutCenter, .layoutArrange, .layoutOverview,
+    .openInVSCode, .openInFork, .openWeb,
     .runScript, .stopRunScript, .togglePinWorktree, .renameBranch,
     .openRepositorySettings, .restoreRunningTab:
     return true
