@@ -312,6 +312,30 @@ private struct GhosttySearchField: NSViewRepresentable {
       guard let field = obj.object as? NSTextField else { return }
       text = field.stringValue
     }
+
+    func control(
+      _ control: NSControl,
+      textView: NSTextView,
+      doCommandBy commandSelector: Selector
+    ) -> Bool {
+      guard
+        let field = control as? SearchField,
+        let command = GhosttySearchFieldCommand.command(
+          for: commandSelector,
+          modifierFlags: NSApp.currentEvent?.modifierFlags ?? []
+        )
+      else {
+        return false
+      }
+
+      switch command {
+      case .submit(let isShifted):
+        field.onSubmit?(isShifted)
+      case .escape:
+        field.onEscape?()
+      }
+      return true
+    }
   }
 
   final class SearchField: NSTextField {
@@ -331,6 +355,26 @@ private struct GhosttySearchField: NSViewRepresentable {
       default:
         super.keyDown(with: event)
       }
+    }
+  }
+}
+
+enum GhosttySearchFieldCommand: Equatable {
+  case submit(isShifted: Bool)
+  case escape
+
+  static func command(
+    for selector: Selector,
+    modifierFlags: NSEvent.ModifierFlags
+  ) -> GhosttySearchFieldCommand? {
+    switch selector {
+    case #selector(NSResponder.insertNewline(_:)),
+      #selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)):
+      return .submit(isShifted: modifierFlags.contains(.shift))
+    case #selector(NSResponder.cancelOperation(_:)):
+      return .escape
+    default:
+      return nil
     }
   }
 }
