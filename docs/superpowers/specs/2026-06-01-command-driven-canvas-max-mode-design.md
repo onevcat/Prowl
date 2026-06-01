@@ -380,16 +380,27 @@ struct UserCommandPresentationOverride: Codable, Equatable, Sendable {
 
 ## UI 入口
 
-第一阶段建议放在 Settings 的 Canvas 或 Terminal 区域，避免把这个行为藏在快捷键设置里。
+第一阶段不做 Settings UI。先把规则放进现有 JSON 设置文件，让用户可以直接编辑配置验证行为，避免为了早期策略实验引入一套还不稳定的界面。
 
-控件：
+配置文件命名以现有路径为准：
 
-1. Toggle: `Automatically enter Canvas Max Mode for full-screen terminal apps`
-2. Picker: `When the command exits`
-   - `Stay in Max Mode`
-   - `Exit Max Mode`
+1. 全局默认值写入 app-level `settings.json`，即 `SupacodePaths.settingsURL`。
+2. 如果需要 repository-scoped 规则，再写入 repository settings 的 `prowl.json`，即 `SupacodePaths.repositorySettingsURL(for:)`。
+3. 如果规则属于用户个人偏好而不应进入共享仓库设置，后续再考虑放入 user repository settings 的 `prowl.onevcat.json`。
 
-如果第一阶段不做 UI，也可以先用默认内建行为和 settings file 字段，但需要保证 decode 缺省值稳定。
+第一阶段只需要支持全局配置和内建默认规则。配置字段需要保证 decode 缺省值稳定，缺失字段等价于：
+
+```json
+{
+  "commandPresentation": {
+    "isEnabled": true,
+    "defaultExitPolicy": "manual",
+    "rules": []
+  }
+}
+```
+
+后续如果确实需要 UI，再在 Settings 的 Canvas 或 Terminal 区域增加 toggle 和 picker；UI 只编辑同一份配置模型，不引入第二套状态。
 
 ## 边界行为
 
@@ -450,11 +461,12 @@ struct UserCommandPresentationOverride: Codable, Equatable, Sendable {
 3. 支持 `onForegroundProcessExit`。
 4. 补 surface/tab cleanup 测试。
 
-### Phase 3: 用户设置
+### Phase 3: 配置文件设置
 
-1. `GlobalSettings` 增加 `CommandPresentationSettings`。
-2. Settings UI 增加自动进入 toggle 和退出策略 picker。
-3. 支持用户 override 内建规则。
+1. `GlobalSettings` 增加 `CommandPresentationSettings`，持久化到 `settings.json`。
+2. 支持用户用 JSON 覆盖内建规则，包括 `entryPolicy` 和 `exitPolicy`。
+3. 评估是否需要 repository-scoped override；如果需要，优先使用现有 `prowl.json` 持久化路径。
+4. Settings UI 仅作为后续增强，不是第一阶段目标。
 
 ## 推荐结论
 
