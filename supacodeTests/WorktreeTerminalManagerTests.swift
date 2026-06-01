@@ -473,6 +473,26 @@ struct WorktreeTerminalManagerTests {
     #expect(event == .layoutRestoreFailed(message: "Saved terminal layout was invalid and has been reset"))
   }
 
+  @Test func restoreLayoutSnapshotEmitsRestoredNilWhenSnapshotMissing() async {
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      layoutPersistence: TerminalLayoutPersistenceClient(
+        loadSnapshot: { nil },
+        saveSnapshot: { _ in true },
+        clearSnapshot: { true }
+      )
+    )
+    let stream = manager.eventStream()
+
+    await manager.restoreLayoutSnapshot(from: [makeWorktree()])
+
+    let event = await nextEvent(stream) { event in
+      event == .layoutRestored(selectedWorktreeID: nil)
+    }
+
+    #expect(event == .layoutRestored(selectedWorktreeID: nil))
+  }
+
   @Test func persistLayoutSnapshotWithoutTabsClearsSnapshot() async {
     let clearCount = LockIsolated(0)
     let saveCount = LockIsolated(0)

@@ -307,9 +307,36 @@ struct AppFeature {
     // Enter Canvas after the selection effects so `.selectCanvas`
     // records the just-selected worktree as the pre-Canvas anchor.
     if shouldEnterCanvas {
+      if state.repositories.selectedTerminalWorktree == nil,
+        let targetID = defaultViewFallbackSelectionID(in: state.repositories)
+      {
+        effects.append(defaultViewSelectionEffect(for: targetID, repositories: state.repositories))
+      }
       effects.append(.send(.repositories(.toggleCanvas)))
     }
-    return effects.isEmpty ? .none : .merge(effects)
+    return effects.isEmpty ? .none : .concatenate(effects)
+  }
+
+  private func defaultViewFallbackSelectionID(in repositories: RepositoriesFeature.State) -> Worktree.ID? {
+    let candidateIDs =
+      [repositories.lastFocusedWorktreeID].compactMap(\.self)
+      + repositories.orderedWorktreeRows().map(\.id)
+    return candidateIDs.first { id in
+      repositories.worktree(for: id) != nil
+        || repositories.repositories[id: id]?.kind == .plain
+    }
+  }
+
+  private func defaultViewSelectionEffect(
+    for targetID: Worktree.ID,
+    repositories: RepositoriesFeature.State
+  ) -> Effect<Action> {
+    if repositories.worktree(for: targetID) == nil,
+      repositories.repositories[id: targetID]?.kind == .plain
+    {
+      return .send(.repositories(.selectRepository(targetID)))
+    }
+    return .send(.repositories(.selectWorktree(targetID)))
   }
 
   var body: some Reducer<State, Action> {
@@ -1392,7 +1419,7 @@ struct AppFeature {
             effects.append(.send(.repositories(.selectWorktree(selectedWorktreeID))))
           }
         }
-        return .merge([.merge(effects), applyDefaultViewMode(into: &state)])
+        return .concatenate([.merge(effects), applyDefaultViewMode(into: &state)])
 
       case .terminalEvent(.layoutRestoreFailed(let message)):
         appLogger.warning("[LayoutRestore] layoutRestoreFailed: \(message)")

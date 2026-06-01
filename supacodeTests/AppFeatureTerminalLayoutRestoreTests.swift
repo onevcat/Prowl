@@ -228,6 +228,150 @@ struct AppFeatureTerminalLayoutRestoreTests {
     }
   }
 
+  @Test(.dependencies) func repositoriesChangedAppliesDefaultShelfWhenNotRestoringLayout() async {
+    let worktree = makeWorktree()
+    let repository = makeRepository(worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State(repositories: [repository])
+    repositoriesState.selection = .worktree(worktree.id)
+    setDefaultViewMode(.shelf)
+    defer { setDefaultViewMode(.normal) }
+
+    let store = TestStore(
+      initialState: AppFeature.State(repositories: repositoriesState)
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { _ in }
+      $0.worktreeInfoWatcher.send = { _ in }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.repositories(.delegate(.repositoriesChanged([repository])))) {
+      $0.hasAppliedInitialViewMode = true
+    }
+    await store.receive(\.repositories.toggleShelf) {
+      $0.repositories.isShelfActive = true
+      $0.repositories.openedWorktreeIDs = [worktree.id]
+      $0.repositories.pendingTerminalFocusWorktreeIDs = [worktree.id]
+    }
+    await store.finish()
+  }
+
+  @Test(.dependencies) func repositoriesChangedAppliesDefaultCanvasWhenNotRestoringLayout() async {
+    let worktree = makeWorktree()
+    let repository = makeRepository(worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State(repositories: [repository])
+    repositoriesState.selection = .worktree(worktree.id)
+    setDefaultViewMode(.canvas)
+    defer { setDefaultViewMode(.normal) }
+    let sentCommands = LockIsolated<[TerminalClient.Command]>([])
+
+    let store = TestStore(
+      initialState: AppFeature.State(repositories: repositoriesState)
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sentCommands.withValue { $0.append(command) }
+      }
+      $0.worktreeInfoWatcher.send = { _ in }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.repositories(.delegate(.repositoriesChanged([repository])))) {
+      $0.hasAppliedInitialViewMode = true
+    }
+    await store.receive(\.repositories.toggleCanvas)
+    await store.receive(\.repositories.selectCanvas) {
+      $0.repositories.preCanvasWorktreeID = worktree.id
+      $0.repositories.preCanvasTerminalTargetID = worktree.id
+      $0.repositories.selection = .canvas
+    }
+    await store.finish()
+
+    #expect(
+      sentCommands.value.contains(
+        .ensureInitialTab(worktree, runSetupScriptIfNew: false, focusing: false)
+      )
+    )
+  }
+
+  @Test(.dependencies) func layoutRestoredNilAppliesDefaultCanvasWithLastFocusedAnchor() async {
+    let worktree = makeWorktree()
+    let repository = makeRepository(worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State(repositories: [repository])
+    repositoriesState.lastFocusedWorktreeID = worktree.id
+    repositoriesState.selection = nil
+    setDefaultViewMode(.canvas)
+    defer { setDefaultViewMode(.normal) }
+    let sentCommands = LockIsolated<[TerminalClient.Command]>([])
+
+    let store = TestStore(
+      initialState: AppFeature.State(repositories: repositoriesState)
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sentCommands.withValue { $0.append(command) }
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.terminalEvent(.layoutRestored(selectedWorktreeID: nil))) {
+      $0.hasAppliedInitialViewMode = true
+    }
+    await store.receive(\.repositories.selectWorktree) {
+      $0.repositories.selection = .worktree(worktree.id)
+      $0.repositories.openedWorktreeIDs = [worktree.id]
+    }
+    await store.receive(\.repositories.toggleCanvas)
+    await store.receive(\.repositories.selectCanvas) {
+      $0.repositories.preCanvasWorktreeID = worktree.id
+      $0.repositories.preCanvasTerminalTargetID = worktree.id
+      $0.repositories.selection = .canvas
+    }
+    await store.finish()
+
+    #expect(
+      sentCommands.value.contains(
+        .ensureInitialTab(worktree, runSetupScriptIfNew: false, focusing: false)
+      )
+    )
+  }
+
+  @Test(.dependencies) func layoutRestoreFailedAppliesDefaultShelf() async {
+    let worktree = makeWorktree()
+    let repository = makeRepository(worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State(repositories: [repository])
+    repositoriesState.lastFocusedWorktreeID = worktree.id
+    repositoriesState.selection = nil
+    setDefaultViewMode(.shelf)
+    defer { setDefaultViewMode(.normal) }
+
+    let store = TestStore(
+      initialState: AppFeature.State(repositories: repositoriesState)
+    ) {
+      AppFeature()
+    }
+    store.exhaustivity = .off
+
+    await store.send(.terminalEvent(.layoutRestoreFailed(message: "Invalid layout"))) {
+      $0.hasAppliedInitialViewMode = true
+    }
+    await store.receive(\.repositories.showToast) {
+      $0.repositories.statusToast = .warning("Invalid layout")
+    }
+    await store.receive(\.repositories.toggleShelf) {
+      $0.repositories.isShelfActive = true
+    }
+    await store.receive(\.repositories.selectWorktree) {
+      $0.repositories.selection = .worktree(worktree.id)
+      $0.repositories.openedWorktreeIDs = [worktree.id]
+      $0.repositories.pendingTerminalFocusWorktreeIDs = [worktree.id]
+    }
+    await store.finish()
+  }
+
   @Test(.dependencies) func scenePhaseInactiveSavesLayoutSnapshot() async {
     let sentCommands = LockIsolated<[TerminalClient.Command]>([])
     var settings = SettingsFeature.State()
@@ -350,4 +494,13 @@ private func makePlainRepository() -> Repository {
     kind: .plain,
     worktrees: IdentifiedArray()
   )
+}
+
+private func setDefaultViewMode(_ mode: DefaultViewMode) {
+  @Shared(.settingsFile) var settingsFile
+  $settingsFile.withLock {
+    var updated = $0.global
+    updated.defaultViewMode = mode
+    $0.global = updated
+  }
 }
