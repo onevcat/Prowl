@@ -520,30 +520,6 @@ struct RepositoriesFeature {
           if selectionChanged {
             allEffects.append(.send(.delegate(.selectedWorktreeChanged(selectedWorktree))))
           }
-          // Apply "Default View = Shelf" preference once the initial
-          // repository snapshot has landed — reuses `.toggleShelf`'s
-          // guards (needs ≥1 book, falls back to `lastFocusedWorktreeID`
-          // when no selection is set yet). `repositorySnapshotLoaded`
-          // is only sent from `.task` at launch, so this won't re-enter
-          // Shelf if the user has already exited to Normal in the same
-          // session. When Layout Restore is about to run, defer to the
-          // `.layoutRestored` event in AppFeature — otherwise Layout
-          // Restore clears the selection we just set, and any books not
-          // in the saved layout would linger as stray spines.
-          @Shared(.settingsFile) var settingsFile
-          if state.launchRestoreMode != .restoreLayout {
-            switch settingsFile.global.defaultViewMode {
-            case .shelf where !state.isShelfActive:
-              allEffects.append(.send(.toggleShelf))
-            case .canvas where !state.isShowingCanvas:
-              // `.toggleCanvas` shares Shelf's guards: it only enters
-              // when at least one worktree row exists, otherwise it
-              // falls back to Normal.
-              allEffects.append(.send(.toggleCanvas))
-            case .normal, .shelf, .canvas:
-              break
-            }
-          }
           return .merge(allEffects)
 
         case .pinnedWorktreeIDsLoaded(let pinnedWorktreeIDs):

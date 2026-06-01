@@ -59,6 +59,7 @@ struct AppFeature {
     var notificationIndicatorCount: Int = 0
     var lastKnownSystemNotificationsEnabled: Bool
     var launchRestoreMode: LaunchRestoreMode
+    var hasAppliedInitialViewMode = false
     var suppressLayoutSaveUntilRelaunch = false
     var launchedAt: Date?
     var leftSidebarVisibility: NavigationSplitViewVisibility = .all
@@ -287,6 +288,30 @@ struct AppFeature {
     }
   }
 
+  private func applyDefaultViewMode(into state: inout State) -> Effect<Action> {
+    guard !state.hasAppliedInitialViewMode else { return .none }
+    state.hasAppliedInitialViewMode = true
+
+    @Shared(.settingsFile) var settingsFile
+    let shouldEnterShelf =
+      settingsFile.global.defaultViewMode == .shelf
+      && !state.repositories.isShelfActive
+    let shouldEnterCanvas =
+      settingsFile.global.defaultViewMode == .canvas
+      && !state.repositories.isShowingCanvas
+
+    var effects: [Effect<Action>] = []
+    if shouldEnterShelf {
+      effects.append(.send(.repositories(.toggleShelf)))
+    }
+    // Enter Canvas after the selection effects so `.selectCanvas`
+    // records the just-selected worktree as the pre-Canvas anchor.
+    if shouldEnterCanvas {
+      effects.append(.send(.repositories(.toggleCanvas)))
+    }
+    return effects.isEmpty ? .none : .merge(effects)
+  }
+
   var body: some Reducer<State, Action> {
     let core = Reduce<State, Action> { state, action in
       switch action {
@@ -458,6 +483,7 @@ struct AppFeature {
         let shouldRestoreLayout =
           state.launchRestoreMode == .restoreLayout
           && state.repositories.snapshotPersistencePhase == .active
+        let shouldDeferDefaultView = state.launchRestoreMode == .restoreLayout
         appLogger.info(
           "[LayoutRestore] repositoriesChanged: mode=\(String(describing: state.launchRestoreMode))"
             + " phase=\(String(describing: state.repositories.snapshotPersistencePhase))"
@@ -470,6 +496,10 @@ struct AppFeature {
         state.runScriptStatusByWorktreeID = state.runScriptStatusByWorktreeID.filter { ids.contains($0.key) }
         let restorableWorktrees = makeTerminalRestorableWorktrees(from: Array(repositories))
         appLogger.info("[LayoutRestore] restorableWorktrees count=\(restorableWorktrees.count)")
+        var allEffects: [Effect<Action>] = []
+        if !shouldDeferDefaultView {
+          allEffects.append(applyDefaultViewMode(into: &state))
+        }
         if case .repository(let repositoryID)? = state.settings.selection,
           !repositories.contains(where: { $0.id == repositoryID })
         {
@@ -494,7 +524,8 @@ struct AppFeature {
               }
             )
           }
-          return .merge(effects)
+          allEffects.append(.merge(effects))
+          return .merge(allEffects)
         }
         var effects: [Effect<Action>] = [
           .send(.commandPalette(.pruneRecency(recencyIDs))),
@@ -516,7 +547,8 @@ struct AppFeature {
             }
           )
         }
-        return .merge(effects)
+        allEffects.append(.merge(effects))
+        return .merge(allEffects)
 
       case .repositories(.delegate(.openRepositorySettings(let repositoryID))):
         guard state.repositories.repositories.contains(where: { $0.id == repositoryID }) else {
@@ -1345,19 +1377,10 @@ struct AppFeature {
 
       case .terminalEvent(.layoutRestored(let selectedWorktreeID)):
         appLogger.info("[LayoutRestore] layoutRestored: selectedWorktreeID=\(selectedWorktreeID ?? "nil")")
-        // Once layout is restored the saved tabs have all been re-created
-        // (each emits `tabCreated` → `markWorktreeOpened`) and a valid
-        // active worktree is in hand — the right moment to honor the
-        // "Default View = Shelf" preference for Layout-Restore launches,
-        // which the `repositorySnapshotLoaded` hook intentionally
-        // deferred to avoid a selection flash.
-        @Shared(.settingsFile) var settingsFile
-        let shouldEnterShelf =
-          settingsFile.global.defaultViewMode == .shelf
-          && !state.repositories.isShelfActive
-        let shouldEnterCanvas =
-          settingsFile.global.defaultViewMode == .canvas
-          && !state.repositories.isShowingCanvas
+        // Layout restore has settled: tabs are re-created, selection is set.
+        // Now apply the default view preference, which was deferred in
+        // `repositoriesChanged` (via `shouldDeferDefaultView`) to avoid
+        // stray spines and a selection flash.
         var effects: [Effect<Action>] = []
         if let selectedWorktreeID {
           // Plain folders use .repository selection, not .worktree
@@ -1369,19 +1392,14 @@ struct AppFeature {
             effects.append(.send(.repositories(.selectWorktree(selectedWorktreeID))))
           }
         }
-        if shouldEnterShelf {
-          effects.append(.send(.repositories(.toggleShelf)))
-        }
-        // Enter Canvas after the selection effects so `.selectCanvas`
-        // records the just-selected worktree as the pre-Canvas anchor.
-        if shouldEnterCanvas {
-          effects.append(.send(.repositories(.toggleCanvas)))
-        }
-        return effects.isEmpty ? .none : .merge(effects)
+        return .merge([.merge(effects), applyDefaultViewMode(into: &state)])
 
       case .terminalEvent(.layoutRestoreFailed(let message)):
         appLogger.warning("[LayoutRestore] layoutRestoreFailed: \(message)")
-        return .send(.repositories(.showToast(.warning(message))))
+        return .merge(
+          .send(.repositories(.showToast(.warning(message)))),
+          applyDefaultViewMode(into: &state)
+        )
 
       case .terminalEvent(.tabCreated(let worktreeID)):
         // Every tab creation (user +, CLI open, layout restore, …)

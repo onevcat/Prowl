@@ -575,6 +575,7 @@ final class WorktreeTerminalManager {
     terminalLogger.info("[LayoutRestore] restore: loading snapshot from disk")
     guard let payload = await layoutPersistence.loadSnapshot() else {
       terminalLogger.info("[LayoutRestore] restore: no snapshot found on disk, skipping")
+      emit(.layoutRestored(selectedWorktreeID: nil))
       return
     }
     terminalLogger.info(
