@@ -1224,6 +1224,36 @@ struct WorktreeTerminalManagerTests {
     #expect(restoredTarget.paneID == TmuxPaneID(rawValue: "%9"))
   }
 
+  @Test func tmuxBackedTabStripsClientSessionPrefixFromBridgeTitle() async throws {
+    let controller = TmuxTerminalController(
+      executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
+      execute: { _, arguments in
+        if arguments.contains("new-window") {
+          return TmuxCommandResult(stdout: "@7 %9\n", stderr: "", exitCode: 0)
+        }
+        return TmuxCommandResult(stdout: "", stderr: "", exitCode: 0)
+      }
+    )
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      tmuxController: controller,
+      usesAnonymousTmux: true
+    )
+    let worktree = makeWorktree(name: "master")
+
+    let tabID = try #require(await manager.createTabForTesting(in: worktree, runSetupScriptIfNew: false))
+    let state = try #require(manager.stateIfExists(for: worktree.id))
+    let target = try #require(state.tmuxTargetForTesting(tabID))
+    let surface = try #require(state.surfaceView(for: tabID))
+
+    surface.bridge.onTitleChange?("\(target.clientSession):2.1 master 1")
+    surface.bridge.onTitleChange?("\(target.clientSession):2.1 master 1")
+
+    let displayTitle = state.tabManager.tabs.first(where: { $0.id == tabID })?.displayTitle
+
+    #expect(displayTitle == "master")
+  }
+
   @Test func tmuxSnapshotRestoresPlainTabWithSplitRoot() throws {
     let controller = TmuxTerminalController(
       executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),

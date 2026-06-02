@@ -91,7 +91,9 @@ internal nonisolated struct TmuxCardID: Codable, Equatable, Hashable, Sendable {
 }
 
 internal nonisolated struct TmuxTerminalTarget: Codable, Equatable, Hashable, Sendable {
+  internal static let appNamespace = "prowl"
   internal static let cardContainerSession = "prowl-cards"
+  internal static let clientSessionPrefix = "\(appNamespace)-tab-"
 
   internal let socketURL: URL
   internal let groupSession: String
@@ -127,7 +129,7 @@ internal nonisolated struct TmuxTerminalTarget: Codable, Equatable, Hashable, Se
     return TmuxTerminalTarget(
       socketURL: socketRoot.appending(path: "\(appNamespace).sock"),
       groupSession: cardContainerSession,
-      clientSession: "\(appNamespace)-tab-\(tabPrefix)",
+      clientSession: "\(Self.clientSessionPrefix(appNamespace: appNamespace))\(tabPrefix)",
       cardID: cardID,
       windowID: nil,
       paneID: nil
@@ -145,11 +147,15 @@ internal nonisolated struct TmuxTerminalTarget: Codable, Equatable, Hashable, Se
     return TmuxTerminalTarget(
       socketURL: socketURL,
       groupSession: cardContainerSession,
-      clientSession: "prowl-tab-\(tabPrefix)",
+      clientSession: "\(clientSessionPrefix)\(tabPrefix)",
       cardID: cardID,
       windowID: windowID,
       paneID: paneID
     )
+  }
+
+  private static func clientSessionPrefix(appNamespace: String) -> String {
+    "\(appNamespace)-tab-"
   }
 }
 

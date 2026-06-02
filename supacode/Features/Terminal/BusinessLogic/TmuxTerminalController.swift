@@ -605,7 +605,7 @@ internal final class TmuxTerminalController {
 private nonisolated enum TmuxRecoveryScan {
   static let separator = "\u{1F}"
   static let prowlSessionPrefix = "prowl-"
-  static let clientSessionPrefix = "prowl-tab-"
+  static let clientSessionPrefix = TmuxTerminalTarget.clientSessionPrefix
   static let legacyWorktreeSessionPrefix = "prowl-wt-"
   static let clientBootstrapWindowName = "__prowl_client_bootstrap"
   static let clientBootstrapCommand = "/bin/sleep 1000000"

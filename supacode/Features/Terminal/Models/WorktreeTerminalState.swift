@@ -57,7 +57,7 @@ struct AgentDetectionDiagnostic {
 @Observable
 final class WorktreeTerminalState {
   enum TmuxTabCreation {
-    static let appNamespace = "prowl"
+    static let appNamespace = TmuxTerminalTarget.appNamespace
     static let socketRoot = SupacodePaths.cacheDirectory.appending(path: "tmux", directoryHint: .isDirectory)
   }
 
@@ -980,6 +980,60 @@ final class WorktreeTerminalState {
     if wasRunning != isRunning {
       onRunScriptStatusChanged?(isRunning)
     }
+  }
+
+  func userFacingTitle(from rawTitle: String, tabId: TerminalTabID) -> String? {
+    let title = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !title.isEmpty else { return nil }
+    guard let target = tmuxTargetsByTabId[tabId] else { return title }
+    return Self.userFacingTmuxTitle(
+      from: title,
+      target: target,
+      worktreeName: worktree.name
+    )
+  }
+
+  static func userFacingTmuxTitle(
+    from title: String,
+    target: TmuxTerminalTarget,
+    worktreeName: String
+  ) -> String? {
+    let sessionPrefix = "\(target.clientSession):"
+    guard title.hasPrefix(sessionPrefix) else { return title }
+
+    let remainder = title.dropFirst(sessionPrefix.count)
+    guard let separatorIndex = remainder.firstIndex(where: \.isWhitespace) else {
+      return nil
+    }
+
+    let coordinate = remainder[..<separatorIndex]
+    guard isTmuxTitleCoordinate(coordinate) else { return title }
+
+    let windowTitle = remainder[separatorIndex...]
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !windowTitle.isEmpty else { return nil }
+
+    if let generatedTitle = strippedGeneratedTabIndex(from: windowTitle, worktreeName: worktreeName) {
+      return generatedTitle
+    }
+
+    return windowTitle
+  }
+
+  static func isTmuxTitleCoordinate(_ value: Substring) -> Bool {
+    let parts = value.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false)
+    guard parts.count == 2 else { return false }
+    return parts.allSatisfy { part in
+      !part.isEmpty && part.utf8.allSatisfy { $0 >= UInt8(ascii: "0") && $0 <= UInt8(ascii: "9") }
+    }
+  }
+
+  static func strippedGeneratedTabIndex(from title: String, worktreeName: String) -> String? {
+    let prefix = "\(worktreeName) "
+    guard title.hasPrefix(prefix) else { return nil }
+    let suffix = title.dropFirst(prefix.count)
+    guard Int(suffix) != nil else { return nil }
+    return worktreeName
   }
 
 }

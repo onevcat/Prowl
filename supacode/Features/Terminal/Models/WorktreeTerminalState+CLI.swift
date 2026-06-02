@@ -32,7 +32,7 @@ extension WorktreeTerminalState {
           context: GHOSTTY_SURFACE_CONTEXT_TAB
         ).workingDirectory?.path(percentEncoded: false)
 
-        let title = paneTitle(surfaceID: paneID, fallbackTabTitle: tab.displayTitle)
+        let title = paneTitle(surfaceID: paneID, tabID: tab.id, fallbackTabTitle: tab.displayTitle)
         return CLITerminalPaneSnapshot(id: paneID, title: title, cwd: cwd)
       }
 
@@ -51,13 +51,13 @@ extension WorktreeTerminalState {
     )
   }
 
-  func paneTitle(surfaceID: UUID, fallbackTabTitle: String) -> String {
+  func paneTitle(surfaceID: UUID, tabID: TerminalTabID, fallbackTabTitle: String) -> String {
     let rawTitle = surfaces[surfaceID]?.bridge.state.title?.trimmingCharacters(
       in: .whitespacesAndNewlines
     )
 
-    if let rawTitle, !rawTitle.isEmpty {
-      return rawTitle
+    if let rawTitle, let displayTitle = userFacingTitle(from: rawTitle, tabId: tabID) {
+      return displayTitle
     }
 
     return fallbackTabTitle
@@ -104,7 +104,7 @@ extension WorktreeTerminalState {
         fromSurfaceId: paneID,
         context: GHOSTTY_SURFACE_CONTEXT_TAB
       ).workingDirectory?.path(percentEncoded: false)
-      let title = paneTitle(surfaceID: paneID, fallbackTabTitle: "")
+      let title = paneTitle(surfaceID: paneID, tabID: tabId, fallbackTabTitle: "")
       return TargetResolutionSnapshot.Pane(
         id: paneID,
         title: title,

@@ -371,12 +371,15 @@ extension WorktreeTerminalState {
   func configureBridgeCallbacks(for view: GhosttySurfaceView, tabId: TerminalTabID) {
     view.bridge.onTitleChange = { [weak self, weak view] title in
       guard let self, let view else { return }
+      let displayTitle = self.userFacingTitle(from: title, tabId: tabId)
       if self.focusedSurfaceIdByTab[tabId] == view.id {
-        if self.tabManager.updateTitle(tabId, title: title) {
+        if let displayTitle, self.tabManager.updateTitle(tabId, title: displayTitle) {
           self.refreshAgentEntriesForTitleChange(in: tabId)
         }
       }
-      self.noteTitleForCommandDetection(title, surfaceId: view.id, tabId: tabId)
+      if let displayTitle {
+        self.noteTitleForCommandDetection(displayTitle, surfaceId: view.id, tabId: tabId)
+      }
     }
     view.bridge.onSplitAction = { [weak self, weak view] action in
       guard let self, let view else { return false }
@@ -575,7 +578,8 @@ extension WorktreeTerminalState {
       let surface = surfaces[focusedId],
       let title = surface.bridge.state.title
     else { return }
-    if tabManager.updateTitle(tabId, title: title) {
+    guard let displayTitle = userFacingTitle(from: title, tabId: tabId) else { return }
+    if tabManager.updateTitle(tabId, title: displayTitle) {
       refreshAgentEntriesForTitleChange(in: tabId)
     }
   }
