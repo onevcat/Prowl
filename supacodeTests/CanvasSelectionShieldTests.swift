@@ -3,38 +3,35 @@ import Testing
 @testable import supacode
 
 struct CanvasSelectionShieldTests {
-  @Test func commandClickWithoutLinkKeepsSelectionShield() {
-    #expect(
-      shouldShowCanvasSelectionShield(
-        commandKeyPressed: true,
-        isSelecting: false,
-        isBroadcasting: false,
-        isPrimaryTab: true,
-        mouseOverLink: nil
-      )
-    )
-  }
-
-  @Test func commandClickOverLinkBypassesSelectionShieldForPrimaryTab() {
+  @Test func commandClickLeavesSelectionShieldHidden() {
     #expect(
       !shouldShowCanvasSelectionShield(
-        commandKeyPressed: true,
+        selectionModifierPressed: false,
         isSelecting: false,
         isBroadcasting: false,
-        isPrimaryTab: true,
-        mouseOverLink: "https://example.com"
+        isPrimaryTab: true
       )
     )
   }
 
-  @Test func nonPrimaryBroadcastTabStillUsesSelectionShieldOverLink() {
+  @Test func optionClickShowsSelectionShield() {
     #expect(
       shouldShowCanvasSelectionShield(
-        commandKeyPressed: true,
+        selectionModifierPressed: true,
+        isSelecting: false,
+        isBroadcasting: false,
+        isPrimaryTab: true
+      )
+    )
+  }
+
+  @Test func nonPrimaryBroadcastTabStillUsesSelectionShield() {
+    #expect(
+      shouldShowCanvasSelectionShield(
+        selectionModifierPressed: false,
         isSelecting: false,
         isBroadcasting: true,
-        isPrimaryTab: false,
-        mouseOverLink: "https://example.com"
+        isPrimaryTab: false
       )
     )
   }

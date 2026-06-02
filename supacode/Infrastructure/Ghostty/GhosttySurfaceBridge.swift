@@ -409,8 +409,6 @@ final class GhosttySurfaceBridge {
       return true
 
     case GHOSTTY_ACTION_MOUSE_OVER_LINK:
-      let link = action.action.mouse_over_link
-      state.mouseOverLink = string(from: link.url, length: link.len)
       return true
 
     case GHOSTTY_ACTION_RENDERER_HEALTH:
