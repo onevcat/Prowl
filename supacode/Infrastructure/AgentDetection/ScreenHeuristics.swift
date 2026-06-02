@@ -1,10 +1,10 @@
 import Foundation
 
-nonisolated private let agentDetectionRecentLineLimit = 24
+nonisolated let agentDetectionRecentLineLimit = 24
 
 extension DetectedAgent {
   nonisolated func detectState(in screen: String) -> AgentRawState {
-    let screen = recentLines(screen, limit: agentDetectionRecentLineLimit)
+    let screen = agentDetectionRecentText(screen, limit: agentDetectionRecentLineLimit)
     switch self {
     case .pi:
       return detectPi(screen)
@@ -32,7 +32,7 @@ extension DetectedAgent {
   }
 }
 
-nonisolated private func recentLines(_ content: String, limit: Int) -> String {
+nonisolated func agentDetectionRecentText(_ content: String, limit: Int) -> String {
   let lines = content.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
   var remainingNonBlankLines = limit
   var startIndex = lines.startIndex

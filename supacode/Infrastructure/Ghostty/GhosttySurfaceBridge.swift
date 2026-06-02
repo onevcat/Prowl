@@ -59,6 +59,11 @@ final class GhosttySurfaceBridge {
     surfaceView?.readActiveContentsForCLI()
   }
 
+  func readAgentDetectionText() -> String? {
+    // Screen text is anchored to the last written row, while active/viewport can vary with user scrolling.
+    surfaceView?.readScreenContentsForCLI() ?? surfaceView?.readActiveContentsForCLI()
+  }
+
   func childPID() -> pid_t? {
     guard let surface else { return nil }
     let pid = ghostty_surface_pid(surface)

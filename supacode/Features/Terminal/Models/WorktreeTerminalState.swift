@@ -72,7 +72,7 @@ final class WorktreeTerminalState {
   private(set) var surfaceAgentStates: [UUID: PaneAgentState] = [:]
   private var agentDetectionTasks: [UUID: Task<Void, Never>] = [:]
   private var agentDetectionPresenceBySurface: [UUID: AgentDetectionPresence] = [:]
-  private var lastClaudeWorkingAtBySurface: [UUID: Date] = [:]
+  private var lastAgentWorkingAtBySurface: [UUID: Date] = [:]
   private var lastAgentDetectionDiagnosticsBySurface: [UUID: String] = [:]
   private var agentDetectionEnabled = true
   var tabIsRunningById: [TerminalTabID: Bool] = [:]
@@ -1744,25 +1744,26 @@ final class WorktreeTerminalState {
 
     let now = Date()
     let previous = surfaceAgentStates[surfaceID] ?? PaneAgentState(lastChangedAt: now)
-    let activeText = view.bridge.readActiveText() ?? ""
-    // `detectState` is a `nonisolated` pure function that runs in well under a
-    // millisecond on a terminal-sized active screen, so the prior `Task.detached` hop
+    let detectionText = view.bridge.readAgentDetectionText() ?? ""
+    // `detectState` is a `nonisolated` pure function that first trims to the
+    // recent terminal tail, so the prior `Task.detached` hop
     // bought nothing but allocator churn. In long sessions, each detection
     // tick (300 ms or 2 s per surface) was leaving a task stack + closure
     // capture behind that never reached ARC; over a 24 h session this added
     // up to hundreds of MB of unreferenced allocations.
-    let raw = agent.detectState(in: activeText)
+    let raw = agent.detectState(in: detectionText)
     guard surfaces[surfaceID] != nil else { return }
 
-    var lastClaudeWorkingAt = lastClaudeWorkingAtBySurface[surfaceID]
+    var lastAgentWorkingAt = lastAgentWorkingAtBySurface[surfaceID]
     let stabilized = stabilizeAgentState(
       agent: agent,
+      previousAgent: previous.detectedAgent,
       previous: previous.state,
       raw: raw,
       now: now,
-      lastClaudeWorkingAt: &lastClaudeWorkingAt
+      lastWorkingAt: &lastAgentWorkingAt
     )
-    lastClaudeWorkingAtBySurface[surfaceID] = lastClaudeWorkingAt
+    lastAgentWorkingAtBySurface[surfaceID] = lastAgentWorkingAt
 
     let isForeground = isSelected() && isFocusedSurface(surfaceID)
     let becameIdleFromActive =
@@ -1819,7 +1820,7 @@ final class WorktreeTerminalState {
   private func removeAgentEntryIfNeeded(surfaceID: UUID) {
     guard surfaceAgentStates[surfaceID]?.detectedAgent != nil else { return }
     surfaceAgentStates[surfaceID] = PaneAgentState(lastChangedAt: Date())
-    lastClaudeWorkingAtBySurface.removeValue(forKey: surfaceID)
+    lastAgentWorkingAtBySurface.removeValue(forKey: surfaceID)
     onAgentEntryRemoved?(surfaceID)
   }
 
@@ -1864,7 +1865,7 @@ final class WorktreeTerminalState {
     agentDetectionTasks.removeValue(forKey: surfaceId)
     surfaceAgentStates.removeValue(forKey: surfaceId)
     agentDetectionPresenceBySurface.removeValue(forKey: surfaceId)
-    lastClaudeWorkingAtBySurface.removeValue(forKey: surfaceId)
+    lastAgentWorkingAtBySurface.removeValue(forKey: surfaceId)
     lastAgentDetectionDiagnosticsBySurface.removeValue(forKey: surfaceId)
     onAgentEntryRemoved?(surfaceId)
   }
@@ -1877,7 +1878,7 @@ final class WorktreeTerminalState {
     agentDetectionTasks.removeAll()
     surfaceAgentStates.removeAll()
     agentDetectionPresenceBySurface.removeAll()
-    lastClaudeWorkingAtBySurface.removeAll()
+    lastAgentWorkingAtBySurface.removeAll()
     lastAgentDetectionDiagnosticsBySurface.removeAll()
     for id in removedIDs {
       onAgentEntryRemoved?(id)

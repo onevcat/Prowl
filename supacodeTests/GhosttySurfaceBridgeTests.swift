@@ -11,6 +11,12 @@ struct GhosttySurfaceBridgeTests {
     #expect(bridge.readActiveText() == nil)
   }
 
+  @Test func agentDetectionTextReturnsNilWithoutSurfaceView() {
+    let bridge = GhosttySurfaceBridge()
+
+    #expect(bridge.readAgentDetectionText() == nil)
+  }
+
   @Test func desktopNotificationEmitsCallback() {
     let bridge = GhosttySurfaceBridge()
     var received: (String, String)?

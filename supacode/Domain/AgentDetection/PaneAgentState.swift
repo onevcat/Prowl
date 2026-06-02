@@ -67,31 +67,35 @@ struct AgentDetectionPresence: Equatable, Sendable {
   }
 }
 
-private let claudeWorkingHold: TimeInterval = 1.2
+private let agentWorkingHold: TimeInterval = 1.2
 
 func stabilizeAgentState(
   agent: DetectedAgent?,
+  previousAgent: DetectedAgent? = nil,
   previous: AgentRawState,
   raw: AgentRawState,
   now: Date,
-  lastClaudeWorkingAt: inout Date?
+  lastWorkingAt: inout Date?
 ) -> AgentRawState {
-  guard agent == .claude else {
-    lastClaudeWorkingAt = nil
+  guard let agent else {
+    lastWorkingAt = nil
     return raw
+  }
+  if let previousAgent, previousAgent != agent {
+    lastWorkingAt = nil
   }
 
   switch raw {
   case .working:
-    lastClaudeWorkingAt = now
+    lastWorkingAt = now
     return .working
   case .blocked:
     return .blocked
   case .idle where previous == .working:
-    guard let lastClaudeWorkingAt else {
+    guard let lastWorkingAt else {
       return .idle
     }
-    return now.timeIntervalSince(lastClaudeWorkingAt) < claudeWorkingHold ? .working : .idle
+    return now.timeIntervalSince(lastWorkingAt) < agentWorkingHold ? .working : .idle
   case .idle, .unknown:
     return raw
   }

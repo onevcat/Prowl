@@ -27,7 +27,7 @@ struct PaneAgentStateTests {
       previous: .idle,
       raw: .working,
       now: now,
-      lastClaudeWorkingAt: &lastWorking
+      lastWorkingAt: &lastWorking
     )
     #expect(working == .working)
 
@@ -36,7 +36,7 @@ struct PaneAgentStateTests {
       previous: .working,
       raw: .idle,
       now: now.addingTimeInterval(0.4),
-      lastClaudeWorkingAt: &lastWorking
+      lastWorkingAt: &lastWorking
     )
     #expect(stillWorking == .working)
   }
@@ -50,13 +50,29 @@ struct PaneAgentStateTests {
       previous: .working,
       raw: .idle,
       now: now.addingTimeInterval(1.201),
-      lastClaudeWorkingAt: &lastWorking
+      lastWorkingAt: &lastWorking
     )
 
     #expect(idle == .idle)
   }
 
-  @Test func nonClaudeDoesNotUseStickyWindow() {
+  @Test func codexWorkingIsStickyForShortIdleGap() {
+    let now = Date(timeIntervalSince1970: 100)
+    var lastWorking: Date? = now
+
+    let working = stabilizeAgentState(
+      agent: .codex,
+      previous: .working,
+      raw: .idle,
+      now: now.addingTimeInterval(0.4),
+      lastWorkingAt: &lastWorking
+    )
+
+    #expect(working == .working)
+    #expect(lastWorking == now)
+  }
+
+  @Test func codexTransitionsToIdleAfterStickyWindow() {
     let now = Date(timeIntervalSince1970: 100)
     var lastWorking: Date? = now
 
@@ -64,8 +80,24 @@ struct PaneAgentStateTests {
       agent: .codex,
       previous: .working,
       raw: .idle,
-      now: now,
-      lastClaudeWorkingAt: &lastWorking
+      now: now.addingTimeInterval(1.201),
+      lastWorkingAt: &lastWorking
+    )
+
+    #expect(idle == .idle)
+  }
+
+  @Test func stickyWindowResetsWhenAgentChanges() {
+    let now = Date(timeIntervalSince1970: 100)
+    var lastWorking: Date? = now
+
+    let idle = stabilizeAgentState(
+      agent: .codex,
+      previousAgent: .claude,
+      previous: .working,
+      raw: .idle,
+      now: now.addingTimeInterval(0.4),
+      lastWorkingAt: &lastWorking
     )
 
     #expect(idle == .idle)

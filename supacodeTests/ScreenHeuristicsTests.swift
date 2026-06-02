@@ -183,6 +183,14 @@ struct ScreenHeuristicsTests {
     #expect(DetectedAgent.codex.detectState(in: "Ready for input") == .idle)
   }
 
+  @Test func codexDetectionUsesRecentScreenTailWhenScrollbackIsLong() {
+    let screen = ((1...80).map { "historical output \($0)" } + ["• Working (12s)", "esc to interrupt"])
+      .joined(separator: "\n")
+
+    #expect(agentDetectionRecentText(screen, limit: 2) == "• Working (12s)\nesc to interrupt")
+    #expect(DetectedAgent.codex.detectState(in: screen) == .working)
+  }
+
   @Test func geminiDetection() {
     #expect(DetectedAgent.gemini.detectState(in: "│ Apply this change") == .blocked)
     #expect(DetectedAgent.gemini.detectState(in: "esc to cancel") == .working)
