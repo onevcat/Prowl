@@ -771,7 +771,8 @@ struct WorktreeTerminalManagerTests {
     )
 
     let enabledTabID = try #require(await manager.createTabForTesting(in: enabledWorktree, runSetupScriptIfNew: false))
-    let disabledTabID = try #require(await manager.createTabForTesting(in: disabledWorktree, runSetupScriptIfNew: false))
+    let disabledTabID = try #require(
+      await manager.createTabForTesting(in: disabledWorktree, runSetupScriptIfNew: false))
 
     let enabledState = try #require(manager.stateIfExists(for: enabledWorktree.id))
     let disabledState = try #require(manager.stateIfExists(for: disabledWorktree.id))
@@ -1573,6 +1574,103 @@ struct WorktreeTerminalManagerTests {
     #expect(detachedSnapshot.candidates.isEmpty)
   }
 
+  @Test func restoreLayoutSnapshotRecreatesMissingSnapshotTmuxTarget() async throws {
+    let tabUUID = UUID(uuidString: "3FB907DA-5F9D-4DD7-9302-0418DEEBBDA7")!
+    let temporaryRoot = FileManager.default.temporaryDirectory
+      .appending(path: "prowl-restore-\(UUID().uuidString)", directoryHint: .isDirectory)
+    let repositoryRoot = temporaryRoot.appending(path: "repo", directoryHint: .isDirectory)
+    let worktreeDirectory = repositoryRoot.appending(path: "wt", directoryHint: .isDirectory)
+    let snapshotDirectory = worktreeDirectory.appending(path: "subdir", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: snapshotDirectory, withIntermediateDirectories: true)
+    let worktree = makeWorktree(
+      id: worktreeDirectory.path(percentEncoded: false),
+      name: "wt",
+      repositoryRootURL: repositoryRoot
+    )
+    let snapshotCwd = snapshotDirectory.path(percentEncoded: false)
+    let normalizedSnapshotCwd = normalizedTestPath(snapshotCwd)
+    let repositoryRootPath = repositoryRoot.path(percentEncoded: false)
+    let normalizedRepositoryRootPath = normalizedTestPath(repositoryRootPath)
+    let recordedArguments = LockIsolated<[[String]]>([])
+    let snapshot = TerminalLayoutSnapshotPayload(
+      selectedWorktreeID: worktree.id,
+      worktrees: [
+        TerminalLayoutSnapshotPayload.SnapshotWorktree(
+          worktreeID: worktree.id,
+          selectedTabID: tabUUID.uuidString,
+          tabs: [
+            TerminalLayoutSnapshotPayload.SnapshotTab(
+              tabID: tabUUID.uuidString,
+              title: "restored tab",
+              icon: nil,
+              splitRoot: .leaf(surfaceID: UUID().uuidString, cwdPath: snapshotCwd),
+              tmuxTarget: TerminalLayoutSnapshotPayload.SnapshotTmuxTarget(
+                socketPath: "/tmp/prowl-tmux/prowl.sock",
+                groupSession: "prowl-cards",
+                clientSession: "prowl-tab-3FB907DA5F9D",
+                windowID: "@26",
+                paneID: "%26"
+              )
+            )
+          ]
+        )
+      ]
+    )
+    let controller = TmuxTerminalController(
+      executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
+      execute: { _, arguments in
+        recordedArguments.withValue { $0.append(arguments) }
+        if arguments.contains("display-message") {
+          return TmuxCommandResult(stdout: "", stderr: "no server running", exitCode: 1)
+        }
+        if arguments.contains("list-sessions") {
+          return TmuxCommandResult(stdout: "", stderr: "no server running", exitCode: 1)
+        }
+        if arguments.contains("new-window") {
+          return TmuxCommandResult(stdout: "@41 %42\n", stderr: "", exitCode: 0)
+        }
+        return TmuxCommandResult(stdout: "", stderr: "", exitCode: 0)
+      }
+    )
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      tmuxController: controller,
+      usesAnonymousTmux: true,
+      layoutPersistence: TerminalLayoutPersistenceClient(
+        loadSnapshot: { snapshot },
+        saveSnapshot: { _ in true },
+        clearSnapshot: { true }
+      )
+    )
+    let stream = manager.eventStream()
+
+    await manager.restoreLayoutSnapshot(from: [worktree])
+
+    let event = await nextEvent(stream) { $0 == .layoutRestored(selectedWorktreeID: worktree.id) }
+    let state = try #require(manager.stateIfExists(for: worktree.id))
+    let tabID = TerminalTabID(rawValue: tabUUID)
+    let target = try #require(state.tmuxTargetForTesting(tabID))
+    let surface = try #require(state.surfaceView(for: tabID))
+    let newWindowArguments = try #require(recordedArguments.value.first { $0.contains("new-window") })
+    let metadataArguments = recordedArguments.value.filter { $0.contains("set-window-option") }
+    let metadataByOption = Dictionary(
+      uniqueKeysWithValues: metadataArguments.compactMap { arguments -> (String, String)? in
+        guard arguments.count >= 2 else { return nil }
+        return (arguments[arguments.count - 2], arguments[arguments.count - 1])
+      }
+    )
+
+    #expect(event == .layoutRestored(selectedWorktreeID: worktree.id))
+    #expect(target.windowID?.rawValue == "@41")
+    #expect(target.paneID?.rawValue == "%42")
+    #expect(surface.launchCommandForTesting?.contains("attach-session") == true)
+    #expect(newWindowArguments.contains("-c"))
+    #expect(newWindowArguments.contains(normalizedSnapshotCwd))
+    #expect(metadataArguments.contains { $0.contains("@prowl.worktree_id") && $0.contains(worktree.id) })
+    #expect(metadataByOption["@prowl.worktree_path"].map(normalizedTestPath) == normalizedSnapshotCwd)
+    #expect(metadataByOption["@prowl.repository_root"].map(normalizedTestPath) == normalizedRepositoryRootPath)
+  }
+
   @Test func restoreLayoutSnapshotUsesCardIDWhenMultipleTmuxCardsMatchWorktree() async throws {
     let separator = "\u{1F}"
     let tabUUID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
@@ -1767,6 +1865,10 @@ struct WorktreeTerminalManagerTests {
     )
   }
 
+  private func normalizedTestPath(_ path: String) -> String {
+    path.hasSuffix("/") ? String(path.dropLast()) : path
+  }
+
   private func nextEvent(
     _ stream: AsyncStream<TerminalClient.Event>,
     matching predicate: (TerminalClient.Event) -> Bool
@@ -1807,12 +1909,14 @@ struct WorktreeTerminalManagerTests {
       }
       await Task.yield()
     }
-    Issue.record("Timed out waiting for terminal state", sourceLocation: SourceLocation(
-      fileID: fileID,
-      filePath: filePath,
-      line: line,
-      column: column
-    ))
+    Issue.record(
+      "Timed out waiting for terminal state",
+      sourceLocation: SourceLocation(
+        fileID: fileID,
+        filePath: filePath,
+        line: line,
+        column: column
+      ))
     throw WaitForTestError.timedOut
   }
 
@@ -1831,12 +1935,14 @@ struct WorktreeTerminalManagerTests {
       }
       await Task.yield()
     }
-    Issue.record("Timed out waiting for \(count) tab(s)", sourceLocation: SourceLocation(
-      fileID: fileID,
-      filePath: filePath,
-      line: line,
-      column: column
-    ))
+    Issue.record(
+      "Timed out waiting for \(count) tab(s)",
+      sourceLocation: SourceLocation(
+        fileID: fileID,
+        filePath: filePath,
+        line: line,
+        column: column
+      ))
     throw WaitForTestError.timedOut
   }
 
@@ -1856,12 +1962,14 @@ struct WorktreeTerminalManagerTests {
       }
       await Task.yield()
     }
-    Issue.record("Timed out waiting for tmux-backed tab", sourceLocation: SourceLocation(
-      fileID: fileID,
-      filePath: filePath,
-      line: line,
-      column: column
-    ))
+    Issue.record(
+      "Timed out waiting for tmux-backed tab",
+      sourceLocation: SourceLocation(
+        fileID: fileID,
+        filePath: filePath,
+        line: line,
+        column: column
+      ))
     throw WaitForTestError.timedOut
   }
 
@@ -1879,12 +1987,14 @@ struct WorktreeTerminalManagerTests {
       }
       await Task.yield()
     }
-    Issue.record("Timed out waiting for tmux new-window attempt", sourceLocation: SourceLocation(
-      fileID: fileID,
-      filePath: filePath,
-      line: line,
-      column: column
-    ))
+    Issue.record(
+      "Timed out waiting for tmux new-window attempt",
+      sourceLocation: SourceLocation(
+        fileID: fileID,
+        filePath: filePath,
+        line: line,
+        column: column
+      ))
     throw WaitForTestError.timedOut
   }
 

@@ -173,8 +173,8 @@ extension WorktreeTerminalState {
         "[LayoutRestore] applySnapshot: restoring tab[\(index)] id=\(entry.snapshotTab.tabID)"
       )
       let restoredTmuxTarget =
-        makeRestorableTmuxTerminalTarget(for: entry.snapshotTab)
-        ?? recoveredTmuxTargets[entry.tabID]
+        recoveredTmuxTargets[entry.tabID]
+        ?? makeRestorableTmuxTerminalTarget(for: entry.snapshotTab)
       guard
         let rootNode = restoreSplitNode(
           from: entry.snapshotTab.splitRoot,

@@ -1018,10 +1018,12 @@ final class WorktreeTerminalManager {
       }
       terminalLogger.info("[LayoutRestore] apply: restoring worktree \(worktree.id)")
       let state = state(for: worktree)
-      guard state.applyLayoutSnapshot(
-        snapshot,
-        recoveredTmuxTargets: recoveredTmuxTargetsByWorktree[worktree.id] ?? [:]
-      ) else {
+      guard
+        state.applyLayoutSnapshot(
+          snapshot,
+          recoveredTmuxTargets: recoveredTmuxTargetsByWorktree[worktree.id] ?? [:]
+        )
+      else {
         terminalLogger.warning("[LayoutRestore] apply: applyLayoutSnapshot failed for \(worktree.id)")
         state.closeAllSurfaces()
         for restored in restoredStates {
@@ -1044,12 +1046,23 @@ final class WorktreeTerminalManager {
       return [:]
     }
 
-    let tmuxSnapshot = await detachedTmuxCardSnapshot()
-    guard !tmuxSnapshot.candidates.isEmpty else { return [:] }
-
     let worktreeByID = Dictionary(uniqueKeysWithValues: availableWorktrees.map { ($0.id, $0) })
     var consumedCandidateIDs: Set<TmuxDetachedCardCandidate.ID> = []
     var targetsByWorktree: [Worktree.ID: [TerminalTabID: TmuxTerminalTarget]] = [:]
+
+    for snapshot in payload.worktrees {
+      guard let worktree = worktreeByID[snapshot.worktreeID] else { continue }
+      guard usesAnonymousTmuxEnabled(for: worktree) else { continue }
+      await prepareSnapshotTmuxTargets(
+        snapshot,
+        worktree: worktree,
+        socketURL: socketURL,
+        targetsByWorktree: &targetsByWorktree
+      )
+    }
+
+    let tmuxSnapshot = await detachedTmuxCardSnapshot()
+    guard !tmuxSnapshot.candidates.isEmpty else { return targetsByWorktree }
 
     for snapshot in payload.worktrees {
       guard let worktree = worktreeByID[snapshot.worktreeID] else { continue }
@@ -1104,6 +1117,124 @@ final class WorktreeTerminalManager {
     }
 
     return targetsByWorktree
+  }
+
+  private func prepareSnapshotTmuxTargets(
+    _ snapshot: TerminalLayoutSnapshotPayload.SnapshotWorktree,
+    worktree: Worktree,
+    socketURL: URL,
+    targetsByWorktree: inout [Worktree.ID: [TerminalTabID: TmuxTerminalTarget]]
+  ) async {
+    guard let tmuxController else { return }
+
+    for snapshotTab in snapshot.tabs {
+      guard snapshotTab.tmuxTarget != nil, snapshotTab.splitRoot.kind == .leaf else { continue }
+      guard let tabUUID = UUID(uuidString: snapshotTab.tabID) else { continue }
+      let tabID = TerminalTabID(rawValue: tabUUID)
+      guard targetsByWorktree[worktree.id]?[tabID] == nil else { continue }
+      guard let target = makeSnapshotTmuxTarget(for: snapshotTab, tabID: tabID) else { continue }
+
+      do {
+        let prepared = try await tmuxController.prepareExistingWindowForAttach(target: target)
+        targetsByWorktree[worktree.id, default: [:]][tabID] = prepared
+        continue
+      } catch {
+        terminalLogger.warning(
+          "[LayoutRestore] tmux snapshot target missing: worktree=\(worktree.id) tab=\(snapshotTab.tabID) "
+            + "error=\(error)"
+        )
+      }
+
+      do {
+        let replacement = try await recreateSnapshotTmuxTarget(
+          for: snapshotTab,
+          tabID: tabID,
+          worktree: worktree,
+          socketURL: socketURL
+        )
+        targetsByWorktree[worktree.id, default: [:]][tabID] = replacement
+        terminalLogger.info(
+          "[LayoutRestore] tmux snapshot target recreated: worktree=\(worktree.id) tab=\(snapshotTab.tabID) "
+            + "window=\(replacement.windowID?.rawValue ?? "nil")"
+        )
+      } catch {
+        terminalLogger.warning(
+          "[LayoutRestore] tmux snapshot target recreation failed: worktree=\(worktree.id) "
+            + "tab=\(snapshotTab.tabID) error=\(error)"
+        )
+      }
+    }
+  }
+
+  private func makeSnapshotTmuxTarget(
+    for snapshotTab: TerminalLayoutSnapshotPayload.SnapshotTab,
+    tabID: TerminalTabID
+  ) -> TmuxTerminalTarget? {
+    guard let snapshotTarget = snapshotTab.tmuxTarget else { return nil }
+    guard
+      let windowID = TmuxWindowID(rawValue: snapshotTarget.windowID),
+      let paneID = TmuxPaneID(rawValue: snapshotTarget.paneID)
+    else {
+      return nil
+    }
+
+    return TmuxTerminalTarget.restored(
+      socketURL: URL(fileURLWithPath: snapshotTarget.socketPath, isDirectory: false),
+      tabID: tabID,
+      cardID: TmuxCardID(rawValue: tabID.rawValue.uuidString),
+      windowID: windowID,
+      paneID: paneID
+    )
+  }
+
+  private func recreateSnapshotTmuxTarget(
+    for snapshotTab: TerminalLayoutSnapshotPayload.SnapshotTab,
+    tabID: TerminalTabID,
+    worktree: Worktree,
+    socketURL: URL
+  ) async throws -> TmuxTerminalTarget {
+    guard let tmuxController else {
+      throw TmuxTerminalControllerError.tmuxUnavailable
+    }
+
+    let workingDirectory = snapshotWorkingDirectory(for: snapshotTab, worktree: worktree)
+    let socketRoot = socketURL.deletingLastPathComponent()
+    try FileManager.default.createDirectory(at: socketRoot, withIntermediateDirectories: true)
+
+    var target = TmuxTerminalTarget.make(
+      appNamespace: TmuxTerminalTarget.appNamespace,
+      worktreeID: worktree.id,
+      tabID: tabID,
+      cardID: TmuxCardID(rawValue: tabID.rawValue.uuidString),
+      socketRoot: socketRoot
+    )
+    let metadata = TmuxWindowMetadata(
+      cardID: target.cardID,
+      worktreeID: worktree.id,
+      worktreePath: workingDirectory.path(percentEncoded: false),
+      repositoryRoot: worktree.repositoryRootURL.path(percentEncoded: false),
+      createdAt: ISO8601DateFormatter().string(from: Date())
+    )
+    let title = snapshotTab.customTitle ?? snapshotTab.title ?? worktree.name
+
+    try await tmuxController.ensureGroup(target: target, cwd: workingDirectory)
+    target = try await tmuxController.createWindow(
+      target: target,
+      cwd: workingDirectory,
+      title: title,
+      metadata: metadata
+    )
+    return target
+  }
+
+  private func snapshotWorkingDirectory(
+    for snapshotTab: TerminalLayoutSnapshotPayload.SnapshotTab,
+    worktree: Worktree
+  ) -> URL {
+    WorktreeTerminalState.resolveSnapshotWorkingDirectory(
+      from: snapshotTab.splitRoot.cwdPath,
+      worktreeRoot: worktree.workingDirectory
+    ) ?? worktree.workingDirectory
   }
 
   private func recoveredCandidate(
