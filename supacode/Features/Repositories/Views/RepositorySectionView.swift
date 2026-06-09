@@ -54,7 +54,7 @@ struct RepositorySectionView: View {
           repositoryRootURL: repository.rootURL,
           nameTooltip: repository.capabilities.supportsWorktrees
             ? (isExpanded ? "Collapse" : "Expand")
-            : "Open terminal in folder"
+            : (repository.isWorkspace ? "Open terminal in workspace" : "Open terminal in folder")
         )
         RepoHeaderTabCountBadge(
           repository: repository,

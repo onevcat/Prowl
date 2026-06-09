@@ -86,7 +86,7 @@ enum ListRuntimeSnapshotBuilder {
               name: worktree.name,
               path: worktree.workingDirectory.path(percentEncoded: false),
               rootPath: worktree.repositoryRootURL.path(percentEncoded: false),
-              kind: repository.kind == .git ? ListCommandWorktree.Kind.git : .plain
+              kind: listCommandKind(for: repository)
             )
           )
         }
@@ -101,7 +101,7 @@ enum ListRuntimeSnapshotBuilder {
             name: repository.name,
             path: rootPath,
             rootPath: rootPath,
-            kind: repository.kind == .git ? ListCommandWorktree.Kind.git : .plain
+            kind: listCommandKind(for: repository)
           )
         )
       }
@@ -113,5 +113,12 @@ enum ListRuntimeSnapshotBuilder {
   private static func normalizeAbsolutePath(_ value: String?) -> String? {
     guard let value else { return nil }
     return value.hasPrefix("/") ? value : nil
+  }
+
+  private static func listCommandKind(for repository: Repository) -> ListCommandWorktree.Kind {
+    if repository.isWorkspace {
+      return .workspace
+    }
+    return repository.kind == .git ? .git : .plain
   }
 }

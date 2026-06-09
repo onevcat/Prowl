@@ -507,6 +507,71 @@ struct RepositoriesFeatureTests {
     await store.finish()
   }
 
+  @Test func loadPersistedRepositoriesLoadsWorkspaceMetadataAsPlainRepository() async throws {
+    let rootURL = FileManager.default.temporaryDirectory
+      .appending(path: "prowl-workspace-\(UUID().uuidString)")
+      .standardizedFileURL
+    defer { try? FileManager.default.removeItem(at: rootURL) }
+
+    try FileManager.default.createDirectory(
+      at: rootURL.appending(path: ProjectWorkspace.metadataDirectoryName),
+      withIntermediateDirectories: true
+    )
+    try Data(
+      """
+      {
+        "title": "Multi Repo Workspace",
+        "repositories": [
+          {
+            "name": "App",
+            "role": "client",
+            "path": "app",
+            "source_kind": "existing_path"
+          }
+        ]
+      }
+      """.utf8
+    )
+    .write(to: ProjectWorkspace.metadataURL(for: rootURL))
+
+    let rootPath = rootURL.path(percentEncoded: false)
+    let workspace = try #require(ProjectWorkspace.load(from: rootURL))
+    let repository = makeRepository(
+      id: rootPath,
+      name: "Multi Repo Workspace",
+      kind: .plain,
+      worktrees: [],
+      workspace: workspace
+    )
+
+    let store = TestStore(initialState: RepositoriesFeature.State()) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.loadRepositoryEntries = {
+        [PersistedRepositoryEntry(path: rootPath, kind: .plain)]
+      }
+      $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
+      $0.gitClient.repoRoot = { url in
+        Issue.record("workspace should load as plain without git probing: \(url.path(percentEncoded: false))")
+        return url
+      }
+      $0.gitClient.worktrees = { url in
+        Issue.record("workspace should not load git worktrees: \(url.path(percentEncoded: false))")
+        return []
+      }
+    }
+
+    await store.send(.loadPersistedRepositories)
+    await store.receive(\.repositoriesLoaded) {
+      $0.repositories = [repository]
+      $0.repositoryRoots = [rootURL]
+      $0.isInitialLoadComplete = true
+      $0.snapshotPersistencePhase = .active
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
+  }
+
   @Test func loadPersistedRepositoriesAutoUpgradesPlainFolderWhenItBecomesGitRoot() async {
     let root = "/tmp/folder"
     let worktree = makeWorktree(id: root, name: "folder", repoRoot: root)
@@ -5301,14 +5366,16 @@ struct RepositoriesFeatureTests {
     id: String,
     name: String = "repo",
     kind: Repository.Kind = .git,
-    worktrees: [Worktree]
+    worktrees: [Worktree],
+    workspace: ProjectWorkspace? = nil
   ) -> Repository {
     Repository(
       id: id,
       rootURL: URL(fileURLWithPath: id),
       name: name,
       kind: kind,
-      worktrees: IdentifiedArray(uniqueElements: worktrees)
+      worktrees: IdentifiedArray(uniqueElements: worktrees),
+      workspace: workspace
     )
   }
 

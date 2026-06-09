@@ -4,13 +4,14 @@ struct DetailToolbarTitle: Equatable {
   enum Kind: Equatable {
     case branch(name: String)
     case folder(name: String)
+    case workspace(name: String)
   }
 
   let kind: Kind
 
   var text: String {
     switch kind {
-    case .branch(let name), .folder(let name):
+    case .branch(let name), .folder(let name), .workspace(let name):
       return name
     }
   }
@@ -19,6 +20,8 @@ struct DetailToolbarTitle: Equatable {
     switch kind {
     case .branch:
       return "arrow.trianglehead.branch"
+    case .workspace:
+      return "folder.badge.person.crop"
     case .folder:
       return "folder"
     }
@@ -40,6 +43,9 @@ struct DetailToolbarTitle: Equatable {
     }
     guard let repository, repository.kind == .plain else {
       return nil
+    }
+    if repository.isWorkspace {
+      return DetailToolbarTitle(kind: .workspace(name: repository.name))
     }
     return DetailToolbarTitle(kind: .folder(name: repository.name))
   }

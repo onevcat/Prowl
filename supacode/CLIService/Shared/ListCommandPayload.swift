@@ -33,6 +33,7 @@ public struct ListCommandWorktree: Codable, Equatable {
   public enum Kind: String, Codable, Equatable {
     case git
     case plain
+    case workspace
   }
 
   public let id: String

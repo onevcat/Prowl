@@ -10,16 +10,21 @@
 Prowl nests four levels. Everything in the app refers back to these.
 
 ```
-Repository            a git repo (or a plain folder) you've added to Prowl
+Repository            a git repo, workspace, or plain folder added to Prowl
 └─ Worktree           a git worktree = one branch checked out in its own directory
    └─ Tab             a terminal tab inside that worktree
       └─ Pane         one terminal surface; a tab can be split into several panes
 ```
 
-- **Repository** — a project you added to the sidebar. Two kinds:
+- **Repository** — a project you added to the sidebar. Two persisted kinds, plus
+  a workspace overlay:
   - **`git`** — a real git repository; supports worktrees, branches, diff, PRs.
   - **`plain`** — a non-git folder; you can open a terminal and run scripts in it,
     but there are no worktrees, branches, diff, or PR features.
+  - **Workspace** — a plain runnable folder with `.prowl/workspace.json`
+    metadata. One agent starts in the workspace root and can work across several
+    repositories listed in that file. The `prowl` CLI reports this runnable
+    target's `worktree.kind` as `workspace`.
 - **Worktree** — a git *worktree*: a branch checked out into its own working
   directory, so several branches are live on disk at once. This is the unit you
   hand to an agent. The repository's root directory is the **main worktree**
@@ -73,6 +78,7 @@ all agents and their statuses is the
 - **Global settings:** `~/.prowl/settings.json`
 - **Per-repository settings:** `~/.prowl/repo/<repo-name>/prowl.json`
 - **Per-repository user custom commands:** `~/.prowl/repo/<repo-name>/prowl.onevcat.json`
+- **Per-workspace metadata:** `<workspace>/.prowl/workspace.json`
 - **CLI socket:** `~/Library/Application Support/com.onevcat.prowl/cli.sock`
   (overridable with `PROWL_CLI_SOCKET`)
 - Legacy `~/.supacode` is migrated to `~/.prowl` on first launch. (Prowl is a fork
@@ -94,6 +100,8 @@ tabs, worktrees, views — are Prowl's. See
 
 - **Worktree** — a git branch checked out in its own directory; the unit you give
   an agent.
+- **Workspace** — a folder whose terminal root contains several repositories for
+  one agent to handle together, described by `.prowl/workspace.json`.
 - **Book / spine** — Shelf-view name for a worktree shown as a vertical strip.
 - **Card** — Canvas-view name for one terminal tab shown as a floating tile.
 - **Broadcast** — typing into one Canvas card and mirroring it to all selected

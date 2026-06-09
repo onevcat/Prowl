@@ -42,4 +42,24 @@ struct DetailToolbarTitleTests {
     #expect(title?.systemImage == "folder")
     #expect(title?.supportsRename == false)
   }
+
+  @Test func workspaceSelectionUsesWorkspaceTitle() {
+    let repository = Repository(
+      id: "/tmp/workspace",
+      rootURL: URL(fileURLWithPath: "/tmp/workspace"),
+      name: "workspace",
+      kind: .plain,
+      worktrees: [],
+      workspace: ProjectWorkspace(title: "workspace")
+    )
+
+    let title = DetailToolbarTitle.forSelection(
+      worktree: nil,
+      repository: repository
+    )
+
+    #expect(title?.kind == .workspace(name: "workspace"))
+    #expect(title?.systemImage == "folder.badge.person.crop")
+    #expect(title?.supportsRename == false)
+  }
 }

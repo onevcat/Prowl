@@ -64,6 +64,9 @@ extension RepositoriesFeature {
           let normalizedPath = URL(fileURLWithPath: entry.path)
             .standardizedFileURL
             .path(percentEncoded: false)
+          if ProjectWorkspace.load(from: URL(fileURLWithPath: normalizedPath)) != nil {
+            return (index, PersistedRepositoryEntry(path: normalizedPath, kind: .plain))
+          }
           do {
             let repoRoot = try await gitClient.repoRoot(URL(fileURLWithPath: normalizedPath))
             let normalizedRepoRoot = repoRoot.standardizedFileURL.path(percentEncoded: false)
@@ -183,14 +186,16 @@ extension RepositoriesFeature {
               )
             }
           case .plain:
+            let workspace = ProjectWorkspace.load(from: rootURL)
             return WorktreesFetchResult(
               entry: entry,
               repository: Repository(
                 id: rootURL.path(percentEncoded: false),
                 rootURL: rootURL,
-                name: Repository.name(for: rootURL),
+                name: workspace?.title ?? Repository.name(for: rootURL),
                 kind: .plain,
-                worktrees: IdentifiedArray()
+                worktrees: IdentifiedArray(),
+                workspace: workspace
               ),
               errorMessage: nil
             )

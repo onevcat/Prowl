@@ -66,7 +66,7 @@ Snapshot of all worktrees → tabs → panes. No selectors.
 prowl list --json
 ```
 Each item contains:
-- `worktree`: `id`, `name`, `path`, `root_path`, `kind` (`git`|`plain`)
+- `worktree`: `id`, `name`, `path`, `root_path`, `kind` (`git`|`plain`|`workspace`)
 - `tab`: `id`, `title`, `selected`
 - `pane`: `id`, `title`, `cwd`, `focused`
 - `task`: `status` (`running` | `idle` | null)

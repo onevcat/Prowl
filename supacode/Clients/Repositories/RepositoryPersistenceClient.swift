@@ -270,12 +270,14 @@ extension RepositorySnapshotCachePayload {
     let name: String
     let kind: Repository.Kind
     let worktrees: [SnapshotWorktree]
+    let workspace: ProjectWorkspace?
 
     init(repository: Repository) {
       rootPath = repository.rootURL.path(percentEncoded: false)
       name = repository.name
       kind = repository.kind
       worktrees = repository.worktrees.map { SnapshotWorktree(worktree: $0) }
+      workspace = repository.workspace
     }
 
     func restore(
@@ -310,7 +312,8 @@ extension RepositorySnapshotCachePayload {
         rootURL: rootURL,
         name: repositoryName.isEmpty ? Repository.name(for: rootURL) : repositoryName,
         kind: kind,
-        worktrees: IdentifiedArray(restoredWorktrees, uniquingIDsWith: { current, _ in current })
+        worktrees: IdentifiedArray(restoredWorktrees, uniquingIDsWith: { current, _ in current }),
+        workspace: workspace?.normalized(relativeTo: rootURL)
       )
     }
   }

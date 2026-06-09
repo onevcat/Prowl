@@ -205,6 +205,9 @@ nonisolated enum RepositoryEntryNormalizer {
 
     return order.compactMap { path in
       guard let kind = kindByPath[path] else { return nil }
+      if ProjectWorkspace.load(from: URL(fileURLWithPath: path)) != nil {
+        return PersistedRepositoryEntry(path: path, kind: .plain)
+      }
       return PersistedRepositoryEntry(path: path, kind: kind)
     }
   }

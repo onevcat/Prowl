@@ -17,6 +17,16 @@ extension RepositoriesFeature {
         var invalidRoots: [String] = []
         var openFailures: [String] = []
         for url in urls {
+          let normalizedURL = url.standardizedFileURL
+          if ProjectWorkspace.load(from: normalizedURL) != nil {
+            resolvedEntries.append(
+              PersistedRepositoryEntry(
+                path: normalizedURL.path(percentEncoded: false),
+                kind: .plain
+              )
+            )
+            continue
+          }
           do {
             let root = try await gitClient.repoRoot(url)
             resolvedEntries.append(

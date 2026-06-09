@@ -7,6 +7,14 @@ struct RepositoryDetailView: View {
   var customTitle: String?
 
   var body: some View {
+    if let workspace = repository.workspace {
+      WorkspaceDetailView(repository: repository, workspace: workspace)
+    } else {
+      repositoryDetail
+    }
+  }
+
+  private var repositoryDetail: some View {
     VStack(spacing: 12) {
       Image(systemName: repository.kind == .git ? "folder.badge.gearshape" : "folder")
         .font(.largeTitle)
