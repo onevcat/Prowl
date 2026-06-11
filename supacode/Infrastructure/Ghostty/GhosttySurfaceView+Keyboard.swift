@@ -212,10 +212,34 @@ extension GhosttySurfaceView {
   }
 
   func shouldPreferMenuHandling(for event: NSEvent) -> Bool {
-    if UserCustomShortcutRegistry.shared.matches(event: event) {
+    Self.shouldPreferMenuHandling(
+      for: event,
+      isRegisteredAppActionShortcut: UserCustomShortcutRegistry.shared.matches(event: event),
+      isCanvasActive: CanvasDirectionalNewTerminalChordCoordinator.shared.isCanvasActive
+    )
+  }
+
+  internal static func shouldPreferMenuHandling(
+    for event: NSEvent,
+    registeredAppActionKeybindings: [Keybinding],
+    isCanvasActive: Bool
+  ) -> Bool {
+    shouldPreferMenuHandling(
+      for: event,
+      isRegisteredAppActionShortcut: registeredAppActionKeybindings.contains { $0.matches(event: event) },
+      isCanvasActive: isCanvasActive
+    )
+  }
+
+  private static func shouldPreferMenuHandling(
+    for event: NSEvent,
+    isRegisteredAppActionShortcut: Bool,
+    isCanvasActive: Bool
+  ) -> Bool {
+    if isRegisteredAppActionShortcut {
       return true
     }
-    if CanvasDirectionalNewTerminalChordCoordinator.shared.isCanvasActive,
+    if isCanvasActive,
       CanvasView.isDirectionalNewTerminalLeaderShortcut(
         keyCode: event.keyCode,
         charactersIgnoringModifiers: event.charactersIgnoringModifiers,
@@ -224,11 +248,7 @@ extension GhosttySurfaceView {
     {
       return true
     }
-    return matchesCanvasNavigationShortcut(event)
-  }
-
-  func matchesCanvasNavigationShortcut(_ event: NSEvent) -> Bool {
-    Self.isOptionCanvasNavigationShortcut(
+    return isOptionCanvasNavigationShortcut(
       keyCode: event.keyCode,
       charactersIgnoringModifiers: event.charactersIgnoringModifiers,
       modifierFlags: event.modifierFlags

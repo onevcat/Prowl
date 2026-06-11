@@ -5,7 +5,6 @@ struct SidebarCommands: Commands {
   @Bindable var store: StoreOf<AppFeature>
   @FocusedValue(\.toggleLeftSidebarAction) private var toggleLeftSidebarAction
   @FocusedValue(\.revealInSidebarAction) private var revealInSidebarAction
-  @FocusedValue(\.toggleCanvasZoomAction) private var toggleCanvasZoomAction
   @FocusedValue(\.toggleCanvasMaxModeAction) private var toggleCanvasMaxModeAction
   @FocusedValue(\.canvasModeSwitchBlockedAction) private var canvasModeSwitchBlockedAction
 
@@ -61,11 +60,10 @@ struct SidebarCommands: Commands {
       .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.toggleCanvas)))
       .help(helpText(title: "Canvas", commandID: AppShortcuts.CommandID.toggleCanvas))
       Button("Toggle Canvas Zoom") {
-        toggleCanvasZoomAction?()
+        store.send(.toggleCanvasZoom)
       }
       .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.toggleCanvasZoom)))
       .help(helpText(title: "Toggle Canvas Zoom", commandID: AppShortcuts.CommandID.toggleCanvasZoom))
-      .disabled(toggleCanvasZoomAction == nil)
       Button("Toggle Canvas Max Mode") {
         toggleCanvasMaxModeAction?()
       }
@@ -147,10 +145,6 @@ private struct RevealInSidebarActionKey: FocusedValueKey {
   typealias Value = FocusedAction<Void>
 }
 
-private struct ToggleCanvasZoomActionKey: FocusedValueKey {
-  typealias Value = () -> Void
-}
-
 private struct ToggleCanvasMaxModeActionKey: FocusedValueKey {
   typealias Value = () -> Void
 }
@@ -168,11 +162,6 @@ extension FocusedValues {
   var revealInSidebarAction: FocusedAction<Void>? {
     get { self[RevealInSidebarActionKey.self] }
     set { self[RevealInSidebarActionKey.self] = newValue }
-  }
-
-  var toggleCanvasZoomAction: (() -> Void)? {
-    get { self[ToggleCanvasZoomActionKey.self] }
-    set { self[ToggleCanvasZoomActionKey.self] = newValue }
   }
 
   var toggleCanvasMaxModeAction: (() -> Void)? {

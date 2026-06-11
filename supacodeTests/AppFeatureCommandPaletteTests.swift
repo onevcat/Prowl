@@ -792,6 +792,47 @@ struct AppFeatureCommandPaletteTests {
     #expect(store.state.canvasLayoutCommand?.kind == .overview)
   }
 
+  @Test(.dependencies) func toggleCanvasZoomQueuesCanvasCommandOnlyInCanvas() async {
+    let worktree = makeWorktree(
+      id: "/tmp/repo-layout-zoom/wt-1",
+      name: "wt-1",
+      repoRoot: "/tmp/repo-layout-zoom"
+    )
+    let repository = makeRepository(id: "/tmp/repo-layout-zoom", worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    repositoriesState.selection = .canvas
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositoriesState,
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.uuid = .incrementing
+    }
+    store.exhaustivity = .off
+
+    await store.send(.toggleCanvasZoom)
+    await store.receive(.repositories(.requestCanvasCommand(.toggleZoom)))
+
+    #expect(store.state.repositories.pendingCanvasCommandRequest?.command == .toggleZoom)
+  }
+
+  @Test(.dependencies) func toggleCanvasZoomDoesNothingOutsideCanvas() async {
+    let store = TestStore(initialState: AppFeature.State()) {
+      AppFeature()
+    } withDependencies: {
+      $0.uuid = .incrementing
+    }
+    store.exhaustivity = .off
+
+    await store.send(.toggleCanvasZoom)
+
+    #expect(store.state.repositories.pendingCanvasCommandRequest == nil)
+  }
+
   @Test(.dependencies) func refreshWorktreesDispatchesRefresh() async {
     let store = TestStore(initialState: AppFeature.State()) {
       AppFeature()

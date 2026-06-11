@@ -559,6 +559,25 @@ struct GhosttySurfaceViewTests {
     )
   }
 
+  @Test func registeredAppShortcutPrefersMenuHandling() throws {
+    let event = try makeKeyEvent(
+      characters: "\r",
+      charactersIgnoringModifiers: "\r",
+      modifiers: [.command, .control],
+      keyCode: UInt16(kVK_Return)
+    )
+
+    #expect(
+      GhosttySurfaceView.shouldPreferMenuHandling(
+        for: event,
+        registeredAppActionKeybindings: [
+          Keybinding(key: "return", modifiers: .init(command: true, control: true))
+        ],
+        isCanvasActive: false
+      )
+    )
+  }
+
   private func makeKeyEvent(
     characters: String,
     charactersIgnoringModifiers: String,
