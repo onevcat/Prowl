@@ -144,6 +144,13 @@ extension GhosttySurfaceView {
       return true
     }
 
+    if let menu = NSApp.mainMenu,
+      Self.mainMenuHasMatchingItem(for: event, in: menu),
+      menu.performKeyEquivalent(with: event)
+    {
+      return true
+    }
+
     guard let equivalent = equivalentKey(for: event) else { return false }
 
     guard
@@ -483,7 +490,9 @@ extension GhosttySurfaceView {
     var normalizedKey = key.lowercased()
     var normalizedModifiers = modifiers.intersection(shortcutMask)
 
-    if key.count == 1, let character = key.first {
+    if ["\r", "\n", "\u{3}"].contains(normalizedKey) {
+      normalizedKey = "\r"
+    } else if key.count == 1, let character = key.first {
       if let base = shiftedKeyEquivalentBases[character] {
         normalizedKey = String(base)
         normalizedModifiers.insert(.shift)

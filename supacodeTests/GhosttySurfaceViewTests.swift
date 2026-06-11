@@ -54,6 +54,22 @@ struct GhosttySurfaceViewTests {
     #expect(GhosttySurfaceView.mainMenuHasMatchingItem(for: event, in: menu))
   }
 
+  @Test func mainMenuExactMatchAcceptsAlternateReturnKeyEquivalent() throws {
+    let menu = NSMenu()
+    let item = NSMenuItem(title: "Toggle Canvas Zoom", action: nil, keyEquivalent: "\u{3}")
+    item.keyEquivalentModifierMask = [.command, .control]
+    menu.addItem(item)
+
+    let event = try makeKeyEvent(
+      characters: "\r",
+      charactersIgnoringModifiers: "\r",
+      modifiers: [.command, .control],
+      keyCode: UInt16(kVK_Return)
+    )
+
+    #expect(GhosttySurfaceView.mainMenuHasMatchingItem(for: event, in: menu))
+  }
+
   @Test func mainMenuExactMatchAcceptsShiftedSymbolKeyEquivalent() throws {
     let menu = NSMenu()
     let item = NSMenuItem(title: "Help", action: nil, keyEquivalent: "?")
