@@ -35,4 +35,10 @@ struct CanvasSelectionShieldTests {
       )
     )
   }
+
+  @Test func unfocusedTerminalContentShowsFocusTapOverlay() {
+    #expect(shouldShowCanvasTerminalFocusTapOverlay(isFocused: false, showsSelectionShield: false))
+    #expect(!shouldShowCanvasTerminalFocusTapOverlay(isFocused: true, showsSelectionShield: false))
+    #expect(!shouldShowCanvasTerminalFocusTapOverlay(isFocused: false, showsSelectionShield: true))
+  }
 }
