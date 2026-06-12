@@ -314,16 +314,12 @@ struct CanvasCardView: View {
         hasNotification: { _ in false },
         action: onSplitOperation
       )
-      .allowsHitTesting(isFocused && !showsSelectionShield)
-      if shouldShowCanvasTerminalFocusTapOverlay(isFocused: isFocused, showsSelectionShield: showsSelectionShield) {
-        terminalFocusTapOverlay
-      }
     }
     // No own size animation: the canvas drives every size change inside a
     // withAnimation (expand/restore, resize commit, arrange), so the terminal
     // refit stays in lock-step with the card's offset/scale. Without a wrapping
     // animation (live resize drag) the size tracks the gesture 1:1.
-    .allowsHitTesting(!showsSelectionShield)
+    .allowsHitTesting(isFocused && !showsSelectionShield)
   }
 
   private var terminalReadabilityScrimColor: Color {
@@ -339,13 +335,6 @@ struct CanvasCardView: View {
       .contentShape(.rect)
       .accessibilityAddTraits(.isButton)
       .onTapGesture { onSelectionTap() }
-  }
-
-  private var terminalFocusTapOverlay: some View {
-    Color.clear
-      .contentShape(.rect)
-      .accessibilityAddTraits(.isButton)
-      .onTapGesture { onTap() }
   }
 
   // MARK: - Resize Handles
@@ -502,13 +491,6 @@ private struct AnimatedTerminalSplitTreeView: View, Animatable {
     )
     .frame(width: size.width, height: size.height)
   }
-}
-
-func shouldShowCanvasTerminalFocusTapOverlay(
-  isFocused: Bool,
-  showsSelectionShield: Bool
-) -> Bool {
-  !isFocused && !showsSelectionShield
 }
 
 private extension Double {

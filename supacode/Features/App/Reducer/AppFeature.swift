@@ -681,49 +681,6 @@ struct AppFeature {
         }
         return .send(.repositories(.requestCanvasCommand(.toggleZoom)))
 
-      case .newTerminalFromCanvas(let focusedWorktreeID):
-        let worktree =
-          if let focusedWorktreeID,
-            let focusedWorktree = state.repositories.worktree(for: focusedWorktreeID)
-          {
-            focusedWorktree
-          } else {
-            FreestyleTerminal.worktree()
-          }
-        analyticsClient.capture("terminal_tab_created", nil)
-        let shouldRunSetupScript = state.repositories.pendingSetupScriptWorktreeIDs.contains(worktree.id)
-        let inheritFromFocusedSurface = worktree.id == FreestyleTerminal.worktreeID
-        return .run { _ in
-          await terminalClient.send(
-            .createTabFromCanvas(
-              worktree,
-              runSetupScriptIfNew: shouldRunSetupScript,
-              inheritFromFocusedSurface: inheritFromFocusedSurface
-            )
-          )
-        }
-
-      case .newTerminalFromCanvasUsingPWD(let focusedWorktreeID):
-        let worktree =
-          if let focusedWorktreeID,
-            let focusedWorktree = state.repositories.worktree(for: focusedWorktreeID)
-          {
-            focusedWorktree
-          } else {
-            FreestyleTerminal.worktree()
-          }
-        analyticsClient.capture("terminal_tab_created", nil)
-        let shouldRunSetupScript = state.repositories.pendingSetupScriptWorktreeIDs.contains(worktree.id)
-        return .run { _ in
-          await terminalClient.send(
-            .createTabFromCanvas(
-              worktree,
-              runSetupScriptIfNew: shouldRunSetupScript,
-              inheritFromFocusedSurface: true
-            )
-          )
-        }
-
       case .runScript:
         guard let worktree = actionTargetWorktree(repositories: state.repositories) else {
           return .none
