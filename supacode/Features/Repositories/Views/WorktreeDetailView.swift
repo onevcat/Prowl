@@ -840,7 +840,7 @@ struct WorktreeDetailView: View {
       let availableActions = OpenWorktreeAction.availableCases
       let resolvedOpenActionSelection = OpenWorktreeAction.availableSelection(openActionSelection)
 
-      HStack(spacing: 4) {
+      HStack(spacing: 6) {
         Button {
           onOpenWorktree(resolvedOpenActionSelection)
         } label: {
@@ -892,7 +892,6 @@ struct WorktreeDetailView: View {
         .buttonStyle(.plain)
         .help("Open in...")
       }
-      .foregroundStyle(.primary)
       .padding(.leading, 4)
 
     }
