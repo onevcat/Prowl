@@ -215,6 +215,12 @@ struct ActiveAgentsFeatureTests {
     #expect(ActiveAgentsPanel.tabTitle(for: entry) == "Untitled tab")
   }
 
+  @Test func agentIconTintUsesBrandIdentityColors() {
+    #expect(AgentIconTint.colorHex(for: .claude) == "#D97757")
+    #expect(AgentIconTint.colorHex(for: .codex) == "#6370F2")
+    #expect(AgentIconTint.colorHex(for: .gemini) == "#8E75B2")
+  }
+
   private func sampleEntries() -> IdentifiedArrayOf<ActiveAgentEntry> {
     let now = Date(timeIntervalSince1970: 10)
     return [

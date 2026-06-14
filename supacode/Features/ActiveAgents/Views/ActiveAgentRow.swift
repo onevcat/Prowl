@@ -52,8 +52,13 @@ struct ActiveAgentRow: View {
         Image(systemName: "sparkle")
       }
     }
+    .foregroundStyle(agentIconTint)
     .frame(width: 20, height: 20)
     .accessibilityHidden(true)
+  }
+
+  private var agentIconTint: Color {
+    AgentIconTint.color(for: entry.agent) ?? .primary
   }
 
   private var statusPill: some View {
@@ -75,6 +80,48 @@ struct ActiveAgentRow: View {
     Text(entry.displayState.label)
       .font(.caption2.weight(.semibold))
       .lineLimit(1)
+  }
+}
+
+enum AgentIconTint {
+  static func color(for agent: DetectedAgent) -> Color? {
+    guard let components = components(for: agent) else { return nil }
+    return Color(
+      red: Double(components.red) / 255,
+      green: Double(components.green) / 255,
+      blue: Double(components.blue) / 255
+    )
+  }
+
+  static func colorHex(for agent: DetectedAgent) -> String? {
+    components(for: agent).map { "#\(String(format: "%02X%02X%02X", $0.red, $0.green, $0.blue))" }
+  }
+
+  private static func components(for agent: DetectedAgent) -> (red: UInt8, green: UInt8, blue: UInt8)? {
+    switch agent {
+    case .claude:
+      // Simple Icons Claude Code, source: https://code.claude.com
+      return (0xD9, 0x77, 0x57)
+    case .codex:
+      // Sampled from the Codex icon supplied in CleanShot 2026-06-15 at 01.38.31@2x.png.
+      return (0x63, 0x70, 0xF2)
+    case .gemini:
+      // Simple Icons Google Gemini, source: https://gemini.google.com
+      return (0x8E, 0x75, 0xB2)
+    case .amp:
+      // Simple Icons AMP, source: https://amp.dev
+      return (0x00, 0x5A, 0xF0)
+    case .cline:
+      // Simple Icons Cline, source: https://cline.bot/assets/branding/logos/cline-wordmark-black.svg
+      return (0x18, 0x18, 0x1B)
+    case .cursor, .opencode, .copilot, .pi:
+      return (0x00, 0x00, 0x00)
+    case .kimi:
+      // Sampled from https://www.kimi.com/favicon.ico.
+      return (0x10, 0x80, 0xF8)
+    case .droid:
+      return nil
+    }
   }
 }
 
