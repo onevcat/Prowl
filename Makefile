@@ -41,7 +41,7 @@ build-ghostty-xcframework: $(GHOSTTY_BUILD_STAMP) # Build ghostty framework
 
 # Internal: actually rebuild ghostty.
 $(GHOSTTY_BUILD_STAMP):
-	@cd $(CURRENT_MAKEFILE_DIR)/ThirdParty/ghostty && mise exec -- zig build -Doptimize=ReleaseFast -Demit-xcframework=true -Dsentry=false
+	@cd $(CURRENT_MAKEFILE_DIR)/ThirdParty/ghostty && mise exec -- zig build -Doptimize=ReleaseFast -Demit-xcframework=true -Dsentry=false $(GHOSTTY_EXTRA_FLAGS)
 	rsync -a ThirdParty/ghostty/macos/GhosttyKit.xcframework Frameworks
 	@src="$(CURRENT_MAKEFILE_DIR)/ThirdParty/ghostty/zig-out/share/ghostty"; \
 	dst="$(GHOSTTY_RESOURCE_PATH)"; \
