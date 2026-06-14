@@ -839,54 +839,61 @@ struct WorktreeDetailView: View {
     ) -> some View {
       let availableActions = OpenWorktreeAction.availableCases
       let resolvedOpenActionSelection = OpenWorktreeAction.availableSelection(openActionSelection)
-      Button {
-        onOpenWorktree(resolvedOpenActionSelection)
-      } label: {
-        OpenWorktreeActionMenuLabelView(
-          action: resolvedOpenActionSelection,
-          shortcutHint: showExtras ? shortcutDisplay(for: AppShortcuts.CommandID.openWorktree) : nil
-        )
-      }
-      .help(openActionHelpText(for: resolvedOpenActionSelection, isDefault: true))
 
-      Menu {
+      HStack(spacing: 4) {
         Button {
-          onResetOpenActionToAutomatic()
+          onOpenWorktree(resolvedOpenActionSelection)
         } label: {
-          if openActionIsAutomatic {
-            Label("Automatic", systemImage: "checkmark")
-          } else {
-            Text("Automatic")
-          }
+          OpenWorktreeActionMenuLabelView(
+            action: resolvedOpenActionSelection,
+            shortcutHint: showExtras ? shortcutDisplay(for: AppShortcuts.CommandID.openWorktree) : nil
+          )
         }
         .buttonStyle(.plain)
-        .help("Pick the app automatically based on the project type")
-        Divider()
-        ForEach(availableActions) { action in
-          let isDefault = action == resolvedOpenActionSelection
+        .help(openActionHelpText(for: resolvedOpenActionSelection, isDefault: true))
+
+        Menu {
           Button {
-            onOpenActionSelectionChanged(action)
-            onOpenWorktree(action)
+            onResetOpenActionToAutomatic()
           } label: {
-            OpenWorktreeActionMenuLabelView(action: action, shortcutHint: nil)
+            if openActionIsAutomatic {
+              Label("Automatic", systemImage: "checkmark")
+            } else {
+              Text("Automatic")
+            }
           }
           .buttonStyle(.plain)
-          .help(openActionHelpText(for: action, isDefault: isDefault))
+          .help("Pick the app automatically based on the project type")
+          Divider()
+          ForEach(availableActions) { action in
+            let isDefault = action == resolvedOpenActionSelection
+            Button {
+              onOpenActionSelectionChanged(action)
+              onOpenWorktree(action)
+            } label: {
+              OpenWorktreeActionMenuLabelView(action: action, shortcutHint: nil)
+            }
+            .buttonStyle(.plain)
+            .help(openActionHelpText(for: action, isDefault: isDefault))
+          }
+          Divider()
+          Button("Copy Path") {
+            onCopyPath()
+          }
+          .help("Copy path")
+        } label: {
+          Image(systemName: "chevron.down")
+            .font(.caption2)
+            .accessibilityLabel("Open in menu")
         }
-        Divider()
-        Button("Copy Path") {
-          onCopyPath()
-        }
-        .help("Copy path")
-      } label: {
-        Image(systemName: "chevron.down")
-          .font(.caption2)
-          .accessibilityLabel("Open in menu")
+        .imageScale(.small)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .buttonStyle(.plain)
+        .help("Open in...")
       }
-      .imageScale(.small)
-      .menuIndicator(.hidden)
-      .fixedSize()
-      .help("Open in...")
+      .foregroundStyle(.primary)
+      .padding(.leading, 4)
 
     }
 
