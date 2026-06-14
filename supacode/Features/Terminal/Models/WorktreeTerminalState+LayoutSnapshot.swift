@@ -222,6 +222,7 @@ extension WorktreeTerminalState {
     } else {
       lastEmittedFocusSurfaceId = nil
     }
+    wakeAgentDetectionForAllSurfaces()
     emitTaskStatusIfChanged()
     // Signal "this worktree now has tabs" so downstream Shelf
     // bookkeeping (`markWorktreeOpened` via `terminalEvent(.tabCreated)`)

@@ -744,10 +744,18 @@ final class WorktreeTerminalManager {
   }
 
   func setAgentDetectionEnabled(_ enabled: Bool) {
-    guard agentDetectionEnabled != enabled else { return }
-    agentDetectionEnabled = enabled
+    if enabled {
+      agentDetectionEnabled = true
+      for state in states.values {
+        state.setAgentDetectionEnabled(true)
+      }
+      return
+    }
+
+    guard agentDetectionEnabled else { return }
+    agentDetectionEnabled = false
     for state in states.values {
-      state.setAgentDetectionEnabled(enabled)
+      state.setAgentDetectionEnabled(false)
     }
   }
 

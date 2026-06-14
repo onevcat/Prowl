@@ -175,6 +175,38 @@ internal struct TmuxTerminalControllerTests {
       })
   }
 
+  @Test internal func panePIDQueriesStoredTmuxPane() async throws {
+    let recorder = TmuxCommandRecorder()
+    let controller = TmuxTerminalController(
+      executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
+      execute: { _, arguments in
+        await recorder.record(arguments)
+        return TmuxCommandResult(stdout: "77759\n", stderr: "", exitCode: 0)
+      }
+    )
+    let target = TmuxTerminalTarget.restored(
+      socketURL: URL(fileURLWithPath: "/tmp/prowl.sock", isDirectory: false),
+      tabID: TerminalTabID(rawValue: UUID(uuidString: "33333333-3333-3333-3333-333333333333")!),
+      cardID: TmuxCardID(rawValue: "card-33"),
+      windowID: try #require(TmuxWindowID(rawValue: "@33")),
+      paneID: TmuxPaneID(rawValue: "%33")!
+    )
+
+    let pid = try await controller.panePID(for: target)
+
+    let arguments = await recorder.arguments
+    #expect(pid == 77759)
+    #expect(
+      arguments == [[
+        "-S", "/tmp/prowl.sock",
+        "display-message",
+        "-p",
+        "-t", "%33",
+        "#{pane_pid}",
+      ]]
+    )
+  }
+
   @Test internal func detachedCardScanFiltersVisibleWindowsAndReportsLegacyContainers() async throws {
     let separator = "\u{1F}"
     let controller = TmuxTerminalController(

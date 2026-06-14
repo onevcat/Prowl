@@ -26,7 +26,8 @@ icon where Prowl shows detected command icons, including terminal tabs.
 
 1. **Process probe.** Prowl reads the pane's foreground process group and matches
    process names / argv against known agent executables, scoring argv[0] highest,
-   then process name, then command-line tokens.
+   then process name, then command-line tokens. For tmux-backed tabs, Prowl probes
+   the stored tmux pane's foreground job rather than the tmux attach client.
 2. **Screen heuristics.** It scans the last ~24 non-blank lines of the pane for
    agent-specific UI cues — e.g. "Esc to interrupt", Oh My Pi's `Working… ⟦esc⟧`
    loader or braille spinner status line (working), confirmation/permission prompts
@@ -58,7 +59,10 @@ A **Done** pane becomes **Idle** the moment you focus it.
 
 ## How often it runs
 
-- **No polling** for cold panes that have not received recent input.
+- Restored tabs and newly enabled detection get a short warm probe window so
+  already-running agents can appear without waiting for local keyboard input.
+- After that, **no polling** runs for cold panes that have not received recent
+  input and have no detected agent.
 - ~**2 s** for a short warm window after typing, paste, CLI input, or an initial
   command starts in the pane.
 - ~**300 ms** once an agent is detected, so Working/Blocked/Done stays responsive.

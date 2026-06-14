@@ -20,6 +20,15 @@ extension WorktreeTerminalState {
     startAgentDetectionTaskIfNeeded(for: view, tabId: tabId)
   }
 
+  func wakeAgentDetectionForAllSurfaces() {
+    guard agentDetectionEnabled else { return }
+    for (tabId, tree) in trees {
+      for surface in tree.leaves() {
+        wakeAgentDetection(for: surface, tabId: tabId)
+      }
+    }
+  }
+
   func startAgentDetectionTaskIfNeeded(for view: GhosttySurfaceView, tabId: TerminalTabID) {
     guard agentDetectionTasks[view.id] == nil else { return }
     agentDetectionTasks[view.id] = Task { @MainActor [weak self, weak view] in
@@ -53,12 +62,10 @@ extension WorktreeTerminalState {
 
   func detectAgentState(for view: GhosttySurfaceView, tabId: TerminalTabID) async -> Bool {
     let surfaceID = view.id
-    let childPID = view.bridge.childPID()
-    let processGroupID = view.bridge.foregroundProcessGroupID()
-    let job = await AgentProcessProbe.shared.foregroundJob(processGroupID: processGroupID, childPID: childPID)
+    let probe = await agentDetectionProcessProbe(for: view, tabId: tabId)
     guard surfaces[surfaceID] != nil else { return false }
 
-    let identified = job.flatMap { identifyAgentInJob($0) }
+    let identified = probe.job.flatMap { identifyAgentInJob($0) }
     let probedAgent = identified?.agent
 
     var presence = agentDetectionPresenceBySurface[surfaceID] ?? AgentDetectionPresence()
@@ -73,9 +80,9 @@ extension WorktreeTerminalState {
           surfaceID: surfaceID,
           diagnostic: AgentDetectionDiagnostic(
             tabId: tabId,
-            childPID: childPID,
-            processGroupID: processGroupID,
-            job: job,
+            childPID: probe.childPID,
+            processGroupID: probe.processGroupID,
+            job: probe.job,
             identified: identified,
             retainedAgent: nil,
             raw: nil,
@@ -139,9 +146,9 @@ extension WorktreeTerminalState {
         surfaceID: surfaceID,
         diagnostic: AgentDetectionDiagnostic(
           tabId: tabId,
-          childPID: childPID,
-          processGroupID: processGroupID,
-          job: job,
+          childPID: probe.childPID,
+          processGroupID: probe.processGroupID,
+          job: probe.job,
           identified: identified,
           retainedAgent: agent,
           raw: raw,
@@ -154,6 +161,31 @@ extension WorktreeTerminalState {
     emitAgentEntry(surfaceID: surfaceID, tabId: tabId, state: next)
     onInputContextMayHaveChanged?(surfaceID)
     return true
+  }
+
+  func agentDetectionProcessProbe(
+    for view: GhosttySurfaceView,
+    tabId: TerminalTabID
+  ) async -> AgentDetectionProcessProbe {
+    if let target = tmuxTargetsByTabId[tabId],
+      let tmuxController,
+      let panePID = try? await tmuxController.panePID(for: target)
+    {
+      let processGroupID = ProcessDetection.foregroundProcessGroupID(pid: panePID)
+      let job = await AgentProcessProbe.shared.foregroundJob(
+        processGroupID: processGroupID,
+        childPID: panePID
+      )
+      return AgentDetectionProcessProbe(childPID: panePID, processGroupID: processGroupID, job: job)
+    }
+
+    let childPID = view.bridge.childPID()
+    let processGroupID = view.bridge.foregroundProcessGroupID()
+    let job = await AgentProcessProbe.shared.foregroundJob(
+      processGroupID: processGroupID,
+      childPID: childPID
+    )
+    return AgentDetectionProcessProbe(childPID: childPID, processGroupID: processGroupID, job: job)
   }
 
   func markAgentSeen(surfaceID: UUID) {

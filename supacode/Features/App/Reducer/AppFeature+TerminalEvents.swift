@@ -247,6 +247,15 @@ extension AppFeature {
         effects.append(.send(.repositories(.selectWorktree(restoreTargetWorktreeID))))
       }
     }
+    let agentDetectionEnabled = ActiveAgentsFeature.detectionEnabled(
+      isPanelHidden: state.repositories.activeAgents.isPanelHidden,
+      autoShowPanel: state.settings.autoShowActiveAgentsPanel
+    )
+    effects.append(
+      .run { _ in
+        await terminalClient.send(.setAgentDetectionEnabled(agentDetectionEnabled))
+      }
+    )
     return .concatenate([.merge(effects), applyDefaultViewMode(into: &state)])
   }
 

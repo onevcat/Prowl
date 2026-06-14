@@ -53,6 +53,12 @@ struct AgentDetectionDiagnostic {
   let stabilized: AgentRawState?
 }
 
+struct AgentDetectionProcessProbe {
+  let childPID: pid_t?
+  let processGroupID: pid_t?
+  let job: ForegroundJob?
+}
+
 @MainActor
 @Observable
 final class WorktreeTerminalState {
@@ -350,17 +356,15 @@ final class WorktreeTerminalState {
   }
 
   func setAgentDetectionEnabled(_ enabled: Bool) {
-    guard agentDetectionEnabled != enabled else { return }
-    agentDetectionEnabled = enabled
     if enabled {
-      for (tabId, tree) in trees {
-        for surface in tree.leaves() {
-          wakeAgentDetection(for: surface, tabId: tabId)
-        }
-      }
-    } else {
-      cleanupAllAgentDetectionState()
+      agentDetectionEnabled = true
+      wakeAgentDetectionForAllSurfaces()
+      return
     }
+
+    guard agentDetectionEnabled else { return }
+    agentDetectionEnabled = false
+    cleanupAllAgentDetectionState()
   }
 
   func focusedFontSize() -> Float32? {
@@ -604,6 +608,7 @@ final class WorktreeTerminalState {
       tabIsRunningById[tabID] = false
       tabManager.selectTab(tabID)
       if let surface = tree.root?.leftmostLeaf() {
+        wakeAgentDetection(for: surface, tabId: tabID)
         focusSurface(surface, in: tabID)
         onFocusedCommandSurfaceCreated?(surface.id)
       }

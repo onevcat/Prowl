@@ -23,6 +23,10 @@ internal nonisolated enum TmuxTerminalControllerError: Error, Equatable, Sendabl
   case invalidNewWindowOutput(String)
 }
 
+private nonisolated func tmuxShellQuote(_ value: String) -> String {
+  "'\(value.replacing("'", with: "'\"'\"'"))'"
+}
+
 @MainActor
 internal final class TmuxTerminalController {
   private let executableURL: URL?
@@ -344,13 +348,27 @@ internal final class TmuxTerminalController {
   }
 
   internal func attachCommand(for target: TmuxTerminalTarget) -> String {
-    [
-      shellQuote(executableURL?.path ?? "tmux"),
-      "-S", shellQuote(target.socketURL.path),
+    let arguments: [String] = [
+      tmuxShellQuote(executableURL?.path ?? "tmux"),
+      "-S", tmuxShellQuote(target.socketURL.path),
       "attach-session",
-      "-t", shellQuote(target.clientSession),
+      "-t", tmuxShellQuote(target.clientSession),
     ]
-    .joined(separator: " ")
+    return arguments.joined(separator: " ")
+  }
+
+  internal func panePID(for target: TmuxTerminalTarget) async throws -> pid_t? {
+    guard let paneID = target.paneID else { return nil }
+    let result = try await run([
+      "-S", target.socketURL.path,
+      "display-message",
+      "-p",
+      "-t", paneID.rawValue,
+      "#{pane_pid}",
+    ])
+    let trimmed = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let pid = pid_t(trimmed), pid > 0 else { return nil }
+    return pid
   }
 
   internal func detachedCardSnapshot(

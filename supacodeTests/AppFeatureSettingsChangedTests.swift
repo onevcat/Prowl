@@ -86,6 +86,67 @@ struct AppFeatureSettingsChangedTests {
     #expect(sentTerminalCommands.value.contains(.setAnonymousTmuxBackedTerminalsEnabled(true)))
   }
 
+  @Test(.dependencies) func settingsChangedEnablesAgentDetectionWhenActiveAgentsPanelVisible() async {
+    let sentTerminalCommands = LockIsolated<[TerminalClient.Command]>([])
+    UserDefaults.appFeatureSettingsChangedTests.set(false, forKey: "activeAgentsPanelHidden")
+
+    let store = TestStore(initialState: AppFeature.State()) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sentTerminalCommands.withValue { $0.append(command) }
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.settings(.delegate(.settingsChanged(.default))))
+    await store.finish()
+
+    #expect(sentTerminalCommands.value.contains(.setAgentDetectionEnabled(true)))
+  }
+
+  @Test(.dependencies) func settingsChangedEnablesAgentDetectionWhenAutoShowActiveAgentsPanelEnabled() async {
+    let sentTerminalCommands = LockIsolated<[TerminalClient.Command]>([])
+    var settings = GlobalSettings.default
+    settings.autoShowActiveAgentsPanel = true
+    UserDefaults.appFeatureSettingsChangedTests.set(true, forKey: "activeAgentsPanelHidden")
+
+    let store = TestStore(initialState: AppFeature.State()) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sentTerminalCommands.withValue { $0.append(command) }
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.settings(.delegate(.settingsChanged(settings))))
+    await store.finish()
+
+    #expect(sentTerminalCommands.value.contains(.setAgentDetectionEnabled(true)))
+  }
+
+  @Test(.dependencies) func openingActiveAgentsPanelEnablesAgentDetection() async {
+    let sentTerminalCommands = LockIsolated<[TerminalClient.Command]>([])
+    UserDefaults.appFeatureSettingsChangedTests.set(true, forKey: "activeAgentsPanelHidden")
+
+    let store = TestStore(initialState: AppFeature.State()) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sentTerminalCommands.withValue { $0.append(command) }
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.repositories(.activeAgents(.togglePanelVisibility))) {
+      $0.repositories.activeAgents.$isPanelHidden.withLock { $0 = false }
+    }
+    await store.finish()
+
+    #expect(sentTerminalCommands.value.contains(.setAgentDetectionEnabled(true)))
+  }
+
   @Test(.dependencies) func agentEntryAutoShowsActiveAgentsPanelWhenEnabled() async {
     var settings = SettingsFeature.State()
     settings.autoShowActiveAgentsPanel = true

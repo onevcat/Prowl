@@ -443,6 +443,10 @@ struct AppFeature {
           customCommands: state.selectedCustomCommands
         )
         let badgeCount = settings.showNotificationDotOnDock ? state.notificationIndicatorCount : 0
+        let agentDetectionEnabled = ActiveAgentsFeature.detectionEnabled(
+          isPanelHidden: state.repositories.activeAgents.isPanelHidden,
+          autoShowPanel: settings.autoShowActiveAgentsPanel
+        )
         return .merge(
           .send(.repositories(.githubIntegration(.setGithubIntegrationEnabled(settings.githubIntegrationEnabled)))),
           .send(
@@ -488,6 +492,9 @@ struct AppFeature {
                 threshold: settings.commandFinishedNotificationThreshold
               )
             )
+          },
+          .run { _ in
+            await terminalClient.send(.setAgentDetectionEnabled(agentDetectionEnabled))
           },
           .run { _ in
             await worktreeInfoWatcher.send(
@@ -1010,6 +1017,15 @@ struct AppFeature {
 
       case .alert:
         return .none
+
+      case .repositories(.activeAgents(.togglePanelVisibility)):
+        let agentDetectionEnabled = ActiveAgentsFeature.detectionEnabled(
+          isPanelHidden: !state.repositories.activeAgents.isPanelHidden,
+          autoShowPanel: state.settings.autoShowActiveAgentsPanel
+        )
+        return .run { _ in
+          await terminalClient.send(.setAgentDetectionEnabled(agentDetectionEnabled))
+        }
 
       case .repositories:
         return .none

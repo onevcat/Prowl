@@ -1369,6 +1369,67 @@ struct WorktreeTerminalManagerTests {
     #expect(restored.isTitleLocked == false)
   }
 
+  @Test func applyLayoutSnapshotWakesAgentDetectionForRestoredSurface() throws {
+    let tabID = UUID()
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktree = makeWorktree()
+    let state = manager.state(for: worktree)
+    let snapshot = TerminalLayoutSnapshotPayload.SnapshotWorktree(
+      worktreeID: worktree.id,
+      selectedTabID: tabID.uuidString,
+      tabs: [
+        TerminalLayoutSnapshotPayload.SnapshotTab(
+          tabID: tabID.uuidString,
+          title: nil,
+          icon: nil,
+          splitRoot: .leaf(surfaceID: UUID().uuidString)
+        )
+      ]
+    )
+    let terminalTabID = TerminalTabID(rawValue: tabID)
+
+    #expect(state.applyLayoutSnapshot(snapshot))
+    let restoredSurface = try #require(state.surfaceView(for: terminalTabID))
+
+    #expect(state.agentDetectionSchedules[restoredSurface.id] != nil)
+    #expect(state.surfaceAgentStates[restoredSurface.id] != nil)
+    state.setAgentDetectionEnabled(false)
+  }
+
+  @Test func setAgentDetectionEnabledWakesSurfacesWhenAlreadyEnabled() throws {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktree = makeWorktree()
+    let state = manager.state(for: worktree)
+    let tabID = try #require(state.createTab())
+    let surface = try #require(state.surfaceView(for: tabID))
+
+    #expect(state.agentDetectionEnabled == true)
+    #expect(state.agentDetectionSchedules[surface.id] == nil)
+
+    state.setAgentDetectionEnabled(true)
+
+    #expect(state.agentDetectionSchedules[surface.id] != nil)
+    #expect(state.surfaceAgentStates[surface.id] != nil)
+    state.setAgentDetectionEnabled(false)
+  }
+
+  @Test func managerSetAgentDetectionEnabledWakesStatesWhenAlreadyEnabled() throws {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktree = makeWorktree()
+    let state = manager.state(for: worktree)
+    let tabID = try #require(state.createTab())
+    let surface = try #require(state.surfaceView(for: tabID))
+
+    #expect(state.agentDetectionEnabled == true)
+    #expect(state.agentDetectionSchedules[surface.id] == nil)
+
+    manager.setAgentDetectionEnabled(true)
+
+    #expect(state.agentDetectionSchedules[surface.id] != nil)
+    #expect(state.surfaceAgentStates[surface.id] != nil)
+    state.setAgentDetectionEnabled(false)
+  }
+
   @Test func restoreLayoutSnapshotFailClosedClearsSnapshotWhenWorktreeMissing() async {
     let clearCount = LockIsolated(0)
     let snapshot = TerminalLayoutSnapshotPayload(
@@ -1494,6 +1555,9 @@ struct WorktreeTerminalManagerTests {
     #expect(state.tmuxTargetForTesting(restoredTab)?.windowID?.rawValue == "@21")
     #expect(state.tmuxTargetForTesting(restoredTab)?.cardID.rawValue == "card-21")
     #expect(surface.launchCommandForTesting?.contains("attach-session") == true)
+    #expect(state.agentDetectionSchedules[surface.id] != nil)
+    #expect(state.surfaceAgentStates[surface.id] != nil)
+    state.setAgentDetectionEnabled(false)
   }
 
   @Test func restoreLayoutSnapshotRehydratesSingleLegacyTmuxCard() async throws {

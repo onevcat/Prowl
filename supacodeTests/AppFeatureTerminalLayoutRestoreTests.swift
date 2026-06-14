@@ -242,6 +242,99 @@ struct AppFeatureTerminalLayoutRestoreTests {
     await store.receive(\.repositories.selectWorktree)
   }
 
+  @Test(.dependencies) func layoutRestoredEventWakesAgentDetectionWhenPanelVisible() async {
+    let suiteName = "AppFeatureTerminalLayoutRestoreTests.layoutRestoredEventWakesAgentDetectionWhenPanelVisible"
+    let defaults = UserDefaults(suiteName: suiteName)!
+    defaults.removePersistentDomain(forName: suiteName)
+    defaults.set(false, forKey: "activeAgentsPanelHidden")
+    let sentCommands = LockIsolated<[TerminalClient.Command]>([])
+    let store = withDependencies {
+      $0.defaultAppStorage = defaults
+    } operation: {
+      var initialState = AppFeature.State()
+      initialState.isAwaitingLaunchLayoutRestore = true
+      return TestStore(initialState: initialState) {
+        AppFeature()
+      } withDependencies: {
+        $0.defaultAppStorage = defaults
+        $0.terminalClient.send = { command in
+          sentCommands.withValue { $0.append(command) }
+        }
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.terminalEvent(.layoutRestored(selectedWorktreeID: nil))) {
+      $0.isAwaitingLaunchLayoutRestore = false
+    }
+    await store.finish()
+
+    #expect(sentCommands.value.contains(.setAgentDetectionEnabled(true)))
+  }
+
+  @Test(.dependencies) func layoutRestoredEventDisablesAgentDetectionWhenPanelHiddenAndAutoShowDisabled() async {
+    let suiteName =
+      "AppFeatureTerminalLayoutRestoreTests.layoutRestoredEventDisablesAgentDetectionWhenPanelHiddenAndAutoShowDisabled"
+    let defaults = UserDefaults(suiteName: suiteName)!
+    defaults.removePersistentDomain(forName: suiteName)
+    defaults.set(true, forKey: "activeAgentsPanelHidden")
+    let sentCommands = LockIsolated<[TerminalClient.Command]>([])
+    let store = withDependencies {
+      $0.defaultAppStorage = defaults
+    } operation: {
+      var initialState = AppFeature.State()
+      initialState.isAwaitingLaunchLayoutRestore = true
+      initialState.settings.autoShowActiveAgentsPanel = false
+      return TestStore(initialState: initialState) {
+        AppFeature()
+      } withDependencies: {
+        $0.defaultAppStorage = defaults
+        $0.terminalClient.send = { command in
+          sentCommands.withValue { $0.append(command) }
+        }
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.terminalEvent(.layoutRestored(selectedWorktreeID: nil))) {
+      $0.isAwaitingLaunchLayoutRestore = false
+    }
+    await store.finish()
+
+    #expect(sentCommands.value.contains(.setAgentDetectionEnabled(false)))
+  }
+
+  @Test(.dependencies) func layoutRestoredEventWakesAgentDetectionWhenAutoShowEnabled() async {
+    let suiteName = "AppFeatureTerminalLayoutRestoreTests.layoutRestoredEventWakesAgentDetectionWhenAutoShowEnabled"
+    let defaults = UserDefaults(suiteName: suiteName)!
+    defaults.removePersistentDomain(forName: suiteName)
+    defaults.set(true, forKey: "activeAgentsPanelHidden")
+    let sentCommands = LockIsolated<[TerminalClient.Command]>([])
+    let store = withDependencies {
+      $0.defaultAppStorage = defaults
+    } operation: {
+      var initialState = AppFeature.State()
+      initialState.isAwaitingLaunchLayoutRestore = true
+      initialState.settings.autoShowActiveAgentsPanel = true
+      return TestStore(initialState: initialState) {
+        AppFeature()
+      } withDependencies: {
+        $0.defaultAppStorage = defaults
+        $0.terminalClient.send = { command in
+          sentCommands.withValue { $0.append(command) }
+        }
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.terminalEvent(.layoutRestored(selectedWorktreeID: nil))) {
+      $0.isAwaitingLaunchLayoutRestore = false
+    }
+    await store.finish()
+
+    #expect(sentCommands.value.contains(.setAgentDetectionEnabled(true)))
+  }
+
   @Test(.dependencies) func layoutRestoredEventFallsBackToLastFocusedWorktreeWhenSelectedWorktreeMissing() async {
     let firstWorktree = Worktree(
       id: "/tmp/repo/wt-1",
