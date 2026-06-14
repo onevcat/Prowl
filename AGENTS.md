@@ -116,7 +116,7 @@ Reducer ← .terminalEvent(Event) ← AsyncStream<Event>
 
 ## Rules
 
-- After a task, ensure the app builds: `make build-app`
+- After an app-side task, verify and install the Debug app in one step with `make install-dev-build`; do not run `make build-app` first because the install target already builds the app.
 - When working on CLI code (`ProwlCLI/`, `ProwlCLITests/`, `Package.swift`), run `make build-cli`, `make test-cli-smoke`, and `make test-cli-integration` before committing.
 - When you change user-facing behavior (keyboard shortcuts, settings, the `prowl` CLI, or a feature's UX), update the matching file under `docs/` in the same change. For a full audit, run the `sync-docs` skill.
 - When implementing a new feature or fixing a bug that is unrelated to the current branch's active work, first create a dedicated branch from the latest `origin/main`; then work, commit, push, and open a PR from that branch.
