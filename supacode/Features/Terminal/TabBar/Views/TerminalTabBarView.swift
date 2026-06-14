@@ -45,6 +45,7 @@ struct TerminalTabBarView: View {
         splitVertically: splitVertically,
         canSplit: canSplit
       )
+      .padding(.trailing, TerminalTabBarMetrics.barPadding)
     }
     .frame(height: TerminalTabBarMetrics.barHeight)
     // Desaturate only the bar *contents* (tabs + accessories) when the window

@@ -34,7 +34,8 @@ struct TerminalTabBarTrailingAccessories: View {
       .disabled(!canSplit)
     }
     .frame(height: TerminalTabBarMetrics.barHeight)
-    .padding(.trailing, 8)
+    .padding(.horizontal, 8)
+    .background(Capsule().fill(Color.white.opacity(0.3)))
   }
 
   private var newTabButton: some View {
@@ -45,7 +46,7 @@ struct TerminalTabBarTrailingAccessories: View {
       Label("New Tab", systemImage: "plus")
         .labelStyle(.iconOnly)
     }
-    .buttonStyle(.borderless)
+    .buttonStyle(.plain)
     .help(helpText("New Tab", shortcut: ghosttyShortcuts.display(for: "new_tab")))
     .onHover { hovering in
       isHoveringButton = hovering
@@ -80,7 +81,7 @@ struct TerminalTabBarTrailingAccessories: View {
       Label(title, systemImage: systemImage)
         .labelStyle(.iconOnly)
     }
-    .buttonStyle(.borderless)
+    .buttonStyle(.plain)
     .help(helpText(title, shortcut: shortcut))
   }
 
