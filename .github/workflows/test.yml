@@ -11,7 +11,28 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  build-ghostty:
+    runs-on: macos-15
+    permissions:
+      contents: read
+    env:
+      MISE_HTTP_TIMEOUT: 120
+      MISE_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - uses: ./.github/actions/setup-macos
+      - run: make build-ghostty-xcframework
+      - name: Upload GhosttyKit.xcframework
+        uses: actions/upload-artifact@v4
+        with:
+          name: GhosttyKit-xcframework
+          path: Frameworks/GhosttyKit.xcframework
+          retention-days: 1
+
+  build-and-test:
+    needs: build-ghostty
     runs-on: macos-26
     permissions:
       contents: read
@@ -23,15 +44,14 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
+      - name: Download GhosttyKit.xcframework
+        uses: actions/download-artifact@v4
+        with:
+          name: GhosttyKit-xcframework
+          path: Frameworks/GhosttyKit.xcframework
       - uses: ./.github/actions/setup-macos
       - run: make lint
       - run: make build-app
-      - name: Upload GhosttyKit.xcframework
-        uses: actions/upload-artifact@v4
-        with:
-          name: GhosttyKit-xcframework-${{ github.run_id }}
-          path: Frameworks/GhosttyKit.xcframework
-          retention-days: 30
       - name: Run tests in parallel
         shell: bash
         run: |
