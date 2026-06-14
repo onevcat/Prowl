@@ -26,6 +26,12 @@ jobs:
       - uses: ./.github/actions/setup-macos
       - run: make lint
       - run: make build-app
+      - name: Upload GhosttyKit.xcframework
+        uses: actions/upload-artifact@v4
+        with:
+          name: GhosttyKit-xcframework-${{ github.run_id }}
+          path: Frameworks/GhosttyKit.xcframework
+          retention-days: 30
       - name: Run tests in parallel
         shell: bash
         run: |
