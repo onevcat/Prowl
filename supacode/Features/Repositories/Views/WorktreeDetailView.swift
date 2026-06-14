@@ -839,17 +839,20 @@ struct WorktreeDetailView: View {
     ) -> some View {
       let availableActions = OpenWorktreeAction.availableCases
       let resolvedOpenActionSelection = OpenWorktreeAction.availableSelection(openActionSelection)
-      Button {
-        onOpenWorktree(resolvedOpenActionSelection)
-      } label: {
-        OpenWorktreeActionMenuLabelView(
-          action: resolvedOpenActionSelection,
-          shortcutHint: showExtras ? shortcutDisplay(for: AppShortcuts.CommandID.openWorktree) : nil
-        )
-      }
-      .help(openActionHelpText(for: resolvedOpenActionSelection, isDefault: true))
 
       Menu {
+        // Quick open at top of menu
+        Button {
+          onOpenWorktree(resolvedOpenActionSelection)
+        } label: {
+          Label("Open in \(resolvedOpenActionSelection.title)", systemImage: resolvedOpenActionSelection.menuIcon.flatMap { icon -> String? in
+            if case .symbol(let name) = icon { return name }
+            return nil
+          } ?? "macwindow")
+        }
+
+        Divider()
+
         Button {
           onResetOpenActionToAutomatic()
         } label: {
@@ -879,14 +882,18 @@ struct WorktreeDetailView: View {
         }
         .help("Copy path")
       } label: {
-        Image(systemName: "chevron.down")
-          .font(.caption2)
-          .accessibilityLabel("Open in menu")
+        OpenWorktreeActionMenuLabelView(
+          action: resolvedOpenActionSelection,
+          shortcutHint: nil
+        )
       }
-      .imageScale(.small)
-      .menuIndicator(.hidden)
-      .fixedSize()
-      .help("Open in...")
+      .help(
+        AppShortcuts.helpText(
+          title: resolvedOpenActionSelection.title,
+          commandID: AppShortcuts.CommandID.openWorktree,
+          in: resolvedKeybindings
+        )
+      )
 
     }
 
