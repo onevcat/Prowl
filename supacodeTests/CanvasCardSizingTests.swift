@@ -5,6 +5,25 @@ import Testing
 @testable import supacode
 
 struct CanvasCardSizingTests {
+  @Test func defaultSizeUsesFixedCustomSizeWhenAdaptiveSizingDisabled() {
+    let size = CanvasCardLayout.resolvedDefaultSize(
+      useAdaptiveCardSize: false,
+      forScreenWidth: CanvasCardLayout.maxDefaultScreenWidth
+    )
+
+    #expect(size == CanvasCardLayout.fixedDefaultSize)
+    #expect(size == CGSize(width: 800, height: 682))
+  }
+
+  @Test func defaultSizeUsesAdaptiveSizeWhenAdaptiveSizingEnabled() {
+    let size = CanvasCardLayout.resolvedDefaultSize(
+      useAdaptiveCardSize: true,
+      forScreenWidth: CanvasCardLayout.minDefaultScreenWidth
+    )
+
+    #expect(size == CanvasCardLayout.minDefaultSize)
+  }
+
   @Test func smallScreenClampsToMinSize() {
     let size = CanvasCardLayout.adaptiveDefaultSize(forScreenWidth: 1280)
     #expect(size == CanvasCardLayout.minDefaultSize)

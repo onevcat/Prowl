@@ -174,6 +174,7 @@ struct SettingsFilePersistenceTests {
     #expect(settings.global.showActiveAgentStatusInShelf == true)
     #expect(settings.global.shelfSpineTintFallback == .neutral)
     #expect(settings.global.shelfSpineTintFollowsRepositoryColor == true)
+    #expect(settings.global.useAdaptiveCanvasCardSize == true)
     #expect(settings.repositoryRoots.isEmpty)
     #expect(settings.pinnedWorktreeIDs.isEmpty)
   }

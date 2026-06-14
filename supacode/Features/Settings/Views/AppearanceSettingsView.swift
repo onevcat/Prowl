@@ -87,6 +87,14 @@ struct AppearanceSettingsView: View {
           )
           .help("Fade split panes that aren't focused so the active one stands out.")
         }
+        Section("Canvas") {
+          Toggle(
+            "Adapt card size to display",
+            isOn: $store.useAdaptiveCanvasCardSize
+          )
+          .help(
+            "When disabled, new and organized Canvas cards use the fixed custom size: 800x710 including the title bar.")
+        }
         Section("Active Agents") {
           Toggle(
             "Show Active Agents panel automatically",

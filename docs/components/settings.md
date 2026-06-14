@@ -16,7 +16,7 @@ window is a sidebar of tabs plus a detail pane.
 
 | Tab | Controls |
 |-----|----------|
-| **General** | Appearance (system/light/dark), default app for opening worktrees, confirm-before-quit, default view mode, window chrome tint, toolbar buttons (Run / Open-in-editor), dim unfocused splits, Active Agents panel auto-show & tab titles. |
+| **General** | Appearance (system/light/dark), default app for opening worktrees, confirm-before-quit, default view mode, window chrome tint, toolbar buttons (Run / Open-in-editor), dim unfocused splits, Canvas adaptive card sizing, Active Agents panel auto-show & tab titles. |
 | **Notifications** | In-app alerts, sound, macOS system notifications, move-notified-to-top, command-finished notification + threshold, Dock badge & bounce. → [notifications](notifications.md) |
 | **Shortcuts** | Remap app keyboard shortcuts; view defaults; resolve conflicts. → [keyboard-shortcuts](../reference/keyboard-shortcuts.md) |
 | **Worktree** | Worktree creation/deletion defaults: prompt on create, fetch before create, base directory, copy ignored/untracked files, delete-branch-on-delete, merged-worktree action, archived auto-delete period. |

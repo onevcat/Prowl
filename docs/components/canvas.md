@@ -74,7 +74,9 @@ explaining pan/zoom/expand.
 ## Layout & sizing
 
 - Default card size adapts to screen width (roughly 800×550 on a 14", larger on a
-  27"). Cards have generous min/max bounds and snap-animate on resize.
+  27") unless `useAdaptiveCanvasCardSize` is disabled. With adaptive sizing off,
+  new and organized cards use the fixed custom size: 800×710 including the title
+  bar.
 - On first entry, cards auto-arrange into a balanced grid. Positions, sizes, and
   z-order are persisted across launches (in `UserDefaults`) and restored when you
   return to Canvas.
@@ -90,6 +92,8 @@ performance.
 ## Settings that affect Canvas
 
 - `defaultViewMode` — launch directly into Canvas.
+- `useAdaptiveCanvasCardSize` — adapt new and organized card sizes to the current
+  display, or use the fixed custom card size when disabled.
 - `windowTintMode` / repository colors — card and nav tinting.
 - `showRunButtonInToolbar` — whether the Run button appears in the Canvas toolbar.
 

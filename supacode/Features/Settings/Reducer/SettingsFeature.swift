@@ -49,6 +49,7 @@ struct SettingsFeature {
     var showDefaultEditorInToolbar: Bool
     var dockBounceMode: DockBounceMode
     var showNotificationDotOnDock: Bool
+    var useAdaptiveCanvasCardSize: Bool
     var useAnonymousTmuxBackedTerminals: Bool
     var isTmuxAvailable = true
     var cliInstallStatus: CLIInstallStatus = .notInstalled
@@ -104,6 +105,7 @@ struct SettingsFeature {
       showDefaultEditorInToolbar = settings.showDefaultEditorInToolbar
       dockBounceMode = settings.dockBounceMode
       showNotificationDotOnDock = settings.showNotificationDotOnDock
+      useAdaptiveCanvasCardSize = settings.useAdaptiveCanvasCardSize
       useAnonymousTmuxBackedTerminals = settings.useAnonymousTmuxBackedTerminals
     }
 
@@ -151,6 +153,7 @@ struct SettingsFeature {
         showNotificationDotOnDock: showNotificationDotOnDock,
         shelfSpineTintFallback: shelfSpineTintFallback,
         shelfSpineTintFollowsRepositoryColor: shelfSpineTintFollowsRepositoryColor,
+        useAdaptiveCanvasCardSize: useAdaptiveCanvasCardSize,
         useAnonymousTmuxBackedTerminals: useAnonymousTmuxBackedTerminals
       )
     }
@@ -272,6 +275,7 @@ struct SettingsFeature {
         state.showDefaultEditorInToolbar = normalizedSettings.showDefaultEditorInToolbar
         state.dockBounceMode = normalizedSettings.dockBounceMode
         state.showNotificationDotOnDock = normalizedSettings.showNotificationDotOnDock
+        state.useAdaptiveCanvasCardSize = normalizedSettings.useAdaptiveCanvasCardSize
         state.isTmuxAvailable = isTmuxAvailable
         state.useAnonymousTmuxBackedTerminals = normalizedSettings.useAnonymousTmuxBackedTerminals
         state.syncGlobalDefaults(from: normalizedSettings)

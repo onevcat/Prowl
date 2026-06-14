@@ -431,6 +431,24 @@ struct SettingsFeatureTests {
     #expect(settingsFile.global.showActiveAgentStatusInShelf == false)
   }
 
+  @Test(.dependencies) func adaptiveCanvasCardSizePersistsAsGlobalSetting() async {
+    var initialSettings = GlobalSettings.default
+    initialSettings.useAdaptiveCanvasCardSize = true
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = initialSettings }
+
+    let store = TestStore(initialState: SettingsFeature.State(settings: initialSettings)) {
+      SettingsFeature()
+    }
+
+    await store.send(.binding(.set(\.useAdaptiveCanvasCardSize, false))) {
+      $0.useAdaptiveCanvasCardSize = false
+    }
+    await store.receive(\.delegate.settingsChanged)
+
+    #expect(settingsFile.global.useAdaptiveCanvasCardSize == false)
+  }
+
   @Test(.dependencies) func anonymousTmuxBackedTerminalsPersistsAsGlobalSetting() async {
     var initialSettings = GlobalSettings.default
     initialSettings.useAnonymousTmuxBackedTerminals = false

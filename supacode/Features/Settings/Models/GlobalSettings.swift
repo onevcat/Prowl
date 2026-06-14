@@ -39,6 +39,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var showNotificationDotOnDock: Bool
   var shelfSpineTintFallback: ShelfSpineTintFallback
   var shelfSpineTintFollowsRepositoryColor: Bool
+  var useAdaptiveCanvasCardSize: Bool
   var useAnonymousTmuxBackedTerminals: Bool
 
   static let `default` = GlobalSettings(
@@ -82,6 +83,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     showNotificationDotOnDock: false,
     shelfSpineTintFallback: .neutral,
     shelfSpineTintFollowsRepositoryColor: true,
+    useAdaptiveCanvasCardSize: true,
     useAnonymousTmuxBackedTerminals: false
   )
 
@@ -126,6 +128,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     showNotificationDotOnDock: Bool = false,
     shelfSpineTintFallback: ShelfSpineTintFallback = .neutral,
     shelfSpineTintFollowsRepositoryColor: Bool = true,
+    useAdaptiveCanvasCardSize: Bool = true,
     useAnonymousTmuxBackedTerminals: Bool = false
   ) {
     self.appearanceMode = appearanceMode
@@ -168,6 +171,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     self.showNotificationDotOnDock = showNotificationDotOnDock
     self.shelfSpineTintFallback = shelfSpineTintFallback
     self.shelfSpineTintFollowsRepositoryColor = shelfSpineTintFollowsRepositoryColor
+    self.useAdaptiveCanvasCardSize = useAdaptiveCanvasCardSize
     self.useAnonymousTmuxBackedTerminals = useAnonymousTmuxBackedTerminals
   }
 
@@ -213,6 +217,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     try container.encode(showNotificationDotOnDock, forKey: .showNotificationDotOnDock)
     try container.encode(shelfSpineTintFallback, forKey: .shelfSpineTintFallback)
     try container.encode(shelfSpineTintFollowsRepositoryColor, forKey: .shelfSpineTintFollowsRepositoryColor)
+    try container.encode(useAdaptiveCanvasCardSize, forKey: .useAdaptiveCanvasCardSize)
     try container.encode(useAnonymousTmuxBackedTerminals, forKey: .useAnonymousTmuxBackedTerminals)
   }
 
@@ -257,6 +262,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     case showNotificationDotOnDock
     case shelfSpineTintFallback
     case shelfSpineTintFollowsRepositoryColor
+    case useAdaptiveCanvasCardSize
     case useAnonymousTmuxBackedTerminals
     // Legacy key for migration
     case automaticallyArchiveMergedWorktrees
@@ -361,6 +367,9 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     showDefaultEditorInToolbar = toolbarAndDock.showDefaultEditorInToolbar
     dockBounceMode = toolbarAndDock.dockBounceMode
     showNotificationDotOnDock = toolbarAndDock.showNotificationDotOnDock
+    useAdaptiveCanvasCardSize =
+      try container.decodeIfPresent(Bool.self, forKey: .useAdaptiveCanvasCardSize)
+      ?? Self.default.useAdaptiveCanvasCardSize
     useAnonymousTmuxBackedTerminals =
       try container.decodeIfPresent(Bool.self, forKey: .useAnonymousTmuxBackedTerminals)
       ?? Self.default.useAnonymousTmuxBackedTerminals

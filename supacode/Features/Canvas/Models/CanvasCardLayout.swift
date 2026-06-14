@@ -35,10 +35,13 @@ struct CanvasCardLayout: Codable, Equatable, Hashable, Sendable {
   static let minDefaultScreenWidth: CGFloat = 1512  // 14" MacBook Pro
   static let maxDefaultScreenWidth: CGFloat = 2560  // 27" / Studio Display
 
-  /// Size new cards adopt when no explicit size is given. Equal to
-  /// `maxDefaultSize`, used only for transient fallbacks; creation paths pass
-  /// an explicit `adaptiveDefaultSize(forScreenWidth:)` instead.
-  static let defaultSize = maxDefaultSize
+  /// Content area size from the custom branch's fixed card layout; with the
+  /// 28pt title bar, the rendered card is 800x710.
+  static let fixedDefaultSize = CGSize(width: 800, height: 682)
+
+  /// Size new cards adopt when no explicit size is given. Creation paths pass
+  /// `resolvedDefaultSize(useAdaptiveCardSize:forScreenWidth:)` explicitly.
+  static let defaultSize = fixedDefaultSize
 
   /// Linearly interpolate the default card size between `minDefaultSize`
   /// (14"-class screens) and `maxDefaultSize` (27"-class and larger) by screen
@@ -50,6 +53,13 @@ struct CanvasCardLayout: Codable, Equatable, Hashable, Sendable {
       width: minDefaultSize.width + (maxDefaultSize.width - minDefaultSize.width) * fraction,
       height: minDefaultSize.height + (maxDefaultSize.height - minDefaultSize.height) * fraction
     )
+  }
+
+  static func resolvedDefaultSize(useAdaptiveCardSize: Bool, forScreenWidth screenWidth: CGFloat) -> CGSize {
+    guard useAdaptiveCardSize else {
+      return fixedDefaultSize
+    }
+    return adaptiveDefaultSize(forScreenWidth: screenWidth)
   }
 
   init(position: CGPoint, size: CGSize = Self.defaultSize) {

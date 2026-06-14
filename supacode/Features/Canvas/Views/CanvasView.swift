@@ -46,6 +46,7 @@ struct CanvasView: View {
 
   @Environment(\.resolvedKeybindings) var resolvedKeybindings
   @Environment(\.canvasMaxModeActive) var canvasMaxModeActive
+  @Shared(.settingsFile) private var settingsFile
 
   let terminalManager: WorktreeTerminalManager
   let initialFocusWorktreeID: Worktree.ID?
@@ -149,11 +150,12 @@ struct CanvasView: View {
       ?? CanvasCardLayout.maxDefaultScreenWidth
   }
 
-  /// Default size for newly created and uniformly arranged cards, scaled to the
-  /// host screen so small screens (14") don't zoom out into tiny text while
-  /// large screens still get the roomier card.
-  var adaptiveDefaultCardSize: CGSize {
-    CanvasCardLayout.adaptiveDefaultSize(forScreenWidth: hostScreenWidth)
+  /// Default size for newly created and uniformly arranged cards.
+  var defaultCanvasCardSize: CGSize {
+    CanvasCardLayout.resolvedDefaultSize(
+      useAdaptiveCardSize: settingsFile.global.useAdaptiveCanvasCardSize,
+      forScreenWidth: hostScreenWidth
+    )
   }
 
   let directionalNewTerminalTimeout: Duration = .seconds(2)
@@ -733,7 +735,7 @@ struct CanvasView: View {
     let unpositioned = cards.filter { layoutStore.cardLayouts[$0.key] == nil }
     guard !unpositioned.isEmpty else { return }
 
-    let cardSize = adaptiveDefaultCardSize
+    let cardSize = defaultCanvasCardSize
     var layouts = layoutStore.cardLayouts
     var remainingDirectionalHint = directionalPlacementHint
     let placementCards = cards.map {
@@ -875,7 +877,7 @@ struct CanvasView: View {
   func organizeCards() {
     let keys = collectCardKeys(from: terminalManager.activeWorktreeStates)
     let columns = gridColumns(for: keys.count)
-    let cardSize = adaptiveDefaultCardSize
+    let cardSize = defaultCanvasCardSize
     var layouts = layoutStore.cardLayouts
     for (index, key) in keys.enumerated() {
       layouts[key] = CanvasCardLayout(
@@ -894,7 +896,7 @@ struct CanvasView: View {
     guard !keys.isEmpty, viewportSize.width > 0, viewportSize.height > 0 else { return }
 
     let cards: [CanvasCardPacker.CardInfo] = keys.map { key in
-      let size = layoutStore.cardLayouts[key]?.size ?? adaptiveDefaultCardSize
+      let size = layoutStore.cardLayouts[key]?.size ?? defaultCanvasCardSize
       return CanvasCardPacker.CardInfo(key: key, size: size)
     }
 
