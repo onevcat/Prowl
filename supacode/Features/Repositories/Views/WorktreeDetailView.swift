@@ -500,10 +500,9 @@ struct WorktreeDetailView: View {
           }
         }
       )
-      // Canvas tints the nav (leading) only; the toolbar is left untinted so
-      // floating cards don't read against a colored band. The card title
-      // bars still carry their own per-repo color.
-      .windowChromeTint(chromeFill(repositories: repositories, context: .canvas), edges: [.leading])
+      // Canvas leaves the window chrome neutral; card title bars still carry
+      // their own per-repo color without tinting the sidebar glass.
+      .windowChromeTint(nil, edges: WindowChromeTint.detailTintEdges(for: .canvas))
     } else if repositories.isShowingFreestyle {
       WorktreeTerminalTabsView(
         worktree: FreestyleTerminal.worktree(),
@@ -542,7 +541,7 @@ struct WorktreeDetailView: View {
         commandPalettePresented: commandPalettePresented,
         barTint: normalFill
       )
-      .windowChromeTint(normalFill, edges: [.top, .leading])
+      .windowChromeTint(normalFill, edges: WindowChromeTint.detailTintEdges(for: .normal))
     }
   }
 

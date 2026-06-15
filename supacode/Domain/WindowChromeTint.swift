@@ -3,8 +3,8 @@ import SwiftUI
 
 /// Unified color logic for the window *chrome* tint — the nav-panel band
 /// behind the floating glass sidebar and the toolbar band behind the
-/// transparent titlebar — shared across every view mode (Normal, Shelf,
-/// Canvas).
+/// transparent titlebar — shared across the view modes that opt into chrome
+/// tinting (Normal and Shelf).
 ///
 /// The tint is "driven from the detail side": both bands are overlays on
 /// the full-bleed detail content that bleed up under the titlebar and left
@@ -18,6 +18,11 @@ import SwiftUI
 ///   or their own user-selected fallback behavior.
 /// - `.custom` ⇒ a single user-chosen color, ignoring per-repo colors.
 enum WindowChromeTint {
+  enum DetailContext {
+    case normal
+    case canvas
+  }
+
   enum ToolbarFallbackEvent {
     case windowState(isFullScreen: Bool)
     case willEnterFullScreen
@@ -183,6 +188,15 @@ enum WindowChromeTint {
     isFullScreen
   }
 
+  static func detailTintEdges(for context: DetailContext) -> Edge.Set {
+    switch context {
+    case .normal:
+      return [.top, .leading]
+    case .canvas:
+      return []
+    }
+  }
+
   static func toolbarFallbackState(current: Bool, event: ToolbarFallbackEvent) -> Bool {
     switch event {
     case .windowState(let isFullScreen):
@@ -205,7 +219,8 @@ extension View {
   /// - Parameters:
   ///   - fill: the resolved band fill, or `nil` for no tint.
   ///   - edges: which chrome regions to tint — `.top` (toolbar) and/or
-  ///     `.leading` (nav). Normal uses both; Canvas uses `.leading` only.
+  ///     `.leading` (nav). Normal uses both; Canvas passes no edges so the
+  ///     sidebar remains neutral while card title bars keep their own tint.
   func windowChromeTint(_ fill: WindowChromeTint.Fill?, edges: Edge.Set) -> some View {
     modifier(WindowChromeTintModifier(fill: fill, edges: edges))
   }

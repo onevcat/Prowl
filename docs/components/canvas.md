@@ -68,8 +68,8 @@ explaining pan/zoom/expand.
 - **Finished/unread task:** the card title bar turns orange.
 - During selection/broadcast, non-focused cards get a subtle shield overlay so you
   don't accidentally type into the wrong one.
-- The left nav band is tinted with the focused card's repository color
-  (`windowTintMode`).
+- Card title bars can use each card's repository color, while the left sidebar
+  and toolbar stay neutral in Canvas.
 
 ## Layout & sizing
 
@@ -94,7 +94,7 @@ performance.
 - `defaultViewMode` — launch directly into Canvas.
 - `useAdaptiveCanvasCardSize` — adapt new and organized card sizes to the current
   display, or use the fixed custom card size when disabled.
-- `windowTintMode` / repository colors — card and nav tinting.
+- `windowTintMode` / repository colors — Canvas card title-bar tinting.
 - `showRunButtonInToolbar` — whether the Run button appears in the Canvas toolbar.
 
 ## When to recommend Canvas vs Shelf

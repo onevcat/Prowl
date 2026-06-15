@@ -137,6 +137,17 @@ struct WindowChromeTintTests {
   }
 
   @Test
+  func detailTintEdgesKeepNormalChromeButLeaveCanvasSidebarUntinted() {
+    let normalEdges = WindowChromeTint.detailTintEdges(for: .normal)
+    #expect(normalEdges.contains(.top))
+    #expect(normalEdges.contains(.leading))
+
+    let canvasEdges = WindowChromeTint.detailTintEdges(for: .canvas)
+    #expect(!canvasEdges.contains(.top))
+    #expect(!canvasEdges.contains(.leading))
+  }
+
+  @Test
   func toolbarFallbackTurnsOnAtStartOfEnterFullScreenTransition() {
     #expect(
       WindowChromeTint.toolbarFallbackState(
