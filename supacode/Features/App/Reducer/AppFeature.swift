@@ -38,6 +38,7 @@ struct AppFeature {
       settings: SettingsFeature.State = .init()
     ) {
       var repositories = repositories
+      repositories.autoShowActiveAgentsPanel = settings.autoShowActiveAgentsPanel
       repositories.showActiveAgentTabTitles = settings.showActiveAgentTabTitles
       self.repositories = repositories
       self.settings = settings
@@ -440,6 +441,7 @@ struct AppFeature {
           settings.systemNotificationsEnabled && !state.lastKnownSystemNotificationsEnabled
         state.lastKnownSystemNotificationsEnabled = settings.systemNotificationsEnabled
         state.settings.keybindingUserOverrides = settings.keybindingUserOverrides
+        state.repositories.autoShowActiveAgentsPanel = settings.autoShowActiveAgentsPanel
         state.repositories.showActiveAgentTabTitles = settings.showActiveAgentTabTitles
         if let selectedWorktree = state.repositories.selectedTerminalWorktree {
           let rootURL = selectedWorktree.repositoryRootURL

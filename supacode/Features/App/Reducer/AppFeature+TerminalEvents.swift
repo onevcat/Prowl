@@ -142,13 +142,7 @@ extension AppFeature {
   ) -> Effect<Action>? {
     switch event {
     case .agentEntryChanged(let entry):
-      return .send(
-        .repositories(
-          .activeAgents(
-            .agentEntryChanged(entry, autoShowPanel: state.settings.autoShowActiveAgentsPanel)
-          )
-        )
-      )
+      return .send(.repositories(.activeAgents(.agentEntryChanged(entry))))
 
     case .agentEntryRemoved(let id):
       return .send(.repositories(.activeAgents(.agentEntryRemoved(id))))

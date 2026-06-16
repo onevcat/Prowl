@@ -147,11 +147,12 @@ struct AppFeatureSettingsChangedTests {
     #expect(sentTerminalCommands.value.contains(.setAgentDetectionEnabled(true)))
   }
 
-  @Test(.dependencies) func agentEntryAutoShowsActiveAgentsPanelWhenEnabled() async {
+  @Test(.dependencies) func agentEntryAutoShowsActiveAgentsPanelInCanvasWhenEnabled() async {
     var settings = SettingsFeature.State()
     settings.autoShowActiveAgentsPanel = true
-    UserDefaults.appFeatureSettingsChangedTests.set(true, forKey: "activeAgentsPanelHidden")
-    let state = AppFeature.State(settings: settings)
+    var state = AppFeature.State(settings: settings)
+    state.repositories.selection = .canvas
+    state.repositories.activeAgents.$isPanelHidden.withLock { $0 = true }
     let entry = activeAgentEntry()
 
     let store = TestStore(initialState: state) {
@@ -166,11 +167,11 @@ struct AppFeatureSettingsChangedTests {
     }
   }
 
-  @Test(.dependencies) func agentEntryKeepsActiveAgentsPanelHiddenWhenAutoShowDisabled() async {
+  @Test(.dependencies) func agentEntryKeepsActiveAgentsPanelHiddenOutsideCanvasWhenEnabled() async {
     var settings = SettingsFeature.State()
-    settings.autoShowActiveAgentsPanel = false
-    UserDefaults.appFeatureSettingsChangedTests.set(true, forKey: "activeAgentsPanelHidden")
-    let state = AppFeature.State(settings: settings)
+    settings.autoShowActiveAgentsPanel = true
+    var state = AppFeature.State(settings: settings)
+    state.repositories.activeAgents.$isPanelHidden.withLock { $0 = true }
     let entry = activeAgentEntry()
 
     let store = TestStore(initialState: state) {
@@ -180,6 +181,87 @@ struct AppFeatureSettingsChangedTests {
     await store.send(.terminalEvent(.agentEntryChanged(entry)))
     await store.receive(\.repositories.activeAgents.agentEntryChanged) {
       $0.repositories.activeAgents.entries = [entry]
+    }
+  }
+
+  @Test(.dependencies) func agentEntryKeepsActiveAgentsPanelHiddenInShelfWhenEnabled() async {
+    var settings = SettingsFeature.State()
+    settings.autoShowActiveAgentsPanel = true
+    var state = AppFeature.State(settings: settings)
+    state.repositories.isShelfActive = true
+    state.repositories.activeAgents.$isPanelHidden.withLock { $0 = true }
+    let entry = activeAgentEntry()
+
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    }
+
+    await store.send(.terminalEvent(.agentEntryChanged(entry)))
+    await store.receive(\.repositories.activeAgents.agentEntryChanged) {
+      $0.repositories.activeAgents.entries = [entry]
+    }
+  }
+
+  @Test(.dependencies) func agentEntryKeepsActiveAgentsPanelHiddenInCanvasWhenAutoShowDisabled()
+    async
+  {
+    var settings = SettingsFeature.State()
+    settings.autoShowActiveAgentsPanel = false
+    var state = AppFeature.State(settings: settings)
+    state.repositories.selection = .canvas
+    state.repositories.activeAgents.$isPanelHidden.withLock { $0 = true }
+    let entry = activeAgentEntry()
+
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    }
+
+    await store.send(.terminalEvent(.agentEntryChanged(entry)))
+    await store.receive(\.repositories.activeAgents.agentEntryChanged) {
+      $0.repositories.activeAgents.entries = [entry]
+    }
+  }
+
+  @Test(.dependencies) func lastAgentEntryRemovedHidesOpenActiveAgentsPanelInCanvasWhenEnabled()
+    async
+  {
+    var settings = SettingsFeature.State()
+    settings.autoShowActiveAgentsPanel = true
+    var state = AppFeature.State(settings: settings)
+    state.repositories.selection = .canvas
+    let entry = activeAgentEntry()
+    state.repositories.activeAgents.entries = [entry]
+    state.repositories.activeAgents.$isPanelHidden.withLock { $0 = false }
+
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    }
+
+    await store.send(.terminalEvent(.agentEntryRemoved(entry.id))) {
+      $0.repositories.activeAgents.$isPanelHidden.withLock { $0 = true }
+    }
+    await store.receive(\.repositories.activeAgents.agentEntryRemoved) {
+      $0.repositories.activeAgents.entries = []
+    }
+  }
+
+  @Test(.dependencies) func agentEntryRemovedKeepsOpenActiveAgentsPanelOutsideCanvasWhenEnabled()
+    async
+  {
+    var settings = SettingsFeature.State()
+    settings.autoShowActiveAgentsPanel = true
+    var state = AppFeature.State(settings: settings)
+    let entry = activeAgentEntry()
+    state.repositories.activeAgents.entries = [entry]
+    state.repositories.activeAgents.$isPanelHidden.withLock { $0 = false }
+
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    }
+
+    await store.send(.terminalEvent(.agentEntryRemoved(entry.id)))
+    await store.receive(\.repositories.activeAgents.agentEntryRemoved) {
+      $0.repositories.activeAgents.entries = []
     }
   }
 

@@ -97,11 +97,13 @@ struct AppearanceSettingsView: View {
         }
         Section("Active Agents") {
           Toggle(
-            "Show Active Agents panel automatically",
+            "Auto-manage Active Agents panel in Canvas",
             isOn: $store.autoShowActiveAgentsPanel
           )
-          .help("Open the Active Agents panel when an agent is detected.")
-          Text("Hidden panels reopen as soon as an agent starts or updates.")
+          .help(
+            "Show the Active Agents panel in Canvas while agents are active, then hide it when none remain."
+          )
+          Text("Normal and Shelf keep the panel under manual control.")
             .foregroundStyle(.secondary)
             .font(.callout)
           Toggle(

@@ -283,13 +283,15 @@ struct RepositoriesFeature {
     var pendingRenameBranchRequest: PendingRenameBranchRequest?
     var isSidebarDragActive = false
     var pendingSidebarNotifyReorderIDs: [Worktree.ID] = []
+    var autoShowActiveAgentsPanel = false
     var showActiveAgentTabTitles = false
     var nextCanvasFocusRequestID = 0
     var pendingCanvasFocusRequest: CanvasFocusRequest?
     var nextCanvasCommandRequestID = 0
     var pendingCanvasCommandRequest: CanvasCommandRequest?
     var activeAgents = ActiveAgentsFeature.State()
-    @Shared(.appStorage("sidebarCollapsedRepositoryIDs")) var collapsedRepositoryIDs: [Repository.ID] = []
+    @Shared(.appStorage("sidebarCollapsedRepositoryIDs")) var collapsedRepositoryIDs:
+      [Repository.ID] = []
     @Presents var worktreeCreationPrompt: WorktreeCreationPromptFeature.State?
     @Presents var alert: AlertState<Alert>?
   }

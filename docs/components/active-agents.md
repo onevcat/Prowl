@@ -51,8 +51,10 @@ Rows appear in the order agents are first detected. (See
   **Done** row downgrades to **Idle** once focused.
 - **Keyboard navigation:** `⌥⌃↓` next agent, `⌥⌃↑` previous agent (wraps).
 - **Resize** the panel by dragging its top edge (height is remembered).
-- **Auto-show:** if `autoShowActiveAgentsPanel` is on and the panel is hidden, a
-  newly detected agent opens it automatically.
+- **Canvas auto-visibility:** if `autoShowActiveAgentsPanel` is on, Canvas opens
+  the panel whenever at least one agent is active and hides it again when the
+  active-agent count reaches zero. Normal and Shelf keep the panel under manual
+  control.
 
 ## Empty state
 
@@ -60,7 +62,8 @@ When nothing is running: "New agents will appear here".
 
 ## Settings
 
-- `autoShowActiveAgentsPanel` — pop the panel open when an agent appears.
+- `autoShowActiveAgentsPanel` — auto-manage the panel while in Canvas: show it
+  when active agents exist, hide it when none remain.
 - `showActiveAgentTabTitles` — show each agent's tab title instead of its branch.
 - `showActiveAgentStatusInShelf` — show detected agent status markers on Shelf
   tab icons.

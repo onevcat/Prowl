@@ -53,7 +53,7 @@ JSON is pretty-printed with sorted keys. Legacy `~/.supacode` is migrated to
 | `defaultViewMode` | enum (`normal`/`shelf`/`canvas`) | `normal` | View mode on launch. |
 | `dimUnfocusedSplits` | Bool | `true` | Dim panes that aren't focused. |
 | `useAdaptiveCanvasCardSize` | Bool | `true` | Adapt new and organized Canvas card sizes to the current display; when `false`, use the fixed custom 800x710 card size including title bar. |
-| `autoShowActiveAgentsPanel` | Bool | `false` | Auto-open the Active Agents panel on a new agent. |
+| `autoShowActiveAgentsPanel` | Bool | `false` | In Canvas, show the Active Agents panel while active agents exist and hide it when none remain. |
 | `showActiveAgentTabTitles` | Bool | `false` | Show tab titles (vs. branch) as the agents panel subtitle. |
 | `showActiveAgentStatusInShelf` | Bool | `true` | Show agent status markers on Shelf tab icons. |
 | `windowTintMode` | enum (`none`/`repositoryColor`/`custom`) | `repositoryColor` | How the window chrome is tinted. |

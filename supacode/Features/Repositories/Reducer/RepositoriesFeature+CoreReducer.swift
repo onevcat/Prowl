@@ -41,6 +41,22 @@ extension RepositoriesFeature {
         }
       }
 
+    case .activeAgents(.agentEntryChanged(let entry)):
+      let activeAgentCount =
+        state.activeAgents.entries[id: entry.id] == nil
+        ? state.activeAgents.entries.count + 1
+        : state.activeAgents.entries.count
+      reconcileCanvasActiveAgentsPanelVisibility(activeAgentCount: activeAgentCount, state: &state)
+      return .none
+
+    case .activeAgents(.agentEntryRemoved(let id)):
+      let activeAgentCount =
+        state.activeAgents.entries[id: id] == nil
+        ? state.activeAgents.entries.count
+        : state.activeAgents.entries.count - 1
+      reconcileCanvasActiveAgentsPanelVisibility(activeAgentCount: activeAgentCount, state: &state)
+      return .none
+
     case .activeAgents:
       return .none
 
@@ -1001,5 +1017,17 @@ extension RepositoriesFeature {
       ?? state.lastFocusedWorktreeID
       ?? state.orderedWorktreeRows().first?.id
     return terminalTarget(for: fallbackWorktreeID, state: state)
+  }
+}
+
+private func reconcileCanvasActiveAgentsPanelVisibility(
+  activeAgentCount: Int,
+  state: inout RepositoriesFeature.State
+) {
+  guard state.isShowingCanvas, state.autoShowActiveAgentsPanel else { return }
+  if activeAgentCount > 0, state.activeAgents.isPanelHidden {
+    state.activeAgents.$isPanelHidden.withLock { $0 = false }
+  } else if activeAgentCount == 0, !state.activeAgents.isPanelHidden {
+    state.activeAgents.$isPanelHidden.withLock { $0 = true }
   }
 }
