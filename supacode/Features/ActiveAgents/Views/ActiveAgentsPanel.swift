@@ -156,8 +156,7 @@ struct ActiveAgentsPanel: View {
   private func helpText(for entry: ActiveAgentEntry) -> String {
     Self.helpText(
       for: entry,
-      branchName: branchName(for: entry),
-      showTabTitles: showTabTitles
+      repositoryName: repositoryName(for: entry)
     )
   }
 
@@ -171,10 +170,9 @@ struct ActiveAgentsPanel: View {
 
   static func helpText(
     for entry: ActiveAgentEntry,
-    branchName: String,
-    showTabTitles: Bool
+    repositoryName: String
   ) -> String {
-    showTabTitles ? branchName : tabTitle(for: entry)
+    ActiveAgentRow.primaryTitle(for: entry, repositoryName: repositoryName)
   }
 
   static func tabTitle(for entry: ActiveAgentEntry) -> String {

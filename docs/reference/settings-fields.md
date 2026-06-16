@@ -54,7 +54,7 @@ JSON is pretty-printed with sorted keys. Legacy `~/.supacode` is migrated to
 | `dimUnfocusedSplits` | Bool | `true` | Dim panes that aren't focused. |
 | `useAdaptiveCanvasCardSize` | Bool | `true` | Adapt new and organized Canvas card sizes to the current display; when `false`, use the fixed custom 800x710 card size including title bar. |
 | `autoShowActiveAgentsPanel` | Bool | `false` | Auto-open the Active Agents panel on a new agent. |
-| `showActiveAgentTabTitles` | Bool | `false` | Show tab titles (vs. branch) in the agents panel. |
+| `showActiveAgentTabTitles` | Bool | `false` | Show tab titles (vs. branch) as the agents panel subtitle. |
 | `showActiveAgentStatusInShelf` | Bool | `true` | Show agent status markers on Shelf tab icons. |
 | `windowTintMode` | enum (`none`/`repositoryColor`/`custom`) | `repositoryColor` | How the window chrome is tinted. |
 | `windowTintCustomColor` | color | default | The custom tint color (when `windowTintMode = custom`). |

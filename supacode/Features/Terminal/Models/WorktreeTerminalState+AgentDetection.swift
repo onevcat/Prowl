@@ -240,6 +240,10 @@ extension WorktreeTerminalState {
       fromSurfaceId: surfaceID,
       context: GHOSTTY_SURFACE_CONTEXT_TAB
     ).workingDirectory
+    let conversationTitle = ActiveAgentConversationTitle.title(
+      for: agent,
+      workingDirectory: workingDirectory
+    )
     return ActiveAgentEntry(
       id: surfaceID,
       worktreeID: worktree.id,
@@ -247,6 +251,7 @@ extension WorktreeTerminalState {
       workingDirectory: workingDirectory,
       tabID: tabId,
       tabTitle: tabTitle,
+      conversationTitle: conversationTitle,
       surfaceID: surfaceID,
       paneIndex: paneIndex,
       iconLookupToken: state.iconLookupToken ?? agent.iconLookupToken,

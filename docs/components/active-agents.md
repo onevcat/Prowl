@@ -11,7 +11,8 @@
 
 A collapsible panel at the bottom of the left sidebar that lists **every agent
 currently detected across all worktrees/tabs/panes**, in real time. Each row shows
-the agent (Claude, Codex, …), its repository/branch context, and a **status pill**.
+the agent's current task title when one can be inferred, its repository/branch
+context, and a **status pill**.
 Click a row to jump straight to that agent's pane.
 
 **Toggle:** `⌘⌥P` (`toggle_active_agents_panel`), the sidebar footer button, or
@@ -20,15 +21,17 @@ Command Palette → "Toggle Active Agents Panel".
 ## What each row shows
 
 ```
-[icon]  AgentName · RepositoryName        [status pill]
+[icon]  task title or AgentName · RepositoryName        [status pill]
         tab title or branch (secondary)
 ```
 
 - **Icon** — the detected command/agent icon (for example `omp` keeps the OMP
   icon even though it reports as the Pi agent; unknown wrappers fall back to the
   agent icon, then a sparkle).
-- **Title** — detected command/agent name + repository (repo color-coded);
-  command aliases such as `omp` are shown directly.
+- **Title** — inferred task title when available. Codex CLI sessions use the
+  cleaned first real user request from the matching Codex session log, skipping
+  injected AGENTS/environment context; otherwise the row falls back to detected
+  command/agent name + repository.
 - **Subtitle** — the tab title (if `showActiveAgentTabTitles`) or branch name.
 - **Status pill** — one of:
 

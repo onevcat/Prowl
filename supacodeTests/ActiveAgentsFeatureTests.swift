@@ -188,7 +188,7 @@ struct ActiveAgentsFeatureTests {
     }
   }
 
-  @Test func panelSubtitleAndHelpSwapTabTitleAndBranchWhenEnabled() {
+  @Test func panelSubtitleSwapsTabTitleAndBranchWhenEnabled() {
     let entry = entry(id: UUID(0), tabTitle: "Review issue 385", state: .idle, changedAt: Date())
 
     #expect(
@@ -196,16 +196,28 @@ struct ActiveAgentsFeatureTests {
         == "main"
     )
     #expect(
-      ActiveAgentsPanel.helpText(for: entry, branchName: "main", showTabTitles: false)
-        == "Review issue 385"
-    )
-    #expect(
       ActiveAgentsPanel.subtitle(for: entry, branchName: "main", showTabTitles: true)
         == "Review issue 385"
     )
+  }
+
+  @Test func panelHelpTextUsesFullPrimaryTitle() {
+    let titledEntry = entry(
+      id: UUID(0),
+      tabTitle: "Review issue 385",
+      conversationTitle: "定位 active agents 标题检测",
+      state: .idle,
+      changedAt: Date()
+    )
+    let fallbackEntry = entry(id: UUID(1), tabTitle: "Review issue 385", state: .idle, changedAt: Date())
+
     #expect(
-      ActiveAgentsPanel.helpText(for: entry, branchName: "main", showTabTitles: true)
-        == "main"
+      ActiveAgentsPanel.helpText(for: titledEntry, repositoryName: "Prowl")
+        == "定位 active agents 标题检测"
+    )
+    #expect(
+      ActiveAgentsPanel.helpText(for: fallbackEntry, repositoryName: "Prowl")
+        == "codex · Prowl"
     )
   }
 
@@ -213,6 +225,90 @@ struct ActiveAgentsFeatureTests {
     let entry = entry(id: UUID(0), tabTitle: "   ", state: .idle, changedAt: Date())
 
     #expect(ActiveAgentsPanel.tabTitle(for: entry) == "Untitled tab")
+  }
+
+  @Test func codexConversationTitleReadsFirstUserMessageFromMatchingSession() throws {
+    let sessionsRoot = FileManager.default.temporaryDirectory
+      .appending(path: "prowl-codex-title-\(UUID().uuidString)", directoryHint: .isDirectory)
+    let sessionDirectory = sessionsRoot
+      .appending(path: "2026/06/16", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: sessionDirectory, withIntermediateDirectories: true)
+    let sessionFile = sessionDirectory.appending(path: "rollout-test.jsonl")
+    try """
+      {"type":"session_meta","payload":{"id":"test","cwd":"/Users/yam/Developer/Prowl","source":"cli","originator":"codex-tui"}}
+      {"type":"response_item","payload":{"type":"message","role":"developer","content":[{"type":"input_text","text":"ignored"}]}}
+      {"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"<user_message>\\n现在 active 还有点弱，我想实现一个像 codex app 这样的功能，\\n有一个明确的标题和状态\\n</user_message>"}]}}
+      """.write(to: sessionFile, atomically: true, encoding: .utf8)
+
+    let title = ActiveAgentConversationTitle.title(
+      for: .codex,
+      workingDirectory: URL(filePath: "/Users/yam/Developer/Prowl"),
+      sessionsRoot: sessionsRoot,
+      now: Date()
+    )
+
+    #expect(title == "现在 active 还有点弱，我想实现一个像 codex app 这样的功能，有一个明确的标题和状态")
+  }
+
+  @Test func codexConversationTitleSkipsInjectedContextAndReadsMarkedRequest() throws {
+    let sessionsRoot = FileManager.default.temporaryDirectory
+      .appending(path: "prowl-codex-title-\(UUID().uuidString)", directoryHint: .isDirectory)
+    let sessionDirectory = sessionsRoot
+      .appending(path: "2026/06/16", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: sessionDirectory, withIntermediateDirectories: true)
+    let sessionFile = sessionDirectory.appending(path: "rollout-test.jsonl")
+    try """
+      {"type":"session_meta","payload":{"id":"test","cwd":"/Users/yam/Developer/Prowl","source":"cli","originator":"codex-tui"}}
+      {"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"# AGENTS.md instructions for /Users/yam/Developer/Prowl\\n\\n<INSTRUCTIONS>\\nUse local rules.\\n</INSTRUCTIONS>"},{"type":"input_text","text":"<environment_context>\\n  <cwd>/Users/yam/Developer/Prowl</cwd>\\n</environment_context>"},{"type":"input_text","text":"# Files mentioned by the user:\\n\\n## CleanShot.png\\n\\n## My request for Codex:\\n有两个问题 1 你好像取的是完整的 prompt 而不是我输入的文字？ 2 hover 上为什么是分支名？"}]}}
+      """.write(to: sessionFile, atomically: true, encoding: .utf8)
+
+    let title = ActiveAgentConversationTitle.title(
+      for: .codex,
+      workingDirectory: URL(filePath: "/Users/yam/Developer/Prowl"),
+      sessionsRoot: sessionsRoot,
+      now: Date()
+    )
+
+    #expect(title == "有两个问题 1 你好像取的是完整的 prompt 而不是我输入的文字？ 2 hover 上为什么是分支名？")
+  }
+
+  @Test func codexConversationTitleIgnoresUnmatchedSessionDirectories() throws {
+    let sessionsRoot = FileManager.default.temporaryDirectory
+      .appending(path: "prowl-codex-title-\(UUID().uuidString)", directoryHint: .isDirectory)
+    let sessionDirectory = sessionsRoot
+      .appending(path: "2026/06/16", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: sessionDirectory, withIntermediateDirectories: true)
+    let sessionFile = sessionDirectory.appending(path: "rollout-test.jsonl")
+    try """
+      {"type":"session_meta","payload":{"id":"test","cwd":"/Users/yam/Developer/Other","source":"cli","originator":"codex-tui"}}
+      {"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"不要展示这个"}]}}
+      """.write(to: sessionFile, atomically: true, encoding: .utf8)
+
+    let title = ActiveAgentConversationTitle.title(
+      for: .codex,
+      workingDirectory: URL(filePath: "/Users/yam/Developer/Prowl"),
+      sessionsRoot: sessionsRoot,
+      now: Date()
+    )
+
+    #expect(title == nil)
+  }
+
+  @Test func rowTitlePrefersConversationTitleOverAgentRepositoryLabel() {
+    let entry = entry(
+      id: UUID(0),
+      conversationTitle: "查明 Cmd+Opt+P 绑定",
+      state: .working,
+      changedAt: Date()
+    )
+
+    #expect(ActiveAgentRow.primaryTitle(for: entry, repositoryName: "Prowl") == "查明 Cmd+Opt+P 绑定")
+  }
+
+  @Test func rowTitleFallsBackToAgentRepositoryLabel() {
+    let entry = entry(id: UUID(0), state: .working, changedAt: Date())
+
+    #expect(ActiveAgentRow.primaryTitle(for: entry, repositoryName: "Prowl") == "codex · Prowl")
   }
 
   @Test func agentIconTintUsesBrandIdentityColors() {
@@ -233,6 +329,7 @@ struct ActiveAgentsFeatureTests {
   private func entry(
     id: UUID,
     tabTitle: String = "1",
+    conversationTitle: String? = nil,
     state: AgentDisplayState,
     changedAt: Date,
     agent: DetectedAgent = .codex,
@@ -245,6 +342,7 @@ struct ActiveAgentsFeatureTests {
       workingDirectory: nil,
       tabID: TerminalTabID(rawValue: UUID()),
       tabTitle: tabTitle,
+      conversationTitle: conversationTitle,
       surfaceID: id,
       paneIndex: 1,
       iconLookupToken: iconLookupToken ?? agent.iconLookupToken,

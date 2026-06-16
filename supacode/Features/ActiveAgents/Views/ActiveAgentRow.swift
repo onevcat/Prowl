@@ -29,19 +29,40 @@ struct ActiveAgentRow: View {
     .opacity(isDimmed ? 0.7 : 1)
   }
 
+  @ViewBuilder
   private var title: some View {
-    HStack(alignment: .firstTextBaseline, spacing: 3) {
-      Text(entry.displayName)
+    if let conversationTitle = Self.conversationTitle(for: entry) {
+      Text(conversationTitle)
         .font(.body.weight(.medium))
         .foregroundStyle(.primary)
-      Text("·")
-        .font(.caption.weight(.semibold))
-        .foregroundStyle(.tertiary)
-      Text(repositoryName)
-        .font(.callout.weight(.medium))
-        .foregroundStyle(repositoryColor?.color ?? .secondary)
+        .lineLimit(1)
+    } else {
+      HStack(alignment: .firstTextBaseline, spacing: 3) {
+        Text(entry.displayName)
+          .font(.body.weight(.medium))
+          .foregroundStyle(.primary)
+        Text("·")
+          .font(.caption.weight(.semibold))
+          .foregroundStyle(.tertiary)
+        Text(repositoryName)
+          .font(.callout.weight(.medium))
+          .foregroundStyle(repositoryColor?.color ?? .secondary)
+      }
+      .lineLimit(1)
     }
-    .lineLimit(1)
+  }
+
+  static func primaryTitle(for entry: ActiveAgentEntry, repositoryName: String) -> String {
+    guard let title = conversationTitle(for: entry) else {
+      return "\(entry.displayName) · \(repositoryName)"
+    }
+    return title
+  }
+
+  private static func conversationTitle(for entry: ActiveAgentEntry) -> String? {
+    let title = entry.conversationTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let title, !title.isEmpty else { return nil }
+    return title
   }
 
   private var agentIcon: some View {
