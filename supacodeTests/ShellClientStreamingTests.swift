@@ -236,4 +236,27 @@ struct ShellClientStreamingTests {
     #expect(snapshot.currentDirectoryURL == currentDirectoryURL)
     #expect(snapshot.log == false)
   }
+
+  @Test func runLoginStreamWithEnvironmentInjectsVariables() async throws {
+    let shell = ShellClient.liveValue
+    let stream = shell.runLoginStream(
+      URL(fileURLWithPath: "/usr/bin/env"),
+      [],
+      nil,
+      environment: ["PROWL_TEST_VALUE": "present"],
+      log: false
+    )
+    var output = ""
+    for try await event in stream {
+      switch event {
+      case .line(let line):
+        output += line.text + "\n"
+      case .finished:
+        break
+      }
+    }
+
+    #expect(output.contains("PROWL_TEST_VALUE=present"))
+    #expect(output.contains("PATH="))
+  }
 }

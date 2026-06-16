@@ -205,9 +205,28 @@ nonisolated struct ProjectWorkspaceRepositoryPlan: Equatable, Sendable, Identifi
   var sourceKind: ProjectWorkspaceRepositorySourceKind
   var sourceLocation: String
   var checkout: ProjectWorkspaceRepositoryCheckout
+  var bootstrap: ProjectWorkspaceRepositoryBootstrap?
 
   var localSourceURL: URL? {
     sourceKind.localSourceURL(from: sourceLocation)
+  }
+
+  init(
+    id: String,
+    name: String,
+    path: String? = nil,
+    sourceKind: ProjectWorkspaceRepositorySourceKind,
+    sourceLocation: String,
+    checkout: ProjectWorkspaceRepositoryCheckout,
+    bootstrap: ProjectWorkspaceRepositoryBootstrap? = nil
+  ) {
+    self.id = id
+    self.name = name
+    self.path = path
+    self.sourceKind = sourceKind
+    self.sourceLocation = sourceLocation
+    self.checkout = checkout
+    self.bootstrap = bootstrap
   }
 }
 
@@ -258,6 +277,8 @@ nonisolated enum ProjectWorkspaceCreationError: LocalizedError, Equatable, Senda
   case workspaceAlreadyExists(String)
   case repositoryDoesNotExist(String)
   case linkAlreadyExists(String)
+  case bootstrapProfileNotFound(String)
+  case bootstrapFailed(repository: String, message: String)
   case gitCommandFailed(command: String, message: String)
 
   var errorDescription: String? {
@@ -286,6 +307,10 @@ nonisolated enum ProjectWorkspaceCreationError: LocalizedError, Equatable, Senda
       return "\(path) does not exist."
     case .linkAlreadyExists(let path):
       return "\(path) already exists."
+    case .bootstrapProfileNotFound(let scriptID):
+      return "Bootstrap profile not found: \(scriptID)"
+    case .bootstrapFailed(let repository, let message):
+      return "Bootstrap failed for \(repository): \(message)"
     case .gitCommandFailed(let command, let message):
       if message.isEmpty {
         return "Git command failed: \(command)"
@@ -306,6 +331,7 @@ nonisolated struct ProjectWorkspaceRepositoryEntry: Codable, Equatable, Hashable
   var sourceLocation: String?
   var branchName: String?
   var baseRef: String?
+  var bootstrap: ProjectWorkspaceRepositoryBootstrap?
 
   enum CodingKeys: String, CodingKey {
     case id
@@ -316,6 +342,7 @@ nonisolated struct ProjectWorkspaceRepositoryEntry: Codable, Equatable, Hashable
     case sourceLocation = "source_location"
     case branchName = "branch_name"
     case baseRef = "base_ref"
+    case bootstrap
   }
 
   init(
@@ -326,7 +353,8 @@ nonisolated struct ProjectWorkspaceRepositoryEntry: Codable, Equatable, Hashable
     sourceKind: ProjectWorkspaceRepositorySourceKind = .existingPath,
     sourceLocation: String? = nil,
     branchName: String? = nil,
-    baseRef: String? = nil
+    baseRef: String? = nil,
+    bootstrap: ProjectWorkspaceRepositoryBootstrap? = nil
   ) {
     self.id = id
     self.name = name
@@ -336,6 +364,7 @@ nonisolated struct ProjectWorkspaceRepositoryEntry: Codable, Equatable, Hashable
     self.sourceLocation = sourceLocation
     self.branchName = branchName
     self.baseRef = baseRef
+    self.bootstrap = bootstrap
   }
 
   init(from decoder: Decoder) throws {
@@ -353,6 +382,7 @@ nonisolated struct ProjectWorkspaceRepositoryEntry: Codable, Equatable, Hashable
     sourceLocation = try container.decodeIfPresent(String.self, forKey: .sourceLocation)
     branchName = try container.decodeIfPresent(String.self, forKey: .branchName)
     baseRef = try container.decodeIfPresent(String.self, forKey: .baseRef)
+    bootstrap = try container.decodeIfPresent(ProjectWorkspaceRepositoryBootstrap.self, forKey: .bootstrap)
   }
 
   func resolvedURL(relativeTo workspaceRootURL: URL) -> URL {
@@ -509,7 +539,8 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
   static func create(
     _ request: ProjectWorkspaceCreationRequest,
     fileManager: FileManager = .default,
-    gitRunner: ProjectWorkspaceGitRunner
+    gitRunner: ProjectWorkspaceGitRunner,
+    bootstrapRunner: ProjectWorkspaceBootstrapRunner? = nil
   ) async throws -> ProjectWorkspace {
     let title = request.draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !title.isEmpty else {
@@ -558,6 +589,13 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
           gitRunner: gitRunner
         )
         entries.append(entry)
+        try await runBootstrapIfNeeded(
+          for: entry,
+          plan: repository,
+          workspaceRootURL: rootURL,
+          bootstrapRunner: bootstrapRunner,
+          fileManager: fileManager
+        )
       }
 
       let workspace = ProjectWorkspace(
@@ -812,8 +850,64 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
       sourceKind: repository.sourceKind,
       sourceLocation: normalizedSourceLocation,
       branchName: entryBranchName,
-      baseRef: entryBaseRef
+      baseRef: entryBaseRef,
+      bootstrap: repository.bootstrap
     )
+  }
+
+  private static func runBootstrapIfNeeded(
+    for entry: RepositoryEntry,
+    plan: ProjectWorkspaceRepositoryPlan,
+    workspaceRootURL: URL,
+    bootstrapRunner: ProjectWorkspaceBootstrapRunner?,
+    fileManager: FileManager
+  ) async throws {
+    guard let bootstrap = entry.bootstrap,
+      bootstrap.runOn.contains(.create),
+      let bootstrapRunner
+    else {
+      return
+    }
+    guard plan.checkout != .link else {
+      log.info("Skipping automatic bootstrap for linked workspace child \(entry.name)")
+      return
+    }
+
+    let repositoryRootURL = entry.resolvedURL(relativeTo: workspaceRootURL)
+    var isDirectory = ObjCBool(false)
+    guard
+      fileManager.fileExists(
+        atPath: repositoryRootURL.path(percentEncoded: false),
+        isDirectory: &isDirectory
+      ),
+      isDirectory.boolValue
+    else {
+      throw ProjectWorkspaceCreationError.repositoryDoesNotExist(
+        repositoryRootURL.path(percentEncoded: false))
+    }
+
+    let context = ProjectWorkspaceBootstrapContext(
+      workspaceRootURL: workspaceRootURL,
+      repositoryRootURL: repositoryRootURL,
+      repository: entry,
+      timing: .create
+    )
+    do {
+      try await bootstrapRunner.run(bootstrap, context)
+    } catch let error as ProjectWorkspaceCreationError {
+      if !bootstrap.required {
+        log.warning("Optional bootstrap failed for \(entry.name): \(error.localizedDescription)")
+        return
+      }
+      throw error
+    } catch {
+      let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+      if !bootstrap.required {
+        log.warning("Optional bootstrap failed for \(entry.name): \(message)")
+        return
+      }
+      throw ProjectWorkspaceCreationError.bootstrapFailed(repository: entry.name, message: message)
+    }
   }
 
   private static func validatedCheckout(

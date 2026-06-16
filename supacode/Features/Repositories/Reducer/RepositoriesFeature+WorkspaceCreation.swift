@@ -97,9 +97,19 @@ extension RepositoriesFeature {
       state.workspaceCreationPrompt?.validationMessage = nil
       let request = ProjectWorkspaceCreationRequest(draft: draft, createdAt: now)
       let gitRunner = Self.workspaceGitRunner(shellClient: shellClient)
+      @Shared(.bootstrapProfiles) var bootstrapProfiles
+      let bootstrapRunner = ProjectWorkspaceBootstrapExecutor(
+        profiles: bootstrapProfiles,
+        shellClient: shellClient,
+        now: { Date() }
+      ).runner
       return .run { send in
         do {
-          _ = try await ProjectWorkspace.create(request, gitRunner: gitRunner)
+          _ = try await ProjectWorkspace.create(
+            request,
+            gitRunner: gitRunner,
+            bootstrapRunner: bootstrapRunner
+          )
           await send(.workspaceCreation(.workspaceCreated(request.draft.rootURL)))
         } catch {
           guard !Task.isCancelled else {

@@ -115,6 +115,40 @@ struct ProjectWorkspaceTests {
     #expect(shared.sourceKind == .existingPath)
   }
 
+  @Test func decodesWorkspaceBootstrapMetadata() throws {
+    let rootURL = try makeTemporaryWorkspaceRoot()
+    defer { try? FileManager.default.removeItem(at: rootURL) }
+
+    try writeWorkspaceJSON(
+      """
+      {
+        "title": "Bootstrap Task",
+        "repositories": [
+          {
+            "id": "app",
+            "name": "App",
+            "path": "app",
+            "bootstrap": {
+              "script_kind": "user_profile",
+              "script_id": "sync-app",
+              "run_on": ["create", "manual"],
+              "required": true
+            }
+          }
+        ]
+      }
+      """,
+      to: rootURL
+    )
+
+    let workspace = try #require(ProjectWorkspace.load(from: rootURL))
+    let bootstrap = try #require(workspace.repositories.first?.bootstrap)
+    #expect(bootstrap.scriptKind == .userProfile)
+    #expect(bootstrap.scriptID == "sync-app")
+    #expect(bootstrap.runOn == [.create, .manual])
+    #expect(bootstrap.required == true)
+  }
+
   @Test func loadReturnsNilForMalformedWorkspaceMetadata() throws {
     let rootURL = try makeTemporaryWorkspaceRoot()
     defer { try? FileManager.default.removeItem(at: rootURL) }
@@ -564,6 +598,204 @@ struct ProjectWorkspaceTests {
       ])
     #expect(workspace.repositories.map(\.branchName) == ["codex/app", nil])
     #expect(workspace.repositories.map(\.baseRef) == ["main", "origin/main"])
+  }
+
+  @Test func createWorkspaceRunsBootstrapAfterMaterialization() async throws {
+    let rootURL = try makeTemporaryWorkspaceRoot()
+    let appURL = try makeTemporaryWorkspaceRoot()
+    let apiURL = try makeTemporaryWorkspaceRoot()
+    defer {
+      try? FileManager.default.removeItem(at: rootURL)
+      try? FileManager.default.removeItem(at: appURL)
+      try? FileManager.default.removeItem(at: apiURL)
+    }
+    let bootstrapCalls = LockIsolated<[ProjectWorkspaceBootstrapContext]>([])
+    _ = try await ProjectWorkspace.create(
+      ProjectWorkspaceCreationRequest(
+        draft: ProjectWorkspaceCreationDraft(
+          title: "Bootstrap",
+          rootURL: rootURL,
+          repositories: [
+            ProjectWorkspaceRepositoryPlan(
+              id: "app",
+              name: "App",
+              path: "app",
+              sourceKind: .localRepository,
+              sourceLocation: appURL.path(percentEncoded: false),
+              checkout: .createBranch(branchName: "codex/app", baseRef: "main"),
+              bootstrap: ProjectWorkspaceRepositoryBootstrap(
+                scriptKind: .userProfile,
+                scriptID: "sync-app",
+                runOn: [.create],
+                required: true
+              )
+            ),
+            ProjectWorkspaceRepositoryPlan(
+              id: "api",
+              name: "API",
+              path: "api",
+              sourceKind: .existingPath,
+              sourceLocation: apiURL.path(percentEncoded: false),
+              checkout: .link,
+              bootstrap: ProjectWorkspaceRepositoryBootstrap(
+                scriptKind: .userProfile,
+                scriptID: "sync-api",
+                runOn: [.create],
+                required: true
+              )
+            ),
+          ]
+        ),
+        createdAt: Date(timeIntervalSince1970: 9_012_345)
+      ),
+      gitRunner: ProjectWorkspaceGitRunner { command in
+        if command.arguments.contains("worktree") {
+          try FileManager.default.createDirectory(
+            at: rootURL.appending(path: "app"),
+            withIntermediateDirectories: true
+          )
+        }
+      },
+      bootstrapRunner: ProjectWorkspaceBootstrapRunner { _, context in
+        bootstrapCalls.withValue { $0.append(context) }
+      }
+    )
+
+    #expect(bootstrapCalls.value.map(\.repository.id) == ["app"])
+    let loaded = try #require(ProjectWorkspace.load(from: rootURL))
+    #expect(loaded.repositories.map(\.bootstrap?.scriptID) == ["sync-app", "sync-api"])
+  }
+
+  @Test func optionalBootstrapFailureKeepsWorkspace() async throws {
+    let rootURL = try makeTemporaryWorkspaceRoot()
+    let appURL = try makeTemporaryWorkspaceRoot()
+    let apiURL = try makeTemporaryWorkspaceRoot()
+    defer {
+      try? FileManager.default.removeItem(at: rootURL)
+      try? FileManager.default.removeItem(at: appURL)
+      try? FileManager.default.removeItem(at: apiURL)
+    }
+
+    let workspace = try await ProjectWorkspace.create(
+      ProjectWorkspaceCreationRequest(
+        draft: ProjectWorkspaceCreationDraft(
+          title: "Optional Bootstrap",
+          rootURL: rootURL,
+          repositories: [
+            ProjectWorkspaceRepositoryPlan(
+              id: "app",
+              name: "App",
+              path: "app",
+              sourceKind: .localRepository,
+              sourceLocation: appURL.path(percentEncoded: false),
+              checkout: .createBranch(branchName: "codex/app", baseRef: "main"),
+              bootstrap: ProjectWorkspaceRepositoryBootstrap(
+                scriptKind: .userProfile,
+                scriptID: "sync-app",
+                runOn: [.create],
+                required: false
+              )
+            ),
+            ProjectWorkspaceRepositoryPlan(
+              id: "api",
+              name: "API",
+              path: "api",
+              sourceKind: .localRepository,
+              sourceLocation: apiURL.path(percentEncoded: false),
+              checkout: .createBranch(branchName: "codex/api", baseRef: "main")
+            ),
+          ]
+        ),
+        createdAt: Date(timeIntervalSince1970: 9_123_456)
+      ),
+      gitRunner: ProjectWorkspaceGitRunner { command in
+        let arguments = command.arguments.joined(separator: " ")
+        if arguments.contains(rootURL.appending(path: "app").path(percentEncoded: false)) {
+          try FileManager.default.createDirectory(
+            at: rootURL.appending(path: "app"),
+            withIntermediateDirectories: true
+          )
+        }
+        if arguments.contains(rootURL.appending(path: "api").path(percentEncoded: false)) {
+          try FileManager.default.createDirectory(
+            at: rootURL.appending(path: "api"),
+            withIntermediateDirectories: true
+          )
+        }
+      },
+      bootstrapRunner: ProjectWorkspaceBootstrapRunner { _, _ in
+        throw ProjectWorkspaceCreationError.bootstrapFailed(repository: "App", message: "boom")
+      }
+    )
+
+    #expect(workspace.title == "Optional Bootstrap")
+    #expect(ProjectWorkspace.load(from: rootURL) != nil)
+  }
+
+  @Test func requiredBootstrapFailureRollsBackMaterialization() async throws {
+    let rootURL = try makeTemporaryWorkspaceRoot()
+    let appURL = try makeTemporaryWorkspaceRoot()
+    let apiURL = try makeTemporaryWorkspaceRoot()
+    defer {
+      try? FileManager.default.removeItem(at: rootURL)
+      try? FileManager.default.removeItem(at: appURL)
+      try? FileManager.default.removeItem(at: apiURL)
+    }
+
+    await #expect(throws: ProjectWorkspaceCreationError.bootstrapFailed(repository: "App", message: "boom")) {
+      try await ProjectWorkspace.create(
+        ProjectWorkspaceCreationRequest(
+          draft: ProjectWorkspaceCreationDraft(
+            title: "Required Bootstrap",
+            rootURL: rootURL,
+            repositories: [
+              ProjectWorkspaceRepositoryPlan(
+                id: "app",
+                name: "App",
+                path: "app",
+                sourceKind: .localRepository,
+                sourceLocation: appURL.path(percentEncoded: false),
+                checkout: .createBranch(branchName: "codex/app", baseRef: "main"),
+                bootstrap: ProjectWorkspaceRepositoryBootstrap(
+                  scriptKind: .userProfile,
+                  scriptID: "sync-app",
+                  runOn: [.create],
+                  required: true
+                )
+              ),
+              ProjectWorkspaceRepositoryPlan(
+                id: "api",
+                name: "API",
+                path: "api",
+                sourceKind: .localRepository,
+                sourceLocation: apiURL.path(percentEncoded: false),
+                checkout: .createBranch(branchName: "codex/api", baseRef: "main")
+              ),
+            ]
+          ),
+          createdAt: Date(timeIntervalSince1970: 9_234_567)
+        ),
+        gitRunner: ProjectWorkspaceGitRunner { command in
+          let arguments = command.arguments.joined(separator: " ")
+          if arguments.contains(rootURL.appending(path: "app").path(percentEncoded: false)) {
+            try FileManager.default.createDirectory(
+              at: rootURL.appending(path: "app"),
+              withIntermediateDirectories: true
+            )
+          }
+        },
+        bootstrapRunner: ProjectWorkspaceBootstrapRunner { _, _ in
+          throw ProjectWorkspaceCreationError.bootstrapFailed(repository: "App", message: "boom")
+        }
+      )
+    }
+
+    #expect(!FileManager.default.fileExists(atPath: rootURL.appending(path: "app").path(percentEncoded: false)))
+    #expect(
+      !FileManager.default.fileExists(
+        atPath: ProjectWorkspace.metadataURL(for: rootURL).path(percentEncoded: false)
+      )
+    )
   }
 
   @Test func createWorkspaceRollsBackCloneWhenCheckoutFails() async throws {

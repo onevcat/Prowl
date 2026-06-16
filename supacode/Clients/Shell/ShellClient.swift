@@ -7,14 +7,36 @@ nonisolated struct ShellClient: Sendable {
   var runLoginImpl: @Sendable (URL, [String], URL?, Bool) async throws -> ShellOutput
   var runStream: @Sendable (URL, [String], URL?) -> AsyncThrowingStream<ShellStreamEvent, Error>
   var runLoginStreamImpl: @Sendable (URL, [String], URL?, Bool) -> AsyncThrowingStream<ShellStreamEvent, Error>
+  var runLoginWithEnvironmentImpl: @Sendable (URL, [String], URL?, [String: String], Bool) async throws -> ShellOutput
+  var runLoginStreamWithEnvironmentImpl:
+    @Sendable (URL, [String], URL?, [String: String], Bool) -> AsyncThrowingStream<ShellStreamEvent, Error>
 
   init(
     run: @escaping @Sendable (URL, [String], URL?) async throws -> ShellOutput,
     runLoginImpl: @escaping @Sendable (URL, [String], URL?, Bool) async throws -> ShellOutput,
     runStream: (@Sendable (URL, [String], URL?) -> AsyncThrowingStream<ShellStreamEvent, Error>)? = nil,
     runLoginStreamImpl:
-      (@Sendable (URL, [String], URL?, Bool) -> AsyncThrowingStream<ShellStreamEvent, Error>)? = nil
+      (@Sendable (URL, [String], URL?, Bool) -> AsyncThrowingStream<ShellStreamEvent, Error>)? = nil,
+    runLoginWithEnvironmentImpl:
+      (@Sendable (URL, [String], URL?, [String: String], Bool) async throws -> ShellOutput)? = nil,
+    runLoginStreamWithEnvironmentImpl:
+      (@Sendable (URL, [String], URL?, [String: String], Bool) -> AsyncThrowingStream<ShellStreamEvent, Error>)? = nil
   ) {
+    let resolvedRunLoginStreamImpl =
+      runLoginStreamImpl
+      ?? { executableURL, arguments, currentDirectoryURL, log in
+        AsyncThrowingStream { continuation in
+          Task {
+            do {
+              let output = try await runLoginImpl(executableURL, arguments, currentDirectoryURL, log)
+              continuation.yield(.finished(output))
+              continuation.finish()
+            } catch {
+              continuation.finish(throwing: error)
+            }
+          }
+        }
+      }
     self.run = run
     self.runLoginImpl = runLoginImpl
     self.runStream =
@@ -32,20 +54,16 @@ nonisolated struct ShellClient: Sendable {
           }
         }
       }
-    self.runLoginStreamImpl =
-      runLoginStreamImpl
-      ?? { executableURL, arguments, currentDirectoryURL, log in
-        AsyncThrowingStream { continuation in
-          Task {
-            do {
-              let output = try await runLoginImpl(executableURL, arguments, currentDirectoryURL, log)
-              continuation.yield(.finished(output))
-              continuation.finish()
-            } catch {
-              continuation.finish(throwing: error)
-            }
-          }
-        }
+    self.runLoginStreamImpl = resolvedRunLoginStreamImpl
+    self.runLoginWithEnvironmentImpl =
+      runLoginWithEnvironmentImpl
+      ?? { executableURL, arguments, currentDirectoryURL, _, log in
+        try await runLoginImpl(executableURL, arguments, currentDirectoryURL, log)
+      }
+    self.runLoginStreamWithEnvironmentImpl =
+      runLoginStreamWithEnvironmentImpl
+      ?? { executableURL, arguments, currentDirectoryURL, _, log in
+        resolvedRunLoginStreamImpl(executableURL, arguments, currentDirectoryURL, log)
       }
   }
 
@@ -65,6 +83,27 @@ nonisolated struct ShellClient: Sendable {
     log: Bool = true
   ) -> AsyncThrowingStream<ShellStreamEvent, Error> {
     runLoginStreamImpl(executableURL, arguments, currentDirectoryURL, log)
+  }
+
+  func runLogin(
+    _ executableURL: URL,
+    _ arguments: [String],
+    _ currentDirectoryURL: URL?,
+    environment: [String: String],
+    log: Bool = true
+  ) async throws -> ShellOutput {
+    try await runLoginWithEnvironmentImpl(
+      executableURL, arguments, currentDirectoryURL, environment, log)
+  }
+
+  func runLoginStream(
+    _ executableURL: URL,
+    _ arguments: [String],
+    _ currentDirectoryURL: URL?,
+    environment: [String: String],
+    log: Bool = true
+  ) -> AsyncThrowingStream<ShellStreamEvent, Error> {
+    runLoginStreamWithEnvironmentImpl(executableURL, arguments, currentDirectoryURL, environment, log)
   }
 }
 
@@ -116,6 +155,40 @@ extension ShellClient: DependencyKey {
         arguments: shellArguments,
         currentDirectoryURL: currentDirectoryURL
       )
+    },
+    runLoginWithEnvironmentImpl: { executableURL, arguments, currentDirectoryURL, environment, log in
+      let shellURL = URL(fileURLWithPath: defaultShellPath())
+      let execCommand = shellExecCommand(for: shellURL)
+      let shellArguments =
+        ["-l", "-c", execCommand, "--", executableURL.path(percentEncoded: false)] + arguments
+      if log {
+        let cwd = currentDirectoryURL?.path(percentEncoded: false) ?? "nil"
+        let cmd = shellArguments.joined(separator: " ")
+        shellLogger.debug("runLogin cwd=\(cwd) cmd=\(shellURL.path) \(cmd)")
+      }
+      return try await runProcess(
+        executableURL: shellURL,
+        arguments: shellArguments,
+        currentDirectoryURL: currentDirectoryURL,
+        environment: environment
+      )
+    },
+    runLoginStreamWithEnvironmentImpl: { executableURL, arguments, currentDirectoryURL, environment, log in
+      let shellURL = URL(fileURLWithPath: defaultShellPath())
+      let execCommand = shellExecCommand(for: shellURL)
+      let shellArguments =
+        ["-l", "-c", execCommand, "--", executableURL.path(percentEncoded: false)] + arguments
+      if log {
+        let cwd = currentDirectoryURL?.path(percentEncoded: false) ?? "nil"
+        let cmd = shellArguments.joined(separator: " ")
+        shellLogger.debug("runLoginStream cwd=\(cwd) cmd=\(shellURL.path) \(cmd)")
+      }
+      return runProcessStream(
+        executableURL: shellURL,
+        arguments: shellArguments,
+        currentDirectoryURL: currentDirectoryURL,
+        environment: environment
+      )
     }
   )
 
@@ -131,6 +204,13 @@ extension ShellClient: DependencyKey {
       }
     },
     runLoginStreamImpl: { _, _, _, _ in
+      AsyncThrowingStream { continuation in
+        continuation.yield(.finished(ShellOutput(stdout: "", stderr: "", exitCode: 0)))
+        continuation.finish()
+      }
+    },
+    runLoginWithEnvironmentImpl: { _, _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) },
+    runLoginStreamWithEnvironmentImpl: { _, _, _, _, _ in
       AsyncThrowingStream { continuation in
         continuation.yield(.finished(ShellOutput(stdout: "", stderr: "", exitCode: 0)))
         continuation.finish()
@@ -151,12 +231,14 @@ private nonisolated let shellLogger = SupaLogger("Shell")
 nonisolated private func runProcess(
   executableURL: URL,
   arguments: [String],
-  currentDirectoryURL: URL?
+  currentDirectoryURL: URL?,
+  environment: [String: String] = [:]
 ) async throws -> ShellOutput {
   let stream = runProcessStream(
     executableURL: executableURL,
     arguments: arguments,
-    currentDirectoryURL: currentDirectoryURL
+    currentDirectoryURL: currentDirectoryURL,
+    environment: environment
   )
   let command = ([executableURL.path(percentEncoded: false)] + arguments).joined(separator: " ")
   return try await collectOutput(from: stream, command: command)
@@ -165,7 +247,8 @@ nonisolated private func runProcess(
 nonisolated private func runProcessStream(
   executableURL: URL,
   arguments: [String],
-  currentDirectoryURL: URL?
+  currentDirectoryURL: URL?,
+  environment: [String: String] = [:]
 ) -> AsyncThrowingStream<ShellStreamEvent, Error> {
   AsyncThrowingStream { continuation in
     // Stored so onTermination can SIGTERM the process when the consumer of the
@@ -179,6 +262,9 @@ nonisolated private func runProcessStream(
       process.executableURL = executableURL
       process.arguments = arguments
       process.currentDirectoryURL = currentDirectoryURL
+      if !environment.isEmpty {
+        process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, new in new }
+      }
       let outputPipe = Pipe()
       let errorPipe = Pipe()
       process.standardInput = FileHandle.nullDevice

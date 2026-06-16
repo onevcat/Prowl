@@ -152,7 +152,13 @@ Example `.prowl/workspace.json`:
       "path": "app",
       "source_kind": "local_repository",
       "source_location": "/Users/mikoto/Documents/Repos/github/Prowl",
-      "branch_name": "codex/checkout-flow"
+      "branch_name": "codex/checkout-flow",
+      "bootstrap": {
+        "script_kind": "user_profile",
+        "script_id": "sync-prowl-local-files",
+        "run_on": ["create"],
+        "required": false
+      }
     },
     {
       "name": "API",
@@ -197,6 +203,16 @@ Repository entry fields:
   path.
 - `branch_name` — optional branch/worktree name expected for the task.
 - `base_ref` — optional base branch or ref.
+- `bootstrap` — optional bootstrap profile reference. `script_kind:
+  user_profile` looks up a local profile from `~/.prowl/bootstrap-profiles.json`;
+  `script_id` is that profile's id; `run_on` can include `create`; and
+  `required` decides whether bootstrap failure fails workspace creation.
+
+Bootstrap profiles run after a child repository has been materialized, with the
+child repository as the working directory. Automatic bootstrap is skipped for
+linked children because those paths point at the user's existing checkout.
+Bootstrap logs and last-run state are written under the workspace `.prowl`
+runtime directory, not back into `workspace.json`.
 
 ## Agent usage
 

@@ -521,7 +521,8 @@ struct WorkspaceCreationPromptFeature {
     case .missingPath:
       return .rootPath
     case .notEnoughRepositories, .linkCheckoutUnsupported, .destinationIsFile,
-      .workspaceAlreadyExists, .repositoryDoesNotExist, .linkAlreadyExists, .gitCommandFailed:
+      .workspaceAlreadyExists, .repositoryDoesNotExist, .linkAlreadyExists,
+      .bootstrapProfileNotFound, .bootstrapFailed, .gitCommandFailed:
       return nil
     }
   }
