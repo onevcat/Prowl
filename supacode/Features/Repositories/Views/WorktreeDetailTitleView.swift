@@ -70,22 +70,6 @@ struct WorktreeDetailTitleView: View {
       Text(title.text)
     }
     .font(.headline)
-<<<<<<< HEAD
-    .padding(.horizontal, horizontalPadding)
-  }
-
-  private var iconWidth: CGFloat {
-    16
-  }
-
-  private var horizontalSpacing: CGFloat {
-    8
-  }
-
-  private var horizontalPadding: CGFloat {
-    title.supportsRename ? 0 : 8
-=======
->>>>>>> origin/main
   }
 }
 
