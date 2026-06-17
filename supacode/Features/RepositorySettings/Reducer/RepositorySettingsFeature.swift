@@ -36,9 +36,16 @@ struct RepositorySettingsFeature {
     var sourceLocation: String
     var branchName: String
     var baseRef: String
+    var baseRefOptions: [GitBranchRefOption]
+    var checkoutMode: ProjectWorkspaceRepositoryCheckoutMode
+    var resetLocalBranchToRemote: Bool
+    var isNew: Bool
+    var isRemoved: Bool
     var bootstrapScriptID: String
     var bootstrapRequired: Bool
     var bootstrapRunOnCreate: Bool
+    var bootstrapRunOnAdd: Bool
+    var bootstrapRunOnManual: Bool
 
     init(entry: ProjectWorkspace.RepositoryEntry) {
       id = entry.id
@@ -50,9 +57,43 @@ struct RepositorySettingsFeature {
       sourceLocation = entry.sourceLocation ?? ""
       branchName = entry.branchName ?? ""
       baseRef = entry.baseRef ?? ""
+      baseRefOptions = []
+      checkoutMode = .useExistingRef
+      resetLocalBranchToRemote = false
+      isNew = false
+      isRemoved = false
       bootstrapScriptID = entry.bootstrap?.scriptID ?? ""
       bootstrapRequired = entry.bootstrap?.required ?? false
       bootstrapRunOnCreate = entry.bootstrap?.runOn.contains(.create) ?? false
+      bootstrapRunOnAdd = entry.bootstrap?.runOn.contains(.onAdd) ?? false
+      bootstrapRunOnManual = entry.bootstrap?.runOn.contains(.manual) ?? false
+    }
+
+    init(
+      id: String,
+      name: String,
+      sourceKind: ProjectWorkspaceRepositorySourceKind,
+      sourceLocation: String
+    ) {
+      self.id = id
+      self.name = name
+      role = ""
+      agentNotes = ""
+      path = ""
+      self.sourceKind = sourceKind
+      self.sourceLocation = sourceLocation
+      branchName = ""
+      baseRef = ""
+      baseRefOptions = []
+      checkoutMode = sourceKind.defaultCheckoutMode
+      resetLocalBranchToRemote = false
+      isNew = true
+      isRemoved = false
+      bootstrapScriptID = ""
+      bootstrapRequired = false
+      bootstrapRunOnCreate = false
+      bootstrapRunOnAdd = false
+      bootstrapRunOnManual = false
     }
 
     var bootstrap: ProjectWorkspaceRepositoryBootstrap? {
@@ -60,6 +101,12 @@ struct RepositorySettingsFeature {
       var runOn = Set<ProjectWorkspaceBootstrapTiming>()
       if bootstrapRunOnCreate {
         runOn.insert(.create)
+      }
+      if bootstrapRunOnAdd {
+        runOn.insert(.onAdd)
+      }
+      if bootstrapRunOnManual {
+        runOn.insert(.manual)
       }
       guard !scriptID.isEmpty || !runOn.isEmpty || bootstrapRequired else {
         return nil
@@ -69,6 +116,20 @@ struct RepositorySettingsFeature {
         scriptID: scriptID.isEmpty ? nil : scriptID,
         runOn: runOn,
         required: bootstrapRequired
+      )
+    }
+
+    var creationRepository: ProjectWorkspaceCreationRepository {
+      ProjectWorkspaceCreationRepository(
+        id: id,
+        name: name,
+        sourceKind: sourceKind,
+        sourceLocation: sourceLocation,
+        checkoutMode: checkoutMode,
+        branchName: branchName.isEmpty ? nil : branchName,
+        baseRef: baseRef.isEmpty ? nil : baseRef,
+        path: path.isEmpty ? nil : path,
+        baseRefOptions: baseRefOptions
       )
     }
   }
@@ -153,6 +214,10 @@ struct RepositorySettingsFeature {
       workspace != nil && workspaceDraft != nil
     }
 
+    var activeWorkspaceRepositoryCount: Int {
+      workspaceDraft?.repositories.filter { !$0.isRemoved }.count ?? 0
+    }
+
     mutating func setWorkspace(_ workspace: ProjectWorkspace?) {
       self.workspace = workspace
       workspaceDraft = workspace.map(WorkspaceDraft.init)
@@ -190,9 +255,12 @@ struct RepositorySettingsFeature {
         includeChildInstructionFiles: draft.includeChildInstructionFiles,
         extraNotes: draft.agentGuideExtraNotes
       )
-      workspace.repositories = workspace.repositories.map { entry in
+      workspace.repositories = workspace.repositories.compactMap { entry in
         guard let repositoryDraft = draft.repositories.first(where: { $0.id == entry.id }) else {
           return entry
+        }
+        guard !repositoryDraft.isRemoved else {
+          return nil
         }
         var updated = entry
         updated.role = Self.trimmedNonEmpty(repositoryDraft.role)
@@ -239,13 +307,31 @@ struct RepositorySettingsFeature {
     case workspaceAgentGuideExtraNotesChanged(String)
     case workspaceRepositoryRoleChanged(id: String, String)
     case workspaceRepositoryAgentNotesChanged(id: String, String)
+    case workspaceAddLocalRepository(String)
+    case workspaceAddRemoteRepository(name: String, url: String)
+    case workspaceRepositoryNameChanged(id: String, String)
+    case workspaceRepositorySourceChosen(id: String, String)
+    case workspaceLoadBaseRefsTapped(id: String)
+    case workspaceRepositoryPathChanged(id: String, String)
+    case workspaceRepositoryCheckoutModeChanged(id: String, ProjectWorkspaceRepositoryCheckoutMode)
+    case workspaceRepositoryBranchNameChanged(id: String, String)
+    case workspaceRepositoryBaseRefChanged(id: String, String)
+    case workspaceRepositoryBaseRefsLoaded(
+      id: String, [GitBranchRefOption], defaultBaseRef: String?)
+    case workspaceRemoveRepository(id: String)
+    case workspaceRestoreRepository(id: String)
     case workspaceBootstrapIDChanged(id: String, String)
     case workspaceBootstrapRequiredChanged(id: String, Bool)
     case workspaceBootstrapCreateChanged(id: String, Bool)
+    case workspaceBootstrapOnAddChanged(id: String, Bool)
+    case workspaceBootstrapManualChanged(id: String, Bool)
+    case runWorkspaceBootstrapButtonTapped(id: String)
     case saveWorkspaceMetadataButtonTapped
     case regenerateWorkspaceGuideButtonTapped
     case workspaceMetadataSaved(ProjectWorkspace)
     case workspaceMetadataSaveFailed(String)
+    case workspaceBootstrapRan(String)
+    case workspaceBootstrapRunFailed(String)
     case workspaceGuideRegenerated
     case workspaceGuideRegenerateFailed(String)
     case delegate(Delegate)
@@ -260,6 +346,8 @@ struct RepositorySettingsFeature {
   @Dependency(GitClientDependency.self) private var gitClient
   @Dependency(\.repositoryIconAssetStore) private var repositoryIconAssetStore
   @Dependency(\.date.now) private var now
+  @Dependency(ShellClient.self) private var shellClient
+  @Dependency(\.uuid) private var uuid
 
   var body: some Reducer<State, Action> {
     BindingReducer()
@@ -467,6 +555,108 @@ struct RepositorySettingsFeature {
         state.updateWorkspaceRepositoryDraft(id: id) { $0.agentNotes = notes }
         return .none
 
+      case .workspaceAddLocalRepository(let sourceLocation):
+        let trimmed = sourceLocation.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, var draft = state.workspaceDraft else {
+          return .none
+        }
+        let rootURL = URL(fileURLWithPath: trimmed, isDirectory: true)
+        let id = uuid().uuidString
+        draft.repositories.append(
+          RepositoryDraft(
+            id: id,
+            name: Repository.name(for: rootURL),
+            sourceKind: .localRepository,
+            sourceLocation: trimmed
+          )
+        )
+        state.workspaceDraft = draft
+        state.workspaceSaveStatus = nil
+        return workspaceBaseRefsEffect(for: draft.repositories.last)
+
+      case .workspaceAddRemoteRepository(let name, let url):
+        guard var draft = state.workspaceDraft else {
+          return .none
+        }
+        let sourceLocation = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        let id = uuid().uuidString
+        draft.repositories.append(
+          RepositoryDraft(
+            id: id,
+            name: name.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+              ?? GitRemoteNaming.repositoryName(fromRemoteURL: sourceLocation),
+            sourceKind: .remote,
+            sourceLocation: sourceLocation
+          )
+        )
+        state.workspaceDraft = draft
+        state.workspaceSaveStatus = nil
+        return .none
+
+      case .workspaceRepositoryNameChanged(let id, let name):
+        state.updateWorkspaceRepositoryDraft(id: id) { $0.name = name }
+        return .none
+
+      case .workspaceRepositorySourceChosen(let id, let sourceLocation):
+        let trimmed = sourceLocation.trimmingCharacters(in: .whitespacesAndNewlines)
+        state.updateWorkspaceRepositoryDraft(id: id) {
+          $0.sourceLocation = trimmed
+          if $0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            $0.sourceKind == .remote
+          {
+            $0.name = GitRemoteNaming.repositoryName(fromRemoteURL: trimmed)
+          }
+          $0.baseRef = ""
+          $0.baseRefOptions = []
+        }
+        return .none
+
+      case .workspaceLoadBaseRefsTapped(let id):
+        guard let repository = state.workspaceDraft?.repositories.first(where: { $0.id == id })
+        else {
+          return .none
+        }
+        return workspaceBaseRefsEffect(for: repository)
+
+      case .workspaceRepositoryPathChanged(let id, let path):
+        state.updateWorkspaceRepositoryDraft(id: id) { $0.path = path }
+        return .none
+
+      case .workspaceRepositoryCheckoutModeChanged(let id, let mode):
+        state.updateWorkspaceRepositoryDraft(id: id) { repository in
+          guard mode != .link || repository.sourceKind.supportsLinkCheckout else {
+            return
+          }
+          repository.checkoutMode = mode
+        }
+        return .none
+
+      case .workspaceRepositoryBranchNameChanged(let id, let branchName):
+        state.updateWorkspaceRepositoryDraft(id: id) { $0.branchName = branchName }
+        return .none
+
+      case .workspaceRepositoryBaseRefChanged(let id, let baseRef):
+        state.updateWorkspaceRepositoryDraft(id: id) {
+          $0.baseRef = baseRef
+          $0.resetLocalBranchToRemote = false
+        }
+        return .none
+
+      case .workspaceRepositoryBaseRefsLoaded(let id, let options, let defaultBaseRef):
+        state.updateWorkspaceRepositoryDraft(id: id) { repository in
+          repository.baseRefOptions = options
+          repository.baseRef = defaultBaseRef ?? options.first?.ref ?? repository.baseRef
+        }
+        return .none
+
+      case .workspaceRemoveRepository(let id):
+        state.updateWorkspaceRepositoryDraft(id: id) { $0.isRemoved = true }
+        return .none
+
+      case .workspaceRestoreRepository(let id):
+        state.updateWorkspaceRepositoryDraft(id: id) { $0.isRemoved = false }
+        return .none
+
       case .workspaceBootstrapIDChanged(let id, let scriptID):
         state.updateWorkspaceRepositoryDraft(id: id) { $0.bootstrapScriptID = scriptID }
         return .none
@@ -479,6 +669,44 @@ struct RepositorySettingsFeature {
         state.updateWorkspaceRepositoryDraft(id: id) { $0.bootstrapRunOnCreate = enabled }
         return .none
 
+      case .workspaceBootstrapOnAddChanged(let id, let enabled):
+        state.updateWorkspaceRepositoryDraft(id: id) { $0.bootstrapRunOnAdd = enabled }
+        return .none
+
+      case .workspaceBootstrapManualChanged(let id, let enabled):
+        state.updateWorkspaceRepositoryDraft(id: id) { $0.bootstrapRunOnManual = enabled }
+        return .none
+
+      case .runWorkspaceBootstrapButtonTapped(let id):
+        guard let workspace = state.updatedWorkspaceFromDraft(),
+          let draftRepository = state.workspaceDraft?.repositories.first(where: { $0.id == id }),
+          !draftRepository.isNew,
+          !draftRepository.isRemoved,
+          let entry = workspace.repositories.first(where: { $0.id == id })
+        else {
+          return .none
+        }
+        let rootURL = state.rootURL
+        @Shared(.bootstrapProfiles) var bootstrapProfiles
+        let bootstrapRunner = ProjectWorkspaceBootstrapExecutor(
+          profiles: bootstrapProfiles,
+          shellClient: shellClient,
+          now: { Date() }
+        ).runner
+        return .run { send in
+          do {
+            try await ProjectWorkspace.runBootstrap(
+              for: entry,
+              workspaceRootURL: rootURL,
+              timing: .manual,
+              bootstrapRunner: bootstrapRunner
+            )
+            await send(.workspaceBootstrapRan(entry.name))
+          } catch {
+            await send(.workspaceBootstrapRunFailed(error.localizedDescription))
+          }
+        }
+
       case .saveWorkspaceMetadataButtonTapped:
         guard let updatedWorkspace = state.updatedWorkspaceFromDraft() else {
           return .none
@@ -486,13 +714,51 @@ struct RepositorySettingsFeature {
         state.workspaceSaveError = nil
         let rootURL = state.rootURL
         let savedAt = now
+        let originalWorkspace = state.workspace
+        let draft = state.workspaceDraft
+        let gitRunner = RepositoriesFeature.workspaceGitRunner(shellClient: shellClient)
+        @Shared(.bootstrapProfiles) var bootstrapProfiles
+        let bootstrapRunner = ProjectWorkspaceBootstrapExecutor(
+          profiles: bootstrapProfiles,
+          shellClient: shellClient,
+          now: { Date() }
+        ).runner
         return .run { send in
           do {
-            let patcher = ProjectWorkspaceMetadataPatcher(now: { savedAt })
-            let savedWorkspace = try patcher.save(updatedWorkspace, rootURL: rootURL)
-            if savedWorkspace.agentGuide?.enabled == true {
-              try ProjectWorkspaceAgentGuideFileWriter().write(
-                workspace: savedWorkspace, rootURL: rootURL)
+            let additions =
+              try draft?.repositories.filter { $0.isNew && !$0.isRemoved }.map {
+                try Self.plan(for: $0)
+              } ?? []
+            let removedIDs = Set(draft?.repositories.filter(\.isRemoved).map(\.id) ?? [])
+            let removedRepositories =
+              originalWorkspace?.repositories.filter { removedIDs.contains($0.id) } ?? []
+            let savedWorkspace: ProjectWorkspace
+            if !additions.isEmpty || !removedRepositories.isEmpty {
+              savedWorkspace = try await ProjectWorkspace.updateRepositories(
+                ProjectWorkspaceRepositoryUpdateRequest(
+                  workspace: updatedWorkspace,
+                  rootURL: rootURL,
+                  additions: additions,
+                  removedRepositories: removedRepositories,
+                  updatedAt: savedAt
+                ),
+                gitRunner: gitRunner,
+                bootstrapRunner: bootstrapRunner,
+                agentGuideWriter: ProjectWorkspaceAgentGuideFileWriter().writer()
+              ) { workspace in
+                try ProjectWorkspaceMetadataPatcher(now: { savedAt }).save(
+                  workspace, rootURL: rootURL)
+              }
+            } else {
+              savedWorkspace =
+                try ProjectWorkspaceMetadataPatcher(now: { savedAt }).save(
+                  updatedWorkspace,
+                  rootURL: rootURL
+                )
+              if savedWorkspace.agentGuide?.enabled == true {
+                try ProjectWorkspaceAgentGuideFileWriter().write(
+                  workspace: savedWorkspace, rootURL: rootURL)
+              }
             }
             await send(.workspaceMetadataSaved(savedWorkspace))
           } catch {
@@ -524,6 +790,16 @@ struct RepositorySettingsFeature {
         return .send(.delegate(.settingsChanged(state.rootURL)))
 
       case .workspaceMetadataSaveFailed(let message):
+        state.workspaceSaveError = message
+        state.workspaceSaveStatus = nil
+        return .none
+
+      case .workspaceBootstrapRan(let name):
+        state.workspaceSaveStatus = "Ran bootstrap for \(name)."
+        state.workspaceSaveError = nil
+        return .none
+
+      case .workspaceBootstrapRunFailed(let message):
         state.workspaceSaveError = message
         state.workspaceSaveStatus = nil
         return .none
@@ -607,4 +883,86 @@ struct RepositorySettingsFeature {
     }
   }
 
+  private func workspaceBaseRefsEffect(
+    for repository: RepositoryDraft?
+  ) -> Effect<Action> {
+    guard let repository,
+      repository.isNew,
+      !repository.sourceLocation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    else {
+      return .none
+    }
+    let id = repository.id
+    let creationRepository = Self.creationRepository(for: repository)
+    let gitClient = gitClient
+    return .run { send in
+      let result = await RepositoriesFeature.workspaceBaseRefs(
+        for: creationRepository,
+        gitClient: gitClient
+      )
+      await send(
+        .workspaceRepositoryBaseRefsLoaded(
+          id: id,
+          result.options,
+          defaultBaseRef: result.defaultBaseRef
+        )
+      )
+    }
+  }
+
+  nonisolated private static func plan(for repository: RepositoryDraft)
+    throws -> ProjectWorkspaceRepositoryPlan
+  {
+    var plan = try WorkspaceCreationPromptFeature.plan(for: creationRepository(for: repository))
+      .get()
+    plan.bootstrap = bootstrap(for: repository)
+    return plan
+  }
+
+  nonisolated private static func creationRepository(
+    for repository: RepositoryDraft
+  ) -> ProjectWorkspaceCreationRepository {
+    ProjectWorkspaceCreationRepository(
+      id: repository.id,
+      name: repository.name,
+      sourceKind: repository.sourceKind,
+      sourceLocation: repository.sourceLocation,
+      checkoutMode: repository.checkoutMode,
+      branchName: repository.branchName.isEmpty ? nil : repository.branchName,
+      baseRef: repository.baseRef.isEmpty ? nil : repository.baseRef,
+      path: repository.path.isEmpty ? nil : repository.path,
+      baseRefOptions: repository.baseRefOptions
+    )
+  }
+
+  nonisolated private static func bootstrap(
+    for repository: RepositoryDraft
+  ) -> ProjectWorkspaceRepositoryBootstrap? {
+    let scriptID = repository.bootstrapScriptID.trimmingCharacters(in: .whitespacesAndNewlines)
+    var runOn = Set<ProjectWorkspaceBootstrapTiming>()
+    if repository.bootstrapRunOnCreate {
+      runOn.insert(.create)
+    }
+    if repository.bootstrapRunOnAdd {
+      runOn.insert(.onAdd)
+    }
+    if repository.bootstrapRunOnManual {
+      runOn.insert(.manual)
+    }
+    guard !scriptID.isEmpty || !runOn.isEmpty || repository.bootstrapRequired else {
+      return nil
+    }
+    return ProjectWorkspaceRepositoryBootstrap(
+      scriptKind: .userProfile,
+      scriptID: scriptID.isEmpty ? nil : scriptID,
+      runOn: runOn,
+      required: repository.bootstrapRequired
+    )
+  }
+}
+
+extension String {
+  fileprivate var nilIfEmpty: String? {
+    isEmpty ? nil : self
+  }
 }

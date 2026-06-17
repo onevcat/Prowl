@@ -5,6 +5,178 @@ import Testing
 
 @testable import supacode
 
+private struct ShellCommandRecord: Equatable, Sendable {
+  var executableURL: URL
+  var arguments: [String]
+  var currentDirectoryURL: URL?
+}
+
+private struct WorkspaceAddRemoveFixture {
+  var rootURL: URL
+  var appURL: URL
+  var apiURL: URL
+  var webURL: URL
+  var profileURL: URL
+}
+
+private struct WorkspaceBootstrapFixture {
+  var rootURL: URL
+  var profileURL: URL
+}
+
+private func normalizedPath(_ url: URL) -> String {
+  var path = url.standardizedFileURL.path(percentEncoded: false)
+  while path.count > 1, path.hasSuffix("/") {
+    path.removeLast()
+  }
+  return path
+}
+
+private func makeWorkspaceAddRemoveFixture() throws -> WorkspaceAddRemoveFixture {
+  let fixture = WorkspaceAddRemoveFixture(
+    rootURL: FileManager.default.temporaryDirectory
+      .appending(path: "prowl-settings-add-remove-\(UUID().uuidString)"),
+    appURL: FileManager.default.temporaryDirectory
+      .appending(path: "prowl-settings-app-\(UUID().uuidString)"),
+    apiURL: FileManager.default.temporaryDirectory
+      .appending(path: "prowl-settings-api-\(UUID().uuidString)"),
+    webURL: FileManager.default.temporaryDirectory
+      .appending(path: "prowl-settings-web-\(UUID().uuidString)"),
+    profileURL: FileManager.default.temporaryDirectory
+      .appending(path: "prowl-settings-add-remove-profiles-\(UUID().uuidString).json")
+  )
+  try FileManager.default.createDirectory(
+    at: fixture.rootURL.appending(path: ProjectWorkspace.metadataDirectoryName),
+    withIntermediateDirectories: true
+  )
+  try FileManager.default.createDirectory(at: fixture.appURL, withIntermediateDirectories: true)
+  try FileManager.default.createDirectory(at: fixture.apiURL, withIntermediateDirectories: true)
+  try FileManager.default.createDirectory(at: fixture.webURL, withIntermediateDirectories: true)
+  try FileManager.default.createDirectory(
+    at: fixture.rootURL.appending(path: "api"), withIntermediateDirectories: true)
+  try Data(
+    """
+    {
+      "schema_version": "prowl.workspace.v1",
+      "title": "Workspace",
+      "repositories": [
+        {
+          "id": "app",
+          "name": "App",
+          "path": "app",
+          "source_kind": "existing_path",
+          "source_location": "\(fixture.appURL.path(percentEncoded: false))"
+        },
+        {
+          "id": "api",
+          "name": "API",
+          "path": "api",
+          "source_kind": "local_repository",
+          "source_location": "\(fixture.apiURL.path(percentEncoded: false))"
+        }
+      ]
+    }
+    """.utf8
+  )
+  .write(to: ProjectWorkspace.metadataURL(for: fixture.rootURL))
+  return fixture
+}
+
+private func makeWorkspaceBootstrapFixture() throws -> WorkspaceBootstrapFixture {
+  let fixture = WorkspaceBootstrapFixture(
+    rootURL: FileManager.default.temporaryDirectory
+      .appending(path: "prowl-settings-bootstrap-\(UUID().uuidString)"),
+    profileURL: FileManager.default.temporaryDirectory
+      .appending(path: "prowl-settings-bootstrap-profiles-\(UUID().uuidString).json")
+  )
+  try FileManager.default.createDirectory(
+    at: fixture.rootURL.appending(path: ProjectWorkspace.metadataDirectoryName),
+    withIntermediateDirectories: true
+  )
+  try FileManager.default.createDirectory(
+    at: fixture.rootURL.appending(path: "app"), withIntermediateDirectories: true)
+  try FileManager.default.createDirectory(
+    at: fixture.rootURL.appending(path: "api"), withIntermediateDirectories: true)
+  try Data(
+    """
+    {
+      "schema_version": "prowl.workspace.v1",
+      "title": "Workspace",
+      "repositories": [
+        {
+          "id": "app",
+          "name": "App",
+          "path": "app",
+          "source_kind": "existing_path",
+          "bootstrap": {
+            "script_kind": "user_profile",
+            "script_id": "sync-app",
+            "run_on": ["manual"],
+            "required": true
+          }
+        },
+        {
+          "id": "api",
+          "name": "API",
+          "path": "api",
+          "source_kind": "existing_path"
+        }
+      ]
+    }
+    """.utf8
+  )
+  .write(to: ProjectWorkspace.metadataURL(for: fixture.rootURL))
+  return fixture
+}
+
+private func recordingShellClient(
+  commands: LockIsolated<[ShellCommandRecord]>,
+  onRunLogin: @escaping @Sendable ([String]) throws -> Void = { _ in }
+) -> ShellClient {
+  ShellClient(
+    run: { executableURL, arguments, currentDirectoryURL in
+      commands.withValue {
+        $0.append(
+          ShellCommandRecord(
+            executableURL: executableURL,
+            arguments: arguments,
+            currentDirectoryURL: currentDirectoryURL
+          )
+        )
+      }
+      return ShellOutput(stdout: "", stderr: "", exitCode: 0)
+    },
+    runLoginImpl: { executableURL, arguments, currentDirectoryURL, _ in
+      commands.withValue {
+        $0.append(
+          ShellCommandRecord(
+            executableURL: executableURL,
+            arguments: arguments,
+            currentDirectoryURL: currentDirectoryURL
+          )
+        )
+      }
+      try onRunLogin(arguments)
+      return ShellOutput(stdout: "", stderr: "", exitCode: 0)
+    },
+    runLoginStreamWithEnvironmentImpl: { executableURL, arguments, currentDirectoryURL, _, _ in
+      commands.withValue {
+        $0.append(
+          ShellCommandRecord(
+            executableURL: executableURL,
+            arguments: arguments,
+            currentDirectoryURL: currentDirectoryURL
+          )
+        )
+      }
+      return AsyncThrowingStream { continuation in
+        continuation.yield(.finished(ShellOutput(stdout: "", stderr: "", exitCode: 0)))
+        continuation.finish()
+      }
+    }
+  )
+}
+
 @MainActor
 struct RepositorySettingsFeatureTests {
   @Test func githubAccountOverrideRoundTripsThroughRepositorySettings() throws {
@@ -325,6 +497,216 @@ struct RepositorySettingsFeatureTests {
     let guide = try String(contentsOf: rootURL.appending(path: "AGENTS.md"), encoding: .utf8)
     #expect(guide.contains("- Title: New Workspace"))
     #expect(guide.contains("- Agent notes: Use reducer tests."))
+  }
+
+  @Test(.dependencies) func workspaceSettingsAddRemoveRestoreAndSaveRepositoryChanges() async throws {
+    let fixture = try makeWorkspaceAddRemoveFixture()
+    let rootURL = fixture.rootURL
+    let webURL = fixture.webURL
+    defer {
+      try? FileManager.default.removeItem(at: fixture.rootURL)
+      try? FileManager.default.removeItem(at: fixture.appURL)
+      try? FileManager.default.removeItem(at: fixture.apiURL)
+      try? FileManager.default.removeItem(at: fixture.webURL)
+      try? FileManager.default.removeItem(at: fixture.profileURL)
+    }
+
+    let workspace = try #require(ProjectWorkspace.load(from: rootURL))
+    let storage = SettingsTestStorage()
+    withDependencies {
+      $0.settingsFileStorage = storage.storage
+      $0.bootstrapProfilesFileURL = fixture.profileURL
+    } operation: {
+      @Shared(.bootstrapProfiles) var storedProfiles: [ProjectWorkspaceBootstrapProfile]
+      $storedProfiles.withLock { $0 = [] }
+    }
+    var state = RepositorySettingsFeature.State(
+      rootURL: rootURL,
+      repositoryKind: .plain,
+      settings: .default,
+      userSettings: .default
+    )
+    state.setWorkspace(workspace)
+    let commands = LockIsolated<[ShellCommandRecord]>([])
+    let store = TestStore(initialState: state) {
+      RepositorySettingsFeature()
+    } withDependencies: {
+      $0.date.now = Date(timeIntervalSince1970: 50)
+      $0.uuid = .incrementing
+      $0.gitClient.repoRoot = { url in url }
+      $0.gitClient.automaticWorktreeBaseRef = { _ in "main" }
+      $0.gitClient.branchRefOptions = { _ in
+        [GitBranchRefOption(ref: "main", kind: .local)]
+      }
+      $0.settingsFileStorage = storage.storage
+      $0.bootstrapProfilesFileURL = fixture.profileURL
+      $0[ShellClient.self] = recordingShellClient(commands: commands) { arguments in
+        if arguments.contains(rootURL.appending(path: "web").path(percentEncoded: false)) {
+          try FileManager.default.createDirectory(
+            at: rootURL.appending(path: "web"),
+            withIntermediateDirectories: true
+          )
+        }
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.workspaceAddLocalRepository(webURL.path(percentEncoded: false)))
+    await store.receive(\.workspaceRepositoryBaseRefsLoaded)
+    await store.send(.workspaceRepositoryNameChanged(id: UUID(0).uuidString, "Web"))
+    await store.send(.workspaceRepositoryPathChanged(id: UUID(0).uuidString, "web"))
+    await store.send(
+      .workspaceRepositoryCheckoutModeChanged(id: UUID(0).uuidString, .createBranch)
+    )
+    await store.send(.workspaceRepositoryBranchNameChanged(id: UUID(0).uuidString, "codex/web"))
+    await store.send(.workspaceRemoveRepository(id: "api"))
+    await store.send(.workspaceRestoreRepository(id: "api"))
+    await store.send(.workspaceRemoveRepository(id: "api"))
+    await store.send(.workspaceBootstrapIDChanged(id: UUID(0).uuidString, "sync-web"))
+    await store.send(.workspaceBootstrapOnAddChanged(id: UUID(0).uuidString, true))
+    await store.send(.saveWorkspaceMetadataButtonTapped)
+    await store.receive(\.workspaceMetadataSaved)
+    await store.receive(\.delegate.settingsChanged)
+
+    #expect(store.state.workspace?.repositories.map(\.id) == ["app", UUID(0).uuidString])
+    #expect(store.state.workspace?.repositories.map(\.path) == ["app", "web"])
+    #expect(store.state.workspace?.repositories.last?.sourceLocation == normalizedPath(webURL))
+    #expect(store.state.workspace?.repositories.last?.bootstrap?.runOn == [.onAdd])
+    #expect(store.state.workspace?.updatedAt == Date(timeIntervalSince1970: 50))
+    #expect(store.state.workspaceSaveStatus == "Saved workspace metadata.")
+    #expect(store.state.workspaceSaveError == nil)
+
+    let saved = try #require(ProjectWorkspace.load(from: rootURL))
+    #expect(saved.repositories.map(\.id) == ["app", UUID(0).uuidString])
+    #expect(saved.repositories.map(\.path) == ["app", "web"])
+    #expect(saved.repositories.last?.bootstrap?.runOn == [.onAdd])
+    #expect(
+      commands.value.map(\.arguments).contains([
+        "git", "-C", normalizedPath(fixture.apiURL), "worktree",
+        "remove", "--force", rootURL.appending(path: "api").path(percentEncoded: false),
+      ])
+    )
+    #expect(
+      commands.value.map(\.arguments).contains([
+        "git", "-C", normalizedPath(fixture.webURL), "worktree", "add",
+        "-b", "codex/web", rootURL.appending(path: "web").path(percentEncoded: false),
+        "--end-of-options", "main",
+      ])
+    )
+  }
+
+  @Test(.dependencies) func workspaceSaveFailsWhenNewRepositoryCannotBePlanned() async throws {
+    let fixture = try makeWorkspaceAddRemoveFixture()
+    let rootURL = fixture.rootURL
+    defer {
+      try? FileManager.default.removeItem(at: fixture.rootURL)
+      try? FileManager.default.removeItem(at: fixture.appURL)
+      try? FileManager.default.removeItem(at: fixture.apiURL)
+      try? FileManager.default.removeItem(at: fixture.webURL)
+      try? FileManager.default.removeItem(at: fixture.profileURL)
+    }
+
+    let workspace = try #require(ProjectWorkspace.load(from: rootURL))
+    let storage = SettingsTestStorage()
+    var state = RepositorySettingsFeature.State(
+      rootURL: rootURL,
+      repositoryKind: .plain,
+      settings: .default,
+      userSettings: .default
+    )
+    state.setWorkspace(workspace)
+    let store = TestStore(initialState: state) {
+      RepositorySettingsFeature()
+    } withDependencies: {
+      $0.date.now = Date(timeIntervalSince1970: 50)
+      $0.uuid = .incrementing
+      $0.settingsFileStorage = storage.storage
+      $0.bootstrapProfilesFileURL = fixture.profileURL
+    }
+
+    await store.send(.workspaceAddRemoteRepository(name: "Remote", url: "")) {
+      $0.workspaceDraft?.repositories.append(
+        RepositorySettingsFeature.RepositoryDraft(
+          id: UUID(0).uuidString,
+          name: "Remote",
+          sourceKind: .remote,
+          sourceLocation: ""
+        )
+      )
+      $0.workspaceSaveStatus = nil
+    }
+    await store.send(.saveWorkspaceMetadataButtonTapped)
+    await store.receive(\.workspaceMetadataSaveFailed) {
+      $0.workspaceSaveError = "Source required for Remote."
+      $0.workspaceSaveStatus = nil
+    }
+
+    let saved = try #require(ProjectWorkspace.load(from: rootURL))
+    #expect(saved.repositories.map(\.id) == ["app", "api"])
+  }
+
+  @Test(.dependencies) func workspaceManualBootstrapRunsOnlyForSavedRepositories() async throws {
+    let fixture = try makeWorkspaceBootstrapFixture()
+    let rootURL = fixture.rootURL
+    defer {
+      try? FileManager.default.removeItem(at: fixture.rootURL)
+      try? FileManager.default.removeItem(at: fixture.profileURL)
+    }
+    let profiles = [
+      ProjectWorkspaceBootstrapProfile(id: "sync-app", name: "Sync App", script: "echo sync")
+    ]
+    let storage = SettingsTestStorage()
+    withDependencies {
+      $0.settingsFileStorage = storage.storage
+      $0.bootstrapProfilesFileURL = fixture.profileURL
+    } operation: {
+      @Shared(.bootstrapProfiles) var storedProfiles: [ProjectWorkspaceBootstrapProfile]
+      $storedProfiles.withLock { $0 = profiles }
+    }
+
+    let workspace = try #require(ProjectWorkspace.load(from: rootURL))
+    var state = RepositorySettingsFeature.State(
+      rootURL: rootURL,
+      repositoryKind: .plain,
+      settings: .default,
+      userSettings: .default
+    )
+    state.setWorkspace(workspace)
+    let commands = LockIsolated<[ShellCommandRecord]>([])
+    let store = TestStore(initialState: state) {
+      RepositorySettingsFeature()
+    } withDependencies: {
+      $0.settingsFileStorage = storage.storage
+      $0.bootstrapProfilesFileURL = fixture.profileURL
+      $0.uuid = .incrementing
+      $0[ShellClient.self] = recordingShellClient(commands: commands)
+    }
+
+    await store.send(.workspaceAddRemoteRepository(name: "Web", url: "")) {
+      $0.workspaceDraft?.repositories.append(
+        RepositorySettingsFeature.RepositoryDraft(
+          id: UUID(0).uuidString,
+          name: "Web",
+          sourceKind: .remote,
+          sourceLocation: ""
+        )
+      )
+    }
+    await store.send(.workspaceBootstrapIDChanged(id: UUID(0).uuidString, "sync-app")) {
+      $0.workspaceDraft?.repositories[2].bootstrapScriptID = "sync-app"
+    }
+    await store.send(.runWorkspaceBootstrapButtonTapped(id: UUID(0).uuidString))
+    #expect(commands.value.isEmpty)
+
+    await store.send(.runWorkspaceBootstrapButtonTapped(id: "app"))
+    await store.receive(\.workspaceBootstrapRan) {
+      $0.workspaceSaveStatus = "Ran bootstrap for App."
+      $0.workspaceSaveError = nil
+    }
+    #expect(commands.value.count == 1)
+    #expect(
+      commands.value.first?.currentDirectoryURL.map(normalizedPath)
+        == normalizedPath(rootURL.appending(path: "app")))
   }
 
   @Test(.dependencies) func taskLoadsLatestUserSettingsAfterAsyncGitProbe() async throws {

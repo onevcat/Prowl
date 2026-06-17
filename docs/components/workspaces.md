@@ -133,10 +133,26 @@ anyway would leave a dangling worktree registration in the source repository.
 
 The workspace's repository settings page (Settings → the workspace under
 Repositories) can edit workspace title, description, task links, repository
-roles, repository agent notes, bootstrap profile references, and agent guide
-controls. Prowl patches `.prowl/workspace.json` in place so unknown metadata
-fields are preserved. Adding or removing child repositories is not supported in
-the settings editor yet.
+roles, repository agent notes, bootstrap profile references, bootstrap timing,
+and agent guide controls. Prowl patches `.prowl/workspace.json` in place so
+unknown metadata fields are preserved.
+
+The same settings page can add or remove child repositories after creation.
+Adding a child uses the same materialization rules as workspace creation:
+local sources can be linked or turned into worktrees, and remote sources are
+cloned after their branches are loaded. Removing a child removes the workspace
+entry and cleans up Prowl-created materialization under the workspace root:
+linked children remove only the symlink, remote children remove the cloned
+folder, and local or bare worktree children run `git worktree remove --force`
+against their recorded source repository. Existing child source, path, and
+checkout fields are shown as read-only provenance in settings; changing those
+would require removing and re-adding the child.
+
+Bootstrap profiles can be set to run on workspace creation, when a child is
+added later, or manually from settings. Automatic bootstrap is skipped for
+linked children so setup scripts do not write into a shared live checkout; the
+manual run button remains available for saved children with a configured
+profile.
 
 Example `.prowl/workspace.json`:
 

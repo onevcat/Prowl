@@ -443,6 +443,21 @@ struct RepositorySettingsView: View {
       workspaceAgentGuideEditor(draft: draft)
       Divider()
       WorkspaceRepositoriesGridView(workspace: workspace, rootURL: store.rootURL)
+      HStack {
+        Button {
+          chooseWorkspaceRepositorySource()
+        } label: {
+          Label("Add Local", systemImage: "folder.badge.plus")
+        }
+        .help("Add a local repository to this workspace")
+
+        Button {
+          store.send(.workspaceAddRemoteRepository(name: "Remote Repository", url: ""))
+        } label: {
+          Label("Add Remote", systemImage: "network")
+        }
+        .help("Add a remote repository to this workspace")
+      }
       ForEach(draft.repositories) { repository in
         workspaceRepositoryEditor(repository)
       }
@@ -516,13 +531,47 @@ struct RepositorySettingsView: View {
     _ repository: RepositorySettingsFeature.RepositoryDraft
   ) -> some View {
     VStack(alignment: .leading, spacing: 10) {
-      Text(repository.name)
-        .font(.headline)
+      HStack {
+        Text(repository.name.isEmpty ? "Repository" : repository.name)
+          .font(.headline)
+          .strikethrough(repository.isRemoved)
+        if repository.isNew {
+          Text("New")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        Spacer()
+        if repository.isRemoved {
+          Button {
+            store.send(.workspaceRestoreRepository(id: repository.id))
+          } label: {
+            Image(systemName: "arrow.uturn.backward")
+              .accessibilityLabel("Restore Repository")
+          }
+          .buttonStyle(.borderless)
+          .help("Keep this repository in the workspace")
+        } else {
+          Button {
+            store.send(.workspaceRemoveRepository(id: repository.id))
+          } label: {
+            Image(systemName: "trash")
+              .accessibilityLabel("Remove Repository")
+          }
+          .buttonStyle(.borderless)
+          .disabled(store.activeWorkspaceRepositoryCount <= 2)
+          .help("Remove repository from this workspace")
+        }
+      }
       labeledTextField(
         "Role",
         text: repository.role,
         action: { .workspaceRepositoryRoleChanged(id: repository.id, $0) }
       )
+      if repository.isNew {
+        workspaceNewRepositoryMaterializationEditor(repository)
+      } else {
+        workspaceRepositoryMaterializationSummary(repository)
+      }
       labeledPlainTextEditor(
         "Agent notes",
         text: repository.agentNotes,
@@ -545,6 +594,20 @@ struct RepositorySettingsView: View {
           )
         )
         Toggle(
+          "On add",
+          isOn: Binding(
+            get: { repository.bootstrapRunOnAdd },
+            set: { store.send(.workspaceBootstrapOnAddChanged(id: repository.id, $0)) }
+          )
+        )
+        Toggle(
+          "Manual",
+          isOn: Binding(
+            get: { repository.bootstrapRunOnManual },
+            set: { store.send(.workspaceBootstrapManualChanged(id: repository.id, $0)) }
+          )
+        )
+        Toggle(
           "Required",
           isOn: Binding(
             get: { repository.bootstrapRequired },
@@ -552,9 +615,109 @@ struct RepositorySettingsView: View {
           )
         )
       }
-      .help("Configure whether this repository's workspace bootstrap profile runs during creation")
+      .help("Choose when this repository's workspace bootstrap profile runs")
+      Button {
+        store.send(.runWorkspaceBootstrapButtonTapped(id: repository.id))
+      } label: {
+        Label("Run Bootstrap", systemImage: "play")
+      }
+      .disabled(
+        repository.isNew || repository.isRemoved
+          || repository.bootstrapScriptID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      )
+      .help("Run this repository's bootstrap profile now")
     }
+    .opacity(repository.isRemoved ? 0.55 : 1)
     .padding(.top, 6)
+  }
+
+  private func workspaceNewRepositoryMaterializationEditor(
+    _ repository: RepositorySettingsFeature.RepositoryDraft
+  ) -> some View {
+    VStack(alignment: .leading, spacing: 8) {
+      labeledTextField(
+        "Name",
+        text: repository.name,
+        action: { .workspaceRepositoryNameChanged(id: repository.id, $0) }
+      )
+      labeledTextField(
+        "Folder",
+        text: repository.path,
+        action: { .workspaceRepositoryPathChanged(id: repository.id, $0) }
+      )
+      labeledTextField(
+        repository.sourceKind == .remote ? "Remote URL" : "Source",
+        text: repository.sourceLocation,
+        action: { .workspaceRepositorySourceChosen(id: repository.id, $0) }
+      )
+      Button {
+        store.send(.workspaceLoadBaseRefsTapped(id: repository.id))
+      } label: {
+        Label("Load Branches", systemImage: "arrow.clockwise")
+      }
+      .disabled(repository.sourceLocation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+      .help("Load available branches for this repository")
+      HStack(spacing: 8) {
+        Picker(
+          "Branch action",
+          selection: Binding(
+            get: { repository.checkoutMode },
+            set: { store.send(.workspaceRepositoryCheckoutModeChanged(id: repository.id, $0)) }
+          )
+        ) {
+          if repository.sourceKind.supportsLinkCheckout {
+            Text("Link").tag(ProjectWorkspaceRepositoryCheckoutMode.link)
+          }
+          Text("Create Branch").tag(ProjectWorkspaceRepositoryCheckoutMode.createBranch)
+          Text("Use Existing").tag(ProjectWorkspaceRepositoryCheckoutMode.useExistingRef)
+        }
+        .pickerStyle(.menu)
+        .frame(width: 150)
+
+        if repository.checkoutMode == .createBranch {
+          TextField(
+            "Branch",
+            text: Binding(
+              get: { repository.branchName },
+              set: { store.send(.workspaceRepositoryBranchNameChanged(id: repository.id, $0)) }
+            )
+          )
+          .textFieldStyle(.roundedBorder)
+          .frame(maxWidth: 180)
+        }
+
+        if repository.checkoutMode != .link {
+          WorkspaceSettingsBranchRefMenu(
+            selection: repository.baseRef,
+            options: repository.baseRefOptions
+          ) { ref in
+            store.send(.workspaceRepositoryBaseRefChanged(id: repository.id, ref))
+          }
+          if repository.baseRefOptions.isEmpty {
+            Text("Load branches before saving.")
+              .font(.footnote)
+              .foregroundStyle(.secondary)
+          }
+        }
+      }
+    }
+  }
+
+  private func workspaceRepositoryMaterializationSummary(
+    _ repository: RepositorySettingsFeature.RepositoryDraft
+  ) -> some View {
+    VStack(alignment: .leading, spacing: 3) {
+      Text("Path: \(repository.path)")
+      Text("Source: \(repository.sourceKind.rawValue)")
+      if !repository.sourceLocation.isEmpty {
+        Text(repository.sourceLocation)
+          .lineLimit(1)
+          .truncationMode(.middle)
+      }
+    }
+    .font(.footnote.monospaced())
+    .foregroundStyle(.secondary)
+    .textSelection(.enabled)
   }
 
   private func labeledTextField(
@@ -585,6 +748,51 @@ struct RepositorySettingsView: View {
       )
       .frame(maxWidth: 520, minHeight: height)
     }
+  }
+
+  private func chooseWorkspaceRepositorySource() {
+    let panel = NSOpenPanel()
+    panel.canChooseFiles = false
+    panel.canChooseDirectories = true
+    panel.canCreateDirectories = false
+    panel.allowsMultipleSelection = false
+    panel.prompt = "Add"
+    panel.message = "Choose a repository folder"
+    panel.begin { response in
+      guard response == .OK, let url = panel.url else {
+        return
+      }
+      store.send(.workspaceAddLocalRepository(url.path(percentEncoded: false)))
+    }
+  }
+}
+
+private struct WorkspaceSettingsBranchRefMenu: View {
+  let selection: String
+  let options: [GitBranchRefOption]
+  let onSelect: (String) -> Void
+
+  var body: some View {
+    Menu {
+      ForEach(options) { option in
+        Button {
+          onSelect(option.ref)
+        } label: {
+          if option.ref == selection {
+            Label(option.ref, systemImage: "checkmark")
+          } else {
+            Text(option.ref)
+          }
+        }
+      }
+    } label: {
+      Text(selection.isEmpty ? "Branch/ref" : selection)
+        .lineLimit(1)
+        .truncationMode(.middle)
+        .frame(maxWidth: 220, alignment: .leading)
+    }
+    .disabled(options.isEmpty)
+    .help("Choose branch or ref")
   }
 }
 

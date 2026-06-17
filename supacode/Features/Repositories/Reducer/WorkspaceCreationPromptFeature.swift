@@ -530,7 +530,7 @@ struct WorkspaceCreationPromptFeature {
     }
   }
 
-  static func plan(
+  nonisolated static func plan(
     for repository: ProjectWorkspaceCreationRepository
   ) -> Result<ProjectWorkspaceRepositoryPlan, ProjectWorkspaceCreationError> {
     let name = repository.name.trimmingCharacters(in: .whitespacesAndNewlines)

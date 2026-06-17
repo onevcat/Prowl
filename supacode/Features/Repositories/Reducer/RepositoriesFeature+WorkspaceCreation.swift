@@ -19,7 +19,7 @@ extension RepositoriesFeature.State {
 
 nonisolated private let workspaceLog = SupaLogger("workspace")
 
-nonisolated private struct WorkspaceBaseRefsResult: Sendable {
+nonisolated struct WorkspaceBaseRefsResult: Sendable {
   var options: [GitBranchRefOption] = []
   var defaultBaseRef: String?
   var errorMessage: String?
@@ -236,13 +236,31 @@ extension RepositoriesFeature {
     }
   }
 
-  private static func workspaceBaseRefs(
+  static func workspaceBaseRefs(
     for repository: ProjectWorkspaceCreationRepository,
     gitClient: GitClientDependency
   ) async -> WorkspaceBaseRefsResult {
     switch repository.sourceKind {
     case .remote:
-      return WorkspaceBaseRefsResult()
+      let url = repository.sourceLocation.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !url.isEmpty else {
+        return WorkspaceBaseRefsResult()
+      }
+      do {
+        let refs = try await gitClient.remoteBranchRefs(url)
+        let options = ProjectWorkspaceCreationRepository.normalizedBaseRefOptions(refs.options)
+        return WorkspaceBaseRefsResult(
+          options: options,
+          defaultBaseRef: ProjectWorkspaceCreationRepository.preferredBaseRef(
+            automaticBaseRef: refs.defaultBaseRef,
+            options: options
+          )
+        )
+      } catch {
+        return WorkspaceBaseRefsResult(
+          errorMessage: "Could not read remote branches: \(error.localizedDescription)"
+        )
+      }
 
     case .existingPath, .localRepository, .bareRepository:
       guard let sourceURL = repository.localSourceURL else {

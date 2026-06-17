@@ -4,7 +4,6 @@ nonisolated enum ProjectWorkspaceMetadataPatchError: LocalizedError, Equatable, 
   case metadataNotFound(String)
   case invalidMetadata
   case notEnoughRepositories
-  case repositoryCountChanged
 
   var errorDescription: String? {
     switch self {
@@ -14,14 +13,12 @@ nonisolated enum ProjectWorkspaceMetadataPatchError: LocalizedError, Equatable, 
       return "Workspace metadata is not a JSON object."
     case .notEnoughRepositories:
       return "A workspace needs at least two repositories."
-    case .repositoryCountChanged:
-      return "Adding or removing workspace repositories is not supported in this editor yet."
     }
   }
 }
 
-nonisolated struct ProjectWorkspaceMetadataPatcher {
-  var fileManager: FileManager
+nonisolated struct ProjectWorkspaceMetadataPatcher: Sendable {
+  nonisolated(unsafe) var fileManager: FileManager
   var now: @Sendable () -> Date
 
   init(
@@ -82,24 +79,36 @@ nonisolated struct ProjectWorkspaceMetadataPatcher {
     existing: [[String: Any]],
     updated: [ProjectWorkspace.RepositoryEntry]
   ) throws -> [[String: Any]] {
-    guard existing.count == updated.count else {
-      throw ProjectWorkspaceMetadataPatchError.repositoryCountChanged
+    var existingByID: [String: [String: Any]] = [:]
+    for entry in existing {
+      guard let id = entry["id"] as? String, !id.isEmpty else {
+        continue
+      }
+      existingByID[id] = entry
     }
 
-    return zip(existing, updated).map { existingEntry, updatedEntry in
-      var object = existingEntry
-      object["id"] = updatedEntry.id
-      object["name"] = updatedEntry.name
-      object["role"] = updatedEntry.role
-      object["agent_notes"] = updatedEntry.agentNotes
-      object["path"] = updatedEntry.path
-      object["source_kind"] = updatedEntry.sourceKind.rawValue
-      object["source_location"] = updatedEntry.sourceLocation
-      object["branch_name"] = updatedEntry.branchName
-      object["base_ref"] = updatedEntry.baseRef
-      object["bootstrap"] = bootstrapObject(updatedEntry.bootstrap)
-      return object
+    return updated.map { updatedEntry in
+      let object = existingByID[updatedEntry.id] ?? [:]
+      return patchedRepository(object, with: updatedEntry)
     }
+  }
+
+  private func patchedRepository(
+    _ existing: [String: Any],
+    with updatedEntry: ProjectWorkspace.RepositoryEntry
+  ) -> [String: Any] {
+    var object = existing
+    object["id"] = updatedEntry.id
+    object["name"] = updatedEntry.name
+    object["role"] = updatedEntry.role
+    object["agent_notes"] = updatedEntry.agentNotes
+    object["path"] = updatedEntry.path
+    object["source_kind"] = updatedEntry.sourceKind.rawValue
+    object["source_location"] = updatedEntry.sourceLocation
+    object["branch_name"] = updatedEntry.branchName
+    object["base_ref"] = updatedEntry.baseRef
+    object["bootstrap"] = bootstrapObject(updatedEntry.bootstrap)
+    return object
   }
 
   private func agentGuideObject(_ guide: ProjectWorkspaceAgentGuide?) -> [String: Any]? {

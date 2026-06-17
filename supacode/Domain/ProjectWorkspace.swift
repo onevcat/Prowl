@@ -254,6 +254,14 @@ nonisolated struct ProjectWorkspaceCreationRequest: Equatable, Sendable {
   var createdAt: Date
 }
 
+nonisolated struct ProjectWorkspaceRepositoryUpdateRequest: Sendable {
+  var workspace: ProjectWorkspace
+  var rootURL: URL
+  var additions: [ProjectWorkspaceRepositoryPlan]
+  var removedRepositories: [ProjectWorkspace.RepositoryEntry]
+  var updatedAt: Date
+}
+
 nonisolated struct ProjectWorkspaceGitCommand: Equatable, Sendable {
   var arguments: [String]
   var currentDirectoryURL: URL?
@@ -265,6 +273,15 @@ nonisolated struct ProjectWorkspaceGitCommand: Equatable, Sendable {
 
 nonisolated struct ProjectWorkspaceGitRunner: Sendable {
   var run: @Sendable (ProjectWorkspaceGitCommand) async throws -> Void
+}
+
+nonisolated private struct ProjectWorkspaceBootstrapRunRequest {
+  var entry: ProjectWorkspace.RepositoryEntry
+  var plan: ProjectWorkspaceRepositoryPlan?
+  var workspaceRootURL: URL
+  var timing: ProjectWorkspaceBootstrapTiming
+  var runner: ProjectWorkspaceBootstrapRunner?
+  nonisolated(unsafe) var fileManager: FileManager
 }
 
 nonisolated enum ProjectWorkspaceCreationError: LocalizedError, Equatable, Sendable {
@@ -608,11 +625,14 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
         )
         entries.append(entry)
         try await runBootstrapIfNeeded(
-          for: entry,
-          plan: repository,
-          workspaceRootURL: rootURL,
-          bootstrapRunner: bootstrapRunner,
-          fileManager: fileManager
+          ProjectWorkspaceBootstrapRunRequest(
+            entry: entry,
+            plan: repository,
+            workspaceRootURL: rootURL,
+            timing: .create,
+            runner: bootstrapRunner,
+            fileManager: fileManager
+          )
         )
       }
 
@@ -637,6 +657,120 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
     } catch {
       await rollback(ledger, rootURL: rootURL, fileManager: fileManager, gitRunner: gitRunner)
       throw error
+    }
+  }
+
+  static func updateRepositories(
+    _ request: ProjectWorkspaceRepositoryUpdateRequest,
+    fileManager: FileManager = .default,
+    gitRunner: ProjectWorkspaceGitRunner,
+    bootstrapRunner: ProjectWorkspaceBootstrapRunner? = nil,
+    agentGuideWriter: ProjectWorkspaceAgentGuideWriter? = nil,
+    metadataSaver: @Sendable (ProjectWorkspace) throws -> ProjectWorkspace
+  ) async throws -> ProjectWorkspace {
+    var updatedWorkspace = request.workspace
+    let removedIDs = Set(request.removedRepositories.map(\.id))
+    updatedWorkspace.repositories.removeAll { removedIDs.contains($0.id) }
+    guard updatedWorkspace.repositories.count + request.additions.count >= 2 else {
+      throw ProjectWorkspaceCreationError.notEnoughRepositories
+    }
+
+    let rootPath = normalizedPath(request.rootURL, resolvingSymlinks: false)
+    let rootURL = URL(fileURLWithPath: rootPath, isDirectory: true).standardizedFileURL
+    var ledger = MaterializationLedger(
+      occupiedNames: Set(updatedWorkspace.repositories.map { $0.path.lowercased() })
+    )
+
+    do {
+      for entry in request.removedRepositories {
+        try await removeRepositoryMaterialization(
+          entry,
+          workspaceRootURL: rootURL,
+          fileManager: fileManager,
+          gitRunner: gitRunner
+        )
+      }
+      for repository in request.additions {
+        let entry = try await materialize(
+          repository,
+          workspaceRootURL: rootURL,
+          ledger: &ledger,
+          fileManager: fileManager,
+          gitRunner: gitRunner
+        )
+        updatedWorkspace.repositories.append(entry)
+        try await runBootstrapIfNeeded(
+          ProjectWorkspaceBootstrapRunRequest(
+            entry: entry,
+            plan: repository,
+            workspaceRootURL: rootURL,
+            timing: .onAdd,
+            runner: bootstrapRunner,
+            fileManager: fileManager
+          )
+        )
+      }
+
+      updatedWorkspace.updatedAt = request.updatedAt
+      let savedWorkspace = try metadataSaver(updatedWorkspace.normalized(relativeTo: rootURL))
+      if let agentGuideWriter, savedWorkspace.agentGuide?.enabled == true {
+        try await agentGuideWriter.write(savedWorkspace, rootURL)
+      }
+      return savedWorkspace
+    } catch {
+      await rollback(ledger, rootURL: rootURL, fileManager: fileManager, gitRunner: gitRunner)
+      throw error
+    }
+  }
+
+  static func runBootstrap(
+    for entry: RepositoryEntry,
+    workspaceRootURL: URL,
+    timing: ProjectWorkspaceBootstrapTiming,
+    bootstrapRunner: ProjectWorkspaceBootstrapRunner,
+    fileManager: FileManager = .default
+  ) async throws {
+    try await runBootstrapIfNeeded(
+      ProjectWorkspaceBootstrapRunRequest(
+        entry: entry,
+        plan: nil,
+        workspaceRootURL: workspaceRootURL,
+        timing: timing,
+        runner: bootstrapRunner,
+        fileManager: fileManager
+      )
+    )
+  }
+
+  private static func removeRepositoryMaterialization(
+    _ entry: RepositoryEntry,
+    workspaceRootURL: URL,
+    fileManager: FileManager,
+    gitRunner: ProjectWorkspaceGitRunner
+  ) async throws {
+    let rootPath = normalizedPath(workspaceRootURL, resolvingSymlinks: false)
+    let entryURL = entry.resolvedURL(relativeTo: workspaceRootURL)
+    let entryPath = normalizedPath(entryURL, resolvingSymlinks: false)
+    guard entryPath.hasPrefix(rootPath + "/") else {
+      return
+    }
+
+    let isSymbolicLink =
+      (try? entryURL.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == true
+    if !isSymbolicLink, entry.sourceKind != .remote, let sourceLocation = entry.sourceLocation {
+      try await gitRunner.run(
+        ProjectWorkspaceGitCommand(
+          arguments: ["-C", sourceLocation, "worktree", "remove", "--force", entryPath],
+          currentDirectoryURL: nil
+        )
+      )
+      return
+    }
+
+    if fileManager.fileExists(atPath: entryPath)
+      || (try? entryURL.checkResourceIsReachable()) == true
+    {
+      try fileManager.removeItem(at: entryURL)
     }
   }
 
@@ -877,28 +1011,26 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
     )
   }
 
-  private static func runBootstrapIfNeeded(
-    for entry: RepositoryEntry,
-    plan: ProjectWorkspaceRepositoryPlan,
-    workspaceRootURL: URL,
-    bootstrapRunner: ProjectWorkspaceBootstrapRunner?,
-    fileManager: FileManager
-  ) async throws {
+  private static func runBootstrapIfNeeded(_ request: ProjectWorkspaceBootstrapRunRequest)
+    async throws
+  {
+    let entry = request.entry
+    let timing = request.timing
     guard let bootstrap = entry.bootstrap,
-      bootstrap.runOn.contains(.create),
-      let bootstrapRunner
+      bootstrap.runOn.contains(timing),
+      let bootstrapRunner = request.runner
     else {
       return
     }
-    guard plan.checkout != .link else {
+    guard timing == .manual || request.plan?.checkout != .link else {
       log.info("Skipping automatic bootstrap for linked workspace child \(entry.name)")
       return
     }
 
-    let repositoryRootURL = entry.resolvedURL(relativeTo: workspaceRootURL)
+    let repositoryRootURL = entry.resolvedURL(relativeTo: request.workspaceRootURL)
     var isDirectory = ObjCBool(false)
     guard
-      fileManager.fileExists(
+      request.fileManager.fileExists(
         atPath: repositoryRootURL.path(percentEncoded: false),
         isDirectory: &isDirectory
       ),
@@ -909,10 +1041,10 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
     }
 
     let context = ProjectWorkspaceBootstrapContext(
-      workspaceRootURL: workspaceRootURL,
+      workspaceRootURL: request.workspaceRootURL,
       repositoryRootURL: repositoryRootURL,
       repository: entry,
-      timing: .create
+      timing: timing
     )
     do {
       try await bootstrapRunner.run(bootstrap, context)

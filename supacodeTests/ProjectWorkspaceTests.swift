@@ -301,6 +301,60 @@ struct ProjectWorkspaceTests {
     #expect(repositories[0]["agent_notes"] as? String == "Test reducers.")
   }
 
+  @Test func metadataPatcherPreservesUnknownRepositoryFieldsWhenAddingAndRemoving() throws {
+    let rootURL = try makeTemporaryWorkspaceRoot()
+    defer { try? FileManager.default.removeItem(at: rootURL) }
+    try writeWorkspaceJSON(
+      """
+      {
+        "schema_version": "prowl.workspace.v1",
+        "title": "Old",
+        "repositories": [
+          {
+            "id": "app",
+            "name": "App",
+            "path": "app",
+            "source_kind": "existing_path",
+            "custom_repo": "keep"
+          },
+          {
+            "id": "api",
+            "name": "API",
+            "path": "api",
+            "source_kind": "existing_path",
+            "remove_me": true
+          }
+        ]
+      }
+      """,
+      to: rootURL
+    )
+
+    var workspace = try #require(ProjectWorkspace.load(from: rootURL))
+    workspace.repositories = [
+      workspace.repositories[0],
+      ProjectWorkspace.RepositoryEntry(
+        id: "web",
+        name: "Web",
+        path: "web",
+        sourceKind: .remote,
+        sourceLocation: "git@github.com:onevcat/web.git",
+        baseRef: "origin/main"
+      ),
+    ]
+
+    _ = try ProjectWorkspaceMetadataPatcher(now: { Date(timeIntervalSince1970: 10) })
+      .save(workspace, rootURL: rootURL)
+
+    let data = try Data(contentsOf: ProjectWorkspace.metadataURL(for: rootURL))
+    let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+    let repositories = try #require(object["repositories"] as? [[String: Any]])
+    #expect(repositories.map { $0["id"] as? String } == ["app", "web"])
+    #expect(repositories[0]["custom_repo"] as? String == "keep")
+    #expect(repositories[1]["source_location"] as? String == "git@github.com:onevcat/web.git")
+    #expect(repositories[1]["base_ref"] as? String == "origin/main")
+  }
+
   @Test func loadReturnsNilForMalformedWorkspaceMetadata() throws {
     let rootURL = try makeTemporaryWorkspaceRoot()
     defer { try? FileManager.default.removeItem(at: rootURL) }
@@ -816,6 +870,96 @@ struct ProjectWorkspaceTests {
     #expect(bootstrapCalls.value.map(\.repository.id) == ["app"])
     let loaded = try #require(ProjectWorkspace.load(from: rootURL))
     #expect(loaded.repositories.map(\.bootstrap?.scriptID) == ["sync-app", "sync-api"])
+  }
+
+  @Test func updateRepositoriesAddsRemovesAndRunsOnAddBootstrap() async throws {
+    let rootURL = try makeTemporaryWorkspaceRoot()
+    let appURL = try makeTemporaryWorkspaceRoot()
+    let apiURL = try makeTemporaryWorkspaceRoot()
+    let webURL = try makeTemporaryWorkspaceRoot()
+    defer {
+      try? FileManager.default.removeItem(at: rootURL)
+      try? FileManager.default.removeItem(at: appURL)
+      try? FileManager.default.removeItem(at: apiURL)
+      try? FileManager.default.removeItem(at: webURL)
+    }
+    try FileManager.default.createDirectory(
+      at: rootURL.appending(path: "api"), withIntermediateDirectories: true)
+
+    let workspace = ProjectWorkspace(
+      title: "Workspace",
+      repositories: [
+        ProjectWorkspace.RepositoryEntry(
+          id: "app",
+          name: "App",
+          path: "app",
+          sourceKind: .existingPath,
+          sourceLocation: appURL.path(percentEncoded: false)
+        ),
+        ProjectWorkspace.RepositoryEntry(
+          id: "api",
+          name: "API",
+          path: "api",
+          sourceKind: .localRepository,
+          sourceLocation: apiURL.path(percentEncoded: false)
+        ),
+      ]
+    )
+
+    let commands = LockIsolated<[ProjectWorkspaceGitCommand]>([])
+    let bootstrapCalls = LockIsolated<[ProjectWorkspaceBootstrapContext]>([])
+    let saved = try await ProjectWorkspace.updateRepositories(
+      ProjectWorkspaceRepositoryUpdateRequest(
+        workspace: workspace,
+        rootURL: rootURL,
+        additions: [
+          ProjectWorkspaceRepositoryPlan(
+            id: "web",
+            name: "Web",
+            path: "web",
+            sourceKind: .localRepository,
+            sourceLocation: webURL.path(percentEncoded: false),
+            checkout: .createBranch(branchName: "codex/web", baseRef: "main"),
+            bootstrap: ProjectWorkspaceRepositoryBootstrap(
+              scriptKind: .userProfile,
+              scriptID: "sync-web",
+              runOn: [.onAdd],
+              required: true
+            )
+          )
+        ],
+        removedRepositories: [workspace.repositories[1]],
+        updatedAt: Date(timeIntervalSince1970: 42)
+      ),
+      gitRunner: ProjectWorkspaceGitRunner { command in
+        commands.withValue { $0.append(command) }
+        if command.arguments.contains(rootURL.appending(path: "web").path(percentEncoded: false)) {
+          try FileManager.default.createDirectory(
+            at: rootURL.appending(path: "web"),
+            withIntermediateDirectories: true
+          )
+        }
+      },
+      bootstrapRunner: ProjectWorkspaceBootstrapRunner { _, context in
+        bootstrapCalls.withValue { $0.append(context) }
+      }
+    ) { $0 }
+
+    #expect(saved.repositories.map(\.id) == ["app", "web"])
+    #expect(saved.updatedAt == Date(timeIntervalSince1970: 42))
+    #expect(bootstrapCalls.value.map(\.repository.id) == ["web"])
+    #expect(bootstrapCalls.value.map(\.timing) == [.onAdd])
+    let rootPath = rootURL.path(percentEncoded: false)
+    let apiPath = normalizedTestPath(apiURL)
+    let webPath = normalizedTestPath(webURL)
+    #expect(
+      commands.value.map(\.arguments) == [
+        ["-C", apiPath, "worktree", "remove", "--force", "\(rootPath)/api"],
+        [
+          "-C", webPath, "worktree", "add", "-b", "codex/web", "\(rootPath)/web",
+          "--end-of-options", "main",
+        ],
+      ])
   }
 
   @Test func optionalBootstrapFailureKeepsWorkspace() async throws {
