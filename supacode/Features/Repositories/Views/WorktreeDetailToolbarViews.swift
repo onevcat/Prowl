@@ -103,7 +103,7 @@ struct RunScriptToolbarButton: View {
             .foregroundStyle(.secondary)
         }
       }
-      .padding(.horizontal, 6)
+      .padding(.horizontal, 4)
     }
     .font(.callout)
     .help(config.helpText)
@@ -142,7 +142,7 @@ struct UserCustomCommandToolbarButton: View {
             .foregroundStyle(.secondary)
         }
       }
-      .padding(.horizontal, 6)
+      .padding(.horizontal, 4)
     }
     .font(.callout)
     .help(helpText)

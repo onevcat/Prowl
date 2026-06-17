@@ -32,5 +32,6 @@ struct OpenWorktreeActionMenuLabelView: View {
           .font(.body)
       }
     }
+    .padding(.horizontal, 4)
   }
 }
