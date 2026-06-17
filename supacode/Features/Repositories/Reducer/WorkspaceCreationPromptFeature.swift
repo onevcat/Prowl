@@ -109,6 +109,9 @@ struct WorkspaceCreationPromptFeature {
     case repositoryBranchNameChanged(Repository.ID, String)
     case repositoryBaseRefChanged(Repository.ID, String)
     case repositoryResetLocalBranchChanged(Repository.ID, Bool)
+    case repositoryBootstrapScriptIDChanged(Repository.ID, String)
+    case repositoryBootstrapRunOnCreateChanged(Repository.ID, Bool)
+    case repositoryBootstrapRequiredChanged(Repository.ID, Bool)
     case rootPathChosen(String)
     case cancelButtonTapped
     case createButtonTapped
@@ -412,6 +415,21 @@ struct WorkspaceCreationPromptFeature {
         state.clearValidation()
         return .none
 
+      case .repositoryBootstrapScriptIDChanged(let repositoryID, let scriptID):
+        state.repositories[id: repositoryID]?.bootstrapScriptID = scriptID
+        state.clearValidation()
+        return .none
+
+      case .repositoryBootstrapRunOnCreateChanged(let repositoryID, let enabled):
+        state.repositories[id: repositoryID]?.bootstrapRunOnCreate = enabled
+        state.clearValidation()
+        return .none
+
+      case .repositoryBootstrapRequiredChanged(let repositoryID, let required):
+        state.repositories[id: repositoryID]?.bootstrapRequired = required
+        state.clearValidation()
+        return .none
+
       case .rootPathChosen(let path):
         state.rootPath = path
         state.isRootPathDirty = true
@@ -591,8 +609,28 @@ struct WorkspaceCreationPromptFeature {
         path: repository.path,
         sourceKind: repository.sourceKind,
         sourceLocation: sourceLocation,
-        checkout: checkout
+        checkout: checkout,
+        bootstrap: bootstrap(for: repository)
       )
+    )
+  }
+
+  nonisolated private static func bootstrap(
+    for repository: ProjectWorkspaceCreationRepository
+  ) -> ProjectWorkspaceRepositoryBootstrap? {
+    let scriptID = repository.bootstrapScriptID?.trimmingCharacters(in: .whitespacesAndNewlines)
+    var runOn = Set<ProjectWorkspaceBootstrapTiming>()
+    if repository.bootstrapRunOnCreate {
+      runOn.insert(.create)
+    }
+    guard scriptID?.isEmpty == false || !runOn.isEmpty || repository.bootstrapRequired else {
+      return nil
+    }
+    return ProjectWorkspaceRepositoryBootstrap(
+      scriptKind: .userProfile,
+      scriptID: scriptID?.isEmpty == false ? scriptID : nil,
+      runOn: runOn,
+      required: repository.bootstrapRequired
     )
   }
 }

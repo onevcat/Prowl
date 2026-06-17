@@ -154,6 +154,12 @@ linked children so setup scripts do not write into a shared live checkout; the
 manual run button remains available for saved children with a configured
 profile.
 
+The workspace creation sheet exposes per-repository bootstrap controls. Set a
+Bootstrap profile ID, enable Create, and optionally mark it Required before
+creating the workspace. The profile ID must exist in
+`~/.prowl/bootstrap-profiles.json`. Required create-time failures fail workspace
+creation and roll back Prowl-created materialization.
+
 Example `.prowl/workspace.json`:
 
 ```json
@@ -238,8 +244,9 @@ Repository entry fields:
 - `base_ref` — optional base branch or ref.
 - `bootstrap` — optional bootstrap profile reference. `script_kind:
   user_profile` looks up a local profile from `~/.prowl/bootstrap-profiles.json`;
-  `script_id` is that profile's id; `run_on` can include `create`; and
-  `required` decides whether bootstrap failure fails workspace creation.
+  `script_id` is that profile's id; `run_on` can include `create`, `on_add`,
+  and `manual`; and `required` decides whether bootstrap failure fails the
+  current materialization action.
 
 Bootstrap profiles run after a child repository has been materialized, with the
 child repository as the working directory. Automatic bootstrap is skipped for

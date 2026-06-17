@@ -194,6 +194,7 @@ struct WorkspaceCreationPromptView: View {
       repositoryNameAndPathFields(repository)
       repositorySourceField(repository)
       repositoryBranchFields(repository)
+      repositoryBootstrapFields(repository)
     }
     .padding(.horizontal, 10)
     .padding(.vertical, 10)
@@ -370,6 +371,46 @@ struct WorkspaceCreationPromptView: View {
           }
         }
       }
+    }
+  }
+
+  private func repositoryBootstrapFields(_ repository: ProjectWorkspaceCreationRepository)
+    -> some View
+  {
+    VStack(alignment: .leading, spacing: 4) {
+      HStack(spacing: 8) {
+        TextField(
+          "Bootstrap profile ID",
+          text: Binding(
+            get: { repository.bootstrapScriptID ?? "" },
+            set: { store.send(.repositoryBootstrapScriptIDChanged(repository.id, $0)) }
+          )
+        )
+        .textFieldStyle(.roundedBorder)
+        .font(.body.monospaced())
+        .disabled(store.isCreating)
+
+        Toggle(
+          "Create",
+          isOn: Binding(
+            get: { repository.bootstrapRunOnCreate },
+            set: { store.send(.repositoryBootstrapRunOnCreateChanged(repository.id, $0)) }
+          )
+        )
+        .disabled(store.isCreating)
+
+        Toggle(
+          "Required",
+          isOn: Binding(
+            get: { repository.bootstrapRequired },
+            set: { store.send(.repositoryBootstrapRequiredChanged(repository.id, $0)) }
+          )
+        )
+        .disabled(store.isCreating)
+      }
+      helpText(
+        "Optional user profile from ~/.prowl/bootstrap-profiles.json. Create runs after this child is materialized."
+      )
     }
   }
 

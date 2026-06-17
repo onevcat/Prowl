@@ -67,6 +67,9 @@ nonisolated struct ProjectWorkspaceCreationRepository: Equatable, Hashable, Send
   var branchName: String?
   var baseRef: String?
   var baseRefOptions: [GitBranchRefOption]
+  var bootstrapScriptID: String?
+  var bootstrapRequired: Bool
+  var bootstrapRunOnCreate: Bool
   // User choice when a Use-Existing checkout on a remote-tracking ref would
   // reset an existing same-named local branch: false keeps the local branch
   // (checks it out directly), true resets it to the remote ref.
@@ -80,7 +83,10 @@ nonisolated struct ProjectWorkspaceCreationRepository: Equatable, Hashable, Send
     branchName: String? = nil,
     path: String? = nil,
     baseRef: String? = nil,
-    baseRefOptions: [GitBranchRefOption] = []
+    baseRefOptions: [GitBranchRefOption] = [],
+    bootstrapScriptID: String? = nil,
+    bootstrapRequired: Bool = false,
+    bootstrapRunOnCreate: Bool = false
   ) {
     let normalizedURL = rootURL.standardizedFileURL
     self.id = id
@@ -93,6 +99,9 @@ nonisolated struct ProjectWorkspaceCreationRepository: Equatable, Hashable, Send
     self.branchName = branchName
     self.baseRef = baseRef
     self.baseRefOptions = Self.normalizedBaseRefOptions(baseRefOptions)
+    self.bootstrapScriptID = bootstrapScriptID
+    self.bootstrapRequired = bootstrapRequired
+    self.bootstrapRunOnCreate = bootstrapRunOnCreate
   }
 
   init(
@@ -104,7 +113,10 @@ nonisolated struct ProjectWorkspaceCreationRepository: Equatable, Hashable, Send
     branchName: String? = nil,
     baseRef: String? = nil,
     path: String? = nil,
-    baseRefOptions: [GitBranchRefOption] = []
+    baseRefOptions: [GitBranchRefOption] = [],
+    bootstrapScriptID: String? = nil,
+    bootstrapRequired: Bool = false,
+    bootstrapRunOnCreate: Bool = false
   ) {
     self.id = id
     self.name = name
@@ -115,6 +127,9 @@ nonisolated struct ProjectWorkspaceCreationRepository: Equatable, Hashable, Send
     self.branchName = branchName
     self.baseRef = baseRef
     self.baseRefOptions = Self.normalizedBaseRefOptions(baseRefOptions)
+    self.bootstrapScriptID = bootstrapScriptID
+    self.bootstrapRequired = bootstrapRequired
+    self.bootstrapRunOnCreate = bootstrapRunOnCreate
   }
 
   var localSourceURL: URL? {

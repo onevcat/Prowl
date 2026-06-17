@@ -1308,6 +1308,75 @@ struct RepositoriesFeatureTests {
     }
   }
 
+  @Test func workspaceCreationPromptSubmitsBootstrapConfiguration() async {
+    let repoRootA = "/tmp/repo-a"
+    let repoRootB = "/tmp/repo-b"
+    let store = TestStore(
+      initialState: WorkspaceCreationPromptFeature.State(
+        repositories: [
+          ProjectWorkspaceCreationRepository(
+            id: repoRootA,
+            name: "Repo A",
+            rootURL: URL(fileURLWithPath: repoRootA)
+          ),
+          ProjectWorkspaceCreationRepository(
+            id: repoRootB,
+            name: "Repo B",
+            rootURL: URL(fileURLWithPath: repoRootB)
+          ),
+        ],
+        title: "Workspace",
+        rootPath: "/tmp/workspace"
+      )
+    ) {
+      WorkspaceCreationPromptFeature()
+    }
+
+    await store.send(.repositoryBootstrapScriptIDChanged(repoRootA, "sync-app")) {
+      $0.repositories[id: repoRootA]?.bootstrapScriptID = "sync-app"
+    }
+    await store.send(.repositoryBootstrapRunOnCreateChanged(repoRootA, true)) {
+      $0.repositories[id: repoRootA]?.bootstrapRunOnCreate = true
+    }
+    await store.send(.repositoryBootstrapRequiredChanged(repoRootA, true)) {
+      $0.repositories[id: repoRootA]?.bootstrapRequired = true
+    }
+    await store.send(.createButtonTapped)
+    await store.receive(
+      .delegate(
+        .submit(
+          ProjectWorkspaceCreationDraft(
+            title: "Workspace",
+            rootURL: URL(filePath: "/tmp/workspace", directoryHint: .isDirectory),
+            agentGuide: ProjectWorkspaceAgentGuide(enabled: true),
+            repositories: [
+              ProjectWorkspaceRepositoryPlan(
+                id: repoRootA,
+                name: "Repo A",
+                sourceKind: .existingPath,
+                sourceLocation: repoRootA,
+                checkout: .link,
+                bootstrap: ProjectWorkspaceRepositoryBootstrap(
+                  scriptKind: .userProfile,
+                  scriptID: "sync-app",
+                  runOn: [.create],
+                  required: true
+                )
+              ),
+              ProjectWorkspaceRepositoryPlan(
+                id: repoRootB,
+                name: "Repo B",
+                sourceKind: .existingPath,
+                sourceLocation: repoRootB,
+                checkout: .link
+              ),
+            ]
+          )
+        )
+      )
+    )
+  }
+
   @Test func workspaceCreationPromptResetsLinkModeWhenSwitchingToBare() async {
     let repositoryID = "repo"
     let store = TestStore(

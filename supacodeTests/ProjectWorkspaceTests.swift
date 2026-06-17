@@ -1287,6 +1287,27 @@ struct ProjectWorkspaceTests {
     )
   }
 
+  @Test func planMapsCreationBootstrapProfile() throws {
+    let repository = ProjectWorkspaceCreationRepository(
+      id: "app",
+      name: "App",
+      rootURL: URL(fileURLWithPath: "/tmp/app"),
+      bootstrapScriptID: "sync-app",
+      bootstrapRequired: true,
+      bootstrapRunOnCreate: true
+    )
+
+    let plan = try WorkspaceCreationPromptFeature.plan(for: repository).get()
+    #expect(
+      plan.bootstrap
+        == ProjectWorkspaceRepositoryBootstrap(
+          scriptKind: .userProfile,
+          scriptID: "sync-app",
+          runOn: [.create],
+          required: true
+        ))
+  }
+
   @Test func cleanupUnregistersWorktreesAndRemovesFolder() async throws {
     let rootURL = try makeTemporaryWorkspaceRoot()
     let linkedSourceURL = try makeTemporaryWorkspaceRoot()
