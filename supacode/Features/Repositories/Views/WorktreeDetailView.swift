@@ -916,33 +916,32 @@ struct WorktreeDetailView: View {
         ToolbarSpacer(.fixed)
       }
 
-      if showRunButton {
+      if showRunButton || !inlineEntries.isEmpty {
         ToolbarItem {
-          RunScriptToolbarButton(
-            isRunning: toolbarState.runScriptIsRunning,
-            isEnabled: toolbarState.runScriptEnabled,
-            runHelpText: AppShortcuts.helpText(
-              title: "Run Script",
-              commandID: AppShortcuts.CommandID.runScript,
-              in: resolvedKeybindings
-            ),
-            stopHelpText: AppShortcuts.helpText(
-              title: "Stop Script",
-              commandID: AppShortcuts.CommandID.stopScript,
-              in: resolvedKeybindings
-            ),
-            runShortcut: shortcutDisplay(for: AppShortcuts.CommandID.runScript),
-            stopShortcut: shortcutDisplay(for: AppShortcuts.CommandID.stopScript),
-            runAction: onRunScript,
-            stopAction: onStopRunScript
-          )
-        }
-      }
-
-      if !inlineEntries.isEmpty {
-        ToolbarItemGroup {
-          ForEach(inlineEntries, id: \.command.id) { entry in
-            customCommandButton(entry.command, index: entry.index)
+          HStack(spacing: -16) {
+            if showRunButton {
+              RunScriptToolbarButton(
+                isRunning: toolbarState.runScriptIsRunning,
+                isEnabled: toolbarState.runScriptEnabled,
+                runHelpText: AppShortcuts.helpText(
+                  title: "Run Script",
+                  commandID: AppShortcuts.CommandID.runScript,
+                  in: resolvedKeybindings
+                ),
+                stopHelpText: AppShortcuts.helpText(
+                  title: "Stop Script",
+                  commandID: AppShortcuts.CommandID.stopScript,
+                  in: resolvedKeybindings
+                ),
+                runShortcut: shortcutDisplay(for: AppShortcuts.CommandID.runScript),
+                stopShortcut: shortcutDisplay(for: AppShortcuts.CommandID.stopScript),
+                runAction: onRunScript,
+                stopAction: onStopRunScript
+              )
+            }
+            ForEach(inlineEntries, id: \.command.id) { entry in
+              customCommandButton(entry.command, index: entry.index)
+            }
           }
         }
       }
