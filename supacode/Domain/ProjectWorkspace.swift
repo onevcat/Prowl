@@ -233,15 +233,18 @@ nonisolated struct ProjectWorkspaceRepositoryPlan: Equatable, Sendable, Identifi
 nonisolated struct ProjectWorkspaceCreationDraft: Equatable, Sendable {
   var title: String
   var rootURL: URL
+  var agentGuide: ProjectWorkspaceAgentGuide?
   var repositories: [ProjectWorkspaceRepositoryPlan]
 
   init(
     title: String,
     rootURL: URL,
+    agentGuide: ProjectWorkspaceAgentGuide? = nil,
     repositories: [ProjectWorkspaceRepositoryPlan]
   ) {
     self.title = title
     self.rootURL = rootURL.standardizedFileURL
+    self.agentGuide = agentGuide
     self.repositories = repositories
   }
 }
@@ -326,6 +329,7 @@ nonisolated struct ProjectWorkspaceRepositoryEntry: Codable, Equatable, Hashable
   var id: String
   var name: String
   var role: String?
+  var agentNotes: String?
   var path: String
   var sourceKind: ProjectWorkspaceRepositorySourceKind
   var sourceLocation: String?
@@ -337,6 +341,7 @@ nonisolated struct ProjectWorkspaceRepositoryEntry: Codable, Equatable, Hashable
     case id
     case name
     case role
+    case agentNotes = "agent_notes"
     case path
     case sourceKind = "source_kind"
     case sourceLocation = "source_location"
@@ -349,6 +354,7 @@ nonisolated struct ProjectWorkspaceRepositoryEntry: Codable, Equatable, Hashable
     id: String = "",
     name: String = "",
     role: String? = nil,
+    agentNotes: String? = nil,
     path: String = "",
     sourceKind: ProjectWorkspaceRepositorySourceKind = .existingPath,
     sourceLocation: String? = nil,
@@ -359,6 +365,7 @@ nonisolated struct ProjectWorkspaceRepositoryEntry: Codable, Equatable, Hashable
     self.id = id
     self.name = name
     self.role = role
+    self.agentNotes = agentNotes
     self.path = path
     self.sourceKind = sourceKind
     self.sourceLocation = sourceLocation
@@ -372,6 +379,7 @@ nonisolated struct ProjectWorkspaceRepositoryEntry: Codable, Equatable, Hashable
     id = try container.decodeIfPresent(String.self, forKey: .id) ?? ""
     name = try container.decodeIfPresent(String.self, forKey: .name) ?? ""
     role = try container.decodeIfPresent(String.self, forKey: .role)
+    agentNotes = try container.decodeIfPresent(String.self, forKey: .agentNotes)
     path =
       try container.decodeIfPresent(String.self, forKey: .path)
       ?? name.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
@@ -382,7 +390,8 @@ nonisolated struct ProjectWorkspaceRepositoryEntry: Codable, Equatable, Hashable
     sourceLocation = try container.decodeIfPresent(String.self, forKey: .sourceLocation)
     branchName = try container.decodeIfPresent(String.self, forKey: .branchName)
     baseRef = try container.decodeIfPresent(String.self, forKey: .baseRef)
-    bootstrap = try container.decodeIfPresent(ProjectWorkspaceRepositoryBootstrap.self, forKey: .bootstrap)
+    bootstrap = try container.decodeIfPresent(
+      ProjectWorkspaceRepositoryBootstrap.self, forKey: .bootstrap)
   }
 
   func resolvedURL(relativeTo workspaceRootURL: URL) -> URL {
@@ -408,6 +417,7 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
   var title: String
   var description: String
   var taskLinks: [String]
+  var agentGuide: ProjectWorkspaceAgentGuide?
   var repositories: [RepositoryEntry]
   var createdAt: Date?
   var updatedAt: Date?
@@ -418,6 +428,7 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
     case title
     case description
     case taskLinks = "task_links"
+    case agentGuide = "agent_guide"
     case repositories
     case createdAt = "created_at"
     case updatedAt = "updated_at"
@@ -429,6 +440,7 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
     title: String = "",
     description: String = "",
     taskLinks: [String] = [],
+    agentGuide: ProjectWorkspaceAgentGuide? = nil,
     repositories: [RepositoryEntry] = [],
     createdAt: Date? = nil,
     updatedAt: Date? = nil
@@ -438,6 +450,7 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
     self.title = title
     self.description = description
     self.taskLinks = taskLinks
+    self.agentGuide = agentGuide
     self.repositories = repositories
     self.createdAt = createdAt
     self.updatedAt = updatedAt
@@ -452,6 +465,7 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
     title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
     description = try container.decodeIfPresent(String.self, forKey: .description) ?? ""
     taskLinks = try container.decodeIfPresent([String].self, forKey: .taskLinks) ?? []
+    agentGuide = try container.decodeIfPresent(ProjectWorkspaceAgentGuide.self, forKey: .agentGuide)
     repositories =
       try container.decodeIfPresent([RepositoryEntry].self, forKey: .repositories) ?? []
     createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
@@ -512,6 +526,7 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
     copy.description = copy.description.trimmingCharacters(in: .whitespacesAndNewlines)
     copy.taskLinks = copy.taskLinks.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
       .filter { !$0.isEmpty }
+    copy.agentGuide = copy.agentGuide?.normalized
     copy.repositories = copy.repositories.map { entry in
       var entry = entry
       entry.id = entry.id.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -526,6 +541,8 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
           resolvedURL.lastPathComponent.isEmpty ? entry.id : resolvedURL.lastPathComponent
       }
       entry.role = entry.role?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+      entry.agentNotes =
+        entry.agentNotes?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
       entry.sourceLocation =
         entry.sourceLocation?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
       entry.branchName =
@@ -540,7 +557,8 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
     _ request: ProjectWorkspaceCreationRequest,
     fileManager: FileManager = .default,
     gitRunner: ProjectWorkspaceGitRunner,
-    bootstrapRunner: ProjectWorkspaceBootstrapRunner? = nil
+    bootstrapRunner: ProjectWorkspaceBootstrapRunner? = nil,
+    agentGuideWriter: ProjectWorkspaceAgentGuideWriter? = nil
   ) async throws -> ProjectWorkspace {
     let title = request.draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !title.isEmpty else {
@@ -601,6 +619,7 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
       let workspace = ProjectWorkspace(
         id: rootPath,
         title: title,
+        agentGuide: request.draft.agentGuide,
         repositories: entries,
         createdAt: request.createdAt,
         updatedAt: request.createdAt
@@ -611,6 +630,9 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
       encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
       try encoder.encode(workspace).write(to: metadataURL, options: .atomic)
       ledger.createdURLs.append(metadataURL)
+      if let agentGuideWriter, workspace.agentGuide?.enabled == true {
+        try await agentGuideWriter.write(workspace, rootURL)
+      }
       return workspace
     } catch {
       await rollback(ledger, rootURL: rootURL, fileManager: fileManager, gitRunner: gitRunner)

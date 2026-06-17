@@ -279,7 +279,8 @@ struct WorkspaceCreationPromptFeature {
       case .addRepositoryFromURL(let sourceKind, let path):
         guard let rootPath = PathPolicy.normalizePath(path) else {
           state.setValidation(
-            ProjectWorkspaceCreationError.missingRepositorySource("repository").localizedDescription,
+            ProjectWorkspaceCreationError.missingRepositorySource("repository")
+              .localizedDescription,
             target: nil
           )
           return .none
@@ -347,7 +348,8 @@ struct WorkspaceCreationPromptFeature {
       case .repositorySourceChosen(let repositoryID, let sourceLocation):
         guard let rootPath = PathPolicy.normalizePath(sourceLocation) else {
           state.setValidation(
-            ProjectWorkspaceCreationError.missingRepositorySource("repository").localizedDescription,
+            ProjectWorkspaceCreationError.missingRepositorySource("repository")
+              .localizedDescription,
             target: .repository(repositoryID, .source)
           )
           return .none
@@ -463,6 +465,7 @@ struct WorkspaceCreationPromptFeature {
               ProjectWorkspaceCreationDraft(
                 title: title,
                 rootURL: URL(filePath: rootPath, directoryHint: .isDirectory),
+                agentGuide: ProjectWorkspaceAgentGuide(enabled: true),
                 repositories: plans
               )
             )

@@ -149,6 +149,111 @@ struct ProjectWorkspaceTests {
     #expect(bootstrap.required == true)
   }
 
+  @Test func decodesWorkspaceAgentGuideMetadata() throws {
+    let rootURL = try makeTemporaryWorkspaceRoot()
+    defer { try? FileManager.default.removeItem(at: rootURL) }
+
+    try writeWorkspaceJSON(
+      """
+      {
+        "title": "Agent Task",
+        "agent_guide": {
+          "enabled": true,
+          "outputs": ["AGENTS.md", "../outside.md", "CLAUDE.md"],
+          "include_child_instruction_files": false,
+          "extra_notes": "Coordinate edits before touching shared files."
+        },
+        "repositories": [
+          {
+            "id": "app",
+            "name": "App",
+            "path": "app",
+            "role": "macOS app",
+            "agent_notes": "Use TCA reducer tests."
+          }
+        ]
+      }
+      """,
+      to: rootURL
+    )
+
+    let workspace = try #require(ProjectWorkspace.load(from: rootURL))
+    let guide = try #require(workspace.agentGuide)
+    #expect(guide.enabled)
+    #expect(guide.outputs == ["AGENTS.md", "CLAUDE.md"])
+    #expect(guide.includeChildInstructionFiles == false)
+    #expect(guide.extraNotes == "Coordinate edits before touching shared files.")
+    #expect(workspace.repositories.first?.agentNotes == "Use TCA reducer tests.")
+  }
+
+  @Test func agentGuideWriterCreatesManagedBlockAndReferencesChildInstructions() throws {
+    let rootURL = try makeTemporaryWorkspaceRoot()
+    defer { try? FileManager.default.removeItem(at: rootURL) }
+    try FileManager.default.createDirectory(
+      at: rootURL.appending(path: "app"), withIntermediateDirectories: true)
+    try Data("child".utf8).write(to: rootURL.appending(path: "app").appending(path: "AGENTS.md"))
+
+    let workspace = ProjectWorkspace(
+      title: "Agent Task",
+      description: "Touch app and API together.",
+      taskLinks: ["https://example.test/task"],
+      agentGuide: ProjectWorkspaceAgentGuide(enabled: true),
+      repositories: [
+        ProjectWorkspace.RepositoryEntry(
+          id: "app",
+          name: "App",
+          role: "macOS app",
+          agentNotes: "Use reducer tests.",
+          path: "app",
+          sourceKind: .localRepository,
+          branchName: "codex/task"
+        )
+      ]
+    )
+
+    try ProjectWorkspaceAgentGuideFileWriter().write(workspace: workspace, rootURL: rootURL)
+
+    let guide = try String(contentsOf: rootURL.appending(path: "AGENTS.md"), encoding: .utf8)
+    #expect(guide.contains(ProjectWorkspaceAgentGuideFileWriter.startMarker))
+    #expect(guide.contains("- `app`: macOS app"))
+    #expect(guide.contains("- Agent notes: Use reducer tests."))
+    #expect(guide.contains("- `app/AGENTS.md`"))
+  }
+
+  @Test func agentGuideWriterReplacesManagedBlockOnly() throws {
+    let rootURL = try makeTemporaryWorkspaceRoot()
+    defer { try? FileManager.default.removeItem(at: rootURL) }
+    let outputURL = rootURL.appending(path: "AGENTS.md")
+    try Data(
+      """
+      # Custom
+
+      keep before
+      \(ProjectWorkspaceAgentGuideFileWriter.startMarker)
+      old
+      \(ProjectWorkspaceAgentGuideFileWriter.endMarker)
+      keep after
+      """.utf8
+    )
+    .write(to: outputURL)
+
+    let workspace = ProjectWorkspace(
+      title: "New Title",
+      agentGuide: ProjectWorkspaceAgentGuide(enabled: true),
+      repositories: [
+        ProjectWorkspace.RepositoryEntry(id: "app", name: "App", path: "app")
+      ]
+    )
+
+    try ProjectWorkspaceAgentGuideFileWriter().write(workspace: workspace, rootURL: rootURL)
+
+    let guide = try String(contentsOf: outputURL, encoding: .utf8)
+    #expect(guide.contains("keep before"))
+    #expect(guide.contains("keep after"))
+    #expect(guide.contains("- Title: New Title"))
+    #expect(!guide.contains("\nold\n"))
+  }
+
   @Test func loadReturnsNilForMalformedWorkspaceMetadata() throws {
     let rootURL = try makeTemporaryWorkspaceRoot()
     defer { try? FileManager.default.removeItem(at: rootURL) }
@@ -742,7 +847,9 @@ struct ProjectWorkspaceTests {
       try? FileManager.default.removeItem(at: apiURL)
     }
 
-    await #expect(throws: ProjectWorkspaceCreationError.bootstrapFailed(repository: "App", message: "boom")) {
+    await #expect(
+      throws: ProjectWorkspaceCreationError.bootstrapFailed(repository: "App", message: "boom")
+    ) {
       try await ProjectWorkspace.create(
         ProjectWorkspaceCreationRequest(
           draft: ProjectWorkspaceCreationDraft(
@@ -790,7 +897,9 @@ struct ProjectWorkspaceTests {
       )
     }
 
-    #expect(!FileManager.default.fileExists(atPath: rootURL.appending(path: "app").path(percentEncoded: false)))
+    #expect(
+      !FileManager.default.fileExists(
+        atPath: rootURL.appending(path: "app").path(percentEncoded: false)))
     #expect(
       !FileManager.default.fileExists(
         atPath: ProjectWorkspace.metadataURL(for: rootURL).path(percentEncoded: false)

@@ -77,7 +77,8 @@ extension RepositoriesFeature {
       return workspaceBaseRefsEffect(for: [repository])
 
     case .baseRefsLoaded(
-      let repositoryID, let sourceKind, let sourceLocation, let options, let defaultBaseRef, let errorMessage
+      let repositoryID, let sourceKind, let sourceLocation, let options, let defaultBaseRef,
+      let errorMessage
     ):
       Self.applyLoadedBaseRefs(
         into: &state,
@@ -95,32 +96,7 @@ extension RepositoriesFeature {
     case .createWorkspace(let draft):
       state.workspaceCreationPrompt?.isCreating = true
       state.workspaceCreationPrompt?.validationMessage = nil
-      let request = ProjectWorkspaceCreationRequest(draft: draft, createdAt: now)
-      let gitRunner = Self.workspaceGitRunner(shellClient: shellClient)
-      @Shared(.bootstrapProfiles) var bootstrapProfiles
-      let bootstrapRunner = ProjectWorkspaceBootstrapExecutor(
-        profiles: bootstrapProfiles,
-        shellClient: shellClient,
-        now: { Date() }
-      ).runner
-      return .run { send in
-        do {
-          _ = try await ProjectWorkspace.create(
-            request,
-            gitRunner: gitRunner,
-            bootstrapRunner: bootstrapRunner
-          )
-          await send(.workspaceCreation(.workspaceCreated(request.draft.rootURL)))
-        } catch {
-          guard !Task.isCancelled else {
-            workspaceLog.warning("Workspace creation canceled, rollback finished")
-            return
-          }
-          workspaceLog.warning("Workspace creation failed: \(error.localizedDescription)")
-          await send(.workspaceCreation(.workspaceCreationFailed(error.localizedDescription)))
-        }
-      }
-      .cancellable(id: CancelID.workspaceCreation, cancelInFlight: true)
+      return createWorkspaceEffect(draft)
 
     case .workspaceCreated(let rootURL):
       analyticsClient.capture("workspace_created", [String: Any]?.none)
@@ -204,7 +180,39 @@ extension RepositoriesFeature {
     }
   }
 
-  private func workspaceBaseRefsEffect(for repositories: [ProjectWorkspaceCreationRepository]) -> Effect<Action> {
+  private func createWorkspaceEffect(_ draft: ProjectWorkspaceCreationDraft) -> Effect<Action> {
+    let request = ProjectWorkspaceCreationRequest(draft: draft, createdAt: now)
+    let gitRunner = Self.workspaceGitRunner(shellClient: shellClient)
+    @Shared(.bootstrapProfiles) var bootstrapProfiles
+    let bootstrapRunner = ProjectWorkspaceBootstrapExecutor(
+      profiles: bootstrapProfiles,
+      shellClient: shellClient,
+      now: { Date() }
+    ).runner
+    return .run { send in
+      do {
+        _ = try await ProjectWorkspace.create(
+          request,
+          gitRunner: gitRunner,
+          bootstrapRunner: bootstrapRunner,
+          agentGuideWriter: ProjectWorkspaceAgentGuideFileWriter().writer()
+        )
+        await send(.workspaceCreation(.workspaceCreated(request.draft.rootURL)))
+      } catch {
+        guard !Task.isCancelled else {
+          workspaceLog.warning("Workspace creation canceled, rollback finished")
+          return
+        }
+        workspaceLog.warning("Workspace creation failed: \(error.localizedDescription)")
+        await send(.workspaceCreation(.workspaceCreationFailed(error.localizedDescription)))
+      }
+    }
+    .cancellable(id: CancelID.workspaceCreation, cancelInFlight: true)
+  }
+
+  private func workspaceBaseRefsEffect(for repositories: [ProjectWorkspaceCreationRepository])
+    -> Effect<Action>
+  {
     guard !repositories.isEmpty else {
       return .none
     }

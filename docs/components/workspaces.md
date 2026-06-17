@@ -145,10 +145,17 @@ Example `.prowl/workspace.json`:
   "task_links": [
     "https://github.com/onevcat/Prowl/issues/123"
   ],
+  "agent_guide": {
+    "enabled": true,
+    "outputs": ["AGENTS.md"],
+    "include_child_instruction_files": true,
+    "extra_notes": "Coordinate shared files before editing."
+  },
   "repositories": [
     {
       "name": "App",
       "role": "macOS app",
+      "agent_notes": "Use Swift/TCA conventions and validate with make build-app.",
       "path": "app",
       "source_kind": "local_repository",
       "source_location": "/Users/mikoto/Documents/Repos/github/Prowl",
@@ -188,6 +195,11 @@ Top-level fields:
 - `title` — display title. Defaults to the folder name.
 - `description` — optional task summary shown in the detail view.
 - `task_links` — optional links or identifiers for the work item.
+- `agent_guide` — optional guide generation settings. When `enabled` is true,
+  Prowl writes each relative file in `outputs` (default `AGENTS.md`) with a
+  managed workspace block. `include_child_instruction_files` references child
+  `AGENTS.md`, `CLAUDE.md`, `.cursor/rules`, and
+  `.github/copilot-instructions.md` files when they exist.
 - `repositories` — repo entries that belong to the workspace.
 - `created_at` / `updated_at` — optional ISO-8601 timestamps.
 
@@ -196,6 +208,8 @@ Repository entry fields:
 - `id` — optional stable identifier. Defaults to `path`.
 - `name` — display name. Defaults to the last path component.
 - `role` — optional short role such as `app`, `backend`, or `docs`.
+- `agent_notes` — optional repository-specific guidance included in generated
+  workspace agent guides.
 - `path` — relative path under the workspace root, or an absolute path.
 - `source_kind` — `existing_path`, `remote`, `local_repository`, or
   `bare_repository`.
@@ -213,6 +227,21 @@ child repository as the working directory. Automatic bootstrap is skipped for
 linked children because those paths point at the user's existing checkout.
 Bootstrap logs and last-run state are written under the workspace `.prowl`
 runtime directory, not back into `workspace.json`.
+
+## Agent guides
+
+New workspaces generate a workspace-level `AGENTS.md` by default. The generated
+content is bounded by:
+
+```markdown
+<!-- prowl:workspace-agent-guide:start -->
+...
+<!-- prowl:workspace-agent-guide:end -->
+```
+
+Prowl only replaces this managed block when regenerating the guide. Content
+outside the block is preserved. If the target file already exists without a
+managed block, Prowl leaves it untouched and reports the conflict.
 
 ## Agent usage
 
