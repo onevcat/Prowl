@@ -92,7 +92,7 @@ struct RunScriptToolbarButton: View {
     Button {
       config.action()
     } label: {
-      HStack(spacing: 6) {
+      HStack(spacing: 8) {
         Image(systemName: config.systemImage)
           .accessibilityHidden(true)
         Text(config.title)
@@ -103,8 +103,9 @@ struct RunScriptToolbarButton: View {
             .foregroundStyle(.secondary)
         }
       }
+      .padding(.horizontal, 6)
     }
-    .font(.caption)
+    .font(.callout)
     .help(config.helpText)
     .disabled(!config.isEnabled)
   }
@@ -131,7 +132,7 @@ struct UserCustomCommandToolbarButton: View {
     Button {
       action()
     } label: {
-      HStack(spacing: 6) {
+      HStack(spacing: 8) {
         Image(systemName: systemImage)
           .accessibilityHidden(true)
         Text(title)
@@ -141,8 +142,9 @@ struct UserCustomCommandToolbarButton: View {
             .foregroundStyle(.secondary)
         }
       }
+      .padding(.horizontal, 6)
     }
-    .font(.caption)
+    .font(.callout)
     .help(helpText)
     .disabled(!isEnabled)
   }

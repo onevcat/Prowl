@@ -83,11 +83,11 @@ struct WorktreeDetailTitleView: View {
   }
 
   private var horizontalSpacing: CGFloat {
-    6
+    8
   }
 
   private var horizontalPadding: CGFloat {
-    title.supportsRename ? 0 : 6
+    title.supportsRename ? 0 : 8
   }
 }
 

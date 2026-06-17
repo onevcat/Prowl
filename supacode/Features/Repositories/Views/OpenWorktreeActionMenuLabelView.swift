@@ -6,7 +6,7 @@ struct OpenWorktreeActionMenuLabelView: View {
   let shortcutHint: String?
 
   var body: some View {
-    HStack(spacing: 6) {
+    HStack(spacing: 8) {
       if let icon = action.menuIcon {
         switch icon {
         case .app(let image):
