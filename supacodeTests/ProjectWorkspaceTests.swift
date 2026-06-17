@@ -1292,6 +1292,8 @@ struct ProjectWorkspaceTests {
       id: "app",
       name: "App",
       rootURL: URL(fileURLWithPath: "/tmp/app"),
+      checkoutMode: .createBranch,
+      branchName: "workspace/app",
       bootstrapScriptID: "sync-app",
       bootstrapRequired: true,
       bootstrapRunOnCreate: true

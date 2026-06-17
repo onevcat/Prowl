@@ -314,6 +314,10 @@ struct WorkspaceCreationPromptFeature {
           return .none
         }
         repository.checkoutMode = checkoutMode
+        if checkoutMode == .link {
+          repository.bootstrapRunOnCreate = false
+          repository.bootstrapRequired = false
+        }
         state.repositories[id: repositoryID] = repository
         state.clearValidation()
         return .none
@@ -421,12 +425,28 @@ struct WorkspaceCreationPromptFeature {
         return .none
 
       case .repositoryBootstrapRunOnCreateChanged(let repositoryID, let enabled):
-        state.repositories[id: repositoryID]?.bootstrapRunOnCreate = enabled
+        guard var repository = state.repositories[id: repositoryID],
+          repository.checkoutMode != .link
+        else {
+          return .none
+        }
+        repository.bootstrapRunOnCreate = enabled
+        if !enabled {
+          repository.bootstrapRequired = false
+        }
+        state.repositories[id: repositoryID] = repository
         state.clearValidation()
         return .none
 
       case .repositoryBootstrapRequiredChanged(let repositoryID, let required):
-        state.repositories[id: repositoryID]?.bootstrapRequired = required
+        guard var repository = state.repositories[id: repositoryID],
+          repository.checkoutMode != .link,
+          repository.bootstrapRunOnCreate
+        else {
+          return .none
+        }
+        repository.bootstrapRequired = required
+        state.repositories[id: repositoryID] = repository
         state.clearValidation()
         return .none
 
@@ -618,6 +638,9 @@ struct WorkspaceCreationPromptFeature {
   nonisolated private static func bootstrap(
     for repository: ProjectWorkspaceCreationRepository
   ) -> ProjectWorkspaceRepositoryBootstrap? {
+    guard repository.checkoutMode != .link else {
+      return nil
+    }
     let scriptID = repository.bootstrapScriptID?.trimmingCharacters(in: .whitespacesAndNewlines)
     var runOn = Set<ProjectWorkspaceBootstrapTiming>()
     if repository.bootstrapRunOnCreate {

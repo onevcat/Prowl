@@ -1,9 +1,11 @@
 import AppKit
 import ComposableArchitecture
+import Sharing
 import SwiftUI
 
 struct WorkspaceCreationPromptView: View {
   @Bindable var store: StoreOf<WorkspaceCreationPromptFeature>
+  @Shared(.bootstrapProfiles) private var bootstrapProfiles
   @FocusState private var isTitleFieldFocused: Bool
 
   var body: some View {
@@ -377,18 +379,27 @@ struct WorkspaceCreationPromptView: View {
   private func repositoryBootstrapFields(_ repository: ProjectWorkspaceCreationRepository)
     -> some View
   {
-    VStack(alignment: .leading, spacing: 4) {
+    let disablesAutomaticBootstrap = repository.checkoutMode == .link
+    let selectedProfileID = repository.bootstrapScriptID ?? ""
+    return VStack(alignment: .leading, spacing: 4) {
       HStack(spacing: 8) {
-        TextField(
-          "Bootstrap profile ID",
-          text: Binding(
-            get: { repository.bootstrapScriptID ?? "" },
+        Picker(
+          "Bootstrap profile",
+          selection: Binding(
+            get: { selectedProfileID },
             set: { store.send(.repositoryBootstrapScriptIDChanged(repository.id, $0)) }
           )
-        )
-        .textFieldStyle(.roundedBorder)
-        .font(.body.monospaced())
-        .disabled(store.isCreating)
+        ) {
+          Text(bootstrapProfiles.isEmpty ? "No bootstrap profiles" : "No bootstrap").tag("")
+          ForEach(bootstrapProfiles) { profile in
+            Text(bootstrapProfileTitle(profile)).tag(profile.id)
+          }
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .frame(minWidth: 240, maxWidth: .infinity, alignment: .leading)
+        .disabled(store.isCreating || bootstrapProfiles.isEmpty || disablesAutomaticBootstrap)
+        .help("Choose a local bootstrap profile from ~/.prowl/bootstrap-profiles.json")
 
         Toggle(
           "Create",
@@ -397,7 +408,8 @@ struct WorkspaceCreationPromptView: View {
             set: { store.send(.repositoryBootstrapRunOnCreateChanged(repository.id, $0)) }
           )
         )
-        .disabled(store.isCreating)
+        .disabled(store.isCreating || disablesAutomaticBootstrap || selectedProfileID.isEmpty)
+        .help("Run this profile after the child repository is materialized during workspace creation")
 
         Toggle(
           "Required",
@@ -406,12 +418,42 @@ struct WorkspaceCreationPromptView: View {
             set: { store.send(.repositoryBootstrapRequiredChanged(repository.id, $0)) }
           )
         )
-        .disabled(store.isCreating)
+        .disabled(
+          store.isCreating || disablesAutomaticBootstrap || selectedProfileID.isEmpty
+            || !repository.bootstrapRunOnCreate
+        )
+        .help("If the create-time bootstrap fails, fail workspace creation and roll back Prowl-created folders")
       }
-      helpText(
-        "Optional user profile from ~/.prowl/bootstrap-profiles.json. Create runs after this child is materialized."
-      )
+      helpText(bootstrapHelpText(for: repository, disablesAutomaticBootstrap: disablesAutomaticBootstrap))
     }
+  }
+
+  private func bootstrapProfileTitle(_ profile: ProjectWorkspaceBootstrapProfile) -> String {
+    if profile.name.isEmpty || profile.name == profile.id {
+      return profile.id
+    }
+    return "\(profile.name) (\(profile.id))"
+  }
+
+  private func bootstrapHelpText(
+    for repository: ProjectWorkspaceCreationRepository,
+    disablesAutomaticBootstrap: Bool
+  ) -> String {
+    if disablesAutomaticBootstrap {
+      return
+        "Linked repositories point at the original checkout, so create-time bootstrap is skipped. "
+        + "Use Create Branch or Use Existing to materialize a workspace child before running bootstrap."
+    }
+    if bootstrapProfiles.isEmpty {
+      return "No local bootstrap profiles found. Add profiles to ~/.prowl/bootstrap-profiles.json first."
+    }
+    if repository.bootstrapRunOnCreate {
+      return
+        "Create runs the selected profile after this child is materialized. "
+        + "Required makes failures fail workspace creation and roll back Prowl-created folders."
+    }
+    return
+      "Optional local profile from ~/.prowl/bootstrap-profiles.json. Enable Create to run it during workspace creation."
   }
 
   @ViewBuilder

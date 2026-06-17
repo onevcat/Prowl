@@ -1317,7 +1317,9 @@ struct RepositoriesFeatureTests {
           ProjectWorkspaceCreationRepository(
             id: repoRootA,
             name: "Repo A",
-            rootURL: URL(fileURLWithPath: repoRootA)
+            rootURL: URL(fileURLWithPath: repoRootA),
+            checkoutMode: .createBranch,
+            branchName: "workspace/repo-a"
           ),
           ProjectWorkspaceCreationRepository(
             id: repoRootB,
@@ -1355,7 +1357,7 @@ struct RepositoriesFeatureTests {
                 name: "Repo A",
                 sourceKind: .existingPath,
                 sourceLocation: repoRootA,
-                checkout: .link,
+                checkout: .createBranch(branchName: "workspace/repo-a", baseRef: nil),
                 bootstrap: ProjectWorkspaceRepositoryBootstrap(
                   scriptKind: .userProfile,
                   scriptID: "sync-app",
@@ -1375,6 +1377,37 @@ struct RepositoriesFeatureTests {
         )
       )
     )
+  }
+
+  @Test func workspaceCreationPromptIgnoresAutomaticBootstrapForLinkCheckout() async throws {
+    let repoRoot = "/tmp/repo-a"
+    let store = TestStore(
+      initialState: WorkspaceCreationPromptFeature.State(
+        repositories: [
+          ProjectWorkspaceCreationRepository(
+            id: repoRoot,
+            name: "Repo A",
+            rootURL: URL(fileURLWithPath: repoRoot)
+          )
+        ],
+        title: "Workspace",
+        rootPath: "/tmp/workspace"
+      )
+    ) {
+      WorkspaceCreationPromptFeature()
+    }
+
+    await store.send(.repositoryBootstrapScriptIDChanged(repoRoot, "sync-app")) {
+      $0.repositories[id: repoRoot]?.bootstrapScriptID = "sync-app"
+    }
+    await store.send(.repositoryBootstrapRunOnCreateChanged(repoRoot, true))
+    await store.send(.repositoryBootstrapRequiredChanged(repoRoot, true))
+
+    #expect(store.state.repositories[id: repoRoot]?.bootstrapRunOnCreate == false)
+    #expect(store.state.repositories[id: repoRoot]?.bootstrapRequired == false)
+    let repository = try #require(store.state.repositories[id: repoRoot])
+    let plan = try WorkspaceCreationPromptFeature.plan(for: repository).get()
+    #expect(plan.bootstrap == nil)
   }
 
   @Test func workspaceCreationPromptResetsLinkModeWhenSwitchingToBare() async {
