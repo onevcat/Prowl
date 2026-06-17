@@ -96,39 +96,16 @@ struct RepositorySettingsView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
       }
 
-      if let workspace = store.workspace {
+      if let workspace = store.workspace, let draft = store.workspaceDraft {
         Section {
-          VStack(alignment: .leading, spacing: 12) {
-            if !workspace.description.isEmpty {
-              Text(workspace.description)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
-            }
-            if !workspace.taskLinks.isEmpty {
-              VStack(alignment: .leading, spacing: 4) {
-                ForEach(workspace.taskLinks, id: \.self) { link in
-                  Text(link)
-                    .font(.subheadline.monospaced())
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-                }
-              }
-            }
-            WorkspaceRepositoriesGridView(workspace: workspace, rootURL: store.rootURL)
-          }
-          .frame(maxWidth: .infinity, alignment: .leading)
+          workspaceEditor(workspace: workspace, draft: draft)
         } header: {
           Text("Workspace")
         } footer: {
-          Text(
-            "Read-only. Defined in "
-              + "\(ProjectWorkspace.metadataURL(for: store.rootURL).path(percentEncoded: false)) "
-              + "— edit that file to change it."
-          )
-          .font(.footnote)
-          .foregroundStyle(.secondary)
-          .textSelection(.enabled)
+          Text(ProjectWorkspace.metadataURL(for: store.rootURL).path(percentEncoded: false))
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .textSelection(.enabled)
         }
       }
 
@@ -437,6 +414,176 @@ struct RepositorySettingsView: View {
         "“\(conflict.newCommandTitle)” and “\(conflict.existingCommandTitle)” both use \(conflict.shortcutDisplay)."
           + "\n\nChoose Replace to keep the new shortcut and clear the conflicting command."
       )
+    }
+  }
+
+  private func workspaceEditor(
+    workspace: ProjectWorkspace,
+    draft: RepositorySettingsFeature.WorkspaceDraft
+  ) -> some View {
+    VStack(alignment: .leading, spacing: 14) {
+      labeledTextField(
+        "Title",
+        text: draft.title,
+        action: RepositorySettingsFeature.Action.workspaceTitleChanged
+      )
+      labeledPlainTextEditor(
+        "Description",
+        text: draft.description,
+        height: 54,
+        action: RepositorySettingsFeature.Action.workspaceDescriptionChanged
+      )
+      labeledPlainTextEditor(
+        "Task links",
+        text: draft.taskLinksText,
+        height: 54,
+        action: RepositorySettingsFeature.Action.workspaceTaskLinksChanged
+      )
+      Divider()
+      workspaceAgentGuideEditor(draft: draft)
+      Divider()
+      WorkspaceRepositoriesGridView(workspace: workspace, rootURL: store.rootURL)
+      ForEach(draft.repositories) { repository in
+        workspaceRepositoryEditor(repository)
+      }
+      if let error = store.workspaceSaveError {
+        Text(error)
+          .font(.footnote)
+          .foregroundStyle(.red)
+          .textSelection(.enabled)
+      } else if let status = store.workspaceSaveStatus {
+        Text(status)
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+      }
+      HStack {
+        Button {
+          store.send(.saveWorkspaceMetadataButtonTapped)
+        } label: {
+          Label("Save Workspace", systemImage: "square.and.arrow.down")
+        }
+        .disabled(!store.canSaveWorkspaceDraft)
+        .help("Save workspace metadata")
+
+        Button {
+          store.send(.regenerateWorkspaceGuideButtonTapped)
+        } label: {
+          Label("Regenerate Guide", systemImage: "arrow.clockwise")
+        }
+        .disabled(!draft.agentGuideEnabled)
+        .help("Regenerate workspace agent guide")
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  private func workspaceAgentGuideEditor(
+    draft: RepositorySettingsFeature.WorkspaceDraft
+  ) -> some View {
+    VStack(alignment: .leading, spacing: 10) {
+      Toggle(
+        "Generate agent guide",
+        isOn: Binding(
+          get: { draft.agentGuideEnabled },
+          set: { store.send(.workspaceAgentGuideEnabledChanged($0)) }
+        )
+      )
+      .help("Generate managed workspace instructions such as AGENTS.md")
+      labeledPlainTextEditor(
+        "Outputs",
+        text: draft.agentGuideOutputsText,
+        height: 42,
+        action: RepositorySettingsFeature.Action.workspaceAgentGuideOutputsChanged
+      )
+      Toggle(
+        "Reference child instruction files",
+        isOn: Binding(
+          get: { draft.includeChildInstructionFiles },
+          set: { store.send(.workspaceChildInstructionsChanged($0)) }
+        )
+      )
+      .help("List child AGENTS.md, CLAUDE.md, Cursor rules, and Copilot instructions when present")
+      labeledPlainTextEditor(
+        "Guide notes",
+        text: draft.agentGuideExtraNotes,
+        height: 64,
+        action: RepositorySettingsFeature.Action.workspaceAgentGuideExtraNotesChanged
+      )
+    }
+  }
+
+  private func workspaceRepositoryEditor(
+    _ repository: RepositorySettingsFeature.RepositoryDraft
+  ) -> some View {
+    VStack(alignment: .leading, spacing: 10) {
+      Text(repository.name)
+        .font(.headline)
+      labeledTextField(
+        "Role",
+        text: repository.role,
+        action: { .workspaceRepositoryRoleChanged(id: repository.id, $0) }
+      )
+      labeledPlainTextEditor(
+        "Agent notes",
+        text: repository.agentNotes,
+        height: 54,
+        action: { .workspaceRepositoryAgentNotesChanged(id: repository.id, $0) }
+      )
+      labeledTextField(
+        "Bootstrap profile",
+        text: repository.bootstrapScriptID,
+        action: { .workspaceBootstrapIDChanged(id: repository.id, $0) }
+      )
+      HStack {
+        Toggle(
+          "Create",
+          isOn: Binding(
+            get: { repository.bootstrapRunOnCreate },
+            set: {
+              store.send(.workspaceBootstrapCreateChanged(id: repository.id, $0))
+            }
+          )
+        )
+        Toggle(
+          "Required",
+          isOn: Binding(
+            get: { repository.bootstrapRequired },
+            set: { store.send(.workspaceBootstrapRequiredChanged(id: repository.id, $0)) }
+          )
+        )
+      }
+      .help("Configure whether this repository's workspace bootstrap profile runs during creation")
+    }
+    .padding(.top, 6)
+  }
+
+  private func labeledTextField(
+    _ title: String,
+    text: String,
+    action: @escaping (String) -> RepositorySettingsFeature.Action
+  ) -> some View {
+    HStack {
+      Text(title)
+        .frame(width: 120, alignment: .leading)
+      TextField("", text: Binding(get: { text }, set: { store.send(action($0)) }))
+        .textFieldStyle(.roundedBorder)
+        .frame(maxWidth: 420)
+    }
+  }
+
+  private func labeledPlainTextEditor(
+    _ title: String,
+    text: String,
+    height: CGFloat,
+    action: @escaping (String) -> RepositorySettingsFeature.Action
+  ) -> some View {
+    VStack(alignment: .leading, spacing: 4) {
+      Text(title)
+        .font(.subheadline)
+      PlainTextEditor(
+        text: Binding(get: { text }, set: { store.send(action($0)) })
+      )
+      .frame(maxWidth: 520, minHeight: height)
     }
   }
 }

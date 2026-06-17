@@ -132,8 +132,11 @@ anyway would leave a dangling worktree registration in the source repository.
 ## Metadata
 
 The workspace's repository settings page (Settings → the workspace under
-Repositories) shows this metadata read-only; edit `.prowl/workspace.json` to
-change it.
+Repositories) can edit workspace title, description, task links, repository
+roles, repository agent notes, bootstrap profile references, and agent guide
+controls. Prowl patches `.prowl/workspace.json` in place so unknown metadata
+fields are preserved. Adding or removing child repositories is not supported in
+the settings editor yet.
 
 Example `.prowl/workspace.json`:
 

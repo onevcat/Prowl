@@ -3,6 +3,76 @@ import Foundation
 
 @Reducer
 struct RepositorySettingsFeature {
+  struct WorkspaceDraft: Equatable {
+    var title: String
+    var description: String
+    var taskLinksText: String
+    var agentGuideEnabled: Bool
+    var agentGuideOutputsText: String
+    var includeChildInstructionFiles: Bool
+    var agentGuideExtraNotes: String
+    var repositories: [RepositoryDraft]
+
+    init(workspace: ProjectWorkspace) {
+      let guide = workspace.agentGuide?.normalized ?? ProjectWorkspaceAgentGuide()
+      title = workspace.title
+      description = workspace.description
+      taskLinksText = workspace.taskLinks.joined(separator: "\n")
+      agentGuideEnabled = guide.enabled
+      agentGuideOutputsText = guide.outputs.joined(separator: "\n")
+      includeChildInstructionFiles = guide.includeChildInstructionFiles
+      agentGuideExtraNotes = guide.extraNotes
+      repositories = workspace.repositories.map(RepositoryDraft.init)
+    }
+  }
+
+  struct RepositoryDraft: Equatable, Identifiable {
+    var id: String
+    var name: String
+    var role: String
+    var agentNotes: String
+    var path: String
+    var sourceKind: ProjectWorkspaceRepositorySourceKind
+    var sourceLocation: String
+    var branchName: String
+    var baseRef: String
+    var bootstrapScriptID: String
+    var bootstrapRequired: Bool
+    var bootstrapRunOnCreate: Bool
+
+    init(entry: ProjectWorkspace.RepositoryEntry) {
+      id = entry.id
+      name = entry.name
+      role = entry.role ?? ""
+      agentNotes = entry.agentNotes ?? ""
+      path = entry.path
+      sourceKind = entry.sourceKind
+      sourceLocation = entry.sourceLocation ?? ""
+      branchName = entry.branchName ?? ""
+      baseRef = entry.baseRef ?? ""
+      bootstrapScriptID = entry.bootstrap?.scriptID ?? ""
+      bootstrapRequired = entry.bootstrap?.required ?? false
+      bootstrapRunOnCreate = entry.bootstrap?.runOn.contains(.create) ?? false
+    }
+
+    var bootstrap: ProjectWorkspaceRepositoryBootstrap? {
+      let scriptID = bootstrapScriptID.trimmingCharacters(in: .whitespacesAndNewlines)
+      var runOn = Set<ProjectWorkspaceBootstrapTiming>()
+      if bootstrapRunOnCreate {
+        runOn.insert(.create)
+      }
+      guard !scriptID.isEmpty || !runOn.isEmpty || bootstrapRequired else {
+        return nil
+      }
+      return ProjectWorkspaceRepositoryBootstrap(
+        scriptKind: .userProfile,
+        scriptID: scriptID.isEmpty ? nil : scriptID,
+        runOn: runOn,
+        required: bootstrapRequired
+      )
+    }
+  }
+
   @ObservableState
   struct State: Equatable {
     var rootURL: URL
@@ -13,6 +83,9 @@ struct RepositorySettingsFeature {
     var repositoryID: Repository.ID = ""
     var repositoryKind: Repository.Kind
     var workspace: ProjectWorkspace?
+    var workspaceDraft: WorkspaceDraft?
+    var workspaceSaveError: String?
+    var workspaceSaveStatus: String?
     var settings: RepositorySettings
     var userSettings: UserRepositorySettings
     var appearance: RepositoryAppearance = .empty
@@ -75,6 +148,65 @@ struct RepositorySettingsFeature {
         repositoryOverridePath: settings.worktreeBaseDirectoryPath
       )
     }
+
+    var canSaveWorkspaceDraft: Bool {
+      workspace != nil && workspaceDraft != nil
+    }
+
+    mutating func setWorkspace(_ workspace: ProjectWorkspace?) {
+      self.workspace = workspace
+      workspaceDraft = workspace.map(WorkspaceDraft.init)
+      workspaceSaveError = nil
+      workspaceSaveStatus = nil
+    }
+
+    mutating func updateWorkspaceRepositoryDraft(
+      id: String,
+      _ update: (inout RepositoryDraft) -> Void
+    ) {
+      guard var draft = workspaceDraft,
+        let index = draft.repositories.firstIndex(where: { $0.id == id })
+      else {
+        return
+      }
+      update(&draft.repositories[index])
+      workspaceDraft = draft
+      workspaceSaveStatus = nil
+    }
+
+    func updatedWorkspaceFromDraft() -> ProjectWorkspace? {
+      guard var workspace, let draft = workspaceDraft else {
+        return nil
+      }
+      workspace.title = draft.title
+      workspace.description = draft.description
+      workspace.taskLinks = draft.taskLinksText
+        .components(separatedBy: .newlines)
+        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
+      workspace.agentGuide = ProjectWorkspaceAgentGuide(
+        enabled: draft.agentGuideEnabled,
+        outputs: draft.agentGuideOutputsText.components(separatedBy: .newlines),
+        includeChildInstructionFiles: draft.includeChildInstructionFiles,
+        extraNotes: draft.agentGuideExtraNotes
+      )
+      workspace.repositories = workspace.repositories.map { entry in
+        guard let repositoryDraft = draft.repositories.first(where: { $0.id == entry.id }) else {
+          return entry
+        }
+        var updated = entry
+        updated.role = Self.trimmedNonEmpty(repositoryDraft.role)
+        updated.agentNotes = Self.trimmedNonEmpty(repositoryDraft.agentNotes)
+        updated.bootstrap = repositoryDraft.bootstrap
+        return updated
+      }
+      return workspace
+    }
+
+    private static func trimmedNonEmpty(_ value: String) -> String? {
+      let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+      return trimmed.isEmpty ? nil : trimmed
+    }
   }
 
   enum Action: BindableAction {
@@ -98,6 +230,24 @@ struct RepositorySettingsFeature {
     case dismissAppearanceImportError
     case resetAppearance
     case branchDataLoaded([String], defaultBaseRef: String)
+    case workspaceTitleChanged(String)
+    case workspaceDescriptionChanged(String)
+    case workspaceTaskLinksChanged(String)
+    case workspaceAgentGuideEnabledChanged(Bool)
+    case workspaceAgentGuideOutputsChanged(String)
+    case workspaceChildInstructionsChanged(Bool)
+    case workspaceAgentGuideExtraNotesChanged(String)
+    case workspaceRepositoryRoleChanged(id: String, String)
+    case workspaceRepositoryAgentNotesChanged(id: String, String)
+    case workspaceBootstrapIDChanged(id: String, String)
+    case workspaceBootstrapRequiredChanged(id: String, Bool)
+    case workspaceBootstrapCreateChanged(id: String, Bool)
+    case saveWorkspaceMetadataButtonTapped
+    case regenerateWorkspaceGuideButtonTapped
+    case workspaceMetadataSaved(ProjectWorkspace)
+    case workspaceMetadataSaveFailed(String)
+    case workspaceGuideRegenerated
+    case workspaceGuideRegenerateFailed(String)
     case delegate(Delegate)
     case binding(BindingAction<State>)
   }
@@ -109,6 +259,7 @@ struct RepositorySettingsFeature {
 
   @Dependency(GitClientDependency.self) private var gitClient
   @Dependency(\.repositoryIconAssetStore) private var repositoryIconAssetStore
+  @Dependency(\.date.now) private var now
 
   var body: some Reducer<State, Action> {
     BindingReducer()
@@ -180,10 +331,11 @@ struct RepositorySettingsFeature {
         let keybindingUserOverrides
       ):
         var updatedSettings = settings
-        updatedSettings.worktreeBaseDirectoryPath = SupacodePaths.normalizedWorktreeBaseDirectoryPath(
-          updatedSettings.worktreeBaseDirectoryPath,
-          repositoryRootURL: state.rootURL
-        )
+        updatedSettings.worktreeBaseDirectoryPath =
+          SupacodePaths.normalizedWorktreeBaseDirectoryPath(
+            updatedSettings.worktreeBaseDirectoryPath,
+            repositoryRootURL: state.rootURL
+          )
         if isBareRepository {
           updatedSettings.copyIgnoredOnWorktreeCreate = nil
           updatedSettings.copyUntrackedOnWorktreeCreate = nil
@@ -272,6 +424,120 @@ struct RepositorySettingsFeature {
         state.isBranchDataLoaded = true
         return .none
 
+      case .workspaceTitleChanged(let title):
+        state.workspaceDraft?.title = title
+        state.workspaceSaveStatus = nil
+        return .none
+
+      case .workspaceDescriptionChanged(let description):
+        state.workspaceDraft?.description = description
+        state.workspaceSaveStatus = nil
+        return .none
+
+      case .workspaceTaskLinksChanged(let links):
+        state.workspaceDraft?.taskLinksText = links
+        state.workspaceSaveStatus = nil
+        return .none
+
+      case .workspaceAgentGuideEnabledChanged(let enabled):
+        state.workspaceDraft?.agentGuideEnabled = enabled
+        state.workspaceSaveStatus = nil
+        return .none
+
+      case .workspaceAgentGuideOutputsChanged(let outputs):
+        state.workspaceDraft?.agentGuideOutputsText = outputs
+        state.workspaceSaveStatus = nil
+        return .none
+
+      case .workspaceChildInstructionsChanged(let include):
+        state.workspaceDraft?.includeChildInstructionFiles = include
+        state.workspaceSaveStatus = nil
+        return .none
+
+      case .workspaceAgentGuideExtraNotesChanged(let notes):
+        state.workspaceDraft?.agentGuideExtraNotes = notes
+        state.workspaceSaveStatus = nil
+        return .none
+
+      case .workspaceRepositoryRoleChanged(let id, let role):
+        state.updateWorkspaceRepositoryDraft(id: id) { $0.role = role }
+        return .none
+
+      case .workspaceRepositoryAgentNotesChanged(let id, let notes):
+        state.updateWorkspaceRepositoryDraft(id: id) { $0.agentNotes = notes }
+        return .none
+
+      case .workspaceBootstrapIDChanged(let id, let scriptID):
+        state.updateWorkspaceRepositoryDraft(id: id) { $0.bootstrapScriptID = scriptID }
+        return .none
+
+      case .workspaceBootstrapRequiredChanged(let id, let required):
+        state.updateWorkspaceRepositoryDraft(id: id) { $0.bootstrapRequired = required }
+        return .none
+
+      case .workspaceBootstrapCreateChanged(let id, let enabled):
+        state.updateWorkspaceRepositoryDraft(id: id) { $0.bootstrapRunOnCreate = enabled }
+        return .none
+
+      case .saveWorkspaceMetadataButtonTapped:
+        guard let updatedWorkspace = state.updatedWorkspaceFromDraft() else {
+          return .none
+        }
+        state.workspaceSaveError = nil
+        let rootURL = state.rootURL
+        let savedAt = now
+        return .run { send in
+          do {
+            let patcher = ProjectWorkspaceMetadataPatcher(now: { savedAt })
+            let savedWorkspace = try patcher.save(updatedWorkspace, rootURL: rootURL)
+            if savedWorkspace.agentGuide?.enabled == true {
+              try ProjectWorkspaceAgentGuideFileWriter().write(
+                workspace: savedWorkspace, rootURL: rootURL)
+            }
+            await send(.workspaceMetadataSaved(savedWorkspace))
+          } catch {
+            await send(.workspaceMetadataSaveFailed(error.localizedDescription))
+          }
+        }
+
+      case .regenerateWorkspaceGuideButtonTapped:
+        guard let updatedWorkspace = state.updatedWorkspaceFromDraft() else {
+          return .none
+        }
+        state.workspaceSaveError = nil
+        let rootURL = state.rootURL
+        return .run { send in
+          do {
+            try ProjectWorkspaceAgentGuideFileWriter().write(
+              workspace: updatedWorkspace, rootURL: rootURL)
+            await send(.workspaceGuideRegenerated)
+          } catch {
+            await send(.workspaceGuideRegenerateFailed(error.localizedDescription))
+          }
+        }
+
+      case .workspaceMetadataSaved(let workspace):
+        state.workspace = workspace
+        state.workspaceDraft = WorkspaceDraft(workspace: workspace)
+        state.workspaceSaveStatus = "Saved workspace metadata."
+        state.workspaceSaveError = nil
+        return .send(.delegate(.settingsChanged(state.rootURL)))
+
+      case .workspaceMetadataSaveFailed(let message):
+        state.workspaceSaveError = message
+        state.workspaceSaveStatus = nil
+        return .none
+
+      case .workspaceGuideRegenerated:
+        state.workspaceSaveStatus = "Regenerated agent guide."
+        state.workspaceSaveError = nil
+        return .none
+
+      case .workspaceGuideRegenerateFailed(let message):
+        state.workspaceSaveError = message
+        state.workspaceSaveStatus = nil
+        return .none
+
       case .binding:
         if state.isBareRepository {
           state.settings.copyIgnoredOnWorktreeCreate = nil
@@ -280,16 +546,18 @@ struct RepositorySettingsFeature {
         state.userSettings = state.userSettings.normalized()
         let rootURL = state.rootURL
         var normalizedSettings = state.settings
-        normalizedSettings.worktreeBaseDirectoryPath = SupacodePaths.normalizedWorktreeBaseDirectoryPath(
-          normalizedSettings.worktreeBaseDirectoryPath,
-          repositoryRootURL: rootURL
-        )
+        normalizedSettings.worktreeBaseDirectoryPath =
+          SupacodePaths.normalizedWorktreeBaseDirectoryPath(
+            normalizedSettings.worktreeBaseDirectoryPath,
+            repositoryRootURL: rootURL
+          )
         let trimmedCustomTitle =
           normalizedSettings.customTitle?
           .trimmingCharacters(in: .whitespacesAndNewlines)
         normalizedSettings.customTitle =
           (trimmedCustomTitle?.isEmpty ?? true) ? nil : trimmedCustomTitle
-        normalizedSettings.githubAccountOverride = normalizedSettings.githubAccountOverride?.normalized
+        normalizedSettings.githubAccountOverride =
+          normalizedSettings.githubAccountOverride?.normalized
         @Shared(.repositorySettings(rootURL)) var repositorySettings
         @Shared(.userRepositorySettings(rootURL)) var userRepositorySettings
         $repositorySettings.withLock { $0 = normalizedSettings }

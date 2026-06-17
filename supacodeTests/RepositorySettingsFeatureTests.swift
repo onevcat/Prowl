@@ -14,7 +14,8 @@ struct RepositorySettingsFeatureTests {
     let data = try JSONEncoder().encode(settings)
     let decoded = try JSONDecoder().decode(RepositorySettings.self, from: data)
 
-    #expect(decoded.githubAccountOverride == GithubAccountOverride(host: "github.com", login: "work"))
+    #expect(
+      decoded.githubAccountOverride == GithubAccountOverride(host: "github.com", login: "work"))
   }
 
   @Test(.dependencies) func plainFolderTaskLoadsWithoutGitRequests() async throws {
@@ -154,7 +155,8 @@ struct RepositorySettingsFeatureTests {
     }
     await store.receive(\.delegate.settingsChanged)
 
-    let savedData = try #require(localStorage.data(at: SupacodePaths.userRepositorySettingsURL(for: rootURL)))
+    let savedData = try #require(
+      localStorage.data(at: SupacodePaths.userRepositorySettingsURL(for: rootURL)))
     let decoded = try JSONDecoder().decode(UserRepositorySettings.self, from: savedData)
     #expect(decoded.customCommands.first?.shortcut == conflicted.customCommands.first?.shortcut)
   }
@@ -229,6 +231,100 @@ struct RepositorySettingsFeatureTests {
     let savedData = try #require(localStorage.data(at: repositorySettingsURL))
     let decoded = try JSONDecoder().decode(RepositorySettings.self, from: savedData)
     #expect(decoded.customTitle == nil)
+  }
+
+  @Test(.dependencies) func workspaceDraftSavesMetadataAndRegeneratesGuide() async throws {
+    let rootURL = FileManager.default.temporaryDirectory
+      .appending(path: "prowl-settings-workspace-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: rootURL) }
+    try FileManager.default.createDirectory(
+      at: rootURL.appending(path: ProjectWorkspace.metadataDirectoryName),
+      withIntermediateDirectories: true
+    )
+    let metadataURL = ProjectWorkspace.metadataURL(for: rootURL)
+    try Data(
+      """
+      {
+        "schema_version": "prowl.workspace.v1",
+        "title": "Old Workspace",
+        "repositories": [
+          {
+            "id": "app",
+            "name": "App",
+            "path": "app",
+            "source_kind": "existing_path"
+          },
+          {
+            "id": "api",
+            "name": "API",
+            "path": "api",
+            "source_kind": "existing_path"
+          }
+        ]
+      }
+      """.utf8
+    )
+    .write(to: metadataURL)
+
+    let workspace = try #require(ProjectWorkspace.load(from: rootURL))
+    var state = RepositorySettingsFeature.State(
+      rootURL: rootURL,
+      repositoryKind: .plain,
+      settings: .default,
+      userSettings: .default
+    )
+    state.setWorkspace(workspace)
+    let store = TestStore(initialState: state) {
+      RepositorySettingsFeature()
+    } withDependencies: {
+      $0.date.now = Date(timeIntervalSince1970: 20)
+    }
+
+    await store.send(.workspaceTitleChanged("New Workspace")) {
+      $0.workspaceDraft?.title = "New Workspace"
+    }
+    await store.send(.workspaceAgentGuideEnabledChanged(true)) {
+      $0.workspaceDraft?.agentGuideEnabled = true
+    }
+    await store.send(.workspaceRepositoryRoleChanged(id: "app", "macOS app")) {
+      $0.workspaceDraft?.repositories[0].role = "macOS app"
+    }
+    await store.send(.workspaceRepositoryAgentNotesChanged(id: "app", "Use reducer tests.")) {
+      $0.workspaceDraft?.repositories[0].agentNotes = "Use reducer tests."
+    }
+    await store.send(.workspaceBootstrapIDChanged(id: "app", "sync-app")) {
+      $0.workspaceDraft?.repositories[0].bootstrapScriptID = "sync-app"
+    }
+    await store.send(.workspaceBootstrapCreateChanged(id: "app", true)) {
+      $0.workspaceDraft?.repositories[0].bootstrapRunOnCreate = true
+    }
+    await store.send(.saveWorkspaceMetadataButtonTapped)
+    await store.receive(\.workspaceMetadataSaved) {
+      $0.workspace?.title = "New Workspace"
+      $0.workspace?.agentGuide = ProjectWorkspaceAgentGuide(enabled: true)
+      $0.workspace?.repositories[0].role = "macOS app"
+      $0.workspace?.repositories[0].agentNotes = "Use reducer tests."
+      $0.workspace?.repositories[0].bootstrap = ProjectWorkspaceRepositoryBootstrap(
+        scriptKind: .userProfile,
+        scriptID: "sync-app",
+        runOn: [.create]
+      )
+      $0.workspace?.updatedAt = Date(timeIntervalSince1970: 20)
+      if let workspace = $0.workspace {
+        $0.workspaceDraft = RepositorySettingsFeature.WorkspaceDraft(workspace: workspace)
+      }
+      $0.workspaceSaveStatus = "Saved workspace metadata."
+      $0.workspaceSaveError = nil
+    }
+    await store.receive(\.delegate.settingsChanged)
+
+    let saved = try #require(ProjectWorkspace.load(from: rootURL))
+    #expect(saved.title == "New Workspace")
+    #expect(saved.repositories[0].agentNotes == "Use reducer tests.")
+    #expect(saved.repositories[0].bootstrap?.scriptID == "sync-app")
+    let guide = try String(contentsOf: rootURL.appending(path: "AGENTS.md"), encoding: .utf8)
+    #expect(guide.contains("- Title: New Workspace"))
+    #expect(guide.contains("- Agent notes: Use reducer tests."))
   }
 
   @Test(.dependencies) func taskLoadsLatestUserSettingsAfterAsyncGitProbe() async throws {

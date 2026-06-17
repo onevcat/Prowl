@@ -383,7 +383,7 @@ struct AppFeature {
             userSettings: userRepositorySettings,
             appearance: repositoryAppearances[repository.id] ?? .empty
           )
-          repoSettingsState.workspace = repository.workspace
+          repoSettingsState.setWorkspace(repository.workspace)
           repoSettingsState.globalCopyIgnoredOnWorktreeCreate = state.settings.copyIgnoredOnWorktreeCreate
           repoSettingsState.globalCopyUntrackedOnWorktreeCreate = state.settings.copyUntrackedOnWorktreeCreate
           repoSettingsState.globalPullRequestMergeStrategy = state.settings.pullRequestMergeStrategy

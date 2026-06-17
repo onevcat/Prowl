@@ -254,6 +254,53 @@ struct ProjectWorkspaceTests {
     #expect(!guide.contains("\nold\n"))
   }
 
+  @Test func metadataPatcherPreservesUnknownFields() throws {
+    let rootURL = try makeTemporaryWorkspaceRoot()
+    defer { try? FileManager.default.removeItem(at: rootURL) }
+    try writeWorkspaceJSON(
+      """
+      {
+        "schema_version": "prowl.workspace.v1",
+        "title": "Old",
+        "custom_top": "keep",
+        "repositories": [
+          {
+            "id": "app",
+            "name": "App",
+            "path": "app",
+            "source_kind": "existing_path",
+            "custom_repo": "keep"
+          },
+          {
+            "id": "api",
+            "name": "API",
+            "path": "api",
+            "source_kind": "remote"
+          }
+        ]
+      }
+      """,
+      to: rootURL
+    )
+
+    var workspace = try #require(ProjectWorkspace.load(from: rootURL))
+    workspace.title = "New"
+    workspace.agentGuide = ProjectWorkspaceAgentGuide(enabled: true)
+    workspace.repositories[0].role = "macOS app"
+    workspace.repositories[0].agentNotes = "Test reducers."
+    let saved = try ProjectWorkspaceMetadataPatcher(now: { Date(timeIntervalSince1970: 10) })
+      .save(workspace, rootURL: rootURL)
+
+    #expect(saved.title == "New")
+    let data = try Data(contentsOf: ProjectWorkspace.metadataURL(for: rootURL))
+    let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+    #expect(object["custom_top"] as? String == "keep")
+    let repositories = try #require(object["repositories"] as? [[String: Any]])
+    #expect(repositories[0]["custom_repo"] as? String == "keep")
+    #expect(repositories[0]["role"] as? String == "macOS app")
+    #expect(repositories[0]["agent_notes"] as? String == "Test reducers.")
+  }
+
   @Test func loadReturnsNilForMalformedWorkspaceMetadata() throws {
     let rootURL = try makeTemporaryWorkspaceRoot()
     defer { try? FileManager.default.removeItem(at: rootURL) }
