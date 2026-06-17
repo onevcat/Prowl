@@ -70,6 +70,7 @@ struct WorktreeDetailTitleView: View {
       Text(title.text)
     }
     .font(.headline)
+    .padding(.horizontal, 8)
   }
 }
 
