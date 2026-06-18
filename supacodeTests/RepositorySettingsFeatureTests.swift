@@ -645,6 +645,73 @@ struct RepositorySettingsFeatureTests {
     #expect(saved.repositories.map(\.id) == ["app", "api"])
   }
 
+  @Test(.dependencies) func workspaceSettingsDisablesAutomaticBootstrapForLinkedRepository() async throws {
+    let fixture = try makeWorkspaceAddRemoveFixture()
+    let rootURL = fixture.rootURL
+    let webURL = fixture.webURL
+    defer {
+      try? FileManager.default.removeItem(at: fixture.rootURL)
+      try? FileManager.default.removeItem(at: fixture.appURL)
+      try? FileManager.default.removeItem(at: fixture.apiURL)
+      try? FileManager.default.removeItem(at: fixture.webURL)
+      try? FileManager.default.removeItem(at: fixture.profileURL)
+    }
+
+    let workspace = try #require(ProjectWorkspace.load(from: rootURL))
+    let storage = SettingsTestStorage()
+    var state = RepositorySettingsFeature.State(
+      rootURL: rootURL,
+      repositoryKind: .plain,
+      settings: .default,
+      userSettings: .default
+    )
+    state.setWorkspace(workspace)
+    let store = TestStore(initialState: state) {
+      RepositorySettingsFeature()
+    } withDependencies: {
+      $0.date.now = Date(timeIntervalSince1970: 50)
+      $0.uuid = .incrementing
+      $0.gitClient.repoRoot = { url in url }
+      $0.gitClient.automaticWorktreeBaseRef = { _ in "main" }
+      $0.gitClient.branchRefOptions = { _ in
+        [GitBranchRefOption(ref: "main", kind: .local)]
+      }
+      $0.settingsFileStorage = storage.storage
+      $0.bootstrapProfilesFileURL = fixture.profileURL
+    }
+    store.exhaustivity = .off
+
+    let repositoryID = UUID(0).uuidString
+    await store.send(.workspaceAddLocalRepository(webURL.path(percentEncoded: false)))
+    await store.receive(\.workspaceRepositoryBaseRefsLoaded)
+    await store.send(.workspaceBootstrapIDChanged(id: repositoryID, "sync-web")) {
+      $0.workspaceDraft?.repositories[2].bootstrapScriptID = "sync-web"
+    }
+    await store.send(.workspaceBootstrapCreateChanged(id: repositoryID, true))
+    await store.send(.workspaceBootstrapOnAddChanged(id: repositoryID, true))
+    await store.send(.workspaceBootstrapRequiredChanged(id: repositoryID, true))
+    await store.send(.workspaceBootstrapManualChanged(id: repositoryID, true)) {
+      $0.workspaceDraft?.repositories[2].bootstrapRunOnManual = true
+    }
+    await store.send(.workspaceBootstrapIDChanged(id: repositoryID, "")) {
+      $0.workspaceDraft?.repositories[2].bootstrapScriptID = ""
+      $0.workspaceDraft?.repositories[2].bootstrapRunOnManual = false
+    }
+    await store.send(.workspaceBootstrapIDChanged(id: repositoryID, "sync-web")) {
+      $0.workspaceDraft?.repositories[2].bootstrapScriptID = "sync-web"
+    }
+    await store.send(.workspaceBootstrapManualChanged(id: repositoryID, true)) {
+      $0.workspaceDraft?.repositories[2].bootstrapRunOnManual = true
+    }
+
+    let repository = try #require(store.state.workspaceDraft?.repositories[2])
+    #expect(repository.checkoutMode == .link)
+    #expect(repository.bootstrapRunOnCreate == false)
+    #expect(repository.bootstrapRunOnAdd == false)
+    #expect(repository.bootstrapRequired == false)
+    #expect(repository.bootstrap?.runOn == [.manual])
+  }
+
   @Test(.dependencies) func workspaceManualBootstrapRunsOnlyForSavedRepositories() async throws {
     let fixture = try makeWorkspaceBootstrapFixture()
     let rootURL = fixture.rootURL

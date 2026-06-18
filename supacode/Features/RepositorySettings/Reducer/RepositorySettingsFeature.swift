@@ -47,6 +47,14 @@ struct RepositorySettingsFeature {
     var bootstrapRunOnAdd: Bool
     var bootstrapRunOnManual: Bool
 
+    var usesLinkCheckout: Bool {
+      isNew && checkoutMode == .link
+    }
+
+    var hasAutomaticBootstrapTiming: Bool {
+      bootstrapRunOnCreate || bootstrapRunOnAdd
+    }
+
     init(entry: ProjectWorkspace.RepositoryEntry) {
       id = entry.id
       name = entry.name
@@ -99,10 +107,11 @@ struct RepositorySettingsFeature {
     var bootstrap: ProjectWorkspaceRepositoryBootstrap? {
       let scriptID = bootstrapScriptID.trimmingCharacters(in: .whitespacesAndNewlines)
       var runOn = Set<ProjectWorkspaceBootstrapTiming>()
-      if bootstrapRunOnCreate {
+      let permitsAutomaticBootstrap = !usesLinkCheckout
+      if permitsAutomaticBootstrap, bootstrapRunOnCreate {
         runOn.insert(.create)
       }
-      if bootstrapRunOnAdd {
+      if permitsAutomaticBootstrap, bootstrapRunOnAdd {
         runOn.insert(.onAdd)
       }
       if bootstrapRunOnManual {
@@ -628,6 +637,11 @@ struct RepositorySettingsFeature {
             return
           }
           repository.checkoutMode = mode
+          if mode == .link {
+            repository.bootstrapRunOnCreate = false
+            repository.bootstrapRunOnAdd = false
+            repository.bootstrapRequired = false
+          }
         }
         return .none
 
@@ -658,19 +672,48 @@ struct RepositorySettingsFeature {
         return .none
 
       case .workspaceBootstrapIDChanged(let id, let scriptID):
-        state.updateWorkspaceRepositoryDraft(id: id) { $0.bootstrapScriptID = scriptID }
+        state.updateWorkspaceRepositoryDraft(id: id) { repository in
+          repository.bootstrapScriptID = scriptID
+          if scriptID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            repository.bootstrapRunOnCreate = false
+            repository.bootstrapRunOnAdd = false
+            repository.bootstrapRunOnManual = false
+            repository.bootstrapRequired = false
+          }
+        }
         return .none
 
       case .workspaceBootstrapRequiredChanged(let id, let required):
-        state.updateWorkspaceRepositoryDraft(id: id) { $0.bootstrapRequired = required }
+        state.updateWorkspaceRepositoryDraft(id: id) { repository in
+          guard repository.hasAutomaticBootstrapTiming else {
+            return
+          }
+          repository.bootstrapRequired = required
+        }
         return .none
 
       case .workspaceBootstrapCreateChanged(let id, let enabled):
-        state.updateWorkspaceRepositoryDraft(id: id) { $0.bootstrapRunOnCreate = enabled }
+        state.updateWorkspaceRepositoryDraft(id: id) { repository in
+          guard !repository.usesLinkCheckout else {
+            return
+          }
+          repository.bootstrapRunOnCreate = enabled
+          if !repository.hasAutomaticBootstrapTiming {
+            repository.bootstrapRequired = false
+          }
+        }
         return .none
 
       case .workspaceBootstrapOnAddChanged(let id, let enabled):
-        state.updateWorkspaceRepositoryDraft(id: id) { $0.bootstrapRunOnAdd = enabled }
+        state.updateWorkspaceRepositoryDraft(id: id) { repository in
+          guard !repository.usesLinkCheckout else {
+            return
+          }
+          repository.bootstrapRunOnAdd = enabled
+          if !repository.hasAutomaticBootstrapTiming {
+            repository.bootstrapRequired = false
+          }
+        }
         return .none
 
       case .workspaceBootstrapManualChanged(let id, let enabled):

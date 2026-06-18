@@ -1,9 +1,11 @@
 import AppKit
 import ComposableArchitecture
+import Sharing
 import SwiftUI
 
 struct RepositorySettingsView: View {
   @Bindable var store: StoreOf<RepositorySettingsFeature>
+  @Shared(.bootstrapProfiles) private var bootstrapProfiles
   @State private var isBranchPickerPresented = false
   @State private var branchSearchText = ""
   @State private var githubIdentityViewModel = RepositoryGithubIdentityViewModel()
@@ -578,11 +580,40 @@ struct RepositorySettingsView: View {
         height: 54,
         action: { .workspaceRepositoryAgentNotesChanged(id: repository.id, $0) }
       )
-      labeledTextField(
-        "Bootstrap profile",
-        text: repository.bootstrapScriptID,
-        action: { .workspaceBootstrapIDChanged(id: repository.id, $0) }
-      )
+      workspaceBootstrapEditor(repository)
+    }
+    .opacity(repository.isRemoved ? 0.55 : 1)
+    .padding(.top, 6)
+  }
+
+  private func workspaceBootstrapEditor(
+    _ repository: RepositorySettingsFeature.RepositoryDraft
+  ) -> some View {
+    let selectedProfileID = repository.bootstrapScriptID.trimmingCharacters(in: .whitespacesAndNewlines)
+    let disablesAutomaticBootstrap = repository.usesLinkCheckout
+    let hasProfile = !selectedProfileID.isEmpty
+    return VStack(alignment: .leading, spacing: 8) {
+      HStack {
+        Text("Bootstrap profile")
+          .frame(width: 120, alignment: .leading)
+        Picker(
+          "Bootstrap profile",
+          selection: Binding(
+            get: { selectedProfileID },
+            set: { store.send(.workspaceBootstrapIDChanged(id: repository.id, $0)) }
+          )
+        ) {
+          Text(bootstrapProfiles.isEmpty ? "No bootstrap profiles" : "No bootstrap").tag("")
+          ForEach(bootstrapProfiles) { profile in
+            Text(bootstrapProfileTitle(profile)).tag(profile.id)
+          }
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .frame(maxWidth: 420, alignment: .leading)
+        .disabled(bootstrapProfiles.isEmpty || repository.isRemoved)
+        .help("Choose a local bootstrap profile from ~/.prowl/bootstrap-profiles.json")
+      }
       HStack {
         Toggle(
           "Create",
@@ -593,6 +624,7 @@ struct RepositorySettingsView: View {
             }
           )
         )
+        .disabled(disablesAutomaticBootstrap || !hasProfile || repository.isRemoved)
         Toggle(
           "On add",
           isOn: Binding(
@@ -600,6 +632,7 @@ struct RepositorySettingsView: View {
             set: { store.send(.workspaceBootstrapOnAddChanged(id: repository.id, $0)) }
           )
         )
+        .disabled(disablesAutomaticBootstrap || !hasProfile || repository.isRemoved)
         Toggle(
           "Manual",
           isOn: Binding(
@@ -607,6 +640,7 @@ struct RepositorySettingsView: View {
             set: { store.send(.workspaceBootstrapManualChanged(id: repository.id, $0)) }
           )
         )
+        .disabled(!hasProfile || repository.isRemoved)
         Toggle(
           "Required",
           isOn: Binding(
@@ -614,21 +648,47 @@ struct RepositorySettingsView: View {
             set: { store.send(.workspaceBootstrapRequiredChanged(id: repository.id, $0)) }
           )
         )
+        .disabled(
+          disablesAutomaticBootstrap || !hasProfile || repository.isRemoved
+            || !repository.hasAutomaticBootstrapTiming
+        )
+        .help("If automatic bootstrap fails, fail the current materialization action")
       }
-      .help("Choose when this repository's workspace bootstrap profile runs")
+      Text(workspaceBootstrapHelpText(for: repository))
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
       Button {
         store.send(.runWorkspaceBootstrapButtonTapped(id: repository.id))
       } label: {
         Label("Run Bootstrap", systemImage: "play")
       }
-      .disabled(
-        repository.isNew || repository.isRemoved
-          || repository.bootstrapScriptID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-      )
+      .disabled(repository.isNew || repository.isRemoved || !hasProfile)
       .help("Run this repository's bootstrap profile now")
     }
-    .opacity(repository.isRemoved ? 0.55 : 1)
-    .padding(.top, 6)
+  }
+
+  private func bootstrapProfileTitle(_ profile: ProjectWorkspaceBootstrapProfile) -> String {
+    if profile.name.isEmpty || profile.name == profile.id {
+      return profile.id
+    }
+    return "\(profile.name) (\(profile.id))"
+  }
+
+  private func workspaceBootstrapHelpText(
+    for repository: RepositorySettingsFeature.RepositoryDraft
+  ) -> String {
+    if repository.usesLinkCheckout {
+      return
+        "Linked repositories point at the original checkout, so automatic bootstrap is disabled. "
+        + "Manual runs are still available after the repository is saved."
+    }
+    if bootstrapProfiles.isEmpty {
+      return "No local bootstrap profiles found. Add profiles to ~/.prowl/bootstrap-profiles.json first."
+    }
+    return
+      "Create runs during workspace creation, On add runs when this repository is added later, "
+      + "and Manual enables the Run Bootstrap button after saving."
   }
 
   private func workspaceNewRepositoryMaterializationEditor(
