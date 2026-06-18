@@ -589,30 +589,42 @@ struct RepositorySettingsView: View {
   private func workspaceBootstrapEditor(
     _ repository: RepositorySettingsFeature.RepositoryDraft
   ) -> some View {
-    let selectedProfileID = repository.bootstrapScriptID.trimmingCharacters(in: .whitespacesAndNewlines)
+    let selectedProfileIDs = repository.bootstrapScriptIDs
     let disablesAutomaticBootstrap = repository.usesLinkCheckout
-    let hasProfile = !selectedProfileID.isEmpty
+    let hasProfile = !selectedProfileIDs.isEmpty
+    let availableProfiles = bootstrapProfiles.filter { !selectedProfileIDs.contains($0.id) }
     return VStack(alignment: .leading, spacing: 8) {
       HStack {
-        Text("Bootstrap profile")
+        Text("Bootstrap profiles")
           .frame(width: 120, alignment: .leading)
-        Picker(
-          "Bootstrap profile",
-          selection: Binding(
-            get: { selectedProfileID },
-            set: { store.send(.workspaceBootstrapIDChanged(id: repository.id, $0)) }
-          )
-        ) {
-          Text(bootstrapProfiles.isEmpty ? "No bootstrap profiles" : "No bootstrap").tag("")
-          ForEach(bootstrapProfiles) { profile in
-            Text(bootstrapProfileTitle(profile)).tag(profile.id)
+        Menu {
+          if availableProfiles.isEmpty {
+            Text(bootstrapProfiles.isEmpty ? "No bootstrap profiles" : "All profiles selected")
+          } else {
+            ForEach(availableProfiles) { profile in
+              Button(bootstrapProfileTitle(profile)) {
+                store.send(.workspaceBootstrapProfileAdded(id: repository.id, profile.id))
+              }
+            }
           }
+        } label: {
+          Label("Add Profile", systemImage: "plus")
         }
-        .pickerStyle(.menu)
-        .labelsHidden()
         .frame(maxWidth: 420, alignment: .leading)
         .disabled(bootstrapProfiles.isEmpty || repository.isRemoved)
-        .help("Choose a local bootstrap profile from ~/.prowl/bootstrap-profiles.json")
+        .help("Add a local bootstrap profile from ~/.prowl/bootstrap-profiles.json")
+      }
+      if hasProfile {
+        VStack(alignment: .leading, spacing: 4) {
+          ForEach(Array(selectedProfileIDs.enumerated()), id: \.element) { index, profileID in
+            workspaceBootstrapProfileRow(
+              profileID: profileID,
+              index: index,
+              count: selectedProfileIDs.count,
+              repositoryID: repository.id
+            )
+          }
+        }
       }
       HStack {
         Toggle(
@@ -664,8 +676,51 @@ struct RepositorySettingsView: View {
         Label("Run Bootstrap", systemImage: "play")
       }
       .disabled(repository.isNew || repository.isRemoved || !hasProfile)
-      .help("Run this repository's bootstrap profile now")
+      .help("Run this repository's bootstrap profiles now")
     }
+  }
+
+  private func workspaceBootstrapProfileRow(
+    profileID: String,
+    index: Int,
+    count: Int,
+    repositoryID: String
+  ) -> some View {
+    HStack(spacing: 6) {
+      Text(bootstrapProfileTitle(id: profileID))
+        .lineLimit(1)
+      Spacer()
+      Button {
+        store.send(.workspaceBootstrapProfileMoved(id: repositoryID, profileID, .earlier))
+      } label: {
+        Image(systemName: "chevron.up")
+          .accessibilityLabel("Move earlier")
+      }
+      .buttonStyle(.borderless)
+      .disabled(index == 0)
+      .help("Move bootstrap profile earlier")
+      Button {
+        store.send(.workspaceBootstrapProfileMoved(id: repositoryID, profileID, .later))
+      } label: {
+        Image(systemName: "chevron.down")
+          .accessibilityLabel("Move later")
+      }
+      .buttonStyle(.borderless)
+      .disabled(index == count - 1)
+      .help("Move bootstrap profile later")
+      Button {
+        store.send(.workspaceBootstrapProfileRemoved(id: repositoryID, profileID))
+      } label: {
+        Image(systemName: "xmark")
+          .accessibilityLabel("Remove")
+      }
+      .buttonStyle(.borderless)
+      .help("Remove bootstrap profile")
+    }
+    .padding(.horizontal, 8)
+    .padding(.vertical, 4)
+    .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+    .frame(maxWidth: 420)
   }
 
   private func bootstrapProfileTitle(_ profile: ProjectWorkspaceBootstrapProfile) -> String {
@@ -673,6 +728,13 @@ struct RepositorySettingsView: View {
       return profile.id
     }
     return "\(profile.name) (\(profile.id))"
+  }
+
+  private func bootstrapProfileTitle(id: String) -> String {
+    if let profile = bootstrapProfiles.first(where: { $0.id == id }) {
+      return bootstrapProfileTitle(profile)
+    }
+    return id
   }
 
   private func workspaceBootstrapHelpText(

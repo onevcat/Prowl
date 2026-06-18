@@ -380,26 +380,27 @@ struct WorkspaceCreationPromptView: View {
     -> some View
   {
     let disablesAutomaticBootstrap = repository.checkoutMode == .link
-    let selectedProfileID = repository.bootstrapScriptID ?? ""
+    let selectedProfileIDs = repository.bootstrapScriptIDs
+    let hasSelectedProfiles = !selectedProfileIDs.isEmpty
+    let availableProfiles = bootstrapProfiles.filter { !selectedProfileIDs.contains($0.id) }
     return VStack(alignment: .leading, spacing: 4) {
       HStack(spacing: 8) {
-        Picker(
-          "Bootstrap profile",
-          selection: Binding(
-            get: { selectedProfileID },
-            set: { store.send(.repositoryBootstrapScriptIDChanged(repository.id, $0)) }
-          )
-        ) {
-          Text(bootstrapProfiles.isEmpty ? "No bootstrap profiles" : "No bootstrap").tag("")
-          ForEach(bootstrapProfiles) { profile in
-            Text(bootstrapProfileTitle(profile)).tag(profile.id)
+        Menu {
+          if availableProfiles.isEmpty {
+            Text(bootstrapProfiles.isEmpty ? "No bootstrap profiles" : "All profiles selected")
+          } else {
+            ForEach(availableProfiles) { profile in
+              Button(bootstrapProfileTitle(profile)) {
+                store.send(.repositoryBootstrapProfileAdded(repository.id, profile.id))
+              }
+            }
           }
+        } label: {
+          Label("Add Bootstrap Profile", systemImage: "plus")
         }
-        .pickerStyle(.menu)
-        .labelsHidden()
-        .frame(minWidth: 240, maxWidth: .infinity, alignment: .leading)
+        .frame(minWidth: 240, alignment: .leading)
         .disabled(store.isCreating || bootstrapProfiles.isEmpty || disablesAutomaticBootstrap)
-        .help("Choose a local bootstrap profile from ~/.prowl/bootstrap-profiles.json")
+        .help("Add a local bootstrap profile from ~/.prowl/bootstrap-profiles.json")
 
         Toggle(
           "Create",
@@ -408,8 +409,8 @@ struct WorkspaceCreationPromptView: View {
             set: { store.send(.repositoryBootstrapRunOnCreateChanged(repository.id, $0)) }
           )
         )
-        .disabled(store.isCreating || disablesAutomaticBootstrap || selectedProfileID.isEmpty)
-        .help("Run this profile after the child repository is materialized during workspace creation")
+        .disabled(store.isCreating || disablesAutomaticBootstrap || !hasSelectedProfiles)
+        .help("Run these profiles after the child repository is materialized during workspace creation")
 
         Toggle(
           "Required",
@@ -419,13 +420,68 @@ struct WorkspaceCreationPromptView: View {
           )
         )
         .disabled(
-          store.isCreating || disablesAutomaticBootstrap || selectedProfileID.isEmpty
+          store.isCreating || disablesAutomaticBootstrap || !hasSelectedProfiles
             || !repository.bootstrapRunOnCreate
         )
         .help("If the create-time bootstrap fails, fail workspace creation and roll back Prowl-created folders")
       }
+      if hasSelectedProfiles {
+        VStack(alignment: .leading, spacing: 4) {
+          ForEach(Array(selectedProfileIDs.enumerated()), id: \.element) { index, profileID in
+            bootstrapProfileRow(
+              profileID: profileID,
+              index: index,
+              count: selectedProfileIDs.count,
+              repositoryID: repository.id
+            )
+          }
+        }
+      }
       helpText(bootstrapHelpText(for: repository, disablesAutomaticBootstrap: disablesAutomaticBootstrap))
     }
+  }
+
+  private func bootstrapProfileRow(
+    profileID: String,
+    index: Int,
+    count: Int,
+    repositoryID: Repository.ID
+  ) -> some View {
+    HStack(spacing: 6) {
+      Text(bootstrapProfileTitle(id: profileID))
+        .lineLimit(1)
+      Spacer()
+      Button {
+        store.send(.repositoryBootstrapProfileMoved(repositoryID, profileID, .earlier))
+      } label: {
+        Image(systemName: "chevron.up")
+          .accessibilityLabel("Move earlier")
+      }
+      .buttonStyle(.borderless)
+      .disabled(index == 0 || store.isCreating)
+      .help("Move bootstrap profile earlier")
+      Button {
+        store.send(.repositoryBootstrapProfileMoved(repositoryID, profileID, .later))
+      } label: {
+        Image(systemName: "chevron.down")
+          .accessibilityLabel("Move later")
+      }
+      .buttonStyle(.borderless)
+      .disabled(index == count - 1 || store.isCreating)
+      .help("Move bootstrap profile later")
+      Button {
+        store.send(.repositoryBootstrapProfileRemoved(repositoryID, profileID))
+      } label: {
+        Image(systemName: "xmark")
+          .accessibilityLabel("Remove")
+      }
+      .buttonStyle(.borderless)
+      .disabled(store.isCreating)
+      .help("Remove bootstrap profile")
+    }
+    .padding(.horizontal, 8)
+    .padding(.vertical, 4)
+    .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
   }
 
   private func bootstrapProfileTitle(_ profile: ProjectWorkspaceBootstrapProfile) -> String {
@@ -433,6 +489,13 @@ struct WorkspaceCreationPromptView: View {
       return profile.id
     }
     return "\(profile.name) (\(profile.id))"
+  }
+
+  private func bootstrapProfileTitle(id: String) -> String {
+    if let profile = bootstrapProfiles.first(where: { $0.id == id }) {
+      return bootstrapProfileTitle(profile)
+    }
+    return id
   }
 
   private func bootstrapHelpText(
@@ -449,11 +512,12 @@ struct WorkspaceCreationPromptView: View {
     }
     if repository.bootstrapRunOnCreate {
       return
-        "Create runs the selected profile after this child is materialized. "
+        "Create runs the selected profiles in order after this child is materialized. "
         + "Required makes failures fail workspace creation and roll back Prowl-created folders."
     }
     return
-      "Optional local profile from ~/.prowl/bootstrap-profiles.json. Enable Create to run it during workspace creation."
+      "Optional local profiles from ~/.prowl/bootstrap-profiles.json. "
+      + "Enable Create to run them during workspace creation."
   }
 
   @ViewBuilder

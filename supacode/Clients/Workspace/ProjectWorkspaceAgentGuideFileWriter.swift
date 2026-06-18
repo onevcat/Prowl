@@ -92,8 +92,12 @@ nonisolated struct ProjectWorkspaceAgentGuideFileWriter {
         lines.append("  - Agent notes: \(notes)")
       }
       if let bootstrap = entry.bootstrap {
+        let scripts =
+          bootstrap.scriptIDs.isEmpty
+          ? bootstrap.scriptPath ?? bootstrap.scriptKind.rawValue
+          : bootstrap.scriptIDs.joined(separator: ", ")
         lines.append(
-          "  - Bootstrap: \(bootstrap.scriptID ?? bootstrap.scriptPath ?? bootstrap.scriptKind.rawValue)"
+          "  - Bootstrap: \(scripts)"
         )
       }
       if guide.includeChildInstructionFiles {

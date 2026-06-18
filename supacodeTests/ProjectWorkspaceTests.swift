@@ -145,8 +145,42 @@ struct ProjectWorkspaceTests {
     let bootstrap = try #require(workspace.repositories.first?.bootstrap)
     #expect(bootstrap.scriptKind == .userProfile)
     #expect(bootstrap.scriptID == "sync-app")
+    #expect(bootstrap.scriptIDs == ["sync-app"])
     #expect(bootstrap.runOn == [.create, .manual])
     #expect(bootstrap.required == true)
+  }
+
+  @Test func decodesWorkspaceBootstrapScriptIDsMetadata() throws {
+    let rootURL = try makeTemporaryWorkspaceRoot()
+    defer { try? FileManager.default.removeItem(at: rootURL) }
+
+    try writeWorkspaceJSON(
+      """
+      {
+        "title": "Bootstrap Task",
+        "repositories": [
+          {
+            "id": "app",
+            "name": "App",
+            "path": "app",
+            "bootstrap": {
+              "script_kind": "user_profile",
+              "script_ids": ["common", "sync-app", "common"],
+              "run_on": ["create"],
+              "required": false
+            }
+          }
+        ]
+      }
+      """,
+      to: rootURL
+    )
+
+    let workspace = try #require(ProjectWorkspace.load(from: rootURL))
+    let bootstrap = try #require(workspace.repositories.first?.bootstrap)
+    #expect(bootstrap.scriptIDs == ["common", "sync-app"])
+    #expect(bootstrap.scriptID == "common")
+    #expect(bootstrap.runOn == [.create])
   }
 
   @Test func decodesWorkspaceAgentGuideMetadata() throws {
@@ -869,7 +903,7 @@ struct ProjectWorkspaceTests {
 
     #expect(bootstrapCalls.value.map(\.repository.id) == ["app"])
     let loaded = try #require(ProjectWorkspace.load(from: rootURL))
-    #expect(loaded.repositories.map(\.bootstrap?.scriptID) == ["sync-app", "sync-api"])
+    #expect(loaded.repositories.map(\.bootstrap?.scriptIDs) == [["sync-app"], ["sync-api"]])
   }
 
   @Test func updateRepositoriesAddsRemovesAndRunsOnAddBootstrap() async throws {
@@ -1294,7 +1328,7 @@ struct ProjectWorkspaceTests {
       rootURL: URL(fileURLWithPath: "/tmp/app"),
       checkoutMode: .createBranch,
       branchName: "workspace/app",
-      bootstrapScriptID: "sync-app",
+      bootstrapScriptIDs: ["sync-app"],
       bootstrapRequired: true,
       bootstrapRunOnCreate: true
     )

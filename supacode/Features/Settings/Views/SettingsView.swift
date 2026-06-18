@@ -38,6 +38,8 @@ struct SettingsView: View {
             .tag(SettingsSection.shortcuts)
           Label("Worktree", systemImage: "archivebox")
             .tag(SettingsSection.worktree)
+          Label("Bootstrap", systemImage: "terminal")
+            .tag(SettingsSection.bootstrap)
           Label("Updates", systemImage: "arrow.down.circle")
             .tag(SettingsSection.updates)
           Label("Advanced", systemImage: "gearshape.2")
@@ -85,6 +87,12 @@ struct SettingsView: View {
           WorktreeSettingsView(store: settingsStore)
             .navigationTitle("Worktree")
             .navigationSubtitle("Archive behavior")
+        }
+      case .bootstrap:
+        SettingsDetailView {
+          BootstrapProfilesSettingsView()
+            .navigationTitle("Bootstrap")
+            .navigationSubtitle("Workspace bootstrap profiles")
         }
       case .updates:
         SettingsDetailView {

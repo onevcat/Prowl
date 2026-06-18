@@ -67,7 +67,7 @@ nonisolated struct ProjectWorkspaceCreationRepository: Equatable, Hashable, Send
   var branchName: String?
   var baseRef: String?
   var baseRefOptions: [GitBranchRefOption]
-  var bootstrapScriptID: String?
+  var bootstrapScriptIDs: [String]
   var bootstrapRequired: Bool
   var bootstrapRunOnCreate: Bool
   // User choice when a Use-Existing checkout on a remote-tracking ref would
@@ -85,6 +85,7 @@ nonisolated struct ProjectWorkspaceCreationRepository: Equatable, Hashable, Send
     baseRef: String? = nil,
     baseRefOptions: [GitBranchRefOption] = [],
     bootstrapScriptID: String? = nil,
+    bootstrapScriptIDs: [String] = [],
     bootstrapRequired: Bool = false,
     bootstrapRunOnCreate: Bool = false
   ) {
@@ -99,7 +100,9 @@ nonisolated struct ProjectWorkspaceCreationRepository: Equatable, Hashable, Send
     self.branchName = branchName
     self.baseRef = baseRef
     self.baseRefOptions = Self.normalizedBaseRefOptions(baseRefOptions)
-    self.bootstrapScriptID = bootstrapScriptID
+    self.bootstrapScriptIDs = Self.normalizedBootstrapScriptIDs(
+      bootstrapScriptIDs + [bootstrapScriptID].compactMap(\.self)
+    )
     self.bootstrapRequired = bootstrapRequired
     self.bootstrapRunOnCreate = bootstrapRunOnCreate
   }
@@ -115,6 +118,7 @@ nonisolated struct ProjectWorkspaceCreationRepository: Equatable, Hashable, Send
     path: String? = nil,
     baseRefOptions: [GitBranchRefOption] = [],
     bootstrapScriptID: String? = nil,
+    bootstrapScriptIDs: [String] = [],
     bootstrapRequired: Bool = false,
     bootstrapRunOnCreate: Bool = false
   ) {
@@ -127,9 +131,15 @@ nonisolated struct ProjectWorkspaceCreationRepository: Equatable, Hashable, Send
     self.branchName = branchName
     self.baseRef = baseRef
     self.baseRefOptions = Self.normalizedBaseRefOptions(baseRefOptions)
-    self.bootstrapScriptID = bootstrapScriptID
+    self.bootstrapScriptIDs = Self.normalizedBootstrapScriptIDs(
+      bootstrapScriptIDs + [bootstrapScriptID].compactMap(\.self)
+    )
     self.bootstrapRequired = bootstrapRequired
     self.bootstrapRunOnCreate = bootstrapRunOnCreate
+  }
+
+  var bootstrapScriptID: String? {
+    bootstrapScriptIDs.first
   }
 
   var localSourceURL: URL? {
@@ -208,6 +218,19 @@ nonisolated struct ProjectWorkspaceCreationRepository: Equatable, Hashable, Send
         continue
       }
       result.append(GitBranchRefOption(ref: trimmed, kind: value.kind))
+    }
+    return result
+  }
+
+  nonisolated static func normalizedBootstrapScriptIDs(_ values: [String]) -> [String] {
+    var seen = Set<String>()
+    var result: [String] = []
+    for value in values {
+      let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !trimmed.isEmpty, seen.insert(trimmed).inserted else {
+        continue
+      }
+      result.append(trimmed)
     }
     return result
   }

@@ -464,8 +464,14 @@ struct RepositorySettingsFeatureTests {
     await store.send(.workspaceRepositoryAgentNotesChanged(id: "app", "Use reducer tests.")) {
       $0.workspaceDraft?.repositories[0].agentNotes = "Use reducer tests."
     }
-    await store.send(.workspaceBootstrapIDChanged(id: "app", "sync-app")) {
-      $0.workspaceDraft?.repositories[0].bootstrapScriptID = "sync-app"
+    await store.send(.workspaceBootstrapProfileAdded(id: "app", "sync-app")) {
+      $0.workspaceDraft?.repositories[0].bootstrapScriptIDs = ["sync-app"]
+    }
+    await store.send(.workspaceBootstrapProfileAdded(id: "app", "common")) {
+      $0.workspaceDraft?.repositories[0].bootstrapScriptIDs = ["sync-app", "common"]
+    }
+    await store.send(.workspaceBootstrapProfileMoved(id: "app", "common", .earlier)) {
+      $0.workspaceDraft?.repositories[0].bootstrapScriptIDs = ["common", "sync-app"]
     }
     await store.send(.workspaceBootstrapCreateChanged(id: "app", true)) {
       $0.workspaceDraft?.repositories[0].bootstrapRunOnCreate = true
@@ -478,7 +484,7 @@ struct RepositorySettingsFeatureTests {
       $0.workspace?.repositories[0].agentNotes = "Use reducer tests."
       $0.workspace?.repositories[0].bootstrap = ProjectWorkspaceRepositoryBootstrap(
         scriptKind: .userProfile,
-        scriptID: "sync-app",
+        scriptIDs: ["common", "sync-app"],
         runOn: [.create]
       )
       $0.workspace?.updatedAt = Date(timeIntervalSince1970: 20)
@@ -493,7 +499,7 @@ struct RepositorySettingsFeatureTests {
     let saved = try #require(ProjectWorkspace.load(from: rootURL))
     #expect(saved.title == "New Workspace")
     #expect(saved.repositories[0].agentNotes == "Use reducer tests.")
-    #expect(saved.repositories[0].bootstrap?.scriptID == "sync-app")
+    #expect(saved.repositories[0].bootstrap?.scriptIDs == ["common", "sync-app"])
     let guide = try String(contentsOf: rootURL.appending(path: "AGENTS.md"), encoding: .utf8)
     #expect(guide.contains("- Title: New Workspace"))
     #expect(guide.contains("- Agent notes: Use reducer tests."))
@@ -562,7 +568,7 @@ struct RepositorySettingsFeatureTests {
     await store.send(.workspaceRemoveRepository(id: "api"))
     await store.send(.workspaceRestoreRepository(id: "api"))
     await store.send(.workspaceRemoveRepository(id: "api"))
-    await store.send(.workspaceBootstrapIDChanged(id: UUID(0).uuidString, "sync-web"))
+    await store.send(.workspaceBootstrapProfileAdded(id: UUID(0).uuidString, "sync-web"))
     await store.send(.workspaceBootstrapOnAddChanged(id: UUID(0).uuidString, true))
     await store.send(.saveWorkspaceMetadataButtonTapped)
     await store.receive(\.workspaceMetadataSaved)
@@ -684,8 +690,8 @@ struct RepositorySettingsFeatureTests {
     let repositoryID = UUID(0).uuidString
     await store.send(.workspaceAddLocalRepository(webURL.path(percentEncoded: false)))
     await store.receive(\.workspaceRepositoryBaseRefsLoaded)
-    await store.send(.workspaceBootstrapIDChanged(id: repositoryID, "sync-web")) {
-      $0.workspaceDraft?.repositories[2].bootstrapScriptID = "sync-web"
+    await store.send(.workspaceBootstrapProfileAdded(id: repositoryID, "sync-web")) {
+      $0.workspaceDraft?.repositories[2].bootstrapScriptIDs = ["sync-web"]
     }
     await store.send(.workspaceBootstrapCreateChanged(id: repositoryID, true))
     await store.send(.workspaceBootstrapOnAddChanged(id: repositoryID, true))
@@ -693,12 +699,12 @@ struct RepositorySettingsFeatureTests {
     await store.send(.workspaceBootstrapManualChanged(id: repositoryID, true)) {
       $0.workspaceDraft?.repositories[2].bootstrapRunOnManual = true
     }
-    await store.send(.workspaceBootstrapIDChanged(id: repositoryID, "")) {
-      $0.workspaceDraft?.repositories[2].bootstrapScriptID = ""
+    await store.send(.workspaceBootstrapProfileRemoved(id: repositoryID, "sync-web")) {
+      $0.workspaceDraft?.repositories[2].bootstrapScriptIDs = []
       $0.workspaceDraft?.repositories[2].bootstrapRunOnManual = false
     }
-    await store.send(.workspaceBootstrapIDChanged(id: repositoryID, "sync-web")) {
-      $0.workspaceDraft?.repositories[2].bootstrapScriptID = "sync-web"
+    await store.send(.workspaceBootstrapProfileAdded(id: repositoryID, "sync-web")) {
+      $0.workspaceDraft?.repositories[2].bootstrapScriptIDs = ["sync-web"]
     }
     await store.send(.workspaceBootstrapManualChanged(id: repositoryID, true)) {
       $0.workspaceDraft?.repositories[2].bootstrapRunOnManual = true
@@ -759,8 +765,8 @@ struct RepositorySettingsFeatureTests {
         )
       )
     }
-    await store.send(.workspaceBootstrapIDChanged(id: UUID(0).uuidString, "sync-app")) {
-      $0.workspaceDraft?.repositories[2].bootstrapScriptID = "sync-app"
+    await store.send(.workspaceBootstrapProfileAdded(id: UUID(0).uuidString, "sync-app")) {
+      $0.workspaceDraft?.repositories[2].bootstrapScriptIDs = ["sync-app"]
     }
     await store.send(.runWorkspaceBootstrapButtonTapped(id: UUID(0).uuidString))
     #expect(commands.value.isEmpty)

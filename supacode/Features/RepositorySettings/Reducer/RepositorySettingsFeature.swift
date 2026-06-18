@@ -41,7 +41,7 @@ struct RepositorySettingsFeature {
     var resetLocalBranchToRemote: Bool
     var isNew: Bool
     var isRemoved: Bool
-    var bootstrapScriptID: String
+    var bootstrapScriptIDs: [String]
     var bootstrapRequired: Bool
     var bootstrapRunOnCreate: Bool
     var bootstrapRunOnAdd: Bool
@@ -70,7 +70,7 @@ struct RepositorySettingsFeature {
       resetLocalBranchToRemote = false
       isNew = false
       isRemoved = false
-      bootstrapScriptID = entry.bootstrap?.scriptID ?? ""
+      bootstrapScriptIDs = entry.bootstrap?.scriptIDs ?? []
       bootstrapRequired = entry.bootstrap?.required ?? false
       bootstrapRunOnCreate = entry.bootstrap?.runOn.contains(.create) ?? false
       bootstrapRunOnAdd = entry.bootstrap?.runOn.contains(.onAdd) ?? false
@@ -97,7 +97,7 @@ struct RepositorySettingsFeature {
       resetLocalBranchToRemote = false
       isNew = true
       isRemoved = false
-      bootstrapScriptID = ""
+      bootstrapScriptIDs = []
       bootstrapRequired = false
       bootstrapRunOnCreate = false
       bootstrapRunOnAdd = false
@@ -105,7 +105,7 @@ struct RepositorySettingsFeature {
     }
 
     var bootstrap: ProjectWorkspaceRepositoryBootstrap? {
-      let scriptID = bootstrapScriptID.trimmingCharacters(in: .whitespacesAndNewlines)
+      let scriptIDs = bootstrapScriptIDs
       var runOn = Set<ProjectWorkspaceBootstrapTiming>()
       let permitsAutomaticBootstrap = !usesLinkCheckout
       if permitsAutomaticBootstrap, bootstrapRunOnCreate {
@@ -117,12 +117,12 @@ struct RepositorySettingsFeature {
       if bootstrapRunOnManual {
         runOn.insert(.manual)
       }
-      guard !scriptID.isEmpty || !runOn.isEmpty || bootstrapRequired else {
+      guard !scriptIDs.isEmpty || !runOn.isEmpty || bootstrapRequired else {
         return nil
       }
       return ProjectWorkspaceRepositoryBootstrap(
         scriptKind: .userProfile,
-        scriptID: scriptID.isEmpty ? nil : scriptID,
+        scriptIDs: scriptIDs,
         runOn: runOn,
         required: bootstrapRequired
       )
@@ -329,7 +329,9 @@ struct RepositorySettingsFeature {
       id: String, [GitBranchRefOption], defaultBaseRef: String?)
     case workspaceRemoveRepository(id: String)
     case workspaceRestoreRepository(id: String)
-    case workspaceBootstrapIDChanged(id: String, String)
+    case workspaceBootstrapProfileAdded(id: String, String)
+    case workspaceBootstrapProfileRemoved(id: String, String)
+    case workspaceBootstrapProfileMoved(id: String, String, BootstrapProfileMoveDirection)
     case workspaceBootstrapRequiredChanged(id: String, Bool)
     case workspaceBootstrapCreateChanged(id: String, Bool)
     case workspaceBootstrapOnAddChanged(id: String, Bool)
@@ -345,6 +347,11 @@ struct RepositorySettingsFeature {
     case workspaceGuideRegenerateFailed(String)
     case delegate(Delegate)
     case binding(BindingAction<State>)
+  }
+
+  enum BootstrapProfileMoveDirection: Equatable, Sendable {
+    case earlier
+    case later
   }
 
   @CasePathable
@@ -671,15 +678,45 @@ struct RepositorySettingsFeature {
         state.updateWorkspaceRepositoryDraft(id: id) { $0.isRemoved = false }
         return .none
 
-      case .workspaceBootstrapIDChanged(let id, let scriptID):
+      case .workspaceBootstrapProfileAdded(let id, let scriptID):
         state.updateWorkspaceRepositoryDraft(id: id) { repository in
-          repository.bootstrapScriptID = scriptID
-          if scriptID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+          repository.bootstrapScriptIDs = ProjectWorkspaceCreationRepository.normalizedBootstrapScriptIDs(
+            repository.bootstrapScriptIDs + [scriptID]
+          )
+        }
+        return .none
+
+      case .workspaceBootstrapProfileRemoved(let id, let scriptID):
+        state.updateWorkspaceRepositoryDraft(id: id) { repository in
+          repository.bootstrapScriptIDs.removeAll { $0 == scriptID }
+          if repository.bootstrapScriptIDs.isEmpty {
             repository.bootstrapRunOnCreate = false
             repository.bootstrapRunOnAdd = false
             repository.bootstrapRunOnManual = false
             repository.bootstrapRequired = false
           }
+        }
+        return .none
+
+      case .workspaceBootstrapProfileMoved(let id, let scriptID, let direction):
+        state.updateWorkspaceRepositoryDraft(id: id) { repository in
+          guard let index = repository.bootstrapScriptIDs.firstIndex(of: scriptID) else {
+            return
+          }
+          let targetIndex: Int
+          switch direction {
+          case .earlier:
+            guard index > repository.bootstrapScriptIDs.startIndex else {
+              return
+            }
+            targetIndex = repository.bootstrapScriptIDs.index(before: index)
+          case .later:
+            targetIndex = repository.bootstrapScriptIDs.index(after: index)
+            guard targetIndex < repository.bootstrapScriptIDs.endIndex else {
+              return
+            }
+          }
+          repository.bootstrapScriptIDs.swapAt(index, targetIndex)
         }
         return .none
 
@@ -974,14 +1011,15 @@ struct RepositorySettingsFeature {
       branchName: repository.branchName.isEmpty ? nil : repository.branchName,
       baseRef: repository.baseRef.isEmpty ? nil : repository.baseRef,
       path: repository.path.isEmpty ? nil : repository.path,
-      baseRefOptions: repository.baseRefOptions
+      baseRefOptions: repository.baseRefOptions,
+      bootstrapScriptIDs: repository.bootstrapScriptIDs
     )
   }
 
   nonisolated private static func bootstrap(
     for repository: RepositoryDraft
   ) -> ProjectWorkspaceRepositoryBootstrap? {
-    let scriptID = repository.bootstrapScriptID.trimmingCharacters(in: .whitespacesAndNewlines)
+    let scriptIDs = repository.bootstrapScriptIDs
     var runOn = Set<ProjectWorkspaceBootstrapTiming>()
     if repository.bootstrapRunOnCreate {
       runOn.insert(.create)
@@ -992,12 +1030,12 @@ struct RepositorySettingsFeature {
     if repository.bootstrapRunOnManual {
       runOn.insert(.manual)
     }
-    guard !scriptID.isEmpty || !runOn.isEmpty || repository.bootstrapRequired else {
+    guard !scriptIDs.isEmpty || !runOn.isEmpty || repository.bootstrapRequired else {
       return nil
     }
     return ProjectWorkspaceRepositoryBootstrap(
       scriptKind: .userProfile,
-      scriptID: scriptID.isEmpty ? nil : scriptID,
+      scriptIDs: scriptIDs,
       runOn: runOn,
       required: repository.bootstrapRequired
     )

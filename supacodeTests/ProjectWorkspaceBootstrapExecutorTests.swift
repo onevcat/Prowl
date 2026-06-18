@@ -7,11 +7,15 @@ nonisolated final class BootstrapShellRecorder: @unchecked Sendable {
   private let lock = NSLock()
   private var environmentValue: [String: String] = [:]
   private var currentDirectoryURLValue: URL?
+  private var scriptsValue: [String] = []
 
-  func record(environment: [String: String], currentDirectoryURL: URL?) {
+  func record(script: String? = nil, environment: [String: String], currentDirectoryURL: URL?) {
     lock.lock()
     environmentValue = environment
     currentDirectoryURLValue = currentDirectoryURL
+    if let script {
+      scriptsValue.append(script)
+    }
     lock.unlock()
   }
 
@@ -26,6 +30,12 @@ nonisolated final class BootstrapShellRecorder: @unchecked Sendable {
     defer { lock.unlock() }
     return currentDirectoryURLValue
   }
+
+  var scripts: [String] {
+    lock.lock()
+    defer { lock.unlock() }
+    return scriptsValue
+  }
 }
 
 struct ProjectWorkspaceBootstrapExecutorTests {
@@ -39,8 +49,8 @@ struct ProjectWorkspaceBootstrapExecutorTests {
     let shell = ShellClient(
       run: { _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) },
       runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) },
-      runLoginStreamWithEnvironmentImpl: { _, _, currentDirectoryURL, environment, _ in
-        recorder.record(environment: environment, currentDirectoryURL: currentDirectoryURL)
+      runLoginStreamWithEnvironmentImpl: { _, arguments, currentDirectoryURL, environment, _ in
+        recorder.record(script: arguments.last, environment: environment, currentDirectoryURL: currentDirectoryURL)
         return AsyncThrowingStream { continuation in
           continuation.yield(.line(ShellStreamLine(source: .stdout, text: "hello")))
           continuation.yield(.finished(ShellOutput(stdout: "hello", stderr: "", exitCode: 0)))
@@ -103,10 +113,86 @@ struct ProjectWorkspaceBootstrapExecutorTests {
     let state = try decoder.decode(ProjectWorkspaceBootstrapState.self, from: stateData)
     #expect(state.repositories["app"]?.lastStatus == .succeeded)
     #expect(state.repositories["app"]?.lastScriptID == "sync-app")
+    #expect(state.repositories["app"]?.lastScriptIDs == ["sync-app"])
     let logPath = try #require(state.repositories["app"]?.lastLogPath)
     let log = try String(contentsOf: rootURL.appending(path: logPath), encoding: .utf8)
     #expect(log.contains("[stdout] hello"))
     #expect(log.contains("[exit] 0"))
+  }
+
+  @Test func runsMultipleProfilesInOrderAndContinuesOptionalFailures() async throws {
+    let rootURL = try makeTemporaryRoot()
+    let repoURL = rootURL.appending(path: "app", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: repoURL, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: rootURL) }
+
+    let recorder = BootstrapShellRecorder()
+    let shell = ShellClient(
+      run: { _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) },
+      runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) },
+      runLoginStreamWithEnvironmentImpl: { _, arguments, currentDirectoryURL, environment, _ in
+        recorder.record(
+          script: arguments.last,
+          environment: environment,
+          currentDirectoryURL: currentDirectoryURL
+        )
+        return AsyncThrowingStream { continuation in
+          if arguments.last == "exit 1" {
+            continuation.finish(
+              throwing: ProjectWorkspaceCreationError.bootstrapFailed(
+                repository: "App",
+                message: "failed"
+              )
+            )
+          } else {
+            continuation.yield(.finished(ShellOutput(stdout: "", stderr: "", exitCode: 0)))
+            continuation.finish()
+          }
+        }
+      }
+    )
+    let executor = ProjectWorkspaceBootstrapExecutor(
+      profiles: [
+        ProjectWorkspaceBootstrapProfile(id: "first", name: "First", script: "echo first"),
+        ProjectWorkspaceBootstrapProfile(id: "failing", name: "Failing", script: "exit 1"),
+        ProjectWorkspaceBootstrapProfile(id: "last", name: "Last", script: "echo last"),
+      ],
+      shellClient: shell,
+      now: { Date(timeIntervalSince1970: 1_234) }
+    )
+    let entry = ProjectWorkspace.RepositoryEntry(
+      id: "app",
+      name: "App",
+      path: "app",
+      bootstrap: ProjectWorkspaceRepositoryBootstrap(
+        scriptKind: .userProfile,
+        scriptIDs: ["first", "failing", "last"],
+        runOn: [.create],
+        required: false
+      )
+    )
+
+    try await executor.runner.run(
+      try #require(entry.bootstrap),
+      ProjectWorkspaceBootstrapContext(
+        workspaceRootURL: rootURL,
+        repositoryRootURL: repoURL,
+        repository: entry,
+        timing: .create
+      )
+    )
+
+    #expect(recorder.scripts == ["echo first", "exit 1", "echo last"])
+    let stateURL =
+      rootURL
+      .appending(path: ProjectWorkspace.metadataDirectoryName)
+      .appending(path: "bootstrap-state.json")
+    let stateData = try Data(contentsOf: stateURL)
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let state = try decoder.decode(ProjectWorkspaceBootstrapState.self, from: stateData)
+    #expect(state.repositories["app"]?.lastStatus == .failed)
+    #expect(state.repositories["app"]?.lastScriptIDs == ["first", "failing", "last"])
   }
 
   private func makeTemporaryRoot() throws -> URL {

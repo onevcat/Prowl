@@ -1334,8 +1334,14 @@ struct RepositoriesFeatureTests {
       WorkspaceCreationPromptFeature()
     }
 
-    await store.send(.repositoryBootstrapScriptIDChanged(repoRootA, "sync-app")) {
-      $0.repositories[id: repoRootA]?.bootstrapScriptID = "sync-app"
+    await store.send(.repositoryBootstrapProfileAdded(repoRootA, "sync-app")) {
+      $0.repositories[id: repoRootA]?.bootstrapScriptIDs = ["sync-app"]
+    }
+    await store.send(.repositoryBootstrapProfileAdded(repoRootA, "common")) {
+      $0.repositories[id: repoRootA]?.bootstrapScriptIDs = ["sync-app", "common"]
+    }
+    await store.send(.repositoryBootstrapProfileMoved(repoRootA, "common", .earlier)) {
+      $0.repositories[id: repoRootA]?.bootstrapScriptIDs = ["common", "sync-app"]
     }
     await store.send(.repositoryBootstrapRunOnCreateChanged(repoRootA, true)) {
       $0.repositories[id: repoRootA]?.bootstrapRunOnCreate = true
@@ -1360,7 +1366,7 @@ struct RepositoriesFeatureTests {
                 checkout: .createBranch(branchName: "workspace/repo-a", baseRef: nil),
                 bootstrap: ProjectWorkspaceRepositoryBootstrap(
                   scriptKind: .userProfile,
-                  scriptID: "sync-app",
+                  scriptIDs: ["common", "sync-app"],
                   runOn: [.create],
                   required: true
                 )
@@ -1397,8 +1403,8 @@ struct RepositoriesFeatureTests {
       WorkspaceCreationPromptFeature()
     }
 
-    await store.send(.repositoryBootstrapScriptIDChanged(repoRoot, "sync-app")) {
-      $0.repositories[id: repoRoot]?.bootstrapScriptID = "sync-app"
+    await store.send(.repositoryBootstrapProfileAdded(repoRoot, "sync-app")) {
+      $0.repositories[id: repoRoot]?.bootstrapScriptIDs = ["sync-app"]
     }
     await store.send(.repositoryBootstrapRunOnCreateChanged(repoRoot, true))
     await store.send(.repositoryBootstrapRequiredChanged(repoRoot, true))

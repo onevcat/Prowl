@@ -187,7 +187,7 @@ Example `.prowl/workspace.json`:
       "branch_name": "codex/checkout-flow",
       "bootstrap": {
         "script_kind": "user_profile",
-        "script_id": "sync-prowl-local-files",
+        "script_ids": ["common-node-install", "sync-prowl-local-files"],
         "run_on": ["create"],
         "required": false
       }
@@ -243,10 +243,11 @@ Repository entry fields:
 - `branch_name` — optional branch/worktree name expected for the task.
 - `base_ref` — optional base branch or ref.
 - `bootstrap` — optional bootstrap profile reference. `script_kind:
-  user_profile` looks up a local profile from `~/.prowl/bootstrap-profiles.json`;
-  `script_id` is that profile's id; `run_on` can include `create`, `on_add`,
-  and `manual`; and `required` decides whether bootstrap failure fails the
-  current materialization action.
+  user_profile` looks up local profiles from `~/.prowl/bootstrap-profiles.json`;
+  `script_ids` lists profile ids to run in order; `run_on` can include
+  `create`, `on_add`, and `manual`; and `required` decides whether bootstrap
+  failure fails the current materialization action. Older workspaces with a
+  single `script_id` still load as a one-profile list.
 
 Bootstrap profiles run after a child repository has been materialized, with the
 child repository as the working directory. Automatic bootstrap is skipped for

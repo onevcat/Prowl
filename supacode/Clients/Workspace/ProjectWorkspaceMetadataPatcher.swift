@@ -133,7 +133,7 @@ nonisolated struct ProjectWorkspaceMetadataPatcher: Sendable {
       "run_on": bootstrap.runOn.map(\.rawValue).sorted(),
       "required": bootstrap.required,
     ]
-    object["script_id"] = bootstrap.scriptID
+    object["script_ids"] = bootstrap.scriptIDs.isEmpty ? nil : bootstrap.scriptIDs
     object["script_path"] = bootstrap.scriptPath
     return object
   }

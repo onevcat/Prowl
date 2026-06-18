@@ -109,7 +109,9 @@ struct WorkspaceCreationPromptFeature {
     case repositoryBranchNameChanged(Repository.ID, String)
     case repositoryBaseRefChanged(Repository.ID, String)
     case repositoryResetLocalBranchChanged(Repository.ID, Bool)
-    case repositoryBootstrapScriptIDChanged(Repository.ID, String)
+    case repositoryBootstrapProfileAdded(Repository.ID, String)
+    case repositoryBootstrapProfileRemoved(Repository.ID, String)
+    case repositoryBootstrapProfileMoved(Repository.ID, String, BootstrapProfileMoveDirection)
     case repositoryBootstrapRunOnCreateChanged(Repository.ID, Bool)
     case repositoryBootstrapRequiredChanged(Repository.ID, Bool)
     case rootPathChosen(String)
@@ -123,6 +125,11 @@ struct WorkspaceCreationPromptFeature {
     case baseRefSourceChanged(Repository.ID)
     case cancel
     case submit(ProjectWorkspaceCreationDraft)
+  }
+
+  enum BootstrapProfileMoveDirection: Equatable, Sendable {
+    case earlier
+    case later
   }
 
   @Dependency(\.uuid) var uuid
@@ -419,8 +426,54 @@ struct WorkspaceCreationPromptFeature {
         state.clearValidation()
         return .none
 
-      case .repositoryBootstrapScriptIDChanged(let repositoryID, let scriptID):
-        state.repositories[id: repositoryID]?.bootstrapScriptID = scriptID
+      case .repositoryBootstrapProfileAdded(let repositoryID, let scriptID):
+        guard var repository = state.repositories[id: repositoryID] else {
+          return .none
+        }
+        repository.bootstrapScriptIDs = ProjectWorkspaceCreationRepository.normalizedBootstrapScriptIDs(
+          repository.bootstrapScriptIDs + [scriptID]
+        )
+        state.repositories[id: repositoryID] = repository
+        state.clearValidation()
+        return .none
+
+      case .repositoryBootstrapProfileRemoved(let repositoryID, let scriptID):
+        guard var repository = state.repositories[id: repositoryID] else {
+          return .none
+        }
+        repository.bootstrapScriptIDs.removeAll { $0 == scriptID }
+        if repository.bootstrapScriptIDs.isEmpty {
+          repository.bootstrapRunOnCreate = false
+          repository.bootstrapRequired = false
+        }
+        state.repositories[id: repositoryID] = repository
+        state.clearValidation()
+        return .none
+
+      case .repositoryBootstrapProfileMoved(let repositoryID, let scriptID, let direction):
+        guard var repository = state.repositories[id: repositoryID],
+          let index = repository.bootstrapScriptIDs.firstIndex(of: scriptID)
+        else {
+          return .none
+        }
+        let targetIndex: Int
+        switch direction {
+        case .earlier:
+          guard index > repository.bootstrapScriptIDs.startIndex else {
+            return .none
+          }
+          targetIndex = repository.bootstrapScriptIDs.index(before: index)
+        case .later:
+          targetIndex = repository.bootstrapScriptIDs.index(after: index)
+          guard targetIndex < repository.bootstrapScriptIDs.endIndex else {
+            return .none
+          }
+        }
+        guard repository.bootstrapScriptIDs.indices.contains(targetIndex) else {
+          return .none
+        }
+        repository.bootstrapScriptIDs.swapAt(index, targetIndex)
+        state.repositories[id: repositoryID] = repository
         state.clearValidation()
         return .none
 
@@ -641,17 +694,17 @@ struct WorkspaceCreationPromptFeature {
     guard repository.checkoutMode != .link else {
       return nil
     }
-    let scriptID = repository.bootstrapScriptID?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let scriptIDs = repository.bootstrapScriptIDs
     var runOn = Set<ProjectWorkspaceBootstrapTiming>()
     if repository.bootstrapRunOnCreate {
       runOn.insert(.create)
     }
-    guard scriptID?.isEmpty == false || !runOn.isEmpty || repository.bootstrapRequired else {
+    guard !scriptIDs.isEmpty || !runOn.isEmpty || repository.bootstrapRequired else {
       return nil
     }
     return ProjectWorkspaceRepositoryBootstrap(
       scriptKind: .userProfile,
-      scriptID: scriptID?.isEmpty == false ? scriptID : nil,
+      scriptIDs: scriptIDs,
       runOn: runOn,
       required: repository.bootstrapRequired
     )

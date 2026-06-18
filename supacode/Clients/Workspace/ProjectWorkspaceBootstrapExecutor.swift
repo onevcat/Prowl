@@ -7,14 +7,49 @@ nonisolated struct ProjectWorkspaceBootstrapState: Codable, Equatable, Sendable 
 nonisolated struct ProjectWorkspaceBootstrapRepositoryState: Codable, Equatable, Sendable {
   var lastRunAt: Date
   var lastStatus: ProjectWorkspaceBootstrapStatus
-  var lastScriptID: String
+  var lastScriptIDs: [String]
   var lastLogPath: String
 
   enum CodingKeys: String, CodingKey {
     case lastRunAt = "last_run_at"
     case lastStatus = "last_status"
     case lastScriptID = "last_script_id"
+    case lastScriptIDs = "last_script_ids"
     case lastLogPath = "last_log_path"
+  }
+
+  var lastScriptID: String? {
+    lastScriptIDs.first
+  }
+
+  init(
+    lastRunAt: Date,
+    lastStatus: ProjectWorkspaceBootstrapStatus,
+    lastScriptIDs: [String],
+    lastLogPath: String
+  ) {
+    self.lastRunAt = lastRunAt
+    self.lastStatus = lastStatus
+    self.lastScriptIDs = lastScriptIDs
+    self.lastLogPath = lastLogPath
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    lastRunAt = try container.decode(Date.self, forKey: .lastRunAt)
+    lastStatus = try container.decode(ProjectWorkspaceBootstrapStatus.self, forKey: .lastStatus)
+    let scriptIDs = try container.decodeIfPresent([String].self, forKey: .lastScriptIDs) ?? []
+    let scriptID = try container.decodeIfPresent(String.self, forKey: .lastScriptID)
+    lastScriptIDs = normalizedScriptIDs(scriptIDs + [scriptID].compactMap(\.self))
+    lastLogPath = try container.decode(String.self, forKey: .lastLogPath)
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(lastRunAt, forKey: .lastRunAt)
+    try container.encode(lastStatus, forKey: .lastStatus)
+    try container.encode(lastScriptIDs, forKey: .lastScriptIDs)
+    try container.encode(lastLogPath, forKey: .lastLogPath)
   }
 }
 
@@ -83,30 +118,56 @@ nonisolated struct ProjectWorkspaceBootstrapExecutor: Sendable {
     guard bootstrap.scriptKind == .userProfile else {
       return
     }
-    guard let scriptID = trimmedNonEmpty(bootstrap.scriptID) else {
+    let scriptIDs = normalizedScriptIDs(bootstrap.scriptIDs)
+    guard !scriptIDs.isEmpty else {
       throw ProjectWorkspaceCreationError.bootstrapProfileNotFound("")
     }
-    guard let profile = profiles.first(where: { $0.id == scriptID }) else {
-      throw ProjectWorkspaceCreationError.bootstrapProfileNotFound(scriptID)
+    var profilesByID: [String: ProjectWorkspaceBootstrapProfile] = [:]
+    for profile in profiles where profilesByID[profile.id] == nil {
+      profilesByID[profile.id] = profile
+    }
+    let orderedProfiles = try scriptIDs.map { scriptID in
+      guard let profile = profilesByID[scriptID] else {
+        throw ProjectWorkspaceCreationError.bootstrapProfileNotFound(scriptID)
+      }
+      return profile
     }
 
     let logURL = try makeLogURL(for: context.repository, workspaceRootURL: context.workspaceRootURL)
-    do {
-      try await runProfile(profile, context: context, logURL: logURL)
+    var firstError: Error?
+    for profile in orderedProfiles {
+      do {
+        try await runProfile(profile, context: context, logURL: logURL)
+      } catch {
+        if firstError == nil {
+          firstError = error
+        }
+        guard !bootstrap.required else {
+          try? writeState(
+            status: .failed,
+            scriptIDs: scriptIDs,
+            logURL: logURL,
+            context: context
+          )
+          throw error
+        }
+      }
+    }
+
+    if firstError != nil {
+      try writeState(
+        status: .failed,
+        scriptIDs: scriptIDs,
+        logURL: logURL,
+        context: context
+      )
+    } else {
       try writeState(
         status: .succeeded,
-        scriptID: scriptID,
+        scriptIDs: scriptIDs,
         logURL: logURL,
         context: context
       )
-    } catch {
-      try? writeState(
-        status: .failed,
-        scriptID: scriptID,
-        logURL: logURL,
-        context: context
-      )
-      throw error
     }
   }
 
@@ -124,7 +185,7 @@ nonisolated struct ProjectWorkspaceBootstrapExecutor: Sendable {
           environment: environment(for: context),
           log: false
         )
-        try await write(stream, to: logURL)
+        try await write(stream, to: logURL, profileID: profile.id)
       }
       group.addTask {
         try await clock.sleep(for: .seconds(profile.timeoutSeconds))
@@ -146,7 +207,8 @@ nonisolated struct ProjectWorkspaceBootstrapExecutor: Sendable {
 
   private func write(
     _ stream: AsyncThrowingStream<ShellStreamEvent, Error>,
-    to logURL: URL
+    to logURL: URL,
+    profileID: String
   ) async throws {
     let directoryURL = logURL.deletingLastPathComponent()
     try fileClient.createDirectory(directoryURL)
@@ -155,6 +217,8 @@ nonisolated struct ProjectWorkspaceBootstrapExecutor: Sendable {
     defer {
       try? handle.close()
     }
+    try handle.seekToEnd()
+    try handle.write(contentsOf: Data("[profile] \(profileID)\n".utf8))
     for try await event in stream {
       switch event {
       case .line(let line):
@@ -202,7 +266,7 @@ nonisolated struct ProjectWorkspaceBootstrapExecutor: Sendable {
 
   private func writeState(
     status: ProjectWorkspaceBootstrapStatus,
-    scriptID: String,
+    scriptIDs: [String],
     logURL: URL,
     context: ProjectWorkspaceBootstrapContext
   ) throws {
@@ -214,7 +278,7 @@ nonisolated struct ProjectWorkspaceBootstrapExecutor: Sendable {
     repositories[context.repository.id] = ProjectWorkspaceBootstrapRepositoryState(
       lastRunAt: now(),
       lastStatus: status,
-      lastScriptID: scriptID,
+      lastScriptIDs: scriptIDs,
       lastLogPath: relativePath(for: logURL, workspaceRootURL: context.workspaceRootURL)
     )
     let updated = ProjectWorkspaceBootstrapState(repositories: repositories)
@@ -270,4 +334,17 @@ nonisolated struct ProjectWorkspaceBootstrapExecutor: Sendable {
     let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
     return trimmed.isEmpty ? nil : trimmed
   }
+}
+
+private nonisolated func normalizedScriptIDs(_ values: [String]) -> [String] {
+  var seen = Set<String>()
+  var result: [String] = []
+  for value in values {
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty, seen.insert(trimmed).inserted else {
+      continue
+    }
+    result.append(trimmed)
+  }
+  return result
 }

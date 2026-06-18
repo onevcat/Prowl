@@ -15,7 +15,7 @@ nonisolated enum ProjectWorkspaceBootstrapTiming: String, Codable, Equatable, Ha
 
 nonisolated struct ProjectWorkspaceRepositoryBootstrap: Codable, Equatable, Hashable, Sendable {
   var scriptKind: ProjectWorkspaceBootstrapScriptKind
-  var scriptID: String?
+  var scriptIDs: [String]
   var scriptPath: String?
   var runOn: Set<ProjectWorkspaceBootstrapTiming>
   var required: Bool
@@ -23,20 +23,26 @@ nonisolated struct ProjectWorkspaceRepositoryBootstrap: Codable, Equatable, Hash
   enum CodingKeys: String, CodingKey {
     case scriptKind = "script_kind"
     case scriptID = "script_id"
+    case scriptIDs = "script_ids"
     case scriptPath = "script_path"
     case runOn = "run_on"
     case required
   }
 
+  var scriptID: String? {
+    scriptIDs.first
+  }
+
   init(
     scriptKind: ProjectWorkspaceBootstrapScriptKind,
     scriptID: String? = nil,
+    scriptIDs: [String] = [],
     scriptPath: String? = nil,
     runOn: Set<ProjectWorkspaceBootstrapTiming> = [],
     required: Bool = false
   ) {
     self.scriptKind = scriptKind
-    self.scriptID = scriptID
+    self.scriptIDs = Self.normalizedScriptIDs(scriptIDs + [scriptID].compactMap(\.self))
     self.scriptPath = scriptPath
     self.runOn = runOn
     self.required = required
@@ -47,7 +53,9 @@ nonisolated struct ProjectWorkspaceRepositoryBootstrap: Codable, Equatable, Hash
     scriptKind =
       try container.decodeIfPresent(ProjectWorkspaceBootstrapScriptKind.self, forKey: .scriptKind)
       ?? .userProfile
-    scriptID = try container.decodeIfPresent(String.self, forKey: .scriptID)
+    let scriptIDs = try container.decodeIfPresent([String].self, forKey: .scriptIDs) ?? []
+    let scriptID = try container.decodeIfPresent(String.self, forKey: .scriptID)
+    self.scriptIDs = Self.normalizedScriptIDs(scriptIDs + [scriptID].compactMap(\.self))
     scriptPath = try container.decodeIfPresent(String.self, forKey: .scriptPath)
     runOn =
       Set(try container.decodeIfPresent([ProjectWorkspaceBootstrapTiming].self, forKey: .runOn) ?? [])
@@ -57,10 +65,25 @@ nonisolated struct ProjectWorkspaceRepositoryBootstrap: Codable, Equatable, Hash
   func encode(to encoder: Encoder) throws {
     var container = encoder.container(keyedBy: CodingKeys.self)
     try container.encode(scriptKind, forKey: .scriptKind)
-    try container.encodeIfPresent(scriptID, forKey: .scriptID)
+    if !scriptIDs.isEmpty {
+      try container.encode(scriptIDs, forKey: .scriptIDs)
+    }
     try container.encodeIfPresent(scriptPath, forKey: .scriptPath)
     try container.encode(runOn.sorted { $0.rawValue < $1.rawValue }, forKey: .runOn)
     try container.encode(required, forKey: .required)
+  }
+
+  private static func normalizedScriptIDs(_ values: [String]) -> [String] {
+    var seen = Set<String>()
+    var result: [String] = []
+    for value in values {
+      let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !trimmed.isEmpty, seen.insert(trimmed).inserted else {
+        continue
+      }
+      result.append(trimmed)
+    }
+    return result
   }
 }
 
