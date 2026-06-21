@@ -159,42 +159,6 @@ struct AppFeatureCommandPaletteTests {
     #expect(sent.value == [.focusSelectedTab(worktree)])
   }
 
-  @Test(.dependencies) func ghosttyCommandDelegateInCanvasUsesCanvasFocusedWorktree() async {
-    let worktree = makeWorktree(
-      id: "/tmp/repo-canvas-ghostty/wt-1",
-      name: "wt-1",
-      repoRoot: "/tmp/repo-canvas-ghostty"
-    )
-    let repository = makeRepository(id: "/tmp/repo-canvas-ghostty", worktrees: [worktree])
-    var repositoriesState = RepositoriesFeature.State()
-    repositoriesState.repositories = [repository]
-    repositoriesState.selection = .canvas
-    let sent = LockIsolated<[TerminalClient.Command]>([])
-    let store = TestStore(
-      initialState: AppFeature.State(
-        repositories: repositoriesState,
-        settings: SettingsFeature.State()
-      )
-    ) {
-      AppFeature()
-    } withDependencies: {
-      $0.terminalClient.canvasFocusedWorktreeID = { worktree.id }
-      $0.terminalClient.send = { command in
-        sent.withValue { $0.append(command) }
-      }
-    }
-
-    await store.send(.commandPalette(.delegate(.ghosttyCommand("new_tab"))))
-    await store.finish()
-
-    #expect(
-      sent.value == [
-        .performBindingAction(worktree, action: "new_tab"),
-        .focusSelectedTab(worktree),
-      ]
-    )
-  }
-
   @Test(.dependencies) func passiveCommandPaletteCommandRestoresSelectedTerminalFocus() async {
     let worktree = makeWorktree(
       id: "/tmp/repo-passive/wt-1",
@@ -254,67 +218,6 @@ struct AppFeatureCommandPaletteTests {
     await store.finish()
 
     #expect(!sent.value.contains(.focusSelectedTab(worktree)))
-  }
-
-  @Test(.dependencies) func selectingWorktreeInCanvasFocusesCanvasCard() async {
-    let worktree = makeWorktree(
-      id: "/tmp/repo-select-canvas/wt-1",
-      name: "wt-1",
-      repoRoot: "/tmp/repo-select-canvas"
-    )
-    let repository = makeRepository(id: "/tmp/repo-select-canvas", worktrees: [worktree])
-    var repositoriesState = RepositoriesFeature.State()
-    repositoriesState.repositories = [repository]
-    repositoriesState.selection = .canvas
-    let store = TestStore(
-      initialState: AppFeature.State(
-        repositories: repositoriesState,
-        settings: SettingsFeature.State()
-      )
-    ) {
-      AppFeature()
-    }
-
-    await store.send(.commandPalette(.delegate(.selectWorktree(worktree.id))))
-    await store.receive(\.repositories.focusCanvasWorktree) {
-      $0.repositories.nextCanvasFocusRequestID = 1
-      $0.repositories.pendingCanvasFocusRequest = CanvasFocusRequest(
-        id: 1,
-        target: .worktree(worktree.id)
-      )
-      $0.repositories.openedWorktreeIDs = [worktree.id]
-    }
-  }
-
-  @Test(.dependencies) func selectingPlainFolderInCanvasFocusesCanvasCard() async {
-    let repository = Repository(
-      id: "/tmp/folder-select-canvas",
-      rootURL: URL(fileURLWithPath: "/tmp/folder-select-canvas"),
-      name: "folder-select-canvas",
-      kind: .plain,
-      worktrees: []
-    )
-    var repositoriesState = RepositoriesFeature.State()
-    repositoriesState.repositories = [repository]
-    repositoriesState.selection = .canvas
-    let store = TestStore(
-      initialState: AppFeature.State(
-        repositories: repositoriesState,
-        settings: SettingsFeature.State()
-      )
-    ) {
-      AppFeature()
-    }
-
-    await store.send(.commandPalette(.delegate(.selectWorktree(repository.id))))
-    await store.receive(\.repositories.focusCanvasRepository) {
-      $0.repositories.nextCanvasFocusRequestID = 1
-      $0.repositories.pendingCanvasFocusRequest = CanvasFocusRequest(
-        id: 1,
-        target: .worktree(repository.id)
-      )
-      $0.repositories.openedWorktreeIDs = [repository.id]
-    }
   }
 
   @Test(.dependencies) func openSettingsShowsWindow() async {
@@ -830,10 +733,8 @@ struct AppFeatureCommandPaletteTests {
     store.exhaustivity = .off
 
     await store.send(.commandPalette(.delegate(.layoutCenter)))
-    await store.receive(\.repositories.requestCanvasCommand) {
-      $0.repositories.nextCanvasCommandRequestID = 1
-      $0.repositories.pendingCanvasCommandRequest = CanvasCommandRequest(id: 1, command: .center)
-    }
+
+    #expect(store.state.canvasLayoutCommand?.kind == .center)
   }
 
   @Test(.dependencies) func layoutArrangeQueuesCanvasLayoutCommand() async {
@@ -859,10 +760,8 @@ struct AppFeatureCommandPaletteTests {
     store.exhaustivity = .off
 
     await store.send(.commandPalette(.delegate(.layoutArrange)))
-    await store.receive(\.repositories.requestCanvasCommand) {
-      $0.repositories.nextCanvasCommandRequestID = 1
-      $0.repositories.pendingCanvasCommandRequest = CanvasCommandRequest(id: 1, command: .arrange)
-    }
+
+    #expect(store.state.canvasLayoutCommand?.kind == .arrange)
   }
 
   @Test(.dependencies) func layoutOverviewQueuesCanvasLayoutCommand() async {
@@ -888,10 +787,8 @@ struct AppFeatureCommandPaletteTests {
     store.exhaustivity = .off
 
     await store.send(.commandPalette(.delegate(.layoutOverview)))
-    await store.receive(\.repositories.requestCanvasCommand) {
-      $0.repositories.nextCanvasCommandRequestID = 1
-      $0.repositories.pendingCanvasCommandRequest = CanvasCommandRequest(id: 1, command: .overview)
-    }
+
+    #expect(store.state.canvasLayoutCommand?.kind == .overview)
   }
 
   @Test(.dependencies) func refreshWorktreesDispatchesRefresh() async {
@@ -922,6 +819,172 @@ struct AppFeatureCommandPaletteTests {
     await store.receive(\.jumpToLatestUnread)
   }
 
+  @Test(.dependencies) func restoreRunningTabLoadsDetachedCardsIntoPalette() async {
+    let candidate = TmuxDetachedCardCandidate(
+      record: TmuxRawWindowRecord(
+        sessionName: "prowl-cards",
+        windowID: "@21",
+        windowName: "shell",
+        activePath: "/tmp/repo/wt",
+        activeCommand: "zsh",
+        activeTitle: "codex",
+        managed: "1",
+        cardID: "card-21",
+        worktreeID: "/tmp/repo/wt",
+        worktreePath: "/tmp/repo/wt",
+        repositoryRoot: "/tmp/repo/",
+        createdAt: "2026-05-28T12:00:00Z"
+      )
+    )!
+    let worktree = makeWorktree(id: "/tmp/repo/wt", name: "wt", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", name: "Repo", worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    repositoriesState.repositoryCustomTitles = [repository.id: "Custom Repo"]
+    let store = TestStore(initialState: AppFeature.State(repositories: repositoriesState)) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.detachedTmuxCards = {
+        TmuxCardRecoverySnapshot(candidates: [candidate], diagnostics: [])
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.commandPalette(.delegate(.restoreRunningTab)))
+    await store.receive(\.commandPalette.enterDetachedCardsMode)
+
+    #expect(store.state.commandPalette.mode == .detachedCards)
+    #expect(store.state.commandPalette.isPresented)
+    #expect(
+      store.state.commandPalette.detachedCards.rows == [
+        TmuxDetachedCardPresentation(candidate: candidate, repositoryName: "Custom Repo")
+      ])
+    #expect(store.state.commandPalette.detachedCards.diagnostics.isEmpty)
+    #expect(store.state.commandPalette.selectedIndex == 0)
+  }
+
+  @Test(.dependencies) func restoreDetachedCardDelegatesToTerminalClient() async {
+    let restoredIDs = LockIsolated<[TmuxDetachedCardCandidate.ID]>([])
+    let id = TmuxDetachedCardCandidate.ID(rawValue: "prowl.sock:@21")
+    let worktree = makeWorktree(id: "/tmp/repo/wt", name: "wt", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", name: "Repo", worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    let store = TestStore(initialState: AppFeature.State(repositories: repositoriesState)) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.restoreDetachedTmuxCard = { candidateID, _ in
+        restoredIDs.withValue { $0.append(candidateID) }
+        return true
+      }
+    }
+
+    await store.send(.commandPalette(.delegate(.restoreDetachedCard(id))))
+    await store.finish()
+
+    #expect(restoredIDs.value == [id])
+  }
+
+  @Test(.dependencies) func restoreDetachedCardsDelegatesEachSelectionToTerminalClient() async {
+    let restoredIDs = LockIsolated<[TmuxDetachedCardCandidate.ID]>([])
+    let first = TmuxDetachedCardCandidate.ID(rawValue: "prowl.sock:@21")
+    let second = TmuxDetachedCardCandidate.ID(rawValue: "prowl.sock:@22")
+    let worktree = makeWorktree(id: "/tmp/repo/wt", name: "wt", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", name: "Repo", worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    let store = TestStore(initialState: AppFeature.State(repositories: repositoriesState)) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.restoreDetachedTmuxCard = { candidateID, _ in
+        restoredIDs.withValue { $0.append(candidateID) }
+        return true
+      }
+    }
+
+    await store.send(.commandPalette(.delegate(.restoreDetachedCards([first, second]))))
+    await store.finish()
+
+    #expect(restoredIDs.value == [first, second])
+  }
+
+  @Test(.dependencies) func selectWorktreeFromCommandPaletteInCanvasFocusesExistingCanvasCard() async {
+    let worktree = makeWorktree(
+      id: "/tmp/repo-canvas/wt-1",
+      name: "wt-1",
+      repoRoot: "/tmp/repo-canvas"
+    )
+    let repository = makeRepository(id: "/tmp/repo-canvas", worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    repositoriesState.selection = .canvas
+    let focusedIDs = LockIsolated<[Worktree.ID]>([])
+    let sent = LockIsolated<[TerminalClient.Command]>([])
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositoriesState,
+        settings: SettingsFeature.State(),
+      )
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.focusWorktreeInCanvas = { worktreeID in
+        focusedIDs.withValue { $0.append(worktreeID) }
+        return true
+      }
+      $0.terminalClient.send = { command in
+        sent.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.commandPalette(.delegate(.selectWorktree(worktree.id))))
+    await store.finish()
+
+    #expect(store.state.repositories.selection == .canvas)
+    #expect(focusedIDs.value == [worktree.id])
+    #expect(sent.value.isEmpty)
+  }
+
+  @Test(.dependencies) func selectWorktreeFromCommandPaletteInCanvasCreatesTabWhenNoCanvasCardExists() async {
+    let worktree = makeWorktree(
+      id: "/tmp/repo-canvas/wt-1",
+      name: "wt-1",
+      repoRoot: "/tmp/repo-canvas"
+    )
+    let repository = makeRepository(id: "/tmp/repo-canvas", worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    repositoriesState.selection = .canvas
+    let focusedIDs = LockIsolated<[Worktree.ID]>([])
+    let sent = LockIsolated<[TerminalClient.Command]>([])
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositoriesState,
+        settings: SettingsFeature.State(),
+      )
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.focusWorktreeInCanvas = { worktreeID in
+        focusedIDs.withValue { $0.append(worktreeID) }
+        return false
+      }
+      $0.terminalClient.send = { command in
+        sent.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.commandPalette(.delegate(.selectWorktree(worktree.id))))
+    await store.receive(\.newTerminalFromCanvas)
+    await store.finish()
+
+    #expect(store.state.repositories.selection == .canvas)
+    #expect(focusedIDs.value == [worktree.id])
+    #expect(
+      sent.value == [.createTabFromCanvas(worktree, runSetupScriptIfNew: false, inheritFromFocusedSurface: false)],
+    )
+  }
+
   @Test(.dependencies) func ghosttyCommandDispatchesBindingActionToTerminalClient() async {
     let worktree = makeWorktree(
       id: "/tmp/repo-ghostty/wt-1",
@@ -950,96 +1013,10 @@ struct AppFeatureCommandPaletteTests {
     await store.finish()
 
     // Two effects run in parallel (.merge) — assert both fire without
-    // depending on dispatch order. With no selected surface available the
-    // dispatch falls back to the focused-surface command.
+    // depending on dispatch order.
     #expect(sent.value.count == 2)
     #expect(sent.value.contains(.performBindingAction(worktree, action: "goto_split:right")))
     #expect(sent.value.contains(.focusSelectedTab(worktree)))
-  }
-
-  @Test(.dependencies) func ghosttyCommandTargetsSelectedSurfaceWhenAvailable() async {
-    let worktree = makeWorktree(
-      id: "/tmp/repo-ghostty/wt-1",
-      name: "wt-1",
-      repoRoot: "/tmp/repo-ghostty"
-    )
-    let repository = makeRepository(id: "/tmp/repo-ghostty", worktrees: [worktree])
-    var repositoriesState = RepositoriesFeature.State()
-    repositoriesState.repositories = [repository]
-    repositoriesState.selection = .worktree(worktree.id)
-    let surfaceID = UUID()
-    let sent = LockIsolated<[TerminalClient.Command]>([])
-    let store = TestStore(
-      initialState: AppFeature.State(
-        repositories: repositoriesState,
-        settings: SettingsFeature.State()
-      )
-    ) {
-      AppFeature()
-    } withDependencies: {
-      $0.terminalClient.send = { command in
-        sent.withValue { $0.append(command) }
-      }
-      $0.terminalClient.selectedSurfaceID = { _ in surfaceID }
-    }
-
-    await store.send(.commandPalette(.delegate(.ghosttyCommand("goto_split:right"))))
-    await store.finish()
-
-    #expect(sent.value.count == 2)
-    #expect(
-      sent.value.contains(
-        .performBindingActionOnSurface(worktree, surfaceID: surfaceID, action: "goto_split:right")
-      )
-    )
-    #expect(sent.value.contains(.focusSelectedTab(worktree)))
-  }
-
-  @Test(.dependencies) func ghosttyCommandCapturesSelectedSurfaceBeforeAsyncDispatch() async {
-    let worktree = makeWorktree(
-      id: "/tmp/repo-ghostty/wt-1",
-      name: "wt-1",
-      repoRoot: "/tmp/repo-ghostty"
-    )
-    let repository = makeRepository(id: "/tmp/repo-ghostty", worktrees: [worktree])
-    var repositoriesState = RepositoriesFeature.State()
-    repositoriesState.repositories = [repository]
-    repositoriesState.selection = .worktree(worktree.id)
-    let firstSurface = UUID()
-    let secondSurface = UUID()
-    let currentSurface = LockIsolated(firstSurface)
-    let sent = LockIsolated<[TerminalClient.Command]>([])
-    let store = TestStore(
-      initialState: AppFeature.State(
-        repositories: repositoriesState,
-        settings: SettingsFeature.State()
-      )
-    ) {
-      AppFeature()
-    } withDependencies: {
-      $0.terminalClient.send = { command in
-        sent.withValue { $0.append(command) }
-      }
-      $0.terminalClient.selectedSurfaceID = { _ in currentSurface.value }
-    }
-
-    let task = await store.send(.commandPalette(.delegate(.ghosttyCommand("toggle_split_zoom"))))
-    // Simulates the palette-dismiss focus drift: by the time the async dispatch
-    // resolves, `selectedSurfaceID` would already point at the leftmost surface.
-    currentSurface.setValue(secondSurface)
-    await task.finish()
-    await store.finish()
-
-    #expect(
-      sent.value.contains(
-        .performBindingActionOnSurface(worktree, surfaceID: firstSurface, action: "toggle_split_zoom")
-      )
-    )
-    #expect(
-      !sent.value.contains(
-        .performBindingActionOnSurface(worktree, surfaceID: secondSurface, action: "toggle_split_zoom")
-      )
-    )
   }
 
   @Test(.dependencies) func viewToggleDelegateRestoresTerminalFocusByDefault() async {
@@ -1104,6 +1081,30 @@ struct AppFeatureCommandPaletteTests {
     #expect(!sent.value.contains(.focusSelectedTab(worktree)))
   }
 
+  @Test(.dependencies) func revealInFinderDispatchesOpenWorktreeFinder() async {
+    let worktree = makeWorktree(
+      id: "/tmp/repo-finder/wt-1",
+      name: "wt-1",
+      repoRoot: "/tmp/repo-finder"
+    )
+    let repository = makeRepository(id: "/tmp/repo-finder", worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    repositoriesState.selection = .worktree(worktree.id)
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositoriesState,
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    }
+    store.exhaustivity = .off
+
+    await store.send(.commandPalette(.delegate(.revealInFinder)))
+    await store.receive(\.openWorktree)
+  }
+
   @Test(.dependencies) func copyPathWritesWorktreePathToPasteboard() async {
     let worktree = makeWorktree(
       id: "/tmp/repo-copy/wt-1",
@@ -1155,7 +1156,7 @@ struct AppFeatureCommandPaletteTests {
       repositories: repositoriesState,
       settings: SettingsFeature.State()
     )
-    appState.$isLeftSidebarHidden.withLock { $0 = true }
+    appState.leftSidebarVisibility = .detailOnly
     let store = TestStore(initialState: appState) {
       AppFeature()
     }
@@ -1163,7 +1164,7 @@ struct AppFeatureCommandPaletteTests {
 
     await store.send(.commandPalette(.delegate(.revealInSidebar)))
     await store.receive(\.showLeftSidebar) {
-      $0.$isLeftSidebarHidden.withLock { $0 = false }
+      $0.leftSidebarVisibility = .all
     }
     await store.receive(\.repositories.revealSelectedWorktreeInSidebar)
   }
@@ -1351,11 +1352,11 @@ private func makeWorktree(id: String, name: String, repoRoot: String = "/tmp/rep
   )
 }
 
-private func makeRepository(id: String, worktrees: [Worktree]) -> Repository {
+private func makeRepository(id: String, name: String = "repo", worktrees: [Worktree]) -> Repository {
   Repository(
     id: id,
     rootURL: URL(fileURLWithPath: id),
-    name: "repo",
+    name: name,
     worktrees: IdentifiedArray(uniqueElements: worktrees)
   )
 }

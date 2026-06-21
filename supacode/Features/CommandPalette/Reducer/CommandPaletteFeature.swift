@@ -6,10 +6,42 @@ import Sharing
 struct CommandPaletteFeature {
   @ObservableState
   struct State: Equatable {
+    enum Mode: Equatable {
+      case commands
+      case detachedCards
+    }
+
+    struct DetachedCardsState: Equatable {
+      var rows: [TmuxDetachedCardPresentation] = []
+      var diagnostics: [TmuxCardStructureDiagnostic] = []
+      var selectedIDs: Set<TmuxDetachedCardCandidate.ID> = []
+      var lastSelectedID: TmuxDetachedCardCandidate.ID?
+    }
+
     var isPresented = false
     var query = ""
     var selectedIndex: Int?
     var recencyByItemID: [CommandPaletteItem.ID: TimeInterval] = [:]
+    var mode: Mode = .commands
+    var detachedCards = DetachedCardsState()
+
+    mutating func enterDetachedCardsMode(
+      presentations: [TmuxDetachedCardPresentation],
+      diagnostics: [TmuxCardStructureDiagnostic]
+    ) {
+      mode = .detachedCards
+      detachedCards = DetachedCardsState(rows: presentations, diagnostics: diagnostics)
+      query = ""
+      selectedIndex = presentations.isEmpty ? nil : 0
+      isPresented = true
+    }
+
+    mutating func exitDetachedCardsMode() {
+      mode = .commands
+      detachedCards = DetachedCardsState()
+      query = ""
+      selectedIndex = nil
+    }
   }
 
   enum SelectionMove: Equatable {
@@ -26,6 +58,11 @@ struct CommandPaletteFeature {
     case resetSelection(itemsCount: Int)
     case moveSelection(SelectionMove, itemsCount: Int)
     case pruneRecency([CommandPaletteItem.ID])
+    case enterDetachedCardsMode([TmuxDetachedCardPresentation], diagnostics: [TmuxCardStructureDiagnostic])
+    case exitDetachedCardsMode
+    case toggleDetachedCardSelection(TmuxDetachedCardCandidate.ID)
+    case selectDetachedCardRange(TmuxDetachedCardCandidate.ID, orderedIDs: [TmuxDetachedCardCandidate.ID])
+    case confirmDetachedCardSelection
     case delegate(Delegate)
   }
 
@@ -37,11 +74,16 @@ struct CommandPaletteFeature {
     case newWorktree
     case openRepository
     case deleteWorktree(Worktree.ID, Repository.ID)
+    case expandCanvasCard
+    case arrangeCanvasCards
     case layoutCenter
     case layoutArrange
     case layoutOverview
+    case organizeCanvasCards
+    case selectAllCanvasCards
     case openInVSCode
     case openInFork
+    case openWeb
     case viewArchivedWorktrees
     case refreshWorktrees
     case jumpToLatestUnread
@@ -59,10 +101,6 @@ struct CommandPaletteFeature {
     case toggleLeftSidebar
     case toggleActiveAgentsPanel
     case toggleCanvas
-    case expandCanvasCard
-    case arrangeCanvasCards
-    case organizeCanvasCards
-    case selectAllCanvasCards
     case toggleShelf
     case showDiff
     case revealInFinder
@@ -74,6 +112,9 @@ struct CommandPaletteFeature {
     case renameBranch
     case openRepositorySettings(Repository.ID)
     case runCustomCommand(Int)
+    case restoreRunningTab
+    case restoreDetachedCard(TmuxDetachedCardCandidate.ID)
+    case restoreDetachedCards([TmuxDetachedCardCandidate.ID])
     #if DEBUG
       case debugTestToast(RepositoriesFeature.StatusToast)
       case debugSimulateUpdateFound
@@ -96,8 +137,7 @@ struct CommandPaletteFeature {
           loadRecency(into: &state)
           state.selectedIndex = nil
         } else {
-          state.query = ""
-          state.selectedIndex = nil
+          state.exitDetachedCardsMode()
         }
         return .none
 
@@ -107,15 +147,13 @@ struct CommandPaletteFeature {
           loadRecency(into: &state)
           state.selectedIndex = nil
         } else {
-          state.query = ""
-          state.selectedIndex = nil
+          state.exitDetachedCardsMode()
         }
         return .none
 
       case .activateItem(let item):
         state.isPresented = false
-        state.query = ""
-        state.selectedIndex = nil
+        state.exitDetachedCardsMode()
         state.recencyByItemID[item.id] = now.timeIntervalSince1970
         saveRecency(state.recencyByItemID)
         return .send(.delegate(delegateAction(for: item.kind)))
@@ -165,6 +203,49 @@ struct CommandPaletteFeature {
         state.recencyByItemID = pruned
         saveRecency(pruned)
         return .none
+
+      case .enterDetachedCardsMode(let presentations, let diagnostics):
+        state.enterDetachedCardsMode(presentations: presentations, diagnostics: diagnostics)
+        return .none
+
+      case .exitDetachedCardsMode:
+        state.exitDetachedCardsMode()
+        return .none
+
+      case .toggleDetachedCardSelection(let id):
+        if state.detachedCards.selectedIDs.contains(id) {
+          state.detachedCards.selectedIDs.remove(id)
+        } else {
+          state.detachedCards.selectedIDs.insert(id)
+        }
+        state.detachedCards.lastSelectedID = id
+        return .none
+
+      case .selectDetachedCardRange(let id, let orderedIDs):
+        guard let currentIndex = orderedIDs.firstIndex(of: id) else {
+          return .send(.toggleDetachedCardSelection(id))
+        }
+        guard let lastSelectedID = state.detachedCards.lastSelectedID,
+          let lastIndex = orderedIDs.firstIndex(of: lastSelectedID)
+        else {
+          state.detachedCards.selectedIDs.insert(id)
+          state.detachedCards.lastSelectedID = id
+          return .none
+        }
+        let bounds = min(currentIndex, lastIndex)...max(currentIndex, lastIndex)
+        for index in bounds {
+          state.detachedCards.selectedIDs.insert(orderedIDs[index])
+        }
+        state.detachedCards.lastSelectedID = id
+        return .none
+
+      case .confirmDetachedCardSelection:
+        let orderedIDs = state.detachedCards.rows.map(\.id)
+        let selectedIDs = orderedIDs.filter { state.detachedCards.selectedIDs.contains($0) }
+        guard !selectedIDs.isEmpty else { return .none }
+        state.isPresented = false
+        state.exitDetachedCardsMode()
+        return .send(.delegate(.restoreDetachedCards(selectedIDs)))
 
       case .delegate:
         return .none
@@ -231,21 +312,50 @@ struct CommandPaletteFeature {
     return scorer.rankedItems(from: items)
   }
 
+  static func filterDetachedCardItems(
+    presentations: [TmuxDetachedCardPresentation],
+    query: String,
+    recencyByID: [CommandPaletteItem.ID: TimeInterval] = [:],
+    now: Date = .now
+  ) -> [CommandPaletteItem] {
+    let items = detachedCardItems(from: presentations)
+    let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return items }
+
+    let scorer = CommandPaletteFuzzyScorer(query: trimmed, recencyByID: recencyByID, now: now)
+    return scorer.rankedItems(from: items)
+  }
+
+  static func detachedCardItems(from presentations: [TmuxDetachedCardPresentation]) -> [CommandPaletteItem] {
+    presentations.map { row in
+      CommandPaletteItem(
+        id: CommandPaletteItemID.restoreDetachedCard(row.id),
+        title: row.title,
+        subtitle: row.subtitleLines.joined(separator: "\n"),
+        kind: .restoreDetachedCard(row.id),
+        category: .terminal,
+        defaultSuggestion: false,
+        keywords: ["restore", "tmux", "detached", "card"],
+        priorityTier: 0
+      )
+    }
+  }
+
   static func commandPaletteItems(
     from repositories: RepositoriesFeature.State,
     customCommands: [UserCustomCommand] = [],
     runScriptStatusByWorktreeID: [Worktree.ID: Bool] = [:],
     actionTargetWorktreeID: Worktree.ID? = nil,
-    ghosttyCommands: [GhosttyCommand] = []
+    ghosttyCommands: [GhosttyCommand] = [],
+    showsRestoreRunningTab: Bool = true
   ) -> [CommandPaletteItem] {
     let showsNewWorktreeAction =
       repositories.repositories.isEmpty
       || repositories.repositories.contains { $0.capabilities.supportsWorktrees }
-    var items = globalCommandItems(showsNewWorktreeAction: showsNewWorktreeAction)
-    if repositories.isShowingCanvas {
-      items.append(contentsOf: canvasCommandItems())
-      items.append(contentsOf: canvasLayoutItems())
-    }
+    var items = globalCommandItems(
+      showsNewWorktreeAction: showsNewWorktreeAction,
+      showsRestoreRunningTab: showsRestoreRunningTab
+    )
     let worktreeActionTargetID = actionTargetWorktreeID ?? repositories.selectedWorktreeID
     if repositories.selectedWorktreeID != nil {
       items.append(
@@ -258,7 +368,6 @@ struct CommandPaletteFeature {
         )
       )
       items.append(contentsOf: worktreeNavigationCommandItems())
-      items.append(contentsOf: worktreeTargetItems(includeFileActions: false))
       items.append(
         contentsOf: worktreeActionCommandItems(
           repositories: repositories,
@@ -276,11 +385,6 @@ struct CommandPaletteFeature {
         )
       )
     }
-    if repositories.selectedWorktreeID == nil,
-      worktreeActionTargetID != nil || repositories.isShowingFreestyle
-    {
-      items.append(contentsOf: worktreeTargetItems(includeFileActions: true))
-    }
     items.append(contentsOf: customCommandItems(customCommands))
     if let terminalWorktree = repositories.selectedTerminalWorktree {
       items.append(
@@ -294,9 +398,13 @@ struct CommandPaletteFeature {
         )
       )
       items.append(contentsOf: ghosttyCommandItems(ghosttyCommands))
-    } else if worktreeActionTargetID != nil {
-      items.append(contentsOf: ghosttyCommandItems(ghosttyCommands))
     }
+    items.append(contentsOf: canvasLayoutItems(isAvailable: repositories.isShowingCanvas))
+    items.append(
+      contentsOf: worktreeTargetItems(
+        isAvailable: worktreeActionTargetID != nil || repositories.isShowingFreestyle
+      )
+    )
     if let repository = activeRepository(in: repositories) {
       items.append(
         CommandPaletteItem(
@@ -350,7 +458,10 @@ struct CommandPaletteFeature {
   }
 }
 
-private func globalCommandItems(showsNewWorktreeAction: Bool) -> [CommandPaletteItem] {
+private func globalCommandItems(
+  showsNewWorktreeAction: Bool,
+  showsRestoreRunningTab: Bool
+) -> [CommandPaletteItem] {
   var items: [CommandPaletteItem] = [
     .appShortcut(
       id: CommandPaletteItemID.globalCheckForUpdates,
@@ -403,6 +514,17 @@ private func globalCommandItems(showsNewWorktreeAction: Bool) -> [CommandPalette
       keywords: ["unread", "bell", "notification"]
     )
   )
+  if showsRestoreRunningTab {
+    items.append(
+      .appShortcut(
+        id: CommandPaletteItemID.globalRestoreRunningTab,
+        title: "Restore Running Tab",
+        category: .terminal,
+        kind: .restoreRunningTab,
+        keywords: ["restore", "tmux", "detached", "terminal"]
+      )
+    )
+  }
   items.append(
     .appShortcut(
       id: CommandPaletteItemID.globalViewArchivedWorktrees,
@@ -575,58 +697,6 @@ private func worktreeNavigationCommandItems() -> [CommandPaletteItem] {
   ]
 }
 
-private func worktreeTargetItems(includeFileActions: Bool) -> [CommandPaletteItem] {
-  var items: [CommandPaletteItem] = [
-    .appShortcut(
-      id: CommandPaletteItemID.terminalOpenInVSCode,
-      title: "Open in VS Code",
-      category: .navigation,
-      kind: .openInVSCode,
-      keywords: ["code", "vscode", "workspace"],
-      priorityTier: 1
-    ),
-    .appShortcut(
-      id: CommandPaletteItemID.terminalOpenInFork,
-      title: "Open in Fork",
-      category: .navigation,
-      kind: .openInFork,
-      keywords: ["fork", "open", "workspace"],
-      priorityTier: 1
-    ),
-    .appShortcut(
-      id: CommandPaletteItemID.terminalOpenWeb,
-      title: "Open Web",
-      category: .navigation,
-      kind: .openWeb,
-      keywords: ["web", "browser", "remote", "repository"],
-      priorityTier: 1
-    ),
-  ]
-  if includeFileActions {
-    items.append(
-      .appShortcut(
-        id: CommandPaletteItemID.globalCopyPath,
-        title: "Copy Path",
-        category: .navigation,
-        kind: .copyPath,
-        keywords: ["copy", "path", "clipboard"],
-        priorityTier: 1
-      )
-    )
-    items.append(
-      .appShortcut(
-        id: CommandPaletteItemID.globalRevealInFinder,
-        title: "Reveal in Finder",
-        category: .navigation,
-        kind: .revealInFinder,
-        keywords: ["finder", "open", "show"],
-        priorityTier: 1
-      )
-    )
-  }
-  return items
-}
-
 private func viewToggleCommandItems() -> [CommandPaletteItem] {
   [
     .appShortcut(
@@ -660,63 +730,93 @@ private func viewToggleCommandItems() -> [CommandPaletteItem] {
   ]
 }
 
-private func canvasCommandItems() -> [CommandPaletteItem] {
-  [
-    .appShortcut(
-      id: CommandPaletteItemID.globalExpandCanvasCard,
-      title: "Expand / Restore Canvas Card",
+private func canvasLayoutItems(isAvailable: Bool) -> [CommandPaletteItem] {
+  guard isAvailable else { return [] }
+  return [
+    CommandPaletteItem(
+      id: CommandPaletteItemID.canvasLayoutCenter,
+      title: "Layout: Center",
+      subtitle: nil,
+      kind: .layoutCenter,
       category: .view,
-      kind: .expandCanvasCard,
-      keywords: ["canvas", "expand", "restore", "focus", "fullscreen", "card"]
+      defaultSuggestion: true,
+      keywords: ["layout", "center", "canvas"],
+      priorityTier: 1
     ),
-    .appShortcut(
-      id: CommandPaletteItemID.globalArrangeCanvasCards,
-      title: "Arrange Canvas Cards",
+    CommandPaletteItem(
+      id: CommandPaletteItemID.canvasLayoutArrange,
+      title: "Layout: Arrange",
+      subtitle: nil,
+      kind: .layoutArrange,
       category: .view,
-      kind: .arrangeCanvasCards,
-      keywords: ["canvas", "arrange", "layout", "pack", "fit"]
+      defaultSuggestion: true,
+      keywords: ["layout", "arrange", "canvas"],
+      priorityTier: 1
     ),
-    .appShortcut(
-      id: CommandPaletteItemID.globalOrganizeCanvasCards,
-      title: "Organize Canvas Cards",
+    CommandPaletteItem(
+      id: CommandPaletteItemID.canvasLayoutOverview,
+      title: "Layout: Overview",
+      subtitle: nil,
+      kind: .layoutOverview,
       category: .view,
-      kind: .organizeCanvasCards,
-      keywords: ["canvas", "organize", "grid", "tidy", "uniform"]
-    ),
-    .appShortcut(
-      id: CommandPaletteItemID.globalSelectAllCanvasCards,
-      title: "Select All Canvas Cards",
-      category: .view,
-      kind: .selectAllCanvasCards,
-      keywords: ["canvas", "select all", "broadcast"]
+      defaultSuggestion: true,
+      keywords: ["layout", "overview", "canvas"],
+      priorityTier: 1
     ),
   ]
 }
 
-private func canvasLayoutItems() -> [CommandPaletteItem] {
-  [
-    .appShortcut(
-      id: CommandPaletteItemID.canvasLayoutCenter,
-      title: "Layout: Center",
-      category: .view,
-      kind: .layoutCenter,
-      keywords: ["layout", "center", "canvas"],
+private func worktreeTargetItems(isAvailable: Bool) -> [CommandPaletteItem] {
+  guard isAvailable else { return [] }
+  return [
+    CommandPaletteItem(
+      id: CommandPaletteItemID.terminalOpenInVSCode,
+      title: "Open in VS Code",
+      subtitle: nil,
+      kind: .openInVSCode,
+      category: .navigation,
+      defaultSuggestion: true,
+      keywords: ["vscode", "code", "workspace"],
       priorityTier: 1
     ),
-    .appShortcut(
-      id: CommandPaletteItemID.canvasLayoutArrange,
-      title: "Layout: Arrange",
-      category: .view,
-      kind: .layoutArrange,
-      keywords: ["layout", "arrange", "canvas"],
+    CommandPaletteItem(
+      id: CommandPaletteItemID.terminalOpenInFork,
+      title: "Open in Fork",
+      subtitle: nil,
+      kind: .openInFork,
+      category: .navigation,
+      defaultSuggestion: true,
+      keywords: ["fork", "open", "workspace"],
       priorityTier: 1
     ),
-    .appShortcut(
-      id: CommandPaletteItemID.canvasLayoutOverview,
-      title: "Layout: Overview",
-      category: .view,
-      kind: .layoutOverview,
-      keywords: ["layout", "overview", "canvas"],
+    CommandPaletteItem(
+      id: CommandPaletteItemID.terminalOpenWeb,
+      title: "Open Web",
+      subtitle: nil,
+      kind: .openWeb,
+      category: .navigation,
+      defaultSuggestion: true,
+      keywords: ["web", "browser", "repository"],
+      priorityTier: 1
+    ),
+    CommandPaletteItem(
+      id: CommandPaletteItemID.terminalCopyPath,
+      title: "Copy Path",
+      subtitle: nil,
+      kind: .copyPath,
+      category: .navigation,
+      defaultSuggestion: true,
+      keywords: ["copy", "path", "clipboard"],
+      priorityTier: 1
+    ),
+    CommandPaletteItem(
+      id: CommandPaletteItemID.terminalRevealInFinder,
+      title: "Reveal in Finder",
+      subtitle: nil,
+      kind: .revealInFinder,
+      category: .navigation,
+      defaultSuggestion: true,
+      keywords: ["finder", "open", "show"],
       priorityTier: 1
     ),
   ]

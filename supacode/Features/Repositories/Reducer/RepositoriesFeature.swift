@@ -9,11 +9,11 @@ nonisolated let githubIntegrationRecoveryInterval: Duration = .seconds(15)
 nonisolated let worktreeCreationProgressLineLimit = 200
 nonisolated let worktreeCreationProgressUpdateStride = 20
 nonisolated let archiveScriptProgressLineLimit = 200
-let secondsPerDay: Double = 86_400
-let repositoriesLogger = SupaLogger("RepositoriesFeature")
 nonisolated let restoreCanvasModeOnLaunchAppStorageKey = "restoreCanvasModeOnLaunch"
 nonisolated let lastCanvasFocusedWorktreeIDAppStorageKey = "lastCanvasFocusedWorktreeID"
 nonisolated let lastCanvasFocusedTabIDAppStorageKey = "lastCanvasFocusedTabID"
+let secondsPerDay: Double = 86_400
+let repositoriesLogger = SupaLogger("RepositoriesFeature")
 
 nonisolated struct WorktreeCreationProgressUpdateThrottle {
   private let stride: Int
@@ -249,6 +249,8 @@ struct RepositoriesFeature {
     var preCanvasWorktreeID: Worktree.ID?
     var preCanvasTerminalTargetID: Worktree.ID?
     var canvasReturnWorktreeID: Worktree.ID?
+    var shouldCenterRestoredCanvasSoloTab = false
+    var shouldFocusRestoredCanvasAtScaleOne = false
     var isShelfActive: Bool = false
     var worktreeHistoryBackStack: [Worktree.ID] = []
     var worktreeHistoryForwardStack: [Worktree.ID] = []
@@ -258,8 +260,6 @@ struct RepositoriesFeature {
     /// The Shelf's book list is derived from this set so a sidebar
     /// worktree that's never been touched does not appear as a spine.
     var openedWorktreeIDs: Set<Worktree.ID> = []
-    var shouldCenterRestoredCanvasSoloTab = false
-    var shouldFocusRestoredCanvasAtScaleOne = false
     var launchRestoreMode: LaunchRestoreMode = .lastFocusedWorktree
     var shouldRestoreLastFocusedWorktree = false
     var shouldSelectFirstAfterReload = false
@@ -357,14 +357,14 @@ struct RepositoriesFeature {
     case selectShelfBook(Int)
     case markWorktreeOpened(Worktree.ID)
     case markWorktreeClosed(Worktree.ID)
-    case consumeRestoredCanvasSoloTabCentering
-    case consumeRestoredCanvasScaleOneFocus
     case setSidebarSelectedWorktreeIDs(Set<Worktree.ID>)
     case selectRepository(Repository.ID?)
     case selectWorktree(Worktree.ID?, focusTerminal: Bool = false, recordHistory: Bool = true)
     case focusCanvasRepository(Repository.ID)
     case focusCanvasWorktree(Worktree.ID)
     case focusCanvasTab(worktreeID: Worktree.ID, tabID: TerminalTabID, shouldCenterInViewport: Bool = false)
+    case consumeRestoredCanvasSoloTabCentering
+    case consumeRestoredCanvasScaleOneFocus
     case selectNextWorktree
     case selectPreviousWorktree
     case consumeCanvasFocusRequest(Int)

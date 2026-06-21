@@ -17,6 +17,7 @@ struct CommandPaletteFeatureTests {
       "global.new-worktree",
       "global.refresh-worktrees",
       "global.jump-to-latest-unread",
+      "global.restore-running-tab",
       "global.view-archived-worktrees",
       "global.install-cli",
       "global.toggle-left-sidebar",
@@ -33,6 +34,15 @@ struct CommandPaletteFeatureTests {
       ])
     #endif
     expectNoDifference(items.map(\.id), expectedIDs)
+  }
+
+  @Test func commandPaletteItems_omitsRestoreRunningTabWhenTmuxBackedTerminalsDisabled() {
+    let items = CommandPaletteFeature.commandPaletteItems(
+      from: RepositoriesFeature.State(),
+      showsRestoreRunningTab: false
+    )
+
+    #expect(!items.contains { $0.id == "global.restore-running-tab" })
   }
 
   @Test func commandPaletteItems_includesShowDiffWhenWorktreeSelected() {
@@ -339,6 +349,108 @@ struct CommandPaletteFeatureTests {
 
     let filtered = CommandPaletteFeature.filterItems(items: items, query: "jump unread")
     #expect(filtered.first?.id == "global.jump-to-latest-unread")
+  }
+
+  @Test func commandPaletteItems_includeRestoreRunningTabAction() {
+    let items = CommandPaletteFeature.commandPaletteItems(from: RepositoriesFeature.State())
+    let item = items.first { $0.id == "global.restore-running-tab" }
+
+    #expect(item?.title == "Restore Running Tab")
+    #expect(item?.kind == .restoreRunningTab)
+    #expect(item?.appShortcutCommandID == nil)
+  }
+
+  @Test func detachedCardModeShowsOnlyRecoveryRows() {
+    let candidate = TmuxDetachedCardCandidate(record: TmuxRawWindowRecord(
+      sessionName: "prowl-cards",
+      windowID: "@21",
+      windowName: "shell",
+      activePath: "/tmp/repo/wt",
+      activeCommand: "zsh",
+      activeTitle: "codex",
+      managed: "1",
+      cardID: "card-21",
+      worktreeID: "/tmp/repo/wt",
+      worktreePath: "/tmp/repo/wt",
+      repositoryRoot: "/tmp/repo",
+      createdAt: "2026-05-28T12:00:00Z"
+    ))!
+    let presentation = TmuxDetachedCardPresentation(
+      candidate: candidate,
+      repositoryName: "Repo",
+      homePath: "/Users/yam"
+    )
+    var state = CommandPaletteFeature.State()
+
+    state.enterDetachedCardsMode(
+      presentations: [presentation],
+      diagnostics: [
+        TmuxCardStructureDiagnostic(
+          message: "Unexpected tmux sessions found. Restore will show safe managed cards only.",
+          socketPath: "/tmp/prowl.sock",
+          sessionNames: ["prowl-cards", "prowl-wt-old"],
+          windowCountsBySession: ["prowl-cards": 1, "prowl-wt-old": 1]
+        )
+      ]
+    )
+
+    #expect(state.mode == .detachedCards)
+    #expect(state.query == "")
+    #expect(state.selectedIndex == 0)
+    #expect(state.isPresented)
+    #expect(state.detachedCards.rows.first?.title == "Repo / wt")
+    #expect(state.detachedCards.diagnostics.first?.sessionNames == ["prowl-cards", "prowl-wt-old"])
+  }
+
+  @Test func detachedCardItemsShowAllRowsForEmptyQuery() {
+    let alpha = makeDetachedCardPresentation(
+      windowID: "@21",
+      cardID: "card-21",
+      worktreeName: "alpha",
+      activeTitle: "codex alpha"
+    )
+    let beta = makeDetachedCardPresentation(
+      windowID: "@22",
+      cardID: "card-22",
+      worktreeName: "beta",
+      activeTitle: "codex beta"
+    )
+
+    let result = CommandPaletteFeature.filterDetachedCardItems(
+      presentations: [beta, alpha],
+      query: ""
+    )
+
+    expectNoDifference(result.map(\.id), [
+      "tmux.restore-card.prowl.sock:@22",
+      "tmux.restore-card.prowl.sock:@21",
+    ])
+    #expect(result.map(\.title) == ["Repo / beta", "Repo / alpha"])
+  }
+
+  @Test func detachedCardItemsFilterRowsForNonEmptyQuery() {
+    let alpha = makeDetachedCardPresentation(
+      windowID: "@21",
+      cardID: "card-21",
+      worktreeName: "alpha",
+      activeTitle: "codex alpha"
+    )
+    let beta = makeDetachedCardPresentation(
+      windowID: "@22",
+      cardID: "card-22",
+      worktreeName: "beta",
+      activeTitle: "codex beta"
+    )
+
+    let result = CommandPaletteFeature.filterDetachedCardItems(
+      presentations: [alpha, beta],
+      query: "beta"
+    )
+
+    #expect(result.map(\.id) == ["tmux.restore-card.prowl.sock:@22"])
+    #expect(
+      result.first?.kind == .restoreDetachedCard(TmuxDetachedCardCandidate.ID(rawValue: "prowl.sock:@22"))
+    )
   }
 
   @Test func commandPaletteItems_skipsPendingAndDeletingWorktrees() {
@@ -1955,6 +2067,45 @@ struct CommandPaletteFeatureTests {
     await store.receive(.delegate(.openRepository))
   }
 
+  @Test func detachedCardSelectionSupportsToggleRangeAndConfirm() async {
+    let first = TmuxDetachedCardCandidate.ID(rawValue: "prowl.sock:@1")
+    let second = TmuxDetachedCardCandidate.ID(rawValue: "prowl.sock:@2")
+    let third = TmuxDetachedCardCandidate.ID(rawValue: "prowl.sock:@3")
+    var state = CommandPaletteFeature.State()
+    state.enterDetachedCardsMode(
+      presentations: [
+        makeDetachedCardPresentation(windowID: "@1", cardID: "card-1", worktreeName: "one", activeTitle: "One"),
+        makeDetachedCardPresentation(windowID: "@2", cardID: "card-2", worktreeName: "two", activeTitle: "Two"),
+        makeDetachedCardPresentation(windowID: "@3", cardID: "card-3", worktreeName: "three", activeTitle: "Three"),
+      ],
+      diagnostics: []
+    )
+    let store = TestStore(initialState: state) {
+      CommandPaletteFeature()
+    }
+
+    await store.send(.toggleDetachedCardSelection(first)) {
+      $0.detachedCards.selectedIDs = [first]
+      $0.detachedCards.lastSelectedID = first
+    }
+    await store.send(.selectDetachedCardRange(third, orderedIDs: [first, second, third])) {
+      $0.detachedCards.selectedIDs = [first, second, third]
+      $0.detachedCards.lastSelectedID = third
+    }
+    await store.send(.toggleDetachedCardSelection(second)) {
+      $0.detachedCards.selectedIDs = [first, third]
+      $0.detachedCards.lastSelectedID = second
+    }
+    await store.send(.confirmDetachedCardSelection) {
+      $0.isPresented = false
+      $0.query = ""
+      $0.selectedIndex = nil
+      $0.mode = .commands
+      $0.detachedCards = CommandPaletteFeature.State.DetachedCardsState()
+    }
+    await store.receive(.delegate(.restoreDetachedCards([first, third])))
+  }
+
   @Test func activateGhosttyCommandDispatchesDelegate() async {
     let now = Date(timeIntervalSince1970: 7_654_321)
     let item = makeItem(
@@ -2048,7 +2199,7 @@ private func testCategory(for kind: CommandPaletteItem.Kind) -> CommandPaletteIt
     .mergePullRequest, .closePullRequest, .copyFailingJobURL, .copyCiFailureLogs,
     .rerunFailedJobs, .openFailingCheckDetails:
     return .pullRequest
-  case .ghosttyCommand:
+  case .ghosttyCommand, .restoreRunningTab, .restoreDetachedCard:
     return .terminal
   case .toggleLeftSidebar, .toggleActiveAgentsPanel, .toggleCanvas,
     .expandCanvasCard, .arrangeCanvasCards, .organizeCanvasCards, .selectAllCanvasCards,
@@ -2072,17 +2223,44 @@ private func testDefaultSuggestion(for kind: CommandPaletteItem.Kind) -> Bool {
     .toggleShelf, .showDiff,
     .revealInFinder, .copyPath, .revealInSidebar,
     .runScript, .stopRunScript, .togglePinWorktree, .renameBranch,
-    .openRepositorySettings:
+    .openRepositorySettings, .restoreRunningTab:
     return true
   case .worktreeSelect, .changeFocusedTabIcon,
     .ghosttyCommand, .openRepositoryOnCodeHost,
-    .deleteWorktree, .runCustomCommand:
+    .deleteWorktree, .restoreDetachedCard, .runCustomCommand:
     return false
   #if DEBUG
     case .debugTestToast, .debugSimulateUpdateFound, .debugLightDockNotificationDot:
       return true
   #endif
   }
+}
+
+private func makeDetachedCardPresentation(
+  windowID: String,
+  cardID: String,
+  worktreeName: String,
+  activeTitle: String
+) -> TmuxDetachedCardPresentation {
+  let candidate = TmuxDetachedCardCandidate(record: TmuxRawWindowRecord(
+    sessionName: TmuxTerminalTarget.cardContainerSession,
+    windowID: windowID,
+    windowName: "shell",
+    activePath: "/tmp/repo/\(worktreeName)",
+    activeCommand: "zsh",
+    activeTitle: activeTitle,
+    managed: "1",
+    cardID: cardID,
+    worktreeID: "/tmp/repo/\(worktreeName)",
+    worktreePath: "/tmp/repo/\(worktreeName)",
+    repositoryRoot: "/tmp/repo",
+    createdAt: "2026-05-28T12:00:00Z"
+  ))!
+  return TmuxDetachedCardPresentation(
+    candidate: candidate,
+    repositoryName: "Repo",
+    homePath: "/Users/yam"
+  )
 }
 
 private func makePullRequest(

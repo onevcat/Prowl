@@ -9,6 +9,7 @@ enum CommandPaletteItemID {
   static let globalNewWorktree = "global.new-worktree"
   static let globalRefreshWorktrees = "global.refresh-worktrees"
   static let globalJumpToLatestUnread = "global.jump-to-latest-unread"
+  static let globalRestoreRunningTab = "global.restore-running-tab"
   static let globalViewArchivedWorktrees = "global.view-archived-worktrees"
   static let globalInstallCLI = "global.install-cli"
   static let globalToggleLeftSidebar = "global.toggle-left-sidebar"
@@ -34,6 +35,8 @@ enum CommandPaletteItemID {
   static let terminalOpenInVSCode = "terminal.open-in-vscode"
   static let terminalOpenInFork = "terminal.open-in-fork"
   static let terminalOpenWeb = "terminal.open-web"
+  static let terminalCopyPath = "terminal.copy-path"
+  static let terminalRevealInFinder = "terminal.reveal-in-finder"
 
   static func openRepositorySettings(_ repositoryID: Repository.ID) -> CommandPaletteItem.ID {
     "repo.\(repositoryID).open-settings"
@@ -51,6 +54,7 @@ enum CommandPaletteItemID {
       globalNewWorktree,
       globalRefreshWorktrees,
       globalJumpToLatestUnread,
+      globalRestoreRunningTab,
       globalViewArchivedWorktrees,
       globalInstallCLI,
       globalToggleLeftSidebar,
@@ -76,6 +80,8 @@ enum CommandPaletteItemID {
       terminalOpenInVSCode,
       terminalOpenInFork,
       terminalOpenWeb,
+      terminalCopyPath,
+      terminalRevealInFinder,
     ]
   }
 
@@ -85,6 +91,10 @@ enum CommandPaletteItemID {
 
   static func changeFocusedTabIcon(_ worktreeID: Worktree.ID) -> CommandPaletteItem.ID {
     "terminal.\(worktreeID).change-focused-tab-icon"
+  }
+
+  static func restoreDetachedCard(_ id: TmuxDetachedCardCandidate.ID) -> CommandPaletteItem.ID {
+    "detached-card.\(id).restore"
   }
 
   static func ghosttyCommand(_ command: GhosttyCommand) -> CommandPaletteItem.ID {
@@ -188,6 +198,10 @@ func delegateAction(for kind: CommandPaletteItem.Kind) -> CommandPaletteFeature.
     return .openRepositorySettings(repositoryID)
   case .runCustomCommand(let index, _, _):
     return .runCustomCommand(index)
+  case .restoreRunningTab:
+    return .restoreRunningTab
+  case .restoreDetachedCard(let id):
+    return .restoreDetachedCard(id)
   case .openPullRequest,
     .openRepositoryOnCodeHost,
     .markPullRequestReady,
@@ -378,6 +392,8 @@ func pullRequestDelegateAction(
     .stopRunScript,
     .togglePinWorktree,
     .renameBranch,
+    .restoreRunningTab,
+    .restoreDetachedCard,
     .deleteWorktree,
     .openRepositorySettings,
     .runCustomCommand:

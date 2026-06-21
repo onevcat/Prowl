@@ -10,10 +10,13 @@ struct TerminalClient {
   /// (e.g. when a palette dismisses and the leftmost pane reclaims first responder).
   var selectedSurfaceID: @MainActor @Sendable (Worktree.ID) -> UUID?
   var latestUnreadNotification: @MainActor @Sendable () -> NotificationLocation?
+  var focusWorktreeInCanvas: @MainActor @Sendable (Worktree.ID) -> Bool
   var focusSurface: @MainActor @Sendable (Worktree.ID, UUID) -> Bool
   var markNotificationRead: @MainActor @Sendable (Worktree.ID, UUID) -> Void
   var markNotificationsReadForSurface: @MainActor @Sendable (Worktree.ID, UUID) -> Void
   var focusedDirectoryPath: @MainActor @Sendable (_ worktreeID: Worktree.ID) -> String?
+  var detachedTmuxCards: @MainActor @Sendable () async -> TmuxCardRecoverySnapshot
+  var restoreDetachedTmuxCard: @MainActor @Sendable (TmuxDetachedCardCandidate.ID, [Worktree]) async -> Bool
 
   enum Command: Equatable {
     case createTab(Worktree, runSetupScriptIfNew: Bool)
@@ -89,10 +92,13 @@ extension TerminalClient: DependencyKey {
     canvasFocusedWorktreeID: { nil },
     selectedSurfaceID: { _ in nil },
     latestUnreadNotification: { nil },
+    focusWorktreeInCanvas: { _ in false },
     focusSurface: { _, _ in false },
     markNotificationRead: { _, _ in },
     markNotificationsReadForSurface: { _, _ in },
-    focusedDirectoryPath: { _ in nil }
+    focusedDirectoryPath: { _ in nil },
+    detachedTmuxCards: { TmuxCardRecoverySnapshot(candidates: [], diagnostics: []) },
+    restoreDetachedTmuxCard: { _, _ in false }
   )
 
   static let testValue = TerminalClient(
@@ -101,10 +107,13 @@ extension TerminalClient: DependencyKey {
     canvasFocusedWorktreeID: { nil },
     selectedSurfaceID: { _ in nil },
     latestUnreadNotification: { nil },
+    focusWorktreeInCanvas: { _ in false },
     focusSurface: { _, _ in false },
     markNotificationRead: { _, _ in },
     markNotificationsReadForSurface: { _, _ in },
-    focusedDirectoryPath: { _ in nil }
+    focusedDirectoryPath: { _ in nil },
+    detachedTmuxCards: { TmuxCardRecoverySnapshot(candidates: [], diagnostics: []) },
+    restoreDetachedTmuxCard: { _, _ in false }
   )
 }
 

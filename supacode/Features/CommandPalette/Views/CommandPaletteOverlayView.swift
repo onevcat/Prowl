@@ -38,6 +38,8 @@ struct CommandPaletteOverlayView: View {
                 selectedIndex: $store.selectedIndex,
                 items: filteredItems,
                 sections: sectionedSuggestions,
+                mode: store.mode,
+                detachedCards: store.detachedCards,
                 resolvedKeybindings: resolvedKeybindings,
                 hoveredID: $hoveredID,
                 isQueryFocused: isQueryFocused,
@@ -46,13 +48,29 @@ struct CommandPaletteOverlayView: View {
                   case .exit:
                     store.send(.setPresented(false))
                   case .submit:
-                    submitSelected(rows: filteredItems)
+                    if store.mode == .detachedCards {
+                      store.send(.confirmDetachedCardSelection)
+                    } else {
+                      submitSelected(rows: filteredItems)
+                    }
                   case .move(let direction):
                     moveSelection(direction, rows: filteredItems)
                   }
                 },
                 activate: { id in
                   activate(id, rows: filteredItems)
+                },
+                toggleDetachedCardSelection: { id in
+                  store.send(.toggleDetachedCardSelection(id))
+                },
+                selectDetachedCardRange: { id, orderedIDs in
+                  store.send(.selectDetachedCardRange(id, orderedIDs: orderedIDs))
+                },
+                confirmDetachedCardSelection: {
+                  store.send(.confirmDetachedCardSelection)
+                },
+                cancelDetachedCardSelection: {
+                  store.send(.setPresented(false))
                 }
               )
               .zIndex(1)
@@ -89,6 +107,14 @@ struct CommandPaletteOverlayView: View {
       resetSelection(rows: updatedItems)
     }
     .onChange(of: items) { _, _ in
+      let updatedItems = refreshFilteredItems(items: items)
+      updateSelection(rows: updatedItems)
+    }
+    .onChange(of: store.mode) { _, _ in
+      let updatedItems = refreshFilteredItems(items: items)
+      updateSelection(rows: updatedItems)
+    }
+    .onChange(of: store.detachedCards) { _, _ in
       let updatedItems = refreshFilteredItems(items: items)
       updateSelection(rows: updatedItems)
     }
@@ -139,30 +165,47 @@ struct CommandPaletteOverlayView: View {
 
   private func activate(_ id: CommandPaletteItem.ID, rows: [CommandPaletteItem]) {
     guard let item = rows.first(where: { $0.id == id }) else { return }
+    if store.mode == .detachedCards, case .restoreDetachedCard(let candidateID) = item.kind {
+      store.send(.toggleDetachedCardSelection(candidateID))
+      return
+    }
     store.send(.activateItem(item))
   }
 
   private func refreshFilteredItems(items: [CommandPaletteItem]) -> [CommandPaletteItem] {
     let now = Date.now
-    let trimmed = store.query.trimmingCharacters(in: .whitespacesAndNewlines)
-    if trimmed.isEmpty {
-      let suggestions = CommandPaletteFeature.suggestions(
-        items: items,
-        recencyByID: store.recencyByItemID,
-        now: now
-      )
-      sectionedSuggestions = suggestions
-      filteredItems = suggestions.allItems
-    } else {
+    switch store.mode {
+    case .commands:
+      let trimmed = store.query.trimmingCharacters(in: .whitespacesAndNewlines)
+      if trimmed.isEmpty {
+        let suggestions = CommandPaletteFeature.suggestions(
+          items: items,
+          recencyByID: store.recencyByItemID,
+          now: now
+        )
+        sectionedSuggestions = suggestions
+        filteredItems = suggestions.allItems
+      } else {
+        sectionedSuggestions = nil
+        filteredItems = CommandPaletteFeature.filterItems(
+          items: items,
+          query: trimmed,
+          recencyByID: store.recencyByItemID,
+          now: now
+        )
+      }
+      return filteredItems
+    case .detachedCards:
       sectionedSuggestions = nil
-      filteredItems = CommandPaletteFeature.filterItems(
-        items: items,
-        query: trimmed,
+      let updatedItems = CommandPaletteFeature.filterDetachedCardItems(
+        presentations: store.detachedCards.rows,
+        query: store.query,
         recencyByID: store.recencyByItemID,
         now: now
       )
+      filteredItems = updatedItems
+      return updatedItems
     }
-    return filteredItems
   }
 
   private func focusQueryField() {
@@ -193,11 +236,17 @@ private struct CommandPaletteCard: View {
   @Binding var selectedIndex: Int?
   let items: [CommandPaletteItem]
   let sections: CommandPaletteSuggestions?
+  let mode: CommandPaletteFeature.State.Mode
+  let detachedCards: CommandPaletteFeature.State.DetachedCardsState
   let resolvedKeybindings: ResolvedKeybindingMap
   @Binding var hoveredID: CommandPaletteItem.ID?
   let isQueryFocused: Bool
   let onEvent: (CommandPaletteKeyboardEvent) -> Void
   let activate: (CommandPaletteItem.ID) -> Void
+  let toggleDetachedCardSelection: (TmuxDetachedCardCandidate.ID) -> Void
+  let selectDetachedCardRange: (TmuxDetachedCardCandidate.ID, [TmuxDetachedCardCandidate.ID]) -> Void
+  let confirmDetachedCardSelection: () -> Void
+  let cancelDetachedCardSelection: () -> Void
 
   private var backgroundColor: Color {
     Color(nsColor: .windowBackgroundColor)
@@ -219,20 +268,268 @@ private struct CommandPaletteCard: View {
         onEvent(.exit)
       }
 
-      CommandPaletteList(
-        rows: items,
-        sections: sections,
-        resolvedKeybindings: resolvedKeybindings,
-        selectedIndex: $selectedIndex,
-        hoveredID: $hoveredID
-      ) { id in
-        activate(id)
+      if mode == .detachedCards {
+        RestoreCardsPanel(
+          rows: items,
+          selectedIDs: detachedCards.selectedIDs,
+          diagnostics: detachedCards.diagnostics,
+          selectedIndex: $selectedIndex,
+          hoveredID: $hoveredID,
+          toggleSelection: toggleDetachedCardSelection,
+          selectRange: selectDetachedCardRange,
+          cancel: cancelDetachedCardSelection,
+          restore: confirmDetachedCardSelection
+        )
+      } else {
+        CommandPaletteList(
+          rows: items,
+          sections: sections,
+          emptyMessage: "",
+          resolvedKeybindings: resolvedKeybindings,
+          selectedIndex: $selectedIndex,
+          hoveredID: $hoveredID
+        ) { id in
+          activate(id)
+        }
       }
     }
-    .frame(maxWidth: 500)
+    .frame(maxWidth: mode == .detachedCards ? 760 : 500)
     .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 14))
     .shadow(radius: 32, x: 0, y: 12)
     .padding(Self.padding)
+  }
+}
+
+private struct RestoreCardsPanel: View {
+  let rows: [CommandPaletteItem]
+  let selectedIDs: Set<TmuxDetachedCardCandidate.ID>
+  let diagnostics: [TmuxCardStructureDiagnostic]
+  @Binding var selectedIndex: Int?
+  @Binding var hoveredID: CommandPaletteItem.ID?
+  let toggleSelection: (TmuxDetachedCardCandidate.ID) -> Void
+  let selectRange: (TmuxDetachedCardCandidate.ID, [TmuxDetachedCardCandidate.ID]) -> Void
+  let cancel: () -> Void
+  let restore: () -> Void
+
+  private var orderedCandidateIDs: [TmuxDetachedCardCandidate.ID] {
+    rows.compactMap(\.detachedCardCandidateID)
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      VStack(alignment: .leading, spacing: 8) {
+        HStack {
+          Text("Detached Cards")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+
+          Spacer()
+
+          Text("\(rows.count) available")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color(nsColor: .controlBackgroundColor), in: Capsule())
+        }
+
+        ForEach(Array(diagnostics.enumerated()), id: \.offset) { _, diagnostic in
+          Text(diagnostic.message)
+            .font(.caption)
+            .foregroundStyle(Color(nsColor: .systemOrange))
+            .lineLimit(2)
+        }
+      }
+      .padding(.horizontal, 14)
+      .padding(.vertical, 10)
+
+      Divider()
+
+      if rows.isEmpty {
+        Text("No matching detached cards")
+          .font(.callout)
+          .foregroundStyle(.secondary)
+          .frame(maxWidth: .infinity, minHeight: 260)
+      } else {
+        ScrollViewReader { proxy in
+          ScrollView {
+            LazyVStack(alignment: .leading, spacing: 8) {
+              ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                RestoreCardRow(
+                  row: row,
+                  shortcutIndex: index < 5 ? index : nil,
+                  isHighlighted: selectedIndex == index || hoveredID == row.id,
+                  isSelected: row.detachedCardCandidateID.map { selectedIDs.contains($0) } ?? false
+                ) {
+                  handleRowClick(row)
+                }
+                .id(row.id)
+                .onHover { hovering in
+                  hoveredID = hovering ? row.id : nil
+                }
+              }
+            }
+            .padding(12)
+          }
+          .frame(maxHeight: 420)
+          .onChange(of: selectedIndex) { _, index in
+            guard let index, rows.indices.contains(index) else { return }
+            withAnimation(.easeOut(duration: 0.12)) {
+              proxy.scrollTo(rows[index].id, anchor: .center)
+            }
+          }
+        }
+      }
+
+      Divider()
+
+      HStack(spacing: 12) {
+        Text(selectionSummary)
+          .font(.callout)
+          .foregroundStyle(.secondary)
+
+        Spacer()
+
+        Button("Cancel") {
+          cancel()
+        }
+        .keyboardShortcut(.cancelAction)
+        .help("Cancel restore")
+
+        Button("Restore Selected") {
+          restore()
+        }
+        .keyboardShortcut(.defaultAction)
+        .disabled(selectedIDs.isEmpty)
+        .buttonStyle(.borderedProminent)
+        .help("Restore selected cards")
+      }
+      .padding(14)
+      .background(Color(nsColor: .controlBackgroundColor).opacity(0.55))
+    }
+  }
+
+  private var selectionSummary: String {
+    switch selectedIDs.count {
+    case 0:
+      return "No cards selected"
+    case 1:
+      return "1 card selected"
+    default:
+      return "\(selectedIDs.count) cards selected"
+    }
+  }
+
+  private func handleRowClick(_ row: CommandPaletteItem) {
+    guard let candidateID = row.detachedCardCandidateID else { return }
+    if NSEvent.modifierFlags.contains(.shift) {
+      selectRange(candidateID, orderedCandidateIDs)
+    } else {
+      toggleSelection(candidateID)
+    }
+  }
+}
+
+private struct RestoreCardRow: View {
+  let row: CommandPaletteItem
+  let shortcutIndex: Int?
+  let isHighlighted: Bool
+  let isSelected: Bool
+  let action: () -> Void
+
+  var body: some View {
+    Button(action: action) {
+      HStack(alignment: .center, spacing: 12) {
+        selectionBox
+
+        VStack(alignment: .leading, spacing: 5) {
+          Text(row.title)
+            .font(.headline.weight(.semibold))
+            .foregroundStyle(primaryForeground)
+            .lineLimit(1)
+
+          ForEach(subtitleLines, id: \.self) { line in
+            Text(line)
+              .font(.caption)
+              .foregroundStyle(secondaryForeground)
+              .lineLimit(1)
+          }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+
+        VStack(alignment: .trailing, spacing: 8) {
+          if let shortcutIndex {
+            ShortcutSymbolsView(symbols: commandPaletteShortcutSymbols(for: shortcutIndex))
+              .font(.callout.weight(.semibold))
+              .foregroundStyle(primaryForeground)
+          }
+
+          Text("Detached")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(secondaryForeground)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(Color(nsColor: .controlBackgroundColor).opacity(0.75), in: Capsule())
+        }
+      }
+      .padding(.horizontal, 14)
+      .padding(.vertical, 12)
+      .contentShape(Rectangle())
+      .background(background)
+      .clipShape(.rect(cornerRadius: 7))
+      .overlay(
+        RoundedRectangle(cornerRadius: 7)
+          .stroke(borderColor)
+      )
+    }
+    .buttonStyle(.plain)
+    .help("Select \(row.title)")
+  }
+
+  private var subtitleLines: [String] {
+    row.subtitle?.split(separator: "\n", omittingEmptySubsequences: true).map(String.init) ?? []
+  }
+
+  private var primaryForeground: Color {
+    isSelected ? Color(nsColor: .alternateSelectedControlTextColor) : Color(nsColor: .labelColor)
+  }
+
+  private var secondaryForeground: Color {
+    isSelected ? Color(nsColor: .alternateSelectedControlTextColor).opacity(0.82) : Color(nsColor: .secondaryLabelColor)
+  }
+
+  private var background: some View {
+    Group {
+      if isSelected {
+        Color.accentColor
+      } else if isHighlighted {
+        Color(nsColor: .unemphasizedSelectedContentBackgroundColor)
+      } else {
+        Color.clear
+      }
+    }
+  }
+
+  private var borderColor: Color {
+    isSelected ? Color.accentColor.opacity(0.9) : Color(nsColor: .separatorColor).opacity(isHighlighted ? 0.75 : 0)
+  }
+
+  private var selectionBox: some View {
+    ZStack {
+      RoundedRectangle(cornerRadius: 5)
+        .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+        .background(
+          RoundedRectangle(cornerRadius: 5)
+            .fill(isSelected ? Color(nsColor: .alternateSelectedControlTextColor).opacity(0.22) : .clear)
+        )
+        .frame(width: 22, height: 22)
+
+      if isSelected {
+        Image(systemName: "checkmark")
+          .font(.caption.weight(.bold))
+          .foregroundStyle(Color(nsColor: .alternateSelectedControlTextColor))
+      }
+    }
   }
 }
 
@@ -418,6 +715,7 @@ private struct CommandPaletteList: View {
 
   let rows: [CommandPaletteItem]
   let sections: CommandPaletteSuggestions?
+  let emptyMessage: String
   let resolvedKeybindings: ResolvedKeybindingMap
   @Binding var selectedIndex: Int?
   @Binding var hoveredID: CommandPaletteItem.ID?
@@ -425,7 +723,11 @@ private struct CommandPaletteList: View {
 
   var body: some View {
     if rows.isEmpty {
-      EmptyView()
+      if emptyMessage.isEmpty {
+        EmptyView()
+      } else {
+        CommandPaletteEmptyRowsView(message: emptyMessage)
+      }
     } else {
       ScrollViewReader { proxy in
         ScrollView {
@@ -509,6 +811,17 @@ private struct CommandPaletteSectionHeader: View {
   }
 }
 
+private struct CommandPaletteEmptyRowsView: View {
+  let message: String
+
+  var body: some View {
+    Text(message)
+      .font(.caption)
+      .foregroundStyle(.secondary)
+      .frame(maxWidth: .infinity, minHeight: CommandPaletteList.listHeight)
+  }
+}
+
 @MainActor
 private enum CommandPaletteAppIcons {
   static let openInVSCode = appImage(for: .vscode)
@@ -543,12 +856,11 @@ private struct CommandPaletteRowView: View {
       .copyFailingJobURL,
       .copyCiFailureLogs,
       .rerunFailedJobs, .openFailingCheckDetails, .worktreeSelect, .changeFocusedTabIcon,
-      .toggleLeftSidebar, .toggleActiveAgentsPanel, .toggleCanvas,
-      .expandCanvasCard, .arrangeCanvasCards, .organizeCanvasCards, .selectAllCanvasCards,
-      .toggleShelf, .showDiff,
+      .toggleLeftSidebar, .toggleActiveAgentsPanel, .toggleCanvas, .expandCanvasCard, .arrangeCanvasCards,
+      .organizeCanvasCards, .selectAllCanvasCards, .toggleShelf, .showDiff,
       .revealInFinder, .copyPath, .revealInSidebar,
       .runScript, .stopRunScript, .togglePinWorktree, .renameBranch,
-      .openRepositorySettings, .runCustomCommand:
+      .openRepositorySettings, .restoreRunningTab, .restoreDetachedCard, .runCustomCommand:
       return nil
     case .deleteWorktree:
       return "Delete"
@@ -587,6 +899,8 @@ private struct CommandPaletteRowView: View {
       return "arrow.clockwise"
     case .jumpToLatestUnread:
       return "bell.badge"
+    case .restoreRunningTab, .restoreDetachedCard:
+      return "arrow.counterclockwise"
     case .ghosttyCommand:
       return "terminal"
     case .openPullRequest, .openRepositoryOnCodeHost:
@@ -622,9 +936,9 @@ private struct CommandPaletteRowView: View {
     case .arrangeCanvasCards:
       return "rectangle.3.group"
     case .organizeCanvasCards:
-      return "square.grid.2x2"
+      return "rectangle.3.group.bubble"
     case .selectAllCanvasCards:
-      return "checkmark.rectangle.stack"
+      return "selection.pin.in.out"
     case .toggleShelf:
       return "books.vertical"
     case .showDiff:
@@ -670,10 +984,12 @@ private struct CommandPaletteRowView: View {
       return CommandPaletteAppIcons.revealInFinder
     case .checkForUpdates, .openRepository, .layoutCenter, .layoutArrange, .layoutOverview,
       .openWeb, .copyPath, .openSettings, .newWorktree, .viewArchivedWorktrees, .refreshWorktrees, .installCLI,
-      .jumpToLatestUnread, .ghosttyCommand, .openPullRequest, .openRepositoryOnCodeHost,
+      .jumpToLatestUnread, .restoreRunningTab, .restoreDetachedCard, .ghosttyCommand, .openPullRequest,
+      .openRepositoryOnCodeHost,
       .markPullRequestReady, .mergePullRequest, .closePullRequest, .copyFailingJobURL, .copyCiFailureLogs,
       .rerunFailedJobs, .openFailingCheckDetails, .worktreeSelect, .changeFocusedTabIcon,
-      .toggleLeftSidebar, .toggleActiveAgentsPanel, .toggleCanvas, .toggleShelf, .showDiff,
+      .toggleLeftSidebar, .toggleActiveAgentsPanel, .toggleCanvas, .expandCanvasCard, .arrangeCanvasCards,
+      .organizeCanvasCards, .selectAllCanvasCards, .toggleShelf, .showDiff,
       .revealInSidebar, .runScript, .stopRunScript, .togglePinWorktree, .renameBranch,
       .openRepositorySettings, .deleteWorktree, .runCustomCommand:
       return nil
@@ -693,9 +1009,8 @@ private struct CommandPaletteRowView: View {
       .copyFailingJobURL,
       .copyCiFailureLogs,
       .rerunFailedJobs, .openFailingCheckDetails, .changeFocusedTabIcon,
-      .toggleLeftSidebar, .toggleActiveAgentsPanel, .toggleCanvas,
-      .expandCanvasCard, .arrangeCanvasCards, .organizeCanvasCards, .selectAllCanvasCards,
-      .toggleShelf, .showDiff,
+      .toggleLeftSidebar, .toggleActiveAgentsPanel, .toggleCanvas, .expandCanvasCard, .arrangeCanvasCards,
+      .organizeCanvasCards, .selectAllCanvasCards, .toggleShelf, .showDiff,
       .revealInFinder, .copyPath, .revealInSidebar,
       .runScript, .stopRunScript, .togglePinWorktree, .renameBranch,
       .openRepositorySettings,
@@ -703,6 +1018,8 @@ private struct CommandPaletteRowView: View {
       return true
     case .worktreeSelect:
       return false
+    case .restoreRunningTab, .restoreDetachedCard:
+      return true
     #if DEBUG
       case .debugTestToast, .debugSimulateUpdateFound, .debugLightDockNotificationDot:
         return true
@@ -763,11 +1080,6 @@ private struct CommandPaletteRowView: View {
         }
       }
       .padding(8)
-      // The selected row paints an accent background; force a dark color scheme
-      // for its content so the label and symbols stay legible in light mode.
-      .transformEnvironment(\.colorScheme) { colorScheme in
-        if isSelected { colorScheme = .dark }
-      }
       .background(rowBackground)
       .clipShape(.rect(cornerRadius: 14))
     }
@@ -823,6 +1135,10 @@ private struct CommandPaletteRowView: View {
       base = "Refresh Worktrees"
     case .jumpToLatestUnread:
       base = "Jump to Latest Unread"
+    case .restoreRunningTab:
+      base = "Restore Running Tab"
+    case .restoreDetachedCard:
+      base = "Restore Card"
     case .ghosttyCommand:
       base = row.title
     case .openWeb:
@@ -854,7 +1170,7 @@ private struct CommandPaletteRowView: View {
     case .toggleCanvas:
       base = "Toggle Canvas"
     case .expandCanvasCard:
-      base = "Expand / Restore Canvas Card"
+      base = "Expand Canvas Card"
     case .arrangeCanvasCards:
       base = "Arrange Canvas Cards"
     case .organizeCanvasCards:
@@ -985,4 +1301,11 @@ private func commandPaletteShortcutSymbols(for index: Int) -> [String] {
 
 private func commandPaletteShortcutLabel(for index: Int) -> String {
   "Cmd+\(index + 1)"
+}
+
+private extension CommandPaletteItem {
+  var detachedCardCandidateID: TmuxDetachedCardCandidate.ID? {
+    guard case .restoreDetachedCard(let id) = kind else { return nil }
+    return id
+  }
 }

@@ -10,12 +10,19 @@ struct CanvasView: View {
     var hasPerformedInitialFit = false
   }
 
+  struct CanvasShortcuts {
+    let selectAll: AppShortcut?
+    let arrange: AppShortcut?
+    let organize: AppShortcut?
+    let expand: AppShortcut?
+  }
+
   enum DirectionalNewTerminalDirectoryMode: Equatable {
     case currentDirectory
     case worktreeDirectory
   }
 
-  private enum CanvasToastStyle: Equatable {
+  enum CanvasToastStyle: Equatable {
     case wrap
     case directional
     case zoomBlocked
@@ -37,7 +44,6 @@ struct CanvasView: View {
     let directoryMode: DirectionalNewTerminalDirectoryMode
   }
 
-  @Environment(CommandKeyObserver.self) var commandKeyObserver
   @Environment(\.resolvedKeybindings) var resolvedKeybindings
   @Environment(\.canvasMaxModeActive) var canvasMaxModeActive
 
@@ -71,6 +77,7 @@ struct CanvasView: View {
   @State var canvasScale: CGFloat = 1.0
   @State var lastCanvasScale: CGFloat = 1.0
   @State var selectionState = CanvasSelectionState()
+  @State var isCanvasSelectionModifierPressed = false
   @State var pendingCreatedTabID: TerminalTabID?
   @State var lastTitleBarTapDate: Date = .distantPast
   @State var activeResize: [TerminalTabID: ActiveResize] = [:]
@@ -192,24 +199,38 @@ struct CanvasView: View {
     _hasPerformedInitialFit = State(initialValue: viewportState.hasPerformedInitialFit)
   }
 
+  var canvasShortcuts: CanvasShortcuts {
+    CanvasShortcuts(
+      selectAll: AppShortcuts.resolvedShortcut(
+        for: AppShortcuts.CommandID.selectAllCanvasCards,
+        in: resolvedKeybindings
+      ),
+      arrange: AppShortcuts.resolvedShortcut(
+        for: AppShortcuts.CommandID.arrangeCanvasCards,
+        in: resolvedKeybindings
+      ),
+      organize: AppShortcuts.resolvedShortcut(
+        for: AppShortcuts.CommandID.organizeCanvasCards,
+        in: resolvedKeybindings
+      ),
+      expand: AppShortcuts.resolvedShortcut(
+        for: AppShortcuts.CommandID.expandCanvasCard,
+        in: resolvedKeybindings
+      )
+    )
+  }
+
   var body: some View {
-    let selectAllCanvasShortcut = AppShortcuts.resolvedShortcut(
-      for: AppShortcuts.CommandID.selectAllCanvasCards,
-      in: resolvedKeybindings
-    )
-    let arrangeCanvasShortcut = AppShortcuts.resolvedShortcut(
-      for: AppShortcuts.CommandID.arrangeCanvasCards,
-      in: resolvedKeybindings
-    )
-    let organizeCanvasShortcut = AppShortcuts.resolvedShortcut(
-      for: AppShortcuts.CommandID.organizeCanvasCards,
-      in: resolvedKeybindings
-    )
-    let expandCanvasShortcut = AppShortcuts.resolvedShortcut(
-      for: AppShortcuts.CommandID.expandCanvasCard,
-      in: resolvedKeybindings
-    )
     let _ = configReloadCounter
+    canvasLifecycle(
+      canvasKeyboardShortcuts(
+        canvasOverlays(canvasScrollContent),
+        shortcuts: canvasShortcuts
+      )
+    )
+  }
+
+  var canvasScrollContent: some View {
     CanvasScrollContainer(
       offset: $canvasOffset,
       lastOffset: $lastCanvasOffset,
@@ -220,109 +241,135 @@ struct CanvasView: View {
       canZoom: { expandedTabID == nil },
       onZoomBlocked: showMaxModeZoomBlockedToast
     ) {
-      GeometryReader { _ in
-        let activeStates = terminalManager.activeWorktreeStates
-        let canvasCards = collectCanvasCards(from: activeStates)
-        let allCardKeys = canvasCards.map(\.key)
-        let allTabIDs = collectVisibleTabIDs(from: activeStates)
+      canvasGeometryContent
+    }
+  }
 
-        // Background layer: handles canvas pan and tap-to-clear.
-        Color.clear
-          .onAppear {
-            if !allCardKeys.isEmpty {
-              hasSeenCanvasCards = true
-            }
-            ensureLayouts(for: canvasCards)
-            if !allCardKeys.isEmpty {
-              layoutStore.ensureZOrder(for: allCardKeys)
-            }
-            pruneSelection(previousOrder: [], currentOrder: allTabIDs, states: activeStates)
-            syncBroadcastCallbacks(states: activeStates)
-            fulfillPendingFocusRequest(focusRequest, states: activeStates)
+  var canvasGeometryContent: some View {
+    GeometryReader { _ in
+      canvasGeometryLayers
+    }
+    .contentShape(.rect)
+    .simultaneousGesture(canvasZoomGesture, isEnabled: expandedTabID == nil)
+    .animation(.easeInOut(duration: 0.22), value: focusViewportAnimationID)
+    .onGeometryChange(for: CGSize.self) { proxy in
+      proxy.size
+    } action: { newSize in
+      viewportSize = newSize
+      let currentCardKeys = collectCardKeys(from: terminalManager.activeWorktreeStates)
+      if !hasPerformedInitialFit, !currentCardKeys.isEmpty {
+        hasPerformedInitialFit = true
+        if !CanvasLayoutStore.hasAutoArrangedInSession {
+          CanvasLayoutStore.hasAutoArrangedInSession = true
+          if layoutStore.shouldAutoArrangeOnInitialEntry(for: currentCardKeys) {
+            arrangeCards()
           }
-          .onChange(of: allCardKeys) { _, _ in
-            let latestStates = terminalManager.activeWorktreeStates
-            let latestCards = collectCanvasCards(from: latestStates)
-            let latestKeys = latestCards.map(\.key)
-            if latestKeys.isEmpty {
-              CanvasLayoutStore.hasAutoArrangedInSession = false
-              if hasSeenCanvasCards {
-                layoutStore.prune(to: [])
-              }
-            } else {
-              hasSeenCanvasCards = true
-            }
-            ensureLayouts(for: latestCards)
-            if !latestKeys.isEmpty {
-              layoutStore.ensureZOrder(for: latestKeys)
-            }
-            syncBroadcastCallbacks(states: latestStates)
-            recoverCanvasFocusIfNeeded(states: latestStates)
-            fulfillPendingFocusRequest(focusRequest, states: latestStates)
-          }
-          .onChange(of: allTabIDs) { oldTabIDs, newTabIDs in
-            if let createdTabID = newlyCreatedCanvasTabID(
-              previousTabIDs: oldTabIDs,
-              currentTabIDs: newTabIDs
-            ) {
-              pendingCreatedTabID = createdTabID
-            } else if let pendingCreatedTabID, !newTabIDs.contains(pendingCreatedTabID) {
-              self.pendingCreatedTabID = nil
-            }
-            let latestStates = terminalManager.activeWorktreeStates
-            ensureLayouts(for: collectCanvasCards(from: latestStates))
-            let latestTabIDs = collectVisibleTabIDs(from: latestStates)
-            pruneSelection(previousOrder: oldTabIDs, currentOrder: latestTabIDs, states: latestStates)
-            if let expandedTabID, !latestTabIDs.contains(expandedTabID) {
-              cancelExpandForRelayout()
-            }
-            pruneDirectoryShorteningState(keeping: latestStates)
-            recoverCanvasFocusIfNeeded(states: latestStates)
-            fulfillPendingFocusRequest(focusRequest, states: latestStates)
-          }
-          .onChange(of: focusRequest) { _, newRequest in
-            fulfillPendingFocusRequest(newRequest, states: activeStates)
-          }
-          .contentShape(.rect)
-          .accessibilityAddTraits(.isButton)
-          .onTapGesture { clearSelection(states: activeStates) }
-          .gesture(canvasPanGesture, isEnabled: expandedTabID == nil)
-
-        cardsLayer(activeStates: activeStates)
-      }
-      .contentShape(.rect)
-      .simultaneousGesture(canvasZoomGesture, isEnabled: expandedTabID == nil)
-      .animation(.easeInOut(duration: 0.22), value: focusViewportAnimationID)
-      .onGeometryChange(for: CGSize.self) { proxy in
-        proxy.size
-      } action: { newSize in
-        viewportSize = newSize
-        let currentCardKeys = collectCardKeys(from: terminalManager.activeWorktreeStates)
-        if !hasPerformedInitialFit, !currentCardKeys.isEmpty {
-          hasPerformedInitialFit = true
-          if !CanvasLayoutStore.hasAutoArrangedInSession {
-            CanvasLayoutStore.hasAutoArrangedInSession = true
-            if layoutStore.shouldAutoArrangeOnInitialEntry(for: currentCardKeys) {
-              arrangeCards()
-            }
-          }
-          fitToView(canvasSize: newSize)
         }
-        if let pendingCenterRequest,
-          centerCanvas(on: pendingCenterRequest.tabID, scale: pendingCenterRequest.scale)
-        {
-          self.pendingCenterRequest = nil
-        }
+        fitToView(canvasSize: newSize)
       }
-      .onGeometryChange(for: CGFloat.self) { proxy in
-        proxy.safeAreaInsets.top
-      } action: { newInset in
-        viewportTopSafeAreaInset = newInset
+      if let pendingCenterRequest,
+        centerCanvas(on: pendingCenterRequest.tabID, scale: pendingCenterRequest.scale)
+      {
+        self.pendingCenterRequest = nil
       }
     }
+    .onGeometryChange(for: CGFloat.self) { proxy in
+      proxy.safeAreaInsets.top
+    } action: { newInset in
+      viewportTopSafeAreaInset = newInset
+    }
+  }
+
+  @ViewBuilder
+  var canvasGeometryLayers: some View {
+    let activeStates = terminalManager.activeWorktreeStates
+    let canvasCards = collectCanvasCards(from: activeStates)
+    let allCardKeys = canvasCards.map(\.key)
+    let allTabIDs = collectVisibleTabIDs(from: activeStates)
+
+    canvasBackgroundLayer(
+      activeStates: activeStates,
+      canvasCards: canvasCards,
+      allCardKeys: allCardKeys,
+      allTabIDs: allTabIDs
+    )
+    cardsLayer(activeStates: activeStates)
+  }
+
+  func canvasBackgroundLayer(
+    activeStates: [WorktreeTerminalState],
+    canvasCards: [CanvasCardDescriptor],
+    allCardKeys: [String],
+    allTabIDs: [TerminalTabID]
+  ) -> some View {
+    Color.clear
+      .onAppear {
+        if !allCardKeys.isEmpty {
+          hasSeenCanvasCards = true
+        }
+        ensureLayouts(for: canvasCards)
+        if !allCardKeys.isEmpty {
+          layoutStore.ensureZOrder(for: allCardKeys)
+        }
+        pruneSelection(previousOrder: [], currentOrder: allTabIDs, states: activeStates)
+        syncBroadcastCallbacks(states: activeStates)
+        fulfillPendingFocusRequest(focusRequest, states: activeStates)
+      }
+      .onChange(of: allCardKeys) { _, _ in
+        let latestStates = terminalManager.activeWorktreeStates
+        let latestCards = collectCanvasCards(from: latestStates)
+        let latestKeys = latestCards.map(\.key)
+        if latestKeys.isEmpty {
+          CanvasLayoutStore.hasAutoArrangedInSession = false
+          if hasSeenCanvasCards {
+            layoutStore.prune(to: [])
+          }
+        } else {
+          hasSeenCanvasCards = true
+        }
+        ensureLayouts(for: latestCards)
+        if !latestKeys.isEmpty {
+          layoutStore.ensureZOrder(for: latestKeys)
+        }
+        syncBroadcastCallbacks(states: latestStates)
+        recoverCanvasFocusIfNeeded(states: latestStates)
+        fulfillPendingFocusRequest(focusRequest, states: latestStates)
+      }
+      .onChange(of: allTabIDs) { oldTabIDs, newTabIDs in
+        if let createdTabID = newlyCreatedCanvasTabID(
+          previousTabIDs: oldTabIDs,
+          currentTabIDs: newTabIDs
+        ) {
+          pendingCreatedTabID = createdTabID
+        } else if let pendingCreatedTabID, !newTabIDs.contains(pendingCreatedTabID) {
+          self.pendingCreatedTabID = nil
+        }
+        let latestStates = terminalManager.activeWorktreeStates
+        ensureLayouts(for: collectCanvasCards(from: latestStates))
+        let latestTabIDs = collectVisibleTabIDs(from: latestStates)
+        pruneSelection(previousOrder: oldTabIDs, currentOrder: latestTabIDs, states: latestStates)
+        if let expandedTabID, !latestTabIDs.contains(expandedTabID) {
+          cancelExpandForRelayout()
+        }
+        pruneDirectoryShorteningState(keeping: latestStates)
+        recoverCanvasFocusIfNeeded(states: latestStates)
+        fulfillPendingFocusRequest(focusRequest, states: latestStates)
+      }
+      .onChange(of: focusRequest) { _, newRequest in
+        fulfillPendingFocusRequest(newRequest, states: activeStates)
+      }
+      .contentShape(.rect)
+      .accessibilityAddTraits(.isButton)
+      .onTapGesture { clearSelection(states: activeStates) }
+      .gesture(canvasPanGesture, isEnabled: expandedTabID == nil)
+  }
+
+  func canvasOverlays<Content: View>(_ content: Content) -> some View {
+    content
     .overlay(alignment: .bottomTrailing) {
       canvasBottomTrailingOverlay
     }
+    .background(selectionModifierObserver)
     .overlay(alignment: .bottomLeading) {
       canvasBottomLeadingOverlay
     }
@@ -334,49 +381,60 @@ struct CanvasView: View {
           content.offset(y: proxy.size.height / 3)
         }
     }
+  }
+
+  func canvasKeyboardShortcuts<Content: View>(
+    _ content: Content,
+    shortcuts: CanvasShortcuts
+  ) -> some View {
+    content
     .onKeyPress(.escape) {
       guard selectionState.isBroadcasting else { return .ignored }
       clearSelection(states: terminalManager.activeWorktreeStates)
       return .handled
     }
     .onKeyPress(
-      selectAllCanvasShortcut?.keyEquivalent ?? AppShortcuts.selectAllCanvasCards.keyEquivalent,
+      shortcuts.selectAll?.keyEquivalent ?? AppShortcuts.selectAllCanvasCards.keyEquivalent,
       phases: .down
     ) { keyPress in
       // Bail when the binding is disabled in Settings (resolved shortcut is nil);
       // otherwise the app-default key would still fire despite being unbound.
-      guard let shortcut = selectAllCanvasShortcut else { return .ignored }
+      guard let shortcut = shortcuts.selectAll else { return .ignored }
       guard keyPress.modifiers == shortcut.modifiers else { return .ignored }
       selectAllCards()
       return .handled
     }
     .onKeyPress(
-      arrangeCanvasShortcut?.keyEquivalent ?? AppShortcuts.arrangeCanvasCards.keyEquivalent,
+      shortcuts.arrange?.keyEquivalent ?? AppShortcuts.arrangeCanvasCards.keyEquivalent,
       phases: .down
     ) { keyPress in
-      guard let shortcut = arrangeCanvasShortcut else { return .ignored }
+      guard let shortcut = shortcuts.arrange else { return .ignored }
       guard keyPress.modifiers == shortcut.modifiers else { return .ignored }
       arrangeCardsWithFit()
       return .handled
     }
     .onKeyPress(
-      organizeCanvasShortcut?.keyEquivalent ?? AppShortcuts.organizeCanvasCards.keyEquivalent,
+      shortcuts.organize?.keyEquivalent ?? AppShortcuts.organizeCanvasCards.keyEquivalent,
       phases: .down
     ) { keyPress in
-      guard let shortcut = organizeCanvasShortcut else { return .ignored }
+      guard let shortcut = shortcuts.organize else { return .ignored }
       guard keyPress.modifiers == shortcut.modifiers else { return .ignored }
       organizeCardsWithFit()
       return .handled
     }
     .onKeyPress(
-      expandCanvasShortcut?.keyEquivalent ?? AppShortcuts.expandCanvasCard.keyEquivalent,
+      shortcuts.expand?.keyEquivalent ?? AppShortcuts.expandCanvasCard.keyEquivalent,
       phases: .down
     ) { keyPress in
-      guard let shortcut = expandCanvasShortcut else { return .ignored }
+      guard let shortcut = shortcuts.expand else { return .ignored }
       guard keyPress.modifiers == shortcut.modifiers else { return .ignored }
       toggleExpandFocusedCard()
       return .handled
     }
+  }
+
+  func canvasLifecycle<Content: View>(_ content: Content) -> some View {
+    content
     .modifier(
       CanvasMaxModeStateModifier(
         isActive: expandedTabID != nil,
@@ -437,22 +495,32 @@ struct CanvasView: View {
     .focusedSceneValue(\.canvasDirectionalNewTerminalLeaderAction) {
       armDirectionalNewTerminalChord()
     }
-    .focusedSceneValue(\.toggleCanvasZoomAction) {
-      toggleFocusedCanvasZoom()
-    }
     .focusedSceneValue(\.toggleCanvasMaxModeAction) {
       toggleCanvasMaxMode()
     }
   }
 
-  func showsSelectionShield(for tabID: TerminalTabID, in state: WorktreeTerminalState) -> Bool {
+  var selectionModifierObserver: some View {
+    CanvasSelectionModifierObserver(isPressed: $isCanvasSelectionModifierPressed)
+      .frame(width: 0, height: 0)
+      .allowsHitTesting(false)
+  }
+
+  func showsSelectionShield(for tabID: TerminalTabID) -> Bool {
     shouldShowCanvasSelectionShield(
-      commandKeyPressed: commandKeyObserver.isPressed,
+      selectionModifierPressed: isCanvasSelectionModifierPressed,
       isSelecting: selectionState.isSelecting,
       isBroadcasting: selectionState.isBroadcasting,
-      isPrimaryTab: selectionState.primaryTabID == tabID,
-      mouseOverLink: state.surfaceView(for: tabID)?.bridge.state.mouseOverLink
+      isPrimaryTab: selectionState.primaryTabID == tabID
     )
+  }
+
+  static func shouldRenderCard(
+    _ tabID: TerminalTabID,
+    expandedTabID: TerminalTabID?
+  ) -> Bool {
+    guard let expandedTabID else { return true }
+    return tabID == expandedTabID
   }
 
   // MARK: - Cards Layer
@@ -463,13 +531,14 @@ struct CanvasView: View {
   @ViewBuilder
   func cardsLayer(activeStates: [WorktreeTerminalState]) -> some View {
     // Pin to .topLeading and fill the viewport so each card's `.offset()` keeps
-    // the same (0,0) origin it had under GeometryReader — otherwise the scrim's
-    // full-size frame would resize the stack and shift the cards' base position.
+    // the same (0,0) origin it had under GeometryReader.
     ZStack(alignment: .topLeading) {
       ForEach(activeStates, id: \.worktreeID) { state in
         Group {
           ForEach(state.tabManager.tabs) { tab in
-            if state.surfaceView(for: tab.id) != nil {
+            if state.surfaceView(for: tab.id) != nil,
+              Self.shouldRenderCard(tab.id, expandedTabID: expandedTabID)
+            {
               cardView(for: tab, in: state, activeStates: activeStates)
             }
           }
@@ -477,26 +546,6 @@ struct CanvasView: View {
         .onChange(of: state.tabManager.selectedTabId) { _, _ in
           syncFocusToSelectedTab(in: state, states: terminalManager.activeWorktreeStates)
         }
-      }
-
-      // Dimming scrim behind the expanded card (above all other cards). Tapping
-      // it — i.e. anywhere outside the expanded card, including the padding —
-      // restores the layout.
-      if expandedTabID != nil {
-        // Material gives a GPU-efficient backdrop blur; a small black overlay
-        // adds the dim. The whole scrim is kept partly transparent so the
-        // background cards stay clearly visible (still running) behind it.
-        Rectangle()
-          .fill(.ultraThinMaterial)
-          .overlay(Color.black.opacity(0.1))
-          .opacity(0.7)
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
-          .contentShape(.rect)
-          .accessibilityAddTraits(.isButton)
-          .accessibilityLabel("Restore expanded card")
-          .onTapGesture { collapseExpand() }
-          .zIndex(5_000)
-          .transition(.opacity)
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -517,10 +566,7 @@ struct CanvasView: View {
       commandID: AppShortcuts.CommandID.expandCanvasCard,
       in: resolvedKeybindings
     )
-    // The expanded card magic-moves between its in-canvas frame and the full
-    // viewport. AnimatedExpandableCard drives every sub-value (size, center,
-    // scale) from one animatable progress, so they advance frame by frame in
-    // lock-step. The canvas transform is never touched → background frozen.
+    // Reuse main's expand geometry, but without an animation modifier or scrim.
     let fromGeometry = nonExpandedGeometry(for: tab.id, baseLayout: baseLayout)
     let toGeometry = expandedGeometry()
     let unfocusedSplitOverlay = terminalManager.unfocusedSplitOverlay()
@@ -566,10 +612,10 @@ struct CanvasView: View {
         isExpanded: isCardExpanded,
         expandHelp: expandHelp,
         canvasScale: isCardExpanded ? 1 : canvasScale,
-        showsSelectionShield: showsSelectionShield(for: tab.id, in: state),
+        showsSelectionShield: showsSelectionShield(for: tab.id),
         onTap: {
-          let cmdHeld = NSEvent.modifierFlags.contains(.command)
-          if cmdHeld {
+          let selectionModifierHeld = NSEvent.modifierFlags.contains(.option)
+          if selectionModifierHeld {
             handleSelectionShieldTap(tab.id, surfaceState: state, states: activeStates)
           } else {
             focusSingleCard(tab.id, states: activeStates, ensureVisibleInViewport: true)
@@ -616,12 +662,6 @@ struct CanvasView: View {
         }
       )
     }
-    // Animatable progress is interpolated by binding the animation to this
-    // card's expanded state. A plain withAnimation around expandedTabID doesn't
-    // reach here (the GeometryReader's value-scoped .animation swallows the
-    // implicit transaction), so drive it explicitly. Only the toggled card's
-    // value changes, so the rest stay put.
-    .animation(expandAnimation, value: isCardExpanded)
     .zIndex(zIndex(for: tab.id, cardKey: cardKey))
     .onAppear {
       requestDirectoryShortening(for: tab.id, normalizedDisplayPath: normalizedDisplayPath)
@@ -2273,15 +2313,14 @@ func canvasFocusVisibilityBounds(
 }
 
 func shouldShowCanvasSelectionShield(
-  commandKeyPressed: Bool,
+  selectionModifierPressed: Bool,
   isSelecting: Bool,
   isBroadcasting: Bool,
-  isPrimaryTab: Bool,
-  mouseOverLink: String?
+  isPrimaryTab: Bool
 ) -> Bool {
   if isSelecting { return true }
   if isBroadcasting && !isPrimaryTab { return true }
-  if commandKeyPressed, mouseOverLink == nil { return true }
+  if selectionModifierPressed { return true }
   return false
 }
 

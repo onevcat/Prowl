@@ -4,9 +4,6 @@ import Foundation
 import PostHog
 import SwiftUI
 
-private let repositoryWebURLUnavailableTitle = "Repository URL not available"
-private let repositoryWebURLUnavailableMessage = "Prowl could not determine a web URL for this repository."
-
 @Reducer
 struct AppFeature {
   @ObservableState
@@ -30,8 +27,8 @@ struct AppFeature {
     var lastKnownSystemNotificationsEnabled: Bool
     var launchRestoreMode: LaunchRestoreMode
     var hasAppliedInitialViewMode = false
-    var isAwaitingLaunchLayoutRestore = false
     var suppressLayoutSaveUntilRelaunch = false
+    var isAwaitingLaunchLayoutRestore = false
     var launchedAt: Date?
     @Shared(.appStorage("leftSidebarHidden")) var isLeftSidebarHidden = false
     @Presents var alert: AlertState<Alert>?
@@ -67,12 +64,11 @@ struct AppFeature {
     case requestQuit
     case newTerminal
     case jumpToLatestUnread
+    case toggleCanvasZoom
     case toggleLeftSidebar
     case showLeftSidebar
     case setLeftSidebarHidden(Bool)
     case canvasSidebarAutoHideDelayElapsed
-    case newTerminalFromCanvas(focusedWorktreeID: Worktree.ID?)
-    case newTerminalFromCanvasUsingPWD(focusedWorktreeID: Worktree.ID?)
     case runScript
     case runCustomCommand(Int)
     case canvasFocusedWorktreeChanged(Worktree.ID?)
@@ -80,9 +76,11 @@ struct AppFeature {
     case runScriptPromptPresented(Bool)
     case saveRunScriptAndRun
     case stopRunScript
+    case newTerminalFromCanvas(focusedWorktreeID: Worktree.ID?)
+    case newTerminalFromCanvasUsingPWD(focusedWorktreeID: Worktree.ID?)
     case closeTab
-    case killTab
     case closeTabFromCanvas(focusedWorktreeID: Worktree.ID?)
+    case killTab
     case closeSurface
     case startSearch
     case searchSelection
@@ -104,21 +102,22 @@ struct AppFeature {
   @Dependency(\.date.now) var now
   @Dependency(RepositoryPersistenceClient.self) var repositoryPersistence
   @Dependency(WorkspaceClient.self) var workspaceClient
-  @Dependency(GitClientDependency.self) var gitClient
-  @Dependency(OpenURLClient.self) var openURLClient
-  @Dependency(ClipboardClient.self) var clipboardClient
   @Dependency(SettingsWindowClient.self) var settingsWindowClient
   @Dependency(AppLifecycleClient.self) var appLifecycleClient
   @Dependency(NotificationSoundClient.self) var notificationSoundClient
   @Dependency(SystemNotificationClient.self) var systemNotificationClient
+  @Dependency(ClipboardClient.self) var clipboardClient
   @Dependency(DockClient.self) var dockClient
+  @Dependency(GitClientDependency.self) var gitClient
+  @Dependency(OpenURLClient.self) var openURLClient
   @Dependency(TerminalClient.self) var terminalClient
   @Dependency(WorktreeInfoWatcherClient.self) var worktreeInfoWatcher
   @Dependency(CustomShortcutRegistryClient.self) var customShortcutRegistryClient
   @Dependency(\.continuousClock) var clock
+  @Dependency(\.uuid) var uuid
 
   var body: some Reducer<State, Action> {
-    let core = Reduce<State, Action> { state, action in
+    Reduce { state, action in
       switch action {
       case .toggleLeftSidebar:
         state.$isLeftSidebarHidden.withLock { $0.toggle() }
@@ -190,20 +189,14 @@ struct AppFeature {
             .cancellable(id: CancelID.periodicRefresh, cancelInFlight: true)
           )
         case .inactive, .background:
-          var effects: [Effect<Action>] = [
-            .cancel(id: CancelID.periodicRefresh),
-            .cancel(id: CancelID.canvasSidebarAutoHide),
-          ]
+          var effects: [Effect<Action>] = [.cancel(id: CancelID.periodicRefresh)]
           if state.settings.restoreTerminalLayoutOnLaunch, !state.suppressLayoutSaveUntilRelaunch {
             appLogger.info("[LayoutRestore] scenePhase=\(String(describing: phase)), saving layout snapshot")
             effects.append(.run { _ in await terminalClient.send(.saveLayoutSnapshot) })
           }
           return .merge(effects)
         @unknown default:
-          return .merge(
-            .cancel(id: CancelID.periodicRefresh),
-            .cancel(id: CancelID.canvasSidebarAutoHide)
-          )
+          return .cancel(id: CancelID.periodicRefresh)
         }
 
       case .repositories(.delegate(.selectedWorktreeChanged(let worktree))):
@@ -213,12 +206,6 @@ struct AppFeature {
           state.repositories.selectedRepository?.capabilities.supportsRunnableFolderActions == true
           && state.repositories.selectedRepository?.capabilities.supportsWorktrees == false
         guard let worktree else {
-          let selectedTerminalWorktreeID: Worktree.ID? =
-            if state.repositories.isShowingFreestyle {
-              FreestyleTerminal.worktreeID
-            } else {
-              nil
-            }
           state.openActionSelection = .finder
           state.selectedRunScript = ""
           state.selectedCustomCommands = []
@@ -230,16 +217,13 @@ struct AppFeature {
           state.isRunScriptPromptPresented = false
           var effects: [Effect<Action>] = [
             .run { _ in
-              await terminalClient.send(.setSelectedWorktreeID(selectedTerminalWorktreeID))
+              await terminalClient.send(.setSelectedWorktreeID(nil))
             },
             .run { _ in
               await worktreeInfoWatcher.send(.setSelectedWorktreeID(nil))
             },
           ]
-          if !state.repositories.isShowingArchivedWorktrees,
-            !state.repositories.isShowingCanvas,
-            !state.repositories.isShowingFreestyle
-          {
+          if !state.repositories.isShowingArchivedWorktrees, !state.repositories.isShowingCanvas {
             effects.insert(
               .run { _ in
                 await repositoryPersistence.saveLastFocusedWorktreeID(lastFocusedWorktreeID)
@@ -247,14 +231,10 @@ struct AppFeature {
               at: 0
             )
           }
-          let keybindings = menuPreferredKeybindings(
-            resolvedKeybindings: state.resolvedKeybindings,
-            customCommands: state.selectedCustomCommands
-          )
           return .merge(
             .merge(effects),
             .run { _ in
-              await customShortcutRegistryClient.setShortcuts(keybindings)
+              await customShortcutRegistryClient.setShortcuts([])
             }
           )
         }
@@ -289,13 +269,9 @@ struct AppFeature {
             await worktreeInfoWatcher.send(.setSelectedWorktreeID(isPlainFolderSelection ? nil : worktree.id))
           }
         )
-        let keybindings = menuPreferredKeybindings(
-          resolvedKeybindings: state.resolvedKeybindings,
-          customCommands: state.selectedCustomCommands
-        )
         effects.append(
           .run { _ in
-            await customShortcutRegistryClient.setShortcuts(keybindings)
+            await customShortcutRegistryClient.setShortcuts([])
           }
         )
         effects.append(
@@ -334,10 +310,8 @@ struct AppFeature {
           && !repositories.isEmpty
         let shouldRestoreLayout =
           state.launchRestoreMode == .restoreLayout
-          && (
-            state.repositories.snapshotPersistencePhase == .active
-              || canRestoreFromCachedRepositories
-          )
+          && (state.repositories.snapshotPersistencePhase == .active
+            || canRestoreFromCachedRepositories)
         let shouldDeferDefaultView = state.launchRestoreMode == .restoreLayout
         appLogger.info(
           "[LayoutRestore] repositoriesChanged: mode=\(String(describing: state.launchRestoreMode))"
@@ -348,7 +322,6 @@ struct AppFeature {
         )
         if shouldRestoreLayout {
           state.launchRestoreMode = .lastFocusedWorktree
-          state.isAwaitingLaunchLayoutRestore = true
           state.repositories.selection = nil
         }
         state.runScriptStatusByWorktreeID = state.runScriptStatusByWorktreeID.filter { ids.contains($0.key) }
@@ -470,10 +443,6 @@ struct AppFeature {
           customCommands: state.selectedCustomCommands
         )
         let badgeCount = settings.showNotificationDotOnDock ? state.notificationIndicatorCount : 0
-        let keybindings = menuPreferredKeybindings(
-          resolvedKeybindings: state.resolvedKeybindings,
-          customCommands: state.selectedCustomCommands
-        )
         return .merge(
           .send(.repositories(.githubIntegration(.setGithubIntegrationEnabled(settings.githubIntegrationEnabled)))),
           .send(
@@ -521,20 +490,9 @@ struct AppFeature {
             )
           },
           .run { _ in
-            await terminalClient.send(.setAgentDetectionEnabled(agentDetectionEnabled))
-          },
-          .run { _ in
-            await terminalClient.send(
-              .setAnonymousTmuxBackedTerminalsEnabled(settings.useAnonymousTmuxBackedTerminals)
-            )
-          },
-          .run { _ in
             await worktreeInfoWatcher.send(
               .setPullRequestTrackingEnabled(settings.githubIntegrationEnabled)
             )
-          },
-          .run { _ in
-            await customShortcutRegistryClient.setShortcuts(keybindings)
           },
           .run { send in
             guard shouldCheckSystemNotificationPermission else { return }
@@ -659,16 +617,13 @@ struct AppFeature {
         return .none
 
       case .repositoryWebURLUnavailable:
-        state.alert = AlertState {
-          TextState(repositoryWebURLUnavailableTitle)
-        } actions: {
-          ButtonState(role: .cancel, action: .dismiss) {
-            TextState("OK")
-          }
-        } message: {
-          TextState(repositoryWebURLUnavailableMessage)
-        }
-        return .none
+        return .send(
+          .repositories(
+            .showToast(
+              .warning("Unable to determine repository web URL.")
+            )
+          )
+        )
 
       case .requestQuit:
         guard state.settings.confirmBeforeQuit else {
@@ -693,7 +648,7 @@ struct AppFeature {
         return .none
 
       case .newTerminal:
-        guard let worktree = terminalCommandWorktree(repositories: state.repositories) else {
+        guard let worktree = actionTargetWorktree(repositories: state.repositories) else {
           return .none
         }
         analyticsClient.capture("terminal_tab_created", nil)
@@ -720,48 +675,11 @@ struct AppFeature {
           }
         )
 
-      case .newTerminalFromCanvas(let focusedWorktreeID):
-        let worktree =
-          if let focusedWorktreeID,
-            let focusedWorktree = state.repositories.worktree(for: focusedWorktreeID)
-          {
-            focusedWorktree
-          } else {
-            FreestyleTerminal.worktree()
-          }
-        analyticsClient.capture("terminal_tab_created", nil)
-        let shouldRunSetupScript = state.repositories.pendingSetupScriptWorktreeIDs.contains(worktree.id)
-        let inheritFromFocusedSurface = worktree.id == FreestyleTerminal.worktreeID
-        return .run { _ in
-          await terminalClient.send(
-            .createTabFromCanvas(
-              worktree,
-              runSetupScriptIfNew: shouldRunSetupScript,
-              inheritFromFocusedSurface: inheritFromFocusedSurface
-            )
-          )
+      case .toggleCanvasZoom:
+        guard state.repositories.isShowingCanvas else {
+          return .none
         }
-
-      case .newTerminalFromCanvasUsingPWD(let focusedWorktreeID):
-        let worktree =
-          if let focusedWorktreeID,
-            let focusedWorktree = state.repositories.worktree(for: focusedWorktreeID)
-          {
-            focusedWorktree
-          } else {
-            FreestyleTerminal.worktree()
-          }
-        analyticsClient.capture("terminal_tab_created", nil)
-        let shouldRunSetupScript = state.repositories.pendingSetupScriptWorktreeIDs.contains(worktree.id)
-        return .run { _ in
-          await terminalClient.send(
-            .createTabFromCanvas(
-              worktree,
-              runSetupScriptIfNew: shouldRunSetupScript,
-              inheritFromFocusedSurface: true
-            )
-          )
-        }
+        return .send(.repositories(.requestCanvasCommand(.toggleZoom)))
 
       case .runScript:
         guard let worktree = actionTargetWorktree(repositories: state.repositories) else {
@@ -854,12 +772,8 @@ struct AppFeature {
           )
           state.runScriptDraft = ""
           state.isRunScriptPromptPresented = false
-          let keybindings = menuPreferredKeybindings(
-            resolvedKeybindings: state.resolvedKeybindings,
-            customCommands: state.selectedCustomCommands
-          )
           return .run { _ in
-            await customShortcutRegistryClient.setShortcuts(keybindings)
+            await customShortcutRegistryClient.setShortcuts([])
           }
         }
         let rootURL = worktree.repositoryRootURL
@@ -919,22 +833,44 @@ struct AppFeature {
           await terminalClient.send(.stopRunScript(worktree))
         }
 
+      case .newTerminalFromCanvas(let focusedWorktreeID):
+        let worktree = canvasFocusedWorktree(focusedWorktreeID: focusedWorktreeID, state: state)
+          ?? FreestyleTerminal.worktree()
+        analyticsClient.capture("terminal_tab_created", nil)
+        let shouldRunSetupScript = state.repositories.pendingSetupScriptWorktreeIDs.contains(worktree.id)
+        let inheritFromFocusedSurface = worktree.id == FreestyleTerminal.worktreeID
+        return .run { _ in
+          await terminalClient.send(
+            .createTabFromCanvas(
+              worktree,
+              runSetupScriptIfNew: shouldRunSetupScript,
+              inheritFromFocusedSurface: inheritFromFocusedSurface
+            )
+          )
+        }
+
+      case .newTerminalFromCanvasUsingPWD(let focusedWorktreeID):
+        let worktree = canvasFocusedWorktree(focusedWorktreeID: focusedWorktreeID, state: state)
+          ?? FreestyleTerminal.worktree()
+        analyticsClient.capture("terminal_tab_created", nil)
+        let shouldRunSetupScript = state.repositories.pendingSetupScriptWorktreeIDs.contains(worktree.id)
+        return .run { _ in
+          await terminalClient.send(
+            .createTabFromCanvas(
+              worktree,
+              runSetupScriptIfNew: shouldRunSetupScript,
+              inheritFromFocusedSurface: true
+            )
+          )
+        }
+
       case .closeTab:
-        guard let worktree = terminalCommandWorktree(repositories: state.repositories) else {
+        guard let worktree = state.repositories.selectedTerminalWorktree else {
           return .none
         }
         analyticsClient.capture("terminal_tab_closed", nil)
         return .run { _ in
           await terminalClient.send(.closeFocusedTab(worktree))
-        }
-
-      case .killTab:
-        guard let worktree = terminalCommandWorktree(state: state) else {
-          return .none
-        }
-        analyticsClient.capture("terminal_tab_killed", nil)
-        return .run { _ in
-          await terminalClient.send(.killFocusedTab(worktree))
         }
 
       case .closeTabFromCanvas(let focusedWorktreeID):
@@ -946,8 +882,17 @@ struct AppFeature {
           await terminalClient.send(.closeFocusedTab(worktree))
         }
 
-      case .closeSurface:
+      case .killTab:
         guard let worktree = terminalCommandWorktree(repositories: state.repositories) else {
+          return .none
+        }
+        analyticsClient.capture("terminal_tab_killed", nil)
+        return .run { _ in
+          await terminalClient.send(.killFocusedTab(worktree))
+        }
+
+      case .closeSurface:
+        guard let worktree = state.repositories.selectedTerminalWorktree else {
           return .none
         }
         return .run { _ in
@@ -955,7 +900,7 @@ struct AppFeature {
         }
 
       case .startSearch:
-        guard let worktree = terminalCommandWorktree(repositories: state.repositories) else {
+        guard let worktree = state.repositories.selectedTerminalWorktree else {
           return .none
         }
         return .run { _ in
@@ -963,7 +908,7 @@ struct AppFeature {
         }
 
       case .searchSelection:
-        guard let worktree = terminalCommandWorktree(repositories: state.repositories) else {
+        guard let worktree = state.repositories.selectedTerminalWorktree else {
           return .none
         }
         return .run { _ in
@@ -971,7 +916,7 @@ struct AppFeature {
         }
 
       case .navigateSearchNext:
-        guard let worktree = terminalCommandWorktree(repositories: state.repositories) else {
+        guard let worktree = state.repositories.selectedTerminalWorktree else {
           return .none
         }
         return .run { _ in
@@ -979,7 +924,7 @@ struct AppFeature {
         }
 
       case .navigateSearchPrevious:
-        guard let worktree = terminalCommandWorktree(repositories: state.repositories) else {
+        guard let worktree = state.repositories.selectedTerminalWorktree else {
           return .none
         }
         return .run { _ in
@@ -987,7 +932,7 @@ struct AppFeature {
         }
 
       case .endSearch:
-        guard let worktree = terminalCommandWorktree(repositories: state.repositories) else {
+        guard let worktree = state.repositories.selectedTerminalWorktree else {
           return .none
         }
         return .run { _ in
@@ -1044,16 +989,12 @@ struct AppFeature {
           notificationJumpLogger.warning("Tapped notification worktree vanished: \(worktreeID)")
           return .none
         }
-        let focusNotificationSurface = Effect<Action>.run { _ in
-          _ = await terminalClient.focusSurface(worktreeID, surfaceID)
-          await terminalClient.markNotificationsReadForSurface(worktreeID, surfaceID)
-        }
-        guard !state.repositories.isShowingCanvas else {
-          return focusNotificationSurface
-        }
         return .merge(
           .send(.repositories(.selectWorktree(worktreeID, focusTerminal: true))),
-          focusNotificationSurface
+          .run { _ in
+            _ = await terminalClient.focusSurface(worktreeID, surfaceID)
+            await terminalClient.markNotificationsReadForSurface(worktreeID, surfaceID)
+          }
         )
 
       case .alert(.dismiss):
@@ -1070,12 +1011,7 @@ struct AppFeature {
       case .alert:
         return .none
 
-      case .repositories(let repositoriesAction):
-        if state.repositories.isShowingCanvas,
-          shouldCancelCanvasSidebarAutoHide(for: repositoriesAction)
-        {
-          return .cancel(id: CancelID.canvasSidebarAutoHide)
-        }
+      case .repositories:
         return .none
 
       case .settings:
@@ -1091,8 +1027,7 @@ struct AppFeature {
         return reduceTerminalEvent(event, state: &state)
       }
     }
-    core
-    Reduce<State, Action> { state, action in
+    Reduce { state, action in
       // Default-on focus restore: every command-palette delegate action that
       // doesn't intentionally shift selection sends focus back to the active
       // terminal once its effect has dispatched. Runs after `core` so it

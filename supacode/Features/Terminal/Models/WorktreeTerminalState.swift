@@ -209,6 +209,10 @@ final class WorktreeTerminalState {
     tmuxTargetsByTabId[tabId] != nil
   }
 
+  func visibleTmuxWindowIDs() -> Set<TmuxWindowID> {
+    Set(tmuxTargetsByTabId.values.compactMap(\.windowID))
+  }
+
   var canCreateTmuxBackedPlainTab: Bool {
     guard tmuxBackedTabCreationEnabled else { return false }
     guard let tmuxController else { return false }
@@ -481,11 +485,20 @@ final class WorktreeTerminalState {
     let inherited = inheritedSurfaceConfig(fromSurfaceId: resolvedInheritanceSurfaceId, context: context)
     let tmuxWorkingDirectory = inherited.workingDirectory ?? worktree.workingDirectory
     let title = "\(worktree.name) \(nextTabIndex())"
-    let tabId = tabManager.createTab(title: title, icon: "terminal", isTitleLocked: false)
+    let tabId = TerminalTabID(rawValue: UUID())
+    let cardID = TmuxCardID(rawValue: tabId.rawValue.uuidString)
+    let metadata = TmuxWindowMetadata(
+      cardID: cardID,
+      worktreeID: worktree.id,
+      worktreePath: tmuxWorkingDirectory.path(percentEncoded: false),
+      repositoryRoot: worktree.repositoryRootURL.path(percentEncoded: false),
+      createdAt: ISO8601DateFormatter().string(from: Date())
+    )
     var target = TmuxTerminalTarget.make(
       appNamespace: TmuxTabCreation.appNamespace,
       worktreeID: worktree.id,
       tabID: tabId,
+      cardID: cardID,
       socketRoot: TmuxTabCreation.socketRoot
     )
 
@@ -498,18 +511,14 @@ final class WorktreeTerminalState {
       target = try await tmuxController.createWindow(
         target: target,
         cwd: tmuxWorkingDirectory,
-        title: title
+        title: title,
+        metadata: metadata
       )
     } catch {
       if error is CancellationError || Task.isCancelled {
-        if tabExists(tabId) {
-          tabManager.closeTab(tabId)
-        }
         return nil
       }
-      guard tabExists(tabId) else { return nil }
       terminalStateLogger.warning("tmux tab creation failed for worktree=\(worktree.id) tab=\(tabId): \(error)")
-      tabManager.closeTab(tabId)
       return createTab(
         focusing: focusing,
         setupScript: setupScript,
@@ -519,7 +528,19 @@ final class WorktreeTerminalState {
         workingDirectoryOverride: workingDirectoryOverride
       )
     }
-    guard tabExists(tabId) else {
+
+    guard !Task.isCancelled else {
+      try? await tmuxController.killWindow(target: target)
+      return nil
+    }
+
+    let createdTabId = tabManager.createTab(
+      id: tabId,
+      title: title,
+      icon: "terminal",
+      isTitleLocked: false
+    )
+    guard createdTabId == tabId else {
       try? await tmuxController.killWindow(target: target)
       return nil
     }
@@ -540,6 +561,60 @@ final class WorktreeTerminalState {
     }
     onTabCreated?()
     return tabId
+  }
+
+  @discardableResult
+  func restoreDetachedTmuxCard(_ candidate: TmuxDetachedCardCandidate) async -> TerminalTabID? {
+    guard let tmuxController, tmuxController.isAvailable else { return nil }
+
+    let tabID = TerminalTabID(rawValue: UUID())
+    let target = TmuxTerminalTarget.restored(
+      socketURL: TmuxTabCreation.socketRoot.appending(path: "\(TmuxTabCreation.appNamespace).sock"),
+      tabID: tabID,
+      cardID: candidate.cardID,
+      windowID: candidate.windowID,
+      paneID: candidate.paneID
+    )
+    do {
+      let preparedTarget = try await tmuxController.prepareExistingWindowForAttach(target: target)
+      let title = candidate.runtimeTitle ?? worktree.name
+      let context: ghostty_surface_context_e =
+        tabManager.tabs.isEmpty
+        ? GHOSTTY_SURFACE_CONTEXT_WINDOW
+        : GHOSTTY_SURFACE_CONTEXT_TAB
+      let createdTabID = tabManager.createTab(
+        id: tabID,
+        title: title,
+        icon: "terminal",
+        isTitleLocked: false
+      )
+      guard createdTabID == tabID else {
+        terminalStateLogger.warning("tmux restore tab id drifted expected=\(tabID) actual=\(createdTabID)")
+        return nil
+      }
+      let workingDirectory = URL(fileURLWithPath: candidate.activePath ?? candidate.worktreePath, isDirectory: true)
+      let tree = splitTree(
+        for: tabID,
+        initialInput: nil,
+        workingDirectoryOverride: workingDirectory,
+        launchCommandOverride: tmuxController.attachCommand(for: preparedTarget),
+        context: context
+      )
+      tmuxTargetsByTabId[tabID] = preparedTarget
+      tabIsRunningById[tabID] = false
+      tabManager.selectTab(tabID)
+      if let surface = tree.root?.leftmostLeaf() {
+        focusSurface(surface, in: tabID)
+        onFocusedCommandSurfaceCreated?(surface.id)
+      }
+      onTabCreated?()
+      return tabID
+    } catch {
+      terminalStateLogger.warning(
+        "tmux restore failed window=\(candidate.windowID.rawValue) card=\(candidate.cardID.rawValue): \(error)"
+      )
+      return nil
+    }
   }
 
   func tabExists(_ tabId: TerminalTabID) -> Bool {
@@ -819,6 +894,8 @@ final class WorktreeTerminalState {
   func closeTab(_ tabId: TerminalTabID, confirmation: TerminalCloseConfirmationMode) -> Bool {
     guard confirmCloseIfNeeded(tabIds: [tabId], mode: confirmation) else { return false }
     let wasRunScriptTab = tabId == runScriptTabId
+    detachTmuxClientSession(for: tabId)
+    tabIsRunningById.removeValue(forKey: tabId)
     removeTree(for: tabId)
     tabManager.closeTab(tabId)
     if let selected = tabManager.selectedTabId {

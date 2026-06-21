@@ -23,6 +23,8 @@ extension CanvasView {
       organizeCardsWithFit()
     case .overview:
       previewCanvasOverview()
+    case .toggleZoom:
+      toggleFocusedCanvasZoom()
     case .selectAll:
       selectAllCards()
     }
@@ -100,12 +102,8 @@ extension CanvasView {
     overviewRestoreTask = nil
   }
 
-  /// Expand a card in place: raise it to the top, then flip `expandedTabID`
-  /// inside one `withAnimation` so the card's size, center, and scale all
-  /// interpolate together from its in-canvas frame to the full viewport at
-  /// scale 1 — a magic-move from where the card actually sits. The canvas
-  /// transform is left untouched, so every other card stays exactly where it
-  /// was, behind a dimming scrim.
+  /// Expand a card to the full-viewport frame without animating or changing the
+  /// surrounding canvas chrome.
   func expandCard(_ tabID: TerminalTabID, states: [WorktreeTerminalState]) {
     guard viewportSize.width > 0, viewportSize.height > 0,
       layoutStore.cardLayouts[tabID.rawValue.uuidString] != nil
@@ -115,18 +113,14 @@ extension CanvasView {
     }
     focusSingleCard(tabID, states: states)
     applyExpandedFontBoost(to: tabID, states: states)
-    withAnimation(expandAnimation) {
-      expandedTabID = tabID
-    }
+    expandedTabID = tabID
   }
 
   /// Restore the expanded card back into the (unchanged) canvas.
   func collapseExpand() {
     guard expandedTabID != nil else { return }
     restoreExpandedFontBoost()
-    withAnimation(expandAnimation) {
-      expandedTabID = nil
-    }
+    expandedTabID = nil
   }
 
   /// Drop expand state without animation — used right before a relayout
@@ -218,9 +212,9 @@ extension CanvasView {
     surfaceState _: WorktreeTerminalState,
     states: [WorktreeTerminalState]
   ) {
-    let cmdHeld = NSEvent.modifierFlags.contains(.command)
+    let selectionModifierHeld = NSEvent.modifierFlags.contains(.option)
     mutateSelection(states: states) { state in
-      if cmdHeld {
+      if selectionModifierHeld {
         state.toggleSelection(tabID)
       } else if state.isBroadcasting, state.selectedTabIDs.contains(tabID) {
         state.setPrimary(tabID)
@@ -302,7 +296,7 @@ extension CanvasView {
     guard let surface = state.surfaceView(for: tabID) else { return }
     state.tabManager.selectTab(tabID)
     terminalManager.canvasFocusedWorktreeID = state.worktreeID
-    setFocusedWorktreeID(state.worktreeID)
+    onFocusedWorktreeChanged(state.worktreeID)
     onFocusedTabChanged(tabID)
     surface.focusDidChange(true)
     surface.requestFocus()

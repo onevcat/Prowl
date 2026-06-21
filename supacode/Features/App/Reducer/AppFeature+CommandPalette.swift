@@ -42,6 +42,9 @@ extension AppFeature {
     if let effect = reduceCommandPalettePullRequestDelegate(delegate) {
       return effect
     }
+    if let effect = reduceCommandPaletteTmuxRecoveryDelegate(delegate, state: &state) {
+      return effect
+    }
     #if DEBUG
       if let effect = reduceCommandPaletteDebugDelegate(delegate) {
         return effect
@@ -324,6 +327,48 @@ extension AppFeature {
 
     case .openFailingCheckDetails(let worktreeID):
       return .send(.repositories(.githubIntegration(.pullRequestAction(worktreeID, .openFailingCheckDetails))))
+
+    default:
+      return nil
+    }
+  }
+
+  func reduceCommandPaletteTmuxRecoveryDelegate(
+    _ delegate: CommandPaletteFeature.Delegate,
+    state: inout State
+  ) -> Effect<Action>? {
+    switch delegate {
+    case .restoreRunningTab:
+      guard state.settings.useAnonymousTmuxBackedTerminals else { return .none }
+      let repositoryNamesByRootPath = repositoryDisplayNamesByRootPath(from: state.repositories)
+      return .run { send in
+        let snapshot = await terminalClient.detachedTmuxCards()
+        let presentations = snapshot.candidates.map { candidate in
+          let rootURL = URL(fileURLWithPath: candidate.repositoryRoot, isDirectory: true).standardizedFileURL
+          let rootPath = normalizedRecoveryRootPath(rootURL.path(percentEncoded: false))
+          return TmuxDetachedCardPresentation(
+            candidate: candidate,
+            repositoryName: repositoryNamesByRootPath[rootPath] ?? Repository.name(for: rootURL)
+          )
+        }
+        await send(.commandPalette(.enterDetachedCardsMode(presentations, diagnostics: snapshot.diagnostics)))
+      }
+
+    case .restoreDetachedCard(let candidateID):
+      guard state.settings.useAnonymousTmuxBackedTerminals else { return .none }
+      let worktrees = terminalRecoveryWorktrees(from: Array(state.repositories.repositories))
+      return .run { _ in
+        _ = await terminalClient.restoreDetachedTmuxCard(candidateID, worktrees)
+      }
+
+    case .restoreDetachedCards(let candidateIDs):
+      guard state.settings.useAnonymousTmuxBackedTerminals else { return .none }
+      let worktrees = terminalRecoveryWorktrees(from: Array(state.repositories.repositories))
+      return .run { _ in
+        for candidateID in candidateIDs {
+          _ = await terminalClient.restoreDetachedTmuxCard(candidateID, worktrees)
+        }
+      }
 
     default:
       return nil

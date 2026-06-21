@@ -147,7 +147,8 @@ struct ContentView: View {
           actionTargetWorktreeID: store.repositories.isShowingCanvas
             ? terminalManager.canvasFocusedWorktreeID
             : nil,
-          ghosttyCommands: ghosttyShortcuts.commandPaletteEntries
+          ghosttyCommands: ghosttyShortcuts.commandPaletteEntries,
+          showsRestoreRunningTab: store.settings.useAnonymousTmuxBackedTerminals
         ),
         resolvedKeybindings: store.resolvedKeybindings
       )

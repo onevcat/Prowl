@@ -6,6 +6,98 @@ struct ActiveResize {
   var translation: CGSize
 }
 
+struct CanvasSelectionModifierObserver: NSViewRepresentable {
+  @Binding var isPressed: Bool
+
+  func makeNSView(context _: Context) -> CanvasSelectionModifierObserverView {
+    let view = CanvasSelectionModifierObserverView()
+    view.onPressedChange = { pressed in
+      isPressed = pressed
+    }
+    return view
+  }
+
+  func updateNSView(_ nsView: CanvasSelectionModifierObserverView, context _: Context) {
+    nsView.onPressedChange = { pressed in
+      isPressed = pressed
+    }
+    nsView.refreshPressedState()
+  }
+}
+
+final class CanvasSelectionModifierObserverView: NSView {
+  var onPressedChange: ((Bool) -> Void)?
+  nonisolated(unsafe) private var flagsChangedMonitor: Any?
+  nonisolated(unsafe) private var didBecomeActiveObserver: NSObjectProtocol?
+  nonisolated(unsafe) private var didResignActiveObserver: NSObjectProtocol?
+  private var isPressed = false
+
+  override init(frame frameRect: NSRect) {
+    super.init(frame: frameRect)
+    configureObservers()
+  }
+
+  @available(*, unavailable)
+  required init?(coder _: NSCoder) {
+    nil
+  }
+
+  deinit {
+    if let flagsChangedMonitor {
+      NSEvent.removeMonitor(flagsChangedMonitor)
+    }
+    if let didBecomeActiveObserver {
+      NotificationCenter.default.removeObserver(didBecomeActiveObserver)
+    }
+    if let didResignActiveObserver {
+      NotificationCenter.default.removeObserver(didResignActiveObserver)
+    }
+  }
+
+  func refreshPressedState() {
+    updatePressedState(Self.isSelectionModifierPressed(NSEvent.modifierFlags))
+  }
+
+  private func configureObservers() {
+    flagsChangedMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+      MainActor.assumeIsolated {
+        self?.updatePressedState(Self.isSelectionModifierPressed(event.modifierFlags))
+      }
+      return event
+    }
+
+    let center = NotificationCenter.default
+    didBecomeActiveObserver = center.addObserver(
+      forName: NSApplication.didBecomeActiveNotification,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated {
+        self?.refreshPressedState()
+      }
+    }
+    didResignActiveObserver = center.addObserver(
+      forName: NSApplication.didResignActiveNotification,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated {
+        self?.updatePressedState(false)
+      }
+    }
+  }
+
+  private func updatePressedState(_ pressed: Bool) {
+    guard isPressed != pressed else { return }
+    isPressed = pressed
+    onPressedChange?(pressed)
+  }
+
+  private static func isSelectionModifierPressed(_ modifierFlags: NSEvent.ModifierFlags) -> Bool {
+    modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.option)
+  }
+}
+
 // MARK: - Scroll Container
 
 /// Wraps SwiftUI content in an NSView whose `scrollWheel` override catches

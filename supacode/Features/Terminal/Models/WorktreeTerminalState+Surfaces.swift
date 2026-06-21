@@ -814,6 +814,7 @@ extension WorktreeTerminalState {
     view.closeSurface()
     forgetSurface(view.id)
     if newTree.isEmpty {
+      detachTmuxClientSession(for: tabId)
       trees.removeValue(forKey: tabId)
       focusedSurfaceIdByTab.removeValue(forKey: tabId)
       tabManager.closeTab(tabId)
@@ -838,6 +839,22 @@ extension WorktreeTerminalState {
       }
     }
     return true
+  }
+
+  func detachTmuxClientSession(for tabId: TerminalTabID) {
+    guard let target = tmuxTargetsByTabId.removeValue(forKey: tabId),
+      let tmuxController
+    else {
+      return
+    }
+
+    Task { [tmuxController, target] in
+      do {
+        try await tmuxController.detachClientSession(target: target)
+      } catch {
+        terminalStateLogger.warning("tmux client detach failed tab=\(tabId.rawValue): \(error)")
+      }
+    }
   }
 
   func handleGotoTabRequest(_ target: ghostty_action_goto_tab_e) -> Bool {

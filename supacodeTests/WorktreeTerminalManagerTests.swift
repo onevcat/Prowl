@@ -137,50 +137,6 @@ struct WorktreeTerminalManagerTests {
     #expect(state.canCloseFocusedSurface == false)
   }
 
-  @Test func newEmptyTabStartsColdAgentDetection() throws {
-    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
-    let worktree = makeWorktree()
-    let state = manager.state(for: worktree)
-
-    let tabId = try #require(state.createTab())
-    let surfaceId = try #require(state.focusedSurfaceId(in: tabId))
-
-    #expect(state.agentDetectionSchedules[surfaceId] == nil)
-    #expect(state.agentDetectionTasks[surfaceId] == nil)
-  }
-
-  @Test func wakingSurfaceStartsWarmAgentDetection() throws {
-    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
-    let worktree = makeWorktree()
-    let state = manager.state(for: worktree)
-
-    let tabId = try #require(state.createTab())
-    let surfaceId = try #require(state.focusedSurfaceId(in: tabId))
-
-    state.wakeAgentDetection(forSurfaceID: surfaceId)
-
-    let schedule = try #require(state.agentDetectionSchedules[surfaceId])
-    #expect(schedule.nextInterval(now: Date()) != nil)
-    #expect(state.agentDetectionTasks[surfaceId] != nil)
-
-    state.cleanupAllAgentDetectionState()
-  }
-
-  @Test func initialInputStartsWarmAgentDetection() throws {
-    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
-    let worktree = makeWorktree()
-    let state = manager.state(for: worktree)
-
-    let tabId = try #require(state.createTab(initialInput: "codex\n"))
-    let surfaceId = try #require(state.focusedSurfaceId(in: tabId))
-
-    let schedule = try #require(state.agentDetectionSchedules[surfaceId])
-    #expect(schedule.nextInterval(now: Date()) != nil)
-    #expect(state.agentDetectionTasks[surfaceId] != nil)
-
-    state.cleanupAllAgentDetectionState()
-  }
-
   @Test func firstTabUsesTabSurfaceContext() throws {
     let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
     let worktree = makeWorktree()
@@ -227,18 +183,20 @@ struct WorktreeTerminalManagerTests {
     #expect(state.surfaceView(for: tabId) == nil)
   }
 
-  @Test func closeSurfaceReturnsActualRemovalResult() throws {
+  @Test func focusWorktreeInCanvasForcesFocusChangeForAlreadyActiveSurface() {
     let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
     let worktree = makeWorktree()
     let state = manager.state(for: worktree)
+    let tabID = state.createTab()
 
-    let tabId = try #require(state.createTab())
-    let surfaceId = try #require(state.focusedSurfaceId(in: tabId))
+    #expect(tabID != nil)
+    let initialFocusChange = manager.lastFocusChange
 
-    #expect(state.closeSurface(id: surfaceId, confirmation: .skip) == true)
-    #expect(state.surfaceView(for: surfaceId) == nil)
-    #expect(state.tabManager.tabs.isEmpty)
-    #expect(state.closeSurface(id: surfaceId, confirmation: .skip) == false)
+    let didFocus = manager.focusWorktreeInCanvas(worktreeID: worktree.id)
+
+    #expect(didFocus)
+    #expect(manager.canvasFocusedWorktreeID == worktree.id)
+    #expect(manager.lastFocusChange != initialFocusChange)
   }
 
   @Test func creatingFocusedTabDefaultsInputSourceToABCBeforeProcessProbeCompletes() {
@@ -293,9 +251,236 @@ struct WorktreeTerminalManagerTests {
     let launchCommand = try #require(surface.launchCommandForTesting)
 
     #expect(launchCommand.contains("-S"))
-    #expect(launchCommand.contains("-CC attach-session"))
+    #expect(launchCommand.contains("attach-session"))
+    #expect(!launchCommand.contains("-CC"))
     #expect(state.tmuxTargetForTesting(tabID)?.windowID == TmuxWindowID(rawValue: "@7"))
     #expect(state.isTmuxBacked(tabID) == true)
+  }
+
+  @Test func detachedTmuxCardSnapshotFiltersVisibleManagerWindows() async throws {
+    let separator = "\u{1F}"
+    let controller = TmuxTerminalController(
+      executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
+      execute: { _, arguments in
+        if arguments.contains("new-window") {
+          return TmuxCommandResult(stdout: "@22 %9\n", stderr: "", exitCode: 0)
+        }
+        if arguments.contains("list-sessions") {
+          return TmuxCommandResult(
+            stdout: ["prowl-cards", "2", "prowl-cards"].joined(separator: separator) + "\n",
+            stderr: "",
+            exitCode: 0
+          )
+        }
+        if arguments.contains("list-windows") {
+          return TmuxCommandResult(
+            stdout: [
+              [
+                "prowl-cards", "@21", "detached", "/tmp/repo/wt", "zsh", "", "1", "card-21",
+                "/tmp/repo/wt", "/tmp/repo/wt", "/tmp/repo", "2026-05-28T12:00:01Z",
+              ].joined(separator: separator),
+              [
+                "prowl-cards", "@22", "visible", "/tmp/repo/wt", "zsh", "", "1", "card-22",
+                "/tmp/repo/wt", "/tmp/repo/wt", "/tmp/repo", "2026-05-28T12:00:00Z",
+              ].joined(separator: separator),
+            ].joined(separator: "\n"),
+            stderr: "",
+            exitCode: 0
+          )
+        }
+        return TmuxCommandResult(stdout: "", stderr: "", exitCode: 0)
+      }
+    )
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      tmuxController: controller,
+      usesAnonymousTmux: true
+    )
+    let worktree = makeWorktree()
+
+    _ = try #require(await manager.createTabForTesting(in: worktree, runSetupScriptIfNew: false))
+    let visibleWindowID = try #require(TmuxWindowID(rawValue: "@22"))
+
+    #expect(manager.visibleTmuxWindowIDs() == Set([visibleWindowID]))
+    let snapshot = await manager.detachedTmuxCardSnapshot()
+
+    #expect(snapshot.candidates.map(\.windowID.rawValue) == ["@21"])
+    #expect(snapshot.diagnostics.isEmpty)
+  }
+
+  @Test func detachedTmuxCardSnapshotFiltersAllAppManagedWindows() async throws {
+    let separator = "\u{1F}"
+    let outputs = TmuxNewWindowOutputQueue(["@1 %1\n", "@3 %3\n"])
+    let worktreeA = makeWorktree(id: "/tmp/repo/wt-a", name: "wt-a")
+    let worktreeB = makeWorktree(id: "/tmp/repo/wt-b", name: "wt-b")
+    let controller = TmuxTerminalController(
+      executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
+      execute: { _, arguments in
+        if arguments.contains("new-window") {
+          return TmuxCommandResult(stdout: await outputs.next(), stderr: "", exitCode: 0)
+        }
+        if arguments.contains("list-sessions") {
+          return TmuxCommandResult(
+            stdout: ["prowl-cards", "2", "prowl-cards"].joined(separator: separator) + "\n",
+            stderr: "",
+            exitCode: 0
+          )
+        }
+        if arguments.contains("list-windows") {
+          return TmuxCommandResult(
+            stdout: [
+              [
+                "prowl-cards", "@1", "wt-a", "/tmp/repo/wt-a", "zsh", "", "1", "card-a",
+                worktreeA.id, "/tmp/repo/wt-a", "/tmp/repo", "2026-05-28T12:00:01Z",
+              ].joined(separator: separator),
+              [
+                "prowl-cards", "@3", "wt-b", "/tmp/repo/wt-b", "zsh", "", "1", "card-b",
+                worktreeB.id, "/tmp/repo/wt-b", "/tmp/repo", "2026-05-28T12:00:00Z",
+              ].joined(separator: separator),
+            ].joined(separator: "\n"),
+            stderr: "",
+            exitCode: 0
+          )
+        }
+        return TmuxCommandResult(stdout: "", stderr: "", exitCode: 0)
+      }
+    )
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      tmuxController: controller,
+      usesAnonymousTmux: true
+    )
+
+    _ = try #require(await manager.createTabForTesting(in: worktreeA, runSetupScriptIfNew: false))
+    _ = try #require(await manager.createTabForTesting(in: worktreeB, runSetupScriptIfNew: false))
+    manager.handleCommand(.setSelectedWorktreeID(worktreeA.id))
+
+    #expect(manager.visibleTmuxWindowIDs().map(\.rawValue) == ["@1"])
+    let snapshot = await manager.detachedTmuxCardSnapshot()
+
+    #expect(snapshot.candidates.isEmpty)
+  }
+
+  @Test func detachedTmuxCardSnapshotOnlyShowsWindowsNotManagedByApp() async throws {
+    let separator = "\u{1F}"
+    let outputs = TmuxNewWindowOutputQueue(["@3 %3\n", "@7 %7\n", "@14 %14\n"])
+    let tikTok = makeWorktree(id: "/tmp/repo/tiktok", name: "TikTok")
+    let markEdit = makeWorktree(id: "/tmp/repo/markedit", name: "MarkEdit")
+    let prowl = makeWorktree(id: "/tmp/repo/prowl", name: "Prowl")
+    let controller = TmuxTerminalController(
+      executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
+      execute: { _, arguments in
+        if arguments.contains("new-window") {
+          return TmuxCommandResult(stdout: await outputs.next(), stderr: "", exitCode: 0)
+        }
+        if arguments.contains("list-sessions") {
+          return TmuxCommandResult(
+            stdout: ["prowl-cards", "4", "prowl-cards"].joined(separator: separator) + "\n",
+            stderr: "",
+            exitCode: 0
+          )
+        }
+        if arguments.contains("list-windows") {
+          return TmuxCommandResult(
+            stdout: [
+              [
+                "prowl-cards", "@17", "%17", "Freestyle", "/Users/yam", "zsh", "host", "1", "freestyle-card",
+                "__freestyle__", "/Users/yam", "/Users/yam", "2026-05-29T16:00:33Z",
+              ].joined(separator: separator),
+              [
+                "prowl-cards", "@7", "%7", "MarkEdit", "/tmp/repo/markedit", "zsh", "Commit Manager", "1",
+                "markedit-card", markEdit.id, "/tmp/repo/markedit", "/tmp/repo", "2026-05-29T06:49:06Z",
+              ].joined(separator: separator),
+              [
+                "prowl-cards", "@3", "%3", "TikTok", "/tmp/repo/tiktok", "zsh", "host", "1", "tiktok-card",
+                tikTok.id, "/tmp/repo/tiktok", "/tmp/repo", "2026-05-29T05:33:58Z",
+              ].joined(separator: separator),
+              [
+                "prowl-cards", "@14", "%14", "Prowl", "/tmp/repo/prowl", "zsh", "host", "1", "prowl-card",
+                prowl.id, "/tmp/repo/prowl", "/tmp/repo", "2026-05-29T09:59:18Z",
+              ].joined(separator: separator),
+            ].joined(separator: "\n"),
+            stderr: "",
+            exitCode: 0
+          )
+        }
+        return TmuxCommandResult(stdout: "", stderr: "", exitCode: 0)
+      }
+    )
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      tmuxController: controller,
+      usesAnonymousTmux: true
+    )
+
+    _ = try #require(await manager.createTabForTesting(in: tikTok, runSetupScriptIfNew: false))
+    _ = try #require(await manager.createTabForTesting(in: markEdit, runSetupScriptIfNew: false))
+    _ = try #require(await manager.createTabForTesting(in: prowl, runSetupScriptIfNew: false))
+    manager.handleCommand(.setSelectedWorktreeID(prowl.id))
+
+    #expect(manager.visibleTmuxWindowIDs().map(\.rawValue) == ["@14"])
+    let snapshot = await manager.detachedTmuxCardSnapshot()
+
+    #expect(snapshot.candidates.map(\.windowID.rawValue) == ["@17"])
+  }
+
+  @Test func restoresDetachedCardByAttachingExistingWindow() async throws {
+    let separator = "\u{1F}"
+    let recorder = TmuxCommandRecorder()
+    let controller = TmuxTerminalController(
+      executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
+      execute: { _, arguments in
+        await recorder.record(arguments)
+        if arguments.contains("list-sessions") {
+          return TmuxCommandResult(
+            stdout: ["prowl-cards", "1", "prowl-cards"].joined(separator: separator) + "\n",
+            stderr: "",
+            exitCode: 0
+          )
+        }
+        if arguments.contains("list-windows") {
+          return TmuxCommandResult(
+            stdout: [
+              "prowl-cards", "@21", "shell", "/tmp/repo/wt", "zsh", "codex", "1", "card-21",
+              "/tmp/repo/wt", "/tmp/repo/wt", "/tmp/repo", "2026-05-28T12:00:00Z",
+            ].joined(separator: separator),
+            stderr: "",
+            exitCode: 0
+          )
+        }
+        if arguments.contains("display-message") {
+          return TmuxCommandResult(stdout: "@21\n", stderr: "", exitCode: 0)
+        }
+        return TmuxCommandResult(stdout: "", stderr: "", exitCode: 0)
+      }
+    )
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      tmuxController: controller,
+      usesAnonymousTmux: true
+    )
+    let worktree = makeWorktree(
+      id: "/tmp/repo/wt",
+      name: "wt",
+      repositoryRootURL: URL(fileURLWithPath: "/tmp/repo")
+    )
+
+    let snapshot = await manager.detachedTmuxCardSnapshot()
+    let candidateID = try #require(snapshot.candidates.first?.id)
+    let restored = await manager.restoreDetachedTmuxCard(candidateID, worktrees: [worktree])
+
+    let state = try #require(manager.stateIfExists(for: worktree.id))
+    let restoredTab = try #require(state.tabManager.selectedTabId)
+    let surface = try #require(state.surfaceView(for: restoredTab))
+    let arguments = await recorder.arguments
+
+    #expect(restored == true)
+    #expect(manager.selectedWorktreeID == worktree.id)
+    #expect(state.tmuxTargetForTesting(restoredTab)?.windowID?.rawValue == "@21")
+    #expect(state.tmuxTargetForTesting(restoredTab)?.cardID.rawValue == "card-21")
+    #expect(surface.launchCommandForTesting?.contains("attach-session") == true)
+    #expect(surface.launchCommandForTesting?.contains("-CC") == false)
+    #expect(arguments.contains { $0.contains("new-window") } == false)
   }
 
   @Test func plainTabReportsNotTmuxBacked() {
@@ -307,13 +492,31 @@ struct WorktreeTerminalManagerTests {
   }
 
   @Test func closingTmuxBackedTabDoesNotKillWindow() async throws {
+    let separator = "\u{1F}"
     let recorder = TmuxCommandRecorder()
     let controller = TmuxTerminalController(
       executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
       execute: { _, arguments in
         await recorder.record(arguments)
         if arguments.contains("new-window") {
-          return TmuxCommandResult(stdout: "@7 %9\n", stderr: "", exitCode: 0)
+          return TmuxCommandResult(stdout: "@22 %9\n", stderr: "", exitCode: 0)
+        }
+        if arguments.contains("list-sessions") {
+          return TmuxCommandResult(
+            stdout: ["prowl-cards", "1", "prowl-cards"].joined(separator: separator) + "\n",
+            stderr: "",
+            exitCode: 0
+          )
+        }
+        if arguments.contains("list-windows") {
+          return TmuxCommandResult(
+            stdout: [
+              "prowl-cards", "@22", "closed", "/tmp/repo/wt-1", "zsh", "", "1", "card-22",
+              "/tmp/repo/wt-1", "/tmp/repo/wt-1", "/tmp/repo", "2026-05-28T12:00:00Z",
+            ].joined(separator: separator),
+            stderr: "",
+            exitCode: 0
+          )
         }
         return TmuxCommandResult(stdout: "", stderr: "", exitCode: 0)
       }
@@ -327,11 +530,81 @@ struct WorktreeTerminalManagerTests {
 
     let tabID = try #require(await manager.createTabForTesting(in: worktree, runSetupScriptIfNew: false))
     let state = try #require(manager.stateIfExists(for: worktree.id))
+    let windowID = try #require(TmuxWindowID(rawValue: "@22"))
+    #expect(manager.visibleTmuxWindowIDs() == Set([windowID]))
+
+    let argumentsBeforeClose = await recorder.arguments
     state.closeTab(tabID)
+    await Task.yield()
+    let snapshot = await manager.detachedTmuxCardSnapshot()
 
     let arguments = await recorder.arguments
-    #expect(arguments.contains { $0.contains("kill-window") } == false)
+    let closeArguments = Array(arguments.dropFirst(argumentsBeforeClose.count))
+    #expect(closeArguments.contains { $0.contains("kill-window") } == false)
+    #expect(closeArguments.contains { $0.contains("kill-session") })
     #expect(state.surfaceView(for: tabID) == nil)
+    #expect(manager.visibleTmuxWindowIDs().contains(windowID) == false)
+    #expect(snapshot.candidates.map(\.windowID.rawValue) == ["@22"])
+  }
+
+  @Test func closingLastTmuxBackedSurfaceClearsVisibleWindow() async throws {
+    let recorder = TmuxCommandRecorder()
+    let separator = "\u{1F}"
+    let controller = TmuxTerminalController(
+      executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
+      execute: { _, arguments in
+        await recorder.record(arguments)
+        if arguments.contains("new-window") {
+          return TmuxCommandResult(stdout: "@22 %24\n", stderr: "", exitCode: 0)
+        }
+        if arguments.contains("list-sessions") {
+          return TmuxCommandResult(
+            stdout: [
+              ["prowl-cards", "1", "prowl-cards"].joined(separator: separator),
+              ["prowl-tab-222222222222", "1", ""].joined(separator: separator),
+            ].joined(separator: "\n"),
+            stderr: "",
+            exitCode: 0
+          )
+        }
+        if arguments.contains("list-windows") {
+          return TmuxCommandResult(
+            stdout: [
+              "prowl-cards", "@22", "%24", "closed", "/tmp/repo/wt-1", "zsh", "", "1", "card-22",
+              "/tmp/repo/wt-1", "/tmp/repo/wt-1", "/tmp/repo", "2026-05-28T12:00:00Z",
+            ].joined(separator: separator),
+            stderr: "",
+            exitCode: 0
+          )
+        }
+        return TmuxCommandResult(stdout: "", stderr: "", exitCode: 0)
+      }
+    )
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      tmuxController: controller,
+      usesAnonymousTmux: true
+    )
+    let worktree = makeWorktree()
+
+    let tabID = try #require(await manager.createTabForTesting(in: worktree, runSetupScriptIfNew: false))
+    let state = try #require(manager.stateIfExists(for: worktree.id))
+    let surface = try #require(state.surfaceView(for: tabID))
+    let windowID = try #require(TmuxWindowID(rawValue: "@22"))
+    #expect(manager.visibleTmuxWindowIDs() == Set([windowID]))
+
+    let argumentsBeforeClose = await recorder.arguments
+    surface.bridge.closeSurface(processAlive: false)
+    await Task.yield()
+    let snapshot = await manager.detachedTmuxCardSnapshot()
+
+    let arguments = await recorder.arguments
+    let closeArguments = Array(arguments.dropFirst(argumentsBeforeClose.count))
+    #expect(closeArguments.contains { $0.contains("kill-window") } == false)
+    #expect(closeArguments.contains { $0.contains("kill-session") })
+    #expect(state.surfaceView(for: tabID) == nil)
+    #expect(manager.visibleTmuxWindowIDs().contains(windowID) == false)
+    #expect(snapshot.candidates.map(\.windowID.rawValue) == ["@22"])
   }
 
   @Test func killingTmuxBackedTabKillsWindow() async throws {
@@ -505,7 +778,8 @@ struct WorktreeTerminalManagerTests {
     let enabledSurface = try #require(enabledState.surfaceView(for: enabledTabID))
     let disabledSurface = try #require(disabledState.surfaceView(for: disabledTabID))
 
-    #expect(enabledSurface.launchCommandForTesting?.contains("-CC attach-session") == true)
+    #expect(enabledSurface.launchCommandForTesting?.contains("attach-session") == true)
+    #expect(enabledSurface.launchCommandForTesting?.contains("-CC") == false)
     #expect(disabledSurface.launchCommandForTesting == nil)
   }
 
@@ -535,11 +809,12 @@ struct WorktreeTerminalManagerTests {
     let secondTabID = try #require(await waitForTmuxBackedTab(in: state, excluding: firstTabID))
     let secondSurface = try #require(state.surfaceView(for: secondTabID))
 
-    #expect(secondSurface.launchCommandForTesting?.contains("-CC attach-session") == true)
+    #expect(secondSurface.launchCommandForTesting?.contains("attach-session") == true)
+    #expect(secondSurface.launchCommandForTesting?.contains("-CC") == false)
     #expect(state.tmuxTargetForTesting(secondTabID)?.windowID == TmuxWindowID(rawValue: "@7"))
   }
 
-  @Test func tmuxCreationDoesNotResurrectClosedPendingTab() async throws {
+  @Test func tmuxCreationDoesNotExposeTabBeforeAttachCommandReady() async throws {
     let gate = TmuxNewWindowGate()
     let controller = TmuxTerminalController(
       executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
@@ -563,16 +838,19 @@ struct WorktreeTerminalManagerTests {
       await manager.createTabForTesting(in: worktree, runSetupScriptIfNew: false)
     }
     let state = try await waitForState(worktree.id, in: manager)
-    let pendingTabID = try #require(await waitForTabCount(1, in: state).first)
 
-    state.closeTab(pendingTabID)
+    try await waitForTmuxNewWindowAttempt(gate)
+    #expect(state.tabManager.tabs.isEmpty)
+
     await gate.release()
 
-    let createdTabID = await createTask.value
+    let createdTabID = try #require(await createTask.value)
+    let surface = try #require(state.surfaceView(for: createdTabID))
 
-    #expect(createdTabID == nil)
-    #expect(state.tabManager.tabs.isEmpty)
-    #expect(state.surfaceView(for: pendingTabID) == nil)
+    #expect(state.tabManager.tabs.map(\.id) == [createdTabID])
+    #expect(surface.launchCommandForTesting?.contains("attach-session") == true)
+    #expect(surface.launchCommandForTesting?.contains("-CC") == false)
+    #expect(state.tmuxTargetForTesting(createdTabID)?.windowID == TmuxWindowID(rawValue: "@7"))
   }
 
   @Test func tmuxCreationCancellationDoesNotCreateFallbackTab() async throws {
@@ -604,6 +882,7 @@ struct WorktreeTerminalManagerTests {
     let controller = TmuxTerminalController(
       executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
       execute: { _, arguments in
+        await gate.record(arguments)
         if arguments.contains("new-window") {
           await gate.waitForRelease()
           return TmuxCommandResult(stdout: "", stderr: "cancelled", exitCode: 1)
@@ -622,7 +901,9 @@ struct WorktreeTerminalManagerTests {
       await manager.createTabForTesting(in: worktree, runSetupScriptIfNew: false)
     }
     let state = try await waitForState(worktree.id, in: manager)
-    _ = try #require(await waitForTabCount(1, in: state).first)
+
+    try await waitForTmuxNewWindowAttempt(gate)
+    #expect(state.tabManager.tabs.isEmpty)
 
     createTask.cancel()
     await gate.release()
@@ -936,7 +1217,9 @@ struct WorktreeTerminalManagerTests {
     let restoredSurface = try #require(restoreState.surfaceView(for: sourceTabID))
     let restoredTarget = try #require(restoreState.tmuxTargetForTesting(sourceTabID))
 
-    #expect(restoredSurface.launchCommandForTesting?.contains("-CC attach-session") == true)
+    #expect(restoredSurface.launchCommandForTesting?.contains("attach-session") == true)
+    #expect(restoredSurface.launchCommandForTesting?.contains("-CC") == false)
+    #expect(restoredTarget.cardID.rawValue == sourceTabID.rawValue.uuidString)
     #expect(restoredTarget.windowID == TmuxWindowID(rawValue: "@7"))
     #expect(restoredTarget.paneID == TmuxPaneID(rawValue: "%9"))
   }
@@ -1099,13 +1382,17 @@ struct WorktreeTerminalManagerTests {
     #expect(event == .layoutRestoreFailed(message: "Saved terminal layout was invalid and has been reset"))
   }
 
-  @Test func restoreLayoutSnapshotEmitsRestoredNilWhenSnapshotMissing() async {
+  @Test func restoreLayoutSnapshotWithoutSnapshotEmitsEmptyRestoreEvent() async {
+    let clearCount = LockIsolated(0)
     let manager = WorktreeTerminalManager(
       runtime: GhosttyRuntime(),
       layoutPersistence: TerminalLayoutPersistenceClient(
         loadSnapshot: { nil },
         saveSnapshot: { _ in true },
-        clearSnapshot: { true }
+        clearSnapshot: {
+          clearCount.withValue { $0 += 1 }
+          return true
+        }
       )
     )
     let stream = manager.eventStream()
@@ -1116,7 +1403,285 @@ struct WorktreeTerminalManagerTests {
       event == .layoutRestored(selectedWorktreeID: nil)
     }
 
+    #expect(clearCount.value == 0)
     #expect(event == .layoutRestored(selectedWorktreeID: nil))
+  }
+
+  @Test func restoreLayoutSnapshotWithoutSnapshotRestoresDetachedTmuxCards() async throws {
+    let separator = "\u{1F}"
+    let worktree = makeWorktree(
+      id: "/tmp/repo/wt",
+      name: "wt",
+      repositoryRootURL: URL(fileURLWithPath: "/tmp/repo")
+    )
+    let controller = TmuxTerminalController(
+      executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
+      execute: { _, arguments in
+        if arguments.contains("list-sessions") {
+          return TmuxCommandResult(
+            stdout: ["prowl-cards", "1", "prowl-cards"].joined(separator: separator) + "\n",
+            stderr: "",
+            exitCode: 0
+          )
+        }
+        if arguments.contains("list-windows") {
+          return TmuxCommandResult(
+            stdout: [
+              "prowl-cards", "@21", "%7", "feature", "/tmp/repo/wt", "zsh", "codex", "1",
+              "card-21", "/tmp/repo/wt/", "/tmp/repo/wt/", "/tmp/repo", "2026-05-29T05:33:58Z",
+            ].joined(separator: separator),
+            stderr: "",
+            exitCode: 0
+          )
+        }
+        if arguments.contains("display-message") {
+          return TmuxCommandResult(stdout: "@21\n", stderr: "", exitCode: 0)
+        }
+        return TmuxCommandResult(stdout: "", stderr: "", exitCode: 0)
+      }
+    )
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      tmuxController: controller,
+      usesAnonymousTmux: true,
+      layoutPersistence: TerminalLayoutPersistenceClient(
+        loadSnapshot: { nil },
+        saveSnapshot: { _ in true },
+        clearSnapshot: { true }
+      )
+    )
+    let stream = manager.eventStream()
+
+    await manager.restoreLayoutSnapshot(from: [worktree])
+
+    let event = await nextEvent(stream) { $0 == .layoutRestored(selectedWorktreeID: worktree.id) }
+    let state = try #require(manager.stateIfExists(for: worktree.id))
+    let restoredTab = try #require(state.tabManager.selectedTabId)
+    let surface = try #require(state.surfaceView(for: restoredTab))
+
+    #expect(event == .layoutRestored(selectedWorktreeID: worktree.id))
+    #expect(state.tmuxTargetForTesting(restoredTab)?.windowID?.rawValue == "@21")
+    #expect(state.tmuxTargetForTesting(restoredTab)?.cardID.rawValue == "card-21")
+    #expect(surface.launchCommandForTesting?.contains("attach-session") == true)
+  }
+
+  @Test func restoreLayoutSnapshotRehydratesSingleLegacyTmuxCard() async throws {
+    let separator = "\u{1F}"
+    let tabUUID = UUID(uuidString: "267C4DBA-3DBA-4739-AE9C-566EAC1AFBDD")!
+    let originalCardID = "23E5CBEA-864D-47BC-9F11-E0699D8E4E38"
+    let worktree = makeWorktree(id: "/tmp/repo/wt", name: "wt")
+    let snapshot = TerminalLayoutSnapshotPayload(
+      selectedWorktreeID: worktree.id,
+      worktrees: [
+        TerminalLayoutSnapshotPayload.SnapshotWorktree(
+          worktreeID: worktree.id,
+          selectedTabID: tabUUID.uuidString,
+          tabs: [
+            TerminalLayoutSnapshotPayload.SnapshotTab(
+              tabID: tabUUID.uuidString,
+              title: "Yams-MacBook-Pro.local",
+              icon: nil,
+              splitRoot: .leaf(surfaceID: UUID().uuidString)
+            )
+          ]
+        )
+      ]
+    )
+    let controller = TmuxTerminalController(
+      executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
+      execute: { _, arguments in
+        if arguments.contains("list-sessions") {
+          return TmuxCommandResult(
+            stdout: ["prowl-cards", "1", "prowl-cards"].joined(separator: separator) + "\n",
+            stderr: "",
+            exitCode: 0
+          )
+        }
+        if arguments.contains("list-windows") {
+          return TmuxCommandResult(
+            stdout: [
+              "prowl-cards", "@21", "%7", "feature", "/tmp/repo/wt", "zsh", "Yams-MacBook-Pro.local", "1",
+              originalCardID, worktree.id, "/tmp/repo/wt", "/tmp/repo", "2026-05-29T05:33:58Z",
+            ].joined(separator: separator),
+            stderr: "",
+            exitCode: 0
+          )
+        }
+        if arguments.contains("display-message") {
+          return TmuxCommandResult(stdout: "@21\n", stderr: "", exitCode: 0)
+        }
+        return TmuxCommandResult(stdout: "", stderr: "", exitCode: 0)
+      }
+    )
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      tmuxController: controller,
+      usesAnonymousTmux: true,
+      layoutPersistence: TerminalLayoutPersistenceClient(
+        loadSnapshot: { snapshot },
+        saveSnapshot: { _ in true },
+        clearSnapshot: { true }
+      )
+    )
+    let stream = manager.eventStream()
+
+    await manager.restoreLayoutSnapshot(from: [worktree])
+
+    let event = await nextEvent(stream) { $0 == .layoutRestored(selectedWorktreeID: worktree.id) }
+    let state = try #require(manager.stateIfExists(for: worktree.id))
+    let tabID = TerminalTabID(rawValue: tabUUID)
+    let target = try #require(state.tmuxTargetForTesting(tabID))
+    let surface = try #require(state.surfaceView(for: tabID))
+    let detachedSnapshot = await manager.detachedTmuxCardSnapshot()
+
+    #expect(event == .layoutRestored(selectedWorktreeID: worktree.id))
+    #expect(target.cardID.rawValue == originalCardID)
+    #expect(target.windowID?.rawValue == "@21")
+    #expect(target.paneID?.rawValue == "%7")
+    #expect(surface.launchCommandForTesting?.contains("attach-session") == true)
+    #expect(surface.launchCommandForTesting?.contains("-CC") == false)
+    #expect(detachedSnapshot.candidates.isEmpty)
+  }
+
+  @Test func restoreLayoutSnapshotUsesCardIDWhenMultipleTmuxCardsMatchWorktree() async throws {
+    let separator = "\u{1F}"
+    let tabUUID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+    let worktree = makeWorktree(id: "/tmp/repo/wt", name: "wt")
+    let snapshot = TerminalLayoutSnapshotPayload(
+      worktrees: [
+        TerminalLayoutSnapshotPayload.SnapshotWorktree(
+          worktreeID: worktree.id,
+          selectedTabID: tabUUID.uuidString,
+          tabs: [
+            TerminalLayoutSnapshotPayload.SnapshotTab(
+              tabID: tabUUID.uuidString,
+              title: nil,
+              icon: nil,
+              splitRoot: .leaf(surfaceID: UUID().uuidString)
+            )
+          ]
+        )
+      ]
+    )
+    let controller = TmuxTerminalController(
+      executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
+      execute: { _, arguments in
+        if arguments.contains("list-sessions") {
+          return TmuxCommandResult(
+            stdout: ["prowl-cards", "2", "prowl-cards"].joined(separator: separator) + "\n",
+            stderr: "",
+            exitCode: 0
+          )
+        }
+        if arguments.contains("list-windows") {
+          return TmuxCommandResult(
+            stdout: [
+              [
+                "prowl-cards", "@21", "%21", "other", "/tmp/repo/wt", "zsh", "", "1",
+                "other-card", worktree.id, "/tmp/repo/wt", "/tmp/repo", "2026-05-29T05:33:58Z",
+              ].joined(separator: separator),
+              [
+                "prowl-cards", "@22", "%22", "target", "/tmp/repo/wt", "zsh", "", "1",
+                tabUUID.uuidString, worktree.id, "/tmp/repo/wt", "/tmp/repo", "2026-05-29T05:33:59Z",
+              ].joined(separator: separator),
+            ].joined(separator: "\n"),
+            stderr: "",
+            exitCode: 0
+          )
+        }
+        if arguments.contains("display-message") {
+          return TmuxCommandResult(stdout: "@22\n", stderr: "", exitCode: 0)
+        }
+        return TmuxCommandResult(stdout: "", stderr: "", exitCode: 0)
+      }
+    )
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      tmuxController: controller,
+      usesAnonymousTmux: true,
+      layoutPersistence: TerminalLayoutPersistenceClient(
+        loadSnapshot: { snapshot },
+        saveSnapshot: { _ in true },
+        clearSnapshot: { true }
+      )
+    )
+
+    await manager.restoreLayoutSnapshot(from: [worktree])
+
+    let state = try #require(manager.stateIfExists(for: worktree.id))
+    let target = try #require(state.tmuxTargetForTesting(TerminalTabID(rawValue: tabUUID)))
+
+    #expect(target.windowID?.rawValue == "@22")
+    #expect(target.paneID?.rawValue == "%22")
+  }
+
+  @Test func restoreLayoutSnapshotDoesNotGuessWhenMultipleTmuxCardsMatchWorktree() async throws {
+    let separator = "\u{1F}"
+    let tabUUID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+    let worktree = makeWorktree(id: "/tmp/repo/wt", name: "wt")
+    let snapshot = TerminalLayoutSnapshotPayload(
+      worktrees: [
+        TerminalLayoutSnapshotPayload.SnapshotWorktree(
+          worktreeID: worktree.id,
+          selectedTabID: tabUUID.uuidString,
+          tabs: [
+            TerminalLayoutSnapshotPayload.SnapshotTab(
+              tabID: tabUUID.uuidString,
+              title: nil,
+              icon: nil,
+              splitRoot: .leaf(surfaceID: UUID().uuidString)
+            )
+          ]
+        )
+      ]
+    )
+    let controller = TmuxTerminalController(
+      executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
+      execute: { _, arguments in
+        if arguments.contains("list-sessions") {
+          return TmuxCommandResult(
+            stdout: ["prowl-cards", "2", "prowl-cards"].joined(separator: separator) + "\n",
+            stderr: "",
+            exitCode: 0
+          )
+        }
+        if arguments.contains("list-windows") {
+          return TmuxCommandResult(
+            stdout: [
+              [
+                "prowl-cards", "@21", "%21", "one", "/tmp/repo/wt", "zsh", "", "1",
+                "other-card-1", worktree.id, "/tmp/repo/wt", "/tmp/repo", "2026-05-29T05:33:58Z",
+              ].joined(separator: separator),
+              [
+                "prowl-cards", "@22", "%22", "two", "/tmp/repo/wt", "zsh", "", "1",
+                "other-card-2", worktree.id, "/tmp/repo/wt", "/tmp/repo", "2026-05-29T05:33:59Z",
+              ].joined(separator: separator),
+            ].joined(separator: "\n"),
+            stderr: "",
+            exitCode: 0
+          )
+        }
+        return TmuxCommandResult(stdout: "", stderr: "", exitCode: 0)
+      }
+    )
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      tmuxController: controller,
+      usesAnonymousTmux: true,
+      layoutPersistence: TerminalLayoutPersistenceClient(
+        loadSnapshot: { snapshot },
+        saveSnapshot: { _ in true },
+        clearSnapshot: { true }
+      )
+    )
+
+    await manager.restoreLayoutSnapshot(from: [worktree])
+
+    let state = try #require(manager.stateIfExists(for: worktree.id))
+    let surface = try #require(state.surfaceView(for: TerminalTabID(rawValue: tabUUID)))
+
+    #expect(state.tmuxTargetForTesting(TerminalTabID(rawValue: tabUUID)) == nil)
+    #expect(surface.launchCommandForTesting == nil)
   }
 
   @Test func persistLayoutSnapshotWithoutTabsClearsSnapshot() async {
@@ -1255,13 +1820,36 @@ struct WorktreeTerminalManagerTests {
   ) async throws -> TerminalTabID {
     for _ in 0..<200 {
       for candidate in state.tabManager.tabs.map(\.id) where candidate != tabID {
-        if state.surfaceView(for: candidate)?.launchCommandForTesting?.contains("-CC attach-session") == true {
+        if state.surfaceView(for: candidate)?.launchCommandForTesting?.contains("attach-session") == true {
           return candidate
         }
       }
       await Task.yield()
     }
     Issue.record("Timed out waiting for tmux-backed tab", sourceLocation: SourceLocation(
+      fileID: fileID,
+      filePath: filePath,
+      line: line,
+      column: column
+    ))
+    throw WaitForTestError.timedOut
+  }
+
+  private func waitForTmuxNewWindowAttempt(
+    _ gate: TmuxNewWindowGate,
+    fileID: String = #fileID,
+    filePath: String = #filePath,
+    line: Int = #line,
+    column: Int = #column
+  ) async throws {
+    for _ in 0..<100 {
+      let arguments = await gate.arguments
+      if arguments.contains(where: { $0.contains("new-window") }) {
+        return
+      }
+      await Task.yield()
+    }
+    Issue.record("Timed out waiting for tmux new-window attempt", sourceLocation: SourceLocation(
       fileID: fileID,
       filePath: filePath,
       line: line,
@@ -1311,5 +1899,17 @@ private actor TmuxCommandRecorder {
 
   func record(_ arguments: [String]) {
     recordedArguments.append(arguments)
+  }
+}
+
+private actor TmuxNewWindowOutputQueue {
+  private var outputs: [String]
+
+  init(_ outputs: [String]) {
+    self.outputs = outputs
+  }
+
+  func next() -> String {
+    outputs.removeFirst()
   }
 }

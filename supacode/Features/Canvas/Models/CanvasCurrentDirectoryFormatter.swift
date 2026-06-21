@@ -1,6 +1,6 @@
 import Foundation
 
-enum CanvasCurrentDirectoryFormatter {
+nonisolated enum CanvasCurrentDirectoryFormatter {
   static func displayPath(for path: String?, homePath: String = NSHomeDirectory()) -> String? {
     guard let path else { return nil }
     let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)

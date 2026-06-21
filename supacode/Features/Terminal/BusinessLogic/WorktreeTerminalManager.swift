@@ -358,8 +358,127 @@ final class WorktreeTerminalManager {
     return state
   }
 
+  private func resolvedTmuxController(for worktree: Worktree) -> TmuxTerminalController? {
+    guard usesAnonymousTmuxEnabled(for: worktree) else { return nil }
+    return tmuxController
+  }
+
+  private func usesAnonymousTmuxEnabled(for worktree: Worktree) -> Bool {
+    if let usesAnonymousTmuxForWorktree {
+      return usesAnonymousTmuxForWorktree(worktree)
+    }
+    return usesAnonymousTmux
+  }
+
+  private func refreshAnonymousTmuxConfiguration(for worktree: Worktree) {
+    guard let existing = states[worktree.id] else { return }
+    existing.setTmuxController(resolvedTmuxController(for: worktree))
+  }
+
+  private func setAnonymousTmuxBackedTerminalsEnabled(_ enabled: Bool) {
+    guard usesAnonymousTmux != enabled else { return }
+    usesAnonymousTmux = enabled
+    for state in states.values {
+      state.setTmuxController(enabled ? tmuxController : nil)
+    }
+  }
+
   func focusedDirectoryPath(for worktreeID: Worktree.ID) -> String? {
     stateIfExists(for: worktreeID)?.focusedDirectoryPathForRevealInFinder()
+  }
+
+  func visibleTmuxWindowIDs() -> Set<TmuxWindowID> {
+    if let selectedWorktreeID, let state = states[selectedWorktreeID] {
+      return state.visibleTmuxWindowIDs()
+    }
+    return states.values.reduce(into: Set<TmuxWindowID>()) { result, state in
+      result.formUnion(state.visibleTmuxWindowIDs())
+    }
+  }
+
+  func managedTmuxWindowIDs() -> Set<TmuxWindowID> {
+    states.values.reduce(into: Set<TmuxWindowID>()) { result, state in
+      result.formUnion(state.visibleTmuxWindowIDs())
+    }
+  }
+
+  func detachedTmuxCardSnapshot() async -> TmuxCardRecoverySnapshot {
+    guard let tmuxController, tmuxController.isAvailable else {
+      return TmuxCardRecoverySnapshot(candidates: [], diagnostics: [])
+    }
+    do {
+      return try await tmuxController.detachedCardSnapshot(visibleWindowIDs: managedTmuxWindowIDs())
+    } catch {
+      terminalLogger.warning("tmux recovery scan failed: \(error)")
+      return TmuxCardRecoverySnapshot(candidates: [], diagnostics: [])
+    }
+  }
+
+  func restoreDetachedTmuxCard(
+    _ candidateID: TmuxDetachedCardCandidate.ID,
+    worktrees: [Worktree]
+  ) async -> Bool {
+    let snapshot = await detachedTmuxCardSnapshot()
+    guard let candidate = snapshot.candidates.first(where: { $0.id == candidateID }) else {
+      terminalLogger.warning("tmux restore candidate vanished id=\(candidateID.rawValue)")
+      return false
+    }
+    guard let worktree = resolveWorktree(for: candidate, worktrees: worktrees) else {
+      terminalLogger.warning(
+        "tmux restore missing worktree window=\(candidate.windowID.rawValue) worktreeID=\(candidate.worktreeID)"
+      )
+      return false
+    }
+
+    let state = state(for: worktree)
+    guard await state.restoreDetachedTmuxCard(candidate) != nil else { return false }
+    selectedWorktreeID = worktree.id
+    return true
+  }
+
+  private func restoreDetachedTmuxCards(worktrees: [Worktree]) async -> Worktree.ID? {
+    let snapshot = await detachedTmuxCardSnapshot()
+    guard !snapshot.candidates.isEmpty else { return nil }
+
+    var restoredWorktreeID: Worktree.ID?
+    for candidate in snapshot.candidates {
+      guard let worktree = resolveWorktree(for: candidate, worktrees: worktrees) else {
+        terminalLogger.warning(
+          "tmux restore missing worktree window=\(candidate.windowID.rawValue) worktreeID=\(candidate.worktreeID)"
+        )
+        continue
+      }
+
+      let state = state(for: worktree)
+      guard await state.restoreDetachedTmuxCard(candidate) != nil else { continue }
+      if restoredWorktreeID == nil {
+        restoredWorktreeID = worktree.id
+      }
+    }
+
+    selectedWorktreeID = restoredWorktreeID
+    return restoredWorktreeID
+  }
+
+  private func resolveWorktree(
+    for candidate: TmuxDetachedCardCandidate,
+    worktrees: [Worktree]
+  ) -> Worktree? {
+    if let exact = worktrees.first(where: { normalizedPath($0.id) == normalizedPath(candidate.worktreeID) }) {
+      return exact
+    }
+    if let pathMatch = worktrees.first(where: {
+      normalizedPath($0.workingDirectory.path(percentEncoded: false)) == normalizedPath(candidate.worktreePath)
+    }) {
+      return pathMatch
+    }
+    return Worktree(
+      id: candidate.worktreeID,
+      name: URL(fileURLWithPath: candidate.worktreePath, isDirectory: true).lastPathComponent,
+      detail: candidate.worktreePath,
+      workingDirectory: URL(fileURLWithPath: candidate.worktreePath, isDirectory: true),
+      repositoryRootURL: URL(fileURLWithPath: candidate.repositoryRoot, isDirectory: true)
+    )
   }
 
   @discardableResult
@@ -625,34 +744,10 @@ final class WorktreeTerminalManager {
   }
 
   func setAgentDetectionEnabled(_ enabled: Bool) {
+    guard agentDetectionEnabled != enabled else { return }
     agentDetectionEnabled = enabled
     for state in states.values {
       state.setAgentDetectionEnabled(enabled)
-    }
-  }
-
-  private func resolvedTmuxController(for worktree: Worktree) -> TmuxTerminalController? {
-    guard usesAnonymousTmuxEnabled(for: worktree) else { return nil }
-    return tmuxController
-  }
-
-  private func usesAnonymousTmuxEnabled(for worktree: Worktree) -> Bool {
-    if let usesAnonymousTmuxForWorktree {
-      return usesAnonymousTmuxForWorktree(worktree)
-    }
-    return usesAnonymousTmux
-  }
-
-  private func refreshAnonymousTmuxConfiguration(for worktree: Worktree) {
-    guard let existing = states[worktree.id] else { return }
-    existing.setTmuxController(resolvedTmuxController(for: worktree))
-  }
-
-  private func setAnonymousTmuxBackedTerminalsEnabled(_ enabled: Bool) {
-    guard usesAnonymousTmux != enabled else { return }
-    usesAnonymousTmux = enabled
-    for state in states.values {
-      state.setTmuxController(enabled ? tmuxController : nil)
     }
   }
 
@@ -682,6 +777,27 @@ final class WorktreeTerminalManager {
       }
     }
     return bestLocation
+  }
+
+  @discardableResult
+  func focusWorktreeInCanvas(worktreeID: Worktree.ID) -> Bool {
+    guard selectedWorktreeID == nil,
+      let state = states[worktreeID],
+      let surfaceID = state.activeSurfaceID
+    else {
+      return false
+    }
+    canvasFocusedWorktreeID = worktreeID
+    let previousFocusChange = lastFocusChange
+    guard state.focusSurface(id: surfaceID) else {
+      return false
+    }
+    if lastFocusChange == previousFocusChange {
+      lastFocusChange = FocusChange(token: UUID(), worktreeID: worktreeID, surfaceID: surfaceID)
+      reevaluateInputSource(state: state, surfaceID: surfaceID, reason: .focusChanged)
+      emit(.focusChanged(worktreeID: worktreeID, surfaceID: surfaceID))
+    }
+    return true
   }
 
   @discardableResult
@@ -796,8 +912,12 @@ final class WorktreeTerminalManager {
   func restoreLayoutSnapshot(from worktrees: [Worktree]) async {
     terminalLogger.info("[LayoutRestore] restore: loading snapshot from disk")
     guard let payload = await layoutPersistence.loadSnapshot() else {
-      terminalLogger.info("[LayoutRestore] restore: no snapshot found on disk, skipping")
-      emit(.layoutRestored(selectedWorktreeID: nil))
+      terminalLogger.info("[LayoutRestore] restore: no snapshot found on disk, trying tmux card recovery")
+      let restoredWorktreeID = await restoreDetachedTmuxCards(worktrees: worktrees)
+      terminalLogger.info(
+        "[LayoutRestore] restore: no snapshot fallback selectedWorktreeID=\(restoredWorktreeID ?? "nil")"
+      )
+      emit(.layoutRestored(selectedWorktreeID: restoredWorktreeID))
       return
     }
     terminalLogger.info(
@@ -813,7 +933,15 @@ final class WorktreeTerminalManager {
     for (index, worktree) in worktrees.enumerated() {
       terminalLogger.info("[LayoutRestore] restore: available[\(index)] id=\(worktree.id) name=\(worktree.name)")
     }
-    let didRestore = applyLayoutSnapshotPayload(payload, availableWorktrees: worktrees)
+    let recoveredTmuxTargetsByWorktree = await makeRecoveredTmuxTargetsByWorktree(
+      for: payload,
+      availableWorktrees: worktrees
+    )
+    let didRestore = applyLayoutSnapshotPayload(
+      payload,
+      availableWorktrees: worktrees,
+      recoveredTmuxTargetsByWorktree: recoveredTmuxTargetsByWorktree
+    )
     terminalLogger.info("[LayoutRestore] restore: applyResult=\(didRestore)")
     if didRestore {
       terminalLogger.info(
@@ -871,7 +999,8 @@ final class WorktreeTerminalManager {
 
   private func applyLayoutSnapshotPayload(
     _ payload: TerminalLayoutSnapshotPayload,
-    availableWorktrees: [Worktree]
+    availableWorktrees: [Worktree],
+    recoveredTmuxTargetsByWorktree: [Worktree.ID: [TerminalTabID: TmuxTerminalTarget]] = [:]
   ) -> Bool {
     let worktreeByID = Dictionary(uniqueKeysWithValues: availableWorktrees.map { ($0.id, $0) })
     var restoredStates: [WorktreeTerminalState] = []
@@ -889,7 +1018,10 @@ final class WorktreeTerminalManager {
       }
       terminalLogger.info("[LayoutRestore] apply: restoring worktree \(worktree.id)")
       let state = state(for: worktree)
-      guard state.applyLayoutSnapshot(snapshot) else {
+      guard state.applyLayoutSnapshot(
+        snapshot,
+        recoveredTmuxTargets: recoveredTmuxTargetsByWorktree[worktree.id] ?? [:]
+      ) else {
         terminalLogger.warning("[LayoutRestore] apply: applyLayoutSnapshot failed for \(worktree.id)")
         state.closeAllSurfaces()
         for restored in restoredStates {
@@ -902,6 +1034,109 @@ final class WorktreeTerminalManager {
 
     terminalLogger.info("[LayoutRestore] apply: successfully restored \(restoredStates.count) worktree(s)")
     return true
+  }
+
+  private func makeRecoveredTmuxTargetsByWorktree(
+    for payload: TerminalLayoutSnapshotPayload,
+    availableWorktrees: [Worktree]
+  ) async -> [Worktree.ID: [TerminalTabID: TmuxTerminalTarget]] {
+    guard let tmuxController, tmuxController.isAvailable, let socketURL = tmuxController.defaultSocketURL else {
+      return [:]
+    }
+
+    let tmuxSnapshot = await detachedTmuxCardSnapshot()
+    guard !tmuxSnapshot.candidates.isEmpty else { return [:] }
+
+    let worktreeByID = Dictionary(uniqueKeysWithValues: availableWorktrees.map { ($0.id, $0) })
+    var consumedCandidateIDs: Set<TmuxDetachedCardCandidate.ID> = []
+    var targetsByWorktree: [Worktree.ID: [TerminalTabID: TmuxTerminalTarget]] = [:]
+
+    for snapshot in payload.worktrees {
+      guard let worktree = worktreeByID[snapshot.worktreeID] else { continue }
+      guard usesAnonymousTmuxEnabled(for: worktree) else { continue }
+      let recoverableTabs = snapshot.tabs.filter {
+        $0.tmuxTarget == nil && $0.splitRoot.kind == .leaf && UUID(uuidString: $0.tabID) != nil
+      }
+      let matchingCandidates = tmuxSnapshot.candidates.filter { tmuxCandidate($0, matches: worktree) }
+
+      for snapshotTab in snapshot.tabs {
+        guard snapshotTab.tmuxTarget == nil, snapshotTab.splitRoot.kind == .leaf else { continue }
+        guard let tabUUID = UUID(uuidString: snapshotTab.tabID) else { continue }
+        guard
+          let candidate = recoveredCandidate(
+            for: snapshotTab,
+            matchingCandidates: matchingCandidates,
+            recoverableTabCount: recoverableTabs.count,
+            consumedCandidateIDs: consumedCandidateIDs
+          )
+        else { continue }
+
+        guard let paneID = candidate.paneID else {
+          terminalLogger.warning(
+            "[LayoutRestore] tmux rehydrate: skipping \(candidate.windowID.rawValue) without pane id"
+          )
+          continue
+        }
+
+        consumedCandidateIDs.insert(candidate.id)
+        let tabID = TerminalTabID(rawValue: tabUUID)
+        let target = TmuxTerminalTarget.restored(
+          socketURL: socketURL,
+          tabID: tabID,
+          cardID: candidate.cardID,
+          windowID: candidate.windowID,
+          paneID: paneID
+        )
+
+        do {
+          let prepared = try await tmuxController.prepareExistingWindowForAttach(target: target)
+          targetsByWorktree[worktree.id, default: [:]][tabID] = prepared
+          terminalLogger.info(
+            "[LayoutRestore] tmux rehydrate: worktree=\(worktree.id) tab=\(snapshotTab.tabID) "
+              + "window=\(candidate.windowID.rawValue)"
+          )
+        } catch {
+          terminalLogger.warning(
+            "[LayoutRestore] tmux rehydrate: failed window=\(candidate.windowID.rawValue) error=\(error)"
+          )
+        }
+      }
+    }
+
+    return targetsByWorktree
+  }
+
+  private func recoveredCandidate(
+    for snapshotTab: TerminalLayoutSnapshotPayload.SnapshotTab,
+    matchingCandidates: [TmuxDetachedCardCandidate],
+    recoverableTabCount: Int,
+    consumedCandidateIDs: Set<TmuxDetachedCardCandidate.ID>
+  ) -> TmuxDetachedCardCandidate? {
+    if let exact = matchingCandidates.first(where: {
+      !consumedCandidateIDs.contains($0.id)
+        && $0.cardID.rawValue.caseInsensitiveCompare(snapshotTab.tabID) == .orderedSame
+    }) {
+      return exact
+    }
+
+    let availableCandidates = matchingCandidates.filter { !consumedCandidateIDs.contains($0.id) }
+    guard recoverableTabCount == 1, availableCandidates.count == 1 else {
+      return nil
+    }
+    return availableCandidates[0]
+  }
+
+  private func tmuxCandidate(_ candidate: TmuxDetachedCardCandidate, matches worktree: Worktree) -> Bool {
+    normalizedPath(candidate.worktreeID) == normalizedPath(worktree.id)
+      || normalizedPath(candidate.worktreePath) == normalizedPath(worktree.workingDirectory.path(percentEncoded: false))
+  }
+
+  private func normalizedPath(_ path: String) -> String {
+    var result = path
+    while result.count > 1 && result.hasSuffix("/") {
+      result.removeLast()
+    }
+    return result
   }
 
   #if DEBUG

@@ -13,8 +13,13 @@ final class TerminalTabManager {
   var selectedTabId: TerminalTabID?
   private(set) var editingTabID: TerminalTabID?
 
-  func createTab(title: String, icon: String?, isTitleLocked: Bool = false) -> TerminalTabID {
-    let tab = TerminalTabItem(title: title, icon: icon, isTitleLocked: isTitleLocked)
+  func createTab(
+    id: TerminalTabID = TerminalTabID(),
+    title: String,
+    icon: String?,
+    isTitleLocked: Bool = false
+  ) -> TerminalTabID {
+    let tab = TerminalTabItem(id: id, title: title, icon: icon, isTitleLocked: isTitleLocked)
     if let selectedTabId,
       let selectedIndex = tabs.firstIndex(where: { $0.id == selectedTabId })
     {

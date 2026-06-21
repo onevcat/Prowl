@@ -22,7 +22,8 @@ extension WorktreeTerminalState {
   }
 
   func makeTmuxTerminalTarget(
-    from snapshotTarget: TerminalLayoutSnapshotPayload.SnapshotTmuxTarget?
+    from snapshotTarget: TerminalLayoutSnapshotPayload.SnapshotTmuxTarget?,
+    tabID: TerminalTabID
   ) -> TmuxTerminalTarget? {
     guard let snapshotTarget, let tmuxController, tmuxController.isAvailable, snapshotTarget.isValid else {
       return nil
@@ -34,10 +35,10 @@ extension WorktreeTerminalState {
       return nil
     }
 
-    return TmuxTerminalTarget(
+    return TmuxTerminalTarget.restored(
       socketURL: URL(fileURLWithPath: snapshotTarget.socketPath, isDirectory: false),
-      groupSession: snapshotTarget.groupSession,
-      clientSession: snapshotTarget.clientSession,
+      tabID: tabID,
+      cardID: TmuxCardID(rawValue: tabID.rawValue.uuidString),
       windowID: windowID,
       paneID: paneID
     )
@@ -49,7 +50,13 @@ extension WorktreeTerminalState {
     guard snapshotTab.splitRoot.kind == .leaf else {
       return nil
     }
-    return makeTmuxTerminalTarget(from: snapshotTab.tmuxTarget)
+    guard let tabUUID = UUID(uuidString: snapshotTab.tabID) else {
+      return nil
+    }
+    return makeTmuxTerminalTarget(
+      from: snapshotTab.tmuxTarget,
+      tabID: TerminalTabID(rawValue: tabUUID)
+    )
   }
 
   func makeLayoutSnapshotWorktree() -> TerminalLayoutSnapshotPayload.SnapshotWorktree? {
@@ -105,7 +112,10 @@ extension WorktreeTerminalState {
     return result
   }
 
-  func applyLayoutSnapshot(_ snapshot: TerminalLayoutSnapshotPayload.SnapshotWorktree) -> Bool {
+  func applyLayoutSnapshot(
+    _ snapshot: TerminalLayoutSnapshotPayload.SnapshotWorktree,
+    recoveredTmuxTargets: [TerminalTabID: TmuxTerminalTarget] = [:]
+  ) -> Bool {
     terminalStateLogger.info(
       "[LayoutRestore] applySnapshot: worktree=\(worktree.id)"
         + " snapshotWorktreeID=\(snapshot.worktreeID) tabs=\(snapshot.tabs.count)"
@@ -162,7 +172,9 @@ extension WorktreeTerminalState {
       terminalStateLogger.info(
         "[LayoutRestore] applySnapshot: restoring tab[\(index)] id=\(entry.snapshotTab.tabID)"
       )
-      let restoredTmuxTarget = makeRestorableTmuxTerminalTarget(for: entry.snapshotTab)
+      let restoredTmuxTarget =
+        makeRestorableTmuxTerminalTarget(for: entry.snapshotTab)
+        ?? recoveredTmuxTargets[entry.tabID]
       guard
         let rootNode = restoreSplitNode(
           from: entry.snapshotTab.splitRoot,

@@ -338,6 +338,9 @@ struct SupacodeApp: App {
       latestUnreadNotification: {
         terminalManager.latestUnreadNotificationLocation()
       },
+      focusWorktreeInCanvas: { worktreeID in
+        terminalManager.focusWorktreeInCanvas(worktreeID: worktreeID)
+      },
       focusSurface: { worktreeID, surfaceID in
         terminalManager.focusSurface(worktreeID: worktreeID, surfaceID: surfaceID)
       },
@@ -349,6 +352,12 @@ struct SupacodeApp: App {
       },
       focusedDirectoryPath: { worktreeID in
         terminalManager.focusedDirectoryPath(for: worktreeID)
+      },
+      detachedTmuxCards: {
+        await terminalManager.detachedTmuxCardSnapshot()
+      },
+      restoreDetachedTmuxCard: { candidateID, worktrees in
+        await terminalManager.restoreDetachedTmuxCard(candidateID, worktrees: worktrees)
       }
     )
   }

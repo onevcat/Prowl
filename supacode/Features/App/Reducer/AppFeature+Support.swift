@@ -34,6 +34,38 @@ func makeTerminalRestorableWorktrees(from repositories: [Repository]) -> [Worktr
   return worktrees
 }
 
+func terminalRecoveryWorktrees(from repositories: [Repository]) -> [Worktree] {
+  makeTerminalRestorableWorktrees(from: repositories)
+}
+
+nonisolated func normalizedRecoveryRootPath(_ path: String) -> String {
+  var path = path
+  while path.count > 1, path.hasSuffix("/") {
+    path.removeLast()
+  }
+  return path
+}
+
+func repositoryDisplayNamesByRootPath(from state: RepositoriesFeature.State) -> [String: String] {
+  var displayNames: [String: String] = [:]
+  for repository in state.repositories {
+    let rawRootPath = normalizedRecoveryRootPath(repository.rootURL.path(percentEncoded: false))
+    let standardizedRootPath = normalizedRecoveryRootPath(
+      repository.rootURL.standardizedFileURL.path(percentEncoded: false)
+    )
+    let customTitle = state.repositoryCustomTitles[repository.id]?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let displayName: String
+    if let customTitle, !customTitle.isEmpty {
+      displayName = customTitle
+    } else {
+      displayName = repository.name
+    }
+    displayNames[rawRootPath] = displayName
+    displayNames[standardizedRootPath] = displayName
+  }
+  return displayNames
+}
+
 func openedWorktreeIDsForInfoWatcher(
   from repositories: RepositoriesFeature.State
 ) -> Set<Worktree.ID> {

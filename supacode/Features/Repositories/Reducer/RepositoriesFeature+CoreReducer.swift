@@ -537,7 +537,7 @@ extension RepositoriesFeature {
       switch state.selection {
       case .some(.worktree), .some(.repository):
         needsRedirect = false
-      case .some(.canvas), .some(.archivedWorktrees), .none:
+      case .some(.canvas), .some(.archivedWorktrees), .some(.freestyle), .none:
         needsRedirect = true
       }
       state.shouldFocusRestoredCanvasAtScaleOne = false

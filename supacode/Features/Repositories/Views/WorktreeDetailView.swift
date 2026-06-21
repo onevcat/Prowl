@@ -42,9 +42,6 @@ struct WorktreeDetailView: View {
   /// Drive the chrome (nav + toolbar) tint for Normal and Canvas modes.
   @Shared(.repositoryAppearances) private var repositoryAppearances
   @Shared(.settingsFile) private var settingsFile
-  /// True while a Canvas card is expanded in place, so the otherwise-transparent
-  /// Canvas toolbar gets a matching material scrim instead of showing through.
-  @State private var isCanvasCardExpanded = false
   @State private var canvasFocusedWorktreeID: Worktree.ID?
   @State private var canvasFocusedTabID: TerminalTabID?
   @State private var canvasViewportState = CanvasView.ViewportState()
@@ -177,7 +174,7 @@ struct WorktreeDetailView: View {
     }
     .windowToolbarChromeBackground(
       toolbarChromeFill(repositories: repositories),
-      forceMaterialScrim: repositories.isShowingCanvas && isCanvasCardExpanded
+      forceMaterialScrim: false
     )
     let actions = makeFocusedActions(
       repositories: repositories,
@@ -494,9 +491,6 @@ struct WorktreeDetailView: View {
         onViewportStateChanged: { state in
           canvasViewportState = state
         },
-        onExpandedChange: { expanded in
-          isCanvasCardExpanded = expanded
-        },
         onDirectionalNewTerminalRequested: { worktreeID, directoryMode in
           switch directoryMode {
           case .currentDirectory:
@@ -544,6 +538,8 @@ struct WorktreeDetailView: View {
         loadingInfo: loadingInfo,
         selectedTerminalWorktree: selectedTerminalWorktree,
         selectedWorktreeSummaries: selectedWorktreeSummaries,
+        isAwaitingLaunchLayoutRestore: isAwaitingLaunchLayoutRestore,
+        commandPalettePresented: commandPalettePresented,
         barTint: normalFill
       )
       .windowChromeTint(normalFill, edges: [.top, .leading])
@@ -556,6 +552,8 @@ struct WorktreeDetailView: View {
     loadingInfo: WorktreeLoadingInfo?,
     selectedTerminalWorktree: Worktree?,
     selectedWorktreeSummaries: [MultiSelectedWorktreeSummary],
+    isAwaitingLaunchLayoutRestore: Bool,
+    commandPalettePresented: Bool,
     barTint: WindowChromeTint.Fill?
   ) -> some View {
     if repositories.isShowingArchivedWorktrees {

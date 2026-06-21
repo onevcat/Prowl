@@ -86,6 +86,8 @@ struct CommandPaletteItem: Identifiable, Equatable {
     case renameBranch
     case openRepositorySettings(Repository.ID)
     case runCustomCommand(index: Int, commandID: String, systemImage: String)
+    case restoreRunningTab
+    case restoreDetachedCard(TmuxDetachedCardCandidate.ID)
     #if DEBUG
       case debugTestToast(RepositoriesFeature.StatusToast)
       case debugSimulateUpdateFound
@@ -109,8 +111,10 @@ struct CommandPaletteItem: Identifiable, Equatable {
     switch kind {
     case .checkForUpdates, .openRepository, .layoutCenter, .layoutArrange, .layoutOverview,
       .openInVSCode, .openInFork, .openWeb, .openSettings, .newWorktree,
-      .viewArchivedWorktrees, .refreshWorktrees, .installCLI, .jumpToLatestUnread:
+      .viewArchivedWorktrees, .refreshWorktrees, .installCLI, .jumpToLatestUnread, .restoreRunningTab:
       return true
+    case .restoreDetachedCard:
+      return false
     case .openPullRequest,
       .markPullRequestReady,
       .mergePullRequest,
@@ -123,6 +127,10 @@ struct CommandPaletteItem: Identifiable, Equatable {
     case .toggleLeftSidebar,
       .toggleActiveAgentsPanel,
       .toggleCanvas,
+      .expandCanvasCard,
+      .arrangeCanvasCards,
+      .organizeCanvasCards,
+      .selectAllCanvasCards,
       .toggleShelf,
       .showDiff,
       .revealInFinder,
@@ -153,7 +161,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
   var isRootAction: Bool {
     switch kind {
     case .checkForUpdates, .openRepository, .openSettings, .newWorktree, .viewArchivedWorktrees,
-      .refreshWorktrees, .installCLI, .jumpToLatestUnread:
+      .refreshWorktrees, .installCLI, .jumpToLatestUnread, .restoreRunningTab:
       return true
     case .ghosttyCommand, .layoutCenter, .layoutArrange, .layoutOverview, .openInVSCode, .openInFork,
       .openWeb:
@@ -172,6 +180,10 @@ struct CommandPaletteItem: Identifiable, Equatable {
       .toggleLeftSidebar,
       .toggleActiveAgentsPanel,
       .toggleCanvas,
+      .expandCanvasCard,
+      .arrangeCanvasCards,
+      .organizeCanvasCards,
+      .selectAllCanvasCards,
       .toggleShelf,
       .showDiff,
       .revealInFinder,
@@ -183,6 +195,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
       .deleteWorktree,
       .renameBranch,
       .openRepositorySettings,
+      .restoreDetachedCard,
       .runCustomCommand:
       return false
     #if DEBUG
@@ -256,6 +269,8 @@ struct CommandPaletteItem: Identifiable, Equatable {
       .rerunFailedJobs,
       .openFailingCheckDetails,
       .installCLI,
+      .restoreRunningTab,
+      .restoreDetachedCard,
       .worktreeSelect,
       .changeFocusedTabIcon,
       .togglePinWorktree,

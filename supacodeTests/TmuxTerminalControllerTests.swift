@@ -19,10 +19,11 @@ internal struct TmuxTerminalControllerTests {
     let resolved = TmuxTerminalController.resolveExecutable(isExecutable: probe.isExecutable)
 
     #expect(resolved == URL(fileURLWithPath: "/usr/local/bin/tmux", isDirectory: false))
-    #expect(probe.paths == [
-      "/opt/homebrew/bin/tmux",
-      "/usr/local/bin/tmux",
-    ])
+    #expect(
+      probe.paths == [
+        "/opt/homebrew/bin/tmux",
+        "/usr/local/bin/tmux",
+      ])
   }
 
   @Test internal func attachCommandUsesSharedShellQuoting() {
@@ -36,12 +37,231 @@ internal struct TmuxTerminalControllerTests {
         socketURL: URL(fileURLWithPath: "/tmp/prowl's.sock", isDirectory: false),
         groupSession: "prowl-wt-test",
         clientSession: "prowl-tab-it's",
+        cardID: TmuxCardID(rawValue: "card-quoted"),
         windowID: nil,
         paneID: nil
       )
     )
 
-    #expect(command == "'/tmp/tmux' -S '/tmp/prowl'\"'\"'s.sock' -CC attach-session -t 'prowl-tab-it'\"'\"'s'")
+    #expect(command == "'/tmp/tmux' -S '/tmp/prowl'\"'\"'s.sock' attach-session -t 'prowl-tab-it'\"'\"'s'")
+  }
+
+  @Test internal func createWindowWritesProwlMetadataToWindowOptions() async throws {
+    let recorder = TmuxCommandRecorder()
+    let controller = TmuxTerminalController(
+      executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
+      execute: { _, arguments in
+        await recorder.record(arguments)
+        if arguments.contains("new-window") {
+          return TmuxCommandResult(stdout: "@7 %9\n", stderr: "", exitCode: 0)
+        }
+        return TmuxCommandResult(stdout: "", stderr: "", exitCode: 0)
+      }
+    )
+    let target = TmuxTerminalTarget.make(
+      appNamespace: "prowl",
+      worktreeID: "/tmp/repo/wt",
+      tabID: TerminalTabID(rawValue: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!),
+      cardID: TmuxCardID(rawValue: "card-7"),
+      socketRoot: URL(fileURLWithPath: "/tmp/prowl-tmux", isDirectory: true)
+    )
+    let metadata = TmuxWindowMetadata(
+      cardID: target.cardID,
+      worktreeID: "/tmp/repo/wt",
+      worktreePath: "/tmp/repo/wt",
+      repositoryRoot: "/tmp/repo",
+      createdAt: "2026-05-28T12:00:00Z"
+    )
+
+    _ = try await controller.createWindow(
+      target: target,
+      cwd: URL(fileURLWithPath: "/tmp/repo/wt", isDirectory: true),
+      title: "wt 1",
+      metadata: metadata
+    )
+
+    let arguments = await recorder.arguments
+    #expect(arguments.containsSetWindowOption(name: "@prowl.managed", value: "1"))
+    #expect(arguments.containsSetWindowOption(name: "@prowl.card_id", value: "card-7"))
+    #expect(arguments.containsSetWindowOption(name: "@prowl.worktree_id", value: "/tmp/repo/wt"))
+    #expect(arguments.containsSetWindowOption(name: "@prowl.worktree_path", value: "/tmp/repo/wt"))
+    #expect(arguments.containsSetWindowOption(name: "@prowl.repository_root", value: "/tmp/repo"))
+    #expect(arguments.containsSetWindowOption(name: "@prowl.created_at", value: "2026-05-28T12:00:00Z"))
+  }
+
+  @Test internal func createWindowCleansUpWindowWhenMetadataWriteFails() async {
+    let recorder = TmuxCommandRecorder()
+    let controller = TmuxTerminalController(
+      executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
+      execute: { _, arguments in
+        await recorder.record(arguments)
+        if arguments.contains("new-window") {
+          return TmuxCommandResult(stdout: "@7 %9\n", stderr: "", exitCode: 0)
+        }
+        if arguments.contains("set-window-option") {
+          return TmuxCommandResult(stdout: "", stderr: "metadata failed", exitCode: 1)
+        }
+        return TmuxCommandResult(stdout: "", stderr: "", exitCode: 0)
+      }
+    )
+    let target = TmuxTerminalTarget.make(
+      appNamespace: "prowl",
+      worktreeID: "/tmp/repo/wt",
+      tabID: TerminalTabID(rawValue: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!),
+      cardID: TmuxCardID(rawValue: "card-7"),
+      socketRoot: URL(fileURLWithPath: "/tmp/prowl-tmux", isDirectory: true)
+    )
+    let metadata = TmuxWindowMetadata(
+      cardID: target.cardID,
+      worktreeID: "/tmp/repo/wt",
+      worktreePath: "/tmp/repo/wt",
+      repositoryRoot: "/tmp/repo",
+      createdAt: "2026-05-28T12:00:00Z"
+    )
+
+    await #expect(throws: TmuxTerminalControllerError.self) {
+      _ = try await controller.createWindow(
+        target: target,
+        cwd: URL(fileURLWithPath: "/tmp/repo/wt", isDirectory: true),
+        title: "wt 1",
+        metadata: metadata
+      )
+    }
+
+    let arguments = await recorder.arguments
+    #expect(arguments.containsKillWindow(windowID: "@7"))
+  }
+
+  @Test internal func prepareExistingWindowSelectsWindowInFreshAttachSession() async throws {
+    let recorder = TmuxCommandRecorder()
+    let controller = TmuxTerminalController(
+      executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
+      execute: { _, arguments in
+        await recorder.record(arguments)
+        if arguments.contains("display-message") {
+          return TmuxCommandResult(stdout: "@21\n", stderr: "", exitCode: 0)
+        }
+        if arguments.contains("has-session") {
+          return TmuxCommandResult(stdout: "", stderr: "missing session", exitCode: 1)
+        }
+        return TmuxCommandResult(stdout: "", stderr: "", exitCode: 0)
+      }
+    )
+    let target = TmuxTerminalTarget.restored(
+      socketURL: URL(fileURLWithPath: "/tmp/prowl.sock", isDirectory: false),
+      tabID: TerminalTabID(rawValue: UUID(uuidString: "22222222-2222-2222-2222-222222222222")!),
+      cardID: TmuxCardID(rawValue: "card-21"),
+      windowID: try #require(TmuxWindowID(rawValue: "@21")),
+      paneID: nil
+    )
+
+    let prepared = try await controller.prepareExistingWindowForAttach(target: target)
+
+    let arguments = await recorder.arguments
+    #expect(prepared == target)
+    #expect(arguments.contains { $0.contains("display-message") && $0.contains("@21") })
+    #expect(arguments.contains { $0.contains("kill-session") && $0.contains("prowl-tab-222222222222") })
+    #expect(arguments.contains { $0.contains("new-session") && $0.contains("prowl-tab-222222222222") })
+    #expect(arguments.contains { $0.contains("link-window") && $0.contains("@21") })
+    #expect(arguments.contains { $0.contains("select-window") && $0.contains("prowl-tab-222222222222:@21") })
+    #expect(
+      arguments.contains {
+        $0.contains("kill-window") && $0.contains { $0.contains("__prowl_client_bootstrap") }
+      })
+  }
+
+  @Test internal func detachedCardScanFiltersVisibleWindowsAndReportsLegacyContainers() async throws {
+    let separator = "\u{1F}"
+    let controller = TmuxTerminalController(
+      executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
+      execute: { _, arguments in
+        if arguments.contains("list-sessions") {
+          return TmuxCommandResult(
+            stdout: [
+              ["prowl-cards", "2", "prowl-cards"].joined(separator: separator),
+              ["prowl-tab-111111111111", "2", "prowl-cards"].joined(separator: separator),
+              ["prowl-wt-old", "1", "prowl-wt-old"].joined(separator: separator),
+              ["prowl-tab-222222222222", "1", "prowl-wt-old"].joined(separator: separator),
+            ].joined(separator: "\n"),
+            stderr: "",
+            exitCode: 0
+          )
+        }
+        if arguments.contains("list-windows") {
+          return TmuxCommandResult(
+            stdout: [
+              [
+                "prowl-cards", "@21", "shell", "/tmp/repo/wt", "zsh", "", "1", "card-21",
+                "/tmp/repo/wt", "/tmp/repo/wt", "/tmp/repo", "2026-05-28T12:00:01Z",
+              ].joined(separator: separator),
+              [
+                "prowl-cards", "@22", "visible", "/tmp/repo/wt", "zsh", "", "1", "card-22",
+                "/tmp/repo/wt", "/tmp/repo/wt", "/tmp/repo", "2026-05-28T12:00:00Z",
+              ].joined(separator: separator),
+            ].joined(separator: "\n"),
+            stderr: "",
+            exitCode: 0
+          )
+        }
+        return TmuxCommandResult(stdout: "", stderr: "", exitCode: 0)
+      }
+    )
+
+    let visibleWindowID = try #require(TmuxWindowID(rawValue: "@22"))
+    let snapshot = try await controller.detachedCardSnapshot(visibleWindowIDs: [visibleWindowID])
+
+    #expect(snapshot.candidates.map(\.windowID.rawValue) == ["@21"])
+    #expect(snapshot.diagnostics.count == 1)
+    #expect(
+      snapshot.diagnostics.first?.sessionNames == [
+        "prowl-cards",
+        "prowl-tab-111111111111",
+        "prowl-tab-222222222222",
+        "prowl-wt-old",
+      ])
+    #expect(
+      snapshot.diagnostics.first?.windowCountsBySession == [
+        "prowl-cards": 2,
+        "prowl-tab-111111111111": 2,
+        "prowl-tab-222222222222": 1,
+        "prowl-wt-old": 1,
+      ])
+  }
+
+  @Test internal func detachedCardScanDoesNotReportCurrentClientSessions() async throws {
+    let separator = "\u{1F}"
+    let controller = TmuxTerminalController(
+      executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
+      execute: { _, arguments in
+        if arguments.contains("list-sessions") {
+          return TmuxCommandResult(
+            stdout: [
+              ["prowl-cards", "2", "prowl-cards"].joined(separator: separator),
+              ["prowl-tab-111111111111", "2", "prowl-cards"].joined(separator: separator),
+              ["prowl-tab-222222222222", "1", ""].joined(separator: separator),
+            ].joined(separator: "\n"),
+            stderr: "",
+            exitCode: 0
+          )
+        }
+        if arguments.contains("list-windows") {
+          return TmuxCommandResult(
+            stdout: [
+              "prowl-cards", "@21", "shell", "/tmp/repo/wt", "zsh", "", "1", "card-21",
+              "/tmp/repo/wt", "/tmp/repo/wt", "/tmp/repo", "2026-05-28T12:00:01Z",
+            ].joined(separator: separator),
+            stderr: "",
+            exitCode: 0
+          )
+        }
+        return TmuxCommandResult(stdout: "", stderr: "", exitCode: 0)
+      }
+    )
+
+    let snapshot = try await controller.detachedCardSnapshot(visibleWindowIDs: [])
+
+    #expect(snapshot.candidates.map(\.windowID.rawValue) == ["@21"])
+    #expect(snapshot.diagnostics.isEmpty)
   }
 
   @Test internal func ensureGroupConfiguresProwlCopyModeBindings() async throws {
@@ -132,6 +352,7 @@ internal struct TmuxTerminalControllerTests {
         socketURL: URL(fileURLWithPath: "/tmp/prowl.sock", isDirectory: false),
         groupSession: "prowl-wt-test",
         clientSession: "prowl-tab-test",
+        cardID: TmuxCardID(rawValue: "card-kill-window"),
         windowID: TmuxWindowID(rawValue: "@42"),
         paneID: nil
       )
@@ -154,6 +375,7 @@ internal struct TmuxTerminalControllerTests {
           socketURL: URL(fileURLWithPath: "/tmp/prowl.sock", isDirectory: false),
           groupSession: "prowl-wt-test",
           clientSession: "prowl-tab-test",
+          cardID: TmuxCardID(rawValue: "card-thrown-error"),
           windowID: TmuxWindowID(rawValue: "@42"),
           paneID: nil
         )
@@ -179,9 +401,21 @@ private actor TmuxCommandRecorder {
 }
 
 extension [[String]] {
+  fileprivate func containsSetWindowOption(name: String, value: String) -> Bool {
+    contains {
+      $0 == ["-S", "/tmp/prowl-tmux/prowl.sock", "set-window-option", "-t", "@7", name, value]
+    }
+  }
+
   fileprivate func containsSetGlobalOption(name: String, value: String) -> Bool {
     contains {
       $0 == ["-S", "/tmp/prowl-tmux/prowl.sock", "set-option", "-g", name, value]
+    }
+  }
+
+  fileprivate func containsKillWindow(windowID: String) -> Bool {
+    contains {
+      $0 == ["-S", "/tmp/prowl-tmux/prowl.sock", "kill-window", "-t", windowID]
     }
   }
 
