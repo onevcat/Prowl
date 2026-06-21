@@ -11,7 +11,23 @@ nonisolated func shouldFallbackToLoginShell(_ error: Error) -> Bool {
     return true
   }
   let output = "\(shellError.stderr)\n\(shellError.stdout)".lowercased()
-  return output.contains("command not found")
+  if output.contains("command not found") {
+    return true
+  }
+  // A Finder-launched app inherits the bare launchd PATH, so `git` is the Xcode
+  // shim; when it's unusable (license/active-path) a login shell finds a real git.
+  return indicatesUnusableXcodeCommandLineTools(output)
+}
+
+nonisolated private func indicatesUnusableXcodeCommandLineTools(_ lowercasedOutput: String) -> Bool {
+  let signatures = [
+    "xcode license",
+    "xcode-select: error",
+    "invalid active developer path",
+    "no developer tools were found",
+    "requires xcode",
+  ]
+  return signatures.contains { lowercasedOutput.contains($0) }
 }
 
 nonisolated func wrapShellError(
