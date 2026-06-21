@@ -1,7 +1,16 @@
 import SwiftUI
 
+struct DetailToolbarAgentIdentity: Equatable {
+  let agent: DetectedAgent
+  let icon: TabIconSource?
+  let accessibilityLabel: String
+}
+
 struct WorktreeDetailTitleView: View {
   let title: DetailToolbarTitle
+  let repositoryColor: RepositoryColorChoice?
+  let agentIdentity: DetailToolbarAgentIdentity?
+  let isTmuxBacked: Bool
   let onSubmit: ((String) -> Void)?
   let externalRenamePrompt: PendingRenameBranchRequest?
   let onConsumeExternalRenamePrompt: (Int) -> Void
@@ -67,7 +76,15 @@ struct WorktreeDetailTitleView: View {
         .foregroundStyle(.secondary)
         .accessibilityHidden(true)
         .frame(width: iconWidth, alignment: .center)
-      Text(title.text)
+      titleText
+      if let agentIdentity {
+        agentIcon(agentIdentity)
+      }
+      if isTmuxBacked {
+        Image(systemName: "checkmark")
+          .foregroundStyle(.green)
+          .accessibilityLabel("Tmux-backed terminal")
+      }
       if title.supportsRename && isHovered {
         Image(systemName: "pencil")
           .foregroundStyle(.secondary)
@@ -76,6 +93,65 @@ struct WorktreeDetailTitleView: View {
     }
     .font(.headline)
     .padding(.horizontal, horizontalPadding)
+  }
+
+  @ViewBuilder
+  private var titleText: some View {
+    if let directoryParts {
+      HStack(spacing: 0) {
+        if let prefix = directoryParts.prefix {
+          Text(prefix)
+            .foregroundStyle(.secondary)
+        }
+        Text(directoryParts.name)
+          .foregroundStyle(repositoryColor?.color ?? .accentColor)
+          .fontWeight(.semibold)
+      }
+      if case .branch = title.kind {
+        Text("|")
+          .foregroundStyle(.tertiary)
+        Text(title.text)
+      }
+    } else {
+      Text(title.text)
+    }
+  }
+
+  @ViewBuilder
+  private func agentIcon(_ identity: DetailToolbarAgentIdentity) -> some View {
+    Group {
+      if let icon = identity.icon {
+        TabIconImage(rawName: icon.storageString, pointSize: 15)
+      } else {
+        Image(systemName: "sparkle")
+          .font(.system(size: 15))
+      }
+    }
+    .foregroundStyle(AgentIconTint.color(for: identity.agent) ?? .primary)
+    .frame(width: iconWidth, height: iconWidth)
+    .accessibilityLabel(identity.accessibilityLabel)
+  }
+
+  private var directoryParts: (prefix: String?, name: String)? {
+    guard let directory = title.directory else { return nil }
+    let path = directory.standardizedFileURL.path(percentEncoded: false)
+    guard !path.isEmpty else { return nil }
+    let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path(percentEncoded: false)
+    let displayPath =
+      if path == home {
+        "~"
+      } else if path.hasPrefix(home + "/") {
+        "~" + path.dropFirst(home.count)
+      } else {
+        path
+      }
+    let name = directory.lastPathComponent.isEmpty ? displayPath : directory.lastPathComponent
+    guard !name.isEmpty else { return nil }
+    let suffix = "/\(name)"
+    if displayPath.hasSuffix(suffix) {
+      return (String(displayPath.dropLast(name.count)), name)
+    }
+    return (nil, displayPath)
   }
 
   private var iconWidth: CGFloat {

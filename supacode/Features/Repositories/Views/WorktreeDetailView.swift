@@ -22,6 +22,7 @@ struct WorktreeDetailView: View {
     let availableUpdateVersion: String?
     let showRunButtonInToolbar: Bool
     let showDefaultEditorInToolbar: Bool
+    let actionTargetWorktree: Worktree?
   }
 
   private struct CanvasToolbarState {
@@ -159,7 +160,8 @@ struct WorktreeDetailView: View {
             isUpdateReadyToInstall: state.updates.isUpdateReadyToInstall,
             availableUpdateVersion: state.updates.availableVersion,
             showRunButtonInToolbar: settingsFile.global.showRunButtonInToolbar,
-            showDefaultEditorInToolbar: settingsFile.global.showDefaultEditorInToolbar
+            showDefaultEditorInToolbar: settingsFile.global.showDefaultEditorInToolbar,
+            actionTargetWorktree: actionTargetWorktree
           )
         )
       {
@@ -378,8 +380,51 @@ struct WorktreeDetailView: View {
       isUpdateReadyToInstall: input.isUpdateReadyToInstall,
       availableUpdateVersion: input.availableUpdateVersion,
       showRunButtonInToolbar: input.showRunButtonInToolbar,
-      showDefaultEditorInToolbar: input.showDefaultEditorInToolbar
+      showDefaultEditorInToolbar: input.showDefaultEditorInToolbar,
+      repositoryColor: toolbarRepositoryColor(
+        repositories: input.repositories,
+        selectedWorktree: input.selectedWorktree
+      ),
+      agentIdentity: toolbarAgentIdentity(for: input.actionTargetWorktree),
+      isTmuxBacked: toolbarIsTmuxBacked(for: input.actionTargetWorktree)
     )
+  }
+
+  private func toolbarRepositoryColor(
+    repositories: RepositoriesFeature.State,
+    selectedWorktree: Worktree?
+  ) -> RepositoryColorChoice? {
+    let repositoryID =
+      selectedWorktree.flatMap { repositories.repositoryID(containing: $0.id) }
+      ?? repositories.selectedRepositoryID
+    return repositoryID.flatMap { repositoryAppearances[$0]?.color }
+  }
+
+  private func toolbarAgentIdentity(for worktree: Worktree?) -> DetailToolbarAgentIdentity? {
+    guard let terminalState = worktree.flatMap({ terminalManager.stateIfExists(for: $0.id) }),
+      let surfaceID = terminalState.activeSurfaceID,
+      let paneState = terminalState.surfaceAgentStates[surfaceID],
+      let agent = paneState.detectedAgent,
+      paneState.state != .unknown
+    else {
+      return nil
+    }
+    let iconToken = paneState.iconLookupToken ?? agent.iconLookupToken
+    return DetailToolbarAgentIdentity(
+      agent: agent,
+      icon: CommandIconMap.iconForFirstToken(iconToken)
+        ?? CommandIconMap.iconForFirstToken(agent.iconLookupToken),
+      accessibilityLabel: agent.displayName
+    )
+  }
+
+  private func toolbarIsTmuxBacked(for worktree: Worktree?) -> Bool {
+    guard let terminalState = worktree.flatMap({ terminalManager.stateIfExists(for: $0.id) }),
+      let tabID = terminalState.tabManager.selectedTabId
+    else {
+      return false
+    }
+    return terminalState.isTmuxBacked(tabID)
   }
 
   private func selectedWorktreeSummaries(
@@ -1090,6 +1135,9 @@ struct WorktreeDetailView: View {
     let availableUpdateVersion: String?
     let showRunButtonInToolbar: Bool
     let showDefaultEditorInToolbar: Bool
+    let repositoryColor: RepositoryColorChoice?
+    let agentIdentity: DetailToolbarAgentIdentity?
+    let isTmuxBacked: Bool
   }
 
   struct WorktreeToolbarContent: ToolbarContent {
@@ -1113,6 +1161,9 @@ struct WorktreeDetailView: View {
       ToolbarItem(placement: .navigation) {
         WorktreeDetailTitleView(
           title: toolbarState.title,
+          repositoryColor: toolbarState.repositoryColor,
+          agentIdentity: toolbarState.agentIdentity,
+          isTmuxBacked: toolbarState.isTmuxBacked,
           onSubmit: toolbarState.title.supportsRename ? onRenameBranch : nil,
           externalRenamePrompt: externalRenamePrompt,
           onConsumeExternalRenamePrompt: onConsumeExternalRenamePrompt

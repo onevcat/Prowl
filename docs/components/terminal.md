@@ -83,6 +83,11 @@ Tabs get an auto-detected icon based on what's running (e.g. an agent's icon),
 which you can override (Change Tab Icon) or which a script can set. Icon
 precedence is `auto < script < user`.
 
+The detail toolbar also mirrors the focused pane at a glance: the current
+directory is shown with its last path component highlighted, detected agents use
+the same identity-colored icon as Active Agents, and tmux-backed tabs show a
+green checkmark.
+
 ## Shell integration & status (OSC sequences)
 
 Ghostty's shell integration drives several Prowl features via terminal escape

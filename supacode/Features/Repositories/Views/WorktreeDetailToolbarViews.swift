@@ -252,7 +252,10 @@ private struct WorktreeToolbarPreview: View {
       isUpdateReadyToInstall: false,
       availableUpdateVersion: "2026.5.1",
       showRunButtonInToolbar: true,
-      showDefaultEditorInToolbar: true
+      showDefaultEditorInToolbar: true,
+      repositoryColor: .blue,
+      agentIdentity: nil,
+      isTmuxBacked: true
     )
     let observer = CommandKeyObserver()
     observer.isPressed = false

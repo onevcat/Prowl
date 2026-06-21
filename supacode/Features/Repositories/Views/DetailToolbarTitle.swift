@@ -7,6 +7,12 @@ struct DetailToolbarTitle: Equatable {
   }
 
   let kind: Kind
+  let directory: URL?
+
+  init(kind: Kind, directory: URL? = nil) {
+    self.kind = kind
+    self.directory = directory
+  }
 
   var text: String {
     switch kind {
@@ -36,11 +42,14 @@ struct DetailToolbarTitle: Equatable {
     repository: Repository?
   ) -> DetailToolbarTitle? {
     if let worktree {
-      return DetailToolbarTitle(kind: .branch(name: worktree.name))
+      return DetailToolbarTitle(
+        kind: .branch(name: worktree.name),
+        directory: worktree.workingDirectory
+      )
     }
     guard let repository, repository.kind == .plain else {
       return nil
     }
-    return DetailToolbarTitle(kind: .folder(name: repository.name))
+    return DetailToolbarTitle(kind: .folder(name: repository.name), directory: repository.rootURL)
   }
 }
