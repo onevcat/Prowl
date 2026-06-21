@@ -1,6 +1,8 @@
 import AppKit
 import GhosttyKit
 
+private let surfaceScrollLogger = SupaLogger("SurfaceScroll")
+
 final class GhosttySurfaceScrollView: NSView {
   enum HostKind: String {
     case terminal
@@ -26,8 +28,12 @@ final class GhosttySurfaceScrollView: NSView {
   private var isLiveScrolling = false
   private var isProgrammaticScrollChange = false
   private var isUserScrolledBack = false
+  private var lastScrollBackTraceState: Bool?
+  private var lastScrollbarTraceAt: TimeInterval = 0
+  private var lastLiveScrollTraceAt: TimeInterval = 0
   private var lastSentRow: Int?
   private var scrollbar: ScrollbarState?
+  private(set) var isCanvasMaxModeActive = false
 
   /// When set, the surface renders at this fixed size regardless of the hosting
   /// view's bounds. Used in canvas mode to prevent `.scaleEffect()` from causing
@@ -71,6 +77,7 @@ final class GhosttySurfaceScrollView: NSView {
         queue: .main
       ) { [weak self] _ in
         MainActor.assumeIsolated {
+          self?.traceWrapperScroll("willStartLiveScroll")
           self?.isLiveScrolling = true
         }
       })
@@ -82,6 +89,7 @@ final class GhosttySurfaceScrollView: NSView {
         queue: .main
       ) { [weak self] _ in
         MainActor.assumeIsolated {
+          self?.traceWrapperScroll("didEndLiveScroll")
           self?.isLiveScrolling = false
           self?.updateScrollBackState()
         }
@@ -148,8 +156,26 @@ final class GhosttySurfaceScrollView: NSView {
     ensureSurfaceAttached()
   }
 
+  func updateDiagnosticContext(isCanvasMaxModeActive: Bool) {
+    guard self.isCanvasMaxModeActive != isCanvasMaxModeActive else { return }
+    self.isCanvasMaxModeActive = isCanvasMaxModeActive
+    surfaceScrollLogger.diagnostic(
+      "[ScrollTrace] diagnosticContext wrapper=\(debugID) host=\(hostKind.rawValue) "
+        + "surface=\(surfaceView.debugIdentifierForLogging) maxMode=\(isCanvasMaxModeActive)"
+    )
+  }
+
   func updateHostedSurface(pinnedSize newPinnedSize: CGSize?) {
     let pinnedSizeChanged = pinnedSize != newPinnedSize
+    if pinnedSizeChanged {
+      surfaceScrollLogger.diagnostic(
+        "[ScrollTrace] updateHostedSurface wrapper=\(debugID) host=\(hostKind.rawValue) "
+          + "maxMode=\(isCanvasMaxModeActive) "
+          + "surface=\(surfaceView.debugIdentifierForLogging) "
+          + "pinned=\(Self.sizeDescription(pinnedSize)) -> \(Self.sizeDescription(newPinnedSize)) "
+          + "window=\(window != nil)"
+      )
+    }
     pinnedSize = newPinnedSize
 
     let wasAttached = isSurfaceAttachedToDocumentView
@@ -167,6 +193,11 @@ final class GhosttySurfaceScrollView: NSView {
     let needsSurfaceReattachment = !wasAttached && isAttached
     let needsWrapperUpdate = isAttached && surfaceView.scrollWrapper !== self
     if needsWrapperUpdate {
+      surfaceScrollLogger.diagnostic(
+        "[ScrollTrace] updateHostedSurface wrapperRebind wrapper=\(debugID) host=\(hostKind.rawValue) "
+          + "maxMode=\(isCanvasMaxModeActive) "
+          + "surface=\(surfaceView.debugIdentifierForLogging)"
+      )
       surfaceView.scrollWrapper = self
     }
 
@@ -223,6 +254,7 @@ final class GhosttySurfaceScrollView: NSView {
   }
 
   func updateScrollbar(total: UInt64, offset: UInt64, length: UInt64) {
+    traceScrollbarUpdate(total: total, offset: offset, length: length)
     scrollbar = ScrollbarState(total: total, offset: offset, length: length)
     synchronizeScrollView()
   }
@@ -281,6 +313,15 @@ final class GhosttySurfaceScrollView: NSView {
     let visibleRect = scrollView.contentView.documentVisibleRect
     let distanceFromBottom = max(0, documentView.frame.height - visibleRect.maxY)
     isUserScrolledBack = distanceFromBottom > cellHeight / 2
+    if lastScrollBackTraceState != isUserScrolledBack {
+      lastScrollBackTraceState = isUserScrolledBack
+      surfaceScrollLogger.diagnostic(
+        "[ScrollTrace] scrollBackState wrapper=\(debugID) host=\(hostKind.rawValue) "
+          + "maxMode=\(isCanvasMaxModeActive) "
+          + "surface=\(surfaceView.debugIdentifierForLogging) isUserScrolledBack=\(isUserScrolledBack) "
+          + "distanceFromBottom=\(Int(distanceFromBottom)) cellHeight=\(Int(cellHeight))"
+      )
+    }
   }
 
   private func handleLiveScroll() {
@@ -292,6 +333,7 @@ final class GhosttySurfaceScrollView: NSView {
     let row = Int(scrollOffset / cellHeight)
     guard row != lastSentRow else { return }
     lastSentRow = row
+    traceLiveScroll(row: row, visibleRect: visibleRect)
     surfaceView.performBindingAction("scroll_to_row:\(row)")
   }
 
@@ -304,6 +346,47 @@ final class GhosttySurfaceScrollView: NSView {
       return documentGridHeight + padding
     }
     return contentHeight
+  }
+
+  private func traceScrollbarUpdate(total: UInt64, offset: UInt64, length: UInt64) {
+    let now = ProcessInfo.processInfo.systemUptime
+    let totalOrLengthChanged = scrollbar?.total != total || scrollbar?.length != length
+    guard totalOrLengthChanged || now - lastScrollbarTraceAt >= 1 else { return }
+    lastScrollbarTraceAt = now
+    surfaceScrollLogger.diagnostic(
+      "[ScrollTrace] scrollbar wrapper=\(debugID) host=\(hostKind.rawValue) "
+        + "maxMode=\(isCanvasMaxModeActive) "
+        + "surface=\(surfaceView.debugIdentifierForLogging) total=\(total) offset=\(offset) "
+        + "length=\(length) live=\(isLiveScrolling) userScrolledBack=\(isUserScrolledBack) "
+        + "pinned=\(Self.sizeDescription(pinnedSize))"
+    )
+  }
+
+  private func traceLiveScroll(row: Int, visibleRect: CGRect) {
+    let now = ProcessInfo.processInfo.systemUptime
+    guard now - lastLiveScrollTraceAt >= 0.5 else { return }
+    lastLiveScrollTraceAt = now
+    surfaceScrollLogger.diagnostic(
+      "[ScrollTrace] liveScroll wrapper=\(debugID) host=\(hostKind.rawValue) "
+        + "maxMode=\(isCanvasMaxModeActive) "
+        + "surface=\(surfaceView.debugIdentifierForLogging) row=\(row) "
+        + "visibleY=\(Int(visibleRect.origin.y)) visibleH=\(Int(visibleRect.height)) "
+        + "documentH=\(Int(documentView.frame.height))"
+    )
+  }
+
+  private func traceWrapperScroll(_ name: String) {
+    surfaceScrollLogger.diagnostic(
+      "[ScrollTrace] \(name) wrapper=\(debugID) host=\(hostKind.rawValue) "
+        + "maxMode=\(isCanvasMaxModeActive) "
+        + "surface=\(surfaceView.debugIdentifierForLogging) "
+        + "pinned=\(Self.sizeDescription(pinnedSize))"
+    )
+  }
+
+  private static func sizeDescription(_ size: CGSize?) -> String {
+    guard let size else { return "nil" }
+    return "\(Int(size.width))x\(Int(size.height))"
   }
 
   override func mouseMoved(with event: NSEvent) {

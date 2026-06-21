@@ -1,3 +1,4 @@
+import Foundation
 import OSLog
 
 nonisolated struct SupaLogger: Sendable {
@@ -40,6 +41,17 @@ nonisolated struct SupaLogger: Sendable {
   func info(_ message: String) {
     #if DEBUG
       print("[\(category)] \(message)")
+    #else
+      logger.notice("\(message, privacy: .public)")
+    #endif
+  }
+
+  func diagnostic(_ message: String) {
+    #if DEBUG
+      print("[\(category)] \(message)")
+      Task.detached(priority: .utility) {
+        await DiagnosticFileLog.shared.append(category: category, message: message)
+      }
     #else
       logger.notice("\(message, privacy: .public)")
     #endif
@@ -94,3 +106,113 @@ struct IntervalToken {
   fileprivate let name: StaticString
   fileprivate let state: OSSignpostIntervalState
 }
+
+#if DEBUG
+  private actor DiagnosticFileLog {
+    static let shared = DiagnosticFileLog()
+
+    private static let flushByteThreshold = 16 * 1024
+    private static let maxFileBytes = 20 * 1024 * 1024
+    private static let flushDelay: Duration = .seconds(1)
+
+    private let fileURL: URL
+    private var fileHandle: FileHandle?
+    private var bufferedLines: [String] = []
+    private var bufferedByteCount = 0
+    private var writtenByteCount = 0
+    private var flushTask: Task<Void, Never>?
+    private var hasReportedPath = false
+    private var isClosedForSizeLimit = false
+
+    private init() {
+      let logsDirectory = Self.logsDirectory()
+      try? FileManager.default.createDirectory(
+        at: logsDirectory,
+        withIntermediateDirectories: true
+      )
+      fileURL = logsDirectory.appending(path: Self.launchFileName())
+      FileManager.default.createFile(atPath: fileURL.path, contents: nil)
+      fileHandle = try? FileHandle(forWritingTo: fileURL)
+    }
+
+    func append(category: String, message: String) {
+      guard !isClosedForSizeLimit else { return }
+      if !hasReportedPath {
+        hasReportedPath = true
+        print("[Diagnostics] file=\(fileURL.path)")
+      }
+
+      let line = "\(Self.timestamp()) [\(category)] \(message)\n"
+      let byteCount = line.utf8.count
+      guard writtenByteCount + bufferedByteCount + byteCount <= Self.maxFileBytes else {
+        bufferedLines.append(
+          "\(Self.timestamp()) [Diagnostics] stopped: max file size \(Self.maxFileBytes) bytes reached\n"
+        )
+        bufferedByteCount += bufferedLines.last?.utf8.count ?? 0
+        flush()
+        isClosedForSizeLimit = true
+        return
+      }
+
+      bufferedLines.append(line)
+      bufferedByteCount += byteCount
+      if bufferedByteCount >= Self.flushByteThreshold {
+        flush()
+      } else {
+        scheduleFlush()
+      }
+    }
+
+    private func scheduleFlush() {
+      guard flushTask == nil else { return }
+      flushTask = Task { [weak self] in
+        try? await ContinuousClock().sleep(for: Self.flushDelay)
+        guard !Task.isCancelled else { return }
+        await self?.flushAfterDelay()
+      }
+    }
+
+    private func flushAfterDelay() {
+      flushTask = nil
+      flush()
+    }
+
+    private func flush() {
+      flushTask?.cancel()
+      flushTask = nil
+      guard !bufferedLines.isEmpty, let fileHandle else { return }
+      let contents = bufferedLines.joined()
+      bufferedLines.removeAll(keepingCapacity: true)
+      bufferedByteCount = 0
+      guard let data = contents.data(using: .utf8) else { return }
+      do {
+        try fileHandle.seekToEnd()
+        try fileHandle.write(contentsOf: data)
+        writtenByteCount += data.count
+      } catch {
+        self.fileHandle = nil
+      }
+    }
+
+    private static func logsDirectory() -> URL {
+      if let libraryURL = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first {
+        return libraryURL.appending(path: "Logs/Prowl/Diagnostics")
+      }
+      return URL(fileURLWithPath: NSTemporaryDirectory()).appending(path: "ProwlDiagnostics")
+    }
+
+    private static func launchFileName() -> String {
+      let formatter = DateFormatter()
+      formatter.locale = Locale(identifier: "en_US_POSIX")
+      formatter.dateFormat = "yyyyMMdd-HHmmss"
+      let timestamp = formatter.string(from: Date())
+      return "prowl-\(timestamp)-p\(ProcessInfo.processInfo.processIdentifier).log"
+    }
+
+    private static func timestamp() -> String {
+      let formatter = ISO8601DateFormatter()
+      formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+      return formatter.string(from: Date())
+    }
+  }
+#endif

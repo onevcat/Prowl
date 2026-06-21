@@ -309,6 +309,7 @@ struct CanvasCardView: View {
         activeSurfaceID: activeSurfaceID,
         unfocusedSplitOverlay: unfocusedSplitOverlay,
         splitDivider: splitDivider,
+        isCanvasMaxModeActive: isExpanded,
         debugStyle: debugStyle,
         configReloadGeneration: configReloadGeneration,
         hasNotification: { _ in false },
@@ -465,6 +466,7 @@ private struct AnimatedTerminalSplitTreeView: View, Animatable {
   let activeSurfaceID: UUID?
   let unfocusedSplitOverlay: (fill: Color?, opacity: Double)
   var splitDivider: (color: Color?, width: CGFloat?)
+  var isCanvasMaxModeActive = false
   var debugStyle: CanvasCardDebugStyleConfiguration?
   var configReloadGeneration = 0
   let hasNotification: (UUID) -> Bool
@@ -484,6 +486,7 @@ private struct AnimatedTerminalSplitTreeView: View, Animatable {
       activeSurfaceID: activeSurfaceID,
       unfocusedSplitOverlay: unfocusedSplitOverlay,
       splitDivider: splitDivider,
+      isCanvasMaxModeActive: isCanvasMaxModeActive,
       debugStyle: debugStyle,
       configReloadGeneration: configReloadGeneration,
       hasNotification: hasNotification,

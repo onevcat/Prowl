@@ -93,6 +93,78 @@ internal struct TmuxTerminalControllerTests {
     #expect(arguments.containsSetOption(target: "prowl-tab-111111111111", name: "mouse", value: "on"))
   }
 
+  @Test internal func ensureGroupConfiguresProwlCopyModeBindings() async throws {
+    let recorder = TmuxCommandRecorder()
+    let controller = TmuxTerminalController(
+      executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
+      userConfigPath: "/tmp/prowl-home/.config/prowl/tmux.conf",
+      execute: { _, arguments in
+        await recorder.record(arguments)
+        if arguments.contains("has-session") {
+          return TmuxCommandResult(stdout: "", stderr: "missing session", exitCode: 1)
+        }
+        return TmuxCommandResult(stdout: "", stderr: "", exitCode: 0)
+      }
+    )
+    let target = TmuxTerminalTarget.make(
+      appNamespace: "prowl",
+      worktreeID: "/tmp/repo/wt",
+      tabID: TerminalTabID(rawValue: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!),
+      cardID: TmuxCardID(rawValue: "card-7"),
+      socketRoot: URL(fileURLWithPath: "/tmp/prowl-tmux", isDirectory: true)
+    )
+
+    try await controller.ensureGroup(
+      target: target,
+      cwd: URL(fileURLWithPath: "/tmp/repo/wt", isDirectory: true)
+    )
+
+    let arguments = await recorder.arguments
+    #expect(arguments.containsSetGlobalOption(name: "prefix2", value: "C-q"))
+    #expect(arguments.containsBindKey(["C-q", "send-prefix", "-2"]))
+    #expect(arguments.containsBindKey(["-T", "copy-mode-vi", "v", "send-keys", "-X", "begin-selection"]))
+    #expect(
+      arguments.containsBindKey([
+        "-T", "copy-mode-vi", "y", "send-keys", "-X", "copy-pipe-and-cancel", "reattach-to-user-namespace pbcopy",
+      ]))
+    #expect(
+      arguments.containsBindKey([
+        "-T", "copy-mode-vi", "Enter", "send-keys", "-X", "copy-pipe-and-cancel",
+        "reattach-to-user-namespace pbcopy",
+      ]))
+    #expect(arguments.containsSourceFile(path: "/tmp/prowl-home/.config/prowl/tmux.conf"))
+  }
+
+  @Test internal func ensureGroupReloadsProwlConfigForExistingSession() async throws {
+    let recorder = TmuxCommandRecorder()
+    let controller = TmuxTerminalController(
+      executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
+      userConfigPath: "/tmp/prowl-home/.config/prowl/tmux.conf",
+      execute: { _, arguments in
+        await recorder.record(arguments)
+        return TmuxCommandResult(stdout: "", stderr: "", exitCode: 0)
+      }
+    )
+    let target = TmuxTerminalTarget.make(
+      appNamespace: "prowl",
+      worktreeID: "/tmp/repo/wt",
+      tabID: TerminalTabID(rawValue: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!),
+      cardID: TmuxCardID(rawValue: "card-7"),
+      socketRoot: URL(fileURLWithPath: "/tmp/prowl-tmux", isDirectory: true)
+    )
+
+    try await controller.ensureGroup(
+      target: target,
+      cwd: URL(fileURLWithPath: "/tmp/repo/wt", isDirectory: true)
+    )
+
+    let arguments = await recorder.arguments
+    #expect(arguments.contains { $0.contains("has-session") })
+    #expect(!arguments.contains { $0.contains("new-session") })
+    #expect(arguments.containsSetGlobalOption(name: "prefix2", value: "C-q"))
+    #expect(arguments.containsSourceFile(path: "/tmp/prowl-home/.config/prowl/tmux.conf"))
+  }
+
   @Test internal func createWindowCleansUpWindowWhenMetadataWriteFails() async {
     let recorder = TmuxCommandRecorder()
     let controller = TmuxTerminalController(
@@ -299,76 +371,6 @@ internal struct TmuxTerminalControllerTests {
 
     #expect(snapshot.candidates.map(\.windowID.rawValue) == ["@21"])
     #expect(snapshot.diagnostics.isEmpty)
-  }
-
-  @Test internal func ensureGroupConfiguresProwlCopyModeBindings() async throws {
-    let recorder = TmuxCommandRecorder()
-    let controller = TmuxTerminalController(
-      executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
-      userConfigPath: "/tmp/prowl-home/.config/prowl/tmux.conf",
-      execute: { _, arguments in
-        await recorder.record(arguments)
-        if arguments.contains("has-session") {
-          return TmuxCommandResult(stdout: "", stderr: "missing session", exitCode: 1)
-        }
-        return TmuxCommandResult(stdout: "", stderr: "", exitCode: 0)
-      }
-    )
-    let target = TmuxTerminalTarget.make(
-      appNamespace: "prowl",
-      worktreeID: "/tmp/repo/wt",
-      tabID: TerminalTabID(rawValue: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!),
-      socketRoot: URL(fileURLWithPath: "/tmp/prowl-tmux", isDirectory: true)
-    )
-
-    try await controller.ensureGroup(
-      target: target,
-      cwd: URL(fileURLWithPath: "/tmp/repo/wt", isDirectory: true)
-    )
-
-    let arguments = await recorder.arguments
-    #expect(arguments.containsSetGlobalOption(name: "prefix2", value: "C-q"))
-    #expect(arguments.containsBindKey(["C-q", "send-prefix", "-2"]))
-    #expect(arguments.containsBindKey(["-T", "copy-mode-vi", "v", "send-keys", "-X", "begin-selection"]))
-    #expect(
-      arguments.containsBindKey([
-        "-T", "copy-mode-vi", "y", "send-keys", "-X", "copy-pipe-and-cancel", "reattach-to-user-namespace pbcopy",
-      ]))
-    #expect(
-      arguments.containsBindKey([
-        "-T", "copy-mode-vi", "Enter", "send-keys", "-X", "copy-pipe-and-cancel",
-        "reattach-to-user-namespace pbcopy",
-      ]))
-    #expect(arguments.containsSourceFile(path: "/tmp/prowl-home/.config/prowl/tmux.conf"))
-  }
-
-  @Test internal func ensureGroupReloadsProwlConfigForExistingSession() async throws {
-    let recorder = TmuxCommandRecorder()
-    let controller = TmuxTerminalController(
-      executableURL: URL(fileURLWithPath: "/tmp/tmux", isDirectory: false),
-      userConfigPath: "/tmp/prowl-home/.config/prowl/tmux.conf",
-      execute: { _, arguments in
-        await recorder.record(arguments)
-        return TmuxCommandResult(stdout: "", stderr: "", exitCode: 0)
-      }
-    )
-    let target = TmuxTerminalTarget.make(
-      appNamespace: "prowl",
-      worktreeID: "/tmp/repo/wt",
-      tabID: TerminalTabID(rawValue: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!),
-      socketRoot: URL(fileURLWithPath: "/tmp/prowl-tmux", isDirectory: true)
-    )
-
-    try await controller.ensureGroup(
-      target: target,
-      cwd: URL(fileURLWithPath: "/tmp/repo/wt", isDirectory: true)
-    )
-
-    let arguments = await recorder.arguments
-    #expect(arguments.contains { $0.contains("has-session") })
-    #expect(!arguments.contains { $0.contains("new-session") })
-    #expect(arguments.containsSetGlobalOption(name: "prefix2", value: "C-q"))
-    #expect(arguments.containsSourceFile(path: "/tmp/prowl-home/.config/prowl/tmux.conf"))
   }
 
   @Test internal func killWindowAttemptsClientCleanupWhenKillWindowFails() async throws {

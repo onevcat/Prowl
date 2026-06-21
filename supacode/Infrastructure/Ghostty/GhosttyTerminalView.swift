@@ -5,6 +5,7 @@ private let terminalHostLogger = SupaLogger("TerminalHost")
 struct GhosttyTerminalView: NSViewRepresentable {
   let surfaceView: GhosttySurfaceView
   var pinnedSize: CGSize?
+  var isCanvasMaxModeActive = false
   var debugStyle: CanvasCardDebugStyleConfiguration?
   var configReloadGeneration = 0
 
@@ -21,6 +22,7 @@ struct GhosttyTerminalView: NSViewRepresentable {
     // us if AppKit/Metal initialization is on the hot path.
     return terminalHostLogger.interval("Ghostty.makeNSView") {
       let view = GhosttySurfaceScrollView(surfaceView: surfaceView, hostKind: hostKind)
+      view.updateDiagnosticContext(isCanvasMaxModeActive: isCanvasMaxModeActive)
       view.updateHostedSurface(pinnedSize: pinnedSize)
       view.applyCanvasDebugStyle(debugStyle, configReloadGeneration: configReloadGeneration)
       return view
@@ -29,6 +31,7 @@ struct GhosttyTerminalView: NSViewRepresentable {
 
   func updateNSView(_ view: GhosttySurfaceScrollView, context: Context) {
     terminalHostLogger.interval("Ghostty.updateNSView") {
+      view.updateDiagnosticContext(isCanvasMaxModeActive: isCanvasMaxModeActive)
       view.updateHostedSurface(pinnedSize: pinnedSize)
       view.applyCanvasDebugStyle(debugStyle, configReloadGeneration: configReloadGeneration)
     }

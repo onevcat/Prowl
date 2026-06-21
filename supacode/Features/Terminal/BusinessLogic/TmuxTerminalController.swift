@@ -320,33 +320,6 @@ internal final class TmuxTerminalController {
     return target
   }
 
-  internal func prepareExistingWindowForAttach(target: TmuxTerminalTarget) async throws -> TmuxTerminalTarget {
-    guard let windowID = target.windowID else {
-      throw TmuxTerminalControllerError.invalidNewWindowOutput("missing restore window id")
-    }
-    let result = try await run(
-      [
-        "-S", target.socketURL.path,
-        "display-message",
-        "-p",
-        "-t", windowID.rawValue,
-        "#{window_id}",
-      ],
-      allowFailure: true
-    )
-    guard result.exitCode == 0,
-      result.stdout.trimmingCharacters(in: .whitespacesAndNewlines) == windowID.rawValue
-    else {
-      throw TmuxTerminalControllerError.commandFailed(
-        arguments: ["display-message", "-t", windowID.rawValue],
-        stderr: result.stderr,
-        exitCode: result.exitCode
-      )
-    }
-    try await ensureClientSession(target: target)
-    return target
-  }
-
   internal func attachCommand(for target: TmuxTerminalTarget) -> String {
     let arguments: [String] = [
       tmuxShellQuote(executableURL?.path ?? "tmux"),
