@@ -88,10 +88,13 @@ nonisolated struct ProjectWorkspaceRepositoryBootstrap: Codable, Equatable, Hash
 }
 
 nonisolated struct ProjectWorkspaceBootstrapProfile: Codable, Equatable, Identifiable, Sendable {
+  static let defaultCommand = #"/bin/sh "$script""#
+
   var id: String
   var name: String
   var description: String
-  var shell: String?
+  var command: String
+  var environment: [String: String]
   var script: String
   var timeoutSeconds: Int
 
@@ -99,6 +102,8 @@ nonisolated struct ProjectWorkspaceBootstrapProfile: Codable, Equatable, Identif
     case id
     case name
     case description
+    case command
+    case environment
     case shell
     case script
     case timeoutSeconds = "timeout_seconds"
@@ -108,14 +113,16 @@ nonisolated struct ProjectWorkspaceBootstrapProfile: Codable, Equatable, Identif
     id: String,
     name: String,
     description: String = "",
-    shell: String? = nil,
+    command: String = ProjectWorkspaceBootstrapProfile.defaultCommand,
+    environment: [String: String] = [:],
     script: String,
     timeoutSeconds: Int = 300
   ) {
     self.id = id
     self.name = name
     self.description = description
-    self.shell = shell
+    self.command = command
+    self.environment = environment
     self.script = script
     self.timeoutSeconds = timeoutSeconds
   }
@@ -125,9 +132,29 @@ nonisolated struct ProjectWorkspaceBootstrapProfile: Codable, Equatable, Identif
     id = try container.decodeIfPresent(String.self, forKey: .id) ?? ""
     name = try container.decodeIfPresent(String.self, forKey: .name) ?? ""
     description = try container.decodeIfPresent(String.self, forKey: .description) ?? ""
-    shell = try container.decodeIfPresent(String.self, forKey: .shell)
+    let decodedCommand = try container.decodeIfPresent(String.self, forKey: .command)
+    let legacyShell = try container.decodeIfPresent(String.self, forKey: .shell)
+    command =
+      Self.trimmedNonEmpty(decodedCommand)
+      ?? Self.legacyCommand(for: legacyShell)
+      ?? Self.defaultCommand
+    environment = try container.decodeIfPresent([String: String].self, forKey: .environment) ?? [:]
     script = try container.decodeIfPresent(String.self, forKey: .script) ?? ""
     timeoutSeconds = try container.decodeIfPresent(Int.self, forKey: .timeoutSeconds) ?? 300
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    let normalized = normalized
+    try container.encode(normalized.id, forKey: .id)
+    try container.encode(normalized.name, forKey: .name)
+    try container.encode(normalized.description, forKey: .description)
+    try container.encode(normalized.command, forKey: .command)
+    if !normalized.environment.isEmpty {
+      try container.encode(normalized.environment, forKey: .environment)
+    }
+    try container.encode(normalized.script, forKey: .script)
+    try container.encode(normalized.timeoutSeconds, forKey: .timeoutSeconds)
   }
 
   var normalized: ProjectWorkspaceBootstrapProfile {
@@ -135,10 +162,30 @@ nonisolated struct ProjectWorkspaceBootstrapProfile: Codable, Equatable, Identif
       id: id.trimmingCharacters(in: .whitespacesAndNewlines),
       name: name.trimmingCharacters(in: .whitespacesAndNewlines),
       description: description.trimmingCharacters(in: .whitespacesAndNewlines),
-      shell: Self.trimmedNonEmpty(shell),
+      command: Self.trimmedNonEmpty(command) ?? Self.defaultCommand,
+      environment: Self.normalizedEnvironment(environment),
       script: script,
       timeoutSeconds: max(1, timeoutSeconds)
     )
+  }
+
+  private static func legacyCommand(for shell: String?) -> String? {
+    guard let shell = trimmedNonEmpty(shell) else {
+      return nil
+    }
+    return #"\#(shell) "$script""#
+  }
+
+  private static func normalizedEnvironment(_ environment: [String: String]) -> [String: String] {
+    var result: [String: String] = [:]
+    for (key, value) in environment {
+      let trimmedKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !trimmedKey.isEmpty else {
+        continue
+      }
+      result[trimmedKey] = value
+    }
+    return result
   }
 
   private static func trimmedNonEmpty(_ value: String?) -> String? {

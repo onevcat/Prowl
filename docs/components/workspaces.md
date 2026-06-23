@@ -160,6 +160,12 @@ enable Create or On add for automatic runs, and optionally mark automatic
 bootstrap as Required. Required automatic failures fail the current
 materialization action and roll back Prowl-created materialization.
 
+Bootstrap profiles can be managed in **Settings → Bootstrap** or with
+`prowl bootstrap`. A profile contains a `command`, optional `environment`, a
+`script`, and `timeout_seconds`. The default command is `/bin/sh "$script"`;
+Prowl writes the script to a temporary workspace-local file and injects its path
+as the `script` environment variable before running the command.
+
 Example `.prowl/workspace.json`:
 
 ```json
@@ -252,6 +258,11 @@ Repository entry fields:
 Bootstrap profiles run after a child repository has been materialized, with the
 child repository as the working directory. Automatic bootstrap is skipped for
 linked children because those paths point at the user's existing checkout.
+Prowl-provided environment variables include `PROWL_WORKSPACE_ROOT`,
+`PROWL_REPOSITORY_ROOT`, `PROWL_REPOSITORY_ID`, `PROWL_REPOSITORY_NAME`,
+`PROWL_REPOSITORY_PATH`, `PROWL_SOURCE_KIND`, `PROWL_SOURCE_LOCATION`,
+`PROWL_BRANCH_NAME`, and `PROWL_BASE_REF`; custom profile environment values
+override these on conflict.
 Bootstrap logs and last-run state are written under the workspace `.prowl`
 runtime directory, not back into `workspace.json`.
 

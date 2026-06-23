@@ -63,6 +63,8 @@ struct ProjectWorkspaceBootstrapExecutorTests {
         ProjectWorkspaceBootstrapProfile(
           id: "sync-app",
           name: "Sync App",
+          command: "bash $script",
+          environment: ["CUSTOM_BOOTSTRAP": "yes"],
           script: "echo hello",
           timeoutSeconds: 300
         )
@@ -102,6 +104,10 @@ struct ProjectWorkspaceBootstrapExecutorTests {
     #expect(recorder.environment["PROWL_REPOSITORY_ID"] == "app")
     #expect(recorder.environment["PROWL_REPOSITORY_NAME"] == "App")
     #expect(recorder.environment["PROWL_SOURCE_KIND"] == "remote")
+    #expect(recorder.environment["CUSTOM_BOOTSTRAP"] == "yes")
+    let scriptPath = try #require(recorder.environment["script"])
+    #expect(scriptPath.hasSuffix(".sh"))
+    #expect(recorder.scripts.first == "bash $script")
 
     let stateURL =
       rootURL
@@ -137,7 +143,8 @@ struct ProjectWorkspaceBootstrapExecutorTests {
           currentDirectoryURL: currentDirectoryURL
         )
         return AsyncThrowingStream { continuation in
-          if arguments.last == "exit 1" {
+          let scriptPath = environment["script"] ?? ""
+          if scriptPath.contains("failing") {
             continuation.finish(
               throwing: ProjectWorkspaceCreationError.bootstrapFailed(
                 repository: "App",
@@ -182,7 +189,12 @@ struct ProjectWorkspaceBootstrapExecutorTests {
       )
     )
 
-    #expect(recorder.scripts == ["echo first", "exit 1", "echo last"])
+    #expect(
+      recorder.scripts == [
+        ProjectWorkspaceBootstrapProfile.defaultCommand,
+        ProjectWorkspaceBootstrapProfile.defaultCommand,
+        ProjectWorkspaceBootstrapProfile.defaultCommand,
+      ])
     let stateURL =
       rootURL
       .appending(path: ProjectWorkspace.metadataDirectoryName)

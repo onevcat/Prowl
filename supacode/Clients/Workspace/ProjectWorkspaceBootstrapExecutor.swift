@@ -63,7 +63,9 @@ nonisolated struct ProjectWorkspaceBootstrapFileClient: Sendable {
   var createFile: @Sendable (URL) -> Void
   var readData: @Sendable (URL) throws -> Data
   var writeData: @Sendable (Data, URL) throws -> Void
+  var setExecutable: @Sendable (URL) throws -> Void
   var fileHandleForWriting: @Sendable (URL) throws -> FileHandle
+  var removeItem: @Sendable (URL) throws -> Void
 
   static let live = ProjectWorkspaceBootstrapFileClient(
     createDirectory: { url in
@@ -78,8 +80,17 @@ nonisolated struct ProjectWorkspaceBootstrapFileClient: Sendable {
     writeData: { data, url in
       try data.write(to: url, options: .atomic)
     },
+    setExecutable: { url in
+      try FileManager.default.setAttributes(
+        [.posixPermissions: 0o700],
+        ofItemAtPath: url.path(percentEncoded: false)
+      )
+    },
     fileHandleForWriting: { url in
       try FileHandle(forWritingTo: url)
+    },
+    removeItem: { url in
+      try FileManager.default.removeItem(at: url)
     }
   )
 }
@@ -176,13 +187,19 @@ nonisolated struct ProjectWorkspaceBootstrapExecutor: Sendable {
     context: ProjectWorkspaceBootstrapContext,
     logURL: URL
   ) async throws {
+    let scriptURL = try makeScriptURL(for: profile, context: context)
+    try fileClient.writeData(Data(profile.script.utf8), scriptURL)
+    try fileClient.setExecutable(scriptURL)
+    defer {
+      try? fileClient.removeItem(scriptURL)
+    }
     try await withThrowingTaskGroup(of: Void.self) { group in
       group.addTask {
         let stream = shellClient.runLoginStream(
           URL(fileURLWithPath: "/bin/sh"),
-          ["-c", profile.script],
+          ["-c", profile.command],
           context.repositoryRootURL,
-          environment: environment(for: context),
+          environment: environment(for: context, profile: profile, scriptURL: scriptURL),
           log: false
         )
         try await write(stream, to: logURL, profileID: profile.id)
@@ -236,8 +253,12 @@ nonisolated struct ProjectWorkspaceBootstrapExecutor: Sendable {
     }
   }
 
-  private func environment(for context: ProjectWorkspaceBootstrapContext) -> [String: String] {
-    [
+  private func environment(
+    for context: ProjectWorkspaceBootstrapContext,
+    profile: ProjectWorkspaceBootstrapProfile,
+    scriptURL: URL
+  ) -> [String: String] {
+    var environment = [
       "PROWL_WORKSPACE_ROOT": context.workspaceRootURL.path(percentEncoded: false),
       "PROWL_REPOSITORY_ROOT": context.repositoryRootURL.path(percentEncoded: false),
       "PROWL_REPOSITORY_ID": context.repository.id,
@@ -247,7 +268,24 @@ nonisolated struct ProjectWorkspaceBootstrapExecutor: Sendable {
       "PROWL_SOURCE_LOCATION": context.repository.sourceLocation ?? "",
       "PROWL_BRANCH_NAME": context.repository.branchName ?? "",
       "PROWL_BASE_REF": context.repository.baseRef ?? "",
+      "script": scriptURL.path(percentEncoded: false),
     ]
+    environment.merge(profile.environment, uniquingKeysWith: { _, custom in custom })
+    return environment
+  }
+
+  private func makeScriptURL(
+    for profile: ProjectWorkspaceBootstrapProfile,
+    context: ProjectWorkspaceBootstrapContext
+  ) throws -> URL {
+    let directoryURL =
+      context.workspaceRootURL
+      .appending(path: ProjectWorkspace.metadataDirectoryName, directoryHint: .isDirectory)
+      .appending(path: "bootstrap-scripts", directoryHint: .isDirectory)
+    try fileClient.createDirectory(directoryURL)
+    let timestamp = ISO8601DateFormatter().string(from: now()).replacing(":", with: "-")
+    let name = trimmedNonEmpty(sanitizedLogComponent(profile.id)) ?? "bootstrap"
+    return directoryURL.appending(path: "\(sanitizedLogComponent(name))-\(timestamp).sh")
   }
 
   private func makeLogURL(

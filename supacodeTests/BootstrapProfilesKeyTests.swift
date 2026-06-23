@@ -22,7 +22,11 @@ struct BootstrapProfilesKeyTests {
             id: " sync-app ",
             name: " Sync App ",
             description: " Copies files ",
-            shell: " ",
+            command: " ",
+            environment: [
+              " CUSTOM ": "1",
+              "": "ignored",
+            ],
             script: "echo hello",
             timeoutSeconds: 0
           )
@@ -44,10 +48,30 @@ struct BootstrapProfilesKeyTests {
           id: "sync-app",
           name: "Sync App",
           description: "Copies files",
-          shell: nil,
+          command: ProjectWorkspaceBootstrapProfile.defaultCommand,
+          environment: ["CUSTOM": "1"],
           script: "echo hello",
           timeoutSeconds: 1
         )
       ])
+  }
+
+  @Test func decodesLegacyShellAsCommand() throws {
+    let data = Data(
+      """
+      [
+        {
+          "id": "legacy",
+          "name": "Legacy",
+          "shell": "/bin/zsh",
+          "script": "echo legacy"
+        }
+      ]
+      """.utf8
+    )
+
+    let profiles = try JSONDecoder().decode([ProjectWorkspaceBootstrapProfile].self, from: data)
+
+    #expect(profiles.first?.normalized.command == #"/bin/zsh "$script""#)
   }
 }
