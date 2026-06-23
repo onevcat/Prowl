@@ -162,9 +162,10 @@ materialization action and roll back Prowl-created materialization.
 
 Bootstrap profiles can be managed in **Settings → Bootstrap** or with
 `prowl bootstrap`. A profile contains a `command`, optional `environment`, a
-`script`, and `timeout_seconds`. The default command is `/bin/sh "$script"`;
-Prowl writes the script to a temporary workspace-local file and injects its path
-as the `script` environment variable before running the command.
+`script`, and `timeout_seconds`. The default command is
+`/bin/sh "$PROWL_BOOTSTRAP_SCRIPT"`; Prowl writes the script to a temporary
+workspace-local file and injects its path as the `PROWL_BOOTSTRAP_SCRIPT`
+environment variable before running the command.
 
 Example `.prowl/workspace.json`:
 
@@ -261,8 +262,10 @@ linked children because those paths point at the user's existing checkout.
 Prowl-provided environment variables include `PROWL_WORKSPACE_ROOT`,
 `PROWL_REPOSITORY_ROOT`, `PROWL_REPOSITORY_ID`, `PROWL_REPOSITORY_NAME`,
 `PROWL_REPOSITORY_PATH`, `PROWL_SOURCE_KIND`, `PROWL_SOURCE_LOCATION`,
-`PROWL_BRANCH_NAME`, and `PROWL_BASE_REF`; custom profile environment values
-override these on conflict.
+`PROWL_BRANCH_NAME`, `PROWL_BASE_REF`, and `PROWL_BOOTSTRAP_SCRIPT`; custom
+profile environment values override these on conflict, except
+`PROWL_BOOTSTRAP_SCRIPT`, which is always set by Prowl to the temporary script
+path for the current run.
 Bootstrap logs and last-run state are written under the workspace `.prowl`
 runtime directory, not back into `workspace.json`.
 

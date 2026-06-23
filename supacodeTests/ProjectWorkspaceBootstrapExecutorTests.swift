@@ -63,7 +63,7 @@ struct ProjectWorkspaceBootstrapExecutorTests {
         ProjectWorkspaceBootstrapProfile(
           id: "sync-app",
           name: "Sync App",
-          command: "bash $script",
+          command: "bash $PROWL_BOOTSTRAP_SCRIPT",
           environment: ["CUSTOM_BOOTSTRAP": "yes"],
           script: "echo hello",
           timeoutSeconds: 300
@@ -105,9 +105,10 @@ struct ProjectWorkspaceBootstrapExecutorTests {
     #expect(recorder.environment["PROWL_REPOSITORY_NAME"] == "App")
     #expect(recorder.environment["PROWL_SOURCE_KIND"] == "remote")
     #expect(recorder.environment["CUSTOM_BOOTSTRAP"] == "yes")
-    let scriptPath = try #require(recorder.environment["script"])
+    let scriptPath = try #require(
+      recorder.environment[ProjectWorkspaceBootstrapProfile.bootstrapScriptEnvironmentKey])
     #expect(scriptPath.hasSuffix(".sh"))
-    #expect(recorder.scripts.first == "bash $script")
+    #expect(recorder.scripts.first == "bash $PROWL_BOOTSTRAP_SCRIPT")
 
     let stateURL =
       rootURL
@@ -143,7 +144,7 @@ struct ProjectWorkspaceBootstrapExecutorTests {
           currentDirectoryURL: currentDirectoryURL
         )
         return AsyncThrowingStream { continuation in
-          let scriptPath = environment["script"] ?? ""
+          let scriptPath = environment[ProjectWorkspaceBootstrapProfile.bootstrapScriptEnvironmentKey] ?? ""
           if scriptPath.contains("failing") {
             continuation.finish(
               throwing: ProjectWorkspaceCreationError.bootstrapFailed(

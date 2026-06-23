@@ -121,7 +121,7 @@ final class ProwlCLIIntegrationTests: XCTestCase {
         "--file", file,
         "--id", "sync-app",
         "--name", "Sync App",
-        "--command", #"/bin/zsh "$script""#,
+        "--command", #"/bin/zsh "$PROWL_BOOTSTRAP_SCRIPT""#,
         "--env", "NODE_ENV=test",
         "--script", "echo sync",
         "--json",
@@ -137,7 +137,7 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     let data = try XCTUnwrap(listPayload["data"] as? [String: Any])
     let profiles = try XCTUnwrap(data["profiles"] as? [[String: Any]])
     XCTAssertEqual(profiles.first?["id"] as? String, "sync-app")
-    XCTAssertEqual(profiles.first?["command"] as? String, #"/bin/zsh "$script""#)
+    XCTAssertEqual(profiles.first?["command"] as? String, #"/bin/zsh "$PROWL_BOOTSTRAP_SCRIPT""#)
     let environment = try XCTUnwrap(profiles.first?["environment"] as? [String: String])
     XCTAssertEqual(environment["NODE_ENV"], "test")
 

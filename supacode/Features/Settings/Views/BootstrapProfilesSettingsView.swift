@@ -89,7 +89,7 @@ struct BootstrapProfilesSettingsView: View {
         editableTextField("Name", profileID: profile.id, keyPath: \.name)
         editableTextField("Description", profileID: profile.id, keyPath: \.description)
         editableTextField("Command", profileID: profile.id, keyPath: \.command)
-          .help("Command used to run the script. Use $script as the temporary script file placeholder.")
+          .help("Command used to run the script. Use $PROWL_BOOTSTRAP_SCRIPT for the temporary script file path.")
         HStack {
           Text("Timeout")
           TextField(
@@ -373,8 +373,8 @@ struct BootstrapProfilesSettingsView: View {
     if profile.script.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
       return "Script is required."
     }
-    if !profile.command.contains("$script") {
-      return "Command should include $script."
+    if !profile.command.contains("$\(ProjectWorkspaceBootstrapProfile.bootstrapScriptEnvironmentKey)") {
+      return "Command should include $\(ProjectWorkspaceBootstrapProfile.bootstrapScriptEnvironmentKey)."
     }
     return nil
   }

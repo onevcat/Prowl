@@ -252,7 +252,7 @@ prowl bootstrap list --json
 prowl bootstrap add \
   --id sync-app \
   --name "Sync App" \
-  --command '/bin/sh "$script"' \
+  --command '/bin/sh "$PROWL_BOOTSTRAP_SCRIPT"' \
   --env NODE_ENV=development \
   --script-file ./scripts/bootstrap.sh
 
@@ -260,11 +260,12 @@ prowl bootstrap update sync-app --timeout 600
 prowl bootstrap delete sync-app
 ```
 
-`command` is the wrapper used to execute the profile. Prowl writes `script` to a
-temporary file and exposes its path through the `script` environment variable, so
-the default `/bin/sh "$script"` is usually enough. `--env KEY=VALUE` can be
-repeated; values are merged with Prowl-provided `PROWL_*` variables when the
-profile runs.
+`command` is the wrapper used to execute the profile. Prowl writes the profile
+script to a temporary file and exposes its path through `PROWL_BOOTSTRAP_SCRIPT`,
+so the default `/bin/sh "$PROWL_BOOTSTRAP_SCRIPT"` is usually enough.
+`--env KEY=VALUE` can be repeated; values are merged with Prowl-provided
+`PROWL_*` variables when the profile runs. `PROWL_BOOTSTRAP_SCRIPT` is always
+set by Prowl for the current run.
 
 ## Transport & app launch
 

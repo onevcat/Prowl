@@ -268,9 +268,10 @@ nonisolated struct ProjectWorkspaceBootstrapExecutor: Sendable {
       "PROWL_SOURCE_LOCATION": context.repository.sourceLocation ?? "",
       "PROWL_BRANCH_NAME": context.repository.branchName ?? "",
       "PROWL_BASE_REF": context.repository.baseRef ?? "",
-      "script": scriptURL.path(percentEncoded: false),
     ]
     environment.merge(profile.environment, uniquingKeysWith: { _, custom in custom })
+    environment[ProjectWorkspaceBootstrapProfile.bootstrapScriptEnvironmentKey] =
+      scriptURL.path(percentEncoded: false)
     return environment
   }
 

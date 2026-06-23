@@ -72,6 +72,6 @@ struct BootstrapProfilesKeyTests {
 
     let profiles = try JSONDecoder().decode([ProjectWorkspaceBootstrapProfile].self, from: data)
 
-    #expect(profiles.first?.normalized.command == #"/bin/zsh "$script""#)
+    #expect(profiles.first?.normalized.command == #"/bin/zsh "$PROWL_BOOTSTRAP_SCRIPT""#)
   }
 }

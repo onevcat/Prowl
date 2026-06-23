@@ -16,7 +16,8 @@ struct BootstrapCommand: ParsableCommand {
 }
 
 struct BootstrapProfile: Codable, Equatable {
-  static let defaultCommand = #"/bin/sh "$script""#
+  static let bootstrapScriptEnvironmentKey = "PROWL_BOOTSTRAP_SCRIPT"
+  static let defaultCommand = #"/bin/sh "$PROWL_BOOTSTRAP_SCRIPT""#
 
   var id: String
   var name: String
@@ -62,7 +63,7 @@ struct BootstrapProfile: Codable, Equatable {
     description = try container.decodeIfPresent(String.self, forKey: .description) ?? ""
     let command = try container.decodeIfPresent(String.self, forKey: .command)
     let shell = try container.decodeIfPresent(String.self, forKey: .shell)
-    self.command = Self.trimmedNonEmpty(command) ?? Self.legacyCommand(for: shell) ?? Self.defaultCommand
+    self.command = Self.normalizedCommand(command) ?? Self.legacyCommand(for: shell) ?? Self.defaultCommand
     environment = try container.decodeIfPresent([String: String].self, forKey: .environment) ?? [:]
     script = try container.decodeIfPresent(String.self, forKey: .script) ?? ""
     timeoutSeconds = try container.decodeIfPresent(Int.self, forKey: .timeoutSeconds) ?? 300
@@ -87,7 +88,7 @@ struct BootstrapProfile: Codable, Equatable {
       id: id.trimmingCharacters(in: .whitespacesAndNewlines),
       name: name.trimmingCharacters(in: .whitespacesAndNewlines),
       description: description.trimmingCharacters(in: .whitespacesAndNewlines),
-      command: Self.trimmedNonEmpty(command) ?? Self.defaultCommand,
+      command: Self.normalizedCommand(command) ?? Self.defaultCommand,
       environment: Self.normalizedEnvironment(environment),
       script: script,
       timeoutSeconds: max(1, timeoutSeconds)
@@ -98,7 +99,14 @@ struct BootstrapProfile: Codable, Equatable {
     guard let shell = trimmedNonEmpty(shell) else {
       return nil
     }
-    return #"\#(shell) "$script""#
+    return #"\#(shell) "$\#(bootstrapScriptEnvironmentKey)""#
+  }
+
+  private static func normalizedCommand(_ value: String?) -> String? {
+    guard let command = trimmedNonEmpty(value) else {
+      return nil
+    }
+    return command.replacing("$script", with: "$\(bootstrapScriptEnvironmentKey)")
   }
 
   private static func normalizedEnvironment(_ environment: [String: String]) -> [String: String] {
@@ -215,7 +223,7 @@ struct BootstrapAddCommand: ParsableCommand {
   @Option(name: .long, help: "Description.")
   var description: String = ""
 
-  @Option(name: .long, help: "Command used to run the script. Use $script as the script file placeholder.")
+  @Option(name: .long, help: "Command used to run the script. Use $PROWL_BOOTSTRAP_SCRIPT for the script path.")
   var command: String = BootstrapProfile.defaultCommand
 
   @Option(name: .long, help: "Environment variable in KEY=VALUE form. Can be repeated.")
