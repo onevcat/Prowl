@@ -299,6 +299,9 @@ extension RepositoriesFeature {
       return .run { send in
         var dict: [Repository.ID: String] = [:]
         for repository in repositoriesForTitleRefresh {
+          guard repository.workspace == nil else {
+            continue
+          }
           @Shared(.repositorySettings(repository.rootURL)) var settings
           let trimmed = settings.customTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
           if let trimmed, !trimmed.isEmpty {
@@ -311,6 +314,10 @@ extension RepositoriesFeature {
     case .refreshCustomTitle(let rootURL):
       guard let repository = state.repositories.first(where: { $0.rootURL == rootURL }) else {
         return .none
+      }
+      guard repository.workspace == nil else {
+        let repositoryID = repository.id
+        return .send(.customTitleUpdated(repositoryID, nil))
       }
       let repositoryID = repository.id
       return .run { send in

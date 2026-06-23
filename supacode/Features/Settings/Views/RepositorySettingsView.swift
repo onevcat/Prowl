@@ -66,6 +66,7 @@ struct RepositorySettingsView: View {
     let baseRefOptions =
       store.branchOptions.isEmpty ? [store.defaultWorktreeBaseRef] : store.branchOptions
     let settings = $store.settings
+    let showsRepositoryDisplayName = store.workspace == nil
     let worktreeBaseDirectoryPath = Binding(
       get: { settings.worktreeBaseDirectoryPath.wrappedValue ?? "" },
       set: { settings.worktreeBaseDirectoryPath.wrappedValue = $0 },
@@ -88,15 +89,17 @@ struct RepositorySettingsView: View {
     Form {
       Section("Display") {
         VStack(alignment: .leading, spacing: 12) {
-          HStack {
-            Text("Name")
-            Spacer().frame(width: 20)
-            TextField("", text: customTitle, prompt: Text(folderName))
-              .frame(width: 300)
-              .textFieldStyle(.roundedBorder)
-              .labelsHidden()
+          if showsRepositoryDisplayName {
+            HStack {
+              Text("Name")
+              Spacer().frame(width: 20)
+              TextField("", text: customTitle, prompt: Text(folderName))
+                .frame(width: 300)
+                .textFieldStyle(.roundedBorder)
+                .labelsHidden()
+            }
+            Divider()
           }
-          Divider()
           RepositoryAppearancePickerView(store: store)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
