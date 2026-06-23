@@ -107,15 +107,13 @@ struct WorkspaceCreationPromptView: View {
         }
         ScrollViewReader { proxy in
           ScrollView {
-            VStack(spacing: 0) {
+            VStack(spacing: 12) {
               ForEach(store.repositories) { repository in
                 repositoryEditor(repository)
                   .id(repository.id)
-                if repository.id != store.repositories.last?.id {
-                  Divider()
-                }
               }
             }
+            .padding(.vertical, 2)
           }
           .onChange(of: store.validationRequestID) { _, _ in
             guard let repositoryID = validationRepositoryID else {
@@ -127,11 +125,6 @@ struct WorkspaceCreationPromptView: View {
           }
         }
         .frame(maxHeight: 340)
-        .clipShape(.rect(cornerRadius: 8))
-        .overlay {
-          RoundedRectangle(cornerRadius: 8)
-            .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
-        }
       }
 
       if let message = store.validationMessage, !message.isEmpty {
@@ -183,15 +176,33 @@ struct WorkspaceCreationPromptView: View {
   }
 
   private func repositoryEditor(_ repository: ProjectWorkspaceCreationRepository) -> some View {
-    VStack(alignment: .leading, spacing: 10) {
+    VStack(alignment: .leading, spacing: 0) {
       repositoryHeader(repository)
-      repositoryNameAndPathFields(repository)
-      repositorySourceField(repository)
-      repositoryBranchFields(repository)
+        .padding(.bottom, 10)
+
+      Divider()
+
+      VStack(alignment: .leading, spacing: 10) {
+        repositoryNameAndPathFields(repository)
+        repositorySourceField(repository)
+        repositoryBranchFields(repository)
+      }
+      .padding(.vertical, 10)
+
+      Divider()
+
       repositoryBootstrapFields(repository)
+        .padding(.top, 10)
     }
-    .padding(.horizontal, 10)
-    .padding(.vertical, 10)
+    .padding(14)
+    .background(
+      Color(nsColor: .controlBackgroundColor),
+      in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+    )
+    .overlay {
+      RoundedRectangle(cornerRadius: 14, style: .continuous)
+        .stroke(Color(nsColor: .separatorColor).opacity(0.65), lineWidth: 1)
+    }
   }
 
   private func repositoryHeader(_ repository: ProjectWorkspaceCreationRepository) -> some View {
@@ -371,7 +382,9 @@ struct WorkspaceCreationPromptView: View {
     return VStack(alignment: .leading, spacing: 6) {
       HStack(spacing: 8) {
         Menu {
-          if availableProfiles.isEmpty {
+          if disablesAutomaticBootstrap {
+            Text("Link mode skips bootstrap")
+          } else if availableProfiles.isEmpty {
             Text(bootstrapProfiles.isEmpty ? "No bootstrap profiles" : "All profiles selected")
           } else {
             ForEach(availableProfiles) { profile in
@@ -380,20 +393,18 @@ struct WorkspaceCreationPromptView: View {
               }
             }
           }
+          Divider()
+          Button {
+            store.send(.manageBootstrapProfilesButtonTapped)
+          } label: {
+            Label("Manage Profiles", systemImage: "slider.horizontal.3")
+          }
         } label: {
           Label("Bootstrap Profile", systemImage: "plus")
         }
         .frame(minWidth: 190, alignment: .leading)
-        .disabled(store.isCreating || bootstrapProfiles.isEmpty || disablesAutomaticBootstrap)
-        .help(bootstrapProfilePickerHelpText(disablesAutomaticBootstrap: disablesAutomaticBootstrap))
-
-        Button {
-          store.send(.manageBootstrapProfilesButtonTapped)
-        } label: {
-          Label("Manage", systemImage: "slider.horizontal.3")
-        }
         .disabled(store.isCreating)
-        .help("Open Bootstrap settings")
+        .help(bootstrapProfilePickerHelpText(disablesAutomaticBootstrap: disablesAutomaticBootstrap))
 
         Toggle(
           "Create",
