@@ -48,7 +48,11 @@ struct RepositorySettingsFeature {
     var bootstrapRunOnManual: Bool
 
     var usesLinkCheckout: Bool {
-      isNew && checkoutMode == .link
+      if isNew {
+        return checkoutMode == .link
+      }
+      return sourceKind == .existingPath
+        || (sourceKind == .localRepository && branchName.isEmpty && baseRef.isEmpty)
     }
 
     var hasAutomaticBootstrapTiming: Bool {
@@ -106,25 +110,14 @@ struct RepositorySettingsFeature {
 
     var bootstrap: ProjectWorkspaceRepositoryBootstrap? {
       let scriptIDs = bootstrapScriptIDs
-      var runOn = Set<ProjectWorkspaceBootstrapTiming>()
-      let permitsAutomaticBootstrap = !usesLinkCheckout
-      if permitsAutomaticBootstrap, bootstrapRunOnCreate {
-        runOn.insert(.create)
-      }
-      if permitsAutomaticBootstrap, bootstrapRunOnAdd {
-        runOn.insert(.onAdd)
-      }
-      if bootstrapRunOnManual {
-        runOn.insert(.manual)
-      }
-      guard !scriptIDs.isEmpty || !runOn.isEmpty || bootstrapRequired else {
+      guard !scriptIDs.isEmpty else {
         return nil
       }
       return ProjectWorkspaceRepositoryBootstrap(
         scriptKind: .userProfile,
         scriptIDs: scriptIDs,
-        runOn: runOn,
-        required: bootstrapRequired
+        runOn: [.manual],
+        required: false
       )
     }
 
@@ -337,6 +330,7 @@ struct RepositorySettingsFeature {
     case workspaceBootstrapOnAddChanged(id: String, Bool)
     case workspaceBootstrapManualChanged(id: String, Bool)
     case runWorkspaceBootstrapButtonTapped(id: String)
+    case runWorkspaceBootstrapProfileButtonTapped(id: String, scriptID: String)
     case saveWorkspaceMetadataButtonTapped
     case regenerateWorkspaceGuideButtonTapped
     case workspaceMetadataSaved(ProjectWorkspace)
@@ -645,8 +639,10 @@ struct RepositorySettingsFeature {
           }
           repository.checkoutMode = mode
           if mode == .link {
+            repository.bootstrapScriptIDs = []
             repository.bootstrapRunOnCreate = false
             repository.bootstrapRunOnAdd = false
+            repository.bootstrapRunOnManual = false
             repository.bootstrapRequired = false
           }
         }
@@ -680,9 +676,13 @@ struct RepositorySettingsFeature {
 
       case .workspaceBootstrapProfileAdded(let id, let scriptID):
         state.updateWorkspaceRepositoryDraft(id: id) { repository in
+          guard !repository.usesLinkCheckout else {
+            return
+          }
           repository.bootstrapScriptIDs = ProjectWorkspaceCreationRepository.normalizedBootstrapScriptIDs(
             repository.bootstrapScriptIDs + [scriptID]
           )
+          repository.bootstrapRunOnManual = true
         }
         return .none
 
@@ -754,7 +754,12 @@ struct RepositorySettingsFeature {
         return .none
 
       case .workspaceBootstrapManualChanged(let id, let enabled):
-        state.updateWorkspaceRepositoryDraft(id: id) { $0.bootstrapRunOnManual = enabled }
+        state.updateWorkspaceRepositoryDraft(id: id) { repository in
+          guard !repository.usesLinkCheckout else {
+            return
+          }
+          repository.bootstrapRunOnManual = enabled
+        }
         return .none
 
       case .runWorkspaceBootstrapButtonTapped(let id):
@@ -762,10 +767,18 @@ struct RepositorySettingsFeature {
           let draftRepository = state.workspaceDraft?.repositories.first(where: { $0.id == id }),
           !draftRepository.isNew,
           !draftRepository.isRemoved,
-          let entry = workspace.repositories.first(where: { $0.id == id })
+          !draftRepository.usesLinkCheckout,
+          var entry = workspace.repositories.first(where: { $0.id == id })
         else {
           return .none
         }
+        entry.bootstrap = ProjectWorkspaceRepositoryBootstrap(
+          scriptKind: .userProfile,
+          scriptIDs: draftRepository.bootstrapScriptIDs,
+          runOn: [.manual],
+          required: true
+        )
+        let bootstrapEntry = entry
         let rootURL = state.rootURL
         @Shared(.bootstrapProfiles) var bootstrapProfiles
         let bootstrapRunner = ProjectWorkspaceBootstrapExecutor(
@@ -776,12 +789,51 @@ struct RepositorySettingsFeature {
         return .run { send in
           do {
             try await ProjectWorkspace.runBootstrap(
-              for: entry,
+              for: bootstrapEntry,
               workspaceRootURL: rootURL,
               timing: .manual,
               bootstrapRunner: bootstrapRunner
             )
-            await send(.workspaceBootstrapRan(entry.name))
+            await send(.workspaceBootstrapRan(bootstrapEntry.name))
+          } catch {
+            await send(.workspaceBootstrapRunFailed(error.localizedDescription))
+          }
+        }
+
+      case .runWorkspaceBootstrapProfileButtonTapped(let id, let scriptID):
+        guard let workspace = state.updatedWorkspaceFromDraft(),
+          let draftRepository = state.workspaceDraft?.repositories.first(where: { $0.id == id }),
+          !draftRepository.isNew,
+          !draftRepository.isRemoved,
+          !draftRepository.usesLinkCheckout,
+          draftRepository.bootstrapScriptIDs.contains(scriptID),
+          var entry = workspace.repositories.first(where: { $0.id == id })
+        else {
+          return .none
+        }
+        entry.bootstrap = ProjectWorkspaceRepositoryBootstrap(
+          scriptKind: .userProfile,
+          scriptIDs: [scriptID],
+          runOn: [.manual],
+          required: true
+        )
+        let bootstrapEntry = entry
+        let rootURL = state.rootURL
+        @Shared(.bootstrapProfiles) var bootstrapProfiles
+        let bootstrapRunner = ProjectWorkspaceBootstrapExecutor(
+          profiles: bootstrapProfiles,
+          shellClient: shellClient,
+          now: { Date() }
+        ).runner
+        return .run { send in
+          do {
+            try await ProjectWorkspace.runBootstrap(
+              for: bootstrapEntry,
+              workspaceRootURL: rootURL,
+              timing: .manual,
+              bootstrapRunner: bootstrapRunner
+            )
+            await send(.workspaceBootstrapRan(bootstrapEntry.name))
           } catch {
             await send(.workspaceBootstrapRunFailed(error.localizedDescription))
           }
@@ -847,15 +899,18 @@ struct RepositorySettingsFeature {
         }
 
       case .regenerateWorkspaceGuideButtonTapped:
-        guard let updatedWorkspace = state.updatedWorkspaceFromDraft() else {
+        guard var updatedWorkspace = state.updatedWorkspaceFromDraft() else {
           return .none
         }
+        updatedWorkspace.agentGuide = (updatedWorkspace.agentGuide ?? ProjectWorkspaceAgentGuide())
+          .withEnabledForManualUpdate()
+        let workspaceToWrite = updatedWorkspace
         state.workspaceSaveError = nil
         let rootURL = state.rootURL
         return .run { send in
           do {
             try ProjectWorkspaceAgentGuideFileWriter().write(
-              workspace: updatedWorkspace, rootURL: rootURL)
+              workspace: workspaceToWrite, rootURL: rootURL)
             await send(.workspaceGuideRegenerated)
           } catch {
             await send(.workspaceGuideRegenerateFailed(error.localizedDescription))
@@ -1020,24 +1075,14 @@ struct RepositorySettingsFeature {
     for repository: RepositoryDraft
   ) -> ProjectWorkspaceRepositoryBootstrap? {
     let scriptIDs = repository.bootstrapScriptIDs
-    var runOn = Set<ProjectWorkspaceBootstrapTiming>()
-    if repository.bootstrapRunOnCreate {
-      runOn.insert(.create)
-    }
-    if repository.bootstrapRunOnAdd {
-      runOn.insert(.onAdd)
-    }
-    if repository.bootstrapRunOnManual {
-      runOn.insert(.manual)
-    }
-    guard !scriptIDs.isEmpty || !runOn.isEmpty || repository.bootstrapRequired else {
+    guard !scriptIDs.isEmpty else {
       return nil
     }
     return ProjectWorkspaceRepositoryBootstrap(
       scriptKind: .userProfile,
       scriptIDs: scriptIDs,
-      runOn: runOn,
-      required: repository.bootstrapRequired
+      runOn: [.manual],
+      required: false
     )
   }
 }
@@ -1045,5 +1090,13 @@ struct RepositorySettingsFeature {
 extension String {
   fileprivate var nilIfEmpty: String? {
     isEmpty ? nil : self
+  }
+}
+
+extension ProjectWorkspaceAgentGuide {
+  fileprivate func withEnabledForManualUpdate() -> ProjectWorkspaceAgentGuide {
+    var copy = self
+    copy.enabled = true
+    return copy
   }
 }

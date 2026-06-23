@@ -9,6 +9,10 @@ struct RepositorySettingsView: View {
   @State private var isBranchPickerPresented = false
   @State private var branchSearchText = ""
   @State private var githubIdentityViewModel = RepositoryGithubIdentityViewModel()
+  @State private var isAddWorkspaceRepositorySheetPresented = false
+  @State private var addWorkspaceRepositoryMode = AddWorkspaceRepositoryMode.local
+  @State private var addWorkspaceRepositoryName = ""
+  @State private var addWorkspaceRepositorySource = ""
 
   @State var selectedCustomCommandID: UserCustomCommand.ID?
   @State var recordingCustomCommandID: UserCustomCommand.ID?
@@ -417,126 +421,161 @@ struct RepositorySettingsView: View {
           + "\n\nChoose Replace to keep the new shortcut and clear the conflicting command."
       )
     }
+    .sheet(isPresented: $isAddWorkspaceRepositorySheetPresented) {
+      addWorkspaceRepositorySheet
+    }
   }
 
   private func workspaceEditor(
-    workspace: ProjectWorkspace,
+    workspace _: ProjectWorkspace,
     draft: RepositorySettingsFeature.WorkspaceDraft
   ) -> some View {
-    VStack(alignment: .leading, spacing: 14) {
-      labeledTextField(
-        "Title",
-        text: draft.title,
-        action: RepositorySettingsFeature.Action.workspaceTitleChanged
-      )
-      labeledPlainTextEditor(
-        "Description",
-        text: draft.description,
-        height: 54,
-        action: RepositorySettingsFeature.Action.workspaceDescriptionChanged
-      )
-      labeledPlainTextEditor(
-        "Task links",
-        text: draft.taskLinksText,
-        height: 54,
-        action: RepositorySettingsFeature.Action.workspaceTaskLinksChanged
-      )
-      Divider()
+    VStack(alignment: .leading, spacing: 16) {
+      workspaceMetadataEditor(draft: draft)
+      workspaceRepositoriesEditor(draft: draft)
       workspaceAgentGuideEditor(draft: draft)
-      Divider()
-      WorkspaceRepositoriesGridView(workspace: workspace, rootURL: store.rootURL)
-      HStack {
-        Button {
-          chooseWorkspaceRepositorySource()
-        } label: {
-          Label("Add Local", systemImage: "folder.badge.plus")
-        }
-        .help("Add a local repository to this workspace")
+      workspaceStatusView
+      workspaceActions(draft: draft)
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
 
+  private func workspaceMetadataEditor(
+    draft: RepositorySettingsFeature.WorkspaceDraft
+  ) -> some View {
+    settingsCard {
+      settingsRow("Title") {
+        TextField(
+          "Workspace title",
+          text: Binding(
+            get: { draft.title },
+            set: { store.send(.workspaceTitleChanged($0)) }
+          )
+        )
+        .textFieldStyle(.roundedBorder)
+        .frame(maxWidth: 420)
+      }
+
+      Divider()
+
+      settingsRow("Description", alignment: .top) {
+        PlainTextEditor(
+          text: Binding(
+            get: { draft.description },
+            set: { store.send(.workspaceDescriptionChanged($0)) }
+          )
+        )
+        .frame(maxWidth: 520, minHeight: 54)
+      }
+
+      Divider()
+
+      settingsRow("Task links", alignment: .top) {
+        PlainTextEditor(
+          text: Binding(
+            get: { draft.taskLinksText },
+            set: { store.send(.workspaceTaskLinksChanged($0)) }
+          )
+        )
+        .frame(maxWidth: 520, minHeight: 54)
+      }
+    }
+  }
+
+  private func workspaceRepositoriesEditor(
+    draft: RepositorySettingsFeature.WorkspaceDraft
+  ) -> some View {
+    VStack(alignment: .leading, spacing: 10) {
+      HStack {
+        Text("Repositories")
+          .font(.headline)
+        Spacer()
         Button {
-          store.send(.workspaceAddRemoteRepository(name: "Remote Repository", url: ""))
+          resetAddWorkspaceRepositorySheet()
+          isAddWorkspaceRepositorySheetPresented = true
         } label: {
-          Label("Add Remote", systemImage: "network")
+          Label("Add Repository", systemImage: "plus")
         }
-        .help("Add a remote repository to this workspace")
+        .help("Add a child repository to this workspace")
       }
       ForEach(draft.repositories) { repository in
         workspaceRepositoryEditor(repository)
       }
-      if let error = store.workspaceSaveError {
-        Text(error)
-          .font(.footnote)
-          .foregroundStyle(.red)
-          .textSelection(.enabled)
-      } else if let status = store.workspaceSaveStatus {
-        Text(status)
-          .font(.footnote)
-          .foregroundStyle(.secondary)
-      }
-      HStack {
-        Button {
-          store.send(.saveWorkspaceMetadataButtonTapped)
-        } label: {
-          Label("Save Workspace", systemImage: "square.and.arrow.down")
-        }
-        .disabled(!store.canSaveWorkspaceDraft)
-        .help("Save workspace metadata")
-
-        Button {
-          store.send(.regenerateWorkspaceGuideButtonTapped)
-        } label: {
-          Label("Regenerate Guide", systemImage: "arrow.clockwise")
-        }
-        .disabled(!draft.agentGuideEnabled)
-        .help("Regenerate workspace agent guide")
-      }
     }
-    .frame(maxWidth: .infinity, alignment: .leading)
   }
 
   private func workspaceAgentGuideEditor(
     draft: RepositorySettingsFeature.WorkspaceDraft
   ) -> some View {
     VStack(alignment: .leading, spacing: 10) {
-      Toggle(
-        "Generate agent guide",
-        isOn: Binding(
-          get: { draft.agentGuideEnabled },
-          set: { store.send(.workspaceAgentGuideEnabledChanged($0)) }
-        )
-      )
-      .help("Generate managed workspace instructions such as AGENTS.md")
-      labeledPlainTextEditor(
-        "Outputs",
-        text: draft.agentGuideOutputsText,
-        height: 42,
-        action: RepositorySettingsFeature.Action.workspaceAgentGuideOutputsChanged
-      )
-      Toggle(
-        "Reference child instruction files",
-        isOn: Binding(
-          get: { draft.includeChildInstructionFiles },
-          set: { store.send(.workspaceChildInstructionsChanged($0)) }
-        )
-      )
-      .help("List child AGENTS.md, CLAUDE.md, Cursor rules, and Copilot instructions when present")
-      labeledPlainTextEditor(
-        "Guide notes",
-        text: draft.agentGuideExtraNotes,
-        height: 64,
-        action: RepositorySettingsFeature.Action.workspaceAgentGuideExtraNotesChanged
-      )
+      HStack {
+        VStack(alignment: .leading, spacing: 2) {
+          Text("Agent Guide")
+            .font(.headline)
+          Text("Updates managed workspace instructions from repository metadata.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        Spacer()
+        Button {
+          store.send(.regenerateWorkspaceGuideButtonTapped)
+        } label: {
+          Label("Update Guide", systemImage: "arrow.clockwise")
+        }
+        .help("Update managed workspace guide files now")
+      }
+
+      settingsCard {
+        settingsRow("Output files", alignment: .top) {
+          PlainTextEditor(
+            text: Binding(
+              get: { draft.agentGuideOutputsText },
+              set: { store.send(.workspaceAgentGuideOutputsChanged($0)) }
+            )
+          )
+          .frame(maxWidth: 420, minHeight: 42)
+        }
+
+        Divider()
+
+        settingsRow("Child instructions") {
+          Toggle(
+            "Reference child instruction files",
+            isOn: Binding(
+              get: { draft.includeChildInstructionFiles },
+              set: { store.send(.workspaceChildInstructionsChanged($0)) }
+            )
+          )
+          .toggleStyle(.switch)
+          .help("List child AGENTS.md, CLAUDE.md, Cursor rules, and Copilot instructions when present")
+        }
+
+        Divider()
+
+        settingsRow("Guide notes", alignment: .top) {
+          PlainTextEditor(
+            text: Binding(
+              get: { draft.agentGuideExtraNotes },
+              set: { store.send(.workspaceAgentGuideExtraNotesChanged($0)) }
+            )
+          )
+          .frame(maxWidth: 520, minHeight: 64)
+        }
+      }
     }
   }
 
   private func workspaceRepositoryEditor(
     _ repository: RepositorySettingsFeature.RepositoryDraft
   ) -> some View {
-    VStack(alignment: .leading, spacing: 10) {
-      HStack {
+    VStack(alignment: .leading, spacing: 12) {
+      HStack(spacing: 8) {
         Text(repository.name.isEmpty ? "Repository" : repository.name)
           .font(.headline)
           .strikethrough(repository.isRemoved)
+        Text(repository.sourceKind.rawValue)
+          .font(.caption)
+          .foregroundStyle(.secondary)
         if repository.isNew {
           Text("New")
             .font(.caption)
@@ -564,39 +603,68 @@ struct RepositorySettingsView: View {
           .help("Remove repository from this workspace")
         }
       }
-      labeledTextField(
-        "Role",
-        text: repository.role,
-        action: { .workspaceRepositoryRoleChanged(id: repository.id, $0) }
-      )
+
       if repository.isNew {
         workspaceNewRepositoryMaterializationEditor(repository)
       } else {
         workspaceRepositoryMaterializationSummary(repository)
       }
-      labeledPlainTextEditor(
-        "Agent notes",
-        text: repository.agentNotes,
-        height: 54,
-        action: { .workspaceRepositoryAgentNotesChanged(id: repository.id, $0) }
-      )
+
+      DisclosureGroup("Guide metadata") {
+        VStack(alignment: .leading, spacing: 8) {
+          settingsRow("Role") {
+            TextField(
+              "Optional guide role",
+              text: Binding(
+                get: { repository.role },
+                set: { store.send(.workspaceRepositoryRoleChanged(id: repository.id, $0)) }
+              )
+            )
+            .textFieldStyle(.roundedBorder)
+            .frame(maxWidth: 420)
+          }
+
+          settingsRow("Agent notes", alignment: .top) {
+            PlainTextEditor(
+              text: Binding(
+                get: { repository.agentNotes },
+                set: { store.send(.workspaceRepositoryAgentNotesChanged(id: repository.id, $0)) }
+              )
+            )
+            .frame(maxWidth: 520, minHeight: 54)
+          }
+        }
+        .padding(.top, 8)
+      }
+      .font(.subheadline)
+
       workspaceBootstrapEditor(repository)
     }
     .opacity(repository.isRemoved ? 0.55 : 1)
-    .padding(.top, 6)
+    .padding(14)
+    .background(
+      Color(nsColor: .separatorColor).opacity(0.08),
+      in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+    )
+    .overlay {
+      RoundedRectangle(cornerRadius: 14, style: .continuous)
+        .stroke(Color(nsColor: .separatorColor).opacity(0.65), lineWidth: 1)
+    }
   }
 
   private func workspaceBootstrapEditor(
     _ repository: RepositorySettingsFeature.RepositoryDraft
   ) -> some View {
     let selectedProfileIDs = repository.bootstrapScriptIDs
-    let disablesAutomaticBootstrap = repository.usesLinkCheckout
     let hasProfile = !selectedProfileIDs.isEmpty
+    let disablesBootstrap = repository.usesLinkCheckout
     let availableProfiles = bootstrapProfiles.filter { !selectedProfileIDs.contains($0.id) }
     return VStack(alignment: .leading, spacing: 8) {
       HStack {
-        Text("Bootstrap profiles")
-          .frame(width: 120, alignment: .leading)
+        Text("Bootstrap Scripts")
+          .font(.subheadline)
+          .fontWeight(.semibold)
+        Spacer()
         Menu {
           if availableProfiles.isEmpty {
             Text(bootstrapProfiles.isEmpty ? "No bootstrap profiles" : "All profiles selected")
@@ -608,75 +676,36 @@ struct RepositorySettingsView: View {
             }
           }
         } label: {
-          Label("Add Profile", systemImage: "plus")
+          Label("Add Script", systemImage: "plus")
         }
-        .frame(maxWidth: 420, alignment: .leading)
-        .disabled(bootstrapProfiles.isEmpty || repository.isRemoved)
-        .help("Add a local bootstrap profile from ~/.prowl/bootstrap-profiles.json")
+        .disabled(bootstrapProfiles.isEmpty || repository.isRemoved || disablesBootstrap)
+        .help(
+          disablesBootstrap
+            ? "Linked repositories share the original checkout, so bootstrap scripts are disabled."
+            : "Add a local bootstrap profile from ~/.prowl/bootstrap-profiles.json"
+        )
       }
+
       if hasProfile {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
           ForEach(Array(selectedProfileIDs.enumerated()), id: \.element) { index, profileID in
             workspaceBootstrapProfileRow(
               profileID: profileID,
               index: index,
               count: selectedProfileIDs.count,
-              repositoryID: repository.id
+              repository: repository
             )
           }
         }
-      }
-      HStack {
-        Toggle(
-          "Create",
-          isOn: Binding(
-            get: { repository.bootstrapRunOnCreate },
-            set: {
-              store.send(.workspaceBootstrapCreateChanged(id: repository.id, $0))
-            }
-          )
+      } else {
+        Text(
+          disablesBootstrap
+            ? "Bootstrap scripts are disabled for linked repositories."
+            : "No bootstrap scripts configured."
         )
-        .disabled(disablesAutomaticBootstrap || !hasProfile || repository.isRemoved)
-        Toggle(
-          "On add",
-          isOn: Binding(
-            get: { repository.bootstrapRunOnAdd },
-            set: { store.send(.workspaceBootstrapOnAddChanged(id: repository.id, $0)) }
-          )
-        )
-        .disabled(disablesAutomaticBootstrap || !hasProfile || repository.isRemoved)
-        Toggle(
-          "Manual",
-          isOn: Binding(
-            get: { repository.bootstrapRunOnManual },
-            set: { store.send(.workspaceBootstrapManualChanged(id: repository.id, $0)) }
-          )
-        )
-        .disabled(!hasProfile || repository.isRemoved)
-        Toggle(
-          "Required",
-          isOn: Binding(
-            get: { repository.bootstrapRequired },
-            set: { store.send(.workspaceBootstrapRequiredChanged(id: repository.id, $0)) }
-          )
-        )
-        .disabled(
-          disablesAutomaticBootstrap || !hasProfile || repository.isRemoved
-            || !repository.hasAutomaticBootstrapTiming
-        )
-        .help("If automatic bootstrap fails, fail the current materialization action")
-      }
-      Text(workspaceBootstrapHelpText(for: repository))
         .font(.caption)
         .foregroundStyle(.secondary)
-        .fixedSize(horizontal: false, vertical: true)
-      Button {
-        store.send(.runWorkspaceBootstrapButtonTapped(id: repository.id))
-      } label: {
-        Label("Run Bootstrap", systemImage: "play")
       }
-      .disabled(repository.isNew || repository.isRemoved || !hasProfile)
-      .help("Run this repository's bootstrap profiles now")
     }
   }
 
@@ -684,43 +713,50 @@ struct RepositorySettingsView: View {
     profileID: String,
     index: Int,
     count: Int,
-    repositoryID: String
+    repository: RepositorySettingsFeature.RepositoryDraft
   ) -> some View {
-    HStack(spacing: 6) {
+    HStack(spacing: 8) {
       Text(bootstrapProfileTitle(id: profileID))
         .lineLimit(1)
       Spacer()
       Button {
-        store.send(.workspaceBootstrapProfileMoved(id: repositoryID, profileID, .earlier))
+        store.send(.runWorkspaceBootstrapProfileButtonTapped(id: repository.id, scriptID: profileID))
+      } label: {
+        Label("Run", systemImage: "play")
+      }
+      .disabled(repository.isNew || repository.isRemoved || repository.usesLinkCheckout)
+      .help("Run this bootstrap script now")
+      Button {
+        store.send(.workspaceBootstrapProfileMoved(id: repository.id, profileID, .earlier))
       } label: {
         Image(systemName: "chevron.up")
           .accessibilityLabel("Move earlier")
       }
       .buttonStyle(.borderless)
-      .disabled(index == 0)
-      .help("Move bootstrap profile earlier")
+      .disabled(index == 0 || repository.isRemoved)
+      .help("Move bootstrap script earlier")
       Button {
-        store.send(.workspaceBootstrapProfileMoved(id: repositoryID, profileID, .later))
+        store.send(.workspaceBootstrapProfileMoved(id: repository.id, profileID, .later))
       } label: {
         Image(systemName: "chevron.down")
           .accessibilityLabel("Move later")
       }
       .buttonStyle(.borderless)
-      .disabled(index == count - 1)
-      .help("Move bootstrap profile later")
+      .disabled(index == count - 1 || repository.isRemoved)
+      .help("Move bootstrap script later")
       Button {
-        store.send(.workspaceBootstrapProfileRemoved(id: repositoryID, profileID))
+        store.send(.workspaceBootstrapProfileRemoved(id: repository.id, profileID))
       } label: {
         Image(systemName: "xmark")
           .accessibilityLabel("Remove")
       }
       .buttonStyle(.borderless)
-      .help("Remove bootstrap profile")
+      .disabled(repository.isRemoved)
+      .help("Remove bootstrap script")
     }
-    .padding(.horizontal, 8)
-    .padding(.vertical, 4)
+    .padding(.horizontal, 10)
+    .padding(.vertical, 6)
     .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
-    .frame(maxWidth: 420)
   }
 
   private func bootstrapProfileTitle(_ profile: ProjectWorkspaceBootstrapProfile) -> String {
@@ -737,20 +773,98 @@ struct RepositorySettingsView: View {
     return id
   }
 
-  private func workspaceBootstrapHelpText(
-    for repository: RepositorySettingsFeature.RepositoryDraft
-  ) -> String {
-    if repository.usesLinkCheckout {
-      return
-        "Linked repositories point at the original checkout, so automatic bootstrap is disabled. "
-        + "Manual runs are still available after the repository is saved."
+  private var workspaceStatusView: some View {
+    Group {
+      if let error = store.workspaceSaveError {
+        Text(error)
+          .font(.footnote)
+          .foregroundStyle(.red)
+          .textSelection(.enabled)
+      } else if let status = store.workspaceSaveStatus {
+        Text(status)
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+      }
     }
-    if bootstrapProfiles.isEmpty {
-      return "No local bootstrap profiles found. Add profiles to ~/.prowl/bootstrap-profiles.json first."
+  }
+
+  private func workspaceActions(
+    draft _: RepositorySettingsFeature.WorkspaceDraft
+  ) -> some View {
+    HStack {
+      Button {
+        store.send(.saveWorkspaceMetadataButtonTapped)
+      } label: {
+        Label("Save Workspace", systemImage: "square.and.arrow.down")
+      }
+      .disabled(!store.canSaveWorkspaceDraft)
+      .help("Save workspace metadata")
     }
-    return
-      "Create runs during workspace creation, On add runs when this repository is added later, "
-      + "and Manual enables the Run Bootstrap button after saving."
+  }
+
+  private var addWorkspaceRepositorySheet: some View {
+    VStack(alignment: .leading, spacing: 16) {
+      Text("Add Repository")
+        .font(.headline)
+
+      Picker("Source", selection: $addWorkspaceRepositoryMode) {
+        ForEach(AddWorkspaceRepositoryMode.allCases) { mode in
+          Label(mode.title, systemImage: mode.systemImage).tag(mode)
+        }
+      }
+      .pickerStyle(.segmented)
+
+      settingsCard {
+        if addWorkspaceRepositoryMode == .local {
+          settingsRow("Folder") {
+            TextField(
+              "Choose a repository folder",
+              text: $addWorkspaceRepositorySource
+            )
+            .textFieldStyle(.roundedBorder)
+
+            Button {
+              chooseWorkspaceRepositorySourceForSheet()
+            } label: {
+              Image(systemName: "folder")
+                .accessibilityLabel("Choose Repository Folder")
+            }
+            .help("Choose Repository Folder")
+          }
+        } else {
+          settingsRow("Remote URL") {
+            TextField(
+              "https://github.com/owner/repository.git",
+              text: $addWorkspaceRepositorySource
+            )
+            .textFieldStyle(.roundedBorder)
+          }
+
+          Divider()
+
+          settingsRow("Name") {
+            TextField("Derived from URL", text: $addWorkspaceRepositoryName)
+              .textFieldStyle(.roundedBorder)
+          }
+        }
+      }
+
+      HStack {
+        Spacer()
+        Button("Cancel") {
+          isAddWorkspaceRepositorySheetPresented = false
+        }
+        .keyboardShortcut(.cancelAction)
+
+        Button("Add") {
+          submitAddWorkspaceRepositorySheet()
+        }
+        .keyboardShortcut(.defaultAction)
+        .disabled(addWorkspaceRepositorySource.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+      }
+    }
+    .padding(20)
+    .frame(width: 520)
   }
 
   private func workspaceNewRepositoryMaterializationEditor(
@@ -872,7 +986,63 @@ struct RepositorySettingsView: View {
     }
   }
 
-  private func chooseWorkspaceRepositorySource() {
+  private func settingsCard<Content: View>(
+    @ViewBuilder content: () -> Content
+  ) -> some View {
+    VStack(alignment: .leading, spacing: 10) {
+      content()
+    }
+    .padding(14)
+    .background(
+      Color(nsColor: .controlBackgroundColor),
+      in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+    )
+    .overlay {
+      RoundedRectangle(cornerRadius: 8, style: .continuous)
+        .stroke(Color(nsColor: .separatorColor), lineWidth: 0.5)
+    }
+  }
+
+  private func settingsRow<Content: View>(
+    _ title: String,
+    alignment: VerticalAlignment = .center,
+    @ViewBuilder content: () -> Content
+  ) -> some View {
+    HStack(alignment: alignment, spacing: 12) {
+      Text(title)
+        .frame(width: 140, alignment: .leading)
+        .foregroundStyle(.secondary)
+      content()
+    }
+  }
+
+  private func resetAddWorkspaceRepositorySheet() {
+    addWorkspaceRepositoryMode = .local
+    addWorkspaceRepositoryName = ""
+    addWorkspaceRepositorySource = ""
+  }
+
+  private func submitAddWorkspaceRepositorySheet() {
+    let source = addWorkspaceRepositorySource.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !source.isEmpty else {
+      return
+    }
+    switch addWorkspaceRepositoryMode {
+    case .local:
+      store.send(.workspaceAddLocalRepository(source))
+    case .remote:
+      let name = addWorkspaceRepositoryName.trimmingCharacters(in: .whitespacesAndNewlines)
+      store.send(
+        .workspaceAddRemoteRepository(
+          name: name.isEmpty ? "Remote Repository" : name,
+          url: source
+        )
+      )
+    }
+    isAddWorkspaceRepositorySheetPresented = false
+  }
+
+  private func chooseWorkspaceRepositorySourceForSheet() {
     let panel = NSOpenPanel()
     panel.canChooseFiles = false
     panel.canChooseDirectories = true
@@ -884,7 +1054,32 @@ struct RepositorySettingsView: View {
       guard response == .OK, let url = panel.url else {
         return
       }
-      store.send(.workspaceAddLocalRepository(url.path(percentEncoded: false)))
+      addWorkspaceRepositorySource = url.path(percentEncoded: false)
+    }
+  }
+}
+
+private enum AddWorkspaceRepositoryMode: String, CaseIterable, Identifiable {
+  case local
+  case remote
+
+  var id: Self { self }
+
+  var title: String {
+    switch self {
+    case .local:
+      "Local"
+    case .remote:
+      "Remote"
+    }
+  }
+
+  var systemImage: String {
+    switch self {
+    case .local:
+      "folder"
+    case .remote:
+      "network"
     }
   }
 }

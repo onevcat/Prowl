@@ -64,15 +64,19 @@ private func makeWorkspaceAddRemoveFixture() throws -> WorkspaceAddRemoveFixture
           "id": "app",
           "name": "App",
           "path": "app",
-          "source_kind": "existing_path",
-          "source_location": "\(fixture.appURL.path(percentEncoded: false))"
+          "source_kind": "local_repository",
+          "source_location": "\(fixture.appURL.path(percentEncoded: false))",
+          "branch_name": "workspace-app",
+          "base_ref": "main"
         },
         {
           "id": "api",
           "name": "API",
           "path": "api",
           "source_kind": "local_repository",
-          "source_location": "\(fixture.apiURL.path(percentEncoded: false))"
+          "source_location": "\(fixture.apiURL.path(percentEncoded: false))",
+          "branch_name": "workspace-api",
+          "base_ref": "main"
         }
       ]
     }
@@ -107,7 +111,10 @@ private func makeWorkspaceBootstrapFixture() throws -> WorkspaceBootstrapFixture
           "id": "app",
           "name": "App",
           "path": "app",
-          "source_kind": "existing_path",
+          "source_kind": "local_repository",
+          "source_location": "\(fixture.rootURL.appending(path: "app").path(percentEncoded: false))",
+          "branch_name": "workspace-app",
+          "base_ref": "main",
           "bootstrap": {
             "script_kind": "user_profile",
             "script_id": "sync-app",
@@ -424,7 +431,10 @@ struct RepositorySettingsFeatureTests {
             "id": "app",
             "name": "App",
             "path": "app",
-            "source_kind": "existing_path"
+            "source_kind": "local_repository",
+            "source_location": "\(rootURL.appending(path: "app-source").path(percentEncoded: false))",
+            "branch_name": "workspace-app",
+            "base_ref": "main"
           },
           {
             "id": "api",
@@ -466,9 +476,11 @@ struct RepositorySettingsFeatureTests {
     }
     await store.send(.workspaceBootstrapProfileAdded(id: "app", "sync-app")) {
       $0.workspaceDraft?.repositories[0].bootstrapScriptIDs = ["sync-app"]
+      $0.workspaceDraft?.repositories[0].bootstrapRunOnManual = true
     }
     await store.send(.workspaceBootstrapProfileAdded(id: "app", "common")) {
       $0.workspaceDraft?.repositories[0].bootstrapScriptIDs = ["sync-app", "common"]
+      $0.workspaceDraft?.repositories[0].bootstrapRunOnManual = true
     }
     await store.send(.workspaceBootstrapProfileMoved(id: "app", "common", .earlier)) {
       $0.workspaceDraft?.repositories[0].bootstrapScriptIDs = ["common", "sync-app"]
@@ -485,7 +497,8 @@ struct RepositorySettingsFeatureTests {
       $0.workspace?.repositories[0].bootstrap = ProjectWorkspaceRepositoryBootstrap(
         scriptKind: .userProfile,
         scriptIDs: ["common", "sync-app"],
-        runOn: [.create]
+        runOn: [.manual],
+        required: false
       )
       $0.workspace?.updatedAt = Date(timeIntervalSince1970: 20)
       if let workspace = $0.workspace {
@@ -500,6 +513,7 @@ struct RepositorySettingsFeatureTests {
     #expect(saved.title == "New Workspace")
     #expect(saved.repositories[0].agentNotes == "Use reducer tests.")
     #expect(saved.repositories[0].bootstrap?.scriptIDs == ["common", "sync-app"])
+    #expect(saved.repositories[0].bootstrap?.runOn == [.manual])
     let guide = try String(contentsOf: rootURL.appending(path: "AGENTS.md"), encoding: .utf8)
     #expect(guide.contains("- Title: New Workspace"))
     #expect(guide.contains("- Agent notes: Use reducer tests."))
@@ -577,7 +591,7 @@ struct RepositorySettingsFeatureTests {
     #expect(store.state.workspace?.repositories.map(\.id) == ["app", UUID(0).uuidString])
     #expect(store.state.workspace?.repositories.map(\.path) == ["app", "web"])
     #expect(store.state.workspace?.repositories.last?.sourceLocation == normalizedPath(webURL))
-    #expect(store.state.workspace?.repositories.last?.bootstrap?.runOn == [.onAdd])
+    #expect(store.state.workspace?.repositories.last?.bootstrap?.runOn == [.manual])
     #expect(store.state.workspace?.updatedAt == Date(timeIntervalSince1970: 50))
     #expect(store.state.workspaceSaveStatus == "Saved workspace metadata.")
     #expect(store.state.workspaceSaveError == nil)
@@ -585,7 +599,7 @@ struct RepositorySettingsFeatureTests {
     let saved = try #require(ProjectWorkspace.load(from: rootURL))
     #expect(saved.repositories.map(\.id) == ["app", UUID(0).uuidString])
     #expect(saved.repositories.map(\.path) == ["app", "web"])
-    #expect(saved.repositories.last?.bootstrap?.runOn == [.onAdd])
+    #expect(saved.repositories.last?.bootstrap?.runOn == [.manual])
     #expect(
       commands.value.map(\.arguments).contains([
         "git", "-C", normalizedPath(fixture.apiURL), "worktree",
@@ -651,7 +665,7 @@ struct RepositorySettingsFeatureTests {
     #expect(saved.repositories.map(\.id) == ["app", "api"])
   }
 
-  @Test(.dependencies) func workspaceSettingsDisablesAutomaticBootstrapForLinkedRepository() async throws {
+  @Test(.dependencies) func workspaceSettingsDisablesBootstrapForLinkedRepository() async throws {
     let fixture = try makeWorkspaceAddRemoveFixture()
     let rootURL = fixture.rootURL
     let webURL = fixture.webURL
@@ -690,32 +704,19 @@ struct RepositorySettingsFeatureTests {
     let repositoryID = UUID(0).uuidString
     await store.send(.workspaceAddLocalRepository(webURL.path(percentEncoded: false)))
     await store.receive(\.workspaceRepositoryBaseRefsLoaded)
-    await store.send(.workspaceBootstrapProfileAdded(id: repositoryID, "sync-web")) {
-      $0.workspaceDraft?.repositories[2].bootstrapScriptIDs = ["sync-web"]
-    }
+    await store.send(.workspaceBootstrapProfileAdded(id: repositoryID, "sync-web"))
     await store.send(.workspaceBootstrapCreateChanged(id: repositoryID, true))
     await store.send(.workspaceBootstrapOnAddChanged(id: repositoryID, true))
     await store.send(.workspaceBootstrapRequiredChanged(id: repositoryID, true))
-    await store.send(.workspaceBootstrapManualChanged(id: repositoryID, true)) {
-      $0.workspaceDraft?.repositories[2].bootstrapRunOnManual = true
-    }
-    await store.send(.workspaceBootstrapProfileRemoved(id: repositoryID, "sync-web")) {
-      $0.workspaceDraft?.repositories[2].bootstrapScriptIDs = []
-      $0.workspaceDraft?.repositories[2].bootstrapRunOnManual = false
-    }
-    await store.send(.workspaceBootstrapProfileAdded(id: repositoryID, "sync-web")) {
-      $0.workspaceDraft?.repositories[2].bootstrapScriptIDs = ["sync-web"]
-    }
-    await store.send(.workspaceBootstrapManualChanged(id: repositoryID, true)) {
-      $0.workspaceDraft?.repositories[2].bootstrapRunOnManual = true
-    }
+    await store.send(.workspaceBootstrapManualChanged(id: repositoryID, true))
 
     let repository = try #require(store.state.workspaceDraft?.repositories[2])
     #expect(repository.checkoutMode == .link)
+    #expect(repository.bootstrapScriptIDs.isEmpty)
     #expect(repository.bootstrapRunOnCreate == false)
     #expect(repository.bootstrapRunOnAdd == false)
     #expect(repository.bootstrapRequired == false)
-    #expect(repository.bootstrap?.runOn == [.manual])
+    #expect(repository.bootstrap?.runOn == nil)
   }
 
   @Test(.dependencies) func workspaceManualBootstrapRunsOnlyForSavedRepositories() async throws {
@@ -767,6 +768,7 @@ struct RepositorySettingsFeatureTests {
     }
     await store.send(.workspaceBootstrapProfileAdded(id: UUID(0).uuidString, "sync-app")) {
       $0.workspaceDraft?.repositories[2].bootstrapScriptIDs = ["sync-app"]
+      $0.workspaceDraft?.repositories[2].bootstrapRunOnManual = true
     }
     await store.send(.runWorkspaceBootstrapButtonTapped(id: UUID(0).uuidString))
     #expect(commands.value.isEmpty)
