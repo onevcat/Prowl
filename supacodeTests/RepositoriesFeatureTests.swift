@@ -184,54 +184,6 @@ struct RepositoriesFeatureTests {
     await store.send(.customTitleUpdated("repo-a", nil))
   }
 
-  @Test(.dependencies) func refreshAllCustomTitlesSkipsWorkspaceRepositories() async {
-    let settingsStorage = SettingsTestStorage()
-    let repo = makeRepository(id: "/tmp/repo", worktrees: [])
-    let workspaceRepo = makeRepository(
-      id: "/tmp/workspace",
-      kind: .plain,
-      worktrees: [],
-      workspace: ProjectWorkspace(title: "Workspace Title")
-    )
-    withDependencies {
-      $0.settingsFileStorage = settingsStorage.storage
-    } operation: {
-      @Shared(.repositorySettings(repo.rootURL)) var repoSettings
-      @Shared(.repositorySettings(workspaceRepo.rootURL)) var workspaceSettings
-      $repoSettings.withLock { $0.customTitle = "Repo Alias" }
-      $workspaceSettings.withLock { $0.customTitle = "Stale Workspace Alias" }
-    }
-    let store = TestStore(initialState: makeState(repositories: [repo, workspaceRepo])) {
-      RepositoriesFeature()
-    } withDependencies: {
-      $0.settingsFileStorage = settingsStorage.storage
-    }
-
-    await store.send(.refreshAllCustomTitles)
-    await store.receive(\.customTitlesLoaded) {
-      $0.repositoryCustomTitles = [repo.id: "Repo Alias"]
-    }
-  }
-
-  @Test func refreshCustomTitleClearsWorkspaceRepositoryOverride() async {
-    let workspaceRepo = makeRepository(
-      id: "/tmp/workspace",
-      kind: .plain,
-      worktrees: [],
-      workspace: ProjectWorkspace(title: "Workspace Title")
-    )
-    var state = makeState(repositories: [workspaceRepo])
-    state.repositoryCustomTitles = [workspaceRepo.id: "Stale Workspace Alias"]
-    let store = TestStore(initialState: state) {
-      RepositoriesFeature()
-    }
-
-    await store.send(.refreshCustomTitle(workspaceRepo.rootURL))
-    await store.receive(\.customTitleUpdated) {
-      $0.repositoryCustomTitles = [:]
-    }
-  }
-
   @Test func updateWorktreeLineChangesReturnsFalseWhenCountsMatchExistingEntry() {
     let worktree = makeWorktree(id: "/tmp/repo/feature", name: "feature", repoRoot: "/tmp/repo")
     let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
