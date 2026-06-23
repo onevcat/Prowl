@@ -196,7 +196,7 @@ struct WorkspaceCreationPromptView: View {
     }
     .padding(14)
     .background(
-      Color(nsColor: .controlBackgroundColor),
+      Color(nsColor: .separatorColor).opacity(0.08),
       in: RoundedRectangle(cornerRadius: 14, style: .continuous)
     )
     .overlay {
@@ -403,7 +403,7 @@ struct WorkspaceCreationPromptView: View {
           Label("Bootstrap Profile", systemImage: "plus")
         }
         .frame(minWidth: 190, alignment: .leading)
-        .disabled(store.isCreating)
+        .disabled(store.isCreating || disablesAutomaticBootstrap)
         .help(bootstrapProfilePickerHelpText(disablesAutomaticBootstrap: disablesAutomaticBootstrap))
 
         Toggle(
