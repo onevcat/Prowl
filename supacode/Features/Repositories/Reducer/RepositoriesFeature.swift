@@ -531,6 +531,7 @@ struct RepositoriesFeature {
     case selectedWorktreeChanged(Worktree?)
     case repositoriesChanged(IdentifiedArrayOf<Repository>)
     case openRepositorySettings(Repository.ID)
+    case openBootstrapSettings
     case showDiff(Worktree.ID)
     case worktreeCreated(Worktree)
   }

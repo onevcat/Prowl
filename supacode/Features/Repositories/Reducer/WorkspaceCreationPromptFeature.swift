@@ -114,6 +114,7 @@ struct WorkspaceCreationPromptFeature {
     case repositoryBootstrapProfileMoved(Repository.ID, String, BootstrapProfileMoveDirection)
     case repositoryBootstrapRunOnCreateChanged(Repository.ID, Bool)
     case repositoryBootstrapRequiredChanged(Repository.ID, Bool)
+    case manageBootstrapProfilesButtonTapped
     case rootPathChosen(String)
     case cancelButtonTapped
     case createButtonTapped
@@ -124,6 +125,7 @@ struct WorkspaceCreationPromptFeature {
   enum Delegate: Equatable {
     case baseRefSourceChanged(Repository.ID)
     case cancel
+    case openBootstrapSettings
     case submit(ProjectWorkspaceCreationDraft)
   }
 
@@ -502,6 +504,9 @@ struct WorkspaceCreationPromptFeature {
         state.repositories[id: repositoryID] = repository
         state.clearValidation()
         return .none
+
+      case .manageBootstrapProfilesButtonTapped:
+        return .send(.delegate(.openBootstrapSettings))
 
       case .rootPathChosen(let path):
         state.rootPath = path

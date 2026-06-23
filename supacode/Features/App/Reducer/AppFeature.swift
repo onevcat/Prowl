@@ -358,6 +358,14 @@ struct AppFeature {
           }
         )
 
+      case .repositories(.delegate(.openBootstrapSettings)):
+        return .merge(
+          .send(.settings(.setSelection(.bootstrap))),
+          .run { _ in
+            await settingsWindowClient.show()
+          }
+        )
+
       case .repositories(.delegate(.showDiff(let worktreeID))):
         guard let worktree = state.repositories.worktree(for: worktreeID) else {
           return .none

@@ -36,8 +36,6 @@ struct WorkspaceCreationPromptView: View {
         .onSubmit {
           store.send(.createButtonTapped)
         }
-        helpText(
-          "A short name for the shared task folder shown in the sidebar and workspace metadata.")
       }
 
       VStack(alignment: .leading, spacing: 8) {
@@ -71,9 +69,6 @@ struct WorkspaceCreationPromptView: View {
           .lineLimit(1)
           .truncationMode(.middle)
           .textSelection(.enabled)
-        helpText(
-          "Where Prowl creates the workspace root. Until you edit it, this path follows the workspace title."
-        )
       }
 
       VStack(alignment: .leading, spacing: 8) {
@@ -110,9 +105,6 @@ struct WorkspaceCreationPromptView: View {
           .help("Add Local Repository")
           .disabled(store.isCreating)
         }
-        helpText(
-          "Add at least two repositories. Opened and local repositories can be linked or materialized as worktrees."
-        )
         ScrollViewReader { proxy in
           ScrollView {
             VStack(spacing: 0) {
@@ -243,7 +235,6 @@ struct WorkspaceCreationPromptView: View {
         .overlay {
           invalidFieldBorder(repositoryFieldIsInvalid(repository, .name))
         }
-        helpText("Display name for this repository in the workspace metadata.")
       }
 
       VStack(alignment: .leading, spacing: 4) {
@@ -258,9 +249,6 @@ struct WorkspaceCreationPromptView: View {
         )
         .textFieldStyle(.roundedBorder)
         .disabled(store.isCreating)
-        helpText(
-          "Destination folder under the workspace root. It does not change the original source path."
-        )
       }
     }
   }
@@ -293,7 +281,6 @@ struct WorkspaceCreationPromptView: View {
           .disabled(store.isCreating)
         }
       }
-      helpText(sourceLocationHelpText(repository.sourceKind))
     }
   }
 
@@ -348,8 +335,6 @@ struct WorkspaceCreationPromptView: View {
         }
       }
 
-      helpText(branchActionHelpText(repository))
-
       if repository.checkoutMode != .link {
         if let localBranchName = repository.resettableLocalBranchName {
           VStack(alignment: .leading, spacing: 4) {
@@ -383,7 +368,7 @@ struct WorkspaceCreationPromptView: View {
     let selectedProfileIDs = repository.bootstrapScriptIDs
     let hasSelectedProfiles = !selectedProfileIDs.isEmpty
     let availableProfiles = bootstrapProfiles.filter { !selectedProfileIDs.contains($0.id) }
-    return VStack(alignment: .leading, spacing: 4) {
+    return VStack(alignment: .leading, spacing: 6) {
       HStack(spacing: 8) {
         Menu {
           if availableProfiles.isEmpty {
@@ -396,11 +381,19 @@ struct WorkspaceCreationPromptView: View {
             }
           }
         } label: {
-          Label("Add Bootstrap Profile", systemImage: "plus")
+          Label("Bootstrap Profile", systemImage: "plus")
         }
-        .frame(minWidth: 240, alignment: .leading)
+        .frame(minWidth: 190, alignment: .leading)
         .disabled(store.isCreating || bootstrapProfiles.isEmpty || disablesAutomaticBootstrap)
-        .help("Add a local bootstrap profile from ~/.prowl/bootstrap-profiles.json")
+        .help(bootstrapProfilePickerHelpText(disablesAutomaticBootstrap: disablesAutomaticBootstrap))
+
+        Button {
+          store.send(.manageBootstrapProfilesButtonTapped)
+        } label: {
+          Label("Manage", systemImage: "slider.horizontal.3")
+        }
+        .disabled(store.isCreating)
+        .help("Open Bootstrap settings")
 
         Toggle(
           "Create",
@@ -425,6 +418,7 @@ struct WorkspaceCreationPromptView: View {
         )
         .help("If the create-time bootstrap fails, fail workspace creation and roll back Prowl-created folders")
       }
+
       if hasSelectedProfiles {
         VStack(alignment: .leading, spacing: 4) {
           ForEach(Array(selectedProfileIDs.enumerated()), id: \.element) { index, profileID in
@@ -437,7 +431,10 @@ struct WorkspaceCreationPromptView: View {
           }
         }
       }
-      helpText(bootstrapHelpText(for: repository, disablesAutomaticBootstrap: disablesAutomaticBootstrap))
+      Text(bootstrapStatusText(for: repository, disablesAutomaticBootstrap: disablesAutomaticBootstrap))
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .lineLimit(2)
     }
   }
 
@@ -498,26 +495,35 @@ struct WorkspaceCreationPromptView: View {
     return id
   }
 
-  private func bootstrapHelpText(
+  private func bootstrapProfilePickerHelpText(disablesAutomaticBootstrap: Bool) -> String {
+    if disablesAutomaticBootstrap {
+      return "Linked repositories use the original checkout, so create-time bootstrap is disabled."
+    }
+    return "Add a local bootstrap profile from ~/.prowl/bootstrap-profiles.json"
+  }
+
+  private func bootstrapStatusText(
     for repository: ProjectWorkspaceCreationRepository,
     disablesAutomaticBootstrap: Bool
   ) -> String {
     if disablesAutomaticBootstrap {
-      return
-        "Linked repositories point at the original checkout, so create-time bootstrap is skipped. "
-        + "Use Create Branch or Use Existing to materialize a workspace child before running bootstrap."
+      return "Link mode skips create-time bootstrap."
     }
     if bootstrapProfiles.isEmpty {
-      return "No local bootstrap profiles found. Add profiles to ~/.prowl/bootstrap-profiles.json first."
+      return "No profiles yet."
     }
+    let count = repository.bootstrapScriptIDs.count
+    guard count > 0 else {
+      return "Optional."
+    }
+    var parts = ["\(count) selected"]
     if repository.bootstrapRunOnCreate {
-      return
-        "Create runs the selected profiles in order after this child is materialized. "
-        + "Required makes failures fail workspace creation and roll back Prowl-created folders."
+      parts.append("runs on create")
     }
-    return
-      "Optional local profiles from ~/.prowl/bootstrap-profiles.json. "
-      + "Enable Create to run them during workspace creation."
+    if repository.bootstrapRequired {
+      parts.append("required")
+    }
+    return parts.joined(separator: ", ") + "."
   }
 
   @ViewBuilder
@@ -715,41 +721,6 @@ struct WorkspaceCreationPromptView: View {
       return "Remote URL"
     case .bareRepository:
       return "Bare repository folder"
-    }
-  }
-
-  private func sourceLocationHelpText(_ kind: ProjectWorkspaceRepositorySourceKind) -> String {
-    switch kind {
-    case .existingPath:
-      return
-        "Existing opened repository path. Link keeps using this checkout; "
-        + "branch actions create workspace worktrees from it."
-    case .localRepository:
-      return
-        "Local repository folder on disk. It can be linked as-is or used as the source for a workspace worktree."
-    case .remote:
-      return "Remote URL cloned into the workspace folder after branches are loaded."
-    case .bareRepository:
-      return "Advanced source: a local bare repository used only for git worktree materialization."
-    }
-  }
-
-  private func branchActionHelpText(_ repository: ProjectWorkspaceCreationRepository) -> String {
-    switch repository.checkoutMode {
-    case .link:
-      return
-        "Link adds a symlink to the source checkout, so workspace edits affect the original folder directly."
-    case .createBranch:
-      return
-        "Create Branch materializes an isolated checkout on a new branch from the selected base ref."
-    case .useExistingRef:
-      if repository.resettableLocalBranchName != nil {
-        return
-          "Use Existing checks out the selected branch. "
-          + "If a matching local branch already exists, choose whether to keep or reset it."
-      }
-      return
-        "Use Existing checks out the selected local branch or creates a local tracking branch from a remote ref."
     }
   }
 

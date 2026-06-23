@@ -88,7 +88,8 @@ struct BootstrapProfilesSettingsView: View {
         idTextField(profile)
         editableTextField("Name", profileID: profile.id, keyPath: \.name)
         editableTextField("Description", profileID: profile.id, keyPath: \.description)
-        editableTextField("Shell", profileID: profile.id, keyPath: \.shellText)
+        editableTextField("Command", profileID: profile.id, keyPath: \.command)
+          .help("Command used to run the script. Use $script as the temporary script file placeholder.")
         HStack {
           Text("Timeout")
           TextField(
@@ -105,6 +106,14 @@ struct BootstrapProfilesSettingsView: View {
           Text("seconds")
             .foregroundStyle(.secondary)
         }
+      }
+
+      Section {
+        environmentEditor(profile)
+      } header: {
+        Text("Environment")
+      } footer: {
+        Text("Values are merged with Prowl-provided PROWL_* variables. Custom values win on conflicts.")
       }
 
       Section("Script") {
@@ -130,6 +139,60 @@ struct BootstrapProfilesSettingsView: View {
       }
     }
     .formStyle(.grouped)
+  }
+
+  private func environmentEditor(_ profile: ProjectWorkspaceBootstrapProfile) -> some View {
+    VStack(alignment: .leading, spacing: 8) {
+      if profile.environment.isEmpty {
+        Text("No custom variables")
+          .foregroundStyle(.secondary)
+      } else {
+        ForEach(environmentRows(for: profile), id: \.key) { key, value in
+          HStack(spacing: 8) {
+            TextField(
+              "KEY",
+              text: Binding(
+                get: { key },
+                set: { newKey in
+                  renameEnvironmentKey(profileID: profile.id, oldKey: key, newKey: newKey)
+                }
+              )
+            )
+            .textFieldStyle(.roundedBorder)
+            .font(.body.monospaced())
+            .frame(width: 180)
+
+            TextField(
+              "value",
+              text: Binding(
+                get: { value },
+                set: { newValue in
+                  updateProfile(id: profile.id) { $0.environment[key] = newValue }
+                }
+              )
+            )
+            .textFieldStyle(.roundedBorder)
+            .font(.body.monospaced())
+
+            Button {
+              removeEnvironmentValue(profileID: profile.id, key: key)
+            } label: {
+              Image(systemName: "trash")
+                .accessibilityLabel("Remove Environment Variable")
+            }
+            .buttonStyle(.borderless)
+            .help("Remove environment variable")
+          }
+        }
+      }
+
+      Button {
+        addEnvironmentValue(profileID: profile.id)
+      } label: {
+        Label("Add Variable", systemImage: "plus")
+      }
+      .help("Add an environment variable")
+    }
   }
 
   private func idTextField(_ profile: ProjectWorkspaceBootstrapProfile) -> some View {
@@ -174,7 +237,7 @@ struct BootstrapProfilesSettingsView: View {
     let profile = ProjectWorkspaceBootstrapProfile(
       id: id,
       name: "Bootstrap Profile",
-      shell: "/bin/zsh",
+      command: ProjectWorkspaceBootstrapProfile.defaultCommand,
       script: "set -euo pipefail\n"
     )
     $profiles.withLock { $0.append(profile.normalized) }
@@ -236,6 +299,47 @@ struct BootstrapProfilesSettingsView: View {
     }
   }
 
+  private func environmentRows(for profile: ProjectWorkspaceBootstrapProfile) -> [(key: String, value: String)] {
+    profile.environment
+      .map { (key: $0.key, value: $0.value) }
+      .sorted { $0.key.localizedStandardCompare($1.key) == .orderedAscending }
+  }
+
+  private func addEnvironmentValue(profileID: String) {
+    let key = nextAvailableEnvironmentKey(profileID: profileID)
+    updateProfile(id: profileID) { $0.environment[key] = "" }
+  }
+
+  private func renameEnvironmentKey(profileID: String, oldKey: String, newKey: String) {
+    let trimmed = newKey.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else {
+      return
+    }
+    updateProfile(id: profileID) { profile in
+      guard oldKey != trimmed, profile.environment[trimmed] == nil else {
+        return
+      }
+      let value = profile.environment.removeValue(forKey: oldKey) ?? ""
+      profile.environment[trimmed] = value
+    }
+  }
+
+  private func removeEnvironmentValue(profileID: String, key: String) {
+    updateProfile(id: profileID) { $0.environment.removeValue(forKey: key) }
+  }
+
+  private func nextAvailableEnvironmentKey(profileID: String) -> String {
+    let existing = profiles.first(where: { $0.id == profileID })?.environment ?? [:]
+    if existing["VARIABLE"] == nil {
+      return "VARIABLE"
+    }
+    var suffix = 2
+    while existing["VARIABLE_\(suffix)"] != nil {
+      suffix += 1
+    }
+    return "VARIABLE_\(suffix)"
+  }
+
   private func ensureSelection() {
     if let selectedProfileID, profiles.contains(where: { $0.id == selectedProfileID }) {
       return
@@ -269,16 +373,9 @@ struct BootstrapProfilesSettingsView: View {
     if profile.script.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
       return "Script is required."
     }
-    return nil
-  }
-}
-
-extension ProjectWorkspaceBootstrapProfile {
-  fileprivate var shellText: String {
-    get { shell ?? "" }
-    set {
-      let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-      shell = trimmed.isEmpty ? nil : trimmed
+    if !profile.command.contains("$script") {
+      return "Command should include $script."
     }
+    return nil
   }
 }
