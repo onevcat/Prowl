@@ -111,6 +111,48 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     XCTAssertTrue(message.localizedCaseInsensitiveContains("too long"), "Message should identify path length: \(message)")
   }
 
+  func testBootstrapProfileCommandsManageLocalFile() throws {
+    let file = temporaryBootstrapProfilesPath(suffix: "profiles")
+    defer { try? FileManager.default.removeItem(atPath: file) }
+
+    let add = try runProwl(
+      args: [
+        "bootstrap", "add",
+        "--file", file,
+        "--id", "sync-app",
+        "--name", "Sync App",
+        "--command", #"/bin/zsh "$script""#,
+        "--env", "NODE_ENV=test",
+        "--script", "echo sync",
+        "--json",
+      ]
+    )
+    XCTAssertEqual(add.exitCode, 0)
+    let addPayload = try jsonObject(from: add.stdout)
+    XCTAssertEqual(addPayload["ok"] as? Bool, true)
+
+    let list = try runProwl(args: ["bootstrap", "list", "--file", file, "--json"])
+    XCTAssertEqual(list.exitCode, 0)
+    let listPayload = try jsonObject(from: list.stdout)
+    let data = try XCTUnwrap(listPayload["data"] as? [String: Any])
+    let profiles = try XCTUnwrap(data["profiles"] as? [[String: Any]])
+    XCTAssertEqual(profiles.first?["id"] as? String, "sync-app")
+    XCTAssertEqual(profiles.first?["command"] as? String, #"/bin/zsh "$script""#)
+    let environment = try XCTUnwrap(profiles.first?["environment"] as? [String: String])
+    XCTAssertEqual(environment["NODE_ENV"], "test")
+
+    let update = try runProwl(args: [
+      "bootstrap", "update", "sync-app",
+      "--file", file,
+      "--timeout", "60",
+      "--json",
+    ])
+    XCTAssertEqual(update.exitCode, 0)
+
+    let delete = try runProwl(args: ["bootstrap", "delete", "sync-app", "--file", file, "--json"])
+    XCTAssertEqual(delete.exitCode, 0)
+  }
+
   func testAgentsCommandRoundTripsOverSocket() throws {
     let socketPath = temporarySocketPath(suffix: "agents")
     let response = try CommandResponse(
@@ -1743,6 +1785,12 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     // rather than letting bind() truncate and leak the socket again.
     precondition(path.utf8.count <= 103, "Socket path exceeds AF_UNIX sun_path limit: \(path)")
     return path
+  }
+
+  private func temporaryBootstrapProfilesPath(suffix: String) -> String {
+    let uuid = UUID().uuidString.lowercased()
+    return (Self.socketDirectory as NSString)
+      .appendingPathComponent("prowl-cli-\(suffix)-\(uuid).json")
   }
 }
 

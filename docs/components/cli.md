@@ -241,6 +241,31 @@ Supports `~` and `file://`. Reports `resolution` (no-argument / exact-root /
 inside-root / new-root), `app_launched`, `brought_to_front`, `created_tab`, and a
 `target`.
 
+### `prowl bootstrap`
+Manage local workspace bootstrap profiles without requiring the Prowl app to be
+running. Profiles are stored in `~/.prowl/bootstrap-profiles.json` by default;
+use `--file <path>` for tests or alternate files.
+
+```bash
+prowl bootstrap list --json
+
+prowl bootstrap add \
+  --id sync-app \
+  --name "Sync App" \
+  --command '/bin/sh "$script"' \
+  --env NODE_ENV=development \
+  --script-file ./scripts/bootstrap.sh
+
+prowl bootstrap update sync-app --timeout 600
+prowl bootstrap delete sync-app
+```
+
+`command` is the wrapper used to execute the profile. Prowl writes `script` to a
+temporary file and exposes its path through the `script` environment variable, so
+the default `/bin/sh "$script"` is usually enough. `--env KEY=VALUE` can be
+repeated; values are merged with Prowl-provided `PROWL_*` variables when the
+profile runs.
+
 ## Transport & app launch
 
 - Socket: `~/Library/Application Support/com.onevcat.prowl/cli.sock` (override with

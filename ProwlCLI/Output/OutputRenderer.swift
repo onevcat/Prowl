@@ -105,6 +105,30 @@ enum OutputRenderer {
         return
       }
 
+      if response.command == "bootstrap",
+         let data = response.data,
+         let payload = try? data.decode(as: BootstrapProfilesPayload.self)
+      {
+        print(renderBootstrapProfiles(payload))
+        return
+      }
+
+      if response.command == "bootstrap",
+         let data = response.data,
+         let payload = try? data.decode(as: BootstrapProfilePayload.self)
+      {
+        print(renderBootstrapProfile(payload))
+        return
+      }
+
+      if response.command == "bootstrap",
+         let data = response.data,
+         let payload = try? data.decode(as: BootstrapDeletePayload.self)
+      {
+        print("Deleted bootstrap profile \(payload.id).")
+        return
+      }
+
       if response.command == "open" {
         return
       }
@@ -233,6 +257,23 @@ enum OutputRenderer {
       let sessionLabel = agent.session.map { "  session=\($0.id) [\($0.confidence)]" } ?? ""
       return "\(statusLabel)  \(agent.name)  \(projectLabel)  \(agent.tab.title)  \(paneHandle)\(sessionLabel)"
     }.joined(separator: "\n")
+  }
+
+  private static func renderBootstrapProfiles(_ payload: BootstrapProfilesPayload) -> String {
+    guard !payload.profiles.isEmpty else {
+      return "No bootstrap profiles found at \(payload.path)."
+    }
+    return payload.profiles.map { profile in
+      let title = profile.name.isEmpty || profile.name == profile.id
+        ? profile.id
+        : "\(profile.name) (\(profile.id))"
+      return "\(title)\n  command: \(profile.command)\n  timeout: \(profile.timeoutSeconds)s"
+    }
+    .joined(separator: "\n")
+  }
+
+  private static func renderBootstrapProfile(_ payload: BootstrapProfilePayload) -> String {
+    "Saved bootstrap profile \(payload.profile.id) at \(payload.path)."
   }
 
   private static func agentStatusLabel(_ status: AgentsCommandStatus) -> String {
