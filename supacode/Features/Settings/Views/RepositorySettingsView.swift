@@ -444,9 +444,24 @@ struct RepositorySettingsView: View {
     draft: RepositorySettingsFeature.WorkspaceDraft
   ) -> some View {
     settingsCard {
-      settingsRow("Title") {
+      settingsRow("Folder", alignment: .top) {
+        VStack(alignment: .leading, spacing: 2) {
+          Text(store.rootURL.lastPathComponent)
+            .foregroundStyle(.primary)
+          Text(store.rootURL.path(percentEncoded: false))
+            .font(.caption.monospaced())
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .textSelection(.enabled)
+        }
+      }
+
+      Divider()
+
+      settingsRow("Display name") {
         TextField(
-          "Workspace title",
+          "Workspace display name",
           text: Binding(
             get: { draft.title },
             set: { store.send(.workspaceTitleChanged($0)) }
