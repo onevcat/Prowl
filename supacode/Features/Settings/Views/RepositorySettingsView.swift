@@ -497,7 +497,7 @@ struct RepositorySettingsView: View {
         Spacer()
         Menu {
           Button {
-            beginAddingLocalWorkspaceRepository(from: draft)
+            chooseInitialLocalWorkspaceRepositorySource(from: draft)
           } label: {
             Label("Local Repository", systemImage: "folder")
           }
@@ -887,37 +887,55 @@ struct RepositorySettingsView: View {
   private func workspaceNewRepositoryMaterializationEditor(
     _ repository: RepositorySettingsFeature.RepositoryDraft
   ) -> some View {
-    VStack(alignment: .leading, spacing: 8) {
-      labeledTextField(
-        "Name",
-        text: repository.name,
-        action: { .workspaceRepositoryNameChanged(id: repository.id, $0) }
-      )
-      labeledTextField(
-        "Folder",
-        text: repository.path,
-        action: { .workspaceRepositoryPathChanged(id: repository.id, $0) }
-      )
-      labeledTextField(
-        repository.sourceKind == .remote ? "Remote URL" : "Source",
-        text: repository.sourceLocation,
-        action: { .workspaceRepositorySourceChosen(id: repository.id, $0) }
-      )
-      if repository.sourceKind != .remote {
-        Button {
-          chooseWorkspaceRepositorySource(for: repository.id)
-        } label: {
-          Label("Choose Source", systemImage: "folder")
+    VStack(alignment: .leading, spacing: 14) {
+      HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 4) {
+          settingsFieldLabel("Name")
+          TextField(
+            "Repository name",
+            text: Binding(
+              get: { repository.name },
+              set: { store.send(.workspaceRepositoryNameChanged(id: repository.id, $0)) }
+            )
+          )
+          .textFieldStyle(.roundedBorder)
         }
-        .help("Choose repository source")
+
+        VStack(alignment: .leading, spacing: 4) {
+          settingsFieldLabel("Folder inside workspace")
+          TextField(
+            "Folder name",
+            text: Binding(
+              get: { repository.path },
+              set: { store.send(.workspaceRepositoryPathChanged(id: repository.id, $0)) }
+            )
+          )
+          .textFieldStyle(.roundedBorder)
+        }
       }
-      Button {
-        store.send(.workspaceLoadBaseRefsTapped(id: repository.id))
-      } label: {
-        Label("Load Branches", systemImage: "arrow.clockwise")
+
+      HStack(spacing: 8) {
+        TextField(
+          repository.sourceKind == .remote ? "Remote URL" : "Repository source path",
+          text: Binding(
+            get: { repository.sourceLocation },
+            set: { store.send(.workspaceRepositorySourceChosen(id: repository.id, $0)) }
+          )
+        )
+        .textFieldStyle(.roundedBorder)
+        .font(.body.monospaced())
+
+        if repository.sourceKind != .remote {
+          Button {
+            chooseWorkspaceRepositorySource(for: repository.id)
+          } label: {
+            Image(systemName: "folder")
+              .accessibilityLabel("Choose Repository Source")
+          }
+          .help("Choose Repository Source")
+        }
       }
-      .disabled(repository.sourceLocation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-      .help("Load available branches for this repository")
+
       HStack(spacing: 8) {
         Picker(
           "Branch action",
@@ -933,7 +951,8 @@ struct RepositorySettingsView: View {
           Text("Use Existing").tag(ProjectWorkspaceRepositoryCheckoutMode.useExistingRef)
         }
         .pickerStyle(.menu)
-        .frame(width: 150)
+        .labelsHidden()
+        .frame(width: 170)
 
         if repository.checkoutMode == .createBranch {
           TextField(
@@ -960,6 +979,16 @@ struct RepositorySettingsView: View {
               .foregroundStyle(.secondary)
           }
         }
+
+        Spacer()
+
+        Button {
+          store.send(.workspaceLoadBaseRefsTapped(id: repository.id))
+        } label: {
+          Label("Load Branches", systemImage: "arrow.clockwise")
+        }
+        .disabled(repository.sourceLocation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        .help("Load available branches for this repository")
       }
     }
   }
@@ -1041,6 +1070,11 @@ struct RepositorySettingsView: View {
     }
   }
 
+  private func settingsFieldLabel(_ title: String) -> some View {
+    Text(title)
+      .foregroundStyle(.secondary)
+  }
+
   private var pendingWorkspaceRepository: RepositorySettingsFeature.RepositoryDraft? {
     guard let pendingWorkspaceRepositoryID else {
       return nil
@@ -1055,11 +1089,20 @@ struct RepositorySettingsView: View {
     return !repository.sourceLocation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
   }
 
+  private func chooseInitialLocalWorkspaceRepositorySource(
+    from draft: RepositorySettingsFeature.WorkspaceDraft
+  ) {
+    chooseWorkspaceRepositorySource { source in
+      beginAddingLocalWorkspaceRepository(source: source, from: draft)
+    }
+  }
+
   private func beginAddingLocalWorkspaceRepository(
+    source: String,
     from draft: RepositorySettingsFeature.WorkspaceDraft
   ) {
     let existingIDs = Set(draft.repositories.map(\.id))
-    store.send(.workspaceAddLocalRepository(""))
+    store.send(.workspaceAddLocalRepository(source))
     openPendingWorkspaceRepositorySheet(excluding: existingIDs)
   }
 
@@ -1111,6 +1154,12 @@ struct RepositorySettingsView: View {
   }
 
   private func chooseWorkspaceRepositorySource(for repositoryID: String) {
+    chooseWorkspaceRepositorySource { source in
+      store.send(.workspaceRepositorySourceChosen(id: repositoryID, source))
+    }
+  }
+
+  private func chooseWorkspaceRepositorySource(_ completion: @escaping (String) -> Void) {
     let panel = NSOpenPanel()
     panel.canChooseFiles = false
     panel.canChooseDirectories = true
@@ -1122,7 +1171,7 @@ struct RepositorySettingsView: View {
       guard response == .OK, let url = panel.url else {
         return
       }
-      store.send(.workspaceRepositorySourceChosen(id: repositoryID, url.path(percentEncoded: false)))
+      completion(url.path(percentEncoded: false))
     }
   }
 }
