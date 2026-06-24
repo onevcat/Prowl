@@ -168,6 +168,58 @@ struct AppFeatureSettingsChangedTests {
     }
   }
 
+  @Test(.dependencies) func repositorySettingsChangedReloadsRepositories() async {
+    let repository = makeRepository(worktrees: [])
+    var settings = SettingsFeature.State()
+    settings.repositorySettings = RepositorySettingsFeature.State(
+      rootURL: repository.rootURL,
+      repositoryID: repository.id,
+      repositoryKind: repository.kind,
+      settings: .default,
+      userSettings: .default
+    )
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: RepositoriesFeature.State(repositories: [repository]),
+        settings: settings
+      )
+    ) {
+      AppFeature()
+    }
+    store.exhaustivity = .off
+
+    await store.send(.settings(.repositorySettings(.delegate(.settingsChanged(repository.rootURL)))))
+    await store.receive(\.repositories.refreshCustomTitle)
+    await store.receive(\.repositories.reloadRepositories)
+  }
+
+  @Test(.dependencies) func selectedRepositorySettingsChangedReloadsAndRefreshesWorktreeSettings() async {
+    let worktree = makeWorktree()
+    let repository = makeRepository(worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State(repositories: [repository])
+    repositoriesState.selection = .worktree(worktree.id)
+    var settings = SettingsFeature.State()
+    settings.repositorySettings = RepositorySettingsFeature.State(
+      rootURL: repository.rootURL,
+      repositoryID: repository.id,
+      repositoryKind: repository.kind,
+      settings: .default,
+      userSettings: .default
+    )
+    let store = TestStore(
+      initialState: AppFeature.State(repositories: repositoriesState, settings: settings)
+    ) {
+      AppFeature()
+    }
+    store.exhaustivity = .off
+
+    await store.send(.settings(.repositorySettings(.delegate(.settingsChanged(repository.rootURL)))))
+    await store.receive(\.repositories.refreshCustomTitle)
+    await store.receive(\.repositories.reloadRepositories)
+    await store.receive(\.worktreeSettingsLoaded)
+    await store.receive(\.worktreeUserSettingsLoaded)
+  }
+
   private func activeAgentEntry() -> ActiveAgentEntry {
     ActiveAgentEntry(
       id: fixedUUID(0),

@@ -875,16 +875,18 @@ struct AppFeature {
         // `RepositoriesFeature.State.repositoryCustomTitles` rather
         // than subscribing to the per-repo settings file directly.
         let refreshCustomTitle = Effect<Action>.send(.repositories(.refreshCustomTitle(rootURL)))
+        let reloadRepositories = Effect<Action>.send(.repositories(.reloadRepositories(animated: true)))
         guard let selectedWorktree = state.repositories.selectedTerminalWorktree,
           selectedWorktree.repositoryRootURL == rootURL
         else {
-          return refreshCustomTitle
+          return .concatenate(refreshCustomTitle, reloadRepositories)
         }
         let worktreeID = selectedWorktree.id
         @Shared(.repositorySettings(rootURL)) var repositorySettings
         @Shared(.userRepositorySettings(rootURL)) var userRepositorySettings
         return .concatenate(
           refreshCustomTitle,
+          reloadRepositories,
           .send(.worktreeSettingsLoaded(repositorySettings, worktreeID: worktreeID)),
           .send(.worktreeUserSettingsLoaded(userRepositorySettings, worktreeID: worktreeID))
         )

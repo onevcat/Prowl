@@ -874,7 +874,7 @@ struct RepositorySettingsView: View {
         .keyboardShortcut(.cancelAction)
 
         Button("Add Repository") {
-          submitAddWorkspaceRepositorySheet()
+          saveAndCloseAddWorkspaceRepositorySheet()
         }
         .keyboardShortcut(.defaultAction)
         .disabled(!canSubmitAddWorkspaceRepositorySheet)
@@ -1130,6 +1130,11 @@ struct RepositorySettingsView: View {
     isCommittingAddWorkspaceRepositorySheet = true
     pendingWorkspaceRepositoryID = nil
     isAddWorkspaceRepositorySheetPresented = false
+  }
+
+  private func saveAndCloseAddWorkspaceRepositorySheet() {
+    submitAddWorkspaceRepositorySheet()
+    store.send(.saveWorkspaceMetadataButtonTapped)
   }
 
   private func cancelAddWorkspaceRepositorySheet() {
