@@ -311,6 +311,7 @@ struct RepositorySettingsFeature {
     case workspaceRepositoryAgentNotesChanged(id: String, String)
     case workspaceAddLocalRepository(String)
     case workspaceAddRemoteRepository(name: String, url: String)
+    case workspaceDiscardNewRepository(id: String)
     case workspaceRepositoryNameChanged(id: String, String)
     case workspaceRepositorySourceChosen(id: String, String)
     case workspaceLoadBaseRefsTapped(id: String)
@@ -567,7 +568,7 @@ struct RepositorySettingsFeature {
 
       case .workspaceAddLocalRepository(let sourceLocation):
         let trimmed = sourceLocation.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, var draft = state.workspaceDraft else {
+        guard var draft = state.workspaceDraft else {
           return .none
         }
         let rootURL = URL(fileURLWithPath: trimmed, isDirectory: true)
@@ -575,14 +576,14 @@ struct RepositorySettingsFeature {
         draft.repositories.append(
           RepositoryDraft(
             id: id,
-            name: Repository.name(for: rootURL),
+            name: trimmed.isEmpty ? "" : Repository.name(for: rootURL),
             sourceKind: .localRepository,
             sourceLocation: trimmed
           )
         )
         state.workspaceDraft = draft
         state.workspaceSaveStatus = nil
-        return workspaceBaseRefsEffect(for: draft.repositories.last)
+        return trimmed.isEmpty ? .none : workspaceBaseRefsEffect(for: draft.repositories.last)
 
       case .workspaceAddRemoteRepository(let name, let url):
         guard var draft = state.workspaceDraft else {
@@ -603,6 +604,14 @@ struct RepositorySettingsFeature {
         state.workspaceSaveStatus = nil
         return .none
 
+      case .workspaceDiscardNewRepository(let id):
+        guard var draft = state.workspaceDraft else {
+          return .none
+        }
+        draft.repositories.removeAll { $0.id == id && $0.isNew }
+        state.workspaceDraft = draft
+        return .none
+
       case .workspaceRepositoryNameChanged(let id, let name):
         state.updateWorkspaceRepositoryDraft(id: id) { $0.name = name }
         return .none
@@ -615,6 +624,12 @@ struct RepositorySettingsFeature {
             $0.sourceKind == .remote
           {
             $0.name = GitRemoteNaming.repositoryName(fromRemoteURL: trimmed)
+          }
+          if $0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            $0.sourceKind != .remote,
+            !trimmed.isEmpty
+          {
+            $0.name = Repository.name(for: URL(fileURLWithPath: trimmed, isDirectory: true))
           }
           $0.baseRef = ""
           $0.baseRefOptions = []

@@ -615,6 +615,54 @@ struct RepositorySettingsFeatureTests {
     )
   }
 
+  @Test(.dependencies) func workspaceAddLocalRepositoryCanStartAsEmptyDraftAndBeDiscarded() async throws {
+    let fixture = try makeWorkspaceAddRemoveFixture()
+    let rootURL = fixture.rootURL
+    defer {
+      try? FileManager.default.removeItem(at: fixture.rootURL)
+      try? FileManager.default.removeItem(at: fixture.appURL)
+      try? FileManager.default.removeItem(at: fixture.apiURL)
+      try? FileManager.default.removeItem(at: fixture.webURL)
+      try? FileManager.default.removeItem(at: fixture.profileURL)
+    }
+
+    let workspace = try #require(ProjectWorkspace.load(from: rootURL))
+    var state = RepositorySettingsFeature.State(
+      rootURL: rootURL,
+      repositoryKind: .plain,
+      settings: .default,
+      userSettings: .default
+    )
+    state.setWorkspace(workspace)
+    let store = TestStore(initialState: state) {
+      RepositorySettingsFeature()
+    } withDependencies: {
+      $0.uuid = .incrementing
+    }
+
+    let repositoryID = UUID(0).uuidString
+    await store.send(.workspaceAddLocalRepository("")) {
+      $0.workspaceDraft?.repositories.append(
+        RepositorySettingsFeature.RepositoryDraft(
+          id: repositoryID,
+          name: "",
+          sourceKind: .localRepository,
+          sourceLocation: ""
+        )
+      )
+      $0.workspaceSaveStatus = nil
+    }
+
+    await store.send(.workspaceRepositorySourceChosen(id: repositoryID, fixture.webURL.path(percentEncoded: false))) {
+      $0.workspaceDraft?.repositories[2].name = Repository.name(for: fixture.webURL)
+      $0.workspaceDraft?.repositories[2].sourceLocation = fixture.webURL.path(percentEncoded: false)
+    }
+
+    await store.send(.workspaceDiscardNewRepository(id: repositoryID)) {
+      $0.workspaceDraft?.repositories.removeLast()
+    }
+  }
+
   @Test(.dependencies) func workspaceSaveFailsWhenNewRepositoryCannotBePlanned() async throws {
     let fixture = try makeWorkspaceAddRemoveFixture()
     let rootURL = fixture.rootURL

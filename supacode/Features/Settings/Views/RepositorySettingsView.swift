@@ -10,9 +10,8 @@ struct RepositorySettingsView: View {
   @State private var branchSearchText = ""
   @State private var githubIdentityViewModel = RepositoryGithubIdentityViewModel()
   @State private var isAddWorkspaceRepositorySheetPresented = false
-  @State private var addWorkspaceRepositoryMode = AddWorkspaceRepositoryMode.local
-  @State private var addWorkspaceRepositoryName = ""
-  @State private var addWorkspaceRepositorySource = ""
+  @State private var pendingWorkspaceRepositoryID: String?
+  @State private var isCommittingAddWorkspaceRepositorySheet = false
 
   @State var selectedCustomCommandID: UserCustomCommand.ID?
   @State var recordingCustomCommandID: UserCustomCommand.ID?
@@ -424,6 +423,11 @@ struct RepositorySettingsView: View {
     .sheet(isPresented: $isAddWorkspaceRepositorySheetPresented) {
       addWorkspaceRepositorySheet
     }
+    .onChange(of: isAddWorkspaceRepositorySheetPresented) { _, isPresented in
+      if !isPresented {
+        handleAddWorkspaceRepositorySheetDismissed()
+      }
+    }
   }
 
   private func workspaceEditor(
@@ -491,15 +495,24 @@ struct RepositorySettingsView: View {
         Text("Repositories")
           .font(.headline)
         Spacer()
-        Button {
-          resetAddWorkspaceRepositorySheet()
-          isAddWorkspaceRepositorySheetPresented = true
+        Menu {
+          Button {
+            beginAddingLocalWorkspaceRepository(from: draft)
+          } label: {
+            Label("Local Repository", systemImage: "folder")
+          }
+
+          Button {
+            beginAddingRemoteWorkspaceRepository(from: draft)
+          } label: {
+            Label("Remote Repository", systemImage: "network")
+          }
         } label: {
           Label("Add Repository", systemImage: "plus")
         }
         .help("Add a child repository to this workspace")
       }
-      ForEach(draft.repositories) { repository in
+      ForEach(draft.repositories.filter { $0.id != pendingWorkspaceRepositoryID }) { repository in
         workspaceRepositoryEditor(repository)
       }
     }
@@ -805,67 +818,70 @@ struct RepositorySettingsView: View {
 
   private var addWorkspaceRepositorySheet: some View {
     VStack(alignment: .leading, spacing: 16) {
-      Text("Add Repository")
-        .font(.headline)
-
-      Picker("Source", selection: $addWorkspaceRepositoryMode) {
-        ForEach(AddWorkspaceRepositoryMode.allCases) { mode in
-          Label(mode.title, systemImage: mode.systemImage).tag(mode)
-        }
+      HStack {
+        Text("Add Repository")
+          .font(.headline)
+        Spacer()
       }
-      .pickerStyle(.segmented)
 
-      settingsCard {
-        if addWorkspaceRepositoryMode == .local {
-          settingsRow("Folder") {
-            TextField(
-              "Choose a repository folder",
-              text: $addWorkspaceRepositorySource
-            )
-            .textFieldStyle(.roundedBorder)
+      if let repository = pendingWorkspaceRepository {
+        settingsCard {
+          workspaceNewRepositoryMaterializationEditor(repository)
+        }
 
-            Button {
-              chooseWorkspaceRepositorySourceForSheet()
-            } label: {
-              Image(systemName: "folder")
-                .accessibilityLabel("Choose Repository Folder")
+        settingsCard {
+          DisclosureGroup("Guide metadata") {
+            VStack(alignment: .leading, spacing: 8) {
+              settingsRow("Role") {
+                TextField(
+                  "Optional guide role",
+                  text: Binding(
+                    get: { repository.role },
+                    set: { store.send(.workspaceRepositoryRoleChanged(id: repository.id, $0)) }
+                  )
+                )
+                .textFieldStyle(.roundedBorder)
+                .frame(maxWidth: 420)
+              }
+
+              settingsRow("Agent notes", alignment: .top) {
+                PlainTextEditor(
+                  text: Binding(
+                    get: { repository.agentNotes },
+                    set: { store.send(.workspaceRepositoryAgentNotesChanged(id: repository.id, $0)) }
+                  )
+                )
+                .frame(maxWidth: 520, minHeight: 54)
+              }
             }
-            .help("Choose Repository Folder")
-          }
-        } else {
-          settingsRow("Remote URL") {
-            TextField(
-              "https://github.com/owner/repository.git",
-              text: $addWorkspaceRepositorySource
-            )
-            .textFieldStyle(.roundedBorder)
-          }
-
-          Divider()
-
-          settingsRow("Name") {
-            TextField("Derived from URL", text: $addWorkspaceRepositoryName)
-              .textFieldStyle(.roundedBorder)
+            .padding(.top, 8)
           }
         }
+
+        settingsCard {
+          workspaceBootstrapEditor(repository)
+        }
+      } else {
+        Text("No repository is being added.")
+          .foregroundStyle(.secondary)
       }
 
       HStack {
         Spacer()
         Button("Cancel") {
-          isAddWorkspaceRepositorySheetPresented = false
+          cancelAddWorkspaceRepositorySheet()
         }
         .keyboardShortcut(.cancelAction)
 
-        Button("Add") {
+        Button("Add Repository") {
           submitAddWorkspaceRepositorySheet()
         }
         .keyboardShortcut(.defaultAction)
-        .disabled(addWorkspaceRepositorySource.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        .disabled(!canSubmitAddWorkspaceRepositorySheet)
       }
     }
     .padding(20)
-    .frame(width: 520)
+    .frame(width: 760)
   }
 
   private func workspaceNewRepositoryMaterializationEditor(
@@ -887,6 +903,14 @@ struct RepositorySettingsView: View {
         text: repository.sourceLocation,
         action: { .workspaceRepositorySourceChosen(id: repository.id, $0) }
       )
+      if repository.sourceKind != .remote {
+        Button {
+          chooseWorkspaceRepositorySource(for: repository.id)
+        } label: {
+          Label("Choose Source", systemImage: "folder")
+        }
+        .help("Choose repository source")
+      }
       Button {
         store.send(.workspaceLoadBaseRefsTapped(id: repository.id))
       } label: {
@@ -1017,33 +1041,76 @@ struct RepositorySettingsView: View {
     }
   }
 
-  private func resetAddWorkspaceRepositorySheet() {
-    addWorkspaceRepositoryMode = .local
-    addWorkspaceRepositoryName = ""
-    addWorkspaceRepositorySource = ""
+  private var pendingWorkspaceRepository: RepositorySettingsFeature.RepositoryDraft? {
+    guard let pendingWorkspaceRepositoryID else {
+      return nil
+    }
+    return store.workspaceDraft?.repositories.first { $0.id == pendingWorkspaceRepositoryID }
+  }
+
+  private var canSubmitAddWorkspaceRepositorySheet: Bool {
+    guard let repository = pendingWorkspaceRepository else {
+      return false
+    }
+    return !repository.sourceLocation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+
+  private func beginAddingLocalWorkspaceRepository(
+    from draft: RepositorySettingsFeature.WorkspaceDraft
+  ) {
+    let existingIDs = Set(draft.repositories.map(\.id))
+    store.send(.workspaceAddLocalRepository(""))
+    openPendingWorkspaceRepositorySheet(excluding: existingIDs)
+  }
+
+  private func beginAddingRemoteWorkspaceRepository(
+    from draft: RepositorySettingsFeature.WorkspaceDraft
+  ) {
+    let existingIDs = Set(draft.repositories.map(\.id))
+    store.send(.workspaceAddRemoteRepository(name: "Remote Repository", url: ""))
+    openPendingWorkspaceRepositorySheet(excluding: existingIDs)
+  }
+
+  private func openPendingWorkspaceRepositorySheet(excluding existingIDs: Set<String>) {
+    guard
+      let repository = store.workspaceDraft?.repositories.reversed().first(where: {
+        $0.isNew && !existingIDs.contains($0.id)
+      })
+    else {
+      return
+    }
+    pendingWorkspaceRepositoryID = repository.id
+    isAddWorkspaceRepositorySheetPresented = true
   }
 
   private func submitAddWorkspaceRepositorySheet() {
-    let source = addWorkspaceRepositorySource.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !source.isEmpty else {
-      return
-    }
-    switch addWorkspaceRepositoryMode {
-    case .local:
-      store.send(.workspaceAddLocalRepository(source))
-    case .remote:
-      let name = addWorkspaceRepositoryName.trimmingCharacters(in: .whitespacesAndNewlines)
-      store.send(
-        .workspaceAddRemoteRepository(
-          name: name.isEmpty ? "Remote Repository" : name,
-          url: source
-        )
-      )
-    }
+    isCommittingAddWorkspaceRepositorySheet = true
+    pendingWorkspaceRepositoryID = nil
     isAddWorkspaceRepositorySheetPresented = false
   }
 
-  private func chooseWorkspaceRepositorySourceForSheet() {
+  private func cancelAddWorkspaceRepositorySheet() {
+    discardPendingWorkspaceRepository()
+    isAddWorkspaceRepositorySheetPresented = false
+  }
+
+  private func handleAddWorkspaceRepositorySheetDismissed() {
+    if isCommittingAddWorkspaceRepositorySheet {
+      isCommittingAddWorkspaceRepositorySheet = false
+      pendingWorkspaceRepositoryID = nil
+      return
+    }
+    discardPendingWorkspaceRepository()
+  }
+
+  private func discardPendingWorkspaceRepository() {
+    if let pendingWorkspaceRepositoryID {
+      store.send(.workspaceDiscardNewRepository(id: pendingWorkspaceRepositoryID))
+    }
+    pendingWorkspaceRepositoryID = nil
+  }
+
+  private func chooseWorkspaceRepositorySource(for repositoryID: String) {
     let panel = NSOpenPanel()
     panel.canChooseFiles = false
     panel.canChooseDirectories = true
@@ -1055,32 +1122,7 @@ struct RepositorySettingsView: View {
       guard response == .OK, let url = panel.url else {
         return
       }
-      addWorkspaceRepositorySource = url.path(percentEncoded: false)
-    }
-  }
-}
-
-private enum AddWorkspaceRepositoryMode: String, CaseIterable, Identifiable {
-  case local
-  case remote
-
-  var id: Self { self }
-
-  var title: String {
-    switch self {
-    case .local:
-      "Local"
-    case .remote:
-      "Remote"
-    }
-  }
-
-  var systemImage: String {
-    switch self {
-    case .local:
-      "folder"
-    case .remote:
-      "network"
+      store.send(.workspaceRepositorySourceChosen(id: repositoryID, url.path(percentEncoded: false)))
     }
   }
 }
