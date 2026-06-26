@@ -423,6 +423,19 @@ struct RepositorySettingsView: View {
     .sheet(isPresented: $isAddWorkspaceRepositorySheetPresented) {
       addWorkspaceRepositorySheet
     }
+    .sheet(
+      item: Binding(
+        get: { store.workspaceRepositoryRemovalConfirmation },
+        set: { if $0 == nil { store.send(.workspaceRepositoryRemovalCanceled) } }
+      )
+    ) { confirmation in
+      WorkspaceRepositoryRemovalConfirmationView(
+        confirmation: confirmation,
+        onDeleteBranchChanged: { store.send(.workspaceRepositoryRemovalDeleteBranchChanged($0)) },
+        onCancel: { store.send(.workspaceRepositoryRemovalCanceled) },
+        onRemove: { store.send(.workspaceRepositoryRemovalConfirmed) }
+      )
+    }
     .onChange(of: isAddWorkspaceRepositorySheetPresented) { _, isPresented in
       if !isPresented {
         handleAddWorkspaceRepositorySheetDismissed()
@@ -439,7 +452,6 @@ struct RepositorySettingsView: View {
       workspaceRepositoriesEditor(draft: draft)
       workspaceAgentGuideEditor(draft: draft)
       workspaceStatusView
-      workspaceActions(draft: draft)
     }
     .frame(maxWidth: .infinity, alignment: .leading)
   }
@@ -607,7 +619,7 @@ struct RepositorySettingsView: View {
           .help("Keep this repository in the workspace")
         } else {
           Button {
-            store.send(.workspaceRemoveRepository(id: repository.id))
+            store.send(.requestWorkspaceRepositoryRemoval(id: repository.id))
           } label: {
             Image(systemName: "trash")
               .accessibilityLabel("Remove Repository")
@@ -799,20 +811,6 @@ struct RepositorySettingsView: View {
           .font(.footnote)
           .foregroundStyle(.secondary)
       }
-    }
-  }
-
-  private func workspaceActions(
-    draft _: RepositorySettingsFeature.WorkspaceDraft
-  ) -> some View {
-    HStack {
-      Button {
-        store.send(.saveWorkspaceMetadataButtonTapped)
-      } label: {
-        Label("Save Workspace", systemImage: "square.and.arrow.down")
-      }
-      .disabled(!store.canSaveWorkspaceDraft)
-      .help("Save workspace metadata")
     }
   }
 
@@ -1207,6 +1205,72 @@ private struct WorkspaceSettingsBranchRefMenu: View {
     }
     .disabled(options.isEmpty)
     .help("Choose branch or ref")
+  }
+}
+
+private struct WorkspaceRepositoryRemovalConfirmationView: View {
+  let confirmation: RepositorySettingsFeature.WorkspaceRepositoryRemovalConfirmation
+  let onDeleteBranchChanged: (Bool) -> Void
+  let onCancel: () -> Void
+  let onRemove: () -> Void
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 16) {
+      VStack(alignment: .leading, spacing: 6) {
+        Text("Remove repository?")
+          .font(.headline)
+        Text("This removes \(confirmation.repositoryName) from the workspace.")
+          .foregroundStyle(.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+        Text(confirmation.repositoryPath)
+          .font(.footnote.monospaced())
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+          .truncationMode(.middle)
+          .textSelection(.enabled)
+      }
+
+      if let branchName = confirmation.branchName {
+        Toggle(
+          isOn: Binding(
+            get: { confirmation.deleteBranch },
+            set: { onDeleteBranchChanged($0) }
+          )
+        ) {
+          HStack(spacing: 4) {
+            Text("Also delete local branch")
+            Text(branchName)
+              .font(.body.monospaced())
+          }
+        }
+        .help("Delete the branch from the source repository after removing the workspace worktree.")
+
+        Text("Protected branches are kept.")
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+      } else {
+        Text("No local branch is associated with this repository entry.")
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+      }
+
+      HStack {
+        Spacer()
+        Button("Cancel", role: .cancel) {
+          onCancel()
+        }
+        .keyboardShortcut(.cancelAction)
+        .help("Cancel")
+
+        Button("Remove", role: .destructive) {
+          onRemove()
+        }
+        .keyboardShortcut(.defaultAction)
+        .help("Remove repository")
+      }
+    }
+    .padding(24)
+    .frame(width: 440)
   }
 }
 

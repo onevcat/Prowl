@@ -140,21 +140,24 @@ metadata fields are preserved.
 The same settings page can add or remove child repositories after creation.
 Adding a child uses the same materialization rules as workspace creation:
 local sources can be linked or turned into worktrees, and remote sources are
-cloned after their branches are loaded. Removing a child removes the workspace
-entry and cleans up Prowl-created materialization under the workspace root:
-linked children remove only the symlink, remote children remove the cloned
-folder, and local or bare worktree children run `git worktree remove --force`
-against their recorded source repository. Existing child source, path, and
-checkout fields are shown as read-only provenance in settings; changing those
-would require removing and re-adding the child.
+cloned after their branches are loaded. Pressing **Add Repository** immediately
+saves the new child to `.prowl/workspace.json` and refreshes the sidebar.
+Removing a child asks for confirmation, then removes the workspace entry and
+cleans up Prowl-created materialization under the workspace root: linked
+children remove only the symlink, remote children remove the cloned folder, and
+local or bare worktree children run `git worktree remove --force` against their
+recorded source repository. Child entries with a recorded branch additionally
+offer an **Also delete local branch** checkbox; protected branches are kept.
+Existing child source, path, and checkout fields are shown as read-only
+provenance in settings; changing those would require removing and re-adding the
+child.
 
 Bootstrap profiles can be set to run on workspace creation or manually. The
 workspace creation sheet exposes the creation-time policy, including Required.
 The workspace settings page treats bootstrap as current-state management: choose
-scripts from `~/.prowl/bootstrap-profiles.json`, save the workspace metadata,
-and run each script manually from the child repository card. Linked children do
-not expose bootstrap controls because setup scripts would write into the shared
-live checkout.
+scripts from `~/.prowl/bootstrap-profiles.json` and run each script manually
+from the child repository card. Linked children do not expose bootstrap
+controls because setup scripts would write into the shared live checkout.
 
 Bootstrap profiles can be managed in **Settings → Bootstrap** or with
 `prowl bootstrap`. A profile contains a `command`, optional `environment`, a

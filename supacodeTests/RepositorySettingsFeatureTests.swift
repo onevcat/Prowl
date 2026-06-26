@@ -663,6 +663,87 @@ struct RepositorySettingsFeatureTests {
     }
   }
 
+  @Test(.dependencies) func workspaceRepositoryRemovalConfirmsSavesAndCanDeleteBranch() async throws {
+    let fixture = try makeWorkspaceAddRemoveFixture()
+    let rootURL = fixture.rootURL
+    defer {
+      try? FileManager.default.removeItem(at: fixture.rootURL)
+      try? FileManager.default.removeItem(at: fixture.appURL)
+      try? FileManager.default.removeItem(at: fixture.apiURL)
+      try? FileManager.default.removeItem(at: fixture.webURL)
+      try? FileManager.default.removeItem(at: fixture.profileURL)
+    }
+
+    let workspace = try #require(ProjectWorkspace.load(from: rootURL))
+    try FileManager.default.createDirectory(
+      at: rootURL.appending(path: "web"), withIntermediateDirectories: true)
+    var editableWorkspace = workspace
+    editableWorkspace.repositories.append(
+      ProjectWorkspace.RepositoryEntry(
+        id: "web",
+        name: "Web",
+        path: "web",
+        sourceKind: .existingPath,
+        sourceLocation: fixture.webURL.path(percentEncoded: false)
+      )
+    )
+    let storage = SettingsTestStorage()
+    var state = RepositorySettingsFeature.State(
+      rootURL: rootURL,
+      repositoryKind: .plain,
+      settings: .default,
+      userSettings: .default
+    )
+    state.setWorkspace(editableWorkspace)
+    let commands = LockIsolated<[ShellCommandRecord]>([])
+    let deletedBranches = LockIsolated<[(name: String, url: URL, force: Bool)]>([])
+    let store = TestStore(initialState: state) {
+      RepositorySettingsFeature()
+    } withDependencies: {
+      $0.date.now = Date(timeIntervalSince1970: 50)
+      $0.settingsFileStorage = storage.storage
+      $0.bootstrapProfilesFileURL = fixture.profileURL
+      $0[ShellClient.self] = recordingShellClient(commands: commands)
+      $0.gitClient.deleteLocalBranch = { name, url, force in
+        deletedBranches.withValue { $0.append((name, url, force)) }
+        return .deleted
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.requestWorkspaceRepositoryRemoval(id: "api")) {
+      $0.workspaceRepositoryRemovalConfirmation =
+        RepositorySettingsFeature.WorkspaceRepositoryRemovalConfirmation(
+          repositoryID: "api",
+          repositoryName: "API",
+          repositoryPath: "api",
+          branchName: "workspace-api",
+          deleteBranch: false
+        )
+    }
+    await store.send(.workspaceRepositoryRemovalDeleteBranchChanged(true)) {
+      $0.workspaceRepositoryRemovalConfirmation?.deleteBranch = true
+    }
+    await store.send(.workspaceRepositoryRemovalConfirmed)
+    await store.receive(\.saveWorkspaceMetadataButtonTapped)
+    await store.receive(\.workspaceMetadataSaved)
+    await store.receive(\.delegate.settingsChanged)
+    await store.receive(\.workspaceBranchDeleted)
+
+    #expect(store.state.workspace?.repositories.map(\.id) == ["app", "web"])
+    #expect(store.state.workspaceSaveStatus == "Deleted branch workspace-api.")
+    #expect(deletedBranches.value.count == 1)
+    #expect(deletedBranches.value.first?.name == "workspace-api")
+    #expect(deletedBranches.value.first.map { normalizedPath($0.url) } == normalizedPath(fixture.apiURL))
+    #expect(deletedBranches.value.first?.force == true)
+    #expect(
+      commands.value.map(\.arguments).contains([
+        "git", "-C", normalizedPath(fixture.apiURL), "worktree",
+        "remove", "--force", rootURL.appending(path: "api").path(percentEncoded: false),
+      ])
+    )
+  }
+
   @Test(.dependencies) func workspaceSaveFailsWhenNewRepositoryCannotBePlanned() async throws {
     let fixture = try makeWorkspaceAddRemoveFixture()
     let rootURL = fixture.rootURL

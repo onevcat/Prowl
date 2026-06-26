@@ -26,6 +26,19 @@ struct RepositorySettingsFeature {
     }
   }
 
+  struct WorkspaceRepositoryRemovalConfirmation: Equatable, Identifiable {
+    var id: String { repositoryID }
+    var repositoryID: String
+    var repositoryName: String
+    var repositoryPath: String
+    var branchName: String?
+    var deleteBranch: Bool
+
+    var canDeleteBranch: Bool {
+      branchName != nil
+    }
+  }
+
   struct RepositoryDraft: Equatable, Identifiable {
     var id: String
     var name: String
@@ -147,6 +160,8 @@ struct RepositorySettingsFeature {
     var repositoryKind: Repository.Kind
     var workspace: ProjectWorkspace?
     var workspaceDraft: WorkspaceDraft?
+    var workspaceRepositoryRemovalConfirmation: WorkspaceRepositoryRemovalConfirmation?
+    var pendingWorkspaceBranchDeletion: RepositorySettingsWorkspaceBranchDeletion?
     var workspaceSaveError: String?
     var workspaceSaveStatus: String?
     var settings: RepositorySettings
@@ -321,6 +336,10 @@ struct RepositorySettingsFeature {
     case workspaceRepositoryBaseRefChanged(id: String, String)
     case workspaceRepositoryBaseRefsLoaded(
       id: String, [GitBranchRefOption], defaultBaseRef: String?)
+    case requestWorkspaceRepositoryRemoval(id: String)
+    case workspaceRepositoryRemovalDeleteBranchChanged(Bool)
+    case workspaceRepositoryRemovalCanceled
+    case workspaceRepositoryRemovalConfirmed
     case workspaceRemoveRepository(id: String)
     case workspaceRestoreRepository(id: String)
     case workspaceBootstrapProfileAdded(id: String, String)
@@ -336,6 +355,8 @@ struct RepositorySettingsFeature {
     case regenerateWorkspaceGuideButtonTapped
     case workspaceMetadataSaved(ProjectWorkspace)
     case workspaceMetadataSaveFailed(String)
+    case workspaceBranchDeleted(String)
+    case workspaceBranchDeleteSkipped(String)
     case workspaceBootstrapRan(String)
     case workspaceBootstrapRunFailed(String)
     case workspaceGuideRegenerated
@@ -681,6 +702,55 @@ struct RepositorySettingsFeature {
         }
         return .none
 
+      case .requestWorkspaceRepositoryRemoval(let id):
+        guard state.activeWorkspaceRepositoryCount > 2,
+          let repository = state.workspaceDraft?.repositories.first(where: { $0.id == id }),
+          !repository.isNew,
+          !repository.isRemoved
+        else {
+          return .none
+        }
+        state.workspaceRepositoryRemovalConfirmation = WorkspaceRepositoryRemovalConfirmation(
+          repositoryID: repository.id,
+          repositoryName: repository.name,
+          repositoryPath: repository.path,
+          branchName: repository.branchName.trimmedNilIfEmpty,
+          deleteBranch: false
+        )
+        return .none
+
+      case .workspaceRepositoryRemovalDeleteBranchChanged(let deleteBranch):
+        state.workspaceRepositoryRemovalConfirmation?.deleteBranch = deleteBranch
+        return .none
+
+      case .workspaceRepositoryRemovalCanceled:
+        state.workspaceRepositoryRemovalConfirmation = nil
+        return .none
+
+      case .workspaceRepositoryRemovalConfirmed:
+        guard let confirmation = state.workspaceRepositoryRemovalConfirmation,
+          let repository = state.workspaceDraft?.repositories.first(where: { $0.id == confirmation.repositoryID }),
+          !repository.isNew,
+          !repository.isRemoved
+        else {
+          state.workspaceRepositoryRemovalConfirmation = nil
+          return .none
+        }
+        state.workspaceRepositoryRemovalConfirmation = nil
+        if confirmation.deleteBranch,
+          let sourceLocation = repository.sourceLocation.trimmedNilIfEmpty,
+          let branchName = repository.branchName.trimmedNilIfEmpty
+        {
+          state.pendingWorkspaceBranchDeletion = RepositorySettingsWorkspaceBranchDeletion(
+            sourceLocation: sourceLocation,
+            branchName: branchName
+          )
+        } else {
+          state.pendingWorkspaceBranchDeletion = nil
+        }
+        state.updateWorkspaceRepositoryDraft(id: repository.id) { $0.isRemoved = true }
+        return .send(.saveWorkspaceMetadataButtonTapped)
+
       case .workspaceRemoveRepository(let id):
         state.updateWorkspaceRepositoryDraft(id: id) { $0.isRemoved = true }
         return .none
@@ -933,15 +1003,32 @@ struct RepositorySettingsFeature {
         }
 
       case .workspaceMetadataSaved(let workspace):
+        let pendingBranchDeletion = state.pendingWorkspaceBranchDeletion
+        state.pendingWorkspaceBranchDeletion = nil
         state.workspace = workspace
         state.workspaceDraft = WorkspaceDraft(workspace: workspace)
         state.workspaceSaveStatus = "Saved workspace metadata."
         state.workspaceSaveError = nil
-        return .send(.delegate(.settingsChanged(state.rootURL)))
+        var effects: [Effect<Action>] = [.send(.delegate(.settingsChanged(state.rootURL)))]
+        if let pendingBranchDeletion {
+          effects.append(deleteWorkspaceBranchEffect(pendingBranchDeletion))
+        }
+        return .merge(effects)
 
       case .workspaceMetadataSaveFailed(let message):
+        state.pendingWorkspaceBranchDeletion = nil
         state.workspaceSaveError = message
         state.workspaceSaveStatus = nil
+        return .none
+
+      case .workspaceBranchDeleted(let branchName):
+        state.workspaceSaveStatus = "Deleted branch \(branchName)."
+        state.workspaceSaveError = nil
+        return .none
+
+      case .workspaceBranchDeleteSkipped(let branchName):
+        state.workspaceSaveStatus = "Protected branch \(branchName) was kept."
+        state.workspaceSaveError = nil
         return .none
 
       case .workspaceBootstrapRan(let name):
@@ -1100,11 +1187,40 @@ struct RepositorySettingsFeature {
       required: false
     )
   }
+
+  private func deleteWorkspaceBranchEffect(_ deletion: RepositorySettingsWorkspaceBranchDeletion) -> Effect<Action> {
+    let gitClient = gitClient
+    return .run { send in
+      let outcome = try? await gitClient.deleteLocalBranch(
+        deletion.branchName,
+        URL(fileURLWithPath: deletion.sourceLocation),
+        true
+      )
+      switch outcome {
+      case .deleted?:
+        await send(.workspaceBranchDeleted(deletion.branchName))
+      case .protected?:
+        await send(.workspaceBranchDeleteSkipped(deletion.branchName))
+      case .notFound?, .notRequested?, nil:
+        break
+      }
+    }
+  }
+}
+
+nonisolated struct RepositorySettingsWorkspaceBranchDeletion: Sendable, Equatable {
+  let sourceLocation: String
+  let branchName: String
 }
 
 extension String {
   fileprivate var nilIfEmpty: String? {
     isEmpty ? nil : self
+  }
+
+  fileprivate var trimmedNilIfEmpty: String? {
+    let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
   }
 }
 
