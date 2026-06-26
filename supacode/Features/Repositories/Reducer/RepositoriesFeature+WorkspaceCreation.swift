@@ -1,5 +1,6 @@
 import ComposableArchitecture
 import Foundation
+import Sharing
 
 extension RepositoriesFeature.State {
   var workspaceCreationCandidates: [ProjectWorkspaceCreationRepository] {
@@ -8,12 +9,39 @@ extension RepositoriesFeature.State {
         return nil
       }
       let name = repositoryCustomTitles[repository.id] ?? repository.name
+      @Shared(.repositorySettings(repository.rootURL)) var settings
+      let bootstrapCandidate = Self.workspaceBootstrapCandidate(
+        settings: settings,
+        repositoryName: name
+      )
       return ProjectWorkspaceCreationRepository(
         id: repository.id,
         name: name,
-        rootURL: repository.rootURL
+        rootURL: repository.rootURL,
+        checkoutMode: bootstrapCandidate == nil ? nil : .createBranch,
+        bootstrapCandidate: bootstrapCandidate
       )
     }
+  }
+
+  private static func workspaceBootstrapCandidate(
+    settings: RepositorySettings,
+    repositoryName: String
+  ) -> ProjectWorkspaceCreationBootstrapCandidate? {
+    if let profileID = settings.setupScriptProfileID {
+      return ProjectWorkspaceCreationBootstrapCandidate(
+        profileID: profileID,
+        displayName: repositoryName
+      )
+    }
+    let setupScript = settings.setupScript.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !setupScript.isEmpty else {
+      return nil
+    }
+    return ProjectWorkspaceCreationBootstrapCandidate(
+      script: setupScript,
+      displayName: repositoryName
+    )
   }
 }
 

@@ -57,6 +57,26 @@ nonisolated enum ProjectWorkspaceRepositoryCheckout: Equatable, Hashable, Sendab
   case trackRemoteRef(remoteRef: String, branchName: String)
 }
 
+nonisolated struct ProjectWorkspaceCreationBootstrapCandidate: Equatable, Hashable, Sendable {
+  var profileID: String?
+  var script: String?
+  var displayName: String
+
+  init(
+    profileID: String? = nil,
+    script: String? = nil,
+    displayName: String
+  ) {
+    self.profileID = profileID?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+    self.script = script?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+    self.displayName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  var isEmpty: Bool {
+    profileID == nil && script == nil
+  }
+}
+
 nonisolated struct ProjectWorkspaceCreationRepository: Equatable, Hashable, Sendable, Identifiable {
   var id: String
   var name: String
@@ -70,6 +90,7 @@ nonisolated struct ProjectWorkspaceCreationRepository: Equatable, Hashable, Send
   var bootstrapScriptIDs: [String]
   var bootstrapRequired: Bool
   var bootstrapRunOnCreate: Bool
+  var bootstrapCandidate: ProjectWorkspaceCreationBootstrapCandidate?
   // User choice when a Use-Existing checkout on a remote-tracking ref would
   // reset an existing same-named local branch: false keeps the local branch
   // (checks it out directly), true resets it to the remote ref.
@@ -87,7 +108,8 @@ nonisolated struct ProjectWorkspaceCreationRepository: Equatable, Hashable, Send
     bootstrapScriptID: String? = nil,
     bootstrapScriptIDs: [String] = [],
     bootstrapRequired: Bool = false,
-    bootstrapRunOnCreate: Bool = false
+    bootstrapRunOnCreate: Bool = false,
+    bootstrapCandidate: ProjectWorkspaceCreationBootstrapCandidate? = nil
   ) {
     let normalizedURL = rootURL.standardizedFileURL
     self.id = id
@@ -105,6 +127,7 @@ nonisolated struct ProjectWorkspaceCreationRepository: Equatable, Hashable, Send
     )
     self.bootstrapRequired = bootstrapRequired
     self.bootstrapRunOnCreate = bootstrapRunOnCreate
+    self.bootstrapCandidate = bootstrapCandidate
   }
 
   init(
@@ -120,7 +143,8 @@ nonisolated struct ProjectWorkspaceCreationRepository: Equatable, Hashable, Send
     bootstrapScriptID: String? = nil,
     bootstrapScriptIDs: [String] = [],
     bootstrapRequired: Bool = false,
-    bootstrapRunOnCreate: Bool = false
+    bootstrapRunOnCreate: Bool = false,
+    bootstrapCandidate: ProjectWorkspaceCreationBootstrapCandidate? = nil
   ) {
     self.id = id
     self.name = name
@@ -136,6 +160,7 @@ nonisolated struct ProjectWorkspaceCreationRepository: Equatable, Hashable, Send
     )
     self.bootstrapRequired = bootstrapRequired
     self.bootstrapRunOnCreate = bootstrapRunOnCreate
+    self.bootstrapCandidate = bootstrapCandidate
   }
 
   var bootstrapScriptID: String? {

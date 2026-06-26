@@ -1385,6 +1385,77 @@ struct RepositoriesFeatureTests {
     )
   }
 
+  @Test(.dependencies) func workspaceCreationCandidatesIncludeOpenedRepositorySetupScript() async throws {
+    let storage = SettingsTestStorage()
+    let repoRoot = "/tmp/repo-a"
+    let repository = makeRepository(id: repoRoot, worktrees: [
+      makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    ])
+    let candidate = try withDependencies {
+      $0.settingsFileStorage = storage.storage
+    } operation: {
+      @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
+      $repositorySettings.withLock {
+        $0.setupScript = "echo setup"
+      }
+      return try #require(makeState(repositories: [repository]).workspaceCreationCandidates.first)
+    }
+
+    #expect(candidate.checkoutMode == .createBranch)
+    #expect(candidate.bootstrapCandidate?.script == "echo setup")
+    #expect(candidate.bootstrapCandidate?.profileID == nil)
+  }
+
+  @Test(.dependencies) func workspaceCreationPromptUsesSetupScriptCandidateAsScriptProfile() async throws {
+    let storage = SettingsTestStorage()
+    let profilesURL = URL(fileURLWithPath: "/tmp/script-profiles.json")
+    let repoRoot = "/tmp/repo-a"
+    let store = withDependencies {
+      $0.settingsFileStorage = storage.storage
+      $0.scriptProfilesFileURL = profilesURL
+    } operation: {
+      TestStore(
+        initialState: WorkspaceCreationPromptFeature.State(
+          repositories: [
+            ProjectWorkspaceCreationRepository(
+              id: repoRoot,
+              name: "Repo A",
+              rootURL: URL(fileURLWithPath: repoRoot),
+              checkoutMode: .createBranch,
+              branchName: "workspace/repo-a",
+              bootstrapCandidate: ProjectWorkspaceCreationBootstrapCandidate(
+                script: "echo setup",
+                displayName: "Repo A"
+              )
+            )
+          ],
+          title: "Workspace",
+          rootPath: "/tmp/workspace"
+        )
+      ) {
+        WorkspaceCreationPromptFeature()
+      }
+    }
+
+    await store.send(.repositoryBootstrapCandidateUsed(repoRoot)) {
+      $0.repositories[id: repoRoot]?.bootstrapScriptIDs = ["repo-a-setup"]
+      $0.repositories[id: repoRoot]?.bootstrapRunOnCreate = true
+      $0.repositories[id: repoRoot]?.bootstrapCandidate = nil
+    }
+
+    let profiles: [ScriptProfile] = withDependencies {
+      $0.settingsFileStorage = storage.storage
+      $0.scriptProfilesFileURL = profilesURL
+    } operation: {
+      @Shared(.scriptProfiles) var scriptProfiles
+      return scriptProfiles
+    }
+    let profile = try #require(profiles.first)
+    #expect(profile.id == "repo-a-setup")
+    #expect(profile.name == "Repo A Setup")
+    #expect(profile.script == "echo setup")
+  }
+
   @Test func workspaceCreationPromptIgnoresAutomaticBootstrapForLinkCheckout() async throws {
     let repoRoot = "/tmp/repo-a"
     let store = TestStore(

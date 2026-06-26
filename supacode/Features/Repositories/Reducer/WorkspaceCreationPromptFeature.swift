@@ -1,6 +1,7 @@
 import ComposableArchitecture
 import Foundation
 import IdentifiedCollections
+import Sharing
 
 @Reducer
 struct WorkspaceCreationPromptFeature {
@@ -112,6 +113,7 @@ struct WorkspaceCreationPromptFeature {
     case repositoryBootstrapProfileAdded(Repository.ID, String)
     case repositoryBootstrapProfileRemoved(Repository.ID, String)
     case repositoryBootstrapProfileMoved(Repository.ID, String, BootstrapProfileMoveDirection)
+    case repositoryBootstrapCandidateUsed(Repository.ID)
     case repositoryBootstrapRunOnCreateChanged(Repository.ID, Bool)
     case repositoryBootstrapRequiredChanged(Repository.ID, Bool)
     case manageScriptProfilesButtonTapped
@@ -181,7 +183,10 @@ struct WorkspaceCreationPromptFeature {
         }
         state.repositories.append(repository)
         state.clearValidation()
-        return .send(.delegate(.baseRefSourceChanged(repositoryID)))
+        return .merge(
+          .send(.repositoryBootstrapCandidateUsed(repositoryID)),
+          .send(.delegate(.baseRefSourceChanged(repositoryID)))
+        )
 
       case .addRemoteButtonTapped:
         state.remoteRepositoryPrompt = RemoteRepositoryPromptState()
@@ -479,6 +484,42 @@ struct WorkspaceCreationPromptFeature {
         state.clearValidation()
         return .none
 
+      case .repositoryBootstrapCandidateUsed(let repositoryID):
+        guard var repository = state.repositories[id: repositoryID],
+          repository.checkoutMode != .link,
+          let candidate = repository.bootstrapCandidate,
+          !candidate.isEmpty
+        else {
+          return .none
+        }
+        if let profileID = candidate.profileID {
+          repository.bootstrapScriptIDs = ProjectWorkspaceCreationRepository.normalizedBootstrapScriptIDs(
+            repository.bootstrapScriptIDs + [profileID]
+          )
+        } else if let script = candidate.script {
+          @Shared(.scriptProfiles) var scriptProfiles
+          let profile = ScriptProfile(
+            id: Self.defaultSetupScriptProfileID(
+              repositoryName: candidate.displayName,
+              existingProfileIDs: scriptProfiles.map(\.id)
+            ),
+            name: "\(candidate.displayName.isEmpty ? repository.name : candidate.displayName) Setup",
+            description: "Imported from this repository's Setup Script.",
+            command: ScriptProfile.defaultCommand,
+            script: script
+          ).normalized
+          $scriptProfiles.withLock { $0.append(profile) }
+          repository.bootstrapScriptIDs = ProjectWorkspaceCreationRepository.normalizedBootstrapScriptIDs(
+            repository.bootstrapScriptIDs + [profile.id]
+          )
+        }
+        repository.bootstrapRunOnCreate = !repository.bootstrapScriptIDs.isEmpty
+        repository.bootstrapRequired = false
+        repository.bootstrapCandidate = nil
+        state.repositories[id: repositoryID] = repository
+        state.clearValidation()
+        return .none
+
       case .repositoryBootstrapRunOnCreateChanged(let repositoryID, let enabled):
         guard var repository = state.repositories[id: repositoryID],
           repository.checkoutMode != .link
@@ -580,6 +621,30 @@ struct WorkspaceCreationPromptFeature {
       return name
     }
     return String(name.dropLast(4))
+  }
+
+  nonisolated static func defaultSetupScriptProfileID(
+    repositoryName: String,
+    existingProfileIDs: [String]
+  ) -> String {
+    let base =
+      repositoryName
+      .lowercased()
+      .map { character in
+        character.isLetter || character.isNumber ? String(character) : "-"
+      }
+      .joined()
+      .split(separator: "-")
+      .joined(separator: "-")
+    let prefix = base.isEmpty ? "repository-setup" : "\(base)-setup"
+    var candidate = prefix
+    var suffix = 2
+    let existing = Set(existingProfileIDs)
+    while existing.contains(candidate) {
+      candidate = "\(prefix)-\(suffix)"
+      suffix += 1
+    }
+    return candidate
   }
 
   nonisolated private static func loadRemoteBranchRefs(

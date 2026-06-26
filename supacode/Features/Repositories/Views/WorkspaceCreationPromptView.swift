@@ -381,6 +381,20 @@ struct WorkspaceCreationPromptView: View {
     let availableProfiles = scriptProfiles.filter { !selectedProfileIDs.contains($0.id) }
     return VStack(alignment: .leading, spacing: 6) {
       HStack(spacing: 8) {
+        if repository.bootstrapCandidate?.isEmpty == false {
+          Button {
+            store.send(.repositoryBootstrapCandidateUsed(repository.id))
+          } label: {
+            Label("Use Setup Script", systemImage: "wand.and.sparkles")
+          }
+          .disabled(store.isCreating || disablesAutomaticBootstrap)
+          .help(
+            disablesAutomaticBootstrap
+              ? "Switch this repository out of Link mode before using its setup script."
+              : "Use this opened repository's existing Setup Script as a workspace bootstrap profile."
+          )
+        }
+
         Menu {
           if disablesAutomaticBootstrap {
             Text("Link mode skips bootstrap")

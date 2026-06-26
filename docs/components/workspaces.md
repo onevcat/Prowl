@@ -154,6 +154,9 @@ child.
 
 Script profiles can be set to run on workspace creation or manually. The
 workspace creation sheet exposes the creation-time policy, including Required.
+When adding an already-opened repository that has a Repo Settings **Setup
+Script**, Prowl offers to use that setup script as the child bootstrap. Inline
+setup scripts are saved as local Script Profiles first.
 The workspace settings page treats bootstrap as current-state management: choose
 scripts from `~/.prowl/script-profiles.json` and run each script manually
 from the child repository card. Linked children do not expose bootstrap
