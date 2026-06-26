@@ -96,14 +96,14 @@ nonisolated struct ProjectWorkspaceBootstrapFileClient: Sendable {
 }
 
 nonisolated struct ProjectWorkspaceBootstrapExecutor: Sendable {
-  var profiles: [ProjectWorkspaceBootstrapProfile]
+  var profiles: [ScriptProfile]
   var shellClient: ShellClient
   var fileClient: ProjectWorkspaceBootstrapFileClient
   var now: @Sendable () -> Date
   var clock: any Clock<Duration>
 
   init<C: Clock<Duration>>(
-    profiles: [ProjectWorkspaceBootstrapProfile],
+    profiles: [ScriptProfile],
     shellClient: ShellClient,
     fileClient: ProjectWorkspaceBootstrapFileClient = .live,
     now: @escaping @Sendable () -> Date = Date.init,
@@ -133,7 +133,7 @@ nonisolated struct ProjectWorkspaceBootstrapExecutor: Sendable {
     guard !scriptIDs.isEmpty else {
       throw ProjectWorkspaceCreationError.bootstrapProfileNotFound("")
     }
-    var profilesByID: [String: ProjectWorkspaceBootstrapProfile] = [:]
+    var profilesByID: [String: ScriptProfile] = [:]
     for profile in profiles where profilesByID[profile.id] == nil {
       profilesByID[profile.id] = profile
     }
@@ -183,7 +183,7 @@ nonisolated struct ProjectWorkspaceBootstrapExecutor: Sendable {
   }
 
   private func runProfile(
-    _ profile: ProjectWorkspaceBootstrapProfile,
+    _ profile: ScriptProfile,
     context: ProjectWorkspaceBootstrapContext,
     logURL: URL
   ) async throws {
@@ -255,7 +255,7 @@ nonisolated struct ProjectWorkspaceBootstrapExecutor: Sendable {
 
   private func environment(
     for context: ProjectWorkspaceBootstrapContext,
-    profile: ProjectWorkspaceBootstrapProfile,
+    profile: ScriptProfile,
     scriptURL: URL
   ) -> [String: String] {
     var environment = [
@@ -270,13 +270,13 @@ nonisolated struct ProjectWorkspaceBootstrapExecutor: Sendable {
       "PROWL_BASE_REF": context.repository.baseRef ?? "",
     ]
     environment.merge(profile.environment, uniquingKeysWith: { _, custom in custom })
-    environment[ProjectWorkspaceBootstrapProfile.bootstrapScriptEnvironmentKey] =
+    environment[ScriptProfile.scriptEnvironmentKey] =
       scriptURL.path(percentEncoded: false)
     return environment
   }
 
   private func makeScriptURL(
-    for profile: ProjectWorkspaceBootstrapProfile,
+    for profile: ScriptProfile,
     context: ProjectWorkspaceBootstrapContext
   ) throws -> URL {
     let directoryURL =

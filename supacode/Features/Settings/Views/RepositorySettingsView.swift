@@ -5,7 +5,7 @@ import SwiftUI
 
 struct RepositorySettingsView: View {
   @Bindable var store: StoreOf<RepositorySettingsFeature>
-  @Shared(.bootstrapProfiles) private var bootstrapProfiles
+  @Shared(.scriptProfiles) private var scriptProfiles
   @State private var isBranchPickerPresented = false
   @State private var branchSearchText = ""
   @State private var githubIdentityViewModel = RepositoryGithubIdentityViewModel()
@@ -684,7 +684,7 @@ struct RepositorySettingsView: View {
     let selectedProfileIDs = repository.bootstrapScriptIDs
     let hasProfile = !selectedProfileIDs.isEmpty
     let disablesBootstrap = repository.usesLinkCheckout
-    let availableProfiles = bootstrapProfiles.filter { !selectedProfileIDs.contains($0.id) }
+    let availableProfiles = scriptProfiles.filter { !selectedProfileIDs.contains($0.id) }
     return VStack(alignment: .leading, spacing: 8) {
       HStack {
         Text("Bootstrap Scripts")
@@ -693,7 +693,7 @@ struct RepositorySettingsView: View {
         Spacer()
         Menu {
           if availableProfiles.isEmpty {
-            Text(bootstrapProfiles.isEmpty ? "No bootstrap profiles" : "All profiles selected")
+            Text(scriptProfiles.isEmpty ? "No script profiles" : "All profiles selected")
           } else {
             ForEach(availableProfiles) { profile in
               Button(bootstrapProfileTitle(profile)) {
@@ -704,11 +704,11 @@ struct RepositorySettingsView: View {
         } label: {
           Label("Add Script", systemImage: "plus")
         }
-        .disabled(bootstrapProfiles.isEmpty || repository.isRemoved || disablesBootstrap)
+        .disabled(scriptProfiles.isEmpty || repository.isRemoved || disablesBootstrap)
         .help(
           disablesBootstrap
             ? "Linked repositories share the original checkout, so bootstrap scripts are disabled."
-            : "Add a local bootstrap profile from ~/.prowl/bootstrap-profiles.json"
+            : "Add a local script profile from ~/.prowl/script-profiles.json"
         )
       }
 
@@ -785,7 +785,7 @@ struct RepositorySettingsView: View {
     .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
   }
 
-  private func bootstrapProfileTitle(_ profile: ProjectWorkspaceBootstrapProfile) -> String {
+  private func bootstrapProfileTitle(_ profile: ScriptProfile) -> String {
     if profile.name.isEmpty || profile.name == profile.id {
       return profile.id
     }
@@ -793,7 +793,7 @@ struct RepositorySettingsView: View {
   }
 
   private func bootstrapProfileTitle(id: String) -> String {
-    if let profile = bootstrapProfiles.first(where: { $0.id == id }) {
+    if let profile = scriptProfiles.first(where: { $0.id == id }) {
       return bootstrapProfileTitle(profile)
     }
     return id

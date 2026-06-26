@@ -183,9 +183,9 @@ extension RepositoriesFeature {
   private func createWorkspaceEffect(_ draft: ProjectWorkspaceCreationDraft) -> Effect<Action> {
     let request = ProjectWorkspaceCreationRequest(draft: draft, createdAt: now)
     let gitRunner = Self.workspaceGitRunner(shellClient: shellClient)
-    @Shared(.bootstrapProfiles) var bootstrapProfiles
+    @Shared(.scriptProfiles) var scriptProfiles
     let bootstrapRunner = ProjectWorkspaceBootstrapExecutor(
-      profiles: bootstrapProfiles,
+      profiles: scriptProfiles,
       shellClient: shellClient,
       now: { Date() }
     ).runner

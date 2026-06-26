@@ -2,22 +2,22 @@ import ArgumentParser
 import Foundation
 import ProwlCLIShared
 
-struct BootstrapCommand: ParsableCommand {
+struct ScriptsCommand: ParsableCommand {
   static let configuration = CommandConfiguration(
-    commandName: "bootstrap",
-    abstract: "Manage local workspace bootstrap profiles.",
+    commandName: "scripts",
+    abstract: "Manage local workspace script profiles.",
     subcommands: [
-      BootstrapListCommand.self,
-      BootstrapAddCommand.self,
-      BootstrapUpdateCommand.self,
-      BootstrapDeleteCommand.self,
+      ScriptsListCommand.self,
+      ScriptsAddCommand.self,
+      ScriptsUpdateCommand.self,
+      ScriptsDeleteCommand.self,
     ]
   )
 }
 
-struct BootstrapProfile: Codable, Equatable {
-  static let bootstrapScriptEnvironmentKey = "PROWL_BOOTSTRAP_SCRIPT"
-  static let defaultCommand = #"/bin/sh "$PROWL_BOOTSTRAP_SCRIPT""#
+struct ScriptProfile: Codable, Equatable {
+  static let scriptEnvironmentKey = "PROWL_SCRIPT"
+  static let defaultCommand = #"/bin/sh "$PROWL_SCRIPT""#
 
   var id: String
   var name: String
@@ -42,7 +42,7 @@ struct BootstrapProfile: Codable, Equatable {
     id: String,
     name: String,
     description: String = "",
-    command: String = BootstrapProfile.defaultCommand,
+    command: String = ScriptProfile.defaultCommand,
     environment: [String: String] = [:],
     script: String,
     timeoutSeconds: Int = 300
@@ -83,8 +83,8 @@ struct BootstrapProfile: Codable, Equatable {
     try container.encode(normalized.timeoutSeconds, forKey: .timeoutSeconds)
   }
 
-  var normalized: BootstrapProfile {
-    BootstrapProfile(
+  var normalized: ScriptProfile {
+    ScriptProfile(
       id: id.trimmingCharacters(in: .whitespacesAndNewlines),
       name: name.trimmingCharacters(in: .whitespacesAndNewlines),
       description: description.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -99,14 +99,14 @@ struct BootstrapProfile: Codable, Equatable {
     guard let shell = trimmedNonEmpty(shell) else {
       return nil
     }
-    return #"\#(shell) "$\#(bootstrapScriptEnvironmentKey)""#
+    return #"\#(shell) "$\#(scriptEnvironmentKey)""#
   }
 
   private static func normalizedCommand(_ value: String?) -> String? {
     guard let command = trimmedNonEmpty(value) else {
       return nil
     }
-    return command.replacing("$script", with: "$\(bootstrapScriptEnvironmentKey)")
+    return command.replacing("$script", with: "$\(scriptEnvironmentKey)")
   }
 
   private static func normalizedEnvironment(_ environment: [String: String]) -> [String: String] {
@@ -129,9 +129,9 @@ struct BootstrapProfile: Codable, Equatable {
     return trimmed.isEmpty ? nil : trimmed
   }
 
-  var payload: BootstrapProfilePayloadModel {
+  var payload: ScriptProfilePayloadModel {
     let normalized = normalized
-    return BootstrapProfilePayloadModel(
+    return ScriptProfilePayloadModel(
       id: normalized.id,
       name: normalized.name,
       description: normalized.description,
@@ -143,18 +143,18 @@ struct BootstrapProfile: Codable, Equatable {
   }
 }
 
-struct BootstrapProfileStore {
+struct ScriptProfileStore {
   var url: URL
 
-  func load() throws -> [BootstrapProfile] {
+  func load() throws -> [ScriptProfile] {
     guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
       return []
     }
     let data = try Data(contentsOf: url)
-    return try JSONDecoder().decode([BootstrapProfile].self, from: data).map(\.normalized)
+    return try JSONDecoder().decode([ScriptProfile].self, from: data).map(\.normalized)
   }
 
-  func save(_ profiles: [BootstrapProfile]) throws {
+  func save(_ profiles: [ScriptProfile]) throws {
     let directory = url.deletingLastPathComponent()
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     let encoder = JSONEncoder()
@@ -164,9 +164,9 @@ struct BootstrapProfileStore {
     try data.write(to: url, options: .atomic)
   }
 
-  private func normalizedProfiles(_ profiles: [BootstrapProfile]) -> [BootstrapProfile] {
+  private func normalizedProfiles(_ profiles: [ScriptProfile]) -> [ScriptProfile] {
     var seen = Set<String>()
-    var result: [BootstrapProfile] = []
+    var result: [ScriptProfile] = []
     for profile in profiles {
       let normalized = profile.normalized
       guard !normalized.id.isEmpty, seen.insert(normalized.id).inserted else {
@@ -178,29 +178,29 @@ struct BootstrapProfileStore {
   }
 }
 
-struct BootstrapOptions: ParsableArguments {
+struct ScriptOptions: ParsableArguments {
   @OptionGroup var options: GlobalOptions
 
-  @Option(name: .long, help: "Path to bootstrap-profiles.json. Defaults to ~/.prowl/bootstrap-profiles.json.")
+  @Option(name: .long, help: "Path to script-profiles.json. Defaults to ~/.prowl/script-profiles.json.")
   var file: String?
 
-  var store: BootstrapProfileStore {
-    BootstrapProfileStore(url: URL(fileURLWithPath: file ?? defaultBootstrapProfilesPath()))
+  var store: ScriptProfileStore {
+    ScriptProfileStore(url: URL(fileURLWithPath: file ?? defaultScriptProfilesPath()))
   }
 }
 
-struct BootstrapListCommand: ParsableCommand {
-  static let configuration = CommandConfiguration(commandName: "list", abstract: "List bootstrap profiles.")
+struct ScriptsListCommand: ParsableCommand {
+  static let configuration = CommandConfiguration(commandName: "list", abstract: "List script profiles.")
 
-  @OptionGroup var bootstrapOptions: BootstrapOptions
+  @OptionGroup var scriptOptions: ScriptOptions
 
   mutating func run() throws {
-    let outputMode = bootstrapOptions.options.outputMode
-    try CLIExecution.run(command: "bootstrap", output: outputMode, colorEnabled: bootstrapOptions.options.colorEnabled)
+    let outputMode = scriptOptions.options.outputMode
+    try CLIExecution.run(command: "scripts", output: outputMode, colorEnabled: scriptOptions.options.colorEnabled)
     {
-      let store = bootstrapOptions.store
+      let store = scriptOptions.store
       let profiles = try store.load()
-      let payload = BootstrapProfilesPayload(
+      let payload = ScriptProfilesPayload(
         path: store.url.path(percentEncoded: false),
         profiles: profiles.map(\.payload)
       )
@@ -209,10 +209,10 @@ struct BootstrapListCommand: ParsableCommand {
   }
 }
 
-struct BootstrapAddCommand: ParsableCommand {
-  static let configuration = CommandConfiguration(commandName: "add", abstract: "Add a bootstrap profile.")
+struct ScriptsAddCommand: ParsableCommand {
+  static let configuration = CommandConfiguration(commandName: "add", abstract: "Add a script profile.")
 
-  @OptionGroup var bootstrapOptions: BootstrapOptions
+  @OptionGroup var scriptOptions: ScriptOptions
 
   @Option(name: .long, help: "Stable profile id.")
   var id: String
@@ -223,8 +223,8 @@ struct BootstrapAddCommand: ParsableCommand {
   @Option(name: .long, help: "Description.")
   var description: String = ""
 
-  @Option(name: .long, help: "Command used to run the script. Use $PROWL_BOOTSTRAP_SCRIPT for the script path.")
-  var command: String = BootstrapProfile.defaultCommand
+  @Option(name: .long, help: "Command used to run the script. Use $PROWL_SCRIPT for the script path.")
+  var command: String = ScriptProfile.defaultCommand
 
   @Option(name: .long, help: "Environment variable in KEY=VALUE form. Can be repeated.")
   var env: [String] = []
@@ -239,10 +239,10 @@ struct BootstrapAddCommand: ParsableCommand {
   var timeout: Int = 300
 
   mutating func run() throws {
-    let outputMode = bootstrapOptions.options.outputMode
-    try CLIExecution.run(command: "bootstrap", output: outputMode, colorEnabled: bootstrapOptions.options.colorEnabled)
+    let outputMode = scriptOptions.options.outputMode
+    try CLIExecution.run(command: "scripts", output: outputMode, colorEnabled: scriptOptions.options.colorEnabled)
     {
-      let store = bootstrapOptions.store
+      let store = scriptOptions.store
       var profiles = try store.load()
       let normalizedID = id.trimmingCharacters(in: .whitespacesAndNewlines)
       guard !normalizedID.isEmpty else {
@@ -250,9 +250,9 @@ struct BootstrapAddCommand: ParsableCommand {
       }
       guard !profiles.contains(where: { $0.id == normalizedID }) else {
         throw ExitError(
-          code: CLIErrorCode.invalidArgument, message: "Bootstrap profile already exists: \(normalizedID)")
+          code: CLIErrorCode.invalidArgument, message: "Script profile already exists: \(normalizedID)")
       }
-      let profile = BootstrapProfile(
+      let profile = ScriptProfile(
         id: normalizedID,
         name: name ?? normalizedID,
         description: description,
@@ -264,17 +264,17 @@ struct BootstrapAddCommand: ParsableCommand {
       profiles.append(profile)
       try store.save(profiles)
       try render(
-        BootstrapProfilePayload(path: store.url.path(percentEncoded: false), profile: profile.payload),
+        ScriptProfilePayload(path: store.url.path(percentEncoded: false), profile: profile.payload),
         output: outputMode
       )
     }
   }
 }
 
-struct BootstrapUpdateCommand: ParsableCommand {
-  static let configuration = CommandConfiguration(commandName: "update", abstract: "Update a bootstrap profile.")
+struct ScriptsUpdateCommand: ParsableCommand {
+  static let configuration = CommandConfiguration(commandName: "update", abstract: "Update a script profile.")
 
-  @OptionGroup var bootstrapOptions: BootstrapOptions
+  @OptionGroup var scriptOptions: ScriptOptions
 
   @Argument(help: "Profile id.")
   var id: String
@@ -304,13 +304,13 @@ struct BootstrapUpdateCommand: ParsableCommand {
   var timeout: Int?
 
   mutating func run() throws {
-    let outputMode = bootstrapOptions.options.outputMode
-    try CLIExecution.run(command: "bootstrap", output: outputMode, colorEnabled: bootstrapOptions.options.colorEnabled)
+    let outputMode = scriptOptions.options.outputMode
+    try CLIExecution.run(command: "scripts", output: outputMode, colorEnabled: scriptOptions.options.colorEnabled)
     {
-      let store = bootstrapOptions.store
+      let store = scriptOptions.store
       var profiles = try store.load()
       guard let index = profiles.firstIndex(where: { $0.id == id }) else {
-        throw ExitError(code: CLIErrorCode.targetNotFound, message: "Bootstrap profile not found: \(id)")
+        throw ExitError(code: CLIErrorCode.targetNotFound, message: "Script profile not found: \(id)")
       }
       var profile = profiles[index]
       if let name {
@@ -338,33 +338,33 @@ struct BootstrapUpdateCommand: ParsableCommand {
       profiles[index] = profile
       try store.save(profiles)
       try render(
-        BootstrapProfilePayload(path: store.url.path(percentEncoded: false), profile: profile.payload),
+        ScriptProfilePayload(path: store.url.path(percentEncoded: false), profile: profile.payload),
         output: outputMode
       )
     }
   }
 }
 
-struct BootstrapDeleteCommand: ParsableCommand {
-  static let configuration = CommandConfiguration(commandName: "delete", abstract: "Delete a bootstrap profile.")
+struct ScriptsDeleteCommand: ParsableCommand {
+  static let configuration = CommandConfiguration(commandName: "delete", abstract: "Delete a script profile.")
 
-  @OptionGroup var bootstrapOptions: BootstrapOptions
+  @OptionGroup var scriptOptions: ScriptOptions
 
   @Argument(help: "Profile id.")
   var id: String
 
   mutating func run() throws {
-    let outputMode = bootstrapOptions.options.outputMode
-    try CLIExecution.run(command: "bootstrap", output: outputMode, colorEnabled: bootstrapOptions.options.colorEnabled)
+    let outputMode = scriptOptions.options.outputMode
+    try CLIExecution.run(command: "scripts", output: outputMode, colorEnabled: scriptOptions.options.colorEnabled)
     {
-      let store = bootstrapOptions.store
+      let store = scriptOptions.store
       var profiles = try store.load()
       guard let index = profiles.firstIndex(where: { $0.id == id }) else {
-        throw ExitError(code: CLIErrorCode.targetNotFound, message: "Bootstrap profile not found: \(id)")
+        throw ExitError(code: CLIErrorCode.targetNotFound, message: "Script profile not found: \(id)")
       }
       profiles.remove(at: index)
       try store.save(profiles)
-      try render(BootstrapDeletePayload(path: store.url.path(percentEncoded: false), id: id), output: outputMode)
+      try render(ScriptDeletePayload(path: store.url.path(percentEncoded: false), id: id), output: outputMode)
     }
   }
 }
@@ -372,8 +372,8 @@ struct BootstrapDeleteCommand: ParsableCommand {
 private func render<T: Encodable>(_ payload: T, output: OutputMode) throws {
   let response = try CommandResponse(
     ok: true,
-    command: "bootstrap",
-    schemaVersion: "prowl.cli.bootstrap.v1",
+    command: "scripts",
+    schemaVersion: "prowl.cli.scripts.v1",
     data: RawJSON(encoding: payload)
   )
   OutputRenderer.render(response, mode: output)
@@ -411,9 +411,9 @@ private func resolveScript(script: String?, scriptFile: String?) throws -> Strin
   throw ExitError(code: CLIErrorCode.invalidArgument, message: "Script is required.")
 }
 
-private func defaultBootstrapProfilesPath() -> String {
+private func defaultScriptProfilesPath() -> String {
   FileManager.default.homeDirectoryForCurrentUser
     .appending(path: ".prowl", directoryHint: .isDirectory)
-    .appending(path: "bootstrap-profiles.json", directoryHint: .notDirectory)
+    .appending(path: "script-profiles.json", directoryHint: .notDirectory)
     .path(percentEncoded: false)
 }

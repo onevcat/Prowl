@@ -152,18 +152,18 @@ Existing child source, path, and checkout fields are shown as read-only
 provenance in settings; changing those would require removing and re-adding the
 child.
 
-Bootstrap profiles can be set to run on workspace creation or manually. The
+Script profiles can be set to run on workspace creation or manually. The
 workspace creation sheet exposes the creation-time policy, including Required.
 The workspace settings page treats bootstrap as current-state management: choose
-scripts from `~/.prowl/bootstrap-profiles.json` and run each script manually
+scripts from `~/.prowl/script-profiles.json` and run each script manually
 from the child repository card. Linked children do not expose bootstrap
 controls because setup scripts would write into the shared live checkout.
 
-Bootstrap profiles can be managed in **Settings → Bootstrap** or with
-`prowl bootstrap`. A profile contains a `command`, optional `environment`, a
+Script profiles can be managed in **Settings → Scripts** or with
+`prowl scripts`. A profile contains a `command`, optional `environment`, a
 `script`, and `timeout_seconds`. The default command is
-`/bin/sh "$PROWL_BOOTSTRAP_SCRIPT"`; Prowl writes the script to a temporary
-workspace-local file and injects its path as the `PROWL_BOOTSTRAP_SCRIPT`
+`/bin/sh "$PROWL_SCRIPT"`; Prowl writes the script to a temporary
+workspace-local file and injects its path as the `PROWL_SCRIPT`
 environment variable before running the command.
 
 Example `.prowl/workspace.json`:
@@ -191,7 +191,7 @@ Example `.prowl/workspace.json`:
       "source_kind": "local_repository",
       "source_location": "/Users/mikoto/Documents/Repos/github/Prowl",
       "branch_name": "codex/checkout-flow",
-      "bootstrap": {
+      "scripts": {
         "script_kind": "user_profile",
         "script_ids": ["common-node-install", "sync-prowl-local-files"],
         "run_on": ["create"],
@@ -248,22 +248,22 @@ Repository entry fields:
   path.
 - `branch_name` — optional branch/worktree name expected for the task.
 - `base_ref` — optional base branch or ref.
-- `bootstrap` — optional bootstrap profile reference. `script_kind:
-  user_profile` looks up local profiles from `~/.prowl/bootstrap-profiles.json`;
+- `bootstrap` — optional script profile reference. `script_kind:
+  user_profile` looks up local profiles from `~/.prowl/script-profiles.json`;
   `script_ids` lists profile ids to run in order; `run_on` can include
   `create`, `on_add`, and `manual`; and `required` decides whether bootstrap
   failure fails the current materialization action. Older workspaces with a
   single `script_id` still load as a one-profile list.
 
-Bootstrap profiles run after a child repository has been materialized, with the
+Script profiles run after a child repository has been materialized, with the
 child repository as the working directory. Automatic bootstrap is skipped for
 linked children because those paths point at the user's existing checkout.
 Prowl-provided environment variables include `PROWL_WORKSPACE_ROOT`,
 `PROWL_REPOSITORY_ROOT`, `PROWL_REPOSITORY_ID`, `PROWL_REPOSITORY_NAME`,
 `PROWL_REPOSITORY_PATH`, `PROWL_SOURCE_KIND`, `PROWL_SOURCE_LOCATION`,
-`PROWL_BRANCH_NAME`, `PROWL_BASE_REF`, and `PROWL_BOOTSTRAP_SCRIPT`; custom
+`PROWL_BRANCH_NAME`, `PROWL_BASE_REF`, and `PROWL_SCRIPT`; custom
 profile environment values override these on conflict, except
-`PROWL_BOOTSTRAP_SCRIPT`, which is always set by Prowl to the temporary script
+`PROWL_SCRIPT`, which is always set by Prowl to the temporary script
 path for the current run.
 Bootstrap logs and last-run state are written under the workspace `.prowl`
 runtime directory, not back into `workspace.json`.

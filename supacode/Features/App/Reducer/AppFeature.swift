@@ -360,7 +360,7 @@ struct AppFeature {
 
       case .repositories(.delegate(.openBootstrapSettings)):
         return .merge(
-          .send(.settings(.setSelection(.bootstrap))),
+          .send(.settings(.setSelection(.scripts))),
           .run { _ in
             await settingsWindowClient.show()
           }
@@ -396,7 +396,7 @@ struct AppFeature {
           repoSettingsState.globalCopyUntrackedOnWorktreeCreate = state.settings.copyUntrackedOnWorktreeCreate
           repoSettingsState.globalPullRequestMergeStrategy = state.settings.pullRequestMergeStrategy
           state.settings.repositorySettings = repoSettingsState
-        case .general, .notifications, .shortcuts, .worktree, .bootstrap, .updates, .advanced, .github:
+        case .general, .notifications, .shortcuts, .worktree, .scripts, .updates, .advanced, .github:
           state.settings.repositorySettings = nil
         }
         return .none

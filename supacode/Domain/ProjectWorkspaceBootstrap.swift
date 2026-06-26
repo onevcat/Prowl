@@ -87,9 +87,9 @@ nonisolated struct ProjectWorkspaceRepositoryBootstrap: Codable, Equatable, Hash
   }
 }
 
-nonisolated struct ProjectWorkspaceBootstrapProfile: Codable, Equatable, Identifiable, Sendable {
-  static let bootstrapScriptEnvironmentKey = "PROWL_BOOTSTRAP_SCRIPT"
-  static let defaultCommand = #"/bin/sh "$PROWL_BOOTSTRAP_SCRIPT""#
+nonisolated struct ScriptProfile: Codable, Equatable, Identifiable, Sendable {
+  static let scriptEnvironmentKey = "PROWL_SCRIPT"
+  static let defaultCommand = #"/bin/sh "$PROWL_SCRIPT""#
 
   var id: String
   var name: String
@@ -114,7 +114,7 @@ nonisolated struct ProjectWorkspaceBootstrapProfile: Codable, Equatable, Identif
     id: String,
     name: String,
     description: String = "",
-    command: String = ProjectWorkspaceBootstrapProfile.defaultCommand,
+    command: String = ScriptProfile.defaultCommand,
     environment: [String: String] = [:],
     script: String,
     timeoutSeconds: Int = 300
@@ -158,8 +158,8 @@ nonisolated struct ProjectWorkspaceBootstrapProfile: Codable, Equatable, Identif
     try container.encode(normalized.timeoutSeconds, forKey: .timeoutSeconds)
   }
 
-  var normalized: ProjectWorkspaceBootstrapProfile {
-    ProjectWorkspaceBootstrapProfile(
+  var normalized: ScriptProfile {
+    ScriptProfile(
       id: id.trimmingCharacters(in: .whitespacesAndNewlines),
       name: name.trimmingCharacters(in: .whitespacesAndNewlines),
       description: description.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -174,14 +174,14 @@ nonisolated struct ProjectWorkspaceBootstrapProfile: Codable, Equatable, Identif
     guard let shell = trimmedNonEmpty(shell) else {
       return nil
     }
-    return #"\#(shell) "$\#(bootstrapScriptEnvironmentKey)""#
+    return #"\#(shell) "$\#(scriptEnvironmentKey)""#
   }
 
   private static func normalizedCommand(_ value: String?) -> String? {
     guard let command = trimmedNonEmpty(value) else {
       return nil
     }
-    return command.replacing("$script", with: "$\(bootstrapScriptEnvironmentKey)")
+    return command.replacing("$script", with: "$\(scriptEnvironmentKey)")
   }
 
   private static func normalizedEnvironment(_ environment: [String: String]) -> [String: String] {

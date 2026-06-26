@@ -5,7 +5,7 @@ import SwiftUI
 
 struct WorkspaceCreationPromptView: View {
   @Bindable var store: StoreOf<WorkspaceCreationPromptFeature>
-  @Shared(.bootstrapProfiles) private var bootstrapProfiles
+  @Shared(.scriptProfiles) private var scriptProfiles
   @FocusState private var isTitleFieldFocused: Bool
 
   var body: some View {
@@ -378,14 +378,14 @@ struct WorkspaceCreationPromptView: View {
     let disablesAutomaticBootstrap = repository.checkoutMode == .link
     let selectedProfileIDs = repository.bootstrapScriptIDs
     let hasSelectedProfiles = !selectedProfileIDs.isEmpty
-    let availableProfiles = bootstrapProfiles.filter { !selectedProfileIDs.contains($0.id) }
+    let availableProfiles = scriptProfiles.filter { !selectedProfileIDs.contains($0.id) }
     return VStack(alignment: .leading, spacing: 6) {
       HStack(spacing: 8) {
         Menu {
           if disablesAutomaticBootstrap {
             Text("Link mode skips bootstrap")
           } else if availableProfiles.isEmpty {
-            Text(bootstrapProfiles.isEmpty ? "No bootstrap profiles" : "All profiles selected")
+            Text(scriptProfiles.isEmpty ? "No script profiles" : "All profiles selected")
           } else {
             ForEach(availableProfiles) { profile in
               Button(bootstrapProfileTitle(profile)) {
@@ -395,12 +395,12 @@ struct WorkspaceCreationPromptView: View {
           }
           Divider()
           Button {
-            store.send(.manageBootstrapProfilesButtonTapped)
+            store.send(.manageScriptProfilesButtonTapped)
           } label: {
             Label("Manage Profiles", systemImage: "slider.horizontal.3")
           }
         } label: {
-          Label("Bootstrap Profile", systemImage: "plus")
+          Label("Script Profile", systemImage: "plus")
         }
         .frame(minWidth: 190, alignment: .leading)
         .disabled(store.isCreating || disablesAutomaticBootstrap)
@@ -467,7 +467,7 @@ struct WorkspaceCreationPromptView: View {
       }
       .buttonStyle(.borderless)
       .disabled(index == 0 || store.isCreating)
-      .help("Move bootstrap profile earlier")
+      .help("Move script profile earlier")
       Button {
         store.send(.repositoryBootstrapProfileMoved(repositoryID, profileID, .later))
       } label: {
@@ -476,7 +476,7 @@ struct WorkspaceCreationPromptView: View {
       }
       .buttonStyle(.borderless)
       .disabled(index == count - 1 || store.isCreating)
-      .help("Move bootstrap profile later")
+      .help("Move script profile later")
       Button {
         store.send(.repositoryBootstrapProfileRemoved(repositoryID, profileID))
       } label: {
@@ -485,14 +485,14 @@ struct WorkspaceCreationPromptView: View {
       }
       .buttonStyle(.borderless)
       .disabled(store.isCreating)
-      .help("Remove bootstrap profile")
+      .help("Remove script profile")
     }
     .padding(.horizontal, 8)
     .padding(.vertical, 4)
     .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
   }
 
-  private func bootstrapProfileTitle(_ profile: ProjectWorkspaceBootstrapProfile) -> String {
+  private func bootstrapProfileTitle(_ profile: ScriptProfile) -> String {
     if profile.name.isEmpty || profile.name == profile.id {
       return profile.id
     }
@@ -500,7 +500,7 @@ struct WorkspaceCreationPromptView: View {
   }
 
   private func bootstrapProfileTitle(id: String) -> String {
-    if let profile = bootstrapProfiles.first(where: { $0.id == id }) {
+    if let profile = scriptProfiles.first(where: { $0.id == id }) {
       return bootstrapProfileTitle(profile)
     }
     return id
@@ -510,7 +510,7 @@ struct WorkspaceCreationPromptView: View {
     if disablesAutomaticBootstrap {
       return "Linked repositories use the original checkout, so create-time bootstrap is disabled."
     }
-    return "Add a local bootstrap profile from ~/.prowl/bootstrap-profiles.json"
+    return "Add a local script profile from ~/.prowl/script-profiles.json"
   }
 
   private func bootstrapStatusText(
@@ -520,7 +520,7 @@ struct WorkspaceCreationPromptView: View {
     if disablesAutomaticBootstrap {
       return "Link mode skips create-time bootstrap."
     }
-    if bootstrapProfiles.isEmpty {
+    if scriptProfiles.isEmpty {
       return "No profiles yet."
     }
     let count = repository.bootstrapScriptIDs.count

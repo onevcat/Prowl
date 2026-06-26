@@ -20,7 +20,7 @@ struct ProwlCommand: ParsableCommand {
       ReadCommand.self,
       TabCommand.self,
       PaneCommand.self,
-      BootstrapCommand.self,
+      ScriptsCommand.self,
     ],
     defaultSubcommand: OpenCommand.self
   )

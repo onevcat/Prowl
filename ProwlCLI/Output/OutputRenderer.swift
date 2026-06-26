@@ -105,27 +105,27 @@ enum OutputRenderer {
         return
       }
 
-      if response.command == "bootstrap",
+      if response.command == "scripts",
          let data = response.data,
-         let payload = try? data.decode(as: BootstrapProfilesPayload.self)
+         let payload = try? data.decode(as: ScriptProfilesPayload.self)
       {
-        print(renderBootstrapProfiles(payload))
+        print(renderScriptProfiles(payload))
         return
       }
 
-      if response.command == "bootstrap",
+      if response.command == "scripts",
          let data = response.data,
-         let payload = try? data.decode(as: BootstrapProfilePayload.self)
+         let payload = try? data.decode(as: ScriptProfilePayload.self)
       {
-        print(renderBootstrapProfile(payload))
+        print(renderScriptProfile(payload))
         return
       }
 
-      if response.command == "bootstrap",
+      if response.command == "scripts",
          let data = response.data,
-         let payload = try? data.decode(as: BootstrapDeletePayload.self)
+         let payload = try? data.decode(as: ScriptDeletePayload.self)
       {
-        print("Deleted bootstrap profile \(payload.id).")
+        print("Deleted script profile \(payload.id).")
         return
       }
 
@@ -259,9 +259,9 @@ enum OutputRenderer {
     }.joined(separator: "\n")
   }
 
-  private static func renderBootstrapProfiles(_ payload: BootstrapProfilesPayload) -> String {
+  private static func renderScriptProfiles(_ payload: ScriptProfilesPayload) -> String {
     guard !payload.profiles.isEmpty else {
-      return "No bootstrap profiles found at \(payload.path)."
+      return "No script profiles found at \(payload.path)."
     }
     return payload.profiles.map { profile in
       let title = profile.name.isEmpty || profile.name == profile.id
@@ -272,8 +272,8 @@ enum OutputRenderer {
     .joined(separator: "\n")
   }
 
-  private static func renderBootstrapProfile(_ payload: BootstrapProfilePayload) -> String {
-    "Saved bootstrap profile \(payload.profile.id) at \(payload.path)."
+  private static func renderScriptProfile(_ payload: ScriptProfilePayload) -> String {
+    "Saved script profile \(payload.profile.id) at \(payload.path)."
   }
 
   private static func agentStatusLabel(_ status: AgentsCommandStatus) -> String {

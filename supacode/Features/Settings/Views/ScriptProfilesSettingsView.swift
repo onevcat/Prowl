@@ -1,8 +1,8 @@
 import Sharing
 import SwiftUI
 
-struct BootstrapProfilesSettingsView: View {
-  @Shared(.bootstrapProfiles) private var profiles
+struct ScriptProfilesSettingsView: View {
+  @Shared(.scriptProfiles) private var profiles
   @State private var selectedProfileID: String?
   @State private var profileIDDrafts: [String: String] = [:]
   @State private var profileIDValidationMessage: String?
@@ -15,7 +15,7 @@ struct BootstrapProfilesSettingsView: View {
         } label: {
           Label("Add", systemImage: "plus")
         }
-        .help("Add a bootstrap profile")
+        .help("Add a script profile")
 
         Button {
           duplicateSelectedProfile()
@@ -23,7 +23,7 @@ struct BootstrapProfilesSettingsView: View {
           Label("Duplicate", systemImage: "doc.on.doc")
         }
         .disabled(selectedProfile == nil)
-        .help("Duplicate the selected bootstrap profile")
+        .help("Duplicate the selected script profile")
 
         Button(role: .destructive) {
           removeSelectedProfile()
@@ -31,7 +31,7 @@ struct BootstrapProfilesSettingsView: View {
           Label("Delete", systemImage: "trash")
         }
         .disabled(selectedProfile == nil)
-        .help("Delete the selected bootstrap profile")
+        .help("Delete the selected script profile")
       }
 
       HSplitView {
@@ -55,7 +55,7 @@ struct BootstrapProfilesSettingsView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         } else {
           ContentUnavailableView(
-            "No Bootstrap Profile Selected",
+            "No Script Profile Selected",
             systemImage: "terminal",
             description: Text("Add or select a profile to edit local workspace bootstrap scripts.")
           )
@@ -75,21 +75,21 @@ struct BootstrapProfilesSettingsView: View {
     }
   }
 
-  private var selectedProfile: ProjectWorkspaceBootstrapProfile? {
+  private var selectedProfile: ScriptProfile? {
     guard let selectedProfileID else {
       return nil
     }
     return profiles.first { $0.id == selectedProfileID }
   }
 
-  private func profileEditor(_ profile: ProjectWorkspaceBootstrapProfile) -> some View {
+  private func profileEditor(_ profile: ScriptProfile) -> some View {
     Form {
       Section("Profile") {
         idTextField(profile)
         editableTextField("Name", profileID: profile.id, keyPath: \.name)
         editableTextField("Description", profileID: profile.id, keyPath: \.description)
         editableTextField("Command", profileID: profile.id, keyPath: \.command)
-          .help("Command used to run the script. Use $PROWL_BOOTSTRAP_SCRIPT for the temporary script file path.")
+          .help("Command used to run the script. Use $PROWL_SCRIPT for the temporary script file path.")
         HStack {
           Text("Timeout")
           TextField(
@@ -141,7 +141,7 @@ struct BootstrapProfilesSettingsView: View {
     .formStyle(.grouped)
   }
 
-  private func environmentEditor(_ profile: ProjectWorkspaceBootstrapProfile) -> some View {
+  private func environmentEditor(_ profile: ScriptProfile) -> some View {
     VStack(alignment: .leading, spacing: 8) {
       if profile.environment.isEmpty {
         Text("No custom variables")
@@ -195,7 +195,7 @@ struct BootstrapProfilesSettingsView: View {
     }
   }
 
-  private func idTextField(_ profile: ProjectWorkspaceBootstrapProfile) -> some View {
+  private func idTextField(_ profile: ScriptProfile) -> some View {
     TextField(
       "ID",
       text: Binding(
@@ -212,7 +212,7 @@ struct BootstrapProfilesSettingsView: View {
   private func editableTextField(
     _ title: String,
     profileID: String,
-    keyPath: WritableKeyPath<ProjectWorkspaceBootstrapProfile, String>
+    keyPath: WritableKeyPath<ScriptProfile, String>
   ) -> some View {
     TextField(
       title,
@@ -234,10 +234,10 @@ struct BootstrapProfilesSettingsView: View {
 
   private func addProfile() {
     let id = nextAvailableID(base: "bootstrap-profile")
-    let profile = ProjectWorkspaceBootstrapProfile(
+    let profile = ScriptProfile(
       id: id,
-      name: "Bootstrap Profile",
-      command: ProjectWorkspaceBootstrapProfile.defaultCommand,
+      name: "Script Profile",
+      command: ScriptProfile.defaultCommand,
       script: "set -euo pipefail\n"
     )
     $profiles.withLock { $0.append(profile.normalized) }
@@ -287,7 +287,7 @@ struct BootstrapProfilesSettingsView: View {
 
   private func updateProfile(
     id: String,
-    mutate: (inout ProjectWorkspaceBootstrapProfile) -> Void
+    mutate: (inout ScriptProfile) -> Void
   ) {
     $profiles.withLock { profiles in
       guard let index = profiles.firstIndex(where: { $0.id == id }) else {
@@ -299,7 +299,7 @@ struct BootstrapProfilesSettingsView: View {
     }
   }
 
-  private func environmentRows(for profile: ProjectWorkspaceBootstrapProfile) -> [(key: String, value: String)] {
+  private func environmentRows(for profile: ScriptProfile) -> [(key: String, value: String)] {
     profile.environment
       .map { (key: $0.key, value: $0.value) }
       .sorted { $0.key.localizedStandardCompare($1.key) == .orderedAscending }
@@ -363,7 +363,7 @@ struct BootstrapProfilesSettingsView: View {
     return "\(candidateBase)-\(suffix)"
   }
 
-  private func validationMessage(for profile: ProjectWorkspaceBootstrapProfile) -> String? {
+  private func validationMessage(for profile: ScriptProfile) -> String? {
     if profile.id.isEmpty {
       return "ID is required."
     }
@@ -373,8 +373,8 @@ struct BootstrapProfilesSettingsView: View {
     if profile.script.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
       return "Script is required."
     }
-    if !profile.command.contains("$\(ProjectWorkspaceBootstrapProfile.bootstrapScriptEnvironmentKey)") {
-      return "Command should include $\(ProjectWorkspaceBootstrapProfile.bootstrapScriptEnvironmentKey)."
+    if !profile.command.contains("$\(ScriptProfile.scriptEnvironmentKey)") {
+      return "Command should include $\(ScriptProfile.scriptEnvironmentKey)."
     }
     return nil
   }

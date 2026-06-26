@@ -5,7 +5,7 @@ enum SettingsSection: Hashable {
   case notifications
   case shortcuts
   case worktree
-  case bootstrap
+  case scripts
   case updates
   case advanced
   case github

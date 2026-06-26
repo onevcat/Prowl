@@ -6,19 +6,19 @@ import Testing
 
 @testable import supacode
 
-struct BootstrapProfilesKeyTests {
+struct ScriptProfilesKeyTests {
   @Test(.dependencies) func saveAndReloadProfiles() throws {
     let storage = SettingsTestStorage()
-    let url = URL(fileURLWithPath: "/tmp/bootstrap-profiles-\(UUID().uuidString).json")
+    let url = URL(fileURLWithPath: "/tmp/script-profiles-\(UUID().uuidString).json")
 
     withDependencies {
       $0.settingsFileStorage = storage.storage
-      $0.bootstrapProfilesFileURL = url
+      $0.scriptProfilesFileURL = url
     } operation: {
-      @Shared(.bootstrapProfiles) var profiles: [ProjectWorkspaceBootstrapProfile]
+      @Shared(.scriptProfiles) var profiles: [ScriptProfile]
       $profiles.withLock {
         $0 = [
-          ProjectWorkspaceBootstrapProfile(
+          ScriptProfile(
             id: " sync-app ",
             name: " Sync App ",
             description: " Copies files ",
@@ -34,21 +34,21 @@ struct BootstrapProfilesKeyTests {
       }
     }
 
-    let reloaded: [ProjectWorkspaceBootstrapProfile] = withDependencies {
+    let reloaded: [ScriptProfile] = withDependencies {
       $0.settingsFileStorage = storage.storage
-      $0.bootstrapProfilesFileURL = url
+      $0.scriptProfilesFileURL = url
     } operation: {
-      @Shared(.bootstrapProfiles) var profiles: [ProjectWorkspaceBootstrapProfile]
+      @Shared(.scriptProfiles) var profiles: [ScriptProfile]
       return profiles
     }
 
     #expect(
       reloaded == [
-        ProjectWorkspaceBootstrapProfile(
+        ScriptProfile(
           id: "sync-app",
           name: "Sync App",
           description: "Copies files",
-          command: ProjectWorkspaceBootstrapProfile.defaultCommand,
+          command: ScriptProfile.defaultCommand,
           environment: ["CUSTOM": "1"],
           script: "echo hello",
           timeoutSeconds: 1
@@ -70,8 +70,8 @@ struct BootstrapProfilesKeyTests {
       """.utf8
     )
 
-    let profiles = try JSONDecoder().decode([ProjectWorkspaceBootstrapProfile].self, from: data)
+    let profiles = try JSONDecoder().decode([ScriptProfile].self, from: data)
 
-    #expect(profiles.first?.normalized.command == #"/bin/zsh "$PROWL_BOOTSTRAP_SCRIPT""#)
+    #expect(profiles.first?.normalized.command == #"/bin/zsh "$PROWL_SCRIPT""#)
   }
 }

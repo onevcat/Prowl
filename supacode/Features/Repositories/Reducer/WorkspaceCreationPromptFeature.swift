@@ -114,7 +114,7 @@ struct WorkspaceCreationPromptFeature {
     case repositoryBootstrapProfileMoved(Repository.ID, String, BootstrapProfileMoveDirection)
     case repositoryBootstrapRunOnCreateChanged(Repository.ID, Bool)
     case repositoryBootstrapRequiredChanged(Repository.ID, Bool)
-    case manageBootstrapProfilesButtonTapped
+    case manageScriptProfilesButtonTapped
     case rootPathChosen(String)
     case cancelButtonTapped
     case createButtonTapped
@@ -505,7 +505,7 @@ struct WorkspaceCreationPromptFeature {
         state.clearValidation()
         return .none
 
-      case .manageBootstrapProfilesButtonTapped:
+      case .manageScriptProfilesButtonTapped:
         return .send(.delegate(.openBootstrapSettings))
 
       case .rootPathChosen(let path):

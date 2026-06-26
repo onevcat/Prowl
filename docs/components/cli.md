@@ -241,30 +241,30 @@ Supports `~` and `file://`. Reports `resolution` (no-argument / exact-root /
 inside-root / new-root), `app_launched`, `brought_to_front`, `created_tab`, and a
 `target`.
 
-### `prowl bootstrap`
-Manage local workspace bootstrap profiles without requiring the Prowl app to be
-running. Profiles are stored in `~/.prowl/bootstrap-profiles.json` by default;
+### `prowl scripts`
+Manage local workspace script profiles without requiring the Prowl app to be
+running. Profiles are stored in `~/.prowl/script-profiles.json` by default;
 use `--file <path>` for tests or alternate files.
 
 ```bash
-prowl bootstrap list --json
+prowl scripts list --json
 
-prowl bootstrap add \
+prowl scripts add \
   --id sync-app \
   --name "Sync App" \
-  --command '/bin/sh "$PROWL_BOOTSTRAP_SCRIPT"' \
+  --command '/bin/sh "$PROWL_SCRIPT"' \
   --env NODE_ENV=development \
   --script-file ./scripts/bootstrap.sh
 
-prowl bootstrap update sync-app --timeout 600
-prowl bootstrap delete sync-app
+prowl scripts update sync-app --timeout 600
+prowl scripts delete sync-app
 ```
 
 `command` is the wrapper used to execute the profile. Prowl writes the profile
-script to a temporary file and exposes its path through `PROWL_BOOTSTRAP_SCRIPT`,
-so the default `/bin/sh "$PROWL_BOOTSTRAP_SCRIPT"` is usually enough.
+script to a temporary file and exposes its path through `PROWL_SCRIPT`,
+so the default `/bin/sh "$PROWL_SCRIPT"` is usually enough.
 `--env KEY=VALUE` can be repeated; values are merged with Prowl-provided
-`PROWL_*` variables when the profile runs. `PROWL_BOOTSTRAP_SCRIPT` is always
+`PROWL_*` variables when the profile runs. `PROWL_SCRIPT` is always
 set by Prowl for the current run.
 
 ## Transport & app launch

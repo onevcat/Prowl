@@ -61,8 +61,8 @@ nonisolated enum SupacodePaths {
     baseDirectory.appending(path: "workspaces", directoryHint: .isDirectory)
   }
 
-  static var bootstrapProfilesURL: URL {
-    baseDirectory.appending(path: "bootstrap-profiles.json", directoryHint: .notDirectory)
+  static var scriptProfilesURL: URL {
+    baseDirectory.appending(path: "script-profiles.json", directoryHint: .notDirectory)
   }
 
   static func repositoryDirectory(for rootURL: URL) -> URL {

@@ -865,9 +865,9 @@ struct RepositorySettingsFeature {
         )
         let bootstrapEntry = entry
         let rootURL = state.rootURL
-        @Shared(.bootstrapProfiles) var bootstrapProfiles
+        @Shared(.scriptProfiles) var scriptProfiles
         let bootstrapRunner = ProjectWorkspaceBootstrapExecutor(
-          profiles: bootstrapProfiles,
+          profiles: scriptProfiles,
           shellClient: shellClient,
           now: { Date() }
         ).runner
@@ -904,9 +904,9 @@ struct RepositorySettingsFeature {
         )
         let bootstrapEntry = entry
         let rootURL = state.rootURL
-        @Shared(.bootstrapProfiles) var bootstrapProfiles
+        @Shared(.scriptProfiles) var scriptProfiles
         let bootstrapRunner = ProjectWorkspaceBootstrapExecutor(
-          profiles: bootstrapProfiles,
+          profiles: scriptProfiles,
           shellClient: shellClient,
           now: { Date() }
         ).runner
@@ -934,9 +934,9 @@ struct RepositorySettingsFeature {
         let originalWorkspace = state.workspace
         let draft = state.workspaceDraft
         let gitRunner = RepositoriesFeature.workspaceGitRunner(shellClient: shellClient)
-        @Shared(.bootstrapProfiles) var bootstrapProfiles
+        @Shared(.scriptProfiles) var scriptProfiles
         let bootstrapRunner = ProjectWorkspaceBootstrapExecutor(
-          profiles: bootstrapProfiles,
+          profiles: scriptProfiles,
           shellClient: shellClient,
           now: { Date() }
         ).runner

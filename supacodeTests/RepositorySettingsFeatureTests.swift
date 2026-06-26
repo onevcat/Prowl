@@ -91,7 +91,7 @@ private func makeWorkspaceBootstrapFixture() throws -> WorkspaceBootstrapFixture
     rootURL: FileManager.default.temporaryDirectory
       .appending(path: "prowl-settings-bootstrap-\(UUID().uuidString)"),
     profileURL: FileManager.default.temporaryDirectory
-      .appending(path: "prowl-settings-bootstrap-profiles-\(UUID().uuidString).json")
+      .appending(path: "prowl-settings-script-profiles-\(UUID().uuidString).json")
   )
   try FileManager.default.createDirectory(
     at: fixture.rootURL.appending(path: ProjectWorkspace.metadataDirectoryName),
@@ -115,7 +115,7 @@ private func makeWorkspaceBootstrapFixture() throws -> WorkspaceBootstrapFixture
           "source_location": "\(fixture.rootURL.appending(path: "app").path(percentEncoded: false))",
           "branch_name": "workspace-app",
           "base_ref": "main",
-          "bootstrap": {
+          "scripts": {
             "script_kind": "user_profile",
             "script_id": "sync-app",
             "run_on": ["manual"],
@@ -535,9 +535,9 @@ struct RepositorySettingsFeatureTests {
     let storage = SettingsTestStorage()
     withDependencies {
       $0.settingsFileStorage = storage.storage
-      $0.bootstrapProfilesFileURL = fixture.profileURL
+      $0.scriptProfilesFileURL = fixture.profileURL
     } operation: {
-      @Shared(.bootstrapProfiles) var storedProfiles: [ProjectWorkspaceBootstrapProfile]
+      @Shared(.scriptProfiles) var storedProfiles: [ScriptProfile]
       $storedProfiles.withLock { $0 = [] }
     }
     var state = RepositorySettingsFeature.State(
@@ -559,7 +559,7 @@ struct RepositorySettingsFeatureTests {
         [GitBranchRefOption(ref: "main", kind: .local)]
       }
       $0.settingsFileStorage = storage.storage
-      $0.bootstrapProfilesFileURL = fixture.profileURL
+      $0.scriptProfilesFileURL = fixture.profileURL
       $0[ShellClient.self] = recordingShellClient(commands: commands) { arguments in
         if arguments.contains(rootURL.appending(path: "web").path(percentEncoded: false)) {
           try FileManager.default.createDirectory(
@@ -702,7 +702,7 @@ struct RepositorySettingsFeatureTests {
     } withDependencies: {
       $0.date.now = Date(timeIntervalSince1970: 50)
       $0.settingsFileStorage = storage.storage
-      $0.bootstrapProfilesFileURL = fixture.profileURL
+      $0.scriptProfilesFileURL = fixture.profileURL
       $0[ShellClient.self] = recordingShellClient(commands: commands)
       $0.gitClient.deleteLocalBranch = { name, url, force in
         deletedBranches.withValue { $0.append((name, url, force)) }
@@ -770,7 +770,7 @@ struct RepositorySettingsFeatureTests {
       $0.date.now = Date(timeIntervalSince1970: 50)
       $0.uuid = .incrementing
       $0.settingsFileStorage = storage.storage
-      $0.bootstrapProfilesFileURL = fixture.profileURL
+      $0.scriptProfilesFileURL = fixture.profileURL
     }
 
     await store.send(.workspaceAddRemoteRepository(name: "Remote", url: "")) {
@@ -826,7 +826,7 @@ struct RepositorySettingsFeatureTests {
         [GitBranchRefOption(ref: "main", kind: .local)]
       }
       $0.settingsFileStorage = storage.storage
-      $0.bootstrapProfilesFileURL = fixture.profileURL
+      $0.scriptProfilesFileURL = fixture.profileURL
     }
     store.exhaustivity = .off
 
@@ -856,14 +856,14 @@ struct RepositorySettingsFeatureTests {
       try? FileManager.default.removeItem(at: fixture.profileURL)
     }
     let profiles = [
-      ProjectWorkspaceBootstrapProfile(id: "sync-app", name: "Sync App", script: "echo sync")
+      ScriptProfile(id: "sync-app", name: "Sync App", script: "echo sync")
     ]
     let storage = SettingsTestStorage()
     withDependencies {
       $0.settingsFileStorage = storage.storage
-      $0.bootstrapProfilesFileURL = fixture.profileURL
+      $0.scriptProfilesFileURL = fixture.profileURL
     } operation: {
-      @Shared(.bootstrapProfiles) var storedProfiles: [ProjectWorkspaceBootstrapProfile]
+      @Shared(.scriptProfiles) var storedProfiles: [ScriptProfile]
       $storedProfiles.withLock { $0 = profiles }
     }
 
@@ -880,7 +880,7 @@ struct RepositorySettingsFeatureTests {
       RepositorySettingsFeature()
     } withDependencies: {
       $0.settingsFileStorage = storage.storage
-      $0.bootstrapProfilesFileURL = fixture.profileURL
+      $0.scriptProfilesFileURL = fixture.profileURL
       $0.uuid = .incrementing
       $0[ShellClient.self] = recordingShellClient(commands: commands)
     }

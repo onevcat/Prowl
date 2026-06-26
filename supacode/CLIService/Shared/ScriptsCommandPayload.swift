@@ -1,4 +1,4 @@
-public struct BootstrapProfilePayloadModel: Codable, Equatable, Sendable {
+public struct ScriptProfilePayloadModel: Codable, Equatable, Sendable {
   public let id: String
   public let name: String
   public let description: String
@@ -36,27 +36,27 @@ public struct BootstrapProfilePayloadModel: Codable, Equatable, Sendable {
   }
 }
 
-public struct BootstrapProfilesPayload: Codable, Equatable, Sendable {
+public struct ScriptProfilesPayload: Codable, Equatable, Sendable {
   public let path: String
-  public let profiles: [BootstrapProfilePayloadModel]
+  public let profiles: [ScriptProfilePayloadModel]
 
-  public init(path: String, profiles: [BootstrapProfilePayloadModel]) {
+  public init(path: String, profiles: [ScriptProfilePayloadModel]) {
     self.path = path
     self.profiles = profiles
   }
 }
 
-public struct BootstrapProfilePayload: Codable, Equatable, Sendable {
+public struct ScriptProfilePayload: Codable, Equatable, Sendable {
   public let path: String
-  public let profile: BootstrapProfilePayloadModel
+  public let profile: ScriptProfilePayloadModel
 
-  public init(path: String, profile: BootstrapProfilePayloadModel) {
+  public init(path: String, profile: ScriptProfilePayloadModel) {
     self.path = path
     self.profile = profile
   }
 }
 
-public struct BootstrapDeletePayload: Codable, Equatable, Sendable {
+public struct ScriptDeletePayload: Codable, Equatable, Sendable {
   public let path: String
   public let id: String
 

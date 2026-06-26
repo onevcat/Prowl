@@ -60,10 +60,10 @@ struct ProjectWorkspaceBootstrapExecutorTests {
     )
     let executor = ProjectWorkspaceBootstrapExecutor(
       profiles: [
-        ProjectWorkspaceBootstrapProfile(
+        ScriptProfile(
           id: "sync-app",
           name: "Sync App",
-          command: "bash $PROWL_BOOTSTRAP_SCRIPT",
+          command: "bash $PROWL_SCRIPT",
           environment: ["CUSTOM_BOOTSTRAP": "yes"],
           script: "echo hello",
           timeoutSeconds: 300
@@ -106,9 +106,9 @@ struct ProjectWorkspaceBootstrapExecutorTests {
     #expect(recorder.environment["PROWL_SOURCE_KIND"] == "remote")
     #expect(recorder.environment["CUSTOM_BOOTSTRAP"] == "yes")
     let scriptPath = try #require(
-      recorder.environment[ProjectWorkspaceBootstrapProfile.bootstrapScriptEnvironmentKey])
+      recorder.environment[ScriptProfile.scriptEnvironmentKey])
     #expect(scriptPath.hasSuffix(".sh"))
-    #expect(recorder.scripts.first == "bash $PROWL_BOOTSTRAP_SCRIPT")
+    #expect(recorder.scripts.first == "bash $PROWL_SCRIPT")
 
     let stateURL =
       rootURL
@@ -144,7 +144,7 @@ struct ProjectWorkspaceBootstrapExecutorTests {
           currentDirectoryURL: currentDirectoryURL
         )
         return AsyncThrowingStream { continuation in
-          let scriptPath = environment[ProjectWorkspaceBootstrapProfile.bootstrapScriptEnvironmentKey] ?? ""
+          let scriptPath = environment[ScriptProfile.scriptEnvironmentKey] ?? ""
           if scriptPath.contains("failing") {
             continuation.finish(
               throwing: ProjectWorkspaceCreationError.bootstrapFailed(
@@ -161,9 +161,9 @@ struct ProjectWorkspaceBootstrapExecutorTests {
     )
     let executor = ProjectWorkspaceBootstrapExecutor(
       profiles: [
-        ProjectWorkspaceBootstrapProfile(id: "first", name: "First", script: "echo first"),
-        ProjectWorkspaceBootstrapProfile(id: "failing", name: "Failing", script: "exit 1"),
-        ProjectWorkspaceBootstrapProfile(id: "last", name: "Last", script: "echo last"),
+        ScriptProfile(id: "first", name: "First", script: "echo first"),
+        ScriptProfile(id: "failing", name: "Failing", script: "exit 1"),
+        ScriptProfile(id: "last", name: "Last", script: "echo last"),
       ],
       shellClient: shell,
       now: { Date(timeIntervalSince1970: 1_234) }
@@ -192,9 +192,9 @@ struct ProjectWorkspaceBootstrapExecutorTests {
 
     #expect(
       recorder.scripts == [
-        ProjectWorkspaceBootstrapProfile.defaultCommand,
-        ProjectWorkspaceBootstrapProfile.defaultCommand,
-        ProjectWorkspaceBootstrapProfile.defaultCommand,
+        ScriptProfile.defaultCommand,
+        ScriptProfile.defaultCommand,
+        ScriptProfile.defaultCommand,
       ])
     let stateURL =
       rootURL
