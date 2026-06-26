@@ -9,6 +9,9 @@ nonisolated struct RepositorySettings: Codable, Equatable, Sendable {
   var setupScript: String
   var archiveScript: String
   var runScript: String
+  var setupScriptProfileID: String?
+  var archiveScriptProfileID: String?
+  var runScriptProfileID: String?
   var openActionID: String
   var worktreeBaseRef: String?
   var worktreeBaseDirectoryPath: String?
@@ -32,6 +35,9 @@ nonisolated struct RepositorySettings: Codable, Equatable, Sendable {
     case setupScript
     case archiveScript
     case runScript
+    case setupScriptProfileID
+    case archiveScriptProfileID
+    case runScriptProfileID
     case openActionID
     case worktreeBaseRef
     case worktreeBaseDirectoryPath
@@ -48,6 +54,9 @@ nonisolated struct RepositorySettings: Codable, Equatable, Sendable {
     setupScript: "",
     archiveScript: "",
     runScript: "",
+    setupScriptProfileID: nil,
+    archiveScriptProfileID: nil,
+    runScriptProfileID: nil,
     openActionID: OpenWorktreeAction.automaticSettingsID,
     worktreeBaseRef: nil,
     worktreeBaseDirectoryPath: nil,
@@ -64,6 +73,9 @@ nonisolated struct RepositorySettings: Codable, Equatable, Sendable {
     setupScript: String,
     archiveScript: String,
     runScript: String,
+    setupScriptProfileID: String? = nil,
+    archiveScriptProfileID: String? = nil,
+    runScriptProfileID: String? = nil,
     openActionID: String,
     worktreeBaseRef: String?,
     worktreeBaseDirectoryPath: String? = nil,
@@ -78,6 +90,9 @@ nonisolated struct RepositorySettings: Codable, Equatable, Sendable {
     self.setupScript = setupScript
     self.archiveScript = archiveScript
     self.runScript = runScript
+    self.setupScriptProfileID = setupScriptProfileID
+    self.archiveScriptProfileID = archiveScriptProfileID
+    self.runScriptProfileID = runScriptProfileID
     self.openActionID = openActionID
     self.worktreeBaseRef = worktreeBaseRef
     self.worktreeBaseDirectoryPath = worktreeBaseDirectoryPath
@@ -105,6 +120,12 @@ nonisolated struct RepositorySettings: Codable, Equatable, Sendable {
     runScript =
       try container.decodeIfPresent(String.self, forKey: .runScript)
       ?? Self.default.runScript
+    setupScriptProfileID =
+      try container.decodeIfPresent(String.self, forKey: .setupScriptProfileID)?.trimmedNilIfEmpty
+    archiveScriptProfileID =
+      try container.decodeIfPresent(String.self, forKey: .archiveScriptProfileID)?.trimmedNilIfEmpty
+    runScriptProfileID =
+      try container.decodeIfPresent(String.self, forKey: .runScriptProfileID)?.trimmedNilIfEmpty
     openActionID =
       try container.decodeIfPresent(String.self, forKey: .openActionID)
       ?? Self.default.openActionID
@@ -182,5 +203,12 @@ extension RepositorySettings {
   ) -> Value? {
     guard let value else { return nil }
     return value == legacyDefault ? nil : value
+  }
+}
+
+private extension String {
+  nonisolated var trimmedNilIfEmpty: String? {
+    let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
   }
 }

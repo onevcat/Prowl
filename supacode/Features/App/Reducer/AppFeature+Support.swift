@@ -168,6 +168,7 @@ extension AppFeature {
     )
     state.openActionIsAutomatic = settings.openActionID == OpenWorktreeAction.automaticSettingsID
     state.selectedRunScript = settings.runScript
+    state.selectedRunScriptProfileID = settings.runScriptProfileID
   }
 
   /// Applies a worktree's user settings (custom commands, keybindings) into
@@ -249,6 +250,35 @@ extension AppFeature {
       return .send(.repositories(.selectRepository(targetID)))
     }
     return .send(.repositories(.selectWorktree(targetID)))
+  }
+
+  func resolvedRunScript(
+    inlineScript: String,
+    profileID: String?,
+    worktree: Worktree
+  ) -> String {
+    resolvedScriptProfileInvocation(profileID: profileID, worktree: worktree) ?? inlineScript
+  }
+
+  func resolvedCustomCommandScript(
+    _ command: UserCustomCommand,
+    worktree: Worktree
+  ) -> String {
+    resolvedScriptProfileInvocation(profileID: command.scriptProfileID, worktree: worktree) ?? command.command
+  }
+
+  private func resolvedScriptProfileInvocation(
+    profileID: String?,
+    worktree: Worktree
+  ) -> String? {
+    guard let profileID else {
+      return nil
+    }
+    @Shared(.scriptProfiles) var scriptProfiles
+    guard let profile = scriptProfiles.first(where: { $0.id == profileID }) else {
+      return ""
+    }
+    return profile.terminalInvocation(environment: worktree.scriptEnvironment)
   }
 }
 

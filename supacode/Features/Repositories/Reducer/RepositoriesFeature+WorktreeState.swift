@@ -1,5 +1,6 @@
 import Foundation
 import IdentifiedCollections
+import Sharing
 
 struct FailedWorktreeCleanup {
   let didRemoveWorktree: Bool
@@ -177,6 +178,21 @@ func cleanupWorktreeState(
 nonisolated func archiveScriptCommand(_ script: String) -> String {
   let normalized = script.replacing("\n", with: "\\n")
   return "bash -lc \(shellQuote(normalized))"
+}
+
+func resolvedRepositoryScript(
+  profileID: String?,
+  inlineScript: String,
+  worktree: Worktree
+) -> String {
+  guard let profileID else {
+    return inlineScript
+  }
+  @Shared(.scriptProfiles) var scriptProfiles
+  guard let profile = scriptProfiles.first(where: { $0.id == profileID }) else {
+    return ""
+  }
+  return profile.terminalInvocation(environment: worktree.scriptEnvironment)
 }
 
 nonisolated func worktreeCreateCommand(

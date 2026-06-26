@@ -317,7 +317,7 @@ final class WorktreeTerminalManager {
     if !autoCloseOnSuccess, state.needsSetupScript() {
       @SharedReader(.repositorySettings(worktree.repositoryRootURL))
       var settings = RepositorySettings.default
-      setupScript = settings.setupScript
+      setupScript = resolvedSetupScript(settings: settings, worktree: worktree)
     } else {
       setupScript = nil
     }
@@ -337,6 +337,17 @@ final class WorktreeTerminalManager {
         state.applyCustomCommandIcon(customCommandIcon, surfaceId: surfaceId)
       }
     }
+  }
+
+  private func resolvedSetupScript(settings: RepositorySettings, worktree: Worktree) -> String {
+    guard let profileID = settings.setupScriptProfileID else {
+      return settings.setupScript
+    }
+    @Shared(.scriptProfiles) var scriptProfiles
+    guard let profile = scriptProfiles.first(where: { $0.id == profileID }) else {
+      return ""
+    }
+    return profile.terminalInvocation(environment: worktree.scriptEnvironment)
   }
 
   private func createSplitAsync(

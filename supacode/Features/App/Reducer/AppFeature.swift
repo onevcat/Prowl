@@ -18,6 +18,7 @@ struct AppFeature {
     /// "Automatic" entry's checkmark in the toolbar's Open menu.
     var openActionIsAutomatic: Bool = true
     var selectedRunScript: String = ""
+    var selectedRunScriptProfileID: String?
     var selectedCustomCommands: [UserCustomCommand] = []
     var resolvedKeybindings: ResolvedKeybindingMap = .appDefaults
     var runScriptDraft: String = ""
@@ -664,7 +665,12 @@ struct AppFeature {
         guard let worktree = actionTargetWorktree(repositories: state.repositories) else {
           return .none
         }
-        let trimmed = state.selectedRunScript.trimmingCharacters(in: .whitespacesAndNewlines)
+        let script = resolvedRunScript(
+          inlineScript: state.selectedRunScript,
+          profileID: state.selectedRunScriptProfileID,
+          worktree: worktree
+        )
+        let trimmed = script.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
           if state.isRunScriptPromptPresented {
             return .none
@@ -674,7 +680,6 @@ struct AppFeature {
           return .none
         }
         analyticsClient.capture("script_run", nil)
-        let script = state.selectedRunScript
         return .run { _ in
           await terminalClient.send(.runScript(worktree, script: script))
         }
@@ -690,7 +695,10 @@ struct AppFeature {
         guard customCommand.hasRunnableCommand else {
           return .none
         }
-        let command = customCommand.command
+        let command = resolvedCustomCommandScript(customCommand, worktree: worktree)
+        guard !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+          return .none
+        }
         let closeOnSuccess = customCommand.closeOnSuccess
         let commandName = customCommand.resolvedTitle
         // Treat the model's "terminal" placeholder (and an empty value)

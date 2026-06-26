@@ -102,7 +102,11 @@ extension RepositoriesFeature {
       }
       state.alert = nil
       @Shared(.repositorySettings(worktree.repositoryRootURL)) var repositorySettings
-      let script = repositorySettings.archiveScript
+      let script = resolvedRepositoryScript(
+        profileID: repositorySettings.archiveScriptProfileID,
+        inlineScript: repositorySettings.archiveScript,
+        worktree: worktree
+      )
       let commandText = archiveScriptCommand(script)
       let trimmed = script.trimmingCharacters(in: .whitespacesAndNewlines)
       if trimmed.isEmpty {

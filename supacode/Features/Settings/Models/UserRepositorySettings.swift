@@ -33,6 +33,7 @@ nonisolated struct UserCustomCommand: Codable, Equatable, Sendable, Identifiable
   var title: String
   var systemImage: String
   var command: String
+  var scriptProfileID: String?
   var execution: UserCustomCommandExecution
   var splitDirection: UserCustomSplitDirection
   var closeOnSuccess: Bool
@@ -43,6 +44,7 @@ nonisolated struct UserCustomCommand: Codable, Equatable, Sendable, Identifiable
     title: String,
     systemImage: String,
     command: String,
+    scriptProfileID: String? = nil,
     execution: UserCustomCommandExecution,
     splitDirection: UserCustomSplitDirection = .right,
     closeOnSuccess: Bool = false,
@@ -52,6 +54,7 @@ nonisolated struct UserCustomCommand: Codable, Equatable, Sendable, Identifiable
     self.title = title
     self.systemImage = systemImage
     self.command = command
+    self.scriptProfileID = scriptProfileID?.trimmedNilIfEmpty
     self.execution = execution
     self.splitDirection = splitDirection
     self.closeOnSuccess = closeOnSuccess
@@ -59,7 +62,7 @@ nonisolated struct UserCustomCommand: Codable, Equatable, Sendable, Identifiable
   }
 
   private enum CodingKeys: String, CodingKey {
-    case id, title, systemImage, command, execution, splitDirection, closeOnSuccess, shortcut
+    case id, title, systemImage, command, scriptProfileID, execution, splitDirection, closeOnSuccess, shortcut
   }
 
   init(from decoder: Decoder) throws {
@@ -68,6 +71,7 @@ nonisolated struct UserCustomCommand: Codable, Equatable, Sendable, Identifiable
     self.title = try container.decode(String.self, forKey: .title)
     self.systemImage = try container.decode(String.self, forKey: .systemImage)
     self.command = try container.decode(String.self, forKey: .command)
+    self.scriptProfileID = try container.decodeIfPresent(String.self, forKey: .scriptProfileID)?.trimmedNilIfEmpty
     self.execution = try container.decode(UserCustomCommandExecution.self, forKey: .execution)
     self.splitDirection =
       try container.decodeIfPresent(UserCustomSplitDirection.self, forKey: .splitDirection) ?? .right
@@ -92,6 +96,7 @@ nonisolated struct UserCustomCommand: Codable, Equatable, Sendable, Identifiable
       title: title,
       systemImage: systemImage,
       command: command,
+      scriptProfileID: scriptProfileID,
       execution: execution,
       splitDirection: splitDirection,
       closeOnSuccess: closeOnSuccess,
@@ -116,7 +121,14 @@ nonisolated struct UserCustomCommand: Codable, Equatable, Sendable, Identifiable
   }
 
   var hasRunnableCommand: Bool {
-    !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    scriptProfileID != nil || !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+}
+
+private extension String {
+  nonisolated var trimmedNilIfEmpty: String? {
+    let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
   }
 }
 

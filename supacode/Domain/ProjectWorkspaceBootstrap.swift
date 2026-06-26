@@ -205,6 +205,38 @@ nonisolated struct ScriptProfile: Codable, Equatable, Identifiable, Sendable {
   }
 }
 
+extension ScriptProfile {
+  func terminalInvocation(environment baseEnvironment: [String: String] = [:]) -> String {
+    let normalized = normalized
+    let scriptPath =
+      FileManager.default.temporaryDirectory
+      .appending(path: "prowl-script-\(UUID().uuidString).sh", directoryHint: .notDirectory)
+      .path(percentEncoded: false)
+    var environment = baseEnvironment
+    environment.merge(normalized.environment, uniquingKeysWith: { _, custom in custom })
+    environment[Self.scriptEnvironmentKey] = scriptPath
+
+    var lines: [String] = [
+      "cat > \(scriptShellQuote(scriptPath)) <<'PROWL_SCRIPT_EOF'",
+      normalized.script,
+      "PROWL_SCRIPT_EOF",
+      "chmod +x \(scriptShellQuote(scriptPath))",
+    ]
+    lines.append(contentsOf: environment.sorted { $0.key < $1.key }.map { key, value in
+      "export \(key)=\(scriptShellQuote(value))"
+    })
+    lines.append(normalized.command)
+    lines.append("status=$?")
+    lines.append("rm -f \(scriptShellQuote(scriptPath))")
+    lines.append("exit $status")
+    return lines.joined(separator: "\n")
+  }
+}
+
+nonisolated func scriptShellQuote(_ value: String) -> String {
+  "'\(value.replacing("'", with: "'\"'\"'"))'"
+}
+
 nonisolated struct ProjectWorkspaceBootstrapContext: Equatable, Sendable {
   var workspaceRootURL: URL
   var repositoryRootURL: URL
