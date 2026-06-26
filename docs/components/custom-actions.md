@@ -22,6 +22,10 @@ All scripts run with these **environment variables** injected:
 - `PROWL_WORKTREE_PATH` — the active worktree's directory.
 - `PROWL_ROOT_PATH` — the repository root.
 
+Run Script, Setup Script, Archive Script, and Custom Commands can keep their
+inline command text or reference a reusable Script Profile from
+`~/.prowl/script-profiles.json`. Existing inline settings remain the default.
+
 ## Run Script (`⌘R` / `⌘.`)
 
 A single per-repo command you launch on demand.
@@ -82,7 +86,8 @@ in `~/.prowl/repo/<repo-name>/prowl.onevcat.json`.
 ## Settings recap
 
 - Per repo (Repo Settings): `runScript`, `setupScript`, `archiveScript`, and the
-  Custom Commands list.
+  Custom Commands list. Each can use inline command text or a Script Profile
+  reference.
 - Global: `showRunButtonInToolbar`, `showDefaultEditorInToolbar`.
 
 ## Gotchas for agents

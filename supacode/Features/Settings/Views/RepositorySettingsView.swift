@@ -5,7 +5,7 @@ import SwiftUI
 
 struct RepositorySettingsView: View {
   @Bindable var store: StoreOf<RepositorySettingsFeature>
-  @Shared(.scriptProfiles) private var scriptProfiles
+  @Shared(.scriptProfiles) var scriptProfiles
   @State private var isBranchPickerPresented = false
   @State private var branchSearchText = ""
   @State private var githubIdentityViewModel = RepositoryGithubIdentityViewModel()
@@ -304,11 +304,11 @@ struct RepositorySettingsView: View {
 
       if store.showsSetupScriptSettings {
         Section {
-          PlainTextEditor(
-            text: settings.setupScript,
+          repositoryScriptSourceEditor(
+            inlineScript: settings.setupScript,
+            profileID: settings.setupScriptProfileID,
             placeholder: "claude --dangerously-skip-permissions"
           )
-          .frame(minHeight: 120)
         } header: {
           VStack(alignment: .leading, spacing: 4) {
             Text("Setup Script")
@@ -320,11 +320,11 @@ struct RepositorySettingsView: View {
 
       if store.showsArchiveScriptSettings {
         Section {
-          PlainTextEditor(
-            text: settings.archiveScript,
+          repositoryScriptSourceEditor(
+            inlineScript: settings.archiveScript,
+            profileID: settings.archiveScriptProfileID,
             placeholder: "docker compose down"
           )
-          .frame(minHeight: 120)
         } header: {
           VStack(alignment: .leading, spacing: 4) {
             Text("Archive Script")
@@ -336,11 +336,11 @@ struct RepositorySettingsView: View {
 
       if store.showsRunScriptSettings {
         Section {
-          PlainTextEditor(
-            text: settings.runScript,
+          repositoryScriptSourceEditor(
+            inlineScript: settings.runScript,
+            profileID: settings.runScriptProfileID,
             placeholder: "npm run dev"
           )
-          .frame(minHeight: 120)
         } header: {
           VStack(alignment: .leading, spacing: 4) {
             Text("Run Script")
@@ -454,6 +454,88 @@ struct RepositorySettingsView: View {
       workspaceStatusView
     }
     .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  @ViewBuilder
+  private func repositoryScriptSourceEditor(
+    inlineScript: Binding<String>,
+    profileID: Binding<String?>,
+    placeholder: String
+  ) -> some View {
+    let usesProfile = Binding<Bool>(
+      get: { profileID.wrappedValue != nil },
+      set: { useProfile in
+        if useProfile {
+          profileID.wrappedValue = profileID.wrappedValue ?? scriptProfiles.first?.id
+        } else {
+          profileID.wrappedValue = nil
+        }
+      }
+    )
+
+    VStack(alignment: .leading, spacing: 10) {
+      Picker("Source", selection: usesProfile) {
+        Text("Inline Script").tag(false)
+        Text("Script Profile").tag(true)
+      }
+      .pickerStyle(.segmented)
+      .frame(maxWidth: 260)
+
+      if usesProfile.wrappedValue {
+        LabeledContent("Profile") {
+          Picker("Profile", selection: profileID) {
+            Text("Missing Profile").tag(String?.none)
+            ForEach(scriptProfiles) { profile in
+              Text(scriptProfileTitle(profile)).tag(String?.some(profile.id))
+            }
+          }
+          .labelsHidden()
+          .frame(maxWidth: 320)
+        }
+
+        if let profile = scriptProfiles.first(where: { $0.id == profileID.wrappedValue }) {
+          scriptProfilePreview(profile)
+        } else {
+          ContentUnavailableView(
+            "No Script Profile Selected",
+            systemImage: "terminal",
+            description: Text("Create or select a script profile in Settings → Scripts.")
+          )
+          .frame(minHeight: 120)
+        }
+      } else {
+        PlainTextEditor(
+          text: inlineScript,
+          placeholder: placeholder
+        )
+        .frame(minHeight: 120)
+      }
+    }
+  }
+
+  func scriptProfilePreview(_ profile: ScriptProfile) -> some View {
+    VStack(alignment: .leading, spacing: 6) {
+      Text(profile.command)
+        .font(.caption.monospaced())
+        .foregroundStyle(.secondary)
+        .lineLimit(2)
+        .textSelection(.enabled)
+      Text(profile.script.isEmpty ? "Empty script" : profile.script)
+        .font(.caption.monospaced())
+        .foregroundStyle(profile.script.isEmpty ? .tertiary : .secondary)
+        .lineLimit(6)
+        .textSelection(.enabled)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(8)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+    }
+  }
+
+  func scriptProfileTitle(_ profile: ScriptProfile) -> String {
+    if profile.name.isEmpty || profile.name == profile.id {
+      return profile.id
+    }
+    return "\(profile.name) (\(profile.id))"
   }
 
   private func workspaceMetadataEditor(

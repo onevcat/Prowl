@@ -207,6 +207,26 @@ struct AppFeatureCustomCommandTests {
     #expect(decoded.execution == .shellScript)
   }
 
+  @Test func userCustomCommandDecodesScriptProfileID() throws {
+    let data = Data(
+      """
+      {
+        "id": "abc",
+        "title": "Profile",
+        "systemImage": "terminal",
+        "command": "",
+        "scriptProfileID": " build-profile ",
+        "execution": "shellScript"
+      }
+      """.utf8
+    )
+
+    let decoded = try JSONDecoder().decode(UserCustomCommand.self, from: data)
+
+    #expect(decoded.scriptProfileID == "build-profile")
+    #expect(decoded.hasRunnableCommand)
+  }
+
   @Test(.dependencies) func invalidCommandIndexDoesNothing() async {
     let worktree = makeWorktree()
     let sent = LockIsolated<[TerminalClient.Command]>([])

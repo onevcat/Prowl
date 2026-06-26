@@ -81,6 +81,28 @@ struct RepositorySettingsKeyTests {
     #expect(settings.archiveScript.isEmpty)
   }
 
+  @Test func decodeScriptProfileReferencesTrimsEmptyValues() throws {
+    let data = Data(
+      """
+      {
+        "setupScript": "echo setup",
+        "archiveScript": "echo archive",
+        "runScript": "echo run",
+        "setupScriptProfileID": " setup-profile ",
+        "archiveScriptProfileID": " ",
+        "runScriptProfileID": "run-profile",
+        "openActionID": "automatic"
+      }
+      """.utf8
+    )
+
+    let settings = try JSONDecoder().decode(RepositorySettings.self, from: data)
+
+    #expect(settings.setupScriptProfileID == "setup-profile")
+    #expect(settings.archiveScriptProfileID == nil)
+    #expect(settings.runScriptProfileID == "run-profile")
+  }
+
   @Test(.dependencies) func loadNormalizesLegacyDefaultOverridesToInheritedValues() throws {
     let globalStorage = SettingsTestStorage()
     let localStorage = RepositoryLocalSettingsTestStorage()

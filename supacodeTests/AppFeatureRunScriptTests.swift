@@ -74,6 +74,50 @@ struct AppFeatureRunScriptTests {
     #expect(savedRunScript == "npm run dev")
   }
 
+  @Test(.dependencies) func runScriptUsesScriptProfileWhenConfigured() async {
+    let worktree = makeWorktree()
+    let repositories = makeRepositoriesState(worktree: worktree)
+    let sent = LockIsolated<[TerminalClient.Command]>([])
+    var state = AppFeature.State(
+      repositories: repositories,
+      settings: SettingsFeature.State()
+    )
+    state.selectedRunScript = "echo inline"
+    state.selectedRunScriptProfileID = "build"
+    let store = withDependencies { _ in
+      @Shared(.scriptProfiles) var scriptProfiles
+      $scriptProfiles.withLock {
+        $0 = [
+          ScriptProfile(
+            id: "build",
+            name: "Build",
+            command: #"/bin/sh "$PROWL_SCRIPT""#,
+            environment: ["NODE_ENV": "test"],
+            script: "echo profile"
+          )
+        ]
+      }
+    } operation: {
+      TestStore(initialState: state) {
+        AppFeature()
+      } withDependencies: {
+        $0.terminalClient.send = { command in
+          sent.withValue { $0.append(command) }
+        }
+      }
+    }
+    await store.send(.runScript)
+    await store.finish()
+
+    guard case .runScript(_, let script)? = sent.value.first else {
+      Issue.record("Expected run script command")
+      return
+    }
+    #expect(script.contains("echo profile"))
+    #expect(script.contains("export NODE_ENV='test'"))
+    #expect(script.contains("PROWL_SCRIPT"))
+  }
+
   @Test(.dependencies) func runScriptDoesNotOverwriteDraftWhenPromptAlreadyPresented() async {
     let worktree = makeWorktree()
     let repositories = makeRepositoriesState(worktree: worktree)

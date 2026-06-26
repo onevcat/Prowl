@@ -420,13 +420,7 @@ extension RepositorySettingsView {
         .help("Direction to split the focused terminal pane.")
       }
 
-      PlainTextEditor(
-        text: command.command,
-        isMonospaced: true,
-        shouldFocus: true,
-        placeholder: scriptPlaceholder(for: command.wrappedValue.execution)
-      )
-      .frame(height: 140)
+      customCommandSourceEditor(command: command)
 
       Text(scriptDescription(for: command.wrappedValue.execution))
         .font(.caption)
@@ -441,6 +435,63 @@ extension RepositorySettingsView {
     }
     .padding(12)
     .frame(width: 420)
+  }
+
+  @ViewBuilder
+  func customCommandSourceEditor(command: Binding<UserCustomCommand>) -> some View {
+    let usesProfile = Binding<Bool>(
+      get: { command.wrappedValue.scriptProfileID != nil },
+      set: { useProfile in
+        if useProfile {
+          command.wrappedValue.scriptProfileID = command.wrappedValue.scriptProfileID ?? scriptProfiles.first?.id
+        } else {
+          command.wrappedValue.scriptProfileID = nil
+        }
+      }
+    )
+
+    VStack(alignment: .leading, spacing: 8) {
+      Picker("Source", selection: usesProfile) {
+        Text("Inline Command").tag(false)
+        Text("Script Profile").tag(true)
+      }
+      .pickerStyle(.segmented)
+
+      if usesProfile.wrappedValue {
+        Picker(
+          "Profile",
+          selection: Binding<String?>(
+            get: { command.wrappedValue.scriptProfileID },
+            set: { command.wrappedValue.scriptProfileID = $0 }
+          )
+        ) {
+          Text("Missing Profile").tag(String?.none)
+          ForEach(scriptProfiles) { profile in
+            Text(scriptProfileTitle(profile)).tag(String?.some(profile.id))
+          }
+        }
+        .pickerStyle(.menu)
+
+        if let profile = scriptProfiles.first(where: { $0.id == command.wrappedValue.scriptProfileID }) {
+          scriptProfilePreview(profile)
+        } else {
+          ContentUnavailableView(
+            "No Script Profile Selected",
+            systemImage: "terminal",
+            description: Text("Create or select a script profile in Settings → Scripts.")
+          )
+          .frame(height: 140)
+        }
+      } else {
+        PlainTextEditor(
+          text: command.command,
+          isMonospaced: true,
+          shouldFocus: true,
+          placeholder: scriptPlaceholder(for: command.wrappedValue.execution)
+        )
+        .frame(height: 140)
+      }
+    }
   }
 
   var selectedCommandInvalidMessage: String? {
@@ -609,6 +660,7 @@ extension RepositorySettingsView {
           command.title = updatedCommand.title
           command.systemImage = updatedCommand.systemImage
           command.command = updatedCommand.command
+          command.scriptProfileID = updatedCommand.scriptProfileID
           command.execution = updatedCommand.execution
           command.splitDirection = updatedCommand.splitDirection
           command.closeOnSuccess = updatedCommand.closeOnSuccess
