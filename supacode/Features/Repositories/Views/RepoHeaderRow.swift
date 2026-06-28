@@ -94,6 +94,7 @@ struct RemoteAvatarView: View {
           .aspectRatio(contentMode: .fit)
           .foregroundStyle(.tertiary)
           .padding(size * 0.2)
+          .accessibilityHidden(true)
       )
   }
 }
