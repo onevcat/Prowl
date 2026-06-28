@@ -16,6 +16,9 @@ struct RepoHeaderRow: View {
   /// Repo root URL — needed by `RepositoryIconImage` to resolve
   /// user-imported image filenames into absolute file URLs.
   let repositoryRootURL: URL?
+  /// Remote avatar URL fetched from the code host (e.g. GitHub owner
+  /// avatar). Only used when `icon` is `nil`.
+  let remoteAvatarURL: URL?
   var nameTooltip: String?
 
   var body: some View {
@@ -27,6 +30,8 @@ struct RepoHeaderRow: View {
           tintColor: iconTint,
           size: 14
         )
+      } else if let remoteAvatarURL {
+        RemoteAvatarView(url: remoteAvatarURL, size: 14)
       }
       RepoDisplayName(
         fallbackName: name,
@@ -50,6 +55,46 @@ struct RepoHeaderRow: View {
           }
       }
     }
+  }
+}
+
+/// Renders a remote avatar URL as a small circular image. Shows a
+/// placeholder initials badge while loading or on failure.
+struct RemoteAvatarView: View {
+  let url: URL
+  let size: CGFloat
+
+  var body: some View {
+    AsyncImage(url: url) { phase in
+      switch phase {
+      case .empty:
+        placeholder
+      case .success(let image):
+        image
+          .resizable()
+          .aspectRatio(contentMode: .fill)
+          .clipShape(Circle())
+      case .failure:
+        placeholder
+      @unknown default:
+        placeholder
+      }
+    }
+    .frame(width: size, height: size)
+    .accessibilityHidden(true)
+  }
+
+  @ViewBuilder
+  private var placeholder: some View {
+    Circle()
+      .fill(.quaternary)
+      .overlay(
+        Image(systemName: "person.circle.fill")
+          .resizable()
+          .aspectRatio(contentMode: .fit)
+          .foregroundStyle(.tertiary)
+          .padding(size * 0.2)
+      )
   }
 }
 
@@ -93,21 +138,24 @@ struct RepoHeaderTabCountBadge: View {
       isRemoving: false,
       icon: nil,
       iconTint: nil,
-      repositoryRootURL: nil
+      repositoryRootURL: nil,
+      remoteAvatarURL: nil
     )
     RepoHeaderRow(
       name: "ghostty",
       isRemoving: false,
       icon: .sfSymbol("folder.fill"),
       iconTint: .blue,
-      repositoryRootURL: URL(fileURLWithPath: "/tmp/ghostty")
+      repositoryRootURL: URL(fileURLWithPath: "/tmp/ghostty"),
+      remoteAvatarURL: nil
     )
     RepoHeaderRow(
       name: "removing-repo",
       isRemoving: true,
       icon: .sfSymbol("hammer.fill"),
       iconTint: .orange,
-      repositoryRootURL: URL(fileURLWithPath: "/tmp/removing")
+      repositoryRootURL: URL(fileURLWithPath: "/tmp/removing"),
+      remoteAvatarURL: nil
     )
   }
   .padding()

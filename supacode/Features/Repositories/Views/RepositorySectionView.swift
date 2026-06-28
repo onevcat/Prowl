@@ -16,6 +16,7 @@ struct RepositorySectionView: View {
   @Environment(\.colorScheme) private var colorScheme
   @Environment(\.resolvedKeybindings) private var resolvedKeybindings
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Dependency(GitClientDependency.self) private var gitClient
   @State private var isHovering = false
   @Shared(.repositoryAppearances) private var repositoryAppearances
 
@@ -43,6 +44,7 @@ struct RepositorySectionView: View {
       }
     }
     let appearance = repositoryAppearances[repository.id] ?? .empty
+    let remoteAvatarURL = RemoteAvatarStore.shared.avatarURL(forRepositoryRoot: repository.rootURL)
     let header = HStack {
       // Inner HStack groups the name row and the tab-count badge so they
       // share the leading-aligned region of the outer header. Crucially
@@ -57,6 +59,7 @@ struct RepositorySectionView: View {
           icon: appearance.icon ?? (repository.isWorkspace ? .sfSymbol("folder") : nil),
           iconTint: appearance.color?.color ?? .accentColor,
           repositoryRootURL: repository.rootURL,
+          remoteAvatarURL: remoteAvatarURL,
           nameTooltip: repository.capabilities.supportsWorktrees
             ? (isExpanded ? "Collapse" : "Expand")
             : (repository.isWorkspace ? "Open terminal in workspace" : "Open terminal in folder")
@@ -216,6 +219,26 @@ struct RepositorySectionView: View {
         withAnimation(.easeOut(duration: 0.15)) {
           isHovering = hovering
         }
+      }
+    }
+    .onAppear {
+      // Kick off GitHub owner resolution if the repo has no user-set icon.
+      let appearance = repositoryAppearances[repository.id] ?? .empty
+      if appearance.icon == nil {
+        RemoteAvatarStore.shared.ensureOwnerResolved(
+          forRepositoryRoot: repository.rootURL,
+          gitClient: gitClient
+        )
+      }
+    }
+    .onChange(of: repositoryAppearances[repository.id]) { _, _ in
+      // If user clears their custom icon, re-resolve the GitHub owner.
+      let appearance = repositoryAppearances[repository.id] ?? .empty
+      if appearance.icon == nil {
+        RemoteAvatarStore.shared.ensureOwnerResolved(
+          forRepositoryRoot: repository.rootURL,
+          gitClient: gitClient
+        )
       }
     }
     .onTapGesture {
