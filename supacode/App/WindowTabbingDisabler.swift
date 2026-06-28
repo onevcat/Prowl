@@ -31,7 +31,10 @@ final class WindowTabbingView: NSView, NSWindowDelegate {
   }
 
   func windowShouldClose(_ sender: NSWindow) -> Bool {
-    sender.orderOut(nil)
+    // Prowl is a single-window app. Calling orderOut(nil) here breaks
+    // fullscreen state and destroys the Ghostty Metal render layer when
+    // terminal surfaces are closed, causing a black screen on re-show.
+    // Just return false to keep the window visible.
     return false
   }
 }
