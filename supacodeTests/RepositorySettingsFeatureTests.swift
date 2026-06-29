@@ -115,9 +115,9 @@ private func makeWorkspaceBootstrapFixture() throws -> WorkspaceBootstrapFixture
           "source_location": "\(fixture.rootURL.appending(path: "app").path(percentEncoded: false))",
           "branch_name": "workspace-app",
           "base_ref": "main",
-          "scripts": {
+          "bootstrap": {
             "script_kind": "user_profile",
-            "script_id": "sync-app",
+            "script_ids": ["sync-app"],
             "run_on": ["manual"],
             "required": true
           }
@@ -858,14 +858,6 @@ struct RepositorySettingsFeatureTests {
     let profiles = [
       ScriptProfile(id: "sync-app", name: "Sync App", script: "echo sync")
     ]
-    let storage = SettingsTestStorage()
-    withDependencies {
-      $0.settingsFileStorage = storage.storage
-      $0.scriptProfilesFileURL = fixture.profileURL
-    } operation: {
-      @Shared(.scriptProfiles) var storedProfiles: [ScriptProfile]
-      $storedProfiles.withLock { $0 = profiles }
-    }
 
     let workspace = try #require(ProjectWorkspace.load(from: rootURL))
     var state = RepositorySettingsFeature.State(
@@ -879,10 +871,10 @@ struct RepositorySettingsFeatureTests {
     let store = TestStore(initialState: state) {
       RepositorySettingsFeature()
     } withDependencies: {
-      $0.settingsFileStorage = storage.storage
-      $0.scriptProfilesFileURL = fixture.profileURL
       $0.uuid = .incrementing
       $0[ShellClient.self] = recordingShellClient(commands: commands)
+      @Shared(.scriptProfiles) var storedProfiles: [ScriptProfile]
+      $storedProfiles.withLock { $0 = profiles }
     }
 
     await store.send(.workspaceAddRemoteRepository(name: "Web", url: "")) {
@@ -902,8 +894,13 @@ struct RepositorySettingsFeatureTests {
     await store.send(.runWorkspaceBootstrapButtonTapped(id: UUID(0).uuidString))
     #expect(commands.value.isEmpty)
 
-    await store.send(.runWorkspaceBootstrapButtonTapped(id: "app"))
+    await store.send(.runWorkspaceBootstrapButtonTapped(id: "app")) {
+      $0.workspaceSaveStatus = "Running bootstrap for App..."
+      $0.workspaceSaveError = nil
+      $0.runningWorkspaceBootstrapIDs = ["app"]
+    }
     await store.receive(\.workspaceBootstrapRan) {
+      $0.runningWorkspaceBootstrapIDs = []
       $0.workspaceSaveStatus = "Ran bootstrap for App."
       $0.workspaceSaveError = nil
     }
@@ -911,6 +908,50 @@ struct RepositorySettingsFeatureTests {
     #expect(
       commands.value.first?.currentDirectoryURL.map(normalizedPath)
         == normalizedPath(rootURL.appending(path: "app")))
+  }
+
+  @Test(.dependencies) func workspaceManualBootstrapProfileShowsRunningState() async throws {
+    let fixture = try makeWorkspaceBootstrapFixture()
+    let rootURL = fixture.rootURL
+    defer {
+      try? FileManager.default.removeItem(at: fixture.rootURL)
+      try? FileManager.default.removeItem(at: fixture.profileURL)
+    }
+    let profiles = [
+      ScriptProfile(id: "sync-app", name: "Sync App", script: "echo sync")
+    ]
+
+    let workspace = try #require(ProjectWorkspace.load(from: rootURL))
+    var state = RepositorySettingsFeature.State(
+      rootURL: rootURL,
+      repositoryKind: .plain,
+      settings: .default,
+      userSettings: .default
+    )
+    state.setWorkspace(workspace)
+    let commands = LockIsolated<[ShellCommandRecord]>([])
+    let store = TestStore(initialState: state) {
+      RepositorySettingsFeature()
+    } withDependencies: {
+      $0[ShellClient.self] = recordingShellClient(commands: commands)
+      @Shared(.scriptProfiles) var storedProfiles: [ScriptProfile]
+      $storedProfiles.withLock { $0 = profiles }
+    }
+
+    let runID = RepositorySettingsFeature.workspaceBootstrapRunID(
+      repositoryID: "app",
+      scriptID: "sync-app"
+    )
+    await store.send(.runWorkspaceBootstrapProfileButtonTapped(id: "app", scriptID: "sync-app")) {
+      $0.workspaceSaveStatus = "Running sync-app for App..."
+      $0.workspaceSaveError = nil
+      $0.runningWorkspaceBootstrapIDs = [runID]
+    }
+    await store.receive(\.workspaceBootstrapRan) {
+      $0.runningWorkspaceBootstrapIDs = []
+      $0.workspaceSaveStatus = "Ran bootstrap for sync-app for App."
+      $0.workspaceSaveError = nil
+    }
   }
 
   @Test(.dependencies) func taskLoadsLatestUserSettingsAfterAsyncGitProbe() async throws {

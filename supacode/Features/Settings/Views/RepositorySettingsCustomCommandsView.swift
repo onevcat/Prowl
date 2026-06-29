@@ -443,7 +443,7 @@ extension RepositorySettingsView {
       get: { command.wrappedValue.scriptProfileID != nil },
       set: { useProfile in
         if useProfile {
-          command.wrappedValue.scriptProfileID = command.wrappedValue.scriptProfileID ?? scriptProfiles.first?.id
+          command.wrappedValue.scriptProfileID = command.wrappedValue.scriptProfileID ?? scriptProfiles.first?.id ?? ""
         } else {
           command.wrappedValue.scriptProfileID = nil
         }

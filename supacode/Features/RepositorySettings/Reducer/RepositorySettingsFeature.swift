@@ -164,6 +164,7 @@ struct RepositorySettingsFeature {
     var pendingWorkspaceBranchDeletion: RepositorySettingsWorkspaceBranchDeletion?
     var workspaceSaveError: String?
     var workspaceSaveStatus: String?
+    var runningWorkspaceBootstrapIDs: Set<String> = []
     var settings: RepositorySettings
     var userSettings: UserRepositorySettings
     var appearance: RepositoryAppearance = .empty
@@ -357,8 +358,8 @@ struct RepositorySettingsFeature {
     case workspaceMetadataSaveFailed(String)
     case workspaceBranchDeleted(String)
     case workspaceBranchDeleteSkipped(String)
-    case workspaceBootstrapRan(String)
-    case workspaceBootstrapRunFailed(String)
+    case workspaceBootstrapRan(id: String, name: String)
+    case workspaceBootstrapRunFailed(id: String, message: String)
     case workspaceGuideRegenerated
     case workspaceGuideRegenerateFailed(String)
     case delegate(Delegate)
@@ -857,6 +858,9 @@ struct RepositorySettingsFeature {
         else {
           return .none
         }
+        state.workspaceSaveError = nil
+        state.workspaceSaveStatus = "Running bootstrap for \(draftRepository.name)..."
+        state.runningWorkspaceBootstrapIDs.insert(id)
         entry.bootstrap = ProjectWorkspaceRepositoryBootstrap(
           scriptKind: .userProfile,
           scriptIDs: draftRepository.bootstrapScriptIDs,
@@ -879,9 +883,9 @@ struct RepositorySettingsFeature {
               timing: .manual,
               bootstrapRunner: bootstrapRunner
             )
-            await send(.workspaceBootstrapRan(bootstrapEntry.name))
+            await send(.workspaceBootstrapRan(id: id, name: bootstrapEntry.name))
           } catch {
-            await send(.workspaceBootstrapRunFailed(error.localizedDescription))
+            await send(.workspaceBootstrapRunFailed(id: id, message: error.localizedDescription))
           }
         }
 
@@ -896,6 +900,11 @@ struct RepositorySettingsFeature {
         else {
           return .none
         }
+        let runID = Self.workspaceBootstrapRunID(repositoryID: id, scriptID: scriptID)
+        let scriptTitle = scriptID
+        state.workspaceSaveError = nil
+        state.workspaceSaveStatus = "Running \(scriptTitle) for \(draftRepository.name)..."
+        state.runningWorkspaceBootstrapIDs.insert(runID)
         entry.bootstrap = ProjectWorkspaceRepositoryBootstrap(
           scriptKind: .userProfile,
           scriptIDs: [scriptID],
@@ -918,9 +927,9 @@ struct RepositorySettingsFeature {
               timing: .manual,
               bootstrapRunner: bootstrapRunner
             )
-            await send(.workspaceBootstrapRan(bootstrapEntry.name))
+            await send(.workspaceBootstrapRan(id: runID, name: "\(scriptTitle) for \(bootstrapEntry.name)"))
           } catch {
-            await send(.workspaceBootstrapRunFailed(error.localizedDescription))
+            await send(.workspaceBootstrapRunFailed(id: runID, message: error.localizedDescription))
           }
         }
 
@@ -1031,12 +1040,14 @@ struct RepositorySettingsFeature {
         state.workspaceSaveError = nil
         return .none
 
-      case .workspaceBootstrapRan(let name):
+      case .workspaceBootstrapRan(let id, let name):
+        state.runningWorkspaceBootstrapIDs.remove(id)
         state.workspaceSaveStatus = "Ran bootstrap for \(name)."
         state.workspaceSaveError = nil
         return .none
 
-      case .workspaceBootstrapRunFailed(let message):
+      case .workspaceBootstrapRunFailed(let id, let message):
+        state.runningWorkspaceBootstrapIDs.remove(id)
         state.workspaceSaveError = message
         state.workspaceSaveStatus = nil
         return .none
@@ -1186,6 +1197,10 @@ struct RepositorySettingsFeature {
       runOn: [.manual],
       required: false
     )
+  }
+
+  nonisolated static func workspaceBootstrapRunID(repositoryID: String, scriptID: String) -> String {
+    "\(repositoryID)::\(scriptID)"
   }
 
   private func deleteWorkspaceBranchEffect(_ deletion: RepositorySettingsWorkspaceBranchDeletion) -> Effect<Action> {

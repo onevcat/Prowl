@@ -466,7 +466,7 @@ struct RepositorySettingsView: View {
       get: { profileID.wrappedValue != nil },
       set: { useProfile in
         if useProfile {
-          profileID.wrappedValue = profileID.wrappedValue ?? scriptProfiles.first?.id
+          profileID.wrappedValue = profileID.wrappedValue ?? scriptProfiles.first?.id ?? ""
         } else {
           profileID.wrappedValue = nil
         }
@@ -474,12 +474,18 @@ struct RepositorySettingsView: View {
     )
 
     VStack(alignment: .leading, spacing: 10) {
-      Picker("Source", selection: usesProfile) {
-        Text("Inline Script").tag(false)
-        Text("Script Profile").tag(true)
+      HStack(spacing: 12) {
+        Text("Source")
+          .foregroundStyle(.secondary)
+          .frame(width: 108, alignment: .leading)
+
+        Picker("Source", selection: usesProfile) {
+          Text("Inline Script").tag(false)
+          Text("Script Profile").tag(true)
+        }
+        .pickerStyle(.segmented)
+        .frame(width: 260)
       }
-      .pickerStyle(.segmented)
-      .frame(maxWidth: 260)
 
       if usesProfile.wrappedValue {
         LabeledContent("Profile") {
@@ -492,6 +498,7 @@ struct RepositorySettingsView: View {
           .labelsHidden()
           .frame(maxWidth: 320)
         }
+        .labelStyle(.titleOnly)
 
         if let profile = scriptProfiles.first(where: { $0.id == profileID.wrappedValue }) {
           scriptProfilePreview(profile)
@@ -823,16 +830,30 @@ struct RepositorySettingsView: View {
     count: Int,
     repository: RepositorySettingsFeature.RepositoryDraft
   ) -> some View {
-    HStack(spacing: 8) {
+    let runID = RepositorySettingsFeature.workspaceBootstrapRunID(
+      repositoryID: repository.id,
+      scriptID: profileID
+    )
+    let isRunning = store.runningWorkspaceBootstrapIDs.contains(runID)
+    return HStack(spacing: 8) {
       Text(bootstrapProfileTitle(id: profileID))
         .lineLimit(1)
       Spacer()
       Button {
         store.send(.runWorkspaceBootstrapProfileButtonTapped(id: repository.id, scriptID: profileID))
       } label: {
-        Label("Run", systemImage: "play")
+        if isRunning {
+          Label {
+            Text("Running")
+          } icon: {
+            ProgressView()
+              .controlSize(.small)
+          }
+        } else {
+          Label("Run", systemImage: "play")
+        }
       }
-      .disabled(repository.isNew || repository.isRemoved || repository.usesLinkCheckout)
+      .disabled(repository.isNew || repository.isRemoved || repository.usesLinkCheckout || isRunning)
       .help("Run this bootstrap script now")
       Button {
         store.send(.workspaceBootstrapProfileMoved(id: repository.id, profileID, .earlier))
