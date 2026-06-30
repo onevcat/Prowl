@@ -70,6 +70,9 @@ explaining pan/zoom/expand.
   don't accidentally type into the wrong one.
 - Card title bars can use each card's repository color, while the left sidebar
   and toolbar stay neutral in Canvas.
+- Card titles highlight the current directory's last path component, mirror the
+  focused pane's detected agent icon, and show a green checkmark for tmux-backed
+  tabs.
 
 ## Layout & sizing
 

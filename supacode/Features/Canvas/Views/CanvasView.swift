@@ -577,6 +577,7 @@ struct CanvasView: View {
     let resolvedRepositoryName = repositoryDisplayName(for: state.repositoryRootURL)
     let currentDirectoryPath = state.surfaceView(for: tab.id)?.bridge.state.pwd
       ?? state.repositoryRootURL.path(percentEncoded: false)
+    let activeSurfaceID = state.activeSurfaceID(for: tab.id)
     let normalizedDisplayPath = CanvasCurrentDirectoryFormatter.displayPath(for: currentDirectoryPath)
     let titleSegments = canvasCardTitleSegments(
       currentDirectoryPath: currentDirectoryPath,
@@ -598,11 +599,12 @@ struct CanvasView: View {
         currentDirectory: titleSegments.currentDirectory,
         isTmuxBacked: state.isTmuxBacked(tab.id),
         worktreeName: titleSegments.worktreeName,
+        agentIdentity: canvasCardAgentIdentity(in: state, surfaceID: activeSurfaceID),
         repositoryIcon: repositoryAppearance.icon,
         repositoryColor: repositoryAppearance.color?.color,
         repositoryRootURL: state.repositoryRootURL,
         tree: tree,
-        activeSurfaceID: state.activeSurfaceID(for: tab.id),
+        activeSurfaceID: activeSurfaceID,
         unfocusedSplitOverlay: unfocusedSplitOverlay,
         splitDivider: splitDivider,
         isFocused: selectionState.primaryTabID == tab.id,
@@ -671,6 +673,26 @@ struct CanvasView: View {
     .onChange(of: normalizedDisplayPath) { _, newDisplayPath in
       requestDirectoryShortening(for: tab.id, normalizedDisplayPath: newDisplayPath)
     }
+  }
+
+  private func canvasCardAgentIdentity(
+    in state: WorktreeTerminalState,
+    surfaceID: UUID?
+  ) -> CanvasCardView.AgentIdentity? {
+    guard let surfaceID,
+      let paneState = state.surfaceAgentStates[surfaceID],
+      let agent = paneState.detectedAgent,
+      paneState.state != .unknown
+    else {
+      return nil
+    }
+    let iconToken = paneState.iconLookupToken ?? agent.iconLookupToken
+    return CanvasCardView.AgentIdentity(
+      agent: agent,
+      icon: CommandIconMap.iconForFirstToken(iconToken)
+        ?? CommandIconMap.iconForFirstToken(agent.iconLookupToken),
+      accessibilityLabel: agent.displayName
+    )
   }
 
   // MARK: - Canvas Gestures

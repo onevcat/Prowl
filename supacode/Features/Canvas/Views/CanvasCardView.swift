@@ -2,10 +2,17 @@ import AppKit
 import SwiftUI
 
 struct CanvasCardView: View {
+  struct AgentIdentity: Equatable {
+    let agent: DetectedAgent
+    let icon: TabIconSource?
+    let accessibilityLabel: String
+  }
+
   let repositoryName: String
   let currentDirectory: String?
   let isTmuxBacked: Bool
   let worktreeName: String?
+  let agentIdentity: AgentIdentity?
   /// User-pinned icon for this card's repository, drawn before the
   /// repo name in the title bar. `nil` keeps the historical text-only
   /// title bar.
@@ -153,12 +160,7 @@ struct CanvasCardView: View {
         .layoutPriority(CanvasCardTitleLayoutPriority.repositoryName)
       if let currentDirectory {
         titleSeparator
-        Text(currentDirectory)
-          .font(.caption)
-          .foregroundStyle(.secondary)
-          .lineLimit(1)
-          .truncationMode(.tail)
-          .layoutPriority(CanvasCardTitleLayoutPriority.currentDirectory)
+        directoryTitle(currentDirectory)
       }
       if let worktreeName,
         !worktreeName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -170,6 +172,9 @@ struct CanvasCardView: View {
           .lineLimit(1)
           .truncationMode(.tail)
           .layoutPriority(CanvasCardTitleLayoutPriority.worktreeName)
+      }
+      if let agentIdentity {
+        agentIcon(agentIdentity)
       }
       if isTmuxBacked {
         tmuxBackedStatusIcon
@@ -200,6 +205,60 @@ struct CanvasCardView: View {
         },
       isEnabled: !isExpanded
     )
+  }
+
+  @ViewBuilder
+  private func directoryTitle(_ directory: String) -> some View {
+    if let parts = directoryParts(directory) {
+      HStack(spacing: 0) {
+        Text(parts.prefix)
+          .foregroundStyle(.secondary)
+        Text(parts.name)
+          .foregroundStyle(repositoryColor ?? .accentColor)
+          .fontWeight(.semibold)
+        Text(parts.suffix)
+          .foregroundStyle(.secondary)
+      }
+      .font(.caption)
+      .lineLimit(1)
+      .truncationMode(.tail)
+      .layoutPriority(CanvasCardTitleLayoutPriority.currentDirectory)
+    } else {
+      Text(directory)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+        .truncationMode(.tail)
+        .layoutPriority(CanvasCardTitleLayoutPriority.currentDirectory)
+    }
+  }
+
+  private func directoryParts(_ directory: String) -> (prefix: String, name: String, suffix: String)? {
+    let trimmed = directory.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return nil }
+    let suffix = trimmed.hasSuffix("/") && trimmed.count > 1 ? "/" : ""
+    let path = suffix.isEmpty ? trimmed : String(trimmed.dropLast())
+    guard let separatorIndex = path.lastIndex(of: "/") else {
+      return ("", path, suffix)
+    }
+    let nameStart = path.index(after: separatorIndex)
+    guard nameStart < path.endIndex else { return nil }
+    return (String(path[...separatorIndex]), String(path[nameStart...]), suffix)
+  }
+
+  @ViewBuilder
+  private func agentIcon(_ identity: AgentIdentity) -> some View {
+    Group {
+      if let icon = identity.icon {
+        TabIconImage(rawName: icon.storageString, pointSize: 14)
+      } else {
+        Image(systemName: "sparkle")
+          .font(.system(size: 14))
+      }
+    }
+    .foregroundStyle(AgentIconTint.color(for: identity.agent) ?? .primary)
+    .frame(width: 14, height: 14)
+    .accessibilityLabel(identity.accessibilityLabel)
   }
 
   private var titleBarActions: some View {
