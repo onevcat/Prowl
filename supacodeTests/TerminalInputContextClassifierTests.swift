@@ -71,6 +71,24 @@ struct TerminalInputContextClassifierTests {
     #expect(TerminalInputContextClassifier.context(job: job, viewportText: viewport) == .chatAgent)
   }
 
+  @Test func tmuxWithCodexModelStatusViewportIsChatAgent() {
+    let job = ForegroundJob(
+      processGroupID: 100,
+      processes: [
+        ForegroundProcess(pid: 101, name: "tmux", argv0: "tmux", cmdline: "tmux")
+      ]
+    )
+    let viewport = """
+      Working (2m 43s - esc to interrupt)
+
+      > Improve documentation in @filename
+
+      gpt-5.5 high fast - ~/Developer/Tabs
+      """
+
+    #expect(TerminalInputContextClassifier.context(job: job, viewportText: viewport) == .chatAgent)
+  }
+
   @Test func tmuxWithoutAgentSignatureIsCommandLike() {
     let job = ForegroundJob(
       processGroupID: 100,

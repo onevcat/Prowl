@@ -47,8 +47,17 @@ internal enum TerminalInputContextClassifier {
 
   private static func viewportLooksLikeChatAgent(_ text: String) -> Bool {
     let normalized = text.lowercased()
+    guard inputPrompts.contains(where: normalized.contains) else { return false }
     return strongSignatures.contains { containsBoundaryAware(normalized, needle: $0) }
-      && inputPrompts.contains { normalized.contains($0) }
+      || viewportLooksLikeCodexModelStatus(normalized)
+  }
+
+  private static func viewportLooksLikeCodexModelStatus(_ normalizedText: String) -> Bool {
+    normalizedText.split(separator: "\n").contains { line in
+      let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard let firstToken = trimmedLine.split(separator: " ").first else { return false }
+      return firstToken.hasPrefix("gpt-")
+    }
   }
 
   private static func normalizedProcessName(_ raw: String?) -> String? {
