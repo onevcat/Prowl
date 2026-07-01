@@ -58,6 +58,7 @@ its keyboard shortcuts, detailed behavior, settings, and gotchas.
 | [`components/settings.md`](components/settings.md) | The Settings window (`⌘,`): every tab and what it controls. |
 | [`components/updates.md`](components/updates.md) | Sparkle auto-updates: channels, auto-check, `⌘⇧U`. |
 | [`components/cli.md`](components/cli.md) | The `prowl` CLI — let an agent inspect and drive panes (`list`, `read`, `send`, `key`, `focus`, `tab`, `pane`, `open`). |
+| [`components/telegram-bridge.md`](components/telegram-bridge.md) | Telegram bridge MVP: map forum topics to Prowl worktrees and drive panes through the `prowl` CLI. |
 
 ## Reference (exact lookups)
 
@@ -81,6 +82,7 @@ its keyboard shortcuts, detailed behavior, settings, and gotchas.
 | Review what an agent changed | [`components/diff-view.md`](components/diff-view.md) |
 | Open / merge / re-run CI on a pull request | [`components/github-pull-requests.md`](components/github-pull-requests.md) |
 | Drive a pane from a script or another agent | [`components/cli.md`](components/cli.md) |
+| Drive Prowl from Telegram topics | [`components/telegram-bridge.md`](components/telegram-bridge.md), [`components/cli.md`](components/cli.md) |
 | Look up a keyboard shortcut | [`reference/keyboard-shortcuts.md`](reference/keyboard-shortcuts.md) |
 | Change app behavior / a setting | [`components/settings.md`](components/settings.md), [`reference/settings-fields.md`](reference/settings-fields.md) |
 

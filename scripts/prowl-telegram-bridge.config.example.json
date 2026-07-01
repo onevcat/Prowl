@@ -1,0 +1,18 @@
+{
+  "bot_key": "123456:replace-with-the-value-from-BotFather",
+  "chat_id": -1001234567890,
+  "allowed_user_ids": [93520829],
+  "prowl_bin": "prowl",
+  "default_read_lines": 120,
+  "max_message_chars": 3800,
+  "poll_timeout_seconds": 10,
+  "sync_interval_seconds": 5,
+  "send_timeout_seconds": 60,
+  "allow_send": true,
+  "allow_key": true,
+  "allow_focus": true,
+  "allow_create_topics": false,
+  "notify_status_changes": true,
+  "overview_thread_id": null,
+  "redact_output": true
+}

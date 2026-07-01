@@ -80,3 +80,6 @@ build/
 # Release-only credentials (analytics, crash reporting)
 Config/Secrets.env
 .build-benchmark/
+# Local Telegram bridge config/state
+prowl-telegram-bridge.config.json
+prowl-telegram-bridge-state.json
