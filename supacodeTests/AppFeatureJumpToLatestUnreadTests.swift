@@ -88,6 +88,7 @@ struct AppFeatureJumpToLatestUnreadTests {
     let worktree = makeWorktree()
     let repository = makeRepository(worktrees: [worktree])
     let surfaceID = UUID()
+    let tabID = TerminalTabID()
     var repositoriesState = RepositoriesFeature.State(repositories: [repository])
     repositoriesState.selection = .canvas
     repositoriesState.snapshotPersistencePhase = .active
@@ -102,11 +103,22 @@ struct AppFeatureJumpToLatestUnreadTests {
         focusedSurfaces.withValue { $0.append((worktreeID, targetSurfaceID)) }
         return true
       }
+      $0.terminalClient.tabIDContainingSurface = { worktreeID, targetSurfaceID in
+        worktreeID == worktree.id && targetSurfaceID == surfaceID ? tabID : nil
+      }
       $0.terminalClient.markNotificationsReadForSurface = { worktreeID, targetSurfaceID in
         readSurfaces.withValue { $0.append((worktreeID, targetSurfaceID)) }
       }
     }
     await store.send(.systemNotificationTapped(worktreeID: worktree.id, surfaceID: surfaceID))
+    await store.receive(\.repositories.focusCanvasTab) {
+      $0.repositories.nextCanvasFocusRequestID = 1
+      $0.repositories.pendingCanvasFocusRequest = CanvasFocusRequest(
+        id: 1,
+        target: .tab(tabID)
+      )
+      $0.repositories.openedWorktreeIDs = [worktree.id]
+    }
     await store.finish()
 
     #expect(store.state.repositories.selection == .canvas)

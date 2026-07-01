@@ -344,6 +344,9 @@ struct SupacodeApp: App {
       focusSurface: { worktreeID, surfaceID in
         terminalManager.focusSurface(worktreeID: worktreeID, surfaceID: surfaceID)
       },
+      tabIDContainingSurface: { worktreeID, surfaceID in
+        terminalManager.stateIfExists(for: worktreeID)?.tabID(containing: surfaceID)
+      },
       markNotificationRead: { worktreeID, notificationID in
         terminalManager.markNotificationRead(worktreeID: worktreeID, notificationID: notificationID)
       },

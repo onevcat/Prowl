@@ -12,6 +12,7 @@ struct TerminalClient {
   var latestUnreadNotification: @MainActor @Sendable () -> NotificationLocation?
   var focusWorktreeInCanvas: @MainActor @Sendable (Worktree.ID) -> Bool
   var focusSurface: @MainActor @Sendable (Worktree.ID, UUID) -> Bool
+  var tabIDContainingSurface: @MainActor @Sendable (Worktree.ID, UUID) -> TerminalTabID?
   var markNotificationRead: @MainActor @Sendable (Worktree.ID, UUID) -> Void
   var markNotificationsReadForSurface: @MainActor @Sendable (Worktree.ID, UUID) -> Void
   var focusedDirectoryPath: @MainActor @Sendable (_ worktreeID: Worktree.ID) -> String?
@@ -94,6 +95,7 @@ extension TerminalClient: DependencyKey {
     latestUnreadNotification: { nil },
     focusWorktreeInCanvas: { _ in false },
     focusSurface: { _, _ in false },
+    tabIDContainingSurface: { _, _ in nil },
     markNotificationRead: { _, _ in },
     markNotificationsReadForSurface: { _, _ in },
     focusedDirectoryPath: { _ in nil },
@@ -109,6 +111,7 @@ extension TerminalClient: DependencyKey {
     latestUnreadNotification: { nil },
     focusWorktreeInCanvas: { _ in false },
     focusSurface: { _, _ in false },
+    tabIDContainingSurface: { _, _ in nil },
     markNotificationRead: { _, _ in },
     markNotificationsReadForSurface: { _, _ in },
     focusedDirectoryPath: { _ in nil },
