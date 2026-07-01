@@ -376,7 +376,6 @@ final class WorktreeTerminalManager {
   }
 
   private func setAnonymousTmuxBackedTerminalsEnabled(_ enabled: Bool) {
-    guard usesAnonymousTmux != enabled else { return }
     usesAnonymousTmux = enabled
     for state in states.values {
       state.setTmuxController(enabled ? tmuxController : nil)

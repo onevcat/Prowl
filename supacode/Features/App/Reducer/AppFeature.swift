@@ -511,6 +511,11 @@ struct AppFeature {
             await terminalClient.send(.setAgentDetectionEnabled(agentDetectionEnabled))
           },
           .run { _ in
+            await terminalClient.send(
+              .setAnonymousTmuxBackedTerminalsEnabled(settings.useAnonymousTmuxBackedTerminals)
+            )
+          },
+          .run { _ in
             await worktreeInfoWatcher.send(
               .setPullRequestTrackingEnabled(settings.githubIntegrationEnabled)
             )
