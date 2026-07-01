@@ -242,6 +242,46 @@ struct AppFeatureTerminalLayoutRestoreTests {
     await store.receive(\.repositories.selectWorktree)
   }
 
+  @Test(.dependencies) func layoutRestoredEventEnsuresInitialTabForSelectedWorktree() async {
+    let worktree = makeWorktree()
+    let repository = makeRepository(worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State(repositories: [repository])
+    repositoriesState.selection = nil
+    let sentCommands = LockIsolated<[TerminalClient.Command]>([])
+
+    let store = TestStore(
+      initialState: {
+        var state = AppFeature.State(repositories: repositoriesState)
+        state.isAwaitingLaunchLayoutRestore = true
+        return state
+      }()
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sentCommands.withValue { $0.append(command) }
+      }
+      $0.worktreeInfoWatcher.send = { _ in }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.terminalEvent(.layoutRestored(selectedWorktreeID: worktree.id))) {
+      $0.isAwaitingLaunchLayoutRestore = false
+    }
+    await store.receive(\.repositories.selectWorktree) {
+      $0.repositories.selection = .worktree(worktree.id)
+      $0.repositories.openedWorktreeIDs = [worktree.id]
+    }
+    await store.receive(\.repositories.delegate.selectedWorktreeChanged)
+    await store.finish()
+
+    #expect(
+      sentCommands.value.contains(
+        .ensureInitialTab(worktree, runSetupScriptIfNew: false, focusing: false)
+      )
+    )
+  }
+
   @Test(.dependencies) func layoutRestoredEventWakesAgentDetectionWhenPanelVisible() async {
     let suiteName = "AppFeatureTerminalLayoutRestoreTests.layoutRestoredEventWakesAgentDetectionWhenPanelVisible"
     let defaults = UserDefaults(suiteName: suiteName)!
@@ -371,6 +411,129 @@ struct AppFeatureTerminalLayoutRestoreTests {
     await store.receive(\.repositories.selectWorktree)
   }
 
+  @Test(.dependencies) func layoutRestoredEventEnsuresInitialTabForFallbackWorktree() async {
+    let worktree = makeWorktree()
+    let repository = makeRepository(worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State(repositories: [repository])
+    repositoriesState.lastFocusedWorktreeID = worktree.id
+    let sentCommands = LockIsolated<[TerminalClient.Command]>([])
+    let store = TestStore(
+      initialState: {
+        var state = AppFeature.State(repositories: repositoriesState)
+        state.isAwaitingLaunchLayoutRestore = true
+        return state
+      }()
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sentCommands.withValue { $0.append(command) }
+      }
+      $0.worktreeInfoWatcher.send = { _ in }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.terminalEvent(.layoutRestored(selectedWorktreeID: nil))) {
+      $0.isAwaitingLaunchLayoutRestore = false
+    }
+    await store.receive(\.repositories.selectWorktree) {
+      $0.repositories.selection = .worktree(worktree.id)
+      $0.repositories.openedWorktreeIDs = [worktree.id]
+    }
+    await store.finish()
+
+    #expect(
+      sentCommands.value.contains(
+        .ensureInitialTab(worktree, runSetupScriptIfNew: false, focusing: false)
+      )
+    )
+  }
+
+  @Test(.dependencies) func repositoriesLoadedEnsuresInitialTabForRestoredSelectionOnInitialLoad() async {
+    let worktree = makeWorktree()
+    let repository = makeRepository(worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State(repositories: [repository])
+    repositoriesState.selection = .worktree(worktree.id)
+    let sentCommands = LockIsolated<[TerminalClient.Command]>([])
+
+    let store = TestStore(
+      initialState: AppFeature.State(repositories: repositoriesState)
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sentCommands.withValue { $0.append(command) }
+      }
+      $0.worktreeInfoWatcher.send = { _ in }
+    }
+    store.exhaustivity = .off
+
+    await store.send(
+      .repositories(
+        .repositoriesLoaded(
+          [repository],
+          failures: [],
+          roots: [repository.rootURL],
+          animated: false
+        )
+      )
+    ) {
+      $0.repositories.isInitialLoadComplete = true
+      $0.repositories.snapshotPersistencePhase = .active
+    }
+    await store.receive(\.repositories.delegate.selectedWorktreeChanged)
+    await store.finish()
+
+    #expect(
+      sentCommands.value.contains(
+        .ensureInitialTab(worktree, runSetupScriptIfNew: false, focusing: false)
+      )
+    )
+  }
+
+  @Test(.dependencies) func repositoriesLoadedEnsuresInitialCanvasTabForRestoredCanvasOnInitialLoad() async {
+    let worktree = makeWorktree()
+    let repository = makeRepository(worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State(repositories: [repository])
+    repositoriesState.selection = .canvas
+    repositoriesState.preCanvasTerminalTargetID = worktree.id
+    let sentCommands = LockIsolated<[TerminalClient.Command]>([])
+
+    let store = TestStore(
+      initialState: AppFeature.State(repositories: repositoriesState)
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sentCommands.withValue { $0.append(command) }
+      }
+      $0.worktreeInfoWatcher.send = { _ in }
+    }
+    store.exhaustivity = .off
+
+    await store.send(
+      .repositories(
+        .repositoriesLoaded(
+          [repository],
+          failures: [],
+          roots: [repository.rootURL],
+          animated: false
+        )
+      )
+    ) {
+      $0.repositories.isInitialLoadComplete = true
+      $0.repositories.snapshotPersistencePhase = .active
+    }
+    await store.finish()
+
+    #expect(
+      sentCommands.value.contains(
+        .ensureInitialTab(worktree, runSetupScriptIfNew: false, focusing: false)
+      )
+    )
+    #expect(sentCommands.value.contains(.setCanvasMode(true)))
+  }
+
   @Test(.dependencies) func layoutRestoredEventReentersCanvasWhenPersisted() async {
     let suiteName = "AppFeatureTerminalLayoutRestoreTests.layoutRestoredEventReentersCanvasWhenPersisted"
     let defaults = UserDefaults(suiteName: suiteName)!
@@ -394,12 +557,16 @@ struct AppFeatureTerminalLayoutRestoreTests {
     let repository = makeRepository(worktrees: [firstWorktree, fallbackWorktree])
     var repositoriesState = RepositoriesFeature.State(repositories: [repository])
     repositoriesState.lastFocusedWorktreeID = fallbackWorktree.id
+    let sentCommands = LockIsolated<[TerminalClient.Command]>([])
     let store = TestStore(
       initialState: AppFeature.State(repositories: repositoriesState)
     ) {
       AppFeature()
     } withDependencies: {
       $0.defaultAppStorage = defaults
+      $0.terminalClient.send = { command in
+        sentCommands.withValue { $0.append(command) }
+      }
     }
     store.exhaustivity = .off
 
@@ -407,7 +574,7 @@ struct AppFeatureTerminalLayoutRestoreTests {
       $0.isAwaitingLaunchLayoutRestore = false
     }
     await store.receive(\.repositories.restoreCanvasOnLaunch) {
-      $0.repositories.shouldCenterRestoredCanvasSoloTab = false
+      $0.repositories.shouldCenterRestoredCanvasSoloTab = true
       $0.repositories.shouldFocusRestoredCanvasAtScaleOne = true
       $0.repositories.preCanvasWorktreeID = fallbackWorktree.id
       $0.repositories.preCanvasTerminalTargetID = fallbackWorktree.id
@@ -415,6 +582,14 @@ struct AppFeatureTerminalLayoutRestoreTests {
       $0.repositories.selection = .canvas
       $0.repositories.sidebarSelectedWorktreeIDs = []
     }
+    await store.finish()
+
+    #expect(
+      sentCommands.value.contains(
+        .ensureInitialTab(fallbackWorktree, runSetupScriptIfNew: false, focusing: false)
+      )
+    )
+    #expect(sentCommands.value.contains(.setCanvasMode(true)))
   }
 
   @Test(.dependencies) func layoutRestoredEventSelectsRepositoryForPlainFolder() async {

@@ -264,6 +264,20 @@ struct AppFeature {
             await terminalClient.send(.setSelectedWorktreeID(worktree.id))
           }
         )
+        if !isPlainFolderSelection {
+          let shouldRunSetupScript = state.repositories.pendingSetupScriptWorktreeIDs.contains(worktree.id)
+          effects.append(
+            .run { _ in
+              await terminalClient.send(
+                .ensureInitialTab(
+                  worktree,
+                  runSetupScriptIfNew: shouldRunSetupScript,
+                  focusing: false
+                )
+              )
+            }
+          )
+        }
         effects.append(
           .run { _ in
             await worktreeInfoWatcher.send(.setSelectedWorktreeID(isPlainFolderSelection ? nil : worktree.id))

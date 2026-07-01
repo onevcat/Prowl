@@ -3808,6 +3808,7 @@ struct RepositoriesFeatureTests {
     let updatedRepository = makeRepository(id: repoRoot, worktrees: [updatedWorktree])
     var initialState = makeState(repositories: [repository])
     initialState.selection = .worktree(worktree.id)
+    initialState.isInitialLoadComplete = true
     let store = TestStore(initialState: initialState) {
       RepositoriesFeature()
     }
@@ -3825,6 +3826,31 @@ struct RepositoriesFeatureTests {
       $0.snapshotPersistencePhase = .active
     }
     await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
+  }
+
+  @Test func repositoriesLoadedNotifiesSelectedWorktreeOnInitialLoadWhenSelectionWasRestored() async {
+    let repoRoot = "/tmp/repo"
+    let worktree = makeWorktree(id: "/tmp/repo/main", name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [worktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .worktree(worktree.id)
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(
+      .repositoriesLoaded(
+        [repository],
+        failures: [],
+        roots: [repository.rootURL],
+        animated: false
+      )
+    ) {
+      $0.isInitialLoadComplete = true
+      $0.snapshotPersistencePhase = .active
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
     await store.finish()
   }
 

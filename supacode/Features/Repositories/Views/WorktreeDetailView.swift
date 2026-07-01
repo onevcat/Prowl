@@ -536,6 +536,11 @@ struct WorktreeDetailView: View {
         onViewportStateChanged: { state in
           canvasViewportState = state
         },
+        centerInitialSoloCard: repositories.shouldCenterRestoredCanvasSoloTab,
+        centerInitialSoloCardScale: repositories.shouldFocusRestoredCanvasAtScaleOne ? 1.0 : nil,
+        onInitialSoloCardCenteringConsumed: {
+          store.send(.repositories(.consumeRestoredCanvasSoloTabCentering))
+        },
         onDirectionalNewTerminalRequested: { worktreeID, directoryMode in
           switch directoryMode {
           case .currentDirectory:

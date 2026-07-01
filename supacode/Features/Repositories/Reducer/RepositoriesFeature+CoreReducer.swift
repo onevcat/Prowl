@@ -69,11 +69,12 @@ extension RepositoriesFeature {
       }
       state.isRefreshingWorktrees = false
       let roots = repositories.map(\.rootURL)
+      let wasInitialLoadComplete = state.isInitialLoadComplete
       let previousSelection = state.selectedWorktreeID
       let previousSelectedWorktree = state.worktree(for: previousSelection)
       let incomingRepositories = IdentifiedArray(uniqueElements: repositories)
       let repositoriesChanged = incomingRepositories != state.repositories
-      _ = applyRepositories(
+      let applyResult = applyRepositories(
         repositories,
         roots: roots,
         shouldPruneArchivedWorktrees: true,
@@ -94,7 +95,26 @@ extension RepositoriesFeature {
       if repositoriesChanged {
         allEffects.append(.send(.delegate(.repositoriesChanged(state.repositories))))
       }
-      if selectionChanged {
+      if let canvasStartupTerminalTarget = canvasStartupTerminalTarget(
+        applyResult: applyResult,
+        wasInitialLoadComplete: wasInitialLoadComplete,
+        selectedWorktree: selectedWorktree,
+        state: state
+      ) {
+        allEffects.append(
+          .run { _ in
+            await terminalClient.send(
+              .ensureInitialTab(
+                canvasStartupTerminalTarget,
+                runSetupScriptIfNew: false,
+                focusing: false
+              )
+            )
+            await terminalClient.send(.setCanvasMode(true))
+          }
+        )
+      }
+      if selectionChanged || (!wasInitialLoadComplete && selectedWorktree != nil) {
         allEffects.append(.send(.delegate(.selectedWorktreeChanged(selectedWorktree))))
       }
       return .merge(allEffects)
@@ -206,6 +226,7 @@ extension RepositoriesFeature {
     case .repositoriesLoaded(let repositories, let failures, let roots, let animated):
       state.isRefreshingWorktrees = false
       let wasRestoringSnapshot = state.snapshotPersistencePhase == .restoring
+      let wasInitialLoadComplete = state.isInitialLoadComplete
       if failures.isEmpty, state.snapshotPersistencePhase != .active {
         state.snapshotPersistencePhase = .active
       }
@@ -251,8 +272,26 @@ extension RepositoriesFeature {
             await terminalClient.send(.setCanvasMode(true))
           }
         )
+      } else if let canvasStartupTerminalTarget = canvasStartupTerminalTarget(
+        applyResult: applyResult,
+        wasInitialLoadComplete: wasInitialLoadComplete,
+        selectedWorktree: selectedWorktree,
+        state: state
+      ) {
+        allEffects.append(
+          .run { _ in
+            await terminalClient.send(
+              .ensureInitialTab(
+                canvasStartupTerminalTarget,
+                runSetupScriptIfNew: false,
+                focusing: false
+              )
+            )
+            await terminalClient.send(.setCanvasMode(true))
+          }
+        )
       }
-      if selectionChanged {
+      if selectionChanged || (!wasInitialLoadComplete && selectedWorktree != nil) {
         allEffects.append(.send(.delegate(.selectedWorktreeChanged(selectedWorktree))))
       }
       if applyResult.didPrunePinned {
@@ -397,7 +436,7 @@ extension RepositoriesFeature {
       }
 
     case .restoreCanvasOnLaunch(let worktreeID):
-      state.shouldCenterRestoredCanvasSoloTab = false
+      state.shouldCenterRestoredCanvasSoloTab = true
       state.shouldFocusRestoredCanvasAtScaleOne = true
       state.preCanvasWorktreeID = worktreeID
       state.preCanvasTerminalTargetID = worktreeID
@@ -405,7 +444,13 @@ extension RepositoriesFeature {
       state.isShelfActive = false
       state.selection = .canvas
       state.sidebarSelectedWorktreeIDs = []
+      let canvasSeedWorktree = terminalTarget(for: worktreeID, state: state)
       return .run { _ in
+        if let canvasSeedWorktree {
+          await terminalClient.send(
+            .ensureInitialTab(canvasSeedWorktree, runSetupScriptIfNew: false, focusing: false)
+          )
+        }
         await terminalClient.send(.setCanvasMode(true))
       }
 
@@ -935,5 +980,26 @@ extension RepositoriesFeature {
     case .delegate:
       return .none
     }
+  }
+
+  func canvasStartupTerminalTarget(
+    applyResult: ApplyRepositoriesResult,
+    wasInitialLoadComplete: Bool,
+    selectedWorktree: Worktree?,
+    state: State
+  ) -> Worktree? {
+    if let restoredCanvasTerminalTarget = applyResult.restoredCanvasTerminalTarget {
+      return restoredCanvasTerminalTarget
+    }
+    guard !wasInitialLoadComplete, selectedWorktree == nil, state.isShowingCanvas else {
+      return nil
+    }
+    let fallbackWorktreeID =
+      state.preCanvasTerminalTargetID
+      ?? state.canvasReturnWorktreeID
+      ?? state.preCanvasWorktreeID
+      ?? state.lastFocusedWorktreeID
+      ?? state.orderedWorktreeRows().first?.id
+    return terminalTarget(for: fallbackWorktreeID, state: state)
   }
 }

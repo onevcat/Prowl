@@ -65,6 +65,9 @@ struct CanvasView: View {
   var onFocusRequestConsumed: (Int) -> Void = { _ in }
   var onCommandConsumed: (Int) -> Void = { _ in }
   var onViewportStateChanged: ((ViewportState) -> Void)?
+  var centerInitialSoloCard = false
+  var centerInitialSoloCardScale: CGFloat?
+  var onInitialSoloCardCenteringConsumed: () -> Void = {}
   /// Reports whether a card is currently expanded in place, so the parent can
   /// give the window toolbar a matching scrim (it can't be covered from here).
   var onExpandedChange: (Bool) -> Void = { _ in }
@@ -178,6 +181,9 @@ struct CanvasView: View {
     onCommandConsumed: @escaping (Int) -> Void = { _ in },
     viewportState: ViewportState = .init(),
     onViewportStateChanged: ((ViewportState) -> Void)? = nil,
+    centerInitialSoloCard: Bool = false,
+    centerInitialSoloCardScale: CGFloat? = nil,
+    onInitialSoloCardCenteringConsumed: @escaping () -> Void = {},
     onExpandedChange: @escaping (Bool) -> Void = { _ in },
     onDirectionalNewTerminalRequested: ((Worktree.ID?, DirectionalNewTerminalDirectoryMode) -> Void)? = nil
   ) {
@@ -192,6 +198,9 @@ struct CanvasView: View {
     self.onFocusRequestConsumed = onFocusRequestConsumed
     self.onCommandConsumed = onCommandConsumed
     self.onViewportStateChanged = onViewportStateChanged
+    self.centerInitialSoloCard = centerInitialSoloCard
+    self.centerInitialSoloCardScale = centerInitialSoloCardScale
+    self.onInitialSoloCardCenteringConsumed = onInitialSoloCardCenteringConsumed
     self.onExpandedChange = onExpandedChange
     self.onDirectionalNewTerminalRequested = onDirectionalNewTerminalRequested
     _canvasOffset = State(initialValue: viewportState.offset)
@@ -258,22 +267,10 @@ struct CanvasView: View {
       proxy.size
     } action: { newSize in
       viewportSize = newSize
-      let currentCardKeys = collectCardKeys(from: terminalManager.activeWorktreeStates)
-      if !hasPerformedInitialFit, !currentCardKeys.isEmpty {
-        hasPerformedInitialFit = true
-        if !CanvasLayoutStore.hasAutoArrangedInSession {
-          CanvasLayoutStore.hasAutoArrangedInSession = true
-          if layoutStore.shouldAutoArrangeOnInitialEntry(for: currentCardKeys) {
-            arrangeCards()
-          }
-        }
-        fitToView(canvasSize: newSize)
-      }
-      if let pendingCenterRequest,
-        centerCanvas(on: pendingCenterRequest.tabID, scale: pendingCenterRequest.scale)
-      {
-        self.pendingCenterRequest = nil
-      }
+      let states = terminalManager.activeWorktreeStates
+      performInitialFitIfNeeded(cards: collectCanvasCards(from: states))
+      centerInitialSoloCardIfNeeded(tabIDs: collectVisibleTabIDs(from: states))
+      fulfillPendingCenterRequestIfPossible()
     }
     .onGeometryChange(for: CGFloat.self) { proxy in
       proxy.safeAreaInsets.top
@@ -310,12 +307,15 @@ struct CanvasView: View {
           hasSeenCanvasCards = true
         }
         ensureLayouts(for: canvasCards)
+        performInitialFitIfNeeded(cards: canvasCards)
+        fulfillPendingCenterRequestIfPossible()
         if !allCardKeys.isEmpty {
           layoutStore.ensureZOrder(for: allCardKeys)
         }
         pruneSelection(previousOrder: [], currentOrder: allTabIDs, states: activeStates)
         syncBroadcastCallbacks(states: activeStates)
         fulfillPendingFocusRequest(focusRequest, states: activeStates)
+        centerInitialSoloCardIfNeeded(tabIDs: allTabIDs)
       }
       .onChange(of: allCardKeys) { _, _ in
         let latestStates = terminalManager.activeWorktreeStates
@@ -330,12 +330,15 @@ struct CanvasView: View {
           hasSeenCanvasCards = true
         }
         ensureLayouts(for: latestCards)
+        performInitialFitIfNeeded(cards: latestCards)
+        fulfillPendingCenterRequestIfPossible()
         if !latestKeys.isEmpty {
           layoutStore.ensureZOrder(for: latestKeys)
         }
         syncBroadcastCallbacks(states: latestStates)
         recoverCanvasFocusIfNeeded(states: latestStates)
         fulfillPendingFocusRequest(focusRequest, states: latestStates)
+        centerInitialSoloCardIfNeeded(tabIDs: collectVisibleTabIDs(from: latestStates))
       }
       .onChange(of: allTabIDs) { oldTabIDs, newTabIDs in
         if let createdTabID = newlyCreatedCanvasTabID(
@@ -347,7 +350,10 @@ struct CanvasView: View {
           self.pendingCreatedTabID = nil
         }
         let latestStates = terminalManager.activeWorktreeStates
-        ensureLayouts(for: collectCanvasCards(from: latestStates))
+        let latestCards = collectCanvasCards(from: latestStates)
+        ensureLayouts(for: latestCards)
+        performInitialFitIfNeeded(cards: latestCards)
+        fulfillPendingCenterRequestIfPossible()
         let latestTabIDs = collectVisibleTabIDs(from: latestStates)
         pruneSelection(previousOrder: oldTabIDs, currentOrder: latestTabIDs, states: latestStates)
         if let expandedTabID, !latestTabIDs.contains(expandedTabID) {
@@ -356,9 +362,11 @@ struct CanvasView: View {
         pruneDirectoryShorteningState(keeping: latestStates)
         recoverCanvasFocusIfNeeded(states: latestStates)
         fulfillPendingFocusRequest(focusRequest, states: latestStates)
+        centerInitialSoloCardIfNeeded(tabIDs: latestTabIDs)
       }
       .onChange(of: focusRequest) { _, newRequest in
         fulfillPendingFocusRequest(newRequest, states: activeStates)
+        fulfillPendingCenterRequestIfPossible()
       }
       .contentShape(.rect)
       .accessibilityAddTraits(.isButton)
@@ -1022,6 +1030,46 @@ struct CanvasView: View {
         hasPerformedInitialFit: hasPerformedInitialFit
       )
     )
+  }
+
+  func performInitialFitIfNeeded(cards: [CanvasCardDescriptor]) {
+    guard !hasPerformedInitialFit, !cards.isEmpty else { return }
+    guard viewportSize.width > 0, viewportSize.height > 0 else { return }
+
+    ensureLayouts(for: cards)
+    hasPerformedInitialFit = true
+    let cardKeys = cards.map(\.key)
+    if !CanvasLayoutStore.hasAutoArrangedInSession {
+      CanvasLayoutStore.hasAutoArrangedInSession = true
+      if layoutStore.shouldAutoArrangeOnInitialEntry(for: cardKeys) {
+        arrangeCards()
+      }
+    }
+    fitToView(canvasSize: viewportSize)
+  }
+
+  func fulfillPendingCenterRequestIfPossible() {
+    guard let pendingCenterRequest else { return }
+    if centerCanvas(on: pendingCenterRequest.tabID, scale: pendingCenterRequest.scale) {
+      self.pendingCenterRequest = nil
+    }
+  }
+
+  func centerInitialSoloCardIfNeeded(tabIDs: [TerminalTabID]) {
+    guard centerInitialSoloCard else { return }
+    guard hasPerformedInitialFit else { return }
+    guard tabIDs.count == 1, let tabID = tabIDs.first else {
+      if !tabIDs.isEmpty {
+        onInitialSoloCardCenteringConsumed()
+      }
+      return
+    }
+    if !centerCanvas(on: tabID, scale: centerInitialSoloCardScale) {
+      pendingCenterRequest = PendingCenterRequest(tabID: tabID, scale: centerInitialSoloCardScale)
+    } else {
+      pendingCenterRequest = nil
+    }
+    onInitialSoloCardCenteringConsumed()
   }
 
   /// Remove stored layouts for tabs that no longer exist.
