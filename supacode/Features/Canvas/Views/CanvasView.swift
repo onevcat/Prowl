@@ -583,8 +583,10 @@ struct CanvasView: View {
     let splitDivider = terminalManager.splitDividerAppearance()
     let repositoryAppearance = appearance(for: state.repositoryRootURL)
     let resolvedRepositoryName = repositoryDisplayName(for: state.repositoryRootURL)
-    let currentDirectoryPath = state.surfaceView(for: tab.id)?.bridge.state.pwd
-      ?? state.repositoryRootURL.path(percentEncoded: false)
+    let currentDirectoryPath = canvasCurrentDirectoryPath(
+      reportedPath: state.surfaceView(for: tab.id)?.bridge.state.pwd,
+      fallbackWorktreeDirectory: state.worktree.workingDirectory.path(percentEncoded: false)
+    )
     let activeSurfaceID = state.activeSurfaceID(for: tab.id)
     let normalizedDisplayPath = CanvasCurrentDirectoryFormatter.displayPath(for: currentDirectoryPath)
     let titleSegments = canvasCardTitleSegments(
@@ -2246,6 +2248,18 @@ func canvasDisplayedDirectory(
     return normalizedDisplayPath
   }
   return cachedEntry.shortenedDisplayPath
+}
+
+func canvasCurrentDirectoryPath(
+  reportedPath: String?,
+  fallbackWorktreeDirectory: String
+) -> String {
+  guard let reportedPath = reportedPath?.trimmingCharacters(in: .whitespacesAndNewlines),
+    !reportedPath.isEmpty
+  else {
+    return fallbackWorktreeDirectory
+  }
+  return reportedPath
 }
 
 func canvasCardTitleSegments(

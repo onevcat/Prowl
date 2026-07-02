@@ -4,6 +4,21 @@ import Testing
 @testable import supacode
 
 struct CanvasViewTitlePipelineTests {
+  @Test func canvasDirectoryFallbackUsesWorktreeDirectoryWhenReportedPathIsMissing() {
+    #expect(
+      canvasCurrentDirectoryPath(
+        reportedPath: nil,
+        fallbackWorktreeDirectory: "/Users/yam/Developer/TikTok2"
+      ) == "/Users/yam/Developer/TikTok2"
+    )
+    #expect(
+      canvasCurrentDirectoryPath(
+        reportedPath: "  ",
+        fallbackWorktreeDirectory: "/Users/yam/Developer/TikTok2"
+      ) == "/Users/yam/Developer/TikTok2"
+    )
+  }
+
   @Test func canvasPipelineAppliesShortenedDirectoryAndPreservesSegment3Source() {
     let homePath = NSHomeDirectory()
     let segments = canvasCardTitleSegments(
