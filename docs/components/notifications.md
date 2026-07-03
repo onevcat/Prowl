@@ -3,7 +3,7 @@
 > How Prowl tells you an agent finished or needs you — system notifications, the
 > bell/unread indicators, and Dock badge/bounce.
 
-**Keywords:** notification, agent reminder, bell, unread, command finished, dock badge, dock bounce, sound, alert, finished
+**Keywords:** notification, agent reminder, bell, unread, command finished, dock badge, dock bounce, sound, alert, finished, telegram bot
 
 **Related:** [agent-detection](agent-detection.md) · [active-agents](active-agents.md) · [terminal](terminal.md) · [settings](settings.md)
 
@@ -69,6 +69,17 @@ top of its section. **Jump to Latest Unread** (`⌘⌥U`) takes you straight to 
 - `showNotificationDotOnDock`, `dockBounceMode` — Dock badge & bounce.
 
 Full field detail: [`reference/settings-fields.md`](../reference/settings-fields.md).
+
+## Telegram bot
+
+The Telegram bot is a remote-control channel, not a notification backend. It
+does not mirror bell/unread events into Telegram. Instead, authorized Telegram
+users can query and drive the same panes exposed by the [`prowl` CLI](cli.md)
+with commands such as `/agents`, `/list`, `/read`, `/send`, and `/key`.
+
+Configure it under Settings → Telegram. Keep write commands targeted by explicit
+pane/tab/worktree IDs; this avoids sending text or close requests to whichever
+pane happens to be focused.
 
 ## Gotchas for agents
 

@@ -597,8 +597,8 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
     fileManager: FileManager,
     gitRunner: ProjectWorkspaceGitRunner
   ) async {
-    nonisolated(unsafe) let fileManager = fileManager
     let task = Task.detached {
+      let fileManager = FileManager.default
       for command in ledger.cleanupCommands.reversed() {
         do {
           try await gitRunner.run(command)

@@ -44,6 +44,8 @@ struct SettingsView: View {
             .tag(SettingsSection.advanced)
           Label("GitHub", systemImage: "arrow.triangle.branch")
             .tag(SettingsSection.github)
+          Label("Telegram", systemImage: "paperplane")
+            .tag(SettingsSection.telegram)
 
           Section("Repositories") {
             ForEach(repositories) { repository in
@@ -103,6 +105,12 @@ struct SettingsView: View {
           GithubSettingsView(store: settingsStore)
             .navigationTitle("GitHub")
             .navigationSubtitle("GitHub CLI integration")
+        }
+      case .telegram:
+        SettingsDetailView {
+          TelegramSettingsView(store: settingsStore)
+            .navigationTitle("Telegram")
+            .navigationSubtitle("Bot remote control")
         }
       case .repository(let repositoryID):
         if let repository = repositories[id: repositoryID] {

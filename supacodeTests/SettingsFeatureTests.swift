@@ -410,6 +410,74 @@ struct SettingsFeatureTests {
     #expect(settingsFile.global.autoShowActiveAgentsPanel == true)
   }
 
+  @Test(.dependencies) func telegramSettingsPersistAndFanOut() async {
+    var initialSettings = GlobalSettings.default
+    initialSettings.telegramBotEnabled = false
+    initialSettings.telegramBotToken = nil
+    initialSettings.telegramAllowedUserIDs = []
+    initialSettings.telegramDefaultReadLines = 80
+    initialSettings.telegramRequireExplicitPaneForWrite = true
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = initialSettings }
+
+    let store = TestStore(initialState: SettingsFeature.State(settings: initialSettings)) {
+      SettingsFeature()
+    }
+
+    await store.send(.binding(.set(\.telegramBotEnabled, true))) {
+      $0.telegramBotEnabled = true
+    }
+    await store.receive(\.delegate.settingsChanged)
+
+    await store.send(.binding(.set(\.telegramBotToken, " 123:abc "))) {
+      $0.telegramBotToken = " 123:abc "
+    }
+    await store.receive(\.delegate.settingsChanged)
+
+    await store.send(.setTelegramAllowedUserIDsText("42, 99")) {
+      $0.telegramAllowedUserIDsText = "42, 99"
+      $0.telegramAllowedUserIDs = [42, 99]
+    }
+    await store.receive(\.delegate.settingsChanged)
+
+    await store.send(.binding(.set(\.telegramDefaultReadLines, 25))) {
+      $0.telegramDefaultReadLines = 25
+    }
+    await store.receive(\.delegate.settingsChanged)
+
+    #expect(settingsFile.global.telegramBotEnabled == true)
+    #expect(settingsFile.global.telegramBotToken == "123:abc")
+    #expect(settingsFile.global.telegramAllowedUserIDs == [42, 99])
+    #expect(settingsFile.global.telegramDefaultReadLines == 25)
+    #expect(settingsFile.global.telegramRequireExplicitPaneForWrite == true)
+  }
+
+  @Test(.dependencies) func telegramConnectionTestUsesConfiguredToken() async {
+    var initialSettings = GlobalSettings.default
+    initialSettings.telegramBotToken = "token"
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = initialSettings }
+    let requestedTokens = LockIsolated<[String]>([])
+
+    let store = TestStore(initialState: SettingsFeature.State(settings: initialSettings)) {
+      SettingsFeature()
+    } withDependencies: {
+      $0[TelegramBotClient.self].getMe = { token in
+        requestedTokens.withValue { $0.append(token) }
+        return TelegramBotUser(id: 1, isBot: true, firstName: "Prowl", username: "prowl_bot")
+      }
+    }
+
+    await store.send(.testTelegramConnectionButtonTapped) {
+      $0.telegramConnectionStatus = .testing
+    }
+    await store.receive(\.telegramConnectionTestCompleted) {
+      $0.telegramConnectionStatus = .success("@prowl_bot")
+    }
+
+    #expect(requestedTokens.value == ["token"])
+  }
+
   @Test(.dependencies) func showActiveAgentTabTitlesPersistsChanges() async {
     var initialSettings = GlobalSettings.default
     initialSettings.showActiveAgentTabTitles = false

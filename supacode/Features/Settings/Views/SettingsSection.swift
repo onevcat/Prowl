@@ -8,5 +8,6 @@ enum SettingsSection: Hashable {
   case updates
   case advanced
   case github
+  case telegram
   case repository(Repository.ID)
 }

@@ -14,6 +14,11 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var analyticsEnabled: Bool
   var crashReportsEnabled: Bool
   var githubIntegrationEnabled: Bool
+  var telegramBotEnabled: Bool
+  var telegramBotToken: String?
+  var telegramAllowedUserIDs: [Int64]
+  var telegramDefaultReadLines: Int
+  var telegramRequireExplicitPaneForWrite: Bool
   var deleteBranchOnDeleteWorktree: Bool
   var mergedWorktreeAction: MergedWorktreeAction?
   var promptForWorktreeCreation: Bool
@@ -59,6 +64,11 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     analyticsEnabled: true,
     crashReportsEnabled: true,
     githubIntegrationEnabled: true,
+    telegramBotEnabled: false,
+    telegramBotToken: nil,
+    telegramAllowedUserIDs: [],
+    telegramDefaultReadLines: 80,
+    telegramRequireExplicitPaneForWrite: true,
     deleteBranchOnDeleteWorktree: false,
     mergedWorktreeAction: nil,
     promptForWorktreeCreation: true,
@@ -103,6 +113,11 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     analyticsEnabled: Bool,
     crashReportsEnabled: Bool,
     githubIntegrationEnabled: Bool,
+    telegramBotEnabled: Bool = false,
+    telegramBotToken: String? = nil,
+    telegramAllowedUserIDs: [Int64] = [],
+    telegramDefaultReadLines: Int = 80,
+    telegramRequireExplicitPaneForWrite: Bool = true,
     deleteBranchOnDeleteWorktree: Bool,
     mergedWorktreeAction: MergedWorktreeAction? = nil,
     promptForWorktreeCreation: Bool,
@@ -145,6 +160,11 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     self.analyticsEnabled = analyticsEnabled
     self.crashReportsEnabled = crashReportsEnabled
     self.githubIntegrationEnabled = githubIntegrationEnabled
+    self.telegramBotEnabled = telegramBotEnabled
+    self.telegramBotToken = telegramBotToken
+    self.telegramAllowedUserIDs = telegramAllowedUserIDs
+    self.telegramDefaultReadLines = max(1, min(telegramDefaultReadLines, 500))
+    self.telegramRequireExplicitPaneForWrite = telegramRequireExplicitPaneForWrite
     self.deleteBranchOnDeleteWorktree = deleteBranchOnDeleteWorktree
     self.mergedWorktreeAction = mergedWorktreeAction
     self.promptForWorktreeCreation = promptForWorktreeCreation
@@ -190,6 +210,11 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     try container.encode(analyticsEnabled, forKey: .analyticsEnabled)
     try container.encode(crashReportsEnabled, forKey: .crashReportsEnabled)
     try container.encode(githubIntegrationEnabled, forKey: .githubIntegrationEnabled)
+    try container.encode(telegramBotEnabled, forKey: .telegramBotEnabled)
+    try container.encodeIfPresent(telegramBotToken, forKey: .telegramBotToken)
+    try container.encode(telegramAllowedUserIDs, forKey: .telegramAllowedUserIDs)
+    try container.encode(telegramDefaultReadLines, forKey: .telegramDefaultReadLines)
+    try container.encode(telegramRequireExplicitPaneForWrite, forKey: .telegramRequireExplicitPaneForWrite)
     try container.encode(deleteBranchOnDeleteWorktree, forKey: .deleteBranchOnDeleteWorktree)
     try container.encodeIfPresent(mergedWorktreeAction, forKey: .mergedWorktreeAction)
     try container.encode(promptForWorktreeCreation, forKey: .promptForWorktreeCreation)
@@ -236,6 +261,11 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     case analyticsEnabled
     case crashReportsEnabled
     case githubIntegrationEnabled
+    case telegramBotEnabled
+    case telegramBotToken
+    case telegramAllowedUserIDs
+    case telegramDefaultReadLines
+    case telegramRequireExplicitPaneForWrite
     case deleteBranchOnDeleteWorktree
     case mergedWorktreeAction
     case promptForWorktreeCreation
@@ -270,45 +300,36 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
 
   init(from decoder: any Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
+    let base = Self.default
     appearanceMode = try container.decode(AppearanceMode.self, forKey: .appearanceMode)
-    defaultEditorID =
-      try container.decodeIfPresent(String.self, forKey: .defaultEditorID)
-      ?? Self.default.defaultEditorID
-    confirmBeforeQuit =
-      try container.decodeIfPresent(Bool.self, forKey: .confirmBeforeQuit)
-      ?? Self.default.confirmBeforeQuit
-    updateChannel =
-      try container.decodeIfPresent(UpdateChannel.self, forKey: .updateChannel)
-      ?? Self.default.updateChannel
+    defaultEditorID = try Self.value(.defaultEditorID, container, base.defaultEditorID)
+    confirmBeforeQuit = try Self.value(.confirmBeforeQuit, container, base.confirmBeforeQuit)
+    updateChannel = try Self.value(.updateChannel, container, base.updateChannel)
     updatesAutomaticallyCheckForUpdates = try container.decode(Bool.self, forKey: .updatesAutomaticallyCheckForUpdates)
     updatesAutomaticallyDownloadUpdates = try container.decode(Bool.self, forKey: .updatesAutomaticallyDownloadUpdates)
-    inAppNotificationsEnabled =
-      try container.decodeIfPresent(Bool.self, forKey: .inAppNotificationsEnabled)
-      ?? Self.default.inAppNotificationsEnabled
-    notificationSoundEnabled =
-      try container.decodeIfPresent(Bool.self, forKey: .notificationSoundEnabled)
-      ?? Self.default.notificationSoundEnabled
-    systemNotificationsEnabled =
-      try container.decodeIfPresent(Bool.self, forKey: .systemNotificationsEnabled)
-      ?? Self.default.systemNotificationsEnabled
-    moveNotifiedWorktreeToTop =
-      try container.decodeIfPresent(Bool.self, forKey: .moveNotifiedWorktreeToTop)
-      ?? Self.default.moveNotifiedWorktreeToTop
-    commandFinishedNotificationEnabled =
-      try container.decodeIfPresent(Bool.self, forKey: .commandFinishedNotificationEnabled)
-      ?? Self.default.commandFinishedNotificationEnabled
-    commandFinishedNotificationThreshold =
-      try container.decodeIfPresent(Int.self, forKey: .commandFinishedNotificationThreshold)
-      ?? Self.default.commandFinishedNotificationThreshold
-    analyticsEnabled =
-      try container.decodeIfPresent(Bool.self, forKey: .analyticsEnabled)
-      ?? Self.default.analyticsEnabled
-    crashReportsEnabled =
-      try container.decodeIfPresent(Bool.self, forKey: .crashReportsEnabled)
-      ?? Self.default.crashReportsEnabled
-    githubIntegrationEnabled =
-      try container.decodeIfPresent(Bool.self, forKey: .githubIntegrationEnabled)
-      ?? Self.default.githubIntegrationEnabled
+    inAppNotificationsEnabled = try Self.value(.inAppNotificationsEnabled, container, base.inAppNotificationsEnabled)
+    notificationSoundEnabled = try Self.value(.notificationSoundEnabled, container, base.notificationSoundEnabled)
+    systemNotificationsEnabled = try Self.value(.systemNotificationsEnabled, container, base.systemNotificationsEnabled)
+    moveNotifiedWorktreeToTop = try Self.value(.moveNotifiedWorktreeToTop, container, base.moveNotifiedWorktreeToTop)
+    commandFinishedNotificationEnabled = try Self.value(
+      .commandFinishedNotificationEnabled,
+      container,
+      base.commandFinishedNotificationEnabled
+    )
+    commandFinishedNotificationThreshold = try Self.value(
+      .commandFinishedNotificationThreshold,
+      container,
+      base.commandFinishedNotificationThreshold
+    )
+    let integrations = try Self.decodeIntegrationSettings(from: container)
+    analyticsEnabled = integrations.analyticsEnabled
+    crashReportsEnabled = integrations.crashReportsEnabled
+    githubIntegrationEnabled = integrations.githubIntegrationEnabled
+    telegramBotEnabled = integrations.telegramBotEnabled
+    telegramBotToken = integrations.telegramBotToken
+    telegramAllowedUserIDs = integrations.telegramAllowedUserIDs
+    telegramDefaultReadLines = integrations.telegramDefaultReadLines
+    telegramRequireExplicitPaneForWrite = integrations.telegramRequireExplicitPaneForWrite
     deleteBranchOnDeleteWorktree =
       try container.decodeIfPresent(Bool.self, forKey: .deleteBranchOnDeleteWorktree)
       ?? Self.default.deleteBranchOnDeleteWorktree
@@ -368,6 +389,25 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     showNotificationDotOnDock = toolbarAndDock.showNotificationDotOnDock
   }
 
+  private static func value<Value: Decodable>(
+    _ key: CodingKeys,
+    _ container: KeyedDecodingContainer<CodingKeys>,
+    _ defaultValue: Value
+  ) throws -> Value {
+    try container.decodeIfPresent(Value.self, forKey: key) ?? defaultValue
+  }
+
+  private struct IntegrationSettings {
+    let analyticsEnabled: Bool
+    let crashReportsEnabled: Bool
+    let githubIntegrationEnabled: Bool
+    let telegramBotEnabled: Bool
+    let telegramBotToken: String?
+    let telegramAllowedUserIDs: [Int64]
+    let telegramDefaultReadLines: Int
+    let telegramRequireExplicitPaneForWrite: Bool
+  }
+
   private static func decodeViewSettings(
     from container: KeyedDecodingContainer<CodingKeys>
   ) throws -> (DefaultViewMode, CanvasDefaultLayout) {
@@ -378,6 +418,37 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
       try container.decodeIfPresent(CanvasDefaultLayout.self, forKey: .canvasDefaultLayout)
       ?? Self.default.canvasDefaultLayout
     return (mode, layout)
+  }
+
+  private static func decodeIntegrationSettings(
+    from container: KeyedDecodingContainer<CodingKeys>
+  ) throws -> IntegrationSettings {
+    let decodedTelegramDefaultReadLines =
+      try container.decodeIfPresent(Int.self, forKey: .telegramDefaultReadLines)
+      ?? Self.default.telegramDefaultReadLines
+    return IntegrationSettings(
+      analyticsEnabled: try Self.value(.analyticsEnabled, container, Self.default.analyticsEnabled),
+      crashReportsEnabled: try Self.value(.crashReportsEnabled, container, Self.default.crashReportsEnabled),
+      githubIntegrationEnabled: try Self.value(
+        .githubIntegrationEnabled,
+        container,
+        Self.default.githubIntegrationEnabled
+      ),
+      telegramBotEnabled: try Self.value(.telegramBotEnabled, container, Self.default.telegramBotEnabled),
+      telegramBotToken: try container.decodeIfPresent(String.self, forKey: .telegramBotToken)
+        ?? Self.default.telegramBotToken,
+      telegramAllowedUserIDs: try Self.value(
+        .telegramAllowedUserIDs,
+        container,
+        Self.default.telegramAllowedUserIDs
+      ),
+      telegramDefaultReadLines: max(1, min(decodedTelegramDefaultReadLines, 500)),
+      telegramRequireExplicitPaneForWrite: try Self.value(
+        .telegramRequireExplicitPaneForWrite,
+        container,
+        Self.default.telegramRequireExplicitPaneForWrite
+      )
+    )
   }
 
   private static func decodeWindowTint(

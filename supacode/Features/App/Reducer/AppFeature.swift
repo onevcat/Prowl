@@ -381,7 +381,7 @@ struct AppFeature {
           repoSettingsState.globalCopyUntrackedOnWorktreeCreate = state.settings.copyUntrackedOnWorktreeCreate
           repoSettingsState.globalPullRequestMergeStrategy = state.settings.pullRequestMergeStrategy
           state.settings.repositorySettings = repoSettingsState
-        case .general, .notifications, .shortcuts, .worktree, .updates, .advanced, .github:
+        case .general, .notifications, .shortcuts, .worktree, .updates, .advanced, .github, .telegram:
           state.settings.repositorySettings = nil
         }
         return .none

@@ -21,6 +21,13 @@ struct SettingsFeature {
     var analyticsEnabled: Bool
     var crashReportsEnabled: Bool
     var githubIntegrationEnabled: Bool
+    var telegramBotEnabled: Bool
+    var telegramBotToken: String
+    var telegramAllowedUserIDsText: String
+    var telegramAllowedUserIDs: [Int64]
+    var telegramDefaultReadLines: Int
+    var telegramRequireExplicitPaneForWrite: Bool
+    var telegramConnectionStatus: TelegramConnectionStatus = .idle
     var deleteBranchOnDeleteWorktree: Bool
     var mergedWorktreeAction: MergedWorktreeAction?
     var archivedAutoDeletePeriod: AutoDeletePeriod?
@@ -79,6 +86,12 @@ struct SettingsFeature {
       analyticsEnabled = settings.analyticsEnabled
       crashReportsEnabled = settings.crashReportsEnabled
       githubIntegrationEnabled = settings.githubIntegrationEnabled
+      telegramBotEnabled = settings.telegramBotEnabled
+      telegramBotToken = settings.telegramBotToken ?? ""
+      telegramAllowedUserIDs = settings.telegramAllowedUserIDs
+      telegramAllowedUserIDsText = TelegramAllowedUserIDsParser.format(settings.telegramAllowedUserIDs)
+      telegramDefaultReadLines = settings.telegramDefaultReadLines
+      telegramRequireExplicitPaneForWrite = settings.telegramRequireExplicitPaneForWrite
       deleteBranchOnDeleteWorktree = settings.deleteBranchOnDeleteWorktree
       mergedWorktreeAction = settings.mergedWorktreeAction
       archivedAutoDeletePeriod = settings.archivedAutoDeletePeriod
@@ -127,6 +140,11 @@ struct SettingsFeature {
         analyticsEnabled: analyticsEnabled,
         crashReportsEnabled: crashReportsEnabled,
         githubIntegrationEnabled: githubIntegrationEnabled,
+        telegramBotEnabled: telegramBotEnabled,
+        telegramBotToken: telegramBotToken.trimmedNilIfEmpty,
+        telegramAllowedUserIDs: telegramAllowedUserIDs,
+        telegramDefaultReadLines: telegramDefaultReadLines,
+        telegramRequireExplicitPaneForWrite: telegramRequireExplicitPaneForWrite,
         deleteBranchOnDeleteWorktree: deleteBranchOnDeleteWorktree,
         mergedWorktreeAction: mergedWorktreeAction,
         promptForWorktreeCreation: promptForWorktreeCreation,
@@ -168,6 +186,9 @@ struct SettingsFeature {
     case setSelection(SettingsSection?)
     case setSystemNotificationsEnabled(Bool)
     case setCommandFinishedNotificationThreshold(String)
+    case setTelegramAllowedUserIDsText(String)
+    case testTelegramConnectionButtonTapped
+    case telegramConnectionTestCompleted(Result<String, TelegramConnectionTestError>)
     case setTerminalFontSize(Float32?)
     case clearTerminalLayoutSnapshotButtonTapped
     case installCLIButtonTapped(showAlert: Bool = true)
@@ -194,6 +215,17 @@ struct SettingsFeature {
     case failed(message: String)
   }
 
+  enum TelegramConnectionStatus: Equatable {
+    case idle
+    case testing
+    case success(String)
+    case failure(String)
+  }
+
+  struct TelegramConnectionTestError: Error, Equatable {
+    let message: String
+  }
+
   @CasePathable
   enum Delegate: Equatable {
     case settingsChanged(GlobalSettings)
@@ -206,6 +238,7 @@ struct SettingsFeature {
   @Dependency(SystemNotificationClient.self) private var systemNotificationClient
   @Dependency(TerminalLayoutPersistenceClient.self) private var terminalLayoutPersistence
   @Dependency(CLIInstallClient.self) private var cliInstallClient
+  @Dependency(TelegramBotClient.self) private var telegramBotClient
 
   var body: some Reducer<State, Action> {
     BindingReducer()
@@ -247,6 +280,13 @@ struct SettingsFeature {
         state.analyticsEnabled = normalizedSettings.analyticsEnabled
         state.crashReportsEnabled = normalizedSettings.crashReportsEnabled
         state.githubIntegrationEnabled = normalizedSettings.githubIntegrationEnabled
+        state.telegramBotEnabled = normalizedSettings.telegramBotEnabled
+        state.telegramBotToken = normalizedSettings.telegramBotToken ?? ""
+        state.telegramAllowedUserIDs = normalizedSettings.telegramAllowedUserIDs
+        state.telegramAllowedUserIDsText = TelegramAllowedUserIDsParser.format(
+          normalizedSettings.telegramAllowedUserIDs)
+        state.telegramDefaultReadLines = normalizedSettings.telegramDefaultReadLines
+        state.telegramRequireExplicitPaneForWrite = normalizedSettings.telegramRequireExplicitPaneForWrite
         state.deleteBranchOnDeleteWorktree = normalizedSettings.deleteBranchOnDeleteWorktree
         state.mergedWorktreeAction = normalizedSettings.mergedWorktreeAction
         state.archivedAutoDeletePeriod = normalizedSettings.archivedAutoDeletePeriod
@@ -279,6 +319,7 @@ struct SettingsFeature {
 
       case .binding:
         state.commandFinishedNotificationThreshold = min(max(state.commandFinishedNotificationThreshold, 0), 600)
+        state.telegramDefaultReadLines = min(max(state.telegramDefaultReadLines, 1), 500)
         state.syncGlobalDefaults(from: state.globalSettings)
         return persist(state)
 
@@ -294,6 +335,42 @@ struct SettingsFeature {
         state.systemNotificationsEnabled = isEnabled
         state.syncGlobalDefaults(from: state.globalSettings)
         return persist(state)
+
+      case .setTelegramAllowedUserIDsText(let text):
+        state.telegramAllowedUserIDsText = text
+        guard let ids = TelegramAllowedUserIDsParser.parse(text) else {
+          return .none
+        }
+        state.telegramAllowedUserIDs = ids
+        return persist(state)
+
+      case .testTelegramConnectionButtonTapped:
+        guard let token = state.globalSettings.telegramBotToken else {
+          state.telegramConnectionStatus = .failure("Bot token is required.")
+          return .none
+        }
+        state.telegramConnectionStatus = .testing
+        return .run { [telegramBotClient] send in
+          do {
+            let user = try await telegramBotClient.getMe(token)
+            let label = user.username.map { "@\($0)" } ?? user.firstName
+            await send(.telegramConnectionTestCompleted(.success(label)))
+          } catch {
+            await send(
+              .telegramConnectionTestCompleted(
+                .failure(TelegramConnectionTestError(message: telegramConnectionErrorMessage(error)))
+              )
+            )
+          }
+        }
+
+      case .telegramConnectionTestCompleted(.success(let label)):
+        state.telegramConnectionStatus = .success(label)
+        return .none
+
+      case .telegramConnectionTestCompleted(.failure(let error)):
+        state.telegramConnectionStatus = .failure(error.message)
+        return .none
 
       case .setTerminalFontSize(let fontSize):
         guard state.terminalFontSize != fontSize else { return .none }
@@ -456,6 +533,16 @@ struct SettingsFeature {
 }
 
 extension SettingsFeature.State {
+  var telegramBotConfiguration: TelegramBotConfiguration {
+    TelegramBotConfiguration(
+      enabled: telegramBotEnabled,
+      token: telegramBotToken,
+      allowedUserIDs: telegramAllowedUserIDs,
+      defaultReadLines: telegramDefaultReadLines,
+      requireExplicitPaneForWrite: telegramRequireExplicitPaneForWrite
+    )
+  }
+
   mutating func syncGlobalDefaults(from settings: GlobalSettings) {
     repositorySettings?.globalDefaultWorktreeBaseDirectoryPath =
       settings.defaultWorktreeBaseDirectoryPath
@@ -465,5 +552,27 @@ extension SettingsFeature.State {
       settings.copyUntrackedOnWorktreeCreate
     repositorySettings?.globalPullRequestMergeStrategy =
       settings.pullRequestMergeStrategy
+  }
+}
+
+private func telegramConnectionErrorMessage(_ error: Error) -> String {
+  if let clientError = error as? TelegramBotClientError {
+    switch clientError {
+    case .invalidResponse:
+      return "Telegram returned an invalid response."
+    case .api(let errorCode, let description):
+      if let errorCode {
+        return "Telegram API error \(errorCode): \(description)"
+      }
+      return "Telegram API error: \(description)"
+    }
+  }
+  return "Could not reach Telegram Bot API."
+}
+
+extension String {
+  fileprivate var trimmedNilIfEmpty: String? {
+    let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
   }
 }

@@ -4,7 +4,7 @@
 > an agent) can list panes, read their screens, run commands and capture output,
 > send keystrokes, focus, and open/close tabs and panes programmatically.
 
-**Keywords:** prowl cli, command line, prowl list, prowl agents, prowl read, prowl send, prowl key, prowl focus, prowl tab, prowl pane, prowl open, pane id, automation, json, capture, socket
+**Keywords:** prowl cli, command line, prowl list, prowl agents, prowl read, prowl send, prowl key, prowl focus, prowl tab, prowl pane, prowl open, telegram bot, pane id, automation, json, capture, socket
 
 **Related:** [terminal](terminal.md) · [concepts](../concepts.md) · [active-agents](active-agents.md) · [agent-detection](agent-detection.md) · the bundled **`prowl-cli` skill** (`skills/prowl-cli/SKILL.md`)
 
@@ -19,6 +19,15 @@ the task is to act on a pane **other than the current one** — check a sibling
 agent, run something in another tab and grab the output, focus a worktree, open a
 project, or close a scratch tab. It is **not** for ordinary editing/building
 inside a repo, and not for how-to questions about Prowl's settings.
+
+The built-in Telegram bot uses the same command router as this CLI. Its commands
+are shorter Telegram forms (`/agents`, `/list`, `/read <pane-id> [lines]`,
+`/focus <pane-id>`, `/send <pane-id> <text>`, `/key <pane-id> <token>`,
+`/tab_create <worktree>`, `/pane_close <pane-id>`, `/tab_close <tab-id>`), but
+they resolve to the same app-side operations and target model documented here.
+By default, `/send` and `/key` require a pane ID; Settings → Telegram can allow
+those two commands to use the current Prowl focus instead. Close commands always
+require an explicit target. Configure it in Settings → Telegram.
 
 ## Install
 
@@ -198,6 +207,9 @@ identifying the target).
 prowl pane close --pane "$pane" --json
 prowl tab close --tab "$tab" --force --json
 ```
+
+Telegram bot close commands never pass `--force`; identify the pane/tab first,
+then close it from the GUI or CLI if a forced close is needed.
 
 ### `prowl open [path]` (the default command)
 Navigate Prowl to a path (or bring it to front with no argument). It may focus an

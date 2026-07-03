@@ -44,6 +44,7 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
   }
   var terminalManager: WorktreeTerminalManager?
   var cliSocketServer: CLISocketServer?
+  var telegramBotRuntime: TelegramBotRuntime?
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     WindowLifecycleDiagnostics.startMainThreadHeartbeat()
@@ -81,7 +82,10 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
 
   func applicationWillTerminate(_ notification: Notification) {
     WindowLifecycleDiagnostics.logWithWindows("applicationWillTerminate")
-    defer { cliSocketServer?.stop() }
+    defer {
+      cliSocketServer?.stop()
+      telegramBotRuntime?.stop()
+    }
     guard appStore?.state.settings.restoreTerminalLayoutOnLaunch == true else { return }
     guard appStore?.state.suppressLayoutSaveUntilRelaunch != true else { return }
     terminalManager?.persistLayoutSnapshotSync()
@@ -104,6 +108,7 @@ struct SupacodeApp: App {
   @State private var pullRequestRefreshCoordinator: PullRequestRefreshCoordinator
   @State private var commandKeyObserver: CommandKeyObserver
   @State private var cliSocketServer: CLISocketServer
+  @State private var telegramBotRuntime: TelegramBotRuntime
   @State private var store: StoreOf<AppFeature>
   @State private var memoryWatchdog: MemoryWatchdog
   @State private var askAgentHelp = AskAgentHelpPresenter()
@@ -233,8 +238,17 @@ struct SupacodeApp: App {
     _store = State(initialValue: appStore)
     storeBox.store = appStore
 
-    let cliServer = Self.makeCLISocketServer(appStore: appStore, terminalManager: terminalManager)
+    let cliRouter = Self.makeCLICommandRouter(appStore: appStore, terminalManager: terminalManager)
+    let cliServer = Self.makeCLISocketServer(router: cliRouter)
     _cliSocketServer = State(initialValue: cliServer)
+    let telegramRuntime = TelegramBotRuntime(
+      client: .liveValue,
+      route: { envelope in
+        await cliRouter.route(envelope)
+      }
+    )
+    telegramRuntime.apply(configuration: initialAppState.settings.telegramBotConfiguration)
+    _telegramBotRuntime = State(initialValue: telegramRuntime)
 
     let watchdog = Self.makeMemoryWatchdog(appStore: appStore, terminalManager: terminalManager)
     #if !DEBUG
@@ -248,6 +262,7 @@ struct SupacodeApp: App {
     appDelegate.appStore = appStore
     appDelegate.terminalManager = terminalManager
     appDelegate.cliSocketServer = cliServer
+    appDelegate.telegramBotRuntime = telegramRuntime
     SettingsWindowManager.shared.configure(
       store: appStore,
       ghosttyShortcuts: shortcuts,
@@ -625,11 +640,7 @@ struct SupacodeApp: App {
     )
   }
 
-  private static func makeCLISocketServer(
-    appStore: StoreOf<AppFeature>,
-    terminalManager: WorktreeTerminalManager
-  ) -> CLISocketServer {
-    let cliRouter = makeCLICommandRouter(appStore: appStore, terminalManager: terminalManager)
+  private static func makeCLISocketServer(router cliRouter: CLICommandRouter) -> CLISocketServer {
     let cliServer = CLISocketServer(router: cliRouter)
     let logger = SupaLogger("CLIService")
     do {
@@ -846,12 +857,16 @@ struct SupacodeApp: App {
         WindowLifecycleDiagnostics.logWithWindows("mainWindow content onAppear")
         WindowLifecycleDiagnostics.noteMainWindowAppeared()
         syncGhosttyManagedShortcuts(with: store.resolvedKeybindings)
+        telegramBotRuntime.apply(configuration: store.settings.telegramBotConfiguration)
       }
       .onDisappear {
         WindowLifecycleDiagnostics.logWithWindows("mainWindow content onDisappear")
       }
       .onChange(of: store.resolvedKeybindings) { _, newValue in
         syncGhosttyManagedShortcuts(with: newValue)
+      }
+      .onChange(of: store.settings.telegramBotConfiguration) { _, newValue in
+        telegramBotRuntime.apply(configuration: newValue)
       }
       .preferredColorScheme(store.settings.appearanceMode.colorScheme)
     }

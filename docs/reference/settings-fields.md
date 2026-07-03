@@ -66,6 +66,11 @@ JSON is pretty-printed with sorted keys. Legacy `~/.supacode` is migrated to
 | `shelfSpineTintFollowsRepositoryColor` | Bool | `true` | Tint shelf spines by repo color. |
 | `externalDiffToolID` | String | `built-in` | Tool used by diff badges and Show Diff: `built-in`, `hunk`, `filemerge`, `kaleidoscope`, or `custom`. |
 | `externalDiffCustomCommand` | String | `""` | Command template for `externalDiffToolID = custom`; supports `{leftPath}`, `{rightPath}`, `{worktreePath}`, `{repoPath}`, and `{branch}`. |
+| `telegramBotEnabled` | Bool | `false` | Start the built-in Telegram bot long-polling runtime. |
+| `telegramBotToken` | String? | `nil` | Telegram Bot API token used for `getUpdates`, `getMe`, and `sendMessage`; never logged. |
+| `telegramAllowedUserIDs` | `[Int64]` | `[]` | Telegram user ID allowlist. Messages from other users are ignored. |
+| `telegramDefaultReadLines` | Int | `80` | Default line count for Telegram `/read <pane-id>` when no count is provided; decoded values are clamped to `1...500`. |
+| `telegramRequireExplicitPaneForWrite` | Bool | `true` | Require explicit pane IDs for Telegram `/send` and `/key`; close commands always require explicit IDs. |
 
 ## Per-repository settings (`RepositorySettings`)
 
