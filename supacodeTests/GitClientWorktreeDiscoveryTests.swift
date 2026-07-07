@@ -111,7 +111,15 @@ struct GitClientWorktreeDiscoveryTests {
           arguments: arguments,
           currentDirectoryURL: currentDirectoryURL
         )
-        return ShellOutput(stdout: output, stderr: "", exitCode: 0)
+        switch arguments {
+        case ["root"]:
+          return ShellOutput(stdout: "/tmp/repo\n", stderr: "", exitCode: 0)
+        case ["ls", "--json"]:
+          return ShellOutput(stdout: output, stderr: "", exitCode: 0)
+        default:
+          Issue.record("Unexpected worktree discovery invocation: \(arguments)")
+          return ShellOutput(stdout: "", stderr: "", exitCode: 0)
+        }
       },
       runLoginImpl: { executableURL, arguments, currentDirectoryURL, _ in
         recorder.recordLogin(
@@ -130,12 +138,14 @@ struct GitClientWorktreeDiscoveryTests {
 
     #expect(worktrees.map(\.id) == ["/tmp/repo", "/tmp/repo/.worktrees/feature"])
     let runs = recorder.runInvocations()
-    #expect(runs.count == 1)
-    if let invocation = runs.first {
-      #expect(invocation.arguments == ["ls", "--json"])
-      #expect(invocation.currentDirectoryPath == "/tmp/repo")
+    #expect(runs.count == 2)
+    if runs.count == 2 {
+      #expect(runs[0].arguments == ["root"])
+      #expect(runs[0].currentDirectoryPath == "/tmp/repo")
+      #expect(runs[1].arguments == ["ls", "--json"])
+      #expect(runs[1].currentDirectoryPath == "/tmp/repo")
     } else {
-      Issue.record("Expected one direct bundled wt invocation for worktree discovery")
+      Issue.record("Expected repo-root validation plus one worktree discovery invocation")
     }
     #expect(recorder.loginInvocations().isEmpty)
   }
@@ -149,8 +159,16 @@ struct GitClientWorktreeDiscoveryTests {
       ]
       """
     let shell = ShellClient(
-      run: { _, _, _ in
-        ShellOutput(stdout: output, stderr: "", exitCode: 0)
+      run: { _, arguments, _ in
+        switch arguments {
+        case ["root"]:
+          return ShellOutput(stdout: "/tmp/repo\n", stderr: "", exitCode: 0)
+        case ["ls", "--json"]:
+          return ShellOutput(stdout: output, stderr: "", exitCode: 0)
+        default:
+          Issue.record("Unexpected worktree discovery invocation: \(arguments)")
+          return ShellOutput(stdout: "", stderr: "", exitCode: 0)
+        }
       },
       runLoginImpl: { _, _, _, _ in
         Issue.record("worktrees should not use runLogin when direct execution succeeds")
@@ -218,12 +236,20 @@ struct GitClientWorktreeDiscoveryTests {
           arguments: arguments,
           currentDirectoryURL: currentDirectoryURL
         )
-        throw ShellClientError(
-          command: "wt ls --json",
-          stdout: "",
-          stderr: "permission denied",
-          exitCode: 1
-        )
+        switch arguments {
+        case ["root"]:
+          return ShellOutput(stdout: "/tmp/repo\n", stderr: "", exitCode: 0)
+        case ["ls", "--json"]:
+          throw ShellClientError(
+            command: "wt ls --json",
+            stdout: "",
+            stderr: "permission denied",
+            exitCode: 1
+          )
+        default:
+          Issue.record("Unexpected worktree discovery invocation: \(arguments)")
+          return ShellOutput(stdout: "", stderr: "", exitCode: 0)
+        }
       },
       runLoginImpl: { executableURL, arguments, currentDirectoryURL, _ in
         recorder.recordLogin(
@@ -241,7 +267,54 @@ struct GitClientWorktreeDiscoveryTests {
       _ = try await client.worktrees(for: URL(fileURLWithPath: "/tmp/repo"))
     }
 
-    #expect(recorder.runInvocations().count == 1)
+    #expect(recorder.runInvocations().count == 2)
+    #expect(recorder.loginInvocations().isEmpty)
+  }
+
+  @Test func worktreesRejectNonRootDirectories() async {
+    let recorder = GitWorktreeDiscoveryRecorder()
+    let shell = ShellClient(
+      run: { executableURL, arguments, currentDirectoryURL in
+        recorder.recordRun(
+          executableURL: executableURL,
+          arguments: arguments,
+          currentDirectoryURL: currentDirectoryURL
+        )
+        switch arguments {
+        case ["root"]:
+          return ShellOutput(stdout: "/tmp/repo\n", stderr: "", exitCode: 0)
+        case ["ls", "--json"]:
+          Issue.record("worktree discovery should not run for non-root directories")
+          return ShellOutput(stdout: "[]", stderr: "", exitCode: 0)
+        default:
+          Issue.record("Unexpected worktree discovery invocation: \(arguments)")
+          return ShellOutput(stdout: "", stderr: "", exitCode: 0)
+        }
+      },
+      runLoginImpl: { executableURL, arguments, currentDirectoryURL, _ in
+        recorder.recordLogin(
+          executableURL: executableURL,
+          arguments: arguments,
+          currentDirectoryURL: currentDirectoryURL
+        )
+        Issue.record("worktrees should not use runLogin when direct execution succeeds")
+        return ShellOutput(stdout: "", stderr: "", exitCode: 0)
+      }
+    )
+    let client = GitClient(shell: shell)
+
+    await #expect(throws: GitClientError.self) {
+      _ = try await client.worktrees(for: URL(fileURLWithPath: "/tmp/repo/subdir"))
+    }
+
+    let runs = recorder.runInvocations()
+    #expect(runs.count == 1)
+    if let invocation = runs.first {
+      #expect(invocation.arguments == ["root"])
+      #expect(invocation.currentDirectoryPath == "/tmp/repo/subdir")
+    } else {
+      Issue.record("Expected repo-root validation for non-root worktree lookup")
+    }
     #expect(recorder.loginInvocations().isEmpty)
   }
 }

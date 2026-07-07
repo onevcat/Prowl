@@ -1,7 +1,7 @@
 import ComposableArchitecture
 import Foundation
-import Sharing
 import IdentifiedCollections
+import Sharing
 import SwiftUI
 
 extension RepositoriesFeature {
@@ -68,25 +68,11 @@ extension RepositoriesFeature {
           do {
             let repoRoot = try await gitClient.repoRoot(URL(fileURLWithPath: normalizedPath))
             let normalizedRepoRoot = repoRoot.standardizedFileURL.path(percentEncoded: false)
-            switch entry.kind {
-            case .plain:
-              if normalizedRepoRoot == normalizedPath {
-                return (index, PersistedRepositoryEntry(path: normalizedPath, kind: .git))
-              }
-              return (index, PersistedRepositoryEntry(path: normalizedPath, kind: .plain))
-            case .git:
-              if normalizedRepoRoot == normalizedPath {
-                return (index, PersistedRepositoryEntry(path: normalizedPath, kind: .git))
-              }
-              return (index, PersistedRepositoryEntry(path: normalizedPath, kind: .plain))
+            if entry.kind == .plain, normalizedRepoRoot == normalizedPath {
+              return (index, PersistedRepositoryEntry(path: normalizedPath, kind: .git))
             }
           } catch {
-            if entry.kind == .git,
-              Self.isNotGitRepositoryError(error),
-              FileManager.default.fileExists(atPath: normalizedPath)
-            {
-              return (index, PersistedRepositoryEntry(path: normalizedPath, kind: .plain))
-            }
+            return (index, PersistedRepositoryEntry(path: normalizedPath, kind: entry.kind))
           }
           return (index, PersistedRepositoryEntry(path: normalizedPath, kind: entry.kind))
         }
@@ -155,63 +141,83 @@ extension RepositoriesFeature {
     let errorMessage: String?
   }
 
+  private struct FilteredLoadedRepositoryState {
+    let repositories: IdentifiedArrayOf<Repository>
+    let availableWorktreeIDs: Set<Worktree.ID>
+    let pendingWorktrees: [PendingWorktree]
+    let deletingWorktreeIDs: Set<Worktree.ID>
+    let pendingSetupScriptWorktreeIDs: Set<Worktree.ID>
+    let pendingTerminalFocusWorktreeIDs: Set<Worktree.ID>
+    let archivingWorktreeIDs: Set<Worktree.ID>
+    let archiveScriptProgressByWorktreeID: [Worktree.ID: ArchiveScriptProgress]
+    let worktreeInfoByID: [Worktree.ID: WorktreeInfoEntry]
+  }
+
   func loadRepositoriesData(_ entries: [PersistedRepositoryEntry]) async -> ([Repository], [LoadFailure]) {
     let fetchResults = await withTaskGroup(of: WorktreesFetchResult.self) { group in
       for entry in entries {
-        let gitClient = self.gitClient
         group.addTask {
-          let rootURL = URL(fileURLWithPath: entry.path).standardizedFileURL
-          switch entry.kind {
-          case .git:
-            do {
-              let worktrees = try await gitClient.worktrees(rootURL)
-              return WorktreesFetchResult(
-                entry: entry,
-                repository: Repository(
-                  id: rootURL.path(percentEncoded: false),
-                  rootURL: rootURL,
-                  name: Repository.name(for: rootURL),
-                  kind: .git,
-                  worktrees: IdentifiedArray(worktrees, uniquingIDsWith: { current, _ in current })
-                ),
-                errorMessage: nil
-              )
-            } catch {
-              return WorktreesFetchResult(
-                entry: entry,
-                repository: nil,
-                errorMessage: error.localizedDescription
-              )
-            }
-          case .plain:
-            return WorktreesFetchResult(
-              entry: entry,
-              repository: Repository(
-                id: rootURL.path(percentEncoded: false),
-                rootURL: rootURL,
-                name: Repository.name(for: rootURL),
-                kind: .plain,
-                worktrees: IdentifiedArray()
-              ),
-              errorMessage: nil
-            )
-          }
+          await fetchRepositoryData(for: entry)
         }
       }
 
       var resultsByRootID: [Repository.ID: WorktreesFetchResult] = [:]
       for await result in group {
-        let rootID = URL(fileURLWithPath: result.entry.path).standardizedFileURL.path(percentEncoded: false)
-        resultsByRootID[rootID] = result
+        resultsByRootID[Self.repositoryRootID(for: result.entry.path)] = result
       }
       return resultsByRootID
     }
 
+    return Self.partitionFetchResults(fetchResults, orderedBy: entries)
+  }
+
+  private func fetchRepositoryData(for entry: PersistedRepositoryEntry) async -> WorktreesFetchResult {
+    let rootURL = URL(fileURLWithPath: entry.path).standardizedFileURL
+    switch entry.kind {
+    case .git:
+      do {
+        let worktrees = try await gitClient.worktrees(rootURL)
+        return WorktreesFetchResult(
+          entry: entry,
+          repository: Repository(
+            id: rootURL.path(percentEncoded: false),
+            rootURL: rootURL,
+            name: Repository.name(for: rootURL),
+            kind: .git,
+            worktrees: IdentifiedArray(worktrees, uniquingIDsWith: { current, _ in current })
+          ),
+          errorMessage: nil
+        )
+      } catch {
+        return WorktreesFetchResult(
+          entry: entry,
+          repository: nil,
+          errorMessage: error.localizedDescription
+        )
+      }
+    case .plain:
+      return WorktreesFetchResult(
+        entry: entry,
+        repository: Repository(
+          id: rootURL.path(percentEncoded: false),
+          rootURL: rootURL,
+          name: Repository.name(for: rootURL),
+          kind: .plain,
+          worktrees: IdentifiedArray()
+        ),
+        errorMessage: nil
+      )
+    }
+  }
+
+  nonisolated private static func partitionFetchResults(
+    _ fetchResults: [Repository.ID: WorktreesFetchResult],
+    orderedBy entries: [PersistedRepositoryEntry]
+  ) -> ([Repository], [LoadFailure]) {
     var loaded: [Repository] = []
     var failures: [LoadFailure] = []
     for entry in entries {
-      let normalizedRoot = URL(fileURLWithPath: entry.path).standardizedFileURL
-      let rootID = normalizedRoot.path(percentEncoded: false)
+      let rootID = repositoryRootID(for: entry.path)
       guard let result = fetchResults[rootID] else { continue }
       if let repository = result.repository {
         loaded.append(repository)
@@ -227,14 +233,14 @@ extension RepositoriesFeature {
     return (loaded, failures)
   }
 
-  func applyRepositories(
+  nonisolated private static func repositoryRootID(for path: String) -> Repository.ID {
+    URL(fileURLWithPath: path).standardizedFileURL.path(percentEncoded: false)
+  }
+
+  private func filteredLoadedRepositoryState(
     _ repositories: [Repository],
-    roots: [URL],
-    shouldPruneArchivedWorktrees: Bool,
-    state: inout State,
-    animated: Bool
-  ) -> ApplyRepositoriesResult {
-    @Shared(.appStorage(restoreCanvasModeOnLaunchAppStorageKey)) var restoreCanvasModeOnLaunch = false
+    state: inout State
+  ) -> FilteredLoadedRepositoryState {
     let previousCounts = Dictionary(
       uniqueKeysWithValues: state.repositories.map { ($0.id, $0.worktrees.count) }
     )
@@ -250,58 +256,85 @@ extension RepositoriesFeature {
         addedCounts[id] = added
       }
     }
-    let filteredPendingWorktrees = state.pendingWorktrees.filter { pending in
+
+    let pendingWorktrees = state.pendingWorktrees.filter { pending in
       guard repositoryIDs.contains(pending.repositoryID) else { return false }
       guard let remaining = addedCounts[pending.repositoryID], remaining > 0 else { return true }
       addedCounts[pending.repositoryID] = remaining - 1
       return false
     }
+
     let availableWorktreeIDs = Set(repositories.flatMap { $0.worktrees.map(\.id) })
-    let filteredDeletingIDs = state.deletingWorktreeIDs.intersection(availableWorktreeIDs)
-    let filteredSetupScriptIDs = state.pendingSetupScriptWorktreeIDs.filter {
-      availableWorktreeIDs.contains($0)
-    }
-    let filteredFocusIDs = state.pendingTerminalFocusWorktreeIDs.filter {
-      availableWorktreeIDs.contains($0)
-    }
-    let filteredArchivingIDs = state.archivingWorktreeIDs
-    let filteredArchiveScriptProgress = state.archiveScriptProgressByWorktreeID.filter {
-      availableWorktreeIDs.contains($0.key) || filteredArchivingIDs.contains($0.key)
-    }
-    let filteredWorktreeInfo = state.worktreeInfoByID.filter {
-      availableWorktreeIDs.contains($0.key)
-    }
+    let archivingWorktreeIDs = state.archivingWorktreeIDs
     state.$prowlCreatedWorktreeIDs.withLock {
       $0.removeAll { !availableWorktreeIDs.contains($0) }
     }
-    let identifiedRepositories = IdentifiedArray(uniqueElements: repositories)
+
+    return FilteredLoadedRepositoryState(
+      repositories: IdentifiedArray(uniqueElements: repositories),
+      availableWorktreeIDs: availableWorktreeIDs,
+      pendingWorktrees: pendingWorktrees,
+      deletingWorktreeIDs: state.deletingWorktreeIDs.intersection(availableWorktreeIDs),
+      pendingSetupScriptWorktreeIDs: state.pendingSetupScriptWorktreeIDs.filter {
+        availableWorktreeIDs.contains($0)
+      },
+      pendingTerminalFocusWorktreeIDs: state.pendingTerminalFocusWorktreeIDs.filter {
+        availableWorktreeIDs.contains($0)
+      },
+      archivingWorktreeIDs: archivingWorktreeIDs,
+      archiveScriptProgressByWorktreeID: state.archiveScriptProgressByWorktreeID.filter {
+        availableWorktreeIDs.contains($0.key) || archivingWorktreeIDs.contains($0.key)
+      },
+      worktreeInfoByID: state.worktreeInfoByID.filter {
+        availableWorktreeIDs.contains($0.key)
+      }
+    )
+  }
+
+  private func applyLoadedRepositoryState(
+    _ filteredState: FilteredLoadedRepositoryState,
+    state: inout State,
+    animated: Bool
+  ) {
     if animated {
       withAnimation {
-        state.repositories = identifiedRepositories
-        state.pendingWorktrees = filteredPendingWorktrees
-        state.deletingWorktreeIDs = filteredDeletingIDs
-        state.pendingSetupScriptWorktreeIDs = filteredSetupScriptIDs
-        state.pendingTerminalFocusWorktreeIDs = filteredFocusIDs
-        state.archivingWorktreeIDs = filteredArchivingIDs
-        state.archiveScriptProgressByWorktreeID = filteredArchiveScriptProgress
-        state.worktreeInfoByID = filteredWorktreeInfo
+        state.repositories = filteredState.repositories
+        state.pendingWorktrees = filteredState.pendingWorktrees
+        state.deletingWorktreeIDs = filteredState.deletingWorktreeIDs
+        state.pendingSetupScriptWorktreeIDs = filteredState.pendingSetupScriptWorktreeIDs
+        state.pendingTerminalFocusWorktreeIDs = filteredState.pendingTerminalFocusWorktreeIDs
+        state.archivingWorktreeIDs = filteredState.archivingWorktreeIDs
+        state.archiveScriptProgressByWorktreeID = filteredState.archiveScriptProgressByWorktreeID
+        state.worktreeInfoByID = filteredState.worktreeInfoByID
       }
     } else {
-      state.repositories = identifiedRepositories
-      state.pendingWorktrees = filteredPendingWorktrees
-      state.deletingWorktreeIDs = filteredDeletingIDs
-      state.pendingSetupScriptWorktreeIDs = filteredSetupScriptIDs
-      state.pendingTerminalFocusWorktreeIDs = filteredFocusIDs
-      state.archivingWorktreeIDs = filteredArchivingIDs
-      state.archiveScriptProgressByWorktreeID = filteredArchiveScriptProgress
-      state.worktreeInfoByID = filteredWorktreeInfo
+      state.repositories = filteredState.repositories
+      state.pendingWorktrees = filteredState.pendingWorktrees
+      state.deletingWorktreeIDs = filteredState.deletingWorktreeIDs
+      state.pendingSetupScriptWorktreeIDs = filteredState.pendingSetupScriptWorktreeIDs
+      state.pendingTerminalFocusWorktreeIDs = filteredState.pendingTerminalFocusWorktreeIDs
+      state.archivingWorktreeIDs = filteredState.archivingWorktreeIDs
+      state.archiveScriptProgressByWorktreeID = filteredState.archiveScriptProgressByWorktreeID
+      state.worktreeInfoByID = filteredState.worktreeInfoByID
     }
+  }
+
+  func applyRepositories(
+    _ repositories: [Repository],
+    roots: [URL],
+    shouldPruneArchivedWorktrees: Bool,
+    state: inout State,
+    animated: Bool
+  ) -> ApplyRepositoriesResult {
+    @Shared(.appStorage(restoreCanvasModeOnLaunchAppStorageKey)) var restoreCanvasModeOnLaunch = false
+    let filteredState = filteredLoadedRepositoryState(repositories, state: &state)
+    applyLoadedRepositoryState(filteredState, state: &state, animated: animated)
     let didPrunePinned = prunePinnedWorktreeIDs(state: &state)
     let didPruneRepositoryOrder = pruneRepositoryOrderIDs(roots: roots, state: &state)
     let didPruneWorktreeOrder = pruneWorktreeOrderByRepository(roots: roots, state: &state)
     let didPruneArchivedWorktrees =
       shouldPruneArchivedWorktrees
-      ? pruneArchivedWorktrees(availableWorktreeIDs: availableWorktreeIDs, state: &state)
+      ? pruneArchivedWorktrees(availableWorktreeIDs: filteredState.availableWorktreeIDs, state: &state)
       : false
     if !state.isShowingArchivedWorktrees, !state.isShowingCanvas, !state.isShowingFreestyle,
       !isSidebarSelectionValid(state.selection, state: state)

@@ -180,6 +180,34 @@ extension RepositoriesFeature {
       }
       .cancellable(id: CancelID.load, cancelInFlight: true)
 
+    case .updateFailedRepositoryPath(let repositoryID, let replacementURL):
+      state.alert = nil
+      let currentRoots = state.repositoryRoots
+      return .run { send in
+        let loadedEntries = await loadPersistedRepositoryEntries(fallbackRoots: currentRoots)
+        let replacementPath = replacementURL.standardizedFileURL.path(percentEncoded: false)
+        let updatedEntries = RepositoryEntryNormalizer.normalize(
+          loadedEntries.map { entry in
+            guard entry.path == repositoryID else {
+              return entry
+            }
+            return PersistedRepositoryEntry(path: replacementPath, kind: entry.kind)
+          }
+        )
+        await repositoryPersistence.saveRepositoryEntries(updatedEntries)
+        let roots = updatedEntries.map { URL(fileURLWithPath: $0.path) }
+        let (repositories, failures) = await loadRepositoriesData(updatedEntries)
+        await send(
+          .repositoriesLoaded(
+            repositories,
+            failures: failures,
+            roots: roots,
+            animated: true
+          )
+        )
+      }
+      .cancellable(id: CancelID.load, cancelInFlight: true)
+
     case .repositoryRemoved(let repositoryID, let selectionWasRemoved):
       analyticsClient.capture("repository_removed", [String: Any]?.none)
       state.removingRepositoryIDs.remove(repositoryID)

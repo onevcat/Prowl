@@ -211,6 +211,10 @@ struct RepositoriesFeature {
     )
     case requestRemoveRepository(Repository.ID)
     case removeFailedRepository(Repository.ID)
+    case updateFailedRepositoryPath(
+      repositoryID: Repository.ID,
+      replacementURL: URL
+    )
     case repositoryRemoved(Repository.ID, selectionWasRemoved: Bool)
     case openRepositorySettings(Repository.ID)
   }
@@ -290,8 +294,7 @@ struct RepositoriesFeature {
     var nextCanvasCommandRequestID = 0
     var pendingCanvasCommandRequest: CanvasCommandRequest?
     var activeAgents = ActiveAgentsFeature.State()
-    @Shared(.appStorage("sidebarCollapsedRepositoryIDs")) var collapsedRepositoryIDs:
-      [Repository.ID] = []
+    @Shared(.appStorage("sidebarCollapsedRepositoryIDs")) var collapsedRepositoryIDs: [Repository.ID] = []
     @Presents var worktreeCreationPrompt: WorktreeCreationPromptFeature.State?
     @Presents var alert: AlertState<Alert>?
   }

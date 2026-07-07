@@ -376,6 +376,18 @@ struct SidebarListView: View {
             let message = "\(model.path)\n\n\(model.failureMessage)"
             store.send(.presentAlert(title: "Unable to load \(model.name)", message: message))
           },
+          updateRepository: {
+            FailedRepositoryPathPicker.present(for: model.path) { url in
+              store.send(
+                .repositoryManagement(
+                  .updateFailedRepositoryPath(
+                    repositoryID: model.id,
+                    replacementURL: url
+                  )
+                )
+              )
+            }
+          },
           removeRepository: {
             store.send(.repositoryManagement(.removeFailedRepository(model.id)))
           }

@@ -132,6 +132,19 @@ The **main worktree cannot be deleted.**
 Right-click a repo header → "Remove Repository" (or the **⋯** menu). This removes
 it from Prowl (closing its open terminals); it does **not** delete files on disk.
 
+## Updating a missing repository path
+
+If a saved repository path disappears or stops loading, the sidebar keeps a failed
+row for it. Right-click that row and choose **Update…** to point the entry at a
+replacement folder.
+
+The folder picker opens at the nearest existing ancestor of the missing path, or
+your home directory if none of the saved path still exists. Prowl preserves the
+original repository kind when you update it: a failed **git** entry must still be
+replaced with the actual git repo root. Choosing a plain folder or a nested
+subdirectory keeps the row failed instead of silently changing it to a plain
+folder.
+
 ## Opening a worktree in another app
 
 `⌘O` opens the worktree with the selected open action. When the action is

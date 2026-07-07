@@ -30,9 +30,19 @@ struct GitClient {
     return URL(fileURLWithPath: trimmed).standardizedFileURL
   }
 
-  nonisolated func worktrees(for repoRoot: URL) async throws -> [Worktree] {
-    let repositoryRootURL = repoRoot.standardizedFileURL
-    let output = try await runWtList(repoRoot: repoRoot)
+  nonisolated func worktrees(for repositoryURL: URL) async throws -> [Worktree] {
+    let requestedPath = repositoryURL.standardizedFileURL.path(percentEncoded: false)
+    let repositoryRootURL = URL(fileURLWithPath: requestedPath, isDirectory: true).standardizedFileURL
+    let resolvedRepositoryRootURL = try await repoRoot(for: repositoryRootURL)
+    guard resolvedRepositoryRootURL == repositoryRootURL else {
+      throw GitClientError.commandFailed(
+        command: "wt root",
+        message:
+          "Expected repository root at \(requestedPath), but git resolved "
+          + "\(resolvedRepositoryRootURL.path(percentEncoded: false))."
+      )
+    }
+    let output = try await runWtList(repoRoot: repositoryRootURL)
     let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
     if trimmed.isEmpty {
       return []

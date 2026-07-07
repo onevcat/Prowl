@@ -598,15 +598,9 @@ struct RepositoriesFeatureTests {
     #expect(savedEntries.value.isEmpty)
   }
 
-  @Test func loadPersistedRepositoriesAutoDowngradesGitRepoWhenItStopsBeingRepoRoot() async {
+  @Test func loadPersistedRepositoriesKeepsGitEntryFailedWhenItStopsBeingRepoRoot() async {
     let root = "/tmp/repo"
     let ancestorRoot = "/tmp"
-    let downgradedRepository = makeRepository(
-      id: root,
-      name: "repo",
-      kind: .plain,
-      worktrees: []
-    )
     let savedEntries = LockIsolated<[[PersistedRepositoryEntry]]>([])
 
     let store = TestStore(initialState: RepositoriesFeature.State()) {
@@ -624,25 +618,24 @@ struct RepositoriesFeatureTests {
         return URL(fileURLWithPath: ancestorRoot)
       }
       $0.gitClient.worktrees = { url in
-        Issue.record("downgraded git entry should not load worktrees: \(url.path(percentEncoded: false))")
-        return []
+        #expect(url.path(percentEncoded: false) == root)
+        throw GitClientError.commandFailed(
+          command: "wt root",
+          message: "Expected repository root at \(root), but git resolved \(ancestorRoot)."
+        )
       }
     }
 
     await store.send(.loadPersistedRepositories)
-    await store.receive(\.repositoriesLoaded) {
-      $0.repositories = [downgradedRepository]
-      $0.repositoryRoots = [URL(fileURLWithPath: root)]
-      $0.isInitialLoadComplete = true
-      $0.snapshotPersistencePhase = .active
-    }
+    await store.receive(\.repositoriesLoaded)
     await store.receive(\.delegate.repositoriesChanged)
     await store.finish()
 
-    let expectedSavedEntries = [
-      [PersistedRepositoryEntry(path: root, kind: .plain)]
-    ]
-    #expect(savedEntries.value == expectedSavedEntries)
+    #expect(store.state.repositories.isEmpty)
+    #expect(store.state.repositoryRoots == [URL(fileURLWithPath: root)])
+    #expect(Set(store.state.loadFailuresByID.keys) == [root])
+    #expect(store.state.isInitialLoadComplete)
+    #expect(savedEntries.value.isEmpty)
   }
 
   @Test func loadPersistedRepositoriesDoesNotDowngradeGitRepoOnUnexpectedProbeError() async {
@@ -749,6 +742,167 @@ struct RepositoriesFeatureTests {
       ]
     ]
     #expect(savedEntries.value == expectedSavedEntries)
+  }
+
+  @Test func updateFailedRepositoryPathReplacesPersistedEntryAndReloads() async {
+    let oldPath = "/tmp/missing-repo"
+    let newPath = "/tmp/repo"
+    let worktree = makeWorktree(id: "\(newPath)/main", name: "main", repoRoot: newPath)
+    let repository = makeRepository(id: newPath, worktrees: [worktree])
+    let savedEntries = LockIsolated<[[PersistedRepositoryEntry]]>([])
+
+    let store = TestStore(initialState: RepositoriesFeature.State()) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.loadRepositoryEntries = {
+        [PersistedRepositoryEntry(path: oldPath, kind: .git)]
+      }
+      $0.repositoryPersistence.saveRepositoryEntries = { entries in
+        savedEntries.withValue { $0.append(entries) }
+      }
+      $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
+      $0.gitClient.repoRoot = { url in
+        #expect(url.path(percentEncoded: false) == newPath)
+        return URL(fileURLWithPath: newPath)
+      }
+      $0.gitClient.worktrees = { url in
+        #expect(url.path(percentEncoded: false) == newPath)
+        return [worktree]
+      }
+    }
+
+    await store.send(
+      .repositoryManagement(
+        .updateFailedRepositoryPath(
+          repositoryID: oldPath,
+          replacementURL: URL(fileURLWithPath: newPath)
+        ))
+    )
+    await store.receive(\.repositoriesLoaded)
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
+
+    #expect(store.state.repositories == [repository])
+    #expect(store.state.repositoryRoots == [URL(fileURLWithPath: newPath)])
+    #expect(store.state.loadFailuresByID.isEmpty)
+    #expect(savedEntries.value == [[PersistedRepositoryEntry(path: newPath, kind: .git)]])
+  }
+
+  @Test func updateFailedRepositoryPathKeepsGitKindWhenReplacementIsNotGitRepo() async {
+    let oldPath = "/tmp/missing-repo"
+    let replacementPath = "/tmp/plain-folder"
+    let savedEntries = LockIsolated<[[PersistedRepositoryEntry]]>([])
+
+    let store = TestStore(initialState: RepositoriesFeature.State()) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.loadRepositoryEntries = {
+        [PersistedRepositoryEntry(path: oldPath, kind: .git)]
+      }
+      $0.repositoryPersistence.saveRepositoryEntries = { entries in
+        savedEntries.withValue { $0.append(entries) }
+      }
+      $0.gitClient.repoRoot = { url in
+        #expect(url.path(percentEncoded: false) == replacementPath)
+        throw GitClientError.commandFailed(command: "wt root", message: "not a git repository")
+      }
+      $0.gitClient.worktrees = { url in
+        Issue.record("git worktrees should not load for invalid replacement: \(url.path(percentEncoded: false))")
+        return []
+      }
+    }
+
+    await store.send(
+      .repositoryManagement(
+        .updateFailedRepositoryPath(
+          repositoryID: oldPath,
+          replacementURL: URL(fileURLWithPath: replacementPath)
+        ))
+    )
+    await store.receive(\.repositoriesLoaded)
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
+
+    #expect(store.state.repositories.isEmpty)
+    #expect(store.state.repositoryRoots == [URL(fileURLWithPath: replacementPath)])
+    #expect(Set(store.state.loadFailuresByID.keys) == [replacementPath])
+    #expect(savedEntries.value == [[PersistedRepositoryEntry(path: replacementPath, kind: .git)]])
+  }
+
+  @Test func updateFailedRepositoryPathDeduplicatesWhenReplacementMatchesExistingEntry() async {
+    let oldPath = "/tmp/missing-repo"
+    let existingPath = "/tmp/repo"
+    let worktree = makeWorktree(id: "\(existingPath)/main", name: "main", repoRoot: existingPath)
+    let repository = makeRepository(id: existingPath, worktrees: [worktree])
+    let savedEntries = LockIsolated<[[PersistedRepositoryEntry]]>([])
+
+    let store = TestStore(initialState: RepositoriesFeature.State()) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.loadRepositoryEntries = {
+        [
+          PersistedRepositoryEntry(path: oldPath, kind: .git),
+          PersistedRepositoryEntry(path: existingPath, kind: .git),
+        ]
+      }
+      $0.repositoryPersistence.saveRepositoryEntries = { entries in
+        savedEntries.withValue { $0.append(entries) }
+      }
+      $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
+      $0.gitClient.repoRoot = { url in
+        #expect(url.path(percentEncoded: false) == existingPath)
+        return URL(fileURLWithPath: existingPath)
+      }
+      $0.gitClient.worktrees = { url in
+        #expect(url.path(percentEncoded: false) == existingPath)
+        return [worktree]
+      }
+    }
+
+    await store.send(
+      .repositoryManagement(
+        .updateFailedRepositoryPath(
+          repositoryID: oldPath,
+          replacementURL: URL(fileURLWithPath: existingPath)
+        ))
+    )
+    await store.receive(\.repositoriesLoaded)
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
+
+    #expect(store.state.repositories == [repository])
+    #expect(store.state.repositoryRoots == [URL(fileURLWithPath: existingPath)])
+    #expect(
+      savedEntries.value == [[PersistedRepositoryEntry(path: existingPath, kind: .git)]]
+    )
+  }
+
+  @Test func failedRepositoryPathPickerUsesNearestExistingAncestor() throws {
+    let baseURL = FileManager.default.temporaryDirectory
+      .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    let existingURL =
+      baseURL
+      .appending(path: "level-1", directoryHint: .isDirectory)
+      .appending(path: "level-2", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: existingURL, withIntermediateDirectories: true)
+    defer {
+      try? FileManager.default.removeItem(at: baseURL)
+    }
+
+    let missingPath =
+      existingURL
+      .appending(path: "missing-a", directoryHint: .isDirectory)
+      .appending(path: "missing-b", directoryHint: .isDirectory)
+      .path(percentEncoded: false)
+    let homeURL = URL(fileURLWithPath: "/tmp/fallback-home", isDirectory: true)
+
+    let resolved = FailedRepositoryPathPicker.initialDirectory(
+      for: missingPath,
+      fileManager: .default,
+      homeDirectory: homeURL
+    )
+
+    #expect(resolved.standardizedFileURL == existingURL.standardizedFileURL)
   }
 
   @Test func revealInSidebarExpandsCollapsedRepository() async {
