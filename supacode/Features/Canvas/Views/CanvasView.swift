@@ -126,7 +126,7 @@ struct CanvasView: View {
   let focusVisibleHorizontalInset: CGFloat = 44
   let focusVisibleVerticalInset: CGFloat = 20
   let focusBottomReservedInset: CGFloat = 36
-  let expandHorizontalPadding: CGFloat = 200
+  let expandHorizontalPadding: CGFloat = 60
   let expandTopPadding: CGFloat = 20
   let expandFontSizeDelta = 2
   let minCardWidth: CGFloat = 300

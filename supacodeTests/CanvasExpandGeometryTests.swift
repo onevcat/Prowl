@@ -32,6 +32,13 @@ struct CanvasExpandGeometryTests {
     #expect(size.height == metrics.minSize.height)
   }
 
+  @MainActor
+  @Test func canvasMaxModeHorizontalPaddingUsesOneThirdOfOriginalMargin() {
+    let view = CanvasView(terminalManager: .preview)
+
+    #expect(view.expandMetrics.horizontalPadding == CGFloat(60))
+  }
+
   @Test func sizeSupportsAsymmetricMaxModeMargins() {
     let metrics = CanvasExpandGeometry.Metrics(
       horizontalPadding: 200,
