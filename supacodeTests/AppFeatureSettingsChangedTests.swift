@@ -41,6 +41,26 @@ struct AppFeatureSettingsChangedTests {
     await store.finish()
   }
 
+  @Test(.dependencies) func settingsChangedConfiguresRemoteControlWithThePersistedValue() async {
+    var settings = GlobalSettings.default
+    settings.remoteControlEnabled = true
+    let configuredValues = LockIsolated<[Bool]>([])
+    let store = TestStore(initialState: AppFeature.State()) {
+      AppFeature()
+    } withDependencies: {
+      $0.remoteControlClient.setEnabled = { enabled in
+        configuredValues.withValue { $0.append(enabled) }
+        return true
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.settings(.delegate(.settingsChanged(settings))))
+    await store.finish()
+
+    #expect(configuredValues.value == [true])
+  }
+
   @Test(.dependencies) func terminalFontSizeEventDoesNotFanOutGlobalSettingsEffects() async {
     let sentTerminalCommands = LockIsolated<[TerminalClient.Command]>([])
     let watcherCommands = LockIsolated<[WorktreeInfoWatcherClient.Command]>([])

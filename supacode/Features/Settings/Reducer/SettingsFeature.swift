@@ -31,6 +31,7 @@ struct SettingsFeature {
     var copyUntrackedOnWorktreeCreate: Bool
     var pullRequestMergeStrategy: PullRequestMergeStrategy
     var restoreTerminalLayoutOnLaunch: Bool
+    var remoteControlEnabled: Bool
     var terminalFontSize: Float32?
     var keybindingUserOverrides: KeybindingUserOverrideStore
     var defaultViewMode: DefaultViewMode
@@ -90,6 +91,7 @@ struct SettingsFeature {
       copyUntrackedOnWorktreeCreate = settings.copyUntrackedOnWorktreeCreate
       pullRequestMergeStrategy = settings.pullRequestMergeStrategy
       restoreTerminalLayoutOnLaunch = settings.restoreTerminalLayoutOnLaunch
+      remoteControlEnabled = settings.remoteControlEnabled
       terminalFontSize = settings.terminalFontSize
       keybindingUserOverrides = settings.keybindingUserOverrides
       defaultViewMode = settings.defaultViewMode
@@ -138,6 +140,7 @@ struct SettingsFeature {
         copyUntrackedOnWorktreeCreate: copyUntrackedOnWorktreeCreate,
         pullRequestMergeStrategy: pullRequestMergeStrategy,
         restoreTerminalLayoutOnLaunch: restoreTerminalLayoutOnLaunch,
+        remoteControlEnabled: remoteControlEnabled,
         archivedAutoDeletePeriod: archivedAutoDeletePeriod,
         terminalFontSize: terminalFontSize,
         keybindingUserOverrides: keybindingUserOverrides,
@@ -167,6 +170,7 @@ struct SettingsFeature {
     case settingsLoaded(GlobalSettings)
     case setSelection(SettingsSection?)
     case setSystemNotificationsEnabled(Bool)
+    case setRemoteControlEnabled(Bool)
     case setCommandFinishedNotificationThreshold(String)
     case setTerminalFontSize(Float32?)
     case clearTerminalLayoutSnapshotButtonTapped
@@ -258,6 +262,7 @@ struct SettingsFeature {
         state.copyUntrackedOnWorktreeCreate = normalizedSettings.copyUntrackedOnWorktreeCreate
         state.pullRequestMergeStrategy = normalizedSettings.pullRequestMergeStrategy
         state.restoreTerminalLayoutOnLaunch = normalizedSettings.restoreTerminalLayoutOnLaunch
+        state.remoteControlEnabled = normalizedSettings.remoteControlEnabled
         state.terminalFontSize = normalizedSettings.terminalFontSize
         state.keybindingUserOverrides = normalizedSettings.keybindingUserOverrides
         state.defaultViewMode = normalizedSettings.defaultViewMode
@@ -305,6 +310,11 @@ struct SettingsFeature {
 
       case .setSystemNotificationsEnabled(let isEnabled):
         state.systemNotificationsEnabled = isEnabled
+        state.syncGlobalDefaults(from: state.globalSettings)
+        return persist(state)
+
+      case .setRemoteControlEnabled(let isEnabled):
+        state.remoteControlEnabled = isEnabled
         state.syncGlobalDefaults(from: state.globalSettings)
         return persist(state)
 

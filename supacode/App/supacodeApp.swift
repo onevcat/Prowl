@@ -19,6 +19,15 @@ private final class SupacodeAppStoreBox {
   weak var store: StoreOf<AppFeature>?
 }
 
+@MainActor
+private final class RemoteControlControllerBox {
+  var controller: RemoteControlController?
+
+  func setEnabled(_ enabled: Bool) -> Bool {
+    controller?.setEnabled(enabled) ?? !enabled
+  }
+}
+
 private enum GhosttyCLI {
   static func argv(resolvedKeybindings: ResolvedKeybindingMap) -> [UnsafeMutablePointer<CChar>?] {
     var args: [UnsafeMutablePointer<CChar>?] = []
@@ -44,6 +53,7 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
   }
   var terminalManager: WorktreeTerminalManager?
   var cliSocketServer: CLISocketServer?
+  var remoteControlController: RemoteControlController?
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     WindowLifecycleDiagnostics.startMainThreadHeartbeat()
@@ -81,7 +91,10 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
 
   func applicationWillTerminate(_ notification: Notification) {
     WindowLifecycleDiagnostics.logWithWindows("applicationWillTerminate")
-    defer { cliSocketServer?.stop() }
+    defer {
+      cliSocketServer?.stop()
+      remoteControlController?.stop()
+    }
     guard appStore?.state.settings.restoreTerminalLayoutOnLaunch == true else { return }
     guard appStore?.state.suppressLayoutSaveUntilRelaunch != true else { return }
     terminalManager?.persistLayoutSnapshotSync()
@@ -104,6 +117,7 @@ struct SupacodeApp: App {
   @State private var pullRequestRefreshCoordinator: PullRequestRefreshCoordinator
   @State private var commandKeyObserver: CommandKeyObserver
   @State private var cliSocketServer: CLISocketServer
+  @State private var remoteControlController: RemoteControlController
   @State private var store: StoreOf<AppFeature>
   @State private var memoryWatchdog: MemoryWatchdog
   @State private var askAgentHelp = AskAgentHelpPresenter()
@@ -204,6 +218,7 @@ struct SupacodeApp: App {
     _pullRequestRefreshCoordinator = State(initialValue: coordinator)
     let keyObserver = CommandKeyObserver()
     _commandKeyObserver = State(initialValue: keyObserver)
+    let remoteControlControllerBox = RemoteControlControllerBox()
     var initialAppState = AppFeature.State(settings: SettingsFeature.State(settings: initialSettings))
     if let cliOpenPath = Self.cliLaunchOpenPath() {
       initialAppState.launchRestoreMode = .cliOpenPath(cliOpenPath)
@@ -229,12 +244,21 @@ struct SupacodeApp: App {
       values.pullRequestRefreshCoordinator = Self.makePullRequestRefreshCoordinatorClient(
         coordinator: coordinator
       )
+      values.remoteControlClient = RemoteControlClient { enabled in
+        remoteControlControllerBox.setEnabled(enabled)
+      }
     }
     _store = State(initialValue: appStore)
     storeBox.store = appStore
 
     let cliServer = Self.makeCLISocketServer(appStore: appStore, terminalManager: terminalManager)
     _cliSocketServer = State(initialValue: cliServer)
+    let remoteControlController = Self.makeRemoteControlController(
+      appStore: appStore,
+      terminalManager: terminalManager
+    )
+    remoteControlControllerBox.controller = remoteControlController
+    _remoteControlController = State(initialValue: remoteControlController)
 
     let watchdog = Self.makeMemoryWatchdog(appStore: appStore, terminalManager: terminalManager)
     #if !DEBUG
@@ -248,6 +272,7 @@ struct SupacodeApp: App {
     appDelegate.appStore = appStore
     appDelegate.terminalManager = terminalManager
     appDelegate.cliSocketServer = cliServer
+    appDelegate.remoteControlController = remoteControlController
     SettingsWindowManager.shared.configure(
       store: appStore,
       ghosttyShortcuts: shortcuts,
@@ -639,6 +664,60 @@ struct SupacodeApp: App {
       logger.warning("Failed to start CLI socket server: \(String(describing: error))")
     }
     return cliServer
+  }
+
+  @MainActor
+  private static func makeRemoteControlController(
+    appStore: StoreOf<AppFeature>,
+    terminalManager: WorktreeTerminalManager
+  ) -> RemoteControlController {
+    let accessTokenStore = RemoteControlAccessTokenStore.shared
+    let router = RemoteControlRouter(
+      accessTokenProvider: {
+        try accessTokenStore.loadOrCreate()
+      },
+      agentsProvider: {
+        let repositoriesState = appStore.state.repositories
+        let metadata = SidebarListView.activeAgentWorktreeMetadata(
+          repositories: repositoriesState.repositories,
+          customTitles: repositoriesState.repositoryCustomTitles
+        )
+        return repositoriesState.activeAgents.entries.compactMap { entry in
+          guard let terminalState = terminalManager.stateIfExists(for: entry.worktreeID),
+            terminalState.surfaceView(for: entry.surfaceID) != nil
+          else {
+            return nil
+          }
+          let display = SidebarListView.activeAgentRowDisplay(
+            for: entry,
+            repositories: repositoriesState.repositories,
+            metadata: metadata
+          )
+          return RemoteControlAgentSnapshot(
+            paneID: entry.surfaceID,
+            type: entry.agent.rawValue,
+            name: entry.displayName,
+            status: entry.displayState.rawValue,
+            projectName: display.repositoryName,
+            branchName: display.branchName,
+            lastChangedAt: entry.lastChangedAt
+          )
+        }
+      },
+      viewportProvider: { paneID in
+        guard let entry = appStore.state.repositories.activeAgents.entries.first(where: { $0.surfaceID == paneID }),
+          let terminalState = terminalManager.stateIfExists(for: entry.worktreeID),
+          let surface = terminalState.surfaceView(for: paneID)
+        else {
+          return nil
+        }
+        return surface.readViewportContentsForCLI()
+      }
+    )
+    return RemoteControlController(
+      server: RemoteControlServer(router: router),
+      accessTokenStore: accessTokenStore
+    )
   }
 
   // MARK: - Open handler factory

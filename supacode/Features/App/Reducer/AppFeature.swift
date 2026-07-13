@@ -81,6 +81,7 @@ struct AppFeature {
     case navigateSearchPrevious
     case endSearch
     case systemNotificationsPermissionFailed(errorMessage: String?)
+    case remoteControlConfigurationFailed
     case systemNotificationTapped(worktreeID: Worktree.ID, surfaceID: UUID)
     case alert(PresentationAction<Alert>)
     case terminalEvent(TerminalClient.Event)
@@ -100,6 +101,7 @@ struct AppFeature {
   @Dependency(NotificationSoundClient.self) var notificationSoundClient
   @Dependency(SystemNotificationClient.self) var systemNotificationClient
   @Dependency(DockClient.self) var dockClient
+  @Dependency(RemoteControlClient.self) var remoteControlClient
   @Dependency(TerminalClient.self) var terminalClient
   @Dependency(WorktreeInfoWatcherClient.self) var worktreeInfoWatcher
   @Dependency(CustomShortcutRegistryClient.self) var customShortcutRegistryClient
@@ -396,6 +398,7 @@ struct AppFeature {
       case .settings(.delegate(.settingsChanged(let settings))):
         let shouldCheckSystemNotificationPermission =
           settings.systemNotificationsEnabled && !state.lastKnownSystemNotificationsEnabled
+        let remoteControlEnabled = settings.remoteControlEnabled
         state.lastKnownSystemNotificationsEnabled = settings.systemNotificationsEnabled
         state.settings.keybindingUserOverrides = settings.keybindingUserOverrides
         state.repositories.showActiveAgentTabTitles = settings.showActiveAgentTabTitles
@@ -484,7 +487,21 @@ struct AppFeature {
           },
           .run { _ in
             await dockClient.setNotificationBadge(badgeCount)
+          },
+          .run { send in
+            guard !(await remoteControlClient.setEnabled(remoteControlEnabled)), remoteControlEnabled else { return }
+            await send(.remoteControlConfigurationFailed)
           }
+        )
+
+      case .remoteControlConfigurationFailed:
+        return .merge(
+          .send(.settings(.setRemoteControlEnabled(false))),
+          .send(
+            .repositories(
+              .showToast(.warning("Unable to start remote control. Check whether its local port is in use."))
+            )
+          )
         )
 
       case .settings(.delegate(.terminalFontSizeChanged)):

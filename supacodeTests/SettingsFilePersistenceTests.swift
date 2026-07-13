@@ -83,6 +83,26 @@ struct SettingsFilePersistenceTests {
     #expect(reloaded.global.showNotificationDotOnDock == true)
   }
 
+  @Test(.dependencies) func saveAndReloadRemoteControlEnabled() throws {
+    let storage = SettingsTestStorage()
+
+    withDependencies {
+      $0.settingsFileStorage = storage.storage
+    } operation: {
+      @Shared(.settingsFile) var settings: SettingsFile
+      $settings.withLock { $0.global.remoteControlEnabled = true }
+    }
+
+    let reloaded: SettingsFile = withDependencies {
+      $0.settingsFileStorage = storage.storage
+    } operation: {
+      @Shared(.settingsFile) var settings: SettingsFile
+      return settings
+    }
+
+    #expect(reloaded.global.remoteControlEnabled == true)
+  }
+
   @Test(.dependencies) func saveAndReloadShelfSpineTintPreferences() throws {
     let storage = SettingsTestStorage()
 
@@ -167,6 +187,7 @@ struct SettingsFilePersistenceTests {
     #expect(settings.global.promptForWorktreeCreation == true)
     #expect(settings.global.defaultWorktreeBaseDirectoryPath == nil)
     #expect(settings.global.restoreTerminalLayoutOnLaunch == false)
+    #expect(settings.global.remoteControlEnabled == false)
     #expect(settings.global.defaultEditorID == OpenWorktreeAction.automaticSettingsID)
     #expect(settings.global.showRunButtonInToolbar == true)
     #expect(settings.global.showDefaultEditorInToolbar == true)
