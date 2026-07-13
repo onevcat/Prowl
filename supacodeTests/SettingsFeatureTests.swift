@@ -118,6 +118,23 @@ struct SettingsFeatureTests {
     #expect(settingsFile.global.systemNotificationsEnabled == true)
   }
 
+  @Test(.dependencies) func remoteControlBindingPersistsAndNotifiesTheApp() async {
+    var initialSettings = GlobalSettings.default
+    initialSettings.remoteControlEnabled = false
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = initialSettings }
+
+    let store = TestStore(initialState: SettingsFeature.State(settings: initialSettings)) {
+      SettingsFeature()
+    }
+
+    await store.send(.binding(.set(\.remoteControlEnabled, true))) {
+      $0.remoteControlEnabled = true
+    }
+    await store.receive(\.delegate.settingsChanged)
+    #expect(settingsFile.global.remoteControlEnabled == true)
+  }
+
   @Test(.dependencies) func selectingNotificationSoundPlaysPreview() async {
     @Shared(.settingsFile) var settingsFile
     $settingsFile.withLock { $0.global = .default }

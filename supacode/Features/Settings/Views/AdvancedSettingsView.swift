@@ -1,8 +1,10 @@
+import AppKit
 import ComposableArchitecture
 import SwiftUI
 
 struct AdvancedSettingsView: View {
   @Bindable var store: StoreOf<SettingsFeature>
+  @State private var remoteControlTokenStatus: String?
 
   var body: some View {
     VStack(alignment: .leading) {
@@ -110,9 +112,74 @@ struct AdvancedSettingsView: View {
           }
           .frame(maxWidth: .infinity, alignment: .leading)
         }
+
+        Section("Remote Control (Experimental)") {
+          VStack(alignment: .leading, spacing: 8) {
+            Toggle("Enable read-only mobile bridge", isOn: $store.remoteControlEnabled)
+              .help("Start or stop the authenticated read-only bridge immediately")
+
+            Text(
+              "The bridge listens only on 127.0.0.1. Use a private TLS tunnel or overlay to reach it from a phone."
+            )
+            .foregroundStyle(.secondary)
+            .font(.callout)
+
+            Text("It exposes agent status and limited viewport text only; it cannot send input or manage tabs.")
+              .foregroundStyle(.secondary)
+              .font(.callout)
+
+            HStack(spacing: 8) {
+              Button("Copy Access Token") {
+                copyRemoteControlToken()
+              }
+              .help("Copy the Keychain-backed token required by a paired mobile client")
+              .buttonStyle(.bordered)
+              .disabled(!store.remoteControlEnabled)
+
+              Button("Rotate and Copy Access Token") {
+                rotateAndCopyRemoteControlToken()
+              }
+              .help("Replace the current token and revoke clients using the previous token")
+              .buttonStyle(.bordered)
+              .disabled(!store.remoteControlEnabled)
+            }
+
+            if let remoteControlTokenStatus {
+              Text(remoteControlTokenStatus)
+                .foregroundStyle(.secondary)
+                .font(.callout)
+            }
+          }
+          .frame(maxWidth: .infinity, alignment: .leading)
+        }
       }
       .formStyle(.grouped)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+  }
+
+  private func copyRemoteControlToken() {
+    do {
+      let token = try RemoteControlAccessTokenStore.shared.loadOrCreate()
+      copyToPasteboard(token)
+      remoteControlTokenStatus = "Access token copied."
+    } catch {
+      remoteControlTokenStatus = "Unable to access the Keychain."
+    }
+  }
+
+  private func rotateAndCopyRemoteControlToken() {
+    do {
+      let token = try RemoteControlAccessTokenStore.shared.rotate()
+      copyToPasteboard(token)
+      remoteControlTokenStatus = "New access token copied; previous tokens are revoked."
+    } catch {
+      remoteControlTokenStatus = "Unable to access the Keychain."
+    }
+  }
+
+  private func copyToPasteboard(_ value: String) {
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(value, forType: .string)
   }
 }

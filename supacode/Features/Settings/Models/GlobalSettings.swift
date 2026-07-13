@@ -23,6 +23,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var copyUntrackedOnWorktreeCreate: Bool
   var pullRequestMergeStrategy: PullRequestMergeStrategy
   var restoreTerminalLayoutOnLaunch: Bool
+  var remoteControlEnabled: Bool
   var terminalFontSize: Float32?
   var archivedAutoDeletePeriod: AutoDeletePeriod?
   var keybindingUserOverrides: KeybindingUserOverrideStore
@@ -68,6 +69,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     copyUntrackedOnWorktreeCreate: false,
     pullRequestMergeStrategy: .merge,
     restoreTerminalLayoutOnLaunch: false,
+    remoteControlEnabled: false,
     archivedAutoDeletePeriod: nil,
     terminalFontSize: nil,
     keybindingUserOverrides: .empty,
@@ -112,6 +114,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     copyUntrackedOnWorktreeCreate: Bool = false,
     pullRequestMergeStrategy: PullRequestMergeStrategy = .merge,
     restoreTerminalLayoutOnLaunch: Bool = false,
+    remoteControlEnabled: Bool = false,
     archivedAutoDeletePeriod: AutoDeletePeriod? = nil,
     terminalFontSize: Float32? = nil,
     keybindingUserOverrides: KeybindingUserOverrideStore = .empty,
@@ -154,6 +157,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     self.copyUntrackedOnWorktreeCreate = copyUntrackedOnWorktreeCreate
     self.pullRequestMergeStrategy = pullRequestMergeStrategy
     self.restoreTerminalLayoutOnLaunch = restoreTerminalLayoutOnLaunch
+    self.remoteControlEnabled = remoteControlEnabled
     self.archivedAutoDeletePeriod = archivedAutoDeletePeriod
     self.terminalFontSize = terminalFontSize
     self.keybindingUserOverrides = keybindingUserOverrides
@@ -199,6 +203,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     try container.encode(copyUntrackedOnWorktreeCreate, forKey: .copyUntrackedOnWorktreeCreate)
     try container.encode(pullRequestMergeStrategy, forKey: .pullRequestMergeStrategy)
     try container.encode(restoreTerminalLayoutOnLaunch, forKey: .restoreTerminalLayoutOnLaunch)
+    try container.encode(remoteControlEnabled, forKey: .remoteControlEnabled)
     try container.encodeIfPresent(archivedAutoDeletePeriod?.rawValue, forKey: .archivedAutoDeletePeriod)
     try container.encodeIfPresent(terminalFontSize, forKey: .terminalFontSize)
     try container.encode(keybindingUserOverrides, forKey: .keybindingUserOverrides)
@@ -245,6 +250,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     case copyUntrackedOnWorktreeCreate
     case pullRequestMergeStrategy
     case restoreTerminalLayoutOnLaunch
+    case remoteControlEnabled
     case archivedAutoDeletePeriod
     case terminalFontSize
     case keybindingUserOverrides
@@ -333,6 +339,9 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     restoreTerminalLayoutOnLaunch =
       try container.decodeIfPresent(Bool.self, forKey: .restoreTerminalLayoutOnLaunch)
       ?? Self.default.restoreTerminalLayoutOnLaunch
+    remoteControlEnabled =
+      try container.decodeIfPresent(Bool.self, forKey: .remoteControlEnabled)
+      ?? Self.default.remoteControlEnabled
     if let rawAutoDelete = try container.decodeIfPresent(Int.self, forKey: .archivedAutoDeletePeriod) {
       archivedAutoDeletePeriod = AutoDeletePeriod(rawValue: rawAutoDelete)
     } else {

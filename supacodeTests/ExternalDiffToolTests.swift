@@ -140,7 +140,7 @@ struct ExternalDiffToolTests {
     try runGit(["config", "user.name", "Test User"], in: repoURL)
     try "one\n".write(to: repoURL.appending(path: "tracked.txt"), atomically: true, encoding: .utf8)
     try runGit(["add", "tracked.txt"], in: repoURL)
-    try runGit(["commit", "-m", "Initial"], in: repoURL)
+    try runGit(["commit", "--no-verify", "-m", "Initial"], in: repoURL)
     try "two\n".write(to: repoURL.appending(path: "tracked.txt"), atomically: true, encoding: .utf8)
     try "new\n".write(to: repoURL.appending(path: "untracked.txt"), atomically: true, encoding: .utf8)
 

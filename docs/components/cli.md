@@ -6,7 +6,7 @@
 
 **Keywords:** prowl cli, command line, prowl list, prowl agents, prowl read, prowl send, prowl key, prowl focus, prowl tab, prowl pane, prowl open, pane id, automation, json, capture, socket
 
-**Related:** [terminal](terminal.md) · [concepts](../concepts.md) · [active-agents](active-agents.md) · [agent-detection](agent-detection.md) · the bundled **`prowl-cli` skill** (`skills/prowl-cli/SKILL.md`)
+**Related:** [terminal](terminal.md) · [concepts](../concepts.md) · [active-agents](active-agents.md) · [agent-detection](agent-detection.md) · [remote-control](remote-control.md) · the bundled **`prowl-cli` skill** (`skills/prowl-cli/SKILL.md`)
 
 > This is the reference for the `prowl` binary. For an opinionated, safety-first
 > *workflow* guide (recipes, pitfalls, quoting), the repository also ships the
@@ -19,6 +19,10 @@ the task is to act on a pane **other than the current one** — check a sibling
 agent, run something in another tab and grab the output, focus a worktree, open a
 project, or close a scratch tab. It is **not** for ordinary editing/building
 inside a repo, and not for how-to questions about Prowl's settings.
+
+`prowl` remains same-Mac, same-user IPC. It is not a remote/mobile endpoint; the
+separate experimental [read-only mobile bridge](remote-control.md) has a narrower
+API, a bearer token, and must be exposed only through a private authenticated tunnel.
 
 ## Install
 
