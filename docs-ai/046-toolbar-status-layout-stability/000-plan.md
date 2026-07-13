@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| **Status** | Planned |
+| **Status** | Implemented |
 | **Anchor date** | 2026-07-13 |
 | **Primary PRs** | TBD |
 | **Related** | [024-canvas-interaction-evolution](../024-canvas-interaction-evolution/000-plan.md), [028-pr-status-tracking](../028-pr-status-tracking/000-plan.md), [033-ui-refresh-2026-05](../033-ui-refresh-2026-05/000-plan.md), [002-custom-commands](../002-custom-commands/000-plan.md), issue #471, `docs/components/canvas.md` |
@@ -74,4 +74,3 @@ An earlier width-measurement and animation experiment (`4c73b76b`) was reverted 
   toolbar screenshot; clean up the temporary app and socket afterward.
 
 ## Amendments
-

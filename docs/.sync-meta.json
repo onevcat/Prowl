@@ -1,6 +1,6 @@
 {
   "_comment": "Metadata for the docs/ manual. The last_synced_commit is the commit at which docs/ was last verified against the implementation; the sync-docs skill (.claude/skills/sync-docs/SKILL.md) diffs HEAD against it and updates this file. Committed to git on purpose so the baseline persists across sessions and machines. A dotfile + .json so a future docs website does not render it as a page.",
-  "last_synced_commit": "168d8e9c8e61655f57dcb8411092b0af9263e7e0",
-  "last_synced_date": "2026-07-10",
-  "note": "Release prep. All user-facing changes in range were doc-synced in their own PRs (#545 sound picker, #546 mute viewed surface, #542 editor additions, #543 TERM_PROGRAM, #541 gh hardening); #544 symlink-preserving writes and PR tri-state fixes need no doc changes."
+  "last_synced_commit": "8d44fdf131963dd217a667e46a5a16336fade331",
+  "last_synced_date": "2026-07-13",
+  "note": "Verified the source range through #580. Existing agent, CLI, settings, updates, terminal, and repository manuals remained accurate; documented the bounded toolbar status area and Custom Command overflow behavior."
 }
