@@ -242,7 +242,6 @@ struct WorktreeDetailView: View {
         pullRequest: state.pullRequest,
         codeHost: state.codeHost
       )
-      .padding(.horizontal)
     }
 
     ToolbarItemGroup(placement: .primaryAction) {
@@ -853,7 +852,6 @@ struct WorktreeDetailView: View {
           pullRequest: toolbarState.pullRequest,
           codeHost: toolbarState.codeHost
         )
-        .padding(.horizontal)
       }
 
       ToolbarItemGroup {

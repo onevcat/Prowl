@@ -92,3 +92,4 @@ behavior (`docs/` is the agent-facing manual for that).
 | 043 | [canvas-tile-layout](043-canvas-tile-layout/000-plan.md) | 2026-06-24 | Tile layout + default-layout setting |
 | 044 | [foundation-model-branch-names](044-foundation-model-branch-names/000-plan.md) | 2026-06-27 | On-device FM branch-name suggestions |
 | 045 | [native-agent-session-detection](045-native-agent-session-detection/000-plan.md) | 2026-07-12 | Native agent session identity (successor to 030's heuristics) |
+| 046 | [toolbar-status-layout-stability](046-toolbar-status-layout-stability/000-plan.md) | 2026-07-13 | Bounded adaptive toolbar status layout; truncation and accessibility policy |

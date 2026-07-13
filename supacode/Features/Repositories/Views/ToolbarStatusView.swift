@@ -4,6 +4,7 @@ struct ToolbarStatusView: View {
   let toast: RepositoriesFeature.StatusToast?
   let pullRequest: GithubPullRequest?
   let codeHost: CodeHost
+  private static let idealWidth: CGFloat = 280
 
   var body: some View {
     Group {
@@ -16,6 +17,8 @@ struct ToolbarStatusView: View {
             .font(.footnote)
             .foregroundStyle(.secondary)
         }
+        .help(message)
+        .accessibilityLabel(message)
         .transition(.opacity)
       case .success(let message):
         HStack(spacing: 6) {
@@ -26,6 +29,8 @@ struct ToolbarStatusView: View {
             .font(.footnote)
             .foregroundStyle(.secondary)
         }
+        .help(message)
+        .accessibilityLabel(message)
         .transition(.opacity)
       case .warning(let message):
         HStack(spacing: 6) {
@@ -36,6 +41,8 @@ struct ToolbarStatusView: View {
             .font(.footnote)
             .foregroundStyle(.secondary)
         }
+        .help(message)
+        .accessibilityLabel(message)
         .transition(.opacity)
       case nil:
         if let model = PullRequestStatusModel(pullRequest: pullRequest) {
@@ -47,6 +54,10 @@ struct ToolbarStatusView: View {
         }
       }
     }
+    .lineLimit(1)
+    .truncationMode(.tail)
+    .padding(.horizontal)
+    .frame(idealWidth: Self.idealWidth, maxWidth: Self.idealWidth)
     .animation(.easeInOut(duration: 0.2), value: toast)
   }
 }

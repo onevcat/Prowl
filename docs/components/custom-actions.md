@@ -71,6 +71,9 @@ detected when you record the key, and you choose Replace / Cancel.
 [Command Palette](command-palette.md). Custom Commands are also stored per repo,
 in `~/.prowl/repo/<repo-name>/prowl.onevcat.json`.
 
+The toolbar shows the first three Custom Commands inline. Additional commands stay
+available through the More Custom Commands overflow menu.
+
 ## Example uses
 
 - `swift build` on `⌘B` (shell script).

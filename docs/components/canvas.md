@@ -80,6 +80,11 @@ Script / Custom Command buttons run against the focused card's worktree. `⌘⌃
 (`open_pull_request`, "Open on Code Host") opens that card's PR when it has one,
 or the repository page otherwise.
 
+The center status area has a bounded, compressible width so its content does not
+shift nearby toolbar controls. Long PR/check text tail-truncates; hover the PR
+summary for its full title and check details. Toasts retain their complete text in
+their hover help.
+
 ## Visual cues
 
 - **Focused card:** bright accent border. **Selected (multi-select):** medium

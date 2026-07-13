@@ -34,6 +34,7 @@ struct PullRequestStatusButton: View {
             .lineLimit(1)
         }
       }
+      .truncationMode(.tail)
     }
     .font(.caption)
   }
