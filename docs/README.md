@@ -58,6 +58,7 @@ its keyboard shortcuts, detailed behavior, settings, and gotchas.
 | [`components/settings.md`](components/settings.md) | The Settings window (`⌘,`): every tab and what it controls. |
 | [`components/updates.md`](components/updates.md) | Sparkle auto-updates: auto-check, `⌘⇧U`. |
 | [`components/cli.md`](components/cli.md) | The `prowl` CLI — let an agent inspect and drive panes (`list`, `read`, `send`, `key`, `focus`, `tab`, `pane`, `open`). |
+| [`components/remote-control.md`](components/remote-control.md) | Experimental read-only mobile bridge: loopback-only deployment, private tunnel boundary, token rotation, agent summaries, and bounded viewport reads. |
 
 ## Reference (exact lookups)
 
@@ -81,6 +82,7 @@ its keyboard shortcuts, detailed behavior, settings, and gotchas.
 | Review what an agent changed | [`components/diff-view.md`](components/diff-view.md) |
 | Open / merge / re-run CI on a pull request | [`components/github-pull-requests.md`](components/github-pull-requests.md) |
 | Drive a pane from a script or another agent | [`components/cli.md`](components/cli.md) |
+| Check active agents from a trusted phone | [`components/remote-control.md`](components/remote-control.md) |
 | Look up a keyboard shortcut | [`reference/keyboard-shortcuts.md`](reference/keyboard-shortcuts.md) |
 | Change app behavior / a setting | [`components/settings.md`](components/settings.md), [`reference/settings-fields.md`](reference/settings-fields.md) |
 

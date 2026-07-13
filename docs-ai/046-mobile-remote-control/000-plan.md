@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| **Status** | Planned |
+| **Status** | Implemented |
 | **Anchor date** | 2026-07-13 |
 | **Primary PRs** | Pending |
 | **Related** | #196, [013-prowl-cli](../013-prowl-cli/000-plan.md), `docs/components/cli.md` |
