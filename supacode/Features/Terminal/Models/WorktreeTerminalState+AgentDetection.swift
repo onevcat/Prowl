@@ -120,7 +120,7 @@ extension WorktreeTerminalState {
     } else {
       seen = previous.seen
     }
-    let iconLookupToken = identified?.name ?? previous.iconLookupToken ?? agent.iconLookupToken
+    let iconLookupToken = identified?.iconLookupToken ?? previous.iconLookupToken ?? agent.iconLookupToken
     let workingDirectory = activeAgentWorkingDirectory(surfaceID: surfaceID)
     let (session, sessionMissStreak) = await resolveRetainedSession(
       identified: identified,

@@ -42,6 +42,7 @@ enum CommandIconMap {
     "cursor-agent": TabIconSource(systemSymbol: "sparkle", assetName: "Cursor"),
     "droid": TabIconSource(systemSymbol: "sparkle", assetName: "Droid"),
     "gemini": TabIconSource(systemSymbol: "sparkle", assetName: "Gemini"),
+    "grok": TabIconSource(systemSymbol: "sparkle", assetName: "Grok"),
     "kimi": TabIconSource(systemSymbol: "sparkle", assetName: "Kimi"),
     "opencode": TabIconSource(systemSymbol: "sparkle", assetName: "OpenCode"),
     "qwen": TabIconSource(systemSymbol: "sparkle", assetName: "Qwen"),

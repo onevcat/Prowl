@@ -17,11 +17,14 @@ running and what state it's in. That signal drives the
 ## Agents it recognizes
 
 Claude (Claude Code), Codex, Gemini, Cursor, Cline, OpenCode, GitHub Copilot,
-Kimi, Droid, Amp, Pi (`pi`), Oh My Pi (`omp`, `oh-my-pi`), and Qwen Code (`qwen`).
+Kimi, Droid, Amp, Pi (`pi`), Oh My Pi (`omp`, `oh-my-pi`), Qwen Code (`qwen`),
+and Grok Build (`grok`).
 Detection covers
 common wrappers (node, python, bun, bash, etc.) so agents launched indirectly are
 still found. Oh My Pi reuses Pi-derived screen heuristics but uses its own command
-icon where Prowl shows detected command icons, including terminal tabs.
+icon where Prowl shows detected command icons, including terminal tabs. Grok Build
+is recognized only when `grok` is the direct process name, or when its `agent`
+alias has a `/.grok/` executable-path marker; model arguments alone are not enough.
 
 ## How detection works (two stages)
 

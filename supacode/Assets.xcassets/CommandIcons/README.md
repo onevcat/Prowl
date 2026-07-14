@@ -12,7 +12,7 @@ without per-mode variants.
 | Source | License | Imagesets |
 | ------ | ------- | --------- |
 | [Simple Icons](https://simpleicons.org/) | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | AWS, Azure, Bun, Curl, Deno, Docker, Git, GitHub, Go, GoogleCloud, Gradle, Homebrew, Kubernetes, MySQL, Neovim, Node, Npm, Pnpm, Podman, PostgreSQL, Python, Rust, SQLite, Swift, Terraform, Tmux, TypeScript, Vim, VSCode, Xcode, Yarn, Gemini |
-| [Lobe Icons](https://github.com/lobehub/lobe-icons) | [MIT](https://github.com/lobehub/lobe-icons/blob/master/LICENSE) | Amp, ClaudeCode, Codex, GitHubCopilot, Kimi, OpenCode |
+| [Lobe Icons](https://github.com/lobehub/lobe-icons) | [MIT](https://github.com/lobehub/lobe-icons/blob/master/LICENSE) | Amp, ClaudeCode, Codex, GitHubCopilot, Grok, Kimi, OpenCode |
 
 `ClaudeCode` is sourced from the Lobe Icons `claude.svg` mark and
 re-authored as a single `fill-rule="evenodd"` path so the `>_` glyph

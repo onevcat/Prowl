@@ -26,6 +26,8 @@ func identifyAgent(processName: String) -> DetectedAgent? {
     return .amp
   case "qwen":
     return .qwen
+  case "grok":
+    return .grok
   default:
     return nil
   }
@@ -35,6 +37,10 @@ struct IdentifiedAgentProcess: Equatable, Sendable {
   let agent: DetectedAgent
   let name: String
   let process: ForegroundProcess
+
+  var iconLookupToken: String {
+    agent == .grok && name == "agent" ? agent.iconLookupToken : name
+  }
 }
 
 func identifyAgentInJob(_ job: ForegroundJob) -> IdentifiedAgentProcess? {
@@ -74,8 +80,19 @@ private func agentCandidates(for process: ForegroundProcess) -> [(name: String, 
 }
 
 private func identifyAgent(candidate: (name: String, score: Int), process: ForegroundProcess) -> DetectedAgent? {
-  if candidate.name == "agent", isCursorAgentAlias(process) {
-    return .cursor
+  if candidate.name == "agent" {
+    if isCursorAgentAlias(process) {
+      return .cursor
+    }
+    if isGrokAgentAlias(process) {
+      return .grok
+    }
+    return nil
+  }
+  // Grok Build is a direct Mach-O executable, not a node/shell wrapper. Do
+  // not let model arguments such as `--model grok` identify an unrelated job.
+  if candidate.name == "grok", candidate.score == 40 {
+    return nil
   }
   return identifyAgent(processName: candidate.name)
 }
@@ -91,6 +108,19 @@ private func isCursorAgentAlias(_ process: ForegroundProcess) -> Bool {
 
   return haystack.contains("cursor-agent")
     || haystack.contains("cursor.app")
+}
+
+private func isGrokAgentAlias(_ process: ForegroundProcess) -> Bool {
+  // `argv0` is basename-only in production. The complete executable path is
+  // the first cmdline token, so later arguments must never participate here.
+  let executablePaths = [
+    process.argv0,
+    process.cmdline?.split(whereSeparator: \.isWhitespace).first.map(String.init),
+  ]
+  .compactMap(\.self)
+  .map { $0.lowercased() }
+
+  return executablePaths.contains { $0.contains("/.grok/") }
 }
 
 private struct AgentCandidate {

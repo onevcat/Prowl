@@ -7,6 +7,38 @@ import Testing
 
 @MainActor
 struct ActiveAgentEntryWorkingDirectoryTests {
+  @Test func grokAliasUsesGrokIcon() throws {
+    let job = ForegroundJob(
+      processGroupID: 42,
+      processes: [
+        ForegroundProcess(
+          pid: 100,
+          name: "agent",
+          argv0: "agent",
+          cmdline: "/Users/me/.grok/bin/agent --always-approve"
+        )
+      ]
+    )
+    let identified = try #require(identifyAgentInJob(job))
+    let fixture = makeState(launchDirectory: URL(fileURLWithPath: "/tmp/repo/worktree", isDirectory: true))
+
+    let entry = try #require(
+      fixture.state.activeAgentEntry(
+        surfaceID: fixture.surface.id,
+        tabId: fixture.tabId,
+        state: PaneAgentState(
+          detectedAgent: identified.agent,
+          iconLookupToken: identified.iconLookupToken,
+          state: .working
+        )
+      )
+    )
+
+    #expect(identified.name == "agent")
+    #expect(entry.iconLookupToken == "grok")
+    #expect(entry.iconSource?.assetName == "Grok")
+  }
+
   @Test func activeAgentEntryUsesCachedPWD() throws {
     let launchDirectory = URL(fileURLWithPath: "/tmp/repo/worktree", isDirectory: true)
     let reportedDirectory = URL(fileURLWithPath: "/tmp/repo/worktree/Sources", isDirectory: true)

@@ -49,6 +49,7 @@ nonisolated struct AgentSessionProfile: Sendable {
     case .opencode: .opencode
     case .amp: .amp
     case .qwen: .qwen
+    case .grok: .init()
     }
   }
 }

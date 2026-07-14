@@ -30,6 +30,8 @@ extension DetectedAgent {
       return detectAmp(screen)
     case .qwen:
       return detectQwen(screen)
+    case .grok:
+      return detectGrok(screen)
     }
   }
 }
@@ -514,6 +516,71 @@ nonisolated private func detectQwen(_ content: String) -> AgentRawState {
     return .working
   }
   return .idle
+}
+
+// Grok Build's permission and tool-status chrome is confined to the bottom
+// of its TUI. Limit matching to that region so transcript text cannot keep an
+// idle session marked as active.
+nonisolated private func detectGrok(_ content: String) -> AgentRawState {
+  let chrome = grokCurrentChrome(content)
+  if hasGrokIdlePrompt(chrome) {
+    return .idle
+  }
+  if hasGrokPermissionPrompt(chrome) || hasGrokQuestionPrompt(chrome) {
+    return .blocked
+  }
+  if hasGrokWorkingSignal(chrome) {
+    return .working
+  }
+  return .idle
+}
+
+nonisolated private func grokCurrentChrome(_ content: String) -> String {
+  content.split(separator: "\n", omittingEmptySubsequences: false)
+    .map { $0.trimmingCharacters(in: .whitespaces) }
+    .filter { !$0.isEmpty }
+    .suffix(6)
+    .joined(separator: "\n")
+}
+
+nonisolated private func hasGrokIdlePrompt(_ content: String) -> Bool {
+  guard let lastLine = content.split(separator: "\n").last else { return false }
+  switch lastLine.lowercased() {
+  case "awaiting input", "type a message":
+    return true
+  default:
+    return false
+  }
+}
+
+nonisolated private func hasGrokPermissionPrompt(_ content: String) -> Bool {
+  let lower = content.lowercased()
+  let hasAllowOnce = lower.contains("allow once")
+  let hasAlwaysAllow =
+    lower.contains("always allow this command")
+    || lower.contains("always allow on all sessions")
+    || lower.contains("always allow this exact command")
+  let hasReject = lower.contains("reject")
+
+  return (hasAllowOnce && (hasAlwaysAllow || hasReject))
+    || (hasAlwaysAllow && hasReject)
+    || lower.contains("yes, and always allow this exact command")
+    || lower.contains("yes, allow all edits")
+}
+
+nonisolated private func hasGrokQuestionPrompt(_ content: String) -> Bool {
+  let lower = content.lowercased()
+  return lower.contains("pending: question")
+    || lower.contains("pending: other (type your own answer")
+    || (lower.contains("awaiting your input")
+      && (lower.contains("?") || lower.contains("select") || lower.contains("enter")))
+}
+
+nonisolated private func hasGrokWorkingSignal(_ content: String) -> Bool {
+  let lower = content.lowercased()
+  return lower.contains("tool calls in flight")
+    || lower.contains("working tools")
+    || lower.contains("still running:")
 }
 
 nonisolated private func hasBrailleSpinner(_ content: String) -> Bool {

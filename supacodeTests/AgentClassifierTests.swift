@@ -24,6 +24,44 @@ struct AgentClassifierTests {
     #expect(identifyAgent(processName: "amp") == .amp)
     #expect(identifyAgent(processName: "amp-local") == .amp)
     #expect(identifyAgent(processName: "qwen") == .qwen)
+    #expect(identifyAgent(processName: "grok") == .grok)
+  }
+
+  @Test func identifiesGrokAgentAliasCommandLines() throws {
+    let job = ForegroundJob(
+      processGroupID: 42,
+      processes: [
+        ForegroundProcess(
+          pid: 100,
+          name: "agent",
+          argv0: "agent",
+          cmdline: "/Users/me/.grok/bin/agent --always-approve"
+        )
+      ]
+    )
+
+    let result = try #require(identifyAgentInJob(job))
+    #expect(result.agent == .grok)
+    #expect(result.name == "agent")
+    #expect(result.iconLookupToken == "grok")
+  }
+
+  @Test func identifiesDirectGrokProcess() throws {
+    let job = ForegroundJob(
+      processGroupID: 42,
+      processes: [
+        ForegroundProcess(
+          pid: 100,
+          name: "grok",
+          argv0: "grok",
+          cmdline: "grok --always-approve"
+        )
+      ]
+    )
+
+    let result = try #require(identifyAgentInJob(job))
+    #expect(result.agent == .grok)
+    #expect(result.name == "grok")
   }
 
   @Test func identifiesOhMyPiCommandNames() throws {
@@ -70,20 +108,16 @@ struct AgentClassifierTests {
   }
 
   @Test func ignoresGenericAgentProcessWithoutCursorContext() {
-    let job = ForegroundJob(
-      processGroupID: 42,
-      processes: [
-        ForegroundProcess(
-          pid: 100,
-          name: "agent",
-          argv0: "agent",
-          cmdline: "agent --serve"
-        )
-      ]
-    )
-
     #expect(identifyAgent(processName: "agent") == nil)
-    #expect(identifyAgentInJob(job) == nil)
+    for cmdline in ["agent --serve", "/usr/local/bin/agent --model grok"] {
+      let job = ForegroundJob(
+        processGroupID: 42,
+        processes: [
+          ForegroundProcess(pid: 100, name: "agent", argv0: "agent", cmdline: cmdline)
+        ]
+      )
+      #expect(identifyAgentInJob(job) == nil)
+    }
   }
 
   @Test func identifiesCursorAgentCommandLines() throws {
@@ -127,6 +161,21 @@ struct AgentClassifierTests {
     let result = try #require(identifyAgentInJob(job))
     #expect(result.agent == .codex)
     #expect(result.name == "codex")
+  }
+
+  @Test func ignoresGrokTokensPassedToWrappedRuntimes() {
+    for cmdline in [
+      "node /tmp/tool --model grok",
+      "node /tmp/tool --model grok-4.5",
+    ] {
+      let job = ForegroundJob(
+        processGroupID: 42,
+        processes: [
+          ForegroundProcess(pid: 100, name: "node", argv0: "node", cmdline: cmdline)
+        ]
+      )
+      #expect(identifyAgentInJob(job) == nil)
+    }
   }
 
   @Test func identifiesOmxAsCodexWrapper() throws {

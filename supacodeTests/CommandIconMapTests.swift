@@ -71,6 +71,7 @@ struct CommandIconMapTests {
     #expect(CommandIconMap.iconForFirstToken("claude")?.assetName == "ClaudeCode")
     #expect(CommandIconMap.iconForFirstToken("codex")?.assetName == "Codex")
     #expect(CommandIconMap.iconForFirstToken("gemini")?.assetName == "Gemini")
+    #expect(CommandIconMap.iconForFirstToken("grok")?.assetName == "Grok")
     #expect(CommandIconMap.iconForFirstToken("copilot")?.assetName == "GitHubCopilot")
     #expect(CommandIconMap.iconForFirstToken("pi")?.assetName == "Pi")
     #expect(CommandIconMap.iconForFirstToken("cursor")?.assetName == "Cursor")
