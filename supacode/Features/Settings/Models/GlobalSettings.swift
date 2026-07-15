@@ -14,7 +14,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var analyticsEnabled: Bool
   var crashReportsEnabled: Bool
   var githubIntegrationEnabled: Bool
-  var deleteBranchOnDeleteWorktree: Bool
+  var deleteBranchOnAutomaticWorktreeCleanup: Bool
   var mergedWorktreeAction: MergedWorktreeAction?
   var promptForWorktreeCreation: Bool
   var fetchOriginBeforeWorktreeCreation: Bool
@@ -59,7 +59,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     analyticsEnabled: true,
     crashReportsEnabled: true,
     githubIntegrationEnabled: true,
-    deleteBranchOnDeleteWorktree: false,
+    deleteBranchOnAutomaticWorktreeCleanup: false,
     mergedWorktreeAction: nil,
     promptForWorktreeCreation: true,
     fetchOriginBeforeWorktreeCreation: true,
@@ -103,7 +103,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     analyticsEnabled: Bool,
     crashReportsEnabled: Bool,
     githubIntegrationEnabled: Bool,
-    deleteBranchOnDeleteWorktree: Bool,
+    deleteBranchOnAutomaticWorktreeCleanup: Bool,
     mergedWorktreeAction: MergedWorktreeAction? = nil,
     promptForWorktreeCreation: Bool,
     fetchOriginBeforeWorktreeCreation: Bool = true,
@@ -145,7 +145,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     self.analyticsEnabled = analyticsEnabled
     self.crashReportsEnabled = crashReportsEnabled
     self.githubIntegrationEnabled = githubIntegrationEnabled
-    self.deleteBranchOnDeleteWorktree = deleteBranchOnDeleteWorktree
+    self.deleteBranchOnAutomaticWorktreeCleanup = deleteBranchOnAutomaticWorktreeCleanup
     self.mergedWorktreeAction = mergedWorktreeAction
     self.promptForWorktreeCreation = promptForWorktreeCreation
     self.fetchOriginBeforeWorktreeCreation = fetchOriginBeforeWorktreeCreation
@@ -190,7 +190,10 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     try container.encode(analyticsEnabled, forKey: .analyticsEnabled)
     try container.encode(crashReportsEnabled, forKey: .crashReportsEnabled)
     try container.encode(githubIntegrationEnabled, forKey: .githubIntegrationEnabled)
-    try container.encode(deleteBranchOnDeleteWorktree, forKey: .deleteBranchOnDeleteWorktree)
+    try container.encode(
+      deleteBranchOnAutomaticWorktreeCleanup,
+      forKey: .deleteBranchOnAutomaticWorktreeCleanup
+    )
     try container.encodeIfPresent(mergedWorktreeAction, forKey: .mergedWorktreeAction)
     try container.encode(promptForWorktreeCreation, forKey: .promptForWorktreeCreation)
     try container.encode(fetchOriginBeforeWorktreeCreation, forKey: .fetchOriginBeforeWorktreeCreation)
@@ -236,7 +239,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     case analyticsEnabled
     case crashReportsEnabled
     case githubIntegrationEnabled
-    case deleteBranchOnDeleteWorktree
+    case deleteBranchOnAutomaticWorktreeCleanup
     case mergedWorktreeAction
     case promptForWorktreeCreation
     case fetchOriginBeforeWorktreeCreation
@@ -265,6 +268,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     case externalDiffToolID
     case externalDiffCustomCommand
     // Legacy keys for migration
+    case deleteBranchOnDeleteWorktree
     case automaticallyArchiveMergedWorktrees
     case notificationSoundEnabled
   }
@@ -308,9 +312,10 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     githubIntegrationEnabled =
       try container.decodeIfPresent(Bool.self, forKey: .githubIntegrationEnabled)
       ?? Self.default.githubIntegrationEnabled
-    deleteBranchOnDeleteWorktree =
-      try container.decodeIfPresent(Bool.self, forKey: .deleteBranchOnDeleteWorktree)
-      ?? Self.default.deleteBranchOnDeleteWorktree
+    deleteBranchOnAutomaticWorktreeCleanup =
+      try container.decodeIfPresent(Bool.self, forKey: .deleteBranchOnAutomaticWorktreeCleanup)
+      ?? (try container.decodeIfPresent(Bool.self, forKey: .deleteBranchOnDeleteWorktree))
+      ?? Self.default.deleteBranchOnAutomaticWorktreeCleanup
     mergedWorktreeAction = try Self.decodeMergedWorktreeAction(from: container)
     promptForWorktreeCreation =
       try container.decodeIfPresent(Bool.self, forKey: .promptForWorktreeCreation)

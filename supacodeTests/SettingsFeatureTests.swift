@@ -22,7 +22,7 @@ struct SettingsFeatureTests {
       analyticsEnabled: false,
       crashReportsEnabled: true,
       githubIntegrationEnabled: true,
-      deleteBranchOnDeleteWorktree: false,
+      deleteBranchOnAutomaticWorktreeCleanup: false,
       mergedWorktreeAction: .archive,
       promptForWorktreeCreation: true
     )
@@ -46,7 +46,7 @@ struct SettingsFeatureTests {
       $0.analyticsEnabled = false
       $0.crashReportsEnabled = true
       $0.githubIntegrationEnabled = true
-      $0.deleteBranchOnDeleteWorktree = false
+      $0.deleteBranchOnAutomaticWorktreeCleanup = false
       $0.mergedWorktreeAction = .archive
       $0.promptForWorktreeCreation = true
     }
@@ -66,7 +66,7 @@ struct SettingsFeatureTests {
       analyticsEnabled: true,
       crashReportsEnabled: false,
       githubIntegrationEnabled: true,
-      deleteBranchOnDeleteWorktree: true,
+      deleteBranchOnAutomaticWorktreeCleanup: true,
       mergedWorktreeAction: nil,
       promptForWorktreeCreation: false
     )
@@ -92,7 +92,7 @@ struct SettingsFeatureTests {
       analyticsEnabled: initialSettings.analyticsEnabled,
       crashReportsEnabled: initialSettings.crashReportsEnabled,
       githubIntegrationEnabled: initialSettings.githubIntegrationEnabled,
-      deleteBranchOnDeleteWorktree: initialSettings.deleteBranchOnDeleteWorktree,
+      deleteBranchOnAutomaticWorktreeCleanup: initialSettings.deleteBranchOnAutomaticWorktreeCleanup,
       mergedWorktreeAction: initialSettings.mergedWorktreeAction,
       promptForWorktreeCreation: initialSettings.promptForWorktreeCreation
     )
@@ -241,7 +241,7 @@ struct SettingsFeatureTests {
       analyticsEnabled: true,
       crashReportsEnabled: false,
       githubIntegrationEnabled: true,
-      deleteBranchOnDeleteWorktree: true,
+      deleteBranchOnAutomaticWorktreeCleanup: true,
       mergedWorktreeAction: .archive,
       promptForWorktreeCreation: false
     )
@@ -258,7 +258,7 @@ struct SettingsFeatureTests {
       $0.analyticsEnabled = true
       $0.crashReportsEnabled = false
       $0.githubIntegrationEnabled = true
-      $0.deleteBranchOnDeleteWorktree = true
+      $0.deleteBranchOnAutomaticWorktreeCleanup = true
       $0.mergedWorktreeAction = .archive
       $0.promptForWorktreeCreation = false
       $0.selection = selection

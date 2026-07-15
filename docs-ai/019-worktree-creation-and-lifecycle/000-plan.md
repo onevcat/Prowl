@@ -89,3 +89,6 @@ deletion-safety rework, clone-from-URL intake — all later waves (see Amendment
 - Updated 2026-07-12: worktree deletion now verifies Git registration removal and
   propagates cleanup failures (fork issue #454) — see
   [006-verified-worktree-deletion.md](006-verified-worktree-deletion.md)
+- Updated 2026-07-16: manual branch-choice persistence and separate automatic-cleanup
+  branch deletion setting — see
+  [007-manual-delete-choice-and-automatic-cleanup.md](007-manual-delete-choice-and-automatic-cleanup.md)

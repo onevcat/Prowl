@@ -63,6 +63,10 @@ struct DeleteWorktreeConfirmation: Equatable, Identifiable {
   var deleteBranch: Bool
 }
 
+enum WorktreeDeletionPreferences {
+  static let lastDeleteBranchOnManualWorktreeDeletion = "lastDeleteBranchOnManualWorktreeDeletion"
+}
+
 struct ForceDeleteBranchRequest: Equatable {
   let branchName: String
   let repositoryRootURL: URL

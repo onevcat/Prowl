@@ -348,6 +348,9 @@ extension RepositoriesFeature {
       guard let confirmation = state.deleteWorktreeConfirmation else {
         return .none
       }
+      @Shared(.appStorage(WorktreeDeletionPreferences.lastDeleteBranchOnManualWorktreeDeletion))
+      var lastDeleteBranch = false
+      $lastDeleteBranch.withLock { $0 = confirmation.deleteBranch }
       state.deleteWorktreeConfirmation = nil
       return .merge(
         confirmation.targets.map { target in
@@ -560,12 +563,9 @@ private func makeDeleteWorktreeConfirmation(
   targets: [RepositoriesFeature.DeleteWorktreeTarget],
   state: RepositoriesFeature.State
 ) -> DeleteWorktreeConfirmation {
-  @Shared(.settingsFile) var settingsFile
+  @Shared(.appStorage(WorktreeDeletionPreferences.lastDeleteBranchOnManualWorktreeDeletion))
+  var lastDeleteBranch = false
   let count = targets.count
-  let allProwlCreated = targets.allSatisfy { target in
-    state.prowlCreatedWorktreeIDs.contains(target.worktreeID)
-  }
-  let defaultDeleteBranch = settingsFile.global.deleteBranchOnDeleteWorktree && allProwlCreated
   if count == 1,
     let target = targets.first,
     let worktree = state.repositories[id: target.repositoryID]?.worktrees[id: target.worktreeID]
@@ -575,7 +575,7 @@ private func makeDeleteWorktreeConfirmation(
       title: "Delete worktree?",
       message: "Delete \(worktree.name)? The worktree directory will be removed.",
       targets: targets,
-      deleteBranch: defaultDeleteBranch
+      deleteBranch: lastDeleteBranch
     )
   }
   return DeleteWorktreeConfirmation(
@@ -583,7 +583,7 @@ private func makeDeleteWorktreeConfirmation(
     title: "Delete \(count) worktrees?",
     message: "Delete \(count) worktrees? Their worktree directories will be removed.",
     targets: targets,
-    deleteBranch: defaultDeleteBranch
+    deleteBranch: lastDeleteBranch
   )
 }
 

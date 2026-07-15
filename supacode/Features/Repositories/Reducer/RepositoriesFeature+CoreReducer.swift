@@ -136,7 +136,7 @@ extension RepositoriesFeature {
           continue
         }
         let shouldDeleteBranch =
-          settingsFile.global.deleteBranchOnDeleteWorktree
+          settingsFile.global.deleteBranchOnAutomaticWorktreeCleanup
           && state.prowlCreatedWorktreeIDs.contains(worktree.id)
         deleteEffects.append(
           .send(
