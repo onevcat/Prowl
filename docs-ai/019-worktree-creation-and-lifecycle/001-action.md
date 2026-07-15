@@ -16,7 +16,7 @@
 | 2026-06-09 | Visible labels + caption for the Advanced fields (TextField labels are not rendered under `.roundedBorder`) | PR #427 |
 | 2026-06-27 | On-device Foundation Model branch-name suggestion added to the same dialog | PR #518 (owned by [044](../044-foundation-model-branch-names/000-plan.md)) |
 | 2026-06-28 | Add to Prowl popover redesign: drop zone, Browse, Clone-from-URL form with clipboard prefill, Add Workspace; auto-select after add — see [005-add-to-prowl-clone.md](005-add-to-prowl-clone.md) | PR #520 |
-| 2026-07-16 | Split manual branch-choice persistence from automatic branch cleanup; retain legacy setting migration and Prowl-created safety guard — see [007-manual-delete-choice-and-automatic-cleanup.md](007-manual-delete-choice-and-automatic-cleanup.md) | Pending PR |
+| 2026-07-16 | Split manual branch-choice persistence from automatic branch cleanup; retain legacy setting migration and Prowl-created safety guard — see [007-manual-delete-choice-and-automatic-cleanup.md](007-manual-delete-choice-and-automatic-cleanup.md) | PR #591 |
 
 ## Outcome & current state (as of 2026-07-16)
 

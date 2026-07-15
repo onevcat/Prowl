@@ -5,7 +5,7 @@
 | **Status** | Implemented (retrospective) |
 | **Anchor date** | 2026-04-12 |
 | **Documented** | 2026-07-12 (backfilled) |
-| **Primary PRs** | #167, #189, #190, #192 (initial wave); later waves #260/#419, #375/#383, #424/#427, #520 |
+| **Primary PRs** | #167, #189, #190, #192 (initial wave); later waves #260/#419, #375/#383, #424/#427, #520, #591 |
 | **Sources** | PR descriptions #167/#189/#190/#192/#260/#375/#383/#419/#424/#427/#520; fork issues #166/#175/#176/#178; `docs-ai/017-upstream-sync-process/upstream-ledger.md` (2026-04-08 and 2026-05-08 review batches) |
 | **Related** | [018-archived-worktrees](../018-archived-worktrees/000-plan.md), [028-pr-status-tracking](../028-pr-status-tracking/000-plan.md), [034-worktree-watcher-correctness](../034-worktree-watcher-correctness/000-plan.md), [044-foundation-model-branch-names](../044-foundation-model-branch-names/000-plan.md), `docs/components/repositories-and-worktrees.md` |
 

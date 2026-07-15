@@ -26,7 +26,7 @@ had created the worktree.
 
 ## Refs
 
-PR pending.
+PR #591.
 
 ## Current state
 
