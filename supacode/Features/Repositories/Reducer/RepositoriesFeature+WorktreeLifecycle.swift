@@ -102,11 +102,18 @@ extension RepositoriesFeature {
       }
       state.alert = nil
       @Shared(.repositorySettings(worktree.repositoryRootURL)) var repositorySettings
-      let script = resolvedRepositoryScript(
-        profileID: repositorySettings.archiveScriptProfileID,
-        inlineScript: repositorySettings.archiveScript,
-        worktree: worktree
-      )
+      let script: String
+      do {
+        script = try resolvedRepositoryScript(
+          profileID: repositorySettings.archiveScriptProfileID,
+          inlineScript: repositorySettings.archiveScript,
+          worktree: worktree
+        )
+      } catch {
+        state.alert = messageAlert(
+          title: "Archive script unavailable", message: error.localizedDescription)
+        return .none
+      }
       let commandText = archiveScriptCommand(script)
       let trimmed = script.trimmingCharacters(in: .whitespacesAndNewlines)
       if trimmed.isEmpty {

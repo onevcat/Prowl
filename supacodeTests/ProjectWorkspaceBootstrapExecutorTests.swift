@@ -8,6 +8,7 @@ nonisolated final class BootstrapShellRecorder: @unchecked Sendable {
   private var environmentValue: [String: String] = [:]
   private var currentDirectoryURLValue: URL?
   private var scriptsValue: [String] = []
+  private var scriptPathsValue: [String] = []
 
   func record(script: String? = nil, environment: [String: String], currentDirectoryURL: URL?) {
     lock.lock()
@@ -15,6 +16,9 @@ nonisolated final class BootstrapShellRecorder: @unchecked Sendable {
     currentDirectoryURLValue = currentDirectoryURL
     if let script {
       scriptsValue.append(script)
+    }
+    if let scriptPath = environment[ScriptProfile.scriptEnvironmentKey] {
+      scriptPathsValue.append(scriptPath)
     }
     lock.unlock()
   }
@@ -35,6 +39,12 @@ nonisolated final class BootstrapShellRecorder: @unchecked Sendable {
     lock.lock()
     defer { lock.unlock() }
     return scriptsValue
+  }
+
+  var scriptPaths: [String] {
+    lock.lock()
+    defer { lock.unlock() }
+    return scriptPathsValue
   }
 }
 
@@ -127,7 +137,7 @@ struct ProjectWorkspaceBootstrapExecutorTests {
     #expect(log.contains("[exit] 0"))
   }
 
-  @Test func runsMultipleProfilesInOrderAndContinuesOptionalFailures() async throws {
+  @Test func runsMultipleProfilesInOrderAndReportsOptionalFailures() async throws {
     let rootURL = try makeTemporaryRoot()
     let repoURL = rootURL.appending(path: "app", directoryHint: .isDirectory)
     try FileManager.default.createDirectory(at: repoURL, withIntermediateDirectories: true)
@@ -180,15 +190,19 @@ struct ProjectWorkspaceBootstrapExecutorTests {
       )
     )
 
-    try await executor.runner.run(
-      try #require(entry.bootstrap),
-      ProjectWorkspaceBootstrapContext(
-        workspaceRootURL: rootURL,
-        repositoryRootURL: repoURL,
-        repository: entry,
-        timing: .create
+    await #expect(
+      throws: ProjectWorkspaceCreationError.bootstrapFailed(repository: "App", message: "failed")
+    ) {
+      try await executor.runner.run(
+        try #require(entry.bootstrap),
+        ProjectWorkspaceBootstrapContext(
+          workspaceRootURL: rootURL,
+          repositoryRootURL: repoURL,
+          repository: entry,
+          timing: .create
+        )
       )
-    )
+    }
 
     #expect(
       recorder.scripts == [
@@ -206,6 +220,113 @@ struct ProjectWorkspaceBootstrapExecutorTests {
     let state = try decoder.decode(ProjectWorkspaceBootstrapState.self, from: stateData)
     #expect(state.repositories["app"]?.lastStatus == .failed)
     #expect(state.repositories["app"]?.lastScriptIDs == ["first", "failing", "last"])
+  }
+
+  @Test func usesUniqueArtifactsForRunsWithSameTimestamp() async throws {
+    let rootURL = try makeTemporaryRoot()
+    let repoURL = rootURL.appending(path: "app", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: repoURL, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: rootURL) }
+
+    let recorder = BootstrapShellRecorder()
+    let shell = ShellClient(
+      run: { _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) },
+      runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) },
+      runLoginStreamWithEnvironmentImpl: { _, arguments, currentDirectoryURL, environment, _ in
+        recorder.record(
+          script: arguments.last,
+          environment: environment,
+          currentDirectoryURL: currentDirectoryURL
+        )
+        return AsyncThrowingStream { continuation in
+          continuation.yield(.finished(ShellOutput(stdout: "", stderr: "", exitCode: 0)))
+          continuation.finish()
+        }
+      }
+    )
+    let executor = ProjectWorkspaceBootstrapExecutor(
+      profiles: [ScriptProfile(id: "sync-app", name: "Sync App", script: "echo hello")],
+      shellClient: shell,
+      now: { Date(timeIntervalSince1970: 1_234) }
+    )
+    let entry = ProjectWorkspace.RepositoryEntry(
+      id: "app",
+      name: "App",
+      path: "app",
+      bootstrap: ProjectWorkspaceRepositoryBootstrap(
+        scriptKind: .userProfile,
+        scriptID: "sync-app",
+        runOn: [.manual],
+        required: true
+      )
+    )
+    let context = ProjectWorkspaceBootstrapContext(
+      workspaceRootURL: rootURL,
+      repositoryRootURL: repoURL,
+      repository: entry,
+      timing: .manual
+    )
+
+    try await executor.runner.run(try #require(entry.bootstrap), context)
+    let firstState = try loadState(from: rootURL)
+    let firstLogPath = try #require(firstState.repositories["app"]?.lastLogPath)
+
+    try await executor.runner.run(try #require(entry.bootstrap), context)
+    let secondState = try loadState(from: rootURL)
+    let secondLogPath = try #require(secondState.repositories["app"]?.lastLogPath)
+
+    #expect(Set(recorder.scriptPaths).count == 2)
+    #expect(firstLogPath != secondLogPath)
+  }
+
+  @Test func rejectsUnsupportedRepoLocalBootstrap() async throws {
+    let rootURL = try makeTemporaryRoot()
+    let repoURL = rootURL.appending(path: "app", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: repoURL, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: rootURL) }
+
+    let executor = ProjectWorkspaceBootstrapExecutor(
+      profiles: [],
+      shellClient: .testValue
+    )
+    let entry = ProjectWorkspace.RepositoryEntry(
+      id: "app",
+      name: "App",
+      path: "app",
+      bootstrap: ProjectWorkspaceRepositoryBootstrap(
+        scriptKind: .repoLocal,
+        scriptPath: ".prowl/bootstrap.sh",
+        runOn: [.manual],
+        required: true
+      )
+    )
+
+    await #expect(
+      throws: ProjectWorkspaceCreationError.bootstrapFailed(
+        repository: "App",
+        message: "Repo-local bootstrap scripts are not supported."
+      )
+    ) {
+      try await executor.runner.run(
+        try #require(entry.bootstrap),
+        ProjectWorkspaceBootstrapContext(
+          workspaceRootURL: rootURL,
+          repositoryRootURL: repoURL,
+          repository: entry,
+          timing: .manual
+        )
+      )
+    }
+  }
+
+  private func loadState(from rootURL: URL) throws -> ProjectWorkspaceBootstrapState {
+    let stateURL = rootURL
+      .appending(path: ProjectWorkspace.metadataDirectoryName)
+      .appending(path: "bootstrap-state.json")
+    let data = try Data(contentsOf: stateURL)
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    return try decoder.decode(ProjectWorkspaceBootstrapState.self, from: data)
   }
 
   private func makeTemporaryRoot() throws -> URL {

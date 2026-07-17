@@ -1,5 +1,13 @@
 import Foundation
 
+nonisolated private final class ProjectWorkspaceAgentGuideFileManagerBox: @unchecked Sendable {
+  let value: FileManager
+
+  init(_ value: FileManager) {
+    self.value = value
+  }
+}
+
 nonisolated enum ProjectWorkspaceAgentGuideWriteError: LocalizedError, Equatable, Sendable {
   case outputOutsideWorkspace(String)
   case missingManagedBlock(String)
@@ -25,8 +33,10 @@ nonisolated struct ProjectWorkspaceAgentGuideFileWriter {
   }
 
   func writer() -> ProjectWorkspaceAgentGuideWriter {
-    ProjectWorkspaceAgentGuideWriter { workspace, rootURL in
-      try ProjectWorkspaceAgentGuideFileWriter().write(workspace: workspace, rootURL: rootURL)
+    let fileManager = ProjectWorkspaceAgentGuideFileManagerBox(self.fileManager)
+    return ProjectWorkspaceAgentGuideWriter { workspace, rootURL in
+      try ProjectWorkspaceAgentGuideFileWriter(fileManager: fileManager.value).write(
+        workspace: workspace, rootURL: rootURL)
     }
   }
 

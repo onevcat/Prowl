@@ -820,6 +820,10 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
 
     let isSymbolicLink =
       (try? entryURL.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == true
+    if isSymbolicLink {
+      try fileManager.removeItem(at: entryURL)
+      return
+    }
     if !isSymbolicLink, entry.sourceKind != .remote, let sourceLocation = entry.sourceLocation {
       try await gitRunner.run(
         ProjectWorkspaceGitCommand(

@@ -2,6 +2,17 @@ import Foundation
 import IdentifiedCollections
 import Sharing
 
+nonisolated enum RepositoryScriptResolutionError: LocalizedError, Equatable, Sendable {
+  case profileNotFound(String)
+
+  var errorDescription: String? {
+    switch self {
+    case .profileNotFound(let profileID):
+      return "Script profile '\(profileID)' is no longer available."
+    }
+  }
+}
+
 struct FailedWorktreeCleanup {
   let didRemoveWorktree: Bool
   let didUpdatePinned: Bool
@@ -184,13 +195,13 @@ func resolvedRepositoryScript(
   profileID: String?,
   inlineScript: String,
   worktree: Worktree
-) -> String {
+) throws -> String {
   guard let profileID else {
     return inlineScript
   }
   @Shared(.scriptProfiles) var scriptProfiles
   guard let profile = scriptProfiles.first(where: { $0.id == profileID }) else {
-    return ""
+    throw RepositoryScriptResolutionError.profileNotFound(profileID)
   }
   return profile.terminalInvocation(environment: worktree.scriptEnvironment)
 }

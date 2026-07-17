@@ -157,8 +157,8 @@ extension ShellClient: DependencyKey {
       )
     },
     runLoginWithEnvironmentImpl: { executableURL, arguments, currentDirectoryURL, environment, log in
-      let shellURL = URL(fileURLWithPath: defaultShellPath())
-      let execCommand = shellExecCommand(for: shellURL)
+      let (shellURL, execCommand) = ShellClient.loginShellInvocation(
+        userShell: URL(fileURLWithPath: defaultShellPath()))
       let shellArguments =
         ["-l", "-c", execCommand, "--", executableURL.path(percentEncoded: false)] + arguments
       if log {
@@ -174,8 +174,8 @@ extension ShellClient: DependencyKey {
       )
     },
     runLoginStreamWithEnvironmentImpl: { executableURL, arguments, currentDirectoryURL, environment, log in
-      let shellURL = URL(fileURLWithPath: defaultShellPath())
-      let execCommand = shellExecCommand(for: shellURL)
+      let (shellURL, execCommand) = ShellClient.loginShellInvocation(
+        userShell: URL(fileURLWithPath: defaultShellPath()))
       let shellArguments =
         ["-l", "-c", execCommand, "--", executableURL.path(percentEncoded: false)] + arguments
       if log {

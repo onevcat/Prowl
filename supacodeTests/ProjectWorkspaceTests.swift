@@ -1,4 +1,5 @@
 import ComposableArchitecture
+import Darwin
 import Foundation
 import IdentifiedCollections
 import Testing
@@ -994,6 +995,50 @@ struct ProjectWorkspaceTests {
           "--end-of-options", "main",
         ],
       ])
+  }
+
+  @Test func updateRepositoriesRemovesBrokenSymlinkChild() async throws {
+    let rootURL = try makeTemporaryWorkspaceRoot()
+    defer { try? FileManager.default.removeItem(at: rootURL) }
+    let linkURL = rootURL.appending(path: "app")
+    let missingTargetURL = rootURL.appending(path: "missing")
+    let linkPath = linkURL.path(percentEncoded: false)
+    try FileManager.default.createSymbolicLink(
+      atPath: linkPath,
+      withDestinationPath: missingTargetURL.path(percentEncoded: false)
+    )
+    var linkInfo = stat()
+    #expect(lstat(linkPath, &linkInfo) == 0)
+
+    let removedEntry = ProjectWorkspace.RepositoryEntry(
+      id: "app",
+      name: "App",
+      path: "app",
+      sourceKind: .existingPath,
+      sourceLocation: missingTargetURL.path(percentEncoded: false)
+    )
+    let workspace = ProjectWorkspace(
+      title: "Workspace",
+      repositories: [
+        removedEntry,
+        ProjectWorkspace.RepositoryEntry(id: "api", name: "API", path: "api"),
+        ProjectWorkspace.RepositoryEntry(id: "web", name: "Web", path: "web"),
+      ]
+    )
+
+    _ = try await ProjectWorkspace.updateRepositories(
+      ProjectWorkspaceRepositoryUpdateRequest(
+        workspace: workspace,
+        rootURL: rootURL,
+        additions: [],
+        removedRepositories: [removedEntry],
+        updatedAt: Date(timeIntervalSince1970: 42)
+      ),
+      gitRunner: ProjectWorkspaceGitRunner { _ in }
+    ) { $0 }
+
+    var removedInfo = stat()
+    #expect(lstat(linkPath, &removedInfo) != 0)
   }
 
   @Test func optionalBootstrapFailureKeepsWorkspace() async throws {

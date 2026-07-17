@@ -127,7 +127,10 @@ nonisolated struct ProjectWorkspaceBootstrapExecutor: Sendable {
     context: ProjectWorkspaceBootstrapContext
   ) async throws {
     guard bootstrap.scriptKind == .userProfile else {
-      return
+      throw ProjectWorkspaceCreationError.bootstrapFailed(
+        repository: context.repository.name,
+        message: "Repo-local bootstrap scripts are not supported."
+      )
     }
     let scriptIDs = normalizedScriptIDs(bootstrap.scriptIDs)
     guard !scriptIDs.isEmpty else {
@@ -165,13 +168,14 @@ nonisolated struct ProjectWorkspaceBootstrapExecutor: Sendable {
       }
     }
 
-    if firstError != nil {
+    if let firstError {
       try writeState(
         status: .failed,
         scriptIDs: scriptIDs,
         logURL: logURL,
         context: context
       )
+      throw firstError
     } else {
       try writeState(
         status: .succeeded,
@@ -286,7 +290,9 @@ nonisolated struct ProjectWorkspaceBootstrapExecutor: Sendable {
     try fileClient.createDirectory(directoryURL)
     let timestamp = ISO8601DateFormatter().string(from: now()).replacing(":", with: "-")
     let name = trimmedNonEmpty(sanitizedLogComponent(profile.id)) ?? "bootstrap"
-    return directoryURL.appending(path: "\(sanitizedLogComponent(name))-\(timestamp).sh")
+    return directoryURL.appending(
+      path: "\(sanitizedLogComponent(name))-\(timestamp)-\(UUID().uuidString).sh"
+    )
   }
 
   private func makeLogURL(
@@ -300,7 +306,9 @@ nonisolated struct ProjectWorkspaceBootstrapExecutor: Sendable {
     try fileClient.createDirectory(directoryURL)
     let timestamp = ISO8601DateFormatter().string(from: now()).replacing(":", with: "-")
     let name = trimmedNonEmpty(sanitizedLogComponent(repository.name)) ?? repository.id
-    return directoryURL.appending(path: "\(sanitizedLogComponent(name))-\(timestamp).log")
+    return directoryURL.appending(
+      path: "\(sanitizedLogComponent(name))-\(timestamp)-\(UUID().uuidString).log"
+    )
   }
 
   private func writeState(

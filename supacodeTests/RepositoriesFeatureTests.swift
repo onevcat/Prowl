@@ -4855,6 +4855,45 @@ struct RepositoriesFeatureTests {
     #expect(store.state.archivedWorktrees.isEmpty)
   }
 
+  @Test func archiveWorktreeWithMissingScriptProfileShowsError() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    let profileID = "missing-archive-profile-\(UUID().uuidString)"
+    @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
+    $repositorySettings.withLock {
+      $0.archiveScriptProfileID = profileID
+      $0.archiveScript = "echo stale inline fallback"
+    }
+    @Shared(.scriptProfiles) var scriptProfiles
+    $scriptProfiles.withLock { $0.removeAll { $0.id == profileID } }
+
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    }
+    let expectedAlert = AlertState<RepositoriesFeature.Alert> {
+      TextState("Archive script unavailable")
+    } actions: {
+      ButtonState(role: .cancel) {
+        TextState("OK")
+      }
+    } message: {
+      TextState("Script profile '\(profileID)' is no longer available.")
+    }
+
+    await store.send(
+      .worktreeLifecycle(.archiveWorktreeConfirmed(featureWorktree.id, repository.id))
+    ) {
+      $0.alert = expectedAlert
+    }
+    #expect(store.state.archivedWorktrees.isEmpty)
+  }
+
   @Test func archiveScriptSucceededIgnoredWhenNotArchiving() async {
     let repoRoot = "/tmp/repo"
     let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
