@@ -27,9 +27,9 @@ extension RepositoriesFeature.State {
   private static func workspaceBootstrapCandidate(
     settings: RepositorySettings,
     repositoryName: String
-  ) -> ProjectWorkspaceCreationBootstrapCandidate? {
+  ) -> WorkspaceBootstrapCandidate? {
     if let profileID = settings.setupScriptProfileID {
-      return ProjectWorkspaceCreationBootstrapCandidate(
+      return WorkspaceBootstrapCandidate(
         profileID: profileID,
         displayName: repositoryName
       )
@@ -38,7 +38,7 @@ extension RepositoriesFeature.State {
     guard !setupScript.isEmpty else {
       return nil
     }
-    return ProjectWorkspaceCreationBootstrapCandidate(
+    return WorkspaceBootstrapCandidate(
       script: setupScript,
       displayName: repositoryName
     )

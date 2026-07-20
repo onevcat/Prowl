@@ -125,8 +125,8 @@ nonisolated struct UserCustomCommand: Codable, Equatable, Sendable, Identifiable
   }
 }
 
-private extension String {
-  nonisolated var trimmedNilIfEmpty: String? {
+extension String {
+  fileprivate nonisolated var trimmedNilIfEmpty: String? {
     let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
     return trimmed.isEmpty ? nil : trimmed
   }

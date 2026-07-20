@@ -356,7 +356,8 @@ format: # Format all Swift code with swift-format (full-tree cleanup)
 
 format-changed: # Format Swift files changed from FORMAT_BASE_REF (default: origin/main)
 	@base="$$(git merge-base HEAD "$(FORMAT_BASE_REF)" 2>/dev/null || git rev-parse HEAD)"; \
-	mapfile -t files < <( \
+	files=(); \
+	while IFS= read -r file; do files+=("$$file"); done < <( \
 		{ \
 			git diff --name-only --diff-filter=ACMR "$$base" -- supacode supacodeTests; \
 			git ls-files --others --exclude-standard -- supacode supacodeTests; \

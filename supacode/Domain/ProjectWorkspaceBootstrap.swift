@@ -222,9 +222,10 @@ extension ScriptProfile {
       "PROWL_SCRIPT_EOF",
       "chmod +x \(scriptShellQuote(scriptPath))",
     ]
-    lines.append(contentsOf: environment.sorted { $0.key < $1.key }.map { key, value in
-      "export \(key)=\(scriptShellQuote(value))"
-    })
+    lines.append(
+      contentsOf: environment.sorted { $0.key < $1.key }.map { key, value in
+        "export \(key)=\(scriptShellQuote(value))"
+      })
     lines.append(normalized.command)
     lines.append("status=$?")
     lines.append("rm -f \(scriptShellQuote(scriptPath))")

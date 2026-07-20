@@ -172,7 +172,7 @@ struct RepositorySettingsFeature {
     var workspace: ProjectWorkspace?
     var workspaceDraft: WorkspaceDraft?
     var workspaceRepositoryRemovalConfirmation: WorkspaceRepositoryRemovalConfirmation?
-    var pendingWorkspaceBranchDeletion: RepositorySettingsWorkspaceBranchDeletion?
+    var pendingWorkspaceBranchDeletion: SettingsWorkspaceBranchDeletion?
     var workspaceSaveError: String?
     var workspaceSaveStatus: String?
     var workspaceBootstrapRuntime = ProjectWorkspaceBootstrapRuntimeSnapshot.empty
@@ -350,7 +350,7 @@ struct RepositorySettingsFeature {
     case workspaceRepositoryBaseRefsLoaded(
       id: String, [GitBranchRefOption], defaultBaseRef: String?)
     case requestWorkspaceRepositoryRemoval(id: String)
-    case workspaceRepositoryRemovalDeleteBranchChanged(Bool)
+    case workspaceRemovalDeleteBranchChanged(Bool)
     case workspaceRepositoryRemovalCanceled
     case workspaceRepositoryRemovalConfirmed
     case workspaceRemoveRepository(id: String)
@@ -778,7 +778,7 @@ struct RepositorySettingsFeature {
         )
         return .none
 
-      case .workspaceRepositoryRemovalDeleteBranchChanged(let deleteBranch):
+      case .workspaceRemovalDeleteBranchChanged(let deleteBranch):
         state.workspaceRepositoryRemovalConfirmation?.deleteBranch = deleteBranch
         return .none
 
@@ -800,7 +800,7 @@ struct RepositorySettingsFeature {
           let sourceLocation = repository.sourceLocation.trimmedNilIfEmpty,
           let branchName = repository.branchName.trimmedNilIfEmpty
         {
-          state.pendingWorkspaceBranchDeletion = RepositorySettingsWorkspaceBranchDeletion(
+          state.pendingWorkspaceBranchDeletion = SettingsWorkspaceBranchDeletion(
             sourceLocation: sourceLocation,
             branchName: branchName
           )
@@ -1235,7 +1235,7 @@ struct RepositorySettingsFeature {
     "\(repositoryID)::\(scriptID)"
   }
 
-  private func deleteWorkspaceBranchEffect(_ deletion: RepositorySettingsWorkspaceBranchDeletion) -> Effect<Action> {
+  private func deleteWorkspaceBranchEffect(_ deletion: SettingsWorkspaceBranchDeletion) -> Effect<Action> {
     let gitClient = gitClient
     return .run { send in
       let outcome = try? await gitClient.deleteLocalBranch(
@@ -1255,7 +1255,7 @@ struct RepositorySettingsFeature {
   }
 }
 
-nonisolated struct RepositorySettingsWorkspaceBranchDeletion: Sendable, Equatable {
+nonisolated struct SettingsWorkspaceBranchDeletion: Sendable, Equatable {
   let sourceLocation: String
   let branchName: String
 }

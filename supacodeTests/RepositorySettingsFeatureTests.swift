@@ -11,6 +11,12 @@ private struct ShellCommandRecord: Equatable, Sendable {
   var currentDirectoryURL: URL?
 }
 
+private struct DeletedBranchRequest: Equatable, Sendable {
+  var name: String
+  var url: URL
+  var force: Bool
+}
+
 private struct WorkspaceAddRemoveFixture {
   var rootURL: URL
   var appURL: URL
@@ -678,7 +684,7 @@ struct RepositorySettingsFeatureTests {
     )
     state.setWorkspace(editableWorkspace)
     let commands = LockIsolated<[ShellCommandRecord]>([])
-    let deletedBranches = LockIsolated<[(name: String, url: URL, force: Bool)]>([])
+    let deletedBranches = LockIsolated<[DeletedBranchRequest]>([])
     let store = TestStore(initialState: state) {
       RepositorySettingsFeature()
     } withDependencies: {
@@ -687,7 +693,9 @@ struct RepositorySettingsFeatureTests {
       $0.scriptProfilesFileURL = fixture.profileURL
       $0[ShellClient.self] = recordingShellClient(commands: commands)
       $0.gitClient.deleteLocalBranch = { name, url, force in
-        deletedBranches.withValue { $0.append((name, url, force)) }
+        deletedBranches.withValue {
+          $0.append(DeletedBranchRequest(name: name, url: url, force: force))
+        }
         return .deleted
       }
     }
@@ -703,7 +711,7 @@ struct RepositorySettingsFeatureTests {
           deleteBranch: false
         )
     }
-    await store.send(.workspaceRepositoryRemovalDeleteBranchChanged(true)) {
+    await store.send(.workspaceRemovalDeleteBranchChanged(true)) {
       $0.workspaceRepositoryRemovalConfirmation?.deleteBranch = true
     }
     await store.send(.workspaceRepositoryRemovalConfirmed)

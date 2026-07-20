@@ -429,9 +429,9 @@ struct RepositorySettingsView: View {
         set: { if $0 == nil { store.send(.workspaceRepositoryRemovalCanceled) } }
       )
     ) { confirmation in
-      WorkspaceRepositoryRemovalConfirmationView(
+      WorkspaceRepoRemovalConfirmationView(
         confirmation: confirmation,
-        onDeleteBranchChanged: { store.send(.workspaceRepositoryRemovalDeleteBranchChanged($0)) },
+        onDeleteBranchChanged: { store.send(.workspaceRemovalDeleteBranchChanged($0)) },
         onCancel: { store.send(.workspaceRepositoryRemovalCanceled) },
         onRemove: { store.send(.workspaceRepositoryRemovalConfirmed) }
       )
@@ -1415,7 +1415,7 @@ private struct WorkspaceSettingsBranchRefMenu: View {
   }
 }
 
-private struct WorkspaceRepositoryRemovalConfirmationView: View {
+private struct WorkspaceRepoRemovalConfirmationView: View {
   let confirmation: RepositorySettingsFeature.WorkspaceRepositoryRemovalConfirmation
   let onDeleteBranchChanged: (Bool) -> Void
   let onCancel: () -> Void

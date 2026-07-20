@@ -57,7 +57,7 @@ nonisolated enum ProjectWorkspaceRepositoryCheckout: Equatable, Hashable, Sendab
   case trackRemoteRef(remoteRef: String, branchName: String)
 }
 
-nonisolated struct ProjectWorkspaceCreationBootstrapCandidate: Equatable, Hashable, Sendable {
+nonisolated struct WorkspaceBootstrapCandidate: Equatable, Hashable, Sendable {
   var profileID: String?
   var script: String?
   var displayName: String
@@ -90,7 +90,7 @@ nonisolated struct ProjectWorkspaceCreationRepository: Equatable, Hashable, Send
   var bootstrapScriptIDs: [String]
   var bootstrapRequired: Bool
   var bootstrapRunOnCreate: Bool
-  var bootstrapCandidate: ProjectWorkspaceCreationBootstrapCandidate?
+  var bootstrapCandidate: WorkspaceBootstrapCandidate?
   // User choice when a Use-Existing checkout on a remote-tracking ref would
   // reset an existing same-named local branch: false keeps the local branch
   // (checks it out directly), true resets it to the remote ref.
@@ -109,7 +109,7 @@ nonisolated struct ProjectWorkspaceCreationRepository: Equatable, Hashable, Send
     bootstrapScriptIDs: [String] = [],
     bootstrapRequired: Bool = false,
     bootstrapRunOnCreate: Bool = false,
-    bootstrapCandidate: ProjectWorkspaceCreationBootstrapCandidate? = nil
+    bootstrapCandidate: WorkspaceBootstrapCandidate? = nil
   ) {
     let normalizedURL = rootURL.standardizedFileURL
     self.id = id
@@ -144,7 +144,7 @@ nonisolated struct ProjectWorkspaceCreationRepository: Equatable, Hashable, Send
     bootstrapScriptIDs: [String] = [],
     bootstrapRequired: Bool = false,
     bootstrapRunOnCreate: Bool = false,
-    bootstrapCandidate: ProjectWorkspaceCreationBootstrapCandidate? = nil
+    bootstrapCandidate: WorkspaceBootstrapCandidate? = nil
   ) {
     self.id = id
     self.name = name

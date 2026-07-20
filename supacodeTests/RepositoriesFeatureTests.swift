@@ -1385,12 +1385,14 @@ struct RepositoriesFeatureTests {
     )
   }
 
-  @Test(.dependencies) func workspaceCreationCandidatesIncludeOpenedRepositorySetupScript() async throws {
+  @Test(.dependencies) func workspaceCreationCandidatesIncludeOpenedRepositorySetupScript() throws {
     let storage = SettingsTestStorage()
     let repoRoot = "/tmp/repo-a"
-    let repository = makeRepository(id: repoRoot, worktrees: [
-      makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
-    ])
+    let repository = makeRepository(
+      id: repoRoot,
+      worktrees: [
+        makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+      ])
     let candidate = try withDependencies {
       $0.settingsFileStorage = storage.storage
     } operation: {
@@ -1423,7 +1425,7 @@ struct RepositoriesFeatureTests {
               rootURL: URL(fileURLWithPath: repoRoot),
               checkoutMode: .createBranch,
               branchName: "workspace/repo-a",
-              bootstrapCandidate: ProjectWorkspaceCreationBootstrapCandidate(
+              bootstrapCandidate: WorkspaceBootstrapCandidate(
                 script: "echo setup",
                 displayName: "Repo A"
               )
