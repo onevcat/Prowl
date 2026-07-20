@@ -2,6 +2,12 @@ import Foundation
 
 nonisolated struct ProjectWorkspaceBootstrapState: Codable, Equatable, Sendable {
   var repositories: [String: ProjectWorkspaceBootstrapRepositoryState]
+
+  static func fileURL(for workspaceRootURL: URL) -> URL {
+    workspaceRootURL
+      .appending(path: ProjectWorkspace.metadataDirectoryName, directoryHint: .isDirectory)
+      .appending(path: "bootstrap-state.json", directoryHint: .notDirectory)
+  }
 }
 
 nonisolated struct ProjectWorkspaceBootstrapRepositoryState: Codable, Equatable, Sendable {
@@ -58,6 +64,45 @@ nonisolated enum ProjectWorkspaceBootstrapStatus: String, Codable, Equatable, Se
   case failed
 }
 
+nonisolated struct ProjectWorkspaceBootstrapRuntimeSnapshot: Equatable, Sendable {
+  var state: ProjectWorkspaceBootstrapState
+  var logURLsByRepositoryID: [String: URL]
+
+  static let empty = ProjectWorkspaceBootstrapRuntimeSnapshot(
+    state: ProjectWorkspaceBootstrapState(repositories: [:]),
+    logURLsByRepositoryID: [:]
+  )
+
+  static func load(
+    workspaceRootURL: URL,
+    fileClient: ProjectWorkspaceBootstrapFileClient = .live
+  ) throws -> ProjectWorkspaceBootstrapRuntimeSnapshot {
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let state = try decoder.decode(
+      ProjectWorkspaceBootstrapState.self,
+      from: fileClient.readData(ProjectWorkspaceBootstrapState.fileURL(for: workspaceRootURL))
+    )
+    var logURLsByRepositoryID: [String: URL] = [:]
+    for (repositoryID, repositoryState) in state.repositories {
+      let logPath = repositoryState.lastLogPath
+      let logURL =
+        if logPath.hasPrefix("/") {
+          URL(fileURLWithPath: logPath)
+        } else {
+          workspaceRootURL.appending(path: logPath, directoryHint: .notDirectory)
+        }
+      if fileClient.fileExists(logURL) {
+        logURLsByRepositoryID[repositoryID] = logURL
+      }
+    }
+    return ProjectWorkspaceBootstrapRuntimeSnapshot(
+      state: state,
+      logURLsByRepositoryID: logURLsByRepositoryID
+    )
+  }
+}
+
 nonisolated struct ProjectWorkspaceBootstrapFileClient: Sendable {
   var createDirectory: @Sendable (URL) throws -> Void
   var createFile: @Sendable (URL) -> Void
@@ -66,6 +111,7 @@ nonisolated struct ProjectWorkspaceBootstrapFileClient: Sendable {
   var setExecutable: @Sendable (URL) throws -> Void
   var fileHandleForWriting: @Sendable (URL) throws -> FileHandle
   var removeItem: @Sendable (URL) throws -> Void
+  var fileExists: @Sendable (URL) -> Bool
 
   static let live = ProjectWorkspaceBootstrapFileClient(
     createDirectory: { url in
@@ -91,6 +137,9 @@ nonisolated struct ProjectWorkspaceBootstrapFileClient: Sendable {
     },
     removeItem: { url in
       try FileManager.default.removeItem(at: url)
+    },
+    fileExists: { url in
+      FileManager.default.fileExists(atPath: url.path(percentEncoded: false))
     }
   )
 }
@@ -317,9 +366,7 @@ nonisolated struct ProjectWorkspaceBootstrapExecutor: Sendable {
     logURL: URL,
     context: ProjectWorkspaceBootstrapContext
   ) throws {
-    let stateURL = context.workspaceRootURL
-      .appending(path: ProjectWorkspace.metadataDirectoryName, directoryHint: .isDirectory)
-      .appending(path: "bootstrap-state.json", directoryHint: .notDirectory)
+    let stateURL = ProjectWorkspaceBootstrapState.fileURL(for: context.workspaceRootURL)
     let state = try loadState(from: stateURL)
     var repositories = state.repositories
     repositories[context.repository.id] = ProjectWorkspaceBootstrapRepositoryState(
@@ -371,7 +418,8 @@ nonisolated struct ProjectWorkspaceBootstrapExecutor: Sendable {
   private func sanitizedLogComponent(_ value: String) -> String {
     let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
     let scalars = value.unicodeScalars.map { allowed.contains($0) ? $0 : "-" }
-    return String(String.UnicodeScalarView(scalars)).trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+    return String(String.UnicodeScalarView(scalars)).trimmingCharacters(
+      in: CharacterSet(charactersIn: "-"))
   }
 
   private func trimmedNonEmpty(_ value: String?) -> String? {

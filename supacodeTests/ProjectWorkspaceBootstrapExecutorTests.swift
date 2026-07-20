@@ -60,7 +60,9 @@ struct ProjectWorkspaceBootstrapExecutorTests {
       run: { _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) },
       runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) },
       runLoginStreamWithEnvironmentImpl: { _, arguments, currentDirectoryURL, environment, _ in
-        recorder.record(script: arguments.last, environment: environment, currentDirectoryURL: currentDirectoryURL)
+        recorder.record(
+          script: arguments.last, environment: environment, currentDirectoryURL: currentDirectoryURL
+        )
         return AsyncThrowingStream { continuation in
           continuation.yield(.line(ShellStreamLine(source: .stdout, text: "hello")))
           continuation.yield(.finished(ShellOutput(stdout: "hello", stderr: "", exitCode: 0)))
@@ -279,6 +281,64 @@ struct ProjectWorkspaceBootstrapExecutorTests {
     #expect(firstLogPath != secondLogPath)
   }
 
+  @Test func runtimeSnapshotLoadsLatestStateAndAvailableLog() throws {
+    let rootURL = try makeTemporaryRoot()
+    defer { try? FileManager.default.removeItem(at: rootURL) }
+
+    let logURL =
+      rootURL
+      .appending(path: ProjectWorkspace.metadataDirectoryName)
+      .appending(path: "bootstrap-runs", directoryHint: .isDirectory)
+      .appending(path: "app.log", directoryHint: .notDirectory)
+    try FileManager.default.createDirectory(
+      at: logURL.deletingLastPathComponent(),
+      withIntermediateDirectories: true
+    )
+    try Data("ok".utf8).write(to: logURL)
+    try writeState(
+      ProjectWorkspaceBootstrapState(
+        repositories: [
+          "app": ProjectWorkspaceBootstrapRepositoryState(
+            lastRunAt: Date(timeIntervalSince1970: 1_234),
+            lastStatus: .succeeded,
+            lastScriptIDs: ["sync-app"],
+            lastLogPath: ".prowl/bootstrap-runs/app.log"
+          )
+        ]
+      ),
+      to: rootURL
+    )
+
+    let snapshot = try ProjectWorkspaceBootstrapRuntimeSnapshot.load(workspaceRootURL: rootURL)
+
+    #expect(snapshot.state.repositories["app"]?.lastStatus == .succeeded)
+    #expect(snapshot.logURLsByRepositoryID["app"] == logURL)
+  }
+
+  @Test func runtimeSnapshotKeepsStateWhenLogIsMissing() throws {
+    let rootURL = try makeTemporaryRoot()
+    defer { try? FileManager.default.removeItem(at: rootURL) }
+
+    try writeState(
+      ProjectWorkspaceBootstrapState(
+        repositories: [
+          "app": ProjectWorkspaceBootstrapRepositoryState(
+            lastRunAt: Date(timeIntervalSince1970: 1_234),
+            lastStatus: .failed,
+            lastScriptIDs: ["sync-app"],
+            lastLogPath: ".prowl/bootstrap-runs/missing.log"
+          )
+        ]
+      ),
+      to: rootURL
+    )
+
+    let snapshot = try ProjectWorkspaceBootstrapRuntimeSnapshot.load(workspaceRootURL: rootURL)
+
+    #expect(snapshot.state.repositories["app"]?.lastStatus == .failed)
+    #expect(snapshot.logURLsByRepositoryID["app"] == nil)
+  }
+
   @Test func rejectsUnsupportedRepoLocalBootstrap() async throws {
     let rootURL = try makeTemporaryRoot()
     let repoURL = rootURL.appending(path: "app", directoryHint: .isDirectory)
@@ -320,13 +380,24 @@ struct ProjectWorkspaceBootstrapExecutorTests {
   }
 
   private func loadState(from rootURL: URL) throws -> ProjectWorkspaceBootstrapState {
-    let stateURL = rootURL
+    let stateURL =
+      rootURL
       .appending(path: ProjectWorkspace.metadataDirectoryName)
       .appending(path: "bootstrap-state.json")
     let data = try Data(contentsOf: stateURL)
     let decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .iso8601
     return try decoder.decode(ProjectWorkspaceBootstrapState.self, from: data)
+  }
+
+  private func writeState(_ state: ProjectWorkspaceBootstrapState, to rootURL: URL) throws {
+    let stateURL =
+      rootURL
+      .appending(path: ProjectWorkspace.metadataDirectoryName)
+      .appending(path: "bootstrap-state.json")
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .iso8601
+    try encoder.encode(state).write(to: stateURL)
   }
 
   private func makeTemporaryRoot() throws -> URL {
