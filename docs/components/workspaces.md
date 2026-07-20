@@ -159,7 +159,9 @@ including Required. Selecting profiles while adding a child repository binds
 them with `on_add` timing, so they run once after that child is materialized.
 When adding an already-opened repository that has a Repo Settings **Setup
 Script**, Prowl offers to use that setup script as the child bootstrap. Inline
-setup scripts are saved as local Script Profiles first.
+setup scripts are saved as local Script Profiles first. A profile binding is
+offered only while that local profile still exists; a retained inline setup
+script is used as the fallback when its profile has been removed.
 
 For an existing child, the workspace settings page shows bootstrap as runtime
 state instead of configuration. It preserves the ordered profile IDs from
@@ -280,7 +282,8 @@ path for the current run.
 Each bootstrap invocation writes a separate log under
 `.prowl/bootstrap-runs/`. The latest execution record for every child is kept
 in `.prowl/bootstrap-state.json`; concurrent runs preserve each child's entry.
-These runtime files do not rewrite `workspace.json`.
+Log references outside `.prowl/bootstrap-runs/` are ignored. These runtime
+files do not rewrite `workspace.json`.
 
 ## Agent guides
 

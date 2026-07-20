@@ -93,12 +93,26 @@ nonisolated struct ProjectWorkspaceBootstrapRuntimeSnapshot: Equatable, Sendable
       guard !logPath.isEmpty else {
         continue
       }
-      let logURL =
+      let candidateURL =
         if logPath.hasPrefix("/") {
           URL(fileURLWithPath: logPath)
         } else {
           workspaceRootURL.appending(path: logPath, directoryHint: .notDirectory)
         }
+      let logURL = candidateURL.standardizedFileURL
+      let resolvedLogURL = logURL.resolvingSymlinksInPath()
+      let resolvedBootstrapLogsURL =
+        workspaceRootURL
+        .appending(path: ProjectWorkspace.metadataDirectoryName, directoryHint: .isDirectory)
+        .appending(path: "bootstrap-runs", directoryHint: .isDirectory)
+        .standardizedFileURL
+        .resolvingSymlinksInPath()
+      let resolvedLogPath = resolvedLogURL.path(percentEncoded: false)
+      let bootstrapLogsPath = resolvedBootstrapLogsURL.path(percentEncoded: false)
+      let bootstrapLogsPrefix = bootstrapLogsPath.hasSuffix("/") ? bootstrapLogsPath : bootstrapLogsPath + "/"
+      guard resolvedLogPath.hasPrefix(bootstrapLogsPrefix) else {
+        continue
+      }
       if fileClient.fileExists(logURL) {
         logURLsByRepositoryID[repositoryID] = logURL
       }

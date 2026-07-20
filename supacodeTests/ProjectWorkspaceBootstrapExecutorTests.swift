@@ -466,6 +466,36 @@ struct ProjectWorkspaceBootstrapExecutorTests {
     #expect(snapshot.logURLsByRepositoryID["app"] == nil)
   }
 
+  @Test func runtimeSnapshotRejectsLogsOutsideBootstrapDirectory() throws {
+    let rootURL = try makeTemporaryRoot()
+    let outsideLogURL = rootURL.deletingLastPathComponent()
+      .appending(path: "prowl-bootstrap-outside-\(UUID().uuidString).log")
+    defer {
+      try? FileManager.default.removeItem(at: rootURL)
+      try? FileManager.default.removeItem(at: outsideLogURL)
+    }
+    try Data("sensitive".utf8).write(to: outsideLogURL)
+
+    try writeState(
+      ProjectWorkspaceBootstrapState(
+        repositories: [
+          "app": ProjectWorkspaceBootstrapRepositoryState(
+            lastRunAt: Date(timeIntervalSince1970: 1_234),
+            lastStatus: .succeeded,
+            lastScriptIDs: ["sync-app"],
+            lastLogPath: "../\(outsideLogURL.lastPathComponent)"
+          )
+        ]
+      ),
+      to: rootURL
+    )
+
+    let snapshot = try ProjectWorkspaceBootstrapRuntimeSnapshot.load(workspaceRootURL: rootURL)
+
+    #expect(snapshot.state.repositories["app"]?.lastStatus == .succeeded)
+    #expect(snapshot.logURLsByRepositoryID["app"] == nil)
+  }
+
   @Test func rejectsUnsupportedRepoLocalBootstrap() async throws {
     let rootURL = try makeTemporaryRoot()
     let repoURL = rootURL.appending(path: "app", directoryHint: .isDirectory)

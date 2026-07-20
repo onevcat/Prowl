@@ -4,7 +4,9 @@ import Sharing
 
 extension RepositoriesFeature.State {
   var workspaceCreationCandidates: [ProjectWorkspaceCreationRepository] {
-    repositories.compactMap { repository in
+    @Shared(.scriptProfiles) var scriptProfiles
+    let scriptProfileIDs = Set(scriptProfiles.map(\.id))
+    return repositories.compactMap { repository in
       guard !repository.isWorkspace, !removingRepositoryIDs.contains(repository.id) else {
         return nil
       }
@@ -12,7 +14,8 @@ extension RepositoriesFeature.State {
       @Shared(.repositorySettings(repository.rootURL)) var settings
       let bootstrapCandidate = Self.workspaceBootstrapCandidate(
         settings: settings,
-        repositoryName: name
+        repositoryName: name,
+        availableProfileIDs: scriptProfileIDs
       )
       return ProjectWorkspaceCreationRepository(
         id: repository.id,
@@ -26,9 +29,12 @@ extension RepositoriesFeature.State {
 
   private static func workspaceBootstrapCandidate(
     settings: RepositorySettings,
-    repositoryName: String
+    repositoryName: String,
+    availableProfileIDs: Set<String>
   ) -> WorkspaceBootstrapCandidate? {
-    if let profileID = settings.setupScriptProfileID {
+    if let profileID = settings.setupScriptProfileID,
+      availableProfileIDs.contains(profileID)
+    {
       return WorkspaceBootstrapCandidate(
         profileID: profileID,
         displayName: repositoryName

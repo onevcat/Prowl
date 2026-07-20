@@ -86,6 +86,8 @@ an empty configuration block for repositories where bootstrap is irrelevant.
   logged, and does not block workspace metadata editing.
 - A missing profile disables only that row and does not hide the manifest reference.
 - A missing log leaves the saved status visible but disables View Log.
+- A log reference outside `.prowl/bootstrap-runs/`, including a traversing or absolute
+  path, is ignored.
 - Manual execution failure updates the latest state and leaves the generated log available.
 - Running one profile does not disable Run for unrelated child repositories.
 

@@ -1408,6 +1408,59 @@ struct RepositoriesFeatureTests {
     #expect(candidate.bootstrapCandidate?.profileID == nil)
   }
 
+  @Test(.dependencies) func workspaceCreationCandidatesIgnoreMissingSetupScriptProfile() throws {
+    let storage = SettingsTestStorage()
+    let profilesURL = URL(fileURLWithPath: "/tmp/prowl-script-profiles-\(UUID().uuidString).json")
+    let repoRoot = "/tmp/repo-a"
+    let repository = makeRepository(
+      id: repoRoot,
+      worktrees: [
+        makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+      ])
+    let candidate = try withDependencies {
+      $0.settingsFileStorage = storage.storage
+      $0.scriptProfilesFileURL = profilesURL
+    } operation: {
+      @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
+      $repositorySettings.withLock {
+        $0.setupScriptProfileID = "missing-profile"
+      }
+      return try #require(makeState(repositories: [repository]).workspaceCreationCandidates.first)
+    }
+
+    #expect(candidate.checkoutMode == .link)
+    #expect(candidate.bootstrapCandidate == nil)
+  }
+
+  @Test(.dependencies) func workspaceCreationCandidatesIncludeAvailableSetupScriptProfile() throws {
+    let storage = SettingsTestStorage()
+    let profilesURL = URL(fileURLWithPath: "/tmp/prowl-script-profiles-\(UUID().uuidString).json")
+    let repoRoot = "/tmp/repo-a"
+    let repository = makeRepository(
+      id: repoRoot,
+      worktrees: [
+        makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+      ])
+    let candidate = try withDependencies {
+      $0.settingsFileStorage = storage.storage
+      $0.scriptProfilesFileURL = profilesURL
+    } operation: {
+      @Shared(.scriptProfiles) var scriptProfiles
+      $scriptProfiles.withLock {
+        $0 = [ScriptProfile(id: "setup-profile", name: "Setup", script: "echo setup")]
+      }
+      @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
+      $repositorySettings.withLock {
+        $0.setupScriptProfileID = "setup-profile"
+      }
+      return try #require(makeState(repositories: [repository]).workspaceCreationCandidates.first)
+    }
+
+    #expect(candidate.checkoutMode == .createBranch)
+    #expect(candidate.bootstrapCandidate?.profileID == "setup-profile")
+    #expect(candidate.bootstrapCandidate?.script == nil)
+  }
+
   @Test(.dependencies) func workspaceCreationPromptUsesSetupScriptCandidateAsScriptProfile() async throws {
     let storage = SettingsTestStorage()
     let profilesURL = URL(fileURLWithPath: "/tmp/script-profiles.json")
