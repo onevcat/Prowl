@@ -1,6 +1,6 @@
 {
   "_comment": "Metadata for the docs/ manual. The last_synced_commit is the commit at which docs/ was last verified against the implementation; the sync-docs skill (.claude/skills/sync-docs/SKILL.md) diffs HEAD against it and updates this file. Committed to git on purpose so the baseline persists across sessions and machines. A dotfile + .json so a future docs website does not render it as a page.",
-  "last_synced_commit": "5bf480820f3d20c99e82ec42789b4b98cab84914",
-  "last_synced_date": "2026-07-14",
-  "note": "Release prep. All user-facing changes in range were doc-synced in their own PRs (#585 short CLI handles, agent session detection + hardening, update channel picker removal, Active Agents pane titles, worktree deletion/plain-repo fixes); verified session confidence/source enums still match AgentSessionResolver."
+  "last_synced_commit": "c109c1d2df74b2bddedef497d0eafe1c013507d9",
+  "last_synced_date": "2026-07-20",
+  "note": "Verified the branch's user-facing source changes against their existing docs and updated workspaces.md for runtime-only bootstrap controls, one-time on-add initialization, latest per-child state, manual profile runs, and logs."
 }

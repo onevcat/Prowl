@@ -133,9 +133,10 @@ anyway would leave a dangling worktree registration in the source repository.
 
 The workspace's repository settings page (Settings → the workspace under
 Repositories) can edit workspace title, description, task links, repository
-roles, repository agent notes, manual bootstrap script references, and agent
-guide controls. Prowl patches `.prowl/workspace.json` in place so unknown
-metadata fields are preserved.
+roles, repository agent notes, and agent guide controls. Bootstrap bindings on
+saved child repositories are read-only. Prowl patches `.prowl/workspace.json`
+in place so unknown metadata fields and the original bootstrap policy are
+preserved.
 
 The same settings page can add or remove child repositories after creation.
 Adding a child uses the same materialization rules as workspace creation:
@@ -152,15 +153,23 @@ Existing child source, path, and checkout fields are shown as read-only
 provenance in settings; changing those would require removing and re-adding the
 child.
 
-Script profiles can be set to run on workspace creation or manually. The
-workspace creation sheet exposes the creation-time policy, including Required.
+Script profiles are selected while a workspace or child repository is being
+created. The workspace creation sheet exposes the creation-time policy,
+including Required. Selecting profiles while adding a child repository binds
+them with `on_add` timing, so they run once after that child is materialized.
 When adding an already-opened repository that has a Repo Settings **Setup
 Script**, Prowl offers to use that setup script as the child bootstrap. Inline
 setup scripts are saved as local Script Profiles first.
-The workspace settings page treats bootstrap as current-state management: choose
-scripts from `~/.prowl/script-profiles.json` and run each script manually
-from the child repository card. Linked children do not expose bootstrap
-controls because setup scripts would write into the shared live checkout.
+
+For an existing child, the workspace settings page shows bootstrap as runtime
+state instead of configuration. It preserves the ordered profile IDs from
+`.prowl/workspace.json`, shows the latest success or failure with its timestamp
+and participating profiles, and opens the latest log when it is still
+available. Each bound profile has a **Run** action that executes only that
+profile without rewriting `workspace.json`. Missing local profiles remain
+visible but cannot run. A child with no bound profile has no bootstrap section.
+Linked children keep their binding visible, but Run is disabled because the
+script would mutate the shared live checkout.
 
 Script profiles can be managed in **Settings → Scripts** or with
 `prowl scripts`. A profile contains a `command`, optional `environment`, a
@@ -194,7 +203,7 @@ Example `.prowl/workspace.json`:
       "source_kind": "local_repository",
       "source_location": "/Users/mikoto/Documents/Repos/github/Prowl",
       "branch_name": "codex/checkout-flow",
-      "scripts": {
+      "bootstrap": {
         "script_kind": "user_profile",
         "script_ids": ["common-node-install", "sync-prowl-local-files"],
         "run_on": ["create"],
@@ -268,8 +277,10 @@ Prowl-provided environment variables include `PROWL_WORKSPACE_ROOT`,
 profile environment values override these on conflict, except
 `PROWL_SCRIPT`, which is always set by Prowl to the temporary script
 path for the current run.
-Bootstrap logs and last-run state are written under the workspace `.prowl`
-runtime directory, not back into `workspace.json`.
+Each bootstrap invocation writes a separate log under
+`.prowl/bootstrap-runs/`. The latest execution record for every child is kept
+in `.prowl/bootstrap-state.json`; concurrent runs preserve each child's entry.
+These runtime files do not rewrite `workspace.json`.
 
 ## Agent guides
 
