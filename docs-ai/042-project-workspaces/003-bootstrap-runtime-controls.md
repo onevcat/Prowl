@@ -1,5 +1,10 @@
 # 042.003 — Workspace Bootstrap Runtime Controls
 
+| | |
+| --- | --- |
+| **Status** | Implemented |
+| **Implementation** | `c109c1d2` |
+
 ## Context
 
 Workspace bootstrap has two distinct ownership layers:
@@ -16,7 +21,7 @@ post-creation use case.
 
 The executor already writes one log per invocation under `.prowl/bootstrap-runs/` and the
 latest result for each child repository to `.prowl/bootstrap-state.json`. The settings UI
-does not currently read or expose that runtime state.
+now reads and exposes that runtime state without owning the saved binding.
 
 ## Decision
 
@@ -53,6 +58,10 @@ repository ID. The stored `last_script_ids` identifies which bound profiles part
 `last_log_path` resolves relative to the workspace root. Missing, malformed, or stale state
 must not prevent the rest of workspace settings from loading.
 
+State updates use a process-wide actor around the JSON read-modify-write operation. Manual
+runs for different child repositories can complete concurrently without dropping one
+another's latest record.
+
 Manual Run continues to construct a one-profile bootstrap request from the saved workspace
 entry and the selected profile ID. It runs with the child repository as the working
 directory, uses the executor's existing timeout and environment behavior, writes a new log,
@@ -73,8 +82,8 @@ an empty configuration block for repositories where bootstrap is irrelevant.
 
 ## Error Handling
 
-- State-file absence or decoding failure degrades to `Never run` and is logged; it does not
-  block workspace metadata editing.
+- State-file absence is a normal empty state. Decoding failure degrades to `Never run`, is
+  logged, and does not block workspace metadata editing.
 - A missing profile disables only that row and does not hide the manifest reference.
 - A missing log leaves the saved status visible but disables View Log.
 - Manual execution failure updates the latest state and leaves the generated log available.
@@ -82,12 +91,11 @@ an empty configuration block for repositories where bootstrap is irrelevant.
 
 ## Verification
 
-- Reducer tests cover state loading, malformed or missing state, refresh after manual run,
-  and no workspace metadata mutation from Run.
-- View/state tests cover hidden empty sections, read-only bound rows, missing-profile
-  presentation, latest success/failure, log availability, and linked-child disabling.
-- Existing bootstrap executor tests continue to cover success, failure, log creation, and
-  latest-state persistence.
+- Reducer tests cover state loading, malformed or missing state, refresh after successful
+  and failed manual runs, non-runnable missing and linked profiles, preservation of the
+  manifest policy, and no workspace metadata mutation from Run.
+- Bootstrap executor tests cover success, failure, log creation, missing and empty log
+  references, latest-state persistence, and concurrent updates for different children.
 - Run `make build-app` after implementation.
 
 ## Alternatives
@@ -105,4 +113,6 @@ an empty configuration block for repositories where bootstrap is irrelevant.
 
 ## Refs
 
-- Planned on 2026-07-20; implementation ref to be added after completion.
+- Planned on 2026-07-20 in `afc3e290` and `4f616256`.
+- Runtime snapshot foundation: `42689be7`.
+- Runtime-only settings controls and concurrency hardening: `c109c1d2`.
