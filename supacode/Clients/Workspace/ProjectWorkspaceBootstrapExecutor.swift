@@ -77,15 +77,22 @@ nonisolated struct ProjectWorkspaceBootstrapRuntimeSnapshot: Equatable, Sendable
     workspaceRootURL: URL,
     fileClient: ProjectWorkspaceBootstrapFileClient = .live
   ) throws -> ProjectWorkspaceBootstrapRuntimeSnapshot {
+    let stateURL = ProjectWorkspaceBootstrapState.fileURL(for: workspaceRootURL)
+    guard fileClient.fileExists(stateURL) else {
+      return .empty
+    }
     let decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .iso8601
     let state = try decoder.decode(
       ProjectWorkspaceBootstrapState.self,
-      from: fileClient.readData(ProjectWorkspaceBootstrapState.fileURL(for: workspaceRootURL))
+      from: fileClient.readData(stateURL)
     )
     var logURLsByRepositoryID: [String: URL] = [:]
     for (repositoryID, repositoryState) in state.repositories {
-      let logPath = repositoryState.lastLogPath
+      let logPath = repositoryState.lastLogPath.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !logPath.isEmpty else {
+        continue
+      }
       let logURL =
         if logPath.hasPrefix("/") {
           URL(fileURLWithPath: logPath)
@@ -206,7 +213,7 @@ nonisolated struct ProjectWorkspaceBootstrapExecutor: Sendable {
           firstError = error
         }
         guard !bootstrap.required else {
-          try? writeState(
+          try? await writeState(
             status: .failed,
             scriptIDs: scriptIDs,
             logURL: logURL,
@@ -218,7 +225,7 @@ nonisolated struct ProjectWorkspaceBootstrapExecutor: Sendable {
     }
 
     if let firstError {
-      try writeState(
+      try await writeState(
         status: .failed,
         scriptIDs: scriptIDs,
         logURL: logURL,
@@ -226,7 +233,7 @@ nonisolated struct ProjectWorkspaceBootstrapExecutor: Sendable {
       )
       throw firstError
     } else {
-      try writeState(
+      try await writeState(
         status: .succeeded,
         scriptIDs: scriptIDs,
         logURL: logURL,
@@ -365,33 +372,20 @@ nonisolated struct ProjectWorkspaceBootstrapExecutor: Sendable {
     scriptIDs: [String],
     logURL: URL,
     context: ProjectWorkspaceBootstrapContext
-  ) throws {
+  ) async throws {
     let stateURL = ProjectWorkspaceBootstrapState.fileURL(for: context.workspaceRootURL)
-    let state = try loadState(from: stateURL)
-    var repositories = state.repositories
-    repositories[context.repository.id] = ProjectWorkspaceBootstrapRepositoryState(
+    let repositoryState = ProjectWorkspaceBootstrapRepositoryState(
       lastRunAt: now(),
       lastStatus: status,
       lastScriptIDs: scriptIDs,
       lastLogPath: relativePath(for: logURL, workspaceRootURL: context.workspaceRootURL)
     )
-    let updated = ProjectWorkspaceBootstrapState(repositories: repositories)
-    let encoder = JSONEncoder()
-    encoder.dateEncodingStrategy = .iso8601
-    encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-    let data = try encoder.encode(updated)
-    try fileClient.writeData(data, stateURL)
-  }
-
-  private func loadState(from url: URL) throws -> ProjectWorkspaceBootstrapState {
-    let decoder = JSONDecoder()
-    decoder.dateDecodingStrategy = .iso8601
-    guard let data = try? fileClient.readData(url),
-      let state = try? decoder.decode(ProjectWorkspaceBootstrapState.self, from: data)
-    else {
-      return ProjectWorkspaceBootstrapState(repositories: [:])
-    }
-    return state
+    try await ProjectWorkspaceBootstrapStateWriter.shared.write(
+      repositoryID: context.repository.id,
+      repositoryState: repositoryState,
+      stateURL: stateURL,
+      fileClient: fileClient
+    )
   }
 
   private func relativePath(for url: URL, workspaceRootURL: URL) -> String {
@@ -428,6 +422,38 @@ nonisolated struct ProjectWorkspaceBootstrapExecutor: Sendable {
     }
     let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
     return trimmed.isEmpty ? nil : trimmed
+  }
+}
+
+private actor ProjectWorkspaceBootstrapStateWriter {
+  static let shared = ProjectWorkspaceBootstrapStateWriter()
+
+  func write(
+    repositoryID: String,
+    repositoryState: ProjectWorkspaceBootstrapRepositoryState,
+    stateURL: URL,
+    fileClient: ProjectWorkspaceBootstrapFileClient
+  ) throws {
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let state =
+      if let data = try? fileClient.readData(stateURL),
+        let decoded = try? decoder.decode(ProjectWorkspaceBootstrapState.self, from: data)
+      {
+        decoded
+      } else {
+        ProjectWorkspaceBootstrapState(repositories: [:])
+      }
+    var repositories = state.repositories
+    repositories[repositoryID] = repositoryState
+
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .iso8601
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+    try fileClient.writeData(
+      encoder.encode(ProjectWorkspaceBootstrapState(repositories: repositories)),
+      stateURL
+    )
   }
 }
 

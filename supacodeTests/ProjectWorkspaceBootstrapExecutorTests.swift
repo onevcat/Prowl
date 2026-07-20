@@ -48,6 +48,27 @@ nonisolated final class BootstrapShellRecorder: @unchecked Sendable {
   }
 }
 
+nonisolated final class BootstrapStateReadBarrier: @unchecked Sendable {
+  private let lock = NSLock()
+  private let secondReadReached = DispatchSemaphore(value: 0)
+  private var readCount = 0
+
+  func read(_ operation: () throws -> Data) throws -> Data {
+    let result = Result { try operation() }
+    lock.lock()
+    readCount += 1
+    let currentReadCount = readCount
+    lock.unlock()
+
+    if currentReadCount == 1 {
+      _ = secondReadReached.wait(timeout: .now() + .milliseconds(200))
+    } else if currentReadCount == 2 {
+      secondReadReached.signal()
+    }
+    return try result.get()
+  }
+}
+
 struct ProjectWorkspaceBootstrapExecutorTests {
   @Test func runsProfileWithWorkspaceEnvironmentAndWritesState() async throws {
     let rootURL = try makeTemporaryRoot()
@@ -281,6 +302,79 @@ struct ProjectWorkspaceBootstrapExecutorTests {
     #expect(firstLogPath != secondLogPath)
   }
 
+  @Test func concurrentRunsPreserveRuntimeStateForEachRepository() async throws {
+    let rootURL = try makeTemporaryRoot()
+    let appURL = rootURL.appending(path: "app", directoryHint: .isDirectory)
+    let apiURL = rootURL.appending(path: "api", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: appURL, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: apiURL, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: rootURL) }
+
+    let shell = ShellClient(
+      run: { _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) },
+      runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) },
+      runLoginStreamWithEnvironmentImpl: { _, _, _, _, _ in
+        AsyncThrowingStream { continuation in
+          continuation.yield(.finished(ShellOutput(stdout: "", stderr: "", exitCode: 0)))
+          continuation.finish()
+        }
+      }
+    )
+    let readBarrier = BootstrapStateReadBarrier()
+    var fileClient = ProjectWorkspaceBootstrapFileClient.live
+    let liveReadData = fileClient.readData
+    fileClient.readData = { url in
+      try readBarrier.read { try liveReadData(url) }
+    }
+    let executor = ProjectWorkspaceBootstrapExecutor(
+      profiles: [ScriptProfile(id: "sync", name: "Sync", script: "echo sync")],
+      shellClient: shell,
+      fileClient: fileClient,
+      now: { Date(timeIntervalSince1970: 1_234) }
+    )
+    let bootstrap = ProjectWorkspaceRepositoryBootstrap(
+      scriptKind: .userProfile,
+      scriptID: "sync",
+      runOn: [.manual],
+      required: true
+    )
+    let app = ProjectWorkspace.RepositoryEntry(
+      id: "app",
+      name: "App",
+      path: "app",
+      bootstrap: bootstrap
+    )
+    let api = ProjectWorkspace.RepositoryEntry(
+      id: "api",
+      name: "API",
+      path: "api",
+      bootstrap: bootstrap
+    )
+
+    async let appRun: Void = executor.runner.run(
+      bootstrap,
+      ProjectWorkspaceBootstrapContext(
+        workspaceRootURL: rootURL,
+        repositoryRootURL: appURL,
+        repository: app,
+        timing: .manual
+      )
+    )
+    async let apiRun: Void = executor.runner.run(
+      bootstrap,
+      ProjectWorkspaceBootstrapContext(
+        workspaceRootURL: rootURL,
+        repositoryRootURL: apiURL,
+        repository: api,
+        timing: .manual
+      )
+    )
+    _ = try await (appRun, apiRun)
+
+    let state = try loadState(from: rootURL)
+    #expect(state.repositories.keys.sorted() == ["api", "app"])
+  }
+
   @Test func runtimeSnapshotLoadsLatestStateAndAvailableLog() throws {
     let rootURL = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: rootURL) }
@@ -336,6 +430,39 @@ struct ProjectWorkspaceBootstrapExecutorTests {
     let snapshot = try ProjectWorkspaceBootstrapRuntimeSnapshot.load(workspaceRootURL: rootURL)
 
     #expect(snapshot.state.repositories["app"]?.lastStatus == .failed)
+    #expect(snapshot.logURLsByRepositoryID["app"] == nil)
+  }
+
+  @Test func runtimeSnapshotTreatsMissingStateAsEmpty() throws {
+    let rootURL = try makeTemporaryRoot()
+    defer { try? FileManager.default.removeItem(at: rootURL) }
+
+    let snapshot = try ProjectWorkspaceBootstrapRuntimeSnapshot.load(workspaceRootURL: rootURL)
+
+    #expect(snapshot == .empty)
+  }
+
+  @Test func runtimeSnapshotDoesNotTreatEmptyLogPathAsWorkspaceRoot() throws {
+    let rootURL = try makeTemporaryRoot()
+    defer { try? FileManager.default.removeItem(at: rootURL) }
+
+    try writeState(
+      ProjectWorkspaceBootstrapState(
+        repositories: [
+          "app": ProjectWorkspaceBootstrapRepositoryState(
+            lastRunAt: Date(timeIntervalSince1970: 1_234),
+            lastStatus: .succeeded,
+            lastScriptIDs: ["sync-app"],
+            lastLogPath: "  "
+          )
+        ]
+      ),
+      to: rootURL
+    )
+
+    let snapshot = try ProjectWorkspaceBootstrapRuntimeSnapshot.load(workspaceRootURL: rootURL)
+
+    #expect(snapshot.state.repositories["app"]?.lastStatus == .succeeded)
     #expect(snapshot.logURLsByRepositoryID["app"] == nil)
   }
 

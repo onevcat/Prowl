@@ -753,7 +753,11 @@ struct RepositorySettingsView: View {
       }
       .font(.subheadline)
 
-      workspaceBootstrapEditor(repository)
+      if repository.isNew {
+        workspaceBootstrapConfigurationEditor(repository)
+      } else if !repository.bootstrapScriptIDs.isEmpty {
+        workspaceBootstrapRuntimeView(repository)
+      }
     }
     .opacity(repository.isRemoved ? 0.55 : 1)
     .padding(14)
@@ -767,7 +771,7 @@ struct RepositorySettingsView: View {
     }
   }
 
-  private func workspaceBootstrapEditor(
+  private func workspaceBootstrapConfigurationEditor(
     _ repository: RepositorySettingsFeature.RepositoryDraft
   ) -> some View {
     let selectedProfileIDs = repository.bootstrapScriptIDs
@@ -794,11 +798,7 @@ struct RepositorySettingsView: View {
           Label("Add Script", systemImage: "plus")
         }
         .disabled(scriptProfiles.isEmpty || repository.isRemoved || disablesBootstrap)
-        .help(
-          disablesBootstrap
-            ? "Linked repositories share the original checkout, so bootstrap scripts are disabled."
-            : "Add a local script profile from ~/.prowl/script-profiles.json"
-        )
+        .help("Add an initialization script profile")
       }
 
       if hasProfile {
@@ -830,14 +830,130 @@ struct RepositorySettingsView: View {
     count: Int,
     repository: RepositorySettingsFeature.RepositoryDraft
   ) -> some View {
+    return HStack(spacing: 8) {
+      Text(bootstrapProfileTitle(id: profileID))
+        .lineLimit(1)
+      Spacer()
+      Button {
+        store.send(.workspaceBootstrapProfileMoved(id: repository.id, profileID, .earlier))
+      } label: {
+        Image(systemName: "chevron.up")
+          .accessibilityLabel("Move earlier")
+      }
+      .buttonStyle(.borderless)
+      .disabled(index == 0 || repository.isRemoved)
+      .help("Move earlier")
+      Button {
+        store.send(.workspaceBootstrapProfileMoved(id: repository.id, profileID, .later))
+      } label: {
+        Image(systemName: "chevron.down")
+          .accessibilityLabel("Move later")
+      }
+      .buttonStyle(.borderless)
+      .disabled(index == count - 1 || repository.isRemoved)
+      .help("Move later")
+      Button {
+        store.send(.workspaceBootstrapProfileRemoved(id: repository.id, profileID))
+      } label: {
+        Image(systemName: "xmark")
+          .accessibilityLabel("Remove")
+      }
+      .buttonStyle(.borderless)
+      .disabled(repository.isRemoved)
+      .help("Remove initialization script")
+    }
+    .padding(.horizontal, 10)
+    .padding(.vertical, 6)
+    .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+  }
+
+  private func workspaceBootstrapRuntimeView(
+    _ repository: RepositorySettingsFeature.RepositoryDraft
+  ) -> some View {
+    let runtime = store.workspaceBootstrapRuntime.state.repositories[repository.id]
+    let logURL = store.workspaceBootstrapRuntime.logURLsByRepositoryID[repository.id]
+    return VStack(alignment: .leading, spacing: 8) {
+      HStack(spacing: 10) {
+        Text("Bootstrap")
+          .font(.subheadline)
+          .fontWeight(.semibold)
+        if let runtime {
+          Label(
+            runtime.lastStatus == .succeeded ? "Succeeded" : "Failed",
+            systemImage: runtime.lastStatus == .succeeded
+              ? "checkmark.circle.fill"
+              : "xmark.circle.fill"
+          )
+          .font(.caption)
+          Text(runtime.lastRunAt.formatted(date: .abbreviated, time: .shortened))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        } else {
+          Label("Never run", systemImage: "clock")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        Spacer()
+        if logURL != nil {
+          Button {
+            store.send(.openWorkspaceBootstrapLogButtonTapped(id: repository.id))
+          } label: {
+            Label("View Log", systemImage: "doc.text.magnifyingglass")
+          }
+          .controlSize(.small)
+          .help("Open the latest bootstrap log")
+        }
+      }
+
+      if let runtime, !runtime.lastScriptIDs.isEmpty {
+        Text(runtime.lastScriptIDs.joined(separator: ", "))
+          .font(.caption.monospaced())
+          .foregroundStyle(.secondary)
+          .textSelection(.enabled)
+      }
+
+      VStack(alignment: .leading, spacing: 6) {
+        ForEach(repository.bootstrapScriptIDs, id: \.self) { profileID in
+          workspaceBootstrapRuntimeProfileRow(profileID: profileID, repository: repository)
+        }
+      }
+    }
+  }
+
+  private func workspaceBootstrapRuntimeProfileRow(
+    profileID: String,
+    repository: RepositorySettingsFeature.RepositoryDraft
+  ) -> some View {
+    let profile = scriptProfiles.first { $0.id == profileID }
+    let title = profile.map { bootstrapProfileTitle($0) } ?? profileID
     let runID = RepositorySettingsFeature.workspaceBootstrapRunID(
       repositoryID: repository.id,
       scriptID: profileID
     )
     let isRunning = store.runningWorkspaceBootstrapIDs.contains(runID)
+    let runDisabled =
+      profile == nil
+      || repository.isRemoved
+      || repository.usesLinkCheckout
+      || isRunning
     return HStack(spacing: 8) {
-      Text(bootstrapProfileTitle(id: profileID))
-        .lineLimit(1)
+      Image(systemName: profile == nil ? "exclamationmark.triangle" : "terminal")
+        .foregroundStyle(.secondary)
+        .accessibilityHidden(true)
+      VStack(alignment: .leading, spacing: 1) {
+        Text(title)
+          .lineLimit(1)
+        if profile == nil {
+          Text("Missing Profile")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        } else if title != profileID {
+          Text(profileID)
+            .font(.caption.monospaced())
+            .foregroundStyle(.secondary)
+            .textSelection(.enabled)
+        }
+      }
       Spacer()
       Button {
         store.send(.runWorkspaceBootstrapProfileButtonTapped(id: repository.id, scriptID: profileID))
@@ -850,42 +966,30 @@ struct RepositorySettingsView: View {
               .controlSize(.small)
           }
         } else {
-          Label("Run", systemImage: "play")
+          Label("Run", systemImage: "play.fill")
         }
       }
-      .disabled(repository.isNew || repository.isRemoved || repository.usesLinkCheckout || isRunning)
-      .help("Run this bootstrap script now")
-      Button {
-        store.send(.workspaceBootstrapProfileMoved(id: repository.id, profileID, .earlier))
-      } label: {
-        Image(systemName: "chevron.up")
-          .accessibilityLabel("Move earlier")
-      }
-      .buttonStyle(.borderless)
-      .disabled(index == 0 || repository.isRemoved)
-      .help("Move bootstrap script earlier")
-      Button {
-        store.send(.workspaceBootstrapProfileMoved(id: repository.id, profileID, .later))
-      } label: {
-        Image(systemName: "chevron.down")
-          .accessibilityLabel("Move later")
-      }
-      .buttonStyle(.borderless)
-      .disabled(index == count - 1 || repository.isRemoved)
-      .help("Move bootstrap script later")
-      Button {
-        store.send(.workspaceBootstrapProfileRemoved(id: repository.id, profileID))
-      } label: {
-        Image(systemName: "xmark")
-          .accessibilityLabel("Remove")
-      }
-      .buttonStyle(.borderless)
-      .disabled(repository.isRemoved)
-      .help("Remove bootstrap script")
+      .frame(width: 84)
+      .disabled(runDisabled)
+      .help(workspaceBootstrapRunHelp(profileID: profileID, title: title, repository: repository))
     }
     .padding(.horizontal, 10)
     .padding(.vertical, 6)
     .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+  }
+
+  private func workspaceBootstrapRunHelp(
+    profileID: String,
+    title: String,
+    repository: RepositorySettingsFeature.RepositoryDraft
+  ) -> String {
+    if scriptProfiles.contains(where: { $0.id == profileID }) == false {
+      return "Restore this profile in Settings > Scripts before running it"
+    }
+    if repository.usesLinkCheckout {
+      return "Linked repositories cannot run bootstrap scripts"
+    }
+    return "Run \(title) in \(repository.name)"
   }
 
   private func bootstrapProfileTitle(_ profile: ScriptProfile) -> String {
@@ -960,7 +1064,7 @@ struct RepositorySettingsView: View {
         }
 
         settingsCard {
-          workspaceBootstrapEditor(repository)
+          workspaceBootstrapConfigurationEditor(repository)
         }
       } else {
         Text("No repository is being added.")

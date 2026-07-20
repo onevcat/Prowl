@@ -123,14 +123,25 @@ struct RepositorySettingsFeature {
 
     var bootstrap: ProjectWorkspaceRepositoryBootstrap? {
       let scriptIDs = bootstrapScriptIDs
-      guard !scriptIDs.isEmpty else {
+      var runOn = Set<ProjectWorkspaceBootstrapTiming>()
+      let permitsAutomaticBootstrap = !usesLinkCheckout
+      if permitsAutomaticBootstrap, bootstrapRunOnCreate {
+        runOn.insert(.create)
+      }
+      if permitsAutomaticBootstrap, bootstrapRunOnAdd {
+        runOn.insert(.onAdd)
+      }
+      if bootstrapRunOnManual {
+        runOn.insert(.manual)
+      }
+      guard !scriptIDs.isEmpty || !runOn.isEmpty || bootstrapRequired else {
         return nil
       }
       return ProjectWorkspaceRepositoryBootstrap(
         scriptKind: .userProfile,
         scriptIDs: scriptIDs,
-        runOn: [.manual],
-        required: false
+        runOn: runOn,
+        required: bootstrapRequired
       )
     }
 
@@ -164,6 +175,7 @@ struct RepositorySettingsFeature {
     var pendingWorkspaceBranchDeletion: RepositorySettingsWorkspaceBranchDeletion?
     var workspaceSaveError: String?
     var workspaceSaveStatus: String?
+    var workspaceBootstrapRuntime = ProjectWorkspaceBootstrapRuntimeSnapshot.empty
     var runningWorkspaceBootstrapIDs: Set<String> = []
     var settings: RepositorySettings
     var userSettings: UserRepositorySettings
@@ -239,6 +251,7 @@ struct RepositorySettingsFeature {
     mutating func setWorkspace(_ workspace: ProjectWorkspace?) {
       self.workspace = workspace
       workspaceDraft = workspace.map(WorkspaceDraft.init)
+      workspaceBootstrapRuntime = .empty
       workspaceSaveError = nil
       workspaceSaveStatus = nil
     }
@@ -283,7 +296,6 @@ struct RepositorySettingsFeature {
         var updated = entry
         updated.role = Self.trimmedNonEmpty(repositoryDraft.role)
         updated.agentNotes = Self.trimmedNonEmpty(repositoryDraft.agentNotes)
-        updated.bootstrap = repositoryDraft.bootstrap
         return updated
       }
       return workspace
@@ -350,7 +362,9 @@ struct RepositorySettingsFeature {
     case workspaceBootstrapCreateChanged(id: String, Bool)
     case workspaceBootstrapOnAddChanged(id: String, Bool)
     case workspaceBootstrapManualChanged(id: String, Bool)
-    case runWorkspaceBootstrapButtonTapped(id: String)
+    case loadWorkspaceBootstrapRuntime
+    case workspaceBootstrapRuntimeLoaded(ProjectWorkspaceBootstrapRuntimeSnapshot)
+    case openWorkspaceBootstrapLogButtonTapped(id: String)
     case runWorkspaceBootstrapProfileButtonTapped(id: String, scriptID: String)
     case saveWorkspaceMetadataButtonTapped
     case regenerateWorkspaceGuideButtonTapped
@@ -379,6 +393,7 @@ struct RepositorySettingsFeature {
   @Dependency(GitClientDependency.self) private var gitClient
   @Dependency(\.repositoryIconAssetStore) private var repositoryIconAssetStore
   @Dependency(\.date.now) private var now
+  @Dependency(OpenURLClient.self) private var openURLClient
   @Dependency(ShellClient.self) private var shellClient
   @Dependency(\.uuid) private var uuid
 
@@ -388,8 +403,35 @@ struct RepositorySettingsFeature {
       switch action {
       case .task:
         let rootURL = state.rootURL
+        let bootstrapRuntimeEffect: Effect<Action> =
+          state.workspace == nil ? .none : .send(.loadWorkspaceBootstrapRuntime)
         guard state.capabilities.supportsRepositoryGitSettings else {
-          return .run { send in
+          return .merge(
+            .run { send in
+              @Shared(.repositorySettings(rootURL)) var repositorySettings
+              @Shared(.userRepositorySettings(rootURL)) var userRepositorySettings
+              @Shared(.settingsFile) var settingsFile
+              let global = settingsFile.global
+              await send(
+                .settingsLoaded(
+                  repositorySettings,
+                  userRepositorySettings,
+                  isBareRepository: false,
+                  globalDefaultWorktreeBaseDirectoryPath: global.defaultWorktreeBaseDirectoryPath,
+                  globalCopyIgnoredOnWorktreeCreate: global.copyIgnoredOnWorktreeCreate,
+                  globalCopyUntrackedOnWorktreeCreate: global.copyUntrackedOnWorktreeCreate,
+                  globalPullRequestMergeStrategy: global.pullRequestMergeStrategy,
+                  keybindingUserOverrides: global.keybindingUserOverrides
+                )
+              )
+            },
+            bootstrapRuntimeEffect
+          )
+        }
+        let gitClient = gitClient
+        return .merge(
+          .run { send in
+            let isBareRepository = (try? await gitClient.isBareRepository(rootURL)) ?? false
             @Shared(.repositorySettings(rootURL)) var repositorySettings
             @Shared(.userRepositorySettings(rootURL)) var userRepositorySettings
             @Shared(.settingsFile) var settingsFile
@@ -398,7 +440,7 @@ struct RepositorySettingsFeature {
               .settingsLoaded(
                 repositorySettings,
                 userRepositorySettings,
-                isBareRepository: false,
+                isBareRepository: isBareRepository,
                 globalDefaultWorktreeBaseDirectoryPath: global.defaultWorktreeBaseDirectoryPath,
                 globalCopyIgnoredOnWorktreeCreate: global.copyIgnoredOnWorktreeCreate,
                 globalCopyUntrackedOnWorktreeCreate: global.copyUntrackedOnWorktreeCreate,
@@ -406,39 +448,55 @@ struct RepositorySettingsFeature {
                 keybindingUserOverrides: global.keybindingUserOverrides
               )
             )
+            let branches: [String]
+            do {
+              branches = try await gitClient.branchRefs(rootURL)
+            } catch {
+              let rootPath = rootURL.path(percentEncoded: false)
+              SupaLogger("Settings").warning(
+                "Branch refs failed for \(rootPath): \(error.localizedDescription)"
+              )
+              branches = []
+            }
+            let defaultBaseRef = await gitClient.automaticWorktreeBaseRef(rootURL) ?? "HEAD"
+            await send(.branchDataLoaded(branches, defaultBaseRef: defaultBaseRef))
+          },
+          bootstrapRuntimeEffect
+        )
+
+      case .loadWorkspaceBootstrapRuntime:
+        guard state.workspace != nil else {
+          state.workspaceBootstrapRuntime = .empty
+          return .none
+        }
+        let rootURL = state.rootURL
+        return .run { send in
+          do {
+            await send(
+              .workspaceBootstrapRuntimeLoaded(
+                try ProjectWorkspaceBootstrapRuntimeSnapshot.load(workspaceRootURL: rootURL)
+              )
+            )
+          } catch {
+            SupaLogger("WorkspaceBootstrap").warning(
+              "Unable to load bootstrap runtime state for \(rootURL.path(percentEncoded: false)): "
+                + error.localizedDescription
+            )
+            await send(.workspaceBootstrapRuntimeLoaded(.empty))
           }
         }
-        let gitClient = gitClient
-        return .run { send in
-          let isBareRepository = (try? await gitClient.isBareRepository(rootURL)) ?? false
-          @Shared(.repositorySettings(rootURL)) var repositorySettings
-          @Shared(.userRepositorySettings(rootURL)) var userRepositorySettings
-          @Shared(.settingsFile) var settingsFile
-          let global = settingsFile.global
-          await send(
-            .settingsLoaded(
-              repositorySettings,
-              userRepositorySettings,
-              isBareRepository: isBareRepository,
-              globalDefaultWorktreeBaseDirectoryPath: global.defaultWorktreeBaseDirectoryPath,
-              globalCopyIgnoredOnWorktreeCreate: global.copyIgnoredOnWorktreeCreate,
-              globalCopyUntrackedOnWorktreeCreate: global.copyUntrackedOnWorktreeCreate,
-              globalPullRequestMergeStrategy: global.pullRequestMergeStrategy,
-              keybindingUserOverrides: global.keybindingUserOverrides
-            )
-          )
-          let branches: [String]
-          do {
-            branches = try await gitClient.branchRefs(rootURL)
-          } catch {
-            let rootPath = rootURL.path(percentEncoded: false)
-            SupaLogger("Settings").warning(
-              "Branch refs failed for \(rootPath): \(error.localizedDescription)"
-            )
-            branches = []
-          }
-          let defaultBaseRef = await gitClient.automaticWorktreeBaseRef(rootURL) ?? "HEAD"
-          await send(.branchDataLoaded(branches, defaultBaseRef: defaultBaseRef))
+
+      case .workspaceBootstrapRuntimeLoaded(let runtime):
+        state.workspaceBootstrapRuntime = runtime
+        return .none
+
+      case .openWorkspaceBootstrapLogButtonTapped(let id):
+        guard let logURL = state.workspaceBootstrapRuntime.logURLsByRepositoryID[id] else {
+          return .none
+        }
+        let openURLClient = openURLClient
+        return .run { _ in
+          await openURLClient.open(logURL)
         }
 
       case .settingsLoaded(
@@ -762,18 +820,21 @@ struct RepositorySettingsFeature {
 
       case .workspaceBootstrapProfileAdded(let id, let scriptID):
         state.updateWorkspaceRepositoryDraft(id: id) { repository in
-          guard !repository.usesLinkCheckout else {
+          guard repository.isNew, !repository.usesLinkCheckout else {
             return
           }
           repository.bootstrapScriptIDs = ProjectWorkspaceCreationRepository.normalizedBootstrapScriptIDs(
             repository.bootstrapScriptIDs + [scriptID]
           )
-          repository.bootstrapRunOnManual = true
+          repository.bootstrapRunOnAdd = true
         }
         return .none
 
       case .workspaceBootstrapProfileRemoved(let id, let scriptID):
         state.updateWorkspaceRepositoryDraft(id: id) { repository in
+          guard repository.isNew else {
+            return
+          }
           repository.bootstrapScriptIDs.removeAll { $0 == scriptID }
           if repository.bootstrapScriptIDs.isEmpty {
             repository.bootstrapRunOnCreate = false
@@ -786,7 +847,9 @@ struct RepositorySettingsFeature {
 
       case .workspaceBootstrapProfileMoved(let id, let scriptID, let direction):
         state.updateWorkspaceRepositoryDraft(id: id) { repository in
-          guard let index = repository.bootstrapScriptIDs.firstIndex(of: scriptID) else {
+          guard repository.isNew,
+            let index = repository.bootstrapScriptIDs.firstIndex(of: scriptID)
+          else {
             return
           }
           let targetIndex: Int
@@ -808,7 +871,7 @@ struct RepositorySettingsFeature {
 
       case .workspaceBootstrapRequiredChanged(let id, let required):
         state.updateWorkspaceRepositoryDraft(id: id) { repository in
-          guard repository.hasAutomaticBootstrapTiming else {
+          guard repository.isNew, repository.hasAutomaticBootstrapTiming else {
             return
           }
           repository.bootstrapRequired = required
@@ -817,7 +880,7 @@ struct RepositorySettingsFeature {
 
       case .workspaceBootstrapCreateChanged(let id, let enabled):
         state.updateWorkspaceRepositoryDraft(id: id) { repository in
-          guard !repository.usesLinkCheckout else {
+          guard repository.isNew, !repository.usesLinkCheckout else {
             return
           }
           repository.bootstrapRunOnCreate = enabled
@@ -829,7 +892,7 @@ struct RepositorySettingsFeature {
 
       case .workspaceBootstrapOnAddChanged(let id, let enabled):
         state.updateWorkspaceRepositoryDraft(id: id) { repository in
-          guard !repository.usesLinkCheckout else {
+          guard repository.isNew, !repository.usesLinkCheckout else {
             return
           }
           repository.bootstrapRunOnAdd = enabled
@@ -841,62 +904,22 @@ struct RepositorySettingsFeature {
 
       case .workspaceBootstrapManualChanged(let id, let enabled):
         state.updateWorkspaceRepositoryDraft(id: id) { repository in
-          guard !repository.usesLinkCheckout else {
+          guard repository.isNew, !repository.usesLinkCheckout else {
             return
           }
           repository.bootstrapRunOnManual = enabled
         }
         return .none
 
-      case .runWorkspaceBootstrapButtonTapped(let id):
-        guard let workspace = state.updatedWorkspaceFromDraft(),
-          let draftRepository = state.workspaceDraft?.repositories.first(where: { $0.id == id }),
-          !draftRepository.isNew,
-          !draftRepository.isRemoved,
-          !draftRepository.usesLinkCheckout,
-          var entry = workspace.repositories.first(where: { $0.id == id })
-        else {
-          return .none
-        }
-        state.workspaceSaveError = nil
-        state.workspaceSaveStatus = "Running bootstrap for \(draftRepository.name)..."
-        state.runningWorkspaceBootstrapIDs.insert(id)
-        entry.bootstrap = ProjectWorkspaceRepositoryBootstrap(
-          scriptKind: .userProfile,
-          scriptIDs: draftRepository.bootstrapScriptIDs,
-          runOn: [.manual],
-          required: true
-        )
-        let bootstrapEntry = entry
-        let rootURL = state.rootURL
-        @Shared(.scriptProfiles) var scriptProfiles
-        let bootstrapRunner = ProjectWorkspaceBootstrapExecutor(
-          profiles: scriptProfiles,
-          shellClient: shellClient,
-          now: { Date() }
-        ).runner
-        return .run { send in
-          do {
-            try await ProjectWorkspace.runBootstrap(
-              for: bootstrapEntry,
-              workspaceRootURL: rootURL,
-              timing: .manual,
-              bootstrapRunner: bootstrapRunner
-            )
-            await send(.workspaceBootstrapRan(id: id, name: bootstrapEntry.name))
-          } catch {
-            await send(.workspaceBootstrapRunFailed(id: id, message: error.localizedDescription))
-          }
-        }
-
       case .runWorkspaceBootstrapProfileButtonTapped(let id, let scriptID):
-        guard let workspace = state.updatedWorkspaceFromDraft(),
-          let draftRepository = state.workspaceDraft?.repositories.first(where: { $0.id == id }),
+        @Shared(.scriptProfiles) var scriptProfiles
+        guard let draftRepository = state.workspaceDraft?.repositories.first(where: { $0.id == id }),
           !draftRepository.isNew,
           !draftRepository.isRemoved,
           !draftRepository.usesLinkCheckout,
-          draftRepository.bootstrapScriptIDs.contains(scriptID),
-          var entry = workspace.repositories.first(where: { $0.id == id })
+          var entry = state.workspace?.repositories.first(where: { $0.id == id }),
+          entry.bootstrap?.scriptIDs.contains(scriptID) == true,
+          scriptProfiles.contains(where: { $0.id == scriptID })
         else {
           return .none
         }
@@ -913,7 +936,6 @@ struct RepositorySettingsFeature {
         )
         let bootstrapEntry = entry
         let rootURL = state.rootURL
-        @Shared(.scriptProfiles) var scriptProfiles
         let bootstrapRunner = ProjectWorkspaceBootstrapExecutor(
           profiles: scriptProfiles,
           shellClient: shellClient,
@@ -1044,13 +1066,13 @@ struct RepositorySettingsFeature {
         state.runningWorkspaceBootstrapIDs.remove(id)
         state.workspaceSaveStatus = "Ran bootstrap for \(name)."
         state.workspaceSaveError = nil
-        return .none
+        return .send(.loadWorkspaceBootstrapRuntime)
 
       case .workspaceBootstrapRunFailed(let id, let message):
         state.runningWorkspaceBootstrapIDs.remove(id)
         state.workspaceSaveError = message
         state.workspaceSaveStatus = nil
-        return .none
+        return .send(.loadWorkspaceBootstrapRuntime)
 
       case .workspaceGuideRegenerated:
         state.workspaceSaveStatus = "Regenerated agent guide."
@@ -1188,14 +1210,24 @@ struct RepositorySettingsFeature {
     for repository: RepositoryDraft
   ) -> ProjectWorkspaceRepositoryBootstrap? {
     let scriptIDs = repository.bootstrapScriptIDs
-    guard !scriptIDs.isEmpty else {
+    var runOn = Set<ProjectWorkspaceBootstrapTiming>()
+    if repository.bootstrapRunOnCreate {
+      runOn.insert(.create)
+    }
+    if repository.bootstrapRunOnAdd {
+      runOn.insert(.onAdd)
+    }
+    if repository.bootstrapRunOnManual {
+      runOn.insert(.manual)
+    }
+    guard !scriptIDs.isEmpty || !runOn.isEmpty || repository.bootstrapRequired else {
       return nil
     }
     return ProjectWorkspaceRepositoryBootstrap(
       scriptKind: .userProfile,
       scriptIDs: scriptIDs,
-      runOn: [.manual],
-      required: false
+      runOn: runOn,
+      required: repository.bootstrapRequired
     )
   }
 
