@@ -106,3 +106,5 @@ watcher, which only handles tracked worktrees.
 - Updated 2026-06-20: sidebar/toolbar follow-up fixes — toolbar title width for
   folder/workspace (#481), full-row click area and collapse/expand-all for workspaces
   (#485) — see [002-sidebar-and-toolbar-follow-ups.md](002-sidebar-and-toolbar-follow-ups.md)
+- Updated 2026-07-20: workspace bootstrap settings become runtime-only controls after
+  creation — see [003-bootstrap-runtime-controls.md](003-bootstrap-runtime-controls.md)
