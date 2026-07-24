@@ -92,7 +92,7 @@ Teach your agent when and how to drive Prowl by installing the bundled `prowl-cl
 
 - **Full Native** — powered by libghostty. No Electron, no web views. CJK-safe out of the box.
 - **Vertical Tabs** — repos, branches, and worktrees in a sidebar. Never lose context.
-- **Git Worktree first-class** — spin up a parallel branch for a new agent in one click.
+- **First-class Git worktrees** — spin up a parallel branch for a new agent in one click.
 - **Agent Reminder** — macOS notification the moment an agent finishes.
 - **Auto-updates** — Sparkle keeps you on the latest release.
 
