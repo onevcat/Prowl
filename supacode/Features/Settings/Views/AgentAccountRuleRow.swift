@@ -11,9 +11,10 @@ struct AgentAccountRuleRow: View {
       HStack(spacing: 8) {
         TextField("Path", text: $rule.pathPrefix, prompt: Text("~/work"))
           .textFieldStyle(.roundedBorder)
+          .frame(maxWidth: .infinity)
         TextField("Account", text: $rule.account, prompt: Text("work"))
           .textFieldStyle(.roundedBorder)
-          .frame(maxWidth: 160)
+          .frame(width: 160)
         Button(action: onRemove) {
           Image(systemName: "minus.circle")
         }
@@ -21,6 +22,7 @@ struct AgentAccountRuleRow: View {
         .help("Remove this rule")
         .accessibilityLabel("Remove rule")
       }
+      .labelsHidden()
       AgentAccountNameWarning(name: rule.account)
     }
   }

@@ -21,7 +21,7 @@ window is a sidebar of tabs plus a detail pane.
 | **Shortcuts** | Remap app keyboard shortcuts; view defaults; resolve conflicts. → [keyboard-shortcuts](../reference/keyboard-shortcuts.md) |
 | **Worktree** | Worktree creation/deletion defaults: prompt on create, fetch before create, base directory, copy ignored/untracked files, automatic local-branch cleanup, merged-worktree action, archived auto-delete period. |
 | **Updates** | Auto-check toggle, "Check for Updates Now". → [updates](updates.md) |
-| **Advanced** | **Agent accounts** (default account + path rules), analytics, crash reports, restore terminal layout on launch (experimental) + clear saved layout, and the **Install Command Line Tool** (`prowl` CLI) action. |
+| **Advanced** | **Agent accounts** (default account, path rules, per-account login status + Sign In), analytics, crash reports, restore terminal layout on launch (experimental) + clear saved layout, and the **Install Command Line Tool** (`prowl` CLI) action. |
 | **GitHub** | Enable GitHub integration (uses the `gh` CLI). → [github-pull-requests](github-pull-requests.md) |
 | **Commands** | Global Custom Commands. Enabled commands appear in the window toolbar; each repo can independently hide a Global command. → [custom-actions](custom-actions.md) |
 | **Repositories / Repo Settings** | Per-repository: setup/archive/run scripts, **Custom Commands**, Global-command visibility, default base ref & directory, copy-files overrides, open-with app, custom title, icon & color, PR merge strategy, line-diff & PR-state fetching, **agent account**. Reached from the sidebar context menu → "Repo Settings". → [custom-actions](custom-actions.md), [repositories-and-worktrees](repositories-and-worktrees.md) |
@@ -49,10 +49,15 @@ Resolution order for a repository:
 3. the **default account** from Advanced;
 4. otherwise the system-wide `~/.claude` and `~/.codex` logins.
 
-Prowl never logs an account in: the first time a pane runs with a new account,
-`claude` and `codex` start signed out — run `claude auth login` or `codex login`
-once in that pane. Only panes launched *after* the change pick up the new
-account; running shells keep the one they started with.
+Prowl never logs an account in, it only points the CLIs at a directory. Advanced
+lists every configured account with what each CLI reports there — the Claude
+identity (`person@example.com (pro)`), or "Not signed in", or "Command line tool
+not found" — with **Refresh** to re-ask and **Sign In** per CLI. Sign In opens a
+terminal tab in the current repository running the login command with that
+account's directory baked in, so the login lands in the intended account even if
+the repository you are standing in resolves to a different one. Only panes
+launched *after* an account change pick it up; running shells keep the one they
+started with.
 
 Because each account is a full config directory, it also has its own settings,
 history, plugins and MCP servers — not just credentials.

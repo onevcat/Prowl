@@ -520,6 +520,25 @@ struct AppFeature {
           }
         )
 
+      case .settings(.delegate(.agentAccountAuth(let account, let cli, let authAction))):
+        guard let worktree = actionTargetWorktree(repositories: state.repositories),
+          let command = cli.command(authAction, forAccountNamed: account)
+        else {
+          return .send(.repositories(.showToast(.warning("Open a repository first to manage agent logins"))))
+        }
+        return .run { _ in
+          // `codex login` fails outright when its CODEX_HOME does not exist yet.
+          try? AgentAccount.prepareDirectories(forAccountNamed: account)
+          await terminalClient.send(
+            .createTabWithInput(
+              worktree,
+              input: command,
+              runSetupScriptIfNew: false,
+              autoCloseOnSuccess: false
+            )
+          )
+        }
+
       case .settings(.delegate(.terminalFontSizeChanged)):
         return .none
 

@@ -6,6 +6,7 @@
 | **Anchor date** | 2026-07-25 |
 | **Primary PRs** | pending |
 | **Related** | [048 agent-runtime-adapters](../048-agent-runtime-adapters/000-plan.md), [045 native-agent-session-detection](../045-native-agent-session-detection/000-plan.md) |
+| **Amendments** | [002 account status and sign in](002-account-status-and-sign-in.md) |
 
 ## Background
 

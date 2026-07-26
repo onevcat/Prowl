@@ -70,16 +70,56 @@ struct AdvancedSettingsView: View {
             AgentAccountNameWarning(name: store.defaultAgentAccount)
             Text(
               "Each account keeps its own Claude Code and Codex login in ~/.prowl/accounts. "
-                + "Leave empty to use the system-wide logins. Run claude auth login or codex login "
-                + "once in a new pane to sign an account in."
+                + "Leave empty to use the system-wide logins."
             )
             .foregroundStyle(.secondary)
             .font(.callout)
           }
           .frame(maxWidth: .infinity, alignment: .leading)
 
+          if !store.agentAccountNames.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+              HStack {
+                Text("Logins")
+                Spacer()
+                Button("Refresh") {
+                  store.send(.refreshAgentAccountStatuses)
+                }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+                .disabled(store.isLoadingAgentAccountStatuses)
+                .help("Ask both CLIs which account they are signed in as")
+              }
+              ForEach(store.agentAccountNames, id: \.self) { account in
+                AgentAccountStatusRow(
+                  account: account,
+                  status: store.agentAccountStatuses[account]
+                ) { cli, action in
+                  store.send(.agentAccountAuthButtonTapped(account: account, cli: cli, action: action))
+                }
+              }
+              Text("Sign In and Sign Out open a terminal tab in the current repository and run the command there.")
+                .foregroundStyle(.secondary)
+                .font(.callout)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .onAppear {
+              store.send(.refreshAgentAccountStatuses)
+            }
+          }
+
           VStack(alignment: .leading, spacing: 8) {
-            Text("Rules")
+            HStack(spacing: 8) {
+              Text("Path")
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+              Text("Account")
+                .foregroundStyle(.secondary)
+                .frame(width: 160, alignment: .leading)
+              // Keeps the header aligned with the rows' remove button.
+              Color.clear.frame(width: 20)
+            }
+            .font(.callout)
             ForEach($store.agentAccountRules) { $rule in
               AgentAccountRuleRow(rule: $rule) {
                 store.send(.removeAgentAccountRuleButtonTapped(id: rule.id))

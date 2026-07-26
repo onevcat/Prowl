@@ -55,6 +55,8 @@ struct SettingsFeature {
     var detectRepositoryIconsAutomatically: Bool
     var defaultAgentAccount: String
     var agentAccountRules: [AgentAccountRule]
+    var agentAccountStatuses: [String: AgentAccountStatus] = [:]
+    var isLoadingAgentAccountStatuses = false
     var cliInstallStatus: CLIInstallStatus = .notInstalled
     var cliInstallShowAlert: Bool = true
     /// Whether macOS will render the Dock notification badge (notification
@@ -115,6 +117,16 @@ struct SettingsFeature {
       detectRepositoryIconsAutomatically = settings.detectRepositoryIconsAutomatically
       defaultAgentAccount = settings.defaultAgentAccount ?? ""
       agentAccountRules = settings.agentAccountRules
+    }
+
+    /// Accounts the user has configured anywhere, the default one first.
+    var agentAccountNames: [String] {
+      var names: [String] = []
+      for candidate in [defaultAgentAccount] + agentAccountRules.map(\.account) {
+        guard let name = AgentAccount.normalizedName(candidate), !names.contains(name) else { continue }
+        names.append(name)
+      }
+      return names
     }
 
     var globalSettings: GlobalSettings {
@@ -181,6 +193,9 @@ struct SettingsFeature {
     case setSystemNotificationsEnabled(Bool)
     case setCommandFinishedNotificationThreshold(String)
     case setTerminalFontSize(Float32?)
+    case refreshAgentAccountStatuses
+    case agentAccountStatusesLoaded([String: AgentAccountStatus])
+    case agentAccountAuthButtonTapped(account: String, cli: AgentAccountCLI, action: AgentAccountAuthAction)
     case addAgentAccountRuleButtonTapped
     case removeAgentAccountRuleButtonTapped(id: AgentAccountRule.ID)
     case clearTerminalLayoutSnapshotButtonTapped
@@ -215,6 +230,7 @@ struct SettingsFeature {
     case terminalFontSizeChanged(Float32?)
     case terminalLayoutSnapshotCleared(success: Bool)
     case cliInstallCompleted(CLIInstallResultMessage)
+    case agentAccountAuth(account: String, cli: AgentAccountCLI, action: AgentAccountAuthAction)
   }
 
   @Dependency(AnalyticsClient.self) private var analyticsClient
@@ -222,6 +238,7 @@ struct SettingsFeature {
   @Dependency(NotificationSoundClient.self) private var notificationSoundClient
   @Dependency(TerminalLayoutPersistenceClient.self) private var terminalLayoutPersistence
   @Dependency(CLIInstallClient.self) private var cliInstallClient
+  @Dependency(AgentAccountStatusClient.self) private var agentAccountStatusClient
   @Dependency(\.uuid) private var uuid
 
   var body: some Reducer<State, Action> {
@@ -312,6 +329,30 @@ struct SettingsFeature {
         state.commandFinishedNotificationThreshold = min(max(state.commandFinishedNotificationThreshold, 0), 600)
         state.syncGlobalDefaults(from: state.globalSettings)
         return persist(state)
+
+      case .refreshAgentAccountStatuses:
+        let accounts = state.agentAccountNames
+        guard !accounts.isEmpty else {
+          state.agentAccountStatuses = [:]
+          return .none
+        }
+        state.isLoadingAgentAccountStatuses = true
+        let statusClient = agentAccountStatusClient
+        return .run { send in
+          var statuses: [String: AgentAccountStatus] = [:]
+          for account in accounts {
+            statuses[account] = await statusClient.status(account)
+          }
+          await send(.agentAccountStatusesLoaded(statuses))
+        }
+
+      case .agentAccountStatusesLoaded(let statuses):
+        state.isLoadingAgentAccountStatuses = false
+        state.agentAccountStatuses = statuses
+        return .none
+
+      case .agentAccountAuthButtonTapped(let account, let cli, let action):
+        return .send(.delegate(.agentAccountAuth(account: account, cli: cli, action: action)))
 
       case .addAgentAccountRuleButtonTapped:
         state.agentAccountRules.append(AgentAccountRule(id: uuid().uuidString))
