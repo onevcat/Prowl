@@ -107,6 +107,11 @@ Every pane's environment reports **`TERM_PROGRAM=prowl`** (with
 they're running inside Prowl rather than standalone Ghostty. `TERM` itself stays
 `xterm-ghostty` — terminfo-based feature detection is unaffected.
 
+When the worktree's repository resolves to an **agent account**, the pane also
+gets `CLAUDE_CONFIG_DIR` and `CODEX_HOME` pointing into
+`~/.prowl/accounts/<name>/`, which is what selects the Claude Code / Codex login
+for that pane — see [settings](settings.md#agent-accounts).
+
 ## Command-finished behavior
 
 When a command finishes (via OSC 133), Prowl can:

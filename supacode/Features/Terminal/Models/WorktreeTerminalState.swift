@@ -67,6 +67,8 @@ final class WorktreeTerminalState {
   private let targetHandleRegistry: TerminalTargetHandleRegistry
   @ObservationIgnored
   @SharedReader private var repositorySettings: RepositorySettings
+  @ObservationIgnored
+  @SharedReader private var settingsFile: SettingsFile
   var trees: [TerminalTabID: SplitTree<GhosttySurfaceView>] = [:]
   var surfaces: [UUID: GhosttySurfaceView] = [:]
   var focusedSurfaceIdByTab: [TerminalTabID: UUID] = [:]
@@ -201,11 +203,42 @@ final class WorktreeTerminalState {
       wrappedValue: RepositorySettings.default,
       .repositorySettings(worktree.repositoryRootURL)
     )
+    _settingsFile = SharedReader(wrappedValue: SettingsFile.default, .settingsFile)
   }
 
   var worktreeID: Worktree.ID { worktree.id }
   var worktreeName: String { worktree.name }
   var repositoryRootURL: URL { worktree.repositoryRootURL }
+
+  /// Account whose Claude Code and Codex logins new panes should use.
+  private var resolvedAgentAccount: String? {
+    AgentAccount.resolvedName(
+      repositoryRootURL: worktree.repositoryRootURL,
+      repositoryOverride: repositorySettings.agentAccount,
+      globalDefault: settingsFile.global.defaultAgentAccount,
+      rules: settingsFile.global.agentAccountRules
+    )
+  }
+
+  /// Environment for a surface about to launch: the worktree paths plus the
+  /// resolved agent account. A function rather than a property because the
+  /// account directories have to exist before the shell starts — `codex` refuses
+  /// to run otherwise — so building the environment and preparing it cannot be
+  /// separated. Panes already running keep the account they launched with.
+  func makeSurfaceEnvironment() -> [String: String] {
+    let account = resolvedAgentAccount
+    do {
+      try AgentAccount.prepareDirectories(forAccountNamed: account)
+    } catch {
+      // The pane still launches: claude falls back to its own defaults, and the
+      // codex startup error is the user-visible signal that this failed.
+      terminalStateLogger.warning(
+        "Unable to prepare agent account directories for \(account ?? ""): \(error.localizedDescription)"
+      )
+    }
+    return worktree.scriptEnvironment
+      .merging(AgentAccount.environment(forAccountNamed: account)) { _, accountValue in accountValue }
+  }
 
   func registerTargetHandle(for tabID: TerminalTabID) -> Int {
     targetHandleRegistry.register(tabID: tabID)

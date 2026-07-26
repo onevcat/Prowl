@@ -68,6 +68,8 @@ JSON is pretty-printed with sorted keys. Legacy `~/.supacode` is migrated to
 | `externalDiffToolID` | String | `built-in` | Tool used by diff badges and Show Diff: `built-in`, `hunk`, `filemerge`, `kaleidoscope`, or `custom`. |
 | `externalDiffCustomCommand` | String | `""` | Command template for `externalDiffToolID = custom`; supports `{leftPath}`, `{rightPath}`, `{worktreePath}`, `{repoPath}`, and `{branch}`. |
 | `detectRepositoryIconsAutomatically` | Bool | `true` | Scan newly added repositories locally for a high-confidence project icon (app icon, launcher, favicon/logo) and use it as the repo icon. Applies to future additions only; never replaces a manual icon. |
+| `defaultAgentAccount` | String? | `nil` | Agent account for repositories with no override and no matching rule; `nil` = the system-wide `~/.claude` and `~/.codex` logins. |
+| `agentAccountRules` | array | `[]` | `{ "pathPrefix": "~/work", "account": "work" }` entries mapping a repository location to an account; the longest matching prefix wins. |
 
 ## Per-repository settings (`RepositorySettings`)
 
@@ -86,6 +88,7 @@ Stored at `~/.prowl/repo/<repo-name>/prowl.json` (schema v2). For the tri-state
 | `copyUntrackedOnWorktreeCreate` | Bool? | `nil` | Copy untracked files; `nil` = use global. |
 | `pullRequestMergeStrategy` | enum? | `nil` | PR merge strategy; `nil` = use global. |
 | `githubAccountOverride` | object? | `nil` | Optional `{ "host": "...", "login": "..." }`; Prowl temporarily switches `gh` to this account for GitHub operations in this repo. |
+| `agentAccount` | String? | `nil` | Agent account for terminals in this repo; `nil` = fall back to `agentAccountRules`, then `defaultAgentAccount`. |
 | `customTitle` | String? | `nil` | Display name override for the repository. |
 | `observeLineDiffsAutomatically` | Bool? | `nil` (= on) | Keep worktree line-change badges updated; set `false` for large repos. |
 | `fetchPullRequestState` | Bool? | `nil` (= on) | Background-fetch PR state; set `false` to save GitHub rate limit. |

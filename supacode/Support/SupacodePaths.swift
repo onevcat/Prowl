@@ -18,6 +18,11 @@ nonisolated enum SupacodePaths {
     baseDirectory.appending(path: "repo", directoryHint: .isDirectory)
   }
 
+  /// Per-account agent configuration: `accounts/<name>/{claude,codex}`.
+  static var agentAccountsDirectory: URL {
+    baseDirectory.appending(path: "accounts", directoryHint: .isDirectory)
+  }
+
   static var appSupportDirectory: URL {
     let appSupport =
       FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first

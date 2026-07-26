@@ -43,6 +43,9 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var externalDiffToolID: String = ExternalDiffTool.builtIn.settingsID
   var externalDiffCustomCommand: String = ""
   var detectRepositoryIconsAutomatically: Bool = true
+  /// Agent account for repositories without an override or matching rule.
+  var defaultAgentAccount: String?
+  var agentAccountRules: [AgentAccountRule] = []
 
   static let `default` = GlobalSettings(
     appearanceMode: .dark,
@@ -220,6 +223,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     try container.encode(externalDiffToolID, forKey: .externalDiffToolID)
     try container.encode(externalDiffCustomCommand, forKey: .externalDiffCustomCommand)
     try container.encode(detectRepositoryIconsAutomatically, forKey: .detectRepositoryIconsAutomatically)
+    try container.encodeIfPresent(defaultAgentAccount, forKey: .defaultAgentAccount)
+    try container.encode(agentAccountRules, forKey: .agentAccountRules)
   }
 
   private enum CodingKeys: String, CodingKey {
@@ -267,6 +272,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     case externalDiffToolID
     case externalDiffCustomCommand
     case detectRepositoryIconsAutomatically
+    case defaultAgentAccount
+    case agentAccountRules
     // Legacy keys for migration
     case automaticallyArchiveMergedWorktrees
     case notificationSoundEnabled
@@ -365,6 +372,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     detectRepositoryIconsAutomatically =
       try container.decodeIfPresent(Bool.self, forKey: .detectRepositoryIconsAutomatically)
       ?? true
+    (defaultAgentAccount, agentAccountRules) = try Self.decodeAgentAccountSettings(from: container)
     let toolbarAndDock = try Self.decodeToolbarAndDockSettings(from: container)
     showRunButtonInToolbar = toolbarAndDock.showRunButtonInToolbar
     showDefaultEditorInToolbar = toolbarAndDock.showDefaultEditorInToolbar
@@ -417,6 +425,17 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
       try container.decodeIfPresent(String.self, forKey: .externalDiffCustomCommand)
       ?? Self.default.externalDiffCustomCommand
     return (toolID, customCommand)
+  }
+
+  private static func decodeAgentAccountSettings(
+    from container: KeyedDecodingContainer<CodingKeys>
+  ) throws -> (String?, [AgentAccountRule]) {
+    let account = AgentAccount.storedName(
+      try container.decodeIfPresent(String.self, forKey: .defaultAgentAccount)
+    )
+    let rules =
+      try container.decodeIfPresent([AgentAccountRule].self, forKey: .agentAccountRules) ?? []
+    return (account, rules)
   }
 
   /// Folds the removed `notificationSoundEnabled` toggle: off becomes `.never`,

@@ -353,7 +353,7 @@ extension WorktreeTerminalState {
       initialInput: initialInput,
       fontSize: resolvedFontSize,
       context: context,
-      environment: worktree.scriptEnvironment
+      environment: makeSurfaceEnvironment()
     )
     // Sending a no-op font size action marks the Ghostty surface as
     // "font_size_adjusted", which prevents config reloads (triggered by

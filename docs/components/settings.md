@@ -21,10 +21,10 @@ window is a sidebar of tabs plus a detail pane.
 | **Shortcuts** | Remap app keyboard shortcuts; view defaults; resolve conflicts. → [keyboard-shortcuts](../reference/keyboard-shortcuts.md) |
 | **Worktree** | Worktree creation/deletion defaults: prompt on create, fetch before create, base directory, copy ignored/untracked files, automatic local-branch cleanup, merged-worktree action, archived auto-delete period. |
 | **Updates** | Auto-check toggle, "Check for Updates Now". → [updates](updates.md) |
-| **Advanced** | Analytics, crash reports, restore terminal layout on launch (experimental) + clear saved layout, and the **Install Command Line Tool** (`prowl` CLI) action. |
+| **Advanced** | **Agent accounts** (default account + path rules), analytics, crash reports, restore terminal layout on launch (experimental) + clear saved layout, and the **Install Command Line Tool** (`prowl` CLI) action. |
 | **GitHub** | Enable GitHub integration (uses the `gh` CLI). → [github-pull-requests](github-pull-requests.md) |
 | **Commands** | Global Custom Commands. Enabled commands appear in the window toolbar; each repo can independently hide a Global command. → [custom-actions](custom-actions.md) |
-| **Repositories / Repo Settings** | Per-repository: setup/archive/run scripts, **Custom Commands**, Global-command visibility, default base ref & directory, copy-files overrides, open-with app, custom title, icon & color, PR merge strategy, line-diff & PR-state fetching. Reached from the sidebar context menu → "Repo Settings". → [custom-actions](custom-actions.md), [repositories-and-worktrees](repositories-and-worktrees.md) |
+| **Repositories / Repo Settings** | Per-repository: setup/archive/run scripts, **Custom Commands**, Global-command visibility, default base ref & directory, copy-files overrides, open-with app, custom title, icon & color, PR merge strategy, line-diff & PR-state fetching, **agent account**. Reached from the sidebar context menu → "Repo Settings". → [custom-actions](custom-actions.md), [repositories-and-worktrees](repositories-and-worktrees.md) |
 
 ## Where settings live on disk
 
@@ -34,6 +34,32 @@ window is a sidebar of tabs plus a detail pane.
 - **Per-repo custom commands:** `~/.prowl/repo/<repo-name>/prowl.onevcat.json`
 
 Legacy `~/.supacode` is migrated to `~/.prowl` on first launch.
+
+## Agent accounts
+
+An **agent account** is a named directory under `~/.prowl/accounts/<name>/` that
+holds one Claude Code login (`claude/`) and one Codex login (`codex/`). Prowl
+selects one per pane by exporting `CLAUDE_CONFIG_DIR` and `CODEX_HOME`, so a
+personal and a work account can run side by side in different panes.
+
+Resolution order for a repository:
+
+1. **Repo Settings → Agent Account** (an explicit name wins);
+2. the longest matching **path rule** from Advanced (a path/account pair, e.g. `~/work` → `work`);
+3. the **default account** from Advanced;
+4. otherwise the system-wide `~/.claude` and `~/.codex` logins.
+
+Prowl never logs an account in: the first time a pane runs with a new account,
+`claude` and `codex` start signed out — run `claude auth login` or `codex login`
+once in that pane. Only panes launched *after* the change pick up the new
+account; running shells keep the one they started with.
+
+Because each account is a full config directory, it also has its own settings,
+history, plugins and MCP servers — not just credentials.
+
+A name containing `/` (or `.` / `..`) cannot be a directory, so Prowl ignores it
+and says so under the field; the text you typed is still saved rather than
+silently dropped.
 
 ## Install the CLI from here
 

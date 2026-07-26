@@ -30,6 +30,10 @@ struct RepositorySettingsView: View {
       get: { settings.fetchPullRequestState.wrappedValue ?? true },
       set: { settings.fetchPullRequestState.wrappedValue = $0 },
     )
+    let agentAccount = Binding(
+      get: { settings.agentAccount.wrappedValue ?? "" },
+      set: { settings.agentAccount.wrappedValue = $0 },
+    )
     let exampleWorktreePath = store.exampleWorktreePath
     let folderName = Repository.name(for: store.rootURL)
 
@@ -186,6 +190,25 @@ struct RepositorySettingsView: View {
               .foregroundStyle(.secondary)
           }
         }
+      }
+
+      Section("Agent Account") {
+        VStack(alignment: .leading, spacing: 8) {
+          TextField(
+            "Account",
+            text: agentAccount,
+            prompt: Text(store.inheritedAgentAccount ?? "System login")
+          )
+          .help("Claude Code and Codex account used by terminals in this repository")
+          AgentAccountNameWarning(name: agentAccount.wrappedValue)
+          Text(
+            "Points Claude Code and Codex at ~/.prowl/accounts/<name>. Leave empty to follow the "
+              + "global rules and default. New panes pick up the change; running ones keep their account."
+          )
+          .foregroundStyle(.secondary)
+          .font(.callout)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
       }
 
       if store.showsDiffsAndPullRequestSettings {

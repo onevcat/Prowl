@@ -16,6 +16,9 @@ nonisolated struct RepositorySettings: Codable, Equatable, Sendable {
   var copyUntrackedOnWorktreeCreate: Bool?
   var pullRequestMergeStrategy: PullRequestMergeStrategy?
   var githubAccountOverride: GithubAccountOverride?
+  /// Agent account used for terminals in this repository. `nil` falls back to
+  /// the global path rules and default account.
+  var agentAccount: String?
   var customTitle: String?
   /// When `nil` (unset) or `true`, Prowl keeps the worktree line-change badges
   /// up to date in the background. Set to `false` to skip the periodic `git diff`
@@ -39,6 +42,7 @@ nonisolated struct RepositorySettings: Codable, Equatable, Sendable {
     case copyUntrackedOnWorktreeCreate
     case pullRequestMergeStrategy
     case githubAccountOverride
+    case agentAccount
     case customTitle
     case observeLineDiffsAutomatically
     case fetchPullRequestState
@@ -55,6 +59,7 @@ nonisolated struct RepositorySettings: Codable, Equatable, Sendable {
     copyUntrackedOnWorktreeCreate: nil,
     pullRequestMergeStrategy: nil,
     githubAccountOverride: nil,
+    agentAccount: nil,
     customTitle: nil,
     observeLineDiffsAutomatically: nil,
     fetchPullRequestState: nil
@@ -71,6 +76,7 @@ nonisolated struct RepositorySettings: Codable, Equatable, Sendable {
     copyUntrackedOnWorktreeCreate: Bool? = nil,
     pullRequestMergeStrategy: PullRequestMergeStrategy? = nil,
     githubAccountOverride: GithubAccountOverride? = nil,
+    agentAccount: String? = nil,
     customTitle: String? = nil,
     observeLineDiffsAutomatically: Bool? = nil,
     fetchPullRequestState: Bool? = nil
@@ -85,6 +91,7 @@ nonisolated struct RepositorySettings: Codable, Equatable, Sendable {
     self.copyUntrackedOnWorktreeCreate = copyUntrackedOnWorktreeCreate
     self.pullRequestMergeStrategy = pullRequestMergeStrategy
     self.githubAccountOverride = githubAccountOverride?.normalized
+    self.agentAccount = AgentAccount.storedName(agentAccount)
     self.customTitle = customTitle
     self.observeLineDiffsAutomatically = observeLineDiffsAutomatically
     self.fetchPullRequestState = fetchPullRequestState
@@ -120,6 +127,9 @@ nonisolated struct RepositorySettings: Codable, Equatable, Sendable {
       try container.decodeIfPresent(Bool.self, forKey: .fetchPullRequestState)
     githubAccountOverride =
       try container.decodeIfPresent(GithubAccountOverride.self, forKey: .githubAccountOverride)?.normalized
+    agentAccount = AgentAccount.storedName(
+      try container.decodeIfPresent(String.self, forKey: .agentAccount)
+    )
     if decodedSchemaVersion >= Self.currentSchemaVersion {
       copyIgnoredOnWorktreeCreate =
         try container.decodeIfPresent(

@@ -63,6 +63,40 @@ struct AdvancedSettingsView: View {
           }
         }
 
+        Section("Agent Accounts") {
+          VStack(alignment: .leading, spacing: 8) {
+            TextField("Default account", text: $store.defaultAgentAccount, prompt: Text("System login"))
+              .help("Agent account used when a repository has no override and no matching rule")
+            AgentAccountNameWarning(name: store.defaultAgentAccount)
+            Text(
+              "Each account keeps its own Claude Code and Codex login in ~/.prowl/accounts. "
+                + "Leave empty to use the system-wide logins. Run claude auth login or codex login "
+                + "once in a new pane to sign an account in."
+            )
+            .foregroundStyle(.secondary)
+            .font(.callout)
+          }
+          .frame(maxWidth: .infinity, alignment: .leading)
+
+          VStack(alignment: .leading, spacing: 8) {
+            Text("Rules")
+            ForEach($store.agentAccountRules) { $rule in
+              AgentAccountRuleRow(rule: $rule) {
+                store.send(.removeAgentAccountRuleButtonTapped(id: rule.id))
+              }
+            }
+            Button("Add Rule") {
+              store.send(.addAgentAccountRuleButtonTapped)
+            }
+            .buttonStyle(.bordered)
+            .help("Map a directory to an agent account")
+            Text("Repositories under a listed path use that account. The longest matching path wins.")
+              .foregroundStyle(.secondary)
+              .font(.callout)
+          }
+          .frame(maxWidth: .infinity, alignment: .leading)
+        }
+
         Section("Advanced") {
           VStack(alignment: .leading) {
             Toggle(

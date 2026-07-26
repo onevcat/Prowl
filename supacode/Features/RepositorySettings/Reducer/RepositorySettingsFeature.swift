@@ -36,6 +36,8 @@ struct RepositorySettingsFeature {
     var globalCopyIgnoredOnWorktreeCreate: Bool = false
     var globalCopyUntrackedOnWorktreeCreate: Bool = false
     var globalPullRequestMergeStrategy: PullRequestMergeStrategy = .merge
+    var globalDefaultAgentAccount: String?
+    var globalAgentAccountRules: [AgentAccountRule] = []
     var isBareRepository = false
     var branchOptions: [String] = []
     var defaultWorktreeBaseRef = "origin/main"
@@ -86,6 +88,16 @@ struct RepositorySettingsFeature {
       capabilities.supportsRunnableFolderActions
     }
 
+    /// Account this repository uses when it has no override of its own.
+    var inheritedAgentAccount: String? {
+      AgentAccount.resolvedName(
+        repositoryRootURL: rootURL,
+        repositoryOverride: nil,
+        globalDefault: globalDefaultAgentAccount,
+        rules: globalAgentAccountRules
+      )
+    }
+
     var exampleWorktreePath: String {
       SupacodePaths.exampleWorktreePath(
         for: rootURL,
@@ -105,6 +117,8 @@ struct RepositorySettingsFeature {
       globalCopyIgnoredOnWorktreeCreate: Bool,
       globalCopyUntrackedOnWorktreeCreate: Bool,
       globalPullRequestMergeStrategy: PullRequestMergeStrategy,
+      globalDefaultAgentAccount: String?,
+      globalAgentAccountRules: [AgentAccountRule],
       keybindingUserOverrides: KeybindingUserOverrideStore
     )
     case appearanceLoaded(RepositoryAppearance)
@@ -157,6 +171,8 @@ struct RepositorySettingsFeature {
                 globalCopyIgnoredOnWorktreeCreate: global.copyIgnoredOnWorktreeCreate,
                 globalCopyUntrackedOnWorktreeCreate: global.copyUntrackedOnWorktreeCreate,
                 globalPullRequestMergeStrategy: global.pullRequestMergeStrategy,
+                globalDefaultAgentAccount: global.defaultAgentAccount,
+                globalAgentAccountRules: global.agentAccountRules,
                 keybindingUserOverrides: global.keybindingUserOverrides
               )
             )
@@ -178,6 +194,8 @@ struct RepositorySettingsFeature {
               globalCopyIgnoredOnWorktreeCreate: global.copyIgnoredOnWorktreeCreate,
               globalCopyUntrackedOnWorktreeCreate: global.copyUntrackedOnWorktreeCreate,
               globalPullRequestMergeStrategy: global.pullRequestMergeStrategy,
+              globalDefaultAgentAccount: global.defaultAgentAccount,
+              globalAgentAccountRules: global.agentAccountRules,
               keybindingUserOverrides: global.keybindingUserOverrides
             )
           )
@@ -203,6 +221,8 @@ struct RepositorySettingsFeature {
         let globalCopyIgnoredOnWorktreeCreate,
         let globalCopyUntrackedOnWorktreeCreate,
         let globalPullRequestMergeStrategy,
+        let globalDefaultAgentAccount,
+        let globalAgentAccountRules,
         let keybindingUserOverrides
       ):
         var updatedSettings = settings
@@ -221,6 +241,8 @@ struct RepositorySettingsFeature {
         state.globalCopyIgnoredOnWorktreeCreate = globalCopyIgnoredOnWorktreeCreate
         state.globalCopyUntrackedOnWorktreeCreate = globalCopyUntrackedOnWorktreeCreate
         state.globalPullRequestMergeStrategy = globalPullRequestMergeStrategy
+        state.globalDefaultAgentAccount = globalDefaultAgentAccount
+        state.globalAgentAccountRules = globalAgentAccountRules
         state.isBareRepository = isBareRepository
         state.keybindingUserOverrides = keybindingUserOverrides
         guard updatedSettings != settings else { return .none }
@@ -376,6 +398,9 @@ struct RepositorySettingsFeature {
         normalizedSettings.customTitle =
           (trimmedCustomTitle?.isEmpty ?? true) ? nil : trimmedCustomTitle
         normalizedSettings.githubAccountOverride = normalizedSettings.githubAccountOverride?.normalized
+        // Only the lossless part of normalization: a name that cannot be used is
+        // kept as typed (the field warns about it) rather than vanishing mid-edit.
+        normalizedSettings.agentAccount = AgentAccount.storedName(normalizedSettings.agentAccount)
         @Shared(.repositorySettings(rootURL)) var repositorySettings
         @Shared(.userRepositorySettings(rootURL)) var userRepositorySettings
         $repositorySettings.withLock { $0 = normalizedSettings }

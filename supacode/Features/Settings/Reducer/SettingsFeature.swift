@@ -53,6 +53,8 @@ struct SettingsFeature {
     var externalDiffToolID: String
     var externalDiffCustomCommand: String
     var detectRepositoryIconsAutomatically: Bool
+    var defaultAgentAccount: String
+    var agentAccountRules: [AgentAccountRule]
     var cliInstallStatus: CLIInstallStatus = .notInstalled
     var cliInstallShowAlert: Bool = true
     /// Whether macOS will render the Dock notification badge (notification
@@ -111,6 +113,8 @@ struct SettingsFeature {
       externalDiffToolID = settings.externalDiffToolID
       externalDiffCustomCommand = settings.externalDiffCustomCommand
       detectRepositoryIconsAutomatically = settings.detectRepositoryIconsAutomatically
+      defaultAgentAccount = settings.defaultAgentAccount ?? ""
+      agentAccountRules = settings.agentAccountRules
     }
 
     var globalSettings: GlobalSettings {
@@ -162,6 +166,10 @@ struct SettingsFeature {
       settings.externalDiffToolID = externalDiffToolID
       settings.externalDiffCustomCommand = externalDiffCustomCommand
       settings.detectRepositoryIconsAutomatically = detectRepositoryIconsAutomatically
+      // Kept exactly as typed: a rule that cannot be used is inert at resolution
+      // time, whereas dropping it here would delete the user's input mid-edit.
+      settings.defaultAgentAccount = AgentAccount.storedName(defaultAgentAccount)
+      settings.agentAccountRules = agentAccountRules
       return settings
     }
   }
@@ -173,6 +181,8 @@ struct SettingsFeature {
     case setSystemNotificationsEnabled(Bool)
     case setCommandFinishedNotificationThreshold(String)
     case setTerminalFontSize(Float32?)
+    case addAgentAccountRuleButtonTapped
+    case removeAgentAccountRuleButtonTapped(id: AgentAccountRule.ID)
     case clearTerminalLayoutSnapshotButtonTapped
     case installCLIButtonTapped(showAlert: Bool = true)
     case uninstallCLIButtonTapped
@@ -212,6 +222,7 @@ struct SettingsFeature {
   @Dependency(NotificationSoundClient.self) private var notificationSoundClient
   @Dependency(TerminalLayoutPersistenceClient.self) private var terminalLayoutPersistence
   @Dependency(CLIInstallClient.self) private var cliInstallClient
+  @Dependency(\.uuid) private var uuid
 
   var body: some Reducer<State, Action> {
     BindingReducer()
@@ -280,6 +291,8 @@ struct SettingsFeature {
         state.showNotificationDotOnDock = normalizedSettings.showNotificationDotOnDock
         state.externalDiffToolID = normalizedSettings.externalDiffToolID
         state.externalDiffCustomCommand = normalizedSettings.externalDiffCustomCommand
+        state.defaultAgentAccount = normalizedSettings.defaultAgentAccount ?? ""
+        state.agentAccountRules = normalizedSettings.agentAccountRules
         state.syncGlobalDefaults(from: normalizedSettings)
         return .send(.delegate(.settingsChanged(normalizedSettings)))
 
@@ -298,6 +311,14 @@ struct SettingsFeature {
       case .binding:
         state.commandFinishedNotificationThreshold = min(max(state.commandFinishedNotificationThreshold, 0), 600)
         state.syncGlobalDefaults(from: state.globalSettings)
+        return persist(state)
+
+      case .addAgentAccountRuleButtonTapped:
+        state.agentAccountRules.append(AgentAccountRule(id: uuid().uuidString))
+        return persist(state)
+
+      case .removeAgentAccountRuleButtonTapped(let id):
+        state.agentAccountRules.removeAll { $0.id == id }
         return persist(state)
 
       case .setCommandFinishedNotificationThreshold(let text):
@@ -489,5 +510,7 @@ extension SettingsFeature.State {
       settings.copyUntrackedOnWorktreeCreate
     repositorySettings?.globalPullRequestMergeStrategy =
       settings.pullRequestMergeStrategy
+    repositorySettings?.globalDefaultAgentAccount = settings.defaultAgentAccount
+    repositorySettings?.globalAgentAccountRules = settings.agentAccountRules
   }
 }
