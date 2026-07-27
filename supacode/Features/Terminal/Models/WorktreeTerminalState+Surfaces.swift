@@ -131,6 +131,7 @@ extension WorktreeTerminalState {
     } catch {
       newSurface.closeSurface()
       surfaces.removeValue(forKey: newSurface.id)
+      forgetAgentAccount(forSurface: newSurface.id)
       surfaceRunningStartedAtById.removeValue(forKey: newSurface.id)
       cleanupCommandDetectorState(forSurfaceId: newSurface.id)
       cleanupAgentDetectionState(forSurfaceId: newSurface.id)
@@ -218,6 +219,7 @@ extension WorktreeTerminalState {
       } catch {
         newSurface.closeSurface()
         surfaces.removeValue(forKey: newSurface.id)
+        forgetAgentAccount(forSurface: newSurface.id)
         surfaceRunningStartedAtById.removeValue(forKey: newSurface.id)
         cleanupCommandDetectorState(forSurfaceId: newSurface.id)
         cleanupAgentDetectionState(forSurfaceId: newSurface.id)
