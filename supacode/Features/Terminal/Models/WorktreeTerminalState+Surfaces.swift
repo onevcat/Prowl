@@ -322,6 +322,7 @@ extension WorktreeTerminalState {
       surface.closeSurface()
     }
     surfaces.removeAll()
+    agentAccountBySurface.removeAll()
     trees.removeAll()
     focusedSurfaceIdByTab.removeAll()
     cleanupAllAgentDetectionState()
@@ -347,13 +348,14 @@ extension WorktreeTerminalState {
       inheritedFontSize: inherited.fontSize,
       context: context
     )
+    let launch = makeSurfaceLaunch()
     let view = GhosttySurfaceView(
       runtime: runtime,
       workingDirectory: workingDirectoryOverride ?? inherited.workingDirectory ?? worktree.workingDirectory,
       initialInput: initialInput,
       fontSize: resolvedFontSize,
       context: context,
-      environment: makeSurfaceEnvironment()
+      environment: launch.environment
     )
     // Sending a no-op font size action marks the Ghostty surface as
     // "font_size_adjusted", which prevents config reloads (triggered by
@@ -362,6 +364,9 @@ extension WorktreeTerminalState {
     if resolvedFontSize != nil {
       view.performBindingAction("increase_font_size:0")
     }
+    // `updateValue` rather than the subscript: assigning `nil` through the
+    // subscript would remove the key instead of recording "system account".
+    agentAccountBySurface.updateValue(launch.account, forKey: view.id)
     configureBridgeCallbacks(for: view, tabId: tabId)
     configureSurfaceCallbacks(for: view, tabId: tabId)
     surfaces[view.id] = view
@@ -620,6 +625,7 @@ extension WorktreeTerminalState {
   func forgetSurface(_ surfaceID: UUID) {
     unregisterTargetHandle(for: surfaceID)
     surfaces.removeValue(forKey: surfaceID)
+    agentAccountBySurface.removeValue(forKey: surfaceID)
     surfaceRunningStartedAtById.removeValue(forKey: surfaceID)
     autoCloseSurfaceIds.remove(surfaceID)
     pendingCustomCommands.removeValue(forKey: surfaceID)

@@ -2,11 +2,11 @@
 
 | | |
 | --- | --- |
-| **Status** | Implemented on `feat/agent-account-switching` (app build unverified — no Xcode on the authoring machine) |
+| **Status** | Implemented on `feat/agent-account-switching`; built, tested, and exercised in the running app |
 | **Anchor date** | 2026-07-25 |
 | **Primary PRs** | pending |
 | **Related** | [048 agent-runtime-adapters](../048-agent-runtime-adapters/000-plan.md), [045 native-agent-session-detection](../045-native-agent-session-detection/000-plan.md) |
-| **Amendments** | [002 account status and sign in](002-account-status-and-sign-in.md) |
+| **Amendments** | [002 account status and sign in](002-account-status-and-sign-in.md), [003 pane account label](003-pane-account-label.md), [004 shared configuration](004-shared-configuration.md) |
 
 ## Background
 

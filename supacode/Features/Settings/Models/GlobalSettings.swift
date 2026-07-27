@@ -433,8 +433,10 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     let account = AgentAccount.storedName(
       try container.decodeIfPresent(String.self, forKey: .defaultAgentAccount)
     )
+    // `try?` as in `decodeNotificationSound`: a malformed value must not fail the
+    // whole settings decode.
     let rules =
-      try container.decodeIfPresent([AgentAccountRule].self, forKey: .agentAccountRules) ?? []
+      (try? container.decodeIfPresent([AgentAccountRule].self, forKey: .agentAccountRules)) ?? []
     return (account, rules)
   }
 

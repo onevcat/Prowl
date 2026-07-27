@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| **Status** | Implemented; build, full test suite, swiftlint and swift-format all green |
+| **Status** | Implemented; build, full test suite, swiftlint and swift-format green |
 | **Anchor date** | 2026-07-26 |
 | **Plan** | [000-plan.md](000-plan.md) · [001-action.md](001-action.md) |
 

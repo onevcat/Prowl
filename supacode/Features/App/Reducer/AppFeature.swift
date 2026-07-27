@@ -87,6 +87,7 @@ struct AppFeature {
     case alert(PresentationAction<Alert>)
     case terminalEvent(TerminalClient.Event)
     case openHandoffHud
+    case openAgentAccountSettings
     case handoffHud(PresentationAction<HandoffHudFeature.Action>)
     /// A CLI handoff completed (announced by the socket-service handler); the
     /// HUD uses it to observe the request it injected into the source pane.
@@ -520,15 +521,28 @@ struct AppFeature {
           }
         )
 
+      case .openAgentAccountSettings:
+        return .merge(
+          .send(.settings(.setSelection(.advanced))),
+          .run { _ in await settingsWindowClient.show() }
+        )
+
       case .settings(.delegate(.agentAccountAuth(let account, let cli, let authAction))):
-        guard let worktree = actionTargetWorktree(repositories: state.repositories),
-          let command = cli.command(authAction, forAccountNamed: account)
-        else {
+        guard let worktree = actionTargetWorktree(repositories: state.repositories) else {
           return .send(.repositories(.showToast(.warning("Open a repository first to manage agent logins"))))
         }
+        guard let command = cli.command(authAction, forAccountNamed: account) else {
+          return .none
+        }
         return .run { _ in
-          // `codex login` fails outright when its CODEX_HOME does not exist yet.
-          try? AgentAccount.prepareDirectories(forAccountNamed: account)
+          do {
+            // `codex login` fails outright when its CODEX_HOME does not exist yet.
+            try AgentAccount.prepareDirectories(forAccountNamed: account)
+          } catch {
+            SupaLogger("AgentAccount").warning(
+              "Unable to prepare agent account directories for \(account): \(error.localizedDescription)"
+            )
+          }
           await terminalClient.send(
             .createTabWithInput(
               worktree,

@@ -253,6 +253,7 @@ private struct WorktreeToolbarPreview: View {
         iconSource: CommandIconMap.iconForFirstToken("codex"),
         infoLine: "Pass this task to another agent in a new tab. codex will summarize its progress first."
       ),
+      agentAccount: "work",
       statusToast: nil,
       pullRequest: nil,
       codeHost: .github,
@@ -309,7 +310,8 @@ private struct WorktreeToolbarPreview: View {
         onStopRunScript: {},
         onRunCustomCommand: { _ in },
         onActivateUpdateButton: {},
-        onHandOff: {}
+        onHandOff: {},
+        onOpenAgentAccountSettings: {}
       )
     }
     .environment(commandKeyObserver)

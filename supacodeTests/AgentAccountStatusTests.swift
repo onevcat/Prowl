@@ -27,8 +27,8 @@ struct AgentAccountStatusTests {
     #expect(AgentAccountStatus.claudeState(fromOutput: output) == .signedIn("Example"))
   }
 
-  /// `claude auth status` exits non-zero when signed out, so only the payload
-  /// distinguishes "signed out" from "could not ask".
+  /// The exit code is non-zero when signed out, so only the payload distinguishes
+  /// "signed out" from "could not ask".
   @Test func claudeSignedOutPayloadIsNotTreatedAsFailure() {
     #expect(AgentAccountStatus.claudeState(fromOutput: #"{"loggedIn": false}"#) == .signedOut)
   }
@@ -66,8 +66,8 @@ struct AgentAccountStatusTests {
     #expect(AgentAccountCLI.claude.command(.signIn, forAccountNamed: "bad/name") == nil)
   }
 
-  /// `codex login status` answers on stderr with an empty stdout, so reading only
-  /// stdout reported an installed CLI as missing.
+  /// Regression: `codex login status` answers on stderr, and reading stdout alone
+  /// reported an installed CLI as missing.
   @Test func statusIsReadFromWhicheverStreamTheCLIUses() {
     #expect(AgentAccountStatusClient.answer(stdout: "", stderr: "Not logged in") == "Not logged in")
     #expect(AgentAccountStatusClient.answer(stdout: "  \n", stderr: "Not logged in") == "Not logged in")
@@ -106,6 +106,64 @@ struct AgentAccountStatusTests {
         "work": AgentAccountStatus(claude: .signedIn("work@example.com"), codex: .signedOut),
       ]
     }
+  }
+
+  /// An account pinned by a single repository lives outside `GlobalSettings`, and
+  /// without a login it is exactly the one that needs the Sign In button.
+  @MainActor
+  @Test(.dependencies) func repositoryScopedAccountsJoinTheList() async {
+    var repositorySettings = RepositorySettings.default
+    repositorySettings.agentAccount = "client"
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.repositories = ["/tmp/repo": repositorySettings] }
+
+    let store = TestStore(initialState: SettingsFeature.State(settings: .default)) {
+      SettingsFeature()
+    } withDependencies: {
+      $0[AgentAccountStatusClient.self] = AgentAccountStatusClient { _ in
+        AgentAccountStatus(claude: .signedOut, codex: .signedOut)
+      }
+    }
+    store.exhaustivity = .off
+
+    #expect(store.state.agentAccountNames.isEmpty)
+
+    await store.send(.refreshAgentAccountStatuses)
+    #expect(store.state.agentAccountNames == ["client"])
+    await store.receive(\.agentAccountStatusesLoaded)
+    #expect(store.state.agentAccountStatuses["client"] != nil)
+  }
+
+  /// Every refresh spawns two login shells per account, so a second pass must
+  /// replace the first instead of racing it to the same state.
+  @MainActor
+  @Test(.dependencies) func asecondRefreshCancelsTheFirst() async {
+    var settings = GlobalSettings.default
+    settings.defaultAgentAccount = "personal"
+    let started = LockIsolated(0)
+
+    let store = TestStore(initialState: SettingsFeature.State(settings: settings)) {
+      SettingsFeature()
+    } withDependencies: {
+      $0[AgentAccountStatusClient.self] = AgentAccountStatusClient { account in
+        started.withValue { $0 += 1 }
+        try? await Task.never()
+        return AgentAccountStatus(claude: .signedIn(account), codex: .signedOut)
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.refreshAgentAccountStatuses)
+    await store.send(.refreshAgentAccountStatuses)
+    #expect(started.value == 2)
+
+    // The empty-account path cancels the run instead of leaving the spinner on.
+    await store.send(.binding(.set(\.defaultAgentAccount, "")))
+    await store.send(.refreshAgentAccountStatuses) {
+      $0.isLoadingAgentAccountStatuses = false
+      $0.agentAccountStatuses = [:]
+    }
+    await store.finish()
   }
 
   @MainActor

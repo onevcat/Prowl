@@ -76,6 +76,11 @@ struct AdvancedSettingsView: View {
             .font(.callout)
           }
           .frame(maxWidth: .infinity, alignment: .leading)
+          // Must live in a view that always renders: this is what discovers
+          // repository-scoped accounts, and the list below stays empty until it runs.
+          .onAppear {
+            store.send(.refreshAgentAccountStatuses)
+          }
 
           if !store.agentAccountNames.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
@@ -103,9 +108,6 @@ struct AdvancedSettingsView: View {
                 .font(.callout)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .onAppear {
-              store.send(.refreshAgentAccountStatuses)
-            }
           }
 
           VStack(alignment: .leading, spacing: 8) {

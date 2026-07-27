@@ -110,7 +110,8 @@ they're running inside Prowl rather than standalone Ghostty. `TERM` itself stays
 When the worktree's repository resolves to an **agent account**, the pane also
 gets `CLAUDE_CONFIG_DIR` and `CODEX_HOME` pointing into
 `~/.prowl/accounts/<name>/`, which is what selects the Claude Code / Codex login
-for that pane — see [settings](settings.md#agent-accounts).
+for that pane — see [settings](settings.md#agent-accounts). The toolbar capsule
+left of the branch title names that account for the selected pane.
 
 ## Command-finished behavior
 

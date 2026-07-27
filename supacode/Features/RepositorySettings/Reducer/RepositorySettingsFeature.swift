@@ -398,8 +398,7 @@ struct RepositorySettingsFeature {
         normalizedSettings.customTitle =
           (trimmedCustomTitle?.isEmpty ?? true) ? nil : trimmedCustomTitle
         normalizedSettings.githubAccountOverride = normalizedSettings.githubAccountOverride?.normalized
-        // Only the lossless part of normalization: a name that cannot be used is
-        // kept as typed (the field warns about it) rather than vanishing mid-edit.
+        // Lossless part only: an unusable name is kept as typed, not vanished.
         normalizedSettings.agentAccount = AgentAccount.storedName(normalizedSettings.agentAccount)
         @Shared(.repositorySettings(rootURL)) var repositorySettings
         @Shared(.userRepositorySettings(rootURL)) var userRepositorySettings

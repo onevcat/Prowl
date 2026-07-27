@@ -56,6 +56,9 @@ struct SettingsFeature {
     var defaultAgentAccount: String
     var agentAccountRules: [AgentAccountRule]
     var agentAccountStatuses: [String: AgentAccountStatus] = [:]
+    /// Accounts pinned by individual repositories; not part of `GlobalSettings`,
+    /// but they still need a login.
+    var repositoryAgentAccounts: [String] = []
     var isLoadingAgentAccountStatuses = false
     var cliInstallStatus: CLIInstallStatus = .notInstalled
     var cliInstallShowAlert: Bool = true
@@ -122,7 +125,8 @@ struct SettingsFeature {
     /// Accounts the user has configured anywhere, the default one first.
     var agentAccountNames: [String] {
       var names: [String] = []
-      for candidate in [defaultAgentAccount] + agentAccountRules.map(\.account) {
+      let candidates = [defaultAgentAccount] + agentAccountRules.map(\.account) + repositoryAgentAccounts
+      for candidate in candidates {
         guard let name = AgentAccount.normalizedName(candidate), !names.contains(name) else { continue }
         names.append(name)
       }
@@ -180,6 +184,7 @@ struct SettingsFeature {
       settings.detectRepositoryIconsAutomatically = detectRepositoryIconsAutomatically
       // Kept exactly as typed: a rule that cannot be used is inert at resolution
       // time, whereas dropping it here would delete the user's input mid-edit.
+      // Kept as typed: dropping unusable input here would delete it mid-edit.
       settings.defaultAgentAccount = AgentAccount.storedName(defaultAgentAccount)
       settings.agentAccountRules = agentAccountRules
       return settings
@@ -231,6 +236,10 @@ struct SettingsFeature {
     case terminalLayoutSnapshotCleared(success: Bool)
     case cliInstallCompleted(CLIInstallResultMessage)
     case agentAccountAuth(account: String, cli: AgentAccountCLI, action: AgentAccountAuthAction)
+  }
+
+  private nonisolated enum CancelID {
+    case agentAccountStatuses
   }
 
   @Dependency(AnalyticsClient.self) private var analyticsClient
@@ -331,10 +340,13 @@ struct SettingsFeature {
         return persist(state)
 
       case .refreshAgentAccountStatuses:
+        @Shared(.settingsFile) var settingsFile
+        state.repositoryAgentAccounts = settingsFile.repositories.values.compactMap(\.agentAccount).sorted()
         let accounts = state.agentAccountNames
         guard !accounts.isEmpty else {
           state.agentAccountStatuses = [:]
-          return .none
+          state.isLoadingAgentAccountStatuses = false
+          return .cancel(id: CancelID.agentAccountStatuses)
         }
         state.isLoadingAgentAccountStatuses = true
         let statusClient = agentAccountStatusClient
@@ -345,6 +357,7 @@ struct SettingsFeature {
           }
           await send(.agentAccountStatusesLoaded(statuses))
         }
+        .cancellable(id: CancelID.agentAccountStatuses, cancelInFlight: true)
 
       case .agentAccountStatusesLoaded(let statuses):
         state.isLoadingAgentAccountStatuses = false

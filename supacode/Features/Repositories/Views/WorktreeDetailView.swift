@@ -207,7 +207,8 @@ struct WorktreeDetailView: View {
         store.send(.runCustomCommand(index))
       },
       onActivateUpdateButton: { store.send(.updates(.activateUpdateButton)) },
-      onHandOff: { store.send(.openHandoffHud) }
+      onHandOff: { store.send(.openHandoffHud) },
+      onOpenAgentAccountSettings: { store.send(.openAgentAccountSettings) }
     )
   }
 
@@ -357,6 +358,7 @@ struct WorktreeDetailView: View {
     return WorktreeToolbarState(
       title: title,
       agentsCapsule: agentsCapsuleState(repositories: input.repositories),
+      agentAccount: agentAccountLabel(repositories: input.repositories),
       statusToast: input.repositories.statusToast,
       pullRequest: matchedPullRequest(
         for: input.selectedWorktree,
@@ -377,6 +379,16 @@ struct WorktreeDetailView: View {
       showRunButtonInToolbar: input.showRunButtonInToolbar,
       showDefaultEditorInToolbar: input.showDefaultEditorInToolbar
     )
+  }
+
+  /// The account the selected pane launched with, which is what its `claude` and
+  /// `codex` actually use.
+  private func agentAccountLabel(repositories: RepositoriesFeature.State) -> String? {
+    guard let worktree = repositories.selectedTerminalWorktree,
+      let state = terminalManager.stateIfExists(for: worktree.id)
+    else { return nil }
+    let surfaceID = state.tabManager.selectedTabId.flatMap(state.activeSurfaceID(for:))
+    return state.agentAccount(forSurface: surfaceID)
   }
 
   /// The selected pane's detected agent, feeding the Agents capsule. nil
@@ -830,6 +842,7 @@ struct WorktreeDetailView: View {
   struct WorktreeToolbarState {
     let title: DetailToolbarTitle
     let agentsCapsule: AgentsCapsuleState?
+    let agentAccount: String?
     let statusToast: RepositoriesFeature.StatusToast?
     let pullRequest: GithubPullRequest?
     let codeHost: CodeHost
@@ -864,6 +877,7 @@ struct WorktreeDetailView: View {
     let onRunCustomCommand: (EffectiveCustomCommand.Identifier) -> Void
     let onActivateUpdateButton: () -> Void
     let onHandOff: () -> Void
+    let onOpenAgentAccountSettings: () -> Void
     @Environment(\.resolvedKeybindings) private var resolvedKeybindings
 
     var body: some ToolbarContent {
@@ -877,6 +891,15 @@ struct WorktreeDetailView: View {
           capsule: toolbarState.agentsCapsule,
           onHandOff: onHandOff
         )
+      }
+      .sharedBackgroundVisibility(.hidden)
+
+      // Unconditional: the toolbar drops an item created inside an `if` once it
+      // opts out of the shared background.
+      ToolbarItem(placement: .navigation) {
+        if let account = toolbarState.agentAccount {
+          AgentAccountToolbarLabel(account: account, onOpenSettings: onOpenAgentAccountSettings)
+        }
       }
       .sharedBackgroundVisibility(.hidden)
 

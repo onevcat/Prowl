@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// One directory-to-account mapping, with its own validation message so an
-/// unusable account name is reported next to the field that holds it.
 struct AgentAccountRuleRow: View {
   @Binding var rule: AgentAccountRule
   let onRemove: () -> Void
@@ -22,6 +20,8 @@ struct AgentAccountRuleRow: View {
         .help("Remove this rule")
         .accessibilityLabel("Remove rule")
       }
+      // A `Form` renders each `TextField`'s title as a label, which made the
+      // prompt read as a filled-in value.
       .labelsHidden()
       AgentAccountNameWarning(name: rule.account)
     }

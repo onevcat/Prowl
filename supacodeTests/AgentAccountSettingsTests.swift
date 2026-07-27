@@ -63,7 +63,6 @@ struct AgentAccountSettingsTests {
     #expect(added.account.isEmpty)
     expectNoDifference(settingsFile.global.agentAccountRules, [existing, added])
 
-    // Removal is keyed by identity, so the surviving row is unambiguous.
     await store.send(.removeAgentAccountRuleButtonTapped(id: existing.id))
     expectNoDifference(settingsFile.global.agentAccountRules, [added])
 

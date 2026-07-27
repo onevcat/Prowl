@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Explains why a typed account name has no effect. The name itself is kept as
-/// typed, so the warning is the only signal the user gets that it is unusable.
+/// Why a typed account name has no effect. The name is kept as typed, so this is
+/// the only signal that it is unusable.
 struct AgentAccountNameWarning: View {
   let name: String
 

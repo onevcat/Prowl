@@ -80,9 +80,10 @@
 - **Not run:** `make build-app`, `make test`, `swiftlint` — all require Xcode /
   mise, neither installed on the authoring machine. The app target has not been
   compiled.
-- **Known unrelated breakage:** `supacodeTests/GhosttyRuntimeScrollbackOverrideTests.swift`
-  (pre-existing, untracked) references `GhosttyRuntime.scrollbackOverrideContents`,
+- **Unrelated file parked, not deleted:** `supacodeTests/GhosttyRuntimeScrollbackOverrideTests.swift`
+  (pre-existing, untracked) referenced `GhosttyRuntime.scrollbackOverrideContents`,
   which does not exist in the target. Because `supacodeTests` is a synchronized
-  root group, that file alone fails the test-target build. It was briefly moved
-  aside during this work and has been put back: it is not this branch's file, and
-  whether to delete it or land the missing implementation is onevcat's call.
+  root group, that one file failed the whole test target. It now lives on the
+  `wip/ghostty-scrollback-override-test` branch (commit `36e04930`, byte-identical)
+  so the work survives, and no longer blocks test runs here. It still needs either
+  the missing implementation or deletion — a decision for its own branch.

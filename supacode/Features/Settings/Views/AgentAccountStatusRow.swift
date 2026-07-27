@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// Which login each CLI currently holds for one account, with the only action
-/// Prowl can offer: open a pane where the user signs that account in or out.
 struct AgentAccountStatusRow: View {
   let account: String
   let status: AgentAccountStatus?

@@ -59,12 +59,30 @@ the repository you are standing in resolves to a different one. Only panes
 launched *after* an account change pick it up; running shells keep the one they
 started with.
 
-Because each account is a full config directory, it also has its own settings,
-history, plugins and MCP servers — not just credentials.
+`CLAUDE_CONFIG_DIR` and `CODEX_HOME` relocate the **whole** configuration, not
+just the credentials, so an untouched account would start as an empty profile.
+Prowl therefore links the parts that belong to you rather than to a login into
+each account the first time it prepares it:
+
+| CLI | Linked from your own config | Stays per-account |
+|-----|------------------------------|-------------------|
+| Claude Code | `settings.json`, `CLAUDE.md`, `agents/`, `commands/`, `skills/`, `plugins/` | the login, `.claude.json`, `projects/`, history |
+| Codex | `config.toml`, `AGENTS.md`, `skills/`, `plugins/` | `auth.json`, history, logs |
+
+Anything the account already owns is never replaced, so a per-account override
+keeps working. Because these are symlinks, editing them from an account pane
+edits your real configuration — that is the point — but a tool that rewrites a
+file wholesale replaces the link with a copy, and that account then diverges.
 
 A name containing `/` (or `.` / `..`) cannot be a directory, so Prowl ignores it
 and says so under the field; the text you typed is still saved rather than
 silently dropped.
+
+The account a pane actually runs under is named by a capsule left of the branch
+title in the worktree toolbar, shown only when an account is in effect. It
+reports the account that pane **launched with**, so a pane opened before you
+changed the rules keeps showing its own account until you open a new one.
+Clicking the capsule opens these settings.
 
 ## Install the CLI from here
 

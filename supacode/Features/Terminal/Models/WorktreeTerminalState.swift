@@ -73,6 +73,10 @@ final class WorktreeTerminalState {
   var surfaces: [UUID: GhosttySurfaceView] = [:]
   var focusedSurfaceIdByTab: [TerminalTabID: UUID] = [:]
   var surfaceAgentStates: [UUID: PaneAgentState] = [:]
+  /// Agent account each surface launched with; a running pane keeps it for life.
+  /// The value is optional on purpose: a pane on the system-wide logins records
+  /// `nil`, which must stay distinguishable from "no pane recorded".
+  var agentAccountBySurface: [UUID: String?] = [:]
   var agentDetectionSchedules: [UUID: AgentDetectionSchedule] = [:]
   var agentDetectionTasks: [UUID: Task<Void, Never>] = [:]
   var agentDetectionPresenceBySurface: [UUID: AgentDetectionPresence] = [:]
@@ -211,7 +215,7 @@ final class WorktreeTerminalState {
   var repositoryRootURL: URL { worktree.repositoryRootURL }
 
   /// Account whose Claude Code and Codex logins new panes should use.
-  private var resolvedAgentAccount: String? {
+  var resolvedAgentAccount: String? {
     AgentAccount.resolvedName(
       repositoryRootURL: worktree.repositoryRootURL,
       repositoryOverride: repositorySettings.agentAccount,
@@ -220,24 +224,29 @@ final class WorktreeTerminalState {
     )
   }
 
-  /// Environment for a surface about to launch: the worktree paths plus the
-  /// resolved agent account. A function rather than a property because the
-  /// account directories have to exist before the shell starts — `codex` refuses
-  /// to run otherwise — so building the environment and preparing it cannot be
-  /// separated. Panes already running keep the account they launched with.
-  func makeSurfaceEnvironment() -> [String: String] {
+  /// Falls back to the current resolution only when nothing is recorded, which
+  /// is what the next pane will launch with.
+  func agentAccount(forSurface surfaceID: UUID?) -> String? {
+    guard let surfaceID, let recorded = agentAccountBySurface[surfaceID] else {
+      return resolvedAgentAccount
+    }
+    return recorded
+  }
+
+  /// A function rather than a property because it also creates the account
+  /// directories, which have to exist before the shell starts.
+  func makeSurfaceLaunch() -> (account: String?, environment: [String: String]) {
     let account = resolvedAgentAccount
     do {
       try AgentAccount.prepareDirectories(forAccountNamed: account)
     } catch {
-      // The pane still launches: claude falls back to its own defaults, and the
-      // codex startup error is the user-visible signal that this failed.
       terminalStateLogger.warning(
         "Unable to prepare agent account directories for \(account ?? ""): \(error.localizedDescription)"
       )
     }
-    return worktree.scriptEnvironment
+    let environment = worktree.scriptEnvironment
       .merging(AgentAccount.environment(forAccountNamed: account)) { _, accountValue in accountValue }
+    return (account, environment)
   }
 
   func registerTargetHandle(for tabID: TerminalTabID) -> Int {
