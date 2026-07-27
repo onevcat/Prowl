@@ -338,8 +338,7 @@ struct SettingsFeature {
         return persist(state)
 
       case .refreshAgentAccountStatuses:
-        @Shared(.settingsFile) var settingsFile
-        state.repositoryAgentAccounts = settingsFile.repositories.values.compactMap(\.agentAccount).sorted()
+        state.repositoryAgentAccounts = Self.repositoryAgentAccounts()
         let accounts = state.agentAccountNames
         guard !accounts.isEmpty else {
           state.agentAccountStatuses = [:]
@@ -528,6 +527,22 @@ struct SettingsFeature {
     .ifLet(\.globalCustomCommands, action: \.globalCustomCommands) {
       GlobalCustomCommandsFeature()
     }
+  }
+
+  /// Accounts pinned by repositories. Settings for a repository may live in its
+  /// own `prowl.json` rather than in the global file, so each known repository is
+  /// asked through the shared key that knows both locations.
+  private static func repositoryAgentAccounts() -> [String] {
+    @Shared(.settingsFile) var settingsFile
+    @Shared(.repositoryEntries) var repositoryEntries
+    var accounts = Set(settingsFile.repositories.values.compactMap(\.agentAccount))
+    for entry in repositoryEntries {
+      @SharedReader(.repositorySettings(URL(fileURLWithPath: entry.path))) var settings
+      if let account = settings.agentAccount {
+        accounts.insert(account)
+      }
+    }
+    return accounts.sorted()
   }
 
   private func persist(

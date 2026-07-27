@@ -66,6 +66,18 @@ struct AgentAccountTests {
     #expect(account == "first")
   }
 
+  /// A rule at the filesystem root is a legitimate catch-all; `"/" + "/"` prefixes
+  /// nothing, so it used to match only the root directory itself.
+  @Test func aRootRuleMatchesEveryRepository() {
+    let account = AgentAccount.resolvedName(
+      repositoryRootURL: URL(fileURLWithPath: "/Users/dev/anywhere/app"),
+      repositoryOverride: nil,
+      globalDefault: nil,
+      rules: [AgentAccountRule(pathPrefix: "/", account: "catch-all")]
+    )
+    #expect(account == "catch-all")
+  }
+
   @Test func ruleMatchesOnPathBoundaryOnly() {
     let account = AgentAccount.resolvedName(
       repositoryRootURL: URL(fileURLWithPath: "/Users/dev/workshop/app"),

@@ -148,12 +148,19 @@ nonisolated enum AgentAccount {
       // would otherwise hide a shorter rule that does work.
       guard let account = normalizedName(rule.account) else { continue }
       let prefix = standardizedPath(NSString(string: rule.pathPrefix).expandingTildeInPath)
-      guard !prefix.isEmpty, path == prefix || path.hasPrefix(prefix + "/") else { continue }
+      guard !prefix.isEmpty, isDescendant(path, of: prefix) else { continue }
       guard prefix.count > bestPrefixLength else { continue }
       bestPrefixLength = prefix.count
       bestAccount = account
     }
     return bestAccount
+  }
+
+  /// Root is its own case: `"/" + "/"` prefixes nothing, so a rule meant as a
+  /// catch-all would otherwise match only the root directory itself.
+  private static func isDescendant(_ path: String, of prefix: String) -> Bool {
+    if prefix == "/" { return path.hasPrefix("/") }
+    return path == prefix || path.hasPrefix(prefix + "/")
   }
 
   /// `URL(fileURLWithPath:)` appends a trailing slash for directories that exist,

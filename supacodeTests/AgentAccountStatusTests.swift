@@ -127,6 +127,15 @@ struct AgentAccountStatusTests {
     repositorySettings.agentAccount = "client"
     @Shared(.settingsFile) var settingsFile
     $settingsFile.withLock { $0.repositories = ["/tmp/repo": repositorySettings] }
+    // A repository whose settings live in its own prowl.json never reaches
+    // settingsFile.repositories, so discovery has to ask the shared key too.
+    let localRootURL = URL(fileURLWithPath: "/tmp/repo-local-\(UUID().uuidString)")
+    @Shared(.repositoryEntries) var repositoryEntries
+    $repositoryEntries.withLock {
+      $0 = [PersistedRepositoryEntry(path: localRootURL.path(percentEncoded: false), kind: .git)]
+    }
+    @Shared(.repositorySettings(localRootURL)) var localSettings
+    $localSettings.withLock { $0.agentAccount = "local-only" }
 
     let store = TestStore(initialState: SettingsFeature.State(settings: .default)) {
       SettingsFeature()
@@ -140,7 +149,7 @@ struct AgentAccountStatusTests {
     #expect(store.state.agentAccountNames.isEmpty)
 
     await store.send(.refreshAgentAccountStatuses)
-    #expect(store.state.agentAccountNames == ["client"])
+    #expect(store.state.agentAccountNames == ["client", "local-only"])
     await store.receive(\.agentAccountStatusesLoaded)
     #expect(store.state.agentAccountStatuses["client"] != nil)
   }
