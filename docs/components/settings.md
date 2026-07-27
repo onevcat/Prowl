@@ -72,7 +72,10 @@ each account the first time it prepares it:
 Anything the account already owns is never replaced, so a per-account override
 keeps working. Because these are symlinks, editing them from an account pane
 edits your real configuration — that is the point — but a tool that rewrites a
-file wholesale replaces the link with a copy, and that account then diverges.
+file wholesale replaces the link with a copy. When that happens the account's row
+in Advanced says which entries it now keeps its own copy of, so the divergence is
+visible instead of silent; delete that file in the account to follow your
+configuration again.
 
 A name containing `/` (or `.` / `..`) cannot be a directory, so Prowl ignores it
 and says so under the field; the text you typed is still saved rather than

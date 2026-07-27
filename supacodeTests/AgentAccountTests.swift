@@ -164,6 +164,30 @@ struct AgentAccountTests {
     #expect(!FileManager.default.fileExists(atPath: account.appending(path: "commands").path(percentEncoded: false)))
   }
 
+  /// A link a tool replaced with a copy looks identical from the outside, so the
+  /// account silently stops following the user's configuration.
+  @Test func anAccountKeepingItsOwnCopyOfSharedConfigIsReported() throws {
+    let root = URL(fileURLWithPath: NSTemporaryDirectory())
+      .appending(path: "prowl-diverged-\(UUID().uuidString)", directoryHint: .isDirectory)
+    let source = root.appending(path: "source", directoryHint: .isDirectory)
+    let account = root.appending(path: "account", directoryHint: .isDirectory)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: account, withIntermediateDirectories: true)
+    try "shared".write(to: source.appending(path: "settings.json"), atomically: true, encoding: .utf8)
+    try "shared".write(to: source.appending(path: "CLAUDE.md"), atomically: true, encoding: .utf8)
+    try "own".write(to: account.appending(path: "settings.json"), atomically: true, encoding: .utf8)
+    AgentAccount.linkSharedConfig(into: account, from: source, entries: ["settings.json", "CLAUDE.md"])
+
+    let diverged = AgentAccount.divergedEntries(
+      in: account,
+      from: source,
+      entries: ["settings.json", "CLAUDE.md"]
+    )
+
+    #expect(diverged == ["settings.json"])
+  }
+
   @Test func environmentIsEmptyForTheSystemAccount() {
     #expect(AgentAccount.environment(forAccountNamed: nil).isEmpty)
     #expect(AgentAccount.environment(forAccountNamed: "").isEmpty)

@@ -84,6 +84,33 @@ nonisolated enum AgentAccount {
     }
   }
 
+  /// Shared entries the account holds as its own file instead of a link, so it no
+  /// longer follows the user's configuration. Prowl never converts these back: it
+  /// cannot tell a deliberate per-account override from a link a tool replaced
+  /// when it rewrote the file.
+  static func divergedSharedEntries(
+    forAccountNamed name: String?,
+    accountsDirectory: URL = SupacodePaths.agentAccountsDirectory
+  ) -> [String] {
+    guard let directories = directories(forAccountNamed: name, accountsDirectory: accountsDirectory) else {
+      return []
+    }
+    let claude = divergedEntries(in: directories.claude, from: systemClaudeDirectory, entries: sharedClaudeEntries)
+    let codex = divergedEntries(in: directories.codex, from: systemCodexDirectory, entries: sharedCodexEntries)
+    return claude.map { "claude/\($0)" } + codex.map { "codex/\($0)" }
+  }
+
+  static func divergedEntries(in accountDirectory: URL, from source: URL, entries: [String]) -> [String] {
+    let fileManager = FileManager.default
+    return entries.filter { name in
+      let destination = accountDirectory.appending(path: name).path(percentEncoded: false)
+      guard fileManager.fileExists(atPath: source.appending(path: name).path(percentEncoded: false)),
+        fileManager.fileExists(atPath: destination)
+      else { return false }
+      return (try? fileManager.destinationOfSymbolicLink(atPath: destination)) == nil
+    }
+  }
+
   /// The configuration a pane would use with no account selected. An ambient
   /// `CLAUDE_CONFIG_DIR` wins, matching what the CLI itself would read.
   static var systemClaudeDirectory: URL {

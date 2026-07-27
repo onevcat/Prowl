@@ -64,5 +64,7 @@ Writing to a shared file from an account pane edits the real file — that is th
 intent. But a tool that saves by writing a temp file and renaming it over the
 target replaces the *symlink* with a regular copy, after which that account
 silently stops following the user's config. Prowl cannot distinguish that from a
-deliberate per-account override, so it will not re-link. Surfacing "linked / own
-copy" per account in Settings is the obvious follow-up if this bites.
+deliberate per-account override, so it will not re-link. It does report it: the
+account's row in Advanced lists the entries it keeps its own copy of
+(`AgentAccount.divergedSharedEntries`), which turns a silent drift into something
+the user can see and undo by deleting that file.

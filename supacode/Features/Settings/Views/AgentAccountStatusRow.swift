@@ -11,6 +11,15 @@ struct AgentAccountStatusRow: View {
         .font(.body.weight(.medium))
       cliRow(.claude, state: status?.claude)
       cliRow(.codex, state: status?.codex)
+      if let diverged = status?.divergedConfig, !diverged.isEmpty {
+        Label(
+          "Own copy of \(diverged.joined(separator: ", ")) — changes to your configuration "
+            + "no longer reach this account.",
+          systemImage: "exclamationmark.triangle"
+        )
+        .foregroundStyle(.secondary)
+        .font(.callout)
+      }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
   }

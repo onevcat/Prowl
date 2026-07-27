@@ -13,6 +13,8 @@ nonisolated struct AgentAccountStatus: Equatable, Sendable {
 
   var claude: LoginState = .signedOut
   var codex: LoginState = .signedOut
+  /// Shared config entries this account keeps its own copy of.
+  var divergedConfig: [String] = []
 }
 
 nonisolated struct AgentAccountStatusClient: Sendable {
@@ -142,6 +144,10 @@ nonisolated extension AgentAccountStatusClient {
           arguments: ["codex", "login", "status"],
           variable: "CODEX_HOME",
           parse: AgentAccountStatus.codexState(fromOutput:)
+        ),
+        divergedConfig: AgentAccount.divergedSharedEntries(
+          forAccountNamed: account,
+          accountsDirectory: accountsDirectory
         )
       )
     }
