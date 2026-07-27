@@ -30,9 +30,8 @@ struct AgentAccountTests {
     #expect(account == "client")
   }
 
-  /// Regression: `URL(fileURLWithPath:)` appends a trailing slash for directories
-  /// that exist, which silently stopped every rule from matching a real
-  /// repository while tests using imaginary paths stayed green.
+  /// Regression: rules matched only paths that do not exist on disk, because
+  /// `URL(fileURLWithPath:)` appends a trailing slash for real directories.
   @Test func ruleMatchesWhenBothPathsExistOnDisk() throws {
     let base = URL(fileURLWithPath: NSTemporaryDirectory())
       .appending(path: "prowl-rules-\(UUID().uuidString)", directoryHint: .isDirectory)
@@ -120,7 +119,7 @@ struct AgentAccountTests {
 
     #expect(environment["CLAUDE_CONFIG_DIR"] == root.appending(path: "work/claude").path(percentEncoded: false))
     #expect(environment["CODEX_HOME"] == root.appending(path: "work/codex").path(percentEncoded: false))
-    // Building the environment must stay pure: only `prepareDirectories` touches disk.
+    // Building the environment must stay pure.
     #expect(!FileManager.default.fileExists(atPath: root.path(percentEncoded: false)))
   }
 
@@ -135,6 +134,34 @@ struct AgentAccountTests {
     for path in AgentAccount.environment(forAccountNamed: "work", accountsDirectory: root).values {
       #expect(FileManager.default.fileExists(atPath: path))
     }
+  }
+
+  /// Relocating `CLAUDE_CONFIG_DIR` moves the whole configuration, so without
+  /// these links an account is an empty profile: no permissions, hooks or agents.
+  @Test func sharedConfigIsLinkedIntoAnAccountWithoutTouchingWhatItOwns() throws {
+    let root = URL(fileURLWithPath: NSTemporaryDirectory())
+      .appending(path: "prowl-shared-\(UUID().uuidString)", directoryHint: .isDirectory)
+    let source = root.appending(path: "source", directoryHint: .isDirectory)
+    let account = root.appending(path: "account", directoryHint: .isDirectory)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: source.appending(path: "agents"), withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: account, withIntermediateDirectories: true)
+    try "shared".write(to: source.appending(path: "settings.json"), atomically: true, encoding: .utf8)
+    try "mine".write(to: account.appending(path: "CLAUDE.md"), atomically: true, encoding: .utf8)
+
+    AgentAccount.linkSharedConfig(
+      into: account,
+      from: source,
+      entries: ["settings.json", "agents", "CLAUDE.md", "commands"]
+    )
+
+    let settingsPath = account.appending(path: "settings.json").path(percentEncoded: false)
+    let agentsPath = account.appending(path: "agents").path(percentEncoded: false)
+    #expect(try FileManager.default.destinationOfSymbolicLink(atPath: settingsPath).hasSuffix("settings.json"))
+    #expect(try FileManager.default.destinationOfSymbolicLink(atPath: agentsPath).hasSuffix("agents"))
+    // A file the account already owns stays its own, and a missing source is skipped.
+    #expect(try String(contentsOf: account.appending(path: "CLAUDE.md"), encoding: .utf8) == "mine")
+    #expect(!FileManager.default.fileExists(atPath: account.appending(path: "commands").path(percentEncoded: false)))
   }
 
   @Test func environmentIsEmptyForTheSystemAccount() {

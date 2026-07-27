@@ -1,12 +1,10 @@
 import Foundation
 
 /// A named agent identity: one directory holding a Claude Code login and a Codex
-/// login. Selecting an account only swaps `CLAUDE_CONFIG_DIR` and `CODEX_HOME`
-/// for panes launched afterwards, so different accounts can run side by side.
+/// login, selected per pane through `CLAUDE_CONFIG_DIR` and `CODEX_HOME`.
 nonisolated enum AgentAccount {
-  /// What gets persisted: whitespace trimmed, empty means "not set". Names that
-  /// could not work as a directory are kept as typed so the user's input is
-  /// never silently discarded — `normalizedName` rejects them at the point of use.
+  /// What gets persisted. Unusable names are kept as typed rather than dropped;
+  /// `normalizedName` rejects them at the point of use.
   static func storedName(_ name: String?) -> String? {
     guard let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else {
       return nil
@@ -14,17 +12,15 @@ nonisolated enum AgentAccount {
     return trimmed
   }
 
-  /// What can actually be used: account names become directory names, so
-  /// anything that could escape the accounts directory is rejected.
+  /// What can be used: the name becomes a directory name, so anything that could
+  /// escape the accounts directory is rejected.
   static func normalizedName(_ name: String?) -> String? {
     guard let trimmed = storedName(name) else { return nil }
     guard !trimmed.contains("/"), trimmed != ".", trimmed != ".." else { return nil }
     return trimmed
   }
 
-  /// Resolution order: the repository override wins, then the longest matching
-  /// path rule, then the global default. `nil` means the system-wide
-  /// `~/.claude` and `~/.codex` accounts.
+  /// `nil` means the system-wide `~/.claude` and `~/.codex` logins.
   static func resolvedName(
     repositoryRootURL: URL,
     repositoryOverride: String?,
@@ -49,6 +45,13 @@ nonisolated enum AgentAccount {
     ]
   }
 
+  /// Config that belongs to the user rather than to a login. Without these links
+  /// an account starts as an empty profile — no permissions, hooks, agents or
+  /// plugins — because `CLAUDE_CONFIG_DIR` and `CODEX_HOME` relocate the whole
+  /// configuration, not just the credentials.
+  static let sharedClaudeEntries = ["settings.json", "CLAUDE.md", "agents", "commands", "skills", "plugins"]
+  static let sharedCodexEntries = ["config.toml", "AGENTS.md", "skills", "plugins"]
+
   /// `codex` refuses to start when `CODEX_HOME` points at a missing directory,
   /// so the account directories must exist before a pane launches its shell.
   static func prepareDirectories(
@@ -61,6 +64,41 @@ nonisolated enum AgentAccount {
     for url in [directories.claude, directories.codex] {
       try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
     }
+    linkSharedConfig(into: directories.claude, from: systemClaudeDirectory, entries: sharedClaudeEntries)
+    linkSharedConfig(into: directories.codex, from: systemCodexDirectory, entries: sharedCodexEntries)
+  }
+
+  /// Links each entry that exists in the user's own configuration and is not
+  /// already present in the account. Anything the account owns is left alone, so
+  /// a per-account override is never overwritten.
+  static func linkSharedConfig(into accountDirectory: URL, from source: URL, entries: [String]) {
+    let fileManager = FileManager.default
+    for name in entries {
+      let origin = source.appending(path: name)
+      let destination = accountDirectory.appending(path: name)
+      guard fileManager.fileExists(atPath: origin.path(percentEncoded: false)),
+        (try? destination.checkResourceIsReachable()) != true,
+        (try? fileManager.destinationOfSymbolicLink(atPath: destination.path(percentEncoded: false))) == nil
+      else { continue }
+      try? fileManager.createSymbolicLink(at: destination, withDestinationURL: origin)
+    }
+  }
+
+  /// The configuration a pane would use with no account selected. An ambient
+  /// `CLAUDE_CONFIG_DIR` wins, matching what the CLI itself would read.
+  static var systemClaudeDirectory: URL {
+    systemDirectory(environmentKey: "CLAUDE_CONFIG_DIR", fallback: ".claude")
+  }
+
+  static var systemCodexDirectory: URL {
+    systemDirectory(environmentKey: "CODEX_HOME", fallback: ".codex")
+  }
+
+  private static func systemDirectory(environmentKey: String, fallback: String) -> URL {
+    if let value = ProcessInfo.processInfo.environment[environmentKey], !value.isEmpty {
+      return URL(fileURLWithPath: NSString(string: value).expandingTildeInPath)
+    }
+    return FileManager.default.homeDirectoryForCurrentUser.appending(path: fallback)
   }
 
   private static func directories(
@@ -68,14 +106,12 @@ nonisolated enum AgentAccount {
     accountsDirectory: URL
   ) -> (claude: URL, codex: URL)? {
     guard let name = normalizedName(name) else { return nil }
-    // No `directoryHint: .isDirectory`: it would leave a trailing slash in the
-    // exported paths.
+    // `directoryHint: .isDirectory` would leave a trailing slash in the exports.
     let base = accountsDirectory.appending(path: name)
     return (base.appending(path: "claude"), base.appending(path: "codex"))
   }
 
-  /// The most specific matching rule wins; rules of equal length resolve to the
-  /// first one in the list.
+  /// Longest matching prefix wins; equal lengths keep the first rule.
   private static func matchingRuleAccount(repositoryRootURL: URL, rules: [AgentAccountRule]) -> String? {
     let path = standardizedPath(repositoryRootURL.path(percentEncoded: false))
     var bestPrefixLength = -1
@@ -90,9 +126,8 @@ nonisolated enum AgentAccount {
     return normalizedName(bestAccount)
   }
 
-  /// `URL(fileURLWithPath:)` appends a trailing slash for paths that exist on
-  /// disk as directories, so both sides of a prefix comparison have to be
-  /// stripped of it — otherwise a rule only ever matches paths that do not exist.
+  /// `URL(fileURLWithPath:)` appends a trailing slash for directories that exist,
+  /// so both sides must be stripped or a rule only matches paths that do not.
   private static func standardizedPath(_ path: String) -> String {
     guard !path.isEmpty else { return "" }
     var value = URL(fileURLWithPath: path).standardizedFileURL.path(percentEncoded: false)
@@ -103,8 +138,6 @@ nonisolated enum AgentAccount {
   }
 }
 
-/// Maps a repository location to an account, so repositories under a work
-/// directory pick up the work account without per-repository setup.
 nonisolated struct AgentAccountRule: Codable, Equatable, Hashable, Sendable, Identifiable {
   var id: String
   var pathPrefix: String
