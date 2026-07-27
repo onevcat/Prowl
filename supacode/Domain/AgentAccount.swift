@@ -144,13 +144,16 @@ nonisolated enum AgentAccount {
     var bestPrefixLength = -1
     var bestAccount: String?
     for rule in rules {
+      // Validated before it can win: an unusable name in the most specific rule
+      // would otherwise hide a shorter rule that does work.
+      guard let account = normalizedName(rule.account) else { continue }
       let prefix = standardizedPath(NSString(string: rule.pathPrefix).expandingTildeInPath)
       guard !prefix.isEmpty, path == prefix || path.hasPrefix(prefix + "/") else { continue }
       guard prefix.count > bestPrefixLength else { continue }
       bestPrefixLength = prefix.count
-      bestAccount = rule.account
+      bestAccount = account
     }
-    return normalizedName(bestAccount)
+    return bestAccount
   }
 
   /// `URL(fileURLWithPath:)` appends a trailing slash for directories that exist,

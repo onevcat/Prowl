@@ -3,6 +3,7 @@ import SwiftUI
 struct AgentAccountStatusRow: View {
   let account: String
   let status: AgentAccountStatus?
+  let isChecking: Bool
   let authenticate: (AgentAccountCLI, AgentAccountAuthAction) -> Void
 
   var body: some View {
@@ -57,7 +58,7 @@ struct AgentAccountStatusRow: View {
     case .signedIn(let identity): identity
     case .signedOut: "Not signed in"
     case .unavailable: "Command line tool not found"
-    case nil: "Checking…"
+    case nil: isChecking ? "Checking…" : "Not checked"
     }
   }
 }

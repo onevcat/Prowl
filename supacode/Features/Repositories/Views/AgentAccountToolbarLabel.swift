@@ -1,9 +1,7 @@
 import SwiftUI
 
 /// Names the agent account the selected pane runs under; tapping opens its
-/// settings. Leaves the navigation group's shared background at the call site so
-/// it does not merge into the branch title's pill, the same escape
-/// `AgentsToolbarButton` uses.
+/// settings.
 struct AgentAccountToolbarLabel: View {
   let account: String
   let onOpenSettings: () -> Void
@@ -18,18 +16,9 @@ struct AgentAccountToolbarLabel: View {
           .frame(width: 20, height: 20)
         Text(account)
       }
-      .font(.title3.weight(.medium))
-      .padding(.horizontal, 10)
-      .padding(.vertical, 8)
-      .contentShape(Capsule())
+      .toolbarCapsuleLabel()
     }
-    .buttonStyle(.plain)
-    // Hover feedback must live in the material: a fill under `glassEffect` is
-    // swallowed by the compositing.
-    .glassEffect(
-      isHovered ? .regular.tint(.primary.opacity(0.12)).interactive() : .regular.interactive(),
-      in: Capsule()
-    )
+    .toolbarGlassCapsule(isHighlighted: isHovered)
     .onHover { isHovered = $0 }
     .help("Claude Code and Codex in this pane use the \(account) agent account. Open Agent Accounts settings.")
     .accessibilityLabel("Agent account \(account)")

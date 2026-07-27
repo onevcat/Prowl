@@ -182,8 +182,6 @@ struct SettingsFeature {
       settings.externalDiffToolID = externalDiffToolID
       settings.externalDiffCustomCommand = externalDiffCustomCommand
       settings.detectRepositoryIconsAutomatically = detectRepositoryIconsAutomatically
-      // Kept exactly as typed: a rule that cannot be used is inert at resolution
-      // time, whereas dropping it here would delete the user's input mid-edit.
       // Kept as typed: dropping unusable input here would delete it mid-edit.
       settings.defaultAgentAccount = AgentAccount.storedName(defaultAgentAccount)
       settings.agentAccountRules = agentAccountRules

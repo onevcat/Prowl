@@ -37,21 +37,7 @@ struct AgentsToolbarButton: View {
         .padding(.vertical, 8)
         .contentShape(Capsule())
     }
-    // The item opts out of the navigation group's shared background
-    // (`sharedBackgroundVisibility(.hidden)`) to stay separate from the
-    // branch title, and draws its own glass capsule. `.plain` + an explicit
-    // glass background keeps the horizontal padding as tight as the other
-    // toolbar buttons; `.buttonStyle(.glass)` pads noticeably wider.
-    .buttonStyle(.plain)
-    // Hover feedback must live in the glass material itself: a translucent
-    // fill layered under `glassEffect` gets swallowed by the material
-    // compositing, and `.interactive()` only adds press feedback on macOS.
-    .glassEffect(
-      isHovered && capsule != nil
-        ? .regular.tint(.primary.opacity(0.12)).interactive()
-        : .regular.interactive(),
-      in: Capsule()
-    )
+    .toolbarGlassCapsule(isHighlighted: isHovered && capsule != nil)
     .opacity(capsule == nil ? 0.45 : 1)
     .disabled(capsule == nil)
     .onHover { isHovered = $0 }

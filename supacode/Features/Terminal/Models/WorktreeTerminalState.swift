@@ -79,7 +79,7 @@ final class WorktreeTerminalState {
   /// Agent account each surface launched with; a running pane keeps it for life.
   /// The value is optional on purpose: a pane on the system-wide logins records
   /// `nil`, which must stay distinguishable from "no pane recorded".
-  var agentAccountBySurface: [UUID: String?] = [:]
+  private(set) var agentAccountBySurface: [UUID: String?] = [:]
   var agentDetectionSchedules: [UUID: AgentDetectionSchedule] = [:]
   var agentDetectionTasks: [UUID: Task<Void, Never>] = [:]
   var agentDetectionPresenceBySurface: [UUID: AgentDetectionPresence] = [:]
@@ -229,6 +229,20 @@ final class WorktreeTerminalState {
 
   /// Falls back to the current resolution only when nothing is recorded, which
   /// is what the next pane will launch with.
+  /// `updateValue` rather than the subscript: assigning `nil` through the
+  /// subscript removes the key instead of recording "system account".
+  func recordAgentAccount(_ account: String?, forSurface surfaceID: UUID) {
+    agentAccountBySurface.updateValue(account, forKey: surfaceID)
+  }
+
+  func forgetAgentAccount(forSurface surfaceID: UUID) {
+    agentAccountBySurface.removeValue(forKey: surfaceID)
+  }
+
+  func forgetAllAgentAccounts() {
+    agentAccountBySurface.removeAll()
+  }
+
   func agentAccount(forSurface surfaceID: UUID?) -> String? {
     guard let surfaceID, let recorded = agentAccountBySurface[surfaceID] else {
       return resolvedAgentAccount

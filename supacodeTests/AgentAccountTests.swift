@@ -100,6 +100,21 @@ struct AgentAccountTests {
     #expect(AgentAccount.storedName(nil) == nil)
   }
 
+  /// A typo in the most specific rule must not hide a shorter rule that works —
+  /// the repository would silently land on the default account instead.
+  @Test func anUnusableRuleDoesNotShadowAShorterUsableOne() {
+    let account = AgentAccount.resolvedName(
+      repositoryRootURL: URL(fileURLWithPath: "/Users/dev/work/client/app"),
+      repositoryOverride: nil,
+      globalDefault: "fallback",
+      rules: [
+        AgentAccountRule(pathPrefix: "/Users/dev/work", account: "work"),
+        AgentAccountRule(pathPrefix: "/Users/dev/work/client", account: "client/typo"),
+      ]
+    )
+    #expect(account == "work")
+  }
+
   @Test func unusableRuleAccountIsIgnoredWithoutFallingBackToAnotherRule() {
     let account = AgentAccount.resolvedName(
       repositoryRootURL: URL(fileURLWithPath: "/Users/dev/work/app"),

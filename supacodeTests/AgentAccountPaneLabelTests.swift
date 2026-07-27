@@ -14,7 +14,7 @@ struct AgentAccountPaneLabelTests {
   @Test(.dependencies) func paneKeepsItsAccountAfterTheSettingsChange() {
     let state = makeState(defaultAccount: "work")
     let surfaceID = UUID()
-    state.agentAccountBySurface.updateValue("personal", forKey: surfaceID)
+    state.recordAgentAccount("personal", forSurface: surfaceID)
 
     #expect(state.resolvedAgentAccount == "work")
     #expect(state.agentAccount(forSurface: surfaceID) == "personal")
@@ -25,7 +25,7 @@ struct AgentAccountPaneLabelTests {
   @Test(.dependencies) func paneLaunchedWithoutAnAccountIsNotRelabelled() {
     let state = makeState(defaultAccount: "work")
     let surfaceID = UUID()
-    state.agentAccountBySurface.updateValue(nil, forKey: surfaceID)
+    state.recordAgentAccount(nil, forSurface: surfaceID)
 
     #expect(state.agentAccount(forSurface: surfaceID) == nil)
   }
@@ -40,7 +40,7 @@ struct AgentAccountPaneLabelTests {
   @Test(.dependencies) func closingAPaneStopsReportingItsAccount() {
     let state = makeState(defaultAccount: "work")
     let surfaceID = UUID()
-    state.agentAccountBySurface.updateValue(nil, forKey: surfaceID)
+    state.recordAgentAccount(nil, forSurface: surfaceID)
 
     state.forgetSurface(surfaceID)
 

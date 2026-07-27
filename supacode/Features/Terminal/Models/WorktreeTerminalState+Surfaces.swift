@@ -322,7 +322,7 @@ extension WorktreeTerminalState {
       surface.closeSurface()
     }
     surfaces.removeAll()
-    agentAccountBySurface.removeAll()
+    forgetAllAgentAccounts()
     trees.removeAll()
     focusedSurfaceIdByTab.removeAll()
     cleanupAllAgentDetectionState()
@@ -364,9 +364,7 @@ extension WorktreeTerminalState {
     if resolvedFontSize != nil {
       view.performBindingAction("increase_font_size:0")
     }
-    // `updateValue` rather than the subscript: assigning `nil` through the
-    // subscript would remove the key instead of recording "system account".
-    agentAccountBySurface.updateValue(launch.account, forKey: view.id)
+    recordAgentAccount(launch.account, forSurface: view.id)
     configureBridgeCallbacks(for: view, tabId: tabId)
     configureSurfaceCallbacks(for: view, tabId: tabId)
     surfaces[view.id] = view
@@ -625,7 +623,7 @@ extension WorktreeTerminalState {
   func forgetSurface(_ surfaceID: UUID) {
     unregisterTargetHandle(for: surfaceID)
     surfaces.removeValue(forKey: surfaceID)
-    agentAccountBySurface.removeValue(forKey: surfaceID)
+    forgetAgentAccount(forSurface: surfaceID)
     surfaceRunningStartedAtById.removeValue(forKey: surfaceID)
     autoCloseSurfaceIds.remove(surfaceID)
     pendingCustomCommands.removeValue(forKey: surfaceID)

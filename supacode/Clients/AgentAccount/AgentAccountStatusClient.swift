@@ -48,15 +48,11 @@ nonisolated enum AgentAccountCLI: String, CaseIterable, Equatable, Sendable {
     switch self {
     case .claude:
       let verb = action == .signIn ? "login" : "logout"
-      return environment["CLAUDE_CONFIG_DIR"].map { "CLAUDE_CONFIG_DIR=\(Self.quoted($0)) claude auth \(verb)" }
+      return environment["CLAUDE_CONFIG_DIR"].map { "CLAUDE_CONFIG_DIR=\(shellQuote($0)) claude auth \(verb)" }
     case .codex:
       let verb = action == .signIn ? "login" : "logout"
-      return environment["CODEX_HOME"].map { "CODEX_HOME=\(Self.quoted($0)) codex \(verb)" }
+      return environment["CODEX_HOME"].map { "CODEX_HOME=\(shellQuote($0)) codex \(verb)" }
     }
-  }
-
-  private static func quoted(_ path: String) -> String {
-    "'\(path.replacing("'", with: "'\"'\"'"))'"
   }
 }
 

@@ -98,7 +98,8 @@ struct AdvancedSettingsView: View {
               ForEach(store.agentAccountNames, id: \.self) { account in
                 AgentAccountStatusRow(
                   account: account,
-                  status: store.agentAccountStatuses[account]
+                  status: store.agentAccountStatuses[account],
+                  isChecking: store.isLoadingAgentAccountStatuses
                 ) { cli, action in
                   store.send(.agentAccountAuthButtonTapped(account: account, cli: cli, action: action))
                 }

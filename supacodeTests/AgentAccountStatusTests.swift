@@ -148,7 +148,7 @@ struct AgentAccountStatusTests {
   /// Every refresh spawns two login shells per account, so a second pass must
   /// replace the first instead of racing it to the same state.
   @MainActor
-  @Test(.dependencies) func asecondRefreshCancelsTheFirst() async {
+  @Test(.dependencies) func aSecondRefreshCancelsTheFirst() async {
     var settings = GlobalSettings.default
     settings.defaultAgentAccount = "personal"
     let started = LockIsolated(0)
