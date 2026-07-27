@@ -49,21 +49,32 @@ struct AgentAccountStatusTests {
   }
 
   @Test func authCommandsCarryTheAccountDirectory() throws {
-    let claude = try #require(AgentAccountCLI.claude.command(.signIn, forAccountNamed: "work"))
-    let codex = try #require(AgentAccountCLI.codex.command(.signIn, forAccountNamed: "work"))
+    let root = URL(fileURLWithPath: NSTemporaryDirectory()).appending(path: "accounts")
+    let claude = try #require(
+      AgentAccountCLI.claude.command(.signIn, forAccountNamed: "work", accountsDirectory: root)
+    )
+    let codex = try #require(
+      AgentAccountCLI.codex.command(.signIn, forAccountNamed: "work", accountsDirectory: root)
+    )
     #expect(claude.hasSuffix(" claude auth login"))
     #expect(claude.contains("CLAUDE_CONFIG_DIR='"))
     #expect(claude.contains("/accounts/work/claude'"))
     #expect(codex.hasSuffix(" codex login"))
     #expect(codex.contains("/accounts/work/codex'"))
 
-    let claudeOut = try #require(AgentAccountCLI.claude.command(.signOut, forAccountNamed: "work"))
-    let codexOut = try #require(AgentAccountCLI.codex.command(.signOut, forAccountNamed: "work"))
+    let claudeOut = try #require(
+      AgentAccountCLI.claude.command(.signOut, forAccountNamed: "work", accountsDirectory: root)
+    )
+    let codexOut = try #require(
+      AgentAccountCLI.codex.command(.signOut, forAccountNamed: "work", accountsDirectory: root)
+    )
     #expect(claudeOut.hasSuffix(" claude auth logout"))
     #expect(codexOut.hasSuffix(" codex logout"))
 
     // An unusable name resolves to no account at all, so there is nothing to run.
-    #expect(AgentAccountCLI.claude.command(.signIn, forAccountNamed: "bad/name") == nil)
+    #expect(
+      AgentAccountCLI.claude.command(.signIn, forAccountNamed: "bad/name", accountsDirectory: root) == nil
+    )
   }
 
   /// Regression: `codex login status` answers on stderr, and reading stdout alone

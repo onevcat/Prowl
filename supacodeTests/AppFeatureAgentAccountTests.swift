@@ -9,12 +9,13 @@ import Testing
 
 @MainActor
 struct AppFeatureAgentAccountTests {
-  /// Sign In creates the account's directories for real, so tests use their own
-  /// name and remove it.
-  private let account = "prowl-test-\(UUID().uuidString)"
+  private let account = "work"
+  /// Sign In creates directories for real, so the tests own the location.
+  private let accountsDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
+    .appending(path: "prowl-accounts-\(UUID().uuidString)", directoryHint: .isDirectory)
 
   private func removeAccountDirectory() {
-    try? FileManager.default.removeItem(at: SupacodePaths.agentAccountsDirectory.appending(path: account))
+    try? FileManager.default.removeItem(at: accountsDirectory)
   }
   @Test(.dependencies) func signInOpensAPaneRunningTheAccountsOwnLoginCommand() async throws {
     let worktree = makeWorktree()
@@ -28,6 +29,7 @@ struct AppFeatureAgentAccountTests {
       AppFeature()
     } withDependencies: {
       $0.terminalClient.send = { command in sent.withValue { $0.append(command) } }
+      $0.agentAccountsDirectory = accountsDirectory
     }
 
     await store.send(.settings(.delegate(.agentAccountAuth(account: account, cli: .claude, action: .signIn))))
@@ -42,7 +44,7 @@ struct AppFeatureAgentAccountTests {
     )
     // The pane it lands in may resolve to a different account.
     #expect(command.hasPrefix("CLAUDE_CONFIG_DIR='"))
-    #expect(command.contains("/accounts/\(account)/claude'"))
+    #expect(command.contains("/\(account)/claude'"))
     #expect(command.hasSuffix(" claude auth login"))
   }
 
@@ -58,6 +60,7 @@ struct AppFeatureAgentAccountTests {
       AppFeature()
     } withDependencies: {
       $0.terminalClient.send = { command in sent.withValue { $0.append(command) } }
+      $0.agentAccountsDirectory = accountsDirectory
     }
 
     await store.send(.settings(.delegate(.agentAccountAuth(account: account, cli: .codex, action: .signOut))))
@@ -81,6 +84,7 @@ struct AppFeatureAgentAccountTests {
       AppFeature()
     } withDependencies: {
       $0.terminalClient.send = { command in sent.withValue { $0.append(command) } }
+      $0.agentAccountsDirectory = accountsDirectory
     }
     store.exhaustivity = .off
 

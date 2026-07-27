@@ -37,8 +37,12 @@ nonisolated enum AgentAccountCLI: String, CaseIterable, Equatable, Sendable {
 
   /// Carries the account directory, so the command acts on the chosen account
   /// whatever the pane running it resolves to.
-  func command(_ action: AgentAccountAuthAction, forAccountNamed account: String) -> String? {
-    let environment = AgentAccount.environment(forAccountNamed: account)
+  func command(
+    _ action: AgentAccountAuthAction,
+    forAccountNamed account: String,
+    accountsDirectory: URL
+  ) -> String? {
+    let environment = AgentAccount.environment(forAccountNamed: account, accountsDirectory: accountsDirectory)
     switch self {
     case .claude:
       let verb = action == .signIn ? "login" : "logout"
@@ -92,9 +96,9 @@ nonisolated extension AgentAccountStatusClient {
     stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? stderr : stdout
   }
 
-  static func live(shell: ShellClient) -> Self {
+  static func live(shell: ShellClient, accountsDirectory: URL) -> Self {
     Self { account in
-      let environment = AgentAccount.environment(forAccountNamed: account)
+      let environment = AgentAccount.environment(forAccountNamed: account, accountsDirectory: accountsDirectory)
       guard let claudeDirectory = environment["CLAUDE_CONFIG_DIR"],
         let codexDirectory = environment["CODEX_HOME"]
       else {
@@ -145,7 +149,10 @@ nonisolated extension AgentAccountStatusClient {
 }
 
 extension AgentAccountStatusClient: DependencyKey {
-  nonisolated static let liveValue = AgentAccountStatusClient.live(shell: .live)
+  nonisolated static let liveValue = AgentAccountStatusClient.live(
+    shell: .live,
+    accountsDirectory: SupacodePaths.agentAccountsDirectory
+  )
 
   nonisolated static let testValue = AgentAccountStatusClient { _ in
     reportIssue("AgentAccountStatusClient.status is unimplemented")

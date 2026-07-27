@@ -48,11 +48,15 @@ struct AgentAccountPaneLabelTests {
   }
 
   @Test(.dependencies) func launchEnvironmentCarriesTheAccountOverTheWorktreeVariables() throws {
-    let account = "prowl-test-\(UUID().uuidString)"
-    defer {
-      try? FileManager.default.removeItem(at: SupacodePaths.agentAccountsDirectory.appending(path: account))
+    let account = "work"
+    let accountsDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
+      .appending(path: "prowl-accounts-\(UUID().uuidString)", directoryHint: .isDirectory)
+    defer { try? FileManager.default.removeItem(at: accountsDirectory) }
+    let state = withDependencies {
+      $0.agentAccountsDirectory = accountsDirectory
+    } operation: {
+      makeState(defaultAccount: account)
     }
-    let state = makeState(defaultAccount: account)
 
     let launch = state.makeSurfaceLaunch()
 
@@ -60,8 +64,8 @@ struct AgentAccountPaneLabelTests {
     #expect(launch.environment["PROWL_WORKTREE_PATH"] == "/tmp/repo/worktree")
     let claudeDirectory = try #require(launch.environment["CLAUDE_CONFIG_DIR"])
     let codexDirectory = try #require(launch.environment["CODEX_HOME"])
-    #expect(claudeDirectory.hasSuffix("/accounts/\(account)/claude"))
-    #expect(codexDirectory.hasSuffix("/accounts/\(account)/codex"))
+    #expect(claudeDirectory.hasSuffix("/\(account)/claude"))
+    #expect(codexDirectory.hasSuffix("/\(account)/codex"))
     // `codex` refuses to start when its home does not exist.
     #expect(FileManager.default.fileExists(atPath: claudeDirectory))
     #expect(FileManager.default.fileExists(atPath: codexDirectory))

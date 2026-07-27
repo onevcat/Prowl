@@ -114,6 +114,7 @@ struct AppFeature {
   @Dependency(CustomShortcutRegistryClient.self) var customShortcutRegistryClient
   @Dependency(ExternalDiffToolClient.self) var externalDiffToolClient
   @Dependency(OutgoingChangesClient.self) var outgoingChangesClient
+  @Dependency(\.agentAccountsDirectory) var agentAccountsDirectory
 
   var body: some Reducer<State, Action> {
     let core = Reduce<State, Action> { state, action in
@@ -531,13 +532,23 @@ struct AppFeature {
         guard let worktree = actionTargetWorktree(repositories: state.repositories) else {
           return .send(.repositories(.showToast(.warning("Open a repository first to manage agent logins"))))
         }
-        guard let command = cli.command(authAction, forAccountNamed: account) else {
+        let accountsDirectory = agentAccountsDirectory
+        guard
+          let command = cli.command(
+            authAction,
+            forAccountNamed: account,
+            accountsDirectory: accountsDirectory
+          )
+        else {
           return .none
         }
         return .run { _ in
           do {
             // `codex login` fails outright when its CODEX_HOME does not exist yet.
-            try AgentAccount.prepareDirectories(forAccountNamed: account)
+            try AgentAccount.prepareDirectories(
+              forAccountNamed: account,
+              accountsDirectory: accountsDirectory
+            )
           } catch {
             SupaLogger("AgentAccount").warning(
               "Unable to prepare agent account directories for \(account): \(error.localizedDescription)"

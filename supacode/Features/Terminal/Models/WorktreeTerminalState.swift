@@ -1,4 +1,5 @@
 import AppKit
+import ComposableArchitecture
 import CoreGraphics
 import Foundation
 import GhosttyKit
@@ -69,6 +70,8 @@ final class WorktreeTerminalState {
   @SharedReader private var repositorySettings: RepositorySettings
   @ObservationIgnored
   @SharedReader private var settingsFile: SettingsFile
+  @ObservationIgnored
+  @Dependency(\.agentAccountsDirectory) private var agentAccountsDirectory
   var trees: [TerminalTabID: SplitTree<GhosttySurfaceView>] = [:]
   var surfaces: [UUID: GhosttySurfaceView] = [:]
   var focusedSurfaceIdByTab: [TerminalTabID: UUID] = [:]
@@ -238,14 +241,19 @@ final class WorktreeTerminalState {
   func makeSurfaceLaunch() -> (account: String?, environment: [String: String]) {
     let account = resolvedAgentAccount
     do {
-      try AgentAccount.prepareDirectories(forAccountNamed: account)
+      try AgentAccount.prepareDirectories(
+        forAccountNamed: account,
+        accountsDirectory: agentAccountsDirectory
+      )
     } catch {
       terminalStateLogger.warning(
         "Unable to prepare agent account directories for \(account ?? ""): \(error.localizedDescription)"
       )
     }
     let environment = worktree.scriptEnvironment
-      .merging(AgentAccount.environment(forAccountNamed: account)) { _, accountValue in accountValue }
+      .merging(
+        AgentAccount.environment(forAccountNamed: account, accountsDirectory: agentAccountsDirectory)
+      ) { _, accountValue in accountValue }
     return (account, environment)
   }
 
