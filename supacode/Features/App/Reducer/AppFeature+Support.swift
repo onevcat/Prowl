@@ -264,12 +264,17 @@ extension AppFeature {
     _ command: UserCustomCommand,
     worktree: Worktree
   ) -> String {
-    resolvedScriptProfileInvocation(profileID: command.scriptProfileID, worktree: worktree) ?? command.command
+    resolvedScriptProfileInvocation(
+      profileID: command.scriptProfileID,
+      worktree: worktree,
+      exitsShell: command.execution != .terminalInput
+    ) ?? command.command
   }
 
   private func resolvedScriptProfileInvocation(
     profileID: String?,
-    worktree: Worktree
+    worktree: Worktree,
+    exitsShell: Bool = true
   ) -> String? {
     guard let profileID else {
       return nil
@@ -278,7 +283,7 @@ extension AppFeature {
     guard let profile = scriptProfiles.first(where: { $0.id == profileID }) else {
       return ""
     }
-    return profile.terminalInvocation(environment: worktree.scriptEnvironment)
+    return profile.terminalInvocation(environment: worktree.scriptEnvironment, exitsShell: exitsShell)
   }
 }
 

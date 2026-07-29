@@ -116,6 +116,8 @@ struct AppFeatureRunScriptTests {
     #expect(script.contains("echo profile"))
     #expect(script.contains("export NODE_ENV='test'"))
     #expect(script.contains("PROWL_SCRIPT"))
+    #expect(script.contains("prowl_script_status=$?"))
+    #expect(!script.components(separatedBy: .newlines).contains("status=$?"))
   }
 
   @Test(.dependencies) func runScriptDoesNotOverwriteDraftWhenPromptAlreadyPresented() async {

@@ -206,7 +206,7 @@ nonisolated struct ScriptProfile: Codable, Equatable, Identifiable, Sendable {
 }
 
 extension ScriptProfile {
-  func terminalInvocation(environment baseEnvironment: [String: String] = [:]) -> String {
+  func terminalInvocation(environment baseEnvironment: [String: String] = [:], exitsShell: Bool = true) -> String {
     let normalized = normalized
     let scriptPath =
       FileManager.default.temporaryDirectory
@@ -227,9 +227,13 @@ extension ScriptProfile {
         "export \(key)=\(scriptShellQuote(value))"
       })
     lines.append(normalized.command)
-    lines.append("status=$?")
+    lines.append("prowl_script_status=$?")
     lines.append("rm -f \(scriptShellQuote(scriptPath))")
-    lines.append("exit $status")
+    if exitsShell {
+      lines.append("exit $prowl_script_status")
+    } else {
+      lines.append("test $prowl_script_status -eq 0")
+    }
     return lines.joined(separator: "\n")
   }
 }

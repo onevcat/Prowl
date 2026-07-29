@@ -86,6 +86,109 @@ struct AppFeatureCustomCommandTests {
     )
   }
 
+  @Test(.dependencies) func terminalInputProfileDoesNotExitFocusedShell() async {
+    let worktree = makeWorktree()
+    let sent = LockIsolated<[TerminalClient.Command]>([])
+    var state = AppFeature.State(
+      repositories: makeRepositoriesState(worktree: worktree),
+      settings: SettingsFeature.State()
+    )
+    state.selectedCustomCommands = [
+      UserCustomCommand(
+        title: "Profile",
+        systemImage: "terminal",
+        command: "",
+        scriptProfileID: "test-profile",
+        execution: .terminalInput,
+        shortcut: nil,
+      )
+    ]
+
+    let store = withDependencies { _ in
+      @Shared(.scriptProfiles) var scriptProfiles
+      $scriptProfiles.withLock {
+        $0 = [
+          ScriptProfile(
+            id: "test-profile",
+            name: "Test",
+            command: #"/bin/sh "$PROWL_SCRIPT""#,
+            script: "echo profile"
+          )
+        ]
+      }
+    } operation: {
+      TestStore(initialState: state) {
+        AppFeature()
+      } withDependencies: {
+        $0.terminalClient.send = { command in
+          sent.withValue { $0.append(command) }
+        }
+      }
+    }
+
+    await store.send(.runCustomCommand(0))
+    await store.finish()
+
+    guard case .insertText(_, let text)? = sent.value.first else {
+      Issue.record("Expected in-place profile input")
+      return
+    }
+    #expect(text.contains("echo profile"))
+    #expect(text.contains("test $prowl_script_status -eq 0"))
+    #expect(!text.components(separatedBy: .newlines).contains("exit $prowl_script_status"))
+  }
+
+  @Test(.dependencies) func shellScriptProfileExitsCreatedShell() async {
+    let worktree = makeWorktree()
+    let sent = LockIsolated<[TerminalClient.Command]>([])
+    var state = AppFeature.State(
+      repositories: makeRepositoriesState(worktree: worktree),
+      settings: SettingsFeature.State()
+    )
+    state.selectedCustomCommands = [
+      UserCustomCommand(
+        title: "Profile",
+        systemImage: "terminal",
+        command: "",
+        scriptProfileID: "test-profile",
+        execution: .shellScript,
+        shortcut: nil,
+      )
+    ]
+
+    let store = withDependencies { _ in
+      @Shared(.scriptProfiles) var scriptProfiles
+      $scriptProfiles.withLock {
+        $0 = [
+          ScriptProfile(
+            id: "test-profile",
+            name: "Test",
+            command: #"/bin/sh "$PROWL_SCRIPT""#,
+            script: "echo profile"
+          )
+        ]
+      }
+    } operation: {
+      TestStore(initialState: state) {
+        AppFeature()
+      } withDependencies: {
+        $0.terminalClient.send = { command in
+          sent.withValue { $0.append(command) }
+        }
+      }
+    }
+
+    await store.send(.runCustomCommand(0))
+    await store.finish()
+
+    guard case .createTabWithInput(_, let input, _, _, _, _)? = sent.value.first else {
+      Issue.record("Expected new-tab profile input")
+      return
+    }
+    #expect(input.contains("echo profile"))
+    #expect(input.components(separatedBy: .newlines).contains("exit $prowl_script_status"))
+  }
+
   @Test(.dependencies) func splitCommandCreatesSplitWithInput() async {
     let worktree = makeWorktree()
     let sent = LockIsolated<[TerminalClient.Command]>([])
