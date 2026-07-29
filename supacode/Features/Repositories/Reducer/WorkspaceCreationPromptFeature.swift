@@ -127,7 +127,7 @@ struct WorkspaceCreationPromptFeature {
   enum Delegate: Equatable {
     case baseRefSourceChanged(Repository.ID)
     case cancel
-    case openBootstrapSettings
+    case openScriptProfilesSettings
     case submit(ProjectWorkspaceCreationDraft)
   }
 
@@ -547,7 +547,7 @@ struct WorkspaceCreationPromptFeature {
         return .none
 
       case .manageScriptProfilesButtonTapped:
-        return .send(.delegate(.openBootstrapSettings))
+        return .send(.delegate(.openScriptProfilesSettings))
 
       case .rootPathChosen(let path):
         state.rootPath = path

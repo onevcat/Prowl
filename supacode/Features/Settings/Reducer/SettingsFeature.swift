@@ -200,6 +200,7 @@ struct SettingsFeature {
     case terminalFontSizeChanged(Float32?)
     case terminalLayoutSnapshotCleared(success: Bool)
     case cliInstallCompleted(CLIInstallResultMessage)
+    case openScriptProfilesSettings
   }
 
   @Dependency(AnalyticsClient.self) private var analyticsClient
@@ -433,6 +434,9 @@ struct SettingsFeature {
 
       case .alert:
         return .none
+
+      case .repositorySettings(.delegate(.openScriptProfilesSettings)):
+        return .send(.delegate(.openScriptProfilesSettings))
 
       case .repositorySettings:
         return .none

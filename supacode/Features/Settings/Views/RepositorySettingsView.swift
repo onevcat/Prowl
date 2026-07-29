@@ -489,14 +489,25 @@ struct RepositorySettingsView: View {
 
       if usesProfile.wrappedValue {
         LabeledContent("Profile") {
-          Picker("Profile", selection: profileID) {
-            Text("Missing Profile").tag(String?.none)
-            ForEach(scriptProfiles) { profile in
-              Text(scriptProfileTitle(profile)).tag(String?.some(profile.id))
+          HStack(spacing: 8) {
+            Picker("Profile", selection: profileID) {
+              Text("Missing Profile").tag(String?.none)
+              ForEach(scriptProfiles) { profile in
+                Text(scriptProfileTitle(profile)).tag(String?.some(profile.id))
+              }
             }
+            .labelsHidden()
+            .frame(maxWidth: 320)
+
+            Button {
+              store.send(.delegate(.openScriptProfilesSettings))
+            } label: {
+              Image(systemName: "terminal")
+                .accessibilityLabel("Manage Script Profiles")
+            }
+            .buttonStyle(.borderless)
+            .help("Open Settings > Scripts")
           }
-          .labelsHidden()
-          .frame(maxWidth: 320)
         }
         .labelStyle(.titleOnly)
 

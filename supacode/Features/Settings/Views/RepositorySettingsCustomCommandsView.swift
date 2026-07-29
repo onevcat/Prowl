@@ -458,19 +458,30 @@ extension RepositorySettingsView {
       .pickerStyle(.segmented)
 
       if usesProfile.wrappedValue {
-        Picker(
-          "Profile",
-          selection: Binding<String?>(
-            get: { command.wrappedValue.scriptProfileID },
-            set: { command.wrappedValue.scriptProfileID = $0 }
-          )
-        ) {
-          Text("Missing Profile").tag(String?.none)
-          ForEach(scriptProfiles) { profile in
-            Text(scriptProfileTitle(profile)).tag(String?.some(profile.id))
+        HStack(spacing: 8) {
+          Picker(
+            "Profile",
+            selection: Binding<String?>(
+              get: { command.wrappedValue.scriptProfileID },
+              set: { command.wrappedValue.scriptProfileID = $0 }
+            )
+          ) {
+            Text("Missing Profile").tag(String?.none)
+            ForEach(scriptProfiles) { profile in
+              Text(scriptProfileTitle(profile)).tag(String?.some(profile.id))
+            }
           }
+          .pickerStyle(.menu)
+
+          Button {
+            store.send(.delegate(.openScriptProfilesSettings))
+          } label: {
+            Image(systemName: "terminal")
+              .accessibilityLabel("Manage Script Profiles")
+          }
+          .buttonStyle(.borderless)
+          .help("Open Settings > Scripts")
         }
-        .pickerStyle(.menu)
 
         if let profile = scriptProfiles.first(where: { $0.id == command.wrappedValue.scriptProfileID }) {
           scriptProfilePreview(profile)

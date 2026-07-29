@@ -812,6 +812,26 @@ struct AppFeatureCommandPaletteTests {
     #expect(shown.value)
   }
 
+  @Test(.dependencies) func repositorySettingsOpenScriptProfilesSettingsDelegateNavigatesAndShowsWindow() async {
+    let shown = LockIsolated(false)
+    var settings = SettingsFeature.State()
+    settings.selection = .general
+    let store = TestStore(
+      initialState: AppFeature.State(settings: settings)
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.settingsWindowClient.show = { shown.withValue { $0 = true } }
+    }
+
+    await store.send(.settings(.delegate(.openScriptProfilesSettings)))
+    await store.receive(\.settings.setSelection) {
+      $0.settings.selection = .scripts
+    }
+    await store.finish()
+    #expect(shown.value)
+  }
+
   @Test(.dependencies) func runCustomCommandDelegateDispatchesAppAction() async {
     let store = TestStore(initialState: AppFeature.State()) {
       AppFeature()

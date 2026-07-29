@@ -388,6 +388,7 @@ struct RepositorySettingsFeature {
   @CasePathable
   enum Delegate: Equatable {
     case settingsChanged(URL)
+    case openScriptProfilesSettings
   }
 
   @Dependency(GitClientDependency.self) private var gitClient

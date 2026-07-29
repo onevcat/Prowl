@@ -25,6 +25,8 @@ All scripts run with these **environment variables** injected:
 Run Script, Setup Script, Archive Script, and Custom Commands can keep their
 inline command text or reference a reusable Script Profile from
 `~/.prowl/script-profiles.json`. Existing inline settings remain the default.
+Profile pickers in Repo Settings provide a direct action to open
+**Settings → Scripts** for profile management.
 
 ## Run Script (`⌘R` / `⌘.`)
 
@@ -97,4 +99,6 @@ in `~/.prowl/repo/<repo-name>/prowl.onevcat.json`.
 - Scripts always have `PROWL_WORKTREE_PATH` and `PROWL_ROOT_PATH` available — use
   them instead of assuming a working directory.
 - "Terminal input" mode types into whatever pane is focused — be sure of the
-  target (the same caution as [`prowl send`](cli.md)).
+  target (the same caution as [`prowl send`](cli.md)). A profile-backed command
+  cleans up its temporary script without exiting that focused shell; New Tab
+  and New Split commands exit their created shell after the profile completes.

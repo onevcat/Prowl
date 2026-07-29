@@ -359,7 +359,7 @@ struct AppFeature {
           }
         )
 
-      case .repositories(.delegate(.openBootstrapSettings)):
+      case .repositories(.delegate(.openScriptProfilesSettings)):
         return .merge(
           .send(.settings(.setSelection(.scripts))),
           .run { _ in
@@ -897,6 +897,14 @@ struct AppFeature {
           reloadRepositories,
           .send(.worktreeSettingsLoaded(repositorySettings, worktreeID: worktreeID)),
           .send(.worktreeUserSettingsLoaded(userRepositorySettings, worktreeID: worktreeID))
+        )
+
+      case .settings(.delegate(.openScriptProfilesSettings)):
+        return .merge(
+          .send(.settings(.setSelection(.scripts))),
+          .run { _ in
+            await settingsWindowClient.show()
+          }
         )
 
       case .worktreeSettingsLoaded(let settings, let worktreeID):

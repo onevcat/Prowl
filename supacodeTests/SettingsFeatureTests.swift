@@ -214,6 +214,23 @@ struct SettingsFeatureTests {
     }
   }
 
+  @Test(.dependencies) func repositorySettingsOpenScriptProfilesSettingsDelegateIsForwarded() async {
+    var state = SettingsFeature.State()
+    state.repositorySettings = RepositorySettingsFeature.State(
+      rootURL: URL(fileURLWithPath: "/tmp/repo-script-profile-settings"),
+      repositoryID: "/tmp/repo-script-profile-settings",
+      repositoryKind: .git,
+      settings: .default,
+      userSettings: .default
+    )
+    let store = TestStore(initialState: state) {
+      SettingsFeature()
+    }
+
+    await store.send(.repositorySettings(.delegate(.openScriptProfilesSettings)))
+    await store.receive(\.delegate.openScriptProfilesSettings)
+  }
+
   @Test(.dependencies) func loadingSettingsDoesNotResetSelection() async {
     let rootURL = URL(fileURLWithPath: "/tmp/repo")
     let selection = SettingsSection.repository("repo-id")
