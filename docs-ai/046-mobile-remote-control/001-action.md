@@ -4,10 +4,11 @@
 | Date | Change | Ref |
 | --- | --- | --- |
 | 2026-07-13 | Added the read-only loopback bridge, Keychain credential store, opt-in Settings lifecycle, and regression tests. | `3a03bcf2` |
-| 2026-07-13 | Added the agent-facing deployment and safety manual, then updated the docs sync baseline. | Pending commit |
-| 2026-07-28 | Hardened the TCP bridge after review: concurrent bounded client handling with a connection deadline, active-socket shutdown on stop, `SIGPIPE` suppression, and TCP integration tests. | PR #583 review |
+| 2026-07-13 | Added the agent-facing deployment and safety manual, then updated the docs sync baseline. | `c9a7493f` |
+| 2026-07-28 | Hardened the TCP bridge after review: concurrent client handling with a connection deadline, active-socket shutdown on stop, `SIGPIPE` suppression, and TCP integration tests. | `155cb24f` |
+| 2026-07-31 | Capped active connections, closed the accept/register shutdown race, and added boundary tests. | `ba1de11b` |
 
-## Outcome & current state (as of 2026-07-13)
+## Outcome & current state (as of 2026-07-31)
 
 - `supacode/CLIService/RemoteControlRouter.swift` accepts authenticated `GET` requests
   for active-agent summaries and bounded viewport reads only. It uses opaque IDs and

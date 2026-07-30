@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | Implemented |
 | **Anchor date** | 2026-07-13 |
-| **Primary PRs** | Pending |
+| **Primary PRs** | #583 |
 | **Related** | #196, [013-prowl-cli](../013-prowl-cli/000-plan.md), `docs/components/cli.md` |
 
 ## Background
@@ -60,4 +60,6 @@ owner identified a proof of concept as the appropriate first increment.
 | Request/response polling | Subscribe to terminal events | The terminal event stream currently permits one subscriber. |
 
 ## Amendments
-None.
+
+- Updated 2026-07-31: Recorded TCP review hardening and corrected stale commit references — see
+  [002-review-follow-up.md](002-review-follow-up.md).
