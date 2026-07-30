@@ -22,6 +22,7 @@ final class RemoteControlServer {
 
   private nonisolated static let clientIOTimeout = timeval(tv_sec: 2, tv_usec: 0)
   private nonisolated static let clientDeadlineSeconds: Double = 5
+  private nonisolated static let maximumActiveConnectionCount = 16
   private nonisolated static let maximumHeaderByteCount = 16 * 1024
 
   private let router: RemoteControlRouter
@@ -32,7 +33,7 @@ final class RemoteControlServer {
     qos: .userInitiated,
     attributes: .concurrent
   )
-  private let connections = RemoteControlConnectionRegistry()
+  private let connections: RemoteControlConnectionRegistry
   private var acceptSource: (any DispatchSourceRead)?
   private var serverFD: Int32 = -1
 
@@ -42,6 +43,9 @@ final class RemoteControlServer {
   init(router: RemoteControlRouter, port: UInt16 = RemoteControlServer.port) {
     self.router = router
     requestedPort = port
+    connections = RemoteControlConnectionRegistry(
+      maximumActiveConnectionCount: Self.maximumActiveConnectionCount
+    )
   }
 
   func start() throws {
@@ -81,19 +85,20 @@ final class RemoteControlServer {
   func stop() {
     isRunning = false
     boundPort = nil
-    connections.shutdownActive()
     if let acceptSource {
       self.acceptSource = nil
       acceptSource.cancel()
     }
-    guard serverFD >= 0 else { return }
-    let listeningFD = serverFD
-    serverFD = -1
-    // Closing on the serial accept queue after cancel() guarantees no in-flight accept still uses the
-    // descriptor and that the listening port is released synchronously before stop() returns.
-    acceptQueue.sync {
-      _ = Darwin.close(listeningFD)
+    if serverFD >= 0 {
+      let listeningFD = serverFD
+      serverFD = -1
+      // Closing on the serial accept queue after cancel() guarantees no in-flight accept still uses the
+      // descriptor. Once this returns, no client can register before shutdownActive().
+      acceptQueue.sync {
+        _ = Darwin.close(listeningFD)
+      }
     }
+    connections.shutdownActive()
   }
 
   private func response(for request: RemoteControlHTTPRequest) -> RemoteControlHTTPResponse {
@@ -197,7 +202,10 @@ final class RemoteControlServer {
         Darwin.close(clientFD)
         continue
       }
-      connections.register(clientFD)
+      guard connections.register(clientFD) else {
+        Darwin.close(clientFD)
+        continue
+      }
       clientQueue.async { [weak server] in
         handleAcceptedClient(clientFD: clientFD, server: server, connections: connections, responseQueue: clientQueue)
       }
@@ -322,14 +330,31 @@ final class RemoteControlServer {
 }
 
 /// Tracks in-flight client sockets so shutdown can unblock them and closes happen exactly once.
-nonisolated private final class RemoteControlConnectionRegistry: @unchecked Sendable {
+nonisolated final class RemoteControlConnectionRegistry: @unchecked Sendable {
   private let lock = NSLock()
+  private let maximumActiveConnectionCount: Int
+  private let closeFileDescriptor: @Sendable (Int32) -> Void
   private var activeFileDescriptors: Set<Int32> = []
 
-  func register(_ fileDescriptor: Int32) {
+  init(
+    maximumActiveConnectionCount: Int,
+    closeFileDescriptor: @escaping @Sendable (Int32) -> Void = { _ = Darwin.close($0) }
+  ) {
+    precondition(maximumActiveConnectionCount > 0)
+    self.maximumActiveConnectionCount = maximumActiveConnectionCount
+    self.closeFileDescriptor = closeFileDescriptor
+  }
+
+  @discardableResult
+  func register(_ fileDescriptor: Int32) -> Bool {
     lock.lock()
     defer { lock.unlock() }
+    guard
+      activeFileDescriptors.count < maximumActiveConnectionCount,
+      !activeFileDescriptors.contains(fileDescriptor)
+    else { return false }
     activeFileDescriptors.insert(fileDescriptor)
+    return true
   }
 
   /// The registry is the sole owner of client socket closes, so descriptors are closed exactly once
@@ -338,7 +363,7 @@ nonisolated private final class RemoteControlConnectionRegistry: @unchecked Send
     lock.lock()
     defer { lock.unlock() }
     guard activeFileDescriptors.remove(fileDescriptor) != nil else { return }
-    _ = Darwin.close(fileDescriptor)
+    closeFileDescriptor(fileDescriptor)
   }
 
   /// Shuts down (but does not close) in-flight client sockets so blocked reads and writes return

@@ -35,6 +35,7 @@ struct RemoteControlServerTests {
 
     server.stop()
     #expect(server.boundPort == nil)
+    #expect(connectionWasClosed(stalledFD))
 
     // The listening port must be released synchronously so re-enabling on the same fixed port works.
     let restartedServer = makeServer(port: firstPort)
@@ -65,6 +66,22 @@ struct RemoteControlServerTests {
 
     let statusCode = try await requestAgentsStatusCode(port: port)
     #expect(statusCode == 200)
+  }
+
+  @Test func connectionRegistryRejectsOverflowAndReusesReleasedCapacity() {
+    let registry = RemoteControlConnectionRegistry(
+      maximumActiveConnectionCount: 2,
+      closeFileDescriptor: { _ in }
+    )
+
+    #expect(registry.register(1))
+    #expect(registry.register(2))
+    #expect(!registry.register(3))
+
+    registry.close(1)
+
+    #expect(registry.register(3))
+    #expect(!registry.register(4))
   }
 
   private func makeServer(port: UInt16 = 0) -> RemoteControlServer {
@@ -119,6 +136,20 @@ struct RemoteControlServerTests {
   private func send(_ text: String, on fileDescriptor: Int32) {
     let bytes = Array(text.utf8)
     _ = bytes.withUnsafeBytes { Darwin.write(fileDescriptor, $0.baseAddress, $0.count) }
+  }
+
+  private func connectionWasClosed(_ fileDescriptor: Int32) -> Bool {
+    var timeout = timeval(tv_sec: 1, tv_usec: 0)
+    _ = setsockopt(
+      fileDescriptor,
+      SOL_SOCKET,
+      SO_RCVTIMEO,
+      &timeout,
+      socklen_t(MemoryLayout<timeval>.size)
+    )
+    var byte: UInt8 = 0
+    let count = Darwin.read(fileDescriptor, &byte, 1)
+    return count == 0 || (count < 0 && errno == ECONNRESET)
   }
 
   /// Closes with `SO_LINGER` zero so the peer observes an abrupt reset instead of a graceful close.
