@@ -1,23 +1,20 @@
 #!/bin/bash
-# PreToolUse hook: block gh pr create unless it explicitly targets the fork.
-# Exit 2 = block the command, exit 0 = allow.
+# PreToolUse hook: block gh pr create against the true upstream, and require an
+# explicit target so a missing --repo cannot default somewhere unintended.
+# Exit 2 = block, exit 0 = allow.
 
 INPUT=$(cat)
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
 
-# Only inspect gh pr create commands
 if echo "$COMMAND" | grep -qE 'gh\s+pr\s+create'; then
-  # Allow if explicitly targeting the fork (onevcat/Prowl)
-  if echo "$COMMAND" | grep -qE '(--repo|--repo=|-R)\s*onevcat/Prowl'; then
-    exit 0
+  if echo "$COMMAND" | grep -qE '(--repo|--repo=|-R)\s*supabitapp/supacode'; then
+    echo "BLOCKED: never open PRs against supabitapp/supacode." >&2
+    exit 2
   fi
-  cat <<EOF >&2
-BLOCKED: gh pr create must explicitly target the fork.
-
-Use:  gh pr create --repo onevcat/Prowl ...
-Never target upstream (supabitapp/supacode).
-EOF
-  exit 2
+  if ! echo "$COMMAND" | grep -qE '(--repo|--repo=|-R)\s*[A-Za-z0-9._-]+/[A-Za-z0-9._-]+'; then
+    echo "BLOCKED: gh pr create must name its target explicitly, e.g. --repo silvarbor/prowl." >&2
+    exit 2
+  fi
 fi
 
 exit 0
