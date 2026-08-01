@@ -5,6 +5,7 @@ import Foundation
 struct HandoffTargetOption: Equatable, Identifiable, Sendable {
   enum Kind: Equatable, Hashable, Sendable {
     case agent(DetectedAgent)
+    case profile(AgentProfile.ID, runtime: DetectedAgent)
     case briefOnly
   }
 
@@ -17,8 +18,18 @@ struct HandoffTargetOption: Equatable, Identifiable, Sendable {
   var id: Kind { kind }
 
   var agent: DetectedAgent? {
-    guard case .agent(let agent) = kind else { return nil }
-    return agent
+    switch kind {
+    case .agent(let agent), .profile(_, let agent): agent
+    case .briefOnly: nil
+    }
+  }
+
+  var receivingTarget: HandoffReceivingTarget? {
+    switch kind {
+    case .agent(let agent): .runtimeDefault(agent)
+    case .profile(let profileID, _): .profile(profileID)
+    case .briefOnly: nil
+    }
   }
 }
 
@@ -98,7 +109,13 @@ struct HandoffHudFeature {
 
     /// Build the HUD for a pane with a detected agent; nil without one — the
     /// no-source mechanical handoff stays CLI-only.
-    static func make(worktree: Worktree, source: HandoffSourceContext?) -> State? {
+    static func make(
+      worktree: Worktree,
+      source: HandoffSourceContext?,
+      profiles: [AgentProfile] = [],
+      designatedProfileID: AgentProfile.ID? = nil,
+      lastLaunchedProfileID: AgentProfile.ID? = nil
+    ) -> State? {
       guard
         let sessionContext = source?.sessionContext,
         let agentToken = sessionContext.agent,
@@ -112,16 +129,38 @@ struct HandoffHudFeature {
         session: source?.session,
         observation: source?.observation
       )
-      var targets = AgentRuntimeAdapterRegistry.launchableAgents.map { agent in
+      let enabledProfiles = profiles.filter(\.isEnabled)
+      let recommendedProfile = AgentProfileRecommendation.recommendedProfile(
+        profiles: enabledProfiles,
+        designatedID: designatedProfileID,
+        lastLaunchedID: lastLaunchedProfileID
+      )
+      let orderedProfiles =
+        (recommendedProfile.map { [$0] } ?? [])
+        + enabledProfiles.filter { $0.id != recommendedProfile?.id }
+      var targets = orderedProfiles.map { profile in
+        let runtime = profile.runtime.agent
+        return HandoffTargetOption(
+          kind: .profile(profile.id, runtime: runtime),
+          title: profile.name,
+          subtitle:
+            profile.id == recommendedProfile?.id
+            ? "Recommended · \(runtime.displayName) Profile"
+            : "\(runtime.displayName) Profile",
+          isCurrentAgent: runtime == sourceAgent
+        )
+      }
+      targets += AgentRuntimeAdapterRegistry.launchableAgents.map { agent in
         HandoffTargetOption(
           kind: .agent(agent),
           title: AgentRuntimeAdapterRegistry.displayName(for: agent),
-          subtitle: Self.launchSubtitle(
-            sourceAgent: sourceAgent,
-            sourceDisplayName: sourceAgent?.displayName ?? agentToken,
-            observation: source?.observation,
-            destination: agent
-          ),
+          subtitle: (enabledProfiles.isEmpty ? "" : "Runtime Default · ")
+            + Self.launchSubtitle(
+              sourceAgent: sourceAgent,
+              sourceDisplayName: sourceAgent?.displayName ?? agentToken,
+              observation: source?.observation,
+              destination: agent
+            ),
           isCurrentAgent: agent == sourceAgent
         )
       }
@@ -222,17 +261,17 @@ struct HandoffHudFeature {
       case .confirmSelection:
         guard state.isChoosing, state.targets.indices.contains(state.selectedIndex) else { return .none }
         let target = state.targets[state.selectedIndex]
-        let purpose: HandoffInjection.Purpose =
-          switch target.kind {
-          case .agent(let agent): .handOff(agent: agent.rawValue)
-          case .briefOnly: .checkpoint
-          }
+        let operation = target.receivingTarget.map { HandoffRequestOperation.handoff(target: $0) } ?? .checkpoint
+        let expectation = HandoffRequestExpectation(
+          sourcePaneID: state.source.sourceSurfaceID,
+          operation: operation
+        )
         let requestID = uuid()
-        handoffRequestClient.register(requestID)
+        handoffRequestClient.register(requestID, expectation)
         let delivered = terminalClient.sendTextToSurface(
           state.worktree.id,
           state.source.sourceSurfaceID,
-          HandoffInjection.instruction(for: purpose, requestID: requestID)
+          HandoffInjection.instruction(for: expectation, requestID: requestID)
         )
         state.phase = .running(
           HandoffHudRun(
@@ -288,15 +327,37 @@ struct HandoffHudFeature {
         guard completion.action == expectedAction else { return .none }
         switch run.target.kind {
         case .briefOnly:
-          guard completion.toAgent == nil else { return .none }
+          guard completion.toAgent == nil, completion.toProfileID == nil else { return .none }
+          if let message = completion.failureMessage {
+            state.phase = .finished(.failed(message: message))
+            return .cancel(id: FallbackCancelID(worktreeID: state.worktree.id))
+          }
           state.phase = .finished(.briefSaved)
         case .agent(let expectedAgent):
-          guard completion.toAgent == expectedAgent.rawValue, let launched = completion.launched,
+          guard completion.toAgent == expectedAgent.rawValue, completion.toProfileID == nil else { return .none }
+          if let message = completion.failureMessage {
+            state.phase = .finished(.failed(message: message))
+            return .cancel(id: FallbackCancelID(worktreeID: state.worktree.id))
+          }
+          guard let launched = completion.launched,
             let paneID = UUID(uuidString: launched.paneID)
           else { return .none }
           state.phase = .finished(.handedOff(agentDisplayName: run.target.title))
           // The user is present and asked for this hand-off — jump to the
           // receiver. The transition core itself never focuses anything.
+          _ = terminalClient.focusSurface(launched.worktreeID, paneID)
+        case .profile(let expectedProfileID, _):
+          guard completion.toProfileID == expectedProfileID else { return .none }
+          if let message = completion.failureMessage {
+            state.phase = .finished(.failed(message: message))
+            return .cancel(id: FallbackCancelID(worktreeID: state.worktree.id))
+          }
+          guard let launched = completion.launched,
+            let paneID = UUID(uuidString: launched.paneID)
+          else { return .none }
+          state.phase = .finished(
+            .handedOff(agentDisplayName: completion.toProfileName ?? run.target.title)
+          )
           _ = terminalClient.focusSurface(launched.worktreeID, paneID)
         }
         return .cancel(id: FallbackCancelID(worktreeID: state.worktree.id))
@@ -391,69 +452,171 @@ struct HandoffHudFeature {
     run.stage = .finishing
     state.phase = .running(run)
 
+    let target = run.target
+
+    switch target.kind {
+    case .briefOnly:
+      return startCheckpointFallback(state, briefing: briefing)
+    case .agent(let destination):
+      return startRuntimeFallback(
+        state,
+        destination: destination,
+        targetTitle: target.title,
+        briefing: briefing
+      )
+    case .profile(let profileID, _):
+      return startProfileFallback(state, profileID: profileID, briefing: briefing)
+    }
+  }
+
+  private func startCheckpointFallback(
+    _ state: State,
+    briefing: HandoffPreparedBriefing
+  ) -> Effect<Action> {
+    let coordinator = makeCoordinator(state)
+    let source = state.source
+    let timestamp = now
+    return .run { send in
+      _ = try await coordinator.makeCheckpoint(
+        outgoingAgent: source.agentToken,
+        sessionContext: source.sessionContext,
+        note: nil,
+        briefing: briefing,
+        now: timestamp
+      )
+      await send(.fallbackFinished(.briefSaved))
+    } catch: { error, send in
+      await send(.runFailed(message: error.localizedDescription))
+    }
+  }
+
+  private func startRuntimeFallback(
+    _ state: State,
+    destination: DetectedAgent,
+    targetTitle: String,
+    briefing: HandoffPreparedBriefing
+  ) -> Effect<Action> {
     let coordinator = makeCoordinator(state)
     let source = state.source
     let worktree = state.worktree
     let rootURL = state.rootURL
-    let target = run.target
     let timestamp = now
     let client = terminalClient
+    let configuration = inheritedConfiguration(source: source, destination: destination)
+    return .run { send in
+      let artifacts = try await coordinator.makeTransitionArtifacts(
+        outgoingAgent: source.agentToken,
+        toAgent: destination.rawValue,
+        sessionContext: source.sessionContext,
+        briefing: briefing,
+        now: timestamp
+      )
+      let request = AgentStartRequest(
+        agent: destination,
+        intent: .prompt(HandoffCommandHandler.kickoffPrompt(hasBriefing: artifacts.hasBriefing)),
+        configuration: configuration
+      )
+      let kickoff = try AgentRuntimeAdapterRegistry.makeStartInvocation(request).terminalInput
+      await coordinator.logTransition(
+        from: source.agentToken,
+        toAgent: destination.rawValue,
+        disposition: .requested,
+        briefing: artifacts.briefing,
+        source: "agents-hud",
+        now: timestamp
+      )
+      await client.send(
+        .createTabWithInput(
+          worktree,
+          input: kickoff,
+          workingDirectory: rootURL,
+          runSetupScriptIfNew: false,
+          autoCloseOnSuccess: false,
+          customCommandName: "Hand off → \(targetTitle)",
+          customCommandIcon: nil
+        )
+      )
+      await send(.fallbackFinished(.handedOff(agentDisplayName: targetTitle)))
+    } catch: { error, send in
+      await send(.runFailed(message: error.localizedDescription))
+    }
+  }
 
-    switch target.kind {
-    case .briefOnly:
-      return .run { send in
-        _ = try await coordinator.makeCheckpoint(
-          outgoingAgent: source.agentToken,
-          sessionContext: source.sessionContext,
-          note: nil,
-          briefing: briefing,
-          now: timestamp
+  private func startProfileFallback(
+    _ state: State,
+    profileID: AgentProfile.ID,
+    briefing: HandoffPreparedBriefing
+  ) -> Effect<Action> {
+    @Shared(.userGlobalSettings) var userGlobalSettings
+    guard
+      let profile = userGlobalSettings.agentProfiles.first(where: { $0.id == profileID }),
+      profile.isEnabled
+    else {
+      return .send(.runFailed(message: "The selected Agent Profile is missing or disabled."))
+    }
+    let plan: AgentProfileLaunchPlan
+    do {
+      plan = try AgentProfileLaunchPlanner.plan(
+        for: profile,
+        homeBaseDirectory: SupacodePaths.agentProfileHomesDirectory,
+        intent: .prompt(HandoffCommandHandler.kickoffPrompt(hasBriefing: briefing.outcome.wroteBriefing))
+      )
+    } catch {
+      return .send(.runFailed(message: "The selected Agent Profile could not be prepared."))
+    }
+    let coordinator = makeCoordinator(state)
+    let source = state.source
+    let worktree = state.worktree
+    let rootURL = state.rootURL
+    let timestamp = now
+    let client = terminalClient
+    return .run { send in
+      let artifacts = try await coordinator.makeTransitionArtifacts(
+        outgoingAgent: source.agentToken,
+        toAgent: profile.runtime.agent.rawValue,
+        sessionContext: source.sessionContext,
+        briefing: briefing,
+        now: timestamp
+      )
+      guard
+        let result = await client.launchAgentProfile(
+          plan,
+          worktree,
+          .handoffBackgroundTab(root: rootURL)
         )
-        await send(.fallbackFinished(.briefSaved))
-      } catch: { error, send in
-        await send(.runFailed(message: error.localizedDescription))
-      }
-
-    case .agent(let destination):
-      let configuration = inheritedConfiguration(source: source, destination: destination)
-      let targetTitle = target.title
-      return .run { send in
-        let artifacts = try await coordinator.makeTransitionArtifacts(
-          outgoingAgent: source.agentToken,
-          toAgent: destination.rawValue,
-          sessionContext: source.sessionContext,
-          briefing: briefing,
-          now: timestamp
-        )
-        let request = AgentStartRequest(
-          agent: destination,
-          intent: .prompt(HandoffCommandHandler.kickoffPrompt(hasBriefing: artifacts.hasBriefing)),
-          configuration: configuration
-        )
-        let kickoff = try AgentRuntimeAdapterRegistry.makeStartInvocation(request).terminalInput
+      else {
         await coordinator.logTransition(
           from: source.agentToken,
-          toAgent: destination.rawValue,
-          disposition: .requested,
+          toAgent: profile.runtime.agent.rawValue,
+          disposition: .failed,
           briefing: artifacts.briefing,
+          toProfileID: profile.id,
+          toProfileName: profile.name,
+          archivedPath: artifacts.archivedPath,
           source: "agents-hud",
           now: timestamp
         )
-        await client.send(
-          .createTabWithInput(
-            worktree,
-            input: kickoff,
-            workingDirectory: rootURL,
-            runSetupScriptIfNew: false,
-            autoCloseOnSuccess: false,
-            customCommandName: "Hand off → \(targetTitle)",
-            customCommandIcon: nil
+        await send(
+          .fallbackFinished(
+            .failed(message: "Progress was saved, but \(profile.name) could not be launched.")
           )
         )
-        await send(.fallbackFinished(.handedOff(agentDisplayName: targetTitle)))
-      } catch: { error, send in
-        await send(.runFailed(message: error.localizedDescription))
+        return
       }
+      await coordinator.logTransition(
+        from: source.agentToken,
+        toAgent: profile.runtime.agent.rawValue,
+        disposition: .pane(result.surfaceID.uuidString),
+        briefing: artifacts.briefing,
+        toProfileID: profile.id,
+        toProfileName: profile.name,
+        source: "agents-hud",
+        now: timestamp
+      )
+      _ = await client.focusSurface(worktree.id, result.surfaceID)
+      await send(.fallbackFinished(.handedOff(agentDisplayName: profile.name)))
+    } catch: { error, send in
+      await send(.runFailed(message: error.localizedDescription))
     }
   }
 

@@ -3,6 +3,7 @@ import ConcurrencyExtras
 import DependenciesTestSupport
 import Foundation
 import IdentifiedCollections
+import Sharing
 import Testing
 
 @testable import supacode
@@ -143,6 +144,32 @@ struct HandoffHudFeatureTests {
     #expect(state.source.sourceSurfaceID == sourcePaneID)
   }
 
+  @Test func makeOrdersRecommendedProfilesBeforeRuntimeDefaults() throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let first = AgentProfile(name: "Claude · Personal", runtime: .claude)
+    let recommended = AgentProfile(name: "Codex · Work", runtime: .codex)
+    let disabled = AgentProfile(name: "Disabled", isEnabled: false, runtime: .codex)
+
+    let state = try #require(
+      HandoffHudFeature.State.make(
+        worktree: makeWorktree(root: root),
+        source: makeSourceContext(),
+        profiles: [first, recommended, disabled],
+        designatedProfileID: recommended.id
+      )
+    )
+
+    #expect(state.selectedIndex == 0)
+    #expect(
+      state.targets.map(\.title) == [
+        "Codex · Work", "Claude · Personal", "Claude Code", "Codex", "Only save progress, don't hand off",
+      ])
+    #expect(state.targets[0].kind == .profile(recommended.id, runtime: .codex))
+    #expect(state.targets[0].subtitle.contains("Recommended"))
+    #expect(state.targets[2].subtitle.hasPrefix("Runtime Default"))
+  }
+
   @Test func makeWithMediumConfidenceSkipsForkRequest() throws {
     let root = try makeTempRoot()
     defer { remove(root) }
@@ -237,10 +264,63 @@ struct HandoffHudFeatureTests {
     let request = try #require(injected.value.first)
     #expect(request.worktreeID == worktree.id)
     #expect(request.surfaceID == sourcePaneID)
-    #expect(request.text.contains("prowl handoff to claude --brief -"))
+    #expect(request.text.contains("prowl handoff to claude --pane \(sourcePaneID.uuidString) --brief -"))
     #expect(request.text.contains("\(HandoffInput.requestIDEnvironmentKey)=\(requestID.uuidString)"))
     #expect(request.text.contains("## Objective"))
     #expect(!request.text.contains("\n"))
+  }
+
+  @Test(.dependencies) func confirmProfileInjectsStableIDAndExplicitSourcePane() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let worktree = makeWorktree(root: root)
+    let profile = AgentProfile(name: "Codex · Work", runtime: .codex)
+    let initial = try #require(
+      HandoffHudFeature.State.make(
+        worktree: worktree,
+        source: makeSourceContext(),
+        profiles: [profile]
+      )
+    )
+    let registered = LockIsolated<HandoffRequestExpectation?>(nil)
+    let injected = LockIsolated<String?>(nil)
+
+    let store = TestStore(initialState: initial) {
+      HandoffHudFeature()
+    } withDependencies: {
+      $0.date.now = Date(timeIntervalSince1970: 1_760_000_000)
+      $0.uuid = UUIDGenerator { requestID }
+      $0.handoffRequestClient = HandoffRequestClient(
+        register: { _, expectation in registered.setValue(expectation) },
+        supersede: { _ in true }
+      )
+      $0[TerminalClient.self].sendTextToSurface = { _, _, text in
+        injected.setValue(text)
+        return true
+      }
+    }
+
+    await store.send(.confirmSelection) {
+      $0.phase = .running(
+        HandoffHudRun(
+          target: $0.targets[0],
+          startedAt: Date(timeIntervalSince1970: 1_760_000_000),
+          stage: .requesting,
+          requestID: requestID
+        )
+      )
+    }
+
+    #expect(
+      registered.value
+        == HandoffRequestExpectation(
+          sourcePaneID: sourcePaneID,
+          operation: .handoff(target: .profile(profile.id))
+        )
+    )
+    #expect(injected.value?.contains("--agent-profile-id \(profile.id.uuidString)") == true)
+    #expect(injected.value?.contains("--pane \(sourcePaneID.uuidString)") == true)
+    #expect(!((injected.value ?? "").contains(profile.name)))
   }
 
   @Test(.dependencies) func cliCompletionFromSourcePaneFinishesAndFocusesReceiver() async throws {
@@ -293,6 +373,114 @@ struct HandoffHudFeatureTests {
     let (focusWorktreeID, focusSurfaceID) = try #require(focused.value.first)
     #expect(focusWorktreeID == launched.worktreeID)
     #expect(focusSurfaceID.uuidString == launched.paneID)
+  }
+
+  @Test(.dependencies) func profileLaunchFailureFinishesWithoutFocusing() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let worktree = makeWorktree(root: root)
+    let profile = AgentProfile(name: "Codex · Work", runtime: .codex)
+    let initial = try #require(
+      HandoffHudFeature.State.make(
+        worktree: worktree,
+        source: makeSourceContext(),
+        profiles: [profile]
+      )
+    )
+    let focused = LockIsolated(false)
+    let store = TestStore(initialState: initial) {
+      HandoffHudFeature()
+    } withDependencies: {
+      $0.date.now = Date(timeIntervalSince1970: 1_760_000_000)
+      $0.uuid = UUIDGenerator { requestID }
+      $0[TerminalClient.self].sendTextToSurface = { _, _, _ in true }
+      $0[TerminalClient.self].focusSurface = { _, _ in
+        focused.setValue(true)
+        return true
+      }
+    }
+
+    await store.send(.confirmSelection) {
+      $0.phase = .running(
+        HandoffHudRun(
+          target: $0.targets[0],
+          startedAt: Date(timeIntervalSince1970: 1_760_000_000),
+          stage: .requesting,
+          requestID: requestID
+        )
+      )
+    }
+    await store.send(
+      .cliCompleted(
+        HandoffCLICompletion(
+          action: .toAgent,
+          sourcePaneID: sourcePaneID.uuidString,
+          toAgent: "codex",
+          toProfileID: profile.id,
+          toProfileName: profile.name,
+          briefing: .inline,
+          launched: nil,
+          failureMessage: "Progress was saved, but Codex · Work could not be launched.",
+          artifactsReady: true,
+          requestID: requestID
+        )
+      )
+    ) {
+      $0.phase = .finished(
+        .failed(message: "Progress was saved, but Codex · Work could not be launched.")
+      )
+    }
+    #expect(focused.value == false)
+  }
+
+  @Test(.dependencies) func profileCompletionUsesLatestResolvedName() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let worktree = makeWorktree(root: root)
+    let profile = AgentProfile(name: "Codex · Work", runtime: .codex)
+    let initial = try #require(
+      HandoffHudFeature.State.make(
+        worktree: worktree,
+        source: makeSourceContext(),
+        profiles: [profile]
+      )
+    )
+    let launched = launchedPane(worktreeID: worktree.id)
+    let store = TestStore(initialState: initial) {
+      HandoffHudFeature()
+    } withDependencies: {
+      $0.date.now = Date(timeIntervalSince1970: 1_760_000_000)
+      $0.uuid = UUIDGenerator { requestID }
+      $0[TerminalClient.self].sendTextToSurface = { _, _, _ in true }
+      $0[TerminalClient.self].focusSurface = { _, _ in true }
+    }
+
+    await store.send(.confirmSelection) {
+      $0.phase = .running(
+        HandoffHudRun(
+          target: $0.targets[0],
+          startedAt: Date(timeIntervalSince1970: 1_760_000_000),
+          stage: .requesting,
+          requestID: requestID
+        )
+      )
+    }
+    await store.send(
+      .cliCompleted(
+        HandoffCLICompletion(
+          action: .toAgent,
+          sourcePaneID: sourcePaneID.uuidString,
+          toAgent: "codex",
+          toProfileID: profile.id,
+          toProfileName: "Codex · Renamed",
+          briefing: .inline,
+          launched: launched,
+          requestID: requestID
+        )
+      )
+    ) {
+      $0.phase = .finished(.handedOff(agentDisplayName: "Codex · Renamed"))
+    }
   }
 
   @Test(.dependencies) func cliCompletionFromOtherPaneOrActionIsIgnored() async throws {
@@ -404,7 +592,9 @@ struct HandoffHudFeatureTests {
           requestID: requestID)
       )
     }
-    #expect(injected.value.first?.contains("prowl handoff save --brief -") == true)
+    #expect(
+      injected.value.first?.contains("prowl handoff save --pane \(sourcePaneID.uuidString) --brief -") == true
+    )
 
     await store.send(
       .cliCompleted(
@@ -444,7 +634,9 @@ struct HandoffHudFeatureTests {
       $0.date.now = startedAt
       $0.uuid = UUIDGenerator { requestID }
       $0.handoffRequestClient = HandoffRequestClient(
-        register: { requestRegistry.register($0) },
+        register: { requestID, expectation in
+          requestRegistry.register(requestID, expectation: expectation)
+        },
         supersede: { requestRegistry.supersede($0) }
       )
 
@@ -465,7 +657,15 @@ struct HandoffHudFeatureTests {
         HandoffHudRun(target: $0.targets[claudeIndex], startedAt: startedAt, stage: .forking, requestID: requestID)
       )
     }
-    #expect(!requestRegistry.claim(requestID))
+    #expect(
+      requestRegistry.claim(
+        requestID,
+        actual: HandoffRequestExpectation(
+          sourcePaneID: sourcePaneID,
+          operation: .handoff(target: .runtimeDefault(.claude))
+        )
+      ) == .unavailable
+    )
     await store.receive(\.fallbackBriefingCollected) {
       $0.phase = .running(
         HandoffHudRun(target: $0.targets[claudeIndex], startedAt: startedAt, stage: .finishing, requestID: requestID)
@@ -540,6 +740,162 @@ struct HandoffHudFeatureTests {
     #expect(!handoffStore.hasCurrentArtifact)
     let log = try String(contentsOf: handoffStore.logURL, encoding: .utf8)
     #expect(log.contains("briefing=none"))
+  }
+
+  @Test(.dependencies) func profileFallbackUsesSharedLauncherAndFocusesExactSurface() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let worktree = makeWorktree(root: root)
+    let profile = AgentProfile(
+      name: "Codex · Work",
+      runtime: .codex,
+      model: "profile-model",
+      placement: .split,
+      extraArguments: "-p work",
+      environmentOverrides: [
+        AgentProfileEnvironmentOverride(name: "OPENAI_API_KEY", value: "secret")
+      ]
+    )
+    let initial = try #require(
+      HandoffHudFeature.State.make(
+        worktree: worktree,
+        source: makeSourceContext(
+          observation: AgentLaunchObservation(model: "outgoing-model", executionMode: .unrestricted)
+        ),
+        profiles: [profile]
+      )
+    )
+    let storage = SettingsTestStorage()
+    let launchedPlan = LockIsolated<AgentProfileLaunchPlan?>(nil)
+    let launchContext = LockIsolated<AgentProfileLaunchContext?>(nil)
+    let launchedSurfaceID = UUID()
+    let focused = LockIsolated<UUID?>(nil)
+
+    let store = withDependencies {
+      $0.settingsFileStorage = storage.storage
+    } operation: {
+      @Shared(.userGlobalSettings) var settings
+      $settings.withLock { $0.agentProfiles = [profile] }
+      return TestStore(initialState: initial) {
+        HandoffHudFeature()
+      } withDependencies: {
+        $0.date.now = Date(timeIntervalSince1970: 1_760_000_000)
+        $0.uuid = UUIDGenerator { requestID }
+        $0[TerminalClient.self].sendTextToSurface = { _, _, _ in true }
+        $0[TerminalClient.self].launchAgentProfile = { plan, launchedWorktree, context in
+          #expect(launchedWorktree == worktree)
+          launchedPlan.setValue(plan)
+          launchContext.setValue(context)
+          return AgentProfileLaunchResult(
+            tabID: TerminalTabID(),
+            surfaceID: launchedSurfaceID,
+            paneTitle: profile.name
+          )
+        }
+        $0[TerminalClient.self].focusSurface = { _, surfaceID in
+          focused.setValue(surfaceID)
+          return true
+        }
+      }
+    }
+
+    await store.send(.confirmSelection) {
+      $0.phase = .running(
+        HandoffHudRun(
+          target: $0.targets[0],
+          startedAt: Date(timeIntervalSince1970: 1_760_000_000),
+          stage: .requesting,
+          requestID: requestID
+        )
+      )
+    }
+    await store.send(.fallbackContextOnlyTapped) {
+      $0.phase = .running(
+        HandoffHudRun(
+          target: $0.targets[0],
+          startedAt: Date(timeIntervalSince1970: 1_760_000_000),
+          stage: .finishing,
+          requestID: requestID
+        )
+      )
+    }
+    await store.receive(\.fallbackFinished) {
+      $0.phase = .finished(.handedOff(agentDisplayName: profile.name))
+    }
+
+    let plan = try #require(launchedPlan.value)
+    #expect(plan.profileID == profile.id)
+    #expect(plan.invocation.arguments.contains("profile-model"))
+    #expect(plan.invocation.arguments.contains("work"))
+    #expect(!plan.terminalInput.contains("outgoing-model"))
+    #expect(plan.surfaceEnvironment["PROWL_ENV_OPENAI_API_KEY"] == "secret")
+    guard case .handoffBackgroundTab(let launchRoot) = launchContext.value else {
+      Issue.record("Expected a handoff background launch context")
+      return
+    }
+    #expect(launchRoot == root)
+    #expect(focused.value == launchedSurfaceID)
+    let log = try String(contentsOf: HandoffStore(rootURL: root).logURL, encoding: .utf8)
+    #expect(log.contains("profile_id=\(profile.id.uuidString)"))
+    #expect(!log.contains("secret"))
+  }
+
+  @Test(.dependencies) func deletedProfileFallbackFailsBeforeArtifacts() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let worktree = makeWorktree(root: root)
+    let profile = AgentProfile(name: "Deleted", runtime: .codex)
+    let initial = try #require(
+      HandoffHudFeature.State.make(
+        worktree: worktree,
+        source: makeSourceContext(),
+        profiles: [profile]
+      )
+    )
+    let storage = SettingsTestStorage()
+    let launched = LockIsolated(false)
+    let store = withDependencies {
+      $0.settingsFileStorage = storage.storage
+    } operation: {
+      TestStore(initialState: initial) {
+        HandoffHudFeature()
+      } withDependencies: {
+        $0.date.now = Date(timeIntervalSince1970: 1_760_000_000)
+        $0.uuid = UUIDGenerator { requestID }
+        $0[TerminalClient.self].sendTextToSurface = { _, _, _ in true }
+        $0[TerminalClient.self].launchAgentProfile = { _, _, _ in
+          launched.setValue(true)
+          return nil
+        }
+      }
+    }
+
+    await store.send(.confirmSelection) {
+      $0.phase = .running(
+        HandoffHudRun(
+          target: $0.targets[0],
+          startedAt: Date(timeIntervalSince1970: 1_760_000_000),
+          stage: .requesting,
+          requestID: requestID
+        )
+      )
+    }
+    await store.send(.fallbackContextOnlyTapped) {
+      $0.phase = .running(
+        HandoffHudRun(
+          target: $0.targets[0],
+          startedAt: Date(timeIntervalSince1970: 1_760_000_000),
+          stage: .finishing,
+          requestID: requestID
+        )
+      )
+    }
+    await store.receive(\.runFailed) {
+      $0.phase = .finished(.failed(message: "The selected Agent Profile is missing or disabled."))
+    }
+
+    #expect(launched.value == false)
+    #expect(!FileManager.default.fileExists(atPath: root.appending(path: ".prowl").path(percentEncoded: false)))
   }
 
   @Test(.dependencies) func failedInjectionFallsBackAutomatically() async throws {

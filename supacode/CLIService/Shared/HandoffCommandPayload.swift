@@ -7,6 +7,9 @@ public struct HandoffCommandPayload: Codable, Sendable, Equatable {
   public let outgoingAgent: String?
   /// The receiving agent for `to`.
   public let toAgent: String?
+  /// The receiving Prowl Agent Profile, when the handoff targeted a profile.
+  public let toProfileID: UUID?
+  public let toProfileName: String?
   public let repos: [HandoffRepoPayload]
   public let changedFileCount: Int
   /// Archived copy of the previous artifact, relative to the handoff dir (for `to`).
@@ -25,6 +28,8 @@ public struct HandoffCommandPayload: Codable, Sendable, Equatable {
     case artifactPath = "artifact_path"
     case outgoingAgent = "outgoing_agent"
     case toAgent = "to_agent"
+    case toProfileID = "to_profile_id"
+    case toProfileName = "to_profile_name"
     case repos
     case changedFileCount = "changed_file_count"
     case archivedPath = "archived_path"
@@ -39,6 +44,8 @@ public struct HandoffCommandPayload: Codable, Sendable, Equatable {
     artifactPath: String,
     outgoingAgent: String? = nil,
     toAgent: String? = nil,
+    toProfileID: UUID? = nil,
+    toProfileName: String? = nil,
     repos: [HandoffRepoPayload] = [],
     changedFileCount: Int = 0,
     archivedPath: String? = nil,
@@ -51,6 +58,8 @@ public struct HandoffCommandPayload: Codable, Sendable, Equatable {
     self.artifactPath = artifactPath
     self.outgoingAgent = outgoingAgent
     self.toAgent = toAgent
+    self.toProfileID = toProfileID
+    self.toProfileName = toProfileName
     self.repos = repos
     self.changedFileCount = changedFileCount
     self.archivedPath = archivedPath

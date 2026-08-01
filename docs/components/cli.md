@@ -255,8 +255,29 @@ for any runnable target. Two subcommands:
 
 ```bash
 prowl handoff to <agent> [target] [--brief -|--no-brief] [--note "…"] [--no-launch]
+prowl handoff to --agent-profile-id <uuid> \
+  [--pane <id>|--tab <id>|--worktree <id>] [--brief -|--no-brief] [--note "…"] [--no-launch]
 prowl handoff save       [target] [--brief -|--no-brief] [--note "…"]
 ```
+
+`handoff to` accepts **exactly one** receiver: either the runtime positional
+(`<agent>`) or `--agent-profile-id <uuid>`. A Profile UUID resolves the latest
+persisted, enabled [Agent Profile](agent-profiles.md) when the command runs.
+The Profile form has no positional source because that would be ambiguous;
+use `--pane`, `--tab`, or `--worktree` instead. With no selector, both forms
+still use the calling pane.
+
+In normal app use, choose the Profile by name in the Hand Off HUD; Prowl
+injects the UUID form automatically. For a direct CLI call, ask the user for
+the Profile ID or list only non-secret identity fields with:
+
+```bash
+jq -r '.agentProfiles[] | select(.isEnabled != false) | [.name, .id, .runtime] | @tsv' \
+  ~/.prowl/global.onevcat.json
+```
+
+Never print or paste the full settings file: Profile environment override
+values may contain credentials.
 
 **Source resolution.** An explicit selector (`--pane p3`, `--tab t2`,
 `--worktree <name>`, or the positional target) wins; otherwise the source is
@@ -291,6 +312,20 @@ blocking it.
   saves and accepts the full detected-agent list: `pi`, `claude`, `codex`,
   `gemini`, `cursor-agent`, `cline`, `opencode`, `copilot`, `kimi`, `droid`,
   `amp`, `qodercli`, `qwen`, `grok`.
+- **`to --agent-profile-id <uuid>`** — runs the same archive/briefing/context
+  transition, then launches with the Profile's complete configuration:
+  runtime, model, effort, execution mode, Extra Arguments, launch-scoped
+  environment, Dedicated Home/account, and identity. Source model or
+  unrestricted state is not inherited. The handoff always creates a new
+  background tab rooted at the source and ignores the Profile's normal split
+  placement. A native Codex config profile is simply Profile Extra Arguments,
+  for example `-p work`. Missing, disabled, or unplannable Profiles fail before
+  artifacts change. `--no-launch` still resolves and reports the Profile but
+  does not plan, provision, create a pane, or update launch memory.
+  If Dedicated Home provisioning or surface creation fails after artifact
+  commit, the command returns `HANDOFF_FAILED` but keeps the archive and saved
+  progress, and records `launch=failed`; the error text explicitly says the
+  receiver was not launched.
 - **`save`** — a deferred-handoff checkpoint: installs a fresh briefing
   (archiving the replaced one) and regenerates `context.md`, with no
   destination and no launch. A context-only `save --no-brief` refreshes
@@ -308,14 +343,25 @@ prowl handoff to codex --brief - <<'EOF'      # self-handoff with inline briefin
 EOF
 prowl handoff save --brief - --note "eod checkpoint" <<'EOF' … EOF
 prowl handoff to claude --pane p7 --json      # hand off a third pane (fork fallback)
+prowl handoff to --agent-profile-id "$profile_id" --brief - <<'EOF'
+# Handoff
+## Objective
+…
+## Current State
+…
+## Next Steps
+…
+EOF
 ```
 
 The outgoing agent is whatever Prowl detects in the source pane (see
 `pane.agent` in [`list`](#prowl-list)). Response payload
 (`prowl.cli.handoff.v2`) includes `action`, `artifact_path`, `outgoing_agent`,
-`to_agent`, `repos`, `changed_file_count`, `archived_path`, `session_context`,
-`briefing` (`inline` / `fork` / `none` / `failed`), `has_briefing`, and
-`launched_pane`. `session_context` includes the generated excerpt path plus
+`to_agent`, optional `to_profile_id` / `to_profile_name`, `repos`,
+`changed_file_count`, `archived_path`, `session_context`, `briefing` (`inline`
+/ `fork` / `none` / `failed`), `has_briefing`, and `launched_pane`.
+`to_agent` remains the resolved runtime even for Profile targets.
+`session_context` includes the generated excerpt path plus
 native `session_id` / `transcript_path` only when the source pane has
 unambiguous native-session evidence (the same identity exposed by
 `prowl agents`); ambiguous sessions are never forked. `current.md` exists iff

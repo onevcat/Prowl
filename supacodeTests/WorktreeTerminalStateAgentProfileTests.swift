@@ -22,6 +22,42 @@ struct WorktreeTerminalStateAgentProfileTests {
     #expect(state.launchProfilesBySurface.isEmpty)
   }
 
+  @Test func handoffLaunchCreatesAnUnselectedTabAtTheRequestedRoot() throws {
+    let state = makeState()
+    let originalTabID = try #require(state.createTab())
+    let originalSurfaceID = try #require(state.focusedSurfaceId(in: originalTabID))
+    let profileID = UUID()
+    let root = URL(fileURLWithPath: "/tmp/repo/handoff-root", isDirectory: true)
+    let plan = makePlan(
+      dedicatedHome: nil,
+      profileID: profileID,
+      placement: .split,
+      surfaceEnvironment: ["PROWL_ENV_API_KEY": "secret"]
+    )
+    defer { state.closeAllSurfaces() }
+
+    let result = try #require(
+      state.launchAgentProfile(plan, context: .handoffBackgroundTab(root: root))
+    )
+
+    #expect(state.tabManager.tabs.count == 2)
+    #expect(state.tabManager.selectedTabId == originalTabID)
+    #expect(state.focusedSurfaceId(in: originalTabID) == originalSurfaceID)
+    #expect(result.tabID != originalTabID)
+    #expect(state.tabID(containing: result.surfaceID) == result.tabID)
+    #expect(result.paneTitle == plan.profileName)
+    #expect(state.surfaceView(for: result.surfaceID)?.launchWorkingDirectory == root)
+    #expect(
+      state.launchProfilesBySurface[result.surfaceID]
+        == WorktreeTerminalState.SurfaceLaunchProfile(
+          profileID: profileID,
+          name: plan.profileName,
+          runtime: plan.runtime,
+          dedicatedHome: nil
+        )
+    )
+  }
+
   @Test func launchProfileNameOnlyAppliesToTheLaunchedRuntime() {
     let state = makeState()
     let surfaceID = UUID()
@@ -70,16 +106,21 @@ struct WorktreeTerminalStateAgentProfileTests {
     )
   }
 
-  private func makePlan(dedicatedHome: URL?) -> AgentProfileLaunchPlan {
+  private func makePlan(
+    dedicatedHome: URL?,
+    profileID: UUID = UUID(),
+    placement: AgentProfilePlacement = .tab,
+    surfaceEnvironment: [String: String] = [:]
+  ) -> AgentProfileLaunchPlan {
     AgentProfileLaunchPlan(
-      profileID: UUID(),
+      profileID: profileID,
       profileName: "Codex · Bound",
       runtime: .codex,
       invocation: AgentInvocation(executable: "codex", arguments: []),
       commandEnvironmentTokens: [],
-      placement: .tab,
+      placement: placement,
       splitDirection: .right,
-      surfaceEnvironment: [:],
+      surfaceEnvironment: surfaceEnvironment,
       dedicatedHome: dedicatedHome
     )
   }

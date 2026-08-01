@@ -163,7 +163,8 @@ nonisolated enum AgentProfileLaunchPlanner {
   /// home provisioning happens at the launch boundary, not here.
   static func plan(
     for profile: AgentProfile,
-    homeBaseDirectory: URL
+    homeBaseDirectory: URL,
+    intent: AgentStartIntent = .interactive
   ) throws -> AgentProfileLaunchPlan {
     guard let adapter = AgentRuntimeAdapterRegistry.adapter(for: profile.runtime.agent) else {
       throw AgentProfileLaunchPlanError.runtimeUnavailable(profile.runtime)
@@ -175,7 +176,7 @@ nonisolated enum AgentProfileLaunchPlanner {
       extraArguments: ShellWordSplitter.split(profile.extraArguments)
     )
     let invocation = try AgentRuntimeAdapterRegistry.makeStartInvocation(
-      AgentStartRequest(agent: profile.runtime.agent, intent: .interactive, configuration: configuration)
+      AgentStartRequest(agent: profile.runtime.agent, intent: intent, configuration: configuration)
     )
 
     // The whole patch renders as launch-scoped `env` tokens (docs-ai

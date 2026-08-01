@@ -37,6 +37,13 @@ respawn.
   one click launches the Recommended profile directly, skipping the popover.
 - **Command Palette** (`⌘P`) — "Launch Agent: <name>" rows dispatch the exact
   same action, and carry the same availability warning in their subtitle.
+- **Hand Off HUD** — enabled Profiles appear before Runtime Default receivers;
+  the repo's Recommended Profile is first and preselected, then the remaining
+  Profiles keep Settings order. A handoff uses the Profile's full launch
+  configuration with a takeover prompt, but always opens a new background tab
+  rooted at the source worktree — it deliberately ignores the Profile's normal
+  **Open In** split/tab placement. While the HUD is still waiting, it focuses
+  the exact receiver pane after success.
 
 A launch creates a **new** tab (or split, per placement) in the current
 worktree, running the agent interactively with no initial prompt. Prowl never
@@ -57,6 +64,14 @@ push its editor; the native Back control returns to the list while the Settings
 sidebar remains available. Adding a profile opens the same editor immediately.
 Changing another Settings sidebar section leaves the editor and opens that
 section's root.
+
+To create a Codex Profile backed by a native Codex config profile, choose
+**Add Profile → Codex**, give it a Prowl display name, and put `-p work` (or
+your native profile name) in **Extra Arguments**. There is no separate
+Codex-profile field: this keeps all argv ordering and quoting in the Codex
+runtime adapter. You can then choose the Prowl Profile by name from Hand Off;
+the advanced direct CLI form is
+`prowl handoff to --agent-profile-id <uuid> --brief -`.
 
 The editor's **Icon** preview opens an SF Symbol picker. A custom symbol appears
 where Prowl presents the launch preset: the Settings list, repository Default
@@ -102,6 +117,10 @@ appears in the typed command, shell history, or scrollback. Rules:
   panes intentionally run with your default environment. Re-launch through
   the Agents menu to get the profile's environment again.
 
+Profile handoff uses this same launch path. The injected request, handoff JSON,
+artifacts, and log carry only Profile identity/runtime — never override values,
+Extra Arguments, home paths, or credentials.
+
 ## Dedicated home (separate account)
 
 Toggling **Use Dedicated Home** (Advanced) gives the profile its own runtime
@@ -132,6 +151,8 @@ when the picker says Standard; any other extra argument (including
 `--sandbox`/`--ask-for-approval`/`-c` overrides) shows a neutral "effective
 execution mode follows your extra arguments" note instead of claiming
 Standard — the semantics belong to your command line.
+This is also where a Codex native config profile belongs: `-p work` is passed
+unchanged before an optional handoff takeover prompt.
 The editor opens with a **Profile** section (name, agent, icon), followed by
 **Launch Preview** — the exact rendered invocation, including the env prefix
 for bound profiles, using the same rendering as the real launch — then a

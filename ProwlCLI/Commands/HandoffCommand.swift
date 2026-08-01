@@ -113,9 +113,9 @@ struct HandoffToCommand: ParsableCommand {
 
   @Argument(
     help:
-      "The agent to hand off to. Launch supported: \(HandoffAgentSupport.launchableAgentsDescription); use --no-launch for other detected agents."
+      "The agent to hand off to. Required unless --agent-profile-id is provided. Launch supported: \(HandoffAgentSupport.launchableAgentsDescription); use --no-launch for other detected agents."
   )
-  var agent: String
+  var agent: String?
 
   @Argument(help: "Source pane/tab UUID or worktree id/name/path (defaults to the calling pane).")
   var target: String?
@@ -127,13 +127,43 @@ struct HandoffToCommand: ParsableCommand {
   @Option(name: .long, help: "Optional note appended to the handoff log.")
   var note: String?
 
+  @Option(
+    name: .customLong("agent-profile-id"),
+    help: "Receiving Prowl Agent Profile UUID. Cannot be combined with the agent argument."
+  )
+  var agentProfileID: String?
+
   @Flag(name: .customLong("no-launch"), help: "Archive + save only; do not launch the receiving agent.")
   var noLaunch = false
 
-  mutating func run() throws {
-    try CLIExecution.run(command: "handoff", output: options.outputMode, colorEnabled: options.colorEnabled) {
-      let rawAgent = agent.lowercased()
-      guard let normalizedAgent = HandoffAgentSupport.normalize(rawAgent) else {
+  struct ReceivingTarget: Equatable {
+    let agent: String?
+    let profileID: UUID?
+  }
+
+  func resolveReceivingTarget() throws -> ReceivingTarget {
+    switch (agent, agentProfileID) {
+    case (nil, nil):
+      throw ExitError(
+        code: CLIErrorCode.invalidArgument,
+        message: "handoff to requires exactly one receiver: an agent argument or --agent-profile-id <uuid>."
+      )
+    case (.some, .some):
+      throw ExitError(
+        code: CLIErrorCode.invalidArgument,
+        message:
+          "handoff to with --agent-profile-id does not accept positional arguments; select the source with --pane, --tab, or --worktree."
+      )
+    case (nil, .some(let rawProfileID)):
+      guard let profileID = UUID(uuidString: rawProfileID) else {
+        throw ExitError(
+          code: CLIErrorCode.invalidArgument,
+          message: "--agent-profile-id requires a valid UUID."
+        )
+      }
+      return ReceivingTarget(agent: nil, profileID: profileID)
+    case (.some(let rawAgent), nil):
+      guard let normalizedAgent = HandoffAgentSupport.normalize(rawAgent.lowercased()) else {
         throw ExitError(
           code: CLIErrorCode.invalidArgument,
           message: "handoff to requires an agent of: \(HandoffAgentSupport.supportedAgentsDescription)."
@@ -146,6 +176,13 @@ struct HandoffToCommand: ParsableCommand {
             "handoff can only launch: \(HandoffAgentSupport.launchableAgentsDescription). Use --no-launch for other agents."
         )
       }
+      return ReceivingTarget(agent: normalizedAgent, profileID: nil)
+    }
+  }
+
+  mutating func run() throws {
+    try CLIExecution.run(command: "handoff", output: options.outputMode, colorEnabled: options.colorEnabled) {
+      let receivingTarget = try resolveReceivingTarget()
       let resolvedBrief = try briefOptions.resolve()
       let envelope = CommandEnvelope(
         output: options.outputMode,
@@ -153,7 +190,8 @@ struct HandoffToCommand: ParsableCommand {
           HandoffInput(
             action: .toAgent,
             selector: try selector.resolve(positionalTarget: target),
-            toAgent: normalizedAgent,
+            toAgent: receivingTarget.agent,
+            toProfileID: receivingTarget.profileID,
             note: note,
             launch: !noLaunch,
             brief: resolvedBrief.brief,

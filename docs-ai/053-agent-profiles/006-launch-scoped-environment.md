@@ -58,8 +58,10 @@ env CODEX_HOME='/Users/x/.prowl/agent-profiles/<uuid>' OPENAI_API_KEY="$PROWL_EN
   这两条**不再需要**(surface 上只剩 carrier 变量,不继承恰是正确行为),从 follow-up
   中撤销。
 - restore/手动启动"不重放 override"从 known limitation 升格为规则本身。
-- resume(handoff 波次)携带环境的缺口不变:结构化 resume 需要把同一组
-  token/carrier 语义带过去,仍归 handoff 波次。
+- source resume 携带环境的缺口不变:结构化 resume 仍需把同一组 token/carrier
+  语义带过去,但 053.007 的最小 Profile-aware handoff 波次只配置接收端,不扩展
+  outgoing source 的 `AgentResumeRequest`;该缺口继续延期(见
+  [007-profile-aware-handoff.md](007-profile-aware-handoff.md))。
 
 ## 已知边界
 

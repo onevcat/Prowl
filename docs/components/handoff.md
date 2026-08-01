@@ -125,14 +125,30 @@ exposed by `prowl agents`. Ambiguous sessions are omitted rather than guessed.
 
 ```bash
 prowl handoff to <agent> [target] [--brief -|--no-brief] [--note "…"] [--no-launch]
+prowl handoff to --agent-profile-id <uuid> \
+  [--pane <id> | --tab <id> | --worktree <source>] \
+  [--brief -|--no-brief] [--note "…"] [--no-launch]
 prowl handoff save       [target] [--brief -|--no-brief] [--note "…"]
 ```
 
-- **`to <agent>`** runs the full transition and launches the receiver in a
-  background tab. Interactive launch is verified for `claude` and `codex`;
-  `--no-launch` still archives + saves and accepts every detected-agent
-  token (`pi`, `claude`, `codex`, `gemini`, `cursor-agent`, `cline`,
-  `opencode`, `copilot`, `kimi`, `droid`, `amp`, `qodercli`, `qwen`, `grok`).
+- **`to <agent>`** selects a Runtime Default receiver and preserves the
+  existing portable source inheritance: an explicitly observed unrestricted
+  mode can carry across the verified Claude Code/Codex adapters, while model
+  identifiers stay within one runtime family. Interactive launch is verified
+  for `claude` and `codex`; `--no-launch` still archives + saves and accepts
+  every detected-agent token (`pi`, `claude`, `codex`, `gemini`,
+  `cursor-agent`, `cline`, `opencode`, `copilot`, `kimi`, `droid`, `amp`,
+  `qodercli`, `qwen`, `grok`).
+- **`to --agent-profile-id <uuid>`** selects an enabled
+  [Prowl Agent Profile](agent-profiles.md). The Profile is authoritative for
+  runtime, model, effort, execution mode, Extra Arguments, environment,
+  Dedicated Home/account, and pane identity; none of those values are
+  inherited from the source. For example, a Codex native config profile stays
+  ordinary Profile Extra Arguments: `-p work`. A Profile handoff always opens
+  a new background tab in the source worktree, ignoring that Profile's manual
+  **Open In** split/tab choice. `--no-launch` resolves and records the enabled
+  Profile but does not prepare a launch, provision its home, create a pane, or
+  update Last Launched Profile.
 - **`save`** is the deferred-handoff checkpoint: install a fresh briefing and
   regenerate context, with no destination and no launch. Use it when you stop
   for the day and the successor doesn't exist yet. A checkpoint never removes
@@ -141,7 +157,9 @@ prowl handoff save       [target] [--brief -|--no-brief] [--note "…"]
 ### Who is the source?
 
 - An explicit selector (`--pane p3`, `--tab t2`, `--worktree <name>`, or the
-  positional target) always wins.
+  positional target) always wins. The positional source is available only in
+  the runtime form; to override the calling pane in the Profile form, use an
+  explicit selector flag.
 - Otherwise the source is **the calling pane**: Prowl resolves the `prowl`
   process's ancestry to the pane whose shell spawned it. An agent running
   `prowl handoff to …` inside its pane is therefore handing off **itself** —
@@ -157,10 +175,12 @@ fork degrades to context-only rather than blocking a rescue.
 
 The receiving agent's kickoff prompt adapts: with a briefing it starts from
 `current.md`'s Next Steps; without one it orients from `context.md` and the
-archive. When Prowl observed the outgoing launch, an explicitly observed
-unrestricted execution mode carries over to the **destination launch only**
-across the verified claude/codex adapters; model identifiers stay within the
-same agent family. Full flag/payload reference: [cli](cli.md#prowl-handoff).
+archive. For a Runtime Default receiver, when Prowl observed the outgoing
+launch, an explicitly observed unrestricted execution mode carries over to the
+**destination launch only** across the verified claude/codex adapters; model
+identifiers stay within the same agent family. A Profile receiver instead uses
+only its frozen Profile configuration. Full flag/payload reference:
+[cli](cli.md#prowl-handoff).
 
 ## In the app: the Agents capsule and the Hand Off HUD
 
@@ -177,13 +197,19 @@ the [Active Agents panel](active-agents.md), which targets the row's own pane.
 
 The HUD is a trigger and an observer for the same CLI transition:
 
-1. **Choose** — pick the receiving agent (the current agent stays listed as a
-   fresh-session restart) or **Only save progress, don't hand off**.
+1. **Choose** — enabled Agent Profiles appear first, with the current repo's
+   Recommended Profile selected by default; remaining Profiles keep Settings
+   order. Runtime Default Claude Code/Codex targets follow (the current agent
+   stays listed as a fresh-session restart), then **Only save progress, don't
+   hand off**. With no enabled Profiles, the original Runtime Default list is
+   unchanged.
 2. **Ask the live agent** — Prowl types a one-line request into the source
    pane asking the agent to run `prowl handoff … --brief -` itself, then
    waits. The agent writes its briefing in its own words and the transition
    completes through the CLI service; the HUD observes the completion and
-   jumps you to the receiver. If the agent is busy, the request queues in its
+   jumps you to the exact receiver pane. If launch fails after the artifacts
+   were committed, the HUD says that progress was saved but the receiver was
+   not launched. If the agent is busy, the request queues in its
    input — the HUD says so. While waiting the panel is **non-modal**: the
    keyboard stays with the terminal (the request may trigger permission
    prompts you need to approve), and clicking outside collapses the panel —
@@ -212,6 +238,10 @@ fork fallback is.
   session, so you can still read or roll back from it.
 - Keep secrets/tokens out of the briefing; `.prowl/handoff/` is self-ignoring
   and session excerpts belong in local state, not source control.
+- Profile Extra Arguments, environment values, Dedicated Home paths, and
+  credentials never enter the injected request, CLI payload, handoff
+  artifacts, or transition log. Only Profile ID/name and resolved runtime are
+  recorded.
 
 ## Gotchas
 

@@ -2,6 +2,7 @@ import ComposableArchitecture
 import DependenciesTestSupport
 import Foundation
 import IdentifiedCollections
+import Sharing
 import Testing
 
 @testable import supacode
@@ -147,6 +148,53 @@ struct AppFeatureHandoffTests {
     await store.send(.handoffHud(.presented(.delegate(.dismiss)))) {
       $0.handoffHud = nil
     }
+  }
+
+  @Test(.dependencies) func openHandoffHudReadsRecommendedProfilesFromPersistedSettings() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let first = AgentProfile(name: "Claude · Personal", runtime: .claude)
+    let recommended = AgentProfile(name: "Codex · Work", runtime: .codex)
+    let storage = SettingsTestStorage()
+    let sourcePaneID = uuid(9)
+    let store = withDependencies {
+      $0.settingsFileStorage = storage.storage
+    } operation: {
+      @Shared(.userGlobalSettings) var globalSettings
+      $globalSettings.withLock { $0.agentProfiles = [first, recommended] }
+      @Shared(.userRepositorySettings(root)) var repositorySettings
+      $repositorySettings.withLock { $0.defaultAgentProfileID = recommended.id }
+      return TestStore(
+        initialState: AppFeature.State(
+          repositories: makeWorkspaceState(root: root),
+          settings: SettingsFeature.State()
+        )
+      ) {
+        AppFeature()
+      } withDependencies: {
+        $0.terminalClient.handoffSourceContext = { _ in
+          HandoffSourceContext(
+            sessionContext: HandoffStore.SessionContext(
+              agent: "codex",
+              paneID: sourcePaneID.uuidString,
+              paneTitle: "codex",
+              source: "terminal-scrollback",
+              confidence: "fallback",
+              excerptText: nil
+            ),
+            observation: nil,
+            session: nil
+          )
+        }
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.openHandoffHud)
+
+    let hud = try #require(store.state.handoffHud)
+    #expect(hud.targets.first?.kind == .profile(recommended.id, runtime: .codex))
+    #expect(Array(hud.targets.map(\.title).prefix(2)) == [recommended.name, first.name])
   }
 
   @Test(.dependencies) func openHandoffHudWarnsWithoutDetectedAgent() async throws {
@@ -323,7 +371,11 @@ struct AppFeatureHandoffTests {
     await store.send(.handoffHud(.presented(.confirmSelection)))
 
     // The HUD asked the live agent to hand off itself — nothing launched yet.
-    #expect(injected.value.first?.contains("prowl handoff to claude --brief -") == true)
+    #expect(
+      injected.value.first?.contains(
+        "prowl handoff to claude --pane \(sourceSurfaceID.uuidString) --brief -"
+      ) == true
+    )
     guard case .running(let run)? = store.state.handoffHud?.phase, run.stage == .requesting else {
       Issue.record("Expected requesting stage, got \(String(describing: store.state.handoffHud?.phase))")
       return

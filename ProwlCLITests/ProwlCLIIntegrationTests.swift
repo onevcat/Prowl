@@ -1652,6 +1652,94 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     }
   }
 
+  func testHandoffToProfileRoundTripsOverSocketWithoutSelector() throws {
+    let profileID = UUID()
+    let socketPath = temporarySocketPath(suffix: "handoff-to-profile")
+    let response = try CommandResponse(
+      ok: true,
+      command: "handoff",
+      schemaVersion: "prowl.cli.handoff.v2",
+      data: RawJSON(encoding: HandoffCommandPayload(
+        action: .toAgent,
+        artifactPath: "/Projects/App/.prowl/handoff/current.md",
+        outgoingAgent: "claude",
+        toAgent: "codex",
+        toProfileID: profileID,
+        toProfileName: "Codex Work"
+      ))
+    )
+
+    let (requestData, result) = try runWithMockServer(
+      socketPath: socketPath,
+      response: response,
+      args: ["handoff", "to", "--agent-profile-id", profileID.uuidString, "--no-launch", "--json"]
+    )
+
+    XCTAssertEqual(result.exitCode, 0)
+    let envelope = try JSONDecoder().decode(CommandEnvelope.self, from: requestData)
+    if case .handoff(let input) = envelope.command {
+      XCTAssertEqual(input.action, .toAgent)
+      XCTAssertNil(input.toAgent)
+      XCTAssertEqual(input.toProfileID, profileID)
+      XCTAssertEqual(input.selector, .none)
+      XCTAssertFalse(input.launch)
+    } else {
+      XCTFail("Expected handoff command envelope")
+    }
+
+    let payload = try jsonObject(from: result.stdout)
+    XCTAssertEqual(payload["schema_version"] as? String, "prowl.cli.handoff.v2")
+    let data = try XCTUnwrap(payload["data"] as? [String: Any])
+    XCTAssertEqual(data["to_agent"] as? String, "codex")
+    XCTAssertEqual(data["to_profile_id"] as? String, profileID.uuidString)
+    XCTAssertEqual(data["to_profile_name"] as? String, "Codex Work")
+  }
+
+  func testHandoffToProfileAcceptsExplicitSelector() throws {
+    let profileID = UUID()
+    let socketPath = temporarySocketPath(suffix: "handoff-to-profile-pane")
+    let response = try CommandResponse(
+      ok: true,
+      command: "handoff",
+      schemaVersion: "prowl.cli.handoff.v2",
+      data: RawJSON(encoding: makeHandoffPayload(action: .toAgent))
+    )
+
+    let (requestData, result) = try runWithMockServer(
+      socketPath: socketPath,
+      response: response,
+      args: ["handoff", "to", "--agent-profile-id", profileID.uuidString, "--pane", "p1", "--json"]
+    )
+
+    XCTAssertEqual(result.exitCode, 0)
+    let envelope = try JSONDecoder().decode(CommandEnvelope.self, from: requestData)
+    if case .handoff(let input) = envelope.command {
+      XCTAssertEqual(input.toProfileID, profileID)
+      XCTAssertEqual(input.selector, .pane("p1"))
+    } else {
+      XCTFail("Expected handoff command envelope")
+    }
+  }
+
+  func testHandoffToProfileValidationFailsBeforeTransport() throws {
+    let profileID = UUID().uuidString
+    let invalidArguments = [
+      ["handoff", "to", "--json"],
+      ["handoff", "to", "codex", "--agent-profile-id", profileID, "--json"],
+      ["handoff", "to", "App", "--agent-profile-id", profileID, "--json"],
+      ["handoff", "to", "--agent-profile-id", "not-a-uuid", "--json"],
+    ]
+
+    for arguments in invalidArguments {
+      let result = try runProwl(args: arguments)
+
+      XCTAssertNotEqual(result.exitCode, 0, "Expected failure for \(arguments)")
+      let payload = try jsonObject(from: result.stdout)
+      let error = try XCTUnwrap(payload["error"] as? [String: Any])
+      XCTAssertEqual(error["code"] as? String, CLIErrorCode.invalidArgument)
+    }
+  }
+
   func testHandoffToNormalizesAgentCaseAndNoLaunch() throws {
     let socketPath = temporarySocketPath(suffix: "handoff-to-no-launch")
     let response = try CommandResponse(
@@ -1790,6 +1878,35 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     XCTAssertEqual(result.exitCode, 0)
     XCTAssertTrue(result.stdout.contains("no (--no-launch); take over manually"), result.stdout)
     XCTAssertFalse(result.stdout.contains("use --no-launch handoff"), result.stdout)
+  }
+
+  func testHandoffToProfileTextIncludesProfileMetadataAndResolvedRuntime() throws {
+    let profileID = UUID()
+    let socketPath = temporarySocketPath(suffix: "handoff-to-profile-text")
+    let response = try CommandResponse(
+      ok: true,
+      command: "handoff",
+      schemaVersion: "prowl.cli.handoff.v2",
+      data: RawJSON(encoding: HandoffCommandPayload(
+        action: .toAgent,
+        artifactPath: "/Projects/App/.prowl/handoff/current.md",
+        outgoingAgent: "claude",
+        toAgent: "codex",
+        toProfileID: profileID,
+        toProfileName: "Codex Work"
+      ))
+    )
+
+    let (_, result) = try runWithMockServer(
+      socketPath: socketPath,
+      response: response,
+      args: ["handoff", "to", "--agent-profile-id", profileID.uuidString]
+    )
+
+    XCTAssertEqual(result.exitCode, 0)
+    XCTAssertTrue(result.stdout.contains("claude → codex"), result.stdout)
+    XCTAssertTrue(result.stdout.contains("Codex Work"), result.stdout)
+    XCTAssertTrue(result.stdout.contains(profileID.uuidString), result.stdout)
   }
 
   // MARK: - Helpers

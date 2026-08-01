@@ -305,6 +305,10 @@ enum OutputRenderer {
       if let archived = payload.archivedPath {
         lines.append("  \("archived:".dim) \(archived)")
       }
+      if let profileID = payload.toProfileID {
+        let profileName = payload.toProfileName ?? "Unknown Profile"
+        lines.append("  \("profile:".dim) \(profileName.green)  \(profileID.uuidString.dim)")
+      }
       lines.append(contentsOf: renderHandoffBriefing(payload.briefing))
       lines.append(contentsOf: renderHandoffSession(payload.sessionContext))
       if let pane = payload.launchedPane {

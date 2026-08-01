@@ -186,6 +186,8 @@ public struct HandoffInput: Codable, Sendable {
   public let selector: TargetSelector
   /// Target agent for `to` (e.g. "claude", "codex"). Required for `.to`, nil otherwise.
   public let toAgent: String?
+  /// Target Prowl Agent Profile for `to`. Mutually exclusive with `toAgent` on input.
+  public let toProfileID: UUID?
   /// Optional free-text note appended to the handoff log.
   public let note: String?
   /// When false, `to` refreshes + archives the handoff but does not launch the
@@ -205,6 +207,7 @@ public struct HandoffInput: Codable, Sendable {
     case action
     case selector
     case toAgent = "to_agent"
+    case toProfileID = "to_profile_id"
     case note
     case launch
     case brief
@@ -217,6 +220,7 @@ public struct HandoffInput: Codable, Sendable {
     action: HandoffAction,
     selector: TargetSelector = .none,
     toAgent: String? = nil,
+    toProfileID: UUID? = nil,
     note: String? = nil,
     launch: Bool = true,
     brief: String? = nil,
@@ -227,6 +231,7 @@ public struct HandoffInput: Codable, Sendable {
     self.action = action
     self.selector = selector
     self.toAgent = toAgent
+    self.toProfileID = toProfileID
     self.note = note
     self.launch = launch
     self.brief = brief
@@ -240,6 +245,7 @@ public struct HandoffInput: Codable, Sendable {
     self.action = try container.decode(HandoffAction.self, forKey: .action)
     self.selector = try container.decode(TargetSelector.self, forKey: .selector)
     self.toAgent = try container.decodeIfPresent(String.self, forKey: .toAgent)
+    self.toProfileID = try container.decodeIfPresent(UUID.self, forKey: .toProfileID)
     self.note = try container.decodeIfPresent(String.self, forKey: .note)
     self.launch = try container.decodeIfPresent(Bool.self, forKey: .launch) ?? true
     self.brief = try container.decodeIfPresent(String.self, forKey: .brief)

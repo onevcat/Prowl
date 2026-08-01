@@ -214,6 +214,8 @@ nonisolated struct HandoffCoordinator: Sendable {
     toAgent: String,
     disposition: LaunchDisposition,
     briefing: HandoffBriefing,
+    toProfileID: AgentProfile.ID? = nil,
+    toProfileName: String? = nil,
     archivedPath: String? = nil,
     note: String? = nil,
     source: String? = nil,
@@ -224,6 +226,8 @@ nonisolated struct HandoffCoordinator: Sendable {
       toAgent: toAgent,
       disposition: disposition,
       briefing: briefing,
+      toProfileID: toProfileID,
+      toProfileName: toProfileName,
       archivedPath: archivedPath,
       note: note,
       source: source
@@ -239,6 +243,8 @@ nonisolated struct HandoffCoordinator: Sendable {
     toAgent: String,
     disposition: LaunchDisposition,
     briefing: HandoffBriefing,
+    toProfileID: AgentProfile.ID? = nil,
+    toProfileName: String? = nil,
     archivedPath: String? = nil,
     note: String? = nil,
     source: String? = nil
@@ -251,6 +257,17 @@ nonisolated struct HandoffCoordinator: Sendable {
       case .failed: "  launch=failed"
       }
     var line = "\(from) → \(toAgent)\(launchPart)  briefing=\(briefing.rawValue)"
+    if let toProfileID {
+      line += "  profile_id=\(toProfileID.uuidString)"
+    }
+    if let toProfileName {
+      let name =
+        toProfileName
+        .replacing("\r", with: " ")
+        .replacing("\n", with: " ")
+        .replacing("\"", with: "'")
+      line += "  profile=\"\(name)\""
+    }
     if case .failed = disposition, let archivedPath {
       line += "  archive=\(archivedPath)"
     }

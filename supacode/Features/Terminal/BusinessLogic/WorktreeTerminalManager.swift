@@ -63,12 +63,19 @@ final class WorktreeTerminalManager {
   /// The launch outcome is reported as an event either way: the reducer
   /// records the per-repo launch memory only on success and surfaces the
   /// failure as a toast (docs-ai 053/005).
-  private func launchAgentProfile(_ plan: AgentProfileLaunchPlan, in worktree: Worktree) {
-    if state(for: worktree).launchAgentProfile(plan) != nil {
+  @discardableResult
+  func launchAgentProfile(
+    _ plan: AgentProfileLaunchPlan,
+    in worktree: Worktree,
+    context: AgentProfileLaunchContext = .profileDefault
+  ) -> AgentProfileLaunchResult? {
+    let result = state(for: worktree).launchAgentProfile(plan, context: context)
+    if result != nil {
       emit(.agentProfileLaunched(worktreeID: worktree.id, profileID: plan.profileID))
     } else {
       emit(.agentProfileLaunchFailed(worktreeID: worktree.id, profileName: plan.profileName))
     }
+    return result
   }
 
   private func handleTabCommand(_ command: TerminalClient.Command) -> Bool {

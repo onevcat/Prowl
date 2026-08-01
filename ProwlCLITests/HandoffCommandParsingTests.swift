@@ -66,6 +66,10 @@ final class HandoffCommandParsingTests: XCTestCase {
 
     XCTAssertEqual(command.agent, "claude")
     XCTAssertEqual(
+      try command.resolveReceivingTarget(),
+      HandoffToCommand.ReceivingTarget(agent: "claude", profileID: nil)
+    )
+    XCTAssertEqual(
       try command.selector.resolve(positionalTarget: command.target),
       .auto("App")
     )
@@ -76,5 +80,51 @@ final class HandoffCommandParsingTests: XCTestCase {
 
     XCTAssertTrue(command.briefOptions.noBrief)
     XCTAssertTrue(command.noLaunch)
+  }
+
+  func testToAcceptsProfileWithoutSourceSelector() throws {
+    let profileID = UUID()
+    let command = try HandoffToCommand.parse(["--agent-profile-id", profileID.uuidString])
+
+    XCTAssertNil(command.agent)
+    XCTAssertNil(command.target)
+    XCTAssertEqual(
+      try command.resolveReceivingTarget(),
+      HandoffToCommand.ReceivingTarget(agent: nil, profileID: profileID)
+    )
+    XCTAssertEqual(try command.selector.resolve(positionalTarget: command.target), .none)
+  }
+
+  func testToProfileAcceptsExplicitSelectorAndNoLaunch() throws {
+    let profileID = UUID()
+    let command = try HandoffToCommand.parse([
+      "--agent-profile-id", profileID.uuidString,
+      "--pane", "p1",
+      "--no-launch",
+    ])
+
+    XCTAssertEqual(try command.selector.resolve(positionalTarget: command.target), .pane("p1"))
+    XCTAssertTrue(command.noLaunch)
+  }
+
+  func testToRejectsMissingOrMultipleReceivingTargets() throws {
+    let profileID = UUID().uuidString
+    let missing = try HandoffToCommand.parse([])
+    let multiple = try HandoffToCommand.parse(["codex", "--agent-profile-id", profileID])
+
+    XCTAssertThrowsError(try missing.resolveReceivingTarget())
+    XCTAssertThrowsError(try multiple.resolveReceivingTarget())
+  }
+
+  func testToProfileRejectsPositionalSource() throws {
+    let command = try HandoffToCommand.parse(["App", "--agent-profile-id", UUID().uuidString])
+
+    XCTAssertThrowsError(try command.resolveReceivingTarget())
+  }
+
+  func testToProfileRejectsMalformedUUID() throws {
+    let command = try HandoffToCommand.parse(["--agent-profile-id", "not-a-uuid"])
+
+    XCTAssertThrowsError(try command.resolveReceivingTarget())
   }
 }

@@ -183,6 +183,19 @@ struct AgentProfileTests {
     #expect(plan.previewText == plan.invocation.terminalInput)
   }
 
+  @Test func promptedPlanPlacesHandoffPromptAfterProfileArguments() throws {
+    var preset = profile(name: "Codex · Work")
+    preset.extraArguments = "-p work"
+
+    let plan = try AgentProfileLaunchPlanner.plan(
+      for: preset,
+      homeBaseDirectory: URL(fileURLWithPath: "/base", isDirectory: true),
+      intent: .prompt("Continue from the handoff")
+    )
+
+    #expect(plan.invocation.arguments == ["-p", "work", "Continue from the handoff"])
+  }
+
   @Test func boundProfilePlanDerivesHomeFromUUIDInsideBase() throws {
     var bound = profile(name: "Codex · Work")
     bound.bindsDedicatedHome = true

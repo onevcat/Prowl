@@ -47,6 +47,53 @@ struct WorktreeTerminalManagerTests {
     #expect(event == .setupScriptConsumed(worktreeID: worktree.id))
   }
 
+  @Test func profileLaunchReturnsLocationAndEmitsSuccess() async throws {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktree = makeWorktree()
+    let profileID = UUID()
+    let plan = makeAgentProfilePlan(profileID: profileID)
+    let stream = manager.eventStream()
+
+    let result = try #require(
+      manager.launchAgentProfile(
+        plan,
+        in: worktree,
+        context: .handoffBackgroundTab(root: worktree.repositoryRootURL)
+      )
+    )
+    let event = await nextEvent(stream) { event in
+      if case .agentProfileLaunched = event {
+        return true
+      }
+      return false
+    }
+    defer { manager.state(for: worktree).closeAllSurfaces() }
+
+    #expect(result.paneTitle == plan.profileName)
+    #expect(manager.state(for: worktree).tabID(containing: result.surfaceID) == result.tabID)
+    #expect(event == .agentProfileLaunched(worktreeID: worktree.id, profileID: profileID))
+  }
+
+  @Test func profileLaunchFailureReturnsNilAndEmitsFailure() async {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktree = makeWorktree()
+    let plan = makeAgentProfilePlan(
+      dedicatedHome: URL(fileURLWithPath: "/tmp/prowl-test-outside-base/home", isDirectory: true)
+    )
+    let stream = manager.eventStream()
+
+    let result = manager.launchAgentProfile(plan, in: worktree)
+    let event = await nextEvent(stream) { event in
+      if case .agentProfileLaunchFailed = event {
+        return true
+      }
+      return false
+    }
+
+    #expect(result == nil)
+    #expect(event == .agentProfileLaunchFailed(worktreeID: worktree.id, profileName: plan.profileName))
+  }
+
   @Test func syncPreferredFontSizeNoOpForMissingState() async {
     let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
     let stream = manager.eventStream()
@@ -636,6 +683,23 @@ struct WorktreeTerminalManagerTests {
       detail: "detail",
       workingDirectory: URL(fileURLWithPath: id),
       repositoryRootURL: URL(fileURLWithPath: "/tmp/repo")
+    )
+  }
+
+  private func makeAgentProfilePlan(
+    profileID: UUID = UUID(),
+    dedicatedHome: URL? = nil
+  ) -> AgentProfileLaunchPlan {
+    AgentProfileLaunchPlan(
+      profileID: profileID,
+      profileName: "Codex · Work",
+      runtime: .codex,
+      invocation: AgentInvocation(executable: "codex", arguments: []),
+      commandEnvironmentTokens: [],
+      placement: .tab,
+      splitDirection: .right,
+      surfaceEnvironment: [:],
+      dedicatedHome: dedicatedHome
     )
   }
 

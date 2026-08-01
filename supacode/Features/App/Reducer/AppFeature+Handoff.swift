@@ -1,5 +1,6 @@
 import ComposableArchitecture
 import Foundation
+import Sharing
 
 extension AppFeature {
   /// Open the hand-off HUD for the selected runnable target. Requires a
@@ -9,7 +10,7 @@ extension AppFeature {
     guard state.handoffHud == nil else { return .none }
     guard let worktree = state.repositories.selectedTerminalWorktree else { return .none }
     let source = terminalClient.handoffSourceContext(worktree.id)
-    guard let hudState = HandoffHudFeature.State.make(worktree: worktree, source: source) else {
+    guard let hudState = makeHandoffHudState(worktree: worktree, source: source) else {
       return .send(.repositories(.showToast(.warning("No agent detected in the current pane"))))
     }
     state.handoffHud = hudState
@@ -26,10 +27,25 @@ extension AppFeature {
       let worktree = state.repositories.terminalWorktree(for: entry.worktreeID)
     else { return .none }
     let source = terminalClient.handoffSourceContextForSurface(entry.worktreeID, entry.surfaceID)
-    guard let hudState = HandoffHudFeature.State.make(worktree: worktree, source: source) else {
+    guard let hudState = makeHandoffHudState(worktree: worktree, source: source) else {
       return .send(.repositories(.showToast(.warning("No agent detected in this pane"))))
     }
     state.handoffHud = hudState
     return .none
+  }
+
+  private func makeHandoffHudState(
+    worktree: Worktree,
+    source: HandoffSourceContext?
+  ) -> HandoffHudFeature.State? {
+    @Shared(.userGlobalSettings) var globalSettings
+    @Shared(.userRepositorySettings(worktree.repositoryRootURL)) var repositorySettings
+    return HandoffHudFeature.State.make(
+      worktree: worktree,
+      source: source,
+      profiles: globalSettings.agentProfiles,
+      designatedProfileID: repositorySettings.defaultAgentProfileID,
+      lastLaunchedProfileID: repositorySettings.lastLaunchedAgentProfileID
+    )
   }
 }

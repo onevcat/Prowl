@@ -17,6 +17,8 @@ nonisolated private let validHandoffBriefing = """
   ## Next Steps
   1. Review the PR.
   """
+nonisolated private let handoffHandlerSourcePaneID =
+  UUID(uuidString: "A29DBA75-3B49-490B-912F-0B2A894F6262")!
 
 @MainActor
 struct HandoffCommandHandlerTests {
@@ -34,6 +36,29 @@ struct HandoffCommandHandlerTests {
 
   private let fixedDate = Date(timeIntervalSince1970: 1_760_000_000)
 
+  private func profile(
+    id: AgentProfile.ID = UUID(),
+    name: String = "Codex · Work",
+    isEnabled: Bool = true,
+    model: String? = nil,
+    reasoningEffort: String? = nil,
+    bindsDedicatedHome: Bool = true
+  ) -> AgentProfile {
+    AgentProfile(
+      id: id,
+      name: name,
+      isEnabled: isEnabled,
+      runtime: .codex,
+      model: model,
+      reasoningEffort: reasoningEffort,
+      extraArguments: "-p work",
+      environmentOverrides: [
+        AgentProfileEnvironmentOverride(name: "OPENAI_BASE_URL", value: "https://example.test/v1")
+      ],
+      bindsDedicatedHome: bindsDedicatedHome
+    )
+  }
+
   private func makeHandler(
     root: URL,
     outgoingAgent: String?,
@@ -50,7 +75,7 @@ struct HandoffCommandHandlerTests {
     ),
     sessionContext: HandoffStore.SessionContext? = HandoffStore.SessionContext(
       agent: "codex",
-      paneID: "pane-0",
+      paneID: handoffHandlerSourcePaneID.uuidString,
       paneTitle: "codex",
       source: "terminal-scrollback",
       confidence: "fallback",
@@ -61,9 +86,12 @@ struct HandoffCommandHandlerTests {
     ),
     resolveFailure: HandoffResolveError? = nil,
     launchSpy: (@MainActor (AgentStartRequest) -> Void)? = nil,
+    profiles: [AgentProfile] = [],
+    profileLaunchSpy: (@MainActor (AgentProfileLaunchPlan) -> Void)? = nil,
     forkSpy: (@Sendable (AgentResumeRequest, URL) async throws -> String)? = nil,
+    notificationSpy: (@MainActor (String) -> Void)? = nil,
     completionSpy: (@MainActor (HandoffCLICompletion) -> Void)? = nil,
-    requestClaim: ((UUID) -> Bool)? = nil
+    requestClaim: ((UUID, HandoffRequestExpectation) -> HandoffRequestClaimResult)? = nil
 
   ) -> HandoffCommandHandler {
     HandoffCommandHandler(
@@ -76,7 +104,7 @@ struct HandoffCommandHandlerTests {
             worktreeID: "ws",
             worktreeName: "Workspace",
             rootPath: root.path(percentEncoded: false),
-            paneID: "pane-0",
+            paneID: handoffHandlerSourcePaneID.uuidString,
             outgoingAgent: outgoingAgent,
             outgoingLaunchObservation: outgoingLaunchObservation,
             outgoingSession: outgoingSession,
@@ -89,15 +117,25 @@ struct HandoffCommandHandlerTests {
         launchSpy?(request)
         return launched
       },
+      profileProvider: { profileID in
+        profiles.first { $0.id == profileID }
+      },
+      profileLaunchProvider: { _, plan in
+        profileLaunchSpy?(plan)
+        return launched
+      },
       forkProvider: { request, directory in
         guard let forkSpy else { return validHandoffBriefing }
         return try await forkSpy(request, directory)
       },
+      notifyLaunch: { _, _, receiverDisplayName in
+        notificationSpy?(receiverDisplayName)
+      },
       completionObserver: { completion in
         completionSpy?(completion)
       },
-      requestAuthorizer: { requestID in
-        requestClaim?(requestID) ?? true
+      requestAuthorizer: { requestID, expectation in
+        requestClaim?(requestID, expectation) ?? .claimed
       },
       now: { [fixedDate] in fixedDate }
     )
@@ -230,7 +268,7 @@ struct HandoffCommandHandlerTests {
     let handler = makeHandler(
       root: root,
       outgoingAgent: "codex",
-      requestClaim: { _ in false }
+      requestClaim: { _, _ in .unavailable }
 
     )
 
@@ -247,6 +285,43 @@ struct HandoffCommandHandlerTests {
 
     #expect(response.ok == false)
     #expect(response.error?.code == CLIErrorCode.handoffRequestSuperseded)
+    #expect(!FileManager.default.fileExists(atPath: root.appending(path: ".prowl").path(percentEncoded: false)))
+  }
+
+  @Test func mismatchedHudRequestIsRejectedWithoutConsumingArtifacts() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let requestID = UUID()
+    let actual = LockIsolated<HandoffRequestExpectation?>(nil)
+    let handler = makeHandler(
+      root: root,
+      outgoingAgent: "codex",
+      requestClaim: { _, expectation in
+        actual.setValue(expectation)
+        return .mismatch
+      }
+    )
+
+    let response = await handler.handle(
+      envelope: envelope(
+        HandoffInput(
+          action: .toAgent,
+          toAgent: "claude",
+          brief: validHandoffBriefing,
+          requestID: requestID
+        )
+      )
+    )
+
+    #expect(response.ok == false)
+    #expect(response.error?.code == CLIErrorCode.invalidArgument)
+    #expect(
+      actual.value
+        == HandoffRequestExpectation(
+          sourcePaneID: handoffHandlerSourcePaneID,
+          operation: .handoff(target: .runtimeDefault(.claude))
+        )
+    )
     #expect(!FileManager.default.fileExists(atPath: root.appending(path: ".prowl").path(percentEncoded: false)))
   }
 
@@ -478,9 +553,166 @@ struct HandoffCommandHandlerTests {
     #expect(log.contains("briefing=inline"))
     let completion = try #require(completions.value.first)
     #expect(completion.action == .toAgent)
-    #expect(completion.sourcePaneID == "pane-0")
+    #expect(completion.sourcePaneID == handoffHandlerSourcePaneID.uuidString)
     #expect(completion.toAgent == "claude")
     #expect(completion.launched?.paneID == "pane-1")
+  }
+
+  @Test func profileTargetUsesFrozenProfileLaunchPlanAndReportsIdentity() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let selectedProfile = profile(model: "profile-model", reasoningEffort: "xhigh")
+    let plan = LockIsolated<AgentProfileLaunchPlan?>(nil)
+    let runtimeLaunchCalled = LockIsolated(false)
+    let notifiedReceiver = LockIsolated<String?>(nil)
+    let completions = LockIsolated<[HandoffCLICompletion]>([])
+    let handler = makeHandler(
+      root: root,
+      outgoingAgent: "codex",
+      outgoingLaunchObservation: AgentLaunchObservation(
+        model: "outgoing-model",
+        executionMode: .unrestricted
+      ),
+      launchSpy: { _ in runtimeLaunchCalled.setValue(true) },
+      profiles: [selectedProfile],
+      profileLaunchSpy: { plan.setValue($0) },
+      notificationSpy: { notifiedReceiver.setValue($0) },
+      completionSpy: { completion in completions.withValue { $0.append(completion) } }
+    )
+
+    let response = await handler.handle(
+      envelope: envelope(
+        HandoffInput(
+          action: .toAgent,
+          toProfileID: selectedProfile.id,
+          brief: validHandoffBriefing
+        )
+      )
+    )
+
+    #expect(response.ok)
+    #expect(runtimeLaunchCalled.value == false)
+    let launchPlan = try #require(plan.value)
+    #expect(launchPlan.profileID == selectedProfile.id)
+    #expect(
+      Array(launchPlan.invocation.arguments.prefix(6)) == [
+        "--model", "profile-model", "-c", "model_reasoning_effort=xhigh", "-p", "work",
+      ])
+    #expect(launchPlan.invocation.arguments.last?.contains(".prowl/handoff/current.md") == true)
+    #expect(launchPlan.surfaceEnvironment["PROWL_ENV_OPENAI_BASE_URL"] == "https://example.test/v1")
+    #expect(launchPlan.dedicatedHome != nil)
+    #expect(!launchPlan.terminalInput.contains("outgoing-model"))
+
+    let payload = try #require(try response.data?.decode(as: HandoffCommandPayload.self))
+    #expect(payload.toAgent == "codex")
+    #expect(payload.toProfileID == selectedProfile.id)
+    #expect(payload.toProfileName == selectedProfile.name)
+    let completion = try #require(completions.value.first)
+    #expect(completion.toProfileID == selectedProfile.id)
+    #expect(completion.toProfileName == selectedProfile.name)
+    #expect(completion.failureMessage == nil)
+    #expect(completion.artifactsReady)
+    #expect(notifiedReceiver.value == selectedProfile.name)
+  }
+
+  @Test func profileNoLaunchResolvesIdentityWithoutPlanningOrLaunching() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let selectedProfile = profile()
+    let profileLaunchCalled = LockIsolated(false)
+    let handler = makeHandler(
+      root: root,
+      outgoingAgent: "codex",
+      profiles: [selectedProfile],
+      profileLaunchSpy: { _ in profileLaunchCalled.setValue(true) }
+    )
+
+    let response = await handler.handle(
+      envelope: envelope(
+        HandoffInput(
+          action: .toAgent,
+          toProfileID: selectedProfile.id,
+          launch: false,
+          brief: validHandoffBriefing
+        )
+      )
+    )
+
+    #expect(response.ok)
+    #expect(profileLaunchCalled.value == false)
+    let payload = try #require(try response.data?.decode(as: HandoffCommandPayload.self))
+    #expect(payload.toAgent == "codex")
+    #expect(payload.toProfileID == selectedProfile.id)
+    #expect(payload.toProfileName == selectedProfile.name)
+    #expect(payload.launchedPane == nil)
+  }
+
+  @Test func missingProfileFailsBeforeArtifactMutationAndCompletesClaimedRequest() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let missingProfileID = UUID()
+    let completions = LockIsolated<[HandoffCLICompletion]>([])
+    let handler = makeHandler(
+      root: root,
+      outgoingAgent: "codex",
+      completionSpy: { completion in completions.withValue { $0.append(completion) } }
+    )
+
+    let response = await handler.handle(
+      envelope: envelope(
+        HandoffInput(
+          action: .toAgent,
+          toProfileID: missingProfileID,
+          brief: validHandoffBriefing,
+          requestID: UUID()
+        )
+      )
+    )
+
+    #expect(response.ok == false)
+    #expect(response.error?.code == CLIErrorCode.invalidArgument)
+    #expect(!FileManager.default.fileExists(atPath: root.appending(path: ".prowl").path(percentEncoded: false)))
+    let completion = try #require(completions.value.first)
+    #expect(completion.toProfileID == missingProfileID)
+    #expect(completion.failureMessage != nil)
+    #expect(completion.artifactsReady == false)
+  }
+
+  @Test func profileLaunchFailureKeepsArtifactsAndReportsTerminalCompletion() async throws {
+    let root = try makeTempRoot()
+    defer { remove(root) }
+    let selectedProfile = profile(name: "Codex\n\"Work\"", bindsDedicatedHome: false)
+    let completions = LockIsolated<[HandoffCLICompletion]>([])
+    let handler = makeHandler(
+      root: root,
+      outgoingAgent: "codex",
+      launched: nil,
+      profiles: [selectedProfile],
+      completionSpy: { completion in completions.withValue { $0.append(completion) } }
+    )
+
+    let response = await handler.handle(
+      envelope: envelope(
+        HandoffInput(
+          action: .toAgent,
+          toProfileID: selectedProfile.id,
+          brief: validHandoffBriefing,
+          requestID: UUID()
+        )
+      )
+    )
+
+    #expect(response.ok == false)
+    #expect(response.error?.code == CLIErrorCode.handoffFailed)
+    #expect(HandoffStore(rootURL: root).hasCurrentArtifact)
+    let completion = try #require(completions.value.first)
+    #expect(completion.toProfileID == selectedProfile.id)
+    #expect(completion.failureMessage?.contains("Progress was saved") == true)
+    #expect(completion.artifactsReady)
+    let log = try String(contentsOf: HandoffStore(rootURL: root).logURL, encoding: .utf8)
+    #expect(log.contains("profile_id=\(selectedProfile.id.uuidString)"))
+    #expect(log.contains("profile=\"Codex 'Work'\""))
+    #expect(!log.contains("https://example.test"))
   }
 
   @Test func toWithFailedForkDegradesToContextOnlyAndRemovesStaleBriefing() async throws {

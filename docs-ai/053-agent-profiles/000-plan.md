@@ -228,8 +228,9 @@ Prowl 不提供任何目录共享功能(V1 及以后均然)。希望在绑定 pr
    "用户 home + 固定点目录"推广为 **config root** 参数:默认即 `~/.claude` /
    `~/.codex`;Prowl 启动且绑定账号的 surface 以记录的 profile 推导 root(env 是
    Prowl 自己设置的,root 是已知量,无需探测)。parsePath 的全局子串 marker 改为按
-   已知 root 前缀匹配。绑定 surface 的 resume invocation 必须携带同一环境 patch,
-   否则 CLI 会在默认 home 中查找 session。进程分类(argv)、OSC working/idle、
+   已知 root 前缀匹配。绑定 source surface 的 resume invocation 仍需携带同一环境 patch,
+   否则 CLI 会在默认 home 中查找 session;该 resume env 缝未在 V1 实现,且 053.007
+   只配置 handoff receiver,因此继续延期。进程分类(argv)、OSC working/idle、
    child-env session id 证据与其余 runtime 均不受影响。用户手动携带自定义
    `CLAUDE_CONFIG_DIR` / `CODEX_HOME` 启动的 agent 维持现状(agent 本体可检测、
    session 身份不可得);读取 TUI 进程 env 反推 root 列为 follow-up。
@@ -265,8 +266,9 @@ agent 列表不变。
 未来的 handoff 集成必须让选定 profile 同时贯穿两条路径:HUD 的注入请求与 CLI/fallback
 处理器。只更新 `supacode/Features/HandoffHud/Reducer/HandoffHudFeature.swift` 会让 fallback
 静默丢失 profile,因为 `supacode/CLIService/HandoffCommandHandler.swift` 目前会重建继承
-配置。该阶段应扩展结构化的 handoff request/registry 边界;绝不能在请求开始后再读取
-"当前 profile"。
+配置。该阶段应扩展结构化的 handoff request/registry 边界;绝不能在请求开始后读取
+ambient "当前/推荐 profile" 来改变目标。后续 053.007 绑定稳定 UUID,并允许在执行时
+按该 UUID 读取最新持久化配置;这不是重新选择目标。
 
 ## 验证
 
@@ -285,8 +287,8 @@ agent 列表不变。
   一个 surface(tab 或按 placement 的 split,空 worktree 时 split 退化为 tab)、推荐
   变化后 surface 的 profile 身份保持稳定、纯 preset 启动不设任何环境变量。
 - Session 检测测试:`AgentSessionResolver` 以注入的 config root 在 profile home 布局下
-  解析出 Claude/Codex session;默认 root 行为不变;绑定 surface 的 resume argv 携带
-  同一环境 patch。
+  解析出 Claude/Codex session;默认 root 行为不变。绑定 source surface 的 resume argv
+  环境传播未在 V1 实现,且 053.007 只配置 handoff receiver;该 source-side 缺口继续延期。
 - 手动验证:(a) 同一 runtime 的两个纯 preset(不同 model/effort)并排启动,确认共享同一
   登录且 `--resume` 历史统一;(b) 两个账号绑定 profile 分别登录不同账号并排运行,确认
   各 CLI 报告自己的身份;(c) 修改 repo 指定或启动其他 profile 后,确认只有后续启动的
@@ -330,6 +332,12 @@ agent 列表不变。
   方式(名称/UUID)与 handoff 迁移波次的结构化请求一起定,避免过早固化 CLI 契约。
 
 ## Amendments
+
+- Updated 2026-08-01: implemented Profile-aware handoff across HUD, CLI, request ownership, and the
+  shared Profile launch boundary, while retaining Runtime Default compatibility and keeping native
+  Codex profile selection in Extra Arguments — design in
+  [007-profile-aware-handoff.md](007-profile-aware-handoff.md), result in
+  [008-profile-aware-handoff-action.md](008-profile-aware-handoff-action.md).
 
 - Updated 2026-07-31: **环境补丁语义从 surface-scoped 改为 launch-scoped** — onevcat
   定位出"Agents 启动 → agent 退出 → 手动 codex 继承 profile env"的串号链,环境补丁

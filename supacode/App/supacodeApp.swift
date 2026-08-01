@@ -234,8 +234,8 @@ struct SupacodeApp: App {
         coordinator: coordinator
       )
       values.handoffRequestClient = HandoffRequestClient(
-        register: { requestID in
-          handoffRequestRegistry.register(requestID)
+        register: { requestID, expectation in
+          handoffRequestRegistry.register(requestID, expectation: expectation)
         },
         supersede: { requestID in
           handoffRequestRegistry.supersede(requestID)
@@ -351,6 +351,9 @@ struct SupacodeApp: App {
       },
       createTabInDirectory: { worktree, directory in
         terminalManager.createTabInDirectory(worktree, directory: directory)
+      },
+      launchAgentProfile: { plan, worktree, context in
+        terminalManager.launchAgentProfile(plan, in: worktree, context: context)
       },
       events: {
         terminalManager.eventStream()
@@ -780,20 +783,47 @@ struct SupacodeApp: App {
           terminalManager: terminalManager
         )
       },
+      profileProvider: { profileID in
+        @Shared(.userGlobalSettings) var settings
+        return settings.agentProfiles.first { $0.id == profileID }
+      },
+      profileLaunchProvider: { target, plan in
+        let repositories = Array(appStore.state.repositories.repositories)
+        guard
+          let worktree = resolveCLITerminalWorktree(
+            id: target.worktreeID,
+            repositories: repositories
+          ),
+          let result = terminalManager.launchAgentProfile(
+            plan,
+            in: worktree,
+            context: .handoffBackgroundTab(
+              root: URL(fileURLWithPath: target.rootPath, isDirectory: true)
+            )
+          )
+        else { return nil }
+        return HandoffLaunchedPane(
+          worktreeID: target.worktreeID,
+          worktreeName: target.worktreeName,
+          tabID: result.tabID.rawValue.uuidString,
+          paneID: result.surfaceID.uuidString,
+          paneTitle: result.paneTitle
+        )
+      },
       forkProvider: Self.forkHandoffBriefing,
-      notifyLaunch: { launched, from, toAgent in
+      notifyLaunch: { launched, from, receiverDisplayName in
         Self.notifyHandoffLaunch(
           launched: launched,
           from: from,
-          toAgent: toAgent,
+          receiverDisplayName: receiverDisplayName,
           terminalManager: terminalManager
         )
       },
       completionObserver: { completion in
         appStore.send(.handoffCliCompleted(completion))
       },
-      requestAuthorizer: { requestID in
-        handoffRequestRegistry.claim(requestID)
+      requestAuthorizer: { requestID, expectation in
+        handoffRequestRegistry.claim(requestID, actual: expectation)
       }
 
     )
@@ -860,7 +890,7 @@ struct SupacodeApp: App {
   private static func notifyHandoffLaunch(
     launched: HandoffLaunchedPane,
     from: String,
-    toAgent: String,
+    receiverDisplayName: String,
     terminalManager: WorktreeTerminalManager
   ) {
     let watching =
@@ -871,7 +901,7 @@ struct SupacodeApp: App {
       let state = terminalManager.stateIfExists(for: launched.worktreeID)
     else { return }
     state.appendNotification(
-      title: "\(from) → \(toAgent)",
+      title: "\(from) → \(receiverDisplayName)",
       body: "Took over in \(launched.worktreeName)",
       surfaceId: paneID
     )

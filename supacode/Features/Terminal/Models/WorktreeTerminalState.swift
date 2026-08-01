@@ -53,6 +53,17 @@ struct AgentDetectionDiagnostic {
   let stabilized: AgentRawState?
 }
 
+nonisolated enum AgentProfileLaunchContext: Equatable, Sendable {
+  case profileDefault
+  case handoffBackgroundTab(root: URL)
+}
+
+nonisolated struct AgentProfileLaunchResult: Sendable {
+  let tabID: TerminalTabID
+  let surfaceID: UUID
+  let paneTitle: String
+}
+
 @MainActor
 @Observable
 final class WorktreeTerminalState {
@@ -414,7 +425,10 @@ final class WorktreeTerminalState {
   /// environment patch, and records the profile identity on the new surface.
   /// Split placement degrades to a new tab when nothing is splittable.
   @discardableResult
-  func launchAgentProfile(_ plan: AgentProfileLaunchPlan) -> UUID? {
+  func launchAgentProfile(
+    _ plan: AgentProfileLaunchPlan,
+    context: AgentProfileLaunchContext = .profileDefault
+  ) -> AgentProfileLaunchResult? {
     if let home = plan.dedicatedHome {
       do {
         try AgentProfileHomeProvisioner.provision(
@@ -432,32 +446,55 @@ final class WorktreeTerminalState {
       runtime: plan.runtime,
       dedicatedHome: plan.dedicatedHome
     )
-    if plan.placement == .split,
+    let location: (tabID: TerminalTabID, surfaceID: UUID)
+    if context == .profileDefault, plan.placement == .split,
       let surfaceID = createSplitOnFocusedSurface(
         direction: plan.splitDirection,
         initialInput: plan.terminalInput,
         additionalEnvironment: plan.surfaceEnvironment
       )
     {
-      launchProfilesBySurface[surfaceID] = identity
-      return surfaceID
-    }
-    let tabId = createTab(
-      TabCreation(
-        title: plan.profileName,
-        icon: "terminal",
-        isTitleLocked: false,
-        initialInput: runScriptInput(plan.terminalInput),
-        focusing: true,
-        inheritingFromSurfaceId: currentFocusedSurfaceId(),
-        context: GHOSTTY_SURFACE_CONTEXT_TAB,
-        workingDirectoryOverride: nil,
-        additionalEnvironment: plan.surfaceEnvironment
+      guard let tabID = tabID(containing: surfaceID) else { return nil }
+      location = (tabID, surfaceID)
+    } else {
+      let focusing: Bool
+      let selecting: Bool
+      let workingDirectory: URL?
+      switch context {
+      case .profileDefault:
+        focusing = true
+        selecting = true
+        workingDirectory = nil
+      case .handoffBackgroundTab(let root):
+        focusing = false
+        selecting = false
+        workingDirectory = root
+      }
+      let tabID = createTab(
+        TabCreation(
+          title: plan.profileName,
+          icon: "terminal",
+          isTitleLocked: false,
+          initialInput: runScriptInput(plan.terminalInput),
+          focusing: focusing,
+          selecting: selecting,
+          inheritingFromSurfaceId: currentFocusedSurfaceId(),
+          context: GHOSTTY_SURFACE_CONTEXT_TAB,
+          workingDirectoryOverride: workingDirectory,
+          additionalEnvironment: plan.surfaceEnvironment
+        )
       )
+      guard let tabID, let surfaceID = trees[tabID]?.root?.leftmostLeaf().id else { return nil }
+      location = (tabID, surfaceID)
+    }
+    launchProfilesBySurface[location.surfaceID] = identity
+    let fallbackTitle =
+      tabManager.tabs.first(where: { $0.id == location.tabID })?.displayTitle ?? plan.profileName
+    return AgentProfileLaunchResult(
+      tabID: location.tabID,
+      surfaceID: location.surfaceID,
+      paneTitle: paneTitle(surfaceID: location.surfaceID, fallbackTabTitle: fallbackTitle)
     )
-    guard let tabId, let surfaceID = trees[tabId]?.root?.leftmostLeaf().id else { return nil }
-    launchProfilesBySurface[surfaceID] = identity
-    return surfaceID
   }
 
   @discardableResult

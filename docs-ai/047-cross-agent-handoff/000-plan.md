@@ -105,3 +105,6 @@ cwd, which is weaker than the pid-anchored, ambiguity-safe native session identi
 - Updated 2026-07-21: HUD request ownership — injected requests now need an
   atomic single-transition claim, and fallback cancellation needs a visible commit
   boundary — see [005-hud-request-ownership](005-hud-request-ownership.md).
+- Updated 2026-08-01: planned Profile-aware receiving targets with UUID-bound HUD/CLI requests,
+  execution-time Profile resolution, and one shared background launch path — see
+  [053.007 profile-aware handoff](../053-agent-profiles/007-profile-aware-handoff.md).

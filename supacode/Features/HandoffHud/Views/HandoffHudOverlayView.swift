@@ -32,13 +32,15 @@ struct HandoffHudOverlayView: View {
         .accessibilityLabel("Dismiss Hand Off")
 
       GeometryReader { geometry in
+        let topPadding = max(0, geometry.size.height * 0.22)
         VStack {
           HandoffHudCard(store: store)
+            .frame(maxHeight: max(0, geometry.size.height - topPadding - 32))
             .zIndex(1)
           Spacer(minLength: 0)
         }
         .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
-        .padding(.top, max(0, geometry.size.height * 0.22))
+        .padding(.top, topPadding)
       }
     }
   }
@@ -106,7 +108,7 @@ private struct HandoffHudCard: View {
       return "Hand Off"
     case .running(let run):
       switch run.target.kind {
-      case .agent:
+      case .agent, .profile:
         return "Handing off to \(run.target.title)"
       case .briefOnly:
         return "Saving progress"
@@ -180,17 +182,26 @@ private struct HandoffHudChooseView: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
-      VStack(spacing: 4) {
-        ForEach(Array(store.targets.enumerated()), id: \.element.id) { index, target in
-          HandoffTargetRow(
-            target: target,
-            isSelected: index == store.selectedIndex
-          ) {
-            store.send(.setSelectedIndex(index))
+      ScrollViewReader { proxy in
+        ScrollView {
+          LazyVStack(spacing: 4) {
+            ForEach(Array(store.targets.enumerated()), id: \.element.id) { index, target in
+              HandoffTargetRow(
+                target: target,
+                isSelected: index == store.selectedIndex
+              ) {
+                store.send(.setSelectedIndex(index))
+              }
+              .id(target.id)
+            }
           }
+          .padding(12)
+        }
+        .onChange(of: store.selectedIndex) { _, index in
+          guard store.targets.indices.contains(index) else { return }
+          proxy.scrollTo(store.targets[index].id)
         }
       }
-      .padding(12)
 
       Divider()
 
@@ -214,7 +225,7 @@ private struct HandoffHudChooseView: View {
     guard store.targets.indices.contains(store.selectedIndex) else { return "Continue" }
     let target = store.targets[store.selectedIndex]
     switch target.kind {
-    case .agent:
+    case .agent, .profile:
       return "Hand Off to \(target.title)"
     case .briefOnly:
       return "Save Progress"
@@ -269,7 +280,7 @@ private struct HandoffTargetRow: View {
   @ViewBuilder
   private var icon: some View {
     switch target.kind {
-    case .agent(let agent):
+    case .agent(let agent), .profile(_, let agent):
       if let source = CommandIconMap.iconForFirstToken(agent.iconLookupToken) {
         TabIconImage(rawName: source.storageString, pointSize: 18)
       } else {
@@ -286,7 +297,7 @@ private struct HandoffTargetRow: View {
 
   private var rowHelp: String {
     switch target.kind {
-    case .agent:
+    case .agent, .profile:
       return "Hand this task to \(target.title) in a new tab"
     case .briefOnly:
       return "Save the agent's progress for a later hand-off without launching anything"
@@ -350,7 +361,7 @@ private struct HandoffHudRunView: View {
     switch run.stage {
     case .requesting:
       switch run.target.kind {
-      case .agent:
+      case .agent, .profile:
         return "Asked \(sourceDisplayName) to write its briefing and hand off to \(run.target.title)"
       case .briefOnly:
         return "Asked \(sourceDisplayName) to write a briefing checkpoint"

@@ -311,7 +311,33 @@ prowl handoff to codex --brief - <<'EOF'
 EOF
 ```
 
-Write the briefing from your current working knowledge — required sections are `## Objective`, `## Current State`, and `## Next Steps`. The receiver launches in a background tab of the same worktree; your own session stays open. `prowl handoff save --brief -` writes the same briefing as a checkpoint without launching anyone. Use `--no-brief` only for an intentional context-only handoff, and an explicit `--pane` to hand off a pane other than your own. Details: `docs/components/handoff.md`.
+To use a saved Prowl Agent Profile instead of the runtime default, ask the user
+for its stable UUID and pass no runtime positional:
+
+```bash
+prowl handoff to --agent-profile-id "$profile_id" --brief - <<'EOF'
+# Handoff
+## Objective
+…
+## Current State
+…
+## Next Steps
+…
+EOF
+```
+
+The runtime positional and `--agent-profile-id` are mutually exclusive. The
+Profile form rejects a positional source; use `--pane`, `--tab`, or
+`--worktree` when handing off another pane. In the app, prefer choosing the
+Profile by name in the Hand Off HUD — it injects the UUID and exact source pane
+for you. If the user asks you to discover IDs, project only `.name`, `.id`, and
+`.runtime` with `jq`; never print or paste the full
+`~/.prowl/global.onevcat.json`, because environment override values may contain
+credentials. Put a native Codex config profile in Prowl Profile Extra
+Arguments, for example `-p work`; do not model `--profile` as an environment
+variable.
+
+Write the briefing from your current working knowledge — required sections are `## Objective`, `## Current State`, and `## Next Steps`. The receiver launches in a background tab of the same worktree; your own session stays open. A Profile handoff keeps its model, effort, mode, Extra Arguments, environment, Dedicated Home, and identity, while ignoring its manual split placement. `prowl handoff save --brief -` writes the same briefing as a checkpoint without launching anyone. Use `--no-brief` only for an intentional context-only handoff, and an explicit `--pane` to hand off a pane other than your own. Details: `docs/components/handoff.md`.
 
 ## Command Set
 
