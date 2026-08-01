@@ -422,7 +422,7 @@ struct GitClient {
     return "HEAD"
   }
 
-  nonisolated func lineChanges(at worktreeURL: URL) async -> (added: Int, removed: Int)? {
+  nonisolated func lineChanges(at worktreeURL: URL) async -> GitLineChanges? {
     if await isWorktreeIndexLocked(worktreeURL) {
       return nil
     }
@@ -438,8 +438,12 @@ struct GitClient {
       )
       let tracked = parseShortstat(try await diffOutput)
       let untrackedPaths = parseNULFileList(try await untrackedOutput)
-      let untrackedLines = Self.countLinesInFiles(untrackedPaths, relativeTo: worktreeURL)
-      return (added: tracked.added + untrackedLines, removed: tracked.removed)
+      let untracked = Self.countLinesInFiles(untrackedPaths, relativeTo: worktreeURL)
+      return GitLineChanges(
+        added: tracked.added + untracked.lines,
+        removed: tracked.removed,
+        skippedUntrackedFileCount: untracked.skippedFileCount
+      )
     } catch {
       return nil
     }
@@ -458,25 +462,141 @@ struct GitClient {
     return Int(Self.bigEndianUInt32(from: header, offset: 8))
   }
 
-  nonisolated static func countLinesInFiles(_ relativePaths: [String], relativeTo base: URL) -> Int {
-    var total = 0
-    for relativePath in relativePaths {
-      let fileURL = base.appending(path: relativePath)
-      total += Self.countLines(in: fileURL) ?? 0
+  nonisolated static let untrackedLineCountByteBudget = 32 * 1_024 * 1_024
+  nonisolated static let untrackedLineCountCacheUpdateBatchSize = 256
+
+  nonisolated static func countLinesInFiles(
+    _ relativePaths: [String],
+    relativeTo base: URL,
+    cache: UntrackedLineCountCache = .shared,
+    byteBudget: Int = untrackedLineCountByteBudget
+  ) -> UntrackedLineCountResult {
+    struct FileToCount {
+      let relativePath: String
+      let url: URL
+      let fingerprint: UntrackedLineFileFingerprint
     }
-    return total
+
+    let resourceKeys: Set<URLResourceKey> = [
+      .contentModificationDateKey,
+      .fileResourceIdentifierKey,
+      .fileSizeKey,
+    ]
+    var skippedFileCount = 0
+    let files = relativePaths.compactMap { relativePath -> FileToCount? in
+      let fileURL = base.appending(path: relativePath)
+      guard let values = try? fileURL.resourceValues(forKeys: resourceKeys),
+        let byteCount = values.fileSize,
+        let modificationDate = values.contentModificationDate
+      else {
+        if FileManager.default.fileExists(atPath: fileURL.path(percentEncoded: false)) {
+          skippedFileCount += 1
+        }
+        return nil
+      }
+      return FileToCount(
+        relativePath: relativePath,
+        url: fileURL,
+        fingerprint: UntrackedLineFileFingerprint(
+          byteCount: byteCount,
+          modificationDate: modificationDate,
+          resourceIdentifier: values.fileResourceIdentifier.map { String(describing: $0) }
+        )
+      )
+    }
+    let worktreeKey = base.standardizedFileURL.path(percentEncoded: false)
+    let cacheFiles = files.map {
+      UntrackedLineCacheFile(relativePath: $0.relativePath, fingerprint: $0.fingerprint)
+    }
+    let cachedValues = cache.cachedValues(for: cacheFiles, worktreeKey: worktreeKey)
+
+    var total = 0
+    var misses: [FileToCount] = []
+    for file in files {
+      switch cachedValues[file.relativePath] {
+      case .text(let lines):
+        total += lines
+      case .binary:
+        break
+      case nil:
+        misses.append(file)
+      }
+    }
+
+    var remainingByteBudget = max(0, byteBudget)
+    var cacheUpdates: [UntrackedLineCacheUpdate] = []
+    cacheUpdates.reserveCapacity(untrackedLineCountCacheUpdateBatchSize)
+    for file in misses.sorted(by: { lhs, rhs in
+      if lhs.fingerprint.byteCount == rhs.fingerprint.byteCount {
+        return lhs.relativePath < rhs.relativePath
+      }
+      return lhs.fingerprint.byteCount < rhs.fingerprint.byteCount
+    }) {
+      guard file.fingerprint.byteCount <= remainingByteBudget else {
+        skippedFileCount += 1
+        continue
+      }
+      let cacheUpdate: UntrackedLineCacheUpdate?
+      switch Self.countLines(in: file.url, maximumByteCount: remainingByteBudget) {
+      case .text(let lines, let bytesRead):
+        total += lines
+        remainingByteBudget -= bytesRead
+        cacheUpdate = UntrackedLineCacheUpdate(
+          relativePath: file.relativePath,
+          fingerprint: file.fingerprint,
+          value: .text(lines)
+        )
+      case .binary(let bytesRead):
+        remainingByteBudget -= bytesRead
+        cacheUpdate = UntrackedLineCacheUpdate(
+          relativePath: file.relativePath,
+          fingerprint: file.fingerprint,
+          value: .binary
+        )
+      case .budgetExceeded:
+        remainingByteBudget = 0
+        skippedFileCount += 1
+        cacheUpdate = nil
+      case .unavailable(let bytesRead):
+        remainingByteBudget -= bytesRead
+        skippedFileCount += 1
+        cacheUpdate = nil
+      }
+      if let cacheUpdate {
+        cacheUpdates.append(cacheUpdate)
+        if cacheUpdates.count == untrackedLineCountCacheUpdateBatchSize {
+          cache.store(cacheUpdates, worktreeKey: worktreeKey)
+          cacheUpdates.removeAll(keepingCapacity: true)
+        }
+      }
+    }
+    cache.store(cacheUpdates, worktreeKey: worktreeKey)
+    return UntrackedLineCountResult(lines: total, skippedFileCount: skippedFileCount)
   }
 
   nonisolated private static func bigEndianUInt32(from data: Data, offset: Int) -> UInt32 {
     data[offset..<(offset + 4)].reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
   }
 
-  nonisolated private static func countLines(in fileURL: URL) -> Int? {
-    guard let handle = try? FileHandle(forReadingFrom: fileURL) else { return nil }
+  nonisolated private enum FileLineCountResult {
+    case text(lines: Int, bytesRead: Int)
+    case binary(bytesRead: Int)
+    case budgetExceeded
+    case unavailable(bytesRead: Int)
+  }
+
+  nonisolated private static func countLines(
+    in fileURL: URL,
+    maximumByteCount: Int
+  ) -> FileLineCountResult {
+    guard let handle = try? FileHandle(forReadingFrom: fileURL) else {
+      return .unavailable(bytesRead: 0)
+    }
     defer { try? handle.close() }
 
     let binaryProbeByteCount = 8_192
     let chunkByteCount = 64 * 1_024
+    var bytesRead = 0
     var probedByteCount = 0
     var lineCount = 0
     var isEmpty = true
@@ -485,28 +605,34 @@ struct GitClient {
     while true {
       let chunk: Data
       do {
-        guard let readChunk = try handle.read(upToCount: chunkByteCount) else { break }
+        // The extra byte distinguishes a file exactly at the budget from one
+        // that grew after its metadata fingerprint was collected.
+        let allowedReadCount = min(chunkByteCount, maximumByteCount - bytesRead + 1)
+        guard allowedReadCount > 0 else { return .budgetExceeded }
+        guard let readChunk = try handle.read(upToCount: allowedReadCount) else { break }
         chunk = readChunk
       } catch {
-        return nil
+        return .unavailable(bytesRead: bytesRead)
       }
       guard !chunk.isEmpty else { break }
+      bytesRead += chunk.count
+      guard bytesRead <= maximumByteCount else { return .budgetExceeded }
 
       isEmpty = false
       if probedByteCount < binaryProbeByteCount {
         let remainingProbeCount = binaryProbeByteCount - probedByteCount
         let probe = chunk.prefix(remainingProbeCount)
-        if probe.contains(0x00) { return nil }
+        if probe.containsByte(0x00) { return .binary(bytesRead: bytesRead) }
         probedByteCount += probe.count
       }
-      lineCount += chunk.reduce(0) { $0 + ($1 == 0x0A ? 1 : 0) }
+      lineCount += chunk.countOccurrences(of: 0x0A)
       lastByte = chunk.last
     }
 
     if !isEmpty, lastByte != 0x0A {
       lineCount += 1
     }
-    return lineCount
+    return .text(lines: lineCount, bytesRead: bytesRead)
   }
 
   nonisolated private static func resolveGitDirectory(for worktreeURL: URL) -> URL? {
@@ -1406,4 +1532,49 @@ struct GitClient {
     return GithubRemoteInfo(host: remoteWebInfo.host, owner: owner, repo: repo)
   }
 
+}
+
+/// Byte scans over `Data`'s contiguous storage.
+///
+/// `Data` conforms to `Sequence`, so `reduce` and `contains` walk it through
+/// `Data.Iterator` with a value-witness call per byte. Sampling a running instance
+/// for 300 s attributed roughly one whole core to exactly that path inside
+/// `countLines` — 31% in `Sequence.reduce`, 30% in `Data.Iterator.next`, 22% in
+/// value witnesses — about 72% of everything the process was burning, while
+/// counting lines in untracked files. `memchr` scans sparse matches in vectorized
+/// segments; a raw-pointer fallback bounds the cost when matches are dense.
+extension Data {
+  /// Occurrences of `byte` in the whole buffer.
+  fileprivate nonisolated func countOccurrences(of byte: UInt8) -> Int {
+    withUnsafeBytes { raw -> Int in
+      guard let base = raw.baseAddress, !raw.isEmpty else { return 0 }
+      var count = 0
+      var scanned = 0
+      let denseMatchLimit = 2_048
+      while scanned < raw.count,
+        let hit = memchr(base + scanned, Int32(byte), raw.count - scanned)
+      {
+        // memchr returns the hit itself, so resume one byte past it.
+        scanned = base.distance(to: UnsafeRawPointer(hit)) + 1
+        count += 1
+        if count == denseMatchLimit {
+          let remaining = raw.count - scanned
+          let bytes = (base + scanned).assumingMemoryBound(to: UInt8.self)
+          for index in 0..<remaining {
+            count += bytes[index] == byte ? 1 : 0
+          }
+          break
+        }
+      }
+      return count
+    }
+  }
+
+  /// Whether `byte` occurs anywhere in the buffer. Stops at the first hit.
+  fileprivate nonisolated func containsByte(_ byte: UInt8) -> Bool {
+    withUnsafeBytes { raw -> Bool in
+      guard let base = raw.baseAddress, !raw.isEmpty else { return false }
+      return memchr(base, Int32(byte), raw.count) != nil
+    }
+  }
 }

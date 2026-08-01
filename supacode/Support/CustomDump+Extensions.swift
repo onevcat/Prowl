@@ -83,6 +83,7 @@ extension WorktreeInfoEntry: CustomDumpRepresentable {
     (
       added: addedLines,
       removed: removedLines,
+      skippedUntrackedFiles: skippedUntrackedFileCount,
       hasPR: pullRequest != nil
     )
   }

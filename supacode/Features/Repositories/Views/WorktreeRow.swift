@@ -88,10 +88,19 @@ struct WorktreeRow: View {
     )
     let displayAddedLines = info?.addedLines
     let displayRemovedLines = info?.removedLines
+    let lineChangePresentation: LineChangeBadgePresentation? =
+      if let displayAddedLines, let displayRemovedLines {
+        LineChangeBadgePresentation(
+          addedLines: displayAddedLines,
+          removedLines: displayRemovedLines,
+          skippedUntrackedFileCount: info?.skippedUntrackedFileCount ?? 0
+        )
+      } else {
+        nil
+      }
     let mergeReadiness = pullRequestMergeReadiness(for: display.pullRequest)
     let isQueued =
       display.pullRequest.flatMap(PullRequestMergeQueueStatus.init(pullRequest:)) != nil
-    let hasChangeCounts = displayAddedLines != nil && displayRemovedLines != nil
     let showsPullRequestTag = display.pullRequest != nil && display.pullRequestBadgeStyle != nil
     let nameColor = colorScheme == .dark ? Color.white : Color.primary
     let detailText = worktreeName.isEmpty ? name : worktreeName
@@ -163,23 +172,28 @@ struct WorktreeRow: View {
         if isRunScriptRunning {
           RunScriptIndicator(onStop: onStopRunScript)
         }
-        if hasChangeCounts, let displayAddedLines, let displayRemovedLines {
+        if let lineChangePresentation {
           Button {
             onDiffTap?()
           } label: {
             WorktreeRowChangeCountView(
-              addedLines: displayAddedLines,
-              removedLines: displayRemovedLines,
+              presentation: lineChangePresentation,
               isSelected: isSelected,
             )
           }
           .buttonStyle(.plain)
           .help(
-            AppShortcuts.helpText(
-              title: "Show Diff",
-              commandID: AppShortcuts.CommandID.showDiff,
-              in: resolvedKeybindings
-            ))
+            [
+              AppShortcuts.helpText(
+                title: "Show Diff",
+                commandID: AppShortcuts.CommandID.showDiff,
+                in: resolvedKeybindings
+              ),
+              lineChangePresentation.incompleteCountDescription,
+            ]
+            .compactMap { $0 }
+            .joined(separator: "\n")
+          )
         }
       }
       WorktreeRowInfoView(
@@ -421,15 +435,14 @@ private struct WorktreeRowPreview: View {
 // MARK: - Subviews
 
 private struct WorktreeRowChangeCountView: View {
-  let addedLines: Int
-  let removedLines: Int
+  let presentation: LineChangeBadgePresentation
   let isSelected: Bool
 
   var body: some View {
     HStack(spacing: 4) {
-      Text("+\(addedLines)")
+      Text(presentation.addedText)
         .foregroundStyle(.green)
-      Text("-\(removedLines)")
+      Text(presentation.removedText)
         .foregroundStyle(.red)
         .baselineOffset(-1)
     }
@@ -438,6 +451,8 @@ private struct WorktreeRowChangeCountView: View {
     .padding(.horizontal, 4)
     .padding(.vertical, 0)
     .fixedSize(horizontal: true, vertical: false)
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel(presentation.accessibilityLabel)
     .overlay {
       Capsule()
         .stroke(

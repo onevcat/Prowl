@@ -31,7 +31,7 @@ struct GitClientDependency: Sendable {
       -> LocalBranchDeletionOutcome
   var isBareRepository: @Sendable (_ repoRoot: URL) async throws -> Bool
   var branchName: @Sendable (URL) async -> String?
-  var lineChanges: @Sendable (URL) async -> (added: Int, removed: Int)?
+  var lineChanges: @Sendable (URL) async -> GitLineChanges?
   var renameBranch: @Sendable (_ worktreeURL: URL, _ branchName: String) async throws -> Void
   var repositoryWebURL: @Sendable (_ repositoryRoot: URL) async -> URL?
   var githubRemoteInfos: @Sendable (_ repositoryRoot: URL) async -> [GithubRemoteInfo]

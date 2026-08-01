@@ -28,6 +28,31 @@ enum GitOperation: String {
   case remoteBranchRefs = "remote_branch_refs"
 }
 
+nonisolated struct GitLineChanges: Equatable, Sendable {
+  let added: Int
+  let removed: Int
+  let skippedUntrackedFileCount: Int
+
+  init(
+    added: Int,
+    removed: Int,
+    skippedUntrackedFileCount: Int = 0
+  ) {
+    self.added = added
+    self.removed = removed
+    self.skippedUntrackedFileCount = skippedUntrackedFileCount
+  }
+
+  var isEmpty: Bool {
+    added == 0 && removed == 0 && skippedUntrackedFileCount == 0
+  }
+}
+
+nonisolated struct UntrackedLineCountResult: Equatable, Sendable {
+  let lines: Int
+  let skippedFileCount: Int
+}
+
 enum GitClientError: LocalizedError {
   case commandFailed(command: String, message: String)
   case worktreeNotRegistered(path: String)

@@ -196,8 +196,7 @@ struct RepositoriesFeatureTests {
 
     let changed = updateWorktreeLineChanges(
       worktreeID: worktree.id,
-      added: 12,
-      removed: 4,
+      changes: GitLineChanges(added: 12, removed: 4),
       state: &state
     )
 
@@ -221,8 +220,7 @@ struct RepositoriesFeatureTests {
 
     let changed = updateWorktreeLineChanges(
       worktreeID: worktree.id,
-      added: 0,
-      removed: 0,
+      changes: GitLineChanges(added: 0, removed: 0),
       state: &state
     )
 
@@ -240,8 +238,7 @@ struct RepositoriesFeatureTests {
 
     let changed = updateWorktreeLineChanges(
       worktreeID: worktree.id,
-      added: 12,
-      removed: 4,
+      changes: GitLineChanges(added: 12, removed: 4),
       state: &state
     )
 
@@ -249,6 +246,29 @@ struct RepositoriesFeatureTests {
     #expect(
       state.worktreeInfoByID[worktree.id]
         == WorktreeInfoEntry(addedLines: 12, removedLines: 4, pullRequest: nil)
+    )
+  }
+
+  @Test func updateWorktreeLineChangesKeepsAnIncompleteZeroCountVisible() {
+    let worktree = makeWorktree(id: "/tmp/repo/feature", name: "feature", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var state = makeState(repositories: [repository])
+
+    let changed = updateWorktreeLineChanges(
+      worktreeID: worktree.id,
+      changes: GitLineChanges(added: 0, removed: 0, skippedUntrackedFileCount: 1),
+      state: &state
+    )
+
+    #expect(changed == true)
+    #expect(
+      state.worktreeInfoByID[worktree.id]
+        == WorktreeInfoEntry(
+          addedLines: 0,
+          removedLines: 0,
+          pullRequest: nil,
+          skippedUntrackedFileCount: 1
+        )
     )
   }
 
@@ -265,7 +285,7 @@ struct RepositoriesFeatureTests {
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
     } withDependencies: {
-      $0.gitClient.lineChanges = { _ in (12, 4) }
+      $0.gitClient.lineChanges = { _ in GitLineChanges(added: 12, removed: 4) }
     }
 
     await store.send(.worktreeInfoEvent(.filesChanged(worktreeID: worktree.id)))
@@ -286,7 +306,7 @@ struct RepositoriesFeatureTests {
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
     } withDependencies: {
-      $0.gitClient.lineChanges = { _ in (0, 0) }
+      $0.gitClient.lineChanges = { _ in GitLineChanges(added: 0, removed: 0) }
     }
 
     await store.send(.worktreeInfoEvent(.filesChanged(worktreeID: worktree.id)))
@@ -306,7 +326,7 @@ struct RepositoriesFeatureTests {
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
     } withDependencies: {
-      $0.gitClient.lineChanges = { _ in (0, 0) }
+      $0.gitClient.lineChanges = { _ in GitLineChanges(added: 0, removed: 0) }
     }
 
     await store.send(.worktreeInfoEvent(.filesChanged(worktreeID: worktree.id)))
@@ -326,7 +346,7 @@ struct RepositoriesFeatureTests {
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
     } withDependencies: {
-      $0.gitClient.lineChanges = { _ in (15, 9) }
+      $0.gitClient.lineChanges = { _ in GitLineChanges(added: 15, removed: 9) }
     }
 
     await store.send(.worktreeInfoEvent(.filesChanged(worktreeID: worktree.id)))
@@ -335,6 +355,28 @@ struct RepositoriesFeatureTests {
         addedLines: 15,
         removedLines: 9,
         pullRequest: nil
+      )
+    }
+  }
+
+  @Test func filesChangedKeepsAnIncompleteLineCountVisible() async {
+    let worktree = makeWorktree(id: "/tmp/repo/feature", name: "feature", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.lineChanges = { _ in
+        GitLineChanges(added: 0, removed: 0, skippedUntrackedFileCount: 1)
+      }
+    }
+
+    await store.send(.worktreeInfoEvent(.filesChanged(worktreeID: worktree.id)))
+    await store.receive(\.worktreeLineChangesLoaded) {
+      $0.worktreeInfoByID[worktree.id] = WorktreeInfoEntry(
+        addedLines: 0,
+        removedLines: 0,
+        pullRequest: nil,
+        skippedUntrackedFileCount: 1
       )
     }
   }
@@ -358,7 +400,7 @@ struct RepositoriesFeatureTests {
     } withDependencies: {
       $0.gitClient.lineChanges = { _ in
         lineChangeRequests.withValue { $0 += 1 }
-        return (15, 9)
+        return GitLineChanges(added: 15, removed: 9)
       }
     }
 
@@ -390,6 +432,7 @@ struct RepositoriesFeatureTests {
       $0.snapshotPersistencePhase = .active
     }
     await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
   }
 
   @Test func plainRepositoryBecameGitRepositoryReloadsRepositories() async {
@@ -5493,6 +5536,7 @@ struct RepositoriesFeatureTests {
     }
     await store.receive(\.delegate.repositoriesChanged)
     await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.finish()
   }
 
   @Test func worktreeDeletedPrunesStateAndSendsDelegates() async {
@@ -7544,9 +7588,17 @@ struct RepositoriesFeatureTests {
     applyWorkspaceChildrenInfo(
       [
         WorkspaceChildInfoUpdate(
-          id: "/ws/app", branch: "feature", added: 7, removed: 2, pullRequest: pullRequest),
+          id: "/ws/app",
+          branch: "feature",
+          lineChanges: GitLineChanges(added: 7, removed: 2),
+          pullRequest: pullRequest
+        ),
         WorkspaceChildInfoUpdate(
-          id: "/ws/api", branch: "  ", added: 0, removed: 0, pullRequest: nil),
+          id: "/ws/api",
+          branch: "  ",
+          lineChanges: GitLineChanges(added: 0, removed: 0),
+          pullRequest: nil
+        ),
       ],
       state: &state
     )
@@ -7665,7 +7717,9 @@ struct RepositoriesFeatureTests {
       RepositoriesFeature()
     } withDependencies: {
       $0.gitClient.branchName = { _ in "feature/live" }
-      $0.gitClient.lineChanges = { _ in (7, 2) }
+      $0.gitClient.lineChanges = { _ in
+        GitLineChanges(added: 7, removed: 2, skippedUntrackedFileCount: 1)
+      }
       $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
     }
     store.exhaustivity = .off
@@ -7680,6 +7734,7 @@ struct RepositoriesFeatureTests {
     #expect(store.state.workspaceChildBranchByID[childID] == "feature/live")
     #expect(store.state.workspaceChildInfoByID[childID]?.addedLines == 7)
     #expect(store.state.workspaceChildInfoByID[childID]?.removedLines == 2)
+    #expect(store.state.workspaceChildInfoByID[childID]?.skippedUntrackedFileCount == 1)
   }
 
   @Test func openRepositoriesFinishedRefreshesWorkspaceChildren() async {
@@ -7895,7 +7950,8 @@ struct RepositoriesFeatureTests {
       name: URL(fileURLWithPath: repoRootB).lastPathComponent,
       worktrees: [worktreeB]
     )
-    let gate = AsyncGate()
+    let clock = TestClock()
+    let fetchStarted = AsyncGate()
     let startedRoots = LockIsolated<Set<String>>([])
 
     let store = TestStore(initialState: RepositoriesFeature.State()) {
@@ -7905,8 +7961,9 @@ struct RepositoriesFeatureTests {
       $0.gitClient.worktrees = { root in
         let path = root.path(percentEncoded: false)
         _ = startedRoots.withValue { $0.insert(path) }
+        await fetchStarted.resume()
         if path == repoRootA {
-          await gate.wait()
+          try? await clock.sleep(for: .seconds(1))
           return [worktreeA]
         }
         if path == repoRootB {
@@ -7918,18 +7975,10 @@ struct RepositoriesFeatureTests {
     }
 
     await store.send(.loadPersistedRepositories)
-
-    var secondFetchStarted = false
-    for _ in 0..<100 {
-      if startedRoots.value.contains(repoRootB) {
-        secondFetchStarted = true
-        break
-      }
-      await Task.yield()
-    }
-    #expect(secondFetchStarted)
-
-    await gate.resume()
+    await fetchStarted.wait()
+    await clock.advance()
+    #expect(startedRoots.value == [repoRootA, repoRootB])
+    await clock.advance(by: .seconds(1))
 
     await store.receive(\.repositoriesLoaded) {
       $0.repositories = [repoA, repoB]

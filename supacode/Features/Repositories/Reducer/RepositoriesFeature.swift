@@ -72,11 +72,10 @@ struct ForceDeleteBranchRequest: Equatable {
 // Result of refreshing one workspace child repository's live status: current
 // branch, uncommitted diff counts, and (when GitHub integration is available)
 // the PR for that branch.
-struct WorkspaceChildInfoUpdate: Equatable, Sendable {
+nonisolated struct WorkspaceChildInfoUpdate: Equatable, Sendable {
   let id: String
   let branch: String?
-  let added: Int?
-  let removed: Int?
+  let lineChanges: GitLineChanges?
   let pullRequest: GithubPullRequest?
 }
 
@@ -470,7 +469,7 @@ struct RepositoriesFeature {
     case presentAlert(title: String, message: String)
     case worktreeInfoEvent(WorktreeInfoWatcherClient.Event)
     case worktreeBranchNameLoaded(worktreeID: Worktree.ID, name: String)
-    case worktreeLineChangesLoaded(worktreeID: Worktree.ID, added: Int, removed: Int)
+    case worktreeLineChangesLoaded(worktreeID: Worktree.ID, changes: GitLineChanges)
     case workspaceChildrenInfoLoaded([WorkspaceChildInfoUpdate])
     case showToast(StatusToast)
     case dismissToast

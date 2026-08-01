@@ -49,8 +49,7 @@ extension RepositoriesFeature {
             return WorkspaceChildInfoUpdate(
               id: child.id,
               branch: branch,
-              added: changes?.added,
-              removed: changes?.removed,
+              lineChanges: changes,
               pullRequest: pullRequest
             )
           }
@@ -106,13 +105,14 @@ func applyWorkspaceChildrenInfo(
     }
 
     var entry = state.workspaceChildInfoByID[update.id] ?? WorktreeInfoEntry()
-    if let added = update.added, let removed = update.removed, !(added == 0 && removed == 0) {
-      entry.addedLines = added
-      entry.removedLines = removed
+    if let changes = update.lineChanges, !changes.isEmpty {
+      entry.addedLines = changes.added
+      entry.removedLines = changes.removed
     } else {
       entry.addedLines = nil
       entry.removedLines = nil
     }
+    entry.skippedUntrackedFileCount = update.lineChanges?.skippedUntrackedFileCount ?? 0
     entry.pullRequest = update.pullRequest
     if entry.isEmpty {
       state.workspaceChildInfoByID.removeValue(forKey: update.id)

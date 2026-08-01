@@ -94,6 +94,14 @@ Repositories can show **line-change badges** (additions/deletions) on worktree
 rows, controlled per repo by `observeLineDiffsAutomatically` (on by default).
 Disable it for very large repos if it's expensive.
 
+Prowl caches line counts for untracked files whose metadata has not changed.
+The cache has bounded entry and path-key storage. On a cold refresh it scans at
+most 32 MiB of uncached untracked content across the worktree. If more content
+remains, the additions label ends in an ellipsis (`+N…`, or `+…` when no
+additions were counted yet), and its tooltip identifies how many untracked files
+were omitted. The badge stays available to open Show Diff, which still lists
+every changed file. Tracked additions and deletions remain exact.
+
 ## Availability
 
 Diff is a **git-only** feature — it's unavailable for plain (non-git) folders.

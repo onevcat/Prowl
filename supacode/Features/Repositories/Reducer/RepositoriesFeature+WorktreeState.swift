@@ -251,18 +251,18 @@ func updateWorktreeName(
 @discardableResult
 func updateWorktreeLineChanges(
   worktreeID: Worktree.ID,
-  added: Int,
-  removed: Int,
+  changes: GitLineChanges,
   state: inout RepositoriesFeature.State
 ) -> Bool {
   var entry = state.worktreeInfoByID[worktreeID] ?? WorktreeInfoEntry()
-  if added == 0 && removed == 0 {
+  if changes.isEmpty {
     entry.addedLines = nil
     entry.removedLines = nil
   } else {
-    entry.addedLines = added
-    entry.removedLines = removed
+    entry.addedLines = changes.added
+    entry.removedLines = changes.removed
   }
+  entry.skippedUntrackedFileCount = changes.skippedUntrackedFileCount
   let previousEntry = state.worktreeInfoByID[worktreeID]
   if entry.isEmpty {
     guard previousEntry != nil else {
@@ -292,33 +292,18 @@ func updateWorktreePullRequest(
   }
 }
 
-nonisolated func normalizedLineChanges(_ entry: WorktreeInfoEntry?) -> (added: Int, removed: Int)? {
+nonisolated func normalizedLineChanges(_ entry: WorktreeInfoEntry?) -> GitLineChanges? {
   guard let added = entry?.addedLines, let removed = entry?.removedLines else {
     return nil
   }
-  return normalizedLineChanges(added: added, removed: removed)
+  return normalizedLineChanges(
+    GitLineChanges(
+      added: added,
+      removed: removed,
+      skippedUntrackedFileCount: entry?.skippedUntrackedFileCount ?? 0
+    ))
 }
 
-nonisolated func normalizedLineChanges(
-  added: Int,
-  removed: Int
-) -> (added: Int, removed: Int)? {
-  guard added != 0 || removed != 0 else {
-    return nil
-  }
-  return (added, removed)
-}
-
-nonisolated func lineChangesEqual(
-  _ lhs: (added: Int, removed: Int)?,
-  _ rhs: (added: Int, removed: Int)?
-) -> Bool {
-  switch (lhs, rhs) {
-  case (nil, nil):
-    return true
-  case (.some(let lhs), .some(let rhs)):
-    return lhs.added == rhs.added && lhs.removed == rhs.removed
-  default:
-    return false
-  }
+nonisolated func normalizedLineChanges(_ changes: GitLineChanges) -> GitLineChanges? {
+  changes.isEmpty ? nil : changes
 }

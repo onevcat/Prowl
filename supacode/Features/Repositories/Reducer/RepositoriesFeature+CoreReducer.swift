@@ -937,16 +937,14 @@ extension RepositoriesFeature {
         let previousLineChanges = normalizedLineChanges(state.worktreeInfoByID[worktreeID])
         return .run { send in
           if let changes = await gitClient.lineChanges(worktreeURL) {
-            let nextLineChanges = normalizedLineChanges(
-              added: changes.added, removed: changes.removed)
-            guard !lineChangesEqual(nextLineChanges, previousLineChanges) else {
+            let nextLineChanges = normalizedLineChanges(changes)
+            guard nextLineChanges != previousLineChanges else {
               return
             }
             await send(
               .worktreeLineChangesLoaded(
                 worktreeID: worktreeID,
-                added: changes.added,
-                removed: changes.removed
+                changes: changes
               )
             )
           }
@@ -996,11 +994,10 @@ extension RepositoriesFeature {
       updateWorktreeName(worktreeID, name: name, state: &state)
       return .none
 
-    case .worktreeLineChangesLoaded(let worktreeID, let added, let removed):
+    case .worktreeLineChangesLoaded(let worktreeID, let changes):
       updateWorktreeLineChanges(
         worktreeID: worktreeID,
-        added: added,
-        removed: removed,
+        changes: changes,
         state: &state
       )
       return .none
