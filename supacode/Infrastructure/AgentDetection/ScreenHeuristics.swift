@@ -126,6 +126,9 @@ nonisolated private func detectClaude(_ content: String) -> AgentRawState {
   if hasSpinnerActivity(above) {
     return .working
   }
+  if hasElapsedStatusLine(above) {
+    return .working
+  }
   if hasClaudeBackgroundWork(content) {
     return .working
   }
@@ -143,7 +146,7 @@ nonisolated private func detectCodex(_ content: String) -> AgentRawState {
   {
     return .blocked
   }
-  if hasInterruptPattern(lower) || hasCodexWorkingHeader(content) {
+  if hasInterruptPattern(lower) || hasCodexWorkingHeader(content) || hasElapsedStatusLine(content) {
     return .working
   }
   return .idle
@@ -491,6 +494,35 @@ nonisolated private func hasSpinnerActivity(_ content: String) -> Bool {
       && rest.hasPrefix(" ")
       && rest.contains("…")
       && rest.contains(where: \.isLetter)
+  }
+}
+
+/// Matches an in-progress status line shaped `<glyph> <word> (<elapsed>`, such as
+/// `● Forging… (10s · thinking with high effort)` or `• Working (12s · esc to interrupt)`.
+///
+/// The word is randomized between renders, so no fixed vocabulary can track it and
+/// matching on one goes stale the moment a runtime reworks its wording. The elapsed
+/// counter carries the signal instead: it is rendered only while a turn is in flight.
+///
+/// Anchoring on that counter is also what keeps the check honest. Ordinary message
+/// bullets share the leading glyph and routinely end a clause with an ellipsis, so a
+/// glyph-and-ellipsis match alone would read a finished turn as a running one.
+nonisolated private func hasElapsedStatusLine(_ content: String) -> Bool {
+  let statusGlyphs: Set<UnicodeScalar> = ["●", "•"]
+  return content.split(separator: "\n").contains { line in
+    let trimmed = line.trimmingCharacters(in: .whitespaces)
+    guard let first = trimmed.unicodeScalars.first, statusGlyphs.contains(first) else {
+      return false
+    }
+    let body = trimmed.dropFirst()
+    guard body.hasPrefix(" "), let open = body.firstIndex(of: "(") else { return false }
+    // A single token, so a sentence that merely happens to reach a parenthesis cannot match.
+    let label = body[body.startIndex..<open].trimmingCharacters(in: .whitespaces)
+    guard !label.isEmpty, !label.contains(" ") else { return false }
+    let elapsed = body[body.index(after: open)...]
+    let digits = elapsed.prefix(while: \.isNumber)
+    guard !digits.isEmpty, let unit = elapsed.dropFirst(digits.count).first else { return false }
+    return unit == "s" || unit == "m" || unit == "h"
   }
 }
 

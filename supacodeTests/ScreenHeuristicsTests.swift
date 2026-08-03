@@ -342,6 +342,58 @@ struct ScreenHeuristicsTests {
     )
   }
 
+  /// Live captures. The word after the glyph is randomized between renders, so the
+  /// elapsed counter following it is the part that marks a turn as still in flight.
+  @Test func statusLineWithElapsedCounterIsWorking() {
+    let lines = [
+      "● Forging… (10s · thinking with high effort)",
+      "● Forming… (8s · ↓ 330 tokens · thinking with high effort)",
+      "● Grooving… (2s · thinking with high effort)",
+    ]
+    for line in lines {
+      #expect(
+        DetectedAgent.claude.detectState(
+          in: """
+            \(line)
+            ─────────
+            ❯
+            ─────────
+            """
+        ) == .working
+      )
+    }
+  }
+
+  /// Message bullets share the leading glyph and routinely end a clause with an
+  /// ellipsis, so the counter is the only thing separating a finished turn from a
+  /// running one. Without it these must stay idle.
+  @Test func bulletedMessageWithoutElapsedCounterIsIdle() {
+    let lines = [
+      "● I checked the file… it looks fine to me",
+      "● Done… (see above)",
+    ]
+    for line in lines {
+      #expect(
+        DetectedAgent.claude.detectState(
+          in: """
+            \(line)
+            ─────────
+            ❯
+            ─────────
+            """
+        ) == .idle
+      )
+    }
+  }
+
+  /// The existing header check matches the literal verb `Working`, so a reworded
+  /// status line only registers through the shared elapsed-counter shape.
+  @Test func codexStatusLineWithRewordedVerbIsWorking() {
+    #expect(DetectedAgent.codex.detectState(in: "• Exploring… (12s · 4 tool calls)") == .working)
+    #expect(DetectedAgent.codex.detectState(in: "• Reticulating (3m · 12 files)") == .working)
+    #expect(DetectedAgent.codex.detectState(in: "• Ready for your input") == .idle)
+  }
+
   @Test func codexDetection() {
     #expect(DetectedAgent.codex.detectState(in: "press enter to confirm or esc to cancel") == .blocked)
     #expect(DetectedAgent.codex.detectState(in: "• Working (12s)\nesc to interrupt") == .working)
