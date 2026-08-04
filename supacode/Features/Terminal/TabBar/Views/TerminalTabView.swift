@@ -26,6 +26,11 @@ struct TerminalTabView: View {
   @State private var tabWidth: CGFloat = 0
   @Environment(CommandKeyObserver.self) private var commandKeyObserver
   @Environment(\.resolvedKeybindings) private var resolvedKeybindings
+  @Environment(\.interfaceTextScale) private var interfaceTextScale
+
+  private var metrics: TerminalTabBarMetrics.Scaled {
+    TerminalTabBarMetrics.scaled(interfaceTextScale)
+  }
 
   var body: some View {
     ZStack(alignment: .leading) {
@@ -41,10 +46,10 @@ struct TerminalTabView: View {
       }
       .buttonStyle(TerminalTabButtonStyle(isPressing: $isPressing))
       .frame(
-        minWidth: TerminalTabBarMetrics.tabMinWidth,
+        minWidth: metrics.tabMinWidth,
         maxWidth: .infinity,
-        minHeight: TerminalTabBarMetrics.tabHeight,
-        maxHeight: TerminalTabBarMetrics.tabHeight
+        minHeight: metrics.tabHeight,
+        maxHeight: metrics.tabHeight
       )
       .frame(width: fixedWidth)
       .contentShape(.rect)
@@ -68,17 +73,18 @@ struct TerminalTabView: View {
       }
       .animation(.easeInOut(duration: TerminalTabBarMetrics.hoverAnimationDuration), value: isHovering)
       .animation(.easeInOut(duration: 0.2), value: hasNotification)
-      .padding(.leading, TerminalTabBarMetrics.tabHorizontalPadding)
+      .padding(.leading, metrics.tabHorizontalPadding)
       .opacity(isEditing ? 0 : 1)
       .allowsHitTesting(!isEditing)
     }
     .overlay {
       if isEditing {
-        HStack(spacing: TerminalTabBarMetrics.contentSpacing) {
+        HStack(spacing: metrics.contentSpacing) {
           if tab.isDirty || tab.icon != nil {
             TerminalTabIconBadge(tab: tab, isActive: isActive)
           }
           RenameTextField(
+            fontSize: NSFont.smallSystemFontSize * interfaceTextScale,
             text: $editingTitle,
             onCommit: { onEndRename() },
             onCancel: {
@@ -86,16 +92,16 @@ struct TerminalTabView: View {
               onEndRename()
             }
           )
-          .padding(.horizontal, TerminalTabBarMetrics.contentSpacing)
+          .padding(.horizontal, metrics.contentSpacing)
           .background(
             RoundedRectangle(
-              cornerRadius: TerminalTabBarMetrics.renameFieldCornerRadius,
+              cornerRadius: metrics.renameFieldCornerRadius,
               style: .continuous
             )
             .fill(Color(nsColor: .textBackgroundColor))
             .overlay(
               RoundedRectangle(
-                cornerRadius: TerminalTabBarMetrics.renameFieldCornerRadius,
+                cornerRadius: metrics.renameFieldCornerRadius,
                 style: .continuous
               )
               .strokeBorder(Color.accentColor, lineWidth: 1.5)
@@ -103,9 +109,9 @@ struct TerminalTabView: View {
           )
           .accessibilityLabel("Rename tab")
         }
-        .padding(.leading, TerminalTabBarMetrics.closeButtonSize + TerminalTabBarMetrics.contentSpacing)
-        .padding(.trailing, TerminalTabBarMetrics.tabHorizontalPadding)
-        .padding(.vertical, TerminalTabBarMetrics.renameFieldInset)
+        .padding(.leading, metrics.closeButtonSize + metrics.contentSpacing)
+        .padding(.trailing, metrics.tabHorizontalPadding)
+        .padding(.vertical, metrics.renameFieldInset)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
       }
     }
@@ -174,17 +180,20 @@ struct TerminalTabView: View {
   private func isInIconHitArea(_ point: CGPoint) -> Bool {
     guard tab.isDirty || tab.icon != nil else { return false }
     guard tabWidth > 0 else { return false }
-    let minX = tabWidth - TerminalTabBarMetrics.tabHorizontalPadding - TerminalTabBarMetrics.closeButtonSize
+    let minX = tabWidth - metrics.tabHorizontalPadding - metrics.closeButtonSize
     return point.x >= minX
   }
 }
 
 private struct TabNotificationDot: View {
+  @Environment(\.interfaceTextScale) private var interfaceTextScale
+
   var body: some View {
+    let slotSize = TerminalTabBarMetrics.scaled(interfaceTextScale).closeButtonSize
     Circle()
       .fill(.orange)
       .frame(width: 6, height: 6)
-      .frame(width: TerminalTabBarMetrics.closeButtonSize, height: TerminalTabBarMetrics.closeButtonSize)
+      .frame(width: slotSize, height: slotSize)
       .accessibilityLabel("Unread notifications")
   }
 }
@@ -240,6 +249,7 @@ private final class MiddleClickNSView: NSView {
 /// directly lets us drive `selectAll` on its own field editor without
 /// fighting SwiftUI's focus timing.
 private struct RenameTextField: NSViewRepresentable {
+  let fontSize: CGFloat
   @Binding var text: String
   let onCommit: () -> Void
   let onCancel: () -> Void
@@ -248,7 +258,7 @@ private struct RenameTextField: NSViewRepresentable {
 
   func makeNSView(context: Context) -> RenameNSTextField {
     let field = RenameNSTextField()
-    field.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+    field.font = NSFont.systemFont(ofSize: fontSize)
     field.textColor = .labelColor
     field.isBordered = false
     field.drawsBackground = false
@@ -266,6 +276,9 @@ private struct RenameTextField: NSViewRepresentable {
 
   func updateNSView(_ nsView: RenameNSTextField, context: Context) {
     context.coordinator.parent = self
+    if nsView.font?.pointSize != fontSize {
+      nsView.font = NSFont.systemFont(ofSize: fontSize)
+    }
     if nsView.stringValue != text {
       nsView.stringValue = text
     }

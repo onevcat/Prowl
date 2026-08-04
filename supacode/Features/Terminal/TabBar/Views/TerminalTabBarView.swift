@@ -22,8 +22,10 @@ struct TerminalTabBarView: View {
   let hasNotification: (TerminalTabID) -> Bool
   @Environment(\.controlActiveState)
   private var activeState
+  @Environment(\.interfaceTextScale) private var interfaceTextScale
 
   var body: some View {
+    let metrics = TerminalTabBarMetrics.scaled(interfaceTextScale)
     HStack(spacing: 0) {
       TerminalTabsView(
         manager: manager,
@@ -46,7 +48,7 @@ struct TerminalTabBarView: View {
         canSplit: canSplit
       )
     }
-    .frame(height: TerminalTabBarMetrics.barHeight)
+    .frame(height: metrics.barHeight)
     // Desaturate only the bar *contents* (tabs + accessories) when the window
     // is inactive — the tint band below stays out of this scope so it keeps
     // its hue on blur, matching the toolbar / nav chrome (which don't gray out).
@@ -55,7 +57,7 @@ struct TerminalTabBarView: View {
     // after saturation, before the tint) so the band fills it instead of the
     // parent leaving a transparent seam that reveals the translucent window
     // background when `background-opacity` < 1.
-    .padding(.bottom, TerminalTabBarMetrics.barBottomGap)
+    .padding(.bottom, metrics.barBottomGap)
     // Tint the full-width bar backing (behind the left gap, tabs capsule,
     // trailing accessories, and the bottom gap) so it joins the toolbar / nav
     // chrome as one tinted surface. Fixed band alpha mirrors `windowChromeTint`;

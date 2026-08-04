@@ -53,6 +53,7 @@ struct AgentsToolbarButton: View {
   let onLaunchProfile: (AgentProfile.ID) -> Void
   let onManageProfiles: () -> Void
   @State private var isPopoverPresented = false
+  @Environment(\.interfaceTextScale) private var interfaceTextScale
 
   var body: some View {
     Button {
@@ -87,26 +88,27 @@ struct AgentsToolbarButton: View {
   /// 20pt icon slot) so the two neighboring pills read as one family.
   @ViewBuilder
   private var label: some View {
+    let iconSlot = 20 * interfaceTextScale
     HStack(spacing: 6) {
       if let capsule {
         agentIcon(capsule)
-          .frame(width: 20, height: 20)
+          .frame(width: iconSlot, height: iconSlot)
         Text(capsule.displayName)
       } else {
         Image(systemName: "sparkles")
           .foregroundStyle(.secondary)
           .accessibilityHidden(true)
-          .frame(width: 20, height: 20)
+          .frame(width: iconSlot, height: iconSlot)
         Text("Agents")
       }
     }
-    .font(.title3.weight(.medium))
+    .interfaceFont(.title3, weight: .medium)
   }
 
   @ViewBuilder
   private func agentIcon(_ capsule: AgentsCapsuleState) -> some View {
     if let source = capsule.iconSource {
-      TabIconImage(rawName: source.storageString, pointSize: 17)
+      TabIconImage(rawName: source.storageString, pointSize: 17 * interfaceTextScale)
     } else {
       Image(systemName: "sparkle")
         .accessibilityHidden(true)
@@ -141,7 +143,7 @@ struct AgentsQuickLaunchButton: View {
       onLaunch(item.id)
     } label: {
       Image(systemName: "play.circle")
-        .font(.title3.weight(.medium))
+        .interfaceFont(.title3, weight: .medium)
         .foregroundStyle(.secondary)
     }
     .help("Launch \(item.name) in this worktree")
@@ -176,7 +178,7 @@ private struct AgentsPopoverContent: View {
       }
       if !launcherItems.isEmpty {
         Text("New agent in this worktree")
-          .font(.caption)
+          .interfaceFont(.caption)
           .foregroundStyle(.secondary)
           .padding(.horizontal, 8)
           .padding(.top, 4)
@@ -202,6 +204,7 @@ private struct AgentsPopoverContent: View {
       )
     }
     .padding(6)
+    .interfaceFont(.body)
     .frame(width: 280, alignment: .leading)
     .accessibilityElement(children: .contain)
     .accessibilityLabel("Agents")
@@ -228,16 +231,18 @@ private struct AgentsPopoverRow: View {
   var isDimmed: Bool = false
   let action: () -> Void
   @State private var isHovered = false
+  @Environment(\.interfaceTextScale) private var interfaceTextScale
 
   var body: some View {
+    let iconSlot = 16 * interfaceTextScale
     Button(action: action) {
       HStack(alignment: .top, spacing: 8) {
         if let iconSource {
-          AgentProfileIconImage(source: iconSource, pointSize: 16)
-            .frame(width: 16)
+          AgentProfileIconImage(source: iconSource, pointSize: iconSlot)
+            .frame(width: iconSlot)
         } else {
           Image(systemName: systemImage)
-            .frame(width: 16)
+            .frame(width: iconSlot)
             .accessibilityHidden(true)
         }
         VStack(alignment: .leading, spacing: 2) {
@@ -247,13 +252,13 @@ private struct AgentsPopoverRow: View {
             Spacer(minLength: 0)
             if let trailingText {
               Text(trailingText)
-                .font(.caption)
+                .interfaceFont(.caption)
                 .foregroundStyle(.tertiary)
             }
           }
           if let subtitle {
             Text(subtitle)
-              .font(.caption)
+              .interfaceFont(.caption)
               .foregroundStyle(.secondary)
               .fixedSize(horizontal: false, vertical: true)
           }

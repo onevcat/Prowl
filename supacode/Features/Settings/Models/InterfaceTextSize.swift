@@ -1,7 +1,8 @@
-/// Discrete scale steps for text in the app chrome (sidebar and Active
-/// Agents panel). macOS ignores `dynamicTypeSize`, so the app scales
-/// chrome text itself; discrete steps keep row layouts predictable
-/// across the supported range.
+/// Discrete scale steps for text in the app chrome: sidebar, Active Agents
+/// panel, toolbar, tab bar, and their popovers. macOS ignores
+/// `dynamicTypeSize`, so the app scales chrome text itself; discrete steps
+/// keep row layouts predictable across the supported range. Terminal
+/// content is excluded — its size comes from the Ghostty font settings.
 enum InterfaceTextSize: String, CaseIterable, Identifiable, Codable, Sendable {
   case standard
   case medium

@@ -63,14 +63,14 @@ struct PullRequestChecksPopoverView: View {
           .pointerStyle(.link)
           .help(openPullRequestHelpText)
           .modifier(KeyboardShortcutModifier(shortcut: openPullRequestShortcut?.keyboardShortcut))
-          .font(.headline)
+          .interfaceFont(.headline)
         } else {
           titleLine
             .lineLimit(1)
-            .font(.headline)
+            .interfaceFont(.headline)
         }
         summaryLine
-          .font(.subheadline)
+          .interfaceFont(.subheadline)
           .lineLimit(1)
         HStack {
           additionsText
@@ -84,7 +84,7 @@ struct PullRequestChecksPopoverView: View {
               .foregroundStyle(.red)
           }
         }
-        .font(.subheadline)
+        .interfaceFont(.subheadline)
 
         if let mergeQueueStatus = PullRequestMergeQueueStatus(pullRequest: pullRequest) {
           PullRequestMergeQueueRow(status: mergeQueueStatus)
@@ -96,7 +96,7 @@ struct PullRequestChecksPopoverView: View {
             Text(breakdown.summaryText)
               .foregroundStyle(.secondary)
           }
-          .font(.caption)
+          .interfaceFont(.caption)
         }
 
         if !sortedChecks.isEmpty {
@@ -127,7 +127,7 @@ struct PullRequestChecksPopoverView: View {
                 Text(style.label)
                   .foregroundStyle(.secondary)
               }
-              .font(.caption)
+              .interfaceFont(.caption)
             }
           }
         }
@@ -149,10 +149,10 @@ struct PullRequestChecksPopoverView: View {
           Text(status.summary)
             .foregroundStyle(.brown)
         }
-        .font(.subheadline)
+        .interfaceFont(.subheadline)
         if let detail = status.detail {
           Text(detail)
-            .font(.caption)
+            .interfaceFont(.caption)
             .foregroundStyle(.secondary)
         }
       }

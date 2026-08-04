@@ -16,6 +16,7 @@ struct TerminalTabsView: View {
   @State private var tabLocations: [TerminalTabID: CGRect] = [:]
   @State private var closeButtonGestureActive = false
   @State private var containerWidth: CGFloat = 0
+  @Environment(\.interfaceTextScale) private var interfaceTextScale
 
   var body: some View {
     GeometryReader { geometryProxy in
@@ -38,7 +39,7 @@ struct TerminalTabsView: View {
             closeAll: closeAll,
             scrollReader: scrollReader
           )
-          .padding(.horizontal, TerminalTabBarMetrics.barPadding)
+          .padding(.horizontal, TerminalTabBarMetrics.scaled(interfaceTextScale).barPadding)
         }
         .scrollIndicators(.never)
         .onAppear {
@@ -70,13 +71,14 @@ struct TerminalTabsView: View {
     // padding, inter-tab spacing, and the always-present dividers so a filled
     // row fits exactly — otherwise the leftover overflow lets selection-driven
     // scrollTo(.center) nudge the whole row when picking a middle tab.
+    let metrics = TerminalTabBarMetrics.scaled(interfaceTextScale)
     let interTabCount = CGFloat(count - 1)
     let available =
       containerWidth
-      - TerminalTabBarMetrics.barPadding * 2
-      - TerminalTabBarMetrics.tabSpacing * interTabCount
-      - TerminalTabBarMetrics.tabDividerWidth * interTabCount
+      - metrics.barPadding * 2
+      - metrics.tabSpacing * interTabCount
+      - metrics.tabDividerWidth * interTabCount
     let perTab = available / CGFloat(count)
-    return max(TerminalTabBarMetrics.tabMinWidth, perTab)
+    return max(metrics.tabMinWidth, perTab)
   }
 }

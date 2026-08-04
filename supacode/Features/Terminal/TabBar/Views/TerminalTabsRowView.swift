@@ -19,8 +19,10 @@ struct TerminalTabsRowView: View {
 
   @State private var dropTargetIndex: Int?
   @State private var rowFrame: CGRect = .zero
+  @Environment(\.interfaceTextScale) private var interfaceTextScale
 
   var body: some View {
+    let metrics = TerminalTabBarMetrics.scaled(interfaceTextScale)
     // Read `tabs` once and index it: the lookup below runs inside a `ForEach`
     // over the same collection, so scanning it per row made each rebuild
     // quadratic — and a rebuild happens whenever any one tab's title changes.
@@ -28,7 +30,7 @@ struct TerminalTabsRowView: View {
     let tabsByID = Dictionary(tabs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
 
     ZStack(alignment: .topLeading) {
-      HStack(alignment: .center, spacing: TerminalTabBarMetrics.tabSpacing) {
+      HStack(alignment: .center, spacing: metrics.tabSpacing) {
         ForEach(Array(openedTabs.enumerated()), id: \.element) { index, id in
           if let item = tabsByID[id] {
             TerminalTabView(
@@ -99,12 +101,12 @@ struct TerminalTabsRowView: View {
         Capsule()
           .fill(TerminalTabBarColors.dropIndicator)
           .frame(
-            width: TerminalTabBarMetrics.dropIndicatorWidth,
-            height: TerminalTabBarMetrics.dropIndicatorHeight
+            width: metrics.dropIndicatorWidth,
+            height: metrics.dropIndicatorHeight
           )
           .offset(
-            x: offsetX - (TerminalTabBarMetrics.dropIndicatorWidth / 2),
-            y: (TerminalTabBarMetrics.tabHeight - TerminalTabBarMetrics.dropIndicatorHeight) / 2
+            x: offsetX - (metrics.dropIndicatorWidth / 2),
+            y: (metrics.tabHeight - metrics.dropIndicatorHeight) / 2
           )
           .animation(.easeInOut(duration: TerminalTabBarMetrics.hoverAnimationDuration), value: offsetX)
       }
@@ -151,7 +153,7 @@ struct TerminalTabsRowView: View {
         }
       }
     }
-    .frame(height: TerminalTabBarMetrics.barHeight)
+    .frame(height: metrics.barHeight)
   }
 
   private func makeTabDragGesture(id: TerminalTabID) -> some Gesture {

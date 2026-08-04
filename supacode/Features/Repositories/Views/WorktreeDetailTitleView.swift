@@ -6,6 +6,7 @@ struct WorktreeDetailTitleView: View {
   let externalRenamePrompt: PendingRenameBranchRequest?
   let onConsumeExternalRenamePrompt: (Int) -> Void
   @Environment(\.resolvedKeybindings) private var resolvedKeybindings
+  @Environment(\.interfaceTextScale) private var interfaceTextScale
 
   @State private var isPresented = false
   @State private var isHovered = false
@@ -90,10 +91,10 @@ struct WorktreeDetailTitleView: View {
       Image(systemName: (title.supportsRename && isHovered) ? "pencil" : title.systemImage)
         .foregroundStyle(.secondary)
         .accessibilityHidden(true)
-        .frame(width: 20, height: 20)
+        .frame(width: 20 * interfaceTextScale, height: 20 * interfaceTextScale)
       Text(title.text)
     }
-    .font(.title3.weight(.medium))
+    .interfaceFont(.title3, weight: .medium)
     .padding(.horizontal, 10)
     .padding(.vertical, 8)
     .contentShape(Capsule())
@@ -109,7 +110,7 @@ private struct RenameBranchPopover: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       Text("Rename Branch")
-        .font(.headline)
+        .interfaceFont(.headline)
 
       TextField("Branch name", text: $draftName)
         .textFieldStyle(.roundedBorder)

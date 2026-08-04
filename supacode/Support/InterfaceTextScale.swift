@@ -1,7 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// Multiplier applied to chrome text (sidebar, Active Agents panel).
+/// Multiplier applied to chrome text (sidebar, Active Agents panel,
+/// toolbar, tab bar, and their popovers).
 /// Injected at the window root from `GlobalSettings.interfaceTextSize`;
 /// defaults to 1 so views hosted outside the main window are unaffected.
 private struct InterfaceTextScaleKey: EnvironmentKey {

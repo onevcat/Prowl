@@ -1032,7 +1032,7 @@ struct WorktreeDetailView: View {
         .help("Copy path")
       } label: {
         Image(systemName: "chevron.down")
-          .font(.caption2)
+          .interfaceFont(.caption2)
           .accessibilityLabel("Open in menu")
       }
       .imageScale(.small)

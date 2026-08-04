@@ -2,8 +2,11 @@ import SwiftUI
 
 struct PullRequestChecksRingView: View {
   let breakdown: PullRequestCheckBreakdown
-  @ScaledMetric(relativeTo: .caption) private var diameter: CGFloat = 12
-  @ScaledMetric(relativeTo: .caption) private var lineWidth: CGFloat = 2
+  @Environment(\.interfaceTextScale) private var interfaceTextScale
+  // `@ScaledMetric` tracks Dynamic Type, which macOS ignores; the interface
+  // text scale is what actually resizes the caption text next to the ring.
+  private var diameter: CGFloat { 12 * interfaceTextScale }
+  private var lineWidth: CGFloat { 2 * interfaceTextScale }
   private let segmentGapFraction = 0.05
 
   var body: some View {
