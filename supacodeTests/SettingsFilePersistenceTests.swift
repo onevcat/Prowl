@@ -376,7 +376,7 @@ struct SettingsFilePersistenceTests {
     #expect(settings.global.updatesAutomaticallyDownloadUpdates == true)
   }
 
-  @Test(.dependencies) func saveAndReloadInterfaceTextSize() throws {
+  @Test(.dependencies) func saveAndReloadMinimumTextSize() throws {
     let storage = SettingsTestStorage()
 
     withDependencies {
@@ -384,7 +384,7 @@ struct SettingsFilePersistenceTests {
     } operation: {
       @Shared(.settingsFile) var settings: SettingsFile
       $settings.withLock {
-        $0.global.interfaceTextSize = .large
+        $0.global.minimumTextSize = .points12
       }
     }
 
@@ -395,17 +395,17 @@ struct SettingsFilePersistenceTests {
       return settings
     }
 
-    #expect(reloaded.global.interfaceTextSize == .large)
+    #expect(reloaded.global.minimumTextSize == .points12)
   }
 
-  @Test(.dependencies) func decodesUnrecognizedInterfaceTextSizeAsDefaultWithoutResettingSiblings() throws {
+  @Test(.dependencies) func decodesUnrecognizedMinimumTextSizeAsDefaultWithoutResettingSiblings() throws {
     var global = GlobalSettings.default
     global.appearanceMode = .dark
     global.systemNotificationsEnabled = true
 
     let encoded = try JSONEncoder().encode(global)
     var globalDict = try #require(try JSONSerialization.jsonObject(with: encoded) as? [String: Any])
-    globalDict["interfaceTextSize"] = "futureSizeFromNewerBuild"
+    globalDict["minimumTextSize"] = "futureSizeFromNewerBuild"
     let data = try JSONSerialization.data(withJSONObject: ["global": globalDict, "repositories": [:]])
     let storage = MutableTestStorage(initialData: data)
 
@@ -416,7 +416,7 @@ struct SettingsFilePersistenceTests {
       return settings
     }
 
-    #expect(settings.global.interfaceTextSize == .standard)
+    #expect(settings.global.minimumTextSize == .system)
     #expect(settings.global.appearanceMode == .dark)
     #expect(settings.global.systemNotificationsEnabled == true)
   }

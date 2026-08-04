@@ -48,13 +48,14 @@ struct AppearanceSettingsView: View {
           .foregroundStyle(.secondary)
         }
         Section("Interface") {
-          Picker("Interface text size", selection: $store.interfaceTextSize) {
-            ForEach(InterfaceTextSize.allCases) { size in
+          Picker("Minimum text size", selection: $store.minimumTextSize) {
+            ForEach(MinimumTextSize.allCases) { size in
               Text(size.title).tag(size)
             }
           }
           .help(
-            "Scale text in the sidebar, toolbar, tab bar, and panels. "
+            "Never use text smaller than this size in the sidebar, toolbar, "
+              + "tab bar, and panels — like Safari's minimum font size. "
               + "Terminal text follows your Ghostty font size instead."
           )
         }

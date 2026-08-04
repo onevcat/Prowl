@@ -6,7 +6,6 @@ struct WorktreeDetailTitleView: View {
   let externalRenamePrompt: PendingRenameBranchRequest?
   let onConsumeExternalRenamePrompt: (Int) -> Void
   @Environment(\.resolvedKeybindings) private var resolvedKeybindings
-  @Environment(\.interfaceTextScale) private var interfaceTextScale
 
   @State private var isPresented = false
   @State private var isHovered = false
@@ -91,7 +90,7 @@ struct WorktreeDetailTitleView: View {
       Image(systemName: (title.supportsRename && isHovered) ? "pencil" : title.systemImage)
         .foregroundStyle(.secondary)
         .accessibilityHidden(true)
-        .frame(width: 20 * interfaceTextScale, height: 20 * interfaceTextScale)
+        .frame(width: 20, height: 20)
       Text(title.text)
     }
     .interfaceFont(.title3, weight: .medium)

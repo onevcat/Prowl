@@ -53,7 +53,7 @@ struct SettingsFeature {
     var externalDiffToolID: String
     var externalDiffCustomCommand: String
     var detectRepositoryIconsAutomatically: Bool
-    var interfaceTextSize: InterfaceTextSize
+    var minimumTextSize: MinimumTextSize
     var cliInstallStatus: CLIInstallStatus = .notInstalled
     var cliInstallShowAlert: Bool = true
     /// Whether macOS will render the Dock notification badge (notification
@@ -113,7 +113,7 @@ struct SettingsFeature {
       externalDiffToolID = settings.externalDiffToolID
       externalDiffCustomCommand = settings.externalDiffCustomCommand
       detectRepositoryIconsAutomatically = settings.detectRepositoryIconsAutomatically
-      interfaceTextSize = settings.interfaceTextSize
+      minimumTextSize = settings.minimumTextSize
     }
 
     var globalSettings: GlobalSettings {
@@ -165,7 +165,7 @@ struct SettingsFeature {
       settings.externalDiffToolID = externalDiffToolID
       settings.externalDiffCustomCommand = externalDiffCustomCommand
       settings.detectRepositoryIconsAutomatically = detectRepositoryIconsAutomatically
-      settings.interfaceTextSize = interfaceTextSize
+      settings.minimumTextSize = minimumTextSize
       return settings
     }
   }
@@ -288,7 +288,7 @@ struct SettingsFeature {
         state.externalDiffCustomCommand = normalizedSettings.externalDiffCustomCommand
         state.canvasDefaultLayout = normalizedSettings.canvasDefaultLayout
         state.detectRepositoryIconsAutomatically = normalizedSettings.detectRepositoryIconsAutomatically
-        state.interfaceTextSize = normalizedSettings.interfaceTextSize
+        state.minimumTextSize = normalizedSettings.minimumTextSize
         state.syncGlobalDefaults(from: normalizedSettings)
         return .send(.delegate(.settingsChanged(normalizedSettings)))
 

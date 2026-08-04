@@ -53,7 +53,6 @@ struct AgentsToolbarButton: View {
   let onLaunchProfile: (AgentProfile.ID) -> Void
   let onManageProfiles: () -> Void
   @State private var isPopoverPresented = false
-  @Environment(\.interfaceTextScale) private var interfaceTextScale
 
   var body: some View {
     Button {
@@ -88,7 +87,7 @@ struct AgentsToolbarButton: View {
   /// 20pt icon slot) so the two neighboring pills read as one family.
   @ViewBuilder
   private var label: some View {
-    let iconSlot = 20 * interfaceTextScale
+    let iconSlot: CGFloat = 20
     HStack(spacing: 6) {
       if let capsule {
         agentIcon(capsule)
@@ -108,7 +107,7 @@ struct AgentsToolbarButton: View {
   @ViewBuilder
   private func agentIcon(_ capsule: AgentsCapsuleState) -> some View {
     if let source = capsule.iconSource {
-      TabIconImage(rawName: source.storageString, pointSize: 17 * interfaceTextScale)
+      TabIconImage(rawName: source.storageString, pointSize: 17)
     } else {
       Image(systemName: "sparkle")
         .accessibilityHidden(true)
@@ -231,10 +230,9 @@ private struct AgentsPopoverRow: View {
   var isDimmed: Bool = false
   let action: () -> Void
   @State private var isHovered = false
-  @Environment(\.interfaceTextScale) private var interfaceTextScale
 
   var body: some View {
-    let iconSlot = 16 * interfaceTextScale
+    let iconSlot: CGFloat = 16
     Button(action: action) {
       HStack(alignment: .top, spacing: 8) {
         if let iconSource {

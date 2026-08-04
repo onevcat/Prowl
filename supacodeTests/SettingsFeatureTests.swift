@@ -332,18 +332,18 @@ struct SettingsFeatureTests {
     #expect(settingsFile.global.canvasDefaultLayout == .uniform)
   }
 
-  @Test(.dependencies) func changingInterfaceTextSizePersists() async {
+  @Test(.dependencies) func changingMinimumTextSizePersists() async {
     @Shared(.settingsFile) var settingsFile
     $settingsFile.withLock { $0.global = .default }
     let store = TestStore(initialState: SettingsFeature.State()) {
       SettingsFeature()
     }
-    #expect(store.state.interfaceTextSize == .standard)
-    await store.send(.binding(.set(\.interfaceTextSize, .extraLarge))) {
-      $0.interfaceTextSize = .extraLarge
+    #expect(store.state.minimumTextSize == .system)
+    await store.send(.binding(.set(\.minimumTextSize, .points13))) {
+      $0.minimumTextSize = .points13
     }
     await store.receive(\.delegate.settingsChanged)
-    #expect(settingsFile.global.interfaceTextSize == .extraLarge)
+    #expect(settingsFile.global.minimumTextSize == .points13)
   }
 
   @Test(.dependencies) func changingGlobalOverrideDefaultsUpdatesRepositorySettingsState() async {

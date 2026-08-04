@@ -15,7 +15,6 @@ struct ContentView: View {
   let terminalManager: WorktreeTerminalManager
   @Environment(\.scenePhase) private var scenePhase
   @Environment(GhosttyShortcutManager.self) private var ghosttyShortcuts
-  @Environment(\.interfaceTextScale) private var interfaceTextScale
 
   init(store: StoreOf<AppFeature>, terminalManager: WorktreeTerminalManager) {
     self.store = store
@@ -174,9 +173,9 @@ struct ContentView: View {
     return NavigationSplitView(columnVisibility: visibility) {
       SidebarView(store: repositoriesStore, terminalManager: terminalManager)
         .navigationSplitViewColumnWidth(
-          min: 220 * interfaceTextScale,
-          ideal: 260 * interfaceTextScale,
-          max: 320 * interfaceTextScale
+          min: 220,
+          ideal: 260,
+          max: 320
         )
     } detail: {
       WorktreeDetailView(store: store, terminalManager: terminalManager)

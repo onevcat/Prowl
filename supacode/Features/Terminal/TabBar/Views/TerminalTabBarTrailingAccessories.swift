@@ -8,7 +8,6 @@ struct TerminalTabBarTrailingAccessories: View {
 
   @Environment(GhosttyShortcutManager.self)
   private var ghosttyShortcuts
-  @Environment(\.interfaceTextScale) private var interfaceTextScale
 
   @State private var isHoveringButton = false
   @State private var isHoveringPopover = false
@@ -17,8 +16,7 @@ struct TerminalTabBarTrailingAccessories: View {
   @State private var closeTask: Task<Void, Never>?
 
   var body: some View {
-    let metrics = TerminalTabBarMetrics.scaled(interfaceTextScale)
-    HStack(spacing: metrics.contentTrailingSpacing) {
+    HStack(spacing: TerminalTabBarMetrics.contentTrailingSpacing) {
       newTabButton
       splitButton(
         title: "Split Vertically",
@@ -35,7 +33,7 @@ struct TerminalTabBarTrailingAccessories: View {
       )
       .disabled(!canSplit)
     }
-    .frame(height: metrics.barHeight)
+    .frame(height: TerminalTabBarMetrics.barHeight)
     .padding(.trailing, 8)
   }
 

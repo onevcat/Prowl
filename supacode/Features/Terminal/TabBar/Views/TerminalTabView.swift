@@ -26,11 +26,7 @@ struct TerminalTabView: View {
   @State private var tabWidth: CGFloat = 0
   @Environment(CommandKeyObserver.self) private var commandKeyObserver
   @Environment(\.resolvedKeybindings) private var resolvedKeybindings
-  @Environment(\.interfaceTextScale) private var interfaceTextScale
-
-  private var metrics: TerminalTabBarMetrics.Scaled {
-    TerminalTabBarMetrics.scaled(interfaceTextScale)
-  }
+  @Environment(\.minimumInterfaceTextSize) private var minimumTextSize
 
   var body: some View {
     ZStack(alignment: .leading) {
@@ -46,10 +42,10 @@ struct TerminalTabView: View {
       }
       .buttonStyle(TerminalTabButtonStyle(isPressing: $isPressing))
       .frame(
-        minWidth: metrics.tabMinWidth,
+        minWidth: TerminalTabBarMetrics.tabMinWidth,
         maxWidth: .infinity,
-        minHeight: metrics.tabHeight,
-        maxHeight: metrics.tabHeight
+        minHeight: TerminalTabBarMetrics.tabHeight,
+        maxHeight: TerminalTabBarMetrics.tabHeight
       )
       .frame(width: fixedWidth)
       .contentShape(.rect)
@@ -73,18 +69,18 @@ struct TerminalTabView: View {
       }
       .animation(.easeInOut(duration: TerminalTabBarMetrics.hoverAnimationDuration), value: isHovering)
       .animation(.easeInOut(duration: 0.2), value: hasNotification)
-      .padding(.leading, metrics.tabHorizontalPadding)
+      .padding(.leading, TerminalTabBarMetrics.tabHorizontalPadding)
       .opacity(isEditing ? 0 : 1)
       .allowsHitTesting(!isEditing)
     }
     .overlay {
       if isEditing {
-        HStack(spacing: metrics.contentSpacing) {
+        HStack(spacing: TerminalTabBarMetrics.contentSpacing) {
           if tab.isDirty || tab.icon != nil {
             TerminalTabIconBadge(tab: tab, isActive: isActive)
           }
           RenameTextField(
-            fontSize: NSFont.smallSystemFontSize * interfaceTextScale,
+            fontSize: max(NSFont.smallSystemFontSize, minimumTextSize),
             text: $editingTitle,
             onCommit: { onEndRename() },
             onCancel: {
@@ -92,16 +88,16 @@ struct TerminalTabView: View {
               onEndRename()
             }
           )
-          .padding(.horizontal, metrics.contentSpacing)
+          .padding(.horizontal, TerminalTabBarMetrics.contentSpacing)
           .background(
             RoundedRectangle(
-              cornerRadius: metrics.renameFieldCornerRadius,
+              cornerRadius: TerminalTabBarMetrics.renameFieldCornerRadius,
               style: .continuous
             )
             .fill(Color(nsColor: .textBackgroundColor))
             .overlay(
               RoundedRectangle(
-                cornerRadius: metrics.renameFieldCornerRadius,
+                cornerRadius: TerminalTabBarMetrics.renameFieldCornerRadius,
                 style: .continuous
               )
               .strokeBorder(Color.accentColor, lineWidth: 1.5)
@@ -109,9 +105,9 @@ struct TerminalTabView: View {
           )
           .accessibilityLabel("Rename tab")
         }
-        .padding(.leading, metrics.closeButtonSize + metrics.contentSpacing)
-        .padding(.trailing, metrics.tabHorizontalPadding)
-        .padding(.vertical, metrics.renameFieldInset)
+        .padding(.leading, TerminalTabBarMetrics.closeButtonSize + TerminalTabBarMetrics.contentSpacing)
+        .padding(.trailing, TerminalTabBarMetrics.tabHorizontalPadding)
+        .padding(.vertical, TerminalTabBarMetrics.renameFieldInset)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
       }
     }
@@ -180,20 +176,17 @@ struct TerminalTabView: View {
   private func isInIconHitArea(_ point: CGPoint) -> Bool {
     guard tab.isDirty || tab.icon != nil else { return false }
     guard tabWidth > 0 else { return false }
-    let minX = tabWidth - metrics.tabHorizontalPadding - metrics.closeButtonSize
+    let minX = tabWidth - TerminalTabBarMetrics.tabHorizontalPadding - TerminalTabBarMetrics.closeButtonSize
     return point.x >= minX
   }
 }
 
 private struct TabNotificationDot: View {
-  @Environment(\.interfaceTextScale) private var interfaceTextScale
-
   var body: some View {
-    let slotSize = TerminalTabBarMetrics.scaled(interfaceTextScale).closeButtonSize
     Circle()
       .fill(.orange)
       .frame(width: 6, height: 6)
-      .frame(width: slotSize, height: slotSize)
+      .frame(width: TerminalTabBarMetrics.closeButtonSize, height: TerminalTabBarMetrics.closeButtonSize)
       .accessibilityLabel("Unread notifications")
   }
 }

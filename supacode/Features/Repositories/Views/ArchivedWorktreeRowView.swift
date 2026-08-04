@@ -5,7 +5,7 @@ struct ArchivedWorktreeRowView: View {
   let info: WorktreeInfoEntry?
   let onUnarchive: () -> Void
   let onDelete: () -> Void
-  @Environment(\.interfaceTextScale) private var interfaceTextScale
+  @Environment(\.minimumInterfaceTextSize) private var minimumTextSize
 
   var body: some View {
     let display = WorktreePullRequestDisplay(
@@ -13,14 +13,14 @@ struct ArchivedWorktreeRowView: View {
       pullRequest: info?.pullRequest
     )
     let deleteShortcut = KeyboardShortcut(.delete, modifiers: [.command, .shift]).display
-    let bodyFontAscender = InterfaceTextMetrics.bodyAscender(scale: interfaceTextScale)
+    let bodyFontAscender = InterfaceTextMetrics.bodyAscender(minimumSize: minimumTextSize)
     VStack(alignment: .leading, spacing: 2) {
       HStack(alignment: .firstTextBaseline, spacing: 8) {
         Image(systemName: "archivebox")
           .interfaceFont(.caption)
           .foregroundStyle(.secondary)
           .accessibilityHidden(true)
-          .frame(width: 16 * interfaceTextScale, height: 16 * interfaceTextScale)
+          .frame(width: 16, height: 16)
           .alignmentGuide(.firstTextBaseline) { _ in
             bodyFontAscender
           }
@@ -57,13 +57,17 @@ struct ArchivedWorktreeRowView: View {
       }
       .interfaceFont(.caption)
       .lineLimit(1)
-      .frame(minHeight: 14 * interfaceTextScale)
-      .padding(.leading, 16 * interfaceTextScale + 8)
+      .frame(minHeight: 14 + InterfaceTextMetrics.extraHeight(.caption, minimumSize: minimumTextSize))
+      .padding(.leading, 24)
     }
     .frame(height: rowHeight, alignment: .center)
   }
 
+  /// Base height plus whatever the text floor adds to the two lines
+  /// (body name, caption info) the row stacks.
   private var rowHeight: CGFloat {
-    50 * interfaceTextScale
+    50
+      + InterfaceTextMetrics.extraHeight(.body, minimumSize: minimumTextSize)
+      + InterfaceTextMetrics.extraHeight(.caption, minimumSize: minimumTextSize)
   }
 }

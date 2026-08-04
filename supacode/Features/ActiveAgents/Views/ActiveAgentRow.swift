@@ -8,7 +8,6 @@ struct ActiveAgentRow: View {
   let repositoryColor: RepositoryColorChoice?
   let isDimmed: Bool
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
-  @Environment(\.interfaceTextScale) private var interfaceTextScale
 
   var body: some View {
     HStack(spacing: 8) {
@@ -48,12 +47,12 @@ struct ActiveAgentRow: View {
   private var agentIcon: some View {
     Group {
       if let icon = entry.iconSource {
-        TabIconImage(rawName: icon.storageString, pointSize: 16 * interfaceTextScale)
+        TabIconImage(rawName: icon.storageString, pointSize: 16)
       } else {
         Image(systemName: "sparkle")
       }
     }
-    .frame(width: 20 * interfaceTextScale, height: 20 * interfaceTextScale)
+    .frame(width: 20, height: 20)
     .accessibilityHidden(true)
   }
 
@@ -89,7 +88,6 @@ struct ActiveAgentRow: View {
 struct BaguaWorkingIndicator: View {
   static let frames = ["☰", "☱", "☲", "☳", "☴", "☵", "☶", "☷"]
   static let frameDuration = 0.12
-  @Environment(\.interfaceTextScale) private var interfaceTextScale
 
   var body: some View {
     TimelineView(.periodic(from: .now, by: Self.frameDuration)) { context in
@@ -110,9 +108,9 @@ struct BaguaWorkingIndicator: View {
 
   private func frameText(_ frame: String) -> some View {
     Text(frame)
-      .font(.system(size: 17 * interfaceTextScale, weight: .bold, design: .monospaced))
+      .font(.system(size: 17, weight: .bold, design: .monospaced))
       .lineLimit(1)
-      .frame(width: 20 * interfaceTextScale, height: 18 * interfaceTextScale)
+      .frame(width: 20, height: 18)
       .accessibilityHidden(true)
   }
 }

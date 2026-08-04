@@ -27,7 +27,7 @@ struct WorktreeRow: View {
   let onStopRunScript: (() -> Void)?
   @Environment(\.colorScheme) private var colorScheme
   @Environment(\.resolvedKeybindings) private var resolvedKeybindings
-  @Environment(\.interfaceTextScale) private var interfaceTextScale
+  @Environment(\.minimumInterfaceTextSize) private var minimumTextSize
 
   init(
     name: String,
@@ -104,7 +104,7 @@ struct WorktreeRow: View {
     let showsPullRequestTag = display.pullRequest != nil && display.pullRequestBadgeStyle != nil
     let nameColor = colorScheme == .dark ? Color.white : Color.primary
     let detailText = worktreeName.isEmpty ? name : worktreeName
-    let bodyFontAscender = InterfaceTextMetrics.bodyAscender(scale: interfaceTextScale)
+    let bodyFontAscender = InterfaceTextMetrics.bodyAscender(minimumSize: minimumTextSize)
     VStack(alignment: .leading, spacing: 2) {
       HStack(alignment: .firstTextBaseline, spacing: 6) {
         ZStack {
@@ -131,7 +131,7 @@ struct WorktreeRow: View {
               .controlSize(.small)
           }
         }
-        .frame(width: 16 * interfaceTextScale, height: 16 * interfaceTextScale)
+        .frame(width: 16, height: 16)
         .alignmentGuide(.firstTextBaseline) { _ in
           bodyFontAscender
         }
@@ -207,7 +207,7 @@ struct WorktreeRow: View {
         shortcutHint: shortcutHint,
         showsShortcutHint: showsShortcutHint
       )
-      .padding(.leading, 16 * interfaceTextScale + 6)
+      .padding(.leading, 22)
     }
     .padding(.horizontal, 2)
     .frame(maxWidth: .infinity, minHeight: worktreeRowHeight, alignment: .center)
@@ -222,8 +222,12 @@ struct WorktreeRow: View {
     return PullRequestMergeReadiness(pullRequest: pullRequest)
   }
 
+  /// Base height plus whatever the text floor adds to the two lines
+  /// (body name, caption info) the row stacks.
   private var worktreeRowHeight: CGFloat {
-    36 * interfaceTextScale
+    36
+      + InterfaceTextMetrics.extraHeight(.body, minimumSize: minimumTextSize)
+      + InterfaceTextMetrics.extraHeight(.caption, minimumSize: minimumTextSize)
   }
 }
 
@@ -258,7 +262,7 @@ private struct WorktreeRowInfoView: View {
   let isQueued: Bool
   let shortcutHint: String?
   let showsShortcutHint: Bool
-  @Environment(\.interfaceTextScale) private var interfaceTextScale
+  @Environment(\.minimumInterfaceTextSize) private var minimumTextSize
 
   var body: some View {
     HStack(spacing: 4) {
@@ -274,7 +278,7 @@ private struct WorktreeRowInfoView: View {
       }
     }
     .interfaceFont(.caption)
-    .frame(minHeight: 14 * interfaceTextScale)
+    .frame(minHeight: 14 + InterfaceTextMetrics.extraHeight(.caption, minimumSize: minimumTextSize))
     .animation(.easeInOut(duration: 0.15), value: showsShortcutHint)
   }
 

@@ -174,7 +174,7 @@ struct CustomCommandOverflowButton: View {
   let onRunCustomCommand: (EffectiveCustomCommand.Identifier) -> Void
 
   @State private var isPresented = false
-  @Environment(\.interfaceTextScale) private var interfaceTextScale
+  @Environment(\.minimumInterfaceTextSize) private var minimumTextSize
   private let maxVisibleRows = 10
 
   var body: some View {
@@ -197,7 +197,7 @@ struct CustomCommandOverflowButton: View {
               HStack(spacing: 8) {
                 Image(systemName: entry.command.resolvedSystemImage)
                   .foregroundStyle(.secondary)
-                  .frame(width: 14 * interfaceTextScale)
+                  .frame(width: 14)
                   .accessibilityHidden(true)
                 Text(entry.command.resolvedTitle)
                   .interfaceFont(.body)
@@ -227,7 +227,8 @@ struct CustomCommandOverflowButton: View {
 
   private var popoverHeight: CGFloat {
     let visibleRows = min(maxVisibleRows, max(entries.count, 1))
-    return CGFloat(visibleRows) * 32 * interfaceTextScale + 16
+    let rowHeight = 32 + InterfaceTextMetrics.extraHeight(.body, minimumSize: minimumTextSize)
+    return CGFloat(visibleRows) * rowHeight + 16
   }
 
   private func helpText(for entry: EffectiveCustomCommand) -> String {

@@ -5,12 +5,11 @@ struct TerminalTabBarBackground: View {
   private var activeState
   @Environment(\.surfaceTopChromeBackgroundOpacity)
   private var surfaceTopChromeBackgroundOpacity
-  @Environment(\.interfaceTextScale) private var interfaceTextScale
 
   var body: some View {
     Capsule()
       .fill(TerminalTabBarColors.barBackground.opacity(chromeBackgroundOpacity))
-      .padding(.horizontal, TerminalTabBarMetrics.scaled(interfaceTextScale).barPadding)
+      .padding(.horizontal, TerminalTabBarMetrics.barPadding)
   }
 
   private var chromeBackgroundOpacity: Double {

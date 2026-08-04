@@ -10,12 +10,10 @@ struct TerminalTabCloseButton: View {
 
   @Environment(GhosttyShortcutManager.self)
   private var ghosttyShortcuts
-  @Environment(\.interfaceTextScale) private var interfaceTextScale
 
   @State private var isPressing = false
 
   var body: some View {
-    let closeButtonSize = TerminalTabBarMetrics.scaled(interfaceTextScale).closeButtonSize
     let showClose = (isHoveringTab || isHoveringClose) && !isDragging && !isShowingShortcutHint
     Button("Close Tab", systemImage: "xmark") {
       closeAction()
@@ -26,7 +24,7 @@ struct TerminalTabCloseButton: View {
     .foregroundStyle(
       isHoveringClose ? TerminalTabBarColors.activeText : TerminalTabBarColors.inactiveText
     )
-    .frame(width: closeButtonSize, height: closeButtonSize)
+    .frame(width: TerminalTabBarMetrics.closeButtonSize, height: TerminalTabBarMetrics.closeButtonSize)
     .background(
       TerminalTabCloseButtonBackground(isPressing: isPressing, isHoveringClose: isHoveringClose)
     )

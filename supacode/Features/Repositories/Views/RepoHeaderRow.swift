@@ -17,7 +17,6 @@ struct RepoHeaderRow: View {
   /// user-imported image filenames into absolute file URLs.
   let repositoryRootURL: URL?
   var nameTooltip: String?
-  @Environment(\.interfaceTextScale) private var interfaceTextScale
 
   var body: some View {
     HStack {
@@ -26,7 +25,7 @@ struct RepoHeaderRow: View {
           icon: icon,
           repositoryRootURL: repositoryRootURL,
           tintColor: iconTint,
-          size: 14 * interfaceTextScale
+          size: 14
         )
       }
       RepoDisplayName(

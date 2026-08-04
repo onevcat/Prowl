@@ -43,7 +43,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var externalDiffToolID: String = ExternalDiffTool.builtIn.settingsID
   var externalDiffCustomCommand: String = ""
   var detectRepositoryIconsAutomatically: Bool = true
-  var interfaceTextSize: InterfaceTextSize = .standard
+  var minimumTextSize: MinimumTextSize = .system
 
   static let `default` = GlobalSettings(
     appearanceMode: .dark,
@@ -221,7 +221,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     try container.encode(externalDiffToolID, forKey: .externalDiffToolID)
     try container.encode(externalDiffCustomCommand, forKey: .externalDiffCustomCommand)
     try container.encode(detectRepositoryIconsAutomatically, forKey: .detectRepositoryIconsAutomatically)
-    try container.encode(interfaceTextSize, forKey: .interfaceTextSize)
+    try container.encode(minimumTextSize, forKey: .minimumTextSize)
   }
 
   private enum CodingKeys: String, CodingKey {
@@ -269,7 +269,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     case externalDiffToolID
     case externalDiffCustomCommand
     case detectRepositoryIconsAutomatically
-    case interfaceTextSize
+    case minimumTextSize
     // Legacy keys for migration
     case automaticallyArchiveMergedWorktrees
     case notificationSoundEnabled
@@ -370,10 +370,10 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
       ?? true
     // Raw-string decode so a settings file written by a newer build with an
     // unknown size falls back to the default instead of failing wholesale.
-    interfaceTextSize =
-      (try container.decodeIfPresent(String.self, forKey: .interfaceTextSize))
-      .flatMap(InterfaceTextSize.init(rawValue:))
-      ?? Self.default.interfaceTextSize
+    minimumTextSize =
+      (try container.decodeIfPresent(String.self, forKey: .minimumTextSize))
+      .flatMap(MinimumTextSize.init(rawValue:))
+      ?? Self.default.minimumTextSize
     let toolbarAndDock = try Self.decodeToolbarAndDockSettings(from: container)
     showRunButtonInToolbar = toolbarAndDock.showRunButtonInToolbar
     showDefaultEditorInToolbar = toolbarAndDock.showDefaultEditorInToolbar

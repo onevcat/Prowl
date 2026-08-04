@@ -6,7 +6,7 @@ struct GhosttySurfaceSearchOverlay: View {
   @Bindable var state: GhosttySurfaceState
   @Environment(GhosttyShortcutManager.self) private var ghosttyShortcuts
   @Environment(\.resolvedKeybindings) private var resolvedKeybindings
-  @Environment(\.interfaceTextScale) private var interfaceTextScale
+  @Environment(\.minimumInterfaceTextSize) private var minimumTextSize
 
   @State private var searchText: String
   @State private var corner: GhosttySearchCorner = .topRight
@@ -28,7 +28,7 @@ struct GhosttySurfaceSearchOverlay: View {
       ZStack(alignment: corner.alignment) {
         HStack(spacing: 4) {
           GhosttySearchField(
-            fontSize: NSFont.systemFontSize * interfaceTextScale,
+            fontSize: max(NSFont.systemFontSize, minimumTextSize),
             text: $searchText,
             isFocused: isSearchFieldFocused,
             onSubmit: { isShifted in
