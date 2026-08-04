@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 
 struct WorktreeRow: View {
@@ -28,6 +27,7 @@ struct WorktreeRow: View {
   let onStopRunScript: (() -> Void)?
   @Environment(\.colorScheme) private var colorScheme
   @Environment(\.resolvedKeybindings) private var resolvedKeybindings
+  @Environment(\.interfaceTextScale) private var interfaceTextScale
 
   init(
     name: String,
@@ -104,7 +104,7 @@ struct WorktreeRow: View {
     let showsPullRequestTag = display.pullRequest != nil && display.pullRequestBadgeStyle != nil
     let nameColor = colorScheme == .dark ? Color.white : Color.primary
     let detailText = worktreeName.isEmpty ? name : worktreeName
-    let bodyFontAscender = NSFont.preferredFont(forTextStyle: .body).ascender
+    let bodyFontAscender = InterfaceTextMetrics.bodyAscender(scale: interfaceTextScale)
     VStack(alignment: .leading, spacing: 2) {
       HStack(alignment: .firstTextBaseline, spacing: 6) {
         ZStack {
@@ -114,14 +114,14 @@ struct WorktreeRow: View {
               onFocusNotification: onFocusNotification
             ) {
               Image(systemName: "bell.fill")
-                .font(.caption)
+                .interfaceFont(.caption)
                 .foregroundStyle(.orange)
                 .accessibilityLabel("Unread notifications")
             }
             .opacity(showsSpinner ? 0 : 1)
           } else {
             Image(systemName: branchIconName)
-              .font(.caption)
+              .interfaceFont(.caption)
               .foregroundStyle(.secondary)
               .opacity(showsSpinner ? 0 : 1)
               .accessibilityHidden(true)
@@ -131,12 +131,12 @@ struct WorktreeRow: View {
               .controlSize(.small)
           }
         }
-        .frame(width: 16, height: 16)
+        .frame(width: 16 * interfaceTextScale, height: 16 * interfaceTextScale)
         .alignmentGuide(.firstTextBaseline) { _ in
           bodyFontAscender
         }
         Text(name)
-          .font(.body)
+          .interfaceFont(.body)
           .foregroundStyle(nameColor)
           .lineLimit(1)
           .truncationMode(.middle)
@@ -151,7 +151,7 @@ struct WorktreeRow: View {
             pinAction?()
           } label: {
             Image(systemName: isPinned ? "pin.slash" : "pin")
-              .font(.caption)
+              .interfaceFont(.caption)
               .contentTransition(.symbolEffect(.replace))
               .accessibilityLabel(isPinned ? "Unpin worktree" : "Pin worktree")
           }
@@ -163,7 +163,7 @@ struct WorktreeRow: View {
             archiveAction?()
           } label: {
             Image(systemName: "archivebox")
-              .font(.caption)
+              .interfaceFont(.caption)
               .accessibilityLabel("Archive worktree")
           }
           .buttonStyle(.plain)
@@ -207,7 +207,7 @@ struct WorktreeRow: View {
         shortcutHint: shortcutHint,
         showsShortcutHint: showsShortcutHint
       )
-      .padding(.leading, 22)
+      .padding(.leading, 16 * interfaceTextScale + 6)
     }
     .padding(.horizontal, 2)
     .frame(maxWidth: .infinity, minHeight: worktreeRowHeight, alignment: .center)
@@ -223,7 +223,7 @@ struct WorktreeRow: View {
   }
 
   private var worktreeRowHeight: CGFloat {
-    36
+    36 * interfaceTextScale
   }
 }
 
@@ -236,7 +236,7 @@ private struct RunScriptIndicator: View {
       onStop?()
     } label: {
       Image(systemName: isHovering ? "stop.fill" : "play.fill")
-        .font(.caption)
+        .interfaceFont(.caption)
         .foregroundStyle(isHovering ? .red : .green)
         .contentTransition(.symbolEffect(.replace))
         .accessibilityLabel(isHovering ? "Stop run script" : "Run script active")
@@ -258,6 +258,7 @@ private struct WorktreeRowInfoView: View {
   let isQueued: Bool
   let shortcutHint: String?
   let showsShortcutHint: Bool
+  @Environment(\.interfaceTextScale) private var interfaceTextScale
 
   var body: some View {
     HStack(spacing: 4) {
@@ -272,8 +273,8 @@ private struct WorktreeRowInfoView: View {
           .accessibilityHidden(!showsShortcutHint)
       }
     }
-    .font(.caption)
-    .frame(minHeight: 14)
+    .interfaceFont(.caption)
+    .frame(minHeight: 14 * interfaceTextScale)
     .animation(.easeInOut(duration: 0.15), value: showsShortcutHint)
   }
 
@@ -446,7 +447,7 @@ private struct WorktreeRowChangeCountView: View {
         .foregroundStyle(.red)
         .baselineOffset(-1)
     }
-    .font(.caption)
+    .interfaceFont(.caption)
     .lineLimit(1)
     .padding(.horizontal, 4)
     .padding(.vertical, 0)

@@ -47,6 +47,14 @@ struct AppearanceSettingsView: View {
           .font(.footnote)
           .foregroundStyle(.secondary)
         }
+        Section("Sidebar") {
+          Picker("Sidebar text size", selection: $store.interfaceTextSize) {
+            ForEach(InterfaceTextSize.allCases) { size in
+              Text(size.title).tag(size)
+            }
+          }
+          .help("Scale text in the repository sidebar and the Active Agents panel.")
+        }
         Section("Window Tint") {
           Picker("Tint nav & toolbar", selection: $store.windowTintMode) {
             ForEach(WindowTintMode.allCases) { mode in

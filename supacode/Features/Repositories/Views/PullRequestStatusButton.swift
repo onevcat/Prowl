@@ -35,7 +35,7 @@ struct PullRequestStatusButton: View {
         }
       }
     }
-    .font(.caption)
+    .interfaceFont(.caption)
   }
 
   private var openPullRequestLabel: String {

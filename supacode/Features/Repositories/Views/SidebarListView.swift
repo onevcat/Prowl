@@ -144,7 +144,7 @@ struct SidebarListView: View {
       .overlay {
         if repositoryItems.isEmpty {
           Text("Repositories you add will appear here")
-            .font(.callout)
+            .interfaceFont(.callout)
             .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)
             .padding(.horizontal, 24)
@@ -318,7 +318,7 @@ struct SidebarListView: View {
   ) -> some View {
     HStack(spacing: 4) {
       Text("Repositories")
-        .font(.caption)
+        .interfaceFont(.caption)
         .foregroundStyle(.tertiary)
         .frame(maxWidth: .infinity, alignment: .leading)
       if !expandableRepositoryIDs.isEmpty {

@@ -332,6 +332,20 @@ struct SettingsFeatureTests {
     #expect(settingsFile.global.canvasDefaultLayout == .uniform)
   }
 
+  @Test(.dependencies) func changingInterfaceTextSizePersists() async {
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = .default }
+    let store = TestStore(initialState: SettingsFeature.State()) {
+      SettingsFeature()
+    }
+    #expect(store.state.interfaceTextSize == .standard)
+    await store.send(.binding(.set(\.interfaceTextSize, .extraLarge))) {
+      $0.interfaceTextSize = .extraLarge
+    }
+    await store.receive(\.delegate.settingsChanged)
+    #expect(settingsFile.global.interfaceTextSize == .extraLarge)
+  }
+
   @Test(.dependencies) func changingGlobalOverrideDefaultsUpdatesRepositorySettingsState() async {
     let rootURL = URL(fileURLWithPath: "/tmp/repo")
     @Shared(.settingsFile) var settingsFile

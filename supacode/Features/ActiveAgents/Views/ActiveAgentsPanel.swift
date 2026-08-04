@@ -24,7 +24,7 @@ struct ActiveAgentsPanel: View {
       resizeHandle
       HStack {
         Text("Active Agents")
-          .font(.caption)
+          .interfaceFont(.caption)
           .foregroundStyle(.secondary)
         Spacer()
         if let navigationShortcutHint, !store.entries.isEmpty {
@@ -40,7 +40,7 @@ struct ActiveAgentsPanel: View {
       if store.entries.isEmpty {
         Spacer(minLength: 0)
         Text("New agents will appear here")
-          .font(.callout)
+          .interfaceFont(.callout)
           .foregroundStyle(.secondary)
           // Nudge up slightly off dead-center for better visual balance.
           .offset(y: -8)

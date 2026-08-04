@@ -6,7 +6,7 @@ struct ShortcutHintView: View {
 
   var body: some View {
     Text(text)
-      .font(.caption2)
+      .interfaceFont(.caption2)
       .lineLimit(1)
       .fixedSize(horizontal: true, vertical: false)
       .foregroundStyle(color)
