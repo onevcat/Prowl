@@ -105,17 +105,37 @@ struct GhosttySurfaceViewTests {
     #expect(pasteboard.setData(Data([0x89, 0x50, 0x4E, 0x47]), forType: .png))
     #expect(pasteboard.getOpinionatedStringContents() == nil)
 
-    let surfaceView = GhosttySurfaceView(
-      runtime: GhosttyRuntime(),
-      workingDirectory: nil,
-      context: GHOSTTY_SURFACE_CONTEXT_TAB,
-      skipsSurfaceCreationForTesting: true
-    )
+    let surfaceView = makeSurfaceView()
     let flags = ghostty_binding_flags_e(
       GHOSTTY_BINDING_FLAGS_CONSUMED.rawValue | GHOSTTY_BINDING_FLAGS_PERFORMABLE.rawValue
     )
 
     #expect(!surfaceView.shouldAttemptMenu(for: flags))
+  }
+
+  @Test func menuAttemptRequiresConsumedNonAllBinding() {
+    let surfaceView = makeSurfaceView()
+    let consumedAndAll = ghostty_binding_flags_e(
+      GHOSTTY_BINDING_FLAGS_CONSUMED.rawValue | GHOSTTY_BINDING_FLAGS_ALL.rawValue
+    )
+
+    #expect(surfaceView.shouldAttemptMenu(for: GHOSTTY_BINDING_FLAGS_CONSUMED))
+    #expect(!surfaceView.shouldAttemptMenu(for: ghostty_binding_flags_e(0)))
+    #expect(!surfaceView.shouldAttemptMenu(for: consumedAndAll))
+  }
+
+  @Test func activeBindingScopesBypassMenuUntilTheyExit() {
+    let surfaceView = makeSurfaceView()
+
+    surfaceView.bridge.state.keySequenceActive = true
+    #expect(!surfaceView.shouldAttemptMenu(for: GHOSTTY_BINDING_FLAGS_CONSUMED))
+
+    surfaceView.bridge.state.keySequenceActive = false
+    surfaceView.bridge.state.keyTableDepth = 1
+    #expect(!surfaceView.shouldAttemptMenu(for: GHOSTTY_BINDING_FLAGS_CONSUMED))
+
+    surfaceView.bridge.state.keyTableDepth = 0
+    #expect(surfaceView.shouldAttemptMenu(for: GHOSTTY_BINDING_FLAGS_CONSUMED))
   }
 
   @Test func occlusionStateResendsDesiredValueAfterAttachmentChange() {
@@ -513,6 +533,15 @@ struct GhosttySurfaceViewTests {
         isARepeat: false,
         keyCode: keyCode
       )
+    )
+  }
+
+  private func makeSurfaceView() -> GhosttySurfaceView {
+    GhosttySurfaceView(
+      runtime: GhosttyRuntime(),
+      workingDirectory: nil,
+      context: GHOSTTY_SURFACE_CONTEXT_TAB,
+      skipsSurfaceCreationForTesting: true
     )
   }
 }
