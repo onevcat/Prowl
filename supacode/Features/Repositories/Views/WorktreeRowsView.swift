@@ -379,6 +379,7 @@ struct WorktreeRowsView: View {
     let isSelected = selectedWorktreeIDs.contains(row.id)
     let showsContextMenuHighlight = contextMenuHighlightedWorktreeID == row.id && !isSelected
     let taskStatus = terminalManager.taskStatus(for: row.id)
+    let hasBlockedAgent = terminalManager.hasBlockedAgent(for: row.id)
     let isRunScriptRunning = terminalManager.isRunScriptRunning(for: row.id)
     let isWorktreeDragActive = !draggingWorktreeIDs.isEmpty
     return WorktreeRow(
@@ -392,6 +393,7 @@ struct WorktreeRowsView: View {
       isMainWorktree: row.isMainWorktree,
       isLoading: row.isPending || row.isArchiving || row.isDeleting,
       taskStatus: taskStatus,
+      hasBlockedAgent: hasBlockedAgent,
       isRunScriptRunning: isRunScriptRunning,
       showsNotificationIndicator: config.showsNotificationIndicator,
       notifications: config.notifications,

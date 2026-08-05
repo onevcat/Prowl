@@ -480,6 +480,13 @@ final class WorktreeTerminalManager {
     states[worktreeID]?.taskStatus
   }
 
+  /// Whether the worktree holds an agent awaiting an answer. Paired with
+  /// `taskStatus(for:)` at the sidebar row so a blocked agent reads as needing
+  /// input rather than as work in progress.
+  func hasBlockedAgent(for worktreeID: Worktree.ID) -> Bool {
+    states[worktreeID]?.hasBlockedAgent == true
+  }
+
   func isRunScriptRunning(for worktreeID: Worktree.ID) -> Bool {
     states[worktreeID]?.isRunScriptRunning == true
   }

@@ -326,6 +326,7 @@ extension WorktreeTerminalState {
     cleanupAllAgentDetectionState()
     tabIsRunningById.removeAll()
     tabAgentBusyById.removeAll()
+    tabAgentBlockedById.removeAll()
     boundDirectoryTabIDs.removeAll()
     autoCloseSurfaceIds.removeAll()
     pendingCustomCommands.removeAll()
@@ -643,6 +644,7 @@ extension WorktreeTerminalState {
     focusedSurfaceIdByTab.removeValue(forKey: tabId)
     tabIsRunningById.removeValue(forKey: tabId)
     tabAgentBusyById.removeValue(forKey: tabId)
+    tabAgentBlockedById.removeValue(forKey: tabId)
   }
 
   func tabID(containing surfaceId: UUID) -> TerminalTabID? {

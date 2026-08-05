@@ -158,6 +158,13 @@ final class WorktreeTerminalState {
   /// sidebar spinner and `prowl list` reflect agent activity, not just OSC 9;4
   /// command progress (which Claude Code does not emit while it works).
   var tabAgentBusyById: [TerminalTabID: Bool] = [:]
+  /// Per-tab aggregate of the `.blocked` slice of `tabAgentBusyById`: `true`
+  /// when a surface in the tab holds an agent awaiting an answer (permission
+  /// prompt, AskUserQuestion). Kept separate rather than folded into
+  /// `taskStatus` because the two states call for opposite affordances — a
+  /// spinner tells you to wait, a blocked agent is waiting on you — and
+  /// `WorktreeTaskStatus` has no case to carry the difference.
+  var tabAgentBlockedById: [TerminalTabID: Bool] = [:]
   var boundDirectoryTabIDs: [String: TerminalTabID] = [:]
   var surfaceRunningStartedAtById: [UUID: Date] = [:]
   var lastDefocusedAt: Date?
@@ -374,6 +381,14 @@ final class WorktreeTerminalState {
     let hasRunningCommand = tabIsRunningById.values.contains(true)
     let hasBusyAgent = tabAgentBusyById.values.contains(true)
     return (hasRunningCommand || hasBusyAgent) ? .running : .idle
+  }
+
+  /// Whether any tab holds an agent awaiting an answer. Read alongside
+  /// `taskStatus` by the sidebar so a blocked worktree shows an attention
+  /// affordance instead of the running spinner. `taskStatus` itself is
+  /// unchanged, so `prowl list` keeps reporting `running` for these.
+  var hasBlockedAgent: Bool {
+    tabAgentBlockedById.values.contains(true)
   }
 
   var isRunScriptRunning: Bool {

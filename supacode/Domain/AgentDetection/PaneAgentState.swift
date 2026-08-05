@@ -91,6 +91,14 @@ struct PaneAgentState: Equatable, Sendable {
     guard detectedAgent != nil else { return false }
     return displayState == .working || displayState == .blocked
   }
+
+  /// The `.blocked` slice of `isBusy`: the agent has stopped and is waiting on
+  /// an answer (permission prompt, AskUserQuestion). Tracked separately so the
+  /// sidebar can distinguish "wait for it" from "it is waiting for you".
+  var isBlocked: Bool {
+    guard detectedAgent != nil else { return false }
+    return displayState == .blocked
+  }
 }
 
 struct AgentDetectionPresence: Equatable, Sendable {

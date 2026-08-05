@@ -287,6 +287,15 @@ extension WorktreeTerminalState {
   func updateTabAgentBusyState(for tabId: TerminalTabID) {
     let surfaceIDs = trees[tabId]?.leaves().map(\.id) ?? []
     let isBusy = surfaceIDs.contains { surfaceAgentStates[$0]?.isBusy == true }
+    let isBlocked = surfaceIDs.contains { surfaceAgentStates[$0]?.isBlocked == true }
+    // Blocked is tracked even when `isBusy` is unchanged: working → blocked
+    // leaves the aggregate busy, and that transition is exactly when the
+    // sidebar must swap the spinner for the attention affordance. The view
+    // observes `tabAgentBlockedById` directly, so no task-status event is
+    // needed to redraw it.
+    if (tabAgentBlockedById[tabId] ?? false) != isBlocked {
+      tabAgentBlockedById[tabId] = isBlocked
+    }
     guard (tabAgentBusyById[tabId] ?? false) != isBusy else { return }
     tabAgentBusyById[tabId] = isBusy
     emitTaskStatusIfChanged()

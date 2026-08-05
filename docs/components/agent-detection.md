@@ -65,12 +65,12 @@ showing their chrome keep the last trusted state instead of forcing idle.
 
 **Display states** (what you see):
 
-| Display | Derived from | Meaning |
-|---------|--------------|---------|
-| **Working** | raw `working` | actively processing |
-| **Blocked** | raw `blocked` | waiting for the user (a prompt) |
-| **Done** | raw `idle` + **unseen** | just finished; you haven't looked yet |
-| **Idle** | raw `idle` + **seen** | nothing running |
+| Display     | Derived from            | Meaning                               |
+| ----------- | ----------------------- | ------------------------------------- |
+| **Working** | raw `working`           | actively processing                   |
+| **Blocked** | raw `blocked`           | waiting for the user (a prompt)       |
+| **Done**    | raw `idle` + **unseen** | just finished; you haven't looked yet |
+| **Idle**    | raw `idle` + **seen**   | nothing running                       |
 
 A **Done** pane becomes **Idle** the moment you focus it.
 
@@ -103,6 +103,14 @@ The sidebar worktree row spinner and `prowl list`'s `task.status` report
 - a detected agent is **Working** or **Blocked** — including Claude running a
   background **workflow**, detected from its below-prompt `… agents done …` status
   line even while the input box looks idle.
+
+A **Blocked** agent is the exception to the spinner. Because it has stopped and
+is waiting on you, the sidebar row shows a red attention icon instead of the
+spinner — a spinner there would tell you to wait, which is backwards. The row
+still counts as **running** for `prowl list`'s `task.status`, so the CLI
+contract is unchanged; use `prowl agents` to tell blocked from working. A
+worktree that is being created, archived, or deleted keeps its own spinner,
+which takes precedence over the agent indicator.
 
 It's a single coarse running/idle bit (it can't distinguish a background workflow
 from a long command). For the agent's finer state use the

@@ -688,6 +688,56 @@ struct WorktreeTerminalManagerTests {
     #expect(state.taskStatus == .idle)
   }
 
+  @MainActor
+  @Test func blockedAgentIsTrackedSeparatelyFromBusy() throws {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktree = makeWorktree()
+    let state = manager.state(for: worktree)
+
+    let tabId = try #require(state.createTab())
+    let surfaceId = try #require(state.focusedSurfaceId(in: tabId))
+
+    // Working: busy, but nothing is waiting on the user.
+    state.surfaceAgentStates[surfaceId] = PaneAgentState(detectedAgent: .claude, state: .working)
+    state.updateTabAgentBusyState(for: tabId)
+    #expect(state.taskStatus == .running)
+    #expect(state.hasBlockedAgent == false)
+
+    // working → blocked leaves the busy aggregate unchanged, so the blocked
+    // flag is the only thing that can tell the sidebar to stop spinning.
+    state.surfaceAgentStates[surfaceId] = PaneAgentState(detectedAgent: .claude, state: .blocked)
+    state.updateTabAgentBusyState(for: tabId)
+    #expect(state.taskStatus == .running)
+    #expect(state.hasBlockedAgent)
+    #expect(manager.hasBlockedAgent(for: worktree.id))
+
+    // Answered: back to working, attention affordance clears.
+    state.surfaceAgentStates[surfaceId] = PaneAgentState(detectedAgent: .claude, state: .working)
+    state.updateTabAgentBusyState(for: tabId)
+    #expect(state.hasBlockedAgent == false)
+
+    state.closeAllSurfaces()
+    #expect(state.tabAgentBlockedById.isEmpty)
+    #expect(state.hasBlockedAgent == false)
+  }
+
+  @MainActor
+  @Test func blockedFlagIgnoresPanesWithoutADetectedAgent() throws {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktree = makeWorktree()
+    let state = manager.state(for: worktree)
+
+    let tabId = try #require(state.createTab())
+    let surfaceId = try #require(state.focusedSurfaceId(in: tabId))
+
+    // A bare shell can carry a stale raw state; without a detected agent it
+    // must not light up the sidebar.
+    state.surfaceAgentStates[surfaceId] = PaneAgentState(detectedAgent: nil, state: .blocked)
+    state.updateTabAgentBusyState(for: tabId)
+    #expect(state.hasBlockedAgent == false)
+    #expect(state.taskStatus == .idle)
+  }
+
   private func nextEvent(
     _ stream: AsyncStream<TerminalClient.Event>,
     matching predicate: (TerminalClient.Event) -> Bool
