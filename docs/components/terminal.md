@@ -150,6 +150,10 @@ Scrollback, wide/CJK character rendering, and copy/paste are handled by Ghostty
 with its defaults — Prowl doesn't override them. Customize terminal behavior in
 your Ghostty config at `~/.config/ghostty/config`.
 
+When the clipboard contains only an image, Prowl leaves performable paste
+shortcuts to the terminal program so agents that support clipboard image import
+can handle the image directly.
+
 ## Color scheme
 
 The terminal theme automatically follows the macOS light/dark appearance. There's
