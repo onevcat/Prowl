@@ -21,6 +21,16 @@ struct AppearanceSettingsView: View {
               }
             }
           }
+          Picker("Minimum text size", selection: $store.minimumTextSize) {
+            ForEach(MinimumTextSize.allCases) { size in
+              Text(size.title).tag(size)
+            }
+          }
+          .help(
+            "Never use text smaller than this size in the sidebar, toolbar, "
+              + "tab bar, and panels — like Safari's minimum font size. "
+              + "Terminal text follows your Ghostty font size instead."
+          )
           VStack(alignment: .leading, spacing: 6) {
             Text(
               """
@@ -46,18 +56,6 @@ struct AppearanceSettingsView: View {
           }
           .font(.footnote)
           .foregroundStyle(.secondary)
-        }
-        Section("Interface") {
-          Picker("Minimum text size", selection: $store.minimumTextSize) {
-            ForEach(MinimumTextSize.allCases) { size in
-              Text(size.title).tag(size)
-            }
-          }
-          .help(
-            "Never use text smaller than this size in the sidebar, toolbar, "
-              + "tab bar, and panels — like Safari's minimum font size. "
-              + "Terminal text follows your Ghostty font size instead."
-          )
         }
         Section("Window Tint") {
           Picker("Tint nav & toolbar", selection: $store.windowTintMode) {
