@@ -97,6 +97,27 @@ struct GhosttySurfaceViewTests {
     #expect(!GhosttySurfaceView.hasKeyEquivalentFocusOwnership(cachedFocused: false, isActualFirstResponder: true))
   }
 
+  @Test func imageClipboardLeavesPerformablePasteForPTY() {
+    let pasteboard = NSPasteboard(name: .init("prowl-tests.image-clipboard.\(UUID().uuidString)"))
+    pasteboard.clearContents()
+    defer { pasteboard.clearContents() }
+
+    #expect(pasteboard.setData(Data([0x89, 0x50, 0x4E, 0x47]), forType: .png))
+    #expect(pasteboard.getOpinionatedStringContents() == nil)
+
+    let surfaceView = GhosttySurfaceView(
+      runtime: GhosttyRuntime(),
+      workingDirectory: nil,
+      context: GHOSTTY_SURFACE_CONTEXT_TAB,
+      skipsSurfaceCreationForTesting: true
+    )
+    let flags = ghostty_binding_flags_e(
+      GHOSTTY_BINDING_FLAGS_CONSUMED.rawValue | GHOSTTY_BINDING_FLAGS_PERFORMABLE.rawValue
+    )
+
+    #expect(!surfaceView.shouldAttemptMenu(for: flags))
+  }
+
   @Test func occlusionStateResendsDesiredValueAfterAttachmentChange() {
     var state = GhosttySurfaceView.OcclusionState()
 
