@@ -24,6 +24,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var pullRequestMergeStrategy: PullRequestMergeStrategy
   var restoreTerminalLayoutOnLaunch: Bool
   var terminalFontSize: Float32?
+  var ghosttyConfigPath: String?
   var archivedAutoDeletePeriod: AutoDeletePeriod?
   var keybindingUserOverrides: KeybindingUserOverrideStore
   var defaultViewMode: DefaultViewMode
@@ -71,6 +72,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     restoreTerminalLayoutOnLaunch: false,
     archivedAutoDeletePeriod: nil,
     terminalFontSize: nil,
+    ghosttyConfigPath: nil,
     keybindingUserOverrides: .empty,
     defaultViewMode: .normal,
     canvasDefaultLayout: .tile,
@@ -115,6 +117,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     restoreTerminalLayoutOnLaunch: Bool = false,
     archivedAutoDeletePeriod: AutoDeletePeriod? = nil,
     terminalFontSize: Float32? = nil,
+    ghosttyConfigPath: String? = nil,
     keybindingUserOverrides: KeybindingUserOverrideStore = .empty,
     defaultViewMode: DefaultViewMode = .normal,
     canvasDefaultLayout: CanvasDefaultLayout = .tile,
@@ -157,6 +160,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     self.restoreTerminalLayoutOnLaunch = restoreTerminalLayoutOnLaunch
     self.archivedAutoDeletePeriod = archivedAutoDeletePeriod
     self.terminalFontSize = terminalFontSize
+    self.ghosttyConfigPath = ghosttyConfigPath
     self.keybindingUserOverrides = keybindingUserOverrides
     self.defaultViewMode = defaultViewMode
     self.canvasDefaultLayout = canvasDefaultLayout
@@ -179,29 +183,38 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     try container.encode(appearanceMode, forKey: .appearanceMode)
     try container.encode(defaultEditorID, forKey: .defaultEditorID)
     try container.encode(confirmBeforeQuit, forKey: .confirmBeforeQuit)
-    try container.encode(updatesAutomaticallyCheckForUpdates, forKey: .updatesAutomaticallyCheckForUpdates)
-    try container.encode(updatesAutomaticallyDownloadUpdates, forKey: .updatesAutomaticallyDownloadUpdates)
+    try container.encode(
+      updatesAutomaticallyCheckForUpdates, forKey: .updatesAutomaticallyCheckForUpdates)
+    try container.encode(
+      updatesAutomaticallyDownloadUpdates, forKey: .updatesAutomaticallyDownloadUpdates)
     try container.encode(inAppNotificationsEnabled, forKey: .inAppNotificationsEnabled)
     try container.encode(notificationSound, forKey: .notificationSound)
     try container.encode(systemNotificationsEnabled, forKey: .systemNotificationsEnabled)
-    try container.encode(muteNotificationsForActiveSurface, forKey: .muteNotificationsForActiveSurface)
+    try container.encode(
+      muteNotificationsForActiveSurface, forKey: .muteNotificationsForActiveSurface)
     try container.encode(moveNotifiedWorktreeToTop, forKey: .moveNotifiedWorktreeToTop)
-    try container.encode(commandFinishedNotificationEnabled, forKey: .commandFinishedNotificationEnabled)
-    try container.encode(commandFinishedNotificationThreshold, forKey: .commandFinishedNotificationThreshold)
+    try container.encode(
+      commandFinishedNotificationEnabled, forKey: .commandFinishedNotificationEnabled)
+    try container.encode(
+      commandFinishedNotificationThreshold, forKey: .commandFinishedNotificationThreshold)
     try container.encode(analyticsEnabled, forKey: .analyticsEnabled)
     try container.encode(crashReportsEnabled, forKey: .crashReportsEnabled)
     try container.encode(githubIntegrationEnabled, forKey: .githubIntegrationEnabled)
     try container.encode(deleteBranchOnAutomaticCleanup, forKey: .deleteBranchOnAutomaticCleanup)
     try container.encodeIfPresent(mergedWorktreeAction, forKey: .mergedWorktreeAction)
     try container.encode(promptForWorktreeCreation, forKey: .promptForWorktreeCreation)
-    try container.encode(fetchOriginBeforeWorktreeCreation, forKey: .fetchOriginBeforeWorktreeCreation)
-    try container.encodeIfPresent(defaultWorktreeBaseDirectoryPath, forKey: .defaultWorktreeBaseDirectoryPath)
+    try container.encode(
+      fetchOriginBeforeWorktreeCreation, forKey: .fetchOriginBeforeWorktreeCreation)
+    try container.encodeIfPresent(
+      defaultWorktreeBaseDirectoryPath, forKey: .defaultWorktreeBaseDirectoryPath)
     try container.encode(copyIgnoredOnWorktreeCreate, forKey: .copyIgnoredOnWorktreeCreate)
     try container.encode(copyUntrackedOnWorktreeCreate, forKey: .copyUntrackedOnWorktreeCreate)
     try container.encode(pullRequestMergeStrategy, forKey: .pullRequestMergeStrategy)
     try container.encode(restoreTerminalLayoutOnLaunch, forKey: .restoreTerminalLayoutOnLaunch)
-    try container.encodeIfPresent(archivedAutoDeletePeriod?.rawValue, forKey: .archivedAutoDeletePeriod)
+    try container.encodeIfPresent(
+      archivedAutoDeletePeriod?.rawValue, forKey: .archivedAutoDeletePeriod)
     try container.encodeIfPresent(terminalFontSize, forKey: .terminalFontSize)
+    try container.encodeIfPresent(ghosttyConfigPath, forKey: .ghosttyConfigPath)
     try container.encode(keybindingUserOverrides, forKey: .keybindingUserOverrides)
     try container.encode(defaultViewMode, forKey: .defaultViewMode)
     try container.encode(canvasDefaultLayout, forKey: .canvasDefaultLayout)
@@ -216,10 +229,12 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     try container.encode(dockBounceMode, forKey: .dockBounceMode)
     try container.encode(showNotificationDotOnDock, forKey: .showNotificationDotOnDock)
     try container.encode(shelfSpineTintFallback, forKey: .shelfSpineTintFallback)
-    try container.encode(shelfSpineTintFollowsRepositoryColor, forKey: .shelfSpineTintFollowsRepositoryColor)
+    try container.encode(
+      shelfSpineTintFollowsRepositoryColor, forKey: .shelfSpineTintFollowsRepositoryColor)
     try container.encode(externalDiffToolID, forKey: .externalDiffToolID)
     try container.encode(externalDiffCustomCommand, forKey: .externalDiffCustomCommand)
-    try container.encode(detectRepositoryIconsAutomatically, forKey: .detectRepositoryIconsAutomatically)
+    try container.encode(
+      detectRepositoryIconsAutomatically, forKey: .detectRepositoryIconsAutomatically)
   }
 
   private enum CodingKeys: String, CodingKey {
@@ -249,6 +264,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     case restoreTerminalLayoutOnLaunch
     case archivedAutoDeletePeriod
     case terminalFontSize
+    case ghosttyConfigPath
     case keybindingUserOverrides
     case defaultViewMode
     case canvasDefaultLayout
@@ -282,8 +298,10 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     confirmBeforeQuit =
       try container.decodeIfPresent(Bool.self, forKey: .confirmBeforeQuit)
       ?? Self.default.confirmBeforeQuit
-    updatesAutomaticallyCheckForUpdates = try container.decode(Bool.self, forKey: .updatesAutomaticallyCheckForUpdates)
-    updatesAutomaticallyDownloadUpdates = try container.decode(Bool.self, forKey: .updatesAutomaticallyDownloadUpdates)
+    updatesAutomaticallyCheckForUpdates = try container.decode(
+      Bool.self, forKey: .updatesAutomaticallyCheckForUpdates)
+    updatesAutomaticallyDownloadUpdates = try container.decode(
+      Bool.self, forKey: .updatesAutomaticallyDownloadUpdates)
     inAppNotificationsEnabled =
       try container.decodeIfPresent(Bool.self, forKey: .inAppNotificationsEnabled)
       ?? Self.default.inAppNotificationsEnabled
@@ -330,21 +348,17 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
       try container.decodeIfPresent(Bool.self, forKey: .copyUntrackedOnWorktreeCreate)
       ?? Self.default.copyUntrackedOnWorktreeCreate
     pullRequestMergeStrategy =
-      try container.decodeIfPresent(PullRequestMergeStrategy.self, forKey: .pullRequestMergeStrategy)
+      try container.decodeIfPresent(
+        PullRequestMergeStrategy.self, forKey: .pullRequestMergeStrategy)
       ?? Self.default.pullRequestMergeStrategy
-    restoreTerminalLayoutOnLaunch =
-      try container.decodeIfPresent(Bool.self, forKey: .restoreTerminalLayoutOnLaunch)
-      ?? Self.default.restoreTerminalLayoutOnLaunch
-    if let rawAutoDelete = try container.decodeIfPresent(Int.self, forKey: .archivedAutoDeletePeriod) {
-      archivedAutoDeletePeriod = AutoDeletePeriod(rawValue: rawAutoDelete)
-    } else {
-      archivedAutoDeletePeriod = Self.default.archivedAutoDeletePeriod
-    }
-    terminalFontSize =
-      try container.decodeIfPresent(Float32.self, forKey: .terminalFontSize)
-      ?? Self.default.terminalFontSize
+    let terminalSettings = try Self.decodeTerminalSettings(from: container)
+    restoreTerminalLayoutOnLaunch = terminalSettings.restoresLayout
+    archivedAutoDeletePeriod = terminalSettings.autoDeletePeriod
+    terminalFontSize = terminalSettings.fontSize
+    ghosttyConfigPath = terminalSettings.configPath
     keybindingUserOverrides =
-      try container.decodeIfPresent(KeybindingUserOverrideStore.self, forKey: .keybindingUserOverrides)
+      try container.decodeIfPresent(
+        KeybindingUserOverrideStore.self, forKey: .keybindingUserOverrides)
       ?? Self.default.keybindingUserOverrides
     (defaultViewMode, canvasDefaultLayout) = try Self.decodeViewSettings(from: container)
     dimUnfocusedSplits =
@@ -360,8 +374,10 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
       try container.decodeIfPresent(Bool.self, forKey: .showActiveAgentStatusInShelf)
       ?? Self.default.showActiveAgentStatusInShelf
     (windowTintMode, windowTintCustomColor) = try Self.decodeWindowTint(from: container)
-    (shelfSpineTintFallback, shelfSpineTintFollowsRepositoryColor) = try Self.decodeShelfSpineTint(from: container)
-    (externalDiffToolID, externalDiffCustomCommand) = try Self.decodeExternalDiffSettings(from: container)
+    (shelfSpineTintFallback, shelfSpineTintFollowsRepositoryColor) = try Self.decodeShelfSpineTint(
+      from: container)
+    (externalDiffToolID, externalDiffCustomCommand) = try Self.decodeExternalDiffSettings(
+      from: container)
     detectRepositoryIconsAutomatically =
       try container.decodeIfPresent(Bool.self, forKey: .detectRepositoryIconsAutomatically)
       ?? true
@@ -382,6 +398,35 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
       try container.decodeIfPresent(CanvasDefaultLayout.self, forKey: .canvasDefaultLayout)
       ?? Self.default.canvasDefaultLayout
     return (mode, layout)
+  }
+
+  private struct DecodedTerminalSettings {
+    var restoresLayout: Bool
+    var autoDeletePeriod: AutoDeletePeriod?
+    var fontSize: Float32?
+    var configPath: String?
+  }
+
+  private static func decodeTerminalSettings(
+    from container: KeyedDecodingContainer<CodingKeys>
+  ) throws -> DecodedTerminalSettings {
+    let restoreLayout =
+      try container.decodeIfPresent(Bool.self, forKey: .restoreTerminalLayoutOnLaunch)
+      ?? Self.default.restoreTerminalLayoutOnLaunch
+    let autoDeletePeriod =
+      try container.decodeIfPresent(Int.self, forKey: .archivedAutoDeletePeriod)
+      .flatMap(AutoDeletePeriod.init(rawValue:))
+      ?? Self.default.archivedAutoDeletePeriod
+    let fontSize =
+      try container.decodeIfPresent(Float32.self, forKey: .terminalFontSize)
+      ?? Self.default.terminalFontSize
+    let configPath = try container.decodeIfPresent(String.self, forKey: .ghosttyConfigPath)
+    return DecodedTerminalSettings(
+      restoresLayout: restoreLayout,
+      autoDeletePeriod: autoDeletePeriod,
+      fontSize: fontSize,
+      configPath: configPath
+    )
   }
 
   private static func decodeWindowTint(
@@ -412,7 +457,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     from container: KeyedDecodingContainer<CodingKeys>
   ) throws -> (String, String) {
     let toolID =
-      ExternalDiffTool.normalizedSettingsID(try container.decodeIfPresent(String.self, forKey: .externalDiffToolID))
+      ExternalDiffTool.normalizedSettingsID(
+        try container.decodeIfPresent(String.self, forKey: .externalDiffToolID))
     let customCommand =
       try container.decodeIfPresent(String.self, forKey: .externalDiffCustomCommand)
       ?? Self.default.externalDiffCustomCommand
@@ -427,10 +473,14 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   private static func decodeNotificationSound(
     from container: KeyedDecodingContainer<CodingKeys>
   ) throws -> NotificationSound {
-    if let sound = try? container.decodeIfPresent(NotificationSound.self, forKey: .notificationSound) {
+    if let sound = try? container.decodeIfPresent(
+      NotificationSound.self, forKey: .notificationSound)
+    {
       return sound
     }
-    if let legacyEnabled = try container.decodeIfPresent(Bool.self, forKey: .notificationSoundEnabled) {
+    if let legacyEnabled = try container.decodeIfPresent(
+      Bool.self, forKey: .notificationSoundEnabled)
+    {
       return legacyEnabled ? Self.default.notificationSound : .never
     }
     return Self.default.notificationSound
@@ -454,10 +504,14 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   private static func decodeMergedWorktreeAction(
     from container: KeyedDecodingContainer<CodingKeys>
   ) throws -> MergedWorktreeAction? {
-    if let decoded = try container.decodeIfPresent(MergedWorktreeAction.self, forKey: .mergedWorktreeAction) {
+    if let decoded = try container.decodeIfPresent(
+      MergedWorktreeAction.self, forKey: .mergedWorktreeAction)
+    {
       return decoded
     }
-    if let legacyBool = try container.decodeIfPresent(Bool.self, forKey: .automaticallyArchiveMergedWorktrees) {
+    if let legacyBool = try container.decodeIfPresent(
+      Bool.self, forKey: .automaticallyArchiveMergedWorktrees)
+    {
       return legacyBool ? .archive : nil
     }
     return Self.default.mergedWorktreeAction
@@ -478,11 +532,13 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     try ToolbarAndDockSettings(
       showRunButtonInToolbar: container.decodeIfPresent(Bool.self, forKey: .showRunButtonInToolbar)
         ?? Self.default.showRunButtonInToolbar,
-      showDefaultEditorInToolbar: container.decodeIfPresent(Bool.self, forKey: .showDefaultEditorInToolbar)
+      showDefaultEditorInToolbar: container.decodeIfPresent(
+        Bool.self, forKey: .showDefaultEditorInToolbar)
         ?? Self.default.showDefaultEditorInToolbar,
       dockBounceMode: container.decodeIfPresent(DockBounceMode.self, forKey: .dockBounceMode)
         ?? Self.default.dockBounceMode,
-      showNotificationDotOnDock: container.decodeIfPresent(Bool.self, forKey: .showNotificationDotOnDock)
+      showNotificationDotOnDock: container.decodeIfPresent(
+        Bool.self, forKey: .showNotificationDotOnDock)
         ?? Self.default.showNotificationDotOnDock
     )
   }

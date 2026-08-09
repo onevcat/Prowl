@@ -66,6 +66,7 @@ struct TerminalClient {
     case prune(Set<Worktree.ID>)
     case setNotificationsEnabled(Bool)
     case setCommandFinishedNotification(enabled: Bool, threshold: Int)
+    case setGhosttyConfigPath(String?)
     case setCanvasMode(Bool)
     case setSelectedWorktreeID(Worktree.ID?)
     case saveLayoutSnapshot
@@ -75,7 +76,8 @@ struct TerminalClient {
 
   enum Event: Equatable {
     case customCommandSucceeded(worktreeID: Worktree.ID, name: String, durationMs: Int)
-    case notificationReceived(worktreeID: Worktree.ID, surfaceID: UUID, title: String, body: String, isViewed: Bool)
+    case notificationReceived(
+      worktreeID: Worktree.ID, surfaceID: UUID, title: String, body: String, isViewed: Bool)
     case notificationIndicatorChanged(count: Int)
     case tabCreated(worktreeID: Worktree.ID)
     case tabClosed(worktreeID: Worktree.ID, remainingTabs: Int)
@@ -100,7 +102,8 @@ struct TerminalClient {
 extension TerminalClient: DependencyKey {
   static let liveValue = TerminalClient(
     send: { _ in fatalError("TerminalClient.send not configured") },
-    createTabInDirectory: { _, _ in fatalError("TerminalClient.createTabInDirectory not configured") },
+    createTabInDirectory: { _, _ in fatalError("TerminalClient.createTabInDirectory not configured")
+    },
     events: { fatalError("TerminalClient.events not configured") },
     canvasFocusedWorktreeID: { nil },
     selectedSurfaceID: { _ in nil },

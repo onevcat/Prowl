@@ -292,7 +292,9 @@ struct SettingsFeatureTests {
     #expect(store.state.defaultWorktreeBaseDirectoryPath == expectedPath)
   }
 
-  @Test(.dependencies) func changingDefaultWorktreeBaseDirectoryUpdatesRepositorySettingsState() async {
+  @Test(.dependencies) func changingDefaultWorktreeBaseDirectoryUpdatesRepositorySettingsState()
+    async
+  {
     let rootURL = URL(fileURLWithPath: "/tmp/repo")
     let expectedPath = SupacodePaths.normalizedWorktreeBaseDirectoryPath(" ~/worktrees ")!
     @Shared(.settingsFile) var settingsFile
@@ -420,6 +422,40 @@ struct SettingsFeatureTests {
 
     #expect(settingsFile.global.terminalFontSize == 18)
     #expect(capturedEvents.value.isEmpty)
+  }
+
+  @Test(.dependencies) func setGhosttyConfigPathPersistsAndEmitsFocusedDelegate() async {
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = .default }
+    let store = TestStore(initialState: SettingsFeature.State()) {
+      SettingsFeature()
+    }
+
+    await store.send(.setGhosttyConfigPath("  /tmp/prowl.ghostty  ")) {
+      $0.ghosttyConfigPath = "/tmp/prowl.ghostty"
+    }
+    await store.receive(\.delegate.ghosttyConfigPathChanged)
+    await store.finish()
+
+    #expect(settingsFile.global.ghosttyConfigPath == "/tmp/prowl.ghostty")
+  }
+
+  @Test(.dependencies) func clearingGhosttyConfigPathRestoresDefaultSelection() async {
+    var initialSettings = GlobalSettings.default
+    initialSettings.ghosttyConfigPath = "/tmp/prowl.ghostty"
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = initialSettings }
+    let store = TestStore(initialState: SettingsFeature.State(settings: initialSettings)) {
+      SettingsFeature()
+    }
+
+    await store.send(.setGhosttyConfigPath(nil)) {
+      $0.ghosttyConfigPath = nil
+    }
+    await store.receive(\.delegate.ghosttyConfigPathChanged)
+    await store.finish()
+
+    #expect(settingsFile.global.ghosttyConfigPath == nil)
   }
 
   @Test(.dependencies) func keybindingOverridesPersistAndFanOut() async {

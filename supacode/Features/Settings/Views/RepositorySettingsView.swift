@@ -13,7 +13,7 @@ struct RepositorySettingsView: View {
   var body: some View {
     let baseRefOptions =
       store.branchOptions.isEmpty ? [store.defaultWorktreeBaseRef] : store.branchOptions
-    let settings = $store.settings
+    let settings: Binding<RepositorySettings> = $store.settings
     let worktreeBaseDirectoryPath = Binding(
       get: { settings.worktreeBaseDirectoryPath.wrappedValue ?? "" },
       set: { settings.worktreeBaseDirectoryPath.wrappedValue = $0 },

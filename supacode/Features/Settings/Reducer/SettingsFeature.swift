@@ -32,6 +32,7 @@ struct SettingsFeature {
     var pullRequestMergeStrategy: PullRequestMergeStrategy
     var restoreTerminalLayoutOnLaunch: Bool
     var terminalFontSize: Float32?
+    var ghosttyConfigPath: String?
     var keybindingUserOverrides: KeybindingUserOverrideStore
     var defaultViewMode: DefaultViewMode
     var canvasDefaultLayout: CanvasDefaultLayout
@@ -66,7 +67,8 @@ struct SettingsFeature {
     @Presents var alert: AlertState<Alert>?
 
     init(settings: GlobalSettings = .default) {
-      let normalizedDefaultEditorID = OpenWorktreeAction.normalizedDefaultEditorID(settings.defaultEditorID)
+      let normalizedDefaultEditorID = OpenWorktreeAction.normalizedDefaultEditorID(
+        settings.defaultEditorID)
       appearanceMode = settings.appearanceMode
       defaultEditorID = normalizedDefaultEditorID
       confirmBeforeQuit = settings.confirmBeforeQuit
@@ -88,12 +90,14 @@ struct SettingsFeature {
       promptForWorktreeCreation = settings.promptForWorktreeCreation
       fetchRemoteBeforeWorktreeCreation = settings.fetchOriginBeforeWorktreeCreation
       defaultWorktreeBaseDirectoryPath =
-        SupacodePaths.normalizedWorktreeBaseDirectoryPath(settings.defaultWorktreeBaseDirectoryPath) ?? ""
+        SupacodePaths.normalizedWorktreeBaseDirectoryPath(settings.defaultWorktreeBaseDirectoryPath)
+        ?? ""
       copyIgnoredOnWorktreeCreate = settings.copyIgnoredOnWorktreeCreate
       copyUntrackedOnWorktreeCreate = settings.copyUntrackedOnWorktreeCreate
       pullRequestMergeStrategy = settings.pullRequestMergeStrategy
       restoreTerminalLayoutOnLaunch = settings.restoreTerminalLayoutOnLaunch
       terminalFontSize = settings.terminalFontSize
+      ghosttyConfigPath = settings.ghosttyConfigPath
       keybindingUserOverrides = settings.keybindingUserOverrides
       defaultViewMode = settings.defaultViewMode
       canvasDefaultLayout = settings.canvasDefaultLayout
@@ -144,6 +148,7 @@ struct SettingsFeature {
         restoreTerminalLayoutOnLaunch: restoreTerminalLayoutOnLaunch,
         archivedAutoDeletePeriod: archivedAutoDeletePeriod,
         terminalFontSize: terminalFontSize,
+        ghosttyConfigPath: ghosttyConfigPath,
         keybindingUserOverrides: keybindingUserOverrides,
         defaultViewMode: defaultViewMode,
         canvasDefaultLayout: canvasDefaultLayout,
@@ -174,6 +179,7 @@ struct SettingsFeature {
     case setSystemNotificationsEnabled(Bool)
     case setCommandFinishedNotificationThreshold(String)
     case setTerminalFontSize(Float32?)
+    case setGhosttyConfigPath(String?)
     case clearShortcutButtonTapped(commandID: String)
     case clearTerminalLayoutSnapshotButtonTapped
     case installCLIButtonTapped(showAlert: Bool = true)
@@ -206,6 +212,7 @@ struct SettingsFeature {
   enum Delegate: Equatable {
     case settingsChanged(GlobalSettings)
     case terminalFontSizeChanged(Float32?)
+    case ghosttyConfigPathChanged(String?)
     case terminalLayoutSnapshotCleared(success: Bool)
     case cliInstallCompleted(CLIInstallResultMessage)
   }
@@ -225,9 +232,11 @@ struct SettingsFeature {
         return .send(.settingsLoaded(settingsFile.global))
 
       case .settingsLoaded(let settings):
-        let normalizedDefaultEditorID = OpenWorktreeAction.normalizedDefaultEditorID(settings.defaultEditorID)
+        let normalizedDefaultEditorID = OpenWorktreeAction.normalizedDefaultEditorID(
+          settings.defaultEditorID)
         let normalizedWorktreeBaseDirPath =
-          SupacodePaths.normalizedWorktreeBaseDirectoryPath(settings.defaultWorktreeBaseDirectoryPath)
+          SupacodePaths.normalizedWorktreeBaseDirectoryPath(
+            settings.defaultWorktreeBaseDirectoryPath)
         let normalizedSettings: GlobalSettings
         if normalizedDefaultEditorID == settings.defaultEditorID,
           normalizedWorktreeBaseDirPath == settings.defaultWorktreeBaseDirectoryPath
@@ -244,15 +253,20 @@ struct SettingsFeature {
         state.appearanceMode = normalizedSettings.appearanceMode
         state.defaultEditorID = normalizedSettings.defaultEditorID
         state.confirmBeforeQuit = normalizedSettings.confirmBeforeQuit
-        state.updatesAutomaticallyCheckForUpdates = normalizedSettings.updatesAutomaticallyCheckForUpdates
-        state.updatesAutomaticallyDownloadUpdates = normalizedSettings.updatesAutomaticallyDownloadUpdates
+        state.updatesAutomaticallyCheckForUpdates =
+          normalizedSettings.updatesAutomaticallyCheckForUpdates
+        state.updatesAutomaticallyDownloadUpdates =
+          normalizedSettings.updatesAutomaticallyDownloadUpdates
         state.inAppNotificationsEnabled = normalizedSettings.inAppNotificationsEnabled
         state.notificationSound = normalizedSettings.notificationSound
         state.systemNotificationsEnabled = normalizedSettings.systemNotificationsEnabled
-        state.muteNotificationsForActiveSurface = normalizedSettings.muteNotificationsForActiveSurface
+        state.muteNotificationsForActiveSurface =
+          normalizedSettings.muteNotificationsForActiveSurface
         state.moveNotifiedWorktreeToTop = normalizedSettings.moveNotifiedWorktreeToTop
-        state.commandFinishedNotificationEnabled = normalizedSettings.commandFinishedNotificationEnabled
-        state.commandFinishedNotificationThreshold = normalizedSettings.commandFinishedNotificationThreshold
+        state.commandFinishedNotificationEnabled =
+          normalizedSettings.commandFinishedNotificationEnabled
+        state.commandFinishedNotificationThreshold =
+          normalizedSettings.commandFinishedNotificationThreshold
         state.analyticsEnabled = normalizedSettings.analyticsEnabled
         state.crashReportsEnabled = normalizedSettings.crashReportsEnabled
         state.githubIntegrationEnabled = normalizedSettings.githubIntegrationEnabled
@@ -260,13 +274,16 @@ struct SettingsFeature {
         state.mergedWorktreeAction = normalizedSettings.mergedWorktreeAction
         state.archivedAutoDeletePeriod = normalizedSettings.archivedAutoDeletePeriod
         state.promptForWorktreeCreation = normalizedSettings.promptForWorktreeCreation
-        state.fetchRemoteBeforeWorktreeCreation = normalizedSettings.fetchOriginBeforeWorktreeCreation
-        state.defaultWorktreeBaseDirectoryPath = normalizedSettings.defaultWorktreeBaseDirectoryPath ?? ""
+        state.fetchRemoteBeforeWorktreeCreation =
+          normalizedSettings.fetchOriginBeforeWorktreeCreation
+        state.defaultWorktreeBaseDirectoryPath =
+          normalizedSettings.defaultWorktreeBaseDirectoryPath ?? ""
         state.copyIgnoredOnWorktreeCreate = normalizedSettings.copyIgnoredOnWorktreeCreate
         state.copyUntrackedOnWorktreeCreate = normalizedSettings.copyUntrackedOnWorktreeCreate
         state.pullRequestMergeStrategy = normalizedSettings.pullRequestMergeStrategy
         state.restoreTerminalLayoutOnLaunch = normalizedSettings.restoreTerminalLayoutOnLaunch
         state.terminalFontSize = normalizedSettings.terminalFontSize
+        state.ghosttyConfigPath = normalizedSettings.ghosttyConfigPath
         state.keybindingUserOverrides = normalizedSettings.keybindingUserOverrides
         state.defaultViewMode = normalizedSettings.defaultViewMode
         state.dimUnfocusedSplits = normalizedSettings.dimUnfocusedSplits
@@ -275,7 +292,8 @@ struct SettingsFeature {
         state.showActiveAgentStatusInShelf = normalizedSettings.showActiveAgentStatusInShelf
         state.windowTintMode = normalizedSettings.windowTintMode
         state.shelfSpineTintFallback = normalizedSettings.shelfSpineTintFallback
-        state.shelfSpineTintFollowsRepositoryColor = normalizedSettings.shelfSpineTintFollowsRepositoryColor
+        state.shelfSpineTintFollowsRepositoryColor =
+          normalizedSettings.shelfSpineTintFollowsRepositoryColor
         state.windowTintCustomColor = normalizedSettings.windowTintCustomColor.color
         state.showRunButtonInToolbar = normalizedSettings.showRunButtonInToolbar
         state.showDefaultEditorInToolbar = normalizedSettings.showDefaultEditorInToolbar
@@ -284,7 +302,8 @@ struct SettingsFeature {
         state.externalDiffToolID = normalizedSettings.externalDiffToolID
         state.externalDiffCustomCommand = normalizedSettings.externalDiffCustomCommand
         state.canvasDefaultLayout = normalizedSettings.canvasDefaultLayout
-        state.detectRepositoryIconsAutomatically = normalizedSettings.detectRepositoryIconsAutomatically
+        state.detectRepositoryIconsAutomatically =
+          normalizedSettings.detectRepositoryIconsAutomatically
         state.syncGlobalDefaults(from: normalizedSettings)
         return .send(.delegate(.settingsChanged(normalizedSettings)))
 
@@ -301,7 +320,8 @@ struct SettingsFeature {
         )
 
       case .binding:
-        state.commandFinishedNotificationThreshold = min(max(state.commandFinishedNotificationThreshold, 0), 600)
+        state.commandFinishedNotificationThreshold = min(
+          max(state.commandFinishedNotificationThreshold, 0), 600)
         state.syncGlobalDefaults(from: state.globalSettings)
         return persist(state)
 
@@ -326,9 +346,21 @@ struct SettingsFeature {
           .send(.delegate(.terminalFontSizeChanged(fontSize)))
         )
 
+      case .setGhosttyConfigPath(let path):
+        let trimmed = path?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedPath = trimmed.flatMap { $0.isEmpty ? nil : $0 }
+        guard state.ghosttyConfigPath != normalizedPath else { return .none }
+        state.ghosttyConfigPath = normalizedPath
+        return .merge(
+          persist(state, emitSettingsChanged: false),
+          .send(.delegate(.ghosttyConfigPathChanged(normalizedPath)))
+        )
+
       case .clearShortcutButtonTapped(let commandID):
         guard
-          let command = KeybindingSchemaDocument.appDefaultsV1.commands.first(where: { $0.id == commandID }),
+          let command = KeybindingSchemaDocument.appDefaultsV1.commands.first(where: {
+            $0.id == commandID
+          }),
           command.allowUserOverride
         else {
           return .none
@@ -360,7 +392,8 @@ struct SettingsFeature {
           } catch let error as CLIInstallError {
             await send(.cliInstallCompleted(.failure(error)))
           } catch {
-            await send(.cliInstallCompleted(.failure(CLIInstallError(message: error.localizedDescription))))
+            await send(
+              .cliInstallCompleted(.failure(CLIInstallError(message: error.localizedDescription))))
           }
         }
 
@@ -378,7 +411,8 @@ struct SettingsFeature {
           } catch let error as CLIInstallError {
             await send(.cliInstallCompleted(.failure(error)))
           } catch {
-            await send(.cliInstallCompleted(.failure(CLIInstallError(message: error.localizedDescription))))
+            await send(
+              .cliInstallCompleted(.failure(CLIInstallError(message: error.localizedDescription))))
           }
         }
 
@@ -425,7 +459,8 @@ struct SettingsFeature {
 
       case .refreshDockBadgeAuthorization:
         return .run { send in
-          await send(.dockBadgeAuthorizationResponse(systemNotificationClient.dockBadgeAuthorization()))
+          await send(
+            .dockBadgeAuthorizationResponse(systemNotificationClient.dockBadgeAuthorization()))
         }
 
       case .dockBadgeAuthorizationResponse(let authorization):

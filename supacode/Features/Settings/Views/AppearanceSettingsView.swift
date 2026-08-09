@@ -1,3 +1,4 @@
+import AppKit
 import ComposableArchitecture
 import SwiftUI
 
@@ -11,7 +12,7 @@ struct AppearanceSettingsView: View {
       Form {
         Section("Appearance") {
           HStack {
-            let appearanceMode = $store.appearanceMode
+            let appearanceMode: Binding<AppearanceMode> = $store.appearanceMode
             ForEach(AppearanceMode.allCases) { mode in
               AppearanceOptionCardView(
                 mode: mode,
@@ -22,6 +23,29 @@ struct AppearanceSettingsView: View {
             }
           }
           VStack(alignment: .leading, spacing: 6) {
+            Text("Ghostty Configuration")
+              .font(.headline)
+              .foregroundStyle(.primary)
+            Text(store.ghosttyConfigPath ?? "Using Ghostty's default configuration")
+              .monospaced()
+              .lineLimit(1)
+              .truncationMode(.middle)
+              .textSelection(.enabled)
+              .help(
+                store.ghosttyConfigPath ?? "Prowl follows Ghostty's default configuration files.")
+            HStack(spacing: 8) {
+              Button("Choose Config…") {
+                presentGhosttyConfigPicker()
+              }
+              .help("Choose a dedicated Ghostty configuration file for Prowl.")
+              Button("Use Default") {
+                store.send(.setGhosttyConfigPath(nil))
+              }
+              .disabled(store.ghosttyConfigPath == nil)
+              .help("Stop using the override and return to Ghostty's default configuration.")
+            }
+            .controlSize(.small)
+            Text("An override replaces the global Ghostty configuration while it is selected.")
             Text(
               """
               Terminal theming follows your Ghostty configuration. \
@@ -34,9 +58,13 @@ struct AppearanceSettingsView: View {
               .textSelection(.enabled)
             HStack(spacing: 8) {
               Button("Open Config") {
-                GhosttyRuntime.openGhosttyConfig()
+                if let runtime = GhosttyRuntime.shared {
+                  runtime.openAppConfig()
+                } else {
+                  GhosttyRuntime.openGhosttyConfig(at: store.ghosttyConfigPath)
+                }
               }
-              .help("Open your Ghostty config file in the default text editor.")
+              .help("Open the active Ghostty config file in the default text editor.")
               Button("Reload") {
                 GhosttyRuntime.shared?.reloadAppConfig()
               }
@@ -60,7 +88,8 @@ struct AppearanceSettingsView: View {
               selection: $store.windowTintCustomColor,
               supportsOpacity: false
             )
-            .help("Tint the nav and toolbar with this color in every view, ignoring repository colors.")
+            .help(
+              "Tint the nav and toolbar with this color in every view, ignoring repository colors.")
           }
           Text(tintFootnote)
             .font(.callout)
@@ -71,7 +100,9 @@ struct AppearanceSettingsView: View {
               Text(fallback.title).tag(fallback)
             }
           }
-          .help("Spine style for repositories without a color, or for every spine when Follow Repo Color is off.")
+          .help(
+            "Spine style for repositories without a color, or for every spine when Follow Repo Color is off."
+          )
           Toggle(
             "Follow Repo Color Setting",
             isOn: $store.shelfSpineTintFollowsRepositoryColor
@@ -114,7 +145,8 @@ struct AppearanceSettingsView: View {
             "Show terminal titles in agent rows",
             isOn: $store.showActiveAgentTabTitles
           )
-          .help("Display each agent's own terminal title in the row and show the branch name on hover.")
+          .help(
+            "Display each agent's own terminal title in the row and show the branch name on hover.")
           Toggle(
             "Show agent status in Shelf tabs",
             isOn: $store.showActiveAgentStatusInShelf
@@ -127,7 +159,9 @@ struct AppearanceSettingsView: View {
               Text(mode.title).tag(mode)
             }
           }
-          .help("View Prowl starts in on launch. Shelf and Canvas require at least one worktree or folder.")
+          .help(
+            "View Prowl starts in on launch. Shelf and Canvas require at least one worktree or folder."
+          )
 
           Picker("Canvas layout", selection: $store.canvasDefaultLayout) {
             ForEach(CanvasDefaultLayout.allCases) { layout in
@@ -207,6 +241,22 @@ struct AppearanceSettingsView: View {
       .formStyle(.grouped)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+  }
+
+  private func presentGhosttyConfigPicker() {
+    let panel = NSOpenPanel()
+    panel.canChooseDirectories = false
+    panel.canChooseFiles = true
+    panel.allowsMultipleSelection = false
+    panel.prompt = "Use Config"
+    panel.message = "Choose the Ghostty configuration file Prowl should use."
+    if let path = store.ghosttyConfigPath {
+      panel.directoryURL = URL(fileURLWithPath: path).deletingLastPathComponent()
+    }
+    panel.begin { response in
+      guard response == .OK, let url = panel.url else { return }
+      store.send(.setGhosttyConfigPath(url.path(percentEncoded: false)))
+    }
   }
 
   private var tintFootnote: String {

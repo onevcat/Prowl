@@ -79,6 +79,22 @@ struct AppFeatureSettingsChangedTests {
     #expect(watcherCommands.value.isEmpty)
   }
 
+  @Test(.dependencies) func ghosttyConfigPathChangeUpdatesTerminalRuntime() async {
+    let sentTerminalCommands = LockIsolated<[TerminalClient.Command]>([])
+    let store = TestStore(initialState: AppFeature.State()) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sentTerminalCommands.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.settings(.delegate(.ghosttyConfigPathChanged("/tmp/prowl.ghostty"))))
+    await store.finish()
+
+    #expect(sentTerminalCommands.value == [.setGhosttyConfigPath("/tmp/prowl.ghostty")])
+  }
+
   @Test(.dependencies) func agentEntryAutoShowsActiveAgentsPanelWhenEnabled() async {
     var settings = SettingsFeature.State()
     settings.autoShowActiveAgentsPanel = true

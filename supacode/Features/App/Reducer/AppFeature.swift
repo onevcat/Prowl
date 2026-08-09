@@ -42,7 +42,8 @@ struct AppFeature {
       self.repositories = repositories
       self.settings = settings
       lastKnownSystemNotificationsEnabled = settings.systemNotificationsEnabled
-      launchRestoreMode = settings.restoreTerminalLayoutOnLaunch ? .restoreLayout : .lastFocusedWorktree
+      launchRestoreMode =
+        settings.restoreTerminalLayoutOnLaunch ? .restoreLayout : .lastFocusedWorktree
     }
   }
 
@@ -120,7 +121,9 @@ struct AppFeature {
       switch action {
       case .appLaunched:
         try? SupacodePaths.migrateLegacyCacheFilesIfNeeded()
-        appLogger.info("[LayoutRestore] appLaunched: launchRestoreMode=\(String(describing: state.launchRestoreMode))")
+        appLogger.info(
+          "[LayoutRestore] appLaunched: launchRestoreMode=\(String(describing: state.launchRestoreMode))"
+        )
         state.launchedAt = now
         state.repositories.launchRestoreMode = state.launchRestoreMode
         analyticsClient.capture("app_launched", nil)
@@ -166,7 +169,8 @@ struct AppFeature {
             !state.suppressLayoutSaveUntilRelaunch,
             state.launchRestoreMode != .restoreLayout
           {
-            appLogger.info("[LayoutRestore] scenePhase=\(String(describing: phase)), saving layout snapshot")
+            appLogger.info(
+              "[LayoutRestore] scenePhase=\(String(describing: phase)), saving layout snapshot")
             effects.append(.run { _ in await terminalClient.send(.saveLayoutSnapshot) })
           }
           return .merge(effects)
@@ -241,7 +245,8 @@ struct AppFeature {
         )
         effects.append(
           .run { _ in
-            await worktreeInfoWatcher.send(.setSelectedWorktreeID(isPlainFolderSelection ? nil : worktree.id))
+            await worktreeInfoWatcher.send(
+              .setSelectedWorktreeID(isPlainFolderSelection ? nil : worktree.id))
           }
         )
         effects.append(
@@ -293,7 +298,9 @@ struct AppFeature {
           state.launchRestoreMode = .lastFocusedWorktree
           state.repositories.selection = nil
         }
-        state.runScriptStatusByWorktreeID = state.runScriptStatusByWorktreeID.filter { ids.contains($0.key) }
+        state.runScriptStatusByWorktreeID = state.runScriptStatusByWorktreeID.filter {
+          ids.contains($0.key)
+        }
         let restorableWorktrees = makeTerminalRestorableWorktrees(from: Array(repositories))
         appLogger.info("[LayoutRestore] restorableWorktrees count=\(restorableWorktrees.count)")
         var allEffects: [Effect<Action>] = []
@@ -400,8 +407,10 @@ struct AppFeature {
             appearance: repositoryAppearances[repository.id] ?? .empty
           )
           repoSettingsState.workspace = repository.workspace
-          repoSettingsState.globalCopyIgnoredOnWorktreeCreate = state.settings.copyIgnoredOnWorktreeCreate
-          repoSettingsState.globalCopyUntrackedOnWorktreeCreate = state.settings.copyUntrackedOnWorktreeCreate
+          repoSettingsState.globalCopyIgnoredOnWorktreeCreate =
+            state.settings.copyIgnoredOnWorktreeCreate
+          repoSettingsState.globalCopyUntrackedOnWorktreeCreate =
+            state.settings.copyUntrackedOnWorktreeCreate
           repoSettingsState.globalPullRequestMergeStrategy = state.settings.pullRequestMergeStrategy
           state.settings.repositorySettings = repoSettingsState
           state.settings.globalCustomCommands = nil
@@ -452,7 +461,9 @@ struct AppFeature {
           : .send(.repositories(.repositoryManagement(.cancelPendingIconDetections)))
         return .merge(
           cancelIconDetections,
-          .send(.repositories(.githubIntegration(.setGithubIntegrationEnabled(settings.githubIntegrationEnabled)))),
+          .send(
+            .repositories(
+              .githubIntegration(.setGithubIntegrationEnabled(settings.githubIntegrationEnabled)))),
           .send(
             .repositories(
               .githubIntegration(
@@ -515,7 +526,9 @@ struct AppFeature {
                 )
               }
             case .denied:
-              await send(.systemNotificationsPermissionFailed(errorMessage: "Authorization status is denied."))
+              await send(
+                .systemNotificationsPermissionFailed(
+                  errorMessage: "Authorization status is denied."))
             }
           },
           .run { _ in
@@ -525,6 +538,11 @@ struct AppFeature {
 
       case .settings(.delegate(.terminalFontSizeChanged)):
         return .none
+
+      case .settings(.delegate(.ghosttyConfigPathChanged(let path))):
+        return .run { _ in
+          await terminalClient.send(.setGhosttyConfigPath(path))
+        }
 
       case .settings(.delegate(.cliInstallCompleted(let result))):
         switch result {
@@ -584,7 +602,8 @@ struct AppFeature {
         return .send(.openSelectedWorktree)
 
       case .openSelectedWorktree:
-        return .send(.openWorktree(OpenWorktreeAction.availableSelection(state.openActionSelection)))
+        return .send(
+          .openWorktree(OpenWorktreeAction.availableSelection(state.openActionSelection)))
 
       case .showSelectedWorktreeDiff:
         return openSelectedWorktreeDiffEffect(state: state)
@@ -656,7 +675,8 @@ struct AppFeature {
           return .none
         }
         analyticsClient.capture("terminal_tab_created", nil)
-        let shouldRunSetupScript = state.repositories.pendingSetupScriptWorktreeIDs.contains(worktree.id)
+        let shouldRunSetupScript = state.repositories.pendingSetupScriptWorktreeIDs.contains(
+          worktree.id)
         return .run { _ in
           await terminalClient.send(.createTab(worktree, runSetupScriptIfNew: shouldRunSetupScript))
         }
@@ -667,7 +687,8 @@ struct AppFeature {
           return .none
         }
         guard state.repositories.worktree(for: location.worktreeID) != nil else {
-          notificationJumpLogger.warning("Unread notification worktree vanished: \(location.worktreeID)")
+          notificationJumpLogger.warning(
+            "Unread notification worktree vanished: \(location.worktreeID)")
           return .none
         }
         analyticsClient.capture("notifications_jump_to_latest_unread", nil)
@@ -680,7 +701,8 @@ struct AppFeature {
         )
 
       case .toggleLeftSidebar:
-        state.leftSidebarVisibility = state.leftSidebarVisibility == .detailOnly ? .all : .detailOnly
+        state.leftSidebarVisibility =
+          state.leftSidebarVisibility == .detailOnly ? .all : .detailOnly
         return .none
 
       case .showLeftSidebar:
@@ -720,7 +742,9 @@ struct AppFeature {
         guard let worktree = actionTargetWorktree(repositories: state.repositories) else {
           return .none
         }
-        guard let effectiveCommand = state.selectedCustomCommands.first(where: { $0.id == commandID }) else {
+        guard
+          let effectiveCommand = state.selectedCustomCommands.first(where: { $0.id == commandID })
+        else {
           return .none
         }
         let customCommand = effectiveCommand.command

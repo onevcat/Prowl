@@ -148,12 +148,14 @@ Selection for Find** (`search_selection`). These are Ghostty-managed.
 
 Scrollback, wide/CJK character rendering, and copy/paste are handled by Ghostty
 with its defaults — Prowl doesn't override them. Customize terminal behavior in
-your Ghostty config at `~/.config/ghostty/config`.
+your Ghostty config at `~/.config/ghostty/config`, or choose a dedicated config
+for Prowl under **Settings → General → Appearance**. A dedicated config replaces
+the global Ghostty config until **Use Default** is selected again.
 
 ## Color scheme
 
 The terminal theme automatically follows the macOS light/dark appearance. There's
-no in-app Ghostty theme picker; change Ghostty colors via its config file.
+no in-app Ghostty theme picker; change Ghostty colors via the active config file.
 
 ## Layout persistence
 

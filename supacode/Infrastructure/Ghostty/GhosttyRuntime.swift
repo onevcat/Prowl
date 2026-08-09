@@ -42,6 +42,7 @@ final class GhosttyRuntime {
   }
 
   var config: ghostty_config_t?
+  private(set) var configPath: String?
   private(set) var app: ghostty_app_t?
   var observers: [NSObjectProtocol] = []
   var surfaceRefs: [SurfaceReference] = []
@@ -54,10 +55,12 @@ final class GhosttyRuntime {
   var onConfigChange: (() -> Void)?
   var onQuit: (() -> Void)?
 
-  init(initialColorScheme: ColorScheme? = nil) {
-    guard let config = Self.loadConfig() else {
+  init(initialColorScheme: ColorScheme? = nil, configPath: String? = nil) {
+    let configPath = Self.normalizedConfigPath(configPath)
+    guard let config = Self.loadConfig(at: configPath) else {
       preconditionFailure("ghostty_config_new failed")
     }
+    self.configPath = configPath
     self.config = config
 
     var runtimeConfig = ghostty_runtime_config_s(
@@ -249,7 +252,7 @@ final class GhosttyRuntime {
       ghostty_config_free(clone)
       return
     }
-    guard let config = Self.loadConfig() else { return }
+    guard let config = Self.loadConfig(at: configPath) else { return }
     applyConfig(config, target: target, app: app)
     ghostty_config_free(config)
   }
@@ -262,6 +265,17 @@ final class GhosttyRuntime {
     // config to ghostty, regardless of whether our override contents changed.
     runtimeOverrideSignature = ""
     applyRuntimeOverridesIfNeeded()
+  }
+
+  func setConfigPath(_ path: String?) {
+    let normalizedPath = Self.normalizedConfigPath(path)
+    guard configPath != normalizedPath else { return }
+    configPath = normalizedPath
+    themeFallbackOverrideContents = ""
+    reloadAppConfig()
+    if let currentColorScheme {
+      reconcileThemeFallback(for: currentColorScheme)
+    }
   }
 
   func applyConfig(
@@ -338,12 +352,24 @@ final class GhosttyRuntime {
     return trigger.isEmpty ? nil : trigger
   }
 
-  static func loadConfig() -> ghostty_config_t? {
+  nonisolated static func normalizedConfigPath(_ path: String?) -> String? {
+    let trimmed = path?.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.flatMap { $0.isEmpty ? nil : $0 }
+  }
+
+  static func loadConfig(at path: String?, additionalFiles: [URL] = []) -> ghostty_config_t? {
     guard let config = ghostty_config_new() else { return nil }
-    ghostty_config_load_default_files(config)
+    if let path {
+      path.withCString { ghostty_config_load_file(config, $0) }
+    } else {
+      ghostty_config_load_default_files(config)
+    }
     ghostty_config_load_recursive_files(config)
     ghostty_config_load_cli_args(config)
     loadTerminalProgramOverrides(into: config)
+    for url in additionalFiles {
+      url.path.withCString { ghostty_config_load_file(config, $0) }
+    }
     ghostty_config_finalize(config)
     return config
   }
@@ -373,9 +399,11 @@ final class GhosttyRuntime {
     let url = URL(fileURLWithPath: NSTemporaryDirectory())
       .appendingPathComponent("prowl-ghostty-term-program.conf")
     do {
-      try terminalProgramOverrides(version: appVersion).write(to: url, atomically: true, encoding: .utf8)
+      try terminalProgramOverrides(version: appVersion).write(
+        to: url, atomically: true, encoding: .utf8)
     } catch {
-      ghosttyLogger.warning("Failed to write TERM_PROGRAM override file: \(error.localizedDescription)")
+      ghosttyLogger.warning(
+        "Failed to write TERM_PROGRAM override file: \(error.localizedDescription)")
       return
     }
     url.path.withCString { path in
@@ -455,7 +483,9 @@ final class GhosttyRuntime {
       return Color(nsColor: NSColor(ghostty: color))
     }
     let backgroundKey = "background"
-    if ghostty_config_get(config, &color, backgroundKey, UInt(backgroundKey.lengthOfBytes(using: .utf8))) {
+    if ghostty_config_get(
+      config, &color, backgroundKey, UInt(backgroundKey.lengthOfBytes(using: .utf8)))
+    {
       return Color(nsColor: NSColor(ghostty: color))
     }
     ghosttyLogger.warning(

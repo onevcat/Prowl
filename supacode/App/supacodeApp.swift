@@ -71,13 +71,15 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
   }
 
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-    WindowLifecycleDiagnostics.logWithWindows("applicationShouldHandleReopen hasVisibleWindows=\(flag)")
+    WindowLifecycleDiagnostics.logWithWindows(
+      "applicationShouldHandleReopen hasVisibleWindows=\(flag)")
     if flag, MainWindowSurface.hasVisibleMainWindow(in: sender.windows) {
       WindowLifecycleDiagnostics.noteMainWindowAppeared()
       return true
     }
     let surfaced = sender.surfaceMainWindow()
-    WindowLifecycleDiagnostics.log("applicationShouldHandleReopen surfaced=\(surfaced) -> handled=\(!surfaced)")
+    WindowLifecycleDiagnostics.log(
+      "applicationShouldHandleReopen surfaced=\(surfaced) -> handled=\(!surfaced)")
     return !surfaced
   }
 
@@ -133,10 +135,14 @@ struct SupacodeApp: App {
   private static func bootstrapTelemetry(initialSettings: GlobalSettings) {
     #if !DEBUG
       let infoDictionary = Bundle.main.infoDictionary ?? [:]
-      let releaseName = (infoDictionary["CFBundleShortVersionString"] as? String).map { "prowl@\($0)" }
+      let releaseName = (infoDictionary["CFBundleShortVersionString"] as? String).map {
+        "prowl@\($0)"
+      }
       let environment = "production"
 
-      if initialSettings.crashReportsEnabled, let dsn = infoPlistSecret(infoDictionary, key: "ProwlSentryDSN") {
+      if initialSettings.crashReportsEnabled,
+        let dsn = infoPlistSecret(infoDictionary, key: "ProwlSentryDSN")
+      {
         SentrySDK.start { options in
           options.dsn = dsn
           options.environment = environment
@@ -190,7 +196,10 @@ struct SupacodeApp: App {
         preconditionFailure("ghostty_init failed")
       }
     }
-    let runtime = GhosttyRuntime(initialColorScheme: initialSettings.appearanceMode.colorScheme)
+    let runtime = GhosttyRuntime(
+      initialColorScheme: initialSettings.appearanceMode.colorScheme,
+      configPath: initialSettings.ghosttyConfigPath
+    )
     _ghostty = State(initialValue: runtime)
     let shortcuts = GhosttyShortcutManager(runtime: runtime)
     _ghosttyShortcuts = State(initialValue: shortcuts)
@@ -208,7 +217,8 @@ struct SupacodeApp: App {
     _pullRequestRefreshCoordinator = State(initialValue: coordinator)
     let keyObserver = CommandKeyObserver()
     _commandKeyObserver = State(initialValue: keyObserver)
-    var initialAppState = AppFeature.State(settings: SettingsFeature.State(settings: initialSettings))
+    var initialAppState = AppFeature.State(
+      settings: SettingsFeature.State(settings: initialSettings))
     if let cliOpenPath = Self.cliLaunchOpenPath() {
       initialAppState.launchRestoreMode = .cliOpenPath(cliOpenPath)
     }
@@ -281,7 +291,8 @@ struct SupacodeApp: App {
   ) -> OutgoingChangesClient {
     .live(
       pullRequestInfo: { worktreeID in
-        storeBox.store?.withState { $0.repositories.worktreeInfo(for: worktreeID)?.pullRequest } ?? nil
+        storeBox.store?.withState { $0.repositories.worktreeInfo(for: worktreeID)?.pullRequest }
+          ?? nil
       }
     )
   }
@@ -507,7 +518,8 @@ struct SupacodeApp: App {
       sessionID: nativeSession?.id,
       paneID: paneID.uuidString,
       paneTitle: title.isEmpty ? nil : title,
-      source: nativeSession?.source.rawValue ?? (screenText == nil ? "terminal-unavailable" : "terminal-scrollback"),
+      source: nativeSession?.source.rawValue
+        ?? (screenText == nil ? "terminal-unavailable" : "terminal-scrollback"),
       confidence: nativeSession?.confidence.rawValue ?? "fallback",
       transcriptPath: nativeSession?.transcriptPath?.path(percentEncoded: false),
       excerptText: screenText
@@ -690,7 +702,10 @@ struct SupacodeApp: App {
       },
       createTab: { target, path in
         let repositories = Array(appStore.state.repositories.repositories)
-        guard let worktree = resolveCLITerminalWorktree(id: target.worktreeID, repositories: repositories) else {
+        guard
+          let worktree = resolveCLITerminalWorktree(
+            id: target.worktreeID, repositories: repositories)
+        else {
           return nil
         }
         selectCLIWorktreeContext(
@@ -839,10 +854,14 @@ struct SupacodeApp: App {
     terminalManager: WorktreeTerminalManager
   ) -> HandoffLaunchedPane? {
     let repositories = Array(appStore.state.repositories.repositories)
-    guard let worktree = resolveCLITerminalWorktree(id: target.worktreeID, repositories: repositories) else {
+    guard
+      let worktree = resolveCLITerminalWorktree(id: target.worktreeID, repositories: repositories)
+    else {
       return nil
     }
-    guard let initialInput = try? AgentRuntimeAdapterRegistry.makeStartInvocation(request).terminalInput else {
+    guard
+      let initialInput = try? AgentRuntimeAdapterRegistry.makeStartInvocation(request).terminalInput
+    else {
       return nil
     }
     let state = terminalManager.state(for: worktree)
@@ -939,7 +958,8 @@ struct SupacodeApp: App {
       },
       createTabAtPath: { worktreeID, path in
         let repositories = Array(appStore.state.repositories.repositories)
-        guard let worktree = resolveCLITerminalWorktree(id: worktreeID, repositories: repositories) else {
+        guard let worktree = resolveCLITerminalWorktree(id: worktreeID, repositories: repositories)
+        else {
           return
         }
         terminalManager.handleCommand(
@@ -947,7 +967,9 @@ struct SupacodeApp: App {
         )
       },
       resolveTarget: { selector in
-        switch makeTargetResolver(appStore: appStore, terminalManager: terminalManager).resolve(selector) {
+        let result = makeTargetResolver(appStore: appStore, terminalManager: terminalManager).resolve(
+          selector)
+        switch result {
         case .success(let target):
           return OpenResolvedTarget(
             worktreeID: target.worktreeID,

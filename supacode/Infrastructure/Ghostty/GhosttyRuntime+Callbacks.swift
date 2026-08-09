@@ -196,7 +196,11 @@ extension GhosttyRuntime {
       }
     }
     if action.tag == GHOSTTY_ACTION_OPEN_CONFIG, target.tag == GHOSTTY_TARGET_APP {
-      openGhosttyConfig()
+      if let runtime = runtime(fromApp: app) {
+        runtime.openAppConfig()
+      } else {
+        openGhosttyConfig()
+      }
       return true
     }
     if action.tag == GHOSTTY_ACTION_QUIT {
@@ -226,12 +230,24 @@ extension GhosttyRuntime {
     }
   }
 
-  static func openGhosttyConfig() {
+  func openAppConfig() {
+    Self.openGhosttyConfig(at: configPath)
+  }
+
+  static func openGhosttyConfig(at overridePath: String? = nil) {
+    if let overridePath = normalizedConfigPath(overridePath) {
+      openConfigFile(at: overridePath)
+      return
+    }
     let configStr = ghostty_config_open_path()
     defer { ghostty_string_free(configStr) }
     guard let ptr = configStr.ptr else { return }
     let path = String(data: Data(bytes: ptr, count: Int(configStr.len)), encoding: .utf8) ?? ""
     guard !path.isEmpty else { return }
+    openConfigFile(at: path)
+  }
+
+  private static func openConfigFile(at path: String) {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
     process.arguments = ["-t", path]

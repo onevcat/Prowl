@@ -4,6 +4,12 @@ import SwiftUI
 
 extension GhosttyRuntime {
   func reconcileThemeFallback(for scheme: ColorScheme) {
+    // A dedicated config is intentionally isolated from the user's global
+    // Ghostty config, including Prowl's automatic single-theme fallback.
+    guard configPath == nil else {
+      setThemeFallbackOverride("")
+      return
+    }
     // Subprocess discovery of the user's Ghostty CLI can block the main
     // thread (and in XCTest host bringup it has timed out the test runner
     // preparation phase). Short-circuit under test, and dispatch the
@@ -15,7 +21,8 @@ extension GhosttyRuntime {
     Task { [weak self] in
       let snapshot = await Self.probeUserConfigSnapshot()
       let pair: GhosttyThemePair? =
-        snapshot?.themeMode.allowsMismatchFallback == true ? await Self.probeFallbackThemePair() : nil
+        snapshot?.themeMode.allowsMismatchFallback == true
+        ? await Self.probeFallbackThemePair() : nil
       self?.applyResolvedThemeFallback(for: scheme, snapshot: snapshot, pair: pair)
     }
   }
@@ -72,7 +79,8 @@ extension GhosttyRuntime {
   func applyRuntimeOverridesIfNeeded() {
     guard let app else { return }
 
-    let nextSignature = [appKeybindOverrideContents, themeFallbackOverrideContents].joined(separator: "\n---\n")
+    let nextSignature = [appKeybindOverrideContents, themeFallbackOverrideContents].joined(
+      separator: "\n---\n")
     guard nextSignature != runtimeOverrideSignature else { return }
 
     var overrideURLs: [URL] = []
@@ -83,7 +91,8 @@ extension GhosttyRuntime {
         try appKeybindOverrideContents.write(to: url, atomically: true, encoding: .utf8)
         overrideURLs.append(url)
       } catch {
-        ghosttyLogger.warning("Failed to write ghostty keybind override file: \(error.localizedDescription)")
+        ghosttyLogger.warning(
+          "Failed to write ghostty keybind override file: \(error.localizedDescription)")
         return
       }
     }
@@ -95,22 +104,15 @@ extension GhosttyRuntime {
         try themeFallbackOverrideContents.write(to: url, atomically: true, encoding: .utf8)
         overrideURLs.append(url)
       } catch {
-        ghosttyLogger.warning("Failed to write ghostty theme override file: \(error.localizedDescription)")
+        ghosttyLogger.warning(
+          "Failed to write ghostty theme override file: \(error.localizedDescription)")
         return
       }
     }
 
-    guard let updated = ghostty_config_new() else { return }
-    ghostty_config_load_default_files(updated)
-    ghostty_config_load_recursive_files(updated)
-    ghostty_config_load_cli_args(updated)
-    Self.loadTerminalProgramOverrides(into: updated)
-    for url in overrideURLs {
-      url.path.withCString { path in
-        ghostty_config_load_file(updated, path)
-      }
+    guard let updated = Self.loadConfig(at: configPath, additionalFiles: overrideURLs) else {
+      return
     }
-    ghostty_config_finalize(updated)
     ghostty_app_update_config(app, updated)
     if let clone = ghostty_config_clone(updated) {
       setConfig(clone)
@@ -225,7 +227,8 @@ extension GhosttyRuntime {
     ghosttyCLICacheLock.unlock()
 
     var resolvedPath: String?
-    for candidate in ghosttyExecutableCandidates where FileManager.default.isExecutableFile(atPath: candidate) {
+    for candidate in ghosttyExecutableCandidates
+    where FileManager.default.isExecutableFile(atPath: candidate) {
       resolvedPath = candidate
       break
     }

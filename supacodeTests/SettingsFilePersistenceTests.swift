@@ -181,7 +181,8 @@ struct SettingsFilePersistenceTests {
     #expect(settings.pinnedWorktreeIDs.isEmpty)
   }
 
-  @Test(.dependencies) func legacyAutomaticallyArchiveMergedWorktreesMigratesToMergedWorktreeAction() throws {
+  @Test(.dependencies)
+  func legacyAutomaticallyArchiveMergedWorktreesMigratesToMergedWorktreeAction() throws {
     let legacy = LegacyAutoArchiveSettingsFile(
       global: LegacyAutoArchiveGlobalSettings(
         appearanceMode: .dark,
@@ -234,7 +235,9 @@ struct SettingsFilePersistenceTests {
     var globalDict = try #require(try JSONSerialization.jsonObject(with: encoded) as? [String: Any])
     globalDict.removeValue(forKey: "deleteBranchOnAutomaticCleanup")
     globalDict["deleteBranchOnDeleteWorktree"] = true
-    let data = try JSONSerialization.data(withJSONObject: ["global": globalDict, "repositories": [:]])
+    let data = try JSONSerialization.data(withJSONObject: [
+      "global": globalDict, "repositories": [:],
+    ])
     let storage = MutableTestStorage(initialData: data)
 
     let settings: SettingsFile = withDependencies {
@@ -252,7 +255,9 @@ struct SettingsFilePersistenceTests {
     var globalDict = try #require(try JSONSerialization.jsonObject(with: encoded) as? [String: Any])
     globalDict["deleteBranchOnAutomaticCleanup"] = false
     globalDict["deleteBranchOnDeleteWorktree"] = true
-    let data = try JSONSerialization.data(withJSONObject: ["global": globalDict, "repositories": [:]])
+    let data = try JSONSerialization.data(withJSONObject: [
+      "global": globalDict, "repositories": [:],
+    ])
     let storage = MutableTestStorage(initialData: data)
 
     let settings: SettingsFile = withDependencies {
@@ -274,6 +279,16 @@ struct SettingsFilePersistenceTests {
 
     #expect(globalDict["deleteBranchOnAutomaticCleanup"] as? Bool == true)
     #expect(globalDict["deleteBranchOnDeleteWorktree"] == nil)
+  }
+
+  @Test func roundTripsGhosttyConfigPath() throws {
+    var settings = GlobalSettings.default
+    settings.ghosttyConfigPath = "/tmp/prowl.ghostty"
+
+    let encoded = try JSONEncoder().encode(settings)
+    let decoded = try JSONDecoder().decode(GlobalSettings.self, from: encoded)
+
+    #expect(decoded.ghosttyConfigPath == "/tmp/prowl.ghostty")
   }
 
   @Test(.dependencies) func roundTripsExplicitNotificationSound() throws {
@@ -347,7 +362,9 @@ struct SettingsFilePersistenceTests {
     #expect(settings.global.notificationSound == .supacodeClassic)
   }
 
-  @Test(.dependencies) func decodesUnrecognizedNotificationSoundAsDefaultWithoutResettingSiblings() throws {
+  @Test(.dependencies) func decodesUnrecognizedNotificationSoundAsDefaultWithoutResettingSiblings()
+    throws
+  {
     // A hand-edited or downgraded file carrying a sound case this build doesn't
     // know yet. The `try?` must isolate the fallback to this one field.
     var global = GlobalSettings.default
@@ -358,7 +375,9 @@ struct SettingsFilePersistenceTests {
     let encoded = try JSONEncoder().encode(global)
     var globalDict = try #require(try JSONSerialization.jsonObject(with: encoded) as? [String: Any])
     globalDict["notificationSound"] = "futureSoundFromNewerBuild"
-    let data = try JSONSerialization.data(withJSONObject: ["global": globalDict, "repositories": [:]])
+    let data = try JSONSerialization.data(withJSONObject: [
+      "global": globalDict, "repositories": [:],
+    ])
     let storage = MutableTestStorage(initialData: data)
 
     let settings: SettingsFile = withDependencies {
