@@ -7,6 +7,7 @@ make build-ghostty-xcframework  # Rebuild GhosttyKit from Zig source (requires m
 make build-app                   # Build macOS app (Debug) via xcodebuild
 make run-app                     # Build and launch Debug app
 make install-dev-build           # Build and copy to /Applications (Debug)
+make sign-debug-app              # Sign the built Debug app (runs from build-app; PROWL_CODESIGN_IDENTITY overrides)
 make install-release             # Build Release, sign locally, install to /Applications
 make format-changed              # Run swift-format on changed Swift files only
 make format                      # Run full-tree swift-format cleanup
