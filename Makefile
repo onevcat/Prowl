@@ -165,9 +165,9 @@ sign-debug-app: # Sign the built Debug app so TCC grants survive rebuilds
 		exit 1; \
 	fi; \
 	codesign --force --sign "$$identity" --preserve-metadata=entitlements "$$app"; \
-	codesign --verify --verbose=4 "$$app" >/dev/null 2>&1 || { \
+	codesign --verify --deep --strict --verbose=4 "$$app" >/dev/null 2>&1 || { \
 		echo "error: '$$app' failed code-signature verification." >&2; \
-		codesign --verify --verbose=4 "$$app" >&2 || true; \
+		codesign --verify --deep --strict --verbose=4 "$$app" >&2 || true; \
 		exit 1; \
 	}; \
 	dr="$$(codesign --display --requirements - "$$app" 2>&1)"; \
