@@ -34,9 +34,11 @@ FORMAT_BASE_REF ?= origin/main
 BUILD_SETTINGS_CACHE := $(CURRENT_MAKEFILE_DIR)/.build_settings_cache.json
 PBXPROJ_PATH := $(CURRENT_MAKEFILE_DIR)/supacode.xcodeproj/project.pbxproj
 
-# Code-signing identity for the Debug bundle. Empty auto-selects one that carries
-# a Team ID; "-" opts out and keeps xcodebuild's ad-hoc signature. See sign-debug-app.
+# Code-signing identity for local Debug products, the app and the test host alike.
+# Empty auto-selects one that carries a Team ID; "-" opts out and keeps the ad-hoc
+# signature. See scripts/resolve-codesign-identity.sh.
 PROWL_CODESIGN_IDENTITY ?=
+CODESIGN_IDENTITY_SCRIPT := $(CURRENT_MAKEFILE_DIR)/scripts/resolve-codesign-identity.sh
 
 # Release-only analytics/crash credentials. Included from Config/Secrets.env if present,
 # or overridable from the environment (e.g. CI). Debug builds skip SDK init regardless.
@@ -143,36 +145,14 @@ endef
 # agents running in panes trip them. A named identity yields a cdhash-free
 # requirement, and the answers survive rebuilds.
 #
-# Precedence: an explicit PROWL_CODESIGN_IDENTITY wins, with "-" opting out;
-# otherwise auto-select an identity carrying a Team ID. When none exists the
-# bundle keeps its ad-hoc signature and the reason is announced rather than
-# silently accepted, because the prompts would otherwise look like a Prowl bug.
+# Precedence lives in scripts/resolve-codesign-identity.sh, which the test host
+# resolves through as well so both products carry the same requirement and share
+# one grant.
 sign-debug-app: # Sign the built Debug app so TCC grants survive rebuilds
 	@set -euo pipefail; \
-	if [ "$$(uname -s)" != "Darwin" ]; then \
-		exit 0; \
-	fi; \
-	identity="$(PROWL_CODESIGN_IDENTITY)"; \
-	if [ "$$identity" = "-" ]; then \
-		echo "code-signing opted out (PROWL_CODESIGN_IDENTITY=-): keeping the ad-hoc signature." >&2; \
-		exit 0; \
-	fi; \
+	identity="$$(bash "$(CODESIGN_IDENTITY_SCRIPT)")"; \
 	if [ -z "$$identity" ]; then \
-		identity="$$(security find-identity -v -p codesigning 2>/dev/null \
-			| grep -oE '"(Apple Development|Apple Distribution|Developer ID Application): [^"]*"' \
-			| sed 's/^"//; s/"$$//' | head -n1 || true)"; \
-	fi; \
-	if [ -z "$$identity" ]; then \
-		echo "note: no Team-ID signing identity found; leaving the ad-hoc signature." >&2; \
-		echo "      macOS re-asks for Documents, Desktop, Downloads and Music on every rebuild." >&2; \
-		echo "      Add an Apple Development identity, or point PROWL_CODESIGN_IDENTITY at a" >&2; \
-		echo "      self-signed one, for prompt-free rebuilds." >&2; \
 		exit 0; \
-	fi; \
-	if ! security find-identity -v -p codesigning | grep -qF "\"$$identity\""; then \
-		echo "error: code-signing identity '$$identity' not found." >&2; \
-		echo "Name an available identity in PROWL_CODESIGN_IDENTITY, or set it to '-' to opt out." >&2; \
-		exit 1; \
 	fi; \
 	$(resolve_debug_product) \
 	if [ -z "$$build_dir" ] || [ -z "$$product" ] || [ "$$build_dir" = "null" ] || [ "$$product" = "null" ]; then \
@@ -397,13 +377,26 @@ test: ensure-ghostty embed-cli-debug embed-docs test-app
 test-scripts: # Run tests for the repository's Python scripts
 	@python3 -m unittest discover -s "$(CURRENT_MAKEFILE_DIR)/scripts" -p 'test_*.py'
 
+# The test host is a second Prowl Debug bundle, and macOS makes it the responsible
+# process for anything running in the terminal that launched it. Left ad-hoc it
+# carries a cdhash-pinned requirement that no grant matches, so a test run makes
+# the agents in the surrounding panes re-prompt for Documents, Desktop, Downloads
+# and Music — observed twice before this. Signing it with the same identity as the
+# app gives both the same requirement, so one grant covers both. With no identity
+# available the previous unsigned flags stand, which is what CI gets.
 test-app: ensure-ghostty # Run app/unit tests via xcodebuild
 	@set -euo pipefail; \
 	result_bundle="$(CURRENT_MAKEFILE_DIR)/build/test-results/supacode-tests.xcresult"; \
 	mkdir -p "$$(dirname "$$result_bundle")"; \
 	rm -rf "$$result_bundle"; \
+	identity="$$(bash "$(CODESIGN_IDENTITY_SCRIPT)")"; \
+	if [ -n "$$identity" ]; then \
+		signing_args=(CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="$$identity" CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=YES DEVELOPMENT_TEAM=); \
+	else \
+		signing_args=(CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=); \
+	fi; \
 	set +e; \
-	xcodebuild test -project supacode.xcodeproj -scheme supacode -destination "platform=macOS" -resultBundlePath "$$result_bundle" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" -skipMacroValidation -clonedSourcePackagesDirPath $(SPM_CACHE_DIR) SWIFT_COMPILATION_MODE=incremental 2>&1 | mise exec -- xcsift -w --format toon; \
+	xcodebuild test -project supacode.xcodeproj -scheme supacode -destination "platform=macOS" -resultBundlePath "$$result_bundle" "$${signing_args[@]}" -skipMacroValidation -clonedSourcePackagesDirPath $(SPM_CACHE_DIR) SWIFT_COMPILATION_MODE=incremental 2>&1 | mise exec -- xcsift -w --format toon; \
 	xcodebuild_status=$${PIPESTATUS[0]}; \
 	set -e; \
 	if [ "$$xcodebuild_status" -ne 0 ]; then \
