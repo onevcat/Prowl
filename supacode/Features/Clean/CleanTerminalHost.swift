@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import Foundation
 import GhosttyKit
 import Observation
@@ -25,18 +26,66 @@ internal struct CleanSurfaceConfiguration: Equatable {
 }
 
 @MainActor
+internal final class CleanForegroundJobProbe {
+  internal typealias Provider = @Sendable (pid_t?, pid_t?) async -> ForegroundJob?
+  internal typealias ResultHandler = @MainActor (ForegroundJob?) -> Void
+
+  private let provider: Provider
+  private var task: Task<Void, Never>?
+  private var requestID: UInt64 = 0
+
+  internal init(
+    provider: @escaping Provider = { processGroupID, childPID in
+      AgentProcessProbe.shared.foregroundJob(
+        processGroupID: processGroupID,
+        childPID: childPID
+      )
+    }
+  ) {
+    self.provider = provider
+  }
+
+  isolated deinit {
+    task?.cancel()
+  }
+
+  internal func request(
+    processGroupID: pid_t?,
+    childPID: pid_t?,
+    onResult: @escaping ResultHandler
+  ) {
+    requestID &+= 1
+    let currentRequestID = requestID
+    task?.cancel()
+    let provider = provider
+    task = Task { @MainActor [weak self] in
+      let job = await provider(processGroupID, childPID)
+      guard !Task.isCancelled, let self, requestID == currentRequestID else { return }
+      onResult(job)
+    }
+  }
+
+  internal func cancel() {
+    requestID &+= 1
+    task?.cancel()
+    task = nil
+  }
+}
+
+@MainActor
 @Observable
 internal final class CleanTerminalHost {
+  internal typealias SurfaceFactory = @MainActor (CleanSurfaceConfiguration) -> GhosttySurfaceView
+
   internal private(set) var surface: GhosttySurfaceView?
 
-  private let runtime: GhosttyRuntime
   private let preferredFontSize: Float32?
   private let inputSourceCoordinator: TerminalInputSourceCoordinator
+  private let surfaceFactory: SurfaceFactory
+  private let foregroundJobProbe: CleanForegroundJobProbe
   private let logger = SupaLogger("CleanTerminal")
   private var periodicProbeTask: Task<Void, Never>?
   private var delayedProbeTask: Task<Void, Never>?
-  private var inputProbeTask: Task<Void, Never>?
-  private var latestInputProbeToken: UUID?
   private var isHerdrForeground = false
   private var isWindowActive = false
   @ObservationIgnored private var herdrAdapter: HerdrInputContextAdapter?
@@ -44,11 +93,24 @@ internal final class CleanTerminalHost {
   internal init(
     runtime: GhosttyRuntime,
     preferredFontSize: Float32?,
-    inputSourceCoordinator: TerminalInputSourceCoordinator = TerminalInputSourceCoordinator()
+    inputSourceCoordinator: TerminalInputSourceCoordinator = TerminalInputSourceCoordinator(),
+    surfaceFactory: SurfaceFactory? = nil,
+    foregroundJobProbe: CleanForegroundJobProbe = CleanForegroundJobProbe()
   ) {
-    self.runtime = runtime
     self.preferredFontSize = preferredFontSize
     self.inputSourceCoordinator = inputSourceCoordinator
+    self.surfaceFactory =
+      surfaceFactory ?? { configuration in
+        GhosttySurfaceView(
+          runtime: runtime,
+          workingDirectory: configuration.workingDirectory,
+          initialInput: configuration.initialInput,
+          command: configuration.command,
+          fontSize: configuration.fontSize,
+          context: configuration.context
+        )
+      }
+    self.foregroundJobProbe = foregroundJobProbe
     herdrAdapter = HerdrInputContextAdapter { [weak self] pane in
       guard let self else { return }
       applyHerdrPaneContext(pane)
@@ -58,7 +120,7 @@ internal final class CleanTerminalHost {
   isolated deinit {
     periodicProbeTask?.cancel()
     delayedProbeTask?.cancel()
-    inputProbeTask?.cancel()
+    foregroundJobProbe.cancel()
     herdrAdapter?.stop()
     surface?.closeSurface()
   }
@@ -85,9 +147,7 @@ internal final class CleanTerminalHost {
     periodicProbeTask = nil
     delayedProbeTask?.cancel()
     delayedProbeTask = nil
-    inputProbeTask?.cancel()
-    inputProbeTask = nil
-    latestInputProbeToken = nil
+    foregroundJobProbe.cancel()
     isWindowActive = false
     isHerdrForeground = false
     herdrAdapter?.stop()
@@ -110,16 +170,11 @@ internal final class CleanTerminalHost {
 
   internal func reevaluateInputContext(reason: TerminalInputSourceCoordinator.Reason) {
     guard isWindowActive, let surface else { return }
-    let token = UUID()
-    latestInputProbeToken = token
-    inputProbeTask?.cancel()
-    inputProbeTask = Task { @MainActor [weak self, weak surface] in
-      guard let self, let surface else { return }
-      let job = await AgentProcessProbe.shared.foregroundJob(
-        processGroupID: surface.bridge.foregroundProcessGroupID(),
-        childPID: surface.bridge.childPID()
-      )
-      guard !Task.isCancelled, self.latestInputProbeToken == token, self.isWindowActive else { return }
+    foregroundJobProbe.request(
+      processGroupID: surface.bridge.foregroundProcessGroupID(),
+      childPID: surface.bridge.childPID()
+    ) { [weak self, weak surface] job in
+      guard let self, let surface, self.isWindowActive else { return }
       if job == nil, self.isHerdrForeground {
         return
       }
@@ -148,14 +203,7 @@ internal final class CleanTerminalHost {
       return surface
     }
     let configuration = CleanSurfaceConfiguration.default(preferredFontSize: preferredFontSize)
-    let surface = GhosttySurfaceView(
-      runtime: runtime,
-      workingDirectory: configuration.workingDirectory,
-      initialInput: configuration.initialInput,
-      command: configuration.command,
-      fontSize: configuration.fontSize,
-      context: configuration.context
-    )
+    let surface = surfaceFactory(configuration)
     self.surface = surface
     configureCallbacks(for: surface)
     return surface
@@ -212,6 +260,7 @@ internal final class CleanTerminalHost {
       targetID: .herdrPane(pane.paneID),
       reason: .processContextChanged
     )
-    logger.debug("applied Herdr pane input context pane=\(pane.paneID) agent=\(pane.agent ?? "none")")
+    logger.debug(
+      "applied Herdr pane input context pane=\(pane.paneID) agent=\(pane.agent ?? "none")")
   }
 }
