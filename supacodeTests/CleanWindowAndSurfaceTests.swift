@@ -110,6 +110,25 @@ struct CleanWindowAndSurfaceTests {
     #expect(window.contentView?.frame.minY == 0)
     #expect(window.contentView?.frame.maxY == window.frame.height)
   }
+
+  @Test func enteringFullScreenReappliesHiddenTitlebarChrome() async throws {
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
+      styleMask: [.titled, .closable, .miniaturizable, .resizable],
+      backing: .buffered,
+      defer: false
+    )
+    let configurationView = CleanWindowConfigurationView()
+    window.contentView?.addSubview(configurationView)
+    await configurationView.waitForPendingConfiguration()
+    let titlebarContainer = try #require(CleanWindowConfigurator.titlebarContainer(in: window))
+    titlebarContainer.isHidden = false
+
+    NotificationCenter.default.post(name: NSWindow.didEnterFullScreenNotification, object: window)
+    await waitForCleanCondition { titlebarContainer.isHidden }
+
+    #expect(titlebarContainer.isHidden)
+  }
 }
 
 private func makeForegroundJob(processGroupID: pid_t, name: String) -> ForegroundJob {

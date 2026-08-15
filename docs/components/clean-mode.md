@@ -23,10 +23,21 @@ Clean 只创建一个 Ghostty terminal surface：
 - 启动普通交互式 shell，不注入命令。
 - 不自动启动、attach 或控制 Herdr。
 - 不显示 sidebar、toolbar、tab bar、title、empty state 或 traffic lights。
-- terminal 延伸到原 titlebar 和 traffic-light 区域。
+- terminal 延伸到原 titlebar 和 traffic-light 区域；进入 native fullscreen 后也不会恢复 titlebar chrome。
 
 窗口仍保留 edge resize、native fullscreen、Mission Control、frame restore、`⌘W`、系统 Window menu 和 Dock
 reopen。由于整个顶部区域都交给 terminal mouse input，Clean 不额外放置会吞掉首行点击或选择的 drag strip。
+
+四周留白由 Ghostty 配置控制，不是 Prowl view padding。以下配置会移除四周 padding：
+
+```ini
+window-padding-x = 0
+window-padding-y = 0
+window-padding-balance = false
+```
+
+也可以分别设置两侧，例如 `window-padding-x = 8,12` 表示左侧 8pt、右侧 12pt；`window-padding-y` 的两个值
+依次表示顶部和底部。配置变更只作用于新创建的 terminal surface，需要重启 Clean 主窗口后生效。
 
 ## Herdr
 

@@ -15,6 +15,7 @@ internal struct CleanRootView: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .ignoresSafeArea(.container, edges: .top)
+    .toolbarVisibility(.hidden, for: .windowToolbar)
     .background {
       CleanWindowConfigurator()
       WindowFocusObserverView { activity in

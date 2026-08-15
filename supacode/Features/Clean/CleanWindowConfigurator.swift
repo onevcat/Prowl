@@ -21,9 +21,7 @@ internal struct CleanWindowConfigurator: NSViewRepresentable {
     window.standardWindowButton(.miniaturizeButton)?.isHidden = true
     window.standardWindowButton(.zoomButton)?.isHidden = true
     // Tahoe still draws the titlebar backdrop above full-size content unless the container is hidden.
-    if !window.styleMask.contains(.fullScreen) {
-      titlebarContainer(in: window)?.isHidden = true
-    }
+    titlebarContainer(in: window)?.isHidden = true
   }
 
   internal static func titlebarContainer(in window: NSWindow) -> NSView? {
@@ -67,6 +65,10 @@ internal final class CleanWindowConfigurationView: NSView {
     }
   }
 
+  internal func waitForPendingConfiguration() async {
+    await deferredConfigurationTask?.value
+  }
+
   private func updateObservers() {
     guard configuredWindow !== window else { return }
     clearObservers()
@@ -77,6 +79,7 @@ internal final class CleanWindowConfigurationView: NSView {
       NSWindow.didBecomeKeyNotification,
       NSWindow.didBecomeMainNotification,
       NSWindow.didDeminiaturizeNotification,
+      NSWindow.didEnterFullScreenNotification,
       NSWindow.didExitFullScreenNotification,
     ] {
       observers.append(
