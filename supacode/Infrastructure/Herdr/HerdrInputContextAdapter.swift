@@ -69,12 +69,15 @@ internal final class HerdrInputContextAdapter {
     while !Task.isCancelled {
       do {
         try await refreshCurrentPane()
-        retryDelay = .milliseconds(250)
         var shouldReconnect = false
         for await state in client.events() {
           guard !Task.isCancelled else { return }
           switch state {
+          case .subscribed:
+            retryDelay = .milliseconds(250)
+            try await refreshCurrentPane()
           case .event:
+            retryDelay = .milliseconds(250)
             try? await clock.sleep(for: .milliseconds(80))
             guard !Task.isCancelled else { return }
             try await refreshCurrentPane()

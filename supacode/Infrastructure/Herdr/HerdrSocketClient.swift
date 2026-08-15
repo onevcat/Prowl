@@ -17,6 +17,7 @@ nonisolated internal enum HerdrSocketError: Error, Equatable, Sendable {
 }
 
 nonisolated internal enum HerdrEventStreamState: Sendable {
+  case subscribed
   case event
   case disconnected(HerdrSocketError)
 }
@@ -125,7 +126,8 @@ nonisolated internal struct HerdrSocketClient: Sendable {
       guard let baseAddress = bytes.baseAddress else { return }
       var offset = 0
       while offset < bytes.count {
-        let count = Darwin.write(fileDescriptor, baseAddress.advanced(by: offset), bytes.count - offset)
+        let count = Darwin.write(
+          fileDescriptor, baseAddress.advanced(by: offset), bytes.count - offset)
         if count < 0, errno == EINTR {
           continue
         }
@@ -266,6 +268,7 @@ nonisolated private final class HerdrEventSocketSession: @unchecked Sendable {
         throw HerdrSocketError.unsupportedResponseType(acknowledgement.result?.type)
       }
       try HerdrSocketClient.setTimeout(timeval(tv_sec: 0, tv_usec: 0), on: descriptor)
+      continuation.yield(.subscribed)
 
       while true {
         let line = try HerdrSocketClient.readLine(from: descriptor)

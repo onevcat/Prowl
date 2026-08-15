@@ -1,4 +1,5 @@
 import Clocks
+import ConcurrencyExtras
 import Darwin
 import Foundation
 import Testing
@@ -79,11 +80,29 @@ struct HerdrInputContextTests {
     #expect(response.currentPane?.inputContext == .commandLike)
   }
 
+  @Test(
+    arguments: [
+      "pane.focused",
+      "pane.updated",
+      "pane.agent_detected",
+      "pane.agent_status_changed",
+    ]
+  )
+  func decodesSubscribedLifecycleEvent(eventName: String) throws {
+    let event = try JSONDecoder().decode(
+      HerdrEventEnvelope.self,
+      from: Data(#"{"event":"\#(eventName)","data":{"future_field":true}}"#.utf8)
+    )
+
+    #expect(event.event == eventName)
+  }
+
   @Test func acceptsSupportedHerdrProtocol() throws {
     let response = try JSONDecoder().decode(
       HerdrResponseEnvelope.self,
       from: Data(
-        #"{"id":"clean-protocol","result":{"type":"pong","version":"0.1.0","protocol":19,"future_field":true}}"#.utf8
+        #"{"id":"clean-protocol","result":{"type":"pong","version":"0.1.0","protocol":19,"future_field":true}}"#
+          .utf8
       )
     )
 
@@ -164,6 +183,60 @@ struct HerdrInputContextTests {
     await Task.yield()
     await Task.yield()
     #expect(attemptCount.value == 2)
+    adapter.stop()
+  }
+
+  @Test func adapterRefreshesCurrentPaneAfterSubscriptionStarts() async {
+    let clock = TestClock()
+    let refreshCount = LockIsolated(0)
+    let client = HerdrInputContextClient(
+      currentPane: {
+        refreshCount.withValue { $0 += 1 }
+        return HerdrPaneInfo(paneID: "w1:p1", agent: nil, agentStatus: nil)
+      },
+      events: {
+        AsyncStream { continuation in
+          continuation.yield(.subscribed)
+          continuation.yield(.disconnected(.connectionClosed))
+          continuation.finish()
+        }
+      }
+    )
+    let adapter = HerdrInputContextAdapter(client: client, clock: clock) { _ in }
+
+    adapter.start()
+    for _ in 0..<20 {
+      guard refreshCount.value < 2 else { break }
+      await Task.yield()
+    }
+
+    #expect(refreshCount.value == 2)
+    adapter.stop()
+  }
+
+  @Test func adapterRefreshesWhenBufferedEventReplacesSubscriptionState() async {
+    let refreshCount = LockIsolated(0)
+    let client = HerdrInputContextClient(
+      currentPane: {
+        refreshCount.withValue { $0 += 1 }
+        return HerdrPaneInfo(paneID: "w1:p1", agent: nil, agentStatus: nil)
+      },
+      events: {
+        AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
+          continuation.yield(.subscribed)
+          continuation.yield(.event)
+        }
+      }
+    )
+    let adapter = HerdrInputContextAdapter(client: client, clock: ImmediateClock()) { _ in }
+
+    adapter.start()
+    for _ in 0..<20 {
+      guard refreshCount.value < 2 else { break }
+      await Task.yield()
+    }
+
+    #expect(refreshCount.value == 2)
     adapter.stop()
   }
 }
