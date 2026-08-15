@@ -26,6 +26,8 @@ nonisolated internal struct HerdrInputContextClient: Sendable {
 internal final class HerdrInputContextAdapter {
   internal typealias PaneContextHandler = @MainActor (HerdrPaneInfo) -> Void
 
+  private static let pollingInterval = Duration.milliseconds(100)
+
   private let client: HerdrInputContextClient
   private let clock: any Clock<Duration>
   private let onPaneContext: PaneContextHandler
@@ -33,6 +35,7 @@ internal final class HerdrInputContextAdapter {
   private var lifecycleTask: Task<Void, Never>?
   private var pollingTask: Task<Void, Never>?
   private var isCompatibilityPaused = false
+  private var lastPublishedPane: HerdrPaneInfo?
 
   internal init(
     client: HerdrInputContextClient = HerdrInputContextClient(),
@@ -60,6 +63,7 @@ internal final class HerdrInputContextAdapter {
     lifecycleTask = nil
     pollingTask?.cancel()
     pollingTask = nil
+    lastPublishedPane = nil
   }
 
   internal func resetAfterHerdrExit() {
@@ -83,8 +87,6 @@ internal final class HerdrInputContextAdapter {
             try await refreshCurrentPane()
           case .event:
             retryDelay = .milliseconds(250)
-            try? await clock.sleep(for: .milliseconds(80))
-            guard !Task.isCancelled else { return }
             try await refreshCurrentPane()
           case .disconnected(let error):
             if pauseForCompatibilityFailure(error) {
@@ -114,7 +116,7 @@ internal final class HerdrInputContextAdapter {
     pollingTask = Task { [weak self] in
       guard let self else { return }
       while !Task.isCancelled {
-        try? await clock.sleep(for: .milliseconds(500))
+        try? await clock.sleep(for: Self.pollingInterval)
         guard !Task.isCancelled else { return }
         do {
           try await refreshCurrentPane()
@@ -133,6 +135,13 @@ internal final class HerdrInputContextAdapter {
   private func refreshCurrentPane() async throws {
     let pane = try await client.currentPane()
     guard !Task.isCancelled else { return }
+    if let lastPublishedPane,
+      lastPublishedPane.paneID == pane.paneID,
+      lastPublishedPane.inputContext == pane.inputContext
+    {
+      return
+    }
+    lastPublishedPane = pane
     onPaneContext(pane)
   }
 

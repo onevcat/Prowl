@@ -36,7 +36,7 @@ internal final class CleanForegroundJobProbe {
 
   internal init(
     provider: @escaping Provider = { processGroupID, childPID in
-      AgentProcessProbe.shared.foregroundJob(
+      AgentProcessProbe.shared.refreshForegroundJob(
         processGroupID: processGroupID,
         childPID: childPID
       )
@@ -76,6 +76,9 @@ internal final class CleanForegroundJobProbe {
 @Observable
 internal final class CleanTerminalHost {
   internal typealias SurfaceFactory = @MainActor (CleanSurfaceConfiguration) -> GhosttySurfaceView
+
+  private static let periodicProbeInterval = Duration.milliseconds(200)
+  private static let delayedProbeInterval = Duration.milliseconds(50)
 
   internal private(set) var surface: GhosttySurfaceView?
 
@@ -133,7 +136,7 @@ internal final class CleanTerminalHost {
         guard let self else { return }
         while !Task.isCancelled {
           reevaluateInputContext(reason: .processContextChanged)
-          try? await ContinuousClock().sleep(for: .seconds(1))
+          try? await ContinuousClock().sleep(for: Self.periodicProbeInterval)
         }
       }
     }
@@ -238,7 +241,7 @@ internal final class CleanTerminalHost {
   private func scheduleInputContextProbe() {
     delayedProbeTask?.cancel()
     delayedProbeTask = Task { @MainActor [weak self] in
-      try? await ContinuousClock().sleep(for: .milliseconds(150))
+      try? await ContinuousClock().sleep(for: Self.delayedProbeInterval)
       guard !Task.isCancelled else { return }
       self?.reevaluateInputContext(reason: .processContextChanged)
     }

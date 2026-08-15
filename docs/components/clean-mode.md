@@ -49,12 +49,13 @@ $XDG_CONFIG_HOME/herdr/herdr.sock
 或 ~/.config/herdr/herdr.sock
 ```
 
-Prowl 不发送控制命令。它只读取 focused pane，并订阅 pane lifecycle event：
+Prowl 不发送控制命令。它只读取 focused pane，并订阅已确认的 pane lifecycle event：
 
 - focused pane 存在 agent 时，按该 `pane_id` 恢复已记忆的输入法。
 - 首次进入尚未记忆输入法的 agent pane 时，使用最近一次从 command/shell pane 切换前记录的非 ABC 输入法；如果没有 fallback，则保持当前输入法。
 - focused pane 是 shell/command 时，选择 ABC。
 - 不同 Herdr pane 分别记忆输入法。
+- 切换 Herdr tab 或 workspace 时，如果没有伴随 pane event，则通过 `pane.current` 每 100ms 轮询更新 focused pane。
 - `Option+H/J/K/L` 不作为 Prowl Canvas 导航处理，按键会继续传给 terminal，供 Herdr 自己切换 tab/workspace。
 - Clean runtime 强制启用 `macos-option-as-alt = true`，确保 Option 组合编码为 terminal Alt；代价是 Clean 中不能用
   Option 组合输入 macOS 特殊字符。

@@ -29,17 +29,26 @@ actor AgentProcessProbe {
   }
 
   func foregroundJob(processGroupID: pid_t?, childPID: pid_t?) -> ForegroundJob? {
-    let resolvedProcessGroupID: pid_t?
-    if let processGroupID, processGroupID > 0 {
-      resolvedProcessGroupID = processGroupID
-    } else if let childPID, childPID > 0 {
-      resolvedProcessGroupID = ProcessDetection.foregroundProcessGroupID(pid: childPID)
-    } else {
-      resolvedProcessGroupID = nil
+    guard let resolvedProcessGroupID = resolveProcessGroupID(processGroupID: processGroupID, childPID: childPID) else {
+      return nil
     }
-
-    guard let resolvedProcessGroupID else { return nil }
     return cachedForegroundJob(processGroupID: resolvedProcessGroupID, now: Date())
+  }
+
+  func refreshForegroundJob(processGroupID: pid_t?, childPID: pid_t?) -> ForegroundJob? {
+    guard let resolvedProcessGroupID = resolveProcessGroupID(processGroupID: processGroupID, childPID: childPID) else {
+      return nil
+    }
+    return ProcessDetection.foregroundJob(processGroupID: resolvedProcessGroupID)
+  }
+
+  private func resolveProcessGroupID(processGroupID: pid_t?, childPID: pid_t?) -> pid_t? {
+    if let processGroupID, processGroupID > 0 {
+      return processGroupID
+    } else if let childPID, childPID > 0 {
+      return ProcessDetection.foregroundProcessGroupID(pid: childPID)
+    }
+    return nil
   }
 
   private func cachedForegroundJob(processGroupID: pid_t, now: Date) -> ForegroundJob? {

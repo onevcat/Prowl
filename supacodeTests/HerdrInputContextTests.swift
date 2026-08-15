@@ -367,11 +367,15 @@ struct HerdrInputContextTests {
   @Test func adapterPollsCurrentPaneWhenSubscriptionHasNoEvents() async {
     let clock = TestClock()
     let refreshCount = LockIsolated(0)
+    let currentPane = LockIsolated(
+      HerdrPaneInfo(paneID: "w1:p1", agent: nil, agentStatus: nil)
+    )
+    let publishedPaneIDs = LockIsolated<[String]>([])
     let eventContinuation = LockIsolated<AsyncStream<HerdrEventStreamState>.Continuation?>(nil)
     let client = HerdrInputContextClient(
       currentPane: {
         refreshCount.withValue { $0 += 1 }
-        return HerdrPaneInfo(paneID: "w1:p1", agent: nil, agentStatus: nil)
+        return currentPane.value
       },
       events: {
         AsyncStream { continuation in
@@ -380,15 +384,51 @@ struct HerdrInputContextTests {
         }
       }
     )
-    let adapter = HerdrInputContextAdapter(client: client, clock: clock) { _ in }
+    let adapter = HerdrInputContextAdapter(client: client, clock: clock) { pane in
+      publishedPaneIDs.withValue { $0.append(pane.paneID) }
+    }
 
     adapter.start()
     await waitUntil { refreshCount.value == 2 }
+    #expect(publishedPaneIDs.value == ["w1:p1"])
 
-    await clock.advance(by: .milliseconds(500))
+    currentPane.setValue(HerdrPaneInfo(paneID: "w2:p7", agent: "codex", agentStatus: "idle"))
+    await clock.advance(by: .milliseconds(100))
     await waitUntil { refreshCount.value == 3 }
 
     #expect(refreshCount.value == 3)
+    #expect(publishedPaneIDs.value == ["w1:p1", "w2:p7"])
+    adapter.stop()
+    eventContinuation.value?.finish()
+  }
+
+  @Test func adapterDoesNotRepublishUnchangedPaneContext() async {
+    let clock = TestClock()
+    let refreshCount = LockIsolated(0)
+    let publishedContextCount = LockIsolated(0)
+    let eventContinuation = LockIsolated<AsyncStream<HerdrEventStreamState>.Continuation?>(nil)
+    let client = HerdrInputContextClient(
+      currentPane: {
+        refreshCount.withValue { $0 += 1 }
+        return HerdrPaneInfo(paneID: "w1:p1", agent: "codex", agentStatus: "working")
+      },
+      events: {
+        AsyncStream { continuation in
+          eventContinuation.setValue(continuation)
+          continuation.yield(.subscribed)
+        }
+      }
+    )
+    let adapter = HerdrInputContextAdapter(client: client, clock: clock) { _ in
+      publishedContextCount.withValue { $0 += 1 }
+    }
+
+    adapter.start()
+    await waitUntil { refreshCount.value == 2 }
+    await clock.advance(by: .milliseconds(100))
+    await waitUntil { refreshCount.value == 3 }
+
+    #expect(publishedContextCount.value == 1)
     adapter.stop()
     eventContinuation.value?.finish()
   }
