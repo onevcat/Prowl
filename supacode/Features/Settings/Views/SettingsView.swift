@@ -12,19 +12,29 @@ extension View {
   }
 }
 
-struct SettingsView: View {
-  @Bindable var store: StoreOf<AppFeature>
-  @Bindable var settingsStore: StoreOf<SettingsFeature>
+internal struct SettingsView: View {
+  @Bindable internal var settingsStore: StoreOf<SettingsFeature>
+  internal let updatesStore: StoreOf<UpdatesFeature>
+  internal let repositoriesStore: StoreOf<RepositoriesFeature>?
 
-  init(store: StoreOf<AppFeature>) {
-    self.store = store
+  internal init(store: StoreOf<AppFeature>) {
     settingsStore = store.scope(state: \.settings, action: \.settings)
+    updatesStore = store.scope(state: \.updates, action: \.updates)
+    repositoriesStore = store.scope(state: \.repositories, action: \.repositories)
   }
 
-  var body: some View {
-    let updatesStore = store.scope(state: \.updates, action: \.updates)
-    let repositories = store.repositories.repositories
-    let customTitles = store.repositories.repositoryCustomTitles
+  internal init(
+    settingsStore: StoreOf<SettingsFeature>,
+    updatesStore: StoreOf<UpdatesFeature>
+  ) {
+    self.settingsStore = settingsStore
+    self.updatesStore = updatesStore
+    repositoriesStore = nil
+  }
+
+  internal var body: some View {
+    let repositories = repositoriesStore?.repositories ?? []
+    let customTitles = repositoriesStore?.repositoryCustomTitles ?? [:]
     let selection = settingsStore.selection ?? .general
 
     NavigationSplitView(columnVisibility: .constant(.all)) {

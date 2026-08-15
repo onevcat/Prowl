@@ -42,7 +42,9 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
       }
     }
   }
+  internal var cleanStore: StoreOf<CleanAppFeature>?
   var terminalManager: WorktreeTerminalManager?
+  internal var cleanTerminalHost: CleanTerminalHost?
   var cliSocketServer: CLISocketServer?
 
   func applicationDidFinishLaunching(_ notification: Notification) {
@@ -55,6 +57,7 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
       "ApplePressAndHoldEnabled": false
     ])
     appStore?.send(.appLaunched)
+    cleanStore?.send(.appLaunched)
   }
 
   func applicationDidBecomeActive(_ notification: Notification) {
@@ -68,6 +71,7 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
       _ = app.surfaceMainWindow()
     }
     terminalManager?.reevaluateInputSourceForActiveSurface(reason: .appBecameActive)
+    cleanTerminalHost?.appBecameActive()
   }
 
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -99,15 +103,12 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
 @MainActor
 struct SupacodeApp: App {
   @NSApplicationDelegateAdaptor(SupacodeAppDelegate.self) private var appDelegate
+  @State private var launchProfile: AppLaunchProfile
   @State private var ghostty: GhosttyRuntime
   @State private var ghosttyShortcuts: GhosttyShortcutManager
-  @State private var terminalManager: WorktreeTerminalManager
-  @State private var worktreeInfoWatcher: WorktreeInfoWatcherManager
-  @State private var pullRequestRefreshCoordinator: PullRequestRefreshCoordinator
   @State private var commandKeyObserver: CommandKeyObserver
-  @State private var cliSocketServer: CLISocketServer
-  @State private var store: StoreOf<AppFeature>
-  @State private var memoryWatchdog: MemoryWatchdog
+  @State private var standardRuntime: StandardRuntime?
+  @State private var cleanRuntime: CleanRuntime?
   @State private var askAgentHelp = AskAgentHelpPresenter()
 
   private static func cliLaunchOpenPath() -> String? {
@@ -174,6 +175,8 @@ struct SupacodeApp: App {
     UserDefaults.standard.set(200, forKey: "NSInitialToolTipDelay")
     @Shared(.settingsFile) var settingsFile
     let initialSettings = settingsFile.global
+    let launchProfile = AppLaunchProfile.resolve(initialSettings.defaultViewMode)
+    _launchProfile = State(initialValue: launchProfile)
     let initialResolvedKeybindings = KeybindingResolver.resolve(
       schema: .appResolverSchema(),
       userOverrides: initialSettings.keybindingUserOverrides
@@ -194,32 +197,85 @@ struct SupacodeApp: App {
     _ghostty = State(initialValue: runtime)
     let shortcuts = GhosttyShortcutManager(runtime: runtime)
     _ghosttyShortcuts = State(initialValue: shortcuts)
+    let keyObserver = CommandKeyObserver()
+    _commandKeyObserver = State(initialValue: keyObserver)
+
+    switch launchProfile {
+    case .standard:
+      let standardRuntime = Self.makeStandardRuntime(
+        ghostty: runtime,
+        initialSettings: initialSettings
+      )
+      _standardRuntime = State(initialValue: standardRuntime)
+      _cleanRuntime = State(initialValue: nil)
+      runtime.onQuit = { [weak store = standardRuntime.store] in
+        store?.send(.requestQuit)
+      }
+      appDelegate.appStore = standardRuntime.store
+      appDelegate.terminalManager = standardRuntime.terminalManager
+      appDelegate.cliSocketServer = standardRuntime.cliSocketServer
+      SettingsWindowManager.shared.configure(
+        store: standardRuntime.store,
+        ghosttyShortcuts: shortcuts,
+        commandKeyObserver: keyObserver
+      )
+      #if DEBUG
+        DebugWindowManager.shared.configure(store: standardRuntime.store)
+      #endif
+
+    case .clean:
+      let cleanStore = Store(
+        initialState: CleanAppFeature.State(
+          settings: SettingsFeature.State(settings: initialSettings)
+        )
+      ) {
+        CleanAppFeature()
+          .logActions()
+      }
+      let terminalHost = CleanTerminalHost(
+        runtime: runtime,
+        preferredFontSize: initialSettings.terminalFontSize
+      )
+      let cleanRuntime = CleanRuntime(terminalHost: terminalHost, store: cleanStore)
+      _standardRuntime = State(initialValue: nil)
+      _cleanRuntime = State(initialValue: cleanRuntime)
+      runtime.onQuit = { [weak cleanStore] in
+        cleanStore?.send(.requestQuit)
+      }
+      appDelegate.cleanStore = cleanStore
+      appDelegate.cleanTerminalHost = terminalHost
+      SettingsWindowManager.shared.configure(
+        settingsStore: cleanStore.scope(state: \.settings, action: \.settings),
+        updatesStore: cleanStore.scope(state: \.updates, action: \.updates),
+        ghosttyShortcuts: shortcuts,
+        commandKeyObserver: keyObserver
+      )
+    }
+  }
+
+  private static func makeStandardRuntime(
+    ghostty: GhosttyRuntime,
+    initialSettings: GlobalSettings
+  ) -> StandardRuntime {
     let tmuxController = TmuxTerminalController()
     let terminalManager = WorktreeTerminalManager(
-      runtime: runtime,
+      runtime: ghostty,
       preferredFontSize: initialSettings.terminalFontSize,
       tmuxController: tmuxController,
       usesAnonymousTmux: initialSettings.useAnonymousTmuxBackedTerminals
     )
-    _terminalManager = State(initialValue: terminalManager)
     let worktreeInfoWatcher = WorktreeInfoWatcherManager()
-    _worktreeInfoWatcher = State(initialValue: worktreeInfoWatcher)
     let storeBox = SupacodeAppStoreBox()
-    let coordinator = Self.makePullRequestRefreshCoordinator(storeBox: storeBox)
-    _pullRequestRefreshCoordinator = State(initialValue: coordinator)
-    let keyObserver = CommandKeyObserver()
-    _commandKeyObserver = State(initialValue: keyObserver)
+    let coordinator = makePullRequestRefreshCoordinator(storeBox: storeBox)
     var initialAppState = AppFeature.State(settings: SettingsFeature.State(settings: initialSettings))
-    if let cliOpenPath = Self.cliLaunchOpenPath() {
+    if let cliOpenPath = cliLaunchOpenPath() {
       initialAppState.launchRestoreMode = .cliOpenPath(cliOpenPath)
     }
-    let appStore = Store(
-      initialState: initialAppState
-    ) {
+    let appStore = Store(initialState: initialAppState) {
       AppFeature()
         .logActions()
     } withDependencies: { values in
-      values.terminalClient = Self.makeTerminalClient(terminalManager: terminalManager)
+      values.terminalClient = makeTerminalClient(terminalManager: terminalManager)
       values.worktreeInfoWatcher = WorktreeInfoWatcherClient(
         send: { command in
           worktreeInfoWatcher.handleCommand(command)
@@ -228,36 +284,24 @@ struct SupacodeApp: App {
           worktreeInfoWatcher.eventStream()
         }
       )
-      values.pullRequestRefreshCoordinator = Self.makePullRequestRefreshCoordinatorClient(
+      values.pullRequestRefreshCoordinator = makePullRequestRefreshCoordinatorClient(
         coordinator: coordinator
       )
     }
-    _store = State(initialValue: appStore)
     storeBox.store = appStore
-
-    let cliServer = Self.makeCLISocketServer(appStore: appStore, terminalManager: terminalManager)
-    _cliSocketServer = State(initialValue: cliServer)
-
-    let watchdog = Self.makeMemoryWatchdog(appStore: appStore, terminalManager: terminalManager)
+    let cliServer = makeCLISocketServer(appStore: appStore, terminalManager: terminalManager)
+    let watchdog = makeMemoryWatchdog(appStore: appStore, terminalManager: terminalManager)
     #if !DEBUG
       watchdog.start()
     #endif
-    _memoryWatchdog = State(initialValue: watchdog)
-
-    runtime.onQuit = { [weak appStore] in
-      appStore?.send(.requestQuit)
-    }
-    appDelegate.appStore = appStore
-    appDelegate.terminalManager = terminalManager
-    appDelegate.cliSocketServer = cliServer
-    SettingsWindowManager.shared.configure(
+    return StandardRuntime(
+      terminalManager: terminalManager,
+      worktreeInfoWatcher: worktreeInfoWatcher,
+      pullRequestRefreshCoordinator: coordinator,
+      cliSocketServer: cliServer,
       store: appStore,
-      ghosttyShortcuts: shortcuts,
-      commandKeyObserver: keyObserver
+      memoryWatchdog: watchdog
     )
-    #if DEBUG
-      DebugWindowManager.shared.configure(store: appStore)
-    #endif
   }
 
   @MainActor
@@ -773,14 +817,56 @@ struct SupacodeApp: App {
 
   var body: some Scene {
     Window("Prowl", id: WindowID.main) {
-      GhosttyColorSchemeSyncView(
-        ghostty: ghostty,
-        preferredColorScheme: store.settings.appearanceMode.colorScheme
-      ) {
-        ContentView(store: store, terminalManager: terminalManager)
+      mainContent
+        .registersMainWindowOpener()
+        .onAppear {
+          WindowLifecycleDiagnostics.logWithWindows("mainWindow content onAppear")
+          WindowLifecycleDiagnostics.noteMainWindowAppeared()
+          syncGhosttyManagedShortcuts(with: activeResolvedKeybindings)
+        }
+        .onDisappear {
+          WindowLifecycleDiagnostics.logWithWindows("mainWindow content onDisappear")
+        }
+        .onChange(of: activeResolvedKeybindings) { _, newValue in
+          syncGhosttyManagedShortcuts(with: newValue)
+        }
+        .preferredColorScheme(activeColorScheme)
+    }
+    .environment(ghosttyShortcuts)
+    .environment(commandKeyObserver)
+    .commands {
+      if let standardRuntime {
+        StandardAppCommands(
+          store: standardRuntime.store,
+          terminalManager: standardRuntime.terminalManager,
+          ghosttyShortcuts: ghosttyShortcuts,
+          askAgentHelp: askAgentHelp
+        )
+      } else if let cleanRuntime {
+        CleanAppCommands(
+          store: cleanRuntime.store,
+          resolvedKeybindings: activeResolvedKeybindings
+        )
+      }
+    }
+  }
+
+  @ViewBuilder
+  private var mainContent: some View {
+    switch launchProfile {
+    case .standard:
+      if let standardRuntime {
+        GhosttyColorSchemeSyncView(
+          ghostty: ghostty,
+          preferredColorScheme: standardRuntime.store.settings.appearanceMode.colorScheme
+        ) {
+          ContentView(
+            store: standardRuntime.store,
+            terminalManager: standardRuntime.terminalManager
+          )
           .environment(ghosttyShortcuts)
           .environment(commandKeyObserver)
-          .environment(\.resolvedKeybindings, store.resolvedKeybindings)
+          .environment(\.resolvedKeybindings, standardRuntime.store.resolvedKeybindings)
           .environment(askAgentHelp)
           .sheet(
             isPresented: Binding(
@@ -790,109 +876,43 @@ struct SupacodeApp: App {
           ) {
             AskAgentHelpView { askAgentHelp.dismiss() }
           }
-      }
-      .registersMainWindowOpener()
-      .onAppear {
-        WindowLifecycleDiagnostics.logWithWindows("mainWindow content onAppear")
-        WindowLifecycleDiagnostics.noteMainWindowAppeared()
-        syncGhosttyManagedShortcuts(with: store.resolvedKeybindings)
-      }
-      .onDisappear {
-        WindowLifecycleDiagnostics.logWithWindows("mainWindow content onDisappear")
-      }
-      .onChange(of: store.resolvedKeybindings) { _, newValue in
-        syncGhosttyManagedShortcuts(with: newValue)
-      }
-      .preferredColorScheme(store.settings.appearanceMode.colorScheme)
-    }
-    .environment(ghosttyShortcuts)
-    .environment(commandKeyObserver)
-    .commands {
-      // Grouped to keep `commands` under SwiftUI's CommandsBuilder
-      // tuple-arity limit when `#if DEBUG` adds the Debug menu below.
-      Group {
-        WorktreeCommands(store: store)
-        SidebarCommands(store: store)
-        TerminalCommands(ghosttyShortcuts: ghosttyShortcuts)
-        WindowCommands(
-          store: store,
-          terminalManager: terminalManager,
-          ghosttyShortcuts: ghosttyShortcuts,
-          resolvedKeybindings: store.resolvedKeybindings,
-          settingsWindowManager: SettingsWindowManager.shared
-        )
-      }
-      CommandGroup(after: .textEditing) {
-        Button("Command Palette") {
-          store.send(.commandPalette(.togglePresented))
         }
-        .modifier(
-          KeyboardShortcutModifier(
-            shortcut: store.resolvedKeybindings.keyboardShortcut(
-              for: AppShortcuts.CommandID.commandPalette
-            )
+      }
+
+    case .clean:
+      if let cleanRuntime {
+        GhosttyColorSchemeSyncView(
+          ghostty: ghostty,
+          preferredColorScheme: cleanRuntime.store.settings.appearanceMode.colorScheme
+        ) {
+          CleanRootView(
+            store: cleanRuntime.store,
+            terminalHost: cleanRuntime.terminalHost
           )
-        )
-        .help(helpText(title: "Command Palette", commandID: AppShortcuts.CommandID.commandPalette))
-      }
-      UpdateCommands(
-        store: store.scope(state: \.updates, action: \.updates),
-        resolvedKeybindings: store.resolvedKeybindings
-      )
-      CommandGroup(replacing: .appSettings) {
-        Button("Settings...") {
-          SettingsWindowManager.shared.show()
+          .environment(ghosttyShortcuts)
+          .environment(commandKeyObserver)
+          .environment(\.resolvedKeybindings, activeResolvedKeybindings)
         }
-        .modifier(
-          KeyboardShortcutModifier(
-            shortcut: store.resolvedKeybindings.keyboardShortcut(for: AppShortcuts.CommandID.openSettings)
-          )
-        )
-      }
-      CommandGroup(after: .appSettings) {
-        Button("Install Command Line Tool") {
-          store.send(.settings(.installCLIButtonTapped(showAlert: false)))
-        }
-        .help("Install the prowl command line tool to /usr/local/bin")
-      }
-      #if DEBUG
-        CommandMenu("Debug") {
-          Button("Icon Catalog") {
-            DebugWindowManager.shared.show()
-          }
-        }
-      #endif
-      CommandGroup(replacing: .help) {
-        Button("Ask Agent About Prowl…", systemImage: "sparkles") {
-          askAgentHelp.present()
-        }
-        .help("Copy a prompt that points your AI agent at Prowl's bundled docs")
-        Divider()
-        Button("Homepage", systemImage: "house") {
-          if let url = URL(string: "https://prowl.onev.cat/") {
-            NSWorkspace.shared.open(url)
-          }
-        }
-        Button("Release Notes", systemImage: "note.text") {
-          if let url = URL(string: "https://prowl.onev.cat/releases/") {
-            NSWorkspace.shared.open(url)
-          }
-        }
-      }
-      CommandGroup(replacing: .appTermination) {
-        Button("Quit Prowl") {
-          store.send(.requestQuit)
-        }
-        .modifier(
-          KeyboardShortcutModifier(
-            shortcut: store.resolvedKeybindings.keyboardShortcut(
-              for: AppShortcuts.CommandID.quitApplication
-            )
-          )
-        )
-        .help(helpText(title: "Quit Prowl", commandID: AppShortcuts.CommandID.quitApplication))
       }
     }
+  }
+
+  private var activeResolvedKeybindings: ResolvedKeybindingMap {
+    if let standardRuntime {
+      return standardRuntime.store.resolvedKeybindings
+    }
+    guard let cleanRuntime else { return .appDefaults }
+    return KeybindingResolver.resolve(
+      schema: .appResolverSchema(),
+      userOverrides: cleanRuntime.store.settings.keybindingUserOverrides
+    )
+  }
+
+  private var activeColorScheme: ColorScheme? {
+    if let standardRuntime {
+      return standardRuntime.store.settings.appearanceMode.colorScheme
+    }
+    return cleanRuntime?.store.settings.appearanceMode.colorScheme
   }
 
   private func syncGhosttyManagedShortcuts(with resolvedKeybindings: ResolvedKeybindingMap) {
@@ -901,10 +921,4 @@ struct SupacodeApp: App {
     )
   }
 
-  private func helpText(title: String, commandID: String) -> String {
-    if let shortcut = store.resolvedKeybindings.display(for: commandID) {
-      return "\(title) (\(shortcut))"
-    }
-    return title
-  }
 }

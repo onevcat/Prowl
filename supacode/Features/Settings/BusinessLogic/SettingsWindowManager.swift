@@ -10,7 +10,7 @@ final class SettingsWindowManager {
   private(set) var isOpen: Bool = false
 
   @ObservationIgnored private var settingsWindow: NSWindow?
-  @ObservationIgnored private var store: StoreOf<AppFeature>?
+  @ObservationIgnored private var makeContent: (() -> AnyView)?
   @ObservationIgnored private var ghosttyShortcuts: GhosttyShortcutManager?
   @ObservationIgnored private var commandKeyObserver: CommandKeyObserver?
   @ObservationIgnored private var localEventMonitor: Any?
@@ -18,12 +18,25 @@ final class SettingsWindowManager {
 
   private init() {}
 
-  func configure(
+  internal func configure(
     store: StoreOf<AppFeature>,
     ghosttyShortcuts: GhosttyShortcutManager,
     commandKeyObserver: CommandKeyObserver
   ) {
-    self.store = store
+    makeContent = { AnyView(SettingsView(store: store)) }
+    self.ghosttyShortcuts = ghosttyShortcuts
+    self.commandKeyObserver = commandKeyObserver
+  }
+
+  internal func configure(
+    settingsStore: StoreOf<SettingsFeature>,
+    updatesStore: StoreOf<UpdatesFeature>,
+    ghosttyShortcuts: GhosttyShortcutManager,
+    commandKeyObserver: CommandKeyObserver
+  ) {
+    makeContent = {
+      AnyView(SettingsView(settingsStore: settingsStore, updatesStore: updatesStore))
+    }
     self.ghosttyShortcuts = ghosttyShortcuts
     self.commandKeyObserver = commandKeyObserver
   }
@@ -38,10 +51,10 @@ final class SettingsWindowManager {
       return
     }
 
-    guard let store, let ghosttyShortcuts, let commandKeyObserver else {
+    guard let makeContent, let ghosttyShortcuts, let commandKeyObserver else {
       return
     }
-    let settingsView = SettingsView(store: store)
+    let settingsView = makeContent()
       .environment(ghosttyShortcuts)
       .environment(commandKeyObserver)
     let hostingController = NSHostingController(rootView: settingsView)

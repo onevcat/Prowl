@@ -123,7 +123,9 @@ struct AppearanceSettingsView: View {
               Text(mode.title).tag(mode)
             }
           }
-          .help("View Prowl starts in on launch. Shelf and Canvas require at least one worktree or folder.")
+          .help(
+            "Mode Prowl enters on the next launch. Shelf and Canvas require a worktree or folder; Clean starts a standalone shell."
+          )
         }
         Section("Default Editor") {
           Toggle(

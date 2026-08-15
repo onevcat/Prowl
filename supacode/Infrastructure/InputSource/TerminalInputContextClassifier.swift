@@ -1,6 +1,6 @@
 import Foundation
 
-internal enum TerminalInputContext: Equatable, Sendable {
+nonisolated internal enum TerminalInputContext: Equatable, Sendable {
   case chatAgent
   case commandLike
   case unknown

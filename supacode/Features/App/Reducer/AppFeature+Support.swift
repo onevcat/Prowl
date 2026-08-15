@@ -301,12 +301,11 @@ extension AppFeature {
     state.hasAppliedInitialViewMode = true
 
     @Shared(.settingsFile) var settingsFile
-    let shouldEnterShelf =
-      settingsFile.global.defaultViewMode == .shelf
-      && !state.repositories.isShelfActive
-    let shouldEnterCanvas =
-      settingsFile.global.defaultViewMode == .canvas
-      && !state.repositories.isShowingCanvas
+    guard case .standard(let initialViewMode) = AppLaunchProfile.resolve(settingsFile.global.defaultViewMode) else {
+      return .none
+    }
+    let shouldEnterShelf = initialViewMode == .shelf && !state.repositories.isShelfActive
+    let shouldEnterCanvas = initialViewMode == .canvas && !state.repositories.isShowingCanvas
 
     var effects: [Effect<Action>] = []
     if shouldEnterShelf {

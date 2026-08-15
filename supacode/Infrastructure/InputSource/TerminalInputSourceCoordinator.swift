@@ -1,5 +1,19 @@
 import Foundation
 
+internal enum InputSourceTargetID: Hashable, Sendable {
+  case surface(UUID)
+  case herdrPane(String)
+
+  fileprivate var logValue: String {
+    switch self {
+    case .surface(let id):
+      return "surface:\(id.uuidString.prefix(8))"
+    case .herdrPane(let id):
+      return "herdr:\(id)"
+    }
+  }
+}
+
 @MainActor
 internal final class TerminalInputSourceCoordinator {
   internal enum Reason: String, Sendable {
@@ -10,9 +24,9 @@ internal final class TerminalInputSourceCoordinator {
 
   private let selector: KeyboardInputSourceSelecting
   private let logger = SupaLogger("InputSource")
-  private var focusedSurfaceID: UUID?
+  private var focusedTargetID: InputSourceTargetID?
   private var focusedContext: TerminalInputContext = .unknown
-  private var savedInputSourceByChatSurface: [UUID: String] = [:]
+  private var savedInputSourceByChatTarget: [InputSourceTargetID: String] = [:]
 
   internal init(selector: KeyboardInputSourceSelecting = KeyboardInputSourceSelector()) {
     self.selector = selector
@@ -20,44 +34,43 @@ internal final class TerminalInputSourceCoordinator {
 
   internal func applyFocusedContext(
     _ context: TerminalInputContext,
-    surfaceID: UUID,
+    targetID: InputSourceTargetID,
     reason: Reason
   ) {
-    saveFocusedChatInputSourceIfNeeded(nextSurfaceID: surfaceID, nextContext: context)
-    focusedSurfaceID = surfaceID
+    saveFocusedChatInputSourceIfNeeded(nextTargetID: targetID, nextContext: context)
+    focusedTargetID = targetID
     focusedContext = context
 
     switch context {
     case .chatAgent:
-      restoreChatInputSourceIfNeeded(surfaceID: surfaceID, reason: reason)
+      restoreChatInputSourceIfNeeded(targetID: targetID, reason: reason)
     case .commandLike:
       if selector.selectABC() {
-        logger.debug("selected ABC for surface=\(surfaceID.uuidString.prefix(8)) reason=\(reason.rawValue)")
+        logger.debug("selected ABC for target=\(targetID.logValue) reason=\(reason.rawValue)")
       }
     case .unknown:
-      logger.debug("input source unchanged for unknown context surface=\(surfaceID.uuidString.prefix(8))")
+      logger.debug("input source unchanged for unknown context target=\(targetID.logValue)")
     }
   }
 
   private func saveFocusedChatInputSourceIfNeeded(
-    nextSurfaceID: UUID,
+    nextTargetID: InputSourceTargetID,
     nextContext: TerminalInputContext
   ) {
-    guard let focusedSurfaceID else { return }
+    guard let focusedTargetID else { return }
     guard focusedContext == .chatAgent else { return }
-    guard focusedSurfaceID != nextSurfaceID || nextContext != .chatAgent else { return }
+    guard focusedTargetID != nextTargetID || nextContext != .chatAgent else { return }
     guard let currentID = selector.currentInputSourceID() else { return }
-    savedInputSourceByChatSurface[focusedSurfaceID] = currentID
+    savedInputSourceByChatTarget[focusedTargetID] = currentID
   }
 
-  private func restoreChatInputSourceIfNeeded(surfaceID: UUID, reason: Reason) {
-    guard let savedID = savedInputSourceByChatSurface[surfaceID] else {
-      let surfaceLogID = surfaceID.uuidString.prefix(8)
-      logger.debug("chat agent has no saved input source surface=\(surfaceLogID) reason=\(reason.rawValue)")
+  private func restoreChatInputSourceIfNeeded(targetID: InputSourceTargetID, reason: Reason) {
+    guard let savedID = savedInputSourceByChatTarget[targetID] else {
+      logger.debug("chat agent has no saved input source target=\(targetID.logValue) reason=\(reason.rawValue)")
       return
     }
     if selector.selectInputSource(id: savedID) {
-      logger.debug("restored input source for chat surface=\(surfaceID.uuidString.prefix(8)) reason=\(reason.rawValue)")
+      logger.debug("restored input source for chat target=\(targetID.logValue) reason=\(reason.rawValue)")
     }
   }
 }

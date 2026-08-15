@@ -322,7 +322,11 @@ final class WorktreeTerminalManager {
     state.onFocusedCommandSurfaceCreated = { [weak self, weak state] surfaceID in
       guard let self, let state else { return }
       guard self.isInputSourceActiveTarget(state: state, surfaceID: surfaceID) else { return }
-      self.inputSourceCoordinator.applyFocusedContext(.commandLike, surfaceID: surfaceID, reason: .focusChanged)
+      self.inputSourceCoordinator.applyFocusedContext(
+        .commandLike,
+        targetID: .surface(surfaceID),
+        reason: .focusChanged
+      )
     }
     state.onInputContextMayHaveChanged = { [weak self, weak state] surfaceID in
       guard let self, let state else { return }
@@ -636,7 +640,7 @@ final class WorktreeTerminalManager {
       guard self.shouldApplyInputSourceContext(for: request) else { return }
       let viewportText = surface.bridge.readViewportText() ?? ""
       let context = TerminalInputContextClassifier.context(job: job, viewportText: viewportText)
-      self.inputSourceCoordinator.applyFocusedContext(context, surfaceID: surfaceID, reason: reason)
+      self.inputSourceCoordinator.applyFocusedContext(context, targetID: .surface(surfaceID), reason: reason)
     }
   }
 
