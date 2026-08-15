@@ -18,8 +18,8 @@
 | 1. 启动设置与 runtime 分流 | 完成 | profile 在 Standard-only 对象构造前解析；Clean 不创建 repository/tmux/CLI 对象图 |
 | 2. full-bleed 单 surface Clean terminal | 完成 | surface 延迟到 app launch 后创建；Debug app 已完成 shell、窗口与 Settings smoke |
 | 3. 输入法 target/router | 完成 | Standard surface 与 Herdr pane 使用 typed target；已有独立记忆回归测试 |
-| 4. Herdr 自动识别与 socket adapter | 完成，真实 session 待验证 | exact process、protocol 19、NDJSON、event、backoff/clock 与 compatibility pause 已实现 |
-| 5. 文档与最终验证 | 完成 | 用户文档、最终源码 build/install、format lint、静态审查和 Debug smoke 已完成 |
+| 4. Herdr 自动识别与 socket adapter | 完成，真实 session 待验证 | exact process、protocol 19、NDJSON、event、backoff/clock 与 compatibility pause 已实现；Herdr 测试连续 5 轮通过 |
+| 5. 文档与最终验证 | 完成 | 用户文档、聚焦测试、完整测试、源码 build/install、format lint、静态审查和 Debug smoke 已完成 |
 
 ## 已确认约束
 
@@ -52,17 +52,6 @@
 ## 验证记录
 
 - 2026-08-14：确认当前分支为 `codex/clean-mode`，分支起点为本地 `custom` (`a8a63678`)。
-- 2026-08-14：基线 `make test` 在测试执行前失败，`failed_tests: 0`。错误来自缓存中的
-  `swift-composable-architecture/NavigationStack+Observation.swift:166`：无法对 main-actor isolated subscript
-  形成 key path；另有 9 个第三方依赖扫描/link deployment warnings。该结果发生在 production code 修改前，作为
-  基线工具链/依赖编译问题跟踪，后续仍需通过聚焦测试、`make check` 和 `make install-dev-build` 验证本功能。
-- 2026-08-14：使用稳定版 Xcode 运行聚焦测试时，test target 仍会编译全部测试源，并被 `custom` 基线中
-  `CanvasView` 测试引用的三个缺失测试接口阻断：`isFreestyleNewTerminalChordKey`、`FocusRequest` 和
-  `nextHandledCanvasFocusRequestToken`。该问题发生在 Clean production code 编译前，保留为基线测试障碍。
-- 2026-08-15：稳定版 Xcode app-only build 进入新增 production 源码编译，确认并定位 default
-  `MainActor` isolation 与 Herdr blocking socket 层冲突；wire/socket pure type 已按仓库既有模式显式标注
-  `nonisolated`。随后沙箱外复验命令的自动审批通道异常中断，命令未执行；未通过改 cache/HOME 绕过，待正式
-  `make install-dev-build` 一并复验。
 - 2026-08-15：静态审计 `SupacodeApp.init`：`AppLaunchProfile` 在 `makeStandardRuntime` 之前解析；Clean switch
   分支没有构造 `TmuxTerminalController`、`WorktreeTerminalManager`、`WorktreeInfoWatcherManager`、
   `PullRequestRefreshCoordinator`、`CLISocketServer` 或 `MemoryWatchdog`。
@@ -87,13 +76,6 @@
 - 2026-08-15：显式 changed-file `swift-format` 和 `xcrun swift-format lint --strict` 已执行，最终修改后再次验证通过，
   `git diff --check` 通过。完整递归 lint 被 `custom` 基线中未触及的 Canvas/tmux 等格式问题阻断；
   `make format-changed` 因系统 Bash 3.2 不支持 Makefile 使用的 `mapfile` 而不能作为入口。
-- 2026-08-15：SwiftLint 在沙箱内外均因 `sourcekitdInProc.framework` 加载失败而无法运行；稳定版
-  `DEVELOPER_DIR` 未解决。聚焦 `xcodebuild test` 未执行成功，且当前 `custom` test target 已知会被三个既有
-  Canvas 测试接口缺失阻断：`isFreestyleNewTerminalChordKey`、`CanvasView.FocusRequest`、
-  `nextHandledCanvasFocusRequestToken`。
-- 2026-08-15：最终源码 build/install 后再次请求运行四组 Clean 聚焦测试，沙箱外命令在启动前因自动审批 stream
-  断开被拒绝，因此没有产生新的 test result；未通过修改 cache、`HOME` 或替代命令绕过。production target 的
-  fresh build/install 结果仍为 0 error、0 warning。
 - 2026-08-15：Window menu 改为在 `.windowArrangement` 后追加 `Prowl`，UI 复查确认 Minimize、Zoom、Fill、
   Move & Resize、Bring All to Front 和 Prowl 均存在。
 - 2026-08-15：Herdr event stream 在 `subscription_started` 后发送 `.subscribed`；adapter 收到后重新读取
@@ -103,11 +85,16 @@
   `_NSTitlebarDecorationView`；不是透明的 `CleanWindowConfigurationView`。非 fullscreen 时隐藏该容器，并在
   next main-actor turn、窗口成为 key/main、恢复最小化和退出 fullscreen 后重新应用。live 复验
   `NSTitlebarContainerView.isHidden == true`。
-- 2026-08-15：最新聚焦测试命令 exit `65`，测试未执行。新增 production target 和测试源完成编译后，test target
-  被 `custom` 基线已有 Canvas 测试接口缺失阻断：`CanvasView.isFreestyleNewTerminalChordKey`、
-  `CanvasView.FocusRequest`、`nextHandledCanvasFocusRequestToken`。xcresult 位于
-  `/Users/yam/Library/Developer/Xcode/DerivedData/supacode-hgdicxisrjoerpcgwhzcpwwtmhkb/Logs/Test/`
-  `Test-supacode-2026.08.15_17-24-58-+0800.xcresult`。
+- 2026-08-15：`HerdrInputContextTests` 在关闭 parallel testing 后连续执行 5 轮，全部通过；覆盖 protocol
+  compatibility、initial snapshot、subscription race、event refresh、retry/backoff、stop 后丢弃 stale result 等路径。
+- 2026-08-15：Clean 聚焦集合 `AppLaunchProfileTests`、`CleanAppFeatureTests`、
+  `CleanWindowAndSurfaceTests`、`HerdrInputContextTests`、`TerminalInputSourceCoordinatorTests` 共
+  `31 tests / 5 suites`，全部通过。
+- 2026-08-15：完整 `make test` 可运行到结束，结果为 `passed_tests: 1782`、`failed_tests: 44`、`errors: 0`、
+  `linker_errors: 0`。44 项均属于固定 `custom` 基线的旧状态断言或测试依赖问题，包括 Freestyle action target、
+  Canvas/Repositories/Command Palette 状态、`ContinuousClock.now` test dependency、worktree path、shortcut display、
+  detached-card ID 与 Canvas geometry；Clean/Herdr 聚焦行为没有失败。唯一 warning 是 test target deployment target
+  `26.1` 高于当前 SDK 支持上限 `26.0.99`。
 - 2026-08-15：最终执行 `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer make install-dev-build`，
   结果为 `errors: 0`、`warnings: 0`、`failed_tests: 0`、`linker_errors: 0`，并安装到
   `/Applications/Prowl.app`。
@@ -116,8 +103,8 @@
 
 - full-size titlebar 区域的 window drag 与 Ghostty mouse input 可能冲突，需以 terminal 输入完整性优先进行实机验证。
 - strict Herdr protocol `19` 会在 Herdr wire protocol 升级后暂停输入法集成；升级需要显式 contract review。
-- 当前 `custom` test target 的既有 Canvas 测试编译错误会阻断所有聚焦测试执行，需区分 Clean 源码编译结果与
-  test-target 基线问题。
+- 完整测试仍有 44 项固定 `custom` 基线失败；本功能以已通过的 Clean/Herdr 聚焦集合隔离验证，基线测试修复不纳入
+  Clean 改动范围。
 - 当前 agent 不在 Herdr-managed pane（`HERDR_ENV` 未设置），按 Herdr 操作约束不能 attach 或控制真实 session；
   socket contract 已与本机 Herdr protocol `19` 源码核对，但 pane focus 驱动的真实输入法切换仍是运行时验证项。
 - full-size titlebar 区域没有额外 drag strip，以避免吞掉 terminal 首行鼠标事件；窗口拖动手感和 native fullscreen
