@@ -214,13 +214,22 @@ internal final class CleanTerminalHost {
 
   private func configureCallbacks(for surface: GhosttySurfaceView) {
     surface.bridge.onSplitAction = { _ in true }
-    surface.bridge.onNewTab = { true }
+    surface.bridge.onNewTab = { [weak self] in
+      self?.herdrAdapter?.refreshNow()
+      return true
+    }
     surface.bridge.onCloseTab = { [weak surface] _ in
       surface?.window?.performClose(nil)
       return true
     }
-    surface.bridge.onGotoTab = { _ in true }
-    surface.bridge.onMoveTab = { _ in true }
+    surface.bridge.onGotoTab = { [weak self] _ in
+      self?.herdrAdapter?.refreshNow()
+      return true
+    }
+    surface.bridge.onMoveTab = { [weak self] _ in
+      self?.herdrAdapter?.refreshNow()
+      return true
+    }
     surface.bridge.onCommandPaletteToggle = { true }
     surface.bridge.onCommandFinished = { [weak self] _, _ in
       self?.reevaluateInputContext(reason: .processContextChanged)
@@ -243,6 +252,9 @@ internal final class CleanTerminalHost {
     delayedProbeTask = Task { @MainActor [weak self] in
       try? await ContinuousClock().sleep(for: Self.delayedProbeInterval)
       guard !Task.isCancelled else { return }
+      if self?.isHerdrForeground == true {
+        self?.herdrAdapter?.refreshNow()
+      }
       self?.reevaluateInputContext(reason: .processContextChanged)
     }
   }

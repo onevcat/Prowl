@@ -26,6 +26,8 @@ nonisolated internal struct HerdrSocketClient: Sendable {
   private static let maximumLineLength = 1_048_576
   fileprivate static let requestTimeout = timeval(tv_sec: 2, tv_usec: 0)
   private static let observedEventNames = [
+    "workspace.focused",
+    "tab.focused",
     "pane.focused",
     "pane.updated",
     "pane.agent_detected",
@@ -41,10 +43,12 @@ nonisolated internal struct HerdrSocketClient: Sendable {
     self.socketPath = socketPath
   }
 
-  internal func currentPane() async throws -> HerdrPaneInfo {
+  internal func currentPane(validateProtocol: Bool = true) async throws -> HerdrPaneInfo {
     let socketPath = socketPath
     return try await Task.detached(priority: .utility) {
-      try Self.validateProtocol(at: socketPath)
+      if validateProtocol {
+        try Self.validateProtocol(at: socketPath)
+      }
       let fileDescriptor = try Self.connect(to: socketPath)
       defer { Darwin.close(fileDescriptor) }
       try Self.setTimeout(Self.requestTimeout, on: fileDescriptor)

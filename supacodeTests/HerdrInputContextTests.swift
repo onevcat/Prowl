@@ -83,6 +83,8 @@ struct HerdrInputContextTests {
 
   @Test(
     arguments: [
+      "workspace.focused",
+      "tab.focused",
       "pane.focused",
       "pane.updated",
       "pane.agent_detected",
@@ -432,6 +434,104 @@ struct HerdrInputContextTests {
     adapter.stop()
     eventContinuation.value?.finish()
   }
+
+  @Test func adapterOnlyValidatesProtocolForConnectionStartup() async {
+    let clock = TestClock()
+    let validationFlags = LockIsolated<[Bool]>([])
+    let eventContinuation = LockIsolated<AsyncStream<HerdrEventStreamState>.Continuation?>(nil)
+    let client = HerdrInputContextClient(
+      currentPane: { validateProtocol in
+        validationFlags.withValue { $0.append(validateProtocol) }
+        return HerdrPaneInfo(paneID: "w1:p1", agent: nil, agentStatus: nil)
+      },
+      events: {
+        AsyncStream { continuation in
+          eventContinuation.setValue(continuation)
+          continuation.yield(.subscribed)
+        }
+      }
+    )
+    let adapter = HerdrInputContextAdapter(client: client, clock: clock) { _ in }
+
+    adapter.start()
+    await waitUntil { validationFlags.value.count == 2 }
+    await clock.advance(by: .milliseconds(100))
+    await waitUntil { validationFlags.value.count == 3 }
+
+    #expect(validationFlags.value == [true, false, false])
+    adapter.stop()
+    eventContinuation.value?.finish()
+  }
+
+  @Test func adapterCoalescesImmediateRefreshWithStartupRequest() async throws {
+    let requestContinuation = LockIsolated<CheckedContinuation<HerdrPaneInfo, Never>?>(nil)
+    let requestCount = LockIsolated(0)
+    let client = HerdrInputContextClient(
+      currentPane: { _ in
+        requestCount.withValue { $0 += 1 }
+        return await withCheckedContinuation { continuation in
+          requestContinuation.setValue(continuation)
+        }
+      },
+      events: { AsyncStream { $0.finish() } }
+    )
+    let adapter = HerdrInputContextAdapter(client: client, clock: ImmediateClock()) { _ in }
+
+    adapter.start()
+    await waitUntil { requestCount.value == 1 }
+    adapter.refreshNow()
+    for _ in 0..<20 {
+      await Task.yield()
+    }
+
+    #expect(requestCount.value == 1)
+    let continuation = try #require(
+      requestContinuation.withValue { value in
+        defer { value = nil }
+        return value
+      }
+    )
+    continuation.resume(
+      returning: HerdrPaneInfo(paneID: "w1:p1", agent: "codex", agentStatus: "working")
+    )
+    adapter.stop()
+  }
+
+  @Test func adapterDropsImmediateRefreshResultAfterStop() async throws {
+    let paneContinuation = LockIsolated<CheckedContinuation<HerdrPaneInfo, Never>?>(nil)
+    let receivedPanes = LockIsolated<[HerdrPaneInfo]>([])
+    let client = HerdrInputContextClient(
+      currentPane: { _ in
+        await withCheckedContinuation { continuation in
+          paneContinuation.setValue(continuation)
+        }
+      },
+      events: { AsyncStream { $0.finish() } }
+    )
+    let adapter = HerdrInputContextAdapter(client: client, clock: ImmediateClock()) { pane in
+      receivedPanes.withValue { $0.append(pane) }
+    }
+
+    adapter.start()
+    await waitUntil { paneContinuation.value != nil }
+    adapter.refreshNow()
+    adapter.stop()
+
+    let continuation = try #require(
+      paneContinuation.withValue { value in
+        defer { value = nil }
+        return value
+      }
+    )
+    continuation.resume(
+      returning: HerdrPaneInfo(paneID: "w1:stale", agent: "codex", agentStatus: "working")
+    )
+    for _ in 0..<20 {
+      await Task.yield()
+    }
+
+    #expect(receivedPanes.value.isEmpty)
+  }
 }
 
 nonisolated private struct HerdrTestExchange: Sendable {
@@ -590,7 +690,9 @@ nonisolated private final class HerdrSingleRequestTestServer: @unchecked Sendabl
     while Darwin.read(descriptor, &byte, 1) > 0 {}
   }
 
-  private func withSocketAddress<Result>(_ body: (sockaddr_un) throws -> Result) rethrows -> Result {
+  private func withSocketAddress<Result>(
+    _ body: (sockaddr_un) throws -> Result
+  ) rethrows -> Result {
     var address = sockaddr_un()
     address.sun_family = sa_family_t(AF_UNIX)
     let pathBytes = Array(socketPath.utf8)

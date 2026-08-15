@@ -1,12 +1,12 @@
 import Foundation
 
 nonisolated internal struct HerdrInputContextClient: Sendable {
-  internal let currentPane: @Sendable () async throws -> HerdrPaneInfo
+  internal let currentPane: @Sendable (Bool) async throws -> HerdrPaneInfo
   internal let events: @Sendable () -> AsyncStream<HerdrEventStreamState>
 
   internal init(socketClient: HerdrSocketClient = HerdrSocketClient()) {
-    currentPane = {
-      try await socketClient.currentPane()
+    currentPane = { validateProtocol in
+      try await socketClient.currentPane(validateProtocol: validateProtocol)
     }
     events = {
       socketClient.events()
@@ -17,7 +17,21 @@ nonisolated internal struct HerdrInputContextClient: Sendable {
     currentPane: @escaping @Sendable () async throws -> HerdrPaneInfo,
     events: @escaping @Sendable () -> AsyncStream<HerdrEventStreamState>
   ) {
-    self.currentPane = currentPane
+    self.init(
+      currentPane: { _ in
+        try await currentPane()
+      },
+      events: events
+    )
+  }
+
+  internal init(
+    currentPane: @escaping @Sendable (Bool) async throws -> HerdrPaneInfo,
+    events: @escaping @Sendable () -> AsyncStream<HerdrEventStreamState>
+  ) {
+    self.currentPane = { validateProtocol in
+      try await currentPane(validateProtocol)
+    }
     self.events = events
   }
 }
@@ -34,6 +48,8 @@ internal final class HerdrInputContextAdapter {
   private let logger = SupaLogger("HerdrInputContext")
   private var lifecycleTask: Task<Void, Never>?
   private var pollingTask: Task<Void, Never>?
+  private var refreshTask: Task<HerdrPaneInfo, Error>?
+  private var refreshRequestID: UInt64 = 0
   private var isCompatibilityPaused = false
   private var lastPublishedPane: HerdrPaneInfo?
 
@@ -63,6 +79,9 @@ internal final class HerdrInputContextAdapter {
     lifecycleTask = nil
     pollingTask?.cancel()
     pollingTask = nil
+    refreshRequestID &+= 1
+    refreshTask?.cancel()
+    refreshTask = nil
     lastPublishedPane = nil
   }
 
@@ -71,11 +90,24 @@ internal final class HerdrInputContextAdapter {
     isCompatibilityPaused = false
   }
 
+  internal func refreshNow() {
+    guard lifecycleTask != nil else { return }
+    Task { [weak self] in
+      do {
+        try await self?.refreshCurrentPane(validateProtocol: false)
+      } catch {
+        self?.logger.debug(
+          "Herdr immediate pane refresh unavailable: \(error.localizedDescription)"
+        )
+      }
+    }
+  }
+
   private func run() async {
     var retryDelay = Duration.milliseconds(250)
     while !Task.isCancelled {
       do {
-        try await refreshCurrentPane()
+        try await refreshCurrentPane(validateProtocol: true)
         startPolling()
         defer { stopPolling() }
         var shouldReconnect = false
@@ -84,10 +116,10 @@ internal final class HerdrInputContextAdapter {
           switch state {
           case .subscribed:
             retryDelay = .milliseconds(250)
-            try await refreshCurrentPane()
+            try await refreshCurrentPane(validateProtocol: false)
           case .event:
             retryDelay = .milliseconds(250)
-            try await refreshCurrentPane()
+            try await refreshCurrentPane(validateProtocol: false)
           case .disconnected(let error):
             if pauseForCompatibilityFailure(error) {
               return
@@ -119,7 +151,7 @@ internal final class HerdrInputContextAdapter {
         try? await clock.sleep(for: Self.pollingInterval)
         guard !Task.isCancelled else { return }
         do {
-          try await refreshCurrentPane()
+          try await refreshCurrentPane(validateProtocol: false)
         } catch {
           logger.debug("Herdr pane polling unavailable: \(error.localizedDescription)")
         }
@@ -132,9 +164,30 @@ internal final class HerdrInputContextAdapter {
     pollingTask = nil
   }
 
-  private func refreshCurrentPane() async throws {
-    let pane = try await client.currentPane()
+  private func refreshCurrentPane(validateProtocol: Bool) async throws {
+    let task: Task<HerdrPaneInfo, Error>
+    let requestID: UInt64
+    if let refreshTask {
+      task = refreshTask
+      requestID = refreshRequestID
+    } else {
+      refreshRequestID &+= 1
+      requestID = refreshRequestID
+      let client = client
+      task = Task.detached(priority: .utility) {
+        try await client.currentPane(validateProtocol)
+      }
+      refreshTask = task
+    }
+    defer {
+      if refreshRequestID == requestID {
+        refreshTask = nil
+      }
+    }
+
+    let pane = try await task.value
     guard !Task.isCancelled else { return }
+    guard refreshRequestID == requestID else { return }
     if let lastPublishedPane,
       lastPublishedPane.paneID == pane.paneID,
       lastPublishedPane.inputContext == pane.inputContext
