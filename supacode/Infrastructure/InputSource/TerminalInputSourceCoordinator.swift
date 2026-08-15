@@ -27,6 +27,7 @@ internal final class TerminalInputSourceCoordinator {
   private var focusedTargetID: InputSourceTargetID?
   private var focusedContext: TerminalInputContext = .unknown
   private var savedInputSourceByChatTarget: [InputSourceTargetID: String] = [:]
+  private var fallbackChatInputSourceID: String?
 
   internal init(selector: KeyboardInputSourceSelecting = KeyboardInputSourceSelector()) {
     self.selector = selector
@@ -37,6 +38,7 @@ internal final class TerminalInputSourceCoordinator {
     targetID: InputSourceTargetID,
     reason: Reason
   ) {
+    rememberFallbackChatInputSourceIfNeeded(nextContext: context)
     saveFocusedChatInputSourceIfNeeded(nextTargetID: targetID, nextContext: context)
     focusedTargetID = targetID
     focusedContext = context
@@ -53,6 +55,13 @@ internal final class TerminalInputSourceCoordinator {
     }
   }
 
+  private func rememberFallbackChatInputSourceIfNeeded(nextContext: TerminalInputContext) {
+    guard nextContext == .commandLike else { return }
+    guard let currentID = selector.currentInputSourceID() else { return }
+    guard currentID != KeyboardInputSourceSelector.abcInputSourceID else { return }
+    fallbackChatInputSourceID = currentID
+  }
+
   private func saveFocusedChatInputSourceIfNeeded(
     nextTargetID: InputSourceTargetID,
     nextContext: TerminalInputContext
@@ -62,10 +71,11 @@ internal final class TerminalInputSourceCoordinator {
     guard focusedTargetID != nextTargetID || nextContext != .chatAgent else { return }
     guard let currentID = selector.currentInputSourceID() else { return }
     savedInputSourceByChatTarget[focusedTargetID] = currentID
+    fallbackChatInputSourceID = currentID
   }
 
   private func restoreChatInputSourceIfNeeded(targetID: InputSourceTargetID, reason: Reason) {
-    guard let savedID = savedInputSourceByChatTarget[targetID] else {
+    guard let savedID = savedInputSourceByChatTarget[targetID] ?? fallbackChatInputSourceID else {
       logger.debug(
         "chat agent has no saved input source target=\(targetID.logValue) reason=\(reason.rawValue)"
       )

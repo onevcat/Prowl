@@ -363,6 +363,35 @@ struct HerdrInputContextTests {
     #expect(refreshCount.value == 2)
     adapter.stop()
   }
+
+  @Test func adapterPollsCurrentPaneWhenSubscriptionHasNoEvents() async {
+    let clock = TestClock()
+    let refreshCount = LockIsolated(0)
+    let eventContinuation = LockIsolated<AsyncStream<HerdrEventStreamState>.Continuation?>(nil)
+    let client = HerdrInputContextClient(
+      currentPane: {
+        refreshCount.withValue { $0 += 1 }
+        return HerdrPaneInfo(paneID: "w1:p1", agent: nil, agentStatus: nil)
+      },
+      events: {
+        AsyncStream { continuation in
+          eventContinuation.setValue(continuation)
+          continuation.yield(.subscribed)
+        }
+      }
+    )
+    let adapter = HerdrInputContextAdapter(client: client, clock: clock) { _ in }
+
+    adapter.start()
+    await waitUntil { refreshCount.value == 2 }
+
+    await clock.advance(by: .milliseconds(500))
+    await waitUntil { refreshCount.value == 3 }
+
+    #expect(refreshCount.value == 3)
+    adapter.stop()
+    eventContinuation.value?.finish()
+  }
 }
 
 nonisolated private struct HerdrTestExchange: Sendable {

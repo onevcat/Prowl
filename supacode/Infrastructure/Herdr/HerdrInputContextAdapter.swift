@@ -31,6 +31,7 @@ internal final class HerdrInputContextAdapter {
   private let onPaneContext: PaneContextHandler
   private let logger = SupaLogger("HerdrInputContext")
   private var lifecycleTask: Task<Void, Never>?
+  private var pollingTask: Task<Void, Never>?
   private var isCompatibilityPaused = false
 
   internal init(
@@ -57,6 +58,8 @@ internal final class HerdrInputContextAdapter {
   internal func stop() {
     lifecycleTask?.cancel()
     lifecycleTask = nil
+    pollingTask?.cancel()
+    pollingTask = nil
   }
 
   internal func resetAfterHerdrExit() {
@@ -69,6 +72,8 @@ internal final class HerdrInputContextAdapter {
     while !Task.isCancelled {
       do {
         try await refreshCurrentPane()
+        startPolling()
+        defer { stopPolling() }
         var shouldReconnect = false
         for await state in client.events() {
           guard !Task.isCancelled else { return }
@@ -102,6 +107,27 @@ internal final class HerdrInputContextAdapter {
       try? await clock.sleep(for: retryDelay)
       retryDelay = min(retryDelay * 2, .seconds(2))
     }
+  }
+
+  private func startPolling() {
+    pollingTask?.cancel()
+    pollingTask = Task { [weak self] in
+      guard let self else { return }
+      while !Task.isCancelled {
+        try? await clock.sleep(for: .milliseconds(500))
+        guard !Task.isCancelled else { return }
+        do {
+          try await refreshCurrentPane()
+        } catch {
+          logger.debug("Herdr pane polling unavailable: \(error.localizedDescription)")
+        }
+      }
+    }
+  }
+
+  private func stopPolling() {
+    pollingTask?.cancel()
+    pollingTask = nil
   }
 
   private func refreshCurrentPane() async throws {

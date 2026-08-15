@@ -100,6 +100,30 @@ struct TerminalInputSourceCoordinatorTests {
     #expect(selector.selectedIDs.isEmpty)
   }
 
+  @Test func firstChatAgentAfterCommandLikeRestoresLastNonABCSource() {
+    let selector = MockKeyboardInputSourceSelector()
+    let coordinator = TerminalInputSourceCoordinator(selector: selector)
+
+    coordinator.applyFocusedContext(
+      .commandLike,
+      targetID: .surface(UUID()),
+      reason: .processContextChanged
+    )
+    #expect(selector.currentID == KeyboardInputSourceSelector.abcInputSourceID)
+
+    coordinator.applyFocusedContext(
+      .chatAgent,
+      targetID: .herdrPane("w1:p1"),
+      reason: .processContextChanged
+    )
+
+    #expect(selector.currentID == MockInputSourceID.chinese)
+    #expect(selector.selectedIDs == [
+      KeyboardInputSourceSelector.abcInputSourceID,
+      MockInputSourceID.chinese,
+    ])
+  }
+
   @Test func herdrPanesRememberIndependentChatInputSources() {
     let selector = MockKeyboardInputSourceSelector()
     let coordinator = TerminalInputSourceCoordinator(selector: selector)
