@@ -300,10 +300,7 @@ extension AppFeature {
     guard !state.hasAppliedInitialViewMode else { return .none }
     state.hasAppliedInitialViewMode = true
 
-    @Shared(.settingsFile) var settingsFile
-    guard case .standard(let initialViewMode) = AppLaunchProfile.resolve(settingsFile.global.defaultViewMode) else {
-      return .none
-    }
+    let initialViewMode = state.initialViewMode
     let shouldEnterShelf = initialViewMode == .shelf && !state.repositories.isShelfActive
     let shouldEnterCanvas = initialViewMode == .canvas && !state.repositories.isShowingCanvas
 

@@ -66,11 +66,15 @@ internal final class TerminalInputSourceCoordinator {
 
   private func restoreChatInputSourceIfNeeded(targetID: InputSourceTargetID, reason: Reason) {
     guard let savedID = savedInputSourceByChatTarget[targetID] else {
-      logger.debug("chat agent has no saved input source target=\(targetID.logValue) reason=\(reason.rawValue)")
+      logger.debug(
+        "chat agent has no saved input source target=\(targetID.logValue) reason=\(reason.rawValue)"
+      )
       return
     }
     if selector.selectInputSource(id: savedID) {
-      logger.debug("restored input source for chat target=\(targetID.logValue) reason=\(reason.rawValue)")
+      logger.debug(
+        "restored input source for chat target=\(targetID.logValue) reason=\(reason.rawValue)"
+      )
     }
   }
 }

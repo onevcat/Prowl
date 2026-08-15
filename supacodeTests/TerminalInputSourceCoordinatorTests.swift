@@ -35,9 +35,17 @@ struct TerminalInputSourceCoordinatorTests {
     let agentSurface = UUID()
     let shellSurface = UUID()
 
-    coordinator.applyFocusedContext(.chatAgent, targetID: .surface(agentSurface), reason: .focusChanged)
+    coordinator.applyFocusedContext(
+      .chatAgent,
+      targetID: .surface(agentSurface),
+      reason: .focusChanged
+    )
     selector.currentID = MockInputSourceID.chinese
-    coordinator.applyFocusedContext(.commandLike, targetID: .surface(shellSurface), reason: .focusChanged)
+    coordinator.applyFocusedContext(
+      .commandLike,
+      targetID: .surface(shellSurface),
+      reason: .focusChanged
+    )
 
     #expect(selector.currentID == KeyboardInputSourceSelector.abcInputSourceID)
     #expect(selector.selectedIDs == [KeyboardInputSourceSelector.abcInputSourceID])
@@ -49,10 +57,22 @@ struct TerminalInputSourceCoordinatorTests {
     let agentSurface = UUID()
     let shellSurface = UUID()
 
-    coordinator.applyFocusedContext(.chatAgent, targetID: .surface(agentSurface), reason: .focusChanged)
+    coordinator.applyFocusedContext(
+      .chatAgent,
+      targetID: .surface(agentSurface),
+      reason: .focusChanged
+    )
     selector.currentID = MockInputSourceID.chinese
-    coordinator.applyFocusedContext(.commandLike, targetID: .surface(shellSurface), reason: .focusChanged)
-    coordinator.applyFocusedContext(.chatAgent, targetID: .surface(agentSurface), reason: .focusChanged)
+    coordinator.applyFocusedContext(
+      .commandLike,
+      targetID: .surface(shellSurface),
+      reason: .focusChanged
+    )
+    coordinator.applyFocusedContext(
+      .chatAgent,
+      targetID: .surface(agentSurface),
+      reason: .focusChanged
+    )
 
     #expect(selector.currentID == MockInputSourceID.chinese)
     #expect(selector.selectedIDs.last == MockInputSourceID.chinese)
@@ -84,12 +104,28 @@ struct TerminalInputSourceCoordinatorTests {
     let selector = MockKeyboardInputSourceSelector()
     let coordinator = TerminalInputSourceCoordinator(selector: selector)
 
-    coordinator.applyFocusedContext(.chatAgent, targetID: .herdrPane("w1:p1"), reason: .focusChanged)
+    coordinator.applyFocusedContext(
+      .chatAgent,
+      targetID: .herdrPane("w1:p1"),
+      reason: .focusChanged
+    )
     selector.currentID = "com.example.inputmethod.PaneOne"
-    coordinator.applyFocusedContext(.commandLike, targetID: .herdrPane("w1:p2"), reason: .focusChanged)
-    coordinator.applyFocusedContext(.chatAgent, targetID: .herdrPane("w1:p2"), reason: .focusChanged)
+    coordinator.applyFocusedContext(
+      .commandLike,
+      targetID: .herdrPane("w1:p2"),
+      reason: .focusChanged
+    )
+    coordinator.applyFocusedContext(
+      .chatAgent,
+      targetID: .herdrPane("w1:p2"),
+      reason: .focusChanged
+    )
     selector.currentID = "com.example.inputmethod.PaneTwo"
-    coordinator.applyFocusedContext(.chatAgent, targetID: .herdrPane("w1:p1"), reason: .focusChanged)
+    coordinator.applyFocusedContext(
+      .chatAgent,
+      targetID: .herdrPane("w1:p1"),
+      reason: .focusChanged
+    )
 
     #expect(selector.selectedIDs.last == "com.example.inputmethod.PaneOne")
   }

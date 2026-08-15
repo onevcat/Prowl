@@ -640,7 +640,11 @@ final class WorktreeTerminalManager {
       guard self.shouldApplyInputSourceContext(for: request) else { return }
       let viewportText = surface.bridge.readViewportText() ?? ""
       let context = TerminalInputContextClassifier.context(job: job, viewportText: viewportText)
-      self.inputSourceCoordinator.applyFocusedContext(context, targetID: .surface(surfaceID), reason: reason)
+      self.inputSourceCoordinator.applyFocusedContext(
+        context,
+        targetID: .surface(surfaceID),
+        reason: reason
+      )
     }
   }
 

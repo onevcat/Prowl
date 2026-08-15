@@ -200,12 +200,25 @@ struct SupacodeApp: App {
     let keyObserver = CommandKeyObserver()
     _commandKeyObserver = State(initialValue: keyObserver)
 
-    switch launchProfile {
-    case .standard:
-      let standardRuntime = Self.makeStandardRuntime(
-        ghostty: runtime,
-        initialSettings: initialSettings
-      )
+    let selectedRuntime = AppRuntimeSelector.make(
+      profile: launchProfile,
+      makeStandard: { initialViewMode in
+        Self.makeStandardRuntime(
+          ghostty: runtime,
+          initialSettings: initialSettings,
+          initialViewMode: initialViewMode
+        )
+      },
+      makeClean: {
+        Self.makeCleanRuntime(
+          ghostty: runtime,
+          initialSettings: initialSettings
+        )
+      }
+    )
+
+    switch selectedRuntime {
+    case .standard(let standardRuntime):
       _standardRuntime = State(initialValue: standardRuntime)
       _cleanRuntime = State(initialValue: nil)
       runtime.onQuit = { [weak store = standardRuntime.store] in
@@ -223,20 +236,9 @@ struct SupacodeApp: App {
         DebugWindowManager.shared.configure(store: standardRuntime.store)
       #endif
 
-    case .clean:
-      let cleanStore = Store(
-        initialState: CleanAppFeature.State(
-          settings: SettingsFeature.State(settings: initialSettings)
-        )
-      ) {
-        CleanAppFeature()
-          .logActions()
-      }
-      let terminalHost = CleanTerminalHost(
-        runtime: runtime,
-        preferredFontSize: initialSettings.terminalFontSize
-      )
-      let cleanRuntime = CleanRuntime(terminalHost: terminalHost, store: cleanStore)
+    case .clean(let cleanRuntime):
+      let cleanStore = cleanRuntime.store
+      let terminalHost = cleanRuntime.terminalHost
       _standardRuntime = State(initialValue: nil)
       _cleanRuntime = State(initialValue: cleanRuntime)
       runtime.onQuit = { [weak cleanStore] in
@@ -253,9 +255,29 @@ struct SupacodeApp: App {
     }
   }
 
-  private static func makeStandardRuntime(
+  private static func makeCleanRuntime(
     ghostty: GhosttyRuntime,
     initialSettings: GlobalSettings
+  ) -> CleanRuntime {
+    let store = Store(
+      initialState: CleanAppFeature.State(
+        settings: SettingsFeature.State(settings: initialSettings)
+      )
+    ) {
+      CleanAppFeature()
+        .logActions()
+    }
+    let terminalHost = CleanTerminalHost(
+      runtime: ghostty,
+      preferredFontSize: initialSettings.terminalFontSize
+    )
+    return CleanRuntime(terminalHost: terminalHost, store: store)
+  }
+
+  private static func makeStandardRuntime(
+    ghostty: GhosttyRuntime,
+    initialSettings: GlobalSettings,
+    initialViewMode: StandardViewMode
   ) -> StandardRuntime {
     let tmuxController = TmuxTerminalController()
     let terminalManager = WorktreeTerminalManager(
@@ -267,7 +289,10 @@ struct SupacodeApp: App {
     let worktreeInfoWatcher = WorktreeInfoWatcherManager()
     let storeBox = SupacodeAppStoreBox()
     let coordinator = makePullRequestRefreshCoordinator(storeBox: storeBox)
-    var initialAppState = AppFeature.State(settings: SettingsFeature.State(settings: initialSettings))
+    var initialAppState = AppFeature.State(
+      settings: SettingsFeature.State(settings: initialSettings),
+      initialViewMode: initialViewMode
+    )
     if let cliOpenPath = cliLaunchOpenPath() {
       initialAppState.launchRestoreMode = .cliOpenPath(cliOpenPath)
     }

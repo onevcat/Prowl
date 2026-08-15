@@ -107,6 +107,8 @@ struct CleanWindowAndSurfaceTests {
     #expect(window.standardWindowButton(.miniaturizeButton)?.isHidden == true)
     #expect(window.standardWindowButton(.zoomButton)?.isHidden == true)
     #expect(CleanWindowConfigurator.titlebarContainer(in: window)?.isHidden == true)
+    #expect(window.contentView?.frame.minY == 0)
+    #expect(window.contentView?.frame.maxY == window.frame.height)
   }
 }
 

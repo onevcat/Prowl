@@ -26,6 +26,7 @@ struct AppFeature {
     var notificationIndicatorCount: Int = 0
     var lastKnownSystemNotificationsEnabled: Bool
     var launchRestoreMode: LaunchRestoreMode
+    var initialViewMode: StandardViewMode
     var hasAppliedInitialViewMode = false
     var suppressLayoutSaveUntilRelaunch = false
     var isAwaitingLaunchLayoutRestore = false
@@ -35,13 +36,18 @@ struct AppFeature {
 
     init(
       repositories: RepositoriesFeature.State = .init(),
-      settings: SettingsFeature.State = .init()
+      settings: SettingsFeature.State = .init(),
+      initialViewMode: StandardViewMode? = nil
     ) {
       var repositories = repositories
       repositories.autoShowActiveAgentsPanel = settings.autoShowActiveAgentsPanel
       repositories.showActiveAgentTabTitles = settings.showActiveAgentTabTitles
       self.repositories = repositories
       self.settings = settings
+      self.initialViewMode =
+        initialViewMode
+        ?? AppLaunchProfile.resolve(settings.defaultViewMode).standardViewMode
+        ?? .normal
       lastKnownSystemNotificationsEnabled = settings.systemNotificationsEnabled
       launchRestoreMode = settings.restoreTerminalLayoutOnLaunch ? .restoreLayout : .lastFocusedWorktree
     }
@@ -862,7 +868,8 @@ struct AppFeature {
         }
 
       case .newTerminalFromCanvas(let focusedWorktreeID):
-        let worktree = canvasFocusedWorktree(focusedWorktreeID: focusedWorktreeID, state: state)
+        let worktree =
+          canvasFocusedWorktree(focusedWorktreeID: focusedWorktreeID, state: state)
           ?? FreestyleTerminal.worktree()
         analyticsClient.capture("terminal_tab_created", nil)
         let shouldRunSetupScript = state.repositories.pendingSetupScriptWorktreeIDs.contains(worktree.id)
@@ -878,7 +885,8 @@ struct AppFeature {
         }
 
       case .newTerminalFromCanvasUsingPWD(let focusedWorktreeID):
-        let worktree = canvasFocusedWorktree(focusedWorktreeID: focusedWorktreeID, state: state)
+        let worktree =
+          canvasFocusedWorktree(focusedWorktreeID: focusedWorktreeID, state: state)
           ?? FreestyleTerminal.worktree()
         analyticsClient.capture("terminal_tab_created", nil)
         let shouldRunSetupScript = state.repositories.pendingSetupScriptWorktreeIDs.contains(worktree.id)

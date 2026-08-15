@@ -20,4 +20,30 @@ internal enum AppLaunchProfile: Equatable, Sendable {
       return .clean
     }
   }
+
+  internal var standardViewMode: StandardViewMode? {
+    guard case .standard(let initialViewMode) = self else { return nil }
+    return initialViewMode
+  }
+}
+
+internal enum AppRuntimeSelection<Standard, Clean> {
+  case standard(Standard)
+  case clean(Clean)
+}
+
+internal enum AppRuntimeSelector {
+  @MainActor
+  internal static func make<Standard, Clean>(
+    profile: AppLaunchProfile,
+    makeStandard: (StandardViewMode) -> Standard,
+    makeClean: () -> Clean
+  ) -> AppRuntimeSelection<Standard, Clean> {
+    switch profile {
+    case .standard(let initialViewMode):
+      return .standard(makeStandard(initialViewMode))
+    case .clean:
+      return .clean(makeClean())
+    }
+  }
 }

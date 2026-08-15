@@ -55,6 +55,10 @@
 - 2026-08-15：静态审计 `SupacodeApp.init`：`AppLaunchProfile` 在 `makeStandardRuntime` 之前解析；Clean switch
   分支没有构造 `TmuxTerminalController`、`WorktreeTerminalManager`、`WorktreeInfoWatcherManager`、
   `PullRequestRefreshCoordinator`、`CLISocketServer` 或 `MemoryWatchdog`。
+- 2026-08-15：`AppRuntimeSelector` 通过 factory 注入验证 runtime 隔离：Clean 只调用 Clean factory，Standard 只调用
+  Standard factory；`SupacodeApp.init` 只消费 selector 返回的单一 runtime，不会预先构造另一条对象图。
+- 2026-08-15：`AppLaunchProfileTests` 冻结现有 Standard 启动语义：未设置、显式 `worktrees`、`freestyle`、未知值与
+  大小写不匹配值都保持 Standard；只有精确 `clean` 进入 Clean runtime。
 - 2026-08-15：对照本机 Herdr `events.rs`、`response.rs`、`panes.rs` 与 Socket API 文档，确认
   `pane.current` / `pane_current`、`events.subscribe` / `subscription_started`、默认 socket path 和 protocol `19`
   wire contract；decoder 仅依赖 `pane_id`、`agent`、`agent_status` 和必要 envelope 字段并忽略未知字段。
@@ -73,9 +77,9 @@
   `Default View > Launch in` 显示 `Clean Mode`。`Cmd+W` 关闭 Settings 后返回同一 shell session。
 - 2026-08-15：使用另一个空的隔离 home 启动默认 Normal mode，确认 Standard runtime 仍显示
   `SidebarNavigationSplitView`、toolbar、traffic lights、Add Repository 空状态和 Worktrees menu，且启动无崩溃。
-- 2026-08-15：显式 changed-file `swift-format` 和 `xcrun swift-format lint --strict` 已执行，最终修改后再次验证通过，
-  `git diff --check` 通过。完整递归 lint 被 `custom` 基线中未触及的 Canvas/tmux 等格式问题阻断；
-  `make format-changed` 因系统 Bash 3.2 不支持 Makefile 使用的 `mapfile` 而不能作为入口。
+- 2026-08-15：稳定 Xcode 的 `xcrun swift-format lint --strict` 对新增 Swift 文件结果为 0；对固定基线以来全部
+  Swift diff 做 changed-line 交集审计，结果同样为 0。整文件模式仍报告 70 条位于未改动基线行的旧长行；
+  `git diff --check` 通过。`make format-changed` 因系统 Bash 3.2 不支持 Makefile 使用的 `mapfile` 而不能作为入口。
 - 2026-08-15：Window menu 改为在 `.windowArrangement` 后追加 `Prowl`，UI 复查确认 Minimize、Zoom、Fill、
   Move & Resize、Bring All to Front 和 Prowl 均存在。
 - 2026-08-15：Herdr event stream 在 `subscription_started` 后发送 `.subscribed`；adapter 收到后重新读取
@@ -84,30 +88,37 @@
   `NSTitlebarContainerView`，其子树包含 `NSTitlebarBackgroundView`、`CABackdropLayer` 和
   `_NSTitlebarDecorationView`；不是透明的 `CleanWindowConfigurationView`。非 fullscreen 时隐藏该容器，并在
   next main-actor turn、窗口成为 key/main、恢复最小化和退出 fullscreen 后重新应用。live 复验
-  `NSTitlebarContainerView.isHidden == true`。
+  `NSTitlebarContainerView.isHidden == true`；窗口测试同时断言 content view 从 `minY == 0` 延伸到
+  `maxY == window.frame.height`，确保隐藏 chrome 后没有遗留顶部布局占位。
 - 2026-08-15：`HerdrInputContextTests` 在关闭 parallel testing 后连续执行 5 轮，全部通过；覆盖 protocol
   compatibility、initial snapshot、subscription race、event refresh、retry/backoff、stop 后丢弃 stale result 等路径。
 - 2026-08-15：Clean 聚焦集合 `AppLaunchProfileTests`、`CleanAppFeatureTests`、
   `CleanWindowAndSurfaceTests`、`HerdrInputContextTests`、`TerminalInputSourceCoordinatorTests` 共
-  `31 tests / 5 suites`，全部通过。
-- 2026-08-15：完整 `make test` 可运行到结束，结果为 `passed_tests: 1782`、`failed_tests: 44`、`errors: 0`、
-  `linker_errors: 0`。44 项均属于固定 `custom` 基线的旧状态断言或测试依赖问题，包括 Freestyle action target、
-  Canvas/Repositories/Command Palette 状态、`ContinuousClock.now` test dependency、worktree path、shortcut display、
-  detached-card ID 与 Canvas geometry；Clean/Herdr 聚焦行为没有失败。唯一 warning 是 test target deployment target
-  `26.1` 高于当前 SDK 支持上限 `26.0.99`。
+  `34 tests / 5 suites`，结果为 `0 failures`、`TEST SUCCEEDED`。
+- 2026-08-15：完整回归与固定 `custom@a8a63678` 基线均运行到结束。当前为 `passed: 1788`、`failed: 42`、
+  `total: 1830`，基线为 `passed: 1758`、`failed: 42`、`total: 1800`；两侧 42 个失败 test identifier 集合完全一致，
+  当前没有仅由 Clean 改动引入的失败。失败均属于固定基线已有的状态断言或测试依赖问题，包括 Freestyle action
+  target、Canvas/Repositories/Command Palette 状态、`ContinuousClock.now` test dependency、worktree path、shortcut
+  display、detached-card ID 与 Canvas geometry。唯一 warning 是 test target deployment target `26.1` 高于当前 SDK
+  支持上限 `26.0.99`。
 - 2026-08-15：最终执行 `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer make install-dev-build`，
   结果为 `errors: 0`、`warnings: 0`、`failed_tests: 0`、`linker_errors: 0`，并安装到
   `/Applications/Prowl.app`。
+- 2026-08-15：最终隔离 home 复验确认 `defaultViewMode=clean`，运行期间没有创建 tmux、CLI socket、repository 或
+  layout persistence 文件。由于已有同 bundle 用户实例必须保留，并行启动的第二实例未产生可观察的 shell 子进程；
+  smoke 结束后仅终止隔离 PID，确认原用户实例继续运行。
 
 ## 未决风险
 
 - full-size titlebar 区域的 window drag 与 Ghostty mouse input 可能冲突，需以 terminal 输入完整性优先进行实机验证。
 - strict Herdr protocol `19` 会在 Herdr wire protocol 升级后暂停输入法集成；升级需要显式 contract review。
-- 完整测试仍有 44 项固定 `custom` 基线失败；本功能以已通过的 Clean/Herdr 聚焦集合隔离验证，基线测试修复不纳入
-  Clean 改动范围。
+- 完整测试当前与固定 `custom` 基线均有同一组 42 项失败；本功能以差分回归和已通过的 Clean/Herdr 聚焦集合隔离
+  验证，基线测试修复不纳入 Clean 改动范围。
 - 当前 agent 不在 Herdr-managed pane（`HERDR_ENV` 未设置），按 Herdr 操作约束不能 attach 或控制真实 session；
   socket contract 已与本机 Herdr protocol `19` 源码核对，但 pane focus 驱动的真实输入法切换仍是运行时验证项。
 - full-size titlebar 区域没有额外 drag strip，以避免吞掉 terminal 首行鼠标事件；窗口拖动手感和 native fullscreen
   的人工验证仍需在日常使用中观察。
 - 隐藏 `NSTitlebarContainerView` 后 Computer Use 无法取得该窗口的 CGWindow 截图；当前视觉结论由 live view
   hierarchy 与 `isHidden == true` 证明，最终像素级截图仍需人工观察补充。
+- 最终 build/install 后的并行同 bundle smoke 无法替代正常单实例启动验证；普通 shell 已由较早的隔离单实例 smoke
+  证明，本次新增的 runtime selector、Standard profile 冻结与窗口几何分别由聚焦测试覆盖。

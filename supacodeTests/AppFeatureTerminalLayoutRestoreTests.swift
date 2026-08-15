@@ -1,3 +1,4 @@
+import Clocks
 import ComposableArchitecture
 import DependenciesTestSupport
 import Foundation
@@ -635,11 +636,11 @@ struct AppFeatureTerminalLayoutRestoreTests {
     let repository = makeRepository(worktrees: [worktree])
     var repositoriesState = RepositoriesFeature.State(repositories: [repository])
     repositoriesState.selection = .worktree(worktree.id)
-    setDefaultViewMode(.shelf)
-    defer { setDefaultViewMode(.normal) }
+    var settings = SettingsFeature.State()
+    settings.defaultViewMode = .shelf
 
     let store = TestStore(
-      initialState: AppFeature.State(repositories: repositoriesState)
+      initialState: AppFeature.State(repositories: repositoriesState, settings: settings)
     ) {
       AppFeature()
     } withDependencies: {
@@ -660,19 +661,21 @@ struct AppFeatureTerminalLayoutRestoreTests {
   }
 
   @Test(.dependencies) func repositoriesChangedAppliesDefaultCanvasWhenNotRestoringLayout() async {
+    let clock = TestClock()
     let worktree = makeWorktree()
     let repository = makeRepository(worktrees: [worktree])
     var repositoriesState = RepositoriesFeature.State(repositories: [repository])
     repositoriesState.selection = .worktree(worktree.id)
-    setDefaultViewMode(.canvas)
-    defer { setDefaultViewMode(.normal) }
+    var settings = SettingsFeature.State()
+    settings.defaultViewMode = .canvas
     let sentCommands = LockIsolated<[TerminalClient.Command]>([])
 
     let store = TestStore(
-      initialState: AppFeature.State(repositories: repositoriesState)
+      initialState: AppFeature.State(repositories: repositoriesState, settings: settings)
     ) {
       AppFeature()
     } withDependencies: {
+      $0.continuousClock = clock
       $0.terminalClient.send = { command in
         sentCommands.withValue { $0.append(command) }
       }
@@ -689,6 +692,7 @@ struct AppFeatureTerminalLayoutRestoreTests {
       $0.repositories.preCanvasTerminalTargetID = worktree.id
       $0.repositories.selection = .canvas
     }
+    await clock.advance(by: canvasSidebarAutoHideDelay)
     await store.finish()
 
     #expect(
@@ -699,20 +703,22 @@ struct AppFeatureTerminalLayoutRestoreTests {
   }
 
   @Test(.dependencies) func layoutRestoredNilAppliesDefaultCanvasWithLastFocusedAnchor() async {
+    let clock = TestClock()
     let worktree = makeWorktree()
     let repository = makeRepository(worktrees: [worktree])
     var repositoriesState = RepositoriesFeature.State(repositories: [repository])
     repositoriesState.lastFocusedWorktreeID = worktree.id
     repositoriesState.selection = nil
-    setDefaultViewMode(.canvas)
-    defer { setDefaultViewMode(.normal) }
+    var settings = SettingsFeature.State()
+    settings.defaultViewMode = .canvas
     let sentCommands = LockIsolated<[TerminalClient.Command]>([])
 
     let store = TestStore(
-      initialState: AppFeature.State(repositories: repositoriesState)
+      initialState: AppFeature.State(repositories: repositoriesState, settings: settings)
     ) {
       AppFeature()
     } withDependencies: {
+      $0.continuousClock = clock
       $0.terminalClient.send = { command in
         sentCommands.withValue { $0.append(command) }
       }
@@ -732,6 +738,7 @@ struct AppFeatureTerminalLayoutRestoreTests {
       $0.repositories.preCanvasTerminalTargetID = worktree.id
       $0.repositories.selection = .canvas
     }
+    await clock.advance(by: canvasSidebarAutoHideDelay)
     await store.finish()
 
     #expect(
@@ -747,11 +754,11 @@ struct AppFeatureTerminalLayoutRestoreTests {
     var repositoriesState = RepositoriesFeature.State(repositories: [repository])
     repositoriesState.lastFocusedWorktreeID = worktree.id
     repositoriesState.selection = nil
-    setDefaultViewMode(.shelf)
-    defer { setDefaultViewMode(.normal) }
+    var settings = SettingsFeature.State()
+    settings.defaultViewMode = .shelf
 
     let store = TestStore(
-      initialState: AppFeature.State(repositories: repositoriesState)
+      initialState: AppFeature.State(repositories: repositoriesState, settings: settings)
     ) {
       AppFeature()
     }
@@ -896,13 +903,4 @@ private func makePlainRepository() -> Repository {
     kind: .plain,
     worktrees: IdentifiedArray()
   )
-}
-
-private func setDefaultViewMode(_ mode: DefaultViewMode) {
-  @Shared(.settingsFile) var settingsFile
-  $settingsFile.withLock {
-    var updated = $0.global
-    updated.defaultViewMode = mode
-    $0.global = updated
-  }
 }
