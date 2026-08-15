@@ -20,6 +20,14 @@ struct AppLaunchProfileTests {
     #expect(AppLaunchProfile.resolve(mode) == expectedProfile)
   }
 
+  @Test func cleanProfileTreatsOptionAsTerminalAlt() {
+    #expect(AppLaunchProfile.clean.ghosttyRuntimeOverrideContents == "macos-option-as-alt = true")
+  }
+
+  @Test func standardProfilePreservesUserOptionBehavior() {
+    #expect(AppLaunchProfile.standard(initialViewMode: .normal).ghosttyRuntimeOverrideContents.isEmpty)
+  }
+
   @Test(arguments: DefaultViewMode.allCases)
   func storedViewModeCodableRoundTrips(mode: DefaultViewMode) throws {
     let encoded = try JSONEncoder().encode(mode)

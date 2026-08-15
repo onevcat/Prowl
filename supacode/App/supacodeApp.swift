@@ -193,7 +193,10 @@ struct SupacodeApp: App {
         preconditionFailure("ghostty_init failed")
       }
     }
-    let runtime = GhosttyRuntime(initialColorScheme: initialSettings.appearanceMode.colorScheme)
+    let runtime = GhosttyRuntime(
+      initialColorScheme: initialSettings.appearanceMode.colorScheme,
+      persistentRuntimeOverrideContents: launchProfile.ghosttyRuntimeOverrideContents
+    )
     _ghostty = State(initialValue: runtime)
     let shortcuts = GhosttyShortcutManager(runtime: runtime)
     _ghosttyShortcuts = State(initialValue: shortcuts)

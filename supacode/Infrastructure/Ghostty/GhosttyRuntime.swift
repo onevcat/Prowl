@@ -44,12 +44,23 @@ final class GhosttyRuntime {
   var appKeybindOverrideContents = ""
   var appKeybindOverrideEntries: [String] = []
   var themeFallbackOverrideContents = ""
+  private let persistentRuntimeOverrideContents: String
   var runtimeOverrideSignature = ""
   var onConfigChange: (() -> Void)?
   var onQuit: (() -> Void)?
 
-  init(initialColorScheme: ColorScheme? = nil) {
-    guard let config = Self.loadConfig() else {
+  init(
+    initialColorScheme: ColorScheme? = nil,
+    persistentRuntimeOverrideContents: String = ""
+  ) {
+    self.persistentRuntimeOverrideContents = persistentRuntimeOverrideContents
+    guard
+      let config = Self.loadConfig(
+        appendingOverrideContents: persistentRuntimeOverrideContents.isEmpty
+          ? nil
+          : persistentRuntimeOverrideContents
+      )
+    else {
       preconditionFailure("ghostty_config_new failed")
     }
     self.config = config
@@ -283,6 +294,7 @@ final class GhosttyRuntime {
 
   func runtimeOverrideContents(appending additionalOverrideContents: String?) -> String? {
     let overrideContents = [
+      persistentRuntimeOverrideContents,
       appKeybindOverrideContents,
       themeFallbackOverrideContents,
       additionalOverrideContents ?? "",

@@ -575,6 +575,49 @@ struct GhosttySurfaceViewTests {
     )
   }
 
+  @Test func optionCanvasNavigationRoutesToTerminalWhenCanvasInactive() throws {
+    let shortcuts = [
+      ("h", kVK_ANSI_H),
+      ("j", kVK_ANSI_J),
+      ("k", kVK_ANSI_K),
+      ("l", kVK_ANSI_L),
+    ]
+
+    for (characters, keyCode) in shortcuts {
+      let event = try makeKeyEvent(
+        characters: characters,
+        charactersIgnoringModifiers: characters,
+        modifiers: [.option],
+        keyCode: UInt16(keyCode)
+      )
+
+      #expect(
+        GhosttySurfaceView.keyEquivalentRouting(
+          for: event,
+          registeredAppActionKeybindings: [],
+          isCanvasActive: false
+        ) == .terminal
+      )
+    }
+  }
+
+  @Test func optionCanvasNavigationRoutesToMenuWhenCanvasActive() throws {
+    let event = try makeKeyEvent(
+      characters: "h",
+      charactersIgnoringModifiers: "h",
+      modifiers: [.option],
+      keyCode: UInt16(kVK_ANSI_H)
+    )
+
+    #expect(
+      GhosttySurfaceView.keyEquivalentRouting(
+        for: event,
+        registeredAppActionKeybindings: [],
+        isCanvasActive: true
+      ) == .appMenu
+    )
+  }
+
   @Test func registeredAppShortcutPrefersMenuHandling() throws {
     let event = try makeKeyEvent(
       characters: "\r",
@@ -584,13 +627,32 @@ struct GhosttySurfaceViewTests {
     )
 
     #expect(
-      GhosttySurfaceView.shouldPreferMenuHandling(
+      GhosttySurfaceView.keyEquivalentRouting(
         for: event,
         registeredAppActionKeybindings: [
           Keybinding(key: "return", modifiers: .init(command: true, control: true))
         ],
         isCanvasActive: false
-      )
+      ) == .appMenu
+    )
+  }
+
+  @Test func registeredOptionCanvasNavigationShortcutPrefersMenuHandling() throws {
+    let event = try makeKeyEvent(
+      characters: "h",
+      charactersIgnoringModifiers: "h",
+      modifiers: [.option],
+      keyCode: UInt16(kVK_ANSI_H)
+    )
+
+    #expect(
+      GhosttySurfaceView.keyEquivalentRouting(
+        for: event,
+        registeredAppActionKeybindings: [
+          Keybinding(key: "h", modifiers: .init(option: true))
+        ],
+        isCanvasActive: false
+      ) == .appMenu
     )
   }
 

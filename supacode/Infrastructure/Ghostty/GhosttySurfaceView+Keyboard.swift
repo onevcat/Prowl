@@ -4,6 +4,12 @@ import GhosttyKit
 import SwiftUI
 
 extension GhosttySurfaceView {
+  internal enum KeyEquivalentRouting: Equatable {
+    case automatic
+    case appMenu
+    case terminal
+  }
+
   override func keyDown(with event: NSEvent) {
     if CanvasDirectionalNewTerminalChordCoordinator.shared.shouldBlockTerminalInput(event) {
       return
@@ -112,7 +118,13 @@ extension GhosttySurfaceView {
       )
     else { return false }
 
-    if shouldPreferMenuHandling(for: event),
+    let routing = keyEquivalentRouting(for: event)
+    if routing == .terminal {
+      keyDown(with: event)
+      return true
+    }
+
+    if routing == .appMenu,
       let menu = NSApp.mainMenu,
       Self.mainMenuHasMatchingItem(for: event, in: menu),
       menu.performKeyEquivalent(with: event)
@@ -219,32 +231,36 @@ extension GhosttySurfaceView {
   }
 
   func shouldPreferMenuHandling(for event: NSEvent) -> Bool {
-    Self.shouldPreferMenuHandling(
+    keyEquivalentRouting(for: event) == .appMenu
+  }
+
+  func keyEquivalentRouting(for event: NSEvent) -> KeyEquivalentRouting {
+    Self.keyEquivalentRouting(
       for: event,
       isRegisteredAppActionShortcut: UserCustomShortcutRegistry.shared.matches(event: event),
       isCanvasActive: CanvasDirectionalNewTerminalChordCoordinator.shared.isCanvasActive
     )
   }
 
-  internal static func shouldPreferMenuHandling(
+  internal static func keyEquivalentRouting(
     for event: NSEvent,
     registeredAppActionKeybindings: [Keybinding],
     isCanvasActive: Bool
-  ) -> Bool {
-    shouldPreferMenuHandling(
+  ) -> KeyEquivalentRouting {
+    keyEquivalentRouting(
       for: event,
       isRegisteredAppActionShortcut: registeredAppActionKeybindings.contains { $0.matches(event: event) },
       isCanvasActive: isCanvasActive
     )
   }
 
-  private static func shouldPreferMenuHandling(
+  private static func keyEquivalentRouting(
     for event: NSEvent,
     isRegisteredAppActionShortcut: Bool,
     isCanvasActive: Bool
-  ) -> Bool {
+  ) -> KeyEquivalentRouting {
     if isRegisteredAppActionShortcut {
-      return true
+      return .appMenu
     }
     if isCanvasActive,
       CanvasView.isDirectionalNewTerminalLeaderShortcut(
@@ -253,13 +269,16 @@ extension GhosttySurfaceView {
         modifierFlags: event.modifierFlags
       )
     {
-      return true
+      return .appMenu
     }
-    return isOptionCanvasNavigationShortcut(
-      keyCode: event.keyCode,
-      charactersIgnoringModifiers: event.charactersIgnoringModifiers,
-      modifierFlags: event.modifierFlags
-    )
+    guard
+      isOptionCanvasNavigationShortcut(
+        keyCode: event.keyCode,
+        charactersIgnoringModifiers: event.charactersIgnoringModifiers,
+        modifierFlags: event.modifierFlags
+      )
+    else { return .automatic }
+    return isCanvasActive ? .appMenu : .terminal
   }
 
   static func isOptionCanvasNavigationShortcut(

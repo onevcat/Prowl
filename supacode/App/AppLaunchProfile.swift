@@ -25,6 +25,15 @@ internal enum AppLaunchProfile: Equatable, Sendable {
     guard case .standard(let initialViewMode) = self else { return nil }
     return initialViewMode
   }
+
+  internal var ghosttyRuntimeOverrideContents: String {
+    switch self {
+    case .standard:
+      return ""
+    case .clean:
+      return "macos-option-as-alt = true"
+    }
+  }
 }
 
 internal enum AppRuntimeSelection<Standard, Clean> {

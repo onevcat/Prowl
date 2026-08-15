@@ -43,6 +43,9 @@ Prowl 不发送控制命令。它只读取 focused pane，并订阅 pane lifecyc
 - focused pane 存在 agent 时，按该 `pane_id` 恢复已记忆的输入法。
 - focused pane 是 shell/command 时，选择 ABC。
 - 不同 Herdr pane 分别记忆输入法。
+- `Option+H/J/K/L` 不作为 Prowl Canvas 导航处理，按键会继续传给 terminal，供 Herdr 自己切换 tab/workspace。
+- Clean runtime 强制启用 `macos-option-as-alt = true`，确保 Option 组合编码为 terminal Alt；代价是 Clean 中不能用
+  Option 组合输入 macOS 特殊字符。
 - 退出或 detach Herdr 后，自动恢复外层 terminal 的前台进程判断。
 
 socket 不存在、断开、响应异常或 protocol 不兼容时，Prowl 保持当前输入法并静默重试或停止集成，不显示产品
