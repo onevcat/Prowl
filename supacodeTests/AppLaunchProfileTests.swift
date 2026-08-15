@@ -19,11 +19,18 @@ struct AppLaunchProfileTests {
     #expect(AppLaunchProfile.resolve(mode) == expectedProfile)
   }
 
-  @Test func cleanModeCodableRoundTrips() throws {
-    let encoded = try JSONEncoder().encode(DefaultViewMode.clean)
+  @Test(arguments: DefaultViewMode.allCases)
+  func storedViewModeCodableRoundTrips(mode: DefaultViewMode) throws {
+    let encoded = try JSONEncoder().encode(mode)
     let decoded = try JSONDecoder().decode(DefaultViewMode.self, from: encoded)
 
-    #expect(String(decoding: encoded, as: UTF8.self) == #""clean""#)
-    #expect(decoded == .clean)
+    #expect(String(decoding: encoded, as: UTF8.self) == #""\#(mode.rawValue)""#)
+    #expect(decoded == mode)
+  }
+
+  @Test func legacySettingsWithoutDefaultViewModeUseNormal() throws {
+    let settings = try JSONDecoder().decode(GlobalSettings.self, from: Data("{}".utf8))
+
+    #expect(settings.defaultViewMode == .normal)
   }
 }
