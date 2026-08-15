@@ -45,6 +45,9 @@
 | 2026-08-15 | 不兼容响应进入 compatibility pause | Clean 的周期性 foreground probe 不应在 protocol 不兼容时每秒重新启动 adapter | 同一次 Herdr 前台周期保持暂停；检测到真正退出 Herdr 后才允许下次进入重新握手 |
 | 2026-08-15 | Ghostty surface 延迟到 `CleanRootView.onAppear` 创建 | `SupacodeApp.init` 早于 `applicationDidFinishLaunching`，此时创建 surface 会返回 `nil` | host 初始化仍不构造 Standard runtime；首帧使用稳定透明容器，app launch 完成后创建唯一 shell surface |
 | 2026-08-15 | shell 退出时丢弃 surface，手动关窗时保留 surface | Ghostty 的 close callback 通过 `processAlive` 区分进程退出和用户关窗；保留已退出的 surface 会导致 reopen 得到 dead terminal | `exit` 后下次 reopen 创建新 shell；`Cmd+W` 关窗后 reopen 仍返回原 session |
+| 2026-08-15 | 保留系统 Window menu 并仅追加 Clean 主窗口入口 | 替换 `.windowArrangement` 会一并移除 Minimize、Zoom、Fill、Move & Resize 和 Bring All to Front | Clean 不提供 Prowl tab/split，但保留原生窗口管理能力 |
+| 2026-08-15 | Herdr 订阅确认后重新读取 `pane.current` | initial snapshot 与 `events.subscribe` 生效之间存在焦点变化窗口，仅依赖后续 event 可能永久漏掉最新 pane | `.subscribed` 和首个 `.event` 都会重置重连退避；订阅确认时补一次 snapshot 关闭竞态 |
+| 2026-08-15 | 非 fullscreen 时隐藏 `NSTitlebarContainerView` | Tahoe 会在 `.fullSizeContentView` 上方继续绘制 32 pt titlebar background/backdrop/decoration，遮住终端第一行 | Clean 获得真正 full-bleed 内容；窗口状态变化后需要重新应用隐藏配置 |
 
 ## 验证记录
 
@@ -75,7 +78,8 @@
   进程树确认创建 `/usr/bin/login` 与交互式 `zsh` 子进程；terminal 执行
   `printf 'CLEAN_SMOKE:%s\\n' "$PWD"`，输出 `CLEAN_SMOKE:/tmp/prowl-clean-smoke-home`。
 - 2026-08-15：Computer Use 检查 Clean main window：AX 树只有无标题 `main` window、单一 terminal scroll/text
-  area 和系统 menu bar；没有 traffic-light button、sidebar、toolbar 或 tab bar。截图确认 terminal 内容延伸到窗口顶部。
+  area 和系统 menu bar；没有 traffic-light button、sidebar、toolbar 或 tab bar。截图发现 terminal 内容虽延伸到窗口顶部，
+  但第一行被顶部约 32 pt 的系统 titlebar 绘制层遮挡。
 - 2026-08-15：`Cmd+,` 打开的 Settings window 保留 close/minimize/fullscreen traffic lights；General 页的
   `Default View > Launch in` 显示 `Clean Mode`。`Cmd+W` 关闭 Settings 后返回同一 shell session。
 - 2026-08-15：使用另一个空的隔离 home 启动默认 Normal mode，确认 Standard runtime 仍显示
@@ -90,6 +94,23 @@
 - 2026-08-15：最终源码 build/install 后再次请求运行四组 Clean 聚焦测试，沙箱外命令在启动前因自动审批 stream
   断开被拒绝，因此没有产生新的 test result；未通过修改 cache、`HOME` 或替代命令绕过。production target 的
   fresh build/install 结果仍为 0 error、0 warning。
+- 2026-08-15：Window menu 改为在 `.windowArrangement` 后追加 `Prowl`，UI 复查确认 Minimize、Zoom、Fill、
+  Move & Resize、Bring All to Front 和 Prowl 均存在。
+- 2026-08-15：Herdr event stream 在 `subscription_started` 后发送 `.subscribed`；adapter 收到后重新读取
+  `pane.current`，同时让 `.event` 重置 reconnect backoff，以兼容 `.bufferingNewest(1)` 覆盖订阅状态的情况。
+- 2026-08-15：LLDB live view hierarchy 确认遮挡层为 `NSThemeFrame` 下 frame 为 `(0, 1052, 1728, 32)` 的
+  `NSTitlebarContainerView`，其子树包含 `NSTitlebarBackgroundView`、`CABackdropLayer` 和
+  `_NSTitlebarDecorationView`；不是透明的 `CleanWindowConfigurationView`。非 fullscreen 时隐藏该容器，并在
+  next main-actor turn、窗口成为 key/main、恢复最小化和退出 fullscreen 后重新应用。live 复验
+  `NSTitlebarContainerView.isHidden == true`。
+- 2026-08-15：最新聚焦测试命令 exit `65`，测试未执行。新增 production target 和测试源完成编译后，test target
+  被 `custom` 基线已有 Canvas 测试接口缺失阻断：`CanvasView.isFreestyleNewTerminalChordKey`、
+  `CanvasView.FocusRequest`、`nextHandledCanvasFocusRequestToken`。xcresult 位于
+  `/Users/yam/Library/Developer/Xcode/DerivedData/supacode-hgdicxisrjoerpcgwhzcpwwtmhkb/Logs/Test/`
+  `Test-supacode-2026.08.15_17-24-58-+0800.xcresult`。
+- 2026-08-15：最终执行 `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer make install-dev-build`，
+  结果为 `errors: 0`、`warnings: 0`、`failed_tests: 0`、`linker_errors: 0`，并安装到
+  `/Applications/Prowl.app`。
 
 ## 未决风险
 
@@ -101,3 +122,5 @@
   socket contract 已与本机 Herdr protocol `19` 源码核对，但 pane focus 驱动的真实输入法切换仍是运行时验证项。
 - full-size titlebar 区域没有额外 drag strip，以避免吞掉 terminal 首行鼠标事件；窗口拖动手感和 native fullscreen
   的人工验证仍需在日常使用中观察。
+- 隐藏 `NSTitlebarContainerView` 后 Computer Use 无法取得该窗口的 CGWindow 截图；当前视觉结论由 live view
+  hierarchy 与 `isHidden == true` 证明，最终像素级截图仍需人工观察补充。
