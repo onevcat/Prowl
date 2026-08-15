@@ -43,7 +43,8 @@ internal struct StandardAppCommands: Commands {
       }
       .modifier(
         KeyboardShortcutModifier(
-          shortcut: store.resolvedKeybindings.keyboardShortcut(for: AppShortcuts.CommandID.openSettings)
+          shortcut: store.resolvedKeybindings.keyboardShortcut(
+            for: AppShortcuts.CommandID.openSettings)
         )
       )
     }
@@ -99,7 +100,7 @@ internal struct CleanAppCommands: Commands {
       }
       .keyboardShortcut("w", modifiers: .command)
     }
-    CommandGroup(replacing: .windowArrangement) {
+    CommandGroup(after: .windowArrangement) {
       Button("Prowl") {
         guard mainWindowOpenerRegistered else { return }
         _ = NSApplication.shared.surfaceMainWindow()
@@ -144,7 +145,8 @@ internal struct CleanAppCommands: Commands {
       }
       .modifier(
         KeyboardShortcutModifier(
-          shortcut: resolvedKeybindings.keyboardShortcut(for: AppShortcuts.CommandID.quitApplication)
+          shortcut: resolvedKeybindings.keyboardShortcut(
+            for: AppShortcuts.CommandID.quitApplication)
         )
       )
     }
