@@ -192,6 +192,7 @@ final class GitWorktreeRegistryMonitor: WorktreeRegistryMonitoring {
   private let onEvent: @MainActor @Sendable () -> Void
   private var commonDirectorySource: DispatchSourceFileSystemObject?
   private var worktreesDirectorySource: DispatchSourceFileSystemObject?
+  private var registryEntrySources: [URL: DispatchSourceFileSystemObject] = [:]
   private var isWorktreesDirectoryPresent: Bool
 
   init?(
@@ -205,7 +206,7 @@ final class GitWorktreeRegistryMonitor: WorktreeRegistryMonitoring {
     worktreesDirectoryURL = commonGitDirectoryURL.appending(path: "worktrees")
     self.onEvent = onEvent
     isWorktreesDirectoryPresent = GitCommonDirectory.isDirectory(worktreesDirectoryURL, fileManager: fileManager)
-    commonDirectorySource = Self.makeDirectorySource(url: commonGitDirectoryURL) { [weak self] in
+    commonDirectorySource = Self.makeVnodeSource(url: commonGitDirectoryURL) { [weak self] in
       self?.handleCommonDirectoryEvent()
     }
     if isWorktreesDirectoryPresent {
@@ -214,6 +215,7 @@ final class GitWorktreeRegistryMonitor: WorktreeRegistryMonitoring {
     guard commonDirectorySource != nil || worktreesDirectorySource != nil else {
       return nil
     }
+    syncRegistryEntrySources()
   }
 
   func cancel() {
@@ -221,6 +223,7 @@ final class GitWorktreeRegistryMonitor: WorktreeRegistryMonitoring {
     worktreesDirectorySource?.cancel()
     commonDirectorySource = nil
     worktreesDirectorySource = nil
+    cancelRegistryEntrySources()
   }
 
   private func handleCommonDirectoryEvent() {
@@ -231,9 +234,11 @@ final class GitWorktreeRegistryMonitor: WorktreeRegistryMonitoring {
     isWorktreesDirectoryPresent = isPresent
     if isPresent {
       startWorktreesDirectorySourceIfNeeded()
+      syncRegistryEntrySources()
     } else {
       worktreesDirectorySource?.cancel()
       worktreesDirectorySource = nil
+      cancelRegistryEntrySources()
     }
     onEvent()
   }
@@ -244,23 +249,83 @@ final class GitWorktreeRegistryMonitor: WorktreeRegistryMonitoring {
         isWorktreesDirectoryPresent = false
         worktreesDirectorySource?.cancel()
         worktreesDirectorySource = nil
+        cancelRegistryEntrySources()
         onEvent()
       }
       return
     }
+    syncRegistryEntrySources()
     onEvent()
+  }
+
+  // `git worktree move` rewrites `<commonGitDir>/worktrees/<name>/gitdir` in place and touches
+  // nothing else: the registry entry keeps the name it was created under, and neither the common
+  // directory nor `worktrees/` changes, so a vnode source on either stays silent. Watching each
+  // entry's `gitdir` file is what makes a move visible; without it the move is only picked up by
+  // the 30 s active-scene poll, and not at all while the app is in the background.
+  private func handleRegistryEntryEvent() {
+    syncRegistryEntrySources()
+    onEvent()
+  }
+
+  private func syncRegistryEntrySources() {
+    let desiredURLs = Self.registryEntryURLs(inWorktreesDirectory: worktreesDirectoryURL, fileManager: .default)
+    for (url, source) in registryEntrySources where !desiredURLs.contains(url) {
+      source.cancel()
+      registryEntrySources.removeValue(forKey: url)
+    }
+    for url in desiredURLs where registryEntrySources[url] == nil {
+      registryEntrySources[url] = Self.makeVnodeSource(url: url) { [weak self] in
+        self?.handleRegistryEntryEvent()
+      }
+    }
+  }
+
+  private func cancelRegistryEntrySources() {
+    for source in registryEntrySources.values {
+      source.cancel()
+    }
+    registryEntrySources.removeAll()
+  }
+
+  /// One watch target per registry entry: the entry's `gitdir` file when it exists, and otherwise
+  /// the entry directory itself, so that a `gitdir` written moments after `git worktree add`
+  /// created the directory still produces an event and promotes the watch to the file.
+  static func registryEntryURLs(
+    inWorktreesDirectory worktreesDirectoryURL: URL,
+    fileManager: FileManager
+  ) -> Set<URL> {
+    guard
+      let entries = try? fileManager.contentsOfDirectory(
+        at: worktreesDirectoryURL,
+        includingPropertiesForKeys: nil,
+        options: [.skipsHiddenFiles]
+      )
+    else {
+      return []
+    }
+    var urls: Set<URL> = []
+    for entry in entries where GitCommonDirectory.isDirectory(entry, fileManager: fileManager) {
+      let gitdirURL = entry.appending(path: "gitdir").standardizedFileURL
+      if fileManager.fileExists(atPath: gitdirURL.path(percentEncoded: false)) {
+        urls.insert(gitdirURL)
+      } else {
+        urls.insert(entry.standardizedFileURL)
+      }
+    }
+    return urls
   }
 
   private func startWorktreesDirectorySourceIfNeeded() {
     guard worktreesDirectorySource == nil else {
       return
     }
-    worktreesDirectorySource = Self.makeDirectorySource(url: worktreesDirectoryURL) { [weak self] in
+    worktreesDirectorySource = Self.makeVnodeSource(url: worktreesDirectoryURL) { [weak self] in
       self?.handleWorktreesDirectoryEvent()
     }
   }
 
-  private static func makeDirectorySource(
+  private static func makeVnodeSource(
     url: URL,
     onEvent: @escaping @MainActor @Sendable () -> Void
   ) -> DispatchSourceFileSystemObject? {
