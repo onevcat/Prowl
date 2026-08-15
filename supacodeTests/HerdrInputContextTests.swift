@@ -6,6 +6,7 @@ import Testing
 
 @testable import supacode
 
+@Suite(.serialized)
 @MainActor
 struct HerdrInputContextTests {
   @Test func detectsExactHerdrForegroundProcess() {
@@ -59,7 +60,7 @@ struct HerdrInputContextTests {
     let response = try JSONDecoder().decode(
       HerdrResponseEnvelope.self,
       from: Data(
-        #"{"id":"clean-current","result":{"type":"pane_current","pane":{"pane_id":"w1:p2","agent":"codex","agent_status":"working","future_field":true}}}"#
+        #"{"id":"clean-current","result":{"type":"pane_current","pane":{"pane_id":"w1:p2","agent":"codex","agent_status":"done","future_field":true}}}"#
           .utf8
       )
     )
@@ -72,7 +73,7 @@ struct HerdrInputContextTests {
     let response = try JSONDecoder().decode(
       HerdrResponseEnvelope.self,
       from: Data(
-        #"{"id":"clean-current","result":{"type":"pane_current","pane":{"pane_id":"w1:p3","agent_status":"unknown"}}}"#
+        #"{"id":"clean-current","result":{"type":"pane_current","pane":{"pane_id":"w1:p3","agent_status":"working"}}}"#
           .utf8
       )
     )
@@ -86,6 +87,9 @@ struct HerdrInputContextTests {
       "pane.updated",
       "pane.agent_detected",
       "pane.agent_status_changed",
+      "pane.exited",
+      "pane.closed",
+      "pane.moved",
     ]
   )
   func decodesSubscribedLifecycleEvent(eventName: String) throws {
@@ -95,6 +99,17 @@ struct HerdrInputContextTests {
     )
 
     #expect(event.event == eventName)
+  }
+
+  @Test func decodesAgentReleasedEventPayload() throws {
+    let event = try JSONDecoder().decode(
+      HerdrEventEnvelope.self,
+      from: Data(
+        #"{"event":"pane.agent_detected","data":{"pane_id":"w1:p2","released":true}}"#.utf8
+      )
+    )
+
+    #expect(event.event == "pane.agent_detected")
   }
 
   @Test func acceptsSupportedHerdrProtocol() throws {
@@ -127,6 +142,7 @@ struct HerdrInputContextTests {
   @Test func adapterRetriesConnectionFailureWithInjectedClock() async {
     let clock = TestClock()
     let attemptCount = LockIsolated(0)
+    let paneContextCount = LockIsolated(0)
     let client = HerdrInputContextClient(
       currentPane: {
         attemptCount.withValue { $0 += 1 }
@@ -134,27 +150,51 @@ struct HerdrInputContextTests {
       },
       events: { AsyncStream { $0.finish() } }
     )
-    let adapter = HerdrInputContextAdapter(client: client, clock: clock) { _ in }
+    let adapter = HerdrInputContextAdapter(client: client, clock: clock) { _ in
+      paneContextCount.withValue { $0 += 1 }
+    }
 
     adapter.start()
-    await Task.yield()
-    await Task.yield()
+    await waitUntil { attemptCount.value == 1 }
+    await Task.megaYield()
     #expect(attemptCount.value == 1)
 
     await clock.advance(by: .milliseconds(249))
-    await Task.yield()
     #expect(attemptCount.value == 1)
 
     await clock.advance(by: .milliseconds(1))
-    await Task.yield()
-    await Task.yield()
+    await waitUntil { attemptCount.value == 2 }
     #expect(attemptCount.value == 2)
+    #expect(paneContextCount.value == 0)
+    adapter.stop()
+  }
+
+  @Test func adapterDoesNotPublishPaneAfterDecodeFailure() async {
+    let clock = TestClock()
+    let attemptCount = LockIsolated(0)
+    let paneContextCount = LockIsolated(0)
+    let client = HerdrInputContextClient(
+      currentPane: {
+        attemptCount.withValue { $0 += 1 }
+        throw HerdrSocketError.invalidResponse
+      },
+      events: { AsyncStream { $0.finish() } }
+    )
+    let adapter = HerdrInputContextAdapter(client: client, clock: clock) { _ in
+      paneContextCount.withValue { $0 += 1 }
+    }
+
+    adapter.start()
+    await waitUntil { attemptCount.value == 1 }
+
+    #expect(paneContextCount.value == 0)
     adapter.stop()
   }
 
   @Test func adapterStopsAfterProtocolMismatch() async {
     let clock = TestClock()
     let attemptCount = LockIsolated(0)
+    let paneContextCount = LockIsolated(0)
     let client = HerdrInputContextClient(
       currentPane: {
         attemptCount.withValue { $0 += 1 }
@@ -162,16 +202,17 @@ struct HerdrInputContextTests {
       },
       events: { AsyncStream { $0.finish() } }
     )
-    let adapter = HerdrInputContextAdapter(client: client, clock: clock) { _ in }
+    let adapter = HerdrInputContextAdapter(client: client, clock: clock) { _ in
+      paneContextCount.withValue { $0 += 1 }
+    }
 
     adapter.start()
-    await Task.yield()
-    await Task.yield()
+    await waitUntil { attemptCount.value == 1 && !adapter.isRunning }
 
     #expect(attemptCount.value == 1)
     #expect(!adapter.isRunning)
+    #expect(paneContextCount.value == 0)
     await clock.advance(by: .seconds(2))
-    await Task.yield()
     #expect(attemptCount.value == 1)
 
     adapter.start()
@@ -180,10 +221,43 @@ struct HerdrInputContextTests {
 
     adapter.resetAfterHerdrExit()
     adapter.start()
-    await Task.yield()
-    await Task.yield()
+    await waitUntil { attemptCount.value == 2 }
     #expect(attemptCount.value == 2)
     adapter.stop()
+  }
+
+  @Test func adapterDoesNotPublishStalePaneAfterStop() async throws {
+    let paneContinuation = LockIsolated<CheckedContinuation<HerdrPaneInfo, Never>?>(nil)
+    let receivedPanes = LockIsolated<[HerdrPaneInfo]>([])
+    let client = HerdrInputContextClient(
+      currentPane: {
+        await withCheckedContinuation { continuation in
+          paneContinuation.setValue(continuation)
+        }
+      },
+      events: { AsyncStream { $0.finish() } }
+    )
+    let adapter = HerdrInputContextAdapter(client: client, clock: ImmediateClock()) { pane in
+      receivedPanes.withValue { $0.append(pane) }
+    }
+
+    adapter.start()
+    await waitUntil { paneContinuation.value != nil }
+    adapter.stop()
+    let continuation = try #require(
+      paneContinuation.withValue { value in
+        defer { value = nil }
+        return value
+      }
+    )
+    continuation.resume(
+      returning: HerdrPaneInfo(paneID: "w1:stale", agent: "codex", agentStatus: "working")
+    )
+    for _ in 0..<20 {
+      await Task.yield()
+    }
+
+    #expect(receivedPanes.value.isEmpty)
   }
 
   @Test func adapterRefreshesCurrentPaneAfterSubscriptionStarts() async {
@@ -205,10 +279,7 @@ struct HerdrInputContextTests {
     let adapter = HerdrInputContextAdapter(client: client, clock: clock) { _ in }
 
     adapter.start()
-    for _ in 0..<20 {
-      guard refreshCount.value < 2 else { break }
-      await Task.yield()
-    }
+    await waitUntil { refreshCount.value == 2 }
 
     #expect(refreshCount.value == 2)
     adapter.stop()
@@ -231,12 +302,20 @@ struct HerdrInputContextTests {
     let adapter = HerdrInputContextAdapter(client: client, clock: ImmediateClock()) { _ in }
 
     adapter.start()
-    for _ in 0..<20 {
-      guard refreshCount.value < 2 else { break }
-      await Task.yield()
-    }
+    await waitUntil { refreshCount.value == 2 }
 
     #expect(refreshCount.value == 2)
     adapter.stop()
+  }
+}
+
+@MainActor
+private func waitUntil(
+  _ condition: @MainActor @escaping () -> Bool,
+  maxIterations: Int = 500
+) async {
+  for _ in 0..<maxIterations {
+    guard !condition() else { return }
+    await Task.yield()
   }
 }

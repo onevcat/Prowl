@@ -29,7 +29,13 @@ struct AppLaunchProfileTests {
   }
 
   @Test func legacySettingsWithoutDefaultViewModeUseNormal() throws {
-    let settings = try JSONDecoder().decode(GlobalSettings.self, from: Data("{}".utf8))
+    let encodedSettings = try JSONEncoder().encode(GlobalSettings.default)
+    var legacySettings = try #require(
+      JSONSerialization.jsonObject(with: encodedSettings) as? [String: Any]
+    )
+    legacySettings.removeValue(forKey: "defaultViewMode")
+    let legacyData = try JSONSerialization.data(withJSONObject: legacySettings)
+    let settings = try JSONDecoder().decode(GlobalSettings.self, from: legacyData)
 
     #expect(settings.defaultViewMode == .normal)
   }

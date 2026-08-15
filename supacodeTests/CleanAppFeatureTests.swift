@@ -1,5 +1,6 @@
 import ComposableArchitecture
 import DependenciesTestSupport
+import Sharing
 import Testing
 
 @testable import supacode
@@ -67,6 +68,38 @@ struct CleanAppFeatureTests {
     await store.receive(\.updates.applySettings) {
       $0.updates.didConfigureUpdates = true
     }
+  }
+
+  @Test(.dependencies) func launchModeChangePersistsForNextLaunchWithoutChangingTmuxSetting() async
+  {
+    let storage = SettingsTestStorage()
+    var settings = GlobalSettings.default
+    settings.defaultViewMode = .clean
+    settings.useAnonymousTmuxBackedTerminals = true
+    let store = TestStore(
+      initialState: CleanAppFeature.State(
+        settings: SettingsFeature.State(settings: settings)
+      )
+    ) {
+      CleanAppFeature()
+    } withDependencies: {
+      $0.settingsFileStorage = storage.storage
+    }
+    store.exhaustivity = .off
+
+    await store.send(.settings(.binding(.set(\.defaultViewMode, .normal))))
+    await store.finish()
+
+    let persistedSettings: SettingsFile = withDependencies {
+      $0.settingsFileStorage = storage.storage
+    } operation: {
+      @Shared(.settingsFile) var settingsFile
+      return settingsFile
+    }
+    #expect(store.state.settings.defaultViewMode == .normal)
+    #expect(store.state.settings.useAnonymousTmuxBackedTerminals)
+    #expect(persistedSettings.global.defaultViewMode == .normal)
+    #expect(persistedSettings.global.useAnonymousTmuxBackedTerminals)
   }
 
   @Test(.dependencies) func quitWithoutConfirmationTerminatesApplication() async {
