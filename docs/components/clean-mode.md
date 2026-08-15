@@ -59,6 +59,9 @@ Prowl 不发送控制命令。它只读取 focused pane，并订阅 pane lifecyc
   Option 组合输入 macOS 特殊字符。
 - 退出或 detach Herdr 后，自动恢复外层 terminal 的前台进程判断。
 
+Herdr JSON API 的每条 Unix socket connection 只处理一条 request。Prowl 使用独立短连接完成 protocol check 和
+`pane.current` 查询，并为 `events.subscribe` 保留一条单独的长连接；这些请求不能复用同一条 connection。
+
 socket 不存在、断开、响应异常或 protocol 不兼容时，Prowl 保持当前输入法并静默重试或停止集成，不显示产品
 overlay。首期只支持 bare `herdr` 的 default local session，不支持 named session、remote Herdr 或自定义
 `HERDR_SOCKET_PATH`。

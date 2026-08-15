@@ -44,11 +44,10 @@ nonisolated internal struct HerdrSocketClient: Sendable {
   internal func currentPane() async throws -> HerdrPaneInfo {
     let socketPath = socketPath
     return try await Task.detached(priority: .utility) {
+      try Self.validateProtocol(at: socketPath)
       let fileDescriptor = try Self.connect(to: socketPath)
       defer { Darwin.close(fileDescriptor) }
       try Self.setTimeout(Self.requestTimeout, on: fileDescriptor)
-      try Self.writeLine(try Self.protocolRequest(), to: fileDescriptor)
-      try HerdrProtocolCompatibility.validate(Self.readResponse(from: fileDescriptor))
       let request = HerdrRequest(
         id: "prowl-clean-current",
         method: "pane.current",
@@ -183,6 +182,14 @@ nonisolated internal struct HerdrSocketClient: Sendable {
     )
   }
 
+  fileprivate static func validateProtocol(at socketPath: String) throws {
+    let fileDescriptor = try connect(to: socketPath)
+    defer { Darwin.close(fileDescriptor) }
+    try setTimeout(requestTimeout, on: fileDescriptor)
+    try writeLine(try protocolRequest(), to: fileDescriptor)
+    try HerdrProtocolCompatibility.validate(readResponse(from: fileDescriptor))
+  }
+
   fileprivate static func readResponse(from fileDescriptor: Int32) throws -> HerdrResponseEnvelope {
     let response = try JSONDecoder().decode(
       HerdrResponseEnvelope.self,
@@ -248,6 +255,7 @@ nonisolated private final class HerdrEventSocketSession: @unchecked Sendable {
 
   private func run() {
     do {
+      try HerdrSocketClient.validateProtocol(at: socketPath)
       let descriptor = try HerdrSocketClient.connect(to: socketPath)
       lock.lock()
       if isCancelled {
@@ -260,8 +268,6 @@ nonisolated private final class HerdrEventSocketSession: @unchecked Sendable {
       lock.unlock()
 
       try HerdrSocketClient.setTimeout(HerdrSocketClient.requestTimeout, on: descriptor)
-      try HerdrSocketClient.writeLine(try HerdrSocketClient.protocolRequest(), to: descriptor)
-      try HerdrProtocolCompatibility.validate(HerdrSocketClient.readResponse(from: descriptor))
       try HerdrSocketClient.writeLine(try HerdrSocketClient.subscriptionRequest(), to: descriptor)
       let acknowledgement = try HerdrSocketClient.readResponse(from: descriptor)
       guard acknowledgement.result?.type == "subscription_started" else {
