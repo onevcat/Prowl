@@ -1,11 +1,11 @@
-# View Modes — Normal / Canvas / Shelf
+# View Modes — Normal / Canvas / Shelf / Clean
 
-> The same open worktrees, three layouts. Switching modes rearranges the view; it
-> never changes your running sessions.
+> Normal, Canvas, and Shelf are three layouts for the same open worktrees. Clean
+> is a separate launch runtime with one standalone shell.
 
-**Keywords:** view mode, layout, normal, canvas, shelf, switch view, toggle canvas, toggle shelf, default view
+**Keywords:** view mode, layout, normal, canvas, shelf, clean, switch view, toggle canvas, toggle shelf, default view
 
-**Related:** [canvas](canvas.md) · [shelf](shelf.md) · [concepts](../concepts.md) · [repositories-and-worktrees](repositories-and-worktrees.md)
+**Related:** [canvas](canvas.md) · [shelf](shelf.md) · [clean-mode](clean-mode.md) · [concepts](../concepts.md) · [repositories-and-worktrees](repositories-and-worktrees.md)
 
 ## The three modes
 
@@ -14,6 +14,10 @@
 | **Normal** | Sidebar of worktrees + the focused worktree's tabs/panes | Deep, focused work on one branch | default (exit Canvas/Shelf) |
 | **Canvas** | Zoomable board of live terminal cards | See many agents at once; **broadcast** | `⌘⌥↩` |
 | **Shelf** | Vertical "book spines" you flip through | Fast keyboard triage of many worktrees | `⌘⇧↩` |
+
+Clean is not a fourth layout in this table. It does not load the shared
+repository/worktree session and cannot be toggled at runtime. See
+[Clean Mode](clean-mode.md).
 
 ## How to switch
 
@@ -38,8 +42,9 @@ Toggling Canvas or Shelf with **no open worktrees** does nothing.
 
 ## Launch behavior
 
-`defaultViewMode` (Settings) chooses which mode Prowl opens in:
-`normal`, `shelf`, or `canvas`.
+`defaultViewMode` (Settings → General → Default View → Launch in) chooses which
+runtime Prowl opens on the next launch: `normal`, `shelf`, `canvas`, or `clean`.
+Changing it never hot-switches the current process.
 
 ## Which to recommend
 
@@ -47,3 +52,5 @@ Toggling Canvas or Shelf with **no open worktrees** does nothing.
   ([details](canvas.md)).
 - Cycling agents one-by-one with the keyboard → **Shelf** ([details](shelf.md)).
 - Heads-down on a single branch → **Normal**.
+- A chrome-free standalone shell or a manual Herdr container → **Clean**
+  ([details](clean-mode.md)).

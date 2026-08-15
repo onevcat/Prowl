@@ -3,20 +3,20 @@
 > The Settings window (`⌘,`): what each tab controls. For the exhaustive
 > field-by-field list, see [`reference/settings-fields.md`](../reference/settings-fields.md).
 
-**Keywords:** settings, preferences, ⌘comma, general, notifications, shortcuts, worktree, updates, advanced, github, repo settings, appearance
+**Keywords:** settings, preferences, ⌘comma, general, notifications, shortcuts, worktree, updates, advanced, github, repo settings, appearance, clean mode
 
-**Related:** [reference/settings-fields](../reference/settings-fields.md) · [custom-actions](custom-actions.md) · [updates](updates.md) · [notifications](notifications.md)
+**Related:** [reference/settings-fields](../reference/settings-fields.md) · [clean-mode](clean-mode.md) · [custom-actions](custom-actions.md) · [updates](updates.md) · [notifications](notifications.md)
 
 ## Opening
 
-`⌘,` (`open_settings`), the app menu, or Command Palette → "Open Settings". The
-window is a sidebar of tabs plus a detail pane.
+`⌘,` (`open_settings`) or the app menu. Standard runtime also exposes Command
+Palette → "Open Settings". The window is a sidebar of tabs plus a detail pane.
 
 ## Tabs
 
 | Tab | Controls |
 |-----|----------|
-| **General** | Appearance (system/light/dark), default app for opening worktrees, confirm-before-quit, default view mode, window chrome tint, toolbar buttons (Run / Open-in-editor), dim unfocused splits, Canvas adaptive card sizing, Active Agents panel auto-show & tab titles. |
+| **General** | Appearance (system/light/dark), default app for opening worktrees, confirm-before-quit, default launch mode (Normal/Shelf/Canvas/Clean), window chrome tint, toolbar buttons (Run / Open-in-editor), dim unfocused splits, Canvas adaptive card sizing, Active Agents panel auto-show & tab titles. |
 | **Notifications** | In-app alerts, sound, macOS system notifications, move-notified-to-top, command-finished notification + threshold, Dock badge & bounce. → [notifications](notifications.md) |
 | **Shortcuts** | Remap app keyboard shortcuts; view defaults; resolve conflicts. → [keyboard-shortcuts](../reference/keyboard-shortcuts.md) |
 | **Worktree** | Worktree creation/deletion defaults: prompt on create, fetch before create, base directory, copy ignored/untracked files, delete-branch-on-delete, merged-worktree action, archived auto-delete period. |
@@ -32,6 +32,13 @@ window is a sidebar of tabs plus a detail pane.
 - **Per-repo custom commands:** `~/.prowl/repo/<repo-name>/prowl.onevcat.json`
 
 Legacy `~/.supacode` is migrated to `~/.prowl` on first launch.
+
+## Choosing Clean Mode
+
+Choose **General → Default View → Launch in → Clean Mode**, then quit and reopen
+Prowl. The setting controls the next launch only; it does not replace the current
+window or destroy a running Standard session. In Clean, use the same picker to
+choose Normal, Shelf, or Canvas for the following launch.
 
 ## Install the CLI from here
 

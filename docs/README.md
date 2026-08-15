@@ -47,6 +47,7 @@ its keyboard shortcuts, detailed behavior, settings, and gotchas.
 | [`components/canvas.md`](components/canvas.md) | Canvas view — a zoomable board of live terminal cards, multi-select, and **broadcast a command to every agent at once**. |
 | [`components/shelf.md`](components/shelf.md) | Shelf view — worktrees as vertical "book spines" you flip through from the keyboard. |
 | [`components/view-modes.md`](components/view-modes.md) | Switching between Normal / Canvas / Shelf layouts and what each is good for. |
+| [`components/clean-mode.md`](components/clean-mode.md) | Clean Mode: a full-window standalone shell, manual Herdr entry, input-source behavior, and excluded Standard runtime features. |
 | [`components/command-palette.md`](components/command-palette.md) | `⌘P` searchable command launcher; every action category it exposes. |
 | [`components/active-agents.md`](components/active-agents.md) | The Active Agents panel: a live list of every running agent and its status, with one-click jump-to-agent. |
 | [`components/agent-detection.md`](components/agent-detection.md) | How Prowl knows an agent is Working / Blocked / Idle / Done, which agents it recognizes, and how the status indicator works. |
@@ -79,6 +80,7 @@ its keyboard shortcuts, detailed behavior, settings, and gotchas.
 | Review what an agent changed | [`components/diff-view.md`](components/diff-view.md) |
 | Open / merge / re-run CI on a pull request | [`components/github-pull-requests.md`](components/github-pull-requests.md) |
 | Drive a pane from a script or another agent | [`components/cli.md`](components/cli.md) |
+| Start a minimal standalone shell for Herdr | [`components/clean-mode.md`](components/clean-mode.md) |
 | Look up a keyboard shortcut | [`reference/keyboard-shortcuts.md`](reference/keyboard-shortcuts.md) |
 | Change app behavior / a setting | [`components/settings.md`](components/settings.md), [`reference/settings-fields.md`](reference/settings-fields.md) |
 

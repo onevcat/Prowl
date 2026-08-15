@@ -50,7 +50,7 @@ JSON is pretty-printed with sorted keys. Legacy `~/.supacode` is migrated to
 | `terminalFontSize` | Float32? | `nil` | Remembered terminal font size. |
 | `archivedAutoDeletePeriod` | enum? (days) | `nil` | Auto-delete archived worktrees after N days; `nil` = never. |
 | `keybindingUserOverrides` | object | empty | User keyboard-shortcut remappings. |
-| `defaultViewMode` | enum (`normal`/`shelf`/`canvas`) | `normal` | View mode on launch. |
+| `defaultViewMode` | enum (`normal`/`shelf`/`canvas`/`clean`) | `normal` | Runtime/view selected on the next launch. `clean` starts one standalone shell without repository, Prowl tmux, tab/split, CLI-server, or layout-restore runtime. |
 | `dimUnfocusedSplits` | Bool | `true` | Dim panes that aren't focused. |
 | `useAdaptiveCanvasCardSize` | Bool | `true` | Adapt new and organized Canvas card sizes to the current display; when `false`, use the fixed custom 800x710 card size including title bar. |
 | `autoShowActiveAgentsPanel` | Bool | `false` | In Canvas, show the Active Agents panel while active agents exist and hide it when none remain. |
