@@ -63,7 +63,7 @@ struct CanvasDirectionalNewTerminalShortcutTests {
 
   @Test func freestyleShortcutMatchesByKeyCodeWhenCharactersMissing() {
     #expect(
-      CanvasView.isFreestyleNewTerminalChordKey(
+      CanvasView.matchesFreestyleNewTerminalShortcut(
         keyCode: UInt16(kVK_ANSI_N),
         charactersIgnoringModifiers: nil
       )
@@ -72,7 +72,7 @@ struct CanvasDirectionalNewTerminalShortcutTests {
 
   @Test func freestyleShortcutMatchesFallbackCharacters() {
     #expect(
-      CanvasView.isFreestyleNewTerminalChordKey(
+      CanvasView.matchesFreestyleNewTerminalShortcut(
         keyCode: 0,
         charactersIgnoringModifiers: "n"
       )
@@ -125,18 +125,19 @@ struct CanvasDirectionalNewTerminalShortcutTests {
     charactersIgnoringModifiers: String,
     modifierFlags: NSEvent.ModifierFlags = []
   ) -> NSEvent {
-    guard let event = NSEvent.keyEvent(
-      with: .keyDown,
-      location: .zero,
-      modifierFlags: modifierFlags,
-      timestamp: ProcessInfo.processInfo.systemUptime,
-      windowNumber: 0,
-      context: nil,
-      characters: characters,
-      charactersIgnoringModifiers: charactersIgnoringModifiers,
-      isARepeat: false,
-      keyCode: keyCode
-    )
+    guard
+      let event = NSEvent.keyEvent(
+        with: .keyDown,
+        location: .zero,
+        modifierFlags: modifierFlags,
+        timestamp: ProcessInfo.processInfo.systemUptime,
+        windowNumber: 0,
+        context: nil,
+        characters: characters,
+        charactersIgnoringModifiers: charactersIgnoringModifiers,
+        isARepeat: false,
+        keyCode: keyCode
+      )
     else {
       fatalError("failed to create test key event")
     }

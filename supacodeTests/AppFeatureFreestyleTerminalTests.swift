@@ -8,7 +8,8 @@ import Testing
 
 @MainActor
 struct AppFeatureFreestyleTerminalTests {
-  @Test(.dependencies) func newTerminalInFreestyleSendsCreateTabForFreestyleWorktree() async {
+  @Test(.dependencies) func newTerminalInFreestyleSendsCreateTabForFreestyleWorktree() async throws
+  {
     let repository = makeRepository()
     var repositoriesState = RepositoriesFeature.State(repositories: [repository])
     repositoriesState.selection = .freestyle
@@ -30,7 +31,8 @@ struct AppFeatureFreestyleTerminalTests {
     await store.finish()
 
     #expect(sentCommands.value.count == 1)
-    guard case .createTab(let worktree, let runSetupScriptIfNew) = sentCommands.value[0] else {
+    let command = try #require(sentCommands.value.first)
+    guard case .createTab(let worktree, let runSetupScriptIfNew) = command else {
       Issue.record("Expected createTab command for freestyle new terminal")
       return
     }
@@ -38,7 +40,9 @@ struct AppFeatureFreestyleTerminalTests {
     #expect(runSetupScriptIfNew == false)
   }
 
-  @Test(.dependencies) func newTerminalFromCanvasWithoutFocusFallsBackToFreestyleAndUsesPWD() async {
+  @Test(.dependencies) func newTerminalFromCanvasWithoutFocusFallsBackToFreestyleAndUsesPWD()
+    async throws
+  {
     let repository = makeRepository()
     var repositoriesState = RepositoriesFeature.State(repositories: [repository])
     repositoriesState.selection = .canvas
@@ -60,11 +64,13 @@ struct AppFeatureFreestyleTerminalTests {
     await store.finish()
 
     #expect(sentCommands.value.count == 1)
-    guard case .createTabFromCanvas(
-      let worktree,
-      let runSetupScriptIfNew,
-      let inheritFromFocusedSurface
-    ) = sentCommands.value[0]
+    let command = try #require(sentCommands.value.first)
+    guard
+      case .createTabFromCanvas(
+        let worktree,
+        let runSetupScriptIfNew,
+        let inheritFromFocusedSurface
+      ) = command
     else {
       Issue.record("Expected createTabFromCanvas command for canvas fallback")
       return
@@ -99,7 +105,10 @@ struct AppFeatureFreestyleTerminalTests {
 
     #expect(
       sentCommands.value
-        == [.createTabFromCanvas(worktree, runSetupScriptIfNew: true, inheritFromFocusedSurface: false)]
+        == [
+          .createTabFromCanvas(
+            worktree, runSetupScriptIfNew: true, inheritFromFocusedSurface: false)
+        ]
     )
   }
 
@@ -127,7 +136,10 @@ struct AppFeatureFreestyleTerminalTests {
 
     #expect(
       sentCommands.value
-        == [.createTabFromCanvas(worktree, runSetupScriptIfNew: false, inheritFromFocusedSurface: true)]
+        == [
+          .createTabFromCanvas(
+            worktree, runSetupScriptIfNew: false, inheritFromFocusedSurface: true)
+        ]
     )
   }
 
@@ -180,7 +192,9 @@ struct AppFeatureFreestyleTerminalTests {
     #expect(sentCommands.value == [.closeFocusedTab(FreestyleTerminal.worktree())])
   }
 
-  @Test(.dependencies) func selectedWorktreeChangedNilInFreestyleSetsTerminalSelectionToFreestyle() async {
+  @Test(.dependencies) func selectedWorktreeChangedNilInFreestyleSetsTerminalSelectionToFreestyle()
+    async
+  {
     let worktree = makeWorktreeFixture()
     let repository = makeRepository(worktrees: [worktree])
     var repositoriesState = RepositoriesFeature.State(repositories: [repository])

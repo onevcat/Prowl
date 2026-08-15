@@ -23,38 +23,22 @@ struct CanvasFocusRequestHandlingTests {
     #expect(request.shouldCenterInViewport)
   }
 
-  @Test func keepsPreviousTokenWhenPendingRequestCannotBeHandledYet() {
-    let oldToken = UUID()
-    let request = CanvasView.FocusRequest(
-      worktreeID: "/tmp/repo/wt3",
-      tabID: TerminalTabID(rawValue: UUID()),
-      token: UUID()
-    )
+  @Test func pendingTabRequestResolvesOnlyAfterCandidateAppears() {
+    let requestedTabID = TerminalTabID(rawValue: UUID())
+    let request = CanvasFocusRequest(id: 3, target: .tab(requestedTabID))
 
-    let nextToken = nextHandledCanvasFocusRequestToken(
+    let unresolved = CanvasFocusResolver.resolve(
       request: request,
-      lastHandledToken: oldToken,
-      didHandleRequest: false
+      candidates: [],
+      currentPrimaryTabID: nil
     )
-
-    #expect(nextToken == oldToken)
-  }
-
-  @Test func advancesTokenWhenPendingRequestIsHandled() {
-    let oldToken = UUID()
-    let newToken = UUID()
-    let request = CanvasView.FocusRequest(
-      worktreeID: "/tmp/repo/wt4",
-      tabID: TerminalTabID(rawValue: UUID()),
-      token: newToken
-    )
-
-    let nextToken = nextHandledCanvasFocusRequestToken(
+    let resolved = CanvasFocusResolver.resolve(
       request: request,
-      lastHandledToken: oldToken,
-      didHandleRequest: true
+      candidates: [CanvasFocusCandidate(worktreeID: "/tmp/repo/wt3", tabID: requestedTabID)],
+      currentPrimaryTabID: nil
     )
 
-    #expect(nextToken == newToken)
+    #expect(unresolved == nil)
+    #expect(resolved == requestedTabID)
   }
 }

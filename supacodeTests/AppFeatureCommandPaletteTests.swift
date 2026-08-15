@@ -43,7 +43,9 @@ struct AppFeatureCommandPaletteTests {
     #expect(sent.value == [.focusSelectedTab(worktree)])
   }
 
-  @Test(.dependencies) func togglingPresentedCommandPaletteClosedRestoresSelectedTerminalFocus() async {
+  @Test(.dependencies) func togglingPresentedCommandPaletteClosedRestoresSelectedTerminalFocus()
+    async
+  {
     let worktree = makeWorktree(
       id: "/tmp/repo-toggle-focus/wt-1",
       name: "wt-1",
@@ -75,7 +77,8 @@ struct AppFeatureCommandPaletteTests {
     #expect(sent.value == [.focusSelectedTab(worktree)])
   }
 
-  @Test(.dependencies) func closingCommandPaletteDoesNotRestoreFocusWithoutSelectedTerminal() async {
+  @Test(.dependencies) func closingCommandPaletteDoesNotRestoreFocusWithoutSelectedTerminal() async
+  {
     var state = AppFeature.State()
     state.commandPalette.isPresented = true
     let sent = LockIsolated<[TerminalClient.Command]>([])
@@ -95,7 +98,8 @@ struct AppFeatureCommandPaletteTests {
     #expect(sent.value.isEmpty)
   }
 
-  @Test(.dependencies) func closingCommandPaletteInCanvasRestoresCanvasFocusedTerminalFocus() async {
+  @Test(.dependencies) func closingCommandPaletteInCanvasRestoresCanvasFocusedTerminalFocus() async
+  {
     let worktree = makeWorktree(
       id: "/tmp/repo-canvas-focus/wt-1",
       name: "wt-1",
@@ -128,7 +132,9 @@ struct AppFeatureCommandPaletteTests {
     #expect(sent.value == [.focusSelectedTab(worktree)])
   }
 
-  @Test(.dependencies) func passiveCommandPaletteCommandInCanvasRestoresCanvasFocusedTerminalFocus() async {
+  @Test(.dependencies) func passiveCommandPaletteCommandInCanvasRestoresCanvasFocusedTerminalFocus()
+    async
+  {
     let worktree = makeWorktree(
       id: "/tmp/repo-canvas-passive/wt-1",
       name: "wt-1",
@@ -309,11 +315,14 @@ struct AppFeatureCommandPaletteTests {
     #expect(captured.value.count == 1)
     #expect(captured.value.first?.0 == .finder)
     #expect(
-      captured.value.first?.1.workingDirectory.path(percentEncoded: false) == "/tmp/repo-reveal-open/wt-1/deep/nested"
+      captured.value.first?.1.workingDirectory.path(percentEncoded: false)
+        == "/tmp/repo-reveal-open/wt-1/deep/nested"
     )
   }
 
-  @Test(.dependencies) func revealInFinderFallsBackToWorktreeDirectoryWhenFocusedDirectoryMissing() async {
+  @Test(.dependencies) func revealInFinderFallsBackToWorktreeDirectoryWhenFocusedDirectoryMissing()
+    async
+  {
     let worktree = makeWorktree(
       id: "/tmp/repo-reveal-fallback/wt-2",
       name: "wt-2",
@@ -734,8 +743,12 @@ struct AppFeatureCommandPaletteTests {
     store.exhaustivity = .off
 
     await store.send(.commandPalette(.delegate(.layoutCenter)))
+    await store.receive(\.repositories.requestCanvasCommand) {
+      $0.repositories.nextCanvasCommandRequestID = 1
+      $0.repositories.pendingCanvasCommandRequest = CanvasCommandRequest(id: 1, command: .center)
+    }
 
-    #expect(store.state.canvasLayoutCommand?.kind == .center)
+    #expect(store.state.repositories.pendingCanvasCommandRequest?.command == .center)
   }
 
   @Test(.dependencies) func layoutArrangeQueuesCanvasLayoutCommand() async {
@@ -761,8 +774,12 @@ struct AppFeatureCommandPaletteTests {
     store.exhaustivity = .off
 
     await store.send(.commandPalette(.delegate(.layoutArrange)))
+    await store.receive(\.repositories.requestCanvasCommand) {
+      $0.repositories.nextCanvasCommandRequestID = 1
+      $0.repositories.pendingCanvasCommandRequest = CanvasCommandRequest(id: 1, command: .arrange)
+    }
 
-    #expect(store.state.canvasLayoutCommand?.kind == .arrange)
+    #expect(store.state.repositories.pendingCanvasCommandRequest?.command == .arrange)
   }
 
   @Test(.dependencies) func layoutOverviewQueuesCanvasLayoutCommand() async {
@@ -788,8 +805,12 @@ struct AppFeatureCommandPaletteTests {
     store.exhaustivity = .off
 
     await store.send(.commandPalette(.delegate(.layoutOverview)))
+    await store.receive(\.repositories.requestCanvasCommand) {
+      $0.repositories.nextCanvasCommandRequestID = 1
+      $0.repositories.pendingCanvasCommandRequest = CanvasCommandRequest(id: 1, command: .overview)
+    }
 
-    #expect(store.state.canvasLayoutCommand?.kind == .overview)
+    #expect(store.state.repositories.pendingCanvasCommandRequest?.command == .overview)
   }
 
   @Test(.dependencies) func toggleCanvasZoomQueuesCanvasCommandOnlyInCanvas() async {
@@ -815,7 +836,11 @@ struct AppFeatureCommandPaletteTests {
     store.exhaustivity = .off
 
     await store.send(.toggleCanvasZoom)
-    await store.receive(.repositories(.requestCanvasCommand(.toggleZoom)))
+    await store.receive(\.repositories.requestCanvasCommand) {
+      $0.repositories.nextCanvasCommandRequestID = 1
+      $0.repositories.pendingCanvasCommandRequest = CanvasCommandRequest(
+        id: 1, command: .toggleZoom)
+    }
 
     #expect(store.state.repositories.pendingCanvasCommandRequest?.command == .toggleZoom)
   }
@@ -950,7 +975,9 @@ struct AppFeatureCommandPaletteTests {
     #expect(restoredIDs.value == [first, second])
   }
 
-  @Test(.dependencies) func selectWorktreeFromCommandPaletteInCanvasFocusesExistingCanvasCard() async {
+  @Test(.dependencies) func selectWorktreeFromCommandPaletteInCanvasFocusesExistingCanvasCard()
+    async
+  {
     let worktree = makeWorktree(
       id: "/tmp/repo-canvas/wt-1",
       name: "wt-1",
@@ -987,7 +1014,8 @@ struct AppFeatureCommandPaletteTests {
     #expect(sent.value.isEmpty)
   }
 
-  @Test(.dependencies) func selectWorktreeFromCommandPaletteInCanvasCreatesTabWhenNoCanvasCardExists() async {
+  @Test(.dependencies)
+  func selectWorktreeFromCommandPaletteInCanvasCreatesTabWhenNoCanvasCardExists() async {
     let worktree = makeWorktree(
       id: "/tmp/repo-canvas/wt-1",
       name: "wt-1",
@@ -1023,7 +1051,9 @@ struct AppFeatureCommandPaletteTests {
     #expect(store.state.repositories.selection == .canvas)
     #expect(focusedIDs.value == [worktree.id])
     #expect(
-      sent.value == [.createTabFromCanvas(worktree, runSetupScriptIfNew: false, inheritFromFocusedSurface: false)],
+      sent.value == [
+        .createTabFromCanvas(worktree, runSetupScriptIfNew: false, inheritFromFocusedSurface: false)
+      ],
     )
   }
 
@@ -1387,7 +1417,10 @@ struct AppFeatureCommandPaletteTests {
         id: 0,
         title: "Delete worktree?",
         message: "Delete \(worktree.name)? The worktree directory will be removed.",
-        targets: [RepositoriesFeature.DeleteWorktreeTarget(worktreeID: worktree.id, repositoryID: repository.id)],
+        targets: [
+          RepositoriesFeature.DeleteWorktreeTarget(
+            worktreeID: worktree.id, repositoryID: repository.id)
+        ],
         deleteBranch: false
       )
       $0.repositories.nextDeleteWorktreeConfirmationID = 1
@@ -1406,7 +1439,8 @@ private func makeWorktree(id: String, name: String, repoRoot: String = "/tmp/rep
   )
 }
 
-private func makeRepository(id: String, name: String = "repo", worktrees: [Worktree]) -> Repository {
+private func makeRepository(id: String, name: String = "repo", worktrees: [Worktree]) -> Repository
+{
   Repository(
     id: id,
     rootURL: URL(fileURLWithPath: id),
