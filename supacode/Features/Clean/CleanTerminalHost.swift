@@ -92,6 +92,7 @@ internal final class CleanTerminalHost {
   private var isHerdrForeground = false
   private var isWindowActive = false
   @ObservationIgnored private var herdrAdapter: HerdrInputContextAdapter?
+  @ObservationIgnored private var titlebarMouseForwarder: CleanTitlebarMouseForwarder?
 
   internal init(
     runtime: GhosttyRuntime,
@@ -125,11 +126,13 @@ internal final class CleanTerminalHost {
     delayedProbeTask?.cancel()
     foregroundJobProbe.cancel()
     herdrAdapter?.stop()
+    titlebarMouseForwarder?.stop()
     surface?.closeSurface()
   }
 
   internal func start() {
     let surface = ensureSurface()
+    titlebarMouseForwarder?.start()
     surface.setOcclusion(true)
     if periodicProbeTask == nil {
       periodicProbeTask = Task { @MainActor [weak self] in
@@ -154,6 +157,7 @@ internal final class CleanTerminalHost {
     isWindowActive = false
     isHerdrForeground = false
     herdrAdapter?.stop()
+    titlebarMouseForwarder?.stop()
     surface?.focusDidChange(false)
     surface?.setOcclusion(false)
   }
@@ -209,7 +213,33 @@ internal final class CleanTerminalHost {
     let surface = surfaceFactory(configuration)
     self.surface = surface
     configureCallbacks(for: surface)
+    configureTitlebarMouseForwarding(for: surface)
     return surface
+  }
+
+  private func configureTitlebarMouseForwarding(for surface: GhosttySurfaceView) {
+    titlebarMouseForwarder = CleanTitlebarMouseForwarder(surfaceView: surface) { [weak surface] event in
+      guard let surface else { return }
+      switch event.type {
+      case .leftMouseDown:
+        NSApp.activate(ignoringOtherApps: true)
+        surface.window?.makeKey()
+        surface.requestFocus()
+        surface.sendMousePosition(event)
+        surface.mouseDown(with: event)
+      case .leftMouseDragged:
+        surface.mouseDragged(with: event)
+      case .leftMouseUp:
+        surface.sendMousePosition(event)
+        surface.mouseUp(with: event)
+      case .mouseMoved:
+        surface.mouseMoved(with: event)
+      case .scrollWheel:
+        surface.scrollWheel(with: event)
+      default:
+        break
+      }
+    }
   }
 
   private func configureCallbacks(for surface: GhosttySurfaceView) {

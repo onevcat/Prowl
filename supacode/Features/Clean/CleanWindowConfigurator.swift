@@ -12,15 +12,118 @@ internal struct CleanWindowConfigurator: NSViewRepresentable {
 
   internal static func configure(_ window: NSWindow) {
     window.styleMask.insert(.fullSizeContentView)
-    // A hidden titlebar still makes NSThemeFrame consume its hit-test region.
-    window.styleMask.remove(.titled)
     window.title = ""
     window.titleVisibility = .hidden
     window.titlebarAppearsTransparent = true
     window.toolbar = nil
     window.isMovableByWindowBackground = false
-    window.collectionBehavior.subtract([.fullScreenAuxiliary, .fullScreenNone])
-    window.collectionBehavior.insert(.fullScreenPrimary)
+    window.standardWindowButton(.closeButton)?.isHidden = true
+    window.standardWindowButton(.miniaturizeButton)?.isHidden = true
+    window.standardWindowButton(.zoomButton)?.isHidden = true
+    // Tahoe still draws the titlebar backdrop above full-size content unless the container is hidden.
+    titlebarContainer(in: window)?.isHidden = true
+  }
+
+  internal static func titlebarContainer(in window: NSWindow) -> NSView? {
+    window.contentView?.superview?.firstDescendant(named: "NSTitlebarContainerView")
+  }
+}
+
+extension NSView {
+  fileprivate func firstDescendant(named className: String) -> NSView? {
+    for subview in subviews {
+      if String(describing: type(of: subview)) == className {
+        return subview
+      }
+      if let match = subview.firstDescendant(named: className) {
+        return match
+      }
+    }
+    return nil
+  }
+}
+
+@MainActor
+internal final class CleanTitlebarMouseForwarder {
+  internal typealias EventHandler = @MainActor (NSEvent) -> Void
+
+  private static let eventMask: NSEvent.EventTypeMask = [
+    .leftMouseDown,
+    .leftMouseUp,
+    .leftMouseDragged,
+    .mouseMoved,
+    .scrollWheel,
+  ]
+
+  private weak var surfaceView: NSView?
+  private let eventHandler: EventHandler
+  private var eventMonitor: Any?
+  private var isForwardingLeftMouseGesture = false
+
+  internal init(
+    surfaceView: NSView,
+    eventHandler: @escaping EventHandler
+  ) {
+    self.surfaceView = surfaceView
+    self.eventHandler = eventHandler
+  }
+
+  isolated deinit {
+    if let eventMonitor {
+      NSEvent.removeMonitor(eventMonitor)
+    }
+  }
+
+  internal func start() {
+    guard eventMonitor == nil else { return }
+    eventMonitor = NSEvent.addLocalMonitorForEvents(matching: Self.eventMask) { [weak self] event in
+      self?.route(event) ?? event
+    }
+  }
+
+  internal func stop() {
+    isForwardingLeftMouseGesture = false
+    guard let eventMonitor else { return }
+    NSEvent.removeMonitor(eventMonitor)
+    self.eventMonitor = nil
+  }
+
+  internal func route(_ event: NSEvent) -> NSEvent? {
+    guard let surfaceView, let window = surfaceView.window, event.window === window else {
+      if event.type == .leftMouseDown || event.type == .leftMouseUp {
+        isForwardingLeftMouseGesture = false
+      }
+      return event
+    }
+
+    switch event.type {
+    case .leftMouseDown:
+      isForwardingLeftMouseGesture = false
+      guard shouldForwardNewEvent(event, to: surfaceView, in: window) else { return event }
+      isForwardingLeftMouseGesture = true
+    case .leftMouseDragged, .leftMouseUp:
+      guard isForwardingLeftMouseGesture else { return event }
+      if event.type == .leftMouseUp {
+        isForwardingLeftMouseGesture = false
+      }
+    case .mouseMoved, .scrollWheel:
+      guard shouldForwardNewEvent(event, to: surfaceView, in: window) else { return event }
+    default:
+      return event
+    }
+
+    eventHandler(event)
+    return nil
+  }
+
+  private func shouldForwardNewEvent(
+    _ event: NSEvent,
+    to surfaceView: NSView,
+    in window: NSWindow
+  ) -> Bool {
+    let surfacePoint = surfaceView.convert(event.locationInWindow, from: nil)
+    return surfaceView.bounds.contains(surfacePoint)
+      && !window.contentLayoutRect.contains(event.locationInWindow)
   }
 }
 

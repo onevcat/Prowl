@@ -85,7 +85,7 @@ struct CleanWindowAndSurfaceTests {
     probe.cancel()
   }
 
-  @Test func configuresBorderlessWindowWithoutRemovingNativeCapabilities() {
+  @Test func configuresFocusableWindowWithoutRemovingNativeCapabilities() {
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
       styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -96,24 +96,23 @@ struct CleanWindowAndSurfaceTests {
     CleanWindowConfigurator.configure(window)
 
     #expect(window.styleMask.contains(.fullSizeContentView))
-    #expect(!window.styleMask.contains(.titled))
+    #expect(window.styleMask.contains(.titled))
+    #expect(window.canBecomeKey)
     #expect(window.styleMask.contains(.closable))
     #expect(window.styleMask.contains(.miniaturizable))
     #expect(window.styleMask.contains(.resizable))
-    #expect(window.collectionBehavior.contains(.fullScreenPrimary))
-    #expect(!window.collectionBehavior.contains(.fullScreenAuxiliary))
-    #expect(!window.collectionBehavior.contains(.fullScreenNone))
     #expect(window.titleVisibility == .hidden)
     #expect(window.titlebarAppearsTransparent)
     #expect(window.toolbar == nil)
-    #expect(window.standardWindowButton(.closeButton) == nil)
-    #expect(window.standardWindowButton(.miniaturizeButton) == nil)
-    #expect(window.standardWindowButton(.zoomButton) == nil)
+    #expect(window.standardWindowButton(.closeButton)?.isHidden == true)
+    #expect(window.standardWindowButton(.miniaturizeButton)?.isHidden == true)
+    #expect(window.standardWindowButton(.zoomButton)?.isHidden == true)
+    #expect(CleanWindowConfigurator.titlebarContainer(in: window)?.isHidden == true)
     #expect(window.contentView?.frame.minY == 0)
     #expect(window.contentView?.frame.maxY == window.frame.height)
   }
 
-  @Test func topEdgeHitTestingReachesTerminalContent() throws {
+  @Test func forwardsTitlebarMouseGestureToTerminalContent() throws {
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
       styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -124,15 +123,59 @@ struct CleanWindowAndSurfaceTests {
     let terminalView = NSView(frame: contentView.bounds)
     terminalView.autoresizingMask = [.width, .height]
     contentView.addSubview(terminalView)
-
     CleanWindowConfigurator.configure(window)
+    var forwardedTypes: [NSEvent.EventType] = []
+    let forwarder = CleanTitlebarMouseForwarder(surfaceView: terminalView) { event in
+      forwardedTypes.append(event.type)
+    }
+    let titlebarPoint = NSPoint(x: window.frame.width / 2, y: window.frame.height - 1)
+    let contentPoint = NSPoint(x: window.frame.width / 2, y: window.contentLayoutRect.midY)
+    let down = makeCleanMouseEvent(type: .leftMouseDown, location: titlebarPoint, window: window)
+    let drag = makeCleanMouseEvent(type: .leftMouseDragged, location: contentPoint, window: window)
+    let up = makeCleanMouseEvent(type: .leftMouseUp, location: contentPoint, window: window)
+    let regularContentDown = makeCleanMouseEvent(
+      type: .leftMouseDown,
+      location: contentPoint,
+      window: window
+    )
 
-    let frameView = try #require(window.contentView?.superview)
-    let topEdgePoint = NSPoint(x: frameView.bounds.midX, y: frameView.bounds.maxY - 1)
-    #expect(frameView.hitTest(topEdgePoint) === terminalView)
+    #expect(forwarder.route(down) == nil)
+    #expect(forwarder.route(drag) == nil)
+    #expect(forwarder.route(up) == nil)
+    #expect(forwarder.route(regularContentDown) === regularContentDown)
+    #expect(forwardedTypes == [.leftMouseDown, .leftMouseDragged, .leftMouseUp])
   }
 
-  @Test func enteringFullScreenReappliesBorderlessFrame() async {
+  @Test func newContentMouseDownCancelsStaleTitlebarGesture() throws {
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
+      styleMask: [.titled, .closable, .miniaturizable, .resizable],
+      backing: .buffered,
+      defer: false
+    )
+    let contentView = try #require(window.contentView)
+    let terminalView = NSView(frame: contentView.bounds)
+    contentView.addSubview(terminalView)
+    CleanWindowConfigurator.configure(window)
+    var forwardedTypes: [NSEvent.EventType] = []
+    let forwarder = CleanTitlebarMouseForwarder(surfaceView: terminalView) { event in
+      forwardedTypes.append(event.type)
+    }
+    let titlebarPoint = NSPoint(x: window.frame.width / 2, y: window.frame.height - 1)
+    let contentPoint = NSPoint(x: window.frame.width / 2, y: window.contentLayoutRect.midY)
+    let titlebarDown = makeCleanMouseEvent(type: .leftMouseDown, location: titlebarPoint, window: window)
+    let contentDown = makeCleanMouseEvent(type: .leftMouseDown, location: contentPoint, window: window)
+    let contentDrag = makeCleanMouseEvent(type: .leftMouseDragged, location: contentPoint, window: window)
+    let contentUp = makeCleanMouseEvent(type: .leftMouseUp, location: contentPoint, window: window)
+
+    #expect(forwarder.route(titlebarDown) == nil)
+    #expect(forwarder.route(contentDown) === contentDown)
+    #expect(forwarder.route(contentDrag) === contentDrag)
+    #expect(forwarder.route(contentUp) === contentUp)
+    #expect(forwardedTypes == [.leftMouseDown])
+  }
+
+  @Test func enteringFullScreenReappliesHiddenTitlebarChrome() async throws {
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
       styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -142,13 +185,32 @@ struct CleanWindowAndSurfaceTests {
     let configurationView = CleanWindowConfigurationView()
     window.contentView?.addSubview(configurationView)
     await configurationView.waitForPendingConfiguration()
-    window.styleMask.insert(.titled)
+    let titlebarContainer = try #require(CleanWindowConfigurator.titlebarContainer(in: window))
+    titlebarContainer.isHidden = false
 
     NotificationCenter.default.post(name: NSWindow.didEnterFullScreenNotification, object: window)
-    await waitForCleanCondition { !window.styleMask.contains(.titled) }
+    await waitForCleanCondition { titlebarContainer.isHidden }
 
-    #expect(!window.styleMask.contains(.titled))
+    #expect(titlebarContainer.isHidden)
   }
+}
+
+private func makeCleanMouseEvent(
+  type: NSEvent.EventType,
+  location: NSPoint,
+  window: NSWindow
+) -> NSEvent {
+  NSEvent.mouseEvent(
+    with: type,
+    location: location,
+    modifierFlags: [],
+    timestamp: 0,
+    windowNumber: window.windowNumber,
+    context: nil,
+    eventNumber: 1,
+    clickCount: 1,
+    pressure: type == .leftMouseUp ? 0 : 1
+  )!
 }
 
 private func makeForegroundJob(processGroupID: pid_t, name: String) -> ForegroundJob {
