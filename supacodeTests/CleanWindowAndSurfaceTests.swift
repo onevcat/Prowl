@@ -85,7 +85,7 @@ struct CleanWindowAndSurfaceTests {
     probe.cancel()
   }
 
-  @Test func configuresFullSizeWindowWithoutRemovingNativeCapabilities() {
+  @Test func configuresBorderlessWindowWithoutRemovingNativeCapabilities() {
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
       styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -96,22 +96,43 @@ struct CleanWindowAndSurfaceTests {
     CleanWindowConfigurator.configure(window)
 
     #expect(window.styleMask.contains(.fullSizeContentView))
-    #expect(window.styleMask.contains(.titled))
+    #expect(!window.styleMask.contains(.titled))
     #expect(window.styleMask.contains(.closable))
     #expect(window.styleMask.contains(.miniaturizable))
     #expect(window.styleMask.contains(.resizable))
+    #expect(window.collectionBehavior.contains(.fullScreenPrimary))
+    #expect(!window.collectionBehavior.contains(.fullScreenAuxiliary))
+    #expect(!window.collectionBehavior.contains(.fullScreenNone))
     #expect(window.titleVisibility == .hidden)
     #expect(window.titlebarAppearsTransparent)
     #expect(window.toolbar == nil)
-    #expect(window.standardWindowButton(.closeButton)?.isHidden == true)
-    #expect(window.standardWindowButton(.miniaturizeButton)?.isHidden == true)
-    #expect(window.standardWindowButton(.zoomButton)?.isHidden == true)
-    #expect(CleanWindowConfigurator.titlebarContainer(in: window)?.isHidden == true)
+    #expect(window.standardWindowButton(.closeButton) == nil)
+    #expect(window.standardWindowButton(.miniaturizeButton) == nil)
+    #expect(window.standardWindowButton(.zoomButton) == nil)
     #expect(window.contentView?.frame.minY == 0)
     #expect(window.contentView?.frame.maxY == window.frame.height)
   }
 
-  @Test func enteringFullScreenReappliesHiddenTitlebarChrome() async throws {
+  @Test func topEdgeHitTestingReachesTerminalContent() throws {
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
+      styleMask: [.titled, .closable, .miniaturizable, .resizable],
+      backing: .buffered,
+      defer: false
+    )
+    let contentView = try #require(window.contentView)
+    let terminalView = NSView(frame: contentView.bounds)
+    terminalView.autoresizingMask = [.width, .height]
+    contentView.addSubview(terminalView)
+
+    CleanWindowConfigurator.configure(window)
+
+    let frameView = try #require(window.contentView?.superview)
+    let topEdgePoint = NSPoint(x: frameView.bounds.midX, y: frameView.bounds.maxY - 1)
+    #expect(frameView.hitTest(topEdgePoint) === terminalView)
+  }
+
+  @Test func enteringFullScreenReappliesBorderlessFrame() async {
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
       styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -121,13 +142,12 @@ struct CleanWindowAndSurfaceTests {
     let configurationView = CleanWindowConfigurationView()
     window.contentView?.addSubview(configurationView)
     await configurationView.waitForPendingConfiguration()
-    let titlebarContainer = try #require(CleanWindowConfigurator.titlebarContainer(in: window))
-    titlebarContainer.isHidden = false
+    window.styleMask.insert(.titled)
 
     NotificationCenter.default.post(name: NSWindow.didEnterFullScreenNotification, object: window)
-    await waitForCleanCondition { titlebarContainer.isHidden }
+    await waitForCleanCondition { !window.styleMask.contains(.titled) }
 
-    #expect(titlebarContainer.isHidden)
+    #expect(!window.styleMask.contains(.titled))
   }
 }
 

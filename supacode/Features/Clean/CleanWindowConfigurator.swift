@@ -12,34 +12,15 @@ internal struct CleanWindowConfigurator: NSViewRepresentable {
 
   internal static func configure(_ window: NSWindow) {
     window.styleMask.insert(.fullSizeContentView)
+    // A hidden titlebar still makes NSThemeFrame consume its hit-test region.
+    window.styleMask.remove(.titled)
     window.title = ""
     window.titleVisibility = .hidden
     window.titlebarAppearsTransparent = true
     window.toolbar = nil
     window.isMovableByWindowBackground = false
-    window.standardWindowButton(.closeButton)?.isHidden = true
-    window.standardWindowButton(.miniaturizeButton)?.isHidden = true
-    window.standardWindowButton(.zoomButton)?.isHidden = true
-    // Tahoe still draws the titlebar backdrop above full-size content unless the container is hidden.
-    titlebarContainer(in: window)?.isHidden = true
-  }
-
-  internal static func titlebarContainer(in window: NSWindow) -> NSView? {
-    window.contentView?.superview?.firstDescendant(named: "NSTitlebarContainerView")
-  }
-}
-
-extension NSView {
-  fileprivate func firstDescendant(named className: String) -> NSView? {
-    for subview in subviews {
-      if String(describing: type(of: subview)) == className {
-        return subview
-      }
-      if let match = subview.firstDescendant(named: className) {
-        return match
-      }
-    }
-    return nil
+    window.collectionBehavior.subtract([.fullScreenAuxiliary, .fullScreenNone])
+    window.collectionBehavior.insert(.fullScreenPrimary)
   }
 }
 

@@ -23,7 +23,8 @@ Clean 只创建一个 Ghostty terminal surface：
 - 启动普通交互式 shell，不注入命令。
 - 不自动启动、attach 或控制 Herdr。
 - 不显示 sidebar、toolbar、tab bar、title、empty state 或 traffic lights。
-- terminal 延伸到原 titlebar 和 traffic-light 区域；进入 native fullscreen 后也不会恢复 titlebar chrome。
+- terminal 延伸到原 titlebar 和 traffic-light 区域；窗口使用真正的 borderless frame，因此这一带不会残留不可见的
+  titlebar hit-test 区，进入 native fullscreen 后也不会恢复 titlebar chrome。
 
 窗口仍保留 edge resize、native fullscreen、Mission Control、frame restore、`⌘W`、系统 Window menu 和 Dock
 reopen。由于整个顶部区域都交给 terminal mouse input，Clean 不额外放置会吞掉首行点击或选择的 drag strip。
