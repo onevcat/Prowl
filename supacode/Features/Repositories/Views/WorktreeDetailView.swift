@@ -197,7 +197,11 @@ struct WorktreeDetailView: View {
       onSelectNotification: selectToolbarNotification,
       onDismissAllNotifications: {
         dismissAllToolbarNotifications(in: state.notificationGroups)
-      }
+      },
+      isUpdateAvailable: state.isUpdateAvailable,
+      isUpdateReadyToInstall: state.isUpdateReadyToInstall,
+      availableUpdateVersion: state.availableUpdateVersion,
+      onActivateUpdateButton: { store.send(.updates(.activateUpdateButton)) }
     )
 
     ToolbarItem(placement: .principal) {
@@ -209,24 +213,13 @@ struct WorktreeDetailView: View {
       .padding(.horizontal)
     }
 
-    if state.isUpdateAvailable {
-      ToolbarItem(placement: .primaryAction) {
-        ToolbarUpdateButton(
-          availableVersion: state.availableUpdateVersion,
-          isReadyToInstall: state.isUpdateReadyToInstall
-        ) {
-          store.send(.updates(.activateUpdateButton))
-        }
-      }
-    }
-
     let showRunButton =
       state.showRunButtonInToolbar
       && (state.runScriptIsRunning || state.runScriptEnabled)
     let inlineCommands = Array(state.customCommands.enumerated().prefix(3))
     let overflowCommands = Array(state.customCommands.enumerated().dropFirst(3))
-    // A fixed separator keeps the Run + Custom Command cluster distinct from
-    // the trailing update control, mirroring the Normal toolbar.
+    // A fixed separator keeps the dynamic Run + Custom Command cluster distinct
+    // from other trailing actions, mirroring the Normal toolbar spacing.
     //
     // INTENTIONAL DIVERGENCE FROM THE NORMAL TOOLBAR: the whole cluster is a
     // single `ToolbarItem` (an HStack) here, whereas `commandToolbarItems`
@@ -814,8 +807,8 @@ struct WorktreeDetailView: View {
   }
 
   /// Shared leading toolbar cluster for Normal, Shelf, and Canvas. Agents and
-  /// Quick Launch share one native group; the notifications button stays in a
-  /// separate capsule with the same gap the former branch item used.
+  /// Quick Launch share one native group; notifications and update status share
+  /// the trailing group that replaces the former branch item.
   struct AgentNotificationsToolbarContent: ToolbarContent {
     let agentsCapsule: AgentsCapsuleState?
     let agentsLauncherItems: [AgentsLauncherItem]
@@ -826,6 +819,10 @@ struct WorktreeDetailView: View {
     let onManageProfiles: () -> Void
     let onSelectNotification: (Worktree.ID, WorktreeTerminalNotification) -> Void
     let onDismissAllNotifications: () -> Void
+    let isUpdateAvailable: Bool
+    let isUpdateReadyToInstall: Bool
+    let availableUpdateVersion: String?
+    let onActivateUpdateButton: () -> Void
 
     var body: some ToolbarContent {
       ToolbarItemGroup(placement: .navigation) {
@@ -841,13 +838,25 @@ struct WorktreeDetailView: View {
         }
       }
 
+      // Adjacent navigation groups merge on macOS 26. This isolated item owns
+      // the second capsule; see docs-ai 061 before changing its structure.
       ToolbarItem(placement: .navigation) {
-        ToolbarNotificationsPopoverButton(
-          groups: notificationGroups,
-          unseenWorktreeCount: unseenNotificationWorktreeCount,
-          onSelectNotification: onSelectNotification,
-          onDismissAll: onDismissAllNotifications
-        )
+        HStack(spacing: 0) {
+          ToolbarNotificationsPopoverButton(
+            groups: notificationGroups,
+            unseenWorktreeCount: unseenNotificationWorktreeCount,
+            onSelectNotification: onSelectNotification,
+            onDismissAll: onDismissAllNotifications
+          )
+          if isUpdateAvailable {
+            ToolbarUpdateButton(
+              availableVersion: availableUpdateVersion,
+              isReadyToInstall: isUpdateReadyToInstall,
+              onActivate: onActivateUpdateButton
+            )
+          }
+        }
+        .glassEffect(.regular.interactive(), in: Capsule())
       }
       .sharedBackgroundVisibility(.hidden)
     }
@@ -880,7 +889,11 @@ struct WorktreeDetailView: View {
         onLaunchProfile: onLaunchProfile,
         onManageProfiles: onManageProfiles,
         onSelectNotification: onSelectNotification,
-        onDismissAllNotifications: onDismissAllNotifications
+        onDismissAllNotifications: onDismissAllNotifications,
+        isUpdateAvailable: toolbarState.shared.isUpdateAvailable,
+        isUpdateReadyToInstall: toolbarState.shared.isUpdateReadyToInstall,
+        availableUpdateVersion: toolbarState.shared.availableUpdateVersion,
+        onActivateUpdateButton: onActivateUpdateButton
       )
 
       ToolbarItem(placement: .principal) {
@@ -890,16 +903,6 @@ struct WorktreeDetailView: View {
           codeHost: toolbarState.shared.codeHost
         )
         .padding(.horizontal)
-      }
-
-      if toolbarState.shared.isUpdateAvailable {
-        ToolbarItem(placement: .primaryAction) {
-          ToolbarUpdateButton(
-            availableVersion: toolbarState.shared.availableUpdateVersion,
-            isReadyToInstall: toolbarState.shared.isUpdateReadyToInstall,
-            onActivate: onActivateUpdateButton
-          )
-        }
       }
 
       if toolbarState.showDefaultEditorInToolbar {
@@ -994,8 +997,8 @@ struct WorktreeDetailView: View {
       let overflowEntries = Array(entries.dropFirst(3))
 
       // One fixed separator in front of the whole Run + Custom Command cluster
-      // keeps it distinct from the Open Editor / update controls no matter which
-      // items are hidden. Run and the custom commands share one group (no spacer
+      // keeps it distinct from preceding trailing actions no matter which items
+      // are hidden. Run and the custom commands share one group (no spacer
       // between them), matching the grouping before the toolbar toggles.
       if showRunButton || !inlineEntries.isEmpty || !overflowEntries.isEmpty {
         ToolbarSpacer(.fixed)

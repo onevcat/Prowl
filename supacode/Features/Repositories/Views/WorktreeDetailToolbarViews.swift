@@ -346,7 +346,11 @@ private struct CanvasToolbarPreview: View {
             onLaunchProfile: { _ in },
             onManageProfiles: {},
             onSelectNotification: { _, _ in },
-            onDismissAllNotifications: {}
+            onDismissAllNotifications: {},
+            isUpdateAvailable: true,
+            isUpdateReadyToInstall: false,
+            availableUpdateVersion: "2026.5.1",
+            onActivateUpdateButton: {}
           )
         }
     }

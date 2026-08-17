@@ -14,8 +14,8 @@ Prowl uses the **Sparkle** framework for auto-updates. Releases are notarized.
   Updates", or Settings → Updates → "Check for Updates Now".
 - **Background checks:** if `updatesAutomaticallyCheckForUpdates` is on, Prowl
   checks periodically (roughly hourly). When a background check finds an update, a
-  badge appears on the notification bell; clicking it opens the standard Sparkle
-  dialog.
+  badge appears immediately after the notification bell in the same toolbar control;
+  clicking it opens the standard Sparkle dialog.
 - **On quit with a downloaded update:** Prowl offers to install or defer.
 - **Install confirmation:** installing and relaunching always requires an
   explicit confirmation. When an update is ready (or a user-initiated check finds

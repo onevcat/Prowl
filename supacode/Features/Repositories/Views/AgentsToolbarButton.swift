@@ -4,8 +4,6 @@ enum LeadingToolbarControlMetrics {
   static let labelSpacing: CGFloat = 6
   static let iconSize: CGFloat = 20
   static let font: Font = .title3.weight(.medium)
-  static let standaloneHorizontalPadding: CGFloat = 10
-  static let standaloneVerticalPadding: CGFloat = 8
 }
 
 /// What the Agents capsule shows for the selected pane's detected agent.
@@ -50,9 +48,10 @@ struct AgentsLauncherItem: Equatable, Identifiable {
 /// the popover is the durable container here.
 ///
 /// The button carries no background of its own: it sits in a shared-glass
-/// toolbar group next to `AgentsQuickLaunchButton`. Notifications follow as
-/// a separate capsule, preserving the visual gap previously occupied by the
-/// branch item. Normal, Shelf, and Canvas share this leading structure.
+/// toolbar group next to `AgentsQuickLaunchButton`. Notifications and update
+/// status follow in an isolated glass capsule because adjacent navigation
+/// groups merge on macOS 26. See docs-ai 061 before changing that composition.
+/// Normal, Shelf, and Canvas share this leading structure.
 struct AgentsToolbarButton: View {
   let capsule: AgentsCapsuleState?
   let launcherItems: [AgentsLauncherItem]

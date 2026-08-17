@@ -113,3 +113,5 @@ direction while hardening its implementation:
 - Remove the notifications style branch and share leading-control metrics between Agents and Bell.
 - Restore rename prompt submit/tooltip semantics and advertise the configurable shortcut from the context menu.
 - Verify the reported first-focus timing risk at runtime before changing it; do not add speculative focus workarounds.
+
+- Updated 2026-08-17: Grouped the conditional update indicator with Bell in the leading cluster — see [002-notification-update-group.md](002-notification-update-group.md).

@@ -106,6 +106,7 @@ Reducer ← .terminalEvent(Event) ← AsyncStream<Event>
 - Use `@ObservableState` for TCA feature state; use `@Observable` for non-TCA shared stores; never `ObservableObject`
 - Always mark `@Observable` classes with `@MainActor`
 - Modern SwiftUI only: `foregroundStyle()`, `NavigationStack`, `Button` over `onTapGesture()`
+- Before changing a window toolbar control, its grouping, or Liquid Glass, read `docs-ai/061-native-toolbar-controls/toolbar-controls.md` and perform a Debug visual verification.
 - When a new logic changes in the Reducer, always add tests
 - In unit tests, never use `Task.sleep`; use `TestClock` (or an injected clock) and drive time with `advance`.
 - Prefer Swift-native APIs over Foundation where they exist (e.g., `replacing()` not `replacingOccurrences()`)

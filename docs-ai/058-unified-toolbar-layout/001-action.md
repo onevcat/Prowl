@@ -17,13 +17,15 @@
   `.toolbar(removing: .title)`, preserving `WindowTitle.compute(...)` for window identity
   without rendering a toolbar title. `AgentNotificationsToolbarContent` is the shared
   leading composition for all three view modes.
-- Agents and Quick Launch remain a native shared-glass group. The bell follows in a
-  separate `.navigation` item with `.sharedBackgroundVisibility(.hidden)` so it keeps the
-  visual gap that previously separated Agents from the branch title.
-- `supacode/Features/Repositories/Views/ToolbarNotificationsPopoverButton.swift` now has
-  one unconditional standalone-capsule presentation. Agents, Quick Launch, and Bell share
-  `LeadingToolbarControlMetrics`; the dead style branch and duplicated label metrics are
-  gone. Notification count, hover, click, and read-state behavior are unchanged.
+- Agents and Quick Launch remain a native shared-glass group. Bell and the conditional update
+  indicator follow in a separate leading capsule, preserving the visual gap that previously
+  separated Agents from the branch title. The implementation is centralized in
+  `AgentNotificationsToolbarContent`; see [002-notification-update-group.md](002-notification-update-group.md).
+- `supacode/Features/Repositories/Views/ToolbarNotificationsPopoverButton.swift` and
+  `ToolbarUpdateButton.swift` retain their original button-owned tint, tooltip, accessibility,
+  and interaction behavior. The isolated owner supplies the shared capsule; see
+  [061 Native Toolbar Controls](../061-native-toolbar-controls/toolbar-controls.md) for the
+  documented macOS 26 exception and review standard.
 - Normal, Shelf, and Canvas receive one assembled `ToolbarSharedState`; only their documented
   `ToolbarContent` structure differs. Canvas resolves the Agents capsule and profile launcher
   from the focused card. With no focused card, Quick Launch/profile rows are omitted instead
@@ -57,7 +59,7 @@
 - `make check`: changed-file formatting, strict `swift-format` lint, and SwiftLint passed.
 - `make build-app`: Debug build passed with zero errors and zero warnings.
 - Live Debug app inspection:
-  - Normal: no branch item; Agents + Quick Launch and Bell render as separate capsules.
+  - Normal: no branch item; Agents + Quick Launch render separately from the Bell + update capsule.
   - Canvas: no visible `Canvas` title; the same leading controls render against the
     focused-card toolbar.
   - Shelf: the same leading order and separation are retained.
@@ -72,8 +74,8 @@
 ## Deviations from plan
 
 - The initial shared-layout implementation placed Bell inside the Agents shared-glass
-  group. During live review, the desired separation was clarified: Bell now uses a
-  standalone glass capsule with the same gap as the removed branch item.
+  group. During live review, the desired separation was clarified: Bell and the conditional
+  update indicator now share a standalone capsule with the same gap as the removed branch item.
 - Removing the toolbar anchor required the rename form to move from a popover to an
   app-level sheet. The form and reducer request model remain intact.
 - Adding Agents to Canvas exposed that Hand Off still resolved only
