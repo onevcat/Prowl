@@ -1,5 +1,6 @@
 import ComposableArchitecture
 import DependenciesTestSupport
+import Foundation
 import Sharing
 import Testing
 
@@ -70,8 +71,33 @@ struct CleanAppFeatureTests {
     }
   }
 
-  @Test(.dependencies) func launchModeChangePersistsForNextLaunchWithoutChangingTmuxSetting() async
-  {
+  @Test func herdrProtocolFailurePresentsAlert() async {
+    let store = TestStore(initialState: CleanAppFeature.State()) {
+      CleanAppFeature()
+    }
+
+    await store.send(
+      .herdrCompatibilityFailure(.unsupportedProtocol(supported: 19...20, actual: 21))
+    ) {
+      $0.alert = AlertState {
+        TextState("Herdr protocol incompatible")
+      } actions: {
+        ButtonState(role: .cancel, action: .dismiss) {
+          TextState("OK")
+        }
+      } message: {
+        TextState(
+          "Prowl Clean requires Herdr protocol 19-20, but detected protocol 21. Input-source synchronization is paused. Update Herdr or Prowl."
+        )
+      }
+    }
+
+    await store.send(.alert(.dismiss)) {
+      $0.alert = nil
+    }
+  }
+
+  @Test(.dependencies) func launchModeChangePersistsForNextLaunchWithoutChangingTmuxSetting() async {
     let storage = SettingsTestStorage()
     var settings = GlobalSettings.default
     settings.defaultViewMode = .clean

@@ -39,11 +39,13 @@ nonisolated internal struct HerdrInputContextClient: Sendable {
 @MainActor
 internal final class HerdrInputContextAdapter {
   internal typealias PaneContextHandler = @MainActor (HerdrPaneInfo) -> Void
+  internal typealias CompatibilityFailureHandler = @MainActor (HerdrSocketError) -> Void
 
   private static let pollingInterval = Duration.milliseconds(100)
 
   private let client: HerdrInputContextClient
   private let clock: any Clock<Duration>
+  private let onCompatibilityFailure: CompatibilityFailureHandler
   private let onPaneContext: PaneContextHandler
   private let logger = SupaLogger("HerdrInputContext")
   private var lifecycleTask: Task<Void, Never>?
@@ -56,10 +58,12 @@ internal final class HerdrInputContextAdapter {
   internal init(
     client: HerdrInputContextClient = HerdrInputContextClient(),
     clock: any Clock<Duration> = ContinuousClock(),
+    onCompatibilityFailure: @escaping CompatibilityFailureHandler = { _ in },
     onPaneContext: @escaping PaneContextHandler
   ) {
     self.client = client
     self.clock = clock
+    self.onCompatibilityFailure = onCompatibilityFailure
     self.onPaneContext = onPaneContext
   }
 
@@ -211,6 +215,7 @@ internal final class HerdrInputContextAdapter {
       )
       isCompatibilityPaused = true
       lifecycleTask = nil
+      onCompatibilityFailure(error)
       return true
     default:
       return false

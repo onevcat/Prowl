@@ -262,6 +262,7 @@ struct HerdrInputContextTests {
   @Test func adapterStopsAfterProtocolMismatch() async {
     let clock = TestClock()
     let attemptCount = LockIsolated(0)
+    let compatibilityFailures = LockIsolated<[HerdrSocketError]>([])
     let paneContextCount = LockIsolated(0)
     let client = HerdrInputContextClient(
       currentPane: {
@@ -270,15 +271,27 @@ struct HerdrInputContextTests {
       },
       events: { AsyncStream { $0.finish() } }
     )
-    let adapter = HerdrInputContextAdapter(client: client, clock: clock) { _ in
-      paneContextCount.withValue { $0 += 1 }
-    }
+    let adapter = HerdrInputContextAdapter(
+      client: client,
+      clock: clock,
+      onCompatibilityFailure: { error in
+        compatibilityFailures.withValue { $0.append(error) }
+      },
+      onPaneContext: { _ in
+        paneContextCount.withValue { $0 += 1 }
+      }
+    )
 
     adapter.start()
     await waitUntil { attemptCount.value == 1 && !adapter.isRunning }
 
     #expect(attemptCount.value == 1)
     #expect(!adapter.isRunning)
+    #expect(
+      compatibilityFailures.value == [
+        .unsupportedProtocol(supported: 19...20, actual: 21)
+      ]
+    )
     #expect(paneContextCount.value == 0)
     await clock.advance(by: .seconds(2))
     #expect(attemptCount.value == 1)

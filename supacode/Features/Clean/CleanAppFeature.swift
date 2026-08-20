@@ -16,6 +16,7 @@ internal struct CleanAppFeature {
 
   internal enum Action {
     case appLaunched
+    case herdrCompatibilityFailure(HerdrSocketError)
     case settings(SettingsFeature.Action)
     case updates(UpdatesFeature.Action)
     case requestQuit
@@ -50,6 +51,10 @@ internal struct CleanAppFeature {
           ),
           .send(.updates(.task))
         )
+
+      case .herdrCompatibilityFailure(let error):
+        state.alert = Self.herdrCompatibilityAlert(for: error)
+        return .none
 
       case .settings(.delegate(.settingsChanged(let settings))):
         return .send(
@@ -100,5 +105,32 @@ internal struct CleanAppFeature {
       }
     }
     .ifLet(\.$alert, action: \.alert)
+  }
+
+  private static func herdrCompatibilityAlert(for error: HerdrSocketError) -> AlertState<Alert> {
+    let message: String
+    switch error {
+    case .unsupportedProtocol(let supported, let actual):
+      let detectedVersion = actual.map(String.init) ?? "unknown"
+      message =
+        "Prowl Clean requires Herdr protocol \(supported.lowerBound)-\(supported.upperBound), but detected protocol \(detectedVersion). Input-source synchronization is paused. Update Herdr or Prowl."
+    case .unsupportedResponseType(let responseType):
+      let responseDescription = responseType ?? "unknown"
+      message =
+        "Prowl Clean could not validate the Herdr protocol response (\(responseDescription)). Input-source synchronization is paused. Update Herdr or Prowl."
+    default:
+      message =
+        "Prowl Clean could not validate the Herdr protocol. Input-source synchronization is paused. Update Herdr or Prowl."
+    }
+
+    return AlertState {
+      TextState("Herdr protocol incompatible")
+    } actions: {
+      ButtonState(role: .cancel, action: .dismiss) {
+        TextState("OK")
+      }
+    } message: {
+      TextState(message)
+    }
   }
 }

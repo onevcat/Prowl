@@ -272,7 +272,10 @@ struct SupacodeApp: App {
     }
     let terminalHost = CleanTerminalHost(
       runtime: ghostty,
-      preferredFontSize: initialSettings.terminalFontSize
+      preferredFontSize: initialSettings.terminalFontSize,
+      onHerdrCompatibilityFailure: { [weak store] error in
+        store?.send(.herdrCompatibilityFailure(error))
+      }
     )
     return CleanRuntime(terminalHost: terminalHost, store: store)
   }

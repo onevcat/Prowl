@@ -60,6 +60,7 @@ Prowl 不发送控制命令。它只读取 focused pane，并订阅已确认的 
 - Herdr 的 workspace/tab/pane focus 事件会立即刷新 focused pane；事件与 polling 同时触发时只保留一个进行中的查询。
 - Clean 主窗口从隐藏或非 active 状态恢复时，立即重放已缓存的 focused pane 输入法上下文；通过 Hammerspoon、
   launcher 或 Dock 返回同一 Herdr pane 不需要等待下一次 socket 查询或 polling。
+- 检测到不兼容的 Herdr protocol 时，Clean 会在窗口中弹出错误提示，并暂停输入法同步；离开 Herdr 后重新进入会再次检测。
 - 如果 focus event 丢失或 Herdr 版本没有提供该事件，则通过 `pane.current` 每 100ms 轮询更新 focused pane。
 - `Option+H/J/K/L` 不作为 Prowl Canvas 导航处理，按键会继续传给 terminal，供 Herdr 自己切换 tab/workspace。
 - Clean runtime 强制启用 `macos-option-as-alt = true`，确保 Option 组合编码为 terminal Alt；代价是 Clean 中不能用

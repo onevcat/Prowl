@@ -76,6 +76,7 @@ internal final class CleanForegroundJobProbe {
 @Observable
 internal final class CleanTerminalHost {
   internal typealias SurfaceFactory = @MainActor (CleanSurfaceConfiguration) -> GhosttySurfaceView
+  internal typealias HerdrCompatibilityFailureHandler = @MainActor (HerdrSocketError) -> Void
 
   private static let periodicProbeInterval = Duration.milliseconds(200)
   private static let delayedProbeInterval = Duration.milliseconds(50)
@@ -99,7 +100,8 @@ internal final class CleanTerminalHost {
     preferredFontSize: Float32?,
     inputSourceCoordinator: TerminalInputSourceCoordinator = TerminalInputSourceCoordinator(),
     surfaceFactory: SurfaceFactory? = nil,
-    foregroundJobProbe: CleanForegroundJobProbe = CleanForegroundJobProbe()
+    foregroundJobProbe: CleanForegroundJobProbe = CleanForegroundJobProbe(),
+    onHerdrCompatibilityFailure: @escaping HerdrCompatibilityFailureHandler = { _ in }
   ) {
     self.preferredFontSize = preferredFontSize
     self.inputSourceCoordinator = inputSourceCoordinator
@@ -115,10 +117,13 @@ internal final class CleanTerminalHost {
         )
       }
     self.foregroundJobProbe = foregroundJobProbe
-    herdrAdapter = HerdrInputContextAdapter { [weak self] pane in
-      guard let self else { return }
-      applyHerdrPaneContext(pane)
-    }
+    herdrAdapter = HerdrInputContextAdapter(
+      onCompatibilityFailure: onHerdrCompatibilityFailure,
+      onPaneContext: { [weak self] pane in
+        guard let self else { return }
+        applyHerdrPaneContext(pane)
+      }
+    )
   }
 
   isolated deinit {
