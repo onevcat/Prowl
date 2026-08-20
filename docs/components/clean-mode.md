@@ -58,15 +58,17 @@ Prowl 不发送控制命令。它只读取 focused pane，并订阅已确认的 
 - focused pane 是 shell/command 时，选择 ABC。
 - 不同 Herdr pane 分别记忆输入法。
 - Herdr 的 workspace/tab/pane focus 事件会立即刷新 focused pane；事件与 polling 同时触发时只保留一个进行中的查询。
+- Clean 主窗口从隐藏或非 active 状态恢复时，立即重放已缓存的 focused pane 输入法上下文；通过 Hammerspoon、
+  launcher 或 Dock 返回同一 Herdr pane 不需要等待下一次 socket 查询或 polling。
 - 如果 focus event 丢失或 Herdr 版本没有提供该事件，则通过 `pane.current` 每 100ms 轮询更新 focused pane。
 - `Option+H/J/K/L` 不作为 Prowl Canvas 导航处理，按键会继续传给 terminal，供 Herdr 自己切换 tab/workspace。
 - Clean runtime 强制启用 `macos-option-as-alt = true`，确保 Option 组合编码为 terminal Alt；代价是 Clean 中不能用
   Option 组合输入 macOS 特殊字符。
 - 退出或 detach Herdr 后，自动恢复外层 terminal 的前台进程判断。
 
-Herdr JSON API 的每条 Unix socket connection 只处理一条 request。Prowl 在 adapter 启动或重连时使用独立短连接
-完成 protocol check，随后用新的短连接查询 `pane.current`，并为 `events.subscribe` 保留一条单独的长连接；这些
-请求不能复用同一条 connection。
+Prowl 支持 Herdr protocol 19 和 20。Herdr JSON API 的每条 Unix socket connection 只处理一条 request。Prowl
+在 adapter 启动或重连时使用独立短连接完成 protocol check，随后用新的短连接查询 `pane.current`，并为
+`events.subscribe` 保留一条单独的长连接；这些请求不能复用同一条 connection。
 
 socket 不存在、断开、响应异常或 protocol 不兼容时，Prowl 保持当前输入法并静默重试或停止集成，不显示产品
 overlay。首期只支持 bare `herdr` 的 default local session，不支持 named session、remote Herdr 或自定义

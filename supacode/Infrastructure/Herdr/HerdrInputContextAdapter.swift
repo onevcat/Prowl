@@ -103,6 +103,11 @@ internal final class HerdrInputContextAdapter {
     }
   }
 
+  internal func reapplyLastPaneContext() {
+    guard let lastPublishedPane else { return }
+    onPaneContext(lastPublishedPane)
+  }
+
   private func run() async {
     var retryDelay = Duration.milliseconds(250)
     while !Task.isCancelled {

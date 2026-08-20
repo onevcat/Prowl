@@ -75,16 +75,16 @@ nonisolated internal struct HerdrResponseEnvelope: Decodable, Sendable {
 }
 
 nonisolated internal enum HerdrProtocolCompatibility {
-  internal static let supportedVersion: UInt32 = 19
+  internal static let supportedVersions: ClosedRange<UInt32> = 19...20
 
   internal static func validate(_ response: HerdrResponseEnvelope) throws {
     guard response.result?.type == "pong" else {
       throw HerdrSocketError.unsupportedResponseType(response.result?.type)
     }
     let actualVersion = response.result?.protocolVersion
-    guard actualVersion == supportedVersion else {
+    guard let actualVersion, supportedVersions.contains(actualVersion) else {
       throw HerdrSocketError.unsupportedProtocol(
-        expected: supportedVersion,
+        supported: supportedVersions,
         actual: actualVersion
       )
     }

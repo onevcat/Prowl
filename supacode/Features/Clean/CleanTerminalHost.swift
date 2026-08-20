@@ -163,10 +163,14 @@ internal final class CleanTerminalHost {
   }
 
   internal func updateWindowActivity(_ activity: WindowActivityState) {
+    let wasWindowActive = isWindowActive
     isWindowActive = activity.isKeyWindow && activity.isVisible
     surface?.setOcclusion(activity.isVisible)
     surface?.focusDidChange(isWindowActive)
     guard isWindowActive else { return }
+    if !wasWindowActive, isHerdrForeground {
+      herdrAdapter?.reapplyLastPaneContext()
+    }
     reevaluateInputContext(reason: .focusChanged)
   }
 

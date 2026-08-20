@@ -88,7 +88,6 @@ struct HerdrInputContextTests {
       "pane.focused",
       "pane.updated",
       "pane.agent_detected",
-      "pane.agent_status_changed",
       "pane.exited",
       "pane.closed",
       "pane.moved",
@@ -114,11 +113,12 @@ struct HerdrInputContextTests {
     #expect(event.event == "pane.agent_detected")
   }
 
-  @Test func acceptsSupportedHerdrProtocol() throws {
+  @Test(arguments: [UInt32(19), UInt32(20)])
+  func acceptsSupportedHerdrProtocol(protocolVersion: UInt32) throws {
     let response = try JSONDecoder().decode(
       HerdrResponseEnvelope.self,
       from: Data(
-        #"{"id":"clean-protocol","result":{"type":"pong","version":"0.1.0","protocol":19,"future_field":true}}"#
+        #"{"id":"clean-protocol","result":{"type":"pong","version":"0.8.2","protocol":\#(protocolVersion),"future_field":true}}"#
           .utf8
       )
     )
@@ -130,12 +130,12 @@ struct HerdrInputContextTests {
     let response = try JSONDecoder().decode(
       HerdrResponseEnvelope.self,
       from: Data(
-        #"{"id":"clean-protocol","result":{"type":"pong","version":"0.2.0","protocol":20}}"#.utf8
+        #"{"id":"clean-protocol","result":{"type":"pong","version":"0.9.0","protocol":21}}"#.utf8
       )
     )
 
     #expect(
-      throws: HerdrSocketError.unsupportedProtocol(expected: 19, actual: 20)
+      throws: HerdrSocketError.unsupportedProtocol(supported: 19...20, actual: 21)
     ) {
       try HerdrProtocolCompatibility.validate(response)
     }
@@ -147,7 +147,7 @@ struct HerdrInputContextTests {
         .init(
           expectedMethod: "ping",
           response:
-            #"{"id":"prowl-clean-protocol","result":{"type":"pong","version":"0.8.0","protocol":19}}"#
+            #"{"id":"prowl-clean-protocol","result":{"type":"pong","version":"0.8.2","protocol":20}}"#
         ),
         .init(
           expectedMethod: "pane.current",
@@ -171,12 +171,22 @@ struct HerdrInputContextTests {
         .init(
           expectedMethod: "ping",
           response:
-            #"{"id":"prowl-clean-protocol","result":{"type":"pong","version":"0.8.0","protocol":19}}"#
+            #"{"id":"prowl-clean-protocol","result":{"type":"pong","version":"0.8.2","protocol":20}}"#
         ),
         .init(
           expectedMethod: "events.subscribe",
           response:
             #"{"id":"prowl-clean-events","result":{"type":"subscription_started"}}"#,
+          expectedSubscriptionTypes: [
+            "workspace.focused",
+            "tab.focused",
+            "pane.focused",
+            "pane.updated",
+            "pane.agent_detected",
+            "pane.exited",
+            "pane.closed",
+            "pane.moved",
+          ],
           keepsConnectionOpen: true
         ),
       ]
@@ -256,7 +266,7 @@ struct HerdrInputContextTests {
     let client = HerdrInputContextClient(
       currentPane: {
         attemptCount.withValue { $0 += 1 }
-        throw HerdrSocketError.unsupportedProtocol(expected: 19, actual: 20)
+        throw HerdrSocketError.unsupportedProtocol(supported: 19...20, actual: 21)
       },
       events: { AsyncStream { $0.finish() } }
     )
@@ -435,6 +445,36 @@ struct HerdrInputContextTests {
     eventContinuation.value?.finish()
   }
 
+  @Test func adapterReappliesCachedPaneContextWithoutRefreshingSocket() async {
+    let refreshCount = LockIsolated(0)
+    let publishedPaneIDs = LockIsolated<[String]>([])
+    let eventContinuation = LockIsolated<AsyncStream<HerdrEventStreamState>.Continuation?>(nil)
+    let client = HerdrInputContextClient(
+      currentPane: { _ in
+        refreshCount.withValue { $0 += 1 }
+        return HerdrPaneInfo(paneID: "w1:p1", agent: "codex", agentStatus: "working")
+      },
+      events: {
+        AsyncStream { continuation in
+          eventContinuation.setValue(continuation)
+          continuation.yield(.subscribed)
+        }
+      }
+    )
+    let adapter = HerdrInputContextAdapter(client: client) { pane in
+      publishedPaneIDs.withValue { $0.append(pane.paneID) }
+    }
+
+    adapter.start()
+    await waitUntil { refreshCount.value == 2 && publishedPaneIDs.value == ["w1:p1"] }
+    adapter.reapplyLastPaneContext()
+
+    #expect(refreshCount.value == 2)
+    #expect(publishedPaneIDs.value == ["w1:p1", "w1:p1"])
+    adapter.stop()
+    eventContinuation.value?.finish()
+  }
+
   @Test func adapterOnlyValidatesProtocolForConnectionStartup() async {
     let clock = TestClock()
     let validationFlags = LockIsolated<[Bool]>([])
@@ -537,6 +577,7 @@ struct HerdrInputContextTests {
 nonisolated private struct HerdrTestExchange: Sendable {
   let expectedMethod: String
   let response: String
+  var expectedSubscriptionTypes: [String]? = nil
   var keepsConnectionOpen = false
 }
 
@@ -642,6 +683,14 @@ nonisolated private final class HerdrSingleRequestTestServer: @unchecked Sendabl
       let requestObject = try JSONSerialization.jsonObject(with: request) as? [String: Any]
       guard requestObject?["method"] as? String == exchange.expectedMethod else {
         throw HerdrTestServerError.unexpectedRequest(String(decoding: request, as: UTF8.self))
+      }
+      if let expectedSubscriptionTypes = exchange.expectedSubscriptionTypes {
+        let params = requestObject?["params"] as? [String: Any]
+        let subscriptions = params?["subscriptions"] as? [[String: Any]]
+        let actualSubscriptionTypes = subscriptions?.compactMap { $0["type"] as? String }
+        guard actualSubscriptionTypes == expectedSubscriptionTypes else {
+          throw HerdrTestServerError.unexpectedRequest(String(decoding: request, as: UTF8.self))
+        }
       }
       try writeLine(exchange.response, to: descriptor)
       if exchange.keepsConnectionOpen {

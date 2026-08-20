@@ -13,7 +13,7 @@ nonisolated internal enum HerdrSocketError: Error, Equatable, Sendable {
   case invalidResponse
   case serverError(code: String, message: String)
   case unsupportedResponseType(String?)
-  case unsupportedProtocol(expected: UInt32, actual: UInt32?)
+  case unsupportedProtocol(supported: ClosedRange<UInt32>, actual: UInt32?)
 }
 
 nonisolated internal enum HerdrEventStreamState: Sendable {
@@ -31,7 +31,6 @@ nonisolated internal struct HerdrSocketClient: Sendable {
     "pane.focused",
     "pane.updated",
     "pane.agent_detected",
-    "pane.agent_status_changed",
     "pane.exited",
     "pane.closed",
     "pane.moved",
