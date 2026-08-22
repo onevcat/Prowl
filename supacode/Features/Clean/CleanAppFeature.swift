@@ -7,6 +7,7 @@ internal struct CleanAppFeature {
   internal struct State: Equatable {
     internal var settings: SettingsFeature.State
     internal var updates = UpdatesFeature.State()
+    internal var herdrSidebar = HerdrSidebarFeature.State()
     @Presents internal var alert: AlertState<Alert>?
 
     internal init(settings: SettingsFeature.State = .init()) {
@@ -16,6 +17,8 @@ internal struct CleanAppFeature {
 
   internal enum Action {
     case appLaunched
+    case herdrForegroundChanged(Bool)
+    case herdrSidebar(HerdrSidebarFeature.Action)
     case herdrCompatibilityFailure(HerdrSocketError)
     case settings(SettingsFeature.Action)
     case updates(UpdatesFeature.Action)
@@ -37,6 +40,9 @@ internal struct CleanAppFeature {
     Scope(state: \.updates, action: \.updates) {
       UpdatesFeature()
     }
+    Scope(state: \.herdrSidebar, action: \.herdrSidebar) {
+      HerdrSidebarFeature()
+    }
     Reduce { state, action in
       switch action {
       case .appLaunched:
@@ -55,6 +61,12 @@ internal struct CleanAppFeature {
       case .herdrCompatibilityFailure(let error):
         state.alert = Self.herdrCompatibilityAlert(for: error)
         return .none
+
+      case .herdrForegroundChanged(let isForeground):
+        return .send(.herdrSidebar(.foregroundChanged(isForeground)))
+
+      case .herdrSidebar(.delegate(.compatibilityFailure(let error))):
+        return .send(.herdrCompatibilityFailure(error))
 
       case .settings(.delegate(.settingsChanged(let settings))):
         return .send(
@@ -100,7 +112,7 @@ internal struct CleanAppFeature {
         state.alert = nil
         return .none
 
-      case .settings, .updates, .alert:
+      case .settings, .updates, .herdrSidebar, .alert:
         return .none
       }
     }

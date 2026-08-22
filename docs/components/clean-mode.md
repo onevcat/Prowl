@@ -22,7 +22,8 @@ Clean 只创建一个 Ghostty terminal surface：
 - 初始目录是用户 home directory。
 - 启动普通交互式 shell，不注入命令。
 - 不自动启动、attach 或控制 Herdr。
-- 不显示 sidebar、toolbar、tab bar、title、empty state 或 traffic lights。
+- Herdr 未激活时不显示 sidebar、toolbar、tab bar、title、empty state 或 traffic lights；进入 Herdr 并完成状态同步后，
+  在 terminal 左侧显示 native Herdr sidebar。
 - terminal 延伸到原 titlebar 和 traffic-light 区域；主窗口保留可接收键盘焦点的 native window style，同时隐藏
   titlebar chrome，并把不可见 titlebar 区域中的鼠标事件转发给 terminal；进入 native fullscreen 后也不会恢复
   titlebar chrome。
@@ -51,7 +52,18 @@ $XDG_CONFIG_HOME/herdr/herdr.sock
 或 ~/.config/herdr/herdr.sock
 ```
 
-Prowl 不发送控制命令。它只读取 focused pane，并订阅已确认的 focus/lifecycle event：
+Prowl 的输入法 adapter 只读取 focused pane，并订阅已确认的 focus/lifecycle event。Herdr client 仍由 Ghostty terminal
+显示；native sidebar 只读取 `session.snapshot`，并通过 Herdr JSON API 执行 focus：
+
+- workspace、tab、Agent pane 和普通 shell pane 都会按 Herdr server 的层级显示。
+- 普通 pane 使用 `agent == nil` 判定，不把 shell 当作 Agent；Agent pane 显示 agent 名称和状态。
+- 点击 workspace、tab 或 pane row 会调用对应的 `workspace.focus`、`tab.focus` 或 `pane.focus`，选中状态以服务器
+  后续 snapshot 的 focused ID 为准。
+- workspace、tab、pane 创建、关闭、移动、重命名、聚焦和 layout 更新会触发一次 100ms debounce 后的完整 snapshot 刷新。
+- socket 尚未 ready、断开或 Herdr 退出时，sidebar 隐藏并把 terminal 恢复为全宽；不会影响 Ghostty 输入、渲染或输入法同步。
+- Sidebar 不接管 Herdr terminal stream，不实现 binary client protocol，也不持久化 Herdr workspace/tab/pane。
+
+输入法 adapter 的既有行为如下：
 
 - focused pane 存在 agent 时，按该 `pane_id` 恢复已记忆的输入法。
 - 首次进入尚未记忆输入法的 agent pane 时，使用最近一次从 command/shell pane 切换前记录的非 ABC 输入法；如果没有 fallback，则保持当前输入法。

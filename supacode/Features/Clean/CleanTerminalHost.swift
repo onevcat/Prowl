@@ -77,6 +77,7 @@ internal final class CleanForegroundJobProbe {
 internal final class CleanTerminalHost {
   internal typealias SurfaceFactory = @MainActor (CleanSurfaceConfiguration) -> GhosttySurfaceView
   internal typealias HerdrCompatibilityFailureHandler = @MainActor (HerdrSocketError) -> Void
+  internal typealias HerdrForegroundHandler = @MainActor (Bool) -> Void
 
   private static let periodicProbeInterval = Duration.milliseconds(200)
   private static let delayedProbeInterval = Duration.milliseconds(50)
@@ -87,6 +88,7 @@ internal final class CleanTerminalHost {
   private let inputSourceCoordinator: TerminalInputSourceCoordinator
   private let surfaceFactory: SurfaceFactory
   private let foregroundJobProbe: CleanForegroundJobProbe
+  private let onHerdrForegroundChanged: HerdrForegroundHandler
   private let logger = SupaLogger("CleanTerminal")
   private var periodicProbeTask: Task<Void, Never>?
   private var delayedProbeTask: Task<Void, Never>?
@@ -101,7 +103,8 @@ internal final class CleanTerminalHost {
     inputSourceCoordinator: TerminalInputSourceCoordinator = TerminalInputSourceCoordinator(),
     surfaceFactory: SurfaceFactory? = nil,
     foregroundJobProbe: CleanForegroundJobProbe = CleanForegroundJobProbe(),
-    onHerdrCompatibilityFailure: @escaping HerdrCompatibilityFailureHandler = { _ in }
+    onHerdrCompatibilityFailure: @escaping HerdrCompatibilityFailureHandler = { _ in },
+    onHerdrForegroundChanged: @escaping HerdrForegroundHandler = { _ in }
   ) {
     self.preferredFontSize = preferredFontSize
     self.inputSourceCoordinator = inputSourceCoordinator
@@ -117,6 +120,7 @@ internal final class CleanTerminalHost {
         )
       }
     self.foregroundJobProbe = foregroundJobProbe
+    self.onHerdrForegroundChanged = onHerdrForegroundChanged
     herdrAdapter = HerdrInputContextAdapter(
       onCompatibilityFailure: onHerdrCompatibilityFailure,
       onPaneContext: { [weak self] pane in
@@ -160,7 +164,7 @@ internal final class CleanTerminalHost {
     delayedProbeTask = nil
     foregroundJobProbe.cancel()
     isWindowActive = false
-    isHerdrForeground = false
+    setHerdrForeground(false)
     herdrAdapter?.stop()
     titlebarMouseForwarder?.stop()
     surface?.focusDidChange(false)
@@ -195,13 +199,11 @@ internal final class CleanTerminalHost {
         return
       }
       if HerdrProcessDetector.isHerdr(job) {
-        self.isHerdrForeground = true
-        self.herdrAdapter?.start()
+        self.setHerdrForeground(true)
         return
       }
 
-      self.isHerdrForeground = false
-      self.herdrAdapter?.resetAfterHerdrExit()
+      self.setHerdrForeground(false)
       let context = TerminalInputContextClassifier.context(
         job: job,
         viewportText: surface.bridge.readViewportText() ?? ""
@@ -316,5 +318,16 @@ internal final class CleanTerminalHost {
     )
     logger.debug(
       "applied Herdr pane input context pane=\(pane.paneID) agent=\(pane.agent ?? "none")")
+  }
+
+  private func setHerdrForeground(_ isForeground: Bool) {
+    guard isHerdrForeground != isForeground else { return }
+    isHerdrForeground = isForeground
+    if isForeground {
+      herdrAdapter?.start()
+    } else {
+      herdrAdapter?.resetAfterHerdrExit()
+    }
+    onHerdrForegroundChanged(isForeground)
   }
 }

@@ -275,6 +275,9 @@ struct SupacodeApp: App {
       preferredFontSize: initialSettings.terminalFontSize,
       onHerdrCompatibilityFailure: { [weak store] error in
         store?.send(.herdrCompatibilityFailure(error))
+      },
+      onHerdrForegroundChanged: { [weak store] isForeground in
+        store?.send(.herdrForegroundChanged(isForeground))
       }
     )
     return CleanRuntime(terminalHost: terminalHost, store: store)

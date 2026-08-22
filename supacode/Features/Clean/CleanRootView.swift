@@ -6,12 +6,22 @@ internal struct CleanRootView: View {
   internal let terminalHost: CleanTerminalHost
 
   internal var body: some View {
-    ZStack {
-      if let surface = terminalHost.surface {
-        GhosttyTerminalView(surfaceView: surface)
-      } else {
-        Color.clear
+    HStack(spacing: 0) {
+      if store.herdrSidebar.isVisible {
+        HerdrSidebarView(
+          store: store.scope(state: \.herdrSidebar, action: \.herdrSidebar)
+        )
+        .frame(width: HerdrSidebarLayout.width)
       }
+
+      ZStack {
+        if let surface = terminalHost.surface {
+          GhosttyTerminalView(surfaceView: surface)
+        } else {
+          Color.clear
+        }
+      }
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .ignoresSafeArea(.container, edges: .top)
