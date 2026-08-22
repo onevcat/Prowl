@@ -1,0 +1,115 @@
+import ComposableArchitecture
+import DependenciesTestSupport
+import Foundation
+import Testing
+
+@testable import supacode
+
+@Suite(.serialized)
+@MainActor
+struct HerdrSidebarTests {
+  @Test func decodesAgentAndOrdinaryPanesFromSnapshot() throws {
+    let response = try JSONDecoder().decode(
+      HerdrSnapshotResponse.self,
+      from: Data(
+        #"""
+        {
+          "id": "snapshot",
+          "result": {
+            "type": "session_snapshot",
+            "snapshot": {
+              "version": "0.8.2",
+              "protocol": 20,
+              "focused_workspace_id": "w1",
+              "focused_tab_id": "w1:t1",
+              "focused_pane_id": "w1:p1",
+              "workspaces": [{"workspace_id":"w1","number":1,"label":"Main","focused":true}],
+              "tabs": [{"tab_id":"w1:t1","workspace_id":"w1","number":1,"label":"Shell","focused":true}],
+              "panes": [
+                {"pane_id":"w1:p1","terminal_id":"term-1","workspace_id":"w1","tab_id":"w1:t1","focused":true,"agent":"codex","agent_status":"working"},
+                {"pane_id":"w1:p2","terminal_id":"term-2","workspace_id":"w1","tab_id":"w1:t1","focused":false,"foreground_cwd":"/tmp"}
+              ],
+              "layouts": [],
+              "agents": []
+            }
+          }
+        }
+        """.utf8
+      )
+    )
+
+    #expect(response.type == "session_snapshot")
+    #expect(response.snapshot.panes.first?.isAgent == true)
+    #expect(response.snapshot.panes.dropFirst().first?.agent == nil)
+    #expect(response.snapshot.panes.dropFirst().first?.foregroundCWD == "/tmp")
+  }
+
+  @Test func snapshotResponseConnectsSidebarAndUsesServerSelection() async {
+    let snapshot = makeSnapshot(focusedPaneID: "p2")
+    var initialState = HerdrSidebarFeature.State()
+    initialState.connection = .connecting
+    let store = TestStore(initialState: initialState) {
+      HerdrSidebarFeature()
+    }
+
+    await store.send(.snapshotResponse(.success(snapshot))) {
+      $0.connection = .connected
+      $0.snapshot = snapshot
+      $0.selectedWorkspaceID = "w1"
+      $0.selectedTabID = "t1"
+      $0.selectedPaneID = "p2"
+    }
+  }
+
+  @Test(.dependencies) func focusRefreshConfirmsServerFocusedPane() async {
+    let calls = LockIsolated<[String]>([])
+    let focusedSnapshot = makeSnapshot(focusedPaneID: "p2")
+    var initialState = HerdrSidebarFeature.State()
+    initialState.connection = .connected
+    initialState.snapshot = makeSnapshot(focusedPaneID: "p1")
+    initialState.selectedPaneID = "p1"
+
+    let store = TestStore(initialState: initialState) {
+      HerdrSidebarFeature()
+    } withDependencies: {
+      $0.herdrSidebarClient = HerdrSidebarClient(
+        snapshot: { focusedSnapshot },
+        events: { AsyncStream { $0.finish() } },
+        focusWorkspace: { _ in },
+        focusTab: { _ in },
+        focusPane: { paneID in
+          calls.withValue { $0.append(paneID) }
+        }
+      )
+    }
+
+    await store.send(.focusPaneTapped("p2")) {
+      $0.pendingFocus = .pane("p2")
+    }
+    await store.receive(.focusResponse(.success(())))
+    await store.receive(.refreshResponse(.success(focusedSnapshot))) {
+      $0.snapshot = focusedSnapshot
+      $0.selectedPaneID = "p2"
+      $0.pendingFocus = nil
+    }
+    #expect(calls.value == ["p2"])
+  }
+
+  private func makeSnapshot(focusedPaneID: String) -> HerdrSidebarSnapshot {
+    HerdrSidebarSnapshot(
+      version: "0.8.2",
+      protocolVersion: 20,
+      focusedWorkspaceID: "w1",
+      focusedTabID: "t1",
+      focusedPaneID: focusedPaneID,
+      workspaces: [HerdrWorkspace(workspaceID: "w1", label: "Main", focused: true)],
+      tabs: [HerdrTab(tabID: "t1", workspaceID: "w1", label: "Shell", focused: true)],
+      panes: [
+        HerdrPane(paneID: "p1", workspaceID: "w1", tabID: "t1", agent: "codex"),
+        HerdrPane(paneID: "p2", workspaceID: "w1", tabID: "t1", foregroundCWD: "/tmp"),
+      ],
+      layouts: [],
+      agents: []
+    )
+  }
+}
