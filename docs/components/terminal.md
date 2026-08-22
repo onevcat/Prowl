@@ -147,8 +147,10 @@ Selection for Find** (`search_selection`). These are Ghostty-managed.
 ## Scrollback, CJK, copy/paste
 
 Scrollback, wide/CJK character rendering, and copy/paste are handled by Ghostty
-with its defaults — Prowl doesn't override them. Customize terminal behavior in
-your Ghostty config at `~/.config/ghostty/config`.
+with its defaults. Prowl's native mouse bridge preserves drag-selection anchors
+across long scrollback, split-focus changes, and releases outside the original
+pane. Customize terminal behavior in your Ghostty config at
+`~/.config/ghostty/config`.
 
 ## Color scheme
 
@@ -166,6 +168,9 @@ launch. Notification bodies are not persisted.
 - **Tab selection ≠ pane focus.** A tab can have several panes; selecting a tab
   doesn't pin which split has keyboard focus. The CLI's `pane.focused` is the
   truth.
+- Clicking an unfocused split in an already active window first transfers focus;
+  start a drag selection with the next press so the focus click is not treated as
+  a terminal press.
 - Closing the **last** tab leaves the worktree with no visible terminal (Shelf
   removes the book; Canvas drops the card).
 - `--capture` and stable reads depend on the pane's shell integration; agents

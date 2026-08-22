@@ -1,6 +1,6 @@
 {
   "_comment": "Metadata for the docs/ manual. The last_synced_commit is the commit at which docs/ was last verified against the implementation; the sync-docs skill (.claude/skills/sync-docs/SKILL.md) diffs HEAD against it and updates this file. Committed to git on purpose so the baseline persists across sessions and machines. A dotfile + .json so a future docs website does not render it as a page.",
-  "last_synced_commit": "1abc11ffe293b6b124625fe8a9823beed6ae2a91",
-  "last_synced_date": "2026-08-20",
-  "note": "Verified the CLI target-grammar + workspace child diff + toolbar grouping range (PRs #700, #702-#704): docs for prowl create/close, child-repo diff entry points, and the update indicator placement were maintained in-branch; only added CREATE_FAILED/CLOSE_FAILED to the cli.md error-code list."
+  "last_synced_commit": "90d581547f1dc7c4717a334d07bf1b2a7842b6ea",
+  "last_synced_date": "2026-08-22",
+  "note": "Verified the terminal input bridge and scrollback selection behavior; documented focus-transfer clicks and drag-selection ownership. Unrelated CLI version and Claude screen-profile changes did not require documentation updates."
 }
