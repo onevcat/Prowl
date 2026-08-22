@@ -21,6 +21,7 @@ internal struct HerdrSidebarFeature {
     internal var selectedPaneID: String?
     internal var pendingFocus: FocusTarget?
     internal var refreshGeneration: UInt64 = 0
+    internal var subscribedPaneIDs: Set<String> = []
 
     internal var isVisible: Bool {
       connection == .connected
@@ -44,12 +45,16 @@ internal struct HerdrSidebarFeature {
     case compatibilityFailure(HerdrSocketError)
   }
 
+  internal enum FocusResult: Equatable {
+    case success
+    case failure(HerdrSidebarFailure)
+  }
+
   internal enum Action: Equatable {
     case foregroundChanged(Bool)
     case snapshotResponse(Result<HerdrSidebarSnapshot, HerdrSidebarFailure>)
     case eventStream(HerdrEventStreamState)
     case debouncedRefresh
-    case refreshResponse(Result<HerdrSidebarSnapshot, HerdrSidebarFailure>)
     case refreshResponseWithGeneration(
       UInt64,
       Result<HerdrSidebarSnapshot, HerdrSidebarFailure>
@@ -57,12 +62,12 @@ internal struct HerdrSidebarFeature {
     case focusWorkspaceTapped(String)
     case focusTabTapped(String)
     case focusPaneTapped(String)
-    case focusResponse(Result<Void, HerdrSidebarFailure>)
+    case focusResponse(FocusResult)
     case delegate(DelegateAction)
     case stop
   }
 
-  private enum CancelID: Hashable {
+  nonisolated private enum CancelID: Hashable, Sendable {
     case lifecycle
     case refreshDebounce
     case refresh
@@ -82,6 +87,7 @@ internal struct HerdrSidebarFeature {
         state.selectedTabID = nil
         state.selectedPaneID = nil
         state.pendingFocus = nil
+        state.subscribedPaneIDs = []
         state.refreshGeneration &+= 1
         return .merge(
           .cancel(id: CancelID.lifecycle),
@@ -97,6 +103,7 @@ internal struct HerdrSidebarFeature {
         state.selectedTabID = nil
         state.selectedPaneID = nil
         state.pendingFocus = nil
+        state.subscribedPaneIDs = []
         state.refreshGeneration &+= 1
         return .merge(
           .cancel(id: CancelID.lifecycle),
@@ -109,13 +116,13 @@ internal struct HerdrSidebarFeature {
 
       case .snapshotResponse(.success(let snapshot)):
         guard state.connection != .hidden else { return .none }
-        replaceSnapshot(&state, with: snapshot)
+        _ = replaceSnapshot(&state, with: snapshot)
         state.connection = .connected
         return .none
 
       case .snapshotResponse(.failure(let failure)):
         guard state.connection != .hidden else { return .none }
-        return handleFailure(&state, failure: failure, hidesSidebar: true)
+        return handleFailure(&state, failure: failure)
 
       case .eventStream(.subscribed):
         return .none
@@ -136,47 +143,42 @@ internal struct HerdrSidebarFeature {
 
       case .eventStream(.disconnected(let error)):
         let failure = HerdrSidebarFailure.map(error)
-        if failure == .incompatibleProtocol {
-          return handleFailure(&state, failure: failure, hidesSidebar: true)
+        if failure.isIncompatibleProtocol {
+          return handleFailure(&state, failure: failure)
         }
+        state.refreshGeneration &+= 1
         state.connection = .connecting
         state.snapshot = .empty
-        return .none
+        state.subscribedPaneIDs = []
+        return .merge(
+          .cancel(id: CancelID.refreshDebounce),
+          .cancel(id: CancelID.refresh),
+          .cancel(id: CancelID.focus)
+        )
 
       case .debouncedRefresh:
         guard state.connection == .connected else { return .none }
         return refreshEffect(generation: state.refreshGeneration)
           .cancellable(id: CancelID.refresh, cancelInFlight: true)
 
-      case .refreshResponse(.success(let snapshot)):
-        guard state.connection != .hidden else { return .none }
-        replaceSnapshot(&state, with: snapshot)
-        state.connection = .connected
-        return .none
-
-      case .refreshResponse(.failure(let failure)):
-        guard state.connection != .hidden else { return .none }
-        if failure == .incompatibleProtocol {
-          return handleFailure(&state, failure: failure, hidesSidebar: true)
-        }
-        herdrSidebarLogger.debug("Sidebar refresh failed: \(String(describing: failure))")
-        return .none
-
       case .refreshResponseWithGeneration(let generation, let result):
         guard generation == state.refreshGeneration else { return .none }
         switch result {
         case .success(let snapshot):
           guard state.connection != .hidden else { return .none }
-          replaceSnapshot(&state, with: snapshot)
+          let shouldRestartLifecycle = replaceSnapshot(&state, with: snapshot)
           state.connection = .connected
-          return .none
+          return shouldRestartLifecycle ? restartLifecycleEffect() : .none
         case .failure(let failure):
           guard state.connection != .hidden else { return .none }
-          if failure == .incompatibleProtocol {
-            return handleFailure(&state, failure: failure, hidesSidebar: true)
+          state.pendingFocus = nil
+          if failure.isIncompatibleProtocol {
+            return handleFailure(&state, failure: failure)
           }
-          herdrSidebarLogger.debug("Sidebar refresh failed: \(String(describing: failure))")
-          return .none
+          state.connection = .connecting
+          state.snapshot = .empty
+          state.subscribedPaneIDs = []
+          return restartLifecycleEffect()
         }
 
       case .focusWorkspaceTapped(let workspaceID):
@@ -205,7 +207,9 @@ internal struct HerdrSidebarFeature {
       case .focusResponse(.failure(let failure)):
         state.pendingFocus = nil
         herdrSidebarLogger.warning("Sidebar focus failed: \(String(describing: failure))")
-        return .none
+        guard failure.isNotFound else { return .none }
+        return refreshEffect(generation: state.refreshGeneration)
+          .cancellable(id: CancelID.refresh, cancelInFlight: true)
 
       case .delegate:
         return .none
@@ -225,7 +229,7 @@ internal struct HerdrSidebarFeature {
           await send(.snapshotResponse(.success(snapshot)))
           retryDelay = .milliseconds(250)
 
-          for await event in client.events() {
+          for await event in client.events(Set(snapshot.panes.map(\.id))) {
             guard !Task.isCancelled else { return }
             await send(.eventStream(event))
             if case .disconnected = event {
@@ -236,7 +240,7 @@ internal struct HerdrSidebarFeature {
           let failure = HerdrSidebarFailure.map(error)
           guard !Task.isCancelled else { return }
           await send(.snapshotResponse(.failure(failure)))
-          if failure == .incompatibleProtocol {
+          if failure.isIncompatibleProtocol {
             return
           }
         }
@@ -283,7 +287,7 @@ internal struct HerdrSidebarFeature {
           try await client.focusPane(id)
         }
         guard !Task.isCancelled else { return }
-        await send(.focusResponse(.success(())))
+        await send(.focusResponse(.success))
       } catch {
         guard !Task.isCancelled else { return }
         await send(.focusResponse(.failure(HerdrSidebarFailure.map(error))))
@@ -293,10 +297,9 @@ internal struct HerdrSidebarFeature {
 
   private func handleFailure(
     _ state: inout State,
-    failure: HerdrSidebarFailure,
-    hidesSidebar: Bool
+    failure: HerdrSidebarFailure
   ) -> Effect<Action> {
-    if failure == .incompatibleProtocol {
+    if case .incompatibleProtocol(let error) = failure {
       state.connection = .hidden
       state.snapshot = .empty
       state.selectedWorkspaceID = nil
@@ -308,39 +311,37 @@ internal struct HerdrSidebarFeature {
         .cancel(id: CancelID.refreshDebounce),
         .cancel(id: CancelID.refresh),
         .cancel(id: CancelID.focus),
-        .send(.delegate(.compatibilityFailure(.unsupportedResponseType(nil))))
+        .send(.delegate(.compatibilityFailure(error)))
       )
     }
-    state.connection = hidesSidebar ? .failed : state.connection
-    if hidesSidebar {
-      state.snapshot = .empty
-      state.selectedWorkspaceID = nil
-      state.selectedTabID = nil
-      state.selectedPaneID = nil
-    }
+    state.connection = .failed
+    state.snapshot = .empty
+    state.selectedWorkspaceID = nil
+    state.selectedTabID = nil
+    state.selectedPaneID = nil
     herdrSidebarLogger.debug("Sidebar unavailable: \(String(describing: failure))")
     return .none
   }
 
-  private func replaceSnapshot(_ state: inout State, with snapshot: HerdrSidebarSnapshot) {
+  private func replaceSnapshot(_ state: inout State, with snapshot: HerdrSidebarSnapshot) -> Bool {
+    let paneIDs = Set(snapshot.panes.map(\.id))
+    let shouldRestartLifecycle = paneIDs != state.subscribedPaneIDs
     state.snapshot = snapshot
+    state.subscribedPaneIDs = paneIDs
     state.selectedWorkspaceID = reconciledSelection(
-      current: state.selectedWorkspaceID,
       serverFocused: snapshot.focusedWorkspaceID,
       validIDs: Set(snapshot.workspaces.map(\.id))
     )
     state.selectedTabID = reconciledSelection(
-      current: state.selectedTabID,
       serverFocused: snapshot.focusedTabID,
       validIDs: Set(snapshot.tabs.map(\.id))
     )
     state.selectedPaneID = reconciledSelection(
-      current: state.selectedPaneID,
       serverFocused: snapshot.focusedPaneID,
       validIDs: Set(snapshot.panes.map(\.id))
     )
 
-    guard let pendingFocus = state.pendingFocus else { return }
+    guard let pendingFocus = state.pendingFocus else { return shouldRestartLifecycle }
     let isConfirmed: Bool
     switch pendingFocus {
     case .workspace(let id):
@@ -350,7 +351,7 @@ internal struct HerdrSidebarFeature {
     case .pane(let id):
       isConfirmed = snapshot.focusedPaneID == id
     }
-    guard isConfirmed else { return }
+    guard isConfirmed else { return shouldRestartLifecycle }
     switch pendingFocus {
     case .workspace(let id):
       state.selectedWorkspaceID = id
@@ -360,17 +361,21 @@ internal struct HerdrSidebarFeature {
       state.selectedPaneID = id
     }
     state.pendingFocus = nil
+    return shouldRestartLifecycle
   }
 
   private func reconciledSelection(
-    current: String?,
     serverFocused: String?,
     validIDs: Set<String>
   ) -> String? {
-    if let current, validIDs.contains(current) {
-      return current
-    }
     guard let serverFocused, validIDs.contains(serverFocused) else { return nil }
     return serverFocused
+  }
+
+  private func restartLifecycleEffect() -> Effect<Action> {
+    .merge(
+      .cancel(id: CancelID.lifecycle),
+      lifecycleEffect().cancellable(id: CancelID.lifecycle, cancelInFlight: true)
+    )
   }
 }

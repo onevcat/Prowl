@@ -34,7 +34,7 @@ struct HerdrSidebarTests {
             }
           }
         }
-        """.utf8
+        """#.utf8
       )
     )
 
@@ -42,6 +42,23 @@ struct HerdrSidebarTests {
     #expect(response.snapshot.panes.first?.isAgent == true)
     #expect(response.snapshot.panes.dropFirst().first?.agent == nil)
     #expect(response.snapshot.panes.dropFirst().first?.foregroundCWD == "/tmp")
+  }
+
+  @Test func sidebarSubscriptionIncludesAgentLifecycleAndReorderEvents() throws {
+    let data = try HerdrSocketClient.sidebarSubscriptionRequestData(paneIDs: ["p1"])
+    let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    let params = try #require(object["params"] as? [String: Any])
+    let subscriptions = try #require(params["subscriptions"] as? [[String: Any]])
+    let types = subscriptions.compactMap { $0["type"] as? String }
+
+    #expect(types.contains("pane.agent_detected"))
+    #expect(types.contains("workspace.reordered"))
+    #expect(
+      subscriptions.contains {
+        $0["type"] as? String == "pane.agent_status_changed"
+          && $0["pane_id"] as? String == "p1"
+      }
+    )
   }
 
   @Test func snapshotResponseConnectsSidebarAndUsesServerSelection() async {
@@ -58,6 +75,29 @@ struct HerdrSidebarTests {
       $0.selectedWorkspaceID = "w1"
       $0.selectedTabID = "t1"
       $0.selectedPaneID = "p2"
+      $0.subscribedPaneIDs = ["p1", "p2"]
+    }
+  }
+
+  @Test func externalSnapshotFocusReplacesStillLiveLocalSelection() async {
+    let initialSnapshot = makeSnapshot(focusedPaneID: "p1")
+    let externalFocusSnapshot = makeSnapshot(focusedPaneID: "p2")
+    var initialState = HerdrSidebarFeature.State()
+    initialState.connection = .connected
+    initialState.snapshot = initialSnapshot
+    initialState.selectedWorkspaceID = "w1"
+    initialState.selectedTabID = "t1"
+    initialState.selectedPaneID = "p1"
+    initialState.subscribedPaneIDs = ["p1", "p2"]
+    let store = TestStore(initialState: initialState) {
+      HerdrSidebarFeature()
+    }
+
+    await store.send(.refreshResponseWithGeneration(0, .success(externalFocusSnapshot))) {
+      $0.snapshot = externalFocusSnapshot
+      $0.selectedWorkspaceID = "w1"
+      $0.selectedTabID = "t1"
+      $0.selectedPaneID = "p2"
     }
   }
 
@@ -68,13 +108,14 @@ struct HerdrSidebarTests {
     initialState.connection = .connected
     initialState.snapshot = makeSnapshot(focusedPaneID: "p1")
     initialState.selectedPaneID = "p1"
+    initialState.subscribedPaneIDs = ["p1", "p2"]
 
     let store = TestStore(initialState: initialState) {
       HerdrSidebarFeature()
     } withDependencies: {
       $0.herdrSidebarClient = HerdrSidebarClient(
         snapshot: { focusedSnapshot },
-        events: { AsyncStream { $0.finish() } },
+        events: { _ in AsyncStream { $0.finish() } },
         focusWorkspace: { _ in },
         focusTab: { _ in },
         focusPane: { paneID in
@@ -86,11 +127,53 @@ struct HerdrSidebarTests {
     await store.send(.focusPaneTapped("p2")) {
       $0.pendingFocus = .pane("p2")
     }
-    await store.receive(.focusResponse(.success(())))
+    await store.receive(.focusResponse(.success))
     await store.receive(.refreshResponseWithGeneration(0, .success(focusedSnapshot))) {
       $0.snapshot = focusedSnapshot
+      $0.selectedWorkspaceID = "w1"
+      $0.selectedTabID = "t1"
       $0.selectedPaneID = "p2"
       $0.pendingFocus = nil
+    }
+    #expect(calls.value == ["p2"])
+  }
+
+  @Test(.dependencies) func notFoundFocusFailureRefreshesConfirmedSelection() async {
+    let calls = LockIsolated<[String]>([])
+    let snapshot = makeSnapshot(focusedPaneID: "p1")
+    var initialState = HerdrSidebarFeature.State()
+    initialState.connection = .connected
+    initialState.snapshot = snapshot
+    initialState.selectedPaneID = "p1"
+    initialState.subscribedPaneIDs = ["p1", "p2"]
+    let store = TestStore(initialState: initialState) {
+      HerdrSidebarFeature()
+    } withDependencies: {
+      $0.herdrSidebarClient = HerdrSidebarClient(
+        snapshot: { snapshot },
+        events: { _ in AsyncStream { $0.finish() } },
+        focusWorkspace: { _ in },
+        focusTab: { _ in },
+        focusPane: { paneID in
+          calls.withValue { $0.append(paneID) }
+          throw HerdrSocketError.serverError(code: "not_found", message: "pane not found")
+        }
+      )
+    }
+
+    await store.send(.focusPaneTapped("p2")) {
+      $0.pendingFocus = .pane("p2")
+    }
+    await store.receive(
+      .focusResponse(
+        .failure(.server(code: "not_found", message: "pane not found"))
+      )
+    ) {
+      $0.pendingFocus = nil
+    }
+    await store.receive(.refreshResponseWithGeneration(0, .success(snapshot))) {
+      $0.selectedWorkspaceID = "w1"
+      $0.selectedTabID = "t1"
     }
     #expect(calls.value == ["p2"])
   }

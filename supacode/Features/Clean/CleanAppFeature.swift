@@ -59,6 +59,7 @@ internal struct CleanAppFeature {
         )
 
       case .herdrCompatibilityFailure(let error):
+        guard state.alert == nil else { return .none }
         state.alert = Self.herdrCompatibilityAlert(for: error)
         return .none
 

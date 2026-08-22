@@ -7,7 +7,7 @@ nonisolated internal enum HerdrSidebarFailure: Error, Equatable, Sendable {
   case connection(HerdrSocketError)
   case invalidResponse(String)
   case server(code: String, message: String)
-  case incompatibleProtocol
+  case incompatibleProtocol(HerdrSocketError)
 
   internal static func map(_ error: Error) -> Self {
     if let failure = error as? Self {
@@ -18,7 +18,7 @@ nonisolated internal enum HerdrSidebarFailure: Error, Equatable, Sendable {
     }
     switch socketError {
     case .unsupportedProtocol, .unsupportedResponseType:
-      return .incompatibleProtocol
+      return .incompatibleProtocol(socketError)
     case .serverError(let code, let message):
       return .server(code: code, message: message)
     case .connectionFailed(ENOENT), .connectionFailed(ECONNREFUSED), .invalidSocketPath:
@@ -29,18 +29,32 @@ nonisolated internal enum HerdrSidebarFailure: Error, Equatable, Sendable {
       return .connection(socketError)
     }
   }
+
+  internal var isIncompatibleProtocol: Bool {
+    if case .incompatibleProtocol = self {
+      return true
+    }
+    return false
+  }
+
+  internal var isNotFound: Bool {
+    if case .server(let code, _) = self {
+      return code == "not_found"
+    }
+    return false
+  }
 }
 
 nonisolated internal struct HerdrSidebarClient: Sendable {
   internal var snapshot: @Sendable () async throws -> HerdrSidebarSnapshot
-  internal var events: @Sendable () -> AsyncStream<HerdrEventStreamState>
+  internal var events: @Sendable (Set<String>) -> AsyncStream<HerdrEventStreamState>
   internal var focusWorkspace: @Sendable (String) async throws -> Void
   internal var focusTab: @Sendable (String) async throws -> Void
   internal var focusPane: @Sendable (String) async throws -> Void
 
   internal init(
     snapshot: @escaping @Sendable () async throws -> HerdrSidebarSnapshot,
-    events: @escaping @Sendable () -> AsyncStream<HerdrEventStreamState>,
+    events: @escaping @Sendable (Set<String>) -> AsyncStream<HerdrEventStreamState>,
     focusWorkspace: @escaping @Sendable (String) async throws -> Void,
     focusTab: @escaping @Sendable (String) async throws -> Void,
     focusPane: @escaping @Sendable (String) async throws -> Void
@@ -60,8 +74,8 @@ extension HerdrSidebarClient: DependencyKey {
       snapshot: {
         try await socketClient.sessionSnapshot()
       },
-      events: {
-        socketClient.sidebarEvents()
+    events: { paneIDs in
+      socketClient.sidebarEvents(paneIDs: paneIDs)
       },
       focusWorkspace: { workspaceID in
         try await socketClient.focusWorkspace(workspaceID)
@@ -77,7 +91,7 @@ extension HerdrSidebarClient: DependencyKey {
 
   internal static let testValue = Self(
     snapshot: { .empty },
-    events: { AsyncStream { $0.finish() } },
+    events: { _ in AsyncStream { $0.finish() } },
     focusWorkspace: { _ in },
     focusTab: { _ in },
     focusPane: { _ in }

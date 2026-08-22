@@ -108,6 +108,23 @@ nonisolated internal struct HerdrEmptyParams: Encodable, Sendable {}
 nonisolated internal struct HerdrEventsSubscribeParams: Encodable, Sendable {
   nonisolated internal struct Subscription: Encodable, Sendable {
     internal let type: String
+    internal let paneID: String?
+
+    internal init(type: String, paneID: String? = nil) {
+      self.type = type
+      self.paneID = paneID
+    }
+
+    private enum CodingKeys: String, CodingKey {
+      case type
+      case paneID = "pane_id"
+    }
+
+    internal func encode(to encoder: Encoder) throws {
+      var container = encoder.container(keyedBy: CodingKeys.self)
+      try container.encode(type, forKey: .type)
+      try container.encodeIfPresent(paneID, forKey: .paneID)
+    }
   }
 
   internal let subscriptions: [Subscription]
@@ -579,14 +596,14 @@ nonisolated internal struct HerdrSnapshotResponse: Decodable, Sendable {
   internal let snapshot: HerdrSidebarSnapshot
 
   private struct Result: Decodable {
-    let type: String
-    let snapshot: HerdrSidebarSnapshot
+    fileprivate let type: String
+    fileprivate let snapshot: HerdrSidebarSnapshot
   }
 
   private struct Root: Decodable {
-    let result: Result?
-    let type: String?
-    let snapshot: HerdrSidebarSnapshot?
+    fileprivate let result: Result?
+    fileprivate let type: String?
+    fileprivate let snapshot: HerdrSidebarSnapshot?
   }
 
   internal init(from decoder: Decoder) throws {

@@ -3,8 +3,6 @@ import SwiftUI
 
 internal enum HerdrSidebarLayout {
   internal static let width: CGFloat = 260
-  internal static let minimumWidth: CGFloat = 220
-  internal static let maximumWidth: CGFloat = 360
 }
 
 internal struct HerdrSidebarView: View {
@@ -15,6 +13,7 @@ internal struct HerdrSidebarView: View {
       HStack(spacing: 8) {
         Image(systemName: "rectangle.split.3x1")
           .foregroundStyle(.secondary)
+          .accessibilityHidden(true)
         Text("Herdr")
           .font(.headline)
         Spacer(minLength: 0)
@@ -42,11 +41,7 @@ internal struct HerdrSidebarView: View {
         .scrollIndicators(.never)
       }
     }
-    .frame(
-      minWidth: HerdrSidebarLayout.minimumWidth,
-      maxWidth: HerdrSidebarLayout.maximumWidth,
-      maxHeight: .infinity
-    )
+    .frame(maxHeight: .infinity)
     .background(.regularMaterial)
     .overlay(alignment: .trailing) {
       Divider()
@@ -160,6 +155,7 @@ internal struct HerdrSidebarView: View {
         Image(systemName: systemImage)
           .frame(width: 16)
           .foregroundStyle(isSelected ? .primary : .secondary)
+          .accessibilityHidden(true)
         VStack(alignment: .leading, spacing: 1) {
           Text(title)
             .lineLimit(1)
