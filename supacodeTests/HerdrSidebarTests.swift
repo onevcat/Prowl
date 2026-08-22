@@ -87,7 +87,7 @@ struct HerdrSidebarTests {
       $0.pendingFocus = .pane("p2")
     }
     await store.receive(.focusResponse(.success(())))
-    await store.receive(.refreshResponse(.success(focusedSnapshot))) {
+    await store.receive(.refreshResponseWithGeneration(0, .success(focusedSnapshot))) {
       $0.snapshot = focusedSnapshot
       $0.selectedPaneID = "p2"
       $0.pendingFocus = nil

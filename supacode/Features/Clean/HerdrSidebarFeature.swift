@@ -50,6 +50,10 @@ internal struct HerdrSidebarFeature {
     case eventStream(HerdrEventStreamState)
     case debouncedRefresh
     case refreshResponse(Result<HerdrSidebarSnapshot, HerdrSidebarFailure>)
+    case refreshResponseWithGeneration(
+      UInt64,
+      Result<HerdrSidebarSnapshot, HerdrSidebarFailure>
+    )
     case focusWorkspaceTapped(String)
     case focusTabTapped(String)
     case focusPaneTapped(String)
@@ -141,7 +145,7 @@ internal struct HerdrSidebarFeature {
 
       case .debouncedRefresh:
         guard state.connection == .connected else { return .none }
-        return refreshEffect()
+        return refreshEffect(generation: state.refreshGeneration)
           .cancellable(id: CancelID.refresh, cancelInFlight: true)
 
       case .refreshResponse(.success(let snapshot)):
@@ -157,6 +161,23 @@ internal struct HerdrSidebarFeature {
         }
         herdrSidebarLogger.debug("Sidebar refresh failed: \(String(describing: failure))")
         return .none
+
+      case .refreshResponseWithGeneration(let generation, let result):
+        guard generation == state.refreshGeneration else { return .none }
+        switch result {
+        case .success(let snapshot):
+          guard state.connection != .hidden else { return .none }
+          replaceSnapshot(&state, with: snapshot)
+          state.connection = .connected
+          return .none
+        case .failure(let failure):
+          guard state.connection != .hidden else { return .none }
+          if failure == .incompatibleProtocol {
+            return handleFailure(&state, failure: failure, hidesSidebar: true)
+          }
+          herdrSidebarLogger.debug("Sidebar refresh failed: \(String(describing: failure))")
+          return .none
+        }
 
       case .focusWorkspaceTapped(let workspaceID):
         guard state.connection == .connected else { return .none }
@@ -178,7 +199,7 @@ internal struct HerdrSidebarFeature {
 
       case .focusResponse(.success):
         guard state.pendingFocus != nil else { return .none }
-        return refreshEffect()
+        return refreshEffect(generation: state.refreshGeneration)
           .cancellable(id: CancelID.refresh, cancelInFlight: true)
 
       case .focusResponse(.failure(let failure)):
@@ -230,16 +251,21 @@ internal struct HerdrSidebarFeature {
     }
   }
 
-  private func refreshEffect() -> Effect<Action> {
+  private func refreshEffect(generation: UInt64) -> Effect<Action> {
     let client = client
     return .run { send in
       do {
         let snapshot = try await client.snapshot()
         guard !Task.isCancelled else { return }
-        await send(.refreshResponse(.success(snapshot)))
+        await send(.refreshResponseWithGeneration(generation, .success(snapshot)))
       } catch {
         guard !Task.isCancelled else { return }
-        await send(.refreshResponse(.failure(HerdrSidebarFailure.map(error))))
+        await send(
+          .refreshResponseWithGeneration(
+            generation,
+            .failure(HerdrSidebarFailure.map(error))
+          )
+        )
       }
     }
   }
