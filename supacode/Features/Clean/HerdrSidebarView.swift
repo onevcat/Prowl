@@ -9,37 +9,16 @@ internal struct HerdrSidebarView: View {
   @Bindable internal var store: StoreOf<HerdrSidebarFeature>
 
   internal var body: some View {
-    VStack(alignment: .leading, spacing: 0) {
-      HStack(spacing: 8) {
-        Image(systemName: "rectangle.split.3x1")
-          .foregroundStyle(.secondary)
-          .accessibilityHidden(true)
-        Text("Herdr")
-          .font(.headline)
-        Spacer(minLength: 0)
-        Text("\(store.snapshot.panes.count)")
-          .font(.caption.monospacedDigit())
-          .foregroundStyle(.secondary)
-      }
-      .padding(.horizontal, 12)
-      .padding(.vertical, 10)
+    VStack(spacing: 0) {
+      sidebarSectionHeader(title: "spaces", detail: "\(store.snapshot.workspaces.count)")
+      spacesSection
 
       Divider()
 
-      if store.snapshot.workspaces.isEmpty {
-        ContentUnavailableView("No Herdr panes", systemImage: "rectangle.stack")
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
-      } else {
-        ScrollView {
-          LazyVStack(alignment: .leading, spacing: 2) {
-            ForEach(store.snapshot.workspaces) { workspace in
-              workspaceSection(workspace)
-            }
-          }
-          .padding(.vertical, 8)
-        }
-        .scrollIndicators(.never)
-      }
+      sidebarSectionHeader(title: "agents", detail: "grouped")
+      agentsSection
+
+      footer
     }
     .frame(maxHeight: .infinity)
     .background(.regularMaterial)
@@ -48,142 +27,209 @@ internal struct HerdrSidebarView: View {
     }
   }
 
-  @ViewBuilder
-  private func workspaceSection(_ workspace: HerdrWorkspace) -> some View {
-    rowButton(
-      title: workspace.label,
-      subtitle: workspaceSubtitle(workspace),
-      systemImage: "square.stack.3d.up",
-      isSelected: store.selectedWorkspaceID == workspace.id,
-      isPending: isPending(.workspace(workspace.id)),
-      help: "Focus workspace \(workspace.label)"
-    ) {
-      store.send(.focusWorkspaceTapped(workspace.id))
-    }
-
-    ForEach(tabs(in: workspace)) { tab in
-      VStack(alignment: .leading, spacing: 2) {
-        rowButton(
-          title: tab.label,
-          subtitle: tabSubtitle(tab),
-          systemImage: "rectangle.split.2x1",
-          isSelected: store.selectedTabID == tab.id,
-          isPending: isPending(.tab(tab.id)),
-          indentation: 16,
-          help: "Focus tab \(tab.label)"
-        ) {
-          store.send(.focusTabTapped(tab.id))
-        }
-
-        ForEach(panes(in: tab)) { pane in
-          rowButton(
-            title: paneTitle(pane),
-            subtitle: paneSubtitle(pane),
-            systemImage: pane.isAgent ? "sparkles.rectangle.stack" : "terminal",
-            isSelected: store.selectedPaneID == pane.id,
-            isPending: isPending(.pane(pane.id)),
-            indentation: 32,
-            help: "Focus pane \(paneTitle(pane))"
-          ) {
-            store.send(.focusPaneTapped(pane.id))
-          }
+  private var spacesSection: some View {
+    ScrollView {
+      LazyVStack(alignment: .leading, spacing: 2) {
+        ForEach(store.snapshot.workspaces) { workspace in
+          workspaceRow(workspace)
         }
       }
+      .padding(.horizontal, 8)
+      .padding(.vertical, 6)
+    }
+    .scrollIndicators(.never)
+    .frame(maxHeight: .infinity)
+  }
+
+  private var agentsSection: some View {
+    ScrollView {
+      LazyVStack(alignment: .leading, spacing: 2) {
+        ForEach(sortedAgents) { agent in
+          agentRow(agent)
+        }
+      }
+      .padding(.horizontal, 8)
+      .padding(.vertical, 6)
+    }
+    .scrollIndicators(.never)
+    .frame(maxHeight: .infinity)
+  }
+
+  private var footer: some View {
+    HStack {
+      Text("new")
+      Spacer()
+      Text("menu")
+    }
+    .font(.caption)
+    .foregroundStyle(.tertiary)
+    .padding(.horizontal, 12)
+    .frame(height: 30)
+  }
+
+  private var sortedAgents: [HerdrAgent] {
+    store.snapshot.agents.sorted { lhs, rhs in
+      let lhsRank = statusRank(lhs.agentStatus)
+      let rhsRank = statusRank(rhs.agentStatus)
+      if lhsRank != rhsRank { return lhsRank < rhsRank }
+      return agentTitle(lhs).localizedStandardCompare(agentTitle(rhs)) == .orderedAscending
     }
   }
 
-  private func tabs(in workspace: HerdrWorkspace) -> [HerdrTab] {
-    store.snapshot.tabs.filter { $0.workspaceID == workspace.id }
-  }
-
-  private func panes(in tab: HerdrTab) -> [HerdrPane] {
-    store.snapshot.panes.filter { $0.tabID == tab.id }
-  }
-
-  private func workspaceSubtitle(_ workspace: HerdrWorkspace) -> String? {
-    let counts = [
-      workspace.tabCount.map { "\($0) \($0 == 1 ? "tab" : "tabs")" },
-      workspace.paneCount.map { "\($0) \($0 == 1 ? "pane" : "panes")" },
-    ].compactMap { $0 }
-    return counts.isEmpty ? nil : counts.joined(separator: " · ")
-  }
-
-  private func tabSubtitle(_ tab: HerdrTab) -> String? {
-    guard let paneCount = tab.paneCount else { return nil }
-    return "\(paneCount) \(paneCount == 1 ? "pane" : "panes")"
-  }
-
-  private func paneTitle(_ pane: HerdrPane) -> String {
-    [pane.label, pane.displayAgent, pane.title, pane.terminalTitleStripped, pane.foregroundCWD, pane.paneID]
-      .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
-      .first { !$0.isEmpty } ?? pane.paneID
-  }
-
-  private func paneSubtitle(_ pane: HerdrPane) -> String? {
-    guard pane.isAgent else {
-      return pane.foregroundCWD ?? pane.cwd
+  @ViewBuilder
+  private func sidebarSectionHeader(title: String, detail: String) -> some View {
+    HStack(spacing: 6) {
+      Text(title)
+        .font(.system(size: 13, weight: .semibold))
+        .foregroundStyle(.secondary)
+      Spacer(minLength: 0)
+      Text(detail)
+        .font(.system(size: 11, weight: .medium).monospacedDigit())
+        .foregroundStyle(.tertiary)
     }
-    let agentName = pane.displayAgent ?? pane.agent
-    switch (agentName, pane.agentStatus) {
-    case let (agent?, status?):
-      return "\(agent) · \(status)"
-    case let (agent?, nil):
-      return agent
-    case let (nil, status?):
-      return status
-    case (nil, nil):
-      return nil
-    }
+    .padding(.horizontal, 12)
+    .frame(height: 30)
+    .accessibilityElement(children: .combine)
   }
 
-  private func isPending(_ target: HerdrSidebarFeature.FocusTarget) -> Bool {
-    store.pendingFocus == target
-  }
-
-  private func rowButton(
-    title: String,
-    subtitle: String?,
-    systemImage: String,
-    isSelected: Bool,
-    isPending: Bool,
-    indentation: CGFloat = 0,
-    help: String,
-    action: @escaping () -> Void
-  ) -> some View {
-    Button(action: action) {
+  private func workspaceRow(_ workspace: HerdrWorkspace) -> some View {
+    let selected = store.selectedWorkspaceID == workspace.id
+    return Button {
+      store.send(.focusWorkspaceTapped(workspace.id))
+    } label: {
       HStack(spacing: 8) {
-        Image(systemName: systemImage)
-          .frame(width: 16)
-          .foregroundStyle(isSelected ? .primary : .secondary)
+        Circle()
+          .fill(selected ? Color.accentColor : Color.secondary.opacity(0.65))
+          .frame(width: 7, height: 7)
           .accessibilityHidden(true)
         VStack(alignment: .leading, spacing: 1) {
-          Text(title)
+          Text(workspace.label)
+            .font(.system(size: 13, weight: selected ? .semibold : .regular))
             .lineLimit(1)
-          if let subtitle, !subtitle.isEmpty {
-            Text(subtitle)
-              .font(.caption)
-              .foregroundStyle(.secondary)
-              .lineLimit(1)
-          }
+          Text(workspaceSubtitle(workspace))
+            .font(.system(size: 10.5))
+            .foregroundStyle(.tertiary)
+            .lineLimit(1)
         }
         Spacer(minLength: 0)
-        if isPending {
-          ProgressView()
-            .controlSize(.small)
+        if workspace.focused {
+          Image(systemName: "circle.fill")
+            .font(.system(size: 5))
+            .foregroundStyle(Color.accentColor)
+            .accessibilityHidden(true)
         }
       }
-      .padding(.vertical, 5)
-      .padding(.leading, 8 + indentation)
-      .padding(.trailing, 8)
-      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(.horizontal, 8)
+      .frame(height: 38)
       .background {
-        RoundedRectangle(cornerRadius: 5)
-          .fill(isSelected ? Color.accentColor.opacity(0.16) : .clear)
+        RoundedRectangle(cornerRadius: 6)
+          .fill(selected ? Color.accentColor.opacity(0.14) : .clear)
       }
       .contentShape(.rect)
     }
     .buttonStyle(.plain)
-    .help(help)
-    .accessibilityLabel(title)
+    .help("Focus workspace \(workspace.label)")
+    .accessibilityLabel("Focus workspace \(workspace.label)")
+  }
+
+  private func agentRow(_ agent: HerdrAgent) -> some View {
+    let title = agentTitle(agent)
+    let selected = agent.paneID.map { store.selectedPaneID == $0 } ?? false
+    return Button {
+      guard let paneID = agent.paneID else { return }
+      store.send(.focusPaneTapped(paneID))
+    } label: {
+      HStack(spacing: 8) {
+        statusIcon(agent.agentStatus)
+        VStack(alignment: .leading, spacing: 1) {
+          Text(title)
+            .font(.system(size: 12.5, weight: selected ? .semibold : .regular))
+            .lineLimit(1)
+          Text(agentSubtitle(agent))
+            .font(.system(size: 10.5))
+            .foregroundStyle(.tertiary)
+            .lineLimit(1)
+        }
+        Spacer(minLength: 0)
+        if let status = agent.agentStatus, status != "idle" {
+          Text(status)
+            .font(.system(size: 10))
+            .foregroundStyle(statusColor(status))
+        }
+      }
+      .padding(.horizontal, 8)
+      .frame(height: 42)
+      .background {
+        RoundedRectangle(cornerRadius: 6)
+          .fill(selected ? Color.accentColor.opacity(0.14) : .clear)
+      }
+      .contentShape(.rect)
+    }
+    .buttonStyle(.plain)
+    .help("Focus pane \(title)")
+    .accessibilityLabel("Focus agent \(title)")
+    .disabled(agent.paneID == nil)
+  }
+
+  @ViewBuilder
+  private func statusIcon(_ status: String?) -> some View {
+    let color = statusColor(status)
+    if status == "working" {
+      ProgressView()
+        .controlSize(.small)
+        .tint(color)
+        .frame(width: 14, height: 14)
+        .accessibilityHidden(true)
+    } else {
+      Circle()
+        .fill(color)
+        .frame(width: 8, height: 8)
+        .accessibilityHidden(true)
+    }
+  }
+
+  private func workspaceSubtitle(_ workspace: HerdrWorkspace) -> String {
+    let tabCount = workspace.tabCount.map { "\($0) \($0 == 1 ? "tab" : "tabs")" }
+    let paneCount = workspace.paneCount.map { "\($0) \($0 == 1 ? "pane" : "panes")" }
+    return [tabCount, paneCount].compactMap { $0 }.joined(separator: " · ")
+  }
+
+  private func agentTitle(_ agent: HerdrAgent) -> String {
+    [agent.displayAgent, agent.title, agent.name, agent.agent, agent.paneID]
+      .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+      .first { !$0.isEmpty } ?? "agent"
+  }
+
+  private func agentSubtitle(_ agent: HerdrAgent) -> String {
+    let workspace = agent.workspaceID.flatMap { workspaceLabel(for: $0) }
+    let tab = agent.tabID.flatMap { tabLabel(for: $0) }
+    return [agent.agent, workspace, tab].compactMap { $0 }.joined(separator: " · ")
+  }
+
+  private func workspaceLabel(for id: String) -> String? {
+    store.snapshot.workspaces.first { $0.id == id }?.label
+  }
+
+  private func tabLabel(for id: String) -> String? {
+    store.snapshot.tabs.first { $0.id == id }?.label
+  }
+
+  private func statusRank(_ status: String?) -> Int {
+    switch status {
+    case "blocked": return 0
+    case "done": return 1
+    case "working": return 2
+    case "idle": return 3
+    default: return 4
+    }
+  }
+
+  private func statusColor(_ status: String?) -> Color {
+    switch status {
+    case "blocked": return .orange
+    case "done": return .green
+    case "working": return .blue
+    default: return .secondary
+    }
   }
 }
