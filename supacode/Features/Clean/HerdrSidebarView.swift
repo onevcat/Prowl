@@ -3,6 +3,34 @@ import SwiftUI
 
 internal enum HerdrSidebarLayout {
   internal static let width: CGFloat = 260
+  internal static let smallStatusMarkerSize: CGFloat = 4
+  internal static let agentStatusMarkerSize: CGFloat = 11
+}
+
+internal enum HerdrSidebarStatusKind: String, Equatable, Sendable {
+  case unknown
+  case working
+  case blocked
+  case done
+  case idle
+
+  internal init(_ status: String?) {
+    switch status {
+    case "working": self = .working
+    case "blocked": self = .blocked
+    case "done": self = .done
+    case "idle": self = .idle
+    default: self = .unknown
+    }
+  }
+
+  internal var isSmall: Bool {
+    self == .unknown
+  }
+
+  internal var isFilled: Bool {
+    self != .idle
+  }
 }
 
 internal struct HerdrSidebarView: View {
@@ -154,7 +182,7 @@ internal struct HerdrSidebarView: View {
         if let status = agent.agentStatus, status != "idle" {
           Text(status)
             .font(.system(size: 10))
-            .foregroundStyle(statusColor(status))
+            .foregroundStyle(statusColor(HerdrSidebarStatusKind(status)))
         }
       }
       .padding(.horizontal, 8)
@@ -173,17 +201,31 @@ internal struct HerdrSidebarView: View {
 
   @ViewBuilder
   private func statusIcon(_ status: String?) -> some View {
-    let color = statusColor(status)
-    if status == "working" {
-      ProgressView()
-        .controlSize(.small)
-        .tint(color)
-        .frame(width: 14, height: 14)
+    let kind = HerdrSidebarStatusKind(status)
+    let color = statusColor(kind)
+    if kind.isSmall {
+      Circle()
+        .fill(color)
+        .frame(
+          width: HerdrSidebarLayout.smallStatusMarkerSize,
+          height: HerdrSidebarLayout.smallStatusMarkerSize
+        )
+        .accessibilityHidden(true)
+    } else if kind.isFilled {
+      Circle()
+        .fill(color)
+        .frame(
+          width: HerdrSidebarLayout.agentStatusMarkerSize,
+          height: HerdrSidebarLayout.agentStatusMarkerSize
+        )
         .accessibilityHidden(true)
     } else {
       Circle()
-        .fill(color)
-        .frame(width: 8, height: 8)
+        .strokeBorder(color, lineWidth: 1.5)
+        .frame(
+          width: HerdrSidebarLayout.agentStatusMarkerSize,
+          height: HerdrSidebarLayout.agentStatusMarkerSize
+        )
         .accessibilityHidden(true)
     }
   }
@@ -224,11 +266,11 @@ internal struct HerdrSidebarView: View {
     }
   }
 
-  private func statusColor(_ status: String?) -> Color {
-    switch status {
-    case "blocked": return .orange
-    case "done": return .green
-    case "working": return .blue
+  private func statusColor(_ kind: HerdrSidebarStatusKind) -> Color {
+    switch kind {
+    case .blocked: return .orange
+    case .done: return .green
+    case .working: return .blue
     default: return .secondary
     }
   }

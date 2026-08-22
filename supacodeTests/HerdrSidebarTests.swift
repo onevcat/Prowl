@@ -8,6 +8,29 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct HerdrSidebarTests {
+  @Test(arguments: [
+    (nil, HerdrSidebarStatusKind.unknown),
+    ("unknown", HerdrSidebarStatusKind.unknown),
+    ("working", HerdrSidebarStatusKind.working),
+    ("blocked", HerdrSidebarStatusKind.blocked),
+    ("done", HerdrSidebarStatusKind.done),
+    ("idle", HerdrSidebarStatusKind.idle),
+  ])
+  func mapsServerStatusToNativeMarker(
+    status: String?,
+    expected: HerdrSidebarStatusKind
+  ) {
+    #expect(HerdrSidebarStatusKind(status) == expected)
+  }
+
+  @Test func markerShapesPreserveUnreadSemantics() {
+    #expect(HerdrSidebarStatusKind.unknown.isSmall)
+    #expect(HerdrSidebarStatusKind.done.isFilled)
+    #expect(!HerdrSidebarStatusKind.idle.isFilled)
+    #expect(HerdrSidebarStatusKind.working.isFilled)
+    #expect(HerdrSidebarStatusKind.blocked.isFilled)
+  }
+
   @Test func decodesAgentAndOrdinaryPanesFromSnapshot() throws {
     let response = try JSONDecoder().decode(
       HerdrSnapshotResponse.self,
