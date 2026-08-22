@@ -16,7 +16,7 @@ nonisolated internal enum HerdrSocketError: Error, Equatable, Sendable {
   case unsupportedProtocol(supported: ClosedRange<UInt32>, actual: UInt32?)
 }
 
-nonisolated internal enum HerdrEventStreamState: Sendable {
+nonisolated internal enum HerdrEventStreamState: Equatable, Sendable {
   case subscribed
   case event
   case disconnected(HerdrSocketError)
@@ -34,6 +34,26 @@ nonisolated internal struct HerdrSocketClient: Sendable {
     "pane.exited",
     "pane.closed",
     "pane.moved",
+  ]
+  private static let sidebarEventNames = [
+    "workspace.created",
+    "workspace.updated",
+    "workspace.renamed",
+    "workspace.moved",
+    "workspace.closed",
+    "workspace.focused",
+    "tab.created",
+    "tab.renamed",
+    "tab.moved",
+    "tab.closed",
+    "tab.focused",
+    "pane.created",
+    "pane.updated",
+    "pane.moved",
+    "pane.focused",
+    "pane.closed",
+    "pane.exited",
+    "layout.updated",
   ]
 
   internal let socketPath: String
@@ -65,10 +85,74 @@ nonisolated internal struct HerdrSocketClient: Sendable {
     }.value
   }
 
+  internal func sessionSnapshot() async throws -> HerdrSidebarSnapshot {
+    let socketPath = socketPath
+    return try await Task.detached(priority: .utility) {
+      try Self.validateProtocol(at: socketPath)
+      let fileDescriptor = try Self.connect(to: socketPath)
+      defer { Darwin.close(fileDescriptor) }
+      try Self.setTimeout(Self.requestTimeout, on: fileDescriptor)
+      let request = HerdrRequest(
+        id: "prowl-herdr-sidebar-snapshot",
+        method: "session.snapshot",
+        params: HerdrEmptyParams()
+      )
+      try Self.writeLine(try JSONEncoder().encode(request), to: fileDescriptor)
+      let response = try Self.readResponse(from: fileDescriptor)
+      guard response.result?.type == "session_snapshot", let snapshot = response.result?.snapshot else {
+        throw HerdrSocketError.unsupportedResponseType(response.result?.type)
+      }
+      return snapshot
+    }.value
+  }
+
+  internal func focusWorkspace(_ workspaceID: String) async throws {
+    try await performFocus(
+      id: "prowl-herdr-sidebar-focus-workspace",
+      method: "workspace.focus",
+      params: HerdrWorkspaceFocusParams(workspaceID: workspaceID)
+    )
+  }
+
+  internal func focusTab(_ tabID: String) async throws {
+    try await performFocus(
+      id: "prowl-herdr-sidebar-focus-tab",
+      method: "tab.focus",
+      params: HerdrTabFocusParams(tabID: tabID)
+    )
+  }
+
+  internal func focusPane(_ paneID: String) async throws {
+    try await performFocus(
+      id: "prowl-herdr-sidebar-focus-pane",
+      method: "pane.focus",
+      params: HerdrPaneFocusParams(paneID: paneID)
+    )
+  }
+
   internal func events() -> AsyncStream<HerdrEventStreamState> {
     let socketPath = socketPath
     return AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
-      let session = HerdrEventSocketSession(socketPath: socketPath, continuation: continuation)
+      let session = HerdrEventSocketSession(
+        socketPath: socketPath,
+        eventNames: Self.observedEventNames,
+        continuation: continuation
+      )
+      continuation.onTermination = { _ in
+        session.cancel()
+      }
+      session.start()
+    }
+  }
+
+  internal func sidebarEvents() -> AsyncStream<HerdrEventStreamState> {
+    let socketPath = socketPath
+    return AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
+      let session = HerdrEventSocketSession(
+        socketPath: socketPath,
+        eventNames: Self.sidebarEventNames,
+        continuation: continuation
+      )
       continuation.onTermination = { _ in
         session.cancel()
       }
@@ -164,8 +248,8 @@ nonisolated internal struct HerdrSocketClient: Sendable {
     throw HerdrSocketError.responseTooLarge
   }
 
-  fileprivate static func subscriptionRequest() throws -> Data {
-    let subscriptions = observedEventNames.map(HerdrEventsSubscribeParams.Subscription.init(type:))
+  fileprivate static func subscriptionRequest(eventNames: [String]) throws -> Data {
+    let subscriptions = eventNames.map(HerdrEventsSubscribeParams.Subscription.init(type:))
     return try JSONEncoder().encode(
       HerdrRequest(
         id: "prowl-clean-events",
@@ -204,6 +288,26 @@ nonisolated internal struct HerdrSocketClient: Sendable {
     return response
   }
 
+  private func performFocus<Params: Encodable & Sendable>(
+    id: String,
+    method: String,
+    params: Params
+  ) async throws {
+    let socketPath = socketPath
+    try await Task.detached(priority: .utility) {
+      try Self.validateProtocol(at: socketPath)
+      let fileDescriptor = try Self.connect(to: socketPath)
+      defer { Darwin.close(fileDescriptor) }
+      try Self.setTimeout(Self.requestTimeout, on: fileDescriptor)
+      let request = HerdrRequest(id: id, method: method, params: params)
+      try Self.writeLine(try JSONEncoder().encode(request), to: fileDescriptor)
+      let response = try Self.readResponse(from: fileDescriptor)
+      guard response.result?.type != nil else {
+        throw HerdrSocketError.unsupportedResponseType(nil)
+      }
+    }.value
+  }
+
   fileprivate static func setTimeout(_ timeout: timeval, on fileDescriptor: Int32) throws {
     var timeout = timeout
     for option in [SO_RCVTIMEO, SO_SNDTIMEO] {
@@ -225,6 +329,7 @@ nonisolated internal struct HerdrSocketClient: Sendable {
 
 nonisolated private final class HerdrEventSocketSession: @unchecked Sendable {
   private let socketPath: String
+  private let eventNames: [String]
   private let continuation: AsyncStream<HerdrEventStreamState>.Continuation
   private let lock = NSLock()
   private var fileDescriptor: Int32 = -1
@@ -232,9 +337,11 @@ nonisolated private final class HerdrEventSocketSession: @unchecked Sendable {
 
   fileprivate init(
     socketPath: String,
+    eventNames: [String],
     continuation: AsyncStream<HerdrEventStreamState>.Continuation
   ) {
     self.socketPath = socketPath
+    self.eventNames = eventNames
     self.continuation = continuation
   }
 
@@ -271,7 +378,10 @@ nonisolated private final class HerdrEventSocketSession: @unchecked Sendable {
       lock.unlock()
 
       try HerdrSocketClient.setTimeout(HerdrSocketClient.requestTimeout, on: descriptor)
-      try HerdrSocketClient.writeLine(try HerdrSocketClient.subscriptionRequest(), to: descriptor)
+      try HerdrSocketClient.writeLine(
+        try HerdrSocketClient.subscriptionRequest(eventNames: eventNames),
+        to: descriptor
+      )
       let acknowledgement = try HerdrSocketClient.readResponse(from: descriptor)
       guard acknowledgement.result?.type == "subscription_started" else {
         throw HerdrSocketError.unsupportedResponseType(acknowledgement.result?.type)
