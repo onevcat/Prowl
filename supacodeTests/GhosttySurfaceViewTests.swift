@@ -97,6 +97,83 @@ struct GhosttySurfaceViewTests {
     #expect(!GhosttySurfaceView.hasKeyEquivalentFocusOwnership(cachedFocused: false, isActualFirstResponder: true))
   }
 
+  @Test func leftMouseReleaseRequiresOwnedPress() {
+    var state = GhosttySurfaceView.LeftMousePressState()
+
+    let releaseWithoutPress = state.consumeRelease()
+    #expect(!releaseWithoutPress)
+
+    state.markPressForwarded()
+    let ownedRelease = state.consumeRelease()
+    let duplicateRelease = state.consumeRelease()
+    #expect(ownedRelease)
+    #expect(!duplicateRelease)
+  }
+
+  @Test func newLeftMouseDownClearsStaleOwnership() {
+    var state = GhosttySurfaceView.LeftMousePressState()
+
+    state.markPressForwarded()
+    state.resetForNewMouseDown()
+
+    let releaseAfterReset = state.consumeRelease()
+    #expect(!releaseAfterReset)
+  }
+
+  @Test func contentViewHitTestFindsScrolledSurface() throws {
+    let runtime = GhosttyRuntime()
+    let surfaceView = GhosttySurfaceView(
+      runtime: runtime,
+      workingDirectory: nil,
+      context: GHOSTTY_SURFACE_CONTEXT_TAB,
+      skipsSurfaceCreationForTesting: true
+    )
+    let windowSize = CGSize(width: 400, height: 300)
+    let window = NSWindow(
+      contentRect: NSRect(origin: .zero, size: windowSize),
+      styleMask: [.borderless],
+      backing: .buffered,
+      defer: false
+    )
+    defer { window.orderOut(nil) }
+
+    let contentView = NSView(frame: NSRect(origin: .zero, size: windowSize))
+    let scrollView = NSScrollView(frame: contentView.bounds)
+    scrollView.hasVerticalScroller = false
+    scrollView.contentView.clipsToBounds = false
+    let documentView = NSView(frame: NSRect(x: 0, y: 0, width: windowSize.width, height: 3_000))
+    surfaceView.frame = NSRect(x: 0, y: 2_000, width: windowSize.width, height: windowSize.height)
+    documentView.addSubview(surfaceView)
+    scrollView.documentView = documentView
+    contentView.addSubview(scrollView)
+    window.contentView = contentView
+    window.orderFront(nil)
+
+    scrollView.contentView.scroll(to: NSPoint(x: 0, y: 2_000))
+    scrollView.reflectScrolledClipView(scrollView.contentView)
+
+    let locationInWindow = NSPoint(x: 100, y: 100)
+    let event = try #require(
+      NSEvent.mouseEvent(
+        with: .leftMouseDown,
+        location: locationInWindow,
+        modifierFlags: [],
+        timestamp: 1,
+        windowNumber: window.windowNumber,
+        context: nil,
+        eventNumber: 1,
+        clickCount: 1,
+        pressure: 1
+      )
+    )
+
+    let surfaceLocalPoint = surfaceView.convert(locationInWindow, from: nil)
+    #expect(surfaceView.hitTest(surfaceLocalPoint) !== surfaceView)
+    #expect(contentView.hitTest(locationInWindow) === surfaceView)
+    _ = surfaceView.localEventLeftMouseDown(event)
+    #expect(window.firstResponder === surfaceView)
+  }
+
   @Test func occlusionStateResendsDesiredValueAfterAttachmentChange() {
     var state = GhosttySurfaceView.OcclusionState()
 

@@ -25,12 +25,18 @@ extension GhosttySurfaceView {
   }
 
   override func mouseDown(with event: NSEvent) {
-    sendMouseButton(event, state: GHOSTTY_MOUSE_PRESS, button: GHOSTTY_MOUSE_LEFT)
+    resetLeftMousePressForNewMouseDown()
+    if sendMouseButton(event, state: GHOSTTY_MOUSE_PRESS, button: GHOSTTY_MOUSE_LEFT) {
+      markLeftMousePressForwarded()
+    }
   }
 
   override func mouseUp(with event: NSEvent) {
+    let didSendPress = consumeLeftMouseReleaseOwnership()
     prevPressureStage = 0
-    sendMouseButton(event, state: GHOSTTY_MOUSE_RELEASE, button: GHOSTTY_MOUSE_LEFT)
+    if didSendPress {
+      sendMouseButton(event, state: GHOSTTY_MOUSE_RELEASE, button: GHOSTTY_MOUSE_LEFT)
+    }
     if let surface {
       ghostty_surface_mouse_pressure(surface, 0, 0)
     }
@@ -172,11 +178,14 @@ extension GhosttySurfaceView {
   }
 
   func localEventLeftMouseDown(_ event: NSEvent) -> NSEvent? {
+    resetLeftMousePressForNewMouseDown()
     guard let window, event.window != nil, window == event.window else { return event }
-    let location = convert(event.locationInWindow, from: nil)
-    guard hitTest(location) == self else { return event }
-    guard !NSApp.isActive || !window.isKeyWindow else { return event }
-    guard !focused else { return event }
+    guard window.contentView?.hitTest(event.locationInWindow) == self else { return event }
+    guard window.firstResponder !== self else { return event }
+    if NSApp.isActive, window.isKeyWindow {
+      guard window.makeFirstResponder(self) else { return event }
+      return nil
+    }
     window.makeFirstResponder(self)
     return event
   }
@@ -215,14 +224,16 @@ extension GhosttySurfaceView {
     ghostty_surface_mouse_pos(surface, point.x, yPosition, mods)
   }
 
+  @discardableResult
   func sendMouseButton(
     _ event: NSEvent,
     state: ghostty_input_mouse_state_e,
     button: ghostty_input_mouse_button_e
-  ) {
-    guard let surface else { return }
+  ) -> Bool {
+    guard let surface else { return false }
     let mods = ghosttyMods(event.modifierFlags)
     ghostty_surface_mouse_button(surface, state, button, mods)
+    return true
   }
 
 }
