@@ -113,7 +113,7 @@ struct HerdrInputContextTests {
     #expect(event.event == "pane.agent_detected")
   }
 
-  @Test(arguments: [UInt32(19), UInt32(20)])
+  @Test(arguments: [UInt32(19), UInt32(20), UInt32(21)])
   func acceptsSupportedHerdrProtocol(protocolVersion: UInt32) throws {
     let response = try JSONDecoder().decode(
       HerdrResponseEnvelope.self,
@@ -130,12 +130,12 @@ struct HerdrInputContextTests {
     let response = try JSONDecoder().decode(
       HerdrResponseEnvelope.self,
       from: Data(
-        #"{"id":"clean-protocol","result":{"type":"pong","version":"0.9.0","protocol":21}}"#.utf8
+        #"{"id":"clean-protocol","result":{"type":"pong","version":"0.9.0","protocol":22}}"#.utf8
       )
     )
 
     #expect(
-      throws: HerdrSocketError.unsupportedProtocol(supported: 19...20, actual: 21)
+      throws: HerdrSocketError.unsupportedProtocol(supported: 19...21, actual: 22)
     ) {
       try HerdrProtocolCompatibility.validate(response)
     }
@@ -267,7 +267,7 @@ struct HerdrInputContextTests {
     let client = HerdrInputContextClient(
       currentPane: {
         attemptCount.withValue { $0 += 1 }
-        throw HerdrSocketError.unsupportedProtocol(supported: 19...20, actual: 21)
+        throw HerdrSocketError.unsupportedProtocol(supported: 19...21, actual: 22)
       },
       events: { AsyncStream { $0.finish() } }
     )
@@ -289,7 +289,7 @@ struct HerdrInputContextTests {
     #expect(!adapter.isRunning)
     #expect(
       compatibilityFailures.value == [
-        .unsupportedProtocol(supported: 19...20, actual: 21)
+        .unsupportedProtocol(supported: 19...21, actual: 22)
       ]
     )
     #expect(paneContextCount.value == 0)
@@ -376,7 +376,7 @@ struct HerdrInputContextTests {
       events: {
         AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
           continuation.yield(.subscribed)
-          continuation.yield(.event)
+          continuation.yield(.event(HerdrEventEnvelope(event: "pane_updated")))
         }
       }
     )

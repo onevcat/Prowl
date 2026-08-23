@@ -77,7 +77,7 @@ nonisolated internal struct HerdrResponseEnvelope: Decodable, Sendable {
 }
 
 nonisolated internal enum HerdrProtocolCompatibility {
-  internal static let supportedVersions: ClosedRange<UInt32> = 19...20
+  internal static let supportedVersions: ClosedRange<UInt32> = 19...21
 
   internal static func validate(_ response: HerdrResponseEnvelope) throws {
     guard response.result?.type == "pong" else {
@@ -93,8 +93,50 @@ nonisolated internal enum HerdrProtocolCompatibility {
   }
 }
 
-nonisolated internal struct HerdrEventEnvelope: Decodable, Sendable {
+nonisolated internal struct HerdrEventEnvelope: Decodable, Equatable, Sendable {
   internal let event: String
+  internal let focus: HerdrFocusEvent?
+
+  internal init(event: String, focus: HerdrFocusEvent? = nil) {
+    self.event = event
+    self.focus = focus
+  }
+
+  internal init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    event = try container.decode(String.self, forKey: .event)
+    focus = try? container.decodeIfPresent(HerdrFocusEvent.self, forKey: .data)
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case event
+    case data
+  }
+}
+
+nonisolated internal struct HerdrFocusEvent: Decodable, Equatable, Sendable {
+  internal let workspaceID: String?
+  internal let tabID: String?
+  internal let paneID: String?
+
+  internal init(workspaceID: String? = nil, tabID: String? = nil, paneID: String? = nil) {
+    self.workspaceID = workspaceID
+    self.tabID = tabID
+    self.paneID = paneID
+  }
+
+  internal init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    workspaceID = try? container.decode(String.self, forKey: .workspaceID)
+    tabID = try? container.decode(String.self, forKey: .tabID)
+    paneID = try? container.decode(String.self, forKey: .paneID)
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case workspaceID = "workspace_id"
+    case tabID = "tab_id"
+    case paneID = "pane_id"
+  }
 }
 
 nonisolated internal struct HerdrRequest<Params: Encodable>: Encodable {
