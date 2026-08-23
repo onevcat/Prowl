@@ -101,6 +101,11 @@ internal struct CleanAppCommands: Commands {
       .keyboardShortcut("w", modifiers: .command)
     }
     CommandGroup(after: .windowArrangement) {
+      Button("Toggle Sidebar", systemImage: "sidebar.left") {
+        store.send(.toggleSidebar)
+      }
+      .keyboardShortcut("s", modifiers: .command)
+      .help("Toggle Sidebar (Command-S)")
       Button("Prowl") {
         guard mainWindowOpenerRegistered else { return }
         _ = NSApplication.shared.surfaceMainWindow()

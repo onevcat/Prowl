@@ -8,6 +8,7 @@ internal struct CleanAppFeature {
     internal var settings: SettingsFeature.State
     internal var updates = UpdatesFeature.State()
     internal var herdrTerminalChrome = HerdrTerminalChromeFeature.State()
+    internal var isSidebarVisible = true
     @Presents internal var alert: AlertState<Alert>?
 
     internal init(settings: SettingsFeature.State = .init()) {
@@ -17,6 +18,7 @@ internal struct CleanAppFeature {
 
   internal enum Action {
     case appLaunched
+    case toggleSidebar
     case herdrForegroundChanged(Bool)
     case herdrTerminalChrome(HerdrTerminalChromeFeature.Action)
     case herdrCompatibilityFailure(HerdrSocketError)
@@ -57,6 +59,10 @@ internal struct CleanAppFeature {
           ),
           .send(.updates(.task))
         )
+
+      case .toggleSidebar:
+        state.isSidebarVisible.toggle()
+        return .none
 
       case .herdrCompatibilityFailure(let error):
         guard state.alert == nil else { return .none }

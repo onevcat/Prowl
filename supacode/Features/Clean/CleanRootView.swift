@@ -7,7 +7,7 @@ internal struct CleanRootView: View {
 
   internal var body: some View {
     HStack(spacing: 0) {
-      if store.herdrTerminalChrome.isVisible {
+      if store.herdrTerminalChrome.isVisible && store.isSidebarVisible {
         HerdrSidebarView(
           store: store.scope(
             state: \.herdrTerminalChrome,

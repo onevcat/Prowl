@@ -24,6 +24,7 @@ Clean 只创建一个 Ghostty terminal surface：
 - 不自动启动、attach 或控制 Herdr。
 - Herdr 未激活时不显示 sidebar、toolbar、tab bar、title、empty state 或 traffic lights；进入 Herdr 并完成状态同步后，
   在 terminal 左侧显示 native Herdr sidebar。
+- 在 Clean native Herdr chrome 中按 `⌘S` 可切换 sidebar 显示；tab bar 和 terminal 内容保持不变。
 - terminal 延伸到原 titlebar 和 traffic-light 区域；主窗口保留可接收键盘焦点的 native window style，同时隐藏
   titlebar chrome，并把不可见 titlebar 区域中的鼠标事件转发给 terminal；进入 native fullscreen 后也不会恢复
   titlebar chrome。

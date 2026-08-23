@@ -97,6 +97,20 @@ struct CleanAppFeatureTests {
     }
   }
 
+  @Test func toggleSidebarChangesCleanSidebarVisibility() async {
+    let store = TestStore(initialState: CleanAppFeature.State()) {
+      CleanAppFeature()
+    }
+
+    #expect(store.state.isSidebarVisible)
+    await store.send(.toggleSidebar) {
+      $0.isSidebarVisible = false
+    }
+    await store.send(.toggleSidebar) {
+      $0.isSidebarVisible = true
+    }
+  }
+
   @Test(.dependencies) func launchModeChangePersistsForNextLaunchWithoutChangingTmuxSetting() async {
     let storage = SettingsTestStorage()
     var settings = GlobalSettings.default
