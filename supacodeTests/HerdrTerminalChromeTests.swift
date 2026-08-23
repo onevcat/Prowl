@@ -162,7 +162,7 @@ struct HerdrTerminalChromeTests {
         focusPane: { paneID in
           calls.withValue { $0.append(paneID) }
         },
-        createTab: { _, _ in },
+        createTab: { _, _, _ in },
         renameTab: { _, _ in },
         moveTab: { _, _ in },
         closeTab: { _ in },
@@ -204,7 +204,7 @@ struct HerdrTerminalChromeTests {
           calls.withValue { $0.append(paneID) }
           throw HerdrSocketError.serverError(code: "not_found", message: "pane not found")
         },
-        createTab: { _, _ in },
+        createTab: { _, _, _ in },
         renameTab: { _, _ in },
         moveTab: { _, _ in },
         closeTab: { _ in },
@@ -249,8 +249,14 @@ struct HerdrTerminalChromeTests {
       }
     }
 
-    await store.send(.newTabRequested(workspaceID: "w1", label: "logs")) {
-      $0.pendingMutation = .createTab(workspaceID: "w1", label: "logs")
+    await store.send(
+      .newTabRequested(workspaceID: "w1", label: "logs", sourceTabID: nil)
+    ) {
+      $0.pendingMutation = .createTab(
+        workspaceID: "w1",
+        label: "logs",
+        sourceTabID: nil
+      )
       $0.mutationGeneration = 1
     }
     await store.receive(.mutationResponse(1, .success)) {
@@ -338,7 +344,7 @@ struct HerdrTerminalChromeTests {
       focusWorkspace: { _ in },
       focusTab: { _ in },
       focusPane: { _ in },
-      createTab: { _, _ in try await createTab() },
+      createTab: { _, _, _ in try await createTab() },
       renameTab: { _, _ in },
       moveTab: { _, _ in },
       closeTab: { _ in try await closeTab() },

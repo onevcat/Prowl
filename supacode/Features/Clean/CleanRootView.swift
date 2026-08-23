@@ -17,7 +17,16 @@ internal struct CleanRootView: View {
         .frame(width: HerdrSidebarLayout.width)
       }
 
-      ZStack {
+      VStack(spacing: 0) {
+        if store.herdrTerminalChrome.isVisible {
+          HerdrTabBarView(
+            store: store.scope(
+              state: \.herdrTerminalChrome,
+              action: \.herdrTerminalChrome
+            )
+          )
+        }
+
         if let surface = terminalHost.surface {
           GhosttyTerminalView(surfaceView: surface)
         } else {

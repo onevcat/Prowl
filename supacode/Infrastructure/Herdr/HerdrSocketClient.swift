@@ -128,7 +128,14 @@ nonisolated internal struct HerdrSocketClient: Sendable {
     )
   }
 
-  internal func createTab(workspaceID: String, label: String?) async throws {
+  internal func createTab(
+    workspaceID: String,
+    label: String?,
+    sourceTabID: String? = nil
+  ) async throws {
+    if let sourceTabID {
+      try await focusTab(sourceTabID)
+    }
     try await performRequest(
       id: "prowl-herdr-tab-create",
       method: "tab.create",

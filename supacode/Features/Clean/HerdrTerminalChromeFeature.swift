@@ -46,7 +46,7 @@ internal struct HerdrTerminalChromeFeature {
   }
 
   internal enum Mutation: Equatable, Sendable {
-    case createTab(workspaceID: String, label: String?)
+    case createTab(workspaceID: String, label: String?, sourceTabID: String?)
     case renameTab(tabID: String, label: String)
     case moveTab(tabID: String, insertIndex: Int)
     case closeTab(tabID: String, workspaceID: String, isLastTab: Bool)
@@ -84,12 +84,13 @@ internal struct HerdrTerminalChromeFeature {
     case focusTabTapped(String)
     case focusPaneTapped(String)
     case focusResponse(FocusResult)
-    case newTabRequested(workspaceID: String, label: String?)
+    case newTabRequested(workspaceID: String, label: String?, sourceTabID: String?)
     case renameTabRequested(tabID: String, label: String)
     case moveTabRequested(tabID: String, insertIndex: Int)
     case closeTabRequested(tabID: String, workspaceID: String)
     case closeConfirmationConfirmed
     case closeConfirmationCancelled
+    case mutationErrorDismissed
     case mutationResponse(UInt64, MutationResult)
     case delegate(DelegateAction)
     case stop
@@ -260,11 +261,11 @@ internal struct HerdrTerminalChromeFeature {
         return refreshEffect(generation: state.refreshGeneration)
           .cancellable(id: CancelID.refresh, cancelInFlight: true)
 
-      case .newTabRequested(let workspaceID, let label):
+      case .newTabRequested(let workspaceID, let label, let sourceTabID):
         guard state.connection == .connected else { return .none }
         return startMutation(
           &state,
-          .createTab(workspaceID: workspaceID, label: label)
+          .createTab(workspaceID: workspaceID, label: label, sourceTabID: sourceTabID)
         )
 
       case .renameTabRequested(let tabID, let label):
@@ -301,6 +302,10 @@ internal struct HerdrTerminalChromeFeature {
       case .closeConfirmationCancelled:
         state.closeConfirmation = nil
         state.pendingMutation = nil
+        return .none
+
+      case .mutationErrorDismissed:
+        state.mutationError = nil
         return .none
 
       case .mutationResponse(let generation, let result):
@@ -346,8 +351,8 @@ internal struct HerdrTerminalChromeFeature {
     return .run { send in
       do {
         switch mutation {
-        case .createTab(let workspaceID, let label):
-          try await client.createTab(workspaceID, label)
+        case .createTab(let workspaceID, let label, let sourceTabID):
+          try await client.createTab(workspaceID, label, sourceTabID)
         case .renameTab(let tabID, let label):
           try await client.renameTab(tabID, label)
         case .moveTab(let tabID, let insertIndex):

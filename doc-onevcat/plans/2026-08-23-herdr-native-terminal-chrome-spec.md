@@ -45,6 +45,7 @@
 
 - 不恢复、修改或复用 Standard Mode 的 Prowl repository/worktree Sidebar。
 - 不接管 Herdr PTY，不实现 Herdr binary client protocol，不自行渲染 terminal pane 内容。
+- Herdr 侧增加 per-client `hide_navigation_chrome` handshake capability；该字段属于 binary client protocol 变更，Herdr protocol version 必须同步升级；该能力只影响声明了 native chrome 的 Herdr client。
 - 不把 workspace、tab、pane、agent 持久化到 Prowl repository state。
 - 不创建新的 Herdr session、workspace、pane 或 tab 用于验证；运行验证只读检查既有 session，除非测试使用 fake client。
 - 所有 Herdr mutation 必须通过 JSON socket API；UI 不直接修改本地 snapshot 作为最终状态。
@@ -53,17 +54,12 @@
 
 ## 3. 视觉结构与 surface 几何
 
-### 3.1 Full-surface overlay
+### 3.1 Native chrome occupies real layout space
 
-Ghostty surface 保持一个稳定实例和稳定尺寸。Clean root 使用 full-surface `ZStack`，native chrome 作为 opaque overlay：
+Ghostty surface 保持一个稳定实例。Clean root 使用真实的 `HStack + VStack`，native sidebar 和 tab bar 占用自己的布局空间，Ghostty surface 被向下/向右挤开：
 
 ```swift
-ZStack(alignment: .topLeading) {
-  if let surface = terminalHost.surface {
-    GhosttyTerminalView(surfaceView: surface)
-      .frame(maxWidth: .infinity, maxHeight: .infinity)
-  }
-
+HStack(spacing: 0) {
   if store.herdrTerminalChrome.isVisible {
     HerdrSidebarView(
       store: store.scope(
@@ -72,36 +68,41 @@ ZStack(alignment: .topLeading) {
       )
     )
     .frame(width: HerdrSidebarLayout.width)
-
-    HerdrTabBarView(
-      store: store.scope(
-        state: \.herdrTerminalChrome,
-        action: \.herdrTerminalChrome
-      )
-    )
-    .padding(.leading, HerdrSidebarLayout.width)
   }
+
+  VStack(spacing: 0) {
+    if store.herdrTerminalChrome.isVisible {
+      HerdrTabBarView(
+        store: store.scope(
+          state: \.herdrTerminalChrome,
+          action: \.herdrTerminalChrome
+        )
+      )
+    }
+    if let surface = terminalHost.surface {
+      GhosttyTerminalView(surfaceView: surface)
+    }
+  }
+  .frame(maxWidth: .infinity, maxHeight: .infinity)
 }
 ```
 
-Overlay 的理由：
+真实布局的理由：
 
-- 不因 sidebar 显示/隐藏改变 Ghostty surface 的 terminal size，避免 Herdr pane 重新布局；
-- native sidebar 覆盖 Herdr 原始左侧 chrome；
-- native tab bar 覆盖 Herdr 原始顶部 tab row；
-- terminal pane 内容和光标坐标保持由 Herdr/Ghostty 自己计算。
+- native chrome 不遮挡 terminal pane 内容；
+- Ghostty surface 的尺寸变化由真实 layout 传递给 surface，Herdr 会按新尺寸重新计算 pane；
+- Herdr 原始 tab row 必须通过 client capability 隐藏，不能由 Prowl overlay 遮盖；
+- sidebar 与 tab bar 的 hit testing 由 SwiftUI 原生 layout 处理。
 
-Native chrome 背景必须是不透明或足够不透明的 material，不能透出下层 TUI 的文字和颜色。overlay 的 trailing/bottom divider 与当前 Clean chrome 风格保持一致。
+Native chrome 使用自适应系统窗口背景色，避免下层 TUI 文字透出。tab bar 的高度必须作为 terminal surface 的真实 top inset。
 
 ### 3.2 Mouse event routing
 
-`CleanTitlebarMouseForwarder` 继续负责将 titlebar 区域内属于 Ghostty surface 的鼠标事件转发给 surface，但必须排除 native chrome hit regions：
+`CleanTitlebarMouseForwarder` 只负责将属于 Ghostty surface 的 titlebar 事件转发给 surface。由于 native chrome 使用真实 layout，它不在 surface bounds 内，不需要额外的 overlay exclusion：
 
-- sidebar region：`x < HerdrSidebarLayout.width`；
-- tab bar region：`x >= HerdrSidebarLayout.width` 且 `y < HerdrTabBarLayout.height`；
-- native context menu、rename sheet 和 confirmation alert 出现时，不转发其覆盖区域内的事件。
-
-排除逻辑应以 window 坐标转换后的实际 `CGRect` 为依据，而不是固定屏幕坐标。native chrome 处理 click/drag/scroll 后，Ghostty 不应再次收到同一个事件。
+- surface bounds 只覆盖 terminal 内容区；
+- tabbar、sidebar、context menu、rename sheet 和 confirmation alert 由 SwiftUI 接收；
+- Ghostty 不会收到 native chrome 的 click/drag/scroll。
 
 ## 4. 数据模型
 
@@ -125,6 +126,18 @@ nonisolated internal struct HerdrSessionSnapshot: Decodable, Equatable, Sendable
 ```
 
 所有字段保持向后兼容解码：可变或未来新增字段使用 optional，未知字段忽略；缺失数组按空数组处理。
+
+### 4.4 Herdr 原始 tab 隐藏机制
+
+当前 Herdr 只有 `hide_tab_bar_when_single_tab`，无法隐藏多 tab workspace 的原始 tab row，也没有 per-client 隐藏 sidebar 的能力。Prowl native chrome 采用真实布局后，不能通过遮罩解决重复渲染，因此需要 Herdr 增加 per-client capability：
+
+1. Prowl Clean shell 为 Herdr client 注入 `PROWL_HERDR_NATIVE_CHROME=1`；
+2. Herdr client 在 handshake 的 `Hello` 中携带 `hide_navigation_chrome=true`；
+3. Herdr server 将 capability 保存在对应 `ClientConnection`，仅该 client 的 render path 隐藏 sidebar、跳过 tab row，并将 terminal area 从无 chrome 的区域开始布局；
+4. 未携带 capability 的普通 Herdr client 继续使用原有 tab bar；
+5. protocol version 升级后，旧 client/server 按现有版本协商拒绝连接，不允许静默解释不兼容的 bincode payload。
+
+这项 Herdr-side extension 是 Prowl native tabbar 正确替换原 tab row 的前置条件；在它可用前，Prowl 不应宣称已经完成无重复 chrome 的最终体验。
 
 ### 4.2 Tab 展示模型
 
@@ -212,7 +225,7 @@ nonisolated internal struct HerdrTerminalChromeClient: Sendable {
   internal var focusWorkspace: @Sendable (String) async throws -> Void
   internal var focusTab: @Sendable (String) async throws -> Void
   internal var focusPane: @Sendable (String) async throws -> Void
-  internal var createTab: @Sendable (String, String?) async throws -> Void
+  internal var createTab: @Sendable (String, String?, String?) async throws -> Void
   internal var renameTab: @Sendable (String, String) async throws -> Void
   internal var moveTab: @Sendable (String, Int) async throws -> Void
   internal var closeTab: @Sendable (String) async throws -> Void
@@ -229,7 +242,7 @@ nonisolated internal struct HerdrTerminalChromeClient: Sendable {
 | workspace focus | `workspace.focus` | `workspace_id` |
 | tab focus | `tab.focus` | `tab_id` |
 | pane focus | `pane.focus` | `pane_id` |
-| create tab | `tab.create` | `workspace_id`、`focus=true`、可选 `label` |
+| create tab | `tab.create` | `workspace_id`、`focus=true`、可选 `label`；context menu New tab 先 focus 来源 tab |
 | rename tab | `tab.rename` | `tab_id`、`label` |
 | move tab | `tab.move` | `tab_id`、`insert_index` |
 | close tab | `tab.close` | `tab_id` |
@@ -340,10 +353,18 @@ Native tab bar 的交互结果不得只更新 local ordering 或 selected ID；�
 | `supacode/Infrastructure/Herdr/HerdrSocketClient.swift` | tab/workspace request encoding、response/error decoding、event subscription |
 | `supacode/Infrastructure/Herdr/HerdrWireModels.swift` | `HerdrSessionSnapshot` 与 tab/layout models |
 | `supacode/Features/Clean/CleanAppFeature.swift` | `herdrTerminalChrome` scope 和 lifecycle delegate |
-| `supacode/Features/Clean/CleanRootView.swift` | full-surface overlay 与 native chrome composition |
-| `supacode/Features/Clean/CleanWindowConfigurator.swift` | native chrome event exclusion |
+| `supacode/Features/Clean/CleanRootView.swift` | 真实 HStack/VStack layout 与 native chrome composition |
 | `supacodeTests/HerdrTerminalChromeTests.swift` | reducer、wire、mutation、stale response tests |
-| `supacodeTests/HerdrTabBarViewTests.swift` | pure tab projection、zoom label、order、insert index tests |
+| `supacodeTests/HerdrTabBarViewTests.swift` | pure tab projection、zoom label、order、insert index、wheel cycle tests |
+
+### 10.3 Herdr-side prerequisite
+
+| 路径 | 职责 |
+|---|---|
+| `herdr/src/protocol/wire.rs` | 为 `ClientMessage::Hello` 增加 `hide_navigation_chrome` 字段并升级 protocol |
+| `herdr/src/client/mod.rs` | 根据 `PROWL_HERDR_NATIVE_CHROME` 设置 handshake capability |
+| `herdr/src/server/clients.rs` | 保存 client-local hide navigation chrome capability |
+| `herdr/src/server/headless.rs` / `herdr/src/ui.rs` | 仅对 capability client 隐藏 sidebar 与 tab row |
 
 不修改 Standard `RepositoriesFeature`、Standard Sidebar、Canvas、Shelf、Freestyle、Herdr server source或 Prowl CLI schema。
 
@@ -355,8 +376,9 @@ Native tab bar 的交互结果不得只更新 local ordering 或 selected ID；�
 2. client/API：增加 tab/workspace mutation request、response 和 error mapping；
 3. feature：增加 mutation state、confirmation flow、generation/stale response tests；
 4. tab bar projection/UI：实现 label/zoom/order、focus、create、rename、close、drag 和 overflow；
-5. Clean overlay/event routing：切换 full-surface overlay，增加 native chrome hit exclusion；
-6. 集成验证：定向测试、Debug build/install、截图和只读 session 核对。
+5. Clean layout：使用真实 HStack/VStack，让 native tabbar 挤开 Ghostty surface；
+6. Herdr capability：完成 per-client hide tab row 后再进行最终集成验证；
+7. 集成验证：定向测试、Debug build/install、截图和只读 session 核对。
 
 每个 commit 使用 lowercase conventional commit，提交前先确认 commit message；不 push `origin` 或 `upstream`。
 
@@ -380,8 +402,8 @@ Native tab bar 的交互结果不得只更新 local ordering 或 selected ID；�
 ### 12.3 视觉与布局
 
 - native sidebar 和 native tab bar 不显示下层 Herdr TUI chrome；
-- Ghostty surface 不因 chrome visibility 或 selection 发生尺寸跳变；
-- overlay 区域点击、拖拽、滚轮不被 Ghostty 转发器吞掉；
+- Ghostty surface 按真实 native chrome 高度/宽度重新布局，不发生遮罩裁切；
+- native chrome 的点击、拖拽、滚轮不会被 Ghostty 转发器吞掉；
 - inactive window、窄窗口、tabs overflow、长 label 和高对比/浅色外观下没有文字重叠或裁切；
 - 原有 Prowl Standard UI 不被 Clean chrome 改动。
 
@@ -404,7 +426,7 @@ git diff --check
 ## 13. 非目标
 
 - 不实现 Herdr terminal stream 或 Prowl 自己的 pane renderer；
-- 不改变 Herdr server 的全局 sidebar/tab 配置；
+- 不改变 Herdr server 的全局 sidebar/tab 配置；隐藏 tab 只通过 per-client capability 生效；
 - 不在 Prowl 中复制 Herdr 的 workspace/tab/pane 持久化模型；
 - 不自动创建、关闭、重命名或 focus Herdr 资源作为截图验证步骤；
 - 不修改旧评估报告和旧 sidebar spec 的历史内容。

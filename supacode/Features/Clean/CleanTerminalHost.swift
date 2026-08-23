@@ -10,6 +10,7 @@ internal struct CleanSurfaceConfiguration: Equatable {
   internal let command: String?
   internal let fontSize: Float32?
   internal let context: ghostty_surface_context_e
+  internal let environment: [String: String]
 
   internal static func `default`(
     homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
@@ -20,7 +21,8 @@ internal struct CleanSurfaceConfiguration: Equatable {
       initialInput: nil,
       command: nil,
       fontSize: preferredFontSize,
-      context: GHOSTTY_SURFACE_CONTEXT_WINDOW
+      context: GHOSTTY_SURFACE_CONTEXT_WINDOW,
+      environment: ["PROWL_HERDR_NATIVE_CHROME": "1"]
     )
   }
 }
@@ -116,7 +118,8 @@ internal final class CleanTerminalHost {
           initialInput: configuration.initialInput,
           command: configuration.command,
           fontSize: configuration.fontSize,
-          context: configuration.context
+          context: configuration.context,
+          environment: configuration.environment
         )
       }
     self.foregroundJobProbe = foregroundJobProbe

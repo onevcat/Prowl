@@ -58,7 +58,7 @@ nonisolated internal struct HerdrTerminalChromeClient: Sendable {
   internal var focusWorkspace: @Sendable (String) async throws -> Void
   internal var focusTab: @Sendable (String) async throws -> Void
   internal var focusPane: @Sendable (String) async throws -> Void
-  internal var createTab: @Sendable (String, String?) async throws -> Void
+  internal var createTab: @Sendable (String, String?, String?) async throws -> Void
   internal var renameTab: @Sendable (String, String) async throws -> Void
   internal var moveTab: @Sendable (String, Int) async throws -> Void
   internal var closeTab: @Sendable (String) async throws -> Void
@@ -70,7 +70,7 @@ nonisolated internal struct HerdrTerminalChromeClient: Sendable {
     focusWorkspace: @escaping @Sendable (String) async throws -> Void,
     focusTab: @escaping @Sendable (String) async throws -> Void,
     focusPane: @escaping @Sendable (String) async throws -> Void,
-    createTab: @escaping @Sendable (String, String?) async throws -> Void,
+    createTab: @escaping @Sendable (String, String?, String?) async throws -> Void,
     renameTab: @escaping @Sendable (String, String) async throws -> Void,
     moveTab: @escaping @Sendable (String, Int) async throws -> Void,
     closeTab: @escaping @Sendable (String) async throws -> Void,
@@ -108,8 +108,12 @@ extension HerdrTerminalChromeClient: DependencyKey {
       focusPane: { paneID in
         try await socketClient.focusPane(paneID)
       },
-      createTab: { workspaceID, label in
-        try await socketClient.createTab(workspaceID: workspaceID, label: label)
+      createTab: { workspaceID, label, sourceTabID in
+        try await socketClient.createTab(
+          workspaceID: workspaceID,
+          label: label,
+          sourceTabID: sourceTabID
+        )
       },
       renameTab: { tabID, label in
         try await socketClient.renameTab(tabID: tabID, label: label)
@@ -132,7 +136,7 @@ extension HerdrTerminalChromeClient: DependencyKey {
     focusWorkspace: { _ in },
     focusTab: { _ in },
     focusPane: { _ in },
-    createTab: { _, _ in },
+    createTab: { _, _, _ in },
     renameTab: { _, _ in },
     moveTab: { _, _ in },
     closeTab: { _ in },
