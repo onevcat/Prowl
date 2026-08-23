@@ -1,6 +1,8 @@
 import Darwin
 import Foundation
 
+private nonisolated let herdrSocketLogger = SupaLogger("HerdrSocket")
+
 nonisolated internal enum HerdrSocketError: Error, Equatable, Sendable {
   case invalidSocketPath
   case socketCreationFailed(Int32)
@@ -18,7 +20,7 @@ nonisolated internal enum HerdrSocketError: Error, Equatable, Sendable {
 
 nonisolated internal enum HerdrEventStreamState: Equatable, Sendable {
   case subscribed
-  case event
+  case event(HerdrEventEnvelope)
   case disconnected(HerdrSocketError)
 }
 
@@ -57,6 +59,11 @@ nonisolated internal struct HerdrSocketClient: Sendable {
     "pane.exited",
     "layout.updated",
   ]
+  fileprivate static let navigationEventNames: Set<String> = [
+    "workspace_focused",
+    "tab_focused",
+    "pane_focused",
+  ]
 
   internal let socketPath: String
 
@@ -90,7 +97,10 @@ nonisolated internal struct HerdrSocketClient: Sendable {
   internal func sessionSnapshot() async throws -> HerdrSessionSnapshot {
     let socketPath = socketPath
     return try await Task.detached(priority: .utility) {
-      try Self.validateProtocol(at: socketPath)
+      let startedAt = ProcessInfo.processInfo.systemUptime
+      herdrSocketLogger.diagnostic(
+        "snapshot-start uptime_ms=\(Int(startedAt * 1_000))"
+      )
       let fileDescriptor = try Self.connect(to: socketPath)
       defer { Darwin.close(fileDescriptor) }
       try Self.setTimeout(Self.requestTimeout, on: fileDescriptor)
@@ -100,7 +110,34 @@ nonisolated internal struct HerdrSocketClient: Sendable {
         params: HerdrEmptyParams()
       )
       try Self.writeLine(try JSONEncoder().encode(request), to: fileDescriptor)
-      return try Self.readSnapshotResponse(from: fileDescriptor)
+      let snapshot = try Self.readSnapshotResponse(from: fileDescriptor)
+      try HerdrProtocolCompatibility.validate(protocolVersion: snapshot.protocolVersion)
+      let focusedWorkspace = snapshot.focusedWorkspaceID ?? "?"
+      let focusedTab = snapshot.focusedTabID ?? "?"
+      herdrSocketLogger.diagnostic(
+        "snapshot-end uptime_ms=\(Int(ProcessInfo.processInfo.systemUptime * 1_000)) elapsed_ms=\(Int((ProcessInfo.processInfo.systemUptime - startedAt) * 1_000)) focused_workspace=\(focusedWorkspace) focused_tab=\(focusedTab)"
+      )
+      return snapshot
+    }.value
+  }
+
+  internal func paneProcessInfo(paneID: String) async throws -> HerdrPaneProcessInfo {
+    let socketPath = socketPath
+    return try await Task.detached(priority: .utility) {
+      let fileDescriptor = try Self.connect(to: socketPath)
+      defer { Darwin.close(fileDescriptor) }
+      try Self.setTimeout(Self.requestTimeout, on: fileDescriptor)
+      let request = HerdrRequest(
+        id: "prowl-herdr-pane-process-info",
+        method: "pane.process_info",
+        params: HerdrPaneProcessInfoParams(paneID: paneID)
+      )
+      try Self.writeLine(try JSONEncoder().encode(request), to: fileDescriptor)
+      let response = try Self.readResponse(from: fileDescriptor)
+      guard let processInfo = response.paneProcessInfo else {
+        throw HerdrSocketError.unsupportedResponseType(response.result?.type)
+      }
+      return processInfo
     }.value
   }
 
@@ -125,6 +162,14 @@ nonisolated internal struct HerdrSocketClient: Sendable {
       id: "prowl-herdr-sidebar-focus-pane",
       method: "pane.focus",
       params: HerdrPaneFocusParams(paneID: paneID)
+    )
+  }
+
+  internal func createWorkspace() async throws {
+    try await performRequest(
+      id: "prowl-herdr-workspace-create",
+      method: "workspace.create",
+      params: HerdrWorkspaceCreateParams(focus: true)
     )
   }
 
@@ -197,6 +242,7 @@ nonisolated internal struct HerdrSocketClient: Sendable {
         socketPath: socketPath,
         eventNames: Self.terminalChromeEventNames,
         paneIDs: paneIDs,
+        validatesProtocol: false,
         continuation: continuation
       )
       continuation.onTermination = { _ in
@@ -302,7 +348,8 @@ nonisolated internal struct HerdrSocketClient: Sendable {
     eventNames: [String],
     paneIDs: Set<String> = []
   ) throws -> Data {
-    let subscriptions = eventNames.map { HerdrEventsSubscribeParams.Subscription(type: $0) }
+    let subscriptions =
+      eventNames.map { HerdrEventsSubscribeParams.Subscription(type: $0) }
       + paneIDs.sorted().map {
         HerdrEventsSubscribeParams.Subscription(type: "pane.agent_status_changed", paneID: $0)
       }
@@ -344,7 +391,9 @@ nonisolated internal struct HerdrSocketClient: Sendable {
     return response
   }
 
-  private static func readSnapshotResponse(from fileDescriptor: Int32) throws -> HerdrSessionSnapshot {
+  private static func readSnapshotResponse(from fileDescriptor: Int32) throws
+    -> HerdrSessionSnapshot
+  {
     let line = try readLine(from: fileDescriptor)
     let envelope = try JSONDecoder().decode(HerdrResponseEnvelope.self, from: line)
     if let error = envelope.error {
@@ -367,8 +416,16 @@ nonisolated internal struct HerdrSocketClient: Sendable {
     params: Params
   ) async throws {
     let socketPath = socketPath
-    try await Task.detached(priority: .utility) {
-      try Self.validateProtocol(at: socketPath)
+    let shouldLogNavigation =
+      method == "workspace.focus" || method == "tab.focus" || method == "pane.focus"
+    let startedAt = ProcessInfo.processInfo.systemUptime
+    if shouldLogNavigation {
+      herdrSocketLogger.diagnostic(
+        "focus-request-start uptime_ms=\(Int(startedAt * 1_000)) method=\(method) id=\(id)"
+      )
+    }
+    let priority: TaskPriority = shouldLogNavigation ? .userInitiated : .utility
+    try await Task.detached(priority: priority) {
       let fileDescriptor = try Self.connect(to: socketPath)
       defer { Darwin.close(fileDescriptor) }
       try Self.setTimeout(Self.requestTimeout, on: fileDescriptor)
@@ -379,6 +436,11 @@ nonisolated internal struct HerdrSocketClient: Sendable {
         throw HerdrSocketError.unsupportedResponseType(nil)
       }
     }.value
+    if shouldLogNavigation {
+      herdrSocketLogger.diagnostic(
+        "focus-request-end uptime_ms=\(Int(ProcessInfo.processInfo.systemUptime * 1_000)) elapsed_ms=\(Int((ProcessInfo.processInfo.systemUptime - startedAt) * 1_000)) method=\(method) id=\(id)"
+      )
+    }
   }
 
   fileprivate static func setTimeout(_ timeout: timeval, on fileDescriptor: Int32) throws {
@@ -404,6 +466,7 @@ nonisolated private final class HerdrEventSocketSession: @unchecked Sendable {
   private let socketPath: String
   private let eventNames: [String]
   private let paneIDs: Set<String>
+  private let validatesProtocol: Bool
   private let continuation: AsyncStream<HerdrEventStreamState>.Continuation
   private let lock = NSLock()
   private var fileDescriptor: Int32 = -1
@@ -413,11 +476,13 @@ nonisolated private final class HerdrEventSocketSession: @unchecked Sendable {
     socketPath: String,
     eventNames: [String],
     paneIDs: Set<String> = [],
+    validatesProtocol: Bool = true,
     continuation: AsyncStream<HerdrEventStreamState>.Continuation
   ) {
     self.socketPath = socketPath
     self.eventNames = eventNames
     self.paneIDs = paneIDs
+    self.validatesProtocol = validatesProtocol
     self.continuation = continuation
   }
 
@@ -441,7 +506,9 @@ nonisolated private final class HerdrEventSocketSession: @unchecked Sendable {
 
   private func run() {
     do {
-      try HerdrSocketClient.validateProtocol(at: socketPath)
+      if validatesProtocol {
+        try HerdrSocketClient.validateProtocol(at: socketPath)
+      }
       let descriptor = try HerdrSocketClient.connect(to: socketPath)
       lock.lock()
       if isCancelled {
@@ -467,8 +534,13 @@ nonisolated private final class HerdrEventSocketSession: @unchecked Sendable {
 
       while true {
         let line = try HerdrSocketClient.readLine(from: descriptor)
-        _ = try JSONDecoder().decode(HerdrEventEnvelope.self, from: line)
-        continuation.yield(.event)
+        let envelope = try JSONDecoder().decode(HerdrEventEnvelope.self, from: line)
+        if HerdrSocketClient.navigationEventNames.contains(envelope.event) {
+          herdrSocketLogger.diagnostic(
+            "event-received uptime_ms=\(Int(ProcessInfo.processInfo.systemUptime * 1_000)) name=\(envelope.event)"
+          )
+        }
+        continuation.yield(.event(envelope))
       }
     } catch let error as HerdrSocketError {
       if !cancelled {

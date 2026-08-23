@@ -7,6 +7,83 @@ import Testing
 
 @MainActor
 struct CleanWindowAndSurfaceTests {
+  @Test func processInfoCachePublishesOnlyWhenPaneStateChanges() throws {
+    let lazygit = HerdrPaneProcessInfo(
+      paneID: "p1",
+      foregroundProcesses: [HerdrPaneProcess(pid: 20, name: "lazygit")]
+    )
+    let shell = HerdrPaneProcessInfo(
+      paneID: "p1",
+      foregroundProcesses: [HerdrPaneProcess(pid: 10, name: "zsh")]
+    )
+    let current = ["p1": lazygit]
+
+    #expect(
+      HerdrProcessInfoCache.updated(current, with: [("p1", lazygit)]) == nil
+    )
+    let updated = try #require(
+      HerdrProcessInfoCache.updated(current, with: [("p1", shell)])
+    )
+    #expect(updated["p1"] == shell)
+  }
+
+  @Test func processPaneTrackingKeepsRepresentativesUntilFocusIsKnown() {
+    let representatives: Set<String> = ["p1", "p2"]
+
+    #expect(
+      HerdrProcessPaneTracking.resolvedFocusedPaneID(
+        selectedPaneID: "p2",
+        snapshotFocusedPaneID: "p1"
+      ) == "p2"
+    )
+    #expect(
+      HerdrProcessPaneTracking.resolvedFocusedPaneID(
+        selectedPaneID: nil,
+        snapshotFocusedPaneID: "p1"
+      ) == "p1"
+    )
+    #expect(
+      HerdrProcessPaneTracking.shouldRefreshImmediately(
+        from: nil,
+        to: "p1",
+        isHerdrForeground: true
+      )
+    )
+    #expect(
+      HerdrProcessPaneTracking.shouldRefreshImmediately(
+        from: "p1",
+        to: "p2",
+        isHerdrForeground: true
+      )
+    )
+    #expect(
+      !HerdrProcessPaneTracking.shouldRefreshImmediately(
+        from: "p1",
+        to: "p1",
+        isHerdrForeground: true
+      )
+    )
+    #expect(
+      !HerdrProcessPaneTracking.shouldRefreshImmediately(
+        from: "p1",
+        to: "p2",
+        isHerdrForeground: false
+      )
+    )
+    #expect(
+      HerdrProcessPaneTracking.paneIDsAfterInitialScan(
+        representativePaneIDs: representatives,
+        focusedPaneIDs: []
+      ) == representatives
+    )
+    #expect(
+      HerdrProcessPaneTracking.paneIDsAfterInitialScan(
+        representativePaneIDs: representatives,
+        focusedPaneIDs: ["p2"]
+      ) == ["p2"]
+    )
+  }
+
   @Test func defaultSurfaceConfigurationStartsPlainHomeShell() {
     let home = URL(filePath: "/Users/example", directoryHint: .isDirectory)
     let configuration = CleanSurfaceConfiguration.default(
@@ -163,9 +240,12 @@ struct CleanWindowAndSurfaceTests {
     }
     let titlebarPoint = NSPoint(x: window.frame.width / 2, y: window.frame.height - 1)
     let contentPoint = NSPoint(x: window.frame.width / 2, y: window.contentLayoutRect.midY)
-    let titlebarDown = makeCleanMouseEvent(type: .leftMouseDown, location: titlebarPoint, window: window)
-    let contentDown = makeCleanMouseEvent(type: .leftMouseDown, location: contentPoint, window: window)
-    let contentDrag = makeCleanMouseEvent(type: .leftMouseDragged, location: contentPoint, window: window)
+    let titlebarDown = makeCleanMouseEvent(
+      type: .leftMouseDown, location: titlebarPoint, window: window)
+    let contentDown = makeCleanMouseEvent(
+      type: .leftMouseDown, location: contentPoint, window: window)
+    let contentDrag = makeCleanMouseEvent(
+      type: .leftMouseDragged, location: contentPoint, window: window)
     let contentUp = makeCleanMouseEvent(type: .leftMouseUp, location: contentPoint, window: window)
 
     #expect(forwarder.route(titlebarDown) == nil)
@@ -173,6 +253,32 @@ struct CleanWindowAndSurfaceTests {
     #expect(forwarder.route(contentDrag) === contentDrag)
     #expect(forwarder.route(contentUp) === contentUp)
     #expect(forwardedTypes == [.leftMouseDown])
+  }
+
+  @Test func titlebarForwarderPreservesNativeControlClicks() throws {
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
+      styleMask: [.titled, .closable, .miniaturizable, .resizable],
+      backing: .buffered,
+      defer: false
+    )
+    let contentView = try #require(window.contentView)
+    let terminalView = NSView(frame: contentView.bounds)
+    contentView.addSubview(terminalView)
+    let menuButton = HerdrSpacesMenuControl(menuProvider: { NSMenu() })
+    menuButton.frame = NSRect(x: 760, y: 570, width: 24, height: 24)
+    contentView.addSubview(menuButton)
+    CleanWindowConfigurator.configure(window)
+    var forwardedTypes: [NSEvent.EventType] = []
+    let forwarder = CleanTitlebarMouseForwarder(surfaceView: terminalView) { event in
+      forwardedTypes.append(event.type)
+    }
+    let buttonPoint = NSPoint(x: menuButton.frame.midX, y: menuButton.frame.midY)
+    let down = makeCleanMouseEvent(type: .leftMouseDown, location: buttonPoint, window: window)
+
+    #expect(forwarder.route(down) === down)
+    #expect(forwardedTypes.isEmpty)
+    #expect(menuButton.acceptsFirstMouse(for: down))
   }
 
   @Test func enteringFullScreenReappliesHiddenTitlebarChrome() async throws {

@@ -58,6 +58,7 @@ nonisolated internal struct HerdrTerminalChromeClient: Sendable {
   internal var focusWorkspace: @Sendable (String) async throws -> Void
   internal var focusTab: @Sendable (String) async throws -> Void
   internal var focusPane: @Sendable (String) async throws -> Void
+  internal var createWorkspace: @Sendable () async throws -> Void
   internal var createTab: @Sendable (String, String?, String?) async throws -> Void
   internal var renameTab: @Sendable (String, String) async throws -> Void
   internal var moveTab: @Sendable (String, Int) async throws -> Void
@@ -70,6 +71,7 @@ nonisolated internal struct HerdrTerminalChromeClient: Sendable {
     focusWorkspace: @escaping @Sendable (String) async throws -> Void,
     focusTab: @escaping @Sendable (String) async throws -> Void,
     focusPane: @escaping @Sendable (String) async throws -> Void,
+    createWorkspace: @escaping @Sendable () async throws -> Void = {},
     createTab: @escaping @Sendable (String, String?, String?) async throws -> Void,
     renameTab: @escaping @Sendable (String, String) async throws -> Void,
     moveTab: @escaping @Sendable (String, Int) async throws -> Void,
@@ -81,6 +83,7 @@ nonisolated internal struct HerdrTerminalChromeClient: Sendable {
     self.focusWorkspace = focusWorkspace
     self.focusTab = focusTab
     self.focusPane = focusPane
+    self.createWorkspace = createWorkspace
     self.createTab = createTab
     self.renameTab = renameTab
     self.moveTab = moveTab
@@ -96,8 +99,8 @@ extension HerdrTerminalChromeClient: DependencyKey {
       snapshot: {
         try await socketClient.sessionSnapshot()
       },
-    events: { paneIDs in
-      socketClient.terminalChromeEvents(paneIDs: paneIDs)
+      events: { paneIDs in
+        socketClient.terminalChromeEvents(paneIDs: paneIDs)
       },
       focusWorkspace: { workspaceID in
         try await socketClient.focusWorkspace(workspaceID)
@@ -107,6 +110,9 @@ extension HerdrTerminalChromeClient: DependencyKey {
       },
       focusPane: { paneID in
         try await socketClient.focusPane(paneID)
+      },
+      createWorkspace: {
+        try await socketClient.createWorkspace()
       },
       createTab: { workspaceID, label, sourceTabID in
         try await socketClient.createTab(
@@ -136,6 +142,7 @@ extension HerdrTerminalChromeClient: DependencyKey {
     focusWorkspace: { _ in },
     focusTab: { _ in },
     focusPane: { _ in },
+    createWorkspace: {},
     createTab: { _, _, _ in },
     renameTab: { _, _ in },
     moveTab: { _, _ in },

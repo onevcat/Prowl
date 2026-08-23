@@ -121,9 +121,21 @@ internal final class CleanTitlebarMouseForwarder {
     to surfaceView: NSView,
     in window: NSWindow
   ) -> Bool {
+    guard !nativeControlHit(at: event.locationInWindow, in: window) else { return false }
     let surfacePoint = surfaceView.convert(event.locationInWindow, from: nil)
     return surfaceView.bounds.contains(surfacePoint)
       && !window.contentLayoutRect.contains(event.locationInWindow)
+  }
+
+  private func nativeControlHit(at point: NSPoint, in window: NSWindow) -> Bool {
+    guard let contentView = window.contentView else { return false }
+    let contentPoint = contentView.convert(point, from: nil)
+    var hitView = contentView.hitTest(contentPoint)
+    while let view = hitView {
+      if view is NSControl { return true }
+      hitView = view.superview
+    }
+    return false
   }
 }
 

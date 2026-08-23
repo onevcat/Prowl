@@ -56,9 +56,18 @@ Prowl 的输入法 adapter 只读取 focused pane，并订阅已确认的 focus/
 显示；native sidebar 只读取 `session.snapshot`，并通过 Herdr JSON API 执行 focus：
 
 - workspace、tab、Agent pane 和普通 shell pane 都会按 Herdr server 的层级显示。
+- spaces row 的第二行显示 workspace branch；branch 信息在后台缓存解析，不阻塞 sidebar 渲染。
+- spaces 右上角的 ellipsis 是可点击的 native menu button，菜单提供 new 和 menu 项。
 - 普通 pane 使用 `agent == nil` 判定，不把 shell 当作 Agent；Agent pane 显示 agent 名称和状态。
+- Agent title 和包含 Agent pane 的 tab title 左侧都会显示对应 provider 的 full-color canonical 图标；未知 provider 使用
+  Zap 图标兜底，普通 shell tab 不显示图标。
+- Agent title 第一行显示 `foreground_cwd`/`cwd` 的目录名，并与 workspace/tab label 去重；第二行保留 agent 名称。
+- 当前 pane 和刚离开的 pane 有明确 foreground application 时，tab title 临时显示较小字号的 `process · directory`；shell、
+  `starship` 和 transient helper 不参与识别。进程退出后下一次低频轮询恢复原 tab label。
+- tabbar 右侧的 `+` 会直接创建未命名 tab，不弹出命名输入框；重命名仍通过 tab context menu 操作。
+- agents header 的 `grouped`/`priority` 控件对应 Herdr 自带的 workspace 顺序和 attention 优先级排序。
 - 点击 workspace、tab 或 pane row 会调用对应的 `workspace.focus`、`tab.focus` 或 `pane.focus`，选中状态以服务器
-  后续 snapshot 的 focused ID 为准。
+  focus event 为准；点击时先立即显示目标 selection，event 超时或目标不存在时才回退到完整 snapshot。
 - workspace、tab、pane 创建、关闭、移动、重命名、聚焦和 layout 更新会触发一次 100ms debounce 后的完整 snapshot 刷新。
 - socket 尚未 ready、断开或 Herdr 退出时，sidebar 隐藏并把 terminal 恢复为全宽；不会影响 Ghostty 输入、渲染或输入法同步。
 - Sidebar 不接管 Herdr terminal stream，不实现 binary client protocol，也不持久化 Herdr workspace/tab/pane。

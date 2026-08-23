@@ -81,6 +81,20 @@ struct HerdrInputContextTests {
     #expect(response.currentPane?.inputContext == .commandLike)
   }
 
+  @Test func decodesPaneProcessInfoWithForegroundApplication() throws {
+    let response = try JSONDecoder().decode(
+      HerdrResponseEnvelope.self,
+      from: Data(
+        #"{"id":"process-info","result":{"type":"pane_process_info","process_info":{"pane_id":"w1:p1","shell_pid":10,"foreground_process_group_id":20,"foreground_processes":[{"pid":20,"name":"lazygit","argv0":"lazygit","cwd":"/Users/yam/Developer/Prowl"}]}}}"#
+          .utf8
+      )
+    )
+
+    #expect(response.paneProcessInfo?.paneID == "w1:p1")
+    #expect(response.paneProcessInfo?.foregroundProcesses.first?.name == "lazygit")
+    #expect(response.paneProcessInfo?.foregroundProcessGroupID == 20)
+  }
+
   @Test(
     arguments: [
       "workspace.focused",
@@ -203,6 +217,83 @@ struct HerdrInputContextTests {
     guard case .subscribed = firstState else {
       Issue.record("Expected Herdr subscription to start, got \(String(describing: firstState))")
       return
+    }
+    #expect(server.failureDescription == nil)
+  }
+
+  @Test func terminalChromeSnapshotUsesProtocolFromTheSingleBusinessResponse() async throws {
+    let server = try HerdrSingleRequestTestServer(
+      exchanges: [
+        .init(
+          expectedMethod: "session.snapshot",
+          response:
+            #"{"id":"prowl-herdr-sidebar-snapshot","result":{"type":"session_snapshot","snapshot":{"version":"0.8.2","protocol":20,"workspaces":[],"tabs":[],"panes":[],"layouts":[],"agents":[]}}}"#
+        )
+      ]
+    )
+    server.start()
+    defer { server.stop() }
+
+    let snapshot = try await HerdrSocketClient(socketPath: server.socketPath).sessionSnapshot()
+
+    #expect(snapshot.protocolVersion == 20)
+    #expect(server.failureDescription == nil)
+  }
+
+  @Test func terminalChromeProcessInfoUsesPaneProcessInfoRequest() async throws {
+    let server = try HerdrSingleRequestTestServer(
+      exchanges: [
+        .init(
+          expectedMethod: "pane.process_info",
+          response:
+            #"{"id":"prowl-herdr-pane-process-info","result":{"type":"pane_process_info","process_info":{"pane_id":"w1:p1","foreground_processes":[]}}}"#
+        )
+      ]
+    )
+    server.start()
+    defer { server.stop() }
+
+    let processInfo = try await HerdrSocketClient(socketPath: server.socketPath)
+      .paneProcessInfo(paneID: "w1:p1")
+
+    #expect(processInfo.paneID == "w1:p1")
+    #expect(server.failureDescription == nil)
+  }
+
+  @Test func terminalChromeFocusSendsOnlyTheFocusRequest() async throws {
+    let server = try HerdrSingleRequestTestServer(
+      exchanges: [
+        .init(
+          expectedMethod: "tab.focus",
+          response: #"{"id":"prowl-herdr-sidebar-focus-tab","result":{"type":"ok"}}"#
+        )
+      ]
+    )
+    server.start()
+    defer { server.stop() }
+
+    try await HerdrSocketClient(socketPath: server.socketPath).focusTab("w1:t1")
+
+    #expect(server.failureDescription == nil)
+  }
+
+  @Test func terminalChromeSnapshotRejectsUnsupportedProtocolFromBusinessResponse() async throws {
+    let server = try HerdrSingleRequestTestServer(
+      exchanges: [
+        .init(
+          expectedMethod: "session.snapshot",
+          response:
+            #"{"id":"prowl-herdr-sidebar-snapshot","result":{"type":"session_snapshot","snapshot":{"version":"0.9.0","protocol":22,"workspaces":[],"tabs":[],"panes":[],"layouts":[],"agents":[]}}}"#
+        )
+      ]
+    )
+    server.start()
+    defer { server.stop() }
+
+    await #expect(
+      throws: HerdrSocketError.unsupportedProtocol(supported: 19...21, actual: 22)
+    ) {
+      try await HerdrSocketClient(socketPath: server.socketPath).sessionSnapshot()
     }
     #expect(server.failureDescription == nil)
   }

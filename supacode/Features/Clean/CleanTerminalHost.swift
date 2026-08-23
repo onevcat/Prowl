@@ -74,26 +74,82 @@ internal final class CleanForegroundJobProbe {
   }
 }
 
+nonisolated internal enum HerdrProcessInfoCache {
+  internal static func updated(
+    _ current: [String: HerdrPaneProcessInfo],
+    with results: [(String, HerdrPaneProcessInfo?)]
+  ) -> [String: HerdrPaneProcessInfo]? {
+    var next: [String: HerdrPaneProcessInfo]?
+    for (paneID, processInfo) in results {
+      if let processInfo {
+        guard current[paneID] != processInfo else { continue }
+        if next == nil { next = current }
+        next?[paneID] = processInfo
+      } else {
+        guard current[paneID] != nil else { continue }
+        if next == nil { next = current }
+        next?.removeValue(forKey: paneID)
+      }
+    }
+    return next
+  }
+}
+
+nonisolated internal enum HerdrProcessPaneTracking {
+  internal static func resolvedFocusedPaneID(
+    selectedPaneID: String?,
+    snapshotFocusedPaneID: String?
+  ) -> String? {
+    selectedPaneID ?? snapshotFocusedPaneID
+  }
+
+  internal static func shouldRefreshImmediately(
+    from previousFocusedPaneID: String?,
+    to currentFocusedPaneID: String?,
+    isHerdrForeground: Bool
+  ) -> Bool {
+    isHerdrForeground && previousFocusedPaneID != currentFocusedPaneID
+  }
+
+  internal static func paneIDsAfterInitialScan(
+    representativePaneIDs: Set<String>,
+    focusedPaneIDs: Set<String>
+  ) -> Set<String> {
+    focusedPaneIDs.isEmpty ? representativePaneIDs : focusedPaneIDs
+  }
+}
+
 @MainActor
 @Observable
 internal final class CleanTerminalHost {
   internal typealias SurfaceFactory = @MainActor (CleanSurfaceConfiguration) -> GhosttySurfaceView
+  internal typealias HerdrProcessInfoProvider =
+    @Sendable (String) async throws -> HerdrPaneProcessInfo
   internal typealias HerdrCompatibilityFailureHandler = @MainActor (HerdrSocketError) -> Void
   internal typealias HerdrForegroundHandler = @MainActor (Bool) -> Void
 
   private static let periodicProbeInterval = Duration.milliseconds(200)
   private static let delayedProbeInterval = Duration.milliseconds(50)
+  private static let herdrProcessInfoPollingInterval = Duration.seconds(1)
 
   internal private(set) var surface: GhosttySurfaceView?
+  internal private(set) var processInfoByPaneID: [String: HerdrPaneProcessInfo] = [:]
 
   private let preferredFontSize: Float32?
   private let inputSourceCoordinator: TerminalInputSourceCoordinator
   private let surfaceFactory: SurfaceFactory
   private let foregroundJobProbe: CleanForegroundJobProbe
+  private let herdrProcessInfoProvider: HerdrProcessInfoProvider
   private let onHerdrForegroundChanged: HerdrForegroundHandler
   private let logger = SupaLogger("CleanTerminal")
   private var periodicProbeTask: Task<Void, Never>?
   private var delayedProbeTask: Task<Void, Never>?
+  private var herdrProcessInfoTask: Task<Void, Never>?
+  private var herdrProcessPaneIDs: Set<String> = []
+  private var representativeHerdrProcessPaneIDs: Set<String> = []
+  private var currentFocusedHerdrProcessPaneID: String?
+  private var previousFocusedHerdrProcessPaneID: String?
+  private var hasCompletedHerdrProcessInitialScan = false
   private var isHerdrForeground = false
   private var isWindowActive = false
   @ObservationIgnored private var herdrAdapter: HerdrInputContextAdapter?
@@ -105,6 +161,9 @@ internal final class CleanTerminalHost {
     inputSourceCoordinator: TerminalInputSourceCoordinator = TerminalInputSourceCoordinator(),
     surfaceFactory: SurfaceFactory? = nil,
     foregroundJobProbe: CleanForegroundJobProbe = CleanForegroundJobProbe(),
+    herdrProcessInfoProvider: @escaping HerdrProcessInfoProvider = { paneID in
+      try await HerdrSocketClient().paneProcessInfo(paneID: paneID)
+    },
     onHerdrCompatibilityFailure: @escaping HerdrCompatibilityFailureHandler = { _ in },
     onHerdrForegroundChanged: @escaping HerdrForegroundHandler = { _ in }
   ) {
@@ -123,6 +182,7 @@ internal final class CleanTerminalHost {
         )
       }
     self.foregroundJobProbe = foregroundJobProbe
+    self.herdrProcessInfoProvider = herdrProcessInfoProvider
     self.onHerdrForegroundChanged = onHerdrForegroundChanged
     herdrAdapter = HerdrInputContextAdapter(
       onCompatibilityFailure: onHerdrCompatibilityFailure,
@@ -136,6 +196,7 @@ internal final class CleanTerminalHost {
   isolated deinit {
     periodicProbeTask?.cancel()
     delayedProbeTask?.cancel()
+    herdrProcessInfoTask?.cancel()
     foregroundJobProbe.cancel()
     herdrAdapter?.stop()
     titlebarMouseForwarder?.stop()
@@ -166,6 +227,14 @@ internal final class CleanTerminalHost {
     delayedProbeTask?.cancel()
     delayedProbeTask = nil
     foregroundJobProbe.cancel()
+    herdrProcessInfoTask?.cancel()
+    herdrProcessInfoTask = nil
+    herdrProcessPaneIDs = []
+    representativeHerdrProcessPaneIDs = []
+    currentFocusedHerdrProcessPaneID = nil
+    previousFocusedHerdrProcessPaneID = nil
+    hasCompletedHerdrProcessInitialScan = false
+    processInfoByPaneID = [:]
     isWindowActive = false
     setHerdrForeground(false)
     herdrAdapter?.stop()
@@ -189,6 +258,56 @@ internal final class CleanTerminalHost {
   internal func appBecameActive() {
     guard isWindowActive else { return }
     reevaluateInputContext(reason: .appBecameActive)
+  }
+
+  internal func updateHerdrProcessPanes(_ panes: [HerdrPane], focusedPaneID: String? = nil) {
+    let panesByTabID = Dictionary(grouping: panes, by: \.tabID)
+    let representativePaneIDs = Set(
+      panesByTabID.values.compactMap { tabPanes in
+        (tabPanes.first { $0.focused } ?? tabPanes.first)?.id
+      }
+    )
+    if panes.isEmpty {
+      representativeHerdrProcessPaneIDs = []
+      hasCompletedHerdrProcessInitialScan = false
+      currentFocusedHerdrProcessPaneID = nil
+      previousFocusedHerdrProcessPaneID = nil
+    }
+    if representativePaneIDs != representativeHerdrProcessPaneIDs {
+      representativeHerdrProcessPaneIDs = representativePaneIDs
+      processInfoByPaneID = processInfoByPaneID.filter { paneID, _ in
+        representativePaneIDs.contains(paneID)
+      }
+    }
+    let previousFocusedPaneID = currentFocusedHerdrProcessPaneID
+    let resolvedFocusedPaneID = focusedPaneID ?? panes.first(where: \.focused)?.id
+    if let resolvedFocusedPaneID, resolvedFocusedPaneID != currentFocusedHerdrProcessPaneID {
+      previousFocusedHerdrProcessPaneID = currentFocusedHerdrProcessPaneID
+      currentFocusedHerdrProcessPaneID = resolvedFocusedPaneID
+    }
+    let trackedPaneIDs = Set(
+      [previousFocusedHerdrProcessPaneID, currentFocusedHerdrProcessPaneID].compactMap { $0 }
+    )
+    let desiredPaneIDs =
+      hasCompletedHerdrProcessInitialScan ? trackedPaneIDs : representativePaneIDs
+    guard desiredPaneIDs != herdrProcessPaneIDs else {
+      if HerdrProcessPaneTracking.shouldRefreshImmediately(
+        from: previousFocusedPaneID,
+        to: resolvedFocusedPaneID,
+        isHerdrForeground: isHerdrForeground
+      ) {
+        startHerdrProcessInfoPolling()
+      }
+      return
+    }
+    herdrProcessPaneIDs = desiredPaneIDs
+    guard isHerdrForeground else {
+      herdrProcessInfoTask?.cancel()
+      herdrProcessInfoTask = nil
+      processInfoByPaneID = [:]
+      return
+    }
+    startHerdrProcessInfoPolling()
   }
 
   internal func reevaluateInputContext(reason: TerminalInputSourceCoordinator.Reason) {
@@ -232,7 +351,8 @@ internal final class CleanTerminalHost {
   }
 
   private func configureTitlebarMouseForwarding(for surface: GhosttySurfaceView) {
-    titlebarMouseForwarder = CleanTitlebarMouseForwarder(surfaceView: surface) { [weak surface] event in
+    titlebarMouseForwarder = CleanTitlebarMouseForwarder(surfaceView: surface) {
+      [weak surface] event in
       guard let surface else { return }
       switch event.type {
       case .leftMouseDown:
@@ -328,9 +448,64 @@ internal final class CleanTerminalHost {
     isHerdrForeground = isForeground
     if isForeground {
       herdrAdapter?.start()
+      if !herdrProcessPaneIDs.isEmpty {
+        startHerdrProcessInfoPolling()
+      }
     } else {
+      herdrProcessInfoTask?.cancel()
+      herdrProcessInfoTask = nil
+      processInfoByPaneID = [:]
       herdrAdapter?.resetAfterHerdrExit()
     }
     onHerdrForegroundChanged(isForeground)
+  }
+
+  private func startHerdrProcessInfoPolling() {
+    herdrProcessInfoTask?.cancel()
+    let provider = herdrProcessInfoProvider
+    herdrProcessInfoTask = Task { @MainActor [weak self] in
+      while !Task.isCancelled {
+        guard let self else { return }
+        let paneIDs = self.herdrProcessPaneIDs
+        let results = await withTaskGroup(of: (String, HerdrPaneProcessInfo?).self) { group in
+          for paneID in paneIDs {
+            group.addTask {
+              do {
+                return (paneID, try await provider(paneID))
+              } catch {
+                return (paneID, nil)
+              }
+            }
+          }
+          var results: [(String, HerdrPaneProcessInfo?)] = []
+          for await result in group {
+            results.append(result)
+          }
+          return results
+        }
+        guard
+          !Task.isCancelled,
+          self.isHerdrForeground,
+          self.herdrProcessPaneIDs == paneIDs
+        else { return }
+        if let updatedProcessInfo = HerdrProcessInfoCache.updated(
+          self.processInfoByPaneID,
+          with: results
+        ) {
+          self.processInfoByPaneID = updatedProcessInfo
+        }
+        if !self.hasCompletedHerdrProcessInitialScan {
+          self.hasCompletedHerdrProcessInitialScan = true
+          self.herdrProcessPaneIDs = HerdrProcessPaneTracking.paneIDsAfterInitialScan(
+            representativePaneIDs: self.representativeHerdrProcessPaneIDs,
+            focusedPaneIDs: Set(
+              [self.previousFocusedHerdrProcessPaneID, self.currentFocusedHerdrProcessPaneID]
+                .compactMap { $0 }
+            )
+          )
+        }
+        try? await ContinuousClock().sleep(for: Self.herdrProcessInfoPollingInterval)
+      }
+    }
   }
 }

@@ -1,7 +1,7 @@
 import ComposableArchitecture
 import Foundation
 
-private let herdrTerminalChromeLogger = SupaLogger("HerdrTerminalChrome")
+private nonisolated let herdrTerminalChromeLogger = SupaLogger("HerdrTerminalChrome")
 
 @Reducer
 internal struct HerdrTerminalChromeFeature {
@@ -20,6 +20,7 @@ internal struct HerdrTerminalChromeFeature {
     internal var selectedTabID: String?
     internal var selectedPaneID: String?
     internal var pendingFocus: FocusTarget?
+    internal var focusRollback: FocusSelection?
     internal var pendingMutation: Mutation?
     internal var closeConfirmation: CloseConfirmation?
     internal var mutationError: HerdrTerminalChromeFailure?
@@ -30,6 +31,12 @@ internal struct HerdrTerminalChromeFeature {
     internal var isVisible: Bool {
       connection == .connected
     }
+  }
+
+  internal struct FocusSelection: Equatable, Sendable {
+    internal let workspaceID: String?
+    internal let tabID: String?
+    internal let paneID: String?
   }
 
   internal enum FocusTarget: Equatable, Sendable {
@@ -46,6 +53,7 @@ internal struct HerdrTerminalChromeFeature {
   }
 
   internal enum Mutation: Equatable, Sendable {
+    case createWorkspace
     case createTab(workspaceID: String, label: String?, sourceTabID: String?)
     case renameTab(tabID: String, label: String)
     case moveTab(tabID: String, insertIndex: Int)
@@ -84,6 +92,8 @@ internal struct HerdrTerminalChromeFeature {
     case focusTabTapped(String)
     case focusPaneTapped(String)
     case focusResponse(FocusResult)
+    case focusConfirmationTimedOut(FocusTarget)
+    case newWorkspaceRequested
     case newTabRequested(workspaceID: String, label: String?, sourceTabID: String?)
     case renameTabRequested(tabID: String, label: String)
     case moveTabRequested(tabID: String, insertIndex: Int)
@@ -101,7 +111,136 @@ internal struct HerdrTerminalChromeFeature {
     case refreshDebounce
     case refresh
     case focus
+    case focusConfirmation
     case mutation
+  }
+
+  private static let immediateRefreshEvents: Set<String> = [
+    "workspace_created",
+    "workspace_closed",
+    "workspace_moved",
+    "workspace_reordered",
+    "tab_created",
+    "tab_closed",
+    "tab_moved",
+    "pane_created",
+    "pane_closed",
+    "pane_exited",
+    "pane_moved",
+    "layout_updated",
+  ]
+  private static let focusEvents: Set<String> = [
+    "workspace_focused",
+    "tab_focused",
+    "pane_focused",
+  ]
+  private static let focusConfirmationTimeout = Duration.milliseconds(250)
+
+  internal static func shouldRefreshImmediately(for eventName: String) -> Bool {
+    immediateRefreshEvents.contains(eventName.replacing(".", with: "_"))
+  }
+
+  private static func monotonicMilliseconds() -> Int {
+    Int(ProcessInfo.processInfo.systemUptime * 1_000)
+  }
+
+  private static func focusedTabID(in workspaceID: String, snapshot: HerdrSessionSnapshot)
+    -> String?
+  {
+    snapshot.workspaces.first { $0.id == workspaceID }?.activeTabID
+      ?? snapshot.tabs.first { $0.workspaceID == workspaceID && $0.focused }?.id
+  }
+
+  private static func applyFocusEvent(
+    _ state: inout State,
+    _ event: HerdrEventEnvelope
+  ) -> Bool {
+    guard let focus = event.focus else { return false }
+    switch event.event {
+    case "workspace_focused":
+      guard let workspaceID = focus.workspaceID else { return false }
+      state.selectedWorkspaceID = workspaceID
+      state.selectedTabID = Self.focusedTabID(in: workspaceID, snapshot: state.snapshot)
+      state.selectedPaneID =
+        state.snapshot.panes.first {
+          $0.workspaceID == workspaceID && $0.focused
+        }?.id
+      return true
+    case "tab_focused":
+      guard let tabID = focus.tabID else { return false }
+      state.selectedTabID = tabID
+      let tab = state.snapshot.tabs.first { $0.id == tabID }
+      state.selectedWorkspaceID = focus.workspaceID ?? tab?.workspaceID
+      state.selectedPaneID =
+        state.snapshot.panes.first {
+          $0.tabID == tabID && $0.focused
+        }?.id
+      return true
+    case "pane_focused":
+      guard let paneID = focus.paneID else { return false }
+      state.selectedPaneID = paneID
+      let pane = state.snapshot.panes.first { $0.id == paneID }
+      state.selectedWorkspaceID = focus.workspaceID ?? pane?.workspaceID
+      state.selectedTabID = focus.tabID ?? pane?.tabID
+      return true
+    default:
+      return false
+    }
+  }
+
+  private static func event(_ event: HerdrEventEnvelope, confirms target: FocusTarget) -> Bool {
+    guard let focus = event.focus else { return false }
+    switch target {
+    case .workspace(let id): return focus.workspaceID == id
+    case .tab(let id): return focus.tabID == id
+    case .pane(let id): return focus.paneID == id
+    }
+  }
+
+  private static func beginFocus(_ state: inout State, target: FocusTarget) {
+    if state.pendingFocus == nil {
+      state.focusRollback = FocusSelection(
+        workspaceID: state.selectedWorkspaceID,
+        tabID: state.selectedTabID,
+        paneID: state.selectedPaneID
+      )
+    }
+    state.pendingFocus = target
+    applyOptimisticFocus(&state, target: target)
+  }
+
+  private static func applyOptimisticFocus(_ state: inout State, target: FocusTarget) {
+    switch target {
+    case .workspace(let workspaceID):
+      state.selectedWorkspaceID = workspaceID
+      state.selectedTabID = focusedTabID(in: workspaceID, snapshot: state.snapshot)
+      if let tabID = state.selectedTabID {
+        state.selectedPaneID =
+          state.snapshot.panes.first { $0.tabID == tabID && $0.focused }?.id
+          ?? state.snapshot.panes.first { $0.tabID == tabID }?.id
+      }
+    case .tab(let tabID):
+      state.selectedTabID = tabID
+      state.selectedWorkspaceID = state.snapshot.tabs.first { $0.id == tabID }?.workspaceID
+      state.selectedPaneID =
+        state.snapshot.panes.first { $0.tabID == tabID && $0.focused }?.id
+        ?? state.snapshot.panes.first { $0.tabID == tabID }?.id
+    case .pane(let paneID):
+      state.selectedPaneID = paneID
+      guard let pane = state.snapshot.panes.first(where: { $0.id == paneID }) else { return }
+      state.selectedWorkspaceID = pane.workspaceID
+      state.selectedTabID = pane.tabID
+    }
+  }
+
+  private static func rollbackFocus(_ state: inout State) {
+    if let rollback = state.focusRollback {
+      state.selectedWorkspaceID = rollback.workspaceID
+      state.selectedTabID = rollback.tabID
+      state.selectedPaneID = rollback.paneID
+    }
+    state.pendingFocus = nil
+    state.focusRollback = nil
   }
 
   @Dependency(HerdrTerminalChromeClient.self) private var client
@@ -117,6 +256,7 @@ internal struct HerdrTerminalChromeFeature {
         state.selectedTabID = nil
         state.selectedPaneID = nil
         state.pendingFocus = nil
+        state.focusRollback = nil
         state.pendingMutation = nil
         state.closeConfirmation = nil
         state.mutationError = nil
@@ -128,6 +268,7 @@ internal struct HerdrTerminalChromeFeature {
           .cancel(id: CancelID.refreshDebounce),
           .cancel(id: CancelID.refresh),
           .cancel(id: CancelID.focus),
+          .cancel(id: CancelID.focusConfirmation),
           .cancel(id: CancelID.mutation)
         )
 
@@ -138,6 +279,7 @@ internal struct HerdrTerminalChromeFeature {
         state.selectedTabID = nil
         state.selectedPaneID = nil
         state.pendingFocus = nil
+        state.focusRollback = nil
         state.pendingMutation = nil
         state.closeConfirmation = nil
         state.mutationError = nil
@@ -149,6 +291,7 @@ internal struct HerdrTerminalChromeFeature {
           .cancel(id: CancelID.refreshDebounce),
           .cancel(id: CancelID.refresh),
           .cancel(id: CancelID.focus),
+          .cancel(id: CancelID.focusConfirmation),
           .cancel(id: CancelID.mutation),
           lifecycleEffect()
             .cancellable(id: CancelID.lifecycle, cancelInFlight: true)
@@ -167,9 +310,37 @@ internal struct HerdrTerminalChromeFeature {
       case .eventStream(.subscribed):
         return .none
 
-      case .eventStream(.event):
+      case .eventStream(.event(let event)):
         guard state.connection == .connected else { return .none }
-        state.refreshGeneration &+= 1
+        let eventName = event.event
+        herdrTerminalChromeLogger.diagnostic(
+          "event-received uptime_ms=\(Self.monotonicMilliseconds()) name=\(eventName) generation=\(state.refreshGeneration)"
+        )
+        if let pendingFocus = state.pendingFocus,
+          Self.focusEvents.contains(eventName.replacing(".", with: "_")),
+          !Self.event(event, confirms: pendingFocus)
+        {
+          return .none
+        }
+        if Self.applyFocusEvent(&state, event) {
+          if state.pendingFocus != nil {
+            state.pendingFocus = nil
+            state.focusRollback = nil
+          }
+          let workspace = state.selectedWorkspaceID ?? "?"
+          let tab = state.selectedTabID ?? "?"
+          let pane = state.selectedPaneID ?? "?"
+          herdrTerminalChromeLogger.diagnostic(
+            "focus-projected uptime_ms=\(Self.monotonicMilliseconds()) workspace=\(workspace) tab=\(tab) pane=\(pane)"
+          )
+          return .cancel(id: CancelID.focusConfirmation)
+        }
+        if Self.shouldRefreshImmediately(for: eventName) {
+          herdrTerminalChromeLogger.diagnostic(
+            "snapshot-scheduled-immediate uptime_ms=\(Self.monotonicMilliseconds())"
+          )
+          return startRefresh(&state)
+        }
         return .run { [clock] send in
           do {
             try await clock.sleep(for: .milliseconds(100))
@@ -193,17 +364,19 @@ internal struct HerdrTerminalChromeFeature {
         state.pendingMutation = nil
         state.closeConfirmation = nil
         state.subscribedPaneIDs = []
+        state.pendingFocus = nil
+        state.focusRollback = nil
         return .merge(
           .cancel(id: CancelID.refreshDebounce),
           .cancel(id: CancelID.refresh),
           .cancel(id: CancelID.focus),
+          .cancel(id: CancelID.focusConfirmation),
           .cancel(id: CancelID.mutation)
         )
 
       case .debouncedRefresh:
         guard state.connection == .connected else { return .none }
-        return refreshEffect(generation: state.refreshGeneration)
-          .cancellable(id: CancelID.refresh, cancelInFlight: true)
+        return startRefresh(&state)
 
       case .refreshResponseWithGeneration(let generation, let result):
         guard generation == state.refreshGeneration else { return .none }
@@ -211,11 +384,17 @@ internal struct HerdrTerminalChromeFeature {
         case .success(let snapshot):
           guard state.connection != .hidden else { return .none }
           let shouldRestartLifecycle = replaceSnapshot(&state, with: snapshot)
+          let focusedWorkspace = snapshot.focusedWorkspaceID ?? "?"
+          let focusedTab = snapshot.focusedTabID ?? "?"
+          herdrTerminalChromeLogger.diagnostic(
+            "snapshot-applied uptime_ms=\(Self.monotonicMilliseconds()) generation=\(generation) focused_workspace=\(focusedWorkspace) focused_tab=\(focusedTab)"
+          )
           state.connection = .connected
           return shouldRestartLifecycle ? restartLifecycleEffect() : .none
         case .failure(let failure):
           guard state.connection != .hidden else { return .none }
           state.pendingFocus = nil
+          state.focusRollback = nil
           if failure.isIncompatibleProtocol {
             return handleFailure(&state, failure: failure)
           }
@@ -233,33 +412,54 @@ internal struct HerdrTerminalChromeFeature {
 
       case .focusWorkspaceTapped(let workspaceID):
         guard state.connection == .connected else { return .none }
-        state.pendingFocus = .workspace(workspaceID)
-        return focusEffect(.workspace(workspaceID))
-          .cancellable(id: CancelID.focus, cancelInFlight: true)
+        let target = FocusTarget.workspace(workspaceID)
+        Self.beginFocus(&state, target: target)
+        return .merge(
+          focusEffect(target).cancellable(id: CancelID.focus, cancelInFlight: true),
+          focusConfirmationEffect(target)
+        )
 
       case .focusTabTapped(let tabID):
         guard state.connection == .connected else { return .none }
-        state.pendingFocus = .tab(tabID)
-        return focusEffect(.tab(tabID))
-          .cancellable(id: CancelID.focus, cancelInFlight: true)
+        let target = FocusTarget.tab(tabID)
+        Self.beginFocus(&state, target: target)
+        return .merge(
+          focusEffect(target).cancellable(id: CancelID.focus, cancelInFlight: true),
+          focusConfirmationEffect(target)
+        )
 
       case .focusPaneTapped(let paneID):
         guard state.connection == .connected else { return .none }
-        state.pendingFocus = .pane(paneID)
-        return focusEffect(.pane(paneID))
-          .cancellable(id: CancelID.focus, cancelInFlight: true)
+        let target = FocusTarget.pane(paneID)
+        Self.beginFocus(&state, target: target)
+        return .merge(
+          focusEffect(target).cancellable(id: CancelID.focus, cancelInFlight: true),
+          focusConfirmationEffect(target)
+        )
 
       case .focusResponse(.success):
-        guard state.pendingFocus != nil else { return .none }
-        return refreshEffect(generation: state.refreshGeneration)
-          .cancellable(id: CancelID.refresh, cancelInFlight: true)
+        return .none
 
       case .focusResponse(.failure(let failure)):
+        Self.rollbackFocus(&state)
+        herdrTerminalChromeLogger.warning(
+          "Terminal chrome focus failed: \(String(describing: failure))")
+        let cancelConfirmation = Effect<Action>.cancel(id: CancelID.focusConfirmation)
+        guard failure.isNotFound else { return cancelConfirmation }
+        return .merge(
+          cancelConfirmation,
+          startRefresh(&state)
+        )
+
+      case .focusConfirmationTimedOut(let target):
+        guard state.pendingFocus == target else { return .none }
         state.pendingFocus = nil
-        herdrTerminalChromeLogger.warning("Terminal chrome focus failed: \(String(describing: failure))")
-        guard failure.isNotFound else { return .none }
-        return refreshEffect(generation: state.refreshGeneration)
-          .cancellable(id: CancelID.refresh, cancelInFlight: true)
+        state.focusRollback = nil
+        return startRefresh(&state)
+
+      case .newWorkspaceRequested:
+        guard state.connection == .connected else { return .none }
+        return startMutation(&state, .createWorkspace)
 
       case .newTabRequested(let workspaceID, let label, let sourceTabID):
         guard state.connection == .connected else { return .none }
@@ -315,8 +515,7 @@ internal struct HerdrTerminalChromeFeature {
         switch result {
         case .success:
           state.mutationError = nil
-          return refreshEffect(generation: state.refreshGeneration)
-            .cancellable(id: CancelID.refresh, cancelInFlight: true)
+          return startRefresh(&state)
         case .failure(let failure):
           if case .closeTab(_, let workspaceID, true) = pendingMutation,
             failure.isConfirmationRequired
@@ -327,8 +526,7 @@ internal struct HerdrTerminalChromeFeature {
           }
           state.mutationError = failure
           if failure.isNotFound {
-            return refreshEffect(generation: state.refreshGeneration)
-              .cancellable(id: CancelID.refresh, cancelInFlight: true)
+            return startRefresh(&state)
           }
           return .none
         }
@@ -351,6 +549,8 @@ internal struct HerdrTerminalChromeFeature {
     return .run { send in
       do {
         switch mutation {
+        case .createWorkspace:
+          try await client.createWorkspace()
         case .createTab(let workspaceID, let label, let sourceTabID):
           try await client.createTab(workspaceID, label, sourceTabID)
         case .renameTab(let tabID, let label):
@@ -372,6 +572,12 @@ internal struct HerdrTerminalChromeFeature {
       }
     }
     .cancellable(id: CancelID.mutation, cancelInFlight: true)
+  }
+
+  private func startRefresh(_ state: inout State) -> Effect<Action> {
+    state.refreshGeneration &+= 1
+    return refreshEffect(generation: state.refreshGeneration)
+      .cancellable(id: CancelID.refresh, cancelInFlight: true)
   }
 
   private func lifecycleEffect() -> Effect<Action> {
@@ -415,12 +621,22 @@ internal struct HerdrTerminalChromeFeature {
   private func refreshEffect(generation: UInt64) -> Effect<Action> {
     let client = client
     return .run { send in
+      let startedAt = ProcessInfo.processInfo.systemUptime
+      herdrTerminalChromeLogger.diagnostic(
+        "snapshot-effect-start uptime_ms=\(Int(startedAt * 1_000)) generation=\(generation)"
+      )
       do {
         let snapshot = try await client.snapshot()
         guard !Task.isCancelled else { return }
+        herdrTerminalChromeLogger.diagnostic(
+          "snapshot-effect-end uptime_ms=\(Int(ProcessInfo.processInfo.systemUptime * 1_000)) elapsed_ms=\(Int((ProcessInfo.processInfo.systemUptime - startedAt) * 1_000)) generation=\(generation)"
+        )
         await send(.refreshResponseWithGeneration(generation, .success(snapshot)))
       } catch {
         guard !Task.isCancelled else { return }
+        herdrTerminalChromeLogger.diagnostic(
+          "snapshot-effect-failure uptime_ms=\(Int(ProcessInfo.processInfo.systemUptime * 1_000)) elapsed_ms=\(Int((ProcessInfo.processInfo.systemUptime - startedAt) * 1_000)) generation=\(generation) error=\(String(describing: error))"
+        )
         await send(
           .refreshResponseWithGeneration(
             generation,
@@ -452,6 +668,18 @@ internal struct HerdrTerminalChromeFeature {
     }
   }
 
+  private func focusConfirmationEffect(_ target: FocusTarget) -> Effect<Action> {
+    .run { [clock] send in
+      do {
+        try await clock.sleep(for: Self.focusConfirmationTimeout)
+      } catch {
+        return
+      }
+      await send(.focusConfirmationTimedOut(target))
+    }
+    .cancellable(id: CancelID.focusConfirmation, cancelInFlight: true)
+  }
+
   private func handleFailure(
     _ state: inout State,
     failure: HerdrTerminalChromeFailure
@@ -463,6 +691,7 @@ internal struct HerdrTerminalChromeFeature {
       state.selectedTabID = nil
       state.selectedPaneID = nil
       state.pendingFocus = nil
+      state.focusRollback = nil
       state.pendingMutation = nil
       state.closeConfirmation = nil
       state.mutationError = nil
@@ -472,6 +701,7 @@ internal struct HerdrTerminalChromeFeature {
         .cancel(id: CancelID.refreshDebounce),
         .cancel(id: CancelID.refresh),
         .cancel(id: CancelID.focus),
+        .cancel(id: CancelID.focusConfirmation),
         .cancel(id: CancelID.mutation),
         .send(.delegate(.compatibilityFailure(error)))
       )
@@ -481,6 +711,8 @@ internal struct HerdrTerminalChromeFeature {
     state.selectedWorkspaceID = nil
     state.selectedTabID = nil
     state.selectedPaneID = nil
+    state.pendingFocus = nil
+    state.focusRollback = nil
     state.pendingMutation = nil
     state.closeConfirmation = nil
     state.mutationGeneration &+= 1
@@ -506,7 +738,10 @@ internal struct HerdrTerminalChromeFeature {
       validIDs: Set(snapshot.panes.map(\.id))
     )
 
-    guard let pendingFocus = state.pendingFocus else { return shouldRestartLifecycle }
+    guard let pendingFocus = state.pendingFocus else {
+      state.focusRollback = nil
+      return shouldRestartLifecycle
+    }
     let isConfirmed: Bool
     switch pendingFocus {
     case .workspace(let id):
@@ -516,7 +751,24 @@ internal struct HerdrTerminalChromeFeature {
     case .pane(let id):
       isConfirmed = snapshot.focusedPaneID == id
     }
-    guard isConfirmed else { return shouldRestartLifecycle }
+    let targetStillExists: Bool
+    switch pendingFocus {
+    case .workspace(let id):
+      targetStillExists = snapshot.workspaces.contains { $0.id == id }
+    case .tab(let id):
+      targetStillExists = snapshot.tabs.contains { $0.id == id }
+    case .pane(let id):
+      targetStillExists = snapshot.panes.contains { $0.id == id }
+    }
+    guard targetStillExists else {
+      state.pendingFocus = nil
+      state.focusRollback = nil
+      return shouldRestartLifecycle
+    }
+    guard isConfirmed else {
+      Self.applyOptimisticFocus(&state, target: pendingFocus)
+      return shouldRestartLifecycle
+    }
     switch pendingFocus {
     case .workspace(let id):
       state.selectedWorkspaceID = id
@@ -526,6 +778,7 @@ internal struct HerdrTerminalChromeFeature {
       state.selectedPaneID = id
     }
     state.pendingFocus = nil
+    state.focusRollback = nil
     return shouldRestartLifecycle
   }
 

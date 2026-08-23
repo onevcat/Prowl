@@ -27,13 +27,274 @@ struct HerdrTabBarViewTests {
     #expect(items.map(\.id) == ["w1:t1", "w1:t2"])
     #expect(items.map(\.displayLabel) == ["shell", "logs Z"])
     #expect(items.last?.isFocused == true)
+    #expect(items.allSatisfy { !$0.isAgent })
+  }
+
+  @Test func marksTabsContainingAgentsForLeadingIcon() {
+    let snapshot = HerdrSessionSnapshot(
+      version: "0.8.2",
+      protocolVersion: 20,
+      focusedWorkspaceID: "w1",
+      focusedTabID: "w1:t1",
+      focusedPaneID: "w1:p1",
+      workspaces: [],
+      tabs: [
+        HerdrTab(tabID: "w1:t1", workspaceID: "w1", label: "agent"),
+        HerdrTab(tabID: "w1:t2", workspaceID: "w1", label: "shell"),
+      ],
+      panes: [],
+      layouts: [],
+      agents: [HerdrAgent(paneID: "w1:p1", tabID: "w1:t1", agent: "codex")]
+    )
+
+    let items = HerdrTabBarProjection.items(in: snapshot, workspaceID: "w1")
+
+    #expect(items.first?.isAgent == true)
+    #expect(items.first?.agentIcon == .codex)
+    #expect(items.last?.isAgent == false)
+  }
+
+  @Test func mapsProviderIDsToCanonicalTabIcons() {
+    let providerIDs = [
+      "codex", "claude-code", "pi", "acp-cursor", "acp-opencode", "acp-omp", "acp-grok",
+    ]
+    let tabs = providerIDs.map { HerdrTab(tabID: "w1:\($0)", workspaceID: "w1", label: $0) }
+    let agents = providerIDs.map {
+      HerdrAgent(paneID: "p:\($0)", tabID: "w1:\($0)", agent: $0)
+    }
+    let snapshot = HerdrSessionSnapshot(
+      version: "0.8.2",
+      protocolVersion: 20,
+      focusedWorkspaceID: "w1",
+      focusedTabID: nil,
+      focusedPaneID: nil,
+      workspaces: [],
+      tabs: tabs,
+      panes: [],
+      layouts: [],
+      agents: agents
+    )
+
+    let icons = HerdrTabBarProjection.items(in: snapshot, workspaceID: "w1").compactMap(\.agentIcon)
+
+    #expect(icons == [.codex, .claude, .pi, .cursor, .opencode, .omp, .grok])
+    #expect(HerdrTabAgentIcon.resolve(HerdrAgent(agent: "acp-other")) == .generic)
+  }
+
+  @Test func prefersFocusedKnownProviderWhenATabHasMultipleAgents() {
+    let snapshot = HerdrSessionSnapshot(
+      version: "0.8.2",
+      protocolVersion: 20,
+      focusedWorkspaceID: "w1",
+      focusedTabID: "w1:t1",
+      focusedPaneID: "p2",
+      workspaces: [],
+      tabs: [HerdrTab(tabID: "w1:t1", workspaceID: "w1", label: "mixed")],
+      panes: [],
+      layouts: [],
+      agents: [
+        HerdrAgent(paneID: "p1", tabID: "w1:t1", agent: "acp-unknown"),
+        HerdrAgent(paneID: "p2", tabID: "w1:t1", agent: "acp-omp", focused: true),
+      ]
+    )
+
+    let item = HerdrTabBarProjection.items(in: snapshot, workspaceID: "w1").first
+
+    #expect(item?.agentIcon == .omp)
+  }
+
+  @Test func projectsMeaningfulForegroundProcessWithDirectory() {
+    let processInfo = HerdrPaneProcessInfo(
+      paneID: "w1:p1",
+      shellPID: 10,
+      foregroundProcessGroupID: 20,
+      foregroundProcesses: [
+        HerdrPaneProcess(pid: 10, name: "zsh", argv0: "/bin/zsh"),
+        HerdrPaneProcess(
+          pid: 20,
+          name: "lazygit",
+          argv0: "lazygit",
+          cwd: "/Users/yam/Developer/Prowl"
+        ),
+        HerdrPaneProcess(pid: 21, name: "starship", argv0: "starship"),
+      ]
+    )
+
+    #expect(
+      HerdrTabBarProjection.processTitle(
+        in: processInfo,
+        fallbackDirectory: "/Users/yam/Developer/Prowl"
+      ) == HerdrProcessTitle(processName: "lazygit", directoryName: "Prowl")
+    )
+  }
+
+  @Test func suppressesShellAndStarshipOnlyForegroundJobs() {
+    let processInfo = HerdrPaneProcessInfo(
+      paneID: "w1:p1",
+      shellPID: 10,
+      foregroundProcessGroupID: 10,
+      foregroundProcesses: [
+        HerdrPaneProcess(pid: 10, name: "custom-shell", argv0: "custom-shell"),
+        HerdrPaneProcess(pid: 11, name: "starship", argv0: "starship"),
+      ]
+    )
+
+    #expect(
+      HerdrTabBarProjection.processTitle(in: processInfo, fallbackDirectory: "/tmp/Prowl") == nil
+    )
+  }
+
+  @Test func projectsProcessTitlesForEveryTab() {
+    let snapshot = HerdrSessionSnapshot(
+      version: "0.8.2",
+      protocolVersion: 20,
+      focusedWorkspaceID: "w1",
+      focusedTabID: "w1:t1",
+      focusedPaneID: "w1:p1",
+      workspaces: [],
+      tabs: [
+        HerdrTab(tabID: "w1:t1", workspaceID: "w1", label: "shell"),
+        HerdrTab(tabID: "w1:t2", workspaceID: "w1", label: "other"),
+      ],
+      panes: [
+        HerdrPane(
+          paneID: "w1:p1", workspaceID: "w1", tabID: "w1:t1", focused: true, cwd: "/tmp/shell"),
+        HerdrPane(paneID: "w1:p2", workspaceID: "w1", tabID: "w1:t2", cwd: "/tmp/Prowl"),
+      ],
+      layouts: [],
+      agents: []
+    )
+    let processInfoByPaneID = [
+      "w1:p1": HerdrPaneProcessInfo(
+        paneID: "w1:p1",
+        foregroundProcessGroupID: 20,
+        foregroundProcesses: [HerdrPaneProcess(pid: 20, name: "zsh")]
+      ),
+      "w1:p2": HerdrPaneProcessInfo(
+        paneID: "w1:p2",
+        foregroundProcessGroupID: 30,
+        foregroundProcesses: [HerdrPaneProcess(pid: 30, name: "lazygit")]
+      ),
+    ]
+
+    let items = HerdrTabBarProjection.items(
+      in: snapshot,
+      workspaceID: "w1",
+      processInfoByPaneID: processInfoByPaneID
+    )
+
+    #expect(items.first?.processTitle == nil)
+    #expect(
+      items.last?.processTitle == HerdrProcessTitle(processName: "lazygit", directoryName: "Prowl"))
+  }
+
+  @Test func prefersProjectedFocusedPaneOverStaleSnapshotFocus() {
+    let snapshot = HerdrSessionSnapshot(
+      version: "0.8.2",
+      protocolVersion: 20,
+      focusedWorkspaceID: "w1",
+      focusedTabID: "w1:t1",
+      focusedPaneID: "w1:p1",
+      workspaces: [],
+      tabs: [HerdrTab(tabID: "w1:t1", workspaceID: "w1", label: "shell")],
+      panes: [
+        HerdrPane(
+          paneID: "w1:p1", workspaceID: "w1", tabID: "w1:t1", focused: true, cwd: "/tmp/old"),
+        HerdrPane(paneID: "w1:p2", workspaceID: "w1", tabID: "w1:t1", cwd: "/tmp/current"),
+      ],
+      layouts: [],
+      agents: []
+    )
+    let processInfoByPaneID = [
+      "w1:p1": HerdrPaneProcessInfo(
+        paneID: "w1:p1",
+        foregroundProcessGroupID: 20,
+        foregroundProcesses: [HerdrPaneProcess(pid: 20, name: "python3")]
+      ),
+      "w1:p2": HerdrPaneProcessInfo(
+        paneID: "w1:p2",
+        foregroundProcessGroupID: 30,
+        foregroundProcesses: [HerdrPaneProcess(pid: 30, name: "lazygit")]
+      ),
+    ]
+
+    let item = HerdrTabBarProjection.items(
+      in: snapshot,
+      workspaceID: "w1",
+      processInfoByPaneID: processInfoByPaneID,
+      focusedPaneID: "w1:p2"
+    ).first
+
+    #expect(item?.processTitle == HerdrProcessTitle(processName: "lazygit", directoryName: "current"))
+  }
+
+  @Test func removesProcessTitleWhenTheForegroundJobReturnsToShell() {
+    let snapshot = HerdrSessionSnapshot(
+      version: "0.8.2",
+      protocolVersion: 20,
+      focusedWorkspaceID: "w1",
+      focusedTabID: "w1:t1",
+      focusedPaneID: "w1:p1",
+      workspaces: [],
+      tabs: [HerdrTab(tabID: "w1:t1", workspaceID: "w1", label: "TikTok_foldable")],
+      panes: [
+        HerdrPane(
+          paneID: "w1:p1",
+          workspaceID: "w1",
+          tabID: "w1:t1",
+          focused: true,
+          cwd: "/tmp/TikTok_foldable"
+        )
+      ],
+      layouts: [],
+      agents: []
+    )
+    let shellInfo = HerdrPaneProcessInfo(
+      paneID: "w1:p1",
+      shellPID: 10,
+      foregroundProcessGroupID: 10,
+      foregroundProcesses: [HerdrPaneProcess(pid: 10, name: "zsh", argv0: "/bin/zsh")]
+    )
+
+    let item = HerdrTabBarProjection.items(
+      in: snapshot,
+      workspaceID: "w1",
+      processInfoByPaneID: ["w1:p1": shellInfo]
+    ).first
+
+    #expect(item?.processTitle == nil)
+    #expect(item?.displayLabel == "TikTok_foldable")
+  }
+
+  @Test func suppressesKnownAgentProcessWhenProviderIconExists() {
+    let processInfo = HerdrPaneProcessInfo(
+      paneID: "w1:p1",
+      foregroundProcessGroupID: 20,
+      foregroundProcesses: [HerdrPaneProcess(pid: 20, name: "omp")]
+    )
+
+    #expect(
+      HerdrTabBarProjection.processTitle(in: processInfo, fallbackDirectory: "/tmp/bb") == nil
+    )
+  }
+
+  @Test func usesCanonicalProviderAccentColors() {
+    #expect(HerdrTabAgentIcon.generic.accent == .systemSecondary)
+    #expect(HerdrTabAgentIcon.codex.accent == .systemPrimary)
+    #expect(HerdrTabAgentIcon.claude.accent == .claude)
+    #expect(HerdrTabAgentIcon.pi.accent == .pi)
+    #expect(HerdrTabAgentIcon.cursor.accent == .cursor)
+    #expect(HerdrTabAgentIcon.opencode.accent == .opencode)
+    #expect(HerdrTabAgentIcon.omp.accent == .omp)
+    #expect(HerdrTabAgentIcon.grok.accent == .systemPrimary)
   }
 
   @Test func computesServerInsertIndexBeforeDropTarget() {
     let items = [
       HerdrTabBarItem(id: "t1", workspaceID: "w1", label: "one", isZoomed: false, isFocused: true),
       HerdrTabBarItem(id: "t2", workspaceID: "w1", label: "two", isZoomed: false, isFocused: false),
-      HerdrTabBarItem(id: "t3", workspaceID: "w1", label: "three", isZoomed: false, isFocused: false),
+      HerdrTabBarItem(
+        id: "t3", workspaceID: "w1", label: "three", isZoomed: false, isFocused: false),
     ]
 
     #expect(
@@ -51,10 +312,49 @@ struct HerdrTabBarViewTests {
     let items = [
       HerdrTabBarItem(id: "t1", workspaceID: "w1", label: "one", isZoomed: false, isFocused: true),
       HerdrTabBarItem(id: "t2", workspaceID: "w1", label: "two", isZoomed: false, isFocused: false),
-      HerdrTabBarItem(id: "t3", workspaceID: "w1", label: "three", isZoomed: false, isFocused: false),
+      HerdrTabBarItem(
+        id: "t3", workspaceID: "w1", label: "three", isZoomed: false, isFocused: false),
     ]
 
     #expect(HerdrTabBarProjection.cycleTarget(selectedID: "t1", direction: 1, items: items) == "t2")
-    #expect(HerdrTabBarProjection.cycleTarget(selectedID: "t1", direction: -1, items: items) == "t3")
+    #expect(
+      HerdrTabBarProjection.cycleTarget(selectedID: "t1", direction: -1, items: items) == "t3")
+  }
+
+  @Test func showsActiveTreatmentForSelectedTabIncludingSingleTabWorkspaces() {
+    let item = HerdrTabBarItem(
+      id: "t1",
+      workspaceID: "w1",
+      label: "one",
+      isZoomed: false,
+      isFocused: true
+    )
+
+    #expect(
+      HerdrTabBarProjection.shouldShowActiveTreatment(
+        itemID: item.id, selectedID: item.id))
+    #expect(
+      HerdrTabBarProjection.shouldShowActiveTreatment(
+        itemID: item.id, selectedID: item.id))
+    #expect(
+      !HerdrTabBarProjection.shouldShowActiveTreatment(
+        itemID: "t2", selectedID: item.id))
+  }
+
+  @Test func usesCompactTabGeometryWithoutLeadingBarGap() {
+    #expect(HerdrTabBarLayout.minimumTabWidth == 46)
+    #expect(HerdrTabBarLayout.barLeadingPadding == 0)
+    #expect(HerdrTabBarLayout.tabTextLeadingPadding == 18)
+  }
+
+  @Test func scrollsOnlyWhenSelectedTabIsOutsideTheVisibleSet() {
+    #expect(
+      !HerdrTabBarProjection.shouldScrollToSelected(
+        selectedID: "t1", visibleIDs: ["t1", "t2"])
+    )
+    #expect(
+      HerdrTabBarProjection.shouldScrollToSelected(
+        selectedID: "t3", visibleIDs: ["t1", "t2"])
+    )
   }
 }

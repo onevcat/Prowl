@@ -14,6 +14,17 @@ extension GhosttySurfaceView {
     if CanvasDirectionalNewTerminalChordCoordinator.shared.shouldBlockTerminalInput(event) {
       return
     }
+    let isHerdrNavigationKey = Self.isOptionCanvasNavigationShortcut(
+      keyCode: event.keyCode,
+      charactersIgnoringModifiers: event.charactersIgnoringModifiers,
+      modifierFlags: event.modifierFlags
+    )
+    if isHerdrNavigationKey {
+      let key = event.charactersIgnoringModifiers ?? "?"
+      surfaceLogger.diagnostic(
+        "herdr-nav keyDown uptime_ms=\(Self.monotonicMilliseconds()) key=\(key) key_code=\(event.keyCode) modifiers=\(event.modifierFlags.rawValue)"
+      )
+    }
     if shouldPreferMenuHandling(for: event),
       let menu = NSApp.mainMenu,
       menu.performKeyEquivalent(with: event)
@@ -581,13 +592,46 @@ extension GhosttySurfaceView {
     if let finalText, !finalText.isEmpty,
       let codepoint = finalText.utf8.first, codepoint >= 0x20
     {
-      return finalText.withCString { ptr in
+      let result = finalText.withCString { ptr in
         key.text = ptr
         return ghostty_surface_key(surface, key)
       }
+      logHerdrNavigationSendIfNeeded(
+        event: event,
+        action: action,
+        text: finalText,
+        result: result
+      )
+      return result
     }
     key.text = nil
-    return ghostty_surface_key(surface, key)
+    let result = ghostty_surface_key(surface, key)
+    logHerdrNavigationSendIfNeeded(event: event, action: action, text: nil, result: result)
+    return result
+  }
+
+  private func logHerdrNavigationSendIfNeeded(
+    event: NSEvent,
+    action: ghostty_input_action_e,
+    text: String?,
+    result: Bool
+  ) {
+    guard action != GHOSTTY_ACTION_RELEASE,
+      Self.isOptionCanvasNavigationShortcut(
+        keyCode: event.keyCode,
+        charactersIgnoringModifiers: event.charactersIgnoringModifiers,
+        modifierFlags: event.modifierFlags
+      )
+    else { return }
+    let key = event.charactersIgnoringModifiers ?? "?"
+    let loggedText = text ?? "<none>"
+    surfaceLogger.diagnostic(
+      "herdr-nav ghostty-send uptime_ms=\(Self.monotonicMilliseconds()) key=\(key) action=\(String(describing: action)) text=\(loggedText) result=\(result)"
+    )
+  }
+
+  private static func monotonicMilliseconds() -> Int {
+    Int(ProcessInfo.processInfo.systemUptime * 1_000)
   }
 
   func performBindingAction(_ action: String) {

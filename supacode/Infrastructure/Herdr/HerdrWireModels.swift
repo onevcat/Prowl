@@ -50,12 +50,14 @@ nonisolated internal struct HerdrResponseEnvelope: Decodable, Sendable {
   nonisolated internal struct Result: Decodable, Sendable {
     internal let type: String
     internal let pane: HerdrPaneInfo?
+    internal let processInfo: HerdrPaneProcessInfo?
     internal let protocolVersion: UInt32?
     internal let snapshot: HerdrSessionSnapshot?
 
     nonisolated private enum CodingKeys: String, CodingKey {
       case type
       case pane
+      case processInfo = "process_info"
       case protocolVersion = "protocol"
       case snapshot
     }
@@ -74,6 +76,11 @@ nonisolated internal struct HerdrResponseEnvelope: Decodable, Sendable {
     guard result?.type == "pane_current" else { return nil }
     return result?.pane
   }
+
+  internal var paneProcessInfo: HerdrPaneProcessInfo? {
+    guard result?.type == "pane_process_info" else { return nil }
+    return result?.processInfo
+  }
 }
 
 nonisolated internal enum HerdrProtocolCompatibility {
@@ -83,11 +90,14 @@ nonisolated internal enum HerdrProtocolCompatibility {
     guard response.result?.type == "pong" else {
       throw HerdrSocketError.unsupportedResponseType(response.result?.type)
     }
-    let actualVersion = response.result?.protocolVersion
-    guard let actualVersion, supportedVersions.contains(actualVersion) else {
+    try validate(protocolVersion: response.result?.protocolVersion)
+  }
+
+  internal static func validate(protocolVersion: UInt32?) throws {
+    guard let protocolVersion, supportedVersions.contains(protocolVersion) else {
       throw HerdrSocketError.unsupportedProtocol(
         supported: supportedVersions,
-        actual: actualVersion
+        actual: protocolVersion
       )
     }
   }
@@ -146,6 +156,65 @@ nonisolated internal struct HerdrRequest<Params: Encodable>: Encodable {
 }
 
 nonisolated internal struct HerdrEmptyParams: Encodable, Sendable {}
+
+nonisolated internal struct HerdrPaneProcessInfoParams: Encodable, Sendable {
+  internal let paneID: String
+
+  private enum CodingKeys: String, CodingKey {
+    case paneID = "pane_id"
+  }
+}
+
+nonisolated internal struct HerdrPaneProcess: Decodable, Equatable, Sendable {
+  internal let pid: UInt32
+  internal let name: String
+  internal let argv0: String?
+  internal let argv: [String]?
+  internal let cmdline: String?
+  internal let cwd: String?
+
+  internal init(
+    pid: UInt32,
+    name: String,
+    argv0: String? = nil,
+    argv: [String]? = nil,
+    cmdline: String? = nil,
+    cwd: String? = nil
+  ) {
+    self.pid = pid
+    self.name = name
+    self.argv0 = argv0
+    self.argv = argv
+    self.cmdline = cmdline
+    self.cwd = cwd
+  }
+}
+
+nonisolated internal struct HerdrPaneProcessInfo: Decodable, Equatable, Sendable {
+  internal let paneID: String
+  internal let shellPID: UInt32?
+  internal let foregroundProcessGroupID: UInt32?
+  internal let foregroundProcesses: [HerdrPaneProcess]
+
+  internal init(
+    paneID: String,
+    shellPID: UInt32? = nil,
+    foregroundProcessGroupID: UInt32? = nil,
+    foregroundProcesses: [HerdrPaneProcess] = []
+  ) {
+    self.paneID = paneID
+    self.shellPID = shellPID
+    self.foregroundProcessGroupID = foregroundProcessGroupID
+    self.foregroundProcesses = foregroundProcesses
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case paneID = "pane_id"
+    case shellPID = "shell_pid"
+    case foregroundProcessGroupID = "foreground_process_group_id"
+    case foregroundProcesses = "foreground_processes"
+  }
+}
 
 nonisolated internal struct HerdrEventsSubscribeParams: Encodable, Sendable {
   nonisolated internal struct Subscription: Encodable, Sendable {
@@ -260,6 +329,7 @@ nonisolated internal struct HerdrWorkspace: Decodable, Equatable, Sendable, Iden
   internal let tabCount: Int?
   internal let activeTabID: String?
   internal let agentStatus: String?
+  internal let branch: String?
 
   internal var id: String { workspaceID }
 
@@ -271,7 +341,8 @@ nonisolated internal struct HerdrWorkspace: Decodable, Equatable, Sendable, Iden
     paneCount: Int? = nil,
     tabCount: Int? = nil,
     activeTabID: String? = nil,
-    agentStatus: String? = nil
+    agentStatus: String? = nil,
+    branch: String? = nil
   ) {
     self.workspaceID = workspaceID
     self.number = number
@@ -281,6 +352,7 @@ nonisolated internal struct HerdrWorkspace: Decodable, Equatable, Sendable, Iden
     self.tabCount = tabCount
     self.activeTabID = activeTabID
     self.agentStatus = agentStatus
+    self.branch = branch
   }
 
   private enum CodingKeys: String, CodingKey {
@@ -292,6 +364,7 @@ nonisolated internal struct HerdrWorkspace: Decodable, Equatable, Sendable, Iden
     case tabCount = "tab_count"
     case activeTabID = "active_tab_id"
     case agentStatus = "agent_status"
+    case branch
   }
 
   internal init(from decoder: Decoder) throws {
@@ -304,6 +377,7 @@ nonisolated internal struct HerdrWorkspace: Decodable, Equatable, Sendable, Iden
     tabCount = try container.decodeIfPresent(Int.self, forKey: .tabCount)
     activeTabID = try container.decodeIfPresent(String.self, forKey: .activeTabID)
     agentStatus = try container.decodeIfPresent(String.self, forKey: .agentStatus)
+    branch = try container.decodeIfPresent(String.self, forKey: .branch)
   }
 }
 
@@ -447,7 +521,8 @@ nonisolated internal struct HerdrPane: Decodable, Equatable, Sendable, Identifia
     agent = try container.decodeIfPresent(String.self, forKey: .agent)
     title = try container.decodeIfPresent(String.self, forKey: .title)
     terminalTitle = try container.decodeIfPresent(String.self, forKey: .terminalTitle)
-    terminalTitleStripped = try container.decodeIfPresent(String.self, forKey: .terminalTitleStripped)
+    terminalTitleStripped = try container.decodeIfPresent(
+      String.self, forKey: .terminalTitleStripped)
     displayAgent = try container.decodeIfPresent(String.self, forKey: .displayAgent)
     agentStatus = try container.decodeIfPresent(String.self, forKey: .agentStatus)
     tokens = try container.decodeIfPresent([String: String].self, forKey: .tokens) ?? [:]
@@ -465,6 +540,8 @@ nonisolated internal struct HerdrAgent: Decodable, Equatable, Sendable, Identifi
   internal let displayAgent: String?
   internal let agentStatus: String?
   internal let focused: Bool
+  internal let cwd: String?
+  internal let foregroundCWD: String?
 
   internal var id: String { paneID ?? name ?? agent ?? "agent" }
 
@@ -477,7 +554,9 @@ nonisolated internal struct HerdrAgent: Decodable, Equatable, Sendable, Identifi
     title: String? = nil,
     displayAgent: String? = nil,
     agentStatus: String? = nil,
-    focused: Bool = false
+    focused: Bool = false,
+    cwd: String? = nil,
+    foregroundCWD: String? = nil
   ) {
     self.paneID = paneID
     self.workspaceID = workspaceID
@@ -488,6 +567,8 @@ nonisolated internal struct HerdrAgent: Decodable, Equatable, Sendable, Identifi
     self.displayAgent = displayAgent
     self.agentStatus = agentStatus
     self.focused = focused
+    self.cwd = cwd
+    self.foregroundCWD = foregroundCWD
   }
 
   private enum CodingKeys: String, CodingKey {
@@ -500,6 +581,8 @@ nonisolated internal struct HerdrAgent: Decodable, Equatable, Sendable, Identifi
     case displayAgent = "display_agent"
     case agentStatus = "agent_status"
     case focused
+    case cwd
+    case foregroundCWD = "foreground_cwd"
   }
 
   internal init(from decoder: Decoder) throws {
@@ -513,6 +596,8 @@ nonisolated internal struct HerdrAgent: Decodable, Equatable, Sendable, Identifi
     displayAgent = try container.decodeIfPresent(String.self, forKey: .displayAgent)
     agentStatus = try container.decodeIfPresent(String.self, forKey: .agentStatus)
     focused = try container.decodeIfPresent(Bool.self, forKey: .focused) ?? false
+    cwd = try container.decodeIfPresent(String.self, forKey: .cwd)
+    foregroundCWD = try container.decodeIfPresent(String.self, forKey: .foregroundCWD)
   }
 }
 
@@ -624,13 +709,6 @@ nonisolated internal struct HerdrLayoutRect: Decodable, Equatable, Sendable {
   internal let y: Int?
   internal let width: Int?
   internal let height: Int?
-
-  internal init(x: Int?, y: Int?, width: Int?, height: Int?) {
-    self.x = x
-    self.y = y
-    self.width = width
-    self.height = height
-  }
 }
 
 nonisolated internal struct HerdrSnapshotResponse: Decodable, Sendable {
@@ -731,5 +809,23 @@ nonisolated internal struct HerdrWorkspaceCloseParams: Encodable, Sendable {
 
   private enum CodingKeys: String, CodingKey {
     case workspaceID = "workspace_id"
+  }
+}
+
+nonisolated internal struct HerdrWorkspaceCreateParams: Encodable, Sendable {
+  internal let cwd: String?
+  internal let focus: Bool
+  internal let label: String?
+
+  internal init(cwd: String? = nil, focus: Bool, label: String? = nil) {
+    self.cwd = cwd
+    self.focus = focus
+    self.label = label
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case cwd
+    case focus
+    case label
   }
 }

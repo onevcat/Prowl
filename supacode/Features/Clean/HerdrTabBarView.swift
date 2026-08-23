@@ -4,10 +4,116 @@ import SwiftUI
 
 internal enum HerdrTabBarLayout {
   internal static let height: CGFloat = 34
-  internal static let minimumTabWidth: CGFloat = 92
-  internal static let tabHorizontalPadding: CGFloat = 10
+  internal static let minimumTabWidth: CGFloat = 46
+  internal static let barLeadingPadding: CGFloat = 0
+  internal static let tabTextLeadingPadding: CGFloat = 18
+  internal static let tabTrailingPadding: CGFloat = 6
   internal static let tabSpacing: CGFloat = 3
   internal static let closeButtonSize: CGFloat = 18
+  internal static let visibilityThreshold = 0.5
+}
+
+internal struct HerdrProcessTitle: Equatable, Sendable {
+  internal let processName: String
+  internal let directoryName: String
+
+  internal var displayLabel: String {
+    "\(processName) · \(directoryName)"
+  }
+
+  internal var accent: HerdrProcessAccent {
+    switch processName {
+    case "lazygit", "gitui": return .versionControl
+    case "codex", "omp", "pi", "claude", "claude-code", "opencode": return .agent
+    case "vim", "nvim", "vi": return .editor
+    default: return .neutral
+    }
+  }
+}
+
+internal enum HerdrProcessAccent: Equatable, Sendable {
+  case versionControl
+  case agent
+  case editor
+  case neutral
+
+  internal func color(for colorScheme: ColorScheme) -> Color {
+    switch self {
+    case .versionControl: return .orange
+    case .agent: return .cyan
+    case .editor: return .green
+    case .neutral: return colorScheme == .dark ? .primary : .secondary
+    }
+  }
+}
+
+internal enum HerdrTabAgentAccent: Equatable, Sendable {
+  case systemPrimary
+  case systemSecondary
+  case claude
+  case pi
+  case cursor
+  case opencode
+  case omp
+
+  internal func color(for colorScheme: ColorScheme) -> Color {
+    switch self {
+    case .systemPrimary: return .primary
+    case .systemSecondary: return .secondary
+    case .claude: return Self.rgb(red: 217, green: 119, blue: 87)
+    case .pi: return Self.rgb(red: 109, green: 93, blue: 251)
+    case .cursor:
+      return colorScheme == .dark
+        ? Self.rgb(red: 245, green: 245, blue: 245)
+        : Self.rgb(red: 17, green: 24, blue: 39)
+    case .opencode: return Self.rgb(red: 37, green: 99, blue: 235)
+    case .omp: return Self.rgb(red: 147, green: 51, blue: 234)
+    }
+  }
+
+  private static func rgb(red: Double, green: Double, blue: Double) -> Color {
+    Color(red: red / 255, green: green / 255, blue: blue / 255)
+  }
+}
+
+internal enum HerdrTabAgentIcon: String, Equatable, Sendable {
+  case generic = "HerdrAgentIcon"
+  case codex = "HerdrAgentCodexIcon"
+  case claude = "HerdrAgentClaudeIcon"
+  case pi = "HerdrAgentPiIcon"
+  case cursor = "HerdrAgentCursorIcon"
+  case opencode = "HerdrAgentOpencodeIcon"
+  case omp = "HerdrAgentOmpIcon"
+  case grok = "HerdrAgentGrokIcon"
+
+  internal var accent: HerdrTabAgentAccent {
+    switch self {
+    case .generic: return .systemSecondary
+    case .codex, .grok: return .systemPrimary
+    case .claude: return .claude
+    case .pi: return .pi
+    case .cursor: return .cursor
+    case .opencode: return .opencode
+    case .omp: return .omp
+    }
+  }
+
+  internal static func resolve(_ agent: HerdrAgent) -> Self {
+    for rawIdentifier in [agent.agent, agent.displayAgent, agent.name].compactMap({ $0 }) {
+      let identifier = rawIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+      switch identifier {
+      case "codex", "openai": return .codex
+      case "claude", "claude-code", "claude_code", "claude code", "anthropic": return .claude
+      case "pi": return .pi
+      case "cursor", "acp-cursor": return .cursor
+      case "opencode", "open-code", "acp-opencode": return .opencode
+      case "omp", "acp-omp", "oh-my-pi": return .omp
+      case "grok", "grok-build", "acp-grok": return .grok
+      default: continue
+      }
+    }
+    return .generic
+  }
 }
 
 internal struct HerdrTabBarItem: Equatable, Identifiable, Sendable {
@@ -16,22 +122,105 @@ internal struct HerdrTabBarItem: Equatable, Identifiable, Sendable {
   internal let label: String
   internal let isZoomed: Bool
   internal let isFocused: Bool
+  internal let agentIcon: HerdrTabAgentIcon?
+  internal let processTitle: HerdrProcessTitle?
+
+  internal var isAgent: Bool {
+    agentIcon != nil
+  }
+
+  internal init(
+    id: String,
+    workspaceID: String,
+    label: String,
+    isZoomed: Bool,
+    isFocused: Bool,
+    isAgent: Bool = false,
+    agentIcon: HerdrTabAgentIcon? = nil,
+    processTitle: HerdrProcessTitle? = nil
+  ) {
+    self.id = id
+    self.workspaceID = workspaceID
+    self.label = label
+    self.isZoomed = isZoomed
+    self.isFocused = isFocused
+    self.agentIcon = agentIcon ?? (isAgent ? .generic : nil)
+    self.processTitle = processTitle
+  }
 
   internal var displayLabel: String {
-    isZoomed ? "\(label) Z" : label
+    if let processTitle {
+      return processTitle.displayLabel
+    }
+    return isZoomed ? "\(label) Z" : label
   }
 }
 
 internal enum HerdrTabBarProjection {
+  internal static func processTitle(
+    in processInfo: HerdrPaneProcessInfo,
+    fallbackDirectory: String?
+  ) -> HerdrProcessTitle? {
+    let candidates = processInfo.foregroundProcesses.filter { process in
+      guard process.pid != processInfo.shellPID else { return false }
+      guard let name = processName(for: process) else { return false }
+      return !ignoredProcessNames.contains(name)
+    }
+    guard
+      let process = candidates.first(where: {
+        $0.pid == processInfo.foregroundProcessGroupID
+      }) ?? candidates.min(by: { $0.pid < $1.pid }),
+      let processName = processName(for: process),
+      let directoryName = directoryName(for: process.cwd ?? fallbackDirectory)
+    else { return nil }
+    guard !knownAgentProcessNames.contains(processName) else { return nil }
+    return HerdrProcessTitle(processName: processName, directoryName: directoryName)
+  }
+
   internal static func items(
     in snapshot: HerdrSessionSnapshot,
-    workspaceID: String?
+    workspaceID: String?,
+    processInfoByPaneID: [String: HerdrPaneProcessInfo] = [:],
+    focusedPaneID: String? = nil
   ) -> [HerdrTabBarItem] {
     guard let workspaceID else { return [] }
     let zoomedTabIDs = Set(
       snapshot.layouts
         .filter { $0.workspaceID == workspaceID && $0.zoomed }
         .map(\.tabID)
+    )
+    let agentIconsByTabID = snapshot.agents.reduce(into: [String: HerdrTabAgentIcon]()) {
+      icons, agent in
+      guard let tabID = agent.tabID else { return }
+      let icon = HerdrTabAgentIcon.resolve(agent)
+      guard let existingIcon = icons[tabID] else {
+        icons[tabID] = icon
+        return
+      }
+      if icon != .generic, existingIcon == .generic || agent.focused {
+        icons[tabID] = icon
+      }
+    }
+    let panesByTabID = Dictionary(grouping: snapshot.panes, by: \.tabID)
+    let processTitlesByTabID = Dictionary(
+      uniqueKeysWithValues: panesByTabID.compactMap { tabID, panes in
+        let title =
+          panes
+          .sorted {
+            if $0.id == focusedPaneID { return true }
+            if $1.id == focusedPaneID { return false }
+            return $0.focused && !$1.focused
+          }
+          .compactMap { pane -> HerdrProcessTitle? in
+            guard let processInfo = processInfoByPaneID[pane.id] else { return nil }
+            return Self.processTitle(
+              in: processInfo,
+              fallbackDirectory: pane.foregroundCWD ?? pane.cwd
+            )
+          }
+          .first
+        return title.map { (tabID, $0) }
+      }
     )
     return snapshot.tabs.compactMap { tab in
       guard tab.workspaceID == workspaceID else { return nil }
@@ -40,9 +229,31 @@ internal enum HerdrTabBarProjection {
         workspaceID: tab.workspaceID,
         label: tab.label,
         isZoomed: zoomedTabIDs.contains(tab.id),
-        isFocused: tab.id == snapshot.focusedTabID || tab.focused
+        isFocused: tab.id == snapshot.focusedTabID || tab.focused,
+        agentIcon: agentIconsByTabID[tab.id],
+        processTitle: processTitlesByTabID[tab.id]
       )
     }
+  }
+
+  private static let ignoredProcessNames: Set<String> = [
+    "ash", "bash", "command", "dash", "env", "fish", "git", "ksh", "login", "nu",
+    "pwsh", "sh", "sleep", "starship", "sudo", "tcsh", "zsh",
+  ]
+  private static let knownAgentProcessNames: Set<String> = [
+    "amp", "claude", "claude-code", "codex", "copilot", "cursor", "gemini", "kimi", "omp",
+    "opencode", "pi",
+  ]
+
+  private static func processName(for process: HerdrPaneProcess) -> String? {
+    ProcessDetection.basename(process.argv0 ?? process.name)?.lowercased()
+  }
+
+  private static func directoryName(for path: String?) -> String? {
+    guard let path, !path.isEmpty else { return nil }
+    let normalizedPath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    guard !normalizedPath.isEmpty else { return "/" }
+    return URL(fileURLWithPath: "/\(normalizedPath)").lastPathComponent
   }
 
   internal static func insertIndex(
@@ -66,13 +277,31 @@ internal enum HerdrTabBarProjection {
     let nextIndex = (currentIndex + direction + items.count) % items.count
     return items[nextIndex].id
   }
+
+  internal static func shouldShowActiveTreatment(
+    itemID: String,
+    selectedID: String?
+  ) -> Bool {
+    itemID == selectedID
+  }
+
+  internal static func shouldScrollToSelected(
+    selectedID: String?,
+    visibleIDs: Set<String>
+  ) -> Bool {
+    guard let selectedID else { return false }
+    return !visibleIDs.contains(selectedID)
+  }
 }
 
 internal struct HerdrTabBarView: View {
   @Bindable internal var store: StoreOf<HerdrTerminalChromeFeature>
+  internal var processInfoByPaneID: [String: HerdrPaneProcessInfo] = [:]
 
+  @Environment(\.colorScheme) private var colorScheme
   @State private var editor: Editor?
   @State private var hoveredTabID: String?
+  @State private var visibleTabIDs: Set<String> = []
 
   private enum Editor: Identifiable {
     case new(workspaceID: String, sourceTabID: String?)
@@ -80,7 +309,8 @@ internal struct HerdrTabBarView: View {
 
     internal var id: String {
       switch self {
-      case .new(let workspaceID, let sourceTabID): return "new-\(workspaceID)-\(sourceTabID ?? "current")"
+      case .new(let workspaceID, let sourceTabID):
+        return "new-\(workspaceID)-\(sourceTabID ?? "current")"
       case .rename(let tabID, _): return "rename-\(tabID)"
       }
     }
@@ -95,25 +325,32 @@ internal struct HerdrTabBarView: View {
             ForEach(items) { item in
               tabButton(item)
                 .id(item.id)
+                .onScrollVisibilityChange(threshold: HerdrTabBarLayout.visibilityThreshold) {
+                  isVisible in
+                  if isVisible {
+                    visibleTabIDs.insert(item.id)
+                  } else {
+                    visibleTabIDs.remove(item.id)
+                  }
+                }
             }
           }
-          .padding(.horizontal, 4)
+          .padding(.leading, HerdrTabBarLayout.barLeadingPadding)
+          .padding(.trailing, 4)
         }
         .scrollIndicators(.never)
         .onAppear {
           scrollToSelected(proxy, selectedID: store.selectedTabID)
         }
         .onChange(of: store.selectedTabID) { _, selectedID in
-          withAnimation(.easeInOut(duration: 0.16)) {
-            scrollToSelected(proxy, selectedID: selectedID)
-          }
+          scrollToSelected(proxy, selectedID: selectedID)
         }
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
 
       Button {
         guard let workspaceID else { return }
-        editor = .new(workspaceID: workspaceID, sourceTabID: nil)
+        store.send(.newTabRequested(workspaceID: workspaceID, label: nil, sourceTabID: nil))
       } label: {
         Image(systemName: "plus")
           .font(.system(size: 12, weight: .semibold))
@@ -126,25 +363,21 @@ internal struct HerdrTabBarView: View {
       .accessibilityLabel("New tab")
       .disabled(workspaceID == nil || store.pendingMutation != nil)
     }
-    .padding(.horizontal, 8)
+    .padding(.leading, HerdrTabBarLayout.barLeadingPadding)
+    .padding(.trailing, 8)
     .frame(height: HerdrTabBarLayout.height)
-    .glassEffect(
-      .regular.tint(Color(nsColor: .windowBackgroundColor).opacity(0.72)),
-      in: Rectangle()
-    )
     .background {
       HerdrTabBarScrollInterceptor { delta in
         let direction = delta > 0 ? -1 : 1
-        guard let targetID = HerdrTabBarProjection.cycleTarget(
-          selectedID: store.selectedTabID,
-          direction: direction,
-          items: tabItems
-        ) else { return }
+        guard
+          let targetID = HerdrTabBarProjection.cycleTarget(
+            selectedID: store.selectedTabID,
+            direction: direction,
+            items: tabItems
+          )
+        else { return }
         store.send(.focusTabTapped(targetID))
       }
-    }
-    .overlay(alignment: .bottom) {
-      Divider()
     }
     .sheet(item: $editor) { editor in
       editorView(editor)
@@ -179,40 +412,56 @@ internal struct HerdrTabBarView: View {
   }
 
   private var tabItems: [HerdrTabBarItem] {
-    HerdrTabBarProjection.items(in: store.snapshot, workspaceID: workspaceID)
+    HerdrTabBarProjection.items(
+      in: store.snapshot,
+      workspaceID: workspaceID,
+      processInfoByPaneID: processInfoByPaneID,
+      focusedPaneID: store.selectedPaneID ?? store.snapshot.focusedPaneID
+    )
   }
 
   private func scrollToSelected(_ proxy: ScrollViewProxy, selectedID: String?) {
-    guard let selectedID else { return }
+    guard
+      HerdrTabBarProjection.shouldScrollToSelected(
+        selectedID: selectedID,
+        visibleIDs: visibleTabIDs
+      ),
+      let selectedID
+    else { return }
     proxy.scrollTo(selectedID, anchor: .center)
   }
 
   private func tabButton(_ item: HerdrTabBarItem) -> some View {
-    let isActive = store.selectedTabID == item.id || (store.selectedTabID == nil && item.isFocused)
+    let selectedID = store.selectedTabID ?? tabItems.first(where: { $0.isFocused })?.id
+    let isActive = HerdrTabBarProjection.shouldShowActiveTreatment(
+      itemID: item.id,
+      selectedID: selectedID
+    )
     let isHovered = hoveredTabID == item.id
     return ZStack(alignment: .trailing) {
       Button {
         store.send(.focusTabTapped(item.id))
       } label: {
-        HStack(spacing: 6) {
-          Text(item.displayLabel)
-            .font(.system(size: 12.5, weight: isActive ? .semibold : .medium))
-            .lineLimit(1)
-            .truncationMode(.middle)
-            .frame(minWidth: HerdrTabBarLayout.minimumTabWidth, alignment: .leading)
-          Spacer(minLength: 4)
+        HStack(spacing: 3) {
+          if let agentIcon = item.agentIcon {
+            Image(agentIcon.rawValue)
+              .resizable()
+              .foregroundStyle(agentIcon.accent.color(for: colorScheme))
+              .frame(width: 14, height: 14)
+              .accessibilityHidden(true)
+          }
+          tabTitleLabel(item, isActive: isActive)
           Color.clear
             .frame(width: HerdrTabBarLayout.closeButtonSize)
         }
-        .padding(.horizontal, HerdrTabBarLayout.tabHorizontalPadding)
+        .padding(.leading, HerdrTabBarLayout.tabTextLeadingPadding)
+        .padding(.trailing, HerdrTabBarLayout.tabTrailingPadding)
         .frame(minHeight: 26)
         .background {
-          RoundedRectangle(cornerRadius: 6, style: .continuous)
-            .fill(isActive ? Color.accentColor.opacity(0.2) : isHovered ? Color.primary.opacity(0.07) : .clear)
-        }
-        .overlay {
-          RoundedRectangle(cornerRadius: 6, style: .continuous)
-            .strokeBorder(isActive ? Color.accentColor.opacity(0.45) : .clear, lineWidth: 1)
+          Rectangle()
+            .fill(
+              isActive
+                ? Color.accentColor.opacity(0.2) : isHovered ? Color.primary.opacity(0.07) : .clear)
         }
         .contentShape(.rect)
       }
@@ -225,11 +474,12 @@ internal struct HerdrTabBarView: View {
         } label: {
           Image(systemName: "xmark")
             .font(.system(size: 9, weight: .bold))
-            .frame(width: HerdrTabBarLayout.closeButtonSize, height: HerdrTabBarLayout.closeButtonSize)
+            .frame(
+              width: HerdrTabBarLayout.closeButtonSize, height: HerdrTabBarLayout.closeButtonSize)
         }
         .buttonStyle(.plain)
-        .foregroundStyle(.secondary)
-        .padding(.trailing, HerdrTabBarLayout.tabHorizontalPadding)
+        .foregroundStyle(.tertiary)
+        .padding(.trailing, HerdrTabBarLayout.tabTrailingPadding)
         .help("Close tab")
         .accessibilityLabel("Close tab \(item.displayLabel)")
         .disabled(store.pendingMutation != nil)
@@ -264,6 +514,51 @@ internal struct HerdrTabBarView: View {
       else { return false }
       store.send(.moveTabRequested(tabID: sourceID, insertIndex: insertIndex))
       return true
+    }
+  }
+
+  @ViewBuilder
+  private func tabTitleLabel(_ item: HerdrTabBarItem, isActive: Bool) -> some View {
+    if let processTitle = item.processTitle {
+      HStack(spacing: 3) {
+        Text(processTitle.processName)
+          .font(
+            .custom(
+              HerdrChromeTypography.titleFontFamily,
+              size: HerdrChromeTypography.processTitleFontSize
+            )
+            .weight(isActive ? .semibold : .medium)
+          )
+          .foregroundStyle(processTitle.accent.color(for: colorScheme))
+        Text("•")
+          .font(.system(size: 8))
+          .foregroundStyle(.tertiary)
+          .offset(y: -0.5)
+        Text(processTitle.directoryName)
+          .font(
+            .custom(
+              HerdrChromeTypography.titleFontFamily,
+              size: HerdrChromeTypography.tabTitleFontSize
+            )
+            .weight(isActive ? .semibold : .medium)
+          )
+          .foregroundStyle(.secondary)
+      }
+      .lineLimit(1)
+      .truncationMode(.middle)
+      .frame(minWidth: HerdrTabBarLayout.minimumTabWidth, alignment: .leading)
+    } else {
+      Text(item.displayLabel)
+        .font(
+          .custom(
+            HerdrChromeTypography.titleFontFamily,
+            size: HerdrChromeTypography.tabTitleFontSize
+          )
+          .weight(isActive ? .semibold : .medium)
+        )
+        .lineLimit(1)
+        .truncationMode(.middle)
+        .frame(minWidth: HerdrTabBarLayout.minimumTabWidth, alignment: .leading)
     }
   }
 

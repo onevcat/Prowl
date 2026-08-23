@@ -3,7 +3,7 @@ import SwiftUI
 
 internal struct CleanRootView: View {
   @Bindable internal var store: StoreOf<CleanAppFeature>
-  internal let terminalHost: CleanTerminalHost
+  @Bindable internal var terminalHost: CleanTerminalHost
 
   internal var body: some View {
     HStack(spacing: 0) {
@@ -23,7 +23,8 @@ internal struct CleanRootView: View {
             store: store.scope(
               state: \.herdrTerminalChrome,
               action: \.herdrTerminalChrome
-            )
+            ),
+            processInfoByPaneID: terminalHost.processInfoByPaneID
           )
         }
 
@@ -51,6 +52,26 @@ internal struct CleanRootView: View {
     .onDisappear {
       terminalHost.suspend()
     }
+    .task(id: herdrProcessPaneKey) {
+      terminalHost.updateHerdrProcessPanes(
+        store.herdrTerminalChrome.snapshot.panes,
+        focusedPaneID: herdrProcessFocusedPaneID
+      )
+    }
     .alert($store.scope(state: \.alert, action: \.alert))
+  }
+
+  private var herdrProcessPaneKey: String {
+    let snapshot = store.herdrTerminalChrome.snapshot
+    return snapshot.panes
+      .map { "\($0.id):\($0.tabID):\($0.focused)" }
+      .joined(separator: "|") + "|focused:\(herdrProcessFocusedPaneID ?? "")"
+  }
+
+  private var herdrProcessFocusedPaneID: String? {
+    HerdrProcessPaneTracking.resolvedFocusedPaneID(
+      selectedPaneID: store.herdrTerminalChrome.selectedPaneID,
+      snapshotFocusedPaneID: store.herdrTerminalChrome.snapshot.focusedPaneID
+    )
   }
 }
