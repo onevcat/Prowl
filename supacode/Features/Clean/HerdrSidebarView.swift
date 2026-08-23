@@ -49,7 +49,10 @@ internal struct HerdrSidebarView: View {
       footer
     }
     .frame(maxHeight: .infinity)
-    .glassEffect(.regular, in: Rectangle())
+    .glassEffect(
+      .regular.tint(Color(nsColor: .windowBackgroundColor).opacity(0.72)),
+      in: Rectangle()
+    )
     .overlay(alignment: .trailing) {
       Divider()
     }

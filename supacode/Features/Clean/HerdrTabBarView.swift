@@ -128,7 +128,10 @@ internal struct HerdrTabBarView: View {
     }
     .padding(.horizontal, 8)
     .frame(height: HerdrTabBarLayout.height)
-    .glassEffect(.regular, in: Rectangle())
+    .glassEffect(
+      .regular.tint(Color(nsColor: .windowBackgroundColor).opacity(0.72)),
+      in: Rectangle()
+    )
     .background {
       HerdrTabBarScrollInterceptor { delta in
         let direction = delta > 0 ? -1 : 1
