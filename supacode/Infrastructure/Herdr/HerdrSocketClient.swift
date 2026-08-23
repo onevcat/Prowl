@@ -128,6 +128,46 @@ nonisolated internal struct HerdrSocketClient: Sendable {
     )
   }
 
+  internal func createTab(workspaceID: String, label: String?) async throws {
+    try await performRequest(
+      id: "prowl-herdr-tab-create",
+      method: "tab.create",
+      params: HerdrTabCreateParams(workspaceID: workspaceID, focus: true, label: label)
+    )
+  }
+
+  internal func renameTab(tabID: String, label: String) async throws {
+    try await performRequest(
+      id: "prowl-herdr-tab-rename",
+      method: "tab.rename",
+      params: HerdrTabRenameParams(tabID: tabID, label: label)
+    )
+  }
+
+  internal func moveTab(tabID: String, insertIndex: Int) async throws {
+    try await performRequest(
+      id: "prowl-herdr-tab-move",
+      method: "tab.move",
+      params: HerdrTabMoveParams(tabID: tabID, insertIndex: insertIndex)
+    )
+  }
+
+  internal func closeTab(tabID: String) async throws {
+    try await performRequest(
+      id: "prowl-herdr-tab-close",
+      method: "tab.close",
+      params: HerdrTabFocusParams(tabID: tabID)
+    )
+  }
+
+  internal func closeWorkspace(workspaceID: String) async throws {
+    try await performRequest(
+      id: "prowl-herdr-workspace-close",
+      method: "workspace.close",
+      params: HerdrWorkspaceCloseParams(workspaceID: workspaceID)
+    )
+  }
+
   internal func events() -> AsyncStream<HerdrEventStreamState> {
     let socketPath = socketPath
     return AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
@@ -307,6 +347,14 @@ nonisolated internal struct HerdrSocketClient: Sendable {
   }
 
   private func performFocus<Params: Encodable & Sendable>(
+    id: String,
+    method: String,
+    params: Params
+  ) async throws {
+    try await performRequest(id: id, method: method, params: params)
+  }
+
+  private func performRequest<Params: Encodable & Sendable>(
     id: String,
     method: String,
     params: Params

@@ -8,6 +8,24 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct HerdrTerminalChromeTests {
+  @Test func tabMutationParamsUseHerdrWireNames() throws {
+    let encoder = JSONEncoder()
+    let create = try JSONSerialization.jsonObject(
+      with: encoder.encode(
+        HerdrTabCreateParams(workspaceID: "w1", focus: true, label: "logs")
+      )
+    ) as? [String: Any]
+    let move = try JSONSerialization.jsonObject(
+      with: encoder.encode(HerdrTabMoveParams(tabID: "w1:t1", insertIndex: 2))
+    ) as? [String: Any]
+
+    #expect(create?["workspace_id"] as? String == "w1")
+    #expect(create?["focus"] as? Bool == true)
+    #expect(create?["label"] as? String == "logs")
+    #expect(move?["tab_id"] as? String == "w1:t1")
+    #expect(move?["insert_index"] as? Int == 2)
+  }
+
   @Test(arguments: [
     (nil, HerdrAgentStatusKind.unknown),
     ("unknown", HerdrAgentStatusKind.unknown),
@@ -143,7 +161,12 @@ struct HerdrTerminalChromeTests {
         focusTab: { _ in },
         focusPane: { paneID in
           calls.withValue { $0.append(paneID) }
-        }
+        },
+        createTab: { _, _ in },
+        renameTab: { _, _ in },
+        moveTab: { _, _ in },
+        closeTab: { _ in },
+        closeWorkspace: { _ in }
       )
     }
 
@@ -180,7 +203,12 @@ struct HerdrTerminalChromeTests {
         focusPane: { paneID in
           calls.withValue { $0.append(paneID) }
           throw HerdrSocketError.serverError(code: "not_found", message: "pane not found")
-        }
+        },
+        createTab: { _, _ in },
+        renameTab: { _, _ in },
+        moveTab: { _, _ in },
+        closeTab: { _ in },
+        closeWorkspace: { _ in }
       )
     }
 
@@ -199,6 +227,123 @@ struct HerdrTerminalChromeTests {
       $0.selectedTabID = "t1"
     }
     #expect(calls.value == ["p2"])
+  }
+
+  @Test(.dependencies) func createTabMutationRefreshesAfterServerSuccess() async {
+    let calls = LockIsolated<[String]>([])
+    let clock = TestClock()
+    let snapshot = makeSnapshot(focusedPaneID: "p1")
+    var initialState = HerdrTerminalChromeFeature.State()
+    initialState.connection = .connected
+    initialState.snapshot = snapshot
+    initialState.selectedWorkspaceID = "w1"
+    initialState.selectedTabID = "t1"
+    initialState.selectedPaneID = "p1"
+    initialState.subscribedPaneIDs = ["p1", "p2"]
+    let store = TestStore(initialState: initialState) {
+      HerdrTerminalChromeFeature()
+    } withDependencies: {
+      $0.continuousClock = clock
+      $0.herdrTerminalChromeClient = testClient(snapshot: snapshot) {
+        calls.withValue { $0.append("create:w1:logs") }
+      }
+    }
+
+    await store.send(.newTabRequested(workspaceID: "w1", label: "logs")) {
+      $0.pendingMutation = .createTab(workspaceID: "w1", label: "logs")
+      $0.mutationGeneration = 1
+    }
+    await store.receive(.mutationResponse(1, .success)) {
+      $0.pendingMutation = nil
+    }
+    await store.receive(.refreshResponseWithGeneration(0, .success(snapshot)))
+    #expect(calls.value == ["create:w1:logs"])
+  }
+
+  @Test(.dependencies) func lastTabConfirmationClosesWorkspaceOnlyAfterConfirm() async {
+    let calls = LockIsolated<[String]>([])
+    let clock = TestClock()
+    let (closeWorkspaceStream, closeWorkspaceContinuation) = AsyncStream.makeStream(of: Void.self)
+    let snapshot = makeSnapshot(focusedPaneID: "p1")
+    var initialState = HerdrTerminalChromeFeature.State()
+    initialState.connection = .connected
+    initialState.snapshot = snapshot
+    initialState.selectedWorkspaceID = "w1"
+    initialState.selectedTabID = "t1"
+    initialState.selectedPaneID = "p1"
+    initialState.subscribedPaneIDs = ["p1", "p2"]
+    let store = TestStore(initialState: initialState) {
+      HerdrTerminalChromeFeature()
+    } withDependencies: {
+      $0.continuousClock = clock
+      $0.herdrTerminalChromeClient = testClient(
+        snapshot: snapshot,
+        closeTab: {
+          calls.withValue { $0.append("close-tab") }
+          throw HerdrSocketError.serverError(
+            code: "confirmation_required",
+            message: "closing this tab would close a worktree group"
+          )
+        },
+        closeWorkspace: {
+          calls.withValue { $0.append("close-workspace:w1") }
+          for await _ in closeWorkspaceStream {
+            break
+          }
+        }
+      )
+    }
+
+    await store.send(.closeTabRequested(tabID: "w1:t1", workspaceID: "w1")) {
+      $0.pendingMutation = .closeTab(tabID: "w1:t1", workspaceID: "w1", isLastTab: true)
+      $0.mutationGeneration = 1
+    }
+    await store.receive(
+      .mutationResponse(
+        1,
+        .failure(
+          .server(
+            code: "confirmation_required",
+            message: "closing this tab would close a worktree group"
+          )
+        )
+      )
+    ) {
+      $0.pendingMutation = nil
+      $0.closeConfirmation = .init(workspaceID: "w1")
+    }
+    await store.send(.closeConfirmationConfirmed) {
+      $0.closeConfirmation = nil
+      $0.pendingMutation = .closeWorkspace(workspaceID: "w1")
+      $0.mutationGeneration = 2
+    }
+    closeWorkspaceContinuation.yield(())
+    await store.receive(.mutationResponse(2, .success)) {
+      $0.pendingMutation = nil
+    }
+    await store.receive(.refreshResponseWithGeneration(0, .success(snapshot)))
+    closeWorkspaceContinuation.finish()
+    #expect(calls.value == ["close-tab", "close-workspace:w1"])
+  }
+
+  private func testClient(
+    snapshot: HerdrSessionSnapshot,
+    createTab: @escaping @Sendable () async throws -> Void = {},
+    closeTab: @escaping @Sendable () async throws -> Void = {},
+    closeWorkspace: @escaping @Sendable () async throws -> Void = {}
+  ) -> HerdrTerminalChromeClient {
+    HerdrTerminalChromeClient(
+      snapshot: { snapshot },
+      events: { _ in AsyncStream { $0.finish() } },
+      focusWorkspace: { _ in },
+      focusTab: { _ in },
+      focusPane: { _ in },
+      createTab: { _, _ in try await createTab() },
+      renameTab: { _, _ in },
+      moveTab: { _, _ in },
+      closeTab: { _ in try await closeTab() },
+      closeWorkspace: { _ in try await closeWorkspace() }
+    )
   }
 
   private func makeSnapshot(focusedPaneID: String) -> HerdrSessionSnapshot {

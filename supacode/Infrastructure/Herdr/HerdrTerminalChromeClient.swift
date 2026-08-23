@@ -43,6 +43,13 @@ nonisolated internal enum HerdrTerminalChromeFailure: Error, Equatable, Sendable
     }
     return false
   }
+
+  internal var isConfirmationRequired: Bool {
+    if case .server(let code, _) = self {
+      return code == "confirmation_required"
+    }
+    return false
+  }
 }
 
 nonisolated internal struct HerdrTerminalChromeClient: Sendable {
@@ -51,19 +58,34 @@ nonisolated internal struct HerdrTerminalChromeClient: Sendable {
   internal var focusWorkspace: @Sendable (String) async throws -> Void
   internal var focusTab: @Sendable (String) async throws -> Void
   internal var focusPane: @Sendable (String) async throws -> Void
+  internal var createTab: @Sendable (String, String?) async throws -> Void
+  internal var renameTab: @Sendable (String, String) async throws -> Void
+  internal var moveTab: @Sendable (String, Int) async throws -> Void
+  internal var closeTab: @Sendable (String) async throws -> Void
+  internal var closeWorkspace: @Sendable (String) async throws -> Void
 
   internal init(
     snapshot: @escaping @Sendable () async throws -> HerdrSessionSnapshot,
     events: @escaping @Sendable (Set<String>) -> AsyncStream<HerdrEventStreamState>,
     focusWorkspace: @escaping @Sendable (String) async throws -> Void,
     focusTab: @escaping @Sendable (String) async throws -> Void,
-    focusPane: @escaping @Sendable (String) async throws -> Void
+    focusPane: @escaping @Sendable (String) async throws -> Void,
+    createTab: @escaping @Sendable (String, String?) async throws -> Void,
+    renameTab: @escaping @Sendable (String, String) async throws -> Void,
+    moveTab: @escaping @Sendable (String, Int) async throws -> Void,
+    closeTab: @escaping @Sendable (String) async throws -> Void,
+    closeWorkspace: @escaping @Sendable (String) async throws -> Void
   ) {
     self.snapshot = snapshot
     self.events = events
     self.focusWorkspace = focusWorkspace
     self.focusTab = focusTab
     self.focusPane = focusPane
+    self.createTab = createTab
+    self.renameTab = renameTab
+    self.moveTab = moveTab
+    self.closeTab = closeTab
+    self.closeWorkspace = closeWorkspace
   }
 }
 
@@ -85,6 +107,21 @@ extension HerdrTerminalChromeClient: DependencyKey {
       },
       focusPane: { paneID in
         try await socketClient.focusPane(paneID)
+      },
+      createTab: { workspaceID, label in
+        try await socketClient.createTab(workspaceID: workspaceID, label: label)
+      },
+      renameTab: { tabID, label in
+        try await socketClient.renameTab(tabID: tabID, label: label)
+      },
+      moveTab: { tabID, insertIndex in
+        try await socketClient.moveTab(tabID: tabID, insertIndex: insertIndex)
+      },
+      closeTab: { tabID in
+        try await socketClient.closeTab(tabID: tabID)
+      },
+      closeWorkspace: { workspaceID in
+        try await socketClient.closeWorkspace(workspaceID: workspaceID)
       }
     )
   }()
@@ -94,7 +131,12 @@ extension HerdrTerminalChromeClient: DependencyKey {
     events: { _ in AsyncStream { $0.finish() } },
     focusWorkspace: { _ in },
     focusTab: { _ in },
-    focusPane: { _ in }
+    focusPane: { _ in },
+    createTab: { _, _ in },
+    renameTab: { _, _ in },
+    moveTab: { _, _ in },
+    closeTab: { _ in },
+    closeWorkspace: { _ in }
   )
 }
 

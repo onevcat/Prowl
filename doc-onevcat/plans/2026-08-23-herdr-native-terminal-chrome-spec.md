@@ -184,7 +184,7 @@ internal enum Action: Equatable {
   case moveTabSubmitted(tabID: String, insertIndex: Int)
   case closeTabTapped(tabID: String, workspaceID: String, isLastTab: Bool)
   case closeWorkspaceConfirmed(String)
-  case mutationResponse(Result<Void, HerdrTerminalChromeFailure>)
+  case mutationResponse(HerdrTerminalChromeFeature.MutationResult)
   case focusResponse(FocusResult)
   case delegate(DelegateAction)
   case stop

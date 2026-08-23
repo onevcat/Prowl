@@ -20,8 +20,12 @@ internal struct HerdrTerminalChromeFeature {
     internal var selectedTabID: String?
     internal var selectedPaneID: String?
     internal var pendingFocus: FocusTarget?
+    internal var pendingMutation: Mutation?
+    internal var closeConfirmation: CloseConfirmation?
+    internal var mutationError: HerdrTerminalChromeFailure?
     internal var refreshGeneration: UInt64 = 0
     internal var subscribedPaneIDs: Set<String> = []
+    internal var mutationGeneration: UInt64 = 0
 
     internal var isVisible: Bool {
       connection == .connected
@@ -39,6 +43,23 @@ internal struct HerdrTerminalChromeFeature {
         return id
       }
     }
+  }
+
+  internal enum Mutation: Equatable, Sendable {
+    case createTab(workspaceID: String, label: String?)
+    case renameTab(tabID: String, label: String)
+    case moveTab(tabID: String, insertIndex: Int)
+    case closeTab(tabID: String, workspaceID: String, isLastTab: Bool)
+    case closeWorkspace(workspaceID: String)
+  }
+
+  internal struct CloseConfirmation: Equatable, Sendable {
+    internal let workspaceID: String
+  }
+
+  internal enum MutationResult: Equatable, Sendable {
+    case success
+    case failure(HerdrTerminalChromeFailure)
   }
 
   internal enum DelegateAction: Equatable {
@@ -63,6 +84,13 @@ internal struct HerdrTerminalChromeFeature {
     case focusTabTapped(String)
     case focusPaneTapped(String)
     case focusResponse(FocusResult)
+    case newTabRequested(workspaceID: String, label: String?)
+    case renameTabRequested(tabID: String, label: String)
+    case moveTabRequested(tabID: String, insertIndex: Int)
+    case closeTabRequested(tabID: String, workspaceID: String)
+    case closeConfirmationConfirmed
+    case closeConfirmationCancelled
+    case mutationResponse(UInt64, MutationResult)
     case delegate(DelegateAction)
     case stop
   }
@@ -72,6 +100,7 @@ internal struct HerdrTerminalChromeFeature {
     case refreshDebounce
     case refresh
     case focus
+    case mutation
   }
 
   @Dependency(HerdrTerminalChromeClient.self) private var client
@@ -87,13 +116,18 @@ internal struct HerdrTerminalChromeFeature {
         state.selectedTabID = nil
         state.selectedPaneID = nil
         state.pendingFocus = nil
+        state.pendingMutation = nil
+        state.closeConfirmation = nil
+        state.mutationError = nil
         state.subscribedPaneIDs = []
         state.refreshGeneration &+= 1
+        state.mutationGeneration &+= 1
         return .merge(
           .cancel(id: CancelID.lifecycle),
           .cancel(id: CancelID.refreshDebounce),
           .cancel(id: CancelID.refresh),
-          .cancel(id: CancelID.focus)
+          .cancel(id: CancelID.focus),
+          .cancel(id: CancelID.mutation)
         )
 
       case .foregroundChanged(true):
@@ -103,13 +137,18 @@ internal struct HerdrTerminalChromeFeature {
         state.selectedTabID = nil
         state.selectedPaneID = nil
         state.pendingFocus = nil
+        state.pendingMutation = nil
+        state.closeConfirmation = nil
+        state.mutationError = nil
         state.subscribedPaneIDs = []
         state.refreshGeneration &+= 1
+        state.mutationGeneration &+= 1
         return .merge(
           .cancel(id: CancelID.lifecycle),
           .cancel(id: CancelID.refreshDebounce),
           .cancel(id: CancelID.refresh),
           .cancel(id: CancelID.focus),
+          .cancel(id: CancelID.mutation),
           lifecycleEffect()
             .cancellable(id: CancelID.lifecycle, cancelInFlight: true)
         )
@@ -142,18 +181,22 @@ internal struct HerdrTerminalChromeFeature {
         .cancellable(id: CancelID.refreshDebounce, cancelInFlight: true)
 
       case .eventStream(.disconnected(let error)):
-    let failure = HerdrTerminalChromeFailure.map(error)
+        let failure = HerdrTerminalChromeFailure.map(error)
         if failure.isIncompatibleProtocol {
           return handleFailure(&state, failure: failure)
         }
         state.refreshGeneration &+= 1
+        state.mutationGeneration &+= 1
         state.connection = .connecting
         state.snapshot = .empty
+        state.pendingMutation = nil
+        state.closeConfirmation = nil
         state.subscribedPaneIDs = []
         return .merge(
           .cancel(id: CancelID.refreshDebounce),
           .cancel(id: CancelID.refresh),
-          .cancel(id: CancelID.focus)
+          .cancel(id: CancelID.focus),
+          .cancel(id: CancelID.mutation)
         )
 
       case .debouncedRefresh:
@@ -177,8 +220,14 @@ internal struct HerdrTerminalChromeFeature {
           }
           state.connection = .connecting
           state.snapshot = .empty
+          state.pendingMutation = nil
+          state.closeConfirmation = nil
           state.subscribedPaneIDs = []
-          return restartLifecycleEffect()
+          state.mutationGeneration &+= 1
+          return .merge(
+            .cancel(id: CancelID.mutation),
+            restartLifecycleEffect()
+          )
         }
 
       case .focusWorkspaceTapped(let workspaceID):
@@ -211,10 +260,113 @@ internal struct HerdrTerminalChromeFeature {
         return refreshEffect(generation: state.refreshGeneration)
           .cancellable(id: CancelID.refresh, cancelInFlight: true)
 
+      case .newTabRequested(let workspaceID, let label):
+        guard state.connection == .connected else { return .none }
+        return startMutation(
+          &state,
+          .createTab(workspaceID: workspaceID, label: label)
+        )
+
+      case .renameTabRequested(let tabID, let label):
+        guard state.connection == .connected, !label.isEmpty else { return .none }
+        return startMutation(&state, .renameTab(tabID: tabID, label: label))
+
+      case .moveTabRequested(let tabID, let insertIndex):
+        guard state.connection == .connected, insertIndex >= 0 else { return .none }
+        return startMutation(
+          &state,
+          .moveTab(tabID: tabID, insertIndex: insertIndex)
+        )
+
+      case .closeTabRequested(let tabID, let workspaceID):
+        guard state.connection == .connected else { return .none }
+        let isLastTab = state.snapshot.tabs.filter { $0.workspaceID == workspaceID }.count <= 1
+        return startMutation(
+          &state,
+          .closeTab(
+            tabID: tabID,
+            workspaceID: workspaceID,
+            isLastTab: isLastTab
+          )
+        )
+
+      case .closeConfirmationConfirmed:
+        guard let confirmation = state.closeConfirmation else { return .none }
+        state.closeConfirmation = nil
+        return startMutation(
+          &state,
+          .closeWorkspace(workspaceID: confirmation.workspaceID)
+        )
+
+      case .closeConfirmationCancelled:
+        state.closeConfirmation = nil
+        state.pendingMutation = nil
+        return .none
+
+      case .mutationResponse(let generation, let result):
+        guard generation == state.mutationGeneration else { return .none }
+        let pendingMutation = state.pendingMutation
+        state.pendingMutation = nil
+        switch result {
+        case .success:
+          state.mutationError = nil
+          return refreshEffect(generation: state.refreshGeneration)
+            .cancellable(id: CancelID.refresh, cancelInFlight: true)
+        case .failure(let failure):
+          if case .closeTab(_, let workspaceID, true) = pendingMutation,
+            failure.isConfirmationRequired
+          {
+            state.closeConfirmation = CloseConfirmation(workspaceID: workspaceID)
+            state.mutationError = nil
+            return .none
+          }
+          state.mutationError = failure
+          if failure.isNotFound {
+            return refreshEffect(generation: state.refreshGeneration)
+              .cancellable(id: CancelID.refresh, cancelInFlight: true)
+          }
+          return .none
+        }
+
       case .delegate:
         return .none
       }
     }
+  }
+
+  private func startMutation(
+    _ state: inout State,
+    _ mutation: Mutation
+  ) -> Effect<Action> {
+    state.pendingMutation = mutation
+    state.mutationError = nil
+    state.mutationGeneration &+= 1
+    let generation = state.mutationGeneration
+    let client = client
+    return .run { send in
+      do {
+        switch mutation {
+        case .createTab(let workspaceID, let label):
+          try await client.createTab(workspaceID, label)
+        case .renameTab(let tabID, let label):
+          try await client.renameTab(tabID, label)
+        case .moveTab(let tabID, let insertIndex):
+          try await client.moveTab(tabID, insertIndex)
+        case .closeTab(let tabID, _, _):
+          try await client.closeTab(tabID)
+        case .closeWorkspace(let workspaceID):
+          try await client.closeWorkspace(workspaceID)
+        }
+        guard !Task.isCancelled else { return }
+        await send(.mutationResponse(generation, .success))
+      } catch {
+        guard !Task.isCancelled else { return }
+        await send(
+          .mutationResponse(generation, .failure(HerdrTerminalChromeFailure.map(error)))
+        )
+      }
+    }
+    .cancellable(id: CancelID.mutation, cancelInFlight: true)
   }
 
   private func lifecycleEffect() -> Effect<Action> {
@@ -306,11 +458,16 @@ internal struct HerdrTerminalChromeFeature {
       state.selectedTabID = nil
       state.selectedPaneID = nil
       state.pendingFocus = nil
+      state.pendingMutation = nil
+      state.closeConfirmation = nil
+      state.mutationError = nil
+      state.mutationGeneration &+= 1
       return .merge(
         .cancel(id: CancelID.lifecycle),
         .cancel(id: CancelID.refreshDebounce),
         .cancel(id: CancelID.refresh),
         .cancel(id: CancelID.focus),
+        .cancel(id: CancelID.mutation),
         .send(.delegate(.compatibilityFailure(error)))
       )
     }
@@ -319,6 +476,9 @@ internal struct HerdrTerminalChromeFeature {
     state.selectedWorkspaceID = nil
     state.selectedTabID = nil
     state.selectedPaneID = nil
+    state.pendingMutation = nil
+    state.closeConfirmation = nil
+    state.mutationGeneration &+= 1
     herdrTerminalChromeLogger.debug("Terminal chrome unavailable: \(String(describing: failure))")
     return .none
   }

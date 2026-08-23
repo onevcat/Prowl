@@ -651,3 +651,43 @@ nonisolated internal struct HerdrPaneFocusParams: Encodable, Sendable {
     case paneID = "pane_id"
   }
 }
+
+nonisolated internal struct HerdrTabCreateParams: Encodable, Sendable {
+  internal let workspaceID: String
+  internal let focus: Bool
+  internal let label: String?
+
+  private enum CodingKeys: String, CodingKey {
+    case workspaceID = "workspace_id"
+    case focus
+    case label
+  }
+}
+
+nonisolated internal struct HerdrTabRenameParams: Encodable, Sendable {
+  internal let tabID: String
+  internal let label: String
+
+  private enum CodingKeys: String, CodingKey {
+    case tabID = "tab_id"
+    case label
+  }
+}
+
+nonisolated internal struct HerdrTabMoveParams: Encodable, Sendable {
+  internal let tabID: String
+  internal let insertIndex: Int
+
+  private enum CodingKeys: String, CodingKey {
+    case tabID = "tab_id"
+    case insertIndex = "insert_index"
+  }
+}
+
+nonisolated internal struct HerdrWorkspaceCloseParams: Encodable, Sendable {
+  internal let workspaceID: String
+
+  private enum CodingKeys: String, CodingKey {
+    case workspaceID = "workspace_id"
+  }
+}
