@@ -7,7 +7,7 @@ internal struct CleanAppFeature {
   internal struct State: Equatable {
     internal var settings: SettingsFeature.State
     internal var updates = UpdatesFeature.State()
-    internal var herdrSidebar = HerdrSidebarFeature.State()
+    internal var herdrTerminalChrome = HerdrTerminalChromeFeature.State()
     @Presents internal var alert: AlertState<Alert>?
 
     internal init(settings: SettingsFeature.State = .init()) {
@@ -18,7 +18,7 @@ internal struct CleanAppFeature {
   internal enum Action {
     case appLaunched
     case herdrForegroundChanged(Bool)
-    case herdrSidebar(HerdrSidebarFeature.Action)
+    case herdrTerminalChrome(HerdrTerminalChromeFeature.Action)
     case herdrCompatibilityFailure(HerdrSocketError)
     case settings(SettingsFeature.Action)
     case updates(UpdatesFeature.Action)
@@ -40,8 +40,8 @@ internal struct CleanAppFeature {
     Scope(state: \.updates, action: \.updates) {
       UpdatesFeature()
     }
-    Scope(state: \.herdrSidebar, action: \.herdrSidebar) {
-      HerdrSidebarFeature()
+    Scope(state: \.herdrTerminalChrome, action: \.herdrTerminalChrome) {
+      HerdrTerminalChromeFeature()
     }
     Reduce { state, action in
       switch action {
@@ -64,9 +64,9 @@ internal struct CleanAppFeature {
         return .none
 
       case .herdrForegroundChanged(let isForeground):
-        return .send(.herdrSidebar(.foregroundChanged(isForeground)))
+        return .send(.herdrTerminalChrome(.foregroundChanged(isForeground)))
 
-      case .herdrSidebar(.delegate(.compatibilityFailure(let error))):
+      case .herdrTerminalChrome(.delegate(.compatibilityFailure(let error))):
         return .send(.herdrCompatibilityFailure(error))
 
       case .settings(.delegate(.settingsChanged(let settings))):
@@ -113,7 +113,7 @@ internal struct CleanAppFeature {
         state.alert = nil
         return .none
 
-      case .settings, .updates, .herdrSidebar, .alert:
+      case .settings, .updates, .herdrTerminalChrome, .alert:
         return .none
       }
     }

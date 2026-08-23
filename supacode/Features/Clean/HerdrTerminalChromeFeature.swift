@@ -1,10 +1,10 @@
 import ComposableArchitecture
 import Foundation
 
-private let herdrSidebarLogger = SupaLogger("HerdrSidebar")
+private let herdrTerminalChromeLogger = SupaLogger("HerdrTerminalChrome")
 
 @Reducer
-internal struct HerdrSidebarFeature {
+internal struct HerdrTerminalChromeFeature {
   @ObservableState
   internal struct State: Equatable {
     internal enum Connection: Equatable {
@@ -15,7 +15,7 @@ internal struct HerdrSidebarFeature {
     }
 
     internal var connection: Connection = .hidden
-    internal var snapshot = HerdrSidebarSnapshot.empty
+    internal var snapshot = HerdrSessionSnapshot.empty
     internal var selectedWorkspaceID: String?
     internal var selectedTabID: String?
     internal var selectedPaneID: String?
@@ -47,17 +47,17 @@ internal struct HerdrSidebarFeature {
 
   internal enum FocusResult: Equatable {
     case success
-    case failure(HerdrSidebarFailure)
+    case failure(HerdrTerminalChromeFailure)
   }
 
   internal enum Action: Equatable {
     case foregroundChanged(Bool)
-    case snapshotResponse(Result<HerdrSidebarSnapshot, HerdrSidebarFailure>)
+    case snapshotResponse(Result<HerdrSessionSnapshot, HerdrTerminalChromeFailure>)
     case eventStream(HerdrEventStreamState)
     case debouncedRefresh
     case refreshResponseWithGeneration(
       UInt64,
-      Result<HerdrSidebarSnapshot, HerdrSidebarFailure>
+      Result<HerdrSessionSnapshot, HerdrTerminalChromeFailure>
     )
     case focusWorkspaceTapped(String)
     case focusTabTapped(String)
@@ -74,7 +74,7 @@ internal struct HerdrSidebarFeature {
     case focus
   }
 
-  @Dependency(HerdrSidebarClient.self) private var client
+  @Dependency(HerdrTerminalChromeClient.self) private var client
   @Dependency(\.continuousClock) private var clock
 
   internal var body: some Reducer<State, Action> {
@@ -142,7 +142,7 @@ internal struct HerdrSidebarFeature {
         .cancellable(id: CancelID.refreshDebounce, cancelInFlight: true)
 
       case .eventStream(.disconnected(let error)):
-        let failure = HerdrSidebarFailure.map(error)
+    let failure = HerdrTerminalChromeFailure.map(error)
         if failure.isIncompatibleProtocol {
           return handleFailure(&state, failure: failure)
         }
@@ -206,7 +206,7 @@ internal struct HerdrSidebarFeature {
 
       case .focusResponse(.failure(let failure)):
         state.pendingFocus = nil
-        herdrSidebarLogger.warning("Sidebar focus failed: \(String(describing: failure))")
+        herdrTerminalChromeLogger.warning("Terminal chrome focus failed: \(String(describing: failure))")
         guard failure.isNotFound else { return .none }
         return refreshEffect(generation: state.refreshGeneration)
           .cancellable(id: CancelID.refresh, cancelInFlight: true)
@@ -237,7 +237,7 @@ internal struct HerdrSidebarFeature {
             }
           }
         } catch {
-          let failure = HerdrSidebarFailure.map(error)
+          let failure = HerdrTerminalChromeFailure.map(error)
           guard !Task.isCancelled else { return }
           await send(.snapshotResponse(.failure(failure)))
           if failure.isIncompatibleProtocol {
@@ -267,7 +267,7 @@ internal struct HerdrSidebarFeature {
         await send(
           .refreshResponseWithGeneration(
             generation,
-            .failure(HerdrSidebarFailure.map(error))
+            .failure(HerdrTerminalChromeFailure.map(error))
           )
         )
       }
@@ -290,14 +290,14 @@ internal struct HerdrSidebarFeature {
         await send(.focusResponse(.success))
       } catch {
         guard !Task.isCancelled else { return }
-        await send(.focusResponse(.failure(HerdrSidebarFailure.map(error))))
+        await send(.focusResponse(.failure(HerdrTerminalChromeFailure.map(error))))
       }
     }
   }
 
   private func handleFailure(
     _ state: inout State,
-    failure: HerdrSidebarFailure
+    failure: HerdrTerminalChromeFailure
   ) -> Effect<Action> {
     if case .incompatibleProtocol(let error) = failure {
       state.connection = .hidden
@@ -319,11 +319,11 @@ internal struct HerdrSidebarFeature {
     state.selectedWorkspaceID = nil
     state.selectedTabID = nil
     state.selectedPaneID = nil
-    herdrSidebarLogger.debug("Sidebar unavailable: \(String(describing: failure))")
+    herdrTerminalChromeLogger.debug("Terminal chrome unavailable: \(String(describing: failure))")
     return .none
   }
 
-  private func replaceSnapshot(_ state: inout State, with snapshot: HerdrSidebarSnapshot) -> Bool {
+  private func replaceSnapshot(_ state: inout State, with snapshot: HerdrSessionSnapshot) -> Bool {
     let paneIDs = Set(snapshot.panes.map(\.id))
     let shouldRestartLifecycle = paneIDs != state.subscribedPaneIDs
     state.snapshot = snapshot

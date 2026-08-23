@@ -2,7 +2,7 @@ import ComposableArchitecture
 import Darwin
 import Foundation
 
-nonisolated internal enum HerdrSidebarFailure: Error, Equatable, Sendable {
+nonisolated internal enum HerdrTerminalChromeFailure: Error, Equatable, Sendable {
   case unavailable
   case connection(HerdrSocketError)
   case invalidResponse(String)
@@ -45,15 +45,15 @@ nonisolated internal enum HerdrSidebarFailure: Error, Equatable, Sendable {
   }
 }
 
-nonisolated internal struct HerdrSidebarClient: Sendable {
-  internal var snapshot: @Sendable () async throws -> HerdrSidebarSnapshot
+nonisolated internal struct HerdrTerminalChromeClient: Sendable {
+  internal var snapshot: @Sendable () async throws -> HerdrSessionSnapshot
   internal var events: @Sendable (Set<String>) -> AsyncStream<HerdrEventStreamState>
   internal var focusWorkspace: @Sendable (String) async throws -> Void
   internal var focusTab: @Sendable (String) async throws -> Void
   internal var focusPane: @Sendable (String) async throws -> Void
 
   internal init(
-    snapshot: @escaping @Sendable () async throws -> HerdrSidebarSnapshot,
+    snapshot: @escaping @Sendable () async throws -> HerdrSessionSnapshot,
     events: @escaping @Sendable (Set<String>) -> AsyncStream<HerdrEventStreamState>,
     focusWorkspace: @escaping @Sendable (String) async throws -> Void,
     focusTab: @escaping @Sendable (String) async throws -> Void,
@@ -67,7 +67,7 @@ nonisolated internal struct HerdrSidebarClient: Sendable {
   }
 }
 
-extension HerdrSidebarClient: DependencyKey {
+extension HerdrTerminalChromeClient: DependencyKey {
   internal static let liveValue: Self = {
     let socketClient = HerdrSocketClient()
     return Self(
@@ -75,7 +75,7 @@ extension HerdrSidebarClient: DependencyKey {
         try await socketClient.sessionSnapshot()
       },
     events: { paneIDs in
-      socketClient.sidebarEvents(paneIDs: paneIDs)
+      socketClient.terminalChromeEvents(paneIDs: paneIDs)
       },
       focusWorkspace: { workspaceID in
         try await socketClient.focusWorkspace(workspaceID)
@@ -99,8 +99,8 @@ extension HerdrSidebarClient: DependencyKey {
 }
 
 extension DependencyValues {
-  internal var herdrSidebarClient: HerdrSidebarClient {
-    get { self[HerdrSidebarClient.self] }
-    set { self[HerdrSidebarClient.self] = newValue }
+  internal var herdrTerminalChromeClient: HerdrTerminalChromeClient {
+    get { self[HerdrTerminalChromeClient.self] }
+    set { self[HerdrTerminalChromeClient.self] = newValue }
   }
 }

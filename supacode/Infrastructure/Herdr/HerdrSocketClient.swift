@@ -35,7 +35,7 @@ nonisolated internal struct HerdrSocketClient: Sendable {
     "pane.closed",
     "pane.moved",
   ]
-  private static let sidebarEventNames = [
+  private static let terminalChromeEventNames = [
     "workspace.created",
     "workspace.updated",
     "workspace.renamed",
@@ -87,7 +87,7 @@ nonisolated internal struct HerdrSocketClient: Sendable {
     }.value
   }
 
-  internal func sessionSnapshot() async throws -> HerdrSidebarSnapshot {
+  internal func sessionSnapshot() async throws -> HerdrSessionSnapshot {
     let socketPath = socketPath
     return try await Task.detached(priority: .utility) {
       try Self.validateProtocol(at: socketPath)
@@ -143,12 +143,12 @@ nonisolated internal struct HerdrSocketClient: Sendable {
     }
   }
 
-  internal func sidebarEvents(paneIDs: Set<String>) -> AsyncStream<HerdrEventStreamState> {
+  internal func terminalChromeEvents(paneIDs: Set<String>) -> AsyncStream<HerdrEventStreamState> {
     let socketPath = socketPath
     return AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
       let session = HerdrEventSocketSession(
         socketPath: socketPath,
-        eventNames: Self.sidebarEventNames,
+        eventNames: Self.terminalChromeEventNames,
         paneIDs: paneIDs,
         continuation: continuation
       )
@@ -247,8 +247,8 @@ nonisolated internal struct HerdrSocketClient: Sendable {
     throw HerdrSocketError.responseTooLarge
   }
 
-  internal static func sidebarSubscriptionRequestData(paneIDs: Set<String>) throws -> Data {
-    try subscriptionRequest(eventNames: sidebarEventNames, paneIDs: paneIDs)
+  internal static func terminalChromeSubscriptionRequestData(paneIDs: Set<String>) throws -> Data {
+    try subscriptionRequest(eventNames: terminalChromeEventNames, paneIDs: paneIDs)
   }
 
   fileprivate static func subscriptionRequest(
@@ -297,7 +297,7 @@ nonisolated internal struct HerdrSocketClient: Sendable {
     return response
   }
 
-  private static func readSnapshotResponse(from fileDescriptor: Int32) throws -> HerdrSidebarSnapshot {
+  private static func readSnapshotResponse(from fileDescriptor: Int32) throws -> HerdrSessionSnapshot {
     let line = try readLine(from: fileDescriptor)
     let envelope = try JSONDecoder().decode(HerdrResponseEnvelope.self, from: line)
     if let error = envelope.error {

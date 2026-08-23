@@ -7,7 +7,7 @@ internal enum HerdrSidebarLayout {
   internal static let agentStatusMarkerSize: CGFloat = 11
 }
 
-internal enum HerdrSidebarStatusKind: String, Equatable, Sendable {
+internal enum HerdrAgentStatusKind: String, Equatable, Sendable {
   case unknown
   case working
   case blocked
@@ -34,7 +34,7 @@ internal enum HerdrSidebarStatusKind: String, Equatable, Sendable {
 }
 
 internal struct HerdrSidebarView: View {
-  @Bindable internal var store: StoreOf<HerdrSidebarFeature>
+  @Bindable internal var store: StoreOf<HerdrTerminalChromeFeature>
 
   internal var body: some View {
     VStack(spacing: 0) {
@@ -182,7 +182,7 @@ internal struct HerdrSidebarView: View {
         if let status = agent.agentStatus, status != "idle" {
           Text(status)
             .font(.system(size: 10))
-            .foregroundStyle(statusColor(HerdrSidebarStatusKind(status)))
+            .foregroundStyle(statusColor(HerdrAgentStatusKind(status)))
         }
       }
       .padding(.horizontal, 8)
@@ -201,7 +201,7 @@ internal struct HerdrSidebarView: View {
 
   @ViewBuilder
   private func statusIcon(_ status: String?) -> some View {
-    let kind = HerdrSidebarStatusKind(status)
+    let kind = HerdrAgentStatusKind(status)
     let color = statusColor(kind)
     if kind.isSmall {
       Circle()
@@ -266,7 +266,7 @@ internal struct HerdrSidebarView: View {
     }
   }
 
-  private func statusColor(_ kind: HerdrSidebarStatusKind) -> Color {
+  private func statusColor(_ kind: HerdrAgentStatusKind) -> Color {
     switch kind {
     case .blocked: return .orange
     case .done: return .green

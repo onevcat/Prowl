@@ -7,28 +7,28 @@ import Testing
 
 @Suite(.serialized)
 @MainActor
-struct HerdrSidebarTests {
+struct HerdrTerminalChromeTests {
   @Test(arguments: [
-    (nil, HerdrSidebarStatusKind.unknown),
-    ("unknown", HerdrSidebarStatusKind.unknown),
-    ("working", HerdrSidebarStatusKind.working),
-    ("blocked", HerdrSidebarStatusKind.blocked),
-    ("done", HerdrSidebarStatusKind.done),
-    ("idle", HerdrSidebarStatusKind.idle),
+    (nil, HerdrAgentStatusKind.unknown),
+    ("unknown", HerdrAgentStatusKind.unknown),
+    ("working", HerdrAgentStatusKind.working),
+    ("blocked", HerdrAgentStatusKind.blocked),
+    ("done", HerdrAgentStatusKind.done),
+    ("idle", HerdrAgentStatusKind.idle),
   ])
   func mapsServerStatusToNativeMarker(
     status: String?,
-    expected: HerdrSidebarStatusKind
+    expected: HerdrAgentStatusKind
   ) {
-    #expect(HerdrSidebarStatusKind(status) == expected)
+    #expect(HerdrAgentStatusKind(status) == expected)
   }
 
   @Test func markerShapesPreserveUnreadSemantics() {
-    #expect(HerdrSidebarStatusKind.unknown.isSmall)
-    #expect(HerdrSidebarStatusKind.done.isFilled)
-    #expect(!HerdrSidebarStatusKind.idle.isFilled)
-    #expect(HerdrSidebarStatusKind.working.isFilled)
-    #expect(HerdrSidebarStatusKind.blocked.isFilled)
+    #expect(HerdrAgentStatusKind.unknown.isSmall)
+    #expect(HerdrAgentStatusKind.done.isFilled)
+    #expect(!HerdrAgentStatusKind.idle.isFilled)
+    #expect(HerdrAgentStatusKind.working.isFilled)
+    #expect(HerdrAgentStatusKind.blocked.isFilled)
   }
 
   @Test func decodesAgentAndOrdinaryPanesFromSnapshot() throws {
@@ -67,8 +67,8 @@ struct HerdrSidebarTests {
     #expect(response.snapshot.panes.dropFirst().first?.foregroundCWD == "/tmp")
   }
 
-  @Test func sidebarSubscriptionIncludesAgentLifecycleAndReorderEvents() throws {
-    let data = try HerdrSocketClient.sidebarSubscriptionRequestData(paneIDs: ["p1"])
+  @Test func terminalChromeSubscriptionIncludesAgentLifecycleAndReorderEvents() throws {
+    let data = try HerdrSocketClient.terminalChromeSubscriptionRequestData(paneIDs: ["p1"])
     let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
     let params = try #require(object["params"] as? [String: Any])
     let subscriptions = try #require(params["subscriptions"] as? [[String: Any]])
@@ -86,10 +86,10 @@ struct HerdrSidebarTests {
 
   @Test func snapshotResponseConnectsSidebarAndUsesServerSelection() async {
     let snapshot = makeSnapshot(focusedPaneID: "p2")
-    var initialState = HerdrSidebarFeature.State()
+    var initialState = HerdrTerminalChromeFeature.State()
     initialState.connection = .connecting
     let store = TestStore(initialState: initialState) {
-      HerdrSidebarFeature()
+      HerdrTerminalChromeFeature()
     }
 
     await store.send(.snapshotResponse(.success(snapshot))) {
@@ -105,7 +105,7 @@ struct HerdrSidebarTests {
   @Test func externalSnapshotFocusReplacesStillLiveLocalSelection() async {
     let initialSnapshot = makeSnapshot(focusedPaneID: "p1")
     let externalFocusSnapshot = makeSnapshot(focusedPaneID: "p2")
-    var initialState = HerdrSidebarFeature.State()
+    var initialState = HerdrTerminalChromeFeature.State()
     initialState.connection = .connected
     initialState.snapshot = initialSnapshot
     initialState.selectedWorkspaceID = "w1"
@@ -113,7 +113,7 @@ struct HerdrSidebarTests {
     initialState.selectedPaneID = "p1"
     initialState.subscribedPaneIDs = ["p1", "p2"]
     let store = TestStore(initialState: initialState) {
-      HerdrSidebarFeature()
+      HerdrTerminalChromeFeature()
     }
 
     await store.send(.refreshResponseWithGeneration(0, .success(externalFocusSnapshot))) {
@@ -127,16 +127,16 @@ struct HerdrSidebarTests {
   @Test(.dependencies) func focusRefreshConfirmsServerFocusedPane() async {
     let calls = LockIsolated<[String]>([])
     let focusedSnapshot = makeSnapshot(focusedPaneID: "p2")
-    var initialState = HerdrSidebarFeature.State()
+    var initialState = HerdrTerminalChromeFeature.State()
     initialState.connection = .connected
     initialState.snapshot = makeSnapshot(focusedPaneID: "p1")
     initialState.selectedPaneID = "p1"
     initialState.subscribedPaneIDs = ["p1", "p2"]
 
     let store = TestStore(initialState: initialState) {
-      HerdrSidebarFeature()
+      HerdrTerminalChromeFeature()
     } withDependencies: {
-      $0.herdrSidebarClient = HerdrSidebarClient(
+      $0.herdrTerminalChromeClient = HerdrTerminalChromeClient(
         snapshot: { focusedSnapshot },
         events: { _ in AsyncStream { $0.finish() } },
         focusWorkspace: { _ in },
@@ -164,15 +164,15 @@ struct HerdrSidebarTests {
   @Test(.dependencies) func notFoundFocusFailureRefreshesConfirmedSelection() async {
     let calls = LockIsolated<[String]>([])
     let snapshot = makeSnapshot(focusedPaneID: "p1")
-    var initialState = HerdrSidebarFeature.State()
+    var initialState = HerdrTerminalChromeFeature.State()
     initialState.connection = .connected
     initialState.snapshot = snapshot
     initialState.selectedPaneID = "p1"
     initialState.subscribedPaneIDs = ["p1", "p2"]
     let store = TestStore(initialState: initialState) {
-      HerdrSidebarFeature()
+      HerdrTerminalChromeFeature()
     } withDependencies: {
-      $0.herdrSidebarClient = HerdrSidebarClient(
+      $0.herdrTerminalChromeClient = HerdrTerminalChromeClient(
         snapshot: { snapshot },
         events: { _ in AsyncStream { $0.finish() } },
         focusWorkspace: { _ in },
@@ -201,8 +201,8 @@ struct HerdrSidebarTests {
     #expect(calls.value == ["p2"])
   }
 
-  private func makeSnapshot(focusedPaneID: String) -> HerdrSidebarSnapshot {
-    HerdrSidebarSnapshot(
+  private func makeSnapshot(focusedPaneID: String) -> HerdrSessionSnapshot {
+    HerdrSessionSnapshot(
       version: "0.8.2",
       protocolVersion: 20,
       focusedWorkspaceID: "w1",

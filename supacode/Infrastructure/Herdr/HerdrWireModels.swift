@@ -51,7 +51,7 @@ nonisolated internal struct HerdrResponseEnvelope: Decodable, Sendable {
     internal let type: String
     internal let pane: HerdrPaneInfo?
     internal let protocolVersion: UInt32?
-    internal let snapshot: HerdrSidebarSnapshot?
+    internal let snapshot: HerdrSessionSnapshot?
 
     nonisolated private enum CodingKeys: String, CodingKey {
       case type
@@ -130,7 +130,7 @@ nonisolated internal struct HerdrEventsSubscribeParams: Encodable, Sendable {
   internal let subscriptions: [Subscription]
 }
 
-nonisolated internal struct HerdrSidebarSnapshot: Decodable, Equatable, Sendable {
+nonisolated internal struct HerdrSessionSnapshot: Decodable, Equatable, Sendable {
   internal let version: String?
   internal let protocolVersion: UInt32?
   internal let focusedWorkspaceID: String?
@@ -593,17 +593,17 @@ nonisolated internal struct HerdrLayoutRect: Decodable, Equatable, Sendable {
 
 nonisolated internal struct HerdrSnapshotResponse: Decodable, Sendable {
   internal let type: String
-  internal let snapshot: HerdrSidebarSnapshot
+  internal let snapshot: HerdrSessionSnapshot
 
   private struct Result: Decodable {
     fileprivate let type: String
-    fileprivate let snapshot: HerdrSidebarSnapshot
+    fileprivate let snapshot: HerdrSessionSnapshot
   }
 
   private struct Root: Decodable {
     fileprivate let result: Result?
     fileprivate let type: String?
-    fileprivate let snapshot: HerdrSidebarSnapshot?
+    fileprivate let snapshot: HerdrSessionSnapshot?
   }
 
   internal init(from decoder: Decoder) throws {
