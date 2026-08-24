@@ -89,7 +89,8 @@ internal enum HerdrChromeTypography {
   internal static let workspaceTitleFontSize: CGFloat = 15
   internal static let agentTitleFontSize: CGFloat = 14.5
   internal static let tabTitleFontSize: CGFloat = 14.5
-  internal static let processTitleFontSize: CGFloat = 13
+  internal static let processTitleFontSize: CGFloat = 14.5
+  internal static let linkedWorktreeRepoFontSize: CGFloat = 15
 }
 
 internal enum HerdrAgentStatusKind: String, Equatable, Sendable {

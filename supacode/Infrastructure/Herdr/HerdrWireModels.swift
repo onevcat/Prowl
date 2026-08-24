@@ -320,6 +320,36 @@ nonisolated internal struct HerdrSessionSnapshot: Decodable, Equatable, Sendable
   }
 }
 
+nonisolated internal struct HerdrWorkspaceWorktree: Decodable, Equatable, Sendable {
+  internal let repoKey: String
+  internal let repoName: String
+  internal let repoRoot: String
+  internal let checkoutPath: String
+  internal let isLinkedWorktree: Bool
+
+  internal init(
+    repoName: String,
+    repoRoot: String,
+    checkoutPath: String,
+    isLinkedWorktree: Bool,
+    repoKey: String = ""
+  ) {
+    self.repoKey = repoKey
+    self.repoName = repoName
+    self.repoRoot = repoRoot
+    self.checkoutPath = checkoutPath
+    self.isLinkedWorktree = isLinkedWorktree
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case repoKey = "repo_key"
+    case repoName = "repo_name"
+    case repoRoot = "repo_root"
+    case checkoutPath = "checkout_path"
+    case isLinkedWorktree = "is_linked_worktree"
+  }
+}
+
 nonisolated internal struct HerdrWorkspace: Decodable, Equatable, Sendable, Identifiable {
   internal let workspaceID: String
   internal let number: Int?
@@ -330,6 +360,7 @@ nonisolated internal struct HerdrWorkspace: Decodable, Equatable, Sendable, Iden
   internal let activeTabID: String?
   internal let agentStatus: String?
   internal let branch: String?
+  internal let worktree: HerdrWorkspaceWorktree?
 
   internal var id: String { workspaceID }
 
@@ -342,7 +373,8 @@ nonisolated internal struct HerdrWorkspace: Decodable, Equatable, Sendable, Iden
     tabCount: Int? = nil,
     activeTabID: String? = nil,
     agentStatus: String? = nil,
-    branch: String? = nil
+    branch: String? = nil,
+    worktree: HerdrWorkspaceWorktree? = nil
   ) {
     self.workspaceID = workspaceID
     self.number = number
@@ -353,6 +385,7 @@ nonisolated internal struct HerdrWorkspace: Decodable, Equatable, Sendable, Iden
     self.activeTabID = activeTabID
     self.agentStatus = agentStatus
     self.branch = branch
+    self.worktree = worktree
   }
 
   private enum CodingKeys: String, CodingKey {
@@ -365,6 +398,7 @@ nonisolated internal struct HerdrWorkspace: Decodable, Equatable, Sendable, Iden
     case activeTabID = "active_tab_id"
     case agentStatus = "agent_status"
     case branch
+    case worktree
   }
 
   internal init(from decoder: Decoder) throws {
@@ -378,6 +412,7 @@ nonisolated internal struct HerdrWorkspace: Decodable, Equatable, Sendable, Iden
     activeTabID = try container.decodeIfPresent(String.self, forKey: .activeTabID)
     agentStatus = try container.decodeIfPresent(String.self, forKey: .agentStatus)
     branch = try container.decodeIfPresent(String.self, forKey: .branch)
+    worktree = try container.decodeIfPresent(HerdrWorkspaceWorktree.self, forKey: .worktree)
   }
 }
 

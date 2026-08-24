@@ -13,9 +13,29 @@ internal enum HerdrTabBarLayout {
   internal static let visibilityThreshold = 0.5
 }
 
+internal struct HerdrLinkedWorktreeTitle: Equatable, Sendable {
+  internal let repoName: String
+  internal let checkoutName: String
+
+  internal var displayLabel: String {
+    "\(repoName) ↳ \(checkoutName)"
+  }
+}
+
 internal struct HerdrProcessTitle: Equatable, Sendable {
   internal let processName: String
   internal let directoryName: String
+  internal let linkedWorktree: HerdrLinkedWorktreeTitle?
+
+  internal init(
+    processName: String,
+    directoryName: String,
+    linkedWorktree: HerdrLinkedWorktreeTitle? = nil
+  ) {
+    self.processName = processName
+    self.directoryName = directoryName
+    self.linkedWorktree = linkedWorktree
+  }
 
   internal var displayLabel: String {
     "\(processName) · \(directoryName)"
@@ -124,6 +144,7 @@ internal struct HerdrTabBarItem: Equatable, Identifiable, Sendable {
   internal let isFocused: Bool
   internal let agentIcon: HerdrTabAgentIcon?
   internal let processTitle: HerdrProcessTitle?
+  internal let linkedWorktree: HerdrLinkedWorktreeTitle?
 
   internal var isAgent: Bool {
     agentIcon != nil
@@ -137,7 +158,8 @@ internal struct HerdrTabBarItem: Equatable, Identifiable, Sendable {
     isFocused: Bool,
     isAgent: Bool = false,
     agentIcon: HerdrTabAgentIcon? = nil,
-    processTitle: HerdrProcessTitle? = nil
+    processTitle: HerdrProcessTitle? = nil,
+    linkedWorktree: HerdrLinkedWorktreeTitle? = nil
   ) {
     self.id = id
     self.workspaceID = workspaceID
@@ -146,11 +168,15 @@ internal struct HerdrTabBarItem: Equatable, Identifiable, Sendable {
     self.isFocused = isFocused
     self.agentIcon = agentIcon ?? (isAgent ? .generic : nil)
     self.processTitle = processTitle
+    self.linkedWorktree = linkedWorktree
   }
 
   internal var displayLabel: String {
     if let processTitle {
       return processTitle.displayLabel
+    }
+    if let linkedWorktree {
+      return linkedWorktree.displayLabel
     }
     return isZoomed ? "\(label) Z" : label
   }
@@ -159,7 +185,8 @@ internal struct HerdrTabBarItem: Equatable, Identifiable, Sendable {
 internal enum HerdrTabBarProjection {
   internal static func processTitle(
     in processInfo: HerdrPaneProcessInfo,
-    fallbackDirectory: String?
+    fallbackDirectory: String?,
+    worktree: HerdrWorkspaceWorktree? = nil
   ) -> HerdrProcessTitle? {
     let candidates = processInfo.foregroundProcesses.filter { process in
       guard process.pid != processInfo.shellPID else { return false }
@@ -174,6 +201,13 @@ internal enum HerdrTabBarProjection {
       let directoryName = directoryName(for: process.cwd ?? fallbackDirectory)
     else { return nil }
     guard !knownAgentProcessNames.contains(processName) else { return nil }
+    if let linkedWorktree = linkedWorktreeTitle(for: worktree) {
+      return HerdrProcessTitle(
+        processName: processName,
+        directoryName: linkedWorktree.displayLabel,
+        linkedWorktree: linkedWorktree
+      )
+    }
     return HerdrProcessTitle(processName: processName, directoryName: directoryName)
   }
 
@@ -202,6 +236,19 @@ internal enum HerdrTabBarProjection {
       }
     }
     let panesByTabID = Dictionary(grouping: snapshot.panes, by: \.tabID)
+    let worktreesByWorkspaceID = snapshot.workspaces.reduce(into: [String: HerdrWorkspaceWorktree]()) {
+      worktrees, workspace in
+      if let worktree = workspace.worktree {
+        worktrees[workspace.id] = worktree
+      }
+    }
+    let linkedWorktreesByWorkspaceID = worktreesByWorkspaceID.reduce(
+      into: [String: HerdrLinkedWorktreeTitle]()
+    ) { linkedWorktrees, entry in
+      if let title = linkedWorktreeTitle(for: entry.value) {
+        linkedWorktrees[entry.key] = title
+      }
+    }
     let processTitlesByTabID = Dictionary(
       uniqueKeysWithValues: panesByTabID.compactMap { tabID, panes in
         let title =
@@ -215,7 +262,8 @@ internal enum HerdrTabBarProjection {
             guard let processInfo = processInfoByPaneID[pane.id] else { return nil }
             return Self.processTitle(
               in: processInfo,
-              fallbackDirectory: pane.foregroundCWD ?? pane.cwd
+              fallbackDirectory: pane.foregroundCWD ?? pane.cwd,
+              worktree: worktreesByWorkspaceID[pane.workspaceID]
             )
           }
           .first
@@ -231,7 +279,8 @@ internal enum HerdrTabBarProjection {
         isZoomed: zoomedTabIDs.contains(tab.id),
         isFocused: tab.id == snapshot.focusedTabID || tab.focused,
         agentIcon: agentIconsByTabID[tab.id],
-        processTitle: processTitlesByTabID[tab.id]
+        processTitle: processTitlesByTabID[tab.id],
+        linkedWorktree: linkedWorktreesByWorkspaceID[tab.workspaceID]
       )
     }
   }
@@ -254,6 +303,19 @@ internal enum HerdrTabBarProjection {
     let normalizedPath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
     guard !normalizedPath.isEmpty else { return "/" }
     return URL(fileURLWithPath: "/\(normalizedPath)").lastPathComponent
+  }
+
+  private static func linkedWorktreeTitle(
+    for worktree: HerdrWorkspaceWorktree?
+  ) -> HerdrLinkedWorktreeTitle? {
+    guard
+      let worktree,
+      worktree.isLinkedWorktree,
+      !worktree.repoName.isEmpty,
+      let checkoutName = directoryName(for: worktree.checkoutPath),
+      !checkoutName.isEmpty
+    else { return nil }
+    return HerdrLinkedWorktreeTitle(repoName: worktree.repoName, checkoutName: checkoutName)
   }
 
   internal static func insertIndex(
@@ -534,7 +596,29 @@ internal struct HerdrTabBarView: View {
           .font(.system(size: 8))
           .foregroundStyle(.tertiary)
           .offset(y: -0.5)
-        Text(processTitle.directoryName)
+        if let linkedWorktree = processTitle.linkedWorktree {
+          linkedWorktreeTitleLabel(linkedWorktree, isActive: isActive)
+        } else {
+          Text(processTitle.directoryName)
+            .font(
+              .custom(
+                HerdrChromeTypography.titleFontFamily,
+                size: HerdrChromeTypography.tabTitleFontSize
+              )
+              .weight(isActive ? .semibold : .medium)
+            )
+            .foregroundStyle(.secondary)
+        }
+      }
+      .lineLimit(1)
+      .truncationMode(.middle)
+      .frame(minWidth: HerdrTabBarLayout.minimumTabWidth, alignment: .leading)
+    } else {
+      if let linkedWorktree = item.linkedWorktree {
+        linkedWorktreeTitleLabel(linkedWorktree, isActive: isActive)
+          .frame(minWidth: HerdrTabBarLayout.minimumTabWidth, alignment: .leading)
+      } else {
+        Text(item.displayLabel)
           .font(
             .custom(
               HerdrChromeTypography.titleFontFamily,
@@ -542,24 +626,48 @@ internal struct HerdrTabBarView: View {
             )
             .weight(isActive ? .semibold : .medium)
           )
-          .foregroundStyle(.secondary)
+          .lineLimit(1)
+          .truncationMode(.middle)
+          .frame(minWidth: HerdrTabBarLayout.minimumTabWidth, alignment: .leading)
       }
-      .lineLimit(1)
-      .truncationMode(.middle)
-      .frame(minWidth: HerdrTabBarLayout.minimumTabWidth, alignment: .leading)
-    } else {
-      Text(item.displayLabel)
+    }
+  }
+
+  private func linkedWorktreeTitleLabel(
+    _ linkedWorktree: HerdrLinkedWorktreeTitle,
+    isActive: Bool
+  ) -> some View {
+    HStack(spacing: 3) {
+      Text(linkedWorktree.repoName)
         .font(
           .custom(
             HerdrChromeTypography.titleFontFamily,
-            size: HerdrChromeTypography.tabTitleFontSize
+            size: HerdrChromeTypography.linkedWorktreeRepoFontSize
           )
           .weight(isActive ? .semibold : .medium)
         )
-        .lineLimit(1)
-        .truncationMode(.middle)
-        .frame(minWidth: HerdrTabBarLayout.minimumTabWidth, alignment: .leading)
+        .foregroundStyle(.secondary)
+      Text("↳")
+        .font(
+          .custom(
+            HerdrChromeTypography.titleFontFamily,
+            size: HerdrChromeTypography.processTitleFontSize
+          )
+          .weight(isActive ? .semibold : .medium)
+        )
+        .foregroundStyle(.tertiary)
+      Text(linkedWorktree.checkoutName)
+        .font(
+          .custom(
+            HerdrChromeTypography.titleFontFamily,
+            size: HerdrChromeTypography.processTitleFontSize
+          )
+          .weight(isActive ? .semibold : .medium)
+        )
+        .foregroundStyle(.tertiary)
     }
+    .lineLimit(1)
+    .truncationMode(.middle)
   }
 
   @ViewBuilder

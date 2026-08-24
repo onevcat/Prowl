@@ -4,6 +4,12 @@ import Testing
 @testable import supacode
 
 struct HerdrTabBarViewTests {
+  @Test func linkedWorktreeTitleUsesTheRequestedSizeHierarchy() {
+    #expect(HerdrChromeTypography.processTitleFontSize == 14.5)
+    #expect(HerdrChromeTypography.linkedWorktreeRepoFontSize == 15)
+    #expect(HerdrChromeTypography.tabTitleFontSize == 14.5)
+  }
+
   @Test func projectsOnlyFocusedWorkspaceTabsAndZoomSuffix() {
     let snapshot = HerdrSessionSnapshot(
       version: "0.8.2",
@@ -126,6 +132,114 @@ struct HerdrTabBarViewTests {
         fallbackDirectory: "/Users/yam/Developer/Prowl"
       ) == HerdrProcessTitle(processName: "lazygit", directoryName: "Prowl")
     )
+  }
+
+  @Test func decodesLinkedWorktreeProvenance() throws {
+    let workspace = try JSONDecoder().decode(
+      HerdrWorkspace.self,
+      from: Data(
+        #"""
+        {
+          "workspace_id": "w1",
+          "label": "feature",
+          "worktree": {
+            "repo_key": "/Users/yam/Developer/Warlock",
+            "repo_name": "Warlock",
+            "repo_root": "/Users/yam/Developer/Warlock",
+            "checkout_path": "/Users/yam/Developer/warlock-ios-simulator-replay",
+            "is_linked_worktree": true
+          }
+        }
+        """#.utf8
+      )
+    )
+
+    #expect(workspace.worktree?.repoName == "Warlock")
+    #expect(workspace.worktree?.checkoutPath == "/Users/yam/Developer/warlock-ios-simulator-replay")
+    #expect(workspace.worktree?.isLinkedWorktree == true)
+  }
+
+  @Test func linkedWorktreeProcessTitleKeepsMainRepositoryAndCheckoutIdentity() {
+    let snapshot = HerdrSessionSnapshot(
+      version: "0.8.2",
+      protocolVersion: 20,
+      focusedWorkspaceID: "w1",
+      focusedTabID: "w1:t1",
+      focusedPaneID: "w1:p1",
+      workspaces: [
+        HerdrWorkspace(
+          workspaceID: "w1",
+          worktree: HerdrWorkspaceWorktree(
+            repoName: "Warlock",
+            repoRoot: "/Users/yam/Developer/Warlock",
+            checkoutPath: "/Users/yam/Developer/warlock-ios-simulator-replay",
+            isLinkedWorktree: true
+          )
+        )
+      ],
+      tabs: [HerdrTab(tabID: "w1:t1", workspaceID: "w1", label: "feature")],
+      panes: [
+        HerdrPane(
+          paneID: "w1:p1",
+          workspaceID: "w1",
+          tabID: "w1:t1",
+          focused: true,
+          cwd: "/Users/yam/Developer/warlock-ios-simulator-replay"
+        )
+      ],
+      layouts: [],
+      agents: []
+    )
+    let processInfo = HerdrPaneProcessInfo(
+      paneID: "w1:p1",
+      shellPID: 10,
+      foregroundProcessGroupID: 20,
+      foregroundProcesses: [HerdrPaneProcess(pid: 20, name: "lazygit")]
+    )
+
+    let item = HerdrTabBarProjection.items(
+      in: snapshot,
+      workspaceID: "w1",
+      processInfoByPaneID: ["w1:p1": processInfo]
+    ).first
+
+    #expect(
+      item?.processTitle
+        == HerdrProcessTitle(
+          processName: "lazygit",
+          directoryName: "Warlock ↳ warlock-ios-simulator-replay",
+          linkedWorktree: HerdrLinkedWorktreeTitle(
+            repoName: "Warlock",
+            checkoutName: "warlock-ios-simulator-replay"
+          )
+        )
+    )
+  }
+
+  @Test func linkedWorktreeKeepsItsIdentityWhenNoForegroundProcessIsShown() {
+    let worktree = HerdrWorkspaceWorktree(
+      repoName: "Warlock",
+      repoRoot: "/Users/yam/Developer/Warlock",
+      checkoutPath: "/Users/yam/Developer/warlock-ios-simulator-replay",
+      isLinkedWorktree: true
+    )
+    let snapshot = HerdrSessionSnapshot(
+      version: "0.8.2",
+      protocolVersion: 20,
+      focusedWorkspaceID: "w1",
+      focusedTabID: "w1:t1",
+      focusedPaneID: "w1:p1",
+      workspaces: [HerdrWorkspace(workspaceID: "w1", worktree: worktree)],
+      tabs: [HerdrTab(tabID: "w1:t1", workspaceID: "w1", label: "feature")],
+      panes: [HerdrPane(paneID: "w1:p1", workspaceID: "w1", tabID: "w1:t1", focused: true)],
+      layouts: [],
+      agents: []
+    )
+
+    let item = HerdrTabBarProjection.items(in: snapshot, workspaceID: "w1").first
+
+    #expect(item?.processTitle == nil)
+    #expect(item?.displayLabel == "Warlock ↳ warlock-ios-simulator-replay")
   }
 
   @Test func suppressesShellAndStarshipOnlyForegroundJobs() {
