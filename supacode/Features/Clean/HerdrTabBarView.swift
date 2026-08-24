@@ -38,7 +38,7 @@ internal struct HerdrProcessTitle: Equatable, Sendable {
   }
 
   internal var displayLabel: String {
-    "\(processName) · \(directoryName)"
+    "\(processName) ・ \(directoryName)"
   }
 
   internal var accent: HerdrProcessAccent {
@@ -726,9 +726,9 @@ internal struct HerdrTabBarView: View {
             .weight(isActive ? .semibold : .medium)
           )
           .foregroundStyle(processTitle.accent.color(for: colorScheme))
-        Text("•")
+        Text("・")
           .font(.system(size: 8))
-          .foregroundStyle(.tertiary)
+          .foregroundStyle(.secondary)
           .offset(y: -0.5)
         if let linkedWorktree = processTitle.linkedWorktree {
           linkedWorktreeTitleLabel(linkedWorktree, isActive: isActive)
