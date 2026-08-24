@@ -242,6 +242,68 @@ struct HerdrTabBarViewTests {
     #expect(item?.displayLabel == "Warlock ↳ warlock-ios-simulator-replay")
   }
 
+  @Test func derivesLinkedWorktreeTitleFromGitCommonDirectory() {
+    #expect(
+      HerdrWorktreeIdentityResolver.linkedTitle(
+        checkoutPath: "/Users/yam/.config/superpowers/worktrees/Warlock/warlock-ios-simulator-replay",
+        commonDirectory: "/Users/yam/Developer/Warlock/.git"
+      )
+        == HerdrLinkedWorktreeTitle(
+          repoName: "Warlock",
+          checkoutName: "warlock-ios-simulator-replay"
+        )
+    )
+    #expect(
+      HerdrWorktreeIdentityResolver.linkedTitle(
+        checkoutPath: "/Users/yam/Developer/Warlock",
+        commonDirectory: "/Users/yam/Developer/Warlock/.git"
+      ) == nil
+    )
+    #expect(
+      HerdrWorktreeIdentityResolver.linkedTitle(
+        checkoutPath: "/Users/yam/dotfiles",
+        commonDirectory: "/Users/yam/dotfiles/.git"
+      ) == nil
+    )
+  }
+
+  @Test func worktreeProbeRequestsAbsoluteGitPaths() {
+    #expect(
+      HerdrWorktreeIdentityResolver.gitRevParseArguments(at: "/Users/yam/.hammerspoon")
+        == [
+          "-C", "/Users/yam/.hammerspoon", "rev-parse", "--path-format=absolute",
+          "--show-toplevel", "--git-common-dir",
+        ]
+    )
+  }
+
+  @Test func detectedLinkedWorktreeIdentityCoversSnapshotsWithoutProvenance() {
+    let detectedTitle = HerdrLinkedWorktreeTitle(
+      repoName: "Warlock",
+      checkoutName: "warlock-ios-simulator-replay"
+    )
+    let snapshot = HerdrSessionSnapshot(
+      version: "0.8.2",
+      protocolVersion: 20,
+      focusedWorkspaceID: "w1",
+      focusedTabID: "w1:t1",
+      focusedPaneID: "w1:p1",
+      workspaces: [HerdrWorkspace(workspaceID: "w1")],
+      tabs: [HerdrTab(tabID: "w1:t1", workspaceID: "w1", label: "feature")],
+      panes: [HerdrPane(paneID: "w1:p1", workspaceID: "w1", tabID: "w1:t1", focused: true)],
+      layouts: [],
+      agents: []
+    )
+
+    let item = HerdrTabBarProjection.items(
+      in: snapshot,
+      workspaceID: "w1",
+      detectedLinkedWorktreesByWorkspaceID: ["w1": detectedTitle]
+    ).first
+
+    #expect(item?.displayLabel == detectedTitle.displayLabel)
+  }
+
   @Test func suppressesShellAndStarshipOnlyForegroundJobs() {
     let processInfo = HerdrPaneProcessInfo(
       paneID: "w1:p1",

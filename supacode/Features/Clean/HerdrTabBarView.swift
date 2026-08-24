@@ -182,11 +182,94 @@ internal struct HerdrTabBarItem: Equatable, Identifiable, Sendable {
   }
 }
 
+nonisolated internal enum HerdrWorktreeIdentityResolver {
+  internal static func linkedTitle(
+    checkoutPath: String,
+    commonDirectory: String
+  ) -> HerdrLinkedWorktreeTitle? {
+    let checkoutURL = URL(fileURLWithPath: checkoutPath).standardizedFileURL
+    let commonDirectoryURL: URL
+    if commonDirectory.hasPrefix("/") {
+      commonDirectoryURL = URL(fileURLWithPath: commonDirectory).standardizedFileURL
+    } else {
+      commonDirectoryURL = checkoutURL.appending(path: commonDirectory).standardizedFileURL
+    }
+    let mainRepositoryURL = commonDirectoryURL.deletingLastPathComponent()
+    guard
+      mainRepositoryURL.path != checkoutURL.path,
+      let repoName = nonEmptyLastPathComponent(of: mainRepositoryURL),
+      let checkoutName = nonEmptyLastPathComponent(of: checkoutURL)
+    else { return nil }
+    return HerdrLinkedWorktreeTitle(repoName: repoName, checkoutName: checkoutName)
+  }
+
+  internal static func resolve(
+    _ pathsByWorkspaceID: [String: String]
+  ) async -> [String: HerdrLinkedWorktreeTitle] {
+    await withTaskGroup(of: (String, HerdrLinkedWorktreeTitle?).self) { group in
+      for (workspaceID, path) in pathsByWorkspaceID {
+        group.addTask {
+          guard let (checkoutPath, commonDirectory) = gitWorktreePaths(at: path) else {
+            return (workspaceID, nil)
+          }
+          return (
+            workspaceID,
+            linkedTitle(checkoutPath: checkoutPath, commonDirectory: commonDirectory)
+          )
+        }
+      }
+
+      var result: [String: HerdrLinkedWorktreeTitle] = [:]
+      for await (workspaceID, title) in group {
+        if let title {
+          result[workspaceID] = title
+        }
+      }
+      return result
+    }
+  }
+
+  internal static func gitRevParseArguments(at path: String) -> [String] {
+    [
+      "-C", path, "rev-parse", "--path-format=absolute", "--show-toplevel", "--git-common-dir",
+    ]
+  }
+
+  private static func gitWorktreePaths(at path: String) -> (String, String)? {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+    process.arguments = gitRevParseArguments(at: path)
+    let output = Pipe()
+    process.standardOutput = output
+    process.standardError = Pipe()
+
+    do {
+      try process.run()
+      process.waitUntilExit()
+    } catch {
+      return nil
+    }
+    guard process.terminationStatus == 0 else { return nil }
+    let lines = String(
+      data: output.fileHandleForReading.readDataToEndOfFile(),
+      encoding: .utf8
+    )?.split(whereSeparator: \.isNewline)
+      .map(String.init)
+    guard let lines, lines.count >= 2 else { return nil }
+    return (lines[0], lines[1])
+  }
+
+  private static func nonEmptyLastPathComponent(of url: URL) -> String? {
+    let name = url.lastPathComponent
+    return name.isEmpty || name == "/" ? nil : name
+  }
+}
+
 internal enum HerdrTabBarProjection {
   internal static func processTitle(
     in processInfo: HerdrPaneProcessInfo,
     fallbackDirectory: String?,
-    worktree: HerdrWorkspaceWorktree? = nil
+    linkedWorktree: HerdrLinkedWorktreeTitle? = nil
   ) -> HerdrProcessTitle? {
     let candidates = processInfo.foregroundProcesses.filter { process in
       guard process.pid != processInfo.shellPID else { return false }
@@ -201,7 +284,7 @@ internal enum HerdrTabBarProjection {
       let directoryName = directoryName(for: process.cwd ?? fallbackDirectory)
     else { return nil }
     guard !knownAgentProcessNames.contains(processName) else { return nil }
-    if let linkedWorktree = linkedWorktreeTitle(for: worktree) {
+    if let linkedWorktree {
       return HerdrProcessTitle(
         processName: processName,
         directoryName: linkedWorktree.displayLabel,
@@ -215,7 +298,8 @@ internal enum HerdrTabBarProjection {
     in snapshot: HerdrSessionSnapshot,
     workspaceID: String?,
     processInfoByPaneID: [String: HerdrPaneProcessInfo] = [:],
-    focusedPaneID: String? = nil
+    focusedPaneID: String? = nil,
+    detectedLinkedWorktreesByWorkspaceID: [String: HerdrLinkedWorktreeTitle] = [:]
   ) -> [HerdrTabBarItem] {
     guard let workspaceID else { return [] }
     let zoomedTabIDs = Set(
@@ -242,11 +326,10 @@ internal enum HerdrTabBarProjection {
         worktrees[workspace.id] = worktree
       }
     }
-    let linkedWorktreesByWorkspaceID = worktreesByWorkspaceID.reduce(
-      into: [String: HerdrLinkedWorktreeTitle]()
-    ) { linkedWorktrees, entry in
+    var linkedWorktreesByWorkspaceID = detectedLinkedWorktreesByWorkspaceID
+    for entry in worktreesByWorkspaceID {
       if let title = linkedWorktreeTitle(for: entry.value) {
-        linkedWorktrees[entry.key] = title
+        linkedWorktreesByWorkspaceID[entry.key] = title
       }
     }
     let processTitlesByTabID = Dictionary(
@@ -263,7 +346,7 @@ internal enum HerdrTabBarProjection {
             return Self.processTitle(
               in: processInfo,
               fallbackDirectory: pane.foregroundCWD ?? pane.cwd,
-              worktree: worktreesByWorkspaceID[pane.workspaceID]
+              linkedWorktree: linkedWorktreesByWorkspaceID[pane.workspaceID]
             )
           }
           .first
@@ -364,6 +447,7 @@ internal struct HerdrTabBarView: View {
   @State private var editor: Editor?
   @State private var hoveredTabID: String?
   @State private var visibleTabIDs: Set<String> = []
+  @State private var detectedLinkedWorktreesByWorkspaceID: [String: HerdrLinkedWorktreeTitle] = [:]
 
   private enum Editor: Identifiable {
     case new(workspaceID: String, sourceTabID: String?)
@@ -467,6 +551,13 @@ internal struct HerdrTabBarView: View {
     } message: {
       Text(mutationErrorMessage)
     }
+    .task(id: worktreeResolutionKey) {
+      let detectedWorktrees = await HerdrWorktreeIdentityResolver.resolve(
+        worktreePathsByWorkspaceID
+      )
+      guard !Task.isCancelled else { return }
+      detectedLinkedWorktreesByWorkspaceID = detectedWorktrees
+    }
   }
 
   private var workspaceID: String? {
@@ -478,8 +569,33 @@ internal struct HerdrTabBarView: View {
       in: store.snapshot,
       workspaceID: workspaceID,
       processInfoByPaneID: processInfoByPaneID,
-      focusedPaneID: store.selectedPaneID ?? store.snapshot.focusedPaneID
+      focusedPaneID: store.selectedPaneID ?? store.snapshot.focusedPaneID,
+      detectedLinkedWorktreesByWorkspaceID: detectedLinkedWorktreesByWorkspaceID
     )
+  }
+
+  private var worktreePathsByWorkspaceID: [String: String] {
+    let serverKnownWorkspaceIDs = Set(
+      store.snapshot.workspaces
+        .filter { $0.worktree != nil }
+        .map(\.id)
+    )
+    return [String: String](
+      uniqueKeysWithValues: Dictionary(grouping: store.snapshot.panes, by: \.workspaceID)
+        .compactMap { workspaceID, panes in
+          guard !serverKnownWorkspaceIDs.contains(workspaceID) else { return nil }
+          let pane = panes.first(where: \.focused) ?? panes.first
+          guard let path = pane?.foregroundCWD ?? pane?.cwd, !path.isEmpty else { return nil }
+          return (workspaceID, path)
+        }
+    )
+  }
+
+  private var worktreeResolutionKey: String {
+    worktreePathsByWorkspaceID
+      .sorted { $0.key < $1.key }
+      .map { "\($0.key):\($0.value)" }
+      .joined(separator: "|")
   }
 
   private func scrollToSelected(_ proxy: ScrollViewProxy, selectedID: String?) {
