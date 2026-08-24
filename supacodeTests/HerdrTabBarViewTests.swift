@@ -4,6 +4,15 @@ import Testing
 @testable import supacode
 
 struct HerdrTabBarViewTests {
+  @Test func activeStructuredTitlesRestorePrimaryEmphasis() {
+    #expect(HerdrTabBarProjection.contextTone(isActive: true) == .primary)
+    #expect(HerdrTabBarProjection.contextTone(isActive: false) == .secondary)
+    #expect(HerdrTabBarProjection.linkedRepoTone(isActive: true) == .primary)
+    #expect(HerdrTabBarProjection.linkedRepoTone(isActive: false) == .secondary)
+    #expect(HerdrTabBarProjection.linkedCheckoutTone(isActive: true) == .secondary)
+    #expect(HerdrTabBarProjection.linkedCheckoutTone(isActive: false) == .tertiary)
+  }
+
   @Test func linkedWorktreeTitleUsesTheRequestedSizeHierarchy() {
     #expect(HerdrChromeTypography.processTitleFontSize == 14.5)
     #expect(HerdrChromeTypography.linkedWorktreeRepoFontSize == 15)

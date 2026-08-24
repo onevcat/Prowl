@@ -67,6 +67,12 @@ internal enum HerdrProcessAccent: Equatable, Sendable {
   }
 }
 
+internal enum HerdrTabTitleTone: Equatable, Sendable {
+  case primary
+  case secondary
+  case tertiary
+}
+
 internal enum HerdrTabAgentAccent: Equatable, Sendable {
   case systemPrimary
   case systemSecondary
@@ -266,6 +272,18 @@ nonisolated internal enum HerdrWorktreeIdentityResolver {
 }
 
 internal enum HerdrTabBarProjection {
+  internal static func contextTone(isActive: Bool) -> HerdrTabTitleTone {
+    isActive ? .primary : .secondary
+  }
+
+  internal static func linkedRepoTone(isActive: Bool) -> HerdrTabTitleTone {
+    isActive ? .primary : .secondary
+  }
+
+  internal static func linkedCheckoutTone(isActive: Bool) -> HerdrTabTitleTone {
+    isActive ? .secondary : .tertiary
+  }
+
   internal static func processTitle(
     in processInfo: HerdrPaneProcessInfo,
     fallbackDirectory: String?,
@@ -723,7 +741,7 @@ internal struct HerdrTabBarView: View {
               )
               .weight(isActive ? .semibold : .medium)
             )
-            .foregroundStyle(.secondary)
+            .foregroundStyle(titleColor(HerdrTabBarProjection.contextTone(isActive: isActive)))
         }
       }
       .lineLimit(1)
@@ -762,7 +780,7 @@ internal struct HerdrTabBarView: View {
           )
           .weight(isActive ? .semibold : .medium)
         )
-        .foregroundStyle(.secondary)
+        .foregroundStyle(titleColor(HerdrTabBarProjection.linkedRepoTone(isActive: isActive)))
       Text("↳")
         .font(
           .custom(
@@ -771,7 +789,8 @@ internal struct HerdrTabBarView: View {
           )
           .weight(isActive ? .semibold : .medium)
         )
-        .foregroundStyle(.tertiary)
+        .foregroundStyle(
+          titleColor(HerdrTabBarProjection.linkedCheckoutTone(isActive: isActive)))
       Text(linkedWorktree.checkoutName)
         .font(
           .custom(
@@ -780,10 +799,19 @@ internal struct HerdrTabBarView: View {
           )
           .weight(isActive ? .semibold : .medium)
         )
-        .foregroundStyle(.tertiary)
+        .foregroundStyle(
+          titleColor(HerdrTabBarProjection.linkedCheckoutTone(isActive: isActive)))
     }
     .lineLimit(1)
     .truncationMode(.middle)
+  }
+
+  private func titleColor(_ tone: HerdrTabTitleTone) -> AnyShapeStyle {
+    switch tone {
+    case .primary: return AnyShapeStyle(.primary)
+    case .secondary: return AnyShapeStyle(.secondary)
+    case .tertiary: return AnyShapeStyle(.tertiary)
+    }
   }
 
   @ViewBuilder
