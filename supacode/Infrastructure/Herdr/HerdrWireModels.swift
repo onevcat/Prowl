@@ -421,6 +421,8 @@ nonisolated internal struct HerdrTab: Decodable, Equatable, Sendable, Identifiab
   internal let workspaceID: String
   internal let number: Int?
   internal let label: String
+  internal let customLabel: String?
+  internal let hasCustomLabelField: Bool
   internal let focused: Bool
   internal let paneCount: Int?
   internal let agentStatus: String?
@@ -432,6 +434,8 @@ nonisolated internal struct HerdrTab: Decodable, Equatable, Sendable, Identifiab
     workspaceID: String,
     number: Int? = nil,
     label: String? = nil,
+    customLabel: String? = nil,
+    hasCustomLabelField: Bool = true,
     focused: Bool = false,
     paneCount: Int? = nil,
     agentStatus: String? = nil
@@ -440,6 +444,8 @@ nonisolated internal struct HerdrTab: Decodable, Equatable, Sendable, Identifiab
     self.workspaceID = workspaceID
     self.number = number
     self.label = label ?? tabID
+    self.customLabel = customLabel
+    self.hasCustomLabelField = hasCustomLabelField
     self.focused = focused
     self.paneCount = paneCount
     self.agentStatus = agentStatus
@@ -450,6 +456,7 @@ nonisolated internal struct HerdrTab: Decodable, Equatable, Sendable, Identifiab
     case workspaceID = "workspace_id"
     case number
     case label
+    case customLabel = "custom_label"
     case focused
     case paneCount = "pane_count"
     case agentStatus = "agent_status"
@@ -461,6 +468,8 @@ nonisolated internal struct HerdrTab: Decodable, Equatable, Sendable, Identifiab
     workspaceID = try container.decode(String.self, forKey: .workspaceID)
     number = try container.decodeIfPresent(Int.self, forKey: .number)
     label = try container.decodeIfPresent(String.self, forKey: .label) ?? tabID
+    customLabel = try container.decodeIfPresent(String.self, forKey: .customLabel)
+    hasCustomLabelField = container.contains(.customLabel)
     focused = try container.decodeIfPresent(Bool.self, forKey: .focused) ?? false
     paneCount = try container.decodeIfPresent(Int.self, forKey: .paneCount)
     agentStatus = try container.decodeIfPresent(String.self, forKey: .agentStatus)
@@ -821,11 +830,17 @@ nonisolated internal struct HerdrTabCreateParams: Encodable, Sendable {
 
 nonisolated internal struct HerdrTabRenameParams: Encodable, Sendable {
   internal let tabID: String
-  internal let label: String
+  internal let label: String?
 
   private enum CodingKeys: String, CodingKey {
     case tabID = "tab_id"
     case label
+  }
+
+  internal func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(tabID, forKey: .tabID)
+    try container.encode(label, forKey: .label)
   }
 }
 

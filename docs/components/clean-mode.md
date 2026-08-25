@@ -63,12 +63,14 @@ Prowl 的输入法 adapter 只读取 focused pane，并订阅已确认的 focus/
 - Agent title 和包含 Agent pane 的 tab title 左侧都会显示对应 provider 的 full-color canonical 图标；未知 provider 使用
   Zap 图标兜底，普通 shell tab 不显示图标。
 - Agent title 第一行显示 `foreground_cwd`/`cwd` 的目录名，并与 workspace/tab label 去重；第二行保留 agent 名称。
-- 当前 pane 和刚离开的 pane 有明确 foreground application 时，tab title 临时显示较小字号的 `process · directory`；shell、
-  `starship` 和 transient helper 不参与识别。进程退出后下一次低频轮询恢复原 tab label。
+- 当前 pane 和刚离开的 pane 有明确 foreground application 时，tab title 显示 `process · directory`；shell、`starship` 和
+  transient helper 不参与识别。进程退出后恢复自动目录段。
 - linked worktree 的 tab title 显示为 `<process> · <repo_name> ↳ <checkout_directory>`；没有前台进程时仍保留该 worktree 标识。
   Herdr snapshot 没有 worktree provenance 时，Prowl 按 pane cwd 异步解析 Git common directory，并按 workspace 路径缓存结果，
   不阻塞 native chrome 渲染。
-- tabbar 右侧的 `+` 会直接创建未命名 tab，不弹出命名输入框；重命名仍通过 tab context menu 操作。
+- tabbar 右键菜单中的 **Rename Directory Name...** 只修改目录段，进程名和 Agent icon 保持独立显示；已有手动名称时会同时提供
+  **Use Automatic Directory Name**，Rename sheet 中也提供 **Use Automatic Name**，用于明确恢复自动目录段。
+- tabbar 右侧的 `+` 会直接创建未命名 tab，不弹出命名输入框；重命名和恢复自动名称都通过 tab context menu 或 Rename sheet 操作。
 - agents header 的 `grouped`/`priority` 控件对应 Herdr 自带的 workspace 顺序和 attention 优先级排序。
 - 点击 workspace、tab 或 pane row 会调用对应的 `workspace.focus`、`tab.focus` 或 `pane.focus`，选中状态以服务器
   focus event 为准；点击时先立即显示目标 selection，event 超时或目标不存在时才回退到完整 snapshot。

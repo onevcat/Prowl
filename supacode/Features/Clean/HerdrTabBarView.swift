@@ -146,6 +146,8 @@ internal struct HerdrTabBarItem: Equatable, Identifiable, Sendable {
   internal let id: String
   internal let workspaceID: String
   internal let label: String
+  internal let customLabel: String?
+  internal let automaticDirectoryName: String?
   internal let isZoomed: Bool
   internal let isFocused: Bool
   internal let agentIcon: HerdrTabAgentIcon?
@@ -162,6 +164,8 @@ internal struct HerdrTabBarItem: Equatable, Identifiable, Sendable {
     label: String,
     isZoomed: Bool,
     isFocused: Bool,
+    customLabel: String? = nil,
+    automaticDirectoryName: String? = nil,
     isAgent: Bool = false,
     agentIcon: HerdrTabAgentIcon? = nil,
     processTitle: HerdrProcessTitle? = nil,
@@ -170,6 +174,8 @@ internal struct HerdrTabBarItem: Equatable, Identifiable, Sendable {
     self.id = id
     self.workspaceID = workspaceID
     self.label = label
+    self.customLabel = customLabel
+    self.automaticDirectoryName = automaticDirectoryName
     self.isZoomed = isZoomed
     self.isFocused = isFocused
     self.agentIcon = agentIcon ?? (isAgent ? .generic : nil)
@@ -179,12 +185,16 @@ internal struct HerdrTabBarItem: Equatable, Identifiable, Sendable {
 
   internal var displayLabel: String {
     if let processTitle {
-      return processTitle.displayLabel
+      return "\(processTitle.processName) ・ \(directoryLabel)"
     }
-    if let linkedWorktree {
-      return linkedWorktree.displayLabel
-    }
-    return isZoomed ? "\(label) Z" : label
+    return isZoomed ? "\(directoryLabel) Z" : directoryLabel
+  }
+
+  internal var directoryLabel: String {
+    customLabel
+      ?? linkedWorktree?.displayLabel
+      ?? automaticDirectoryName
+      ?? (label.isEmpty || label.allSatisfy(\.isNumber) ? "Terminal" : label)
   }
 }
 
@@ -350,35 +360,51 @@ internal enum HerdrTabBarProjection {
         linkedWorktreesByWorkspaceID[entry.key] = title
       }
     }
-    let processTitlesByTabID = Dictionary(
-      uniqueKeysWithValues: panesByTabID.compactMap { tabID, panes in
-        let title =
-          panes
-          .sorted {
-            if $0.id == focusedPaneID { return true }
-            if $1.id == focusedPaneID { return false }
-            return $0.focused && !$1.focused
-          }
-          .compactMap { pane -> HerdrProcessTitle? in
-            guard let processInfo = processInfoByPaneID[pane.id] else { return nil }
-            return Self.processTitle(
-              in: processInfo,
-              fallbackDirectory: pane.foregroundCWD ?? pane.cwd,
-              linkedWorktree: linkedWorktreesByWorkspaceID[pane.workspaceID]
-            )
-          }
-          .first
-        return title.map { (tabID, $0) }
+    var processTitlesByTabID: [String: HerdrProcessTitle] = [:]
+    var automaticDirectoryNamesByTabID: [String: String] = [:]
+    for (tabID, panes) in panesByTabID {
+      let orderedPanes = panes.sorted {
+        if $0.id == focusedPaneID { return true }
+        if $1.id == focusedPaneID { return false }
+        return $0.focused && !$1.focused
       }
-    )
+      guard let representativePane = orderedPanes.first else { continue }
+      let linkedWorktree = linkedWorktreesByWorkspaceID[representativePane.workspaceID]
+      let processTitle = orderedPanes
+        .compactMap { pane -> HerdrProcessTitle? in
+          guard let processInfo = processInfoByPaneID[pane.id] else { return nil }
+          return Self.processTitle(
+            in: processInfo,
+            fallbackDirectory: pane.foregroundCWD ?? pane.cwd,
+            linkedWorktree: linkedWorktree
+          )
+        }
+        .first
+      if let processTitle {
+        processTitlesByTabID[tabID] = processTitle
+      }
+      let fallbackDirectory = representativePane.foregroundCWD ?? representativePane.cwd
+      if let automaticDirectoryName = linkedWorktree?.displayLabel
+        ?? processTitle?.directoryName
+        ?? directoryName(for: fallbackDirectory)
+      {
+        automaticDirectoryNamesByTabID[tabID] = automaticDirectoryName
+      }
+    }
     return snapshot.tabs.compactMap { tab in
       guard tab.workspaceID == workspaceID else { return nil }
+      let automaticDirectoryName = automaticDirectoryNamesByTabID[tab.id]
       return HerdrTabBarItem(
         id: tab.id,
         workspaceID: tab.workspaceID,
         label: tab.label,
         isZoomed: zoomedTabIDs.contains(tab.id),
         isFocused: tab.id == snapshot.focusedTabID || tab.focused,
+        customLabel: Self.resolvedCustomLabel(
+          for: tab,
+          automaticDirectoryName: automaticDirectoryName
+        ),
+        automaticDirectoryName: automaticDirectoryName,
         agentIcon: agentIconsByTabID[tab.id],
         processTitle: processTitlesByTabID[tab.id],
         linkedWorktree: linkedWorktreesByWorkspaceID[tab.workspaceID]
@@ -404,6 +430,21 @@ internal enum HerdrTabBarProjection {
     let normalizedPath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
     guard !normalizedPath.isEmpty else { return "/" }
     return URL(fileURLWithPath: "/\(normalizedPath)").lastPathComponent
+  }
+
+  private static func resolvedCustomLabel(
+    for tab: HerdrTab,
+    automaticDirectoryName: String?
+  ) -> String? {
+    if tab.hasCustomLabelField {
+      return tab.customLabel
+    }
+    let legacyLabel = tab.label.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !legacyLabel.isEmpty,
+      !legacyLabel.allSatisfy(\.isNumber),
+      legacyLabel != automaticDirectoryName
+    else { return nil }
+    return legacyLabel
   }
 
   private static func linkedWorktreeTitle(
@@ -469,13 +510,13 @@ internal struct HerdrTabBarView: View {
 
   private enum Editor: Identifiable {
     case new(workspaceID: String, sourceTabID: String?)
-    case rename(tabID: String, label: String)
+    case rename(tabID: String, label: String, canReset: Bool)
 
     internal var id: String {
       switch self {
       case .new(let workspaceID, let sourceTabID):
         return "new-\(workspaceID)-\(sourceTabID ?? "current")"
-      case .rename(let tabID, _): return "rename-\(tabID)"
+      case .rename(let tabID, _, _): return "rename-\(tabID)"
       }
     }
   }
@@ -690,8 +731,18 @@ internal struct HerdrTabBarView: View {
       Button("New tab") {
         editor = .new(workspaceID: item.workspaceID, sourceTabID: item.id)
       }
-      Button("Rename") {
-        editor = .rename(tabID: item.id, label: item.label)
+      Button("Rename Directory Name…") {
+        editor = .rename(
+          tabID: item.id,
+          label: item.directoryLabel,
+          canReset: item.customLabel != nil
+        )
+      }
+      if item.customLabel != nil {
+        Button("Use Automatic Directory Name") {
+          store.send(.resetTabNameRequested(item.id))
+        }
+        .disabled(store.pendingMutation != nil)
       }
       Divider()
       Button("Close", role: .destructive) {
@@ -730,40 +781,33 @@ internal struct HerdrTabBarView: View {
           .font(.system(size: 8))
           .foregroundStyle(.secondary)
           .offset(y: -0.5)
-        if let linkedWorktree = processTitle.linkedWorktree {
-          linkedWorktreeTitleLabel(linkedWorktree, isActive: isActive)
-        } else {
-          Text(processTitle.directoryName)
-            .font(
-              .custom(
-                HerdrChromeTypography.titleFontFamily,
-                size: HerdrChromeTypography.tabTitleFontSize
-              )
-              .weight(isActive ? .semibold : .medium)
-            )
-            .foregroundStyle(titleColor(HerdrTabBarProjection.contextTone(isActive: isActive)))
-        }
+        directorySegmentLabel(item, isActive: isActive)
       }
       .lineLimit(1)
       .truncationMode(.middle)
       .frame(minWidth: HerdrTabBarLayout.minimumTabWidth, alignment: .leading)
     } else {
-      if let linkedWorktree = item.linkedWorktree {
-        linkedWorktreeTitleLabel(linkedWorktree, isActive: isActive)
-          .frame(minWidth: HerdrTabBarLayout.minimumTabWidth, alignment: .leading)
-      } else {
-        Text(item.displayLabel)
-          .font(
-            .custom(
-              HerdrChromeTypography.titleFontFamily,
-              size: HerdrChromeTypography.tabTitleFontSize
-            )
-            .weight(isActive ? .semibold : .medium)
+      directorySegmentLabel(item, isActive: isActive)
+        .frame(minWidth: HerdrTabBarLayout.minimumTabWidth, alignment: .leading)
+    }
+  }
+
+  @ViewBuilder
+  private func directorySegmentLabel(_ item: HerdrTabBarItem, isActive: Bool) -> some View {
+    if item.customLabel == nil, let linkedWorktree = item.linkedWorktree {
+      linkedWorktreeTitleLabel(linkedWorktree, isActive: isActive)
+    } else {
+      Text(item.directoryLabel)
+        .font(
+          .custom(
+            HerdrChromeTypography.titleFontFamily,
+            size: HerdrChromeTypography.tabTitleFontSize
           )
-          .lineLimit(1)
-          .truncationMode(.middle)
-          .frame(minWidth: HerdrTabBarLayout.minimumTabWidth, alignment: .leading)
-      }
+          .weight(isActive ? .semibold : .medium)
+        )
+        .foregroundStyle(titleColor(HerdrTabBarProjection.contextTone(isActive: isActive)))
+        .lineLimit(1)
+        .truncationMode(.middle)
     }
   }
 
@@ -827,8 +871,16 @@ internal struct HerdrTabBarView: View {
           )
         )
       }
-    case .rename(let tabID, let label):
-      HerdrTabEditorView(title: "Rename tab", label: label, isOptional: false) { label in
+    case .rename(let tabID, let label, let canReset):
+      HerdrTabEditorView(
+        title: "Rename Directory Name",
+        label: label,
+        isOptional: false,
+        canReset: canReset,
+        onReset: {
+          store.send(.resetTabNameRequested(tabID))
+        }
+      ) { label in
         guard let label else { return }
         store.send(.renameTabRequested(tabID: tabID, label: label))
       }
@@ -921,16 +973,22 @@ private struct HerdrTabEditorView: View {
 
   let title: String
   let isOptional: Bool
+  let canReset: Bool
+  let onReset: (() -> Void)?
   let onSubmit: (String?) -> Void
 
   init(
     title: String,
     label: String,
     isOptional: Bool,
+    canReset: Bool = false,
+    onReset: (() -> Void)? = nil,
     onSubmit: @escaping (String?) -> Void
   ) {
     self.title = title
     self.isOptional = isOptional
+    self.canReset = canReset
+    self.onReset = onReset
     self.onSubmit = onSubmit
     _label = State(initialValue: label)
   }
@@ -944,6 +1002,13 @@ private struct HerdrTabEditorView: View {
         .focused($isFocused)
         .onSubmit(submit)
       HStack {
+        if canReset, let onReset {
+          Button("Use Automatic Name") {
+            onReset()
+            dismiss()
+          }
+          .help("Remove the custom name and follow the active directory.")
+        }
         Spacer()
         Button("Cancel", role: .cancel) { dismiss() }
         Button("Save", action: submit)

@@ -373,6 +373,123 @@ struct HerdrTabBarViewTests {
       items.last?.processTitle == HerdrProcessTitle(processName: "lazygit", directoryName: "Prowl"))
   }
 
+  @Test func manualDirectoryNameOnlyReplacesTheDirectorySegment() {
+    let snapshot = HerdrSessionSnapshot(
+      version: "0.8.2",
+      protocolVersion: 21,
+      focusedWorkspaceID: "w1",
+      focusedTabID: "w1:t1",
+      focusedPaneID: "w1:p1",
+      workspaces: [],
+      tabs: [
+        HerdrTab(
+          tabID: "w1:t1",
+          workspaceID: "w1",
+          label: "Backend",
+          customLabel: "Backend"
+        )
+      ],
+      panes: [
+        HerdrPane(
+          paneID: "w1:p1",
+          workspaceID: "w1",
+          tabID: "w1:t1",
+          focused: true,
+          cwd: "/Users/yam/Developer/Prowl"
+        )
+      ],
+      layouts: [],
+      agents: []
+    )
+    let processInfo = HerdrPaneProcessInfo(
+      paneID: "w1:p1",
+      shellPID: 10,
+      foregroundProcessGroupID: 20,
+      foregroundProcesses: [
+        HerdrPaneProcess(pid: 10, name: "zsh", argv0: "/bin/zsh"),
+        HerdrPaneProcess(pid: 20, name: "lazygit", argv0: "lazygit", cwd: "/tmp/Prowl"),
+      ]
+    )
+
+    let item = HerdrTabBarProjection.items(
+      in: snapshot,
+      workspaceID: "w1",
+      processInfoByPaneID: ["w1:p1": processInfo]
+    ).first
+
+    #expect(item?.customLabel == "Backend")
+    #expect(item?.displayLabel == "lazygit ・ Backend")
+  }
+
+  @Test func automaticDirectoryNameDoesNotRenderHerdrNumericLabel() {
+    let snapshot = HerdrSessionSnapshot(
+      version: "0.8.2",
+      protocolVersion: 21,
+      focusedWorkspaceID: "w1",
+      focusedTabID: "w1:t1",
+      focusedPaneID: "w1:p1",
+      workspaces: [],
+      tabs: [HerdrTab(tabID: "w1:t1", workspaceID: "w1", label: "1")],
+      panes: [
+        HerdrPane(
+          paneID: "w1:p1",
+          workspaceID: "w1",
+          tabID: "w1:t1",
+          focused: true,
+          cwd: "/tmp/Prowl"
+        )
+      ],
+      layouts: [],
+      agents: []
+    )
+
+    let item = HerdrTabBarProjection.items(in: snapshot, workspaceID: "w1").first
+
+    #expect(item?.directoryLabel == "Prowl")
+    #expect(item?.displayLabel == "Prowl")
+  }
+
+  @Test func linkedWorktreeDirectoryCanBeOverriddenAndRestored() {
+    let worktree = HerdrWorkspaceWorktree(
+      repoName: "Prowl",
+      repoRoot: "/Users/yam/Developer/Prowl",
+      checkoutPath: "/tmp/Prowl-feature",
+      isLinkedWorktree: true
+    )
+    let base = HerdrSessionSnapshot(
+      version: "0.8.2",
+      protocolVersion: 21,
+      focusedWorkspaceID: "w1",
+      focusedTabID: "w1:t1",
+      focusedPaneID: "w1:p1",
+      workspaces: [HerdrWorkspace(workspaceID: "w1", worktree: worktree)],
+      tabs: [HerdrTab(tabID: "w1:t1", workspaceID: "w1", label: "1")],
+      panes: [
+        HerdrPane(paneID: "w1:p1", workspaceID: "w1", tabID: "w1:t1", focused: true)
+      ],
+      layouts: [],
+      agents: []
+    )
+    let overridden = HerdrSessionSnapshot(
+      version: base.version,
+      protocolVersion: base.protocolVersion,
+      focusedWorkspaceID: base.focusedWorkspaceID,
+      focusedTabID: base.focusedTabID,
+      focusedPaneID: base.focusedPaneID,
+      workspaces: base.workspaces,
+      tabs: [HerdrTab(tabID: "w1:t1", workspaceID: "w1", label: "Backend", customLabel: "Backend")],
+      panes: base.panes,
+      layouts: base.layouts,
+      agents: base.agents
+    )
+
+    let automatic = HerdrTabBarProjection.items(in: base, workspaceID: "w1").first
+    let manual = HerdrTabBarProjection.items(in: overridden, workspaceID: "w1").first
+
+    #expect(automatic?.displayLabel == "Prowl ↳ Prowl-feature")
+    #expect(manual?.displayLabel == "Backend")
+  }
+
   @Test func prefersProjectedFocusedPaneOverStaleSnapshotFocus() {
     let snapshot = HerdrSessionSnapshot(
       version: "0.8.2",

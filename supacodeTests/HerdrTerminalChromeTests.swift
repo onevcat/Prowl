@@ -138,6 +138,14 @@ struct HerdrTerminalChromeTests {
       try JSONSerialization.jsonObject(
         with: encoder.encode(HerdrTabMoveParams(tabID: "w1:t1", insertIndex: 2))
       ) as? [String: Any]
+    let rename =
+      try JSONSerialization.jsonObject(
+        with: encoder.encode(HerdrTabRenameParams(tabID: "w1:t1", label: "Backend"))
+      ) as? [String: Any]
+    let reset =
+      try JSONSerialization.jsonObject(
+        with: encoder.encode(HerdrTabRenameParams(tabID: "w1:t1", label: nil))
+      ) as? [String: Any]
     let workspace =
       try JSONSerialization.jsonObject(
         with: encoder.encode(HerdrWorkspaceCreateParams(focus: true))
@@ -148,6 +156,11 @@ struct HerdrTerminalChromeTests {
     #expect(create?["label"] as? String == "logs")
     #expect(move?["tab_id"] as? String == "w1:t1")
     #expect(move?["insert_index"] as? Int == 2)
+    #expect(rename?["tab_id"] as? String == "w1:t1")
+    #expect(rename?["label"] as? String == "Backend")
+    #expect(reset?["tab_id"] as? String == "w1:t1")
+    #expect(reset?.keys.contains("label") == true)
+    #expect(reset?["label"] is NSNull)
     #expect(workspace?["focus"] as? Bool == true)
   }
 
@@ -718,6 +731,47 @@ struct HerdrTerminalChromeTests {
     }
     await store.receive(.refreshResponseWithGeneration(1, .success(snapshot)))
     #expect(calls.value == ["create:w1:logs"])
+  }
+
+  @Test(.dependencies) func resetTabNameSendsNullableRenameAndRefreshes() async {
+    let labels = LockIsolated<[String?]>([])
+    let clock = TestClock()
+    let snapshot = makeSnapshot(focusedPaneID: "p1")
+    var initialState = HerdrTerminalChromeFeature.State()
+    initialState.connection = .connected
+    initialState.snapshot = snapshot
+    initialState.selectedWorkspaceID = "w1"
+    initialState.selectedTabID = "t1"
+    initialState.selectedPaneID = "p1"
+    initialState.subscribedPaneIDs = ["p1", "p2"]
+    let store = TestStore(initialState: initialState) {
+      HerdrTerminalChromeFeature()
+    } withDependencies: {
+      $0.continuousClock = clock
+      $0.herdrTerminalChromeClient = HerdrTerminalChromeClient(
+        snapshot: { snapshot },
+        events: { _ in AsyncStream { $0.finish() } },
+        focusWorkspace: { _ in },
+        focusTab: { _ in },
+        focusPane: { _ in },
+        createTab: { _, _, _ in },
+        renameTab: { _, label in labels.withValue { $0.append(label) } },
+        moveTab: { _, _ in },
+        closeTab: { _ in },
+        closeWorkspace: { _ in }
+      )
+    }
+
+    await store.send(.resetTabNameRequested("t1")) {
+      $0.pendingMutation = .renameTab(tabID: "t1", label: nil)
+      $0.mutationGeneration = 1
+    }
+    await store.receive(.mutationResponse(1, .success)) {
+      $0.pendingMutation = nil
+      $0.refreshGeneration = 1
+    }
+    await store.receive(.refreshResponseWithGeneration(1, .success(snapshot)))
+    #expect(labels.value == [nil])
   }
 
   @Test(.dependencies) func newWorkspaceMutationUsesFocusedCreateRequest() async {

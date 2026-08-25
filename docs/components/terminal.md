@@ -63,10 +63,13 @@ exit-zoom button in the same spot so it's always clear how to leave zoom.
 
 ## Tab titles — important caveat
 
-A tab's displayed title is, in order of precedence:
+A standard terminal tab's displayed title is, in order of precedence:
 1. a **custom title** you set via Rename Tab, else
 2. the **live shell title** the running program emits (OSC 2), else
 3. an auto-generated default like `project 1`, `project 2`.
+
+Clean mode uses a separate native Herdr tab bar. Its Rename Directory Name action only overrides the directory segment; process names and
+agent icons remain independent. Use Automatic Directory Name restores the live pane/worktree directory segment.
 
 The Run Script tab is labeled **RUN SCRIPT** and is **title-locked** for its
 lifetime. Prowl also "learns" your shell's idle prompt so it doesn't mistake it

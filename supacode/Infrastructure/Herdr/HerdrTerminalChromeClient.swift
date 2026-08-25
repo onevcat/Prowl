@@ -60,7 +60,7 @@ nonisolated internal struct HerdrTerminalChromeClient: Sendable {
   internal var focusPane: @Sendable (String) async throws -> Void
   internal var createWorkspace: @Sendable () async throws -> Void
   internal var createTab: @Sendable (String, String?, String?) async throws -> Void
-  internal var renameTab: @Sendable (String, String) async throws -> Void
+  internal var renameTab: @Sendable (String, String?) async throws -> Void
   internal var moveTab: @Sendable (String, Int) async throws -> Void
   internal var closeTab: @Sendable (String) async throws -> Void
   internal var closeWorkspace: @Sendable (String) async throws -> Void
@@ -73,7 +73,7 @@ nonisolated internal struct HerdrTerminalChromeClient: Sendable {
     focusPane: @escaping @Sendable (String) async throws -> Void,
     createWorkspace: @escaping @Sendable () async throws -> Void = {},
     createTab: @escaping @Sendable (String, String?, String?) async throws -> Void,
-    renameTab: @escaping @Sendable (String, String) async throws -> Void,
+    renameTab: @escaping @Sendable (String, String?) async throws -> Void,
     moveTab: @escaping @Sendable (String, Int) async throws -> Void,
     closeTab: @escaping @Sendable (String) async throws -> Void,
     closeWorkspace: @escaping @Sendable (String) async throws -> Void

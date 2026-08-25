@@ -55,7 +55,7 @@ internal struct HerdrTerminalChromeFeature {
   internal enum Mutation: Equatable, Sendable {
     case createWorkspace
     case createTab(workspaceID: String, label: String?, sourceTabID: String?)
-    case renameTab(tabID: String, label: String)
+    case renameTab(tabID: String, label: String?)
     case moveTab(tabID: String, insertIndex: Int)
     case closeTab(tabID: String, workspaceID: String, isLastTab: Bool)
     case closeWorkspace(workspaceID: String)
@@ -96,6 +96,7 @@ internal struct HerdrTerminalChromeFeature {
     case newWorkspaceRequested
     case newTabRequested(workspaceID: String, label: String?, sourceTabID: String?)
     case renameTabRequested(tabID: String, label: String)
+    case resetTabNameRequested(String)
     case moveTabRequested(tabID: String, insertIndex: Int)
     case closeTabRequested(tabID: String, workspaceID: String)
     case closeConfirmationConfirmed
@@ -471,6 +472,10 @@ internal struct HerdrTerminalChromeFeature {
       case .renameTabRequested(let tabID, let label):
         guard state.connection == .connected, !label.isEmpty else { return .none }
         return startMutation(&state, .renameTab(tabID: tabID, label: label))
+
+      case .resetTabNameRequested(let tabID):
+        guard state.connection == .connected else { return .none }
+        return startMutation(&state, .renameTab(tabID: tabID, label: nil))
 
       case .moveTabRequested(let tabID, let insertIndex):
         guard state.connection == .connected, insertIndex >= 0 else { return .none }
