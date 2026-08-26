@@ -315,7 +315,8 @@ internal struct HerdrTerminalChromeFeature {
 
       case .snapshotResponse(.success(let snapshot)):
         guard state.connection != .hidden else { return .none }
-        let shouldRestartLifecycle = state.subscriptionAwaitingSnapshot && replaceSnapshot(&state, with: snapshot)
+        let wasAwaitingSnapshot = state.subscriptionAwaitingSnapshot
+        let shouldRestartLifecycle = replaceSnapshot(&state, with: snapshot) && wasAwaitingSnapshot
         state.subscriptionAwaitingSnapshot = false
         state.connection = .connected
         return shouldRestartLifecycle ? restartLifecycleEffect() : .none

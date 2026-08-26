@@ -69,7 +69,15 @@ struct HerdrTerminalChromeTests {
     await store.send(.refreshResponseWithGeneration(0, .success(makeSnapshot(focusedPaneID: "p1"))))
     #expect(store.state.selectedPaneID == "p2")
     #expect(store.state.snapshot.focusedPaneID == "p1")
-    await store.send(.stop)
+    await store.send(.stop) {
+      $0.connection = .hidden
+      $0.snapshot = .empty
+      $0.selectedWorkspaceID = nil
+      $0.selectedTabID = nil
+      $0.selectedPaneID = nil
+      $0.refreshGeneration = 2
+      $0.mutationGeneration = 1
+    }
   }
 
   @Test func spacesMenuUsesANativeButtonHitTarget() {
@@ -181,13 +189,18 @@ struct HerdrTerminalChromeTests {
       $0.selectedPaneID = nil
       $0.subscribedPaneIDs = []
     }
-    await store.receive(.snapshotResponse(.success(.empty)))
+    await store.receive(.subscriptionPrepared([])) {
+      $0.subscriptionAwaitingSnapshot = true
+    }
+    await store.receive(.snapshotResponse(.success(.empty))) {
+      $0.subscriptionAwaitingSnapshot = false
+    }
     await store.send(.stop) {
       $0.connection = .hidden
       $0.refreshGeneration = 2
       $0.mutationGeneration = 1
     }
-    #expect(snapshotCalls.value == 2)
+    #expect(snapshotCalls.value == 3)
   }
 
   @Test func tabMutationParamsUseHerdrWireNames() throws {
@@ -503,7 +516,8 @@ struct HerdrTerminalChromeTests {
     }
   }
 
-  @Test func paneFocusEventDerivesTabSelectionFromPaneSnapshot() async {
+  @Test(.dependencies) func paneFocusEventDerivesTabSelectionFromPaneSnapshot() async {
+    let clock = TestClock()
     var initialState = HerdrTerminalChromeFeature.State()
     initialState.connection = .connected
     initialState.snapshot = HerdrSessionSnapshot(
@@ -529,6 +543,8 @@ struct HerdrTerminalChromeTests {
     initialState.selectedPaneID = "p1"
     let store = TestStore(initialState: initialState) {
       HerdrTerminalChromeFeature()
+    } withDependencies: {
+      $0.continuousClock = clock
     }
 
     await store.send(
@@ -544,6 +560,16 @@ struct HerdrTerminalChromeTests {
       $0.selectedWorkspaceID = "w1"
       $0.selectedTabID = "t2"
       $0.selectedPaneID = "p2"
+      $0.refreshGeneration = 1
+    }
+    await store.send(.stop) {
+      $0.connection = .hidden
+      $0.snapshot = .empty
+      $0.selectedWorkspaceID = nil
+      $0.selectedTabID = nil
+      $0.selectedPaneID = nil
+      $0.refreshGeneration = 2
+      $0.mutationGeneration = 1
     }
   }
 
@@ -863,8 +889,10 @@ struct HerdrTerminalChromeTests {
       $0.refreshGeneration = 1
     }
     await clock.advance(by: .milliseconds(100))
-    await store.receive(.debouncedRefresh)
-    await store.receive(.refreshResponseWithGeneration(1, .success(snapshot)))
+    await store.receive(.debouncedRefresh) {
+      $0.refreshGeneration = 2
+    }
+    await store.receive(.refreshResponseWithGeneration(2, .success(snapshot)))
     #expect(labels.value == [nil])
   }
 
