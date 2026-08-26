@@ -52,9 +52,22 @@ nonisolated internal enum HerdrTerminalChromeFailure: Error, Equatable, Sendable
   }
 }
 
+nonisolated internal struct HerdrEventSubscription: Sendable {
+  internal let stream: AsyncStream<HerdrEventStreamState>
+  internal let cancel: @Sendable () -> Void
+
+  internal init(
+    stream: AsyncStream<HerdrEventStreamState>,
+    cancel: @escaping @Sendable () -> Void
+  ) {
+    self.stream = stream
+    self.cancel = cancel
+  }
+}
+
 nonisolated internal struct HerdrTerminalChromeClient: Sendable {
   internal var snapshot: @Sendable () async throws -> HerdrSessionSnapshot
-  internal var events: @Sendable (Set<String>) -> AsyncStream<HerdrEventStreamState>
+  internal var subscribeEvents: @Sendable (Set<String>) async throws -> HerdrEventSubscription
   internal var focusWorkspace: @Sendable (String) async throws -> Void
   internal var focusTab: @Sendable (String) async throws -> Void
   internal var focusPane: @Sendable (String) async throws -> Void
@@ -67,7 +80,7 @@ nonisolated internal struct HerdrTerminalChromeClient: Sendable {
 
   internal init(
     snapshot: @escaping @Sendable () async throws -> HerdrSessionSnapshot,
-    events: @escaping @Sendable (Set<String>) -> AsyncStream<HerdrEventStreamState>,
+    subscribeEvents: @escaping @Sendable (Set<String>) async throws -> HerdrEventSubscription,
     focusWorkspace: @escaping @Sendable (String) async throws -> Void,
     focusTab: @escaping @Sendable (String) async throws -> Void,
     focusPane: @escaping @Sendable (String) async throws -> Void,
@@ -79,7 +92,7 @@ nonisolated internal struct HerdrTerminalChromeClient: Sendable {
     closeWorkspace: @escaping @Sendable (String) async throws -> Void
   ) {
     self.snapshot = snapshot
-    self.events = events
+    self.subscribeEvents = subscribeEvents
     self.focusWorkspace = focusWorkspace
     self.focusTab = focusTab
     self.focusPane = focusPane
@@ -99,8 +112,8 @@ extension HerdrTerminalChromeClient: DependencyKey {
       snapshot: {
         try await socketClient.sessionSnapshot()
       },
-      events: { paneIDs in
-        socketClient.terminalChromeEvents(paneIDs: paneIDs)
+      subscribeEvents: { paneIDs in
+        try await socketClient.terminalChromeEventSubscription(paneIDs: paneIDs)
       },
       focusWorkspace: { workspaceID in
         try await socketClient.focusWorkspace(workspaceID)
@@ -138,7 +151,9 @@ extension HerdrTerminalChromeClient: DependencyKey {
 
   internal static let testValue = Self(
     snapshot: { .empty },
-    events: { _ in AsyncStream { $0.finish() } },
+    subscribeEvents: { _ in
+      HerdrEventSubscription(stream: AsyncStream { $0.finish() }, cancel: {})
+    },
     focusWorkspace: { _ in },
     focusTab: { _ in },
     focusPane: { _ in },

@@ -131,8 +131,12 @@ internal struct CleanAppFeature {
     switch error {
     case .unsupportedProtocol(let supported, let actual):
       let detectedVersion = actual.map(String.init) ?? "unknown"
+      let supportedDescription =
+        supported.lowerBound == supported.upperBound
+        ? String(supported.lowerBound)
+        : "\(supported.lowerBound)-\(supported.upperBound)"
       message =
-        "Prowl Clean requires Herdr protocol \(supported.lowerBound)-\(supported.upperBound), but detected protocol \(detectedVersion). Input-source synchronization is paused. Update Herdr or Prowl."
+        "Prowl Clean requires Herdr protocol \(supportedDescription), but detected protocol \(detectedVersion). Input-source synchronization is paused. Update Herdr or Prowl."
     case .unsupportedResponseType(let responseType):
       let responseDescription = responseType ?? "unknown"
       message =

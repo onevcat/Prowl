@@ -23,7 +23,7 @@
 | 类型/文件 | 职责 |
 |---|---|
 | `HerdrTerminalChromeFeature` | TCA state、snapshot lifecycle、事件订阅、selection、focus 和 chrome mutation 状态 |
-| `HerdrTerminalChromeClient` | Herdr JSON socket dependency，提供 snapshot、events、focus 和 tab/workspace mutation closures |
+| `HerdrTerminalChromeClient` | Herdr JSON socket dependency，提供 snapshot、单一 multiplexed event subscription、focus 和 tab/workspace mutation closures |
 | `HerdrSessionSnapshot` | Herdr `session.snapshot` 的 wire model，包含 workspace、tab、pane、layout、agent |
 | `HerdrSidebarView` | 左侧 sidebar 的纯 SwiftUI 子视图 |
 | `HerdrTabBarView` | terminal 顶部 tab bar 的纯 SwiftUI 子视图 |
@@ -45,7 +45,7 @@
 
 - 不恢复、修改或复用 Standard Mode 的 Prowl repository/worktree Sidebar。
 - 不接管 Herdr PTY，不实现 Herdr binary client protocol，不自行渲染 terminal pane 内容。
-- Herdr 侧增加 per-client `hide_navigation_chrome` handshake capability；该字段属于 binary client protocol 变更，Herdr protocol version 必须同步升级；该能力只影响声明了 native chrome 的 Herdr client。
+- Herdr 侧增加 per-client `hide_navigation_chrome` handshake capability；该字段属于 binary client protocol 变更，当前 binary protocol 保持 21；Prowl 只支持 protocol 21，19/20/22 在 API/render 前拒绝；该能力只影响声明了 native chrome 的 Herdr client。
 - 不把 workspace、tab、pane、agent 持久化到 Prowl repository state。
 - 不创建新的 Herdr session、workspace、pane 或 tab 用于验证；运行验证只读检查既有 session，除非测试使用 fake client。
 - 所有 Herdr mutation 必须通过 JSON socket API；UI 不直接修改本地 snapshot 作为最终状态。
@@ -170,10 +170,10 @@ Native tab bar 只展示 Herdr 自带 tab bar 的内容元素：
 ### 5.1 Lifecycle
 
 - Clean foreground process 确认是 `herdr` 后，发送 `foregroundChanged(true)`；
-- feature 请求 `ping` protocol check，再请求 `session.snapshot`；
-- snapshot 成功后进入 `.connected`，sidebar 和 tab bar 同时可见；
-- 根据 snapshot pane IDs 建立全局 lifecycle 与动态 pane-specific event subscription；
-- 收到事件后 100ms debounce，再请求完整 snapshot；
+- feature 先请求 discovery `session.snapshot` 获取 pane IDs，再建立包含 global 与 pane-specific subscriptions 的 `events.subscribe` 并等待 acknowledgement，最后请求 authoritative `session.snapshot`；
+- authoritative snapshot 成功后进入 `.connected`，sidebar 和 tab bar 同时可见；两次 snapshot 之间到达的事件保留在同一 stream 中；
+- 若 authoritative snapshot 的 pane-set 与 discovery 不同，取消旧 subscription 并重建 discovery -> subscribe -> authoritative snapshot 生命周期；
+- 收到 rename/focus event 后 100ms debounce，再请求完整 snapshot；结构性 move/create/close event 使用 immediate refresh；
 - Herdr 退出或 `foregroundChanged(false)` 时取消 lifecycle、refresh、focus、mutation tasks，清空 snapshot 并隐藏 chrome；
 - 普通 shell、socket 不存在或 Herdr 不在 foreground 时，不显示 stale chrome。
 
@@ -221,7 +221,7 @@ internal enum Action: Equatable {
 ```swift
 nonisolated internal struct HerdrTerminalChromeClient: Sendable {
   internal var snapshot: @Sendable () async throws -> HerdrSessionSnapshot
-  internal var events: @Sendable (Set<String>) -> AsyncStream<HerdrEventStreamState>
+  internal var subscribeEvents: @Sendable () async throws -> HerdrEventSubscription
   internal var focusWorkspace: @Sendable (String) async throws -> Void
   internal var focusTab: @Sendable (String) async throws -> Void
   internal var focusPane: @Sendable (String) async throws -> Void
@@ -294,7 +294,7 @@ Herdr `tab.close` 在关闭 workspace group 需要确认时返回 `confirmation_
 | tab bar 滚轮 | 按 snapshot tabs 顺序循环 focus previous/next tab |
 | tab 横向滚动 | overflow 时移动 native tab viewport，不改变 server tab 顺序 |
 | 左键拖拽 tab | 计算 insert index，调用 `tab.move`；显示 drop indicator |
-| 点击 `+` | 显示 native tab name prompt；提交后 `tab.create` |
+| 点击 `+` | 直接创建并 focus 未命名 tab；手动命名通过 Rename 菜单或 sheet 提交 `tab.rename` |
 | 右键 tab | 显示 New tab / Rename / Close |
 | 右键菜单 New tab | 以该 tab 所属 workspace 创建并 focus 新 tab |
 | 右键菜单 Rename | 预填当前 label，提交 `tab.rename` |

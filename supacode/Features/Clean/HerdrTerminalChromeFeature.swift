@@ -26,6 +26,7 @@ internal struct HerdrTerminalChromeFeature {
     internal var mutationError: HerdrTerminalChromeFailure?
     internal var refreshGeneration: UInt64 = 0
     internal var subscribedPaneIDs: Set<String> = []
+    internal var subscriptionAwaitingSnapshot = false
     internal var mutationGeneration: UInt64 = 0
 
     internal var isVisible: Bool {
@@ -81,6 +82,7 @@ internal struct HerdrTerminalChromeFeature {
 
   internal enum Action: Equatable {
     case foregroundChanged(Bool)
+    case subscriptionPrepared(Set<String>)
     case snapshotResponse(Result<HerdrSessionSnapshot, HerdrTerminalChromeFailure>)
     case eventStream(HerdrEventStreamState)
     case debouncedRefresh
@@ -121,6 +123,10 @@ internal struct HerdrTerminalChromeFeature {
     "workspace_closed",
     "workspace_moved",
     "workspace_reordered",
+    "workspace_metadata_updated",
+    "worktree_created",
+    "worktree_opened",
+    "worktree_removed",
     "tab_created",
     "tab_closed",
     "tab_moved",
@@ -139,6 +145,13 @@ internal struct HerdrTerminalChromeFeature {
 
   internal static func shouldRefreshImmediately(for eventName: String) -> Bool {
     immediateRefreshEvents.contains(eventName.replacing(".", with: "_"))
+  }
+
+  internal static func paneSetRequiresLifecycleRestart(
+    subscribedPaneIDs: Set<String>,
+    snapshotPaneIDs: Set<String>
+  ) -> Bool {
+    subscribedPaneIDs != snapshotPaneIDs
   }
 
   private static func monotonicMilliseconds() -> Int {
@@ -262,6 +275,7 @@ internal struct HerdrTerminalChromeFeature {
         state.closeConfirmation = nil
         state.mutationError = nil
         state.subscribedPaneIDs = []
+        state.subscriptionAwaitingSnapshot = false
         state.refreshGeneration &+= 1
         state.mutationGeneration &+= 1
         return .merge(
@@ -285,6 +299,7 @@ internal struct HerdrTerminalChromeFeature {
         state.closeConfirmation = nil
         state.mutationError = nil
         state.subscribedPaneIDs = []
+        state.subscriptionAwaitingSnapshot = false
         state.refreshGeneration &+= 1
         state.mutationGeneration &+= 1
         return .merge(
@@ -300,8 +315,15 @@ internal struct HerdrTerminalChromeFeature {
 
       case .snapshotResponse(.success(let snapshot)):
         guard state.connection != .hidden else { return .none }
-        _ = replaceSnapshot(&state, with: snapshot)
+        let shouldRestartLifecycle = state.subscriptionAwaitingSnapshot && replaceSnapshot(&state, with: snapshot)
+        state.subscriptionAwaitingSnapshot = false
         state.connection = .connected
+        return shouldRestartLifecycle ? restartLifecycleEffect() : .none
+
+      case .subscriptionPrepared(let paneIDs):
+        guard state.connection != .hidden else { return .none }
+        state.subscribedPaneIDs = paneIDs
+        state.subscriptionAwaitingSnapshot = true
         return .none
 
       case .snapshotResponse(.failure(let failure)):
@@ -334,7 +356,10 @@ internal struct HerdrTerminalChromeFeature {
           herdrTerminalChromeLogger.diagnostic(
             "focus-projected uptime_ms=\(Self.monotonicMilliseconds()) workspace=\(workspace) tab=\(tab) pane=\(pane)"
           )
-          return .cancel(id: CancelID.focusConfirmation)
+          return .merge(
+            .cancel(id: CancelID.focusConfirmation),
+            scheduleDebouncedRefresh(&state, invalidatesInFlightRefresh: true)
+          )
         }
         if Self.shouldRefreshImmediately(for: eventName) {
           herdrTerminalChromeLogger.diagnostic(
@@ -342,16 +367,10 @@ internal struct HerdrTerminalChromeFeature {
           )
           return startRefresh(&state)
         }
-        return .run { [clock] send in
-          do {
-            try await clock.sleep(for: .milliseconds(100))
-          } catch {
-            return
-          }
-          guard !Task.isCancelled else { return }
-          await send(.debouncedRefresh)
+        if eventName.replacing(".", with: "_") == "tab_renamed" {
+          return scheduleDebouncedRefresh(&state, invalidatesInFlightRefresh: true)
         }
-        .cancellable(id: CancelID.refreshDebounce, cancelInFlight: true)
+        return scheduleDebouncedRefresh(&state)
 
       case .eventStream(.disconnected(let error)):
         let failure = HerdrTerminalChromeFailure.map(error)
@@ -365,6 +384,7 @@ internal struct HerdrTerminalChromeFeature {
         state.pendingMutation = nil
         state.closeConfirmation = nil
         state.subscribedPaneIDs = []
+        state.subscriptionAwaitingSnapshot = false
         state.pendingFocus = nil
         state.focusRollback = nil
         return .merge(
@@ -404,6 +424,7 @@ internal struct HerdrTerminalChromeFeature {
           state.pendingMutation = nil
           state.closeConfirmation = nil
           state.subscribedPaneIDs = []
+          state.subscriptionAwaitingSnapshot = false
           state.mutationGeneration &+= 1
           return .merge(
             .cancel(id: CancelID.mutation),
@@ -520,6 +541,13 @@ internal struct HerdrTerminalChromeFeature {
         switch result {
         case .success:
           state.mutationError = nil
+          if case .some(.renameTab) = pendingMutation {
+            state.refreshGeneration &+= 1
+            return .merge(
+              .cancel(id: CancelID.refresh),
+              scheduleDebouncedRefresh(&state)
+            )
+          }
           return startRefresh(&state)
         case .failure(let failure):
           if case .closeTab(_, let workspaceID, true) = pendingMutation,
@@ -585,6 +613,28 @@ internal struct HerdrTerminalChromeFeature {
       .cancellable(id: CancelID.refresh, cancelInFlight: true)
   }
 
+  private func scheduleDebouncedRefresh(
+    _ state: inout State,
+    invalidatesInFlightRefresh: Bool = false
+  ) -> Effect<Action> {
+    if invalidatesInFlightRefresh {
+      state.refreshGeneration &+= 1
+    }
+    let delay = Effect<Action>.run { [clock] send in
+      do {
+        try await clock.sleep(for: .milliseconds(100))
+        guard !Task.isCancelled else { return }
+        await send(.debouncedRefresh)
+      } catch {
+        return
+      }
+    }
+    .cancellable(id: CancelID.refreshDebounce, cancelInFlight: true)
+    return invalidatesInFlightRefresh
+      ? .merge(.cancel(id: CancelID.refresh), delay)
+      : delay
+  }
+
   private func lifecycleEffect() -> Effect<Action> {
     let client = client
     let clock = clock
@@ -592,12 +642,18 @@ internal struct HerdrTerminalChromeFeature {
       var retryDelay = Duration.milliseconds(250)
       while !Task.isCancelled {
         do {
+          let discoverySnapshot = try await client.snapshot()
+          let subscription = try await client.subscribeEvents(Set(discoverySnapshot.panes.map(\.id)))
+          defer { subscription.cancel() }
+          guard !Task.isCancelled else { return }
+          await send(.subscriptionPrepared(Set(discoverySnapshot.panes.map(\.id))))
+          guard !Task.isCancelled else { return }
           let snapshot = try await client.snapshot()
           guard !Task.isCancelled else { return }
           await send(.snapshotResponse(.success(snapshot)))
           retryDelay = .milliseconds(250)
 
-          for await event in client.events(Set(snapshot.panes.map(\.id))) {
+          for await event in subscription.stream {
             guard !Task.isCancelled else { return }
             await send(.eventStream(event))
             if case .disconnected = event {
@@ -727,7 +783,10 @@ internal struct HerdrTerminalChromeFeature {
 
   private func replaceSnapshot(_ state: inout State, with snapshot: HerdrSessionSnapshot) -> Bool {
     let paneIDs = Set(snapshot.panes.map(\.id))
-    let shouldRestartLifecycle = paneIDs != state.subscribedPaneIDs
+    let shouldRestartLifecycle = Self.paneSetRequiresLifecycleRestart(
+      subscribedPaneIDs: state.subscribedPaneIDs,
+      snapshotPaneIDs: paneIDs
+    )
     state.snapshot = snapshot
     state.subscribedPaneIDs = paneIDs
     state.selectedWorkspaceID = reconciledSelection(

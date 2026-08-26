@@ -40,11 +40,15 @@ nonisolated internal struct HerdrSocketClient: Sendable {
   private static let terminalChromeEventNames = [
     "workspace.created",
     "workspace.updated",
+    "workspace.metadata_updated",
     "workspace.renamed",
     "workspace.moved",
     "workspace.closed",
     "workspace.focused",
     "workspace.reordered",
+    "worktree.created",
+    "worktree.opened",
+    "worktree.removed",
     "tab.created",
     "tab.renamed",
     "tab.moved",
@@ -236,8 +240,33 @@ nonisolated internal struct HerdrSocketClient: Sendable {
   }
 
   internal func terminalChromeEvents(paneIDs: Set<String>) -> AsyncStream<HerdrEventStreamState> {
+    terminalChromeEventResource(paneIDs: paneIDs).stream
+  }
+
+  internal func terminalChromeEventSubscription(paneIDs: Set<String>) async throws -> HerdrEventSubscription {
+    let resource = terminalChromeEventResource(paneIDs: paneIDs)
+    var iterator = resource.stream.makeAsyncIterator()
+    while let state = await iterator.next() {
+      switch state {
+      case .subscribed:
+        return resource
+      case .event:
+        // Events arriving with the acknowledgement are retained in the source iterator.
+        continue
+      case .disconnected(let error):
+        resource.cancel()
+        throw error
+      }
+    }
+    resource.cancel()
+    throw HerdrSocketError.connectionClosed
+  }
+
+  private func terminalChromeEventResource(paneIDs: Set<String>) -> HerdrEventSubscription {
     let socketPath = socketPath
-    return AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
+    let holder = HerdrEventSocketSessionHolder()
+    let stream = AsyncStream<HerdrEventStreamState>(bufferingPolicy: .bufferingNewest(256)) {
+      continuation in
       let session = HerdrEventSocketSession(
         socketPath: socketPath,
         eventNames: Self.terminalChromeEventNames,
@@ -245,11 +274,17 @@ nonisolated internal struct HerdrSocketClient: Sendable {
         validatesProtocol: false,
         continuation: continuation
       )
+      holder.set(session)
       continuation.onTermination = { _ in
         session.cancel()
       }
       session.start()
     }
+    return HerdrEventSubscription(
+      stream: stream,
+      cancel: {
+        holder.cancel()
+      })
   }
 
   fileprivate static func connect(to socketPath: String) throws -> Int32 {
@@ -462,6 +497,22 @@ nonisolated internal struct HerdrSocketClient: Sendable {
   }
 }
 
+nonisolated private final class HerdrEventSocketSessionHolder: @unchecked Sendable {
+  private let lock = NSLock()
+  private var session: HerdrEventSocketSession?
+
+  fileprivate func set(_ session: HerdrEventSocketSession) {
+    lock.withLock {
+      self.session = session
+    }
+  }
+
+  fileprivate func cancel() {
+    let session = lock.withLock { self.session }
+    session?.cancel()
+  }
+}
+
 nonisolated private final class HerdrEventSocketSession: @unchecked Sendable {
   private let socketPath: String
   private let eventNames: [String]
@@ -496,25 +547,34 @@ nonisolated private final class HerdrEventSocketSession: @unchecked Sendable {
     lock.lock()
     isCancelled = true
     let descriptor = fileDescriptor
-    fileDescriptor = -1
-    lock.unlock()
     if descriptor >= 0 {
       _ = Darwin.shutdown(descriptor, SHUT_RDWR)
-      Darwin.close(descriptor)
     }
+    lock.unlock()
   }
 
   private func run() {
+    var descriptor: Int32 = -1
+    defer {
+      lock.lock()
+      if fileDescriptor == descriptor {
+        fileDescriptor = -1
+      }
+      if descriptor >= 0 {
+        Darwin.close(descriptor)
+      }
+      lock.unlock()
+      continuation.finish()
+    }
+
     do {
       if validatesProtocol {
         try HerdrSocketClient.validateProtocol(at: socketPath)
       }
-      let descriptor = try HerdrSocketClient.connect(to: socketPath)
+      descriptor = try HerdrSocketClient.connect(to: socketPath)
       lock.lock()
       if isCancelled {
         lock.unlock()
-        Darwin.close(descriptor)
-        continuation.finish()
         return
       }
       fileDescriptor = descriptor
@@ -551,8 +611,6 @@ nonisolated private final class HerdrEventSocketSession: @unchecked Sendable {
         continuation.yield(.disconnected(.invalidResponse))
       }
     }
-    cancel()
-    continuation.finish()
   }
 
   private var cancelled: Bool {

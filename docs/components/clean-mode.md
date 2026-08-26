@@ -63,18 +63,25 @@ Prowl 的输入法 adapter 只读取 focused pane，并订阅已确认的 focus/
 - Agent title 和包含 Agent pane 的 tab title 左侧都会显示对应 provider 的 full-color canonical 图标；未知 provider 使用
   Zap 图标兜底，普通 shell tab 不显示图标。
 - Agent title 第一行显示 `foreground_cwd`/`cwd` 的目录名，并与 workspace/tab label 去重；第二行保留 agent 名称。
+- Herdr tab 的 `label` 是当前实际名称，`custom_name` 是手动命名标记。自动状态下 `label` 跟随 focused pane 的 cwd basename；
+  手动状态下 cwd 变化不会覆盖 `label`，即使手动名称恰好等于当前目录名也保持手动状态。
+- Goto、Navigator、mobile switcher、window title、terminal attach、`session.snapshot`、`tab.list`/`tab.get` 和 Clean native tab bar
+  都读取 Herdr 的同一个 `label`，不再使用 `1`、`2` 等 tab 序号作为名称。
 - 当前 pane 和刚离开的 pane 有明确 foreground application 时，tab title 显示 `process · directory`；shell、`starship` 和
-  transient helper 不参与识别。进程退出后恢复自动目录段。
-- linked worktree 的 tab title 显示为 `<process> · <repo_name> ↳ <checkout_directory>`；没有前台进程时仍保留该 worktree 标识。
-  Herdr snapshot 没有 worktree provenance 时，Prowl 按 pane cwd 异步解析 Git common directory，并按 workspace 路径缓存结果，
-  不阻塞 native chrome 渲染。
-- tabbar 右键菜单中的 **Rename Directory Name...** 只修改目录段，进程名和 Agent icon 保持独立显示；已有手动名称时会同时提供
-  **Use Automatic Directory Name**，Rename sheet 中也提供 **Use Automatic Name**，用于明确恢复自动目录段。
+  transient helper 不参与识别。进程退出后只恢复 directory segment，不改变 Herdr 的手动命名状态。
+- linked worktree、process title 和 Agent icon 都是 Prowl 的独立视觉装饰。linked worktree 只在自动状态下为 directory segment
+  增加 rich presentation，手动 directory segment 始终优先；只有 Herdr snapshot 已提供 worktree provenance 时才显示 linked-worktree
+  装饰，没有 provenance 时直接使用 server `label`，不在 tab projection 内启动 Git 子进程；Herdr 的 `label`/`custom_name` 不通过装饰字符串反推。
+- tabbar 右键菜单中的 **Rename Directory Name...** 只修改 directory segment，进程名和 Agent icon 保持独立显示；已有手动名称时会同时提供
+  **Use Automatic Directory Name**，Rename sheet 中也提供 **Use Automatic Name**。清除操作发送 `tab.rename` 的 `label: null`，
+  由 Herdr 将 `custom_name` 清空并恢复当前 cwd。
+- tab name 逻辑不增加 cwd polling、额外子进程、每次 render 的 Git/文件系统访问或 socket 写入循环；自动名称只在已有 cwd/focus
+  事件中更新，Prowl 的装饰变化不触发 Herdr rename。
 - tabbar 右侧的 `+` 会直接创建未命名 tab，不弹出命名输入框；重命名和恢复自动名称都通过 tab context menu 或 Rename sheet 操作。
 - agents header 的 `grouped`/`priority` 控件对应 Herdr 自带的 workspace 顺序和 attention 优先级排序。
 - 点击 workspace、tab 或 pane row 会调用对应的 `workspace.focus`、`tab.focus` 或 `pane.focus`，选中状态以服务器
   focus event 为准；点击时先立即显示目标 selection，event 超时或目标不存在时才回退到完整 snapshot。
-- workspace、tab、pane 创建、关闭、移动、重命名、聚焦和 layout 更新会触发一次 100ms debounce 后的完整 snapshot 刷新。
+- Herdr protocol 21 的 workspace、worktree、tab、pane 创建、关闭、移动、重命名、聚焦、metadata 和 layout 更新都会触发一次完整 snapshot 刷新；rename/focus burst 使用 100ms debounce，结构变更沿用 immediate refresh。
 - socket 尚未 ready、断开或 Herdr 退出时，sidebar 隐藏并把 terminal 恢复为全宽；不会影响 Ghostty 输入、渲染或输入法同步。
 - Sidebar 不接管 Herdr terminal stream，不实现 binary client protocol，也不持久化 Herdr workspace/tab/pane。
 
@@ -94,9 +101,10 @@ Prowl 的输入法 adapter 只读取 focused pane，并订阅已确认的 focus/
   Option 组合输入 macOS 特殊字符。
 - 退出或 detach Herdr 后，自动恢复外层 terminal 的前台进程判断。
 
-Prowl 支持 Herdr protocol 19 和 20。Herdr JSON API 的每条 Unix socket connection 只处理一条 request。Prowl
-在 adapter 启动或重连时使用独立短连接完成 protocol check，随后用新的短连接查询 `pane.current`，并为
-`events.subscribe` 保留一条单独的长连接；这些请求不能复用同一条 connection。
+Prowl 只支持 Herdr protocol 21；protocol 19、20 及未来 protocol 22 在 protocol check 前拒绝并隐藏 native chrome。Herdr JSON API 的每条 Unix socket connection 只处理一条 request。Prowl
+在 adapter 启动或重连时使用独立短连接完成 protocol check，随后为 terminal chrome 按三步建立生命周期：先用短连接取得 discovery
+`session.snapshot` 以获得当前 pane IDs，再用单一 multiplexed `events.subscribe` 长连接订阅 global 与这些 pane-specific events 并等待 ack，最后重新取得 authoritative
+`session.snapshot` 作为首个对外状态；两次 snapshot 之间到达的事件由同一 stream/consumer 保留。authoritative snapshot 发现 pane-set 变化时，取消旧订阅并重建整轮生命周期。
 
 socket 不存在、断开、响应异常或 protocol 不兼容时，Prowl 保持当前输入法并静默重试或停止集成，不显示产品
 overlay。首期只支持 bare `herdr` 的 default local session，不支持 named session、remote Herdr 或自定义

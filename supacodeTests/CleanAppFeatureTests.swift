@@ -77,7 +77,7 @@ struct CleanAppFeatureTests {
     }
 
     await store.send(
-      .herdrCompatibilityFailure(.unsupportedProtocol(supported: 19...21, actual: 22))
+      .herdrCompatibilityFailure(.unsupportedProtocol(supported: 21...21, actual: 22))
     ) {
       $0.alert = AlertState {
         TextState("Herdr protocol incompatible")
@@ -87,7 +87,7 @@ struct CleanAppFeatureTests {
         }
       } message: {
         TextState(
-          "Prowl Clean requires Herdr protocol 19-21, but detected protocol 22. Input-source synchronization is paused. Update Herdr or Prowl."
+          "Prowl Clean requires Herdr protocol 21, but detected protocol 22. Input-source synchronization is paused. Update Herdr or Prowl."
         )
       }
     }
