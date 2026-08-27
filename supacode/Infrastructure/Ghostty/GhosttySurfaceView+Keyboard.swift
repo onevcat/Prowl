@@ -610,13 +610,22 @@ extension GhosttySurfaceView {
     return result
   }
 
+  internal static func shouldLogHerdrNavigationSend(
+    eventType: NSEvent.EventType,
+    action: ghostty_input_action_e
+  ) -> Bool {
+    guard eventType == .keyDown || eventType == .keyUp else { return false }
+    return action != GHOSTTY_ACTION_RELEASE
+  }
+
   private func logHerdrNavigationSendIfNeeded(
     event: NSEvent,
     action: ghostty_input_action_e,
     text: String?,
     result: Bool
   ) {
-    guard action != GHOSTTY_ACTION_RELEASE,
+    guard Self.shouldLogHerdrNavigationSend(eventType: event.type, action: action) else { return }
+    guard
       Self.isOptionCanvasNavigationShortcut(
         keyCode: event.keyCode,
         charactersIgnoringModifiers: event.charactersIgnoringModifiers,

@@ -545,6 +545,27 @@ struct GhosttySurfaceViewTests {
     )
   }
 
+  @Test func herdrNavigationLoggingRejectsModifierOnlyEvents() {
+    #expect(
+      !GhosttySurfaceView.shouldLogHerdrNavigationSend(
+        eventType: .flagsChanged,
+        action: GHOSTTY_ACTION_PRESS
+      )
+    )
+    #expect(
+      GhosttySurfaceView.shouldLogHerdrNavigationSend(
+        eventType: .keyDown,
+        action: GHOSTTY_ACTION_PRESS
+      )
+    )
+    #expect(
+      !GhosttySurfaceView.shouldLogHerdrNavigationSend(
+        eventType: .keyDown,
+        action: GHOSTTY_ACTION_RELEASE
+      )
+    )
+  }
+
   @Test func optionCanvasNavigationShortcutMatchesByKeyCodeWhenCharactersMissing() {
     #expect(
       GhosttySurfaceView.isOptionCanvasNavigationShortcut(
