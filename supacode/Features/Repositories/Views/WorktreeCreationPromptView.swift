@@ -9,7 +9,7 @@ struct WorktreeCreationPromptView: View {
     VStack(alignment: .leading, spacing: 16) {
       VStack(alignment: .leading, spacing: 4) {
         Text("New Worktree")
-          .font(.title3)
+          .interfaceFont(.title3)
         Text("Create a branch in \(store.repositoryName)")
           .foregroundStyle(.secondary)
       }
@@ -37,10 +37,10 @@ struct WorktreeCreationPromptView: View {
         if let suggested = store.suggestedBranchName {
           HStack(spacing: 4) {
             Text("Auto suggestion: ")
-              .font(.footnote)
+              .interfaceFont(.footnote)
               .foregroundStyle(.tertiary)
             Text(suggested)
-              .font(.footnote)
+              .interfaceFont(.footnote)
               .monospaced()
               .foregroundStyle(.tertiary)
               .lineLimit(1)
@@ -48,14 +48,14 @@ struct WorktreeCreationPromptView: View {
               store.send(.useSuggestedBranchName)
             } label: {
               Text("Use")
-                .font(.footnote)
+                .interfaceFont(.footnote)
             }
             .buttonStyle(.plain)
             .foregroundStyle(.tint)
             Spacer()
             Image(systemName: "questionmark.circle")
               .accessibilityLabel("About auto suggestion")
-              .font(.footnote)
+              .interfaceFont(.footnote)
               .foregroundStyle(.tertiary)
               .help(
                 "Suggested by on-device AI based on your repository "
@@ -82,14 +82,14 @@ struct WorktreeCreationPromptView: View {
         )
         .help("Runs git fetch <remote> before creating the worktree.")
         Text("Keeps remote-tracking base branches current. Fetch failures are logged and creation continues.")
-          .font(.footnote)
+          .interfaceFont(.footnote)
           .foregroundStyle(.secondary)
       }
 
       DisclosureGroup("Advanced", isExpanded: $store.showAdvancedOptions) {
         VStack(alignment: .leading, spacing: 12) {
           Text("Override where the new worktree folder is created. Leave a field blank to use its default.")
-            .font(.footnote)
+            .interfaceFont(.footnote)
             .foregroundStyle(.secondary)
           VStack(alignment: .leading, spacing: 8) {
             Text("Worktree name")
@@ -119,11 +119,11 @@ struct WorktreeCreationPromptView: View {
       // path the worktree will be created at (mirrors the reducer's resolution).
       if let message = store.validationMessage ?? store.worktreeNameValidationError, !message.isEmpty {
         Text(message)
-          .font(.footnote)
+          .interfaceFont(.footnote)
           .foregroundStyle(.red)
       } else {
         Text(store.resolvedWorktreeLocationPreview)
-          .font(.footnote)
+          .interfaceFont(.footnote)
           .monospaced()
           .foregroundStyle(.secondary)
           .textSelection(.enabled)

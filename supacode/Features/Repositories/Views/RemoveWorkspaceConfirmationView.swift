@@ -11,12 +11,12 @@ struct RemoveWorkspaceConfirmationView: View {
     VStack(alignment: .leading, spacing: 16) {
       VStack(alignment: .leading, spacing: 6) {
         Text("Remove workspace?")
-          .font(.headline)
+          .interfaceFont(.headline)
         Text("This removes \(confirmation.workspaceTitle) from Prowl.")
           .foregroundStyle(.secondary)
           .fixedSize(horizontal: false, vertical: true)
         Text(confirmation.rootPath)
-          .font(.footnote.monospaced())
+          .interfaceFont(.footnote, design: .monospaced)
           .foregroundStyle(.secondary)
           .lineLimit(1)
           .truncationMode(.middle)
@@ -47,7 +47,7 @@ struct RemoveWorkspaceConfirmationView: View {
               HStack(spacing: 4) {
                 Text("Delete branch")
                 Text(option.branchName)
-                  .font(.body.monospaced())
+                  .interfaceFont(.body, design: .monospaced)
                 Text("in \(option.repositoryName)")
               }
             }
@@ -59,7 +59,7 @@ struct RemoveWorkspaceConfirmationView: View {
       }
 
       Text("Linked repositories stay untouched; only the symlinks inside the workspace folder are removed.")
-        .font(.footnote)
+        .interfaceFont(.footnote)
         .foregroundStyle(.secondary)
         .fixedSize(horizontal: false, vertical: true)
 

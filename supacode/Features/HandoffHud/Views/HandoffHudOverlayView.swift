@@ -89,9 +89,9 @@ private struct HandoffHudCard: View {
   private var header: some View {
     VStack(alignment: .leading, spacing: 2) {
       Text(headerTitle)
-        .font(.headline)
+        .interfaceFont(.headline)
       Text(headerSubtitle)
-        .font(.subheadline)
+        .interfaceFont(.subheadline)
         .foregroundStyle(.secondary)
     }
     .padding(16)
@@ -230,10 +230,10 @@ private struct HandoffTargetRow: View {
         VStack(alignment: .leading, spacing: 1) {
           HStack(spacing: 6) {
             Text(target.title)
-              .font(.body)
+              .interfaceFont(.body)
             if target.isCurrentAgent {
               Text("fresh session")
-                .font(.caption2)
+                .interfaceFont(.caption2)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 1)
@@ -241,7 +241,7 @@ private struct HandoffTargetRow: View {
             }
           }
           Text(target.subtitle)
-            .font(.caption)
+            .interfaceFont(.caption)
             .foregroundStyle(.secondary)
         }
         Spacer(minLength: 0)
@@ -304,7 +304,7 @@ private struct HandoffHudRunView: View {
         ProgressView()
           .controlSize(.small)
         Text(stageDescription)
-          .font(.body)
+          .interfaceFont(.body)
         Spacer(minLength: 0)
       }
       .padding(16)
@@ -313,7 +313,7 @@ private struct HandoffHudRunView: View {
 
       HStack {
         Text(footerHint)
-          .font(.caption)
+          .interfaceFont(.caption)
           .foregroundStyle(.secondary)
         Spacer()
         if run.stage == .requesting {
@@ -378,7 +378,7 @@ private struct HandoffHudFinishedView: View {
       HStack(spacing: 10) {
         icon
         Text(message)
-          .font(.body)
+          .interfaceFont(.body)
         Spacer(minLength: 0)
       }
       .padding(16)
@@ -403,12 +403,12 @@ private struct HandoffHudFinishedView: View {
     case .handedOff, .briefSaved:
       Image(systemName: "checkmark.circle.fill")
         .foregroundStyle(.green)
-        .font(.title2)
+        .interfaceFont(.title2)
         .accessibilityLabel("Success")
     case .failed:
       Image(systemName: "exclamationmark.triangle.fill")
         .foregroundStyle(.yellow)
-        .font(.title2)
+        .interfaceFont(.title2)
         .accessibilityLabel("Failure")
     }
   }

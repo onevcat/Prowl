@@ -7,7 +7,7 @@ struct WorkspaceRepositoriesGridView: View {
   var body: some View {
     if workspace.repositories.isEmpty {
       Text("No repositories are declared in this workspace metadata.")
-        .font(.callout)
+        .interfaceFont(.callout)
         .foregroundStyle(.secondary)
     } else {
       Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 8) {
@@ -24,22 +24,22 @@ struct WorkspaceRepositoriesGridView: View {
         ForEach(workspace.repositories) { entry in
           GridRow(alignment: .firstTextBaseline) {
             Text(entry.name)
-              .font(.subheadline.weight(.medium))
+              .interfaceFont(.subheadline, weight: .medium)
             Text(entry.role ?? " ")
-              .font(.subheadline)
+              .interfaceFont(.subheadline)
               .foregroundStyle(.secondary)
             Text(sourceKindTitle(entry.sourceKind))
-              .font(.subheadline)
+              .interfaceFont(.subheadline)
               .foregroundStyle(.secondary)
               .help(entry.sourceLocation ?? "")
             Text(materializationTitle(entry))
-              .font(.subheadline)
+              .interfaceFont(.subheadline)
               .foregroundStyle(.secondary)
             Text(entry.branchName ?? entry.baseRef ?? " ")
-              .font(.subheadline.monospaced())
+              .interfaceFont(.subheadline, design: .monospaced)
               .foregroundStyle(.secondary)
             Text(entry.resolvedURL(relativeTo: rootURL).path(percentEncoded: false))
-              .font(.subheadline.monospaced())
+              .interfaceFont(.subheadline, design: .monospaced)
               .foregroundStyle(.secondary)
               .lineLimit(1)
               .truncationMode(.middle)
@@ -52,7 +52,7 @@ struct WorkspaceRepositoriesGridView: View {
 
   private func header(_ title: String) -> some View {
     Text(title)
-      .font(.caption.weight(.semibold))
+      .interfaceFont(.caption, weight: .semibold)
       .foregroundStyle(.tertiary)
   }
 

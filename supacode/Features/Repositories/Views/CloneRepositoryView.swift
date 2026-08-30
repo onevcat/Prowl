@@ -13,9 +13,9 @@ struct CloneRepositoryView: View {
     VStack(alignment: .leading, spacing: 16) {
       VStack(alignment: .leading, spacing: 4) {
         Text("Clone")
-          .font(.system(size: 16, weight: .semibold))
+          .interfaceFont(size: 16, weight: .semibold)
         Text("Clone a remote repository into a local directory")
-          .font(.system(size: 12.5))
+          .interfaceFont(size: 12.5)
           .foregroundStyle(.secondary)
       }
 
@@ -45,7 +45,7 @@ struct CloneRepositoryView: View {
 
       if let errorMessage {
         Text(errorMessage)
-          .font(.caption)
+          .interfaceFont(.caption)
           .foregroundStyle(.red)
           .textSelection(.enabled)
       }
@@ -72,7 +72,7 @@ struct CloneRepositoryView: View {
         VStack(spacing: 8) {
           ProgressView()
           Text("Cloning…")
-            .font(.callout)
+            .interfaceFont(.callout)
             .foregroundStyle(.secondary)
         }
         .padding(18)

@@ -99,7 +99,7 @@ struct SidebarFooterView: View {
         ))
     }
     .buttonStyle(.plain)
-    .font(.callout)
+    .interfaceFont(.callout)
     .padding(.horizontal, 12)
     .padding(.vertical, 8)
     .frame(maxWidth: .infinity, alignment: .leading)

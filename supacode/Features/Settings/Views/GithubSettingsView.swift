@@ -80,7 +80,7 @@ struct GithubSettingsView: View {
                 .foregroundStyle(.red)
               Text("Enable GitHub integration and install gh CLI to use pull request checks.")
                 .foregroundStyle(.secondary)
-                .font(.callout)
+                .interfaceFont(.callout)
             }
 
           case .notAuthenticated:
@@ -89,7 +89,7 @@ struct GithubSettingsView: View {
                 .foregroundStyle(.orange)
               Text("Run `gh auth login` in terminal to authenticate.")
                 .foregroundStyle(.secondary)
-                .font(.callout)
+                .interfaceFont(.callout)
             }
 
           case .outdated:
@@ -98,7 +98,7 @@ struct GithubSettingsView: View {
                 .foregroundStyle(.orange)
               Text("Update GitHub CLI to the latest version to use GitHub integration.")
                 .foregroundStyle(.secondary)
-                .font(.callout)
+                .interfaceFont(.callout)
             }
 
           case .authenticated(let snapshot):
@@ -107,7 +107,7 @@ struct GithubSettingsView: View {
               VStack(alignment: .leading, spacing: 8) {
                 LabeledContent("Host") {
                   Text(host)
-                    .font(.body)
+                    .interfaceFont(.body)
                 }
                 ForEach(accounts) { account in
                   HStack {
@@ -123,7 +123,7 @@ struct GithubSettingsView: View {
                         .help(status.help)
                     }
                   }
-                  .font(.body)
+                  .interfaceFont(.body)
                 }
               }
             }
@@ -134,7 +134,7 @@ struct GithubSettingsView: View {
                 .foregroundStyle(.red)
               Text(message)
                 .foregroundStyle(.secondary)
-                .font(.callout)
+                .interfaceFont(.callout)
             }
           }
         }

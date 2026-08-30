@@ -15,7 +15,7 @@ struct MultiSelectedWorktreesDetailView: View {
     let deleteShortcut = KeyboardShortcut(.delete, modifiers: [.command, .shift]).display
     VStack(alignment: .leading, spacing: 16) {
       Text("\(rows.count) worktrees selected")
-        .font(.title3)
+        .interfaceFont(.title3)
       VStack(alignment: .leading, spacing: 8) {
         ForEach(Array(rows.prefix(visibleRowsLimit))) { row in
           HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -27,23 +27,23 @@ struct MultiSelectedWorktreesDetailView: View {
                 .lineLimit(1)
             }
           }
-          .font(.body)
+          .interfaceFont(.body)
         }
         if rows.count > visibleRowsLimit {
           Text("+\(rows.count - visibleRowsLimit) more")
-            .font(.caption)
+            .interfaceFont(.caption)
             .foregroundStyle(.secondary)
         }
       }
       Divider()
       VStack(alignment: .leading, spacing: 6) {
         Text("Available actions")
-          .font(.headline)
+          .interfaceFont(.headline)
         Text("Archive selected")
         Text("Delete selected (\(deleteShortcut))")
         Text("Right-click any selected worktree to apply actions to all selected worktrees.")
       }
-      .font(.caption)
+      .interfaceFont(.caption)
       .foregroundStyle(.secondary)
       Spacer(minLength: 0)
     }
@@ -99,12 +99,12 @@ struct RunScriptToolbarButton: View {
 
         if commandKeyObserver.isPressed, let shortcut = config.shortcut {
           Text(shortcut)
-            .font(.caption)
+            .interfaceFont(.caption)
             .foregroundStyle(.secondary)
         }
       }
     }
-    .font(.caption)
+    .interfaceFont(.caption)
     .help(config.helpText)
     .disabled(!config.isEnabled)
   }
@@ -138,12 +138,12 @@ struct UserCustomCommandToolbarButton: View {
         Text(title)
         if commandKeyObserver.isPressed, let shortcut {
           Text(shortcut)
-            .font(.caption)
+            .interfaceFont(.caption)
             .foregroundStyle(.secondary)
         }
       }
     }
-    .font(.caption)
+    .interfaceFont(.caption)
     .help(helpText)
     .disabled(!isEnabled)
   }
@@ -174,6 +174,7 @@ struct CustomCommandOverflowButton: View {
   let onRunCustomCommand: (EffectiveCustomCommand.Identifier) -> Void
 
   @State private var isPresented = false
+  @Environment(\.interfaceText) private var interfaceText
   private let maxVisibleRows = 10
 
   var body: some View {
@@ -181,7 +182,7 @@ struct CustomCommandOverflowButton: View {
       isPresented.toggle()
     } label: {
       Image(systemName: "chevron.down")
-        .font(.caption2)
+        .interfaceFont(.caption2)
         .accessibilityLabel("More custom commands")
     }
     .help("More custom commands")
@@ -199,11 +200,12 @@ struct CustomCommandOverflowButton: View {
                   .frame(width: 14)
                   .accessibilityHidden(true)
                 Text(entry.command.resolvedTitle)
+                  .interfaceFont(.body)
                   .lineLimit(1)
                 Spacer(minLength: 0)
                 if let shortcut = shortcutDisplay(entry) {
                   Text(shortcut)
-                    .font(.caption.monospaced())
+                    .interfaceFont(.caption, design: .monospaced)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                 }
@@ -225,7 +227,8 @@ struct CustomCommandOverflowButton: View {
 
   private var popoverHeight: CGFloat {
     let visibleRows = min(maxVisibleRows, max(entries.count, 1))
-    return CGFloat(visibleRows) * 32 + 16
+    let rowHeight = 32 + InterfaceTextMetrics.extraHeight(.body, resolution: interfaceText)
+    return CGFloat(visibleRows) * rowHeight + 16
   }
 
   private func helpText(for entry: EffectiveCustomCommand) -> String {

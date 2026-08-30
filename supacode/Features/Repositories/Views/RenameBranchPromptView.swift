@@ -20,9 +20,12 @@ struct RenameBranchPromptView: View {
   }
 
   var body: some View {
+    // The field and the buttons carry no font of their own. A resolved default
+    // on the container reaches them, and the explicit styles below override it
+    // where a row wants something other than body.
     VStack(alignment: .leading, spacing: 12) {
       Text("Rename Branch")
-        .font(.headline)
+        .interfaceFont(.headline)
 
       TextField("Branch name", text: $draftName)
         .textFieldStyle(.roundedBorder)
@@ -49,6 +52,7 @@ struct RenameBranchPromptView: View {
     }
     .padding()
     .frame(width: 280)
+    .interfaceFont(.body)
     .task { isFocused = true }
   }
 

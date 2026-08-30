@@ -31,9 +31,9 @@ struct AddToProwlView: View {
           .accessibilityHidden(true)
         VStack(alignment: .leading, spacing: 2) {
           Text("Add to Prowl")
-            .font(.system(size: 16, weight: .semibold))
+            .interfaceFont(size: 16, weight: .semibold)
           Text("Bring a project in for an agent to work on.")
-            .font(.system(size: 12.5))
+            .interfaceFont(size: 12.5)
             .foregroundStyle(.secondary)
         }
       }
@@ -66,7 +66,7 @@ struct AddToProwlView: View {
   private var dropZone: some View {
     VStack(spacing: 2) {
       Image(systemName: "folder.badge.plus")
-        .font(.system(size: 28))
+        .interfaceFont(size: 28)
         .symbolRenderingMode(.hierarchical)
         .foregroundStyle(Color.accentColor)
         .frame(width: 52, height: 52)
@@ -78,11 +78,11 @@ struct AddToProwlView: View {
         .scaleEffect(isDragTargeted ? 1.06 : 1)
 
       Text(isDragTargeted ? "Release to add" : "Drag a repo here")
-        .font(.system(size: 15, weight: .semibold))
+        .interfaceFont(size: 15, weight: .semibold)
         .padding(.top, 10)
 
       Text("a Git repository or any folder — opens one project root")
-        .font(.system(size: 12))
+        .interfaceFont(size: 12)
         .foregroundStyle(.secondary)
 
       HStack(spacing: 8) {
@@ -128,7 +128,7 @@ struct AddToProwlView: View {
     HStack(spacing: 12) {
       Rectangle().fill(.separator).frame(height: 1)
       Text("OR")
-        .font(.system(size: 10.5, weight: .semibold))
+        .interfaceFont(size: 10.5, weight: .semibold)
         .foregroundStyle(.tertiary)
       Rectangle().fill(.separator).frame(height: 1)
     }
@@ -141,7 +141,7 @@ struct AddToProwlView: View {
     } label: {
       HStack(spacing: 13) {
         Image(systemName: "rectangle.stack")
-          .font(.system(size: 18))
+          .interfaceFont(size: 18)
           .foregroundStyle(.secondary)
           .frame(width: 38, height: 38)
           .background(.quaternary, in: .rect(cornerRadius: 10))
@@ -149,9 +149,9 @@ struct AddToProwlView: View {
 
         VStack(alignment: .leading, spacing: 1) {
           Text("Add Workspace")
-            .font(.system(size: 13.5, weight: .semibold))
+            .interfaceFont(size: 13.5, weight: .semibold)
           Text("A shared task folder spanning multiple repos for one agent.")
-            .font(.system(size: 11.5))
+            .interfaceFont(size: 11.5)
             .foregroundStyle(.secondary)
             .lineLimit(2)
         }
@@ -159,7 +159,7 @@ struct AddToProwlView: View {
         Spacer()
 
         Image(systemName: "chevron.right")
-          .font(.system(size: 12, weight: .semibold))
+          .interfaceFont(size: 12, weight: .semibold)
           .foregroundStyle(.tertiary)
           .offset(x: isWorkspaceHovered ? 2 : 0)
           .accessibilityHidden(true)

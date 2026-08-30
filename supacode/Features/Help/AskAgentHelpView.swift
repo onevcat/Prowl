@@ -28,16 +28,16 @@ struct AskAgentHelpView: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
       Label(strings.title, systemImage: "sparkles")
-        .font(.headline)
+        .interfaceFont(.headline)
 
       Text(strings.explanation)
-        .font(.callout)
+        .interfaceFont(.callout)
         .foregroundStyle(.secondary)
         .fixedSize(horizontal: false, vertical: true)
 
       ScrollView {
         Text(strings.prompt)
-          .font(.system(.callout, design: .monospaced))
+          .interfaceFont(.callout, design: .monospaced)
           .textSelection(.enabled)
           .frame(maxWidth: .infinity, alignment: .leading)
           .padding(12)

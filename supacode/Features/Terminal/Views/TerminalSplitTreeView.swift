@@ -240,7 +240,7 @@ struct TerminalSplitTreeView: View {
             ? "arrow.down.right.and.arrow.up.left"
             : "arrow.up.left.and.arrow.down.right"
         )
-        .font(.callout.weight(.semibold))
+        .interfaceFont(.callout, weight: .semibold)
         .foregroundStyle(.primary)
         .padding(5)
         .background(.regularMaterial, in: .rect(cornerRadius: 6))
@@ -270,7 +270,7 @@ struct TerminalSplitTreeView: View {
         .overlay {
           if isHovering {
             Image(systemName: "ellipsis")
-              .font(.system(.callout, weight: .semibold))
+              .interfaceFont(.callout, weight: .semibold)
               .foregroundStyle(.primary.opacity(0.5))
               .accessibilityHidden(true)
           }

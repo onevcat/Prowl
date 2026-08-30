@@ -83,9 +83,9 @@ struct RepositoryAppearancePickerView: View {
       iconMenu
       VStack(alignment: .leading, spacing: 4) {
         Text("Icon")
-          .font(.headline)
+          .interfaceFont(.headline)
         Text(iconHelpText)
-          .font(.caption)
+          .interfaceFont(.caption)
           .foregroundStyle(.secondary)
           .fixedSize(horizontal: false, vertical: true)
       }
@@ -173,7 +173,7 @@ struct RepositoryAppearancePickerView: View {
         )
       } else {
         Image(systemName: "questionmark")
-          .font(.system(size: 16, weight: .semibold))
+          .interfaceFont(size: 16, weight: .semibold)
           .foregroundStyle(.tertiary)
           .accessibilityHidden(true)
       }
@@ -227,7 +227,7 @@ struct RepositoryAppearancePickerView: View {
     VStack(alignment: .leading, spacing: 6) {
       HStack(alignment: .center, spacing: 12) {
         Text("Color")
-          .font(.headline)
+          .interfaceFont(.headline)
           .frame(width: previewSize, alignment: .center)
         HStack(spacing: 6) {
           ForEach(RepositoryColorChoice.presets, id: \.self) { choice in
@@ -241,7 +241,7 @@ struct RepositoryAppearancePickerView: View {
       Text(
         "Tints the row in the sidebar, the shelf spine background, and the canvas card title bar."
       )
-      .font(.caption)
+      .interfaceFont(.caption)
       .foregroundStyle(.secondary)
       .fixedSize(horizontal: false, vertical: true)
       .padding(.leading, previewSize + 12)
@@ -342,7 +342,7 @@ struct RepositoryAppearancePickerView: View {
           .frame(width: swatchDotSize, height: swatchDotSize)
           .overlay {
             Image(systemName: "slash.circle")
-              .font(.system(size: 11))
+              .interfaceFont(size: 11)
               .foregroundStyle(.secondary)
               .accessibilityHidden(true)
           }
@@ -384,14 +384,14 @@ struct RepositoryAppearancePickerView: View {
         .foregroundStyle(.orange)
         .accessibilityHidden(true)
       Text(message)
-        .font(.caption)
+        .interfaceFont(.caption)
         .foregroundStyle(.primary)
       Spacer(minLength: 0)
       Button("Dismiss") {
         store.send(.dismissAppearanceImportError)
       }
       .buttonStyle(.plain)
-      .font(.caption)
+      .interfaceFont(.caption)
       .foregroundStyle(.secondary)
     }
     .padding(.vertical, 4)

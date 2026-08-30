@@ -498,7 +498,7 @@ private struct CommandPaletteSectionHeader: View {
 
   var body: some View {
     Text(title.uppercased())
-      .font(.caption2.weight(.semibold))
+      .interfaceFont(.caption2, weight: .semibold)
       .foregroundStyle(.secondary)
       .padding(.horizontal, 6)
       .padding(.bottom, 2)
@@ -671,7 +671,7 @@ private struct CommandPaletteRowView: View {
         } else if let leadingIcon {
           Image(systemName: leadingIcon)
             .foregroundStyle(emphasis ? .primary : .secondary)
-            .font(.subheadline.weight(.medium))
+            .interfaceFont(.subheadline, weight: .medium)
             .frame(width: 16, height: 16, alignment: .center)
             .accessibilityHidden(true)
         }
@@ -682,7 +682,7 @@ private struct CommandPaletteRowView: View {
 
           if let subtitle = row.subtitle {
             Text(subtitle)
-              .font(.caption)
+              .interfaceFont(.caption)
               .foregroundStyle(.secondary)
           }
         }
@@ -691,7 +691,7 @@ private struct CommandPaletteRowView: View {
 
         if let badge, !badge.isEmpty {
           Text(badge)
-            .font(.caption2.weight(.medium))
+            .interfaceFont(.caption2, weight: .medium)
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
             .background(

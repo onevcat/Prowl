@@ -63,7 +63,7 @@ struct RepositorySettingsView: View {
               VStack(alignment: .leading, spacing: 4) {
                 ForEach(workspace.taskLinks, id: \.self) { link in
                   Text(link)
-                    .font(.subheadline.monospaced())
+                    .interfaceFont(.subheadline, design: .monospaced)
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
                 }
@@ -80,7 +80,7 @@ struct RepositorySettingsView: View {
               + "\(ProjectWorkspace.metadataURL(for: store.rootURL).path(percentEncoded: false)) "
               + "— edit that file to change it."
           )
-          .font(.footnote)
+          .interfaceFont(.footnote)
           .foregroundStyle(.secondary)
           .textSelection(.enabled)
         }
@@ -101,7 +101,7 @@ struct RepositorySettingsView: View {
                 Spacer()
                 Image(systemName: "chevron.up.chevron.down")
                   .foregroundStyle(.secondary)
-                  .font(.caption)
+                  .interfaceFont(.caption)
                   .accessibilityHidden(true)
               }
               .contentShape(Rectangle())

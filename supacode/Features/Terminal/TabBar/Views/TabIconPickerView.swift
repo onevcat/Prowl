@@ -48,9 +48,9 @@ struct TabIconPickerView: View {
     VStack(alignment: .leading, spacing: 16) {
       VStack(alignment: .leading, spacing: 4) {
         Text(title)
-          .font(.headline)
+          .interfaceFont(.headline)
         Text(subtitle)
-          .font(.caption)
+          .interfaceFont(.caption)
           .foregroundStyle(.secondary)
       }
 

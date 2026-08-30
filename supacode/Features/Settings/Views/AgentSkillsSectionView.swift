@@ -40,11 +40,11 @@ struct AgentSkillsSectionView: View {
             .foregroundStyle(.secondary)
         }
       }
-      .font(.callout)
+      .interfaceFont(.callout)
     } else if store.skills.isEmpty {
       Text("This app bundles no installable skills.")
         .foregroundStyle(.secondary)
-        .font(.callout)
+        .interfaceFont(.callout)
     } else {
       if store.noTargetsDetected {
         Text(
@@ -53,7 +53,7 @@ struct AgentSkillsSectionView: View {
             + "prowl skills install --target claude|codex|agents."
         )
         .foregroundStyle(.secondary)
-        .font(.callout)
+        .interfaceFont(.callout)
       }
       ForEach(store.skills) { row in
         skillRow(row)
@@ -68,10 +68,10 @@ struct AgentSkillsSectionView: View {
     VStack(alignment: .leading, spacing: 10) {
       HStack(alignment: .firstTextBaseline, spacing: 8) {
         Text(row.skill.name)
-          .font(.headline)
+          .interfaceFont(.headline)
         if row.skill.name != row.skill.id {
           Text(row.skill.id)
-            .font(.callout.monospaced())
+            .interfaceFont(.callout, design: .monospaced)
             .foregroundStyle(.secondary)
         }
         Spacer()
@@ -86,7 +86,7 @@ struct AgentSkillsSectionView: View {
       // human-facing text, so it wins whenever the skill provides one.
       Text(row.skill.summary ?? row.skill.description)
         .foregroundStyle(.secondary)
-        .font(.callout)
+        .interfaceFont(.callout)
         .fixedSize(horizontal: false, vertical: true)
       if !row.links.isEmpty {
         linkTable(row)
@@ -105,7 +105,7 @@ struct AgentSkillsSectionView: View {
         linkLine(skill: row.skill, link: link)
       }
     }
-    .font(.callout)
+    .interfaceFont(.callout)
   }
 
   private func linkLine(skill: BundledSkill, link: AgentSkillsFeature.SkillLink) -> some View {
@@ -217,7 +217,7 @@ struct AgentSkillsSectionView: View {
   /// Paths keep one line and truncate in the middle so the skill folder name stays visible.
   private func pathText(_ path: String) -> some View {
     Text(path)
-      .font(.callout.monospaced())
+      .interfaceFont(.callout, design: .monospaced)
       .lineLimit(1)
       .truncationMode(.middle)
   }

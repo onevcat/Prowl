@@ -20,8 +20,7 @@ struct TerminalTabCloseButton: View {
     }
     .labelStyle(.iconOnly)
     .buttonStyle(TerminalPressTrackingButtonStyle(isPressed: $isPressing))
-    .font(.caption2)
-    .bold()
+    .interfaceFont(.caption2, weight: .bold)
     .foregroundStyle(
       isHoveringClose ? TerminalTabBarColors.activeText : TerminalTabBarColors.inactiveText
     )

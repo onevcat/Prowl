@@ -3,7 +3,11 @@ import SwiftUI
 enum LeadingToolbarControlMetrics {
   static let labelSpacing: CGFloat = 6
   static let iconSize: CGFloat = 20
-  static let font: Font = .title3.weight(.medium)
+  /// Carried as style plus weight rather than a resolved `Font` so call sites
+  /// can apply it through `interfaceFont`, which reads the minimum text size
+  /// from the environment. A static `Font` cannot see that floor.
+  static let textStyle: Font.TextStyle = .title3
+  static let fontWeight: Font.Weight = .medium
 }
 
 /// What the Agents capsule shows for the selected pane's detected agent.
@@ -112,7 +116,7 @@ struct AgentsToolbarButton: View {
         Text("Agents")
       }
     }
-    .font(LeadingToolbarControlMetrics.font)
+    .interfaceFont(LeadingToolbarControlMetrics.textStyle, weight: LeadingToolbarControlMetrics.fontWeight)
   }
 
   @ViewBuilder
@@ -155,7 +159,7 @@ struct AgentsQuickLaunchButton: View {
       onLaunch(item.id)
     } label: {
       Image(systemName: "play.circle")
-        .font(LeadingToolbarControlMetrics.font)
+        .interfaceFont(LeadingToolbarControlMetrics.textStyle, weight: LeadingToolbarControlMetrics.fontWeight)
         .foregroundStyle(.secondary)
     }
     .help("Launch \(item.name) in this worktree")
@@ -190,7 +194,7 @@ private struct AgentsPopoverContent: View {
       }
       if !launcherItems.isEmpty {
         Text("New agent in this worktree")
-          .font(.caption)
+          .interfaceFont(.caption)
           .foregroundStyle(.secondary)
           .padding(.horizontal, 8)
           .padding(.top, 4)
@@ -218,6 +222,7 @@ private struct AgentsPopoverContent: View {
       )
     }
     .padding(6)
+    .interfaceFont(.body)
     .frame(width: 280, alignment: .leading)
     .accessibilityElement(children: .contain)
     .accessibilityLabel("Agents")
@@ -246,14 +251,15 @@ private struct AgentsPopoverRow: View {
   @State private var isHovered = false
 
   var body: some View {
+    let iconSlot: CGFloat = 16
     Button(action: action) {
       HStack(alignment: .top, spacing: 8) {
         if let iconSource {
-          AgentProfileIconImage(source: iconSource, pointSize: 16)
-            .frame(width: 16)
+          AgentProfileIconImage(source: iconSource, pointSize: iconSlot)
+            .frame(width: iconSlot)
         } else {
           Image(systemName: systemImage)
-            .frame(width: 16)
+            .frame(width: iconSlot)
             .accessibilityHidden(true)
         }
         VStack(alignment: .leading, spacing: 2) {
@@ -263,13 +269,13 @@ private struct AgentsPopoverRow: View {
             Spacer(minLength: 0)
             if let trailingText {
               Text(trailingText)
-                .font(.caption)
+                .interfaceFont(.caption)
                 .foregroundStyle(.tertiary)
             }
           }
           if let subtitle {
             Text(subtitle)
-              .font(.caption)
+              .interfaceFont(.caption)
               .foregroundStyle(.secondary)
               .fixedSize(horizontal: false, vertical: true)
           }

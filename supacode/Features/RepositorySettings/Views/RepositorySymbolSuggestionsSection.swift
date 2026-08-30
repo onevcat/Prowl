@@ -17,7 +17,7 @@ struct RepositorySymbolSuggestionsSection: View {
     VStack(alignment: .leading, spacing: 8) {
       HStack(spacing: 8) {
         Text("Suggested for this repository")
-          .font(.subheadline.weight(.medium))
+          .interfaceFont(.subheadline, weight: .medium)
         Spacer(minLength: 0)
         switch phase {
         case .idle:
@@ -33,21 +33,21 @@ struct RepositorySymbolSuggestionsSection: View {
       switch phase {
       case .idle:
         Text("Uses this project's README to propose fitting symbols. Everything runs on-device.")
-          .font(.caption)
+          .interfaceFont(.caption)
           .foregroundStyle(.secondary)
       case .loading:
         HStack(spacing: 8) {
           ProgressView()
             .controlSize(.small)
           Text("Generating suggestions…")
-            .font(.caption)
+            .interfaceFont(.caption)
             .foregroundStyle(.secondary)
         }
       case .loaded(let suggestions):
         loadedContent(suggestions)
       case .failed:
         Text("Couldn't generate suggestions. You can retry, or pick a symbol manually below.")
-          .font(.caption)
+          .interfaceFont(.caption)
           .foregroundStyle(.secondary)
       }
     }
@@ -86,12 +86,12 @@ struct RepositorySymbolSuggestionsSection: View {
       Spacer(minLength: 0)
     }
     Text(suggestions.reason)
-      .font(.caption)
+      .interfaceFont(.caption)
       .foregroundStyle(.secondary)
       .lineLimit(3)
       .fixedSize(horizontal: false, vertical: true)
     Text(sourceLabel(suggestions))
-      .font(.caption2)
+      .interfaceFont(.caption2)
       .foregroundStyle(.tertiary)
   }
 

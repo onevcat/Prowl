@@ -10,7 +10,7 @@ struct WorkspaceCreationPromptView: View {
     VStack(alignment: .leading, spacing: 16) {
       VStack(alignment: .leading, spacing: 4) {
         Text("New Workspace")
-          .font(.title3)
+          .interfaceFont(.title3)
         Text(repositoryCountText)
           .foregroundStyle(.secondary)
       }
@@ -50,7 +50,7 @@ struct WorkspaceCreationPromptView: View {
             )
           )
           .textFieldStyle(.roundedBorder)
-          .font(.body.monospaced())
+          .interfaceFont(.body, design: .monospaced)
           .disabled(store.isCreating)
           .overlay {
             invalidFieldBorder(store.validationTarget == .rootPath)
@@ -64,7 +64,7 @@ struct WorkspaceCreationPromptView: View {
           .disabled(store.isCreating)
         }
         Text(store.rootPathPreview)
-          .font(.footnote.monospaced())
+          .interfaceFont(.footnote, design: .monospaced)
           .foregroundStyle(.secondary)
           .lineLimit(1)
           .truncationMode(.middle)
@@ -142,7 +142,7 @@ struct WorkspaceCreationPromptView: View {
 
       if let message = store.validationMessage, !message.isEmpty {
         Text(message)
-          .font(.footnote)
+          .interfaceFont(.footnote)
           .foregroundStyle(.red)
       }
 
@@ -273,7 +273,7 @@ struct WorkspaceCreationPromptView: View {
           )
         )
         .textFieldStyle(.roundedBorder)
-        .font(.body.monospaced())
+        .interfaceFont(.body, design: .monospaced)
         .disabled(store.isCreating)
         .overlay {
           invalidFieldBorder(repositoryFieldIsInvalid(repository, .source))
@@ -351,7 +351,7 @@ struct WorkspaceCreationPromptView: View {
         if let localBranchName = repository.resettableLocalBranchName {
           VStack(alignment: .leading, spacing: 4) {
             Text("Local branch “\(localBranchName)” already exists and would be reset to this ref.")
-              .font(.footnote)
+              .interfaceFont(.footnote)
               .foregroundStyle(.secondary)
               .fixedSize(horizontal: false, vertical: true)
             Picker(
@@ -378,7 +378,7 @@ struct WorkspaceCreationPromptView: View {
     if let prompt = store.remoteRepositoryPrompt {
       VStack(alignment: .leading, spacing: 16) {
         Text("Add Remote Repository")
-          .font(.title3)
+          .interfaceFont(.title3)
 
         VStack(alignment: .leading, spacing: 8) {
           Text("Remote URL")
@@ -391,7 +391,7 @@ struct WorkspaceCreationPromptView: View {
             )
           )
           .textFieldStyle(.roundedBorder)
-          .font(.body.monospaced())
+          .interfaceFont(.body, design: .monospaced)
           .disabled(prompt.isLoading)
           helpText("Remote git URL to clone into the workspace, such as SSH or HTTPS.")
         }
@@ -413,7 +413,7 @@ struct WorkspaceCreationPromptView: View {
 
         if !prompt.branchOptions.isEmpty {
           Text("\(prompt.branchOptions.count) remote branches loaded")
-            .font(.footnote)
+            .interfaceFont(.footnote)
             .foregroundStyle(.secondary)
         } else {
           helpText("Load branches before adding so Prowl can choose an existing branch safely.")
@@ -421,7 +421,7 @@ struct WorkspaceCreationPromptView: View {
 
         if let message = prompt.validationMessage, !message.isEmpty {
           Text(message)
-            .font(.footnote)
+            .interfaceFont(.footnote)
             .foregroundStyle(.red)
         }
 
@@ -553,7 +553,7 @@ struct WorkspaceCreationPromptView: View {
 
   private func sourceKindBadge(_ kind: ProjectWorkspaceRepositorySourceKind) -> some View {
     Label(sourceKindTitle(kind), systemImage: sourceKindIcon(kind))
-      .font(.caption)
+      .interfaceFont(.caption)
       .foregroundStyle(.secondary)
       .labelStyle(.titleAndIcon)
       .lineLimit(1)
@@ -608,7 +608,7 @@ struct WorkspaceCreationPromptView: View {
 
   private func helpText(_ text: String) -> some View {
     Text(text)
-      .font(.footnote)
+      .interfaceFont(.footnote)
       .foregroundStyle(.secondary)
       .fixedSize(horizontal: false, vertical: true)
   }
@@ -676,7 +676,7 @@ private struct WorkspaceBranchRefPickerView: View {
             ForEach(groupedOptions, id: \.kind) { group in
               VStack(alignment: .leading, spacing: 4) {
                 Text(group.kind.title)
-                  .font(.caption)
+                  .interfaceFont(.caption)
                   .foregroundStyle(.secondary)
                 ForEach(group.options) { option in
                   Button {

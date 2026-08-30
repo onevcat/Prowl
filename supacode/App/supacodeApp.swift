@@ -1734,6 +1734,13 @@ struct SupacodeApp: App {
           .environment(ghosttyShortcuts)
           .environment(commandKeyObserver)
           .environment(\.resolvedKeybindings, store.resolvedKeybindings)
+          .environment(
+            \.interfaceText,
+            InterfaceTextResolution(
+              scale: store.settings.interfaceTextScale.factor,
+              minimumSize: store.settings.minimumTextSize.points ?? 0
+            )
+          )
           .environment(askAgentHelp)
           .sheet(
             isPresented: Binding(

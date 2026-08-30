@@ -43,6 +43,21 @@ custom_rules:
     message: "Do not mutate store state directly in views. Send actions instead."
     severity: error
     included: "supacode/.*/Views/.*\\.swift"
+  interface_font_in_chrome:
+    name: "Interface Font In Chrome"
+    # `included` is the record of how far interface-text coverage reaches. It
+    # grows as directories are converted; it is never widened ahead of them,
+    # because a rule that fails on landing gets disabled rather than obeyed.
+    # Absence of any font modifier is invisible here — a view that inherits the
+    # system default matches nothing. Set a resolved default on the container
+    # for those, which this rule cannot check for you.
+    regex: "\\.font\\("
+    message: "Chrome text must honour the interface text settings. Use .interfaceFont(style) instead, or .fixedInterfaceFont(...) when the size is a layout constant."
+    severity: error
+    match_kinds:
+      - identifier
+    included: "supacode/(Features|App|Support)/.*\\.swift"
+    excluded: "supacode/Support/InterfaceTextMetrics.swift"
   dictionary_unique_keys_with_values:
     name: "Dictionary Unique Keys With Values"
     regex: "\\bDictionary\\s*\\(\\s*uniqueKeysWithValues\\s*:"

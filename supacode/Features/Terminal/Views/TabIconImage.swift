@@ -22,7 +22,7 @@ struct TabIconImage: View {
       switch ResolvedTabIcon.parse(rawName) {
       case .systemSymbol(let name):
         Image(systemName: name)
-          .font(.system(size: pointSize))
+          .fixedInterfaceFont(.system(size: pointSize))
       case .asset(let name):
         Image(name)
           .resizable()

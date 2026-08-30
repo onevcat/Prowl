@@ -10,9 +10,10 @@ struct FailedRepositoryRow: View {
     HStack(spacing: 8) {
       VStack(alignment: .leading, spacing: 2) {
         Text(name)
+          .interfaceFont(.body)
           .foregroundStyle(.secondary)
         Text(path)
-          .font(.caption)
+          .interfaceFont(.caption)
           .foregroundStyle(.tertiary)
       }
       Spacer(minLength: 8)

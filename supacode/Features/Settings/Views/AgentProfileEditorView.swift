@@ -91,11 +91,11 @@ struct AgentProfileEditorView: View {
               + "It may execute commands and modify files without prompting."
             : "Extra arguments request the runtime's least-restricted mode."
         )
-        .font(.caption)
+        .interfaceFont(.caption)
         .foregroundStyle(.red)
       case .followsExtraArguments:
         Text("Effective execution mode follows your extra arguments.")
-          .font(.caption)
+          .interfaceFont(.caption)
           .foregroundStyle(.secondary)
       }
       Picker("Open In", selection: $store.profile.placement) {
@@ -139,7 +139,7 @@ struct AgentProfileEditorView: View {
             + "but also separate skills, global instructions, and session history. "
             + "The first launch signs in through the agent itself."
         )
-        .font(.caption)
+        .interfaceFont(.caption)
         .foregroundStyle(.secondary)
         LabeledContent(
           "Profile Home",
@@ -184,11 +184,11 @@ struct AgentProfileEditorView: View {
   ) -> some View {
     HStack(spacing: 8) {
       TextField("NAME", text: override.name)
-        .font(.body.monospaced())
+        .interfaceFont(.body, design: .monospaced)
         .frame(width: 180)
         .accessibilityLabel("Variable name")
       TextField("value", text: override.value)
-        .font(.body.monospaced())
+        .interfaceFont(.body, design: .monospaced)
         .accessibilityLabel("Variable value")
       if let issue = AgentProfileEnvironmentPolicy.issue(for: override.wrappedValue) {
         Image(systemName: "exclamationmark.triangle.fill")
@@ -240,10 +240,10 @@ struct AgentProfileEditorView: View {
         "Prowl types this command into the new pane. "
           + "Override values travel in hidden PROWL_ENV variables, never in the command text."
       )
-      .font(.caption)
+      .interfaceFont(.caption)
       .foregroundStyle(.secondary)
       Text(previewText)
-        .font(.callout.monospaced())
+        .interfaceFont(.callout, design: .monospaced)
         .foregroundStyle(.secondary)
         .textSelection(.enabled)
         .lineLimit(nil)
@@ -255,13 +255,13 @@ struct AgentProfileEditorView: View {
       iconMenu
       VStack(alignment: .leading, spacing: 4) {
         Text("Icon")
-          .font(.headline)
+          .interfaceFont(.headline)
         Text(
           store.profile.icon == nil
             ? "\(AgentRuntimeAdapterRegistry.displayName(for: store.profile.runtime)) brand icon"
             : "Custom SF Symbol"
         )
-        .font(.caption)
+        .interfaceFont(.caption)
         .foregroundStyle(.secondary)
       }
       Spacer(minLength: 0)

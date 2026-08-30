@@ -36,11 +36,11 @@ struct CommandLineToolSettingsView: View {
               Text("Not installed")
             }
           }
-          .font(.callout)
+          .interfaceFont(.callout)
 
           Text("Install the prowl command to let terminals and coding agents control Prowl.")
             .foregroundStyle(.secondary)
-            .font(.callout)
+            .interfaceFont(.callout)
 
           HStack(spacing: 8) {
             switch store.cliInstallStatus {
@@ -80,7 +80,7 @@ struct CommandLineToolSettingsView: View {
       Section("Connection") {
         LabeledContent("Socket") {
           Text(ProwlSocket.defaultPath)
-            .font(.callout.monospaced())
+            .interfaceFont(.callout, design: .monospaced)
             .foregroundStyle(.secondary)
             .textSelection(.enabled)
             .lineLimit(1)
@@ -92,7 +92,7 @@ struct CommandLineToolSettingsView: View {
             + "Set PROWL_CLI_SOCKET for both Prowl and prowl to use a different path."
         )
         .foregroundStyle(.secondary)
-        .font(.callout)
+        .interfaceFont(.callout)
       }
 
       if let agentSkillsStore = store.scope(state: \.agentSkills, action: \.agentSkills) {

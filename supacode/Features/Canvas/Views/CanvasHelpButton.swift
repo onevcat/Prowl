@@ -18,7 +18,7 @@ struct CanvasHelpButton: View {
       togglePresentation()
     } label: {
       Image(systemName: "questionmark.circle")
-        .font(.body)
+        .interfaceFont(.body)
         .accessibilityLabel("Canvas navigation help")
     }
     .buttonStyle(.bordered)
@@ -61,7 +61,7 @@ struct CanvasHelpButton: View {
 
     return VStack(alignment: .leading, spacing: 14) {
       Text("Canvas Navigation")
-        .font(.headline)
+        .interfaceFont(.headline)
 
       VStack(alignment: .leading, spacing: 12) {
         canvasHelpRow(
@@ -100,9 +100,9 @@ struct CanvasHelpButton: View {
         .frame(width: 18)
         .accessibilityHidden(true)
       VStack(alignment: .leading, spacing: 2) {
-        Text(title).font(.callout).fontWeight(.medium)
+        Text(title).interfaceFont(.callout).fontWeight(.medium)
         Text(detail)
-          .font(.caption)
+          .interfaceFont(.caption)
           .foregroundStyle(.secondary)
           .fixedSize(horizontal: false, vertical: true)
       }

@@ -17,19 +17,19 @@ struct RepositoryDetailView: View {
   private var repositoryDetail: some View {
     VStack(spacing: 12) {
       Image(systemName: repository.kind == .git ? "folder.badge.gearshape" : "folder")
-        .font(.largeTitle)
+        .interfaceFont(.largeTitle)
         .accessibilityHidden(true)
       RepoDisplayName(
         fallbackName: repository.name,
         customTitle: customTitle
       )
-      .font(.title3.weight(.semibold))
+      .interfaceFont(.title3, weight: .semibold)
       Text(repository.rootURL.path(percentEncoded: false))
-        .font(.subheadline.monospaced())
+        .interfaceFont(.subheadline, design: .monospaced)
         .foregroundStyle(.secondary)
         .textSelection(.enabled)
       Text(descriptionText)
-        .font(.subheadline)
+        .interfaceFont(.subheadline)
         .foregroundStyle(.secondary)
         .multilineTextAlignment(.center)
     }

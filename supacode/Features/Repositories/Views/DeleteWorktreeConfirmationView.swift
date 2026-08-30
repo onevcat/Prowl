@@ -10,7 +10,7 @@ struct DeleteWorktreeConfirmationView: View {
     VStack(alignment: .leading, spacing: 16) {
       VStack(alignment: .leading, spacing: 6) {
         Text(confirmation.title)
-          .font(.headline)
+          .interfaceFont(.headline)
         Text(confirmation.message)
           .foregroundStyle(.secondary)
           .fixedSize(horizontal: false, vertical: true)
@@ -29,7 +29,7 @@ struct DeleteWorktreeConfirmationView: View {
         "Protected branches are kept. If safe branch deletion fails, Prowl asks before forcing it. "
           + "Your choice is remembered for the next delete."
       )
-      .font(.footnote)
+      .interfaceFont(.footnote)
       .foregroundStyle(.secondary)
       .fixedSize(horizontal: false, vertical: true)
 

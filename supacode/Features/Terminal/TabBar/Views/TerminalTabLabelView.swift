@@ -19,7 +19,7 @@ struct TerminalTabLabelView: View {
           TerminalTabIconBadge(tab: tab, isActive: isActive)
         }
         Text(tab.displayTitle)
-          .font(.caption)
+          .interfaceFont(.caption)
           .lineLimit(1)
           .foregroundStyle(isActive ? TerminalTabBarColors.activeText : TerminalTabBarColors.inactiveText)
       }

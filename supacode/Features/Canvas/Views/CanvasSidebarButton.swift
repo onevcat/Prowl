@@ -13,7 +13,7 @@ struct CanvasSidebarButton: View {
     } label: {
       HStack(spacing: 6) {
         Label("Canvas", systemImage: "square.grid.2x2")
-          .font(.callout)
+          .interfaceFont(.callout)
           .frame(maxWidth: .infinity, alignment: .leading)
         if commandKeyObserver.isPressed,
           let shortcut = AppShortcuts.display(for: AppShortcuts.CommandID.toggleCanvas, in: resolvedKeybindings)

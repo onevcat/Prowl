@@ -214,7 +214,7 @@ struct DiffWindowContentView: View {
                 .foregroundStyle(.orange)
                 .accessibilityHidden(true)
               Text(renderError.message)
-                .font(.caption)
+                .interfaceFont(.caption)
                 .multilineTextAlignment(.center)
             }
             .padding(12)
@@ -269,17 +269,17 @@ private struct FileRowView: View {
   var body: some View {
     HStack(spacing: 6) {
       Text(file.statusSymbol)
-        .font(.caption)
+        .interfaceFont(.caption)
         .monospaced()
         .foregroundStyle(file.status.color)
         .frame(width: 14, alignment: .center)
       VStack(alignment: .leading, spacing: 1) {
         Text(file.displayName)
-          .font(.body)
+          .interfaceFont(.body)
           .lineLimit(1)
         if !file.directoryPath.isEmpty {
           Text(file.directoryPath)
-            .font(.caption)
+            .interfaceFont(.caption)
             .foregroundStyle(.secondary)
             .lineLimit(1)
             .truncationMode(.head)

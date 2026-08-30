@@ -96,7 +96,7 @@ struct TerminalTabBarView: View {
     var body: some View {
       VStack(alignment: .leading, spacing: 4) {
         Text(title)
-          .font(.caption)
+          .interfaceFont(.caption)
           .foregroundStyle(.secondary)
         TerminalTabBarView(
           manager: manager,

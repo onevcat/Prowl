@@ -43,7 +43,7 @@ struct PullRequestBadgeView: View {
 
   var body: some View {
     Text(text)
-      .font(.caption2)
+      .interfaceFont(.caption2)
       .foregroundStyle(color)
       .padding(.horizontal, 6)
       .padding(.vertical, 2)

@@ -33,10 +33,11 @@ struct RepoHeaderRow: View {
         customTitle: customTitle,
         tooltip: nameTooltip
       )
+      .interfaceFont(.body)
       .foregroundStyle(.secondary)
       if isRemoving {
         Text("Removing...")
-          .font(.caption)
+          .interfaceFont(.caption)
           .foregroundStyle(.tertiary)
       }
     }
@@ -98,7 +99,7 @@ struct TabCountBadge: View {
   var body: some View {
     if count > 0 {
       Text("\(count)")
-        .font(.caption2)
+        .interfaceFont(.caption2)
         .monospacedDigit()
         .foregroundStyle(.secondary)
         .padding(.horizontal, 5)

@@ -146,6 +146,11 @@ struct TerminalTabBarTrailingAccessories: View {
     }
     .padding(10)
     .frame(minWidth: 220)
+    // The action titles carry no font of their own, so without a resolved
+    // default here they stay at the system size while their shortcut hints
+    // scale. Setting it on the container covers every row, including rows
+    // added later that would otherwise inherit the unscaled default.
+    .interfaceFont(.body)
   }
 
   private func helpText(_ title: String, shortcut: String?) -> String {

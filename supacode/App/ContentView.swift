@@ -210,7 +210,11 @@ struct ContentView: View {
     )
     return NavigationSplitView(columnVisibility: visibility) {
       SidebarView(store: repositoriesStore, terminalManager: terminalManager)
-        .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 320)
+        .navigationSplitViewColumnWidth(
+          min: 220,
+          ideal: 260,
+          max: 320
+        )
     } detail: {
       WorktreeDetailView(store: store, terminalManager: terminalManager)
     }
@@ -282,7 +286,7 @@ private struct RunScriptPromptView: View {
     VStack(alignment: .leading, spacing: 16) {
       VStack(alignment: .leading, spacing: 4) {
         Text("Run")
-          .font(.title3)
+          .interfaceFont(.title3)
         Text("Enter a command to run in this worktree. It will be saved to repository settings.")
           .foregroundStyle(.secondary)
       }

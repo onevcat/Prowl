@@ -6,6 +6,7 @@ struct GhosttySurfaceSearchOverlay: View {
   @Bindable var state: GhosttySurfaceState
   @Environment(GhosttyShortcutManager.self) private var ghosttyShortcuts
   @Environment(\.resolvedKeybindings) private var resolvedKeybindings
+  @Environment(\.interfaceText) private var interfaceText
 
   @State private var searchText: String
   @State private var corner: GhosttySearchCorner = .topRight
@@ -27,6 +28,7 @@ struct GhosttySurfaceSearchOverlay: View {
       ZStack(alignment: corner.alignment) {
         HStack(spacing: 4) {
           GhosttySearchField(
+            fontSize: InterfaceTextMetrics.pointSize(NSFont.systemFontSize, resolution: interfaceText),
             text: $searchText,
             isFocused: isSearchFieldFocused,
             onSubmit: { isShifted in
@@ -151,12 +153,12 @@ struct GhosttySurfaceSearchOverlay: View {
   private var matchLabel: some View {
     if let selected = state.searchSelected, let total = state.searchTotal {
       Text("\(total - selected)/\(total)")
-        .font(.caption)
+        .interfaceFont(.caption)
         .foregroundStyle(.secondary)
         .padding(.trailing, 8)
     } else if let total = state.searchTotal {
       Text("-/\(total)")
-        .font(.caption)
+        .interfaceFont(.caption)
         .foregroundStyle(.secondary)
         .padding(.trailing, 8)
     }
@@ -281,6 +283,7 @@ private struct SearchButtonLabel: View {
 }
 
 private struct GhosttySearchField: NSViewRepresentable {
+  let fontSize: CGFloat
   @Binding var text: String
   var isFocused: Bool
   var onSubmit: (Bool) -> Void
@@ -301,11 +304,14 @@ private struct GhosttySearchField: NSViewRepresentable {
     field.placeholderString = "Search"
     field.usesSingleLineMode = true
     field.lineBreakMode = .byTruncatingTail
-    field.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+    field.font = .systemFont(ofSize: fontSize, weight: .regular)
     return field
   }
 
   func updateNSView(_ nsView: SearchField, context: Context) {
+    if nsView.font?.pointSize != fontSize {
+      nsView.font = .systemFont(ofSize: fontSize, weight: .regular)
+    }
     if nsView.stringValue != text {
       nsView.stringValue = text
     }

@@ -9,7 +9,7 @@ struct WorkspaceDetailView: View {
       header
       if !workspace.description.isEmpty {
         Text(workspace.description)
-          .font(.callout)
+          .interfaceFont(.callout)
           .foregroundStyle(.secondary)
           .textSelection(.enabled)
       }
@@ -27,19 +27,19 @@ struct WorkspaceDetailView: View {
   private var header: some View {
     HStack(alignment: .top, spacing: 12) {
       Image(systemName: "folder.badge.person.crop")
-        .font(.largeTitle)
+        .interfaceFont(.largeTitle)
         .foregroundStyle(.secondary)
         .accessibilityHidden(true)
       VStack(alignment: .leading, spacing: 4) {
         Text(workspace.title)
-          .font(.title3.weight(.semibold))
+          .interfaceFont(.title3, weight: .semibold)
           .textSelection(.enabled)
         Text(repository.rootURL.path(percentEncoded: false))
-          .font(.subheadline.monospaced())
+          .interfaceFont(.subheadline, design: .monospaced)
           .foregroundStyle(.secondary)
           .textSelection(.enabled)
         Text(repositoryCountText)
-          .font(.subheadline)
+          .interfaceFont(.subheadline)
           .foregroundStyle(.tertiary)
       }
     }
@@ -53,10 +53,10 @@ struct WorkspaceDetailView: View {
   private var taskLinks: some View {
     VStack(alignment: .leading, spacing: 6) {
       Text("Task Links")
-        .font(.headline)
+        .interfaceFont(.headline)
       ForEach(workspace.taskLinks, id: \.self) { link in
         Text(link)
-          .font(.subheadline.monospaced())
+          .interfaceFont(.subheadline, design: .monospaced)
           .foregroundStyle(.secondary)
           .textSelection(.enabled)
       }
@@ -66,7 +66,7 @@ struct WorkspaceDetailView: View {
   private var repositoriesTable: some View {
     VStack(alignment: .leading, spacing: 8) {
       Text("Repositories")
-        .font(.headline)
+        .interfaceFont(.headline)
       WorkspaceRepositoriesGridView(workspace: workspace, rootURL: repository.rootURL)
     }
   }

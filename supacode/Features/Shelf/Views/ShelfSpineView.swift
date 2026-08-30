@@ -349,6 +349,7 @@ private struct ShelfSpineHeader: View {
   let icon: RepositoryIconSource?
   let iconTint: Color
   let repositoryRootURL: URL
+  @Environment(\.interfaceText) private var interfaceText
 
   /// Reserved slot for the top decoration (icon and/or notification),
   /// sized at the maximum expected configuration (14pt icon plus a
@@ -430,8 +431,8 @@ private struct ShelfSpineHeader: View {
   /// repositories with many worktrees.
   @ViewBuilder
   private var rotatedTitle: some View {
-    combinedTitle
-      .font(.callout)
+    combinedTitle(interfaceText)
+      .interfaceFont(.callout)
       .lineLimit(1)
       .truncationMode(.middle)
       .frame(width: ShelfMetrics.headerMaxLength, alignment: .leading)
@@ -443,9 +444,13 @@ private struct ShelfSpineHeader: View {
   /// truncation can operate across project + branch as one string.
   /// `foregroundStyle` on each interpolated piece survives composition
   /// and drives the primary/secondary split.
-  private var combinedTitle: Text {
+  /// Takes the resolution rather than reading the environment: the composed
+  /// value must stay a `Text` for interpolation to shorten across both pieces
+  /// as one string, and the view modifiers that read the environment return
+  /// `some View`.
+  private func combinedTitle(_ resolution: InterfaceTextResolution) -> Text {
     let project = Text(book.projectName)
-      .font(.callout.weight(.semibold))
+      .interfaceFont(.callout, weight: .semibold, resolution: resolution)
       .foregroundStyle(.primary)
     guard let branch = book.branchName, !branch.isEmpty else {
       return project
@@ -543,10 +548,11 @@ private struct ShelfSpineTabSlot: View {
     if let hotkeyIndex, showsHotkey {
       HStack(spacing: 1) {
         Image(systemName: "command")
-          .font(.system(size: 8, weight: .semibold))
+          .interfaceFont(size: 8, weight: .semibold)
           .foregroundStyle(foregroundTint)
         Text("\(hotkeyIndex)")
-          .font(.callout.weight(.semibold).monospacedDigit())
+          .interfaceFont(.callout, weight: .semibold)
+          .monospacedDigit()
           .foregroundStyle(foregroundTint)
       }
       .accessibilityHidden(true)
@@ -605,7 +611,7 @@ private struct ShelfSpineTabSlot: View {
   private func statusMarker(for entry: ActiveAgentEntry) -> some View {
     if let symbol = entry.displayState.shelfSpineStatusSymbol {
       Image(systemName: symbol)
-        .font(.caption2.weight(.bold))
+        .interfaceFont(.caption2, weight: .bold)
         .foregroundStyle(entry.displayState.foregroundStyle)
         // Thin halo so the bare glyph stays legible over the tab icon's strokes.
         .shadow(color: .black.opacity(0.4), radius: 1)

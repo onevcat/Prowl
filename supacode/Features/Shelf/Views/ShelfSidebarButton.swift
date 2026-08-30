@@ -13,7 +13,7 @@ struct ShelfSidebarButton: View {
     } label: {
       HStack(spacing: 6) {
         Label("Shelf", systemImage: "books.vertical")
-          .font(.callout)
+          .interfaceFont(.callout)
           .frame(maxWidth: .infinity, alignment: .leading)
         if commandKeyObserver.isPressed,
           let shortcut = AppShortcuts.display(for: AppShortcuts.CommandID.toggleShelf, in: resolvedKeybindings)

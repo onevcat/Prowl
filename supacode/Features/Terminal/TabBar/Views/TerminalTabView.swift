@@ -26,6 +26,7 @@ struct TerminalTabView: View {
   @State private var tabWidth: CGFloat = 0
   @Environment(CommandKeyObserver.self) private var commandKeyObserver
   @Environment(\.resolvedKeybindings) private var resolvedKeybindings
+  @Environment(\.interfaceText) private var interfaceText
 
   var body: some View {
     ZStack(alignment: .leading) {
@@ -79,6 +80,7 @@ struct TerminalTabView: View {
             TerminalTabIconBadge(tab: tab, isActive: isActive)
           }
           RenameTextField(
+            fontSize: InterfaceTextMetrics.pointSize(NSFont.smallSystemFontSize, resolution: interfaceText),
             text: $editingTitle,
             onCommit: { onEndRename() },
             onCancel: {
@@ -240,6 +242,7 @@ private final class MiddleClickNSView: NSView {
 /// directly lets us drive `selectAll` on its own field editor without
 /// fighting SwiftUI's focus timing.
 private struct RenameTextField: NSViewRepresentable {
+  let fontSize: CGFloat
   @Binding var text: String
   let onCommit: () -> Void
   let onCancel: () -> Void
@@ -248,7 +251,7 @@ private struct RenameTextField: NSViewRepresentable {
 
   func makeNSView(context: Context) -> RenameNSTextField {
     let field = RenameNSTextField()
-    field.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+    field.font = NSFont.systemFont(ofSize: fontSize)
     field.textColor = .labelColor
     field.isBordered = false
     field.drawsBackground = false
@@ -266,6 +269,9 @@ private struct RenameTextField: NSViewRepresentable {
 
   func updateNSView(_ nsView: RenameNSTextField, context: Context) {
     context.coordinator.parent = self
+    if nsView.font?.pointSize != fontSize {
+      nsView.font = NSFont.systemFont(ofSize: fontSize)
+    }
     if nsView.stringValue != text {
       nsView.stringValue = text
     }

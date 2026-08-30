@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 
 struct ArchivedWorktreeRowView: View {
@@ -6,6 +5,7 @@ struct ArchivedWorktreeRowView: View {
   let info: WorktreeInfoEntry?
   let onUnarchive: () -> Void
   let onDelete: () -> Void
+  @Environment(\.interfaceText) private var interfaceText
 
   var body: some View {
     let display = WorktreePullRequestDisplay(
@@ -13,11 +13,11 @@ struct ArchivedWorktreeRowView: View {
       pullRequest: info?.pullRequest
     )
     let deleteShortcut = KeyboardShortcut(.delete, modifiers: [.command, .shift]).display
-    let bodyFontAscender = NSFont.preferredFont(forTextStyle: .body).ascender
+    let bodyFontAscender = InterfaceTextMetrics.bodyAscender(resolution: interfaceText)
     VStack(alignment: .leading, spacing: 2) {
       HStack(alignment: .firstTextBaseline, spacing: 8) {
         Image(systemName: "archivebox")
-          .font(.caption)
+          .interfaceFont(.caption)
           .foregroundStyle(.secondary)
           .accessibilityHidden(true)
           .frame(width: 16, height: 16)
@@ -25,7 +25,7 @@ struct ArchivedWorktreeRowView: View {
             bodyFontAscender
           }
         Text(worktree.name)
-          .font(.body)
+          .interfaceFont(.body)
           .lineLimit(1)
         Spacer(minLength: 8)
         HStack(spacing: 8) {
@@ -55,15 +55,19 @@ struct ArchivedWorktreeRowView: View {
         Spacer(minLength: 0)
         WorktreePullRequestAccessoryView(display: display)
       }
-      .font(.caption)
+      .interfaceFont(.caption)
       .lineLimit(1)
-      .frame(minHeight: 14)
+      .frame(minHeight: 14 + InterfaceTextMetrics.extraHeight(.caption, resolution: interfaceText))
       .padding(.leading, 24)
     }
     .frame(height: rowHeight, alignment: .center)
   }
 
+  /// Base height plus whatever the text floor adds to the two lines
+  /// (body name, caption info) the row stacks.
   private var rowHeight: CGFloat {
     50
+      + InterfaceTextMetrics.extraHeight(.body, resolution: interfaceText)
+      + InterfaceTextMetrics.extraHeight(.caption, resolution: interfaceText)
   }
 }

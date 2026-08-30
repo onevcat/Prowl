@@ -15,7 +15,7 @@ struct ActiveAgentRow: View {
       VStack(alignment: .leading, spacing: 2) {
         title
         Text(subtitle)
-          .font(.caption)
+          .interfaceFont(.caption)
           .foregroundStyle(.secondary)
           .lineLimit(1)
           .truncationMode(.tail)
@@ -32,13 +32,13 @@ struct ActiveAgentRow: View {
   private var title: some View {
     HStack(alignment: .firstTextBaseline, spacing: 3) {
       Text(entry.displayName)
-        .font(.body.weight(.medium))
+        .interfaceFont(.body, weight: .medium)
         .foregroundStyle(.primary)
       Text("·")
-        .font(.caption.weight(.semibold))
+        .interfaceFont(.caption, weight: .semibold)
         .foregroundStyle(.tertiary)
       Text(repositoryName)
-        .font(.callout.weight(.medium))
+        .interfaceFont(.callout, weight: .medium)
         .foregroundStyle(repositoryColor?.color ?? .secondary)
     }
     .lineLimit(1)
@@ -73,7 +73,7 @@ struct ActiveAgentRow: View {
 
   private var statusText: some View {
     Text(entry.displayState.label)
-      .font(.caption2.weight(.semibold))
+      .interfaceFont(.caption2, weight: .semibold)
       .lineLimit(1)
   }
 }
@@ -108,7 +108,7 @@ struct BaguaWorkingIndicator: View {
 
   private func frameText(_ frame: String) -> some View {
     Text(frame)
-      .font(.system(size: 17, weight: .bold, design: .monospaced))
+      .fixedInterfaceFont(.system(size: 17, weight: .bold, design: .monospaced))
       .lineLimit(1)
       .frame(width: 20, height: 18)
       .accessibilityHidden(true)

@@ -53,9 +53,9 @@ import SwiftUI
           .frame(width: 32, height: 32, alignment: .center)
         VStack(alignment: .leading, spacing: 2) {
           Text(token)
-            .font(.body.monospaced().weight(.semibold))
+            .interfaceFont(.body, weight: .semibold, design: .monospaced)
           Text(detailLine)
-            .font(.caption.monospaced())
+            .interfaceFont(.caption, design: .monospaced)
             .foregroundStyle(.secondary)
         }
         Spacer(minLength: 0)

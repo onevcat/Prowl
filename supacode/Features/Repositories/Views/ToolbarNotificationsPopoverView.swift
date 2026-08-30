@@ -16,9 +16,9 @@ struct ToolbarNotificationsPopoverView: View {
         HStack {
           VStack(alignment: .leading, spacing: 2) {
             Text("Notifications")
-              .font(.headline)
+              .interfaceFont(.headline)
             Text("\(notificationCount) \(notificationLabel)")
-              .font(.subheadline)
+              .interfaceFont(.subheadline)
               .foregroundStyle(.secondary)
           }
           Spacer()
@@ -33,12 +33,12 @@ struct ToolbarNotificationsPopoverView: View {
           VStack(alignment: .leading, spacing: 8) {
             Divider()
             Text(repository.name)
-              .font(.subheadline)
+              .interfaceFont(.subheadline)
             ForEach(repository.worktrees) { worktree in
               VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
                   Text(worktree.name)
-                    .font(.caption)
+                    .interfaceFont(.caption)
                     .foregroundStyle(.secondary)
                   if worktree.hasUnseenNotifications {
                     Circle()
@@ -56,7 +56,7 @@ struct ToolbarNotificationsPopoverView: View {
                         .foregroundStyle(notification.isRead ? Color.secondary : Color.orange)
                         .accessibilityHidden(true)
                       Text(notification.content)
-                        .font(.caption)
+                        .interfaceFont(.caption)
                         .foregroundStyle(notification.isRead ? Color.secondary : Color.primary)
                         .lineLimit(2)
                     }

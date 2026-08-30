@@ -10,9 +10,9 @@ struct NotificationPopoverView: View {
     ScrollView {
       VStack(alignment: .leading) {
         Text("Notifications")
-          .font(.headline)
+          .interfaceFont(.headline)
         Text("\(count) \(countLabel)")
-          .font(.subheadline)
+          .interfaceFont(.subheadline)
           .foregroundStyle(.secondary)
         Divider()
         ForEach(notifications) { notification in
@@ -30,7 +30,7 @@ struct NotificationPopoverView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
           }
           .buttonStyle(.plain)
-          .font(.caption)
+          .interfaceFont(.caption)
           .help(notification.content.isEmpty ? "Focus pane" : notification.content)
         }
       }
