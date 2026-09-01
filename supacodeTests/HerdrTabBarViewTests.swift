@@ -143,6 +143,97 @@ struct HerdrTabBarViewTests {
     )
   }
 
+  @Test func mapsRemoteShellForegroundProcessesToTheSshIcon() {
+    #expect(HerdrProcessIcon(processName: "ssh") == .ssh)
+    #expect(HerdrProcessIcon(processName: "SSH") == .ssh)
+    #expect(HerdrProcessIcon(processName: "mosh-client") == .ssh)
+    #expect(HerdrProcessIcon(processName: "zsh") == nil)
+    #expect(HerdrProcessIcon(processName: "lazygit") == nil)
+    #expect(HerdrProcessTitle(processName: "ssh", directoryName: "prod").icon == .ssh)
+    #expect(HerdrProcessTitle(processName: "ssh", directoryName: "prod").rendersIconOnly)
+    #expect(!HerdrProcessTitle(processName: "zsh", directoryName: "Prowl").rendersIconOnly)
+    #expect(HerdrProcessTitle(processName: "zsh", directoryName: "Prowl").icon == nil)
+  }
+
+  @Test func brandsSshForegroundTabsWithTheSshIcon() {
+    let snapshot = HerdrSessionSnapshot(
+      version: "0.8.2",
+      protocolVersion: 21,
+      focusedWorkspaceID: "w1",
+      focusedTabID: "w1:t1",
+      focusedPaneID: "w1:p1",
+      workspaces: [],
+      tabs: [HerdrTab(tabID: "w1:t1", workspaceID: "w1", label: "remote")],
+      panes: [
+        HerdrPane(
+          paneID: "w1:p1", workspaceID: "w1", tabID: "w1:t1", focused: true, cwd: "/tmp/prod")
+      ],
+      layouts: [],
+      agents: []
+    )
+    let processInfoByPaneID = [
+      "w1:p1": HerdrPaneProcessInfo(
+        paneID: "w1:p1",
+        shellPID: 10,
+        foregroundProcessGroupID: 20,
+        foregroundProcesses: [
+          HerdrPaneProcess(pid: 10, name: "zsh", argv0: "/bin/zsh"),
+          HerdrPaneProcess(pid: 20, name: "ssh", argv0: "ssh", cwd: "/tmp/prod"),
+        ]
+      )
+    ]
+
+    let item = HerdrTabBarProjection.items(
+      in: snapshot,
+      workspaceID: "w1",
+      processInfoByPaneID: processInfoByPaneID,
+      focusedPaneID: "w1:p1"
+    ).first
+
+    #expect(item?.processTitle == HerdrProcessTitle(processName: "ssh", directoryName: "prod"))
+    #expect(item?.processIcon == .ssh)
+    #expect(item?.agentIcon == nil)
+  }
+
+  @Test func agentIconKeepsPrecedenceOverTheSshProcessIcon() {
+    let snapshot = HerdrSessionSnapshot(
+      version: "0.8.2",
+      protocolVersion: 21,
+      focusedWorkspaceID: "w1",
+      focusedTabID: "w1:t1",
+      focusedPaneID: "w1:p1",
+      workspaces: [],
+      tabs: [HerdrTab(tabID: "w1:t1", workspaceID: "w1", label: "agent")],
+      panes: [
+        HerdrPane(
+          paneID: "w1:p1", workspaceID: "w1", tabID: "w1:t1", focused: true, cwd: "/tmp/prod")
+      ],
+      layouts: [],
+      agents: [HerdrAgent(paneID: "w1:p1", tabID: "w1:t1", agent: "codex")]
+    )
+    let processInfoByPaneID = [
+      "w1:p1": HerdrPaneProcessInfo(
+        paneID: "w1:p1",
+        shellPID: 10,
+        foregroundProcessGroupID: 20,
+        foregroundProcesses: [
+          HerdrPaneProcess(pid: 10, name: "zsh", argv0: "/bin/zsh"),
+          HerdrPaneProcess(pid: 20, name: "ssh", argv0: "ssh", cwd: "/tmp/prod"),
+        ]
+      )
+    ]
+
+    let item = HerdrTabBarProjection.items(
+      in: snapshot,
+      workspaceID: "w1",
+      processInfoByPaneID: processInfoByPaneID,
+      focusedPaneID: "w1:p1"
+    ).first
+
+    #expect(item?.agentIcon == .codex)
+    #expect(item?.processIcon == .ssh)
+  }
+
   @Test func decodesLinkedWorktreeProvenance() throws {
     let workspace = try JSONDecoder().decode(
       HerdrWorkspace.self,
@@ -465,7 +556,8 @@ struct HerdrTabBarViewTests {
       focusedPaneID: "w1:p2"
     ).first
 
-    #expect(item?.processTitle == HerdrProcessTitle(processName: "lazygit", directoryName: "current"))
+    #expect(
+      item?.processTitle == HerdrProcessTitle(processName: "lazygit", directoryName: "current"))
   }
 
   @Test func removesProcessTitleWhenTheForegroundJobReturnsToShell() {

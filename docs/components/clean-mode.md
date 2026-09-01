@@ -61,14 +61,17 @@ Prowl 的输入法 adapter 只读取 focused pane，并订阅已确认的 focus/
 - spaces 右上角的 ellipsis 是可点击的 native menu button，菜单提供 new 和 menu 项。
 - 普通 pane 使用 `agent == nil` 判定，不把 shell 当作 Agent；Agent pane 显示 agent 名称和状态。
 - Agent title 和包含 Agent pane 的 tab title 左侧都会显示对应 provider 的 full-color canonical 图标；未知 provider 使用
-  Zap 图标兜底，普通 shell tab 不显示图标。
+  Zap 图标兜底。前台进程是 `ssh` 或 `mosh-client` 的普通 tab 在同一图标位显示 SSH badge（`HerdrProcessSshIcon`：
+  14pt 槽位内等比放大填充 24 网格、idle 状态同款绿色、无背景 template）；badge 替代进程名文字，tab 只显示
+  badge + directory segment；agent 图标优先于 SSH badge，两者同时存在时只显示 agent 图标。
 - Agent title 第一行显示 `foreground_cwd`/`cwd` 的目录名，并与 workspace/tab label 去重；第二行保留 agent 名称。
 - Herdr tab 的 `label` 是当前实际名称，`custom_name` 是手动命名标记。自动状态下 `label` 跟随 focused pane 的 cwd basename；
   手动状态下 cwd 变化不会覆盖 `label`，即使手动名称恰好等于当前目录名也保持手动状态。
 - Goto、Navigator、mobile switcher、window title、terminal attach、`session.snapshot`、`tab.list`/`tab.get` 和 Clean native tab bar
   都读取 Herdr 的同一个 `label`，不再使用 `1`、`2` 等 tab 序号作为名称。
 - 当前 pane 和刚离开的 pane 有明确 foreground application 时，tab title 显示 `process · directory`；shell、`starship` 和
-  transient helper 不参与识别。进程退出后只恢复 directory segment，不改变 Herdr 的手动命名状态。
+  transient helper 不参与识别。进程退出后只恢复 directory segment，不改变 Herdr 的手动命名状态。SSH badge 复用同一
+  foreground process 判定：连接期间替代进程名文字显示，进程退出后 badge 消失并恢复普通 directory-only 展示。
 - linked worktree、process title 和 Agent icon 都是 Prowl 的独立视觉装饰。linked worktree 只在自动状态下为 directory segment
   增加 rich presentation，手动 directory segment 始终优先；只有 Herdr snapshot 已提供 worktree provenance 时才显示 linked-worktree
   装饰，没有 provenance 时直接使用 server `label`，不在 tab projection 内启动 Git 子进程；Herdr 的 `label`/`custom_name` 不通过装饰字符串反推。

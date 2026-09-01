@@ -49,6 +49,16 @@ internal struct HerdrProcessTitle: Equatable, Sendable {
     default: return .neutral
     }
   }
+
+  internal var icon: HerdrProcessIcon? {
+    HerdrProcessIcon(processName: processName)
+  }
+
+  /// Badge-carrying processes replace the process-name text with their
+  /// leading icon; the badge alone identifies what is running.
+  internal var rendersIconOnly: Bool {
+    icon != nil
+  }
 }
 
 internal enum HerdrProcessAccent: Equatable, Sendable {
@@ -63,6 +73,22 @@ internal enum HerdrProcessAccent: Equatable, Sendable {
     case .agent: return .cyan
     case .editor: return .green
     case .neutral: return colorScheme == .dark ? .primary : .secondary
+    }
+  }
+}
+
+internal enum HerdrProcessIcon: String, Equatable, Sendable {
+  /// Leading tab icon for remote-shell foreground processes. Driven by the
+  /// daemon-reported foreground process, so the badge tracks the live session:
+  /// it appears while `ssh`/`mosh-client` owns the pane and drops off when the
+  /// shell regains the foreground. Extend the switch as more remote transports
+  /// earn distinct artwork.
+  case ssh = "HerdrProcessSshIcon"
+
+  internal init?(processName: String) {
+    switch processName.lowercased() {
+    case "ssh", "mosh-client": self = .ssh
+    default: return nil
     }
   }
 }
@@ -155,6 +181,10 @@ internal struct HerdrTabBarItem: Equatable, Identifiable, Sendable {
 
   internal var isAgent: Bool {
     agentIcon != nil
+  }
+
+  internal var processIcon: HerdrProcessIcon? {
+    processTitle?.icon
   }
 
   internal init(
@@ -258,13 +288,17 @@ internal enum HerdrTabBarProjection {
       }
     }
     let panesByTabID = Dictionary(grouping: snapshot.panes, by: \.tabID)
-    let worktreesByWorkspaceID = snapshot.workspaces.reduce(into: [String: HerdrWorkspaceWorktree]()) {
+    let worktreesByWorkspaceID = snapshot.workspaces.reduce(
+      into: [String: HerdrWorkspaceWorktree]()
+    ) {
       worktrees, workspace in
       if let worktree = workspace.worktree {
         worktrees[workspace.id] = worktree
       }
     }
-    let linkedWorktreesByWorkspaceID = worktreesByWorkspaceID.reduce(into: [String: HerdrLinkedWorktreeTitle]()) {
+    let linkedWorktreesByWorkspaceID = worktreesByWorkspaceID.reduce(
+      into: [String: HerdrLinkedWorktreeTitle]()
+    ) {
       result, entry in
       if let title = linkedWorktreeTitle(for: entry.value) {
         result[entry.key] = title
@@ -540,6 +574,12 @@ internal struct HerdrTabBarView: View {
               .foregroundStyle(agentIcon.accent.color(for: colorScheme))
               .frame(width: 14, height: 14)
               .accessibilityHidden(true)
+          } else if let processIcon = item.processIcon {
+            Image(processIcon.rawValue)
+              .resizable()
+              .foregroundStyle(.green)
+              .frame(width: 14, height: 14)
+              .accessibilityHidden(true)
           }
           tabTitleLabel(item, isActive: isActive)
           Color.clear
@@ -620,7 +660,7 @@ internal struct HerdrTabBarView: View {
 
   @ViewBuilder
   private func tabTitleLabel(_ item: HerdrTabBarItem, isActive: Bool) -> some View {
-    if let processTitle = item.processTitle {
+    if let processTitle = item.processTitle, !processTitle.rendersIconOnly {
       HStack(spacing: 3) {
         Text(processTitle.processName)
           .font(
