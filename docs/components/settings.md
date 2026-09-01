@@ -56,7 +56,7 @@ Legacy `~/.supacode` is migrated to `~/.prowl` on first launch.
 ## Agent Skills
 
 **Agents → CLI & Skills → Agent Skills** lists the user-installable skills bundled in
-the app (`Prowl.app/Contents/Resources/skills/`, today `prowl-cli`) and links them into
+the app (`Prowl.app/Contents/Resources/skills/`, today `prowl-cli` and `prowl-workflow`) and links them into
 your agents' skill folders so every agent reads the version that matches the installed
 app. It is the GUI for [`prowl skills`](cli.md#prowl-skills) in user scope and shows the
 same status as `prowl skills list`.
