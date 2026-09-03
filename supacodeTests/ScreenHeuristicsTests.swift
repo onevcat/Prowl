@@ -309,6 +309,34 @@ struct ScreenHeuristicsTests {
     )
   }
 
+  @Test func claudeDetectsUnnumberedWorkspaceTrustChoices() {
+    // Newer Claude releases render this initial trust prompt without the
+    // numbered menu used by earlier releases. Its selected "No, exit" row is still a
+    // live user decision, not the ordinary composer that means idle.
+    #expect(
+      claudeProfileState(
+        // swiftlint:disable line_length
+        in: """
+          Accessing workspace:
+
+          /Users/user
+
+          Quick safety check: Is this a project you created or one you trust? (Like your own code, a well-known open source project, or work from your team). If not, take a moment to review what's in this folder first.
+
+          Claude Code'll be able to read, edit, and execute files here.
+
+          Security guide
+
+          ❯ No, exit
+            Yes, I trust this folder
+
+          Enter to confirm · Esc to cancel
+          """
+        // swiftlint:enable line_length
+      ) == .blocked
+    )
+  }
+
   @Test func claudeIgnoresStalePermissionPromptNearCurrentIdlePrompt() {
     #expect(
       claudeProfileState(

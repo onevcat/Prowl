@@ -82,12 +82,25 @@ enum ClaudeScreenProfile {
       || lower.contains("chat about this")
       || lower.contains("review your answers")
       || lower.contains("skip interview and plan immediately")
+      || hasWorkspaceTrustPrompt(lower)
     {
       return true
     }
     return hasConfirmationPrompt(lower)
       || (hasSelectionPrompt(regions.currentInteractionLines)
         && hasYesNoChoice(regions.currentInteractionLines))
+  }
+
+  // Newer Claude releases render this initial gate as plain "No, exit" /
+  // "Yes, I trust this folder" rows instead of a numbered menu. Keep the full prompt
+  // signature so the user entering one of those phrases into the composer
+  // cannot be mistaken for a live blocker.
+  nonisolated private static func hasWorkspaceTrustPrompt(_ lower: String) -> Bool {
+    lower.contains("quick safety check:")
+      && lower.contains("claude code'll be able to read, edit, and execute files here.")
+      && lower.contains("no, exit")
+      && lower.contains("yes, i trust this folder")
+      && lower.contains("enter to confirm")
   }
 
   nonisolated private static func hasSelectionPrompt(_ lines: [String]) -> Bool {
@@ -270,10 +283,15 @@ private struct ClaudeScreenRegions: Sendable {
     guard let promptIndex else {
       return Array(screenLines.suffix(18))
     }
-    guard isClaudeNumberedSelectionLine(screenLines[promptIndex]) else {
+    let isWorkspaceTrustChoice = isClaudeWorkspaceTrustChoiceLine(screenLines[promptIndex])
+    guard isClaudeNumberedSelectionLine(screenLines[promptIndex]) || isWorkspaceTrustChoice else {
       return []
     }
-    let lowerBound = max(screenLines.startIndex, promptIndex - 10)
+    // The first-launch safety copy wraps before the choices. Keep its full
+    // signature when the new unnumbered menu appears; numbered menus retain
+    // the narrower interaction window used to reject stale transcript text.
+    let lineLimit = isWorkspaceTrustChoice ? 18 : 10
+    let lowerBound = max(screenLines.startIndex, promptIndex - lineLimit)
     return Array(screenLines[lowerBound..<screenLines.endIndex])
   }
 
@@ -375,6 +393,13 @@ nonisolated private func isClaudeNumberedSelectionLine(_ line: String) -> Bool {
   guard trimmed.first == "❯" else { return false }
   let option = trimmed.dropFirst().trimmingCharacters(in: .whitespaces)
   return isNumberedChoice(option)
+}
+
+nonisolated private func isClaudeWorkspaceTrustChoiceLine(_ line: String) -> Bool {
+  let trimmed = line.trimmingCharacters(in: .whitespaces).lowercased()
+  guard trimmed.hasPrefix("❯") else { return false }
+  let option = trimmed.dropFirst().trimmingCharacters(in: .whitespaces)
+  return option == "no, exit" || option == "yes, i trust this folder"
 }
 
 nonisolated private func isBoxBorderLine(_ line: String) -> Bool {
