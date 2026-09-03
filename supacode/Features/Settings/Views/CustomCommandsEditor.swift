@@ -85,24 +85,36 @@ struct CustomCommandsEditor: View {
       VStack(spacing: 0) {
         customCommandsHeaderRow
         Divider()
-        ScrollView {
-          LazyVStack(spacing: 4) {
-            ForEach(commands) { command in
-              customCommandRow(command)
-                .id(command.id)
-            }
-            localCommandDropTarget
-            if showsGlobalCommands {
-              ForEach(globalCommands) { command in
-                globalCustomCommandRow(command)
-                  .id("global-\(command.id)")
+        ScrollViewReader { proxy in
+          ScrollView {
+            LazyVStack(spacing: 4) {
+              ForEach(commands) { command in
+                customCommandRow(command)
+                  .id(command.id)
+              }
+              localCommandDropTarget
+              if showsGlobalCommands {
+                ForEach(globalCommands) { command in
+                  globalCustomCommandRow(command)
+                    .id("global-\(command.id)")
+                }
               }
             }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 6)
           }
-          .padding(.horizontal, 6)
-          .padding(.vertical, 6)
+          .frame(height: customCommandsListHeight)
+          .onChange(of: editingNameCommandID) { _, commandID in
+            // The lazy stack never builds a row below the viewport, so scroll
+            // the row being renamed in before its field takes focus.
+            guard let commandID else { return }
+            var transaction = Transaction()
+            transaction.animation = nil
+            withTransaction(transaction) {
+              proxy.scrollTo(commandID)
+            }
+          }
         }
-        .frame(height: customCommandsListHeight)
       }
       .clipShape(RoundedRectangle(cornerRadius: 8))
 
@@ -174,8 +186,8 @@ struct CustomCommandsEditor: View {
     .onChange(of: selectedCustomCommandID) { _, selectedID in
       if editingNameCommandID != selectedID {
         editingNameCommandID = nil
+        focusedNameEditorCommandID = nil
       }
-      focusedNameEditorCommandID = nil
       if let iconPickerCommandID, iconPickerCommandID != selectedID {
         self.iconPickerCommandID = nil
       }
@@ -277,7 +289,14 @@ struct CustomCommandsEditor: View {
           }
       }
       .onAppear {
-        focusedNameEditorCommandID = command.id
+        // A focus request made in the same update that installs the field is a
+        // no-op — SwiftUI has no responder to move yet, and AppKit falls back
+        // to the window's first text field (the repository name).
+        let commandID = command.id
+        Task { @MainActor in
+          guard editingNameCommandID == commandID else { return }
+          focusedNameEditorCommandID = commandID
+        }
       }
     } else {
       InlineEditableCellButton {
@@ -953,9 +972,10 @@ struct CustomCommandsEditor: View {
       focusedNameEditorCommandID = nil
       return
     }
+    // Hold the first responder inside the editor until the row's field exists.
+    focusCustomCommandsArea()
     selectedCustomCommandID = commandID
     editingNameCommandID = commandID
-    focusedNameEditorCommandID = commandID
     iconPickerCommandID = nil
     commandEditorCommandID = nil
     recordingCustomCommandID = nil
