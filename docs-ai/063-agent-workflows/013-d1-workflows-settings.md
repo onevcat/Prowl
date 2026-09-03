@@ -2,7 +2,8 @@
 
 ## Status
 
-Drafted 2026-09-04 on `feat/workflow-settings-d1`. D1's authoring skill shipped ahead of the
+Drafted 2026-09-04 on `feat/workflow-settings-d1`; implemented and opened as
+[#761](https://github.com/onevcat/Prowl/pull/761) the same day. D1's authoring skill shipped ahead of the
 slice as `prowl-workflow` (#754); this record covers the remaining D1 scope from the
 [release plan](release-plan.md): the Settings › Agents › **Workflows** page, the agent-facing
 manual `docs/components/workflows.md`, and the CLI reachability status deferred from C0

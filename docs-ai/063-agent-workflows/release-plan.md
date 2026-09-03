@@ -44,7 +44,7 @@ say when each is cut:
 | --- | --- | --- |
 | C2 | Merged | #752: start sheet + capsule popover / palette / Active Agents entry points; [063.011](011-c2-start-sheet.md) |
 | D1 (skill) | Merged | #754: `prowl-workflow` bundled authoring skill (shipped ahead of the rest of D1) |
-| D1 (rest) | In progress | Settings › Agents › Workflows page, `docs/components/workflows.md`, CLI reachability status (deferred from C0); [063.013](013-d1-workflows-settings.md) |
+| D1 (rest) | Open | #761: Settings › Agents › Workflows page, `docs/components/workflows.md`, CLI reachability status (deferred from C0); [063.013](013-d1-workflows-settings.md) |
 | #726 T1 | Planned | `make test-agent-contracts` — after D1 |
 | D2 | Planned | `prowl.adversarial-review` built-in + reviewer skill + E2E — after #726 T1 |
 
