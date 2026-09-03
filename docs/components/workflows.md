@@ -95,9 +95,9 @@ The sheet collects what the run needs before it exists:
 - **Don't ask again for this workflow** — writes the per-workflow **Automatic**
   bind mode (same control as Settings → Workflows → Bindings), so the next start
   skips the sheet when nothing is undecided.
-- A banner blocks Run when the `prowl` CLI is not installed (with an inline
-  Install) or when Prowl is not listening on its socket (the reason is shown;
-  participants could not deliver).
+- A banner blocks Run when the `prowl` CLI is not usable (missing, or a dangling
+  link — with an inline Install / Repair) or when Prowl is not listening on its
+  socket (the reason is shown; participants could not deliver).
 
 A workflow with `bind: auto` roles, resolved bindings, no `pick` roles, and
 fully defaulted inputs starts **without the sheet**; the toolbar status item is
@@ -154,8 +154,9 @@ copyable, localized prompt that points your coding agent at the bundled
 a workflow for you; **Show Folder** reveals `~/.prowl/workflows` (creating it).
 
 A banner at the top mirrors the start sheet's preflight: Install when `prowl`
-is missing, or the reason Prowl is not listening on its socket (also shown as
-the **Status** row under Settings → Agents → CLI & Skills → Connection).
+is missing (Repair when the link is dangling), or the reason Prowl is not
+listening on its socket (also shown as the **Status** row under Settings →
+Agents → CLI & Skills → Connection).
 
 ## Gotchas for agents
 
