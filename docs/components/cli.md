@@ -26,7 +26,9 @@ From the app: **Settings → Agents → CLI & Skills → Install**, or Command
 Palette → "Install Command Line Tool". This symlinks `prowl` into
 `/usr/local/bin` (prompting for admin if needed). The Settings page also shows
 the local Unix socket path `prowl` uses to reach the app (`PROWL_CLI_SOCKET`
-overrides it for both processes). Once `prowl` is installed, `prowl skills install` links
+overrides it for both processes) and a **Status** row saying whether this app is
+listening there — with the reason when it is not (typically another Prowl
+instance owns the socket). Once `prowl` is installed, `prowl skills install` links
 the bundled `prowl-cli` and `prowl-workflow` skills into your agents' skill folders (see
 [`prowl skills`](#prowl-skills)).
 
@@ -475,7 +477,9 @@ three sources, later ones winning for the same id: the app bundle
 `~/.prowl/workflows/*.yaml` < `<repo>/.prowl/workflows/*.yaml`. `validate` and `schema` run
 **locally** and work with Prowl closed; every other subcommand needs the app. The bundled
 `prowl-workflow` skill (`skills/prowl-workflow/SKILL.md`, linked by `prowl skills install`)
-teaches an agent to author, validate, run, and take part in workflows.
+teaches an agent to author, validate, run, and take part in workflows. The feature as a
+whole — entry points, the start sheet, the run panel, Settings → Agents → Workflows — is in
+[workflows](workflows.md).
 
 ```bash
 prowl workflow list [target] [--json]                   # every definition visible to a worktree, with status

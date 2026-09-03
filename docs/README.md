@@ -59,7 +59,8 @@ its keyboard shortcuts, detailed behavior, settings, and gotchas.
 | [`components/custom-actions.md`](components/custom-actions.md) | Run Script (`⌘R`/`⌘.`), Setup & Archive scripts, and per-repo Custom Commands with their own buttons & hotkeys. Injected env vars. |
 | [`components/settings.md`](components/settings.md) | The Settings window (`⌘,`): every tab and what it controls. |
 | [`components/updates.md`](components/updates.md) | Sparkle auto-updates: auto-check, `⌘⇧U`. |
-| [`components/cli.md`](components/cli.md) | The `prowl` CLI — let an agent inspect and drive panes (`list`, `agents`, `profiles`, `skills`, `focus`, `send`, `key`, `read`, `create`, `close`, `open`, `handoff`). |
+| [`components/cli.md`](components/cli.md) | The `prowl` CLI — let an agent inspect and drive panes (`list`, `agents`, `profiles`, `skills`, `workflow`, `focus`, `send`, `key`, `read`, `create`, `close`, `open`, `handoff`). |
+| [`components/workflows.md`](components/workflows.md) | Agent Workflows: YAML-declared multi-agent orchestrations Prowl runs — sources, entry points, the start sheet and bindings, the run panel, and Settings → Agents → Workflows. |
 | [`components/handoff.md`](components/handoff.md) | Hand a task off between agents: the `.prowl/handoff/` artifact, inline briefings (`--brief`), caller-pane source resolution, `prowl handoff`, and the Agents capsule + Hand Off HUD. |
 
 ## Reference (exact lookups)
@@ -76,6 +77,7 @@ its keyboard shortcuts, detailed behavior, settings, and gotchas.
 | Run many agents side by side and see them all | [`components/canvas.md`](components/canvas.md), [`components/shelf.md`](components/shelf.md) |
 | Give one agent a task that spans several repos | [`components/workspaces.md`](components/workspaces.md) |
 | Hand a task off between agents | [`components/handoff.md`](components/handoff.md) |
+| Run a multi-agent workflow (e.g. launch a reviewer and loop until clean) | [`components/workflows.md`](components/workflows.md) |
 | Send one command to every agent simultaneously | [`components/canvas.md`](components/canvas.md) (broadcast) |
 | Spin up a new branch/worktree for a new agent | [`components/repositories-and-worktrees.md`](components/repositories-and-worktrees.md) |
 | Find / run any action by name | [`components/command-palette.md`](components/command-palette.md) |

@@ -60,7 +60,8 @@ selected worktree has a pull request).
   action-target worktree (refreshed when the palette opens). Activation goes
   through the workflow start sheet — or starts immediately when the workflow's
   bindings resolve without a decision. Validation-failing files are not listed
-  here; the toolbar Agents popover names them with their reason.
+  here; the toolbar Agents popover names them with their reason. See
+  [workflows](workflows.md).
 - **Debug** (Debug builds only): toast/update/dock simulations.
 
 ## Behavior notes
