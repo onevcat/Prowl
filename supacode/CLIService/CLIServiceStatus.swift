@@ -16,7 +16,17 @@ nonisolated enum CLIServiceStatus: Equatable, Sendable {
     return false
   }
 
-  /// Why `prowl` cannot reach this app right now; nil while listening or stopped.
+  /// Why `prowl` cannot reach this app right now — the preflight gate: nil only while listening.
+  /// A stopped server is unreachable without being a failure (start-up, shutdown).
+  var unreachableDescription: String? {
+    switch self {
+    case .listening: nil
+    case .stopped: "Prowl is not listening for the prowl command right now."
+    case .failed: failureDescription
+    }
+  }
+
+  /// Why the last start failed; nil while listening or stopped.
   var failureDescription: String? {
     guard case .failed(let error, _) = self else { return nil }
     switch error {

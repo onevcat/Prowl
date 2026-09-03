@@ -17,9 +17,10 @@ struct WorkflowSettingsClient: Sendable {
   /// Writes `WorkflowStarterTemplate` into the user directory and returns the new file.
   var createWorkflow: @Sendable () throws -> URL
   var reveal: @Sendable (URL) -> Void
-  /// One element per change in any of the directories; a directory that does not exist yet is
-  /// watched through its parent so its creation is noticed too.
-  var watch: @Sendable (_ directories: [URL]) -> AsyncStream<Void>
+  /// One element per change to any of the paths — directories (entries added, removed, renamed)
+  /// and files (in-place saves). A path that does not exist yet is watched through its nearest
+  /// existing ancestor so its creation is noticed too.
+  var watch: @Sendable (_ paths: [URL]) -> AsyncStream<Void>
 }
 
 extension WorkflowSettingsClient: DependencyKey {
@@ -41,30 +42,32 @@ extension WorkflowSettingsClient: DependencyKey {
     NSWorkspace.shared.activateFileViewerSelecting([url])
   }
 
-  nonisolated static func watchDirectories(_ directories: [URL]) -> AsyncStream<Void> {
+  nonisolated static func watchPaths(_ paths: [URL]) -> AsyncStream<Void> {
     AsyncStream { continuation in
-      let watcher = DirectoryChangeWatcher(directories: directories) { continuation.yield() }
+      let watcher = WorkflowChangeWatcher(paths: paths) { continuation.yield() }
       continuation.onTermination = { _ in watcher.cancel() }
     }
   }
 }
 
-/// vnode sources on each directory (or its nearest existing parent), coalesced into one callback.
-nonisolated final class DirectoryChangeWatcher: @unchecked Sendable {
+/// One vnode source per path (file or directory, else its nearest existing ancestor), coalesced
+/// into one callback. Directories report entries coming and going; files report in-place saves,
+/// which never touch the directory's vnode.
+nonisolated final class WorkflowChangeWatcher: @unchecked Sendable {
   private let sources: [DispatchSourceFileSystemObject]
 
-  init(directories: [URL], fileManager: FileManager = .default, onChange: @escaping @Sendable () -> Void) {
+  init(paths: [URL], fileManager: FileManager = .default, onChange: @escaping @Sendable () -> Void) {
     var watched: Set<String> = []
     var sources: [DispatchSourceFileSystemObject] = []
-    for directory in directories {
-      guard let path = Self.existingDirectory(for: directory, fileManager: fileManager),
+    for url in paths {
+      guard let path = Self.existingPath(for: url, fileManager: fileManager),
         watched.insert(path).inserted
       else { continue }
       let descriptor = open(path, O_EVTONLY)
       guard descriptor >= 0 else { continue }
       let source = DispatchSource.makeFileSystemObjectSource(
         fileDescriptor: descriptor,
-        eventMask: [.write, .rename, .delete],
+        eventMask: [.write, .extend, .attrib, .rename, .delete],
         queue: DispatchQueue.global(qos: .utility))
       source.setEventHandler(handler: onChange)
       source.setCancelHandler { close(descriptor) }
@@ -84,14 +87,13 @@ nonisolated final class DirectoryChangeWatcher: @unchecked Sendable {
     }
   }
 
-  /// The directory itself, else the closest existing ancestor (creating the directory is a
-  /// write to that ancestor).
-  static func existingDirectory(for directory: URL, fileManager: FileManager) -> String? {
-    var candidate = directory.standardizedFileURL
+  /// The path itself when it exists, else the closest existing ancestor (creating the missing
+  /// entry is a write to that ancestor).
+  static func existingPath(for url: URL, fileManager: FileManager) -> String? {
+    var candidate = url.standardizedFileURL
     while true {
-      var isDirectory: ObjCBool = false
       let path = candidate.path(percentEncoded: false)
-      if fileManager.fileExists(atPath: path, isDirectory: &isDirectory), isDirectory.boolValue {
+      if fileManager.fileExists(atPath: path) {
         return path
       }
       let parent = candidate.deletingLastPathComponent()

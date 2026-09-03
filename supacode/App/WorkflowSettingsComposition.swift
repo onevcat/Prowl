@@ -62,7 +62,7 @@ extension SupacodeApp {
         }
       },
       reveal: WorkflowSettingsClient.reveal,
-      watch: WorkflowSettingsClient.watchDirectories
+      watch: WorkflowSettingsClient.watchPaths
     )
   }
 }

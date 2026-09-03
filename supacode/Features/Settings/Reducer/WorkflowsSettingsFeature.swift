@@ -27,10 +27,13 @@ struct WorkflowsSettingsFeature {
     }
 
     /// The banner's reason, in the same precedence as the start sheet: an app that is not
-    /// listening cannot be fixed by installing the CLI.
+    /// listening cannot be fixed by installing the CLI, and a dangling link needs a repair.
     var cliBlocker: CLIBlocker? {
-      if let failure = cliServiceStatus.failureDescription { return .socketUnavailable(failure) }
-      if cliInstallStatus == .notInstalled { return .notInstalled }
+      if let reason = cliServiceStatus.unreachableDescription { return .socketUnavailable(reason) }
+      guard cliInstallStatus.isUsable else {
+        if case .broken = cliInstallStatus { return .notInstalled(repair: true) }
+        return .notInstalled(repair: false)
+      }
       return nil
     }
 
@@ -42,15 +45,21 @@ struct WorkflowsSettingsFeature {
       catalog.bundle + catalog.user + catalog.repositories.flatMap(\.rows)
     }
 
-    /// Every directory whose content decides the rows; the client watches the ones that exist.
-    var watchedDirectories: [URL] {
+    /// Everything whose change must re-derive the rows: the source directories (files appear,
+    /// disappear, get renamed) and every discovered file (an in-place save touches only the
+    /// file's vnode). A directory that does not exist yet is watched through its parent.
+    var watchedPaths: [URL] {
       guard let scan else { return [catalog.userDirectory] }
-      return [scan.userDirectory] + scan.repositories.map(\.directory)
+      let directories = [scan.userDirectory] + scan.repositories.map(\.directory)
+      let files = scan.entries.map(\.file.url) + scan.repositories.flatMap { $0.entries.map(\.file.url) }
+      var seen: Set<String> = []
+      return (directories + files).filter { seen.insert($0.path(percentEncoded: false)).inserted }
     }
   }
 
   enum CLIBlocker: Equatable {
-    case notInstalled
+    /// `repair` = the slot holds a dangling link, so the action reads Repair.
+    case notInstalled(repair: Bool)
     case socketUnavailable(String)
   }
 
@@ -240,9 +249,9 @@ struct WorkflowsSettingsFeature {
   }
 
   private func watch(_ state: State) -> Effect<Action> {
-    let directories = state.watchedDirectories
+    let paths = state.watchedPaths
     return .run { [client] send in
-      for await _ in client.watch(directories) {
+      for await _ in client.watch(paths) {
         await send(.directoriesChanged)
       }
     }

@@ -88,8 +88,9 @@ nonisolated struct WorkflowStartContext: Equatable, Sendable {
   /// The user's per-workflow tri-state override, already folded into each role's
   /// `effectiveBind`; carried so the sheet can show the "Don't ask again" toggle state.
   let bindModeOverride: WorkflowBindModeOverride.Mode?
-  /// Why `prowl` cannot reach this app (docs-ai 063 D1 preflight); nil while Prowl listens.
-  /// Participants deliver through the CLI, so a run cannot start until this clears.
+  /// Why `prowl` cannot reach this app (docs-ai 063 D1 preflight): nil only while Prowl listens;
+  /// a stopped server carries a reason too. Participants deliver through the CLI, so a run
+  /// cannot start until this clears.
   var cliServiceFailure: String?
 
   /// Steps offering a "Skip" choice at start: every step with an `expect` (§9 `--skip`).

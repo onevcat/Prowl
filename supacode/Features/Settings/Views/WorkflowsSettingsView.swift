@@ -43,14 +43,18 @@ struct WorkflowsSettingsView: View {
       VStack(alignment: .leading, spacing: 6) {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
           switch blocker {
-          case .notInstalled:
+          case .notInstalled(let repair):
             Label("Workflows need the prowl command line tool.", systemImage: "exclamationmark.triangle.fill")
               .foregroundStyle(.orange)
             Spacer()
-            Button("Install") {
+            Button(repair ? "Repair" : "Install") {
               store.send(.installCLITapped)
             }
-            .help("Install the prowl command line tool to /usr/local/bin")
+            .help(
+              repair
+                ? "Replace the broken prowl link with the version bundled in this app"
+                : "Install the prowl command line tool to /usr/local/bin"
+            )
             .buttonStyle(.bordered)
             .controlSize(.small)
           case .socketUnavailable:
@@ -59,9 +63,14 @@ struct WorkflowsSettingsView: View {
           }
         }
         switch blocker {
-        case .notInstalled:
-          Text("Participants deliver their results through prowl, so a run cannot start until it is installed.")
-            .foregroundStyle(.secondary)
+        case .notInstalled(let repair):
+          Text(
+            repair
+              ? "The prowl link at /usr/local/bin points at an app that is gone. Participants deliver their "
+                + "results through prowl, so a run cannot start until it is repaired."
+              : "Participants deliver their results through prowl, so a run cannot start until it is installed."
+          )
+          .foregroundStyle(.secondary)
         case .socketUnavailable(let reason):
           Text(reason)
             .foregroundStyle(.secondary)
@@ -258,7 +267,7 @@ private struct WorkflowSettingsRowView: View {
       if let shadowNote = row.shadowNote {
         Text("·")
         Text(shadowNote)
-          .help("A file with the same id in a higher-precedence source is the one that runs")
+          .help("Another definition with the same id is the one that runs; this file is never offered")
       }
       Text("·")
       Text(row.fileName)

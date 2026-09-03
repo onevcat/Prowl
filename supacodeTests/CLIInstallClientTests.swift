@@ -15,6 +15,14 @@ struct CLIInstallClientTests {
     try? FileManager.default.removeItem(at: url)
   }
 
+  @Test func onlyALiveProwlIsUsable() {
+    #expect(CLIInstallStatus.installed(path: "/usr/local/bin/prowl").isUsable)
+    #expect(CLIInstallStatus.installedDifferentSource(path: "/usr/local/bin/prowl", destination: "/other").isUsable)
+    #expect(CLIInstallStatus.installedDifferentSource(path: "/usr/local/bin/prowl", destination: nil).isUsable)
+    #expect(!CLIInstallStatus.broken(path: "/usr/local/bin/prowl", destination: "/gone").isUsable)
+    #expect(!CLIInstallStatus.notInstalled.isUsable)
+  }
+
   @Test func statusNotInstalledWhenNoFileExists() throws {
     let tmp = try makeTempDir()
     defer { cleanup(tmp) }

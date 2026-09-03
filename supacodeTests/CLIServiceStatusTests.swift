@@ -10,6 +10,15 @@ struct CLIServiceStatusTests {
     #expect(!CLIServiceStatus.stopped.isListening)
   }
 
+  @Test func stoppedIsUnreachableWithoutBeingAFailure() throws {
+    #expect(CLIServiceStatus.stopped.failureDescription == nil)
+    let reason = try #require(CLIServiceStatus.stopped.unreachableDescription)
+    #expect(reason.contains("not listening"))
+    #expect(CLIServiceStatus.listening(path: "/tmp/cli.sock").unreachableDescription == nil)
+    let failed = CLIServiceStatus.failed(.socketAlreadyOwned, path: "/tmp/cli.sock")
+    #expect(failed.unreachableDescription == failed.failureDescription)
+  }
+
   @Test func alreadyOwnedNamesTheCompetingInstanceAndTheOverride() throws {
     let description = try #require(
       CLIServiceStatus.failed(.socketAlreadyOwned, path: "/tmp/cli.sock").failureDescription)

@@ -105,7 +105,8 @@ struct WorkflowsSettingsFeatureTests {
     _ fixture: Fixture,
     storage: SettingsTestStorage,
     clock: TestClock<Duration> = TestClock(),
-    serviceStatus: CLIServiceStatus = .listening(path: "/tmp/cli.sock")
+    serviceStatus: CLIServiceStatus = .listening(path: "/tmp/cli.sock"),
+    installStatus: CLIInstallStatus = .installed(path: "/usr/local/bin/prowl")
   ) -> TestStoreOf<WorkflowsSettingsFeature> {
     withDependencies {
       $0.settingsFileStorage = storage.storage
@@ -117,7 +118,7 @@ struct WorkflowsSettingsFeatureTests {
       } withDependencies: {
         $0[WorkflowSettingsClient.self] = fixture.client
         $0[CLIServiceStatusClient.self].current = { serviceStatus }
-        $0[CLIInstallClient.self].installationStatus = { _ in .installed(path: "/usr/local/bin/prowl") }
+        $0[CLIInstallClient.self].installationStatus = { _ in installStatus }
         $0.continuousClock = clock
       }
     }
@@ -141,6 +142,9 @@ struct WorkflowsSettingsFeatureTests {
     #expect(row.launchRoles.first?.candidates.map(\.name) == ["Codex Review"])
     #expect(store.state.cliBlocker == nil)
     #expect(store.state.catalog.repositories.isEmpty)
+    // Files are watched too: an in-place edit touches the file's vnode, not the directory's.
+    #expect(store.state.watchedPaths.contains(row.url))
+    #expect(store.state.watchedPaths.contains(fixture.userDirectory))
 
     fixture.finishWatchers()
     await store.finish()
@@ -165,7 +169,16 @@ struct WorkflowsSettingsFeatureTests {
     var missing = WorkflowsSettingsFeature.State(userDirectory: fixture.userDirectory)
     missing.cliInstallStatus = .notInstalled
     missing.cliServiceStatus = .listening(path: "/x")
-    #expect(missing.cliBlocker == .notInstalled)
+    #expect(missing.cliBlocker == .notInstalled(repair: false))
+    // A dangling link is not a usable `prowl` either; the banner offers Repair.
+    missing.cliInstallStatus = .broken(path: "/usr/local/bin/prowl", destination: "/gone")
+    #expect(missing.cliBlocker == .notInstalled(repair: true))
+    // Another build's live `prowl` is usable (C2's rule); the socket rules first, and a
+    // stopped server is unreachable even though it is not a failure.
+    missing.cliInstallStatus = .installedDifferentSource(path: "/usr/local/bin/prowl", destination: "/other")
+    #expect(missing.cliBlocker == nil)
+    missing.cliServiceStatus = .stopped
+    #expect(missing.cliBlocker == .socketUnavailable(CLIServiceStatus.stopped.unreachableDescription!))
 
     fixture.finishWatchers()
     await store.finish()

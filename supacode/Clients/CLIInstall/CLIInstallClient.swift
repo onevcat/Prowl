@@ -3,6 +3,18 @@ import Foundation
 
 typealias CLIInstallStatus = SymlinkInstallStatus
 
+extension CLIInstallStatus {
+  /// Whether the slot holds a `prowl` a shell can run: this bundle's link or another live
+  /// build's (docs-ai 063.011: distinguishing foreign installs is Settings' business). A
+  /// dangling link is not usable even though something occupies the path.
+  nonisolated var isUsable: Bool {
+    switch self {
+    case .installed, .installedDifferentSource: true
+    case .notInstalled, .broken: false
+    }
+  }
+}
+
 struct CLIInstallError: Error, Equatable, Sendable, LocalizedError {
   let message: String
 

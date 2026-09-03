@@ -26,8 +26,9 @@ healthy-looking Settings page. D1 closes that:
   - **Built-in**, **Your Workflows** (`~/.prowl/workflows`), and **Repositories**
     (`<root>/.prowl/workflows` of every open repository that has files) lists;
   - per row: enable checkbox (`disabledWorkflowIDs`, keyed `<scope>/<id>`), icon/name/id/
-    description, validation status with the diagnostics (`line:column code message`), a
-    "Overridden by <repository>" note when a repo file shadows the row, **Reveal**;
+    description, validation status with the diagnostics (`line:column message code`), an
+    "Overridden by <file>" / "Overridden in <repository>" note when another definition wins
+    the id, **Reveal**;
   - per row with `launch` roles: the **Bindings** picker (Follow file / Always ask /
     Automatic — C2's tri-state) and one profile picker per launch role showing the remembered
     profile (editable: pick a qualifying profile or "Ask at start"), with **Manage Profiles…**
@@ -59,8 +60,9 @@ healthy-looking Settings page. D1 closes that:
    the directory watcher is cancelled with the page. Row derivation is a pure builder
    (`WorkflowSettingsCatalog`) over discovery entries + `UserGlobalSettings`, tested without
    the filesystem; the filesystem scan, template creation, Reveal, and watching live in
-   `WorkflowSettingsClient`, assembled in `WorkflowStartComposition` beside the start client
-   so both read the same validation inputs (bundled skill ids, agent catalog, probes, profiles).
+   `WorkflowSettingsClient`, assembled in `WorkflowSettingsComposition` from the same runtime
+   snapshot the start client reads, so both use the same validation inputs (bundled skill
+   ids, agent catalog, probes, profiles).
 3. **Settings writes workflow fields field-wise into `@Shared(.userGlobalSettings)`**, never
    replacing the whole struct: the Profiles page may be editing `agentProfiles` in another
    window state, and a whole-struct write from here would clobber it.
@@ -98,6 +100,25 @@ healthy-looking Settings page. D1 closes that:
 - Docs: `docs/components/workflows.md` (new), `README.md`, `settings.md`,
   `reference/settings-fields.md`, `cli.md`, `command-palette.md`, `active-agents.md`,
   `agent-profiles.md`; the `prowl-workflow` skill mentions the page.
+
+## Review
+
+Adversarial review by the neighbouring Pi reviewer (`prowl agents dispatch` into its pane,
+briefs and findings under `/tmp/prowl-d1-review/`), read-only, no builds in the shared
+checkout.
+
+- **Round 1 — 2 P1 + 2 P2, all acted on.** P1: the directory vnode watcher missed in-place
+  saves (an editor writing a file touches the file's vnode, not the directory's) — every
+  discovered file is now watched too, re-armed on each reload, pinned by a real-vnode test.
+  P1: a dangling `prowl` link (`.broken`) counted as installed for the Settings banner and the
+  start-sheet gate — `CLIInstallStatus.isUsable` (installed or another live build; never
+  broken or missing) now drives both, and the banner offers Repair. P2: a `stopped` socket
+  status carried no reason, so the start gate treated it as reachable —
+  `CLIServiceStatus.unreachableDescription` (nil only while listening) is the gate for the
+  sheet and the page; `failureDescription` stays the Connection row's failure text. P2: the
+  start composition read the status publisher directly — it now reads the dependency client,
+  the same source Settings uses (a composition-level test was not added: the assembly needs
+  the app store and terminal manager; the gate itself is covered from the context down).
 
 ## Verification plan
 
