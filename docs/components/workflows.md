@@ -95,9 +95,12 @@ The sheet collects what the run needs before it exists:
 - **Don't ask again for this workflow** — writes the per-workflow **Automatic**
   bind mode (same control as Settings → Workflows → Bindings), so the next start
   skips the sheet when nothing is undecided.
-- A banner blocks Run when the `prowl` CLI is not usable (missing, or a dangling
-  link — with an inline Install / Repair) or when Prowl is not listening on its
-  socket (the reason is shown; participants could not deliver).
+- A banner blocks Run when the `prowl` CLI is not usable or when Prowl is not
+  listening on its socket (participants could not deliver). Inline action per
+  state: **Install** when missing, **Repair** for a dangling link, **Reinstall**
+  for a foreign link that is not executable; a real file or folder in the slot
+  gets no button, only the instruction to remove it (same matrix as the
+  Workflows page banner below). A socket failure shows its reason.
 
 A workflow with `bind: auto` roles, resolved bindings, no `pick` roles, and
 fully defaulted inputs starts **without the sheet**; the toolbar status item is
