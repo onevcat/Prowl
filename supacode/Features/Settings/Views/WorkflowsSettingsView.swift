@@ -47,12 +47,14 @@ struct WorkflowsSettingsView: View {
             Label("Workflows need the prowl command line tool.", systemImage: "exclamationmark.triangle.fill")
               .foregroundStyle(.orange)
             Spacer()
-            Button(status.installActionTitle) {
-              store.send(.installCLITapped)
+            if let title = status.installActionTitle {
+              Button(title) {
+                store.send(.installCLITapped)
+              }
+              .help("\(title) the prowl command line tool at /usr/local/bin/prowl")
+              .buttonStyle(.bordered)
+              .controlSize(.small)
             }
-            .help("\(status.installActionTitle) the prowl command line tool at /usr/local/bin/prowl")
-            .buttonStyle(.bordered)
-            .controlSize(.small)
           case .socketUnavailable:
             Label("Prowl is not listening for the prowl command.", systemImage: "exclamationmark.triangle.fill")
               .foregroundStyle(.orange)
@@ -60,7 +62,7 @@ struct WorkflowsSettingsView: View {
         }
         switch blocker {
         case .cliUnusable(let status):
-          Text(Self.cliUnusableCopy(status))
+          Text(status.workflowBlockerCopy)
             .foregroundStyle(.secondary)
         case .socketUnavailable(let reason):
           Text(reason)
@@ -69,27 +71,6 @@ struct WorkflowsSettingsView: View {
       }
       .font(.callout)
       .fixedSize(horizontal: false, vertical: true)
-    }
-  }
-
-  /// Why a run cannot start, per what occupies the install path. A real file or directory in
-  /// the slot cannot be replaced by Install; the copy says what to do instead.
-  static func cliUnusableCopy(_ status: CLIInstallStatus) -> String {
-    let delivery = "Participants deliver their results through prowl, so a run cannot start until "
-    switch status {
-    case .notInstalled:
-      return delivery + "it is installed."
-    case .broken(let path, _):
-      return "The link at \(path) points at an app that is gone. " + delivery + "it is repaired."
-    case .installedDifferentSource(let path, let destination):
-      if destination == nil {
-        return "\(path) is a file or folder Prowl will not replace, and it is not an executable command. "
-          + "Remove it, then install; " + delivery.lowercased() + "prowl runs."
-      }
-      return "The link at \(path) points at something that is not an executable command. " + delivery
-        + "it is replaced."
-    case .installed(let path):
-      return "\(path) is not executable. " + delivery + "it is reinstalled."
     }
   }
 
@@ -423,18 +404,21 @@ private struct WorkflowSettingsRowView: View {
         Text("Ask at start").tag(Optional<UUID>.none)
         ForEach(role.candidates) { candidate in
           if let reason = candidate.unavailableReason {
-            // Same contract as the start sheet: dimmed with the resolver's reason, not selectable
-            // — except as the current (remembered) value, which stays visible until it is changed.
+            // Same contract as the start sheet: dimmed with the resolver's reason, never
+            // selectable — it stays visible as the current value until the user changes it.
             Text("\(candidate.name) — \(reason)")
               .foregroundStyle(.secondary)
               .tag(Optional(candidate.profileID))
-              .selectionDisabled(candidate.profileID != role.rememberedProfileID)
+              .selectionDisabled()
           } else {
             Text("\(candidate.name) — \(candidate.agentToken)").tag(Optional(candidate.profileID))
           }
         }
         if let rememberedID = role.rememberedProfileID, remembered == nil {
-          Text("Deleted profile").tag(Optional(rememberedID))
+          Text("Deleted profile")
+            .foregroundStyle(.secondary)
+            .tag(Optional(rememberedID))
+            .selectionDisabled()
         }
       }
       .labelsHidden()
@@ -442,11 +426,13 @@ private struct WorkflowSettingsRowView: View {
       .help(
         "The Agent Profile this role launches with. Remembered from the last start; "
           + "\"Ask at start\" forgets it so the sheet asks again.")
+      // dsl-spec §3: a remembered binding that fails re-validation falls through to `suggest`
+      // and Recommended before the sheet asks, so the copy must not promise a prompt.
       if remembered?.unavailableReason != nil {
-        Text("This profile no longer qualifies; the next start will ask.")
+        Text("No longer qualifies; the next start picks another eligible profile or asks.")
           .foregroundStyle(.secondary)
       } else if role.rememberedProfileID != nil, remembered == nil {
-        Text("The remembered profile was deleted; the next start will ask.")
+        Text("Deleted; the next start picks another eligible profile or asks.")
           .foregroundStyle(.secondary)
       } else if qualifying.isEmpty {
         Text("No enabled profile qualifies for this role.")

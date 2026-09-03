@@ -96,8 +96,13 @@ nonisolated struct WorkflowStartContext: Equatable, Sendable {
   /// (Install / Repair / Reinstall); nil reads as a plain Install.
   var cliInstallStatus: CLIInstallStatus?
 
-  var cliInstallActionTitle: String {
+  /// nil = nothing the sheet can do (a real file or directory occupies the slot).
+  var cliInstallActionTitle: String? {
     (cliInstallStatus ?? .notInstalled).installActionTitle
+  }
+
+  var cliInstallBlockerCopy: String {
+    (cliInstallStatus ?? .notInstalled).workflowBlockerCopy
   }
 
   /// Steps offering a "Skip" choice at start: every step with an `expect` (§9 `--skip`).

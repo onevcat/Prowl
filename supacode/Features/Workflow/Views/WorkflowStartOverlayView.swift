@@ -106,17 +106,24 @@ private struct WorkflowStartCard: View {
   }
 
   private var cliBanner: some View {
-    HStack(spacing: 8) {
-      Label(
-        "Workflows need the prowl command line tool.",
-        systemImage: "exclamationmark.triangle.fill"
-      )
-      .foregroundStyle(.orange)
-      Spacer()
-      Button(store.context.cliInstallActionTitle) {
-        store.send(.installCLITapped)
+    VStack(alignment: .leading, spacing: 4) {
+      HStack(spacing: 8) {
+        Label(
+          "Workflows need the prowl command line tool.",
+          systemImage: "exclamationmark.triangle.fill"
+        )
+        .foregroundStyle(.orange)
+        Spacer()
+        if let title = store.context.cliInstallActionTitle {
+          Button(title) {
+            store.send(.installCLITapped)
+          }
+          .help("\(title) the prowl command line tool at /usr/local/bin/prowl.")
+        }
       }
-      .help("\(store.context.cliInstallActionTitle) the prowl command line tool at /usr/local/bin/prowl.")
+      Text(store.context.cliInstallBlockerCopy)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
     }
     .font(.callout)
   }

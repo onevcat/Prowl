@@ -154,6 +154,22 @@ struct WorkflowStartFeatureTests {
     #expect(store.state.canRun)
   }
 
+  @Test func aFailedInlineInstallShowsTheInstallerMessage() async throws {
+    let context = try makeContext(resolvedProfileID: Self.profileID)
+    let store = TestStore(initialState: WorkflowStartFeature.State(context: context)) {
+      WorkflowStartFeature()
+    } withDependencies: {
+      $0[CLIInstallClient.self].install = { _ in
+        throw CLIInstallError(message: "A file already exists at /usr/local/bin/prowl.")
+      }
+    }
+
+    await store.send(.installCLITapped)
+    await store.receive(\.cliInstallCompleted.failure) {
+      $0.submissionError = "A file already exists at /usr/local/bin/prowl."
+    }
+  }
+
   @Test func endsRunSkipsAreNeverArmed() async throws {
     let context = try makeContext(resolvedProfileID: Self.profileID)
     let store = TestStore(initialState: WorkflowStartFeature.State(context: context)) {

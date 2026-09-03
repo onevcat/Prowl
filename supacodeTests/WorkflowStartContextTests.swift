@@ -123,8 +123,11 @@ struct WorkflowStartContextTests {
     #expect(context.cliInstallActionTitle == "Install")
     context.cliInstallStatus = .broken(path: "/usr/local/bin/prowl", destination: "/gone")
     #expect(context.cliInstallActionTitle == "Repair")
-    context.cliInstallStatus = .installedDifferentSource(path: "/usr/local/bin/prowl", destination: nil)
+    context.cliInstallStatus = .installedDifferentSource(path: "/usr/local/bin/prowl", destination: "/other")
     #expect(context.cliInstallActionTitle == "Reinstall")
+    context.cliInstallStatus = .installedDifferentSource(path: "/usr/local/bin/prowl", destination: nil)
+    #expect(context.cliInstallActionTitle == nil)
+    #expect(context.cliInstallBlockerCopy.contains("Remove it"))
   }
 
   @Test func unreachableSocketPresentsTheSheet() throws {

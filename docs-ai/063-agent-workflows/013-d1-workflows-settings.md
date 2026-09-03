@@ -136,6 +136,16 @@ checkout.
   the button follows it. P3: the manual claimed parity with `prowl workflow validate`; it now
   says the page adds the availability warnings only the app can evaluate.
 
+- **Round 3 — F5–F8 verified; 0 P0/P1, 2 UX P2, both acted on.** P2: a real file or
+  directory in the slot still got a Reinstall button that the installer deterministically
+  refuses — `installActionTitle` is nil there, both banners show only the manual-removal
+  copy (`workflowBlockerCopy`, shared by the page and the sheet), and the sheet now surfaces
+  the installer's own error message instead of a generic line. P2: the picker copy promised
+  "the next start will ask" for a disabled or deleted remembered profile, but dsl-spec §3
+  falls through to `suggest` and Recommended first — the copy and the manual now say the
+  next start picks another eligible profile or asks, and every unavailable entry (the
+  current one included) is non-selectable.
+
 ## Verification plan
 
 Red-first unit tests: `CLIServiceStatus` descriptions and server transitions (already-owned

@@ -4,13 +4,36 @@ import Foundation
 typealias CLIInstallStatus = SymlinkInstallStatus
 
 extension CLIInstallStatus {
-  /// The Settings and workflow-banner button for this slot: a fresh install, a repair of a
-  /// dangling link, or a reinstall over whatever else occupies the path.
-  nonisolated var installActionTitle: String {
+  /// The workflow banners' button for this slot: a fresh install, a repair of a dangling link,
+  /// or a reinstall over a foreign link. nil when a real file or directory occupies the path —
+  /// the installer refuses to replace those, so no button is honest there.
+  nonisolated var installActionTitle: String? {
     switch self {
     case .notInstalled: "Install"
     case .broken: "Repair"
-    case .installed, .installedDifferentSource: "Reinstall"
+    case .installedDifferentSource(_, let destination): destination == nil ? nil : "Reinstall"
+    case .installed: "Reinstall"
+    }
+  }
+
+  /// Why a workflow cannot start with this slot (docs-ai 063 D1 preflight), for the Settings
+  /// and start-sheet banners; says what to do when no button can.
+  nonisolated var workflowBlockerCopy: String {
+    let delivery = "Participants deliver their results through prowl, so a run cannot start until "
+    switch self {
+    case .notInstalled:
+      return delivery + "it is installed."
+    case .broken(let path, _):
+      return "The link at \(path) points at an app that is gone. " + delivery + "it is repaired."
+    case .installedDifferentSource(let path, let destination):
+      if destination == nil {
+        return "\(path) is a file or folder that is not an executable prowl command, and Prowl never replaces "
+          + "one. Remove it, then install the command from Settings › Agents › CLI & Skills."
+      }
+      return "The link at \(path) points at something that is not an executable command. " + delivery
+        + "it is replaced."
+    case .installed(let path):
+      return "\(path) is not executable. " + delivery + "it is reinstalled."
     }
   }
 }

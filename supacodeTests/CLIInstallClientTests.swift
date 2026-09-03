@@ -47,8 +47,15 @@ struct CLIInstallClientTests {
   @Test func installActionTitleFollowsTheSlot() {
     #expect(CLIInstallStatus.notInstalled.installActionTitle == "Install")
     #expect(CLIInstallStatus.broken(path: "/p", destination: "/gone").installActionTitle == "Repair")
-    #expect(CLIInstallStatus.installedDifferentSource(path: "/p", destination: nil).installActionTitle == "Reinstall")
+    #expect(
+      CLIInstallStatus.installedDifferentSource(path: "/p", destination: "/other").installActionTitle == "Reinstall")
     #expect(CLIInstallStatus.installed(path: "/p").installActionTitle == "Reinstall")
+    // A real file or directory is never replaced by the installer, so no button is offered; the
+    // copy says to remove it by hand.
+    let occupied = CLIInstallStatus.installedDifferentSource(path: "/p", destination: nil)
+    #expect(occupied.installActionTitle == nil)
+    #expect(occupied.workflowBlockerCopy.contains("Remove it"))
+    #expect(CLIInstallStatus.notInstalled.workflowBlockerCopy.contains("installed"))
   }
 
   @Test func statusNotInstalledWhenNoFileExists() throws {

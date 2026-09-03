@@ -144,7 +144,7 @@ struct WorkflowStartFeature {
     case createSuggestionConfirmed
     case createSuggestionCancelled
     case installCLITapped
-    case cliInstallCompleted(success: Bool)
+    case cliInstallCompleted(Result<String, CLIInstallError>)
     case cancelTapped
     case runTapped
     case runResponse(WorkflowStartOutcome)
@@ -276,18 +276,22 @@ struct WorkflowStartFeature {
       return .run { [cliInstallClient] send in
         do {
           try await cliInstallClient.install(cliDefaultInstallPath)
-          await send(.cliInstallCompleted(success: true))
+          await send(.cliInstallCompleted(.success(cliDefaultInstallPath.path(percentEncoded: false))))
+        } catch let error as CLIInstallError {
+          await send(.cliInstallCompleted(.failure(error)))
         } catch {
-          await send(.cliInstallCompleted(success: false))
+          await send(.cliInstallCompleted(.failure(CLIInstallError(message: error.localizedDescription))))
         }
       }
 
-    case .cliInstallCompleted(let success):
-      if success {
-        state.cliInstalled = true
-      } else {
-        state.submissionError = "The prowl command line tool could not be installed."
-      }
+    case .cliInstallCompleted(.success):
+      state.cliInstalled = true
+      return .none
+
+    case .cliInstallCompleted(.failure(let error)):
+      // The installer's own message names the conflict (a file in the way, a denied prompt);
+      // a generic line would hide the recovery.
+      state.submissionError = error.message
       return .none
 
     case .cancelTapped:

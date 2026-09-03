@@ -144,7 +144,7 @@ Per row:
 | Status line | **Valid**, **Valid, N warnings**, or **N errors** with **Show Details** listing every diagnostic as `line:column message code` — everything `prowl workflow validate` reports, plus the availability warnings only the running app can know (an `agents` allow-list with no installed runtime, a `suggest` no enabled profile matches). An **Overridden …** note names the file or repository whose same-id definition wins. |
 | **Reveal** | shows the file in Finder |
 | **Bindings** (workflows with `launch` roles) | **Follow file** (the YAML's `bind`), **Always ask**, or **Automatic** — the tri-state override the start sheet's "Don't ask again" also writes |
-| Role pickers (one per `launch` role) | the remembered profile for that role, or **Ask at start** to forget it. Every enabled profile is listed; the ones that do not qualify are dimmed with the resolver's reason (wrong runtime for the role's `agents`, no launch-prompt support) and cannot be chosen. A remembered profile that was disabled since stays listed as "Disabled in Settings"; a deleted one reads "Deleted profile" — either way the next start asks. **Manage Profiles…** jumps to Settings → Agents → Profiles. |
+| Role pickers (one per `launch` role) | the remembered profile for that role, or **Ask at start** to forget it. Every enabled profile is listed; the ones that do not qualify are dimmed with the resolver's reason (wrong runtime for the role's `agents`, no launch-prompt support) and cannot be chosen. A remembered profile that was disabled since stays listed as "Disabled in Settings"; a deleted one reads "Deleted profile" — either way the next start resolves the role afresh (a profile matching `suggest`, then the repository's Recommended profile) and asks only when nothing qualifies. **Manage Profiles…** jumps to Settings → Agents → Profiles. |
 
 Page actions (under Your Workflows): **New Workflow…** writes a validated
 starter file (`new-workflow.yaml`, then `new-workflow-2.yaml`, …; its id is the
@@ -154,9 +154,11 @@ copyable, localized prompt that points your coding agent at the bundled
 a workflow for you; **Show Folder** reveals `~/.prowl/workflows` (creating it).
 
 A banner at the top mirrors the start sheet's preflight: Install when `prowl`
-is missing (Repair when the link is dangling), or the reason Prowl is not
-listening on its socket (also shown as the **Status** row under Settings →
-Agents → CLI & Skills → Connection).
+is missing (Repair when the link is dangling, Reinstall when a foreign link is
+not executable; a real file or folder in the slot gets no button, only the
+instruction to remove it), or the reason Prowl is not listening on its socket
+(also shown as the **Status** row under Settings → Agents → CLI & Skills →
+Connection).
 
 ## Gotchas for agents
 
