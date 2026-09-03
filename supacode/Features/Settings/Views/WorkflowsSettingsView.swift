@@ -27,6 +27,7 @@ struct WorkflowsSettingsView: View {
     .navigationTitle("Workflows")
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     .task { store.send(.task) }
+    .onDisappear { store.send(.teardown) }
     .alert($store.scope(state: \.alert, action: \.alert))
     .sheet(isPresented: $store.isAuthoringPromptPresented.sending(\.setAuthoringPromptPresented)) {
       AskAgentHelpView(strings: authoringPromptStrings) {
@@ -222,6 +223,12 @@ private struct WorkflowSettingsRowView: View {
           row.isEnabled
             ? "Enabled — offered in the Command Palette and the Agents menu"
             : "Disabled — hidden from every entry point and refused by prowl workflow run")
+      } else {
+        // A file without an id has nothing to toggle; keep the columns aligned with its siblings.
+        Toggle("", isOn: .constant(false))
+          .labelsHidden()
+          .toggleStyle(.checkbox)
+          .hidden()
       }
       Image(systemName: row.icon ?? "point.3.connected.trianglepath.dotted")
         .foregroundStyle(.secondary)

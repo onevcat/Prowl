@@ -89,19 +89,18 @@ struct CommandLineToolSettingsView: View {
         }
 
         LabeledContent("Status") {
-          VStack(alignment: .trailing, spacing: 4) {
-            HStack(spacing: 6) {
-              connectionStatusIcon
-              Text(connectionStatusText)
-            }
-            if let failure = store.cliServiceStatus.failureDescription {
-              Text(failure)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.trailing)
-                .fixedSize(horizontal: false, vertical: true)
-            }
+          HStack(spacing: 6) {
+            connectionStatusIcon
+            Text(connectionStatusText)
           }
           .font(.callout)
+        }
+
+        if let failure = store.cliServiceStatus.failureDescription {
+          Text(failure)
+            .foregroundStyle(.secondary)
+            .font(.callout)
+            .fixedSize(horizontal: false, vertical: true)
         }
 
         Text(

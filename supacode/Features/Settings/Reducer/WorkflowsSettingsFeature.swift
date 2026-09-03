@@ -56,6 +56,8 @@ struct WorkflowsSettingsFeature {
 
   enum Action: Equatable {
     case task
+    /// The page went away (the Settings window closed on it): stop watching until it appears again.
+    case teardown
     case reload
     /// A watched directory changed; coalesced into one `reload` after a short quiet period.
     case directoriesChanged
@@ -103,6 +105,9 @@ struct WorkflowsSettingsFeature {
       case .task, .reload:
         reload(&state)
         return watch(state)
+
+      case .teardown:
+        return .merge(.cancel(id: CancelID.watch), .cancel(id: CancelID.debounce))
 
       case .directoriesChanged:
         return .run { send in

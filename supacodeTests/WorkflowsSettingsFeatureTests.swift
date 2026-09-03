@@ -316,6 +316,27 @@ struct WorkflowsSettingsFeatureTests {
     await store.finish()
   }
 
+  @Test(.dependencies) func teardownStopsTheWatcherAndAPendingReload() async throws {
+    let fixture = try Fixture()
+    defer { fixture.cleanUp() }
+    let clock = TestClock()
+    let store = makeStore(fixture, storage: SettingsTestStorage(), clock: clock)
+    await store.send(.task) {
+      $0.cliInstallStatus = .installed(path: "/usr/local/bin/prowl")
+      $0.cliServiceStatus = .listening(path: "/tmp/cli.sock")
+      $0.scan = try fixture.scan()
+      $0.catalog = try fixture.expectedCatalog()
+    }
+    let continuation = try #require(fixture.watchContinuations.value.last)
+    continuation.yield()
+    await store.receive(.directoriesChanged)
+
+    // Neither the watcher nor the debounced reload survives the page going away.
+    await store.send(.teardown)
+    await clock.advance(by: WorkflowsSettingsFeature.reloadDebounce)
+    await store.finish()
+  }
+
   @Test(.dependencies) func scanFailureIsReportedAndKeepsTheLastRows() async throws {
     let fixture = try Fixture()
     defer { fixture.cleanUp() }
