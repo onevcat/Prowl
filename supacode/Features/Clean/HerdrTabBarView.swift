@@ -18,7 +18,7 @@ internal struct HerdrLinkedWorktreeTitle: Equatable, Sendable {
   internal let checkoutName: String
 
   internal var displayLabel: String {
-    "\(repoName) ↳ \(checkoutName)"
+    "\(checkoutName) ↳ \(repoName)"
   }
 }
 
@@ -710,7 +710,7 @@ internal struct HerdrTabBarView: View {
     isActive: Bool
   ) -> some View {
     HStack(spacing: 3) {
-      Text(linkedWorktree.repoName)
+      Text(linkedWorktree.checkoutName)
         .font(
           .custom(
             HerdrChromeTypography.titleFontFamily,
@@ -729,7 +729,7 @@ internal struct HerdrTabBarView: View {
         )
         .foregroundStyle(
           titleColor(HerdrTabBarProjection.linkedCheckoutTone(isActive: isActive)))
-      Text(linkedWorktree.checkoutName)
+      Text(linkedWorktree.repoName)
         .font(
           .custom(
             HerdrChromeTypography.titleFontFamily,

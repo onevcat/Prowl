@@ -307,7 +307,7 @@ struct HerdrTabBarViewTests {
       item?.processTitle
         == HerdrProcessTitle(
           processName: "lazygit",
-          directoryName: "Warlock ↳ warlock-ios-simulator-replay",
+          directoryName: "warlock-ios-simulator-replay ↳ Warlock",
           linkedWorktree: HerdrLinkedWorktreeTitle(
             repoName: "Warlock",
             checkoutName: "warlock-ios-simulator-replay"
@@ -339,7 +339,7 @@ struct HerdrTabBarViewTests {
     let item = HerdrTabBarProjection.items(in: snapshot, workspaceID: "w1").first
 
     #expect(item?.processTitle == nil)
-    #expect(item?.displayLabel == "Warlock ↳ warlock-ios-simulator-replay")
+    #expect(item?.displayLabel == "warlock-ios-simulator-replay ↳ Warlock")
   }
 
   @Test func suppressesShellAndStarshipOnlyForegroundJobs() {
@@ -515,7 +515,7 @@ struct HerdrTabBarViewTests {
     let automatic = HerdrTabBarProjection.items(in: base, workspaceID: "w1").first
     let manual = HerdrTabBarProjection.items(in: overridden, workspaceID: "w1").first
 
-    #expect(automatic?.displayLabel == "Prowl ↳ Prowl-feature")
+    #expect(automatic?.displayLabel == "Prowl-feature ↳ Prowl")
     #expect(manual?.displayLabel == "Backend")
   }
 
