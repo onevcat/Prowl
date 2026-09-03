@@ -20,6 +20,7 @@ icon: magnifyingglass.circle      # optional SF Symbol
 
 inputs:
   focus: { type: string, prompt: "What should the reviewer focus on?" }  # no default = required
+  depth: { type: enum, values: [quick, deep], default: quick }            # enum needs `values`; default must be one of them
   max_rounds: { type: integer, default: 3, min: 1, max: 10 }
 
 roles:
@@ -27,8 +28,8 @@ roles:
     source: current               # the pane the run starts from (at most one per workflow)
   reviewer:
     source: launch                # Prowl starts a new agent for this role
-    kind: interactive
-    agents: [claude, codex]       # allow-list of runtime tokens; omit = any launchable
+    kind: interactive             # optional; the only V1 kind
+    agents: [claude, codex]       # allow-list of runtime tokens (see Roles); omit = any launchable
     suggest: { agent: claude }    # used by binding resolution; never a profile name/UUID
     bind: ask                     # ask = start sheet always shows the picker; auto = silent when unambiguous
     placement: split              # split | tab
@@ -47,10 +48,11 @@ steps:
   - id: launch-reviewer
     title: "Reviewer starting"
     launch: reviewer
-    prompt: "Read {{ outputs.brief.path }} and review the work it describes. Deliver '## Findings' and choose a verdict."
+    prompt: "Read {{ outputs.brief.path }} and do a {{ inputs.depth }} review of the work it describes. Deliver '## Findings' and choose a verdict."
     expect: { output: findings, sections: ["## Findings"], verdict: [clean, issues], timeout: 30m }
 
   - id: rounds
+    title: "Reconciling findings"
     repeat:
       max: "{{ inputs.max_rounds }}"     # positive literal 1–20, or exactly one integer input
       until: outputs.findings.verdict == clean
@@ -73,6 +75,14 @@ steps:
     close: reviewer                # closes only the pane this run launched; no confirmation
 ```
 
+## Inputs
+
+Each `inputs.<name>` entry declares a start-time value by `type`: `integer` (optional
+`min`/`max`; a default must lie inside them), `string` (one line, no control characters), or
+`enum` (`values` is required; a default must be one of them). An input without `default` is
+required: the GUI start sheet asks for it (`prompt` is its label) and the CLI needs
+`--input name=value`. Inputs reach steps only through `{{ inputs.<name> }}` and `repeat.max`.
+
 ## Roles
 
 | `source` | Meaning | Key facts |
@@ -87,6 +97,11 @@ resolves silently when unambiguous. The CLI never shows UI — resolution just r
 preset fields (`agent`, `model`, `reasoning_effort`, `execution_mode`), never a profile
 name or UUID.
 
+`agents` lists runtime tokens — the agent column of `prowl profiles list`: `claude`, `codex`,
+`gemini`, `pi`, `omp`, `opencode`, `droid`, `cursor-agent`, `copilot`, `kimi`, `amp`,
+`qodercli`, `qwen`, `grok`, `cline`. An unknown token, or a list no installed agent
+satisfies, is a validation warning. `kind` may be omitted (`interactive` is the only V1 kind).
+
 ## Step verbs
 
 Each step has a unique `id`, an optional templated `title` (shown in the status center),
@@ -95,11 +110,11 @@ and exactly one verb:
 | Verb | Payload | Rules |
 | --- | --- | --- |
 | `message: <role>` | `text` (one line, typed into the pane) or `instruction` (multi-line, materialized to a file; a pointer line is typed) | target must be alive: `current`, `pick`, or a `launch` role **after** its launch step. Injected only when the role is idle — a working role queues the step, a blocked one raises attention |
-| `launch: <role>` | `prompt` (templated kickoff), optional `skill` (bundled skill id) | once per role per run; rendered prompt ≤ 32 KiB |
+| `launch: <role>` | `prompt` (templated kickoff; may span lines as a YAML `\|` block), optional `skill` (bundled skill id) | once per role per run; rendered prompt ≤ 32 KiB, no NUL |
 | `action: <id>` | `with` (templated map) | native built-ins: `git.context`, `handoff.transition`, `handoff.checkpoint`; synchronous typed outputs under `{{ actions.<step>.<key> }}`; `prowl workflow schema` prints their input/output schemas; cannot carry `expect` |
 | `notify: <text>` | — | notification bell; click focuses the `current` role's pane (or the source worktree) |
 | `close: <role>` | — | `launch` roles only, no confirmation; a cancelled run never closes panes |
-| `repeat` | `max` (required), `until` (optional), sibling `steps` | while-loop: `until` is checked before entry and after each iteration and compares one declared verdict only (`outputs.<n>.verdict == v` / `in [..]`); no nesting, no `launch` inside; reaching `max` unsatisfied ends the run as `max_rounds_reached` |
+| `repeat` | `max` (required), `until` (optional), sibling `steps` | while-loop: `until` is checked before entry and after each iteration and compares one declared verdict only (`outputs.<n>.verdict == v` / `in [..]`); no nesting, no `launch` inside. A satisfied `until` is the **only** way past a loop: reaching `max` with it unsatisfied — or a loop with no `until` at all — ends the run as `max_rounds_reached` and no later step runs (see the patterns below) |
 
 ## `expect` — waiting for a delivery
 
@@ -113,8 +128,8 @@ expect:
   format: markdown          # markdown (default) | text | json
   sections: ["## Findings"] # required headings (case/level-forgiving; fenced code ignored)
   verdict: [clean, issues]  # 2–4 slugs; makes --verdict mandatory and drives `until`
-  timeout: 30m              # optional hard cap; NO default — omit to wait as long as the agent works
-  on_timeout: attention     # attention (default) | skip | cancel
+  timeout: 30m              # optional hard cap as <n>s|m|h (90s, 10m, 2h); NO default — omit to wait as long as the agent works
+  on_timeout: attention     # only together with timeout; attention (default) | skip | cancel
   strict: false             # false: a delivery missing sections/format/verdict is kept as
                             # provisional and the run asks the user; true: rejected outright
 ```
@@ -131,6 +146,10 @@ warns); the runner's renderer is the only source of that command.
 `{{ outputs.<name>.verdict }}`, `{{ actions.<step>.<key> }}`, `{{ inputs.<k> }}`,
 `{{ loop.index }}`, `{{ loop.count }}`.
 
+`loop.index` is the 1-based round inside a `repeat`; `loop.count` is the number of completed
+rounds of the latest loop, valid inside and after it, and renders `0` after a loop that was
+skipped before entry.
+
 There are no expressions and **no inlined output text** (`outputs.<name>.text` does not
 exist). Content moves between agents by path — the receiver reads the file, which costs an
 agent nothing. An agent-produced value can reach templates only as a verdict. Referencing
@@ -145,7 +164,8 @@ an output at a point where no earlier step could have produced it is a validatio
 - At most one `current` role; `launch` at most once per role; `repeat` not nested, no
   `launch` inside; `max` is 1–20 (a literal, or a template naming exactly one integer input).
 - `verdict` is 2–4 slug values; `until` literals must belong to the declared set.
-- `expect` only on `message` and `launch` steps.
+- `expect` only on `message` and `launch` steps; `on_timeout` only next to a `timeout`;
+  `min`/`max` only on `integer` inputs, `values` only on `enum` inputs.
 - A skippable step (`--skip` / the start sheet's Skip) is one whose output has no
   non-optional consumer; skipping a step whose output a later template needs ends the run
   instead of advancing, and the validator/panel names the dependent step.
@@ -155,9 +175,16 @@ an output at a point where no earlier step could have produced it is a validatio
 - **Seed delivery**: before a loop whose body references `{{ outputs.reply.path }}`, have an
   opening step deliver `reply` once (e.g. with a spare verdict value like `ready`) so the
   first iteration's reference has a producer.
-- **Poor-man's `if`**: `repeat: { max: 1, until: outputs.x.verdict == ok }` runs its body
-  exactly once when the verdict is not `ok` and skips it entirely otherwise (`until` is
-  evaluated before entry).
+- **Poor-man's `if`**: `repeat: { max: 1, until: outputs.x.verdict == ok }` skips its body when
+  the verdict is already `ok` (`until` is evaluated before entry) and runs it once otherwise.
+  It is only an `if` when that one round is certain to make the verdict `ok`: if it does not,
+  the run ends as `max_rounds_reached` right there.
+- **Bounded loop that must go on**: V1 has no "try N times, then continue regardless". Reserve
+  a verdict for giving up — `verdict: [agree, disagree, gave_up]` with
+  `until: outputs.check.verdict in [agree, gave_up]` — and tell the agent in the loop body to
+  choose it on the last round (`Round {{ loop.index }} of {{ inputs.max_rounds }}`); the
+  steps after the loop (notify, close) then always run. Otherwise accept `max_rounds_reached`
+  as an outcome: the status center reports it and launched panes stay open for inspection.
 - **Fork / ordered join**: expect-less `launch` steps return immediately, so two workers run
   wall-clock concurrently; join by messaging each in turn with an `expect`. Phrase the fork
   prompt as "do the work now, deliver only when asked" and the join as "deliver when your

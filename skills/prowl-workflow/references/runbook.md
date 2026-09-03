@@ -33,33 +33,58 @@ invocation shapes).
   action's optional `with` input; any other reference (`text`/`instruction`/`prompt`/
   `notify` templates, a `repeat` `until`) ends the run as `skipped` — the consequence is
   computed and shown before the skip is confirmed.
-- `prowl workflow cancel <run-id>` revokes all outstanding delivery tokens and never closes
-  panes; only an explicit `close:` step (authored by the workflow) closes a pane the run
-  launched.
-- Run states: `completed`, `max_rounds_reached` (a `repeat` hit `max` with `until`
-  unsatisfied — steps after the loop do NOT execute), `skipped`, `cancelled`, plus failure
-  states surfaced through the status center.
+- Neither finishing nor `prowl workflow cancel <run-id>` (which revokes all outstanding
+  delivery tokens) closes a pane: a `completed` run leaves every launched pane open unless an
+  explicit `close:` step (authored by the workflow) closed it.
+- Run states (`status.state`): `running`, `needs_attention` (the panel waits for the user),
+  then one terminal state — `completed`, `max_rounds_reached` (a `repeat` hit `max` with
+  `until` unsatisfied, or had no `until` — steps after the loop do NOT execute), `skipped`
+  (a skipped output had a consumer), `cancelled`, or `interrupted` (left unfinished by an
+  earlier app instance; V1 does not resume it).
+
+## Watching a run
+
+`prowl workflow status <run-id> --json` is the poll target (the text form omits timestamps):
+
+- `.data.status.state` — see the states above; `.data.finished_at` is set once the run ended.
+  `.data.status.attention` (`reason`, `message`, `step`, `actions`) explains a `needs_attention`.
+- `.data.step` — the step in progress; `.data.activation` — the awaited delivery (`step`,
+  `role`, `output`, `state` `waiting` | `persisting` | `provisional`, `ordinal`, `deadline`,
+  and `expect.completion[]`, the exact commands that complete it).
+- `.data.outputs.<name>` — the latest accepted delivery (`path`, `latest_path`, `ordinal`,
+  `verdict`); `.data.bindings` and `.data.run_directory` are frozen at start.
+- `.data.started_at` / `.data.finished_at` carry milliseconds; `log.md` and `run.json` round
+  to seconds.
+- `.data.source` is `live`, or `record` after an app restart (read back from `run.json`: no
+  activation, no tokens). Without a run id the command answers for the calling pane only and
+  is `RUN_NOT_FOUND` when that pane is not in an active run.
 
 ## Reading a run afterwards
 
 Everything lives under the source worktree:
 
 ```
-<worktree root>/.prowl/workflow-runs/<run-id>/
+<worktree root>/.prowl/workflow-runs/<run-id>/   # self-ignored by Git
 ├── log.md                       # timestamped timeline (start here)
-├── run.json                     # machine record: bindings, invocation map, activations
+├── run.json                     # machine record: bindings, invocations, step states, outputs
 ├── outputs/
 │   ├── <name>.<ordinal>.md      # the ledger — one immutable file per delivery
 │   └── <name>.md                # "latest" view, replaced atomically on each delivery
-└── instructions/
-    └── <step>.<ordinal>.md      # materialized multi-line instructions for message steps
+├── instructions/
+│   └── <step>.<ordinal>.md      # `instruction:` bodies of message steps (empty for `text:` steps)
+└── skills/
+    └── <id>/SKILL.md            # bundled skills named by `launch … skill:` (empty otherwise)
 ```
 
 - `log.md` records every launch (with the frozen profile and pane id), wait, nudge,
   delivery, loop round, skip, and the final state — it answers "what happened" without
   asking any agent.
-- **Ordinals** are run-global and monotonic across all steps and iterations (fire-and-forget
-  steps consume them too), so sorting the ledger by number replays the run in order.
+- **Invocation ordinals** — `log.md` says `(invocation 4)`, `run.json` lists them under
+  `invocations[]` — are run-global and monotonic across all steps and iterations
+  (fire-and-forget steps consume them too), so sorting the ledger by number replays the run
+  in order. A `repeat` whose `until` was already satisfied before entry is recorded in
+  `run.json` with step state `skipped`: the loop was skipped, unrelated to the run's `skipped`
+  terminal state.
 - `<name>.md` always holds the newest accepted delivery of that name: deliveries are
   serialized, persisted before the run advances, and the file is swapped via atomic rename —
   a reader never sees a half-written or stale-after-advance file.
@@ -86,6 +111,9 @@ Every awaited step mints a fresh token for its activation; Skip/Cancel/Relaunch 
 | `SOURCE_REQUIRED` | the workflow has a `current` role and the call wasn't made from a pane — pass a source |
 | `INVALID_ARGUMENT` | bad `--input` value, unknown/duplicate `--role`, or a `--skip` on a step another step depends on (the message names it) |
 | `PANE_BUSY` | the pane chosen for a `pick` role already belongs to a run |
+| `DISPATCH_PENDING` | a `pick` pane still holds a pending `prowl agents dispatch`; complete or abandon it first |
+| `TARGET_NOT_FOUND` / `AGENT_NOT_FOUND` | the source or `--role` pane/worktree does not exist, or a `pick` pane hosts no detected agent |
+| `RUN_NOT_FOUND` | no such run id, or `status` without an id from a pane that is not in an active run |
 | `PROFILE_NOT_FOUND` / `PROFILE_NOT_UNIQUE` | a `--role` override doesn't match exactly one enabled profile |
 | `TOKEN_REQUIRED` / `TOKEN_INVALID` / `STEP_NOT_EXPECTING` | delivering without/with a stale token, or the step has moved on — check `prowl workflow status` |
 | `OUTPUT_INVALID` / `VERDICT_REQUIRED` / `OUTPUT_TOO_LARGE` | empty body / missing mandatory verdict under `strict` / body over the cap |

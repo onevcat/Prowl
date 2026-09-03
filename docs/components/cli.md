@@ -6,7 +6,7 @@
 
 **Keywords:** prowl cli, command line, prowl list, prowl agents, prowl agents read, prowl agents signal, prowl agents dispatch, prowl agents wait, prowl profiles list, prowl skills, skills install, agent skills, prowl workflow, workflow status center, workflow run panel, workflow attention, prowl read, prowl send, prowl key, prowl focus, prowl create, prowl close, prowl open, prowl handoff, pane id, agent, profile, automation, json, capture, socket
 
-**Related:** [terminal](terminal.md) · [concepts](../concepts.md) · [active-agents](active-agents.md) · [agent-detection](agent-detection.md) · the bundled **`prowl-cli` skill** (`skills/prowl-cli/SKILL.md`)
+**Related:** [terminal](terminal.md) · [concepts](../concepts.md) · [active-agents](active-agents.md) · [agent-detection](agent-detection.md) · the bundled **`prowl-cli`** (`skills/prowl-cli/SKILL.md`) and **`prowl-workflow`** (`skills/prowl-workflow/SKILL.md`) skills
 
 > This is the reference for the `prowl` binary. For an opinionated, safety-first
 > *workflow* guide (recipes, pitfalls, quoting), the repository also ships the
@@ -27,7 +27,7 @@ Palette → "Install Command Line Tool". This symlinks `prowl` into
 `/usr/local/bin` (prompting for admin if needed). The Settings page also shows
 the local Unix socket path `prowl` uses to reach the app (`PROWL_CLI_SOCKET`
 overrides it for both processes). Once `prowl` is installed, `prowl skills install` links
-the bundled `prowl-cli` skill into your agents' skill folders (see
+the bundled `prowl-cli` and `prowl-workflow` skills into your agents' skill folders (see
 [`prowl skills`](#prowl-skills)).
 
 ## Global options
@@ -473,7 +473,9 @@ Discover, validate, and **run** Agent Workflow definitions — YAML files
 three sources, later ones winning for the same id: the app bundle
 (`Prowl.app/Contents/Resources/workflows/`, ids `prowl.*` are reserved for it) <
 `~/.prowl/workflows/*.yaml` < `<repo>/.prowl/workflows/*.yaml`. `validate` and `schema` run
-**locally** and work with Prowl closed; every other subcommand needs the app.
+**locally** and work with Prowl closed; every other subcommand needs the app. The bundled
+`prowl-workflow` skill (`skills/prowl-workflow/SKILL.md`, linked by `prowl skills install`)
+teaches an agent to author, validate, run, and take part in workflows.
 
 ```bash
 prowl workflow list [target] [--json]                   # every definition visible to a worktree, with status

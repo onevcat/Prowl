@@ -49,13 +49,18 @@ prowl workflow status [run-id] [--json]       # no args inside a run: who am I /
 prowl workflow cancel <run-id> [--json]
 ```
 
-- `[source]` is a pane/tab/worktree reference (`pN`, `tN`, UUID, worktree name). Omitted:
-  the caller's own pane serves the `current` role; a workflow without a `current` role needs
-  a worktree. Required inputs without defaults must be passed via `--input k=v`.
-- The run is asynchronous: `run` returns the run id and frozen bindings; watch with
-  `prowl workflow status <run-id>` or read the run directory
-  (`<worktree root>/.prowl/workflow-runs/<run-id>/` — `log.md` is the timeline; layout and
-  error tables in `references/runbook.md`).
+- `[source]` is a pane/tab/worktree reference (`pN`, `tN`, UUID, or the worktree name that
+  `prowl workflow list` prints as `Worktree: <name>` — `main`, not the `Repo:main` label of
+  `prowl list`). Omitted inside a pane: that pane serves the `current` role and its worktree
+  is the run's; outside a pane the focused worktree is used, and a workflow with a `current`
+  role fails with `SOURCE_REQUIRED`. Required inputs without defaults must be passed via
+  `--input k=v`.
+- The run is asynchronous: `run` returns the run id and frozen bindings; poll
+  `prowl workflow status <run-id> --json` (`.data.status.state` is `running`,
+  `needs_attention`, or a terminal state; `.data.finished_at` appears when it ended) or read
+  the run directory (`<worktree root>/.prowl/workflow-runs/<run-id>/` — `log.md` is the
+  timeline; field guide, layout, and error tables in `references/runbook.md`). Finishing never
+  closes launched panes; only a `close:` step does.
 - The GUI starts (Command Palette, Agents capsule popover, Active Agents context menu) go
   through the same admission — behavior is identical to the CLI.
 
