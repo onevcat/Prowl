@@ -222,7 +222,8 @@ extension SupacodeApp {
       launchRoles: launchRoles,
       pickRoles: pickRoles,
       cliInstalled: cliInstalled,
-      bindModeOverride: bindOverride)
+      bindModeOverride: bindOverride,
+      cliServiceFailure: CLIServiceStatusPublisher.shared.status.failureDescription)
   }
 
   /// dsl-spec §3 binding resolution, presented: the resolver's pre-selection per launch role,

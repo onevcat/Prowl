@@ -74,17 +74,34 @@ struct CommandLineToolSettingsView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear {
           store.send(.refreshCLIInstallStatus)
+          store.send(.refreshCLIServiceStatus)
         }
       }
 
       Section("Connection") {
         LabeledContent("Socket") {
-          Text(ProwlSocket.defaultPath)
+          Text(socketPath)
             .font(.callout.monospaced())
             .foregroundStyle(.secondary)
             .textSelection(.enabled)
             .lineLimit(1)
             .truncationMode(.middle)
+        }
+
+        LabeledContent("Status") {
+          VStack(alignment: .trailing, spacing: 4) {
+            HStack(spacing: 6) {
+              connectionStatusIcon
+              Text(connectionStatusText)
+            }
+            if let failure = store.cliServiceStatus.failureDescription {
+              Text(failure)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.trailing)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+          }
+          .font(.callout)
         }
 
         Text(
@@ -101,5 +118,40 @@ struct CommandLineToolSettingsView: View {
     }
     .formStyle(.grouped)
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+  }
+
+  /// The path the server actually bound (or failed to bind), falling back to the default
+  /// before the first status arrives.
+  private var socketPath: String {
+    switch store.cliServiceStatus {
+    case .listening(let path), .failed(_, let path): path
+    case .stopped: ProwlSocket.defaultPath
+    }
+  }
+
+  @ViewBuilder
+  private var connectionStatusIcon: some View {
+    switch store.cliServiceStatus {
+    case .listening:
+      Image(systemName: "checkmark.circle.fill")
+        .foregroundStyle(.green)
+        .accessibilityLabel("Listening")
+    case .failed:
+      Image(systemName: "exclamationmark.triangle.fill")
+        .foregroundStyle(.yellow)
+        .accessibilityLabel("Not listening")
+    case .stopped:
+      Image(systemName: "xmark.circle")
+        .foregroundStyle(.secondary)
+        .accessibilityLabel("Not running")
+    }
+  }
+
+  private var connectionStatusText: String {
+    switch store.cliServiceStatus {
+    case .listening: "Listening"
+    case .failed: "Not listening"
+    case .stopped: "Not running"
+    }
   }
 }

@@ -57,6 +57,9 @@ struct SettingsFeature {
     var detectRepositoryIconsAutomatically: Bool
     var cliInstallStatus: CLIInstallStatus = .notInstalled
     var cliInstallShowAlert: Bool = true
+    /// Whether this app instance is listening for `prowl` (docs-ai 063 D1); refreshed with the
+    /// install status when the CLI & Skills page appears.
+    var cliServiceStatus: CLIServiceStatus = .stopped
     /// Whether macOS will render the Dock notification badge (notification
     /// permission + the per-app "Badge app icon" switch). Refreshed when the
     /// Notifications settings pane appears.
@@ -187,6 +190,7 @@ struct SettingsFeature {
     case uninstallCLIButtonTapped
     case cliInstallCompleted(Result<String, CLIInstallError>)
     case refreshCLIInstallStatus
+    case refreshCLIServiceStatus
     case refreshDockBadgeAuthorization
     case dockBadgeAuthorizationResponse(SystemNotificationClient.DockBadgeAuthorization)
     case showNotificationPermissionAlert(errorMessage: String?)
@@ -223,6 +227,7 @@ struct SettingsFeature {
   @Dependency(NotificationSoundClient.self) private var notificationSoundClient
   @Dependency(TerminalLayoutPersistenceClient.self) private var terminalLayoutPersistence
   @Dependency(CLIInstallClient.self) private var cliInstallClient
+  @Dependency(CLIServiceStatusClient.self) private var cliServiceStatusClient
 
   var body: some Reducer<State, Action> {
     BindingReducer()
@@ -431,6 +436,10 @@ struct SettingsFeature {
 
       case .refreshCLIInstallStatus:
         state.cliInstallStatus = cliInstallClient.installationStatus(cliDefaultInstallPath)
+        return .none
+
+      case .refreshCLIServiceStatus:
+        state.cliServiceStatus = cliServiceStatusClient.current()
         return .none
 
       case .refreshDockBadgeAuthorization:

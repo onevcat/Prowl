@@ -58,6 +58,7 @@ struct WorkflowStartContextTests {
     launchRoles: [WorkflowStartLaunchRole],
     pickRoles: [WorkflowStartPickRole] = [],
     cliInstalled: Bool = true,
+    cliServiceFailure: String? = nil,
     validationFailure: String? = nil
   ) throws -> WorkflowStartContext {
     let definition = try definition(yaml)
@@ -71,7 +72,8 @@ struct WorkflowStartContextTests {
       launchRoles: launchRoles,
       pickRoles: pickRoles,
       cliInstalled: cliInstalled,
-      bindModeOverride: nil)
+      bindModeOverride: nil,
+      cliServiceFailure: cliServiceFailure)
   }
 
   private func launchRole(bind: WorkflowBindMode = .auto, resolved: UUID? = profileID) -> WorkflowStartLaunchRole {
@@ -112,6 +114,13 @@ struct WorkflowStartContextTests {
   @Test func defaultlessInputPresentsTheSheet() throws {
     let yaml = Self.autoFlow.replacing("focus: { type: string, default: \"\" }", with: "focus: { type: string }")
     let context = try context(yaml: yaml, source: source(preselected: Self.agentPane), launchRoles: [launchRole()])
+    #expect(!context.canStartImmediately)
+  }
+
+  @Test func unreachableSocketPresentsTheSheet() throws {
+    let context = try context(
+      source: source(preselected: Self.agentPane), launchRoles: [launchRole()],
+      cliServiceFailure: "Another Prowl instance owns the socket.")
     #expect(!context.canStartImmediately)
   }
 

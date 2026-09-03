@@ -53,6 +53,18 @@ struct SettingsFeatureTests {
     await store.receive(\.delegate.settingsChanged)
   }
 
+  @Test(.dependencies) func refreshCLIServiceStatusReadsTheServer() async {
+    let store = TestStore(initialState: SettingsFeature.State()) {
+      SettingsFeature()
+    } withDependencies: {
+      $0[CLIServiceStatusClient.self].current = { .failed(.socketAlreadyOwned, path: "/tmp/cli.sock") }
+    }
+
+    await store.send(.refreshCLIServiceStatus) {
+      $0.cliServiceStatus = .failed(.socketAlreadyOwned, path: "/tmp/cli.sock")
+    }
+  }
+
   @Test(.dependencies) func savesUpdatesChanges() async {
     let initialSettings = GlobalSettings(
       appearanceMode: .system,

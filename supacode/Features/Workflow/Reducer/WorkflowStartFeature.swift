@@ -82,7 +82,9 @@ struct WorkflowStartFeature {
     }
 
     var canRun: Bool {
-      guard !isSubmitting, cliInstalled, context.item.isRunnable else { return false }
+      guard !isSubmitting, cliInstalled, context.cliServiceFailure == nil, context.item.isRunnable else {
+        return false
+      }
       if let source = context.source {
         guard let selected = selectedSourceSurfaceID,
           let candidate = source.candidates.first(where: { $0.surfaceID == selected })
