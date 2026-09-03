@@ -29,14 +29,24 @@ user-facing surface may merge before "their" release and stay dormant. Four rele
 R2a, R2b, R3 (R2 was split on 2026-08-29); the [cadence rules](#cadence-and-working-rules)
 say when each is cut:
 
-### Status (2026-08-31)
+### Status (2026-09-04)
 
 | Release | State | Next action |
 | --- | --- | --- |
 | R1 | **Shipped** — v2026.8.29 (2026-08-29) | — |
 | R2a | **Shipped** — v2026.8.31 (2026-08-31) | — |
-| R2b | Planned | C2 starts next |
+| R2b | In progress — C2 merged (#752), D1 skill merged (#754) | the rest of D1 (Settings › Workflows, `workflows.md`, CLI reachability), then #726 T1, then D2 |
 | R3 | Planned | after R2b ships |
+
+#### R2b PR ledger
+
+| Slice(s) | State | PR / next action |
+| --- | --- | --- |
+| C2 | Merged | #752: start sheet + capsule popover / palette / Active Agents entry points; [063.011](011-c2-start-sheet.md) |
+| D1 (skill) | Merged | #754: `prowl-workflow` bundled authoring skill (shipped ahead of the rest of D1) |
+| D1 (rest) | In progress | Settings › Agents › Workflows page, `docs/components/workflows.md`, CLI reachability status (deferred from C0); [063.013](013-d1-workflows-settings.md) |
+| #726 T1 | Planned | `make test-agent-contracts` — after D1 |
+| D2 | Planned | `prowl.adversarial-review` built-in + reviewer skill + E2E — after #726 T1 |
 
 #### R1 PR ledger
 
@@ -194,6 +204,9 @@ R3+: V2 / S5 rest;  delete HANDOFF_RETIRED stubs
 
 ## Change log
 
+- 2026-09-04 — D1 (rest) started on `feat/workflow-settings-d1` after the C2 (#752) and D1-skill
+  (#754) rows were entered in the ledger above (both merges had left the Status table at
+  "C2 starts next"). Scope and decisions: [063.013](013-d1-workflows-settings.md).
 - 2026-09-04 — The D1 authoring skill shipped ahead of the rest of D1 as `prowl-workflow`
   (#754; singular, matching `prowl workflow …` and `prowl-cli` — the plan's `prowl-workflows`
   name is superseded). Before merge it was driven end to end from fresh agents that saw only
