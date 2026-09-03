@@ -43,18 +43,14 @@ struct WorkflowsSettingsView: View {
       VStack(alignment: .leading, spacing: 6) {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
           switch blocker {
-          case .notInstalled(let repair):
+          case .cliUnusable(let status):
             Label("Workflows need the prowl command line tool.", systemImage: "exclamationmark.triangle.fill")
               .foregroundStyle(.orange)
             Spacer()
-            Button(repair ? "Repair" : "Install") {
+            Button(status.installActionTitle) {
               store.send(.installCLITapped)
             }
-            .help(
-              repair
-                ? "Replace the broken prowl link with the version bundled in this app"
-                : "Install the prowl command line tool to /usr/local/bin"
-            )
+            .help("\(status.installActionTitle) the prowl command line tool at /usr/local/bin/prowl")
             .buttonStyle(.bordered)
             .controlSize(.small)
           case .socketUnavailable:
@@ -63,14 +59,9 @@ struct WorkflowsSettingsView: View {
           }
         }
         switch blocker {
-        case .notInstalled(let repair):
-          Text(
-            repair
-              ? "The prowl link at /usr/local/bin points at an app that is gone. Participants deliver their "
-                + "results through prowl, so a run cannot start until it is repaired."
-              : "Participants deliver their results through prowl, so a run cannot start until it is installed."
-          )
-          .foregroundStyle(.secondary)
+        case .cliUnusable(let status):
+          Text(Self.cliUnusableCopy(status))
+            .foregroundStyle(.secondary)
         case .socketUnavailable(let reason):
           Text(reason)
             .foregroundStyle(.secondary)
@@ -78,6 +69,27 @@ struct WorkflowsSettingsView: View {
       }
       .font(.callout)
       .fixedSize(horizontal: false, vertical: true)
+    }
+  }
+
+  /// Why a run cannot start, per what occupies the install path. A real file or directory in
+  /// the slot cannot be replaced by Install; the copy says what to do instead.
+  static func cliUnusableCopy(_ status: CLIInstallStatus) -> String {
+    let delivery = "Participants deliver their results through prowl, so a run cannot start until "
+    switch status {
+    case .notInstalled:
+      return delivery + "it is installed."
+    case .broken(let path, _):
+      return "The link at \(path) points at an app that is gone. " + delivery + "it is repaired."
+    case .installedDifferentSource(let path, let destination):
+      if destination == nil {
+        return "\(path) is a file or folder Prowl will not replace, and it is not an executable command. "
+          + "Remove it, then install; " + delivery.lowercased() + "prowl runs."
+      }
+      return "The link at \(path) points at something that is not an executable command. " + delivery
+        + "it is replaced."
+    case .installed(let path):
+      return "\(path) is not executable. " + delivery + "it is reinstalled."
     }
   }
 
@@ -399,8 +411,8 @@ private struct WorkflowSettingsRowView: View {
 
   @ViewBuilder
   private func rolePicker(_ role: WorkflowSettingsRow.LaunchRole) -> some View {
-    let available = role.candidates.filter { $0.unavailableReason == nil }
     let remembered = role.candidates.first { $0.profileID == role.rememberedProfileID }
+    let qualifying = role.candidates.filter { $0.unavailableReason == nil }
     HStack(spacing: 8) {
       Picker(
         role.name,
@@ -409,13 +421,20 @@ private struct WorkflowSettingsRowView: View {
           set: { store.send(.setRememberedBinding(role.memoryKey, profileID: $0)) })
       ) {
         Text("Ask at start").tag(Optional<UUID>.none)
-        ForEach(available) { candidate in
-          Text("\(candidate.name) — \(candidate.agentToken)").tag(Optional(candidate.profileID))
+        ForEach(role.candidates) { candidate in
+          if let reason = candidate.unavailableReason {
+            // Same contract as the start sheet: dimmed with the resolver's reason, not selectable
+            // — except as the current (remembered) value, which stays visible until it is changed.
+            Text("\(candidate.name) — \(reason)")
+              .foregroundStyle(.secondary)
+              .tag(Optional(candidate.profileID))
+              .selectionDisabled(candidate.profileID != role.rememberedProfileID)
+          } else {
+            Text("\(candidate.name) — \(candidate.agentToken)").tag(Optional(candidate.profileID))
+          }
         }
-        if let remembered, remembered.unavailableReason != nil {
-          Text("\(remembered.name) — no longer qualifies").tag(Optional(remembered.profileID))
-        } else if let rememberedID = role.rememberedProfileID, remembered == nil {
-          Text("Missing profile").tag(Optional(rememberedID))
+        if let rememberedID = role.rememberedProfileID, remembered == nil {
+          Text("Deleted profile").tag(Optional(rememberedID))
         }
       }
       .labelsHidden()
@@ -423,13 +442,17 @@ private struct WorkflowSettingsRowView: View {
       .help(
         "The Agent Profile this role launches with. Remembered from the last start; "
           + "\"Ask at start\" forgets it so the sheet asks again.")
-      if let reason = remembered?.unavailableReason {
-        Text(reason)
+      if remembered?.unavailableReason != nil {
+        Text("This profile no longer qualifies; the next start will ask.")
           .foregroundStyle(.secondary)
-      } else if available.isEmpty {
+      } else if role.rememberedProfileID != nil, remembered == nil {
+        Text("The remembered profile was deleted; the next start will ask.")
+          .foregroundStyle(.secondary)
+      } else if qualifying.isEmpty {
         Text("No enabled profile qualifies for this role.")
           .foregroundStyle(.secondary)
       }
     }
   }
+
 }

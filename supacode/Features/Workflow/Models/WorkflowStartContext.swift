@@ -92,6 +92,13 @@ nonisolated struct WorkflowStartContext: Equatable, Sendable {
   /// a stopped server carries a reason too. Participants deliver through the CLI, so a run
   /// cannot start until this clears.
   var cliServiceFailure: String?
+  /// What occupies the install path when `cliInstalled` is false, for the banner's action
+  /// (Install / Repair / Reinstall); nil reads as a plain Install.
+  var cliInstallStatus: CLIInstallStatus?
+
+  var cliInstallActionTitle: String {
+    (cliInstallStatus ?? .notInstalled).installActionTitle
+  }
 
   /// Steps offering a "Skip" choice at start: every step with an `expect` (§9 `--skip`).
   var skipOptions: [(stepID: String, title: String?)] {

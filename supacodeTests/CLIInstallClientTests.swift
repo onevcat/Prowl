@@ -15,12 +15,40 @@ struct CLIInstallClientTests {
     try? FileManager.default.removeItem(at: url)
   }
 
-  @Test func onlyALiveProwlIsUsable() {
-    #expect(CLIInstallStatus.installed(path: "/usr/local/bin/prowl").isUsable)
-    #expect(CLIInstallStatus.installedDifferentSource(path: "/usr/local/bin/prowl", destination: "/other").isUsable)
-    #expect(CLIInstallStatus.installedDifferentSource(path: "/usr/local/bin/prowl", destination: nil).isUsable)
-    #expect(!CLIInstallStatus.broken(path: "/usr/local/bin/prowl", destination: "/gone").isUsable)
-    #expect(!CLIInstallStatus.notInstalled.isUsable)
+  /// The workflow gate needs a command a shell can run, not just an occupied slot.
+  @Test func onlyAnExecutableCommandIsUsable() throws {
+    let tmp = try makeTempDir()
+    defer { cleanup(tmp) }
+    let slot = tmp.appendingPathComponent("prowl")
+    let client = CLIInstallClient.liveValue
+
+    #expect(!client.isUsable(slot))
+
+    try Data("#!/bin/sh\n".utf8).write(to: slot)
+    #expect(!client.isUsable(slot))
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: slot.path)
+    #expect(client.isUsable(slot))
+
+    try FileManager.default.removeItem(at: slot)
+    try FileManager.default.createDirectory(at: slot, withIntermediateDirectories: false)
+    #expect(!client.isUsable(slot))
+
+    try FileManager.default.removeItem(at: slot)
+    let target = tmp.appendingPathComponent("real-prowl")
+    try Data("#!/bin/sh\n".utf8).write(to: target)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: target.path)
+    try FileManager.default.createSymbolicLink(at: slot, withDestinationURL: target)
+    #expect(client.isUsable(slot))
+
+    try FileManager.default.removeItem(at: target)
+    #expect(!client.isUsable(slot))
+  }
+
+  @Test func installActionTitleFollowsTheSlot() {
+    #expect(CLIInstallStatus.notInstalled.installActionTitle == "Install")
+    #expect(CLIInstallStatus.broken(path: "/p", destination: "/gone").installActionTitle == "Repair")
+    #expect(CLIInstallStatus.installedDifferentSource(path: "/p", destination: nil).installActionTitle == "Reinstall")
+    #expect(CLIInstallStatus.installed(path: "/p").installActionTitle == "Reinstall")
   }
 
   @Test func statusNotInstalledWhenNoFileExists() throws {
@@ -55,6 +83,7 @@ struct CLIInstallClientTests {
           source: fakeBundledBinary.path(percentEncoded: false)
         )
       },
+      isUsable: { _ in true },
       install: { _ in },
       uninstall: { _ in }
     )
@@ -160,6 +189,7 @@ struct CLIInstallClientTests {
     let client = CLIInstallClient(
       bundledCLIURL: { fakeBundled },
       installationStatus: CLIInstallClient.liveValue.installationStatus,
+      isUsable: { _ in true },
       install: { path in
         let fileManager = FileManager.default
         let bundledPath = fakeBundled.path(percentEncoded: false)
@@ -205,6 +235,7 @@ struct CLIInstallClientTests {
     let client = CLIInstallClient(
       bundledCLIURL: { fakeBundled },
       installationStatus: CLIInstallClient.liveValue.installationStatus,
+      isUsable: { _ in true },
       install: { path in
         let fileManager = FileManager.default
         let bundledPath = fakeBundled.path(percentEncoded: false)
@@ -338,6 +369,7 @@ struct CLIInstallClientTests {
     CLIInstallClient(
       bundledCLIURL: { bundledBinary },
       installationStatus: CLIInstallClient.liveValue.installationStatus,
+      isUsable: { _ in true },
       install: { installPath in
         let fileManager = FileManager.default
         let bundledPath = bundledBinary.path(percentEncoded: false)

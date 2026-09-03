@@ -210,9 +210,11 @@ extension SupacodeApp {
       return WorkflowStartPickRole(name: role.name, candidates: agentCandidates)
     }
 
-    // A dangling `prowl` link is not installed for this purpose: participants could not deliver.
-    let cliInstalled = CLIInstallClient.liveValue.installationStatus(cliDefaultInstallPath).isUsable
+    // Installed here means a shell can run it: participants could not deliver through a
+    // dangling link or a non-executable file in the slot.
+    @Dependency(CLIInstallClient.self) var cliInstallClient
     @Dependency(CLIServiceStatusClient.self) var cliServiceStatus
+    let cliInstalled = cliInstallClient.isUsable(cliDefaultInstallPath)
 
     return WorkflowStartContext(
       item: item,
@@ -224,7 +226,8 @@ extension SupacodeApp {
       pickRoles: pickRoles,
       cliInstalled: cliInstalled,
       bindModeOverride: bindOverride,
-      cliServiceFailure: cliServiceStatus.current().unreachableDescription)
+      cliServiceFailure: cliServiceStatus.current().unreachableDescription,
+      cliInstallStatus: cliInstalled ? nil : cliInstallClient.installationStatus(cliDefaultInstallPath))
   }
 
   /// dsl-spec §3 binding resolution, presented: the resolver's pre-selection per launch role,

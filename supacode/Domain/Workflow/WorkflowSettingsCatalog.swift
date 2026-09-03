@@ -148,11 +148,16 @@ nonisolated struct WorkflowSettingsCatalog: Equatable, Sendable {
         guard role.source == .launch, let requirements = role.launch, let definition else { return nil }
         let key = WorkflowBindingResolver.memoryKey(scope: runScope, workflowID: definition.id, role: role)
         let context = WorkflowBindingResolverContext(profiles: settings.agentProfiles)
+        let remembered = settings.rememberedWorkflowBinding(for: key)
+        // Enabled profiles, each with the resolver's own rejection (the sheet's rule), plus the
+        // remembered profile when it was disabled since — so the picker can say why instead of
+        // presenting it as deleted.
+        let listed = settings.agentProfiles.filter { $0.isEnabled || $0.id == remembered }
         return WorkflowSettingsRow.LaunchRole(
           name: role.name,
           memoryKey: key,
-          rememberedProfileID: settings.rememberedWorkflowBinding(for: key),
-          candidates: settings.agentProfiles.filter(\.isEnabled).map { profile in
+          rememberedProfileID: remembered,
+          candidates: listed.map { profile in
             WorkflowSettingsRow.Candidate(
               profileID: profile.id,
               name: profile.name,

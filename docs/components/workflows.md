@@ -141,10 +141,10 @@ Per row:
 | Control | Effect |
 |---|---|
 | Checkbox | enable/disable (`disabledWorkflowIDs`, keyed `<scope>/<id>`). Disabled workflows appear in no entry point and `prowl workflow run` refuses them with `WORKFLOW_DISABLED`. The same id in two repositories shares one key. |
-| Status line | **Valid**, **Valid, N warnings**, or **N errors** with **Show Details** listing every diagnostic as `line:column message code` — the same output as `prowl workflow validate`. An **Overridden …** note names the file or repository whose same-id definition wins. |
+| Status line | **Valid**, **Valid, N warnings**, or **N errors** with **Show Details** listing every diagnostic as `line:column message code` — everything `prowl workflow validate` reports, plus the availability warnings only the running app can know (an `agents` allow-list with no installed runtime, a `suggest` no enabled profile matches). An **Overridden …** note names the file or repository whose same-id definition wins. |
 | **Reveal** | shows the file in Finder |
 | **Bindings** (workflows with `launch` roles) | **Follow file** (the YAML's `bind`), **Always ask**, or **Automatic** — the tri-state override the start sheet's "Don't ask again" also writes |
-| Role pickers (one per `launch` role) | the remembered profile for that role, or **Ask at start** to forget it. Only qualifying enabled profiles are offered; a remembered profile that no longer qualifies is shown with the reason. **Manage Profiles…** jumps to Settings → Agents → Profiles. |
+| Role pickers (one per `launch` role) | the remembered profile for that role, or **Ask at start** to forget it. Every enabled profile is listed; the ones that do not qualify are dimmed with the resolver's reason (wrong runtime for the role's `agents`, no launch-prompt support) and cannot be chosen. A remembered profile that was disabled since stays listed as "Disabled in Settings"; a deleted one reads "Deleted profile" — either way the next start asks. **Manage Profiles…** jumps to Settings → Agents → Profiles. |
 
 Page actions (under Your Workflows): **New Workflow…** writes a validated
 starter file (`new-workflow.yaml`, then `new-workflow-2.yaml`, …; its id is the
@@ -161,8 +161,10 @@ Agents → CLI & Skills → Connection).
 ## Gotchas for agents
 
 - Validate before handing over: `prowl workflow validate <file>` works with Prowl
-  closed; Settings shows the same diagnostics. A file with errors is never
-  runnable, and its row says so.
+  closed and is the static check; Settings shows the same diagnostics plus
+  availability warnings (installed runtimes, enabled profiles) that only the
+  app can evaluate. Errors, not warnings, make a file unrunnable — and its row
+  says so.
 - `prowl.*` ids are reserved for built-ins; a user or repo file using one is
   invalid (`reserved_id`).
 - Repository workflows are visible only from that repository's worktrees;

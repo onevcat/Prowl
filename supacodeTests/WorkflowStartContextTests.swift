@@ -117,6 +117,16 @@ struct WorkflowStartContextTests {
     #expect(!context.canStartImmediately)
   }
 
+  @Test func theBannerActionFollowsTheInstallStatus() throws {
+    var context = try context(
+      source: source(preselected: Self.agentPane), launchRoles: [launchRole()], cliInstalled: false)
+    #expect(context.cliInstallActionTitle == "Install")
+    context.cliInstallStatus = .broken(path: "/usr/local/bin/prowl", destination: "/gone")
+    #expect(context.cliInstallActionTitle == "Repair")
+    context.cliInstallStatus = .installedDifferentSource(path: "/usr/local/bin/prowl", destination: nil)
+    #expect(context.cliInstallActionTitle == "Reinstall")
+  }
+
   @Test func unreachableSocketPresentsTheSheet() throws {
     let context = try context(
       source: source(preselected: Self.agentPane), launchRoles: [launchRole()],

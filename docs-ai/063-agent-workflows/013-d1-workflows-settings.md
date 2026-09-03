@@ -73,8 +73,9 @@ healthy-looking Settings page. D1 closes that:
    `list` semantics, which is out of D1's scope.
 5. **Remembered bindings are editable here because nothing else can reset them.** The picker
    offers every enabled profile with the resolver's own rejection reason on the ones that do
-   not qualify (same rule as the sheet), and "Ask at start" forgets the memory. Setting a
-   profile from Settings writes exactly what a start would have remembered.
+   not qualify (same rule as the sheet: dimmed, not selectable), keeps a remembered profile
+   that was disabled since listed as "Disabled in Settings", and "Ask at start" forgets the
+   memory. Setting a profile from Settings writes exactly what a start would have remembered.
 6. **New Workflow… reveals rather than opens.** The default app for `.yaml` is unpredictable
    (Xcode, TextEdit, an IDE); revealing the file beside the row that now shows its validation
    status is the safe default, and the row's Reveal does the same later.
@@ -119,6 +120,21 @@ checkout.
   start composition read the status publisher directly — it now reads the dependency client,
   the same source Settings uses (a composition-level test was not added: the assembly needs
   the app store and terminal manager; the gate itself is covered from the context down).
+
+- **Round 2 — fixes F1–F4 verified; 1 P1 + 1 P2 + 2 P3, all acted on.** P1: `isUsable` on
+  the status enum still accepted any occupant of `/usr/local/bin/prowl` — a real file, a
+  directory, or a non-executable foreign link — because discovery calls all of them
+  `installedDifferentSource`. Usability is now a filesystem probe (`CLIInstallClient.isUsable`:
+  the slot, through any symlink, is an executable regular file) used by the page and the
+  start composition; the status only names what occupies the slot for the banner's copy and
+  button (Install / Repair / Reinstall, `installActionTitle`). P2: the Settings role picker
+  filtered out non-qualifying candidates and showed a disabled remembered profile as
+  "Missing" — it now lists every enabled profile with the resolver's reason (dimmed,
+  `selectionDisabled`, the sheet's contract) and keeps a disabled remembered profile listed
+  as "Disabled in Settings"; a deleted one reads "Deleted profile". P3: the start sheet's
+  banner said Install for a dangling link — the context now carries the install status and
+  the button follows it. P3: the manual claimed parity with `prowl workflow validate`; it now
+  says the page adds the availability warnings only the app can evaluate.
 
 ## Verification plan
 

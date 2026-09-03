@@ -106,7 +106,8 @@ struct WorkflowsSettingsFeatureTests {
     storage: SettingsTestStorage,
     clock: TestClock<Duration> = TestClock(),
     serviceStatus: CLIServiceStatus = .listening(path: "/tmp/cli.sock"),
-    installStatus: CLIInstallStatus = .installed(path: "/usr/local/bin/prowl")
+    installStatus: CLIInstallStatus = .installed(path: "/usr/local/bin/prowl"),
+    cliUsable: Bool = true
   ) -> TestStoreOf<WorkflowsSettingsFeature> {
     withDependencies {
       $0.settingsFileStorage = storage.storage
@@ -119,6 +120,7 @@ struct WorkflowsSettingsFeatureTests {
         $0[WorkflowSettingsClient.self] = fixture.client
         $0[CLIServiceStatusClient.self].current = { serviceStatus }
         $0[CLIInstallClient.self].installationStatus = { _ in installStatus }
+        $0[CLIInstallClient.self].isUsable = { _ in cliUsable }
         $0.continuousClock = clock
       }
     }
@@ -132,6 +134,7 @@ struct WorkflowsSettingsFeatureTests {
 
     await store.send(.task) {
       $0.cliInstallStatus = .installed(path: "/usr/local/bin/prowl")
+      $0.cliUsable = true
       $0.cliServiceStatus = .listening(path: "/tmp/cli.sock")
       $0.scan = try fixture.scan()
       $0.catalog = try fixture.expectedCatalog()
@@ -158,6 +161,7 @@ struct WorkflowsSettingsFeatureTests {
 
     await store.send(.task) {
       $0.cliInstallStatus = .installed(path: "/usr/local/bin/prowl")
+      $0.cliUsable = true
       $0.cliServiceStatus = .failed(.socketAlreadyOwned, path: "/x")
       $0.scan = try fixture.scan()
       $0.catalog = try fixture.expectedCatalog()
@@ -168,14 +172,19 @@ struct WorkflowsSettingsFeatureTests {
 
     var missing = WorkflowsSettingsFeature.State(userDirectory: fixture.userDirectory)
     missing.cliInstallStatus = .notInstalled
+    missing.cliUsable = false
     missing.cliServiceStatus = .listening(path: "/x")
-    #expect(missing.cliBlocker == .notInstalled(repair: false))
-    // A dangling link is not a usable `prowl` either; the banner offers Repair.
+    #expect(missing.cliBlocker == .cliUnusable(.notInstalled))
+    // A dangling link, or a real file that is not an executable, is not a usable `prowl` either.
     missing.cliInstallStatus = .broken(path: "/usr/local/bin/prowl", destination: "/gone")
-    #expect(missing.cliBlocker == .notInstalled(repair: true))
-    // Another build's live `prowl` is usable (C2's rule); the socket rules first, and a
+    #expect(missing.cliBlocker == .cliUnusable(.broken(path: "/usr/local/bin/prowl", destination: "/gone")))
+    missing.cliInstallStatus = .installedDifferentSource(path: "/usr/local/bin/prowl", destination: nil)
+    #expect(
+      missing.cliBlocker == .cliUnusable(.installedDifferentSource(path: "/usr/local/bin/prowl", destination: nil)))
+    // Another build's executable `prowl` is usable (C2's rule); the socket rules first, and a
     // stopped server is unreachable even though it is not a failure.
     missing.cliInstallStatus = .installedDifferentSource(path: "/usr/local/bin/prowl", destination: "/other")
+    missing.cliUsable = true
     #expect(missing.cliBlocker == nil)
     missing.cliServiceStatus = .stopped
     #expect(missing.cliBlocker == .socketUnavailable(CLIServiceStatus.stopped.unreachableDescription!))
@@ -192,6 +201,7 @@ struct WorkflowsSettingsFeatureTests {
     let store = makeStore(fixture, storage: storage)
     await store.send(.task) {
       $0.cliInstallStatus = .installed(path: "/usr/local/bin/prowl")
+      $0.cliUsable = true
       $0.cliServiceStatus = .listening(path: "/tmp/cli.sock")
       $0.scan = try fixture.scan()
       $0.catalog = try fixture.expectedCatalog()
@@ -229,6 +239,7 @@ struct WorkflowsSettingsFeatureTests {
     let store = makeStore(fixture, storage: storage)
     await store.send(.task) {
       $0.cliInstallStatus = .installed(path: "/usr/local/bin/prowl")
+      $0.cliUsable = true
       $0.cliServiceStatus = .listening(path: "/tmp/cli.sock")
       $0.scan = try fixture.scan()
       $0.catalog = try fixture.expectedCatalog()
@@ -277,6 +288,7 @@ struct WorkflowsSettingsFeatureTests {
     let store = makeStore(fixture, storage: SettingsTestStorage())
     await store.send(.task) {
       $0.cliInstallStatus = .installed(path: "/usr/local/bin/prowl")
+      $0.cliUsable = true
       $0.cliServiceStatus = .listening(path: "/tmp/cli.sock")
       $0.scan = try fixture.scan()
       $0.catalog = try fixture.expectedCatalog()
@@ -305,6 +317,7 @@ struct WorkflowsSettingsFeatureTests {
     let store = makeStore(fixture, storage: SettingsTestStorage(), clock: clock)
     await store.send(.task) {
       $0.cliInstallStatus = .installed(path: "/usr/local/bin/prowl")
+      $0.cliUsable = true
       $0.cliServiceStatus = .listening(path: "/tmp/cli.sock")
       $0.scan = try fixture.scan()
       $0.catalog = try fixture.expectedCatalog()
@@ -336,6 +349,7 @@ struct WorkflowsSettingsFeatureTests {
     let store = makeStore(fixture, storage: SettingsTestStorage(), clock: clock)
     await store.send(.task) {
       $0.cliInstallStatus = .installed(path: "/usr/local/bin/prowl")
+      $0.cliUsable = true
       $0.cliServiceStatus = .listening(path: "/tmp/cli.sock")
       $0.scan = try fixture.scan()
       $0.catalog = try fixture.expectedCatalog()
@@ -358,6 +372,7 @@ struct WorkflowsSettingsFeatureTests {
 
     await store.send(.task) {
       $0.cliInstallStatus = .installed(path: "/usr/local/bin/prowl")
+      $0.cliUsable = true
       $0.cliServiceStatus = .listening(path: "/tmp/cli.sock")
       $0.loadError = "Could not read a workflow folder."
     }

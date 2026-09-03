@@ -99,6 +99,26 @@ struct WorkflowSettingsCatalogTests {
     #expect(row.launchRoles.first?.rememberedProfileID == Self.codexProfile.id)
   }
 
+  @Test func aDisabledRememberedProfileStaysListedWithItsReason() throws {
+    var disabledCodex = Self.codexProfile
+    disabledCodex.isEnabled = false
+    var stored = settings(profiles: [disabledCodex, Self.claudeProfile])
+    let parsed = entry(Self.review)
+    let role = try #require(parsed.file.definition?.roles.first { $0.name == "reviewer" })
+    stored.remember(
+      workflowBinding: WorkflowBindingResolver.memoryKey(scope: .user, workflowID: "review", role: role),
+      profileID: disabledCodex.id)
+
+    let row = try #require(WorkflowSettingsCatalog.build(scan: scan(entries: [parsed]), settings: stored).user.first)
+    let launchRole = try #require(row.launchRoles.first)
+    #expect(launchRole.rememberedProfileID == disabledCodex.id)
+    // Settings order (the profiles' recommendation order): the enabled Claude with its own
+    // rejection, the disabled remembered Codex with its reason — never other disabled profiles.
+    #expect(launchRole.candidates.map(\.name) == ["Codex Review", "Claude"])
+    #expect(launchRole.candidates[0].unavailableReason == "Disabled in Settings.")
+    #expect(launchRole.candidates[1].unavailableReason == "This role needs codex.")
+  }
+
   @Test func repositoryRowsUseTheRepoScopeAndOnlyRepositoriesWithFilesAreListed() throws {
     let userEntry = entry(Self.review)
     let repoEntry = entry(Self.review, scope: .repo, file: "repo-review.yaml")

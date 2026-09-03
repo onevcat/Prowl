@@ -4,13 +4,13 @@ import Foundation
 typealias CLIInstallStatus = SymlinkInstallStatus
 
 extension CLIInstallStatus {
-  /// Whether the slot holds a `prowl` a shell can run: this bundle's link or another live
-  /// build's (docs-ai 063.011: distinguishing foreign installs is Settings' business). A
-  /// dangling link is not usable even though something occupies the path.
-  nonisolated var isUsable: Bool {
+  /// The Settings and workflow-banner button for this slot: a fresh install, a repair of a
+  /// dangling link, or a reinstall over whatever else occupies the path.
+  nonisolated var installActionTitle: String {
     switch self {
-    case .installed, .installedDifferentSource: true
-    case .notInstalled, .broken: false
+    case .notInstalled: "Install"
+    case .broken: "Repair"
+    case .installed, .installedDifferentSource: "Reinstall"
     }
   }
 }
@@ -26,8 +26,20 @@ let cliDefaultInstallPath = URL(fileURLWithPath: "/usr/local/bin/prowl")
 struct CLIInstallClient: Sendable {
   var bundledCLIURL: @Sendable () -> URL?
   var installationStatus: @Sendable (_ installPath: URL) -> CLIInstallStatus
+  /// Whether a shell can run `prowl` from the slot (docs-ai 063 D1): the path — through any
+  /// symlink — is an executable regular file. Another build's live link qualifies (063.011);
+  /// a dangling link, a directory, or a non-executable file in the way does not, whatever
+  /// `installationStatus` calls it.
+  var isUsable: @Sendable (_ installPath: URL) -> Bool
   var install: @Sendable (_ installPath: URL) async throws -> Void
   var uninstall: @Sendable (_ installPath: URL) async throws -> Void
+
+  nonisolated static func isExecutableCommand(at path: String, fileManager: FileManager = .default) -> Bool {
+    var isDirectory: ObjCBool = false
+    // fileExists follows symlinks, so a dangling link reports absent.
+    guard fileManager.fileExists(atPath: path, isDirectory: &isDirectory), !isDirectory.boolValue else { return false }
+    return fileManager.isExecutableFile(atPath: path)
+  }
 }
 
 extension CLIInstallClient: DependencyKey {
@@ -41,6 +53,9 @@ extension CLIInstallClient: DependencyKey {
         linkPath: installPath.path(percentEncoded: false),
         source: bundledURL?.path(percentEncoded: false) ?? ""
       )
+    },
+    isUsable: { installPath in
+      CLIInstallClient.isExecutableCommand(at: installPath.path(percentEncoded: false))
     },
     install: { installPath in
       guard let bundledURL = Bundle.main.resourceURL?.appendingPathComponent("prowl-cli/prowl") else {
@@ -60,6 +75,7 @@ extension CLIInstallClient: DependencyKey {
   static let testValue = CLIInstallClient(
     bundledCLIURL: { nil },
     installationStatus: { _ in .notInstalled },
+    isUsable: { _ in true },
     install: { _ in },
     uninstall: { _ in }
   )

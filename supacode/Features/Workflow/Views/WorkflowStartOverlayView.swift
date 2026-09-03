@@ -113,10 +113,10 @@ private struct WorkflowStartCard: View {
       )
       .foregroundStyle(.orange)
       Spacer()
-      Button("Install") {
+      Button(store.context.cliInstallActionTitle) {
         store.send(.installCLITapped)
       }
-      .help("Install the prowl command line tool to /usr/local/bin.")
+      .help("\(store.context.cliInstallActionTitle) the prowl command line tool at /usr/local/bin/prowl.")
     }
     .font(.callout)
   }

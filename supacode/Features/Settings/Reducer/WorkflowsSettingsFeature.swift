@@ -18,6 +18,9 @@ struct WorkflowsSettingsFeature {
     /// Why the sources could not be read (an unreadable folder); the lists are then stale or empty.
     var loadError: String?
     var cliInstallStatus: CLIInstallStatus = .notInstalled
+    /// Whether a shell can run `prowl` from the install path (the gate); `cliInstallStatus`
+    /// only names what occupies it (the banner's button and copy).
+    var cliUsable = false
     var cliServiceStatus: CLIServiceStatus = .stopped
     var isAuthoringPromptPresented = false
     @Presents var alert: AlertState<Alert>?
@@ -27,13 +30,10 @@ struct WorkflowsSettingsFeature {
     }
 
     /// The banner's reason, in the same precedence as the start sheet: an app that is not
-    /// listening cannot be fixed by installing the CLI, and a dangling link needs a repair.
+    /// listening cannot be fixed by installing the CLI.
     var cliBlocker: CLIBlocker? {
       if let reason = cliServiceStatus.unreachableDescription { return .socketUnavailable(reason) }
-      guard cliInstallStatus.isUsable else {
-        if case .broken = cliInstallStatus { return .notInstalled(repair: true) }
-        return .notInstalled(repair: false)
-      }
+      guard cliUsable else { return .cliUnusable(cliInstallStatus) }
       return nil
     }
 
@@ -58,8 +58,8 @@ struct WorkflowsSettingsFeature {
   }
 
   enum CLIBlocker: Equatable {
-    /// `repair` = the slot holds a dangling link, so the action reads Repair.
-    case notInstalled(repair: Bool)
+    /// No runnable `prowl` at the install path; the status says what is there instead.
+    case cliUnusable(CLIInstallStatus)
     case socketUnavailable(String)
   }
 
@@ -199,10 +199,12 @@ struct WorkflowsSettingsFeature {
 
       case .cliInstallCompleted(.success(let path)):
         state.cliInstallStatus = cliInstallClient.installationStatus(cliDefaultInstallPath)
+        state.cliUsable = cliInstallClient.isUsable(cliDefaultInstallPath)
         return .send(.delegate(.notice(.cliInstalled(path: path))))
 
       case .cliInstallCompleted(.failure(let error)):
         state.cliInstallStatus = cliInstallClient.installationStatus(cliDefaultInstallPath)
+        state.cliUsable = cliInstallClient.isUsable(cliDefaultInstallPath)
         state.alert = Self.errorAlert(error.message)
         return .send(.delegate(.notice(.failed(message: error.message))))
 
@@ -221,6 +223,7 @@ struct WorkflowsSettingsFeature {
 
   private func reload(_ state: inout State) {
     state.cliInstallStatus = cliInstallClient.installationStatus(cliDefaultInstallPath)
+    state.cliUsable = cliInstallClient.isUsable(cliDefaultInstallPath)
     state.cliServiceStatus = cliServiceStatusClient.current()
     do {
       let scan = try client.scan()
