@@ -146,14 +146,31 @@ checkout.
   next start picks another eligible profile or asks, and every unavailable entry (the
   current one included) is non-selectable.
 
-## Verification plan
+- **Round 4 (closing) — F9/F10 verified; no P0, P1, or user-visible P2 remaining.** One P3
+  (the manual's start-sheet overview named only two of the four CLI banner states) fixed.
 
-Red-first unit tests: `CLIServiceStatus` descriptions and server transitions (already-owned
-path → `failed(.socketAlreadyOwned)`), Settings reducer reads a stubbed status, the starter
-template validates with zero errors and unique names increment, catalog rows (enabled/
-shadowed/bind label/binding candidates), reducer persistence of toggle / bind mode / binding
-memory, watcher debounce on `TestClock`, start-context/sheet gating on a socket failure.
-Then `make check`, `make test`, `make build-app`; adversarial review rounds; an isolated
-Debug E2E over the page (toggle → palette visibility, bind override → sheet behavior, New
-Workflow… → row → edit → live status, Reveal, Ask an Agent…, CLI banner with the CLI
-uninstalled, Connection status with a second instance holding the socket).
+## Verification (all run, 2026-09-04)
+
+- Red-first unit tests, all green on the final head: `CLIServiceStatusTests`, the two new
+  `CLISocketServerTests`, `CLIInstallClientTests` (executable probe, action titles),
+  `WorkflowChangeWatcherTests` (real vnode sources: in-place edit, missing-directory ancestor),
+  `WorkflowSettingsCatalogTests`, `WorkflowStarterTemplateTests`, `WorkflowsSettingsFeatureTests`
+  (load, banner precedence, toggle / bind mode / binding memory persistence, New Workflow…,
+  debounced reload and teardown on `TestClock`, scan failure), `WorkflowAuthoringPromptTests`,
+  and the socket / install-status gating in `SettingsFeatureTests`, `WorkflowStartContextTests`,
+  `WorkflowStartFeatureTests`.
+- `make check`, `make build-app`, and the full `make test` on the final head: 3042 tests,
+  zero failures.
+- Isolated Debug instance (temporary home, own `PROWL_CLI_SOCKET`, seeded user and repository
+  workflow files, three profiles), driven through `agent-ctrl` AXPress and verified through the
+  bundled debug CLI and the settings file: enable checkbox ↔ `disabledWorkflowIDs` ↔
+  `prowl workflow list` `enabled`; Bindings popup ↔ `workflowBindModeOverrides`; role picker
+  (non-qualifying profile dimmed with its reason and disabled) ↔ `workflowBindings`; New
+  Workflow… (file, Valid row, reveal); Ask an Agent… (localized sheet with the bundle's skill
+  and manual paths); an in-place append to a watched file turned its row red within a second
+  and the revert restored it; Show Details; the Command Palette listed only enabled, valid,
+  unshadowed workflows; `prowl workflow run` of a disabled workflow answered
+  `WORKFLOW_DISABLED`; CLI & Skills › Connection showed Listening, and a second instance on
+  the same socket showed Not listening with the "another instance" reason on both pages.
+  Not exercised live: the Install / Repair / Reinstall / occupied-slot banner variants (they
+  need `/usr/local/bin/prowl` altered on the machine) — unit-covered.
