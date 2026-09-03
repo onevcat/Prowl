@@ -69,6 +69,7 @@ struct SettingsFeature {
     var globalCustomCommands: GlobalCustomCommandsFeature.State?
     var agentProfiles: AgentProfilesFeature.State?
     var agentSkills: AgentSkillsFeature.State?
+    var workflows: WorkflowsSettingsFeature.State?
     @Presents var alert: AlertState<Alert>?
 
     init(settings: GlobalSettings = .default) {
@@ -198,6 +199,7 @@ struct SettingsFeature {
     case globalCustomCommands(GlobalCustomCommandsFeature.Action)
     case agentProfiles(AgentProfilesFeature.Action)
     case agentSkills(AgentSkillsFeature.Action)
+    case workflows(WorkflowsSettingsFeature.Action)
     case alert(PresentationAction<Alert>)
     case delegate(Delegate)
     case binding(BindingAction<State>)
@@ -472,13 +474,21 @@ struct SettingsFeature {
         let resolvedSelection = selection ?? .general
         state.selection = resolvedSelection
         // Owned here rather than in AppFeature so `ifLet` observes the removal and cancels an
-        // in-flight link effect instead of letting its completion land on nil child state.
+        // in-flight link effect (or the Workflows page's directory watcher) instead of letting
+        // its completion land on nil child state.
         if resolvedSelection == .commandLineTool {
           if state.agentSkills == nil {
             state.agentSkills = .init()
           }
         } else {
           state.agentSkills = nil
+        }
+        if resolvedSelection == .workflows {
+          if state.workflows == nil {
+            state.workflows = .init()
+          }
+        } else {
+          state.workflows = nil
         }
         return .none
 
@@ -502,6 +512,9 @@ struct SettingsFeature {
       case .agentSkills:
         return .none
 
+      case .workflows:
+        return .none
+
       case .delegate:
         return .none
       }
@@ -517,6 +530,9 @@ struct SettingsFeature {
     }
     .ifLet(\.agentSkills, action: \.agentSkills) {
       AgentSkillsFeature()
+    }
+    .ifLet(\.workflows, action: \.workflows) {
+      WorkflowsSettingsFeature()
     }
     // Without this, alert state is only cleared by the view's dismiss
     // writeback: state set while the Settings window is closed (or closed

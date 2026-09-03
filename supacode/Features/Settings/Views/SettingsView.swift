@@ -40,6 +40,8 @@ struct SettingsView: View {
         Section("Agents") {
           Label("Profiles", systemImage: "person.crop.circle")
             .tag(SettingsSection.profiles)
+          Label("Workflows", systemImage: "point.3.connected.trianglepath.dotted")
+            .tag(SettingsSection.workflows)
           Label("CLI & Skills", systemImage: "terminal")
             .tag(SettingsSection.commandLineTool)
         }
@@ -114,6 +116,15 @@ struct SettingsView: View {
             action: \.agentProfiles
           ) {
             AgentProfilesSettingsView(store: agentProfilesStore)
+          } else {
+            ProgressView()
+              .frame(maxWidth: .infinity, maxHeight: .infinity)
+          }
+        }
+      case .workflows:
+        SettingsDetailView {
+          if let workflowsStore = settingsStore.scope(state: \.workflows, action: \.workflows) {
+            WorkflowsSettingsView(store: workflowsStore)
           } else {
             ProgressView()
               .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -53,6 +53,27 @@ struct SettingsFeatureTests {
     await store.receive(\.delegate.settingsChanged)
   }
 
+  @Test(.dependencies) func selectingWorkflowsOwnsThePageStateAndLeavingTearsItDown() async {
+    let store = TestStore(initialState: SettingsFeature.State()) {
+      SettingsFeature()
+    }
+
+    await store.send(.setSelection(.workflows)) {
+      $0.selection = .workflows
+      $0.workflows = .init()
+    }
+    await store.send(.setSelection(.commandLineTool)) {
+      $0.selection = .commandLineTool
+      $0.workflows = nil
+      $0.agentSkills = .init()
+    }
+    await store.send(.setSelection(.workflows)) {
+      $0.selection = .workflows
+      $0.workflows = .init()
+      $0.agentSkills = nil
+    }
+  }
+
   @Test(.dependencies) func refreshCLIServiceStatusReadsTheServer() async {
     let store = TestStore(initialState: SettingsFeature.State()) {
       SettingsFeature()
