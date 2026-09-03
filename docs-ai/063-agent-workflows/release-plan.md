@@ -120,7 +120,7 @@ touch B1's files); #733 must merge before B3 starts. Docs: `workflows.md` (CLI p
 | Order | Slice | Entry | Depends | Outcome |
 | --- | --- | --- | --- | --- |
 | 1 | **C2** start sheet + entry points (capsule popover, palette, Active Agents) | 063 | B3 | GUI-initiated runs |
-| 2 | **D1** `prowl-workflows` authoring skill (skills embedding from 065), `docs/components/workflows.md`, Settings › Workflows page, CLI reachability status (deferred from C0) | 063 | B1, C2, 065-K1 | custom workflows, agent-assisted authoring |
+| 2 | **D1** `prowl-workflow` authoring skill (shipped early in #754; skills embedding from 065), `docs/components/workflows.md`, Settings › Workflows page, CLI reachability status (deferred from C0) | 063 | B1, C2, 065-K1 | custom workflows, agent-assisted authoring |
 | 3 | **#726 T1** headless contract tests against the real tier-A binaries through the production renderers/decoder (`make test-agent-contracts`, passing runs update T0) | 064 | #726 T0, S3 wave 1 | hook contracts fail loudly on binary drift before D2's E2E leans on them |
 | 4 | **D2** `prowl.adversarial-review` built-in + reviewer skill + E2E | 063 | A2, C2, D1, S3 wave 1, #733, #726 T1 | first built-in workflow |
 
@@ -194,6 +194,15 @@ R3+: V2 / S5 rest;  delete HANDOFF_RETIRED stubs
 
 ## Change log
 
+- 2026-09-04 — The D1 authoring skill shipped ahead of the rest of D1 as `prowl-workflow`
+  (#754; singular, matching `prowl workflow …` and `prowl-cli` — the plan's `prowl-workflows`
+  name is superseded). Before merge it was driven end to end from fresh agents that saw only
+  the skill and the CLI: one ran an existing demo workflow, one authored and ran a new
+  two-agent workflow (validated first try, `close:` steps included), and a launched participant
+  loaded the skill from the typed `[Prowl] …` line. That pass surfaced the `max_rounds_reached`
+  trap (a loop is only left through a satisfied `until`; the "poor-man's if" is not an `if`),
+  now spelled out in the skill with a gave-up-verdict pattern. D1's remaining scope (Settings ›
+  Workflows page, `docs/components/workflows.md`, CLI reachability) is unchanged.
 - 2026-08-31 — R2a shipped in v2026.8.31: B1 #740, #733 #741, #726 T0 #739, B2 #743, B3 #744, C1 #747.
   The release also carried the display-sleep fix #746 and two external contributions (#748
   blocked-agent sidebar indicator, #749 fixture `--agent` validation). `make agent-versions` ran

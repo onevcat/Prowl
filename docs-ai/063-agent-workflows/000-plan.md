@@ -359,7 +359,7 @@ run …` replacement, then removal (see Built-ins).
   are deleted. A self-initiated run returns the first step's instruction and completion
   command in its response instead of typing them into the caller's own pane, so an agent's
   self-handoff stays two commands.
-- `skills/prowl-workflows/SKILL.md`: how to author and run workflows; `prowl workflow
+- `skills/prowl-workflow/SKILL.md`: how to author and run workflows; `prowl workflow
   schema` prints the machine-readable reference.
 
 ### Prerequisite interfaces (A1/A2) and test strategy
@@ -425,7 +425,7 @@ attaches hooks through A2's launch boundary.
 | **B3** | B | A2, 064-S1, B2, #733 | Runner wiring: reducer-owned `WorkflowRunsFeature` effects, per-activation `observeAgentDispatch` + `observeAgentState` watchdog streams, CLI admission preflight, `prowl workflow run/status/done/cancel` + contracts. Engine first powered on. |
 | **C1** | C | B3 | Status center fifth state + run panel + attention triggers + notifications (061 visual verification). Runs become visible. |
 | **C2** | C | B3 | Start sheet (bindings, suggestion-based profile creation, don't-ask-again, `--skip` equivalent) + entry points (capsule popover, palette, Active Agents context menu). GUI-initiated runs. |
-| **D1** | D | B1, C2, 065-K1 | `prowl-workflows` authoring skill (registered by adding it to `skills/`; embedding and the registry come from [065](../065-bundled-agent-skills/000-plan.md)), `docs/components/workflows.md`, Settings › Workflows page (enable/validate/Reveal/New/Ask-agent/per-workflow auto) added to the Agents group. Distribution and docs. |
+| **D1** | D | B1, C2, 065-K1 | `prowl-workflow` authoring skill (registered by adding it to `skills/`; embedding and the registry come from [065](../065-bundled-agent-skills/000-plan.md)), `docs/components/workflows.md`, Settings › Workflows page (enable/validate/Reveal/New/Ask-agent/per-workflow auto) added to the Agents group. Distribution and docs. |
 | **D2** | D | A2, C2, D1, 064-S3 wave 1, #733, #726 T1 | `prowl.adversarial-review` built-in + reviewer skill + E2E self-verification (the exact-signal watchdog's first proof in a real flow). Proves the engine on a fresh flow before touching shipped behavior. |
 | **D3** | D | D2 | `prowl.handoff` + `prowl.handoff-checkpoint` built-ins + `handoff.transition`/`handoff.checkpoint` actions; `prowl handoff to\|save` → `HANDOFF_RETIRED` stubs; remove `HandoffHudFeature`, `HandoffCommandHandler`, `HandoffRequestRegistry`; rewrite `docs/components/handoff.md` and the `prowl-cli` skill. Migrate the shipped feature last. |
 | **V2** | — | — | observe mode (`expect.status` + `agents read` / hook `last_assistant_message`), `on_attention: ask <role>`, fan-out (`count`, `wait all`), run persistence/resume, retention, cross-worktree roles, GUI editor. |
@@ -656,3 +656,4 @@ attaches hooks through A2's launch boundary.
 - Updated 2026-08-22: Implemented A1b — `PROWL_PANE_ID` in every pane's environment, manual identity section, and the `prowl-cli` skill rewritten around it — see [004-pane-identity-env.md](004-pane-identity-env.md).
 - Updated 2026-08-22: Implemented A2 with the typed Profile launch boundary, prompted/background `create tab|pane`, and `profiles list`; the final A1/A2 Swift interface question is resolved — see [005-cli-profile-launch.md](005-cli-profile-launch.md).
 - Updated 2026-08-22: Hardened A2 after review: capped prompts bypass canonical PTY input through a zsh/bash/fish-portable surface-environment carrier command, launch failures retain typed reasons, interactive stdin/version skew fail closed, and hidden-worktree background selection is covered — see [005-cli-profile-launch.md](005-cli-profile-launch.md#review-hardening).
+- Updated 2026-09-04: The D1 authoring skill shipped early as `prowl-workflow` (#754) — the singular name supersedes `prowl-workflows`; see the release-plan change log.
