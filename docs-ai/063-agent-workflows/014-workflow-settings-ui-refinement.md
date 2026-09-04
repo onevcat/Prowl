@@ -2,7 +2,7 @@
 
 ## Status
 
-Implemented and verified 2026-09-05 on `fix/workflow-settings-ui` after #761 merged. This
+Implemented and verified 2026-09-05 on `fix/workflow-settings-ui` in #763 after #761 merged. This
 is an in-frame D1 follow-up: it revises the Settings information architecture and
 presentation before R2b ships; it does not change the workflow DSL or runner. The decisions
 below were reviewed against the existing macOS Settings patterns, Apple HIG list/detail
