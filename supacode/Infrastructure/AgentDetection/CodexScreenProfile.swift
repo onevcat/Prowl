@@ -160,7 +160,12 @@ enum CodexScreenProfile {
       let trimmed = line.trimmingCharacters(in: .whitespaces)
       guard trimmed.first == "•" || trimmed.first == "◦" else { return false }
       let body = trimmed.dropFirst()
-      guard body.hasPrefix(" Working (") else { return false }
+      let workingPrefixes = [
+        " Working (",
+        " Waiting for background terminal (",
+        " Waiting for background terminals (",
+      ]
+      guard workingPrefixes.contains(where: body.hasPrefix) else { return false }
       guard let hint = body.range(of: "esc to interrupt)") else { return false }
       let trailing = body[hint.upperBound...]
       return trailing.isEmpty || trailing.hasPrefix(" · ")

@@ -47,14 +47,16 @@ at a `~/.grok/` install (so Cursor's own `agent` entrypoint stays Cursor).
    push the live row out of view and a status row quoted inside a `⏺` block cannot
    read as live. Confirmation text is consulted only around a current numbered
    selection row such as `❯ 1. Yes`; a bare input prompt cuts off the preceding transcript.
-   Codex uses an exact bottom-of-screen `•`/`◦ Working (... esc to interrupt)` footer
-   fallback. Its confirmation detector requires a numbered selected row such as `› 1. Yes`
+   Codex uses exact bottom-of-screen `•`/`◦ Working (... esc to interrupt)` and
+   `•`/`◦ Waiting for background terminal (... esc to interrupt)` footer fallbacks.
+   Its confirmation detector requires a numbered selected row such as `› 1. Yes`
    paired with a live bottom footer or an explicit Yes/No choice structure. It also recognizes
    the current directory-trust, hook-review, and initial sign-in menus as **Blocked** from
    their complete selected-choice and footer structures. Ordinary prompt text and completed
    responses are not confirmation boundaries.
-   Pi also treats the adjacent `async subagent … · background` header and matching
-   braille job row as **Working**. The compact `subagents (N/M running)`, progressive
+   Pi also treats its bottom `── <braille spinner> Working ──` footer and the adjacent
+   `async subagent … · background` header with a matching braille job row as **Working**.
+   The compact `subagents (N/M running)`, progressive
    `Async agents · N agent(s) running`, and multi-job `Async agents · background`
    layouts carry the same signal; completed, paused, and failed cards use static
    glyphs and remain idle. Other agent families keep their own patterns (including
@@ -94,6 +96,10 @@ hold so brief pauses between thinking and output don't drop it out of
 bypasses the hold and surfaces immediately). Viewer overlays (Claude's
 transcript / history-search views) cover the live status area, so frames
 showing their chrome keep the last trusted state instead of forcing idle.
+When a previously Working pane's active-screen text is still changing, that motion
+refreshes the same hold even if the runtime-specific classifier temporarily reports
+Idle. Motion never promotes an already Idle pane, so typing in an idle composer does
+not create a false Working state.
 
 ## The state machine
 

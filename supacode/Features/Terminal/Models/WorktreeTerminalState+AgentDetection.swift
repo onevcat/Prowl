@@ -100,10 +100,10 @@ extension WorktreeTerminalState {
     // Reuse the previous scan while the screen and detected agent are unchanged.
     // A live-but-idle agent is polled every 300 ms and `detectState` re-splits,
     // lowercases, and scans the whole screen each time; skipping that for
-    // identical text is the bulk of steady-state detection cost. Time-based
-    // stabilization below still runs every tick, so working→idle decay is
-    // unaffected.
-    let detection = cachedScreenDetection(forSurfaceID: surfaceID, agent: agent, text: activeText)
+    // identical text is the bulk of steady-state detection cost. The same
+    // comparison feeds motion into stabilization, which still runs every tick
+    // so an unchanged screen can decay from working to idle.
+    let (detection, screenChanged) = cachedScreenDetection(forSurfaceID: surfaceID, agent: agent, text: activeText)
     let raw = detection.state
     guard surfaces[surfaceID] != nil else { return false }
 
@@ -112,6 +112,7 @@ extension WorktreeTerminalState {
       agent: agent,
       previous: previous.state,
       raw: raw,
+      screenChanged: screenChanged,
       now: now,
       lastWorkingAt: &lastWorkingAt
     )
@@ -200,20 +201,37 @@ extension WorktreeTerminalState {
     return (detection, AgentScreenScan(agent: agent, text: text, detection: detection))
   }
 
+  nonisolated static func activeScreenChanged(
+    agent: DetectedAgent,
+    text: String,
+    previousAgent: DetectedAgent?,
+    cache: AgentScreenScan?
+  ) -> Bool {
+    previousAgent == agent
+      && cache.map { $0.agent == agent && $0.text != text } == true
+  }
+
   /// Instance wrapper over `resolveScreenDetection` that reads and writes the
   /// per-surface memo, keeping `detectAgentState` concise at the call site.
   private func cachedScreenDetection(
     forSurfaceID surfaceID: UUID,
     agent: DetectedAgent,
     text: String
-  ) -> AgentScreenDetection {
+  ) -> (detection: AgentScreenDetection, screenChanged: Bool) {
+    let cachedScan = lastAgentScreenScanBySurface[surfaceID]
+    let screenChanged = Self.activeScreenChanged(
+      agent: agent,
+      text: text,
+      previousAgent: surfaceAgentStates[surfaceID]?.detectedAgent,
+      cache: cachedScan
+    )
     let (detection, scan) = Self.resolveScreenDetection(
       agent: agent,
       text: text,
-      cache: lastAgentScreenScanBySurface[surfaceID]
+      cache: cachedScan
     )
     lastAgentScreenScanBySurface[surfaceID] = scan
-    return detection
+    return (detection, screenChanged)
   }
 
   private static func resolvedSeen(

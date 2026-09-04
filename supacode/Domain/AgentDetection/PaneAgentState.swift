@@ -169,6 +169,7 @@ func stabilizeAgentState(
   agent: DetectedAgent?,
   previous: AgentRawState,
   raw: AgentRawState,
+  screenChanged: Bool = false,
   now: Date,
   lastWorkingAt: inout Date?
 ) -> AgentRawState {
@@ -191,6 +192,12 @@ func stabilizeAgentState(
       lastWorkingAt = now
     }
     return previous
+  case .idle where previous == .working && screenChanged:
+    // A live footer can change shape between runtime versions or disappear
+    // briefly between steps. Motion is enough to extend a trusted Working
+    // state, but never promotes an agent that was already Idle.
+    lastWorkingAt = now
+    return .working
   case .idle where previous == .working:
     guard let lastWorkingAt else {
       return .idle

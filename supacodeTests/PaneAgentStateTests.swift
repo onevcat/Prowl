@@ -58,6 +58,51 @@ struct PaneAgentStateTests {
     #expect(idle == .idle)
   }
 
+  @Test(arguments: DetectedAgent.allCases)
+  func changingIdleScreenRefreshesWorkingHold(agent: DetectedAgent) {
+    let now = Date(timeIntervalSince1970: 100)
+    let changedAt = now.addingTimeInterval(10)
+    var lastWorking: Date? = now
+
+    let held = stabilizeAgentState(
+      agent: agent,
+      previous: .working,
+      raw: .idle,
+      screenChanged: true,
+      now: changedAt,
+      lastWorkingAt: &lastWorking
+    )
+
+    #expect(held == .working)
+    #expect(lastWorking == changedAt)
+
+    let idle = stabilizeAgentState(
+      agent: agent,
+      previous: held,
+      raw: .idle,
+      now: changedAt.addingTimeInterval(3.001),
+      lastWorkingAt: &lastWorking
+    )
+    #expect(idle == .idle)
+  }
+
+  @Test func changingScreenDoesNotPromoteIdleAgent() {
+    let now = Date(timeIntervalSince1970: 100)
+    var lastWorking: Date?
+
+    let idle = stabilizeAgentState(
+      agent: .codex,
+      previous: .idle,
+      raw: .idle,
+      screenChanged: true,
+      now: now,
+      lastWorkingAt: &lastWorking
+    )
+
+    #expect(idle == .idle)
+    #expect(lastWorking == nil)
+  }
+
   @Test func blockedBypassesStickyWindow() {
     let now = Date(timeIntervalSince1970: 100)
     var lastWorking: Date? = now
@@ -66,6 +111,7 @@ struct PaneAgentStateTests {
       agent: .claude,
       previous: .working,
       raw: .blocked,
+      screenChanged: true,
       now: now.addingTimeInterval(0.3),
       lastWorkingAt: &lastWorking
     )

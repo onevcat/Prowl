@@ -68,6 +68,47 @@ struct AgentScreenScanCacheTests {
     #expect(scan.text == "new")
   }
 
+  @Test func screenMotionRequiresAPriorScanFromTheSameDetectedAgent() {
+    let cachedScan = WorktreeTerminalState.AgentScreenScan(
+      agent: .codex,
+      text: "old",
+      detection: AgentScreenDetection(state: .working, reason: .legacyDetector)
+    )
+
+    #expect(
+      WorktreeTerminalState.activeScreenChanged(
+        agent: .codex,
+        text: "new",
+        previousAgent: .codex,
+        cache: cachedScan
+      )
+    )
+    #expect(
+      !WorktreeTerminalState.activeScreenChanged(
+        agent: .codex,
+        text: "old",
+        previousAgent: .codex,
+        cache: cachedScan
+      )
+    )
+    #expect(
+      !WorktreeTerminalState.activeScreenChanged(
+        agent: .codex,
+        text: "new",
+        previousAgent: .claude,
+        cache: cachedScan
+      )
+    )
+    #expect(
+      !WorktreeTerminalState.activeScreenChanged(
+        agent: .codex,
+        text: "new",
+        previousAgent: .codex,
+        cache: nil
+      )
+    )
+  }
+
   @MainActor
   @Test func exitingAgentClearsCachedScreenDetection() {
     let state = WorktreeTerminalState(

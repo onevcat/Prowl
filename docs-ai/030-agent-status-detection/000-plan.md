@@ -146,3 +146,7 @@ the failed attempt to extend the first signal to plain commands is
   012 deferred; adding it exposed that every row rule read one physical line, which
   misses Claude's wrapped rows on narrow panes — see
   [013-background-agent-wait-and-wrapped-rows.md](013-background-agent-wait-and-wrapped-rows.md)
+- Updated 2026-09-04: captured Pi and Codex live footers gained explicit rules, and
+  changing active-screen text now refreshes the shared Working hold without promoting
+  an Idle composer — see
+  [015-screen-motion-working-hold.md](015-screen-motion-working-hold.md)
