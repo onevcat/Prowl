@@ -128,20 +128,49 @@ internal enum HerdrTabAgentAccent: Equatable, Sendable {
   }
 }
 
-internal enum HerdrTabAgentIcon: String, Equatable, Sendable {
-  case generic = "HerdrAgentIcon"
-  case codex = "HerdrAgentCodexIcon"
-  case claude = "HerdrAgentClaudeIcon"
-  case pi = "HerdrAgentPiIcon"
-  case cursor = "HerdrAgentCursorIcon"
-  case opencode = "HerdrAgentOpencodeIcon"
-  case omp = "HerdrAgentOmpIcon"
-  case grok = "HerdrAgentGrokIcon"
+internal enum HerdrTabAgentKind: CaseIterable, Equatable, Sendable {
+  case generic
+  case codex
+  case claude
+  case pi
+  case cursor
+  case opencode
+  case omp
+  case grok
+  case fx
+
+  internal var identifiers: Set<String> {
+    switch self {
+    case .generic: return ["amp", "copilot", "gemini", "kimi"]
+    case .codex: return ["codex", "openai"]
+    case .claude: return ["claude", "claude-code", "claude_code", "claude code", "anthropic"]
+    case .pi: return ["pi"]
+    case .cursor: return ["cursor", "acp-cursor"]
+    case .opencode: return ["opencode", "open-code", "acp-opencode"]
+    case .omp: return ["omp", "acp-omp", "oh-my-pi"]
+    case .grok: return ["grok", "grok-build", "acp-grok"]
+    case .fx: return ["fx"]
+    }
+  }
+
+  internal var iconAssetName: String {
+    switch self {
+    case .generic: return "HerdrAgentIcon"
+    case .codex: return "HerdrAgentCodexIcon"
+    case .claude: return "HerdrAgentClaudeIcon"
+    case .pi: return "HerdrAgentPiIcon"
+    case .cursor: return "HerdrAgentCursorIcon"
+    case .opencode: return "HerdrAgentOpencodeIcon"
+    case .omp: return "HerdrAgentOmpIcon"
+    case .grok: return "HerdrAgentGrokIcon"
+    case .fx: return "HerdrAgentFxIcon"
+    }
+  }
 
   internal var accent: HerdrTabAgentAccent {
     switch self {
     case .generic: return .systemSecondary
-    case .codex, .grok: return .systemPrimary
+    case .codex, .grok, .fx: return .systemPrimary
     case .claude: return .claude
     case .pi: return .pi
     case .cursor: return .cursor
@@ -153,18 +182,15 @@ internal enum HerdrTabAgentIcon: String, Equatable, Sendable {
   internal static func resolve(_ agent: HerdrAgent) -> Self {
     for rawIdentifier in [agent.agent, agent.displayAgent, agent.name].compactMap({ $0 }) {
       let identifier = rawIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-      switch identifier {
-      case "codex", "openai": return .codex
-      case "claude", "claude-code", "claude_code", "claude code", "anthropic": return .claude
-      case "pi": return .pi
-      case "cursor", "acp-cursor": return .cursor
-      case "opencode", "open-code", "acp-opencode": return .opencode
-      case "omp", "acp-omp", "oh-my-pi": return .omp
-      case "grok", "grok-build", "acp-grok": return .grok
-      default: continue
+      if let kind = allCases.first(where: { $0.identifiers.contains(identifier) }) {
+        return kind
       }
     }
     return .generic
+  }
+
+  internal static func recognizesProcessName(_ processName: String) -> Bool {
+    allCases.contains { $0.identifiers.contains(processName) }
   }
 }
 
@@ -175,12 +201,12 @@ internal struct HerdrTabBarItem: Equatable, Identifiable, Sendable {
   internal let customName: String?
   internal let isZoomed: Bool
   internal let isFocused: Bool
-  internal let agentIcon: HerdrTabAgentIcon?
+  internal let agentKind: HerdrTabAgentKind?
   internal let processTitle: HerdrProcessTitle?
   internal let linkedWorktree: HerdrLinkedWorktreeTitle?
 
   internal var isAgent: Bool {
-    agentIcon != nil
+    agentKind != nil
   }
 
   internal var processIcon: HerdrProcessIcon? {
@@ -195,7 +221,7 @@ internal struct HerdrTabBarItem: Equatable, Identifiable, Sendable {
     isFocused: Bool,
     customName: String? = nil,
     isAgent: Bool = false,
-    agentIcon: HerdrTabAgentIcon? = nil,
+    agentKind: HerdrTabAgentKind? = nil,
     processTitle: HerdrProcessTitle? = nil,
     linkedWorktree: HerdrLinkedWorktreeTitle? = nil
   ) {
@@ -205,7 +231,7 @@ internal struct HerdrTabBarItem: Equatable, Identifiable, Sendable {
     self.customName = customName
     self.isZoomed = isZoomed
     self.isFocused = isFocused
-    self.agentIcon = agentIcon ?? (isAgent ? .generic : nil)
+    self.agentKind = agentKind ?? (isAgent ? .generic : nil)
     self.processTitle = processTitle
     self.linkedWorktree = linkedWorktree
   }
@@ -252,7 +278,7 @@ internal enum HerdrTabBarProjection {
       let processName = processName(for: process),
       let directoryName = directoryName(for: process.cwd ?? fallbackDirectory)
     else { return nil }
-    guard !knownAgentProcessNames.contains(processName) else { return nil }
+    guard !HerdrTabAgentKind.recognizesProcessName(processName) else { return nil }
     if let linkedWorktree {
       return HerdrProcessTitle(
         processName: processName,
@@ -275,16 +301,16 @@ internal enum HerdrTabBarProjection {
         .filter { $0.workspaceID == workspaceID && $0.zoomed }
         .map(\.tabID)
     )
-    let agentIconsByTabID = snapshot.agents.reduce(into: [String: HerdrTabAgentIcon]()) {
-      icons, agent in
+    let agentKindsByTabID = snapshot.agents.reduce(into: [String: HerdrTabAgentKind]()) {
+      kinds, agent in
       guard let tabID = agent.tabID else { return }
-      let icon = HerdrTabAgentIcon.resolve(agent)
-      guard let existingIcon = icons[tabID] else {
-        icons[tabID] = icon
+      let kind = HerdrTabAgentKind.resolve(agent)
+      guard let existingKind = kinds[tabID] else {
+        kinds[tabID] = kind
         return
       }
-      if icon != .generic, existingIcon == .generic || agent.focused {
-        icons[tabID] = icon
+      if kind != .generic, existingKind == .generic || agent.focused {
+        kinds[tabID] = kind
       }
     }
     let panesByTabID = Dictionary(grouping: snapshot.panes, by: \.tabID)
@@ -337,7 +363,7 @@ internal enum HerdrTabBarProjection {
         isZoomed: zoomedTabIDs.contains(tab.id),
         isFocused: tab.id == snapshot.focusedTabID || tab.focused,
         customName: tab.customName,
-        agentIcon: agentIconsByTabID[tab.id],
+        agentKind: agentKindsByTabID[tab.id],
         processTitle: processTitlesByTabID[tab.id],
         linkedWorktree: linkedWorktreesByWorkspaceID[tab.workspaceID]
       )
@@ -348,11 +374,6 @@ internal enum HerdrTabBarProjection {
     "ash", "bash", "command", "dash", "env", "fish", "git", "ksh", "login", "nu",
     "pwsh", "sh", "sleep", "starship", "sudo", "tcsh", "zsh",
   ]
-  private static let knownAgentProcessNames: Set<String> = [
-    "amp", "claude", "claude-code", "codex", "copilot", "cursor", "gemini", "kimi", "omp",
-    "opencode", "pi",
-  ]
-
   private static func processName(for process: HerdrPaneProcess) -> String? {
     ProcessDetection.basename(process.argv0 ?? process.name)?.lowercased()
   }
@@ -568,10 +589,10 @@ internal struct HerdrTabBarView: View {
         store.send(.focusTabTapped(item.id))
       } label: {
         HStack(spacing: 3) {
-          if let agentIcon = item.agentIcon {
-            Image(agentIcon.rawValue)
+          if let agentKind = item.agentKind {
+            Image(agentKind.iconAssetName)
               .resizable()
-              .foregroundStyle(agentIcon.accent.color(for: colorScheme))
+              .foregroundStyle(agentKind.accent.color(for: colorScheme))
               .frame(width: 14, height: 14)
               .accessibilityHidden(true)
           } else if let processIcon = item.processIcon {

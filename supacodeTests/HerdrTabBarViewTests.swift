@@ -65,13 +65,13 @@ struct HerdrTabBarViewTests {
     let items = HerdrTabBarProjection.items(in: snapshot, workspaceID: "w1")
 
     #expect(items.first?.isAgent == true)
-    #expect(items.first?.agentIcon == .codex)
+    #expect(items.first?.agentKind == .codex)
     #expect(items.last?.isAgent == false)
   }
 
   @Test func mapsProviderIDsToCanonicalTabIcons() {
     let providerIDs = [
-      "codex", "claude-code", "pi", "acp-cursor", "acp-opencode", "acp-omp", "acp-grok",
+      "codex", "claude-code", "pi", "acp-cursor", "acp-opencode", "acp-omp", "acp-grok", "fx",
     ]
     let tabs = providerIDs.map { HerdrTab(tabID: "w1:\($0)", workspaceID: "w1", label: $0) }
     let agents = providerIDs.map {
@@ -90,10 +90,10 @@ struct HerdrTabBarViewTests {
       agents: agents
     )
 
-    let icons = HerdrTabBarProjection.items(in: snapshot, workspaceID: "w1").compactMap(\.agentIcon)
+    let kinds = HerdrTabBarProjection.items(in: snapshot, workspaceID: "w1").compactMap(\.agentKind)
 
-    #expect(icons == [.codex, .claude, .pi, .cursor, .opencode, .omp, .grok])
-    #expect(HerdrTabAgentIcon.resolve(HerdrAgent(agent: "acp-other")) == .generic)
+    #expect(kinds == [.codex, .claude, .pi, .cursor, .opencode, .omp, .grok, .fx])
+    #expect(HerdrTabAgentKind.resolve(HerdrAgent(agent: "acp-other")) == .generic)
   }
 
   @Test func prefersFocusedKnownProviderWhenATabHasMultipleAgents() {
@@ -115,7 +115,7 @@ struct HerdrTabBarViewTests {
 
     let item = HerdrTabBarProjection.items(in: snapshot, workspaceID: "w1").first
 
-    #expect(item?.agentIcon == .omp)
+    #expect(item?.agentKind == .omp)
   }
 
   @Test func projectsMeaningfulForegroundProcessWithDirectory() {
@@ -192,10 +192,10 @@ struct HerdrTabBarViewTests {
 
     #expect(item?.processTitle == HerdrProcessTitle(processName: "ssh", directoryName: "prod"))
     #expect(item?.processIcon == .ssh)
-    #expect(item?.agentIcon == nil)
+    #expect(item?.agentKind == nil)
   }
 
-  @Test func agentIconKeepsPrecedenceOverTheSshProcessIcon() {
+  @Test func agentKindKeepsPrecedenceOverTheSshProcessIcon() {
     let snapshot = HerdrSessionSnapshot(
       version: "0.8.2",
       protocolVersion: 21,
@@ -230,7 +230,7 @@ struct HerdrTabBarViewTests {
       focusedPaneID: "w1:p1"
     ).first
 
-    #expect(item?.agentIcon == .codex)
+    #expect(item?.agentKind == .codex)
     #expect(item?.processIcon == .ssh)
   }
 
@@ -598,27 +598,32 @@ struct HerdrTabBarViewTests {
     #expect(item?.displayLabel == "TikTok_foldable")
   }
 
-  @Test func suppressesKnownAgentProcessWhenProviderIconExists() {
-    let processInfo = HerdrPaneProcessInfo(
-      paneID: "w1:p1",
-      foregroundProcessGroupID: 20,
-      foregroundProcesses: [HerdrPaneProcess(pid: 20, name: "omp")]
-    )
+  @Test func suppressesEveryKnownAgentProcessName() {
+    let processNames = HerdrTabAgentKind.allCases.flatMap(\.identifiers)
 
-    #expect(
-      HerdrTabBarProjection.processTitle(in: processInfo, fallbackDirectory: "/tmp/bb") == nil
-    )
+    for processName in processNames {
+      let processInfo = HerdrPaneProcessInfo(
+        paneID: "w1:p1",
+        foregroundProcessGroupID: 20,
+        foregroundProcesses: [HerdrPaneProcess(pid: 20, name: processName)]
+      )
+
+      #expect(
+        HerdrTabBarProjection.processTitle(in: processInfo, fallbackDirectory: "/tmp/bb") == nil
+      )
+    }
   }
 
   @Test func usesCanonicalProviderAccentColors() {
-    #expect(HerdrTabAgentIcon.generic.accent == .systemSecondary)
-    #expect(HerdrTabAgentIcon.codex.accent == .systemPrimary)
-    #expect(HerdrTabAgentIcon.claude.accent == .claude)
-    #expect(HerdrTabAgentIcon.pi.accent == .pi)
-    #expect(HerdrTabAgentIcon.cursor.accent == .cursor)
-    #expect(HerdrTabAgentIcon.opencode.accent == .opencode)
-    #expect(HerdrTabAgentIcon.omp.accent == .omp)
-    #expect(HerdrTabAgentIcon.grok.accent == .systemPrimary)
+    #expect(HerdrTabAgentKind.generic.accent == .systemSecondary)
+    #expect(HerdrTabAgentKind.codex.accent == .systemPrimary)
+    #expect(HerdrTabAgentKind.claude.accent == .claude)
+    #expect(HerdrTabAgentKind.pi.accent == .pi)
+    #expect(HerdrTabAgentKind.cursor.accent == .cursor)
+    #expect(HerdrTabAgentKind.opencode.accent == .opencode)
+    #expect(HerdrTabAgentKind.omp.accent == .omp)
+    #expect(HerdrTabAgentKind.grok.accent == .systemPrimary)
+    #expect(HerdrTabAgentKind.fx.accent == .systemPrimary)
   }
 
   @Test func computesServerInsertIndexBeforeDropTarget() {

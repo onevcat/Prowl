@@ -149,8 +149,8 @@ internal enum HerdrAgentSortMode: String, Equatable, Sendable {
 }
 
 internal enum HerdrSidebarProjection {
-  internal static func icon(for agent: HerdrAgent) -> HerdrTabAgentIcon {
-    HerdrTabAgentIcon.resolve(agent)
+  internal static func agentKind(for agent: HerdrAgent) -> HerdrTabAgentKind {
+    HerdrTabAgentKind.resolve(agent)
   }
 
   internal static func contextLabel(
@@ -450,7 +450,7 @@ internal struct HerdrSidebarView: View {
       tabLabel: agent.tabID.flatMap { tabLabel(for: $0) }
     )
     let title = context.isEmpty ? agentName : context
-    let agentIcon = HerdrSidebarProjection.icon(for: agent)
+    let agentKind = HerdrSidebarProjection.agentKind(for: agent)
     let selected = agent.paneID.map { store.selectedPaneID == $0 } ?? false
     return Button {
       guard let paneID = agent.paneID else { return }
@@ -460,9 +460,9 @@ internal struct HerdrSidebarView: View {
         statusIcon(agent.agentStatus)
         VStack(alignment: .leading, spacing: 1) {
           HStack(spacing: 4) {
-            Image(agentIcon.rawValue)
+            Image(agentKind.iconAssetName)
               .resizable()
-              .foregroundStyle(agentIcon.accent.color(for: colorScheme))
+              .foregroundStyle(agentKind.accent.color(for: colorScheme))
               .frame(width: 14, height: 14)
               .accessibilityHidden(true)
             Text(title)

@@ -297,12 +297,12 @@ struct HerdrTerminalChromeTests {
         == ["blocked", "done", "unknown"])
   }
 
-  @Test func agentRowsReuseCanonicalProviderIconProjection() {
+  @Test func agentRowsReuseCanonicalAgentKindProjection() {
     #expect(
-      HerdrSidebarProjection.icon(for: HerdrAgent(agent: "acp-omp")) == .omp
+      HerdrSidebarProjection.agentKind(for: HerdrAgent(agent: "acp-omp")) == .omp
     )
     #expect(
-      HerdrSidebarProjection.icon(for: HerdrAgent(agent: "pi")) == .pi
+      HerdrSidebarProjection.agentKind(for: HerdrAgent(agent: "pi")) == .pi
     )
   }
 
