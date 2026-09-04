@@ -77,6 +77,11 @@ nonisolated struct UserGlobalSettings: Codable, Equatable, Sendable {
       workflowBindings.filter { $0.key != key } + [WorkflowRememberedBinding(key: key, profileID: profileID)])
   }
 
+  /// Drops a remembered binding so the next start resolves the role afresh (Settings "Ask at start").
+  mutating func forget(workflowBinding key: WorkflowBindingMemoryKey) {
+    workflowBindings = WorkflowRememberedBinding.normalized(workflowBindings.filter { $0.key != key })
+  }
+
   /// The user's bind-mode override for a `<scope>/<id>` workflow key; nil follows the YAML `bind`.
   func workflowBindMode(for workflowKey: String) -> WorkflowBindModeOverride.Mode? {
     workflowBindModeOverrides.first { $0.workflowKey == workflowKey }?.mode

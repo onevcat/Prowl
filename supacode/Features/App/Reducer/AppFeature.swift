@@ -422,8 +422,9 @@ struct AppFeature {
           state.settings.repositorySettings = repoSettingsState
           state.settings.globalCustomCommands = nil
           state.settings.agentProfiles = nil
-        case .general, .notifications, .shortcuts, .worktree, .updates, .advanced, .github, .commandLineTool:
-          // `settings.agentSkills` is owned by SettingsFeature.setSelection.
+        case .general, .notifications, .shortcuts, .worktree, .updates, .advanced, .github, .commandLineTool,
+          .workflows:
+          // `settings.agentSkills` and `settings.workflows` are owned by SettingsFeature.setSelection.
           state.settings.repositorySettings = nil
           state.settings.globalCustomCommands = nil
           state.settings.agentProfiles = nil
@@ -559,6 +560,19 @@ struct AppFeature {
           return .send(.repositories(.showToast(.success("prowl command line tool removed"))))
         case .failed(let message):
           return .send(.repositories(.showToast(.warning("CLI install failed: \(message)"))))
+        }
+
+      case .settings(.workflows(.delegate(.openProfiles))):
+        return openSettingsEffect(selecting: .profiles)
+
+      case .settings(.workflows(.delegate(.notice(let notice)))):
+        switch notice {
+        case .workflowCreated(let path):
+          return .send(.repositories(.showToast(.success("Workflow created at \(path)"))))
+        case .cliInstalled(let path):
+          return .send(.repositories(.showToast(.success("prowl installed at \(path)"))))
+        case .failed(let message):
+          return .send(.repositories(.showToast(.warning(message))))
         }
 
       case .settings(.agentSkills(.delegate(.linkChanged(let result)))):

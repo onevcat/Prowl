@@ -1355,7 +1355,10 @@ struct SupacodeApp: App {
       workflowCoordinatorBox: workflowCoordinatorBox,
       workflowReservations: workflowReservations
     )
-    let cliServer = CLISocketServer(router: cliRouter)
+    let cliServer = CLISocketServer(
+      router: cliRouter,
+      onStatusChanged: { CLIServiceStatusPublisher.shared.publish($0) }
+    )
     let logger = SupaLogger("CLIService")
     do {
       try cliServer.start()

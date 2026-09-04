@@ -111,10 +111,14 @@ memory for the Recommended resolution). See
 [`components/agent-profiles.md`](../components/agent-profiles.md).
 
 **Workflows** also persist in `global.onevcat.json`: `disabledWorkflowIDs`
-(`<scope>/<id>` keys of workflow definitions switched off; the Settings UI for
-toggling them ships later) and `workflowBindings` (remembered `launch`-role
-Profile bindings, one per requirements digest). Both are written by the
-workflow runtime rather than edited by hand.
+(`<scope>/<id>` keys of workflow definitions switched off — the checkbox on
+Settings → Agents → Workflows), `workflowBindModeOverrides` (`{workflow_key,
+mode}` entries, `mode` `ask` | `auto`; absent = follow the file's `bind` — the
+page's Bindings picker and the start sheet's "Don't ask again"), and
+`workflowBindings` (remembered `launch`-role Profile bindings, one per
+requirements digest — the page's per-role pickers, or a start that resolved
+the role). Prefer the page over editing them by hand. See
+[`components/workflows.md`](../components/workflows.md).
 
 ## Notes for agents
 

@@ -67,7 +67,8 @@ struct WorkflowStartFeatureTests {
     suggestion: WorkflowProfileSuggestion? = nil,
     bindModeOverride: WorkflowBindModeOverride.Mode? = nil,
     candidateUnavailableReason: String? = nil,
-    includeCandidates: Bool = true
+    includeCandidates: Bool = true,
+    cliServiceFailure: String? = nil
   ) throws -> WorkflowStartContext {
     let definition = try #require(WorkflowDocumentParser.parse(yaml).definition)
     let launchRoles = definition.roles.filter { $0.source == .launch }.map { role in
@@ -97,7 +98,8 @@ struct WorkflowStartFeatureTests {
       launchRoles: launchRoles,
       pickRoles: [],
       cliInstalled: true,
-      bindModeOverride: bindModeOverride)
+      bindModeOverride: bindModeOverride,
+      cliServiceFailure: cliServiceFailure)
   }
 
   @Test func initPrefillsFromTheResolverAnswers() throws {
@@ -118,6 +120,14 @@ struct WorkflowStartFeatureTests {
     state.inputValues["goal"] = "ship C2"
     #expect(state.canRun)
     state.launchSelections = [:]
+    #expect(!state.canRun)
+  }
+
+  @Test func unreachableSocketBlocksRun() throws {
+    let context = try makeContext(
+      resolvedProfileID: Self.profileID, cliServiceFailure: "Another Prowl instance owns the socket.")
+    var state = WorkflowStartFeature.State(context: context)
+    state.inputValues["goal"] = "x"
     #expect(!state.canRun)
   }
 
@@ -142,6 +152,22 @@ struct WorkflowStartFeatureTests {
       $0.skippedSteps = ["note"]
     }
     #expect(store.state.canRun)
+  }
+
+  @Test func aFailedInlineInstallShowsTheInstallerMessage() async throws {
+    let context = try makeContext(resolvedProfileID: Self.profileID)
+    let store = TestStore(initialState: WorkflowStartFeature.State(context: context)) {
+      WorkflowStartFeature()
+    } withDependencies: {
+      $0[CLIInstallClient.self].install = { _ in
+        throw CLIInstallError(message: "A file already exists at /usr/local/bin/prowl.")
+      }
+    }
+
+    await store.send(.installCLITapped)
+    await store.receive(\.cliInstallCompleted.failure) {
+      $0.submissionError = "A file already exists at /usr/local/bin/prowl."
+    }
   }
 
   @Test func endsRunSkipsAreNeverArmed() async throws {

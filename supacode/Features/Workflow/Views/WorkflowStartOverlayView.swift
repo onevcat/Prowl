@@ -42,7 +42,9 @@ private struct WorkflowStartCard: View {
       Divider()
       ScrollView {
         VStack(alignment: .leading, spacing: 14) {
-          if !store.cliInstalled {
+          if let failure = store.context.cliServiceFailure {
+            socketBanner(failure)
+          } else if !store.cliInstalled {
             cliBanner
           }
           if let source = store.context.source {
@@ -104,17 +106,37 @@ private struct WorkflowStartCard: View {
   }
 
   private var cliBanner: some View {
-    HStack(spacing: 8) {
-      Label(
-        "Workflows need the prowl command line tool.",
-        systemImage: "exclamationmark.triangle.fill"
-      )
-      .foregroundStyle(.orange)
-      Spacer()
-      Button("Install") {
-        store.send(.installCLITapped)
+    VStack(alignment: .leading, spacing: 4) {
+      HStack(spacing: 8) {
+        Label(
+          "Workflows need the prowl command line tool.",
+          systemImage: "exclamationmark.triangle.fill"
+        )
+        .foregroundStyle(.orange)
+        Spacer()
+        if let title = store.context.cliInstallActionTitle {
+          Button(title) {
+            store.send(.installCLITapped)
+          }
+          .help("\(title) the prowl command line tool at /usr/local/bin/prowl.")
+        }
       }
-      .help("Install the prowl command line tool to /usr/local/bin.")
+      Text(store.context.cliInstallBlockerCopy)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+    .font(.callout)
+  }
+
+  /// Prowl is not listening for `prowl`, so participants could not deliver; the reason names
+  /// the fix (nothing to install here).
+  private func socketBanner(_ failure: String) -> some View {
+    VStack(alignment: .leading, spacing: 4) {
+      Label("Prowl is not listening for the prowl command.", systemImage: "exclamationmark.triangle.fill")
+        .foregroundStyle(.orange)
+      Text(failure)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
     }
     .font(.callout)
   }

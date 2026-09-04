@@ -62,7 +62,9 @@ prowl workflow cancel <run-id> [--json]
   timeline; field guide, layout, and error tables in `references/runbook.md`). Finishing never
   closes launched panes; only a `close:` step does.
 - The GUI starts (Command Palette, Agents capsule popover, Active Agents context menu) go
-  through the same admission — behavior is identical to the CLI.
+  through the same admission — behavior is identical to the CLI. Settings › Agents › Workflows
+  lists every file with the same validation diagnostics, the enable toggle (a disabled workflow
+  is `WORKFLOW_DISABLED` for `run`), and the remembered profile per launch role.
 
 ## Participating in a run
 

@@ -32,7 +32,7 @@ final class WorkflowCommandHandler: CommandHandler {
     self.runtime = runtime
   }
 
-  static func disabledKey(scope: WorkflowScope, id: String) -> String {
+  nonisolated static func disabledKey(scope: WorkflowScope, id: String) -> String {
     "\(scope.rawValue)/\(id)"
   }
 

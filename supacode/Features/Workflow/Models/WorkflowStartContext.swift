@@ -88,6 +88,22 @@ nonisolated struct WorkflowStartContext: Equatable, Sendable {
   /// The user's per-workflow tri-state override, already folded into each role's
   /// `effectiveBind`; carried so the sheet can show the "Don't ask again" toggle state.
   let bindModeOverride: WorkflowBindModeOverride.Mode?
+  /// Why `prowl` cannot reach this app (docs-ai 063 D1 preflight): nil only while Prowl listens;
+  /// a stopped server carries a reason too. Participants deliver through the CLI, so a run
+  /// cannot start until this clears.
+  var cliServiceFailure: String?
+  /// What occupies the install path when `cliInstalled` is false, for the banner's action
+  /// (Install / Repair / Reinstall); nil reads as a plain Install.
+  var cliInstallStatus: CLIInstallStatus?
+
+  /// nil = nothing the sheet can do (a real file or directory occupies the slot).
+  var cliInstallActionTitle: String? {
+    (cliInstallStatus ?? .notInstalled).installActionTitle
+  }
+
+  var cliInstallBlockerCopy: String {
+    (cliInstallStatus ?? .notInstalled).workflowBlockerCopy
+  }
 
   /// Steps offering a "Skip" choice at start: every step with an `expect` (§9 `--skip`).
   var skipOptions: [(stepID: String, title: String?)] {
@@ -101,7 +117,7 @@ nonisolated struct WorkflowStartContext: Equatable, Sendable {
   /// no `pick` role (those are always an explicit choice), every input has a default, and the
   /// preselected source satisfies the delivery requirement with nothing skipped.
   var canStartImmediately: Bool {
-    guard item.isRunnable, cliInstalled, pickRoles.isEmpty else { return false }
+    guard item.isRunnable, cliInstalled, cliServiceFailure == nil, pickRoles.isEmpty else { return false }
     guard launchRoles.allSatisfy({ $0.effectiveBind == .auto && $0.resolvedProfileID != nil })
     else { return false }
     guard definition.inputs.allSatisfy({ $0.defaultValue != nil }) else { return false }

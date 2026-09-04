@@ -3,9 +3,9 @@
 > The Settings window (`⌘,`): what each tab controls. For the exhaustive
 > field-by-field list, see [`reference/settings-fields.md`](../reference/settings-fields.md).
 
-**Keywords:** settings, preferences, ⌘comma, general, notifications, shortcuts, worktree, updates, advanced, github, agents, agent profiles, cli & skills, command line tool, cli, agent skills, skills install, repo settings, appearance
+**Keywords:** settings, preferences, ⌘comma, general, notifications, shortcuts, worktree, updates, advanced, github, agents, agent profiles, workflows, workflow settings, enable workflow, bindings, cli & skills, command line tool, cli, socket status, agent skills, skills install, repo settings, appearance
 
-**Related:** [reference/settings-fields](../reference/settings-fields.md) · [custom-actions](custom-actions.md) · [updates](updates.md) · [notifications](notifications.md)
+**Related:** [reference/settings-fields](../reference/settings-fields.md) · [custom-actions](custom-actions.md) · [updates](updates.md) · [notifications](notifications.md) · [workflows](workflows.md)
 
 ## Opening
 
@@ -34,13 +34,15 @@ and opens that section's root.
 | **Commands** | Global Custom Commands. Enabled commands appear in the window toolbar; each repo can independently hide a Global command. → [custom-actions](custom-actions.md) |
 | **Advanced** | Analytics, crash reports, restore terminal layout on launch (experimental) + clear saved layout. |
 | **Agents → Profiles** | Named launch presets for supported agent runtimes (model, effort, execution mode, tab/split placement, extra arguments, opt-in dedicated home for a separate account) with a live launch preview. List order is the recommendation fallback. → [agent-profiles](agent-profiles.md) |
-| **Agents → CLI & Skills** | Install/status for the bundled `prowl` CLI, the local socket path it uses to reach the app, and the **Agent Skills** section that links the bundled skills into your agents' skill folders. → [cli](cli.md) |
+| **Agents → Workflows** | Every workflow definition Prowl can see (built-in, `~/.prowl/workflows`, each repository's `.prowl/workflows`) with validation diagnostics, an enable checkbox, the per-workflow bind mode, and the remembered profile per launch role; **New Workflow…**, **Ask an Agent…**, and the CLI dependency banner. → [workflows](workflows.md) |
+| **Agents → CLI & Skills** | Install/status for the bundled `prowl` CLI, the local socket path it uses to reach the app and whether this app is **listening** on it, and the **Agent Skills** section that links the bundled skills into your agents' skill folders. → [cli](cli.md) |
 | **Repositories / Repo Settings** | Per-repository: setup/archive/run scripts, **Custom Commands**, Global-command visibility, **Default Agent Profile**, default base ref & directory, copy-files overrides, open-with app, custom title, icon & color, PR merge strategy, line-diff & PR-state fetching. Reached from the sidebar context menu → "Repo Settings". → [custom-actions](custom-actions.md), [repositories-and-worktrees](repositories-and-worktrees.md) |
 
 ## Where settings live on disk
 
 - **Global:** `~/.prowl/settings.json`
-- **Global custom commands + agent profiles:** `~/.prowl/global.onevcat.json`
+- **Global custom commands + agent profiles + workflow settings:** `~/.prowl/global.onevcat.json`
+- **Your workflow files:** `~/.prowl/workflows/*.yaml` (per repository: `<repo root>/.prowl/workflows/`)
 - **Per-repo:** `~/.prowl/repo/<repo-name>/prowl.json`
 - **Per-repo custom commands + agent profile default/memory:** `~/.prowl/repo/<repo-name>/prowl.onevcat.json`
 - **Dedicated agent profile homes:** `~/.prowl/agent-profiles/<uuid>/`
@@ -52,6 +54,22 @@ Legacy `~/.supacode` is migrated to `~/.prowl` on first launch.
 **Agents → CLI & Skills → Install** symlinks `prowl` into `/usr/local/bin`
 (prompting for admin rights if needed). Also available via Command Palette →
 "Install Command Line Tool". See [cli](cli.md).
+
+The page's **Connection** section shows the socket path and a **Status** row:
+**Listening** (this app accepts `prowl` connections), **Not listening** with the
+reason (another Prowl instance already owns the socket — quit it or give this
+instance its own `PROWL_CLI_SOCKET`; a permission or path-length problem), or
+**Not running**. The same reason blocks Run in the workflow start sheet and tops
+the Workflows page, since workflow participants deliver through `prowl`.
+
+## Workflows
+
+**Agents → Workflows** is the GUI over `prowl workflow list` plus the settings
+the workflow runtime stores: enable/disable per file, the bind-mode override
+(Follow file / Always ask / Automatic), and the remembered profile per `launch`
+role. It also creates a starter file (**New Workflow…**) and hands out an agent
+prompt for authoring (**Ask an Agent…**). Rows follow the folders live. Details
+and every control: [workflows](workflows.md#settings--agents--workflows).
 
 ## Agent Skills
 

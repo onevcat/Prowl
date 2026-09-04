@@ -15,7 +15,13 @@ struct AskAgentHelpView: View {
     locale: Locale = AskAgentHelpPrompt.systemPreferredLocale(),
     onDone: @escaping () -> Void
   ) {
-    self.strings = AskAgentHelpPrompt.strings(docsDirectoryPath: docsDirectoryPath, locale: locale)
+    self.init(
+      strings: AskAgentHelpPrompt.strings(docsDirectoryPath: docsDirectoryPath, locale: locale), onDone: onDone)
+  }
+
+  /// The same sheet over any prompt (Settings › Workflows › "Ask an Agent…").
+  init(strings: AskAgentHelpStrings, onDone: @escaping () -> Void) {
+    self.strings = strings
     self.onDone = onDone
   }
 

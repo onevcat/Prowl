@@ -210,8 +210,11 @@ extension SupacodeApp {
       return WorkflowStartPickRole(name: role.name, candidates: agentCandidates)
     }
 
-    let cliStatus = CLIInstallClient.liveValue.installationStatus(cliDefaultInstallPath)
-    let cliInstalled = cliStatus != .notInstalled
+    // Installed here means a shell can run it: participants could not deliver through a
+    // dangling link or a non-executable file in the slot.
+    @Dependency(CLIInstallClient.self) var cliInstallClient
+    @Dependency(CLIServiceStatusClient.self) var cliServiceStatus
+    let cliInstalled = cliInstallClient.isUsable(cliDefaultInstallPath)
 
     return WorkflowStartContext(
       item: item,
@@ -222,7 +225,9 @@ extension SupacodeApp {
       launchRoles: launchRoles,
       pickRoles: pickRoles,
       cliInstalled: cliInstalled,
-      bindModeOverride: bindOverride)
+      bindModeOverride: bindOverride,
+      cliServiceFailure: cliServiceStatus.current().unreachableDescription,
+      cliInstallStatus: cliInstalled ? nil : cliInstallClient.installationStatus(cliDefaultInstallPath))
   }
 
   /// dsl-spec §3 binding resolution, presented: the resolver's pre-selection per launch role,
@@ -267,7 +272,7 @@ extension SupacodeApp {
           agentToken: profile.runtime.agent.rawValue,
           unavailableReason: WorkflowBindingResolver.rejection(
             of: profile, requirements: requirements, context: resolverContext
-          ).map { rejectionText($0, requirements: requirements) })
+          )?.userFacingText(requirements: requirements))
       }
       // "Create profile from suggestion…" is for when nothing matches (011 decision 4):
       // once an enabled, admissible profile already matches the suggestion exactly,
@@ -294,21 +299,5 @@ extension SupacodeApp {
   private static func focusedSurfaceID(of worktree: TargetResolutionSnapshot.Worktree) -> UUID? {
     let selectedTab = worktree.tabs.first { $0.selected } ?? worktree.tabs.first
     return selectedTab?.focusedPaneID
-  }
-
-  private static func rejectionText(
-    _ rejection: WorkflowBindingRejection, requirements: WorkflowLaunchRequirements
-  ) -> String {
-    switch rejection {
-    case .missing:
-      return "The profile no longer exists."
-    case .disabled:
-      return "Disabled in Settings."
-    case .agentNotAllowed:
-      let allowed = (requirements.agents ?? []).joined(separator: ", ")
-      return "This role needs \(allowed.isEmpty ? "another agent" : allowed)."
-    case .promptUnsupported:
-      return "This profile's runtime cannot take a launch prompt."
-    }
   }
 }

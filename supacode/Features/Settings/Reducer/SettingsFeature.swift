@@ -57,6 +57,9 @@ struct SettingsFeature {
     var detectRepositoryIconsAutomatically: Bool
     var cliInstallStatus: CLIInstallStatus = .notInstalled
     var cliInstallShowAlert: Bool = true
+    /// Whether this app instance is listening for `prowl` (docs-ai 063 D1); refreshed with the
+    /// install status when the CLI & Skills page appears.
+    var cliServiceStatus: CLIServiceStatus = .stopped
     /// Whether macOS will render the Dock notification badge (notification
     /// permission + the per-app "Badge app icon" switch). Refreshed when the
     /// Notifications settings pane appears.
@@ -66,6 +69,7 @@ struct SettingsFeature {
     var globalCustomCommands: GlobalCustomCommandsFeature.State?
     var agentProfiles: AgentProfilesFeature.State?
     var agentSkills: AgentSkillsFeature.State?
+    var workflows: WorkflowsSettingsFeature.State?
     @Presents var alert: AlertState<Alert>?
 
     init(settings: GlobalSettings = .default) {
@@ -187,6 +191,7 @@ struct SettingsFeature {
     case uninstallCLIButtonTapped
     case cliInstallCompleted(Result<String, CLIInstallError>)
     case refreshCLIInstallStatus
+    case refreshCLIServiceStatus
     case refreshDockBadgeAuthorization
     case dockBadgeAuthorizationResponse(SystemNotificationClient.DockBadgeAuthorization)
     case showNotificationPermissionAlert(errorMessage: String?)
@@ -194,6 +199,7 @@ struct SettingsFeature {
     case globalCustomCommands(GlobalCustomCommandsFeature.Action)
     case agentProfiles(AgentProfilesFeature.Action)
     case agentSkills(AgentSkillsFeature.Action)
+    case workflows(WorkflowsSettingsFeature.Action)
     case alert(PresentationAction<Alert>)
     case delegate(Delegate)
     case binding(BindingAction<State>)
@@ -223,6 +229,7 @@ struct SettingsFeature {
   @Dependency(NotificationSoundClient.self) private var notificationSoundClient
   @Dependency(TerminalLayoutPersistenceClient.self) private var terminalLayoutPersistence
   @Dependency(CLIInstallClient.self) private var cliInstallClient
+  @Dependency(CLIServiceStatusClient.self) private var cliServiceStatusClient
 
   var body: some Reducer<State, Action> {
     BindingReducer()
@@ -433,6 +440,10 @@ struct SettingsFeature {
         state.cliInstallStatus = cliInstallClient.installationStatus(cliDefaultInstallPath)
         return .none
 
+      case .refreshCLIServiceStatus:
+        state.cliServiceStatus = cliServiceStatusClient.current()
+        return .none
+
       case .refreshDockBadgeAuthorization:
         return .run { send in
           await send(.dockBadgeAuthorizationResponse(systemNotificationClient.dockBadgeAuthorization()))
@@ -463,13 +474,21 @@ struct SettingsFeature {
         let resolvedSelection = selection ?? .general
         state.selection = resolvedSelection
         // Owned here rather than in AppFeature so `ifLet` observes the removal and cancels an
-        // in-flight link effect instead of letting its completion land on nil child state.
+        // in-flight link effect (or the Workflows page's directory watcher) instead of letting
+        // its completion land on nil child state.
         if resolvedSelection == .commandLineTool {
           if state.agentSkills == nil {
             state.agentSkills = .init()
           }
         } else {
           state.agentSkills = nil
+        }
+        if resolvedSelection == .workflows {
+          if state.workflows == nil {
+            state.workflows = .init()
+          }
+        } else {
+          state.workflows = nil
         }
         return .none
 
@@ -493,6 +512,9 @@ struct SettingsFeature {
       case .agentSkills:
         return .none
 
+      case .workflows:
+        return .none
+
       case .delegate:
         return .none
       }
@@ -508,6 +530,9 @@ struct SettingsFeature {
     }
     .ifLet(\.agentSkills, action: \.agentSkills) {
       AgentSkillsFeature()
+    }
+    .ifLet(\.workflows, action: \.workflows) {
+      WorkflowsSettingsFeature()
     }
     // Without this, alert state is only cleared by the view's dismiss
     // writeback: state set while the Settings window is closed (or closed

@@ -27,6 +27,34 @@ struct CLISocketServerTests {
     #expect(canConnect(to: socketPath))
   }
 
+  @Test func statusFollowsStartAndStop() throws {
+    let socketPath = temporarySocketPath(suffix: "status")
+    var published: [CLIServiceStatus] = []
+    let server = CLISocketServer(
+      router: CLICommandRouter(), socketPath: socketPath, onStatusChanged: { published.append($0) })
+    #expect(server.status == .stopped)
+
+    try server.start()
+    #expect(server.status == .listening(path: socketPath))
+
+    server.stop()
+    #expect(server.status == .stopped)
+    #expect(published == [.listening(path: socketPath), .stopped])
+  }
+
+  @Test func statusReportsAnAlreadyOwnedSocket() throws {
+    let socketPath = temporarySocketPath(suffix: "status-owned")
+    let first = CLISocketServer(router: CLICommandRouter(), socketPath: socketPath)
+    try first.start()
+    defer { first.stop() }
+
+    let second = CLISocketServer(router: CLICommandRouter(), socketPath: socketPath)
+    #expect(throws: CLIServiceError.socketAlreadyOwned) {
+      try second.start()
+    }
+    #expect(second.status == .failed(.socketAlreadyOwned, path: socketPath))
+  }
+
   @Test func ownerCanReplaceStaleSocketPath() throws {
     let socketPath = temporarySocketPath(suffix: "stale-owner")
     try createStaleSocket(at: socketPath)
