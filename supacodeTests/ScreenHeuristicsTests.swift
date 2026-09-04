@@ -698,17 +698,23 @@ struct ScreenHeuristicsTests {
   }
 
   @Test func codexDetectsBackgroundTerminalWaitFooter() {
-    let footer =
+    let footers = [
       "• Waiting for background terminal (2m 34s • esc to interrupt)"
-      + " · 1 background terminal running · /ps to view · /stop to close"
-    #expect(
-      codexProfileState(
+        + " · 1 background terminal running · /ps to view · /stop to close",
+      "• Waiting for background terminals (2m 34s • esc to interrupt)"
+        + " · 2 background terminals running · /ps to view · /stop to close",
+    ]
+
+    for footer in footers {
+      let detection = DetectedAgent.codex.detectScreen(
         in: """
           \(footer)
             └ xcodebuild test
           """
-      ) == .working
-    )
+      )
+      #expect(detection.state == .working)
+      #expect(detection.reason == .matched(CodexScreenProfile.RuleID.backgroundTerminalFooter))
+    }
   }
 
   @Test func codexCurrentPreSessionBlockersAreBlocked() {

@@ -18,6 +18,13 @@ struct AgentScreenFixtureCorpusTests {
     }
   }
 
+  @Test func corpusContainsCapturedLiveFooterRegressions() throws {
+    let paths = Set(try AgentScreenFixtureCorpus.load().map(\.relativePath))
+
+    #expect(paths.contains("pi/0.85.0/working/framed-footer.txt"))
+    #expect(paths.contains("codex/0.153.2/working/background-terminal-footer.txt"))
+  }
+
   @Test func corpusRejectsUnexpectedRegularFiles() throws {
     let temporaryRoot = FileManager.default.temporaryDirectory
       .appending(path: UUID().uuidString, directoryHint: .isDirectory)

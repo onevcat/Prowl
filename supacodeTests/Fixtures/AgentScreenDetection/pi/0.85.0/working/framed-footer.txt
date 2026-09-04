@@ -1,0 +1,35 @@
+ <CAPTURE_PROBE>
+ <CAPTURE_PROBE_CONTINUED>
+
+ ────────────────────────────────────────────────────────────────────────────────
+
+ Prowl dispatch completion protocol v1:
+ Before ending this task, choose exactly one terminal outcome and make this command your final
+ tool action:
+ prowl agents dispatch-complete --outcome succeeded|failed --summary "<concise result>"
+ Use succeeded only when the assigned work is complete and verified. Use failed when it cannot be
+ completed.
+ Keep the required summary to a single line with no control characters, and explain the result
+ clearly.
+ Do not omit the command; Prowl supplies its dispatch context
+ automatically.
+
+
+ Planning terminal wait command
+
+ <MODEL_RESPONSE>
+
+
+ $ printf 'UI-capture probe started: '; date '+%Y-%m-%dT%H:%M:%S%z'; sleep 95; printf 'UI-capture
+ probe finished: '; date '+%Y-%m-%dT%H:%M:%S%z' (timeout 110s)
+
+ UI-capture probe started: <CAPTURE_TIME>
+
+ Elapsed <TIME>
+
+
+── ⠙ Working ──────────────────────────────────────────────────────────────────────────────────────
+
+───────────────────────────────────────────────────────────────────────────────────────────────────
+<WORKSPACE>                           (<BRANCH>        )
+↑XXk ↓XXX $X.XX2 (sub) X.X%/XXXk (auto)                        <PROVIDER>     <MODEL>       • xhigh

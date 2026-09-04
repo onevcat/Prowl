@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-09-04T15:51:31Z",
+  "cli_version": "0.85.0",
+  "capture_source": "prowl-read-detection",
+  "terminal": {
+    "columns": 99,
+    "rows": 35
+  },
+  "redactions": [
+    "probe prompt and response replaced with placeholders",
+    "working directory and branch replaced with placeholders",
+    "capture time, model, provider, and live counters replaced with placeholders"
+  ],
+  "issue": null
+}

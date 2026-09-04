@@ -20,8 +20,8 @@ Known current misdetection:
 <runtime>/<cli-version>/known-misdetection/<expected-state>/<current-state>/<issue>-<scenario>.metadata.json
 ```
 
-The harness accepts every `DetectedAgent`; the initial corpus contains only `claude` and
-`codex`. States are `working`, `blocked`, `idle`, or `unknown`; `done` is display state
+The harness accepts every `DetectedAgent`; the corpus currently contains `claude`, `codex`,
+and `pi`. States are `working`, `blocked`, `idle`, or `unknown`; `done` is display state
 derived from `idle + unseen` and is never a fixture state.
 
 ## Capture and promotion

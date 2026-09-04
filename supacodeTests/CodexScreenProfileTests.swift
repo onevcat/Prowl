@@ -25,6 +25,9 @@ struct CodexScreenProfileTests {
       "codex/0.146.1/working/foreground-footer.txt": .matched(
         CodexScreenProfile.RuleID.workingFooter
       ),
+      "codex/0.153.2/working/background-terminal-footer.txt": .matched(
+        CodexScreenProfile.RuleID.backgroundTerminalFooter
+      ),
     ]
     let fixtures = try AgentScreenFixtureCorpus.load().filter { $0.agent == .codex }
 

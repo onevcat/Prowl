@@ -18,8 +18,15 @@ edited its composer.
 ## Change
 
 - Treat Pi's framed Working row as explicit live evidence only in its bottom UI region.
-- Treat Codex's background-terminal wait row as explicit live evidence only in its
-  existing bottom working-footer region.
+- Treat Codex's background-terminal wait row as explicit live evidence in a four-line
+  bottom region. A real wait includes a `└ command` detail row before the composer and
+  status line, so the former three-line region excluded the footer.
+- Give the Codex wait shape its own `codex.backgroundTerminalFooter` reason instead of
+  sharing `codex.workingFooter`. The singular 0.153.2 shape has a capture-derived fixture;
+  the plural prefix remains an inline compatibility case because that CLI does not render
+  it in the captured state.
+- Add capture-derived Pi 0.85.0 and Codex 0.153.2 fixtures, with the original raw captures
+  retained only under ignored `.local/agent-screen-captures/`.
 - Do not infer agent activity from generic screen motion.
 - Remove the shared time-based Working hold. Explicit Working, Blocked, and Idle screen
   observations now apply on the next active scan. The existing `.unknown` viewer-overlay
@@ -39,5 +46,6 @@ edited its composer.
 - `PaneAgentStateTests` asserts that raw Idle ends Working immediately for every detected
   agent. The related state, screen-profile, and scan-cache suites pass: 68 tests, zero
   failures and warnings.
+- Capture/profile/rule-coverage tests pass: 64 tests, zero failures and warnings.
 - `make check` passes, including 82 script tests.
 - `make build-app` passes with zero errors and warnings.

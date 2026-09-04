@@ -1,0 +1,32 @@
+  │ me="$(printf '%s\n' "$list_json" | jq -c --arg pane "${PROWL_PANE_ID:-}" '.data.items[] | select(.pane.id == $pane)')"
+  │ … +13 lines
+  └ {"watcher_pane":"<PANE_ID>                           ","watcher_tab":"<TAB_ID>                            "}
+
+• Ran capture_path='.local/agent-screen-captures/codex-background-terminal-self-2026-09-05.json'
+  │ if test -f "$capture_path"; then
+  │   jq '{source:.data.source,line_count:.data.line_count,truncated:.data.truncated,text:.data.text}' "$capture_path"
+  │ … +5 lines
+  └ {
+      "source": "detection",
+    … +25 lines (ctrl + t to view transcript)
+    anything\n \n  <MODEL>     xhigh · Context XX% used · weekly XX% left · XXXK used · <WORKSPACE>                           · <BRANCH>         · XXXK window"
+    }
+
+• Waited for background terminal · sleep 25
+
+• Ran sleep 25
+  └ (no output)
+
+• Ran capture_path='<WORKSPACE>                                       /.local/agent-screen-captures/codex-background-terminal-self-2026-09-05.json'
+  │ if test -f "$capture_path"; then rm "$capture_path"; fi
+  │ watch_command="for attempt in {1..600}; do capture=\"\$(prowl read --pane $PROWL_PANE_ID --source detection --json 2>/dev/null)\" || { sleep 0.1; continue; }; footer=\"\
+  │ … +5 lines
+  └ refined watcher armed
+
+• Waiting for background terminal (<TIME>  • esc to interrupt) · 1 background terminal running · /ps to view · /stop to close
+  └ sleep 25
+
+
+› Ask Codex to do anything
+
+  <MODEL>     xhigh · Context XX% used · weekly XX% left · XXXK used · <WORKSPACE>                           · <BRANCH>         · XXXK window

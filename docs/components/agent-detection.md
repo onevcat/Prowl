@@ -82,7 +82,8 @@ because it can differ from the visible viewport when a pane is scrolled; the def
 
 `prowl agents --json` may also include `detection_reason`, a stable classifier rule or
 fallback identifier for the latest screen scan. Codex reports runtime-owned IDs for trust,
-hook, sign-in, confirmation, and working-footer matches. Claude does the same for viewer,
+hook, sign-in, confirmation, foreground-working, and background-terminal matches. Claude
+does the same for viewer,
 blocker, spinner, elapsed-status, background-work, and current-composer regions; current
 history-search chrome such as `⌕ Filter history…` reports `claude.viewer` and preserves
 the last trusted state. An ordinary migrated-profile miss reports

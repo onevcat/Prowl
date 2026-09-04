@@ -3,6 +3,10 @@
 > Amended by [014-claude-full-screen-live-block.md](014-claude-full-screen-live-block.md):
 > the canonical-tail reduction below now applies to non-Claude fixtures only. Claude
 > fixtures are committed as full active screens, bounded by the captured terminal rows.
+>
+> Extended by [015-deterministic-live-footer-coverage.md](015-deterministic-live-footer-coverage.md)
+> with capture-derived Pi 0.85.0 and Codex 0.153.2 Working fixtures. Counts and benchmark
+> numbers below remain the original Phase 2 baseline.
 
 | | |
 | --- | --- |
