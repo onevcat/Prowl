@@ -84,6 +84,7 @@ Prowl 的输入法 adapter 只读取 focused pane，并订阅已确认的 focus/
 - agents header 的 `grouped`/`priority` 控件对应 Herdr 自带的 workspace 顺序和 attention 优先级排序。
 - 点击 workspace、tab 或 pane row 会调用对应的 `workspace.focus`、`tab.focus` 或 `pane.focus`，选中状态以服务器
   focus event 为准；点击时先立即显示目标 selection，event 超时或目标不存在时才回退到完整 snapshot。
+- pane 退出事件会立即从 native chrome 的本地投影中移除对应 pane；若该 pane 是 tab/workspace 的最后一个 pane，也会同步移除空 tab/workspace。随后到达的旧 snapshot 不会恢复已关闭的 tab。
 - Herdr protocol 21 的 workspace、worktree、tab、pane 创建、关闭、移动、重命名、聚焦、metadata 和 layout 更新都会触发一次完整 snapshot 刷新；rename/focus burst 使用 100ms debounce，结构变更沿用 immediate refresh。
 - socket 尚未 ready、断开或 Herdr 退出时，sidebar 隐藏并把 terminal 恢复为全宽；不会影响 Ghostty 输入、渲染或输入法同步。
 - Sidebar 不接管 Herdr terminal stream，不实现 binary client protocol，也不持久化 Herdr workspace/tab/pane。

@@ -145,16 +145,21 @@ struct HerdrTerminalChromeTests {
     #expect(snapshotCalls.value == 1)
   }
 
-  @Test(.dependencies) func paneExitEventRefreshesImmediatelyAndRemovesWorkspace() async {
+  @Test(.dependencies) func paneExitEventImmediatelyRemovesLastTabAndWorkspace() async {
     let snapshotCalls = LockIsolated(0)
     let clock = TestClock()
+    let snapshot = makeSnapshot(focusedPaneID: "p1", includesSecondaryPane: false)
     var initialState = HerdrTerminalChromeFeature.State()
     initialState.connection = .connected
-    initialState.snapshot = makeSnapshot(focusedPaneID: "p1")
+    initialState.snapshot = snapshot
     initialState.selectedWorkspaceID = "w1"
     initialState.selectedTabID = "t1"
     initialState.selectedPaneID = "p1"
-    initialState.subscribedPaneIDs = ["p1", "p2"]
+    initialState.subscribedPaneIDs = ["p1"]
+    let projectedSnapshot = HerdrTerminalChromeFeature.snapshotByRemovingPanes(
+      initialState.snapshot,
+      paneIDs: ["p1"]
+    )
     let store = TestStore(initialState: initialState) {
       HerdrTerminalChromeFeature()
     } withDependencies: {
@@ -178,8 +183,20 @@ struct HerdrTerminalChromeTests {
     }
 
     await store.send(
-      .eventStream(.event(HerdrEventEnvelope(event: "pane.exited")))
+      .eventStream(
+        .event(
+          HerdrEventEnvelope(
+            event: "pane.exited",
+            focus: HerdrFocusEvent(workspaceID: "w1", tabID: "t1", paneID: "p1")
+          )
+        )
+      )
     ) {
+      $0.snapshot = projectedSnapshot
+      $0.selectedWorkspaceID = nil
+      $0.selectedTabID = nil
+      $0.selectedPaneID = nil
+      $0.pendingPaneExitIDs = ["p1"]
       $0.refreshGeneration = 1
     }
     await store.receive(.refreshResponseWithGeneration(1, .success(.empty))) {
@@ -187,6 +204,7 @@ struct HerdrTerminalChromeTests {
       $0.selectedWorkspaceID = nil
       $0.selectedTabID = nil
       $0.selectedPaneID = nil
+      $0.pendingPaneExitIDs = []
       $0.subscribedPaneIDs = []
     }
     await store.receive(.subscriptionPrepared([])) {
@@ -201,6 +219,32 @@ struct HerdrTerminalChromeTests {
       $0.mutationGeneration = 1
     }
     #expect(snapshotCalls.value == 3)
+  }
+  @Test func stalePaneExitSnapshotDoesNotRestoreLastTab() async {
+    let snapshot = makeSnapshot(focusedPaneID: "p1", includesSecondaryPane: false)
+    let projectedSnapshot = HerdrTerminalChromeFeature.snapshotByRemovingPanes(
+      snapshot,
+      paneIDs: ["p1"]
+    )
+    var initialState = HerdrTerminalChromeFeature.State()
+    initialState.connection = .connected
+    initialState.snapshot = snapshot
+    initialState.selectedWorkspaceID = "w1"
+    initialState.selectedTabID = "t1"
+    initialState.selectedPaneID = "p1"
+    initialState.pendingPaneExitIDs = ["p1"]
+    initialState.refreshGeneration = 1
+    let store = TestStore(initialState: initialState) {
+      HerdrTerminalChromeFeature()
+    }
+
+    await store.send(.refreshResponseWithGeneration(1, .success(snapshot))) {
+      $0.snapshot = projectedSnapshot
+      $0.selectedWorkspaceID = nil
+      $0.selectedTabID = nil
+      $0.selectedPaneID = nil
+      $0.pendingPaneExitIDs = ["p1"]
+    }
   }
 
   @Test func tabMutationParamsUseHerdrWireNames() throws {
@@ -1020,8 +1064,15 @@ struct HerdrTerminalChromeTests {
     )
   }
 
-  private func makeSnapshot(focusedPaneID: String) -> HerdrSessionSnapshot {
-    HerdrSessionSnapshot(
+  private func makeSnapshot(
+    focusedPaneID: String,
+    includesSecondaryPane: Bool = true
+  ) -> HerdrSessionSnapshot {
+    var panes = [HerdrPane(paneID: "p1", workspaceID: "w1", tabID: "t1", agent: "codex")]
+    if includesSecondaryPane {
+      panes.append(HerdrPane(paneID: "p2", workspaceID: "w1", tabID: "t1", foregroundCWD: "/tmp"))
+    }
+    return HerdrSessionSnapshot(
       version: "0.8.2",
       protocolVersion: 21,
       focusedWorkspaceID: "w1",
@@ -1029,10 +1080,7 @@ struct HerdrTerminalChromeTests {
       focusedPaneID: focusedPaneID,
       workspaces: [HerdrWorkspace(workspaceID: "w1", label: "Main", focused: true)],
       tabs: [HerdrTab(tabID: "t1", workspaceID: "w1", label: "Shell", focused: true)],
-      panes: [
-        HerdrPane(paneID: "p1", workspaceID: "w1", tabID: "t1", agent: "codex"),
-        HerdrPane(paneID: "p2", workspaceID: "w1", tabID: "t1", foregroundCWD: "/tmp"),
-      ],
+      panes: panes,
       layouts: [],
       agents: []
     )

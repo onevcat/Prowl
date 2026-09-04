@@ -26,6 +26,7 @@ internal struct HerdrTerminalChromeFeature {
     internal var mutationError: HerdrTerminalChromeFailure?
     internal var refreshGeneration: UInt64 = 0
     internal var subscribedPaneIDs: Set<String> = []
+    internal var pendingPaneExitIDs: Set<String> = []
     internal var subscriptionAwaitingSnapshot = false
     internal var mutationGeneration: UInt64 = 0
 
@@ -154,6 +155,74 @@ internal struct HerdrTerminalChromeFeature {
     subscribedPaneIDs != snapshotPaneIDs
   }
 
+  internal static func snapshotByRemovingPanes(
+    _ snapshot: HerdrSessionSnapshot,
+    paneIDs: Set<String>
+  ) -> HerdrSessionSnapshot {
+    let panes = snapshot.panes.filter { !paneIDs.contains($0.id) }
+    guard panes.count != snapshot.panes.count else { return snapshot }
+
+    let tabIDs = Set(panes.map(\.tabID))
+    let tabs = snapshot.tabs.filter { tabIDs.contains($0.id) }
+    let workspaceIDs = Set(tabs.map(\.workspaceID))
+    let workspaces = snapshot.workspaces.filter { workspaceIDs.contains($0.id) }
+    let layouts = snapshot.layouts.compactMap { layout -> HerdrLayout? in
+      guard tabIDs.contains(layout.tabID), workspaceIDs.contains(layout.workspaceID) else { return nil }
+      return HerdrLayout(
+        workspaceID: layout.workspaceID,
+        tabID: layout.tabID,
+        zoomed: layout.zoomed,
+        focusedPaneID: layout.focusedPaneID.flatMap { paneIDs.contains($0) ? nil : $0 },
+        panes: layout.panes.filter { !paneIDs.contains($0.paneID) },
+        splits: layout.splits
+      )
+    }
+    let agents = snapshot.agents.filter { agent in
+      if let paneID = agent.paneID { return !paneIDs.contains(paneID) }
+      if let tabID = agent.tabID { return tabIDs.contains(tabID) }
+      if let workspaceID = agent.workspaceID { return workspaceIDs.contains(workspaceID) }
+      return true
+    }
+    return HerdrSessionSnapshot(
+      version: snapshot.version,
+      protocolVersion: snapshot.protocolVersion,
+      focusedWorkspaceID: snapshot.focusedWorkspaceID.flatMap {
+        workspaceIDs.contains($0) ? $0 : nil
+      },
+      focusedTabID: snapshot.focusedTabID.flatMap { tabIDs.contains($0) ? $0 : nil },
+      focusedPaneID: snapshot.focusedPaneID.flatMap { paneIDs.contains($0) ? nil : $0 },
+      workspaces: workspaces,
+      tabs: tabs,
+      panes: panes,
+      layouts: layouts,
+      agents: agents
+    )
+  }
+
+  private func projectPendingPaneExits(_ state: inout State) {
+    state.snapshot = Self.snapshotByRemovingPanes(state.snapshot, paneIDs: state.pendingPaneExitIDs)
+    state.selectedWorkspaceID = reconciledSelection(
+      serverFocused: state.snapshot.focusedWorkspaceID,
+      validIDs: Set(state.snapshot.workspaces.map(\.id))
+    )
+    state.selectedTabID = reconciledSelection(
+      serverFocused: state.snapshot.focusedTabID,
+      validIDs: Set(state.snapshot.tabs.map(\.id))
+    )
+    state.selectedPaneID = reconciledSelection(
+      serverFocused: state.snapshot.focusedPaneID,
+      validIDs: Set(state.snapshot.panes.map(\.id))
+    )
+  }
+
+  private func applyPaneExit(_ state: inout State, event: HerdrEventEnvelope) {
+    guard let paneID = event.focus?.paneID,
+      state.snapshot.panes.contains(where: { $0.id == paneID })
+    else { return }
+    state.pendingPaneExitIDs.insert(paneID)
+    projectPendingPaneExits(&state)
+  }
+
   private static func monotonicMilliseconds() -> Int {
     Int(ProcessInfo.processInfo.systemUptime * 1_000)
   }
@@ -275,6 +344,7 @@ internal struct HerdrTerminalChromeFeature {
         state.closeConfirmation = nil
         state.mutationError = nil
         state.subscribedPaneIDs = []
+        state.pendingPaneExitIDs = []
         state.subscriptionAwaitingSnapshot = false
         state.refreshGeneration &+= 1
         state.mutationGeneration &+= 1
@@ -299,6 +369,7 @@ internal struct HerdrTerminalChromeFeature {
         state.closeConfirmation = nil
         state.mutationError = nil
         state.subscribedPaneIDs = []
+        state.pendingPaneExitIDs = []
         state.subscriptionAwaitingSnapshot = false
         state.refreshGeneration &+= 1
         state.mutationGeneration &+= 1
@@ -340,6 +411,9 @@ internal struct HerdrTerminalChromeFeature {
         herdrTerminalChromeLogger.diagnostic(
           "event-received uptime_ms=\(Self.monotonicMilliseconds()) name=\(eventName) generation=\(state.refreshGeneration)"
         )
+        if eventName.replacing(".", with: "_") == "pane_exited" {
+          applyPaneExit(&state, event: event)
+        }
         if let pendingFocus = state.pendingFocus,
           Self.focusEvents.contains(eventName.replacing(".", with: "_")),
           !Self.event(event, confirms: pendingFocus)
@@ -385,6 +459,7 @@ internal struct HerdrTerminalChromeFeature {
         state.pendingMutation = nil
         state.closeConfirmation = nil
         state.subscribedPaneIDs = []
+        state.pendingPaneExitIDs = []
         state.subscriptionAwaitingSnapshot = false
         state.pendingFocus = nil
         state.focusRollback = nil
@@ -425,6 +500,7 @@ internal struct HerdrTerminalChromeFeature {
           state.pendingMutation = nil
           state.closeConfirmation = nil
           state.subscribedPaneIDs = []
+          state.pendingPaneExitIDs = []
           state.subscriptionAwaitingSnapshot = false
           state.mutationGeneration &+= 1
           return .merge(
@@ -749,6 +825,7 @@ internal struct HerdrTerminalChromeFeature {
     if case .incompatibleProtocol(let error) = failure {
       state.connection = .hidden
       state.snapshot = .empty
+      state.pendingPaneExitIDs = []
       state.selectedWorkspaceID = nil
       state.selectedTabID = nil
       state.selectedPaneID = nil
@@ -770,6 +847,7 @@ internal struct HerdrTerminalChromeFeature {
     }
     state.connection = .failed
     state.snapshot = .empty
+    state.pendingPaneExitIDs = []
     state.selectedWorkspaceID = nil
     state.selectedTabID = nil
     state.selectedPaneID = nil
@@ -783,24 +861,30 @@ internal struct HerdrTerminalChromeFeature {
   }
 
   private func replaceSnapshot(_ state: inout State, with snapshot: HerdrSessionSnapshot) -> Bool {
-    let paneIDs = Set(snapshot.panes.map(\.id))
+    let snapshotPaneIDs = Set(snapshot.panes.map(\.id))
+    state.pendingPaneExitIDs.formIntersection(snapshotPaneIDs)
+    let projectedSnapshot = Self.snapshotByRemovingPanes(
+      snapshot,
+      paneIDs: state.pendingPaneExitIDs
+    )
+    let paneIDs = Set(projectedSnapshot.panes.map(\.id))
     let shouldRestartLifecycle = Self.paneSetRequiresLifecycleRestart(
       subscribedPaneIDs: state.subscribedPaneIDs,
       snapshotPaneIDs: paneIDs
     )
-    state.snapshot = snapshot
+    state.snapshot = projectedSnapshot
     state.subscribedPaneIDs = paneIDs
     state.selectedWorkspaceID = reconciledSelection(
-      serverFocused: snapshot.focusedWorkspaceID,
-      validIDs: Set(snapshot.workspaces.map(\.id))
+      serverFocused: projectedSnapshot.focusedWorkspaceID,
+      validIDs: Set(projectedSnapshot.workspaces.map(\.id))
     )
     state.selectedTabID = reconciledSelection(
-      serverFocused: snapshot.focusedTabID,
-      validIDs: Set(snapshot.tabs.map(\.id))
+      serverFocused: projectedSnapshot.focusedTabID,
+      validIDs: Set(projectedSnapshot.tabs.map(\.id))
     )
     state.selectedPaneID = reconciledSelection(
-      serverFocused: snapshot.focusedPaneID,
-      validIDs: Set(snapshot.panes.map(\.id))
+      serverFocused: projectedSnapshot.focusedPaneID,
+      validIDs: Set(projectedSnapshot.panes.map(\.id))
     )
 
     guard let pendingFocus = state.pendingFocus else {
@@ -810,20 +894,20 @@ internal struct HerdrTerminalChromeFeature {
     let isConfirmed: Bool
     switch pendingFocus {
     case .workspace(let id):
-      isConfirmed = snapshot.focusedWorkspaceID == id
+      isConfirmed = projectedSnapshot.focusedWorkspaceID == id
     case .tab(let id):
-      isConfirmed = snapshot.focusedTabID == id
+      isConfirmed = projectedSnapshot.focusedTabID == id
     case .pane(let id):
-      isConfirmed = snapshot.focusedPaneID == id
+      isConfirmed = projectedSnapshot.focusedPaneID == id
     }
     let targetStillExists: Bool
     switch pendingFocus {
     case .workspace(let id):
-      targetStillExists = snapshot.workspaces.contains { $0.id == id }
+      targetStillExists = projectedSnapshot.workspaces.contains { $0.id == id }
     case .tab(let id):
-      targetStillExists = snapshot.tabs.contains { $0.id == id }
+      targetStillExists = projectedSnapshot.tabs.contains { $0.id == id }
     case .pane(let id):
-      targetStillExists = snapshot.panes.contains { $0.id == id }
+      targetStillExists = projectedSnapshot.panes.contains { $0.id == id }
     }
     guard targetStillExists else {
       state.pendingFocus = nil
