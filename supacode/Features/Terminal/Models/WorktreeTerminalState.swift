@@ -151,7 +151,6 @@ final class WorktreeTerminalState {
   var agentDetectionSchedules: [UUID: AgentDetectionSchedule] = [:]
   var agentDetectionTasks: [UUID: Task<Void, Never>] = [:]
   var agentDetectionPresenceBySurface: [UUID: AgentDetectionPresence] = [:]
-  var lastWorkingAtBySurface: [UUID: Date] = [:]
   var lastAgentDetectionDiagnosticsBySurface: [UUID: String] = [:]
   /// Memoizes the last agent-screen scan per surface so `detectAgentState` can
   /// reuse it while the terminal text and detected agent are unchanged. A

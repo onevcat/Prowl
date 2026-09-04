@@ -18,146 +18,56 @@ struct PaneAgentStateTests {
     #expect(state.displayState == .idle)
   }
 
-  @Test(arguments: [DetectedAgent.claude, .codex, .gemini])
-  func workingIsStickyForShortIdleGap(agent: DetectedAgent) {
-    let now = Date(timeIntervalSince1970: 100)
-    var lastWorking: Date?
-
+  @Test(arguments: DetectedAgent.allCases)
+  func rawIdleEndsWorkingImmediately(agent: DetectedAgent) {
     let working = stabilizeAgentState(
       agent: agent,
       previous: .idle,
-      raw: .working,
-      now: now,
-      lastWorkingAt: &lastWorking
+      raw: .working
     )
     #expect(working == .working)
 
-    let stillWorking = stabilizeAgentState(
-      agent: agent,
-      previous: .working,
-      raw: .idle,
-      now: now.addingTimeInterval(2.9),
-      lastWorkingAt: &lastWorking
-    )
-    #expect(stillWorking == .working)
-  }
-
-  @Test(arguments: [DetectedAgent.claude, .codex])
-  func transitionsToIdleAfterStickyWindow(agent: DetectedAgent) {
-    let now = Date(timeIntervalSince1970: 100)
-    var lastWorking: Date? = now
-
     let idle = stabilizeAgentState(
       agent: agent,
       previous: .working,
-      raw: .idle,
-      now: now.addingTimeInterval(3.001),
-      lastWorkingAt: &lastWorking
-    )
-
-    #expect(idle == .idle)
-  }
-
-  @Test(arguments: DetectedAgent.allCases)
-  func changingIdleScreenRefreshesWorkingHold(agent: DetectedAgent) {
-    let now = Date(timeIntervalSince1970: 100)
-    let changedAt = now.addingTimeInterval(10)
-    var lastWorking: Date? = now
-
-    let held = stabilizeAgentState(
-      agent: agent,
-      previous: .working,
-      raw: .idle,
-      screenChanged: true,
-      now: changedAt,
-      lastWorkingAt: &lastWorking
-    )
-
-    #expect(held == .working)
-    #expect(lastWorking == changedAt)
-
-    let idle = stabilizeAgentState(
-      agent: agent,
-      previous: held,
-      raw: .idle,
-      now: changedAt.addingTimeInterval(3.001),
-      lastWorkingAt: &lastWorking
+      raw: .idle
     )
     #expect(idle == .idle)
   }
 
-  @Test func changingScreenDoesNotPromoteIdleAgent() {
-    let now = Date(timeIntervalSince1970: 100)
-    var lastWorking: Date?
-
-    let idle = stabilizeAgentState(
-      agent: .codex,
-      previous: .idle,
-      raw: .idle,
-      screenChanged: true,
-      now: now,
-      lastWorkingAt: &lastWorking
-    )
-
-    #expect(idle == .idle)
-    #expect(lastWorking == nil)
-  }
-
-  @Test func blockedBypassesStickyWindow() {
-    let now = Date(timeIntervalSince1970: 100)
-    var lastWorking: Date? = now
-
+  @Test func blockedObservationIsImmediate() {
     let blocked = stabilizeAgentState(
       agent: .claude,
       previous: .working,
-      raw: .blocked,
-      screenChanged: true,
-      now: now.addingTimeInterval(0.3),
-      lastWorkingAt: &lastWorking
+      raw: .blocked
     )
 
     #expect(blocked == .blocked)
   }
 
-  @Test func unknownObservationKeepsPreviousStateAndRefreshesHold() {
-    let now = Date(timeIntervalSince1970: 100)
-    var lastWorking: Date? = now
-    let later = now.addingTimeInterval(10)
-
+  @Test func unknownObservationKeepsPreviousState() {
     let held = stabilizeAgentState(
       agent: .claude,
       previous: .working,
-      raw: .unknown,
-      now: later,
-      lastWorkingAt: &lastWorking
+      raw: .unknown
     )
 
     #expect(held == .working)
-    #expect(lastWorking == later)
 
-    var noHistory: Date?
     let idle = stabilizeAgentState(
       agent: .claude,
       previous: .idle,
-      raw: .unknown,
-      now: later,
-      lastWorkingAt: &noHistory
+      raw: .unknown
     )
 
     #expect(idle == .idle)
-    #expect(noHistory == nil)
   }
 
   @Test func unknownObservationWithoutHistoryStaysUnknown() {
-    let now = Date(timeIntervalSince1970: 100)
-    var lastWorking: Date?
-
     let unknown = stabilizeAgentState(
       agent: .claude,
       previous: .unknown,
-      raw: .unknown,
-      now: now,
-      lastWorkingAt: &lastWorking
+      raw: .unknown
     )
 
     #expect(unknown == .unknown)

@@ -49,7 +49,6 @@ extension WorktreeTerminalState {
     agentDetectionTasks.removeValue(forKey: surfaceID)
     agentDetectionSchedules.removeValue(forKey: surfaceID)
     agentDetectionPresenceBySurface.removeValue(forKey: surfaceID)
-    lastWorkingAtBySurface.removeValue(forKey: surfaceID)
     lastAgentDetectionDiagnosticsBySurface.removeValue(forKey: surfaceID)
     lastAgentScreenScanBySurface.removeValue(forKey: surfaceID)
     if surfaceAgentStates[surfaceID]?.detectedAgent == nil {
@@ -100,23 +99,16 @@ extension WorktreeTerminalState {
     // Reuse the previous scan while the screen and detected agent are unchanged.
     // A live-but-idle agent is polled every 300 ms and `detectState` re-splits,
     // lowercases, and scans the whole screen each time; skipping that for
-    // identical text is the bulk of steady-state detection cost. The same
-    // comparison feeds motion into stabilization, which still runs every tick
-    // so an unchanged screen can decay from working to idle.
-    let (detection, screenChanged) = cachedScreenDetection(forSurfaceID: surfaceID, agent: agent, text: activeText)
+    // identical text is the bulk of steady-state detection cost.
+    let detection = cachedScreenDetection(forSurfaceID: surfaceID, agent: agent, text: activeText)
     let raw = detection.state
     guard surfaces[surfaceID] != nil else { return false }
 
-    var lastWorkingAt = lastWorkingAtBySurface[surfaceID]
     let stabilized = stabilizeAgentState(
       agent: agent,
       previous: previous.state,
-      raw: raw,
-      screenChanged: screenChanged,
-      now: now,
-      lastWorkingAt: &lastWorkingAt
+      raw: raw
     )
-    lastWorkingAtBySurface[surfaceID] = lastWorkingAt
 
     let seen = Self.resolvedSeen(
       previous: previous,
@@ -201,37 +193,20 @@ extension WorktreeTerminalState {
     return (detection, AgentScreenScan(agent: agent, text: text, detection: detection))
   }
 
-  nonisolated static func activeScreenChanged(
-    agent: DetectedAgent,
-    text: String,
-    previousAgent: DetectedAgent?,
-    cache: AgentScreenScan?
-  ) -> Bool {
-    previousAgent == agent
-      && cache.map { $0.agent == agent && $0.text != text } == true
-  }
-
   /// Instance wrapper over `resolveScreenDetection` that reads and writes the
   /// per-surface memo, keeping `detectAgentState` concise at the call site.
   private func cachedScreenDetection(
     forSurfaceID surfaceID: UUID,
     agent: DetectedAgent,
     text: String
-  ) -> (detection: AgentScreenDetection, screenChanged: Bool) {
-    let cachedScan = lastAgentScreenScanBySurface[surfaceID]
-    let screenChanged = Self.activeScreenChanged(
-      agent: agent,
-      text: text,
-      previousAgent: surfaceAgentStates[surfaceID]?.detectedAgent,
-      cache: cachedScan
-    )
+  ) -> AgentScreenDetection {
     let (detection, scan) = Self.resolveScreenDetection(
       agent: agent,
       text: text,
-      cache: cachedScan
+      cache: lastAgentScreenScanBySurface[surfaceID]
     )
     lastAgentScreenScanBySurface[surfaceID] = scan
-    return (detection, screenChanged)
+    return detection
   }
 
   private static func resolvedSeen(
@@ -329,7 +304,6 @@ extension WorktreeTerminalState {
   func removeAgentEntryIfNeeded(surfaceID: UUID) {
     guard surfaceAgentStates[surfaceID]?.detectedAgent != nil else { return }
     surfaceAgentStates[surfaceID] = PaneAgentState(lastChangedAt: Date())
-    lastWorkingAtBySurface.removeValue(forKey: surfaceID)
     lastAgentScreenScanBySurface.removeValue(forKey: surfaceID)
     let hadPublishedEntry = lastEmittedAgentEntriesBySurface.removeValue(forKey: surfaceID) != nil
     // The launch identity lives exactly as long as the launched agent
@@ -351,8 +325,7 @@ extension WorktreeTerminalState {
   /// surface in the tab, emitting a task-status change only when the aggregate
   /// flips. Driven by `detectAgentState` (state change), agent release, and
   /// surface teardown so the sidebar/`prowl list` running indicator tracks agent
-  /// activity. Uses `displayState` (post-stabilization) so the 3 s working-hold
-  /// absorbs raw oscillation; `emitTaskStatusIfChanged` dedupes emissions.
+  /// activity. `emitTaskStatusIfChanged` dedupes emissions.
   func updateTabAgentBusyState(for tabId: TerminalTabID) {
     let surfaceIDs = trees[tabId]?.leaves().map(\.id) ?? []
     let isBusy = surfaceIDs.contains { surfaceAgentStates[$0]?.isBusy == true }
@@ -522,7 +495,6 @@ extension WorktreeTerminalState {
     agentDetectionSchedules.removeValue(forKey: surfaceId)
     surfaceAgentStates.removeValue(forKey: surfaceId)
     agentDetectionPresenceBySurface.removeValue(forKey: surfaceId)
-    lastWorkingAtBySurface.removeValue(forKey: surfaceId)
     lastAgentDetectionDiagnosticsBySurface.removeValue(forKey: surfaceId)
     lastAgentScreenScanBySurface.removeValue(forKey: surfaceId)
     let hadPublishedEntry = lastEmittedAgentEntriesBySurface.removeValue(forKey: surfaceId) != nil
@@ -542,7 +514,6 @@ extension WorktreeTerminalState {
     agentDetectionSchedules.removeAll()
     surfaceAgentStates.removeAll()
     agentDetectionPresenceBySurface.removeAll()
-    lastWorkingAtBySurface.removeAll()
     lastAgentDetectionDiagnosticsBySurface.removeAll()
     lastAgentScreenScanBySurface.removeAll()
     lastEmittedAgentEntriesBySurface.removeAll()

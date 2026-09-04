@@ -100,10 +100,11 @@ the failed attempt to extend the first signal to plain commands is
 - **Screen-text fragility accepted.** Detector strings are agent-rendered UI constants;
   each agent CLI UI revision may require a detector update. Accepted explicitly, with the
   fixture-heavy test suite as the safety net.
-- **Keep the fork's own stabilization model.** The 2026-06-12 herdr upstream review
-  (v0.6.10) decided against porting herdr's later detection refactor; the fork keeps its
-  own stabilizer, including the deliberate 3 s working hold
-  (see [002](002-stability-and-scheduling.md)).
+- **Keep the fork's own state projection.** The 2026-06-12 herdr upstream review
+  (v0.6.10) decided against porting herdr's later detection refactor. The fork originally
+  kept a 3 s Working hold ([002](002-stability-and-scheduling.md)); that hold was later
+  retired in favor of immediate explicit screen states
+  ([015](015-deterministic-live-footer-coverage.md)).
 
 ## Amendments
 
@@ -146,7 +147,6 @@ the failed attempt to extend the first signal to plain commands is
   012 deferred; adding it exposed that every row rule read one physical line, which
   misses Claude's wrapped rows on narrow panes — see
   [013-background-agent-wait-and-wrapped-rows.md](013-background-agent-wait-and-wrapped-rows.md)
-- Updated 2026-09-04: captured Pi and Codex live footers gained explicit rules, and
-  changing active-screen text now refreshes the shared Working hold without promoting
-  an Idle composer — see
-  [015-screen-motion-working-hold.md](015-screen-motion-working-hold.md)
+- Updated 2026-09-05: captured Pi and Codex live footers gained explicit rules, while
+  the time-based Working hold was retired in favor of deterministic screen state — see
+  [015-deterministic-live-footer-coverage.md](015-deterministic-live-footer-coverage.md)

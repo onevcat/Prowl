@@ -158,52 +158,19 @@ struct AgentDetectionPresence: Equatable, Sendable {
   }
 }
 
-// Agents briefly clear their working indicators between steps (output gaps,
-// tool-call boundaries), so a raw working → idle flip is only trusted after
-// the screen has read idle for this long. Keeps Working from flapping to
-// Done and back during those pauses, at the cost of reporting a genuine
-// finish up to this much later.
-private let workingStateHold: TimeInterval = 3.0
-
 func stabilizeAgentState(
   agent: DetectedAgent?,
   previous: AgentRawState,
-  raw: AgentRawState,
-  screenChanged: Bool = false,
-  now: Date,
-  lastWorkingAt: inout Date?
+  raw: AgentRawState
 ) -> AgentRawState {
-  guard agent != nil else {
-    lastWorkingAt = nil
-    return raw
-  }
+  guard agent != nil else { return raw }
 
   switch raw {
-  case .working:
-    lastWorkingAt = now
-    return .working
-  case .blocked:
-    return .blocked
   case .unknown:
     // A viewer overlay (transcript, history search) is covering the live
-    // status area, so this frame carries no signal: keep the last trusted
-    // state, and keep the working hold alive while the screen stays covered.
-    if previous == .working {
-      lastWorkingAt = now
-    }
+    // status area, so this frame carries no signal: keep the last trusted state.
     return previous
-  case .idle where previous == .working && screenChanged:
-    // A live footer can change shape between runtime versions or disappear
-    // briefly between steps. Motion is enough to extend a trusted Working
-    // state, but never promotes an agent that was already Idle.
-    lastWorkingAt = now
-    return .working
-  case .idle where previous == .working:
-    guard let lastWorkingAt else {
-      return .idle
-    }
-    return now.timeIntervalSince(lastWorkingAt) < workingStateHold ? .working : .idle
-  case .idle:
+  case .working, .blocked, .idle:
     return raw
   }
 }

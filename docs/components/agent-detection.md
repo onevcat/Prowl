@@ -89,17 +89,12 @@ the last trusted state. An ordinary migrated-profile miss reports
 `fallback.noRuleMatched`. Reasons never include screen text, and the text-mode command and
 app UI remain unchanged.
 
-To avoid flicker, detection **stabilizes**: it tolerates several consecutive
-misses before declaring an agent gone, and a working agent gets a short (~3s)
-hold so brief pauses between thinking and output don't drop it out of
-"working" (a genuine finish therefore reports up to ~3s late; "blocked"
-bypasses the hold and surfaces immediately). Viewer overlays (Claude's
-transcript / history-search views) cover the live status area, so frames
-showing their chrome keep the last trusted state instead of forcing idle.
-When a previously Working pane's active-screen text is still changing, that motion
-refreshes the same hold even if the runtime-specific classifier temporarily reports
-Idle. Motion never promotes an already Idle pane, so typing in an idle composer does
-not create a false Working state.
+Detection tolerates several consecutive process-probe misses before declaring an
+agent gone. Screen state itself is deterministic: a recognized Working, Blocked, or
+Idle frame takes effect on the next active scan, without a time-based Working hold or
+generic screen-motion inference. Viewer overlays (Claude's transcript / history-search
+views) are an explicit exception: their chrome covers the live status area, so those
+frames keep the last trusted state instead of forcing Idle.
 
 ## The state machine
 
@@ -276,7 +271,8 @@ which takes precedence over the agent indicator.
 It's a single coarse running/idle bit (it can't distinguish background agents
 from a long command). For the agent's finer state use the
 [Active Agents panel](active-agents.md) or [`prowl agents`](cli.md). Expect up to
-~2 s before it lights on a warm pane, and the ~3 s working-hold before it clears.
+~2 s before it lights on a warm pane; panes with a detected agent rescan about every
+300 ms.
 
 ## Settings
 

@@ -29,9 +29,9 @@
     cline, opencode, copilot, kimi, droid, amp, qwen.
   - `AgentRawState.swift` — raw `working`/`blocked`/`idle`/`unknown` plus display states
     (idle + unseen renders as **Done**).
-  - `PaneAgentState.swift` — `stabilizeAgentState` with `workingStateHold = 3.0`
-    (blocked bypasses the hold; `.unknown` keeps the previous state and refreshes the
-    hold), `AgentDetectionPresence.releaseMissThreshold = 6`, `isBusy` (working/blocked →
+  - `PaneAgentState.swift` — `stabilizeAgentState` applies explicit working/blocked/idle
+    observations immediately while `.unknown` keeps the previous state,
+    `AgentDetectionPresence.releaseMissThreshold = 6`, `isBusy` (working/blocked →
     worktree running indicator), and — since #556 — sticky `session` retention.
   - `AgentDetectionSchedule.swift` — `cold` / `warm(until:)` (30 s window) / `active`.
 - **Infrastructure** (`supacode/Infrastructure/AgentDetection/`):
