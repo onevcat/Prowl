@@ -44,6 +44,7 @@ struct RepositorySettingsFeature {
     var appearanceImportError: String?
     var isSymbolPickerPresented = false
     var symbolSuggestions: SymbolSuggestionsPhase = .idle
+    var workflows = WorkflowsSettingsFeature.State()
 
     var capabilities: Repository.Capabilities {
       switch repositoryKind {
@@ -97,6 +98,7 @@ struct RepositorySettingsFeature {
 
   enum Action: BindableAction {
     case task
+    case workflowsAppeared
     case settingsLoaded(
       RepositorySettings,
       UserRepositorySettings,
@@ -124,6 +126,7 @@ struct RepositorySettingsFeature {
     case setGlobalCommandEnabled(UserCustomCommand.ID, Bool)
     case setDefaultAgentProfileID(AgentProfile.ID?)
     case branchDataLoaded([String], defaultBaseRef: String)
+    case workflows(WorkflowsSettingsFeature.Action)
     case delegate(Delegate)
     case binding(BindingAction<State>)
   }
@@ -196,6 +199,14 @@ struct RepositorySettingsFeature {
           await send(.branchDataLoaded(branches, defaultBaseRef: defaultBaseRef))
         }
 
+      case .workflowsAppeared:
+        state.workflows.settingsScope = .repository(
+          WorkflowSettingsRepositoryContext(
+            repositoryID: state.repositoryID,
+            name: state.settings.customTitle ?? state.rootURL.lastPathComponent,
+            rootURL: state.rootURL))
+        return .none
+
       case .settingsLoaded(
         let settings,
         let userSettings,
@@ -207,10 +218,11 @@ struct RepositorySettingsFeature {
         let keybindingUserOverrides
       ):
         var updatedSettings = settings
-        updatedSettings.worktreeBaseDirectoryPath = SupacodePaths.normalizedWorktreeBaseDirectoryPath(
-          updatedSettings.worktreeBaseDirectoryPath,
-          repositoryRootURL: state.rootURL
-        )
+        updatedSettings.worktreeBaseDirectoryPath =
+          SupacodePaths.normalizedWorktreeBaseDirectoryPath(
+            updatedSettings.worktreeBaseDirectoryPath,
+            repositoryRootURL: state.rootURL
+          )
         if isBareRepository {
           updatedSettings.copyIgnoredOnWorktreeCreate = nil
           updatedSettings.copyUntrackedOnWorktreeCreate = nil
@@ -378,16 +390,18 @@ struct RepositorySettingsFeature {
         state.userSettings = state.userSettings.normalized()
         let rootURL = state.rootURL
         var normalizedSettings = state.settings
-        normalizedSettings.worktreeBaseDirectoryPath = SupacodePaths.normalizedWorktreeBaseDirectoryPath(
-          normalizedSettings.worktreeBaseDirectoryPath,
-          repositoryRootURL: rootURL
-        )
+        normalizedSettings.worktreeBaseDirectoryPath =
+          SupacodePaths.normalizedWorktreeBaseDirectoryPath(
+            normalizedSettings.worktreeBaseDirectoryPath,
+            repositoryRootURL: rootURL
+          )
         let trimmedCustomTitle =
           normalizedSettings.customTitle?
           .trimmingCharacters(in: .whitespacesAndNewlines)
         normalizedSettings.customTitle =
           (trimmedCustomTitle?.isEmpty ?? true) ? nil : trimmedCustomTitle
-        normalizedSettings.githubAccountOverride = normalizedSettings.githubAccountOverride?.normalized
+        normalizedSettings.githubAccountOverride =
+          normalizedSettings.githubAccountOverride?.normalized
         @Shared(.repositorySettings(rootURL)) var repositorySettings
         @Shared(.userRepositorySettings(rootURL)) var userRepositorySettings
         $repositorySettings.withLock { $0 = normalizedSettings }
@@ -399,9 +413,15 @@ struct RepositorySettingsFeature {
         $userRepositorySettings.withLock { $0 = state.userSettings }
         return .send(.delegate(.settingsChanged(rootURL)))
 
+      case .workflows:
+        return .none
+
       case .delegate:
         return .none
       }
+    }
+    Scope(state: \.workflows, action: \.workflows) {
+      WorkflowsSettingsFeature()
     }
   }
 

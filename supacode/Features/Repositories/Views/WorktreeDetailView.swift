@@ -55,7 +55,8 @@ struct WorktreeDetailView: View {
       && loadingInfo == nil
       && !showsMultiSelectionSummary
     let runScriptEnabled = hasActiveTerminalTarget
-    let runScriptIsRunning = actionTargetWorktree.flatMap { state.runScriptStatusByWorktreeID[$0.id] } == true
+    let runScriptIsRunning =
+      actionTargetWorktree.flatMap { state.runScriptStatusByWorktreeID[$0.id] } == true
     let customCommands = state.selectedCustomCommands
     let notificationGroups = repositories.toolbarNotificationGroups(
       terminalManager: terminalManager,
@@ -87,7 +88,9 @@ struct WorktreeDetailView: View {
       selectedTerminalWorktree: selectedTerminalWorktree,
       selectedWorktreeSummaries: selectedWorktreeSummaries
     )
-    .navigationTitle(WindowTitle.compute(repositories: repositories, terminalManager: terminalManager))
+    .navigationTitle(
+      WindowTitle.compute(repositories: repositories, terminalManager: terminalManager)
+    )
     .toolbar(removing: .title)
     .toolbar {
       if repositories.isShowingCanvas {
@@ -118,7 +121,8 @@ struct WorktreeDetailView: View {
     let actionToken = WorktreeActionContext(
       selectedWorktreeID: selectedTerminalWorktree?.id,
       isShowingCanvas: repositories.isShowingCanvas,
-      canvasFocusedWorktreeID: repositories.isShowingCanvas ? terminalManager.canvasFocusedWorktreeID : nil
+      canvasFocusedWorktreeID: repositories.isShowingCanvas
+        ? terminalManager.canvasFocusedWorktreeID : nil
     )
     return applyFocusedActions(content: content, actions: actions, token: actionToken)
   }
@@ -158,10 +162,18 @@ struct WorktreeDetailView: View {
       onLaunchProfile: { store.send(.launchAgentProfile($0)) },
       onManageProfiles: { store.send(.openAgentProfilesSettings) },
       onRunWorkflow: { key in
-        store.send(.openWorkflowStart(workflowKey: key, worktreeID: nil, sourceSurfaceID: nil, forceSheet: false))
+        store.send(
+          .openWorkflowStart(
+            workflowKey: key, worktreeID: nil, sourceSurfaceID: nil, forceSheet: false))
       },
       onRunWorkflowWithOptions: { key in
-        store.send(.openWorkflowStart(workflowKey: key, worktreeID: nil, sourceSurfaceID: nil, forceSheet: true))
+        store.send(
+          .openWorkflowStart(
+            workflowKey: key, worktreeID: nil, sourceSurfaceID: nil, forceSheet: true))
+      },
+      onShowWorkflowDetails: { item in
+        guard let worktreeID = actionTargetWorktree?.id else { return }
+        store.send(.openWorkflowDetails(item, worktreeID: worktreeID))
       },
       onWorkflowIntent: handleWorkflowIntent
     )
@@ -211,10 +223,18 @@ struct WorktreeDetailView: View {
       onLaunchProfile: { store.send(.launchAgentProfile($0)) },
       onManageProfiles: { store.send(.openAgentProfilesSettings) },
       onRunWorkflow: { key in
-        store.send(.openWorkflowStart(workflowKey: key, worktreeID: nil, sourceSurfaceID: nil, forceSheet: false))
+        store.send(
+          .openWorkflowStart(
+            workflowKey: key, worktreeID: nil, sourceSurfaceID: nil, forceSheet: false))
       },
       onRunWorkflowWithOptions: { key in
-        store.send(.openWorkflowStart(workflowKey: key, worktreeID: nil, sourceSurfaceID: nil, forceSheet: true))
+        store.send(
+          .openWorkflowStart(
+            workflowKey: key, worktreeID: nil, sourceSurfaceID: nil, forceSheet: true))
+      },
+      onShowWorkflowDetails: { item in
+        guard let worktreeID = state.actionTargetWorktreeID else { return }
+        store.send(.openWorkflowDetails(item, worktreeID: worktreeID))
       },
       onSelectNotification: selectToolbarNotification,
       onDismissAllNotifications: {
@@ -284,7 +304,8 @@ struct WorktreeDetailView: View {
                 in: store.resolvedKeybindings
               ),
               runShortcut: store.resolvedKeybindings.display(for: AppShortcuts.CommandID.runScript),
-              stopShortcut: store.resolvedKeybindings.display(for: AppShortcuts.CommandID.stopScript),
+              stopShortcut: store.resolvedKeybindings.display(
+                for: AppShortcuts.CommandID.stopScript),
               runAction: { store.send(.runScript) },
               stopAction: { store.send(.stopRunScript) }
             )
@@ -533,7 +554,8 @@ struct WorktreeDetailView: View {
     } else if let loadingInfo {
       WorktreeLoadingView(info: loadingInfo)
     } else if let selectedTerminalWorktree {
-      let shouldRunSetupScript = repositories.pendingSetupScriptWorktreeIDs.contains(selectedTerminalWorktree.id)
+      let shouldRunSetupScript = repositories.pendingSetupScriptWorktreeIDs.contains(
+        selectedTerminalWorktree.id)
       let shouldFocusTerminal = repositories.shouldFocusTerminal(for: selectedTerminalWorktree.id)
       WorktreeTerminalTabsView(
         worktree: selectedTerminalWorktree,
@@ -547,7 +569,8 @@ struct WorktreeDetailView: View {
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .onAppear {
         if shouldFocusTerminal {
-          store.send(.repositories(.worktreeCreation(.consumeTerminalFocus(selectedTerminalWorktree.id))))
+          store.send(
+            .repositories(.worktreeCreation(.consumeTerminalFocus(selectedTerminalWorktree.id))))
         }
       }
     } else if let selectedRepository = repositories.selectedRepository {
@@ -578,7 +601,8 @@ struct WorktreeDetailView: View {
     let repositoryID: Repository.ID? =
       switch context {
       case .normal:
-        repositories.repositoryID(for: repositories.selectedWorktreeID) ?? repositories.selectedRepositoryID
+        repositories.repositoryID(for: repositories.selectedWorktreeID)
+          ?? repositories.selectedRepositoryID
       case .canvas:
         repositories.repositoryID(for: terminalManager.canvasFocusedWorktreeID)
       }
@@ -604,34 +628,59 @@ struct WorktreeDetailView: View {
     token: WorktreeActionContext
   ) -> some View {
     content
-      .focusedSceneValue(\.openSelectedWorktreeAction, actions.openSelectedWorktree.asFocusedAction(token: token))
+      .focusedSceneValue(
+        \.openSelectedWorktreeAction, actions.openSelectedWorktree.asFocusedAction(token: token)
+      )
       .focusedSceneValue(\.newTerminalAction, actions.newTerminal.asFocusedAction(token: token))
       .focusedSceneValue(\.closeTabAction, actions.closeTab.asFocusedAction(token: token))
       .focusedSceneValue(\.closeSurfaceAction, actions.closeSurface.asFocusedAction(token: token))
       .focusedSceneValue(\.resetFontSizeAction, actions.resetFontSize.asFocusedAction(token: token))
-      .focusedSceneValue(\.increaseFontSizeAction, actions.increaseFontSize.asFocusedAction(token: token))
-      .focusedSceneValue(\.decreaseFontSizeAction, actions.decreaseFontSize.asFocusedAction(token: token))
+      .focusedSceneValue(
+        \.increaseFontSizeAction, actions.increaseFontSize.asFocusedAction(token: token)
+      )
+      .focusedSceneValue(
+        \.decreaseFontSizeAction, actions.decreaseFontSize.asFocusedAction(token: token)
+      )
       .focusedSceneValue(\.startSearchAction, actions.startSearch.asFocusedAction(token: token))
-      .focusedSceneValue(\.searchSelectionAction, actions.searchSelection.asFocusedAction(token: token))
-      .focusedSceneValue(\.navigateSearchNextAction, actions.navigateSearchNext.asFocusedAction(token: token))
+      .focusedSceneValue(
+        \.searchSelectionAction, actions.searchSelection.asFocusedAction(token: token)
+      )
+      .focusedSceneValue(
+        \.navigateSearchNextAction, actions.navigateSearchNext.asFocusedAction(token: token)
+      )
       .focusedSceneValue(
         \.navigateSearchPreviousAction, actions.navigateSearchPrevious.asFocusedAction(token: token)
       )
       .focusedSceneValue(\.endSearchAction, actions.endSearch.asFocusedAction(token: token))
       .focusedSceneValue(
-        \.selectPreviousTerminalTabAction, actions.selectPreviousTerminalTab.asFocusedAction(token: token)
+        \.selectPreviousTerminalTabAction,
+        actions.selectPreviousTerminalTab.asFocusedAction(token: token)
       )
-      .focusedSceneValue(\.selectNextTerminalTabAction, actions.selectNextTerminalTab.asFocusedAction(token: token))
       .focusedSceneValue(
-        \.selectPreviousTerminalPaneAction, actions.selectPreviousTerminalPane.asFocusedAction(token: token)
+        \.selectNextTerminalTabAction, actions.selectNextTerminalTab.asFocusedAction(token: token)
+      )
+      .focusedSceneValue(
+        \.selectPreviousTerminalPaneAction,
+        actions.selectPreviousTerminalPane.asFocusedAction(token: token)
       )
       .focusedSceneValue(
         \.selectNextTerminalPaneAction, actions.selectNextTerminalPane.asFocusedAction(token: token)
       )
-      .focusedSceneValue(\.selectTerminalPaneAboveAction, actions.selectTerminalPaneAbove.asFocusedAction(token: token))
-      .focusedSceneValue(\.selectTerminalPaneBelowAction, actions.selectTerminalPaneBelow.asFocusedAction(token: token))
-      .focusedSceneValue(\.selectTerminalPaneLeftAction, actions.selectTerminalPaneLeft.asFocusedAction(token: token))
-      .focusedSceneValue(\.selectTerminalPaneRightAction, actions.selectTerminalPaneRight.asFocusedAction(token: token))
+      .focusedSceneValue(
+        \.selectTerminalPaneAboveAction,
+        actions.selectTerminalPaneAbove.asFocusedAction(token: token)
+      )
+      .focusedSceneValue(
+        \.selectTerminalPaneBelowAction,
+        actions.selectTerminalPaneBelow.asFocusedAction(token: token)
+      )
+      .focusedSceneValue(
+        \.selectTerminalPaneLeftAction, actions.selectTerminalPaneLeft.asFocusedAction(token: token)
+      )
+      .focusedSceneValue(
+        \.selectTerminalPaneRightAction,
+        actions.selectTerminalPaneRight.asFocusedAction(token: token)
+      )
       .focusedSceneValue(\.runScriptAction, actions.runScript.asFocusedAction(token: token))
       .focusedSceneValue(\.stopRunScriptAction, actions.stopRunScript.asFocusedAction(token: token))
   }
@@ -668,7 +717,9 @@ struct WorktreeDetailView: View {
           terminalManager.syncPreferredFontSize(from: worktreeID)
         }
       }
-      guard hasActiveWorktree, let selectedWorktree = repositories.selectedTerminalWorktree else { return nil }
+      guard hasActiveWorktree, let selectedWorktree = repositories.selectedTerminalWorktree else {
+        return nil
+      }
       return {
         guard let state = terminalManager.stateIfExists(for: selectedWorktree.id) else { return }
         _ = state.performBindingActionOnFocusedSurface(bindingAction)
@@ -680,54 +731,22 @@ struct WorktreeDetailView: View {
       if let action = canvasAction({ $0.performBindingActionOnFocusedSurface(bindingAction) }) {
         return action
       }
-      guard hasActiveWorktree, let selectedWorktree = repositories.selectedTerminalWorktree else { return nil }
+      guard hasActiveWorktree, let selectedWorktree = repositories.selectedTerminalWorktree else {
+        return nil
+      }
       return {
         guard let state = terminalManager.stateIfExists(for: selectedWorktree.id) else { return }
         _ = state.performBindingActionOnFocusedSurface(bindingAction)
       }
     }
 
-    func closeTabAction() -> (() -> Void)? {
-      if repositories.isShowingCanvas {
-        guard let worktreeID = terminalManager.canvasFocusedWorktreeID,
-          let state = terminalManager.stateIfExists(for: worktreeID),
-          state.canCloseFocusedTab
-        else {
-          return nil
-        }
-        return { _ = state.closeFocusedTab() }
-      }
-      guard hasActiveWorktree, let selectedWorktree = repositories.selectedTerminalWorktree,
-        terminalManager.stateIfExists(for: selectedWorktree.id)?.canCloseFocusedTab == true
-      else {
-        return nil
-      }
-      return { store.send(.closeTab) }
-    }
-
-    func closeSurfaceAction() -> (() -> Void)? {
-      if repositories.isShowingCanvas {
-        guard let worktreeID = terminalManager.canvasFocusedWorktreeID,
-          let state = terminalManager.stateIfExists(for: worktreeID),
-          state.canCloseFocusedSurface
-        else {
-          return nil
-        }
-        return { _ = state.closeFocusedSurface() }
-      }
-      guard hasActiveWorktree, let selectedWorktree = repositories.selectedTerminalWorktree,
-        terminalManager.stateIfExists(for: selectedWorktree.id)?.canCloseFocusedSurface == true
-      else {
-        return nil
-      }
-      return { store.send(.closeSurface) }
-    }
-
     return FocusedActions(
       openSelectedWorktree: action(.openSelectedWorktree),
       newTerminal: action(.newTerminal),
-      closeTab: closeTabAction(),
-      closeSurface: closeSurfaceAction(),
+      closeTab: closeTabFocusedAction(
+        repositories: repositories, hasActiveWorktree: hasActiveWorktree),
+      closeSurface: closeSurfaceFocusedAction(
+        repositories: repositories, hasActiveWorktree: hasActiveWorktree),
       resetFontSize: fontSizeAction("reset_font_size"),
       increaseFontSize: fontSizeAction("increase_font_size:1"),
       decreaseFontSize: fontSizeAction("decrease_font_size:1"),
@@ -747,6 +766,40 @@ struct WorktreeDetailView: View {
       runScript: runScriptEnabled ? { store.send(.runScript) } : nil,
       stopRunScript: runScriptIsRunning ? { store.send(.stopRunScript) } : nil
     )
+  }
+
+  private func closeTabFocusedAction(
+    repositories: RepositoriesFeature.State,
+    hasActiveWorktree: Bool
+  ) -> (() -> Void)? {
+    if repositories.isShowingCanvas {
+      guard let worktreeID = terminalManager.canvasFocusedWorktreeID,
+        let state = terminalManager.stateIfExists(for: worktreeID),
+        state.canCloseFocusedTab
+      else { return nil }
+      return { _ = state.closeFocusedTab() }
+    }
+    guard hasActiveWorktree, let selectedWorktree = repositories.selectedTerminalWorktree,
+      terminalManager.stateIfExists(for: selectedWorktree.id)?.canCloseFocusedTab == true
+    else { return nil }
+    return { store.send(.closeTab) }
+  }
+
+  private func closeSurfaceFocusedAction(
+    repositories: RepositoriesFeature.State,
+    hasActiveWorktree: Bool
+  ) -> (() -> Void)? {
+    if repositories.isShowingCanvas {
+      guard let worktreeID = terminalManager.canvasFocusedWorktreeID,
+        let state = terminalManager.stateIfExists(for: worktreeID),
+        state.canCloseFocusedSurface
+      else { return nil }
+      return { _ = state.closeFocusedSurface() }
+    }
+    guard hasActiveWorktree, let selectedWorktree = repositories.selectedTerminalWorktree,
+      terminalManager.stateIfExists(for: selectedWorktree.id)?.canCloseFocusedSurface == true
+    else { return nil }
+    return { store.send(.closeSurface) }
   }
 
   private func selectToolbarNotification(
@@ -860,6 +913,7 @@ struct WorktreeDetailView: View {
     let onManageProfiles: () -> Void
     let onRunWorkflow: (String) -> Void
     let onRunWorkflowWithOptions: (String) -> Void
+    let onShowWorkflowDetails: (WorkflowStartCatalogItem) -> Void
     let onSelectNotification: (Worktree.ID, WorktreeTerminalNotification) -> Void
     let onDismissAllNotifications: () -> Void
     let isUpdateAvailable: Bool
@@ -877,7 +931,8 @@ struct WorktreeDetailView: View {
           onLaunchProfile: onLaunchProfile,
           onManageProfiles: onManageProfiles,
           onRunWorkflow: onRunWorkflow,
-          onRunWorkflowWithOptions: onRunWorkflowWithOptions
+          onRunWorkflowWithOptions: onRunWorkflowWithOptions,
+          onShowWorkflowDetails: onShowWorkflowDetails
         )
         if let quickLaunchItem = agentsLauncherItems.first {
           AgentsQuickLaunchButton(item: quickLaunchItem, onLaunch: onLaunchProfile)
@@ -925,6 +980,7 @@ struct WorktreeDetailView: View {
     let onManageProfiles: () -> Void
     let onRunWorkflow: (String) -> Void
     let onRunWorkflowWithOptions: (String) -> Void
+    let onShowWorkflowDetails: (WorkflowStartCatalogItem) -> Void
     let onWorkflowIntent: (WorkflowRunPanelIntent) -> Void
     @Environment(\.resolvedKeybindings) private var resolvedKeybindings
 
@@ -940,6 +996,7 @@ struct WorktreeDetailView: View {
         onManageProfiles: onManageProfiles,
         onRunWorkflow: onRunWorkflow,
         onRunWorkflowWithOptions: onRunWorkflowWithOptions,
+        onShowWorkflowDetails: onShowWorkflowDetails,
         onSelectNotification: onSelectNotification,
         onDismissAllNotifications: onDismissAllNotifications,
         isUpdateAvailable: toolbarState.shared.isUpdateAvailable,

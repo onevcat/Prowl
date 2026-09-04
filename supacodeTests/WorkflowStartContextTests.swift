@@ -64,8 +64,14 @@ struct WorkflowStartContextTests {
     let definition = try definition(yaml)
     return WorkflowStartContext(
       item: WorkflowStartCatalogItem(
-        key: "user/\(definition.id)", workflowID: definition.id, name: definition.name,
-        workflowDescription: nil, validationFailure: validationFailure),
+        key: "user/\(definition.id)",
+        scope: .user,
+        fileURL: URL(filePath: "/tmp/\(definition.id).yaml"),
+        workflowID: definition.id,
+        name: definition.name,
+        workflowDescription: nil,
+        icon: definition.icon,
+        validationFailure: validationFailure),
       definition: definition,
       worktreeID: "/tmp/wt/", worktreeName: "main",
       source: source,
@@ -76,7 +82,9 @@ struct WorkflowStartContextTests {
       cliServiceFailure: cliServiceFailure)
   }
 
-  private func launchRole(bind: WorkflowBindMode = .auto, resolved: UUID? = profileID) -> WorkflowStartLaunchRole {
+  private func launchRole(bind: WorkflowBindMode = .auto, resolved: UUID? = profileID)
+    -> WorkflowStartLaunchRole
+  {
     WorkflowStartLaunchRole(
       name: "reviewer", effectiveBind: bind, resolvedProfileID: resolved,
       candidates: [], suggestion: nil, rejectedNote: nil)
@@ -89,18 +97,40 @@ struct WorkflowStartContextTests {
       preselectedSurfaceID: preselected?.surfaceID)
   }
 
+  @Test func catalogItemCarriesTheWorkflowIcon() throws {
+    let url = URL(filePath: "/tmp/icon.yaml")
+    let file = WorkflowDiscovery.parse(
+      Self.autoFlow.replacing("name: Auto Flow", with: "name: Auto Flow\nicon: bolt"),
+      url: url,
+      scope: .user,
+      context: WorkflowValidationContext(scope: .user))
+
+    let item = try #require(
+      WorkflowStartCatalogItem.make(
+        entry: WorkflowCatalogEntry(file: file, shadowed: false),
+        disabledWorkflowIDs: [],
+        repositoryRootPath: nil))
+
+    #expect(item.scope == .user)
+    #expect(item.fileURL == url)
+    #expect(item.icon == "bolt")
+  }
+
   @Test func startsImmediatelyWhenNothingIsUndecided() throws {
-    let context = try context(source: source(preselected: Self.agentPane), launchRoles: [launchRole()])
+    let context = try context(
+      source: source(preselected: Self.agentPane), launchRoles: [launchRole()])
     #expect(context.canStartImmediately)
   }
 
   @Test func askBindAlwaysPresentsTheSheet() throws {
-    let context = try context(source: source(preselected: Self.agentPane), launchRoles: [launchRole(bind: .ask)])
+    let context = try context(
+      source: source(preselected: Self.agentPane), launchRoles: [launchRole(bind: .ask)])
     #expect(!context.canStartImmediately)
   }
 
   @Test func unresolvedAutoRolePresentsTheSheet() throws {
-    let context = try context(source: source(preselected: Self.agentPane), launchRoles: [launchRole(resolved: nil)])
+    let context = try context(
+      source: source(preselected: Self.agentPane), launchRoles: [launchRole(resolved: nil)])
     #expect(!context.canStartImmediately)
   }
 
@@ -112,8 +142,10 @@ struct WorkflowStartContextTests {
   }
 
   @Test func defaultlessInputPresentsTheSheet() throws {
-    let yaml = Self.autoFlow.replacing("focus: { type: string, default: \"\" }", with: "focus: { type: string }")
-    let context = try context(yaml: yaml, source: source(preselected: Self.agentPane), launchRoles: [launchRole()])
+    let yaml = Self.autoFlow.replacing(
+      "focus: { type: string, default: \"\" }", with: "focus: { type: string }")
+    let context = try context(
+      yaml: yaml, source: source(preselected: Self.agentPane), launchRoles: [launchRole()])
     #expect(!context.canStartImmediately)
   }
 
@@ -123,9 +155,11 @@ struct WorkflowStartContextTests {
     #expect(context.cliInstallActionTitle == "Install")
     context.cliInstallStatus = .broken(path: "/usr/local/bin/prowl", destination: "/gone")
     #expect(context.cliInstallActionTitle == "Repair")
-    context.cliInstallStatus = .installedDifferentSource(path: "/usr/local/bin/prowl", destination: "/other")
+    context.cliInstallStatus = .installedDifferentSource(
+      path: "/usr/local/bin/prowl", destination: "/other")
     #expect(context.cliInstallActionTitle == "Reinstall")
-    context.cliInstallStatus = .installedDifferentSource(path: "/usr/local/bin/prowl", destination: nil)
+    context.cliInstallStatus = .installedDifferentSource(
+      path: "/usr/local/bin/prowl", destination: nil)
     #expect(context.cliInstallActionTitle == nil)
     #expect(context.cliInstallBlockerCopy.contains("Remove it"))
   }
@@ -144,7 +178,8 @@ struct WorkflowStartContextTests {
   }
 
   @Test func bareShellSourceNeedsTheSheetWhenAMessageDelivers() throws {
-    let context = try context(source: source(preselected: Self.bareShellPane), launchRoles: [launchRole()])
+    let context = try context(
+      source: source(preselected: Self.bareShellPane), launchRoles: [launchRole()])
     #expect(!context.canStartImmediately)
   }
 
@@ -166,7 +201,8 @@ struct WorkflowStartContextTests {
   }
 
   @Test func skipOptionsListEveryExpectCarryingStep() throws {
-    let context = try context(source: source(preselected: Self.agentPane), launchRoles: [launchRole()])
+    let context = try context(
+      source: source(preselected: Self.agentPane), launchRoles: [launchRole()])
     #expect(context.skipOptions.map(\.stepID) == ["brief"])
   }
 }

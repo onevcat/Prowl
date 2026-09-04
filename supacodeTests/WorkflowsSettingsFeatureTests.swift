@@ -25,8 +25,10 @@ struct WorkflowsSettingsFeatureTests {
     """
 
   private static let codexProfile = AgentProfile(
-    id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!, name: "Codex Review", runtime: .codex)
-  private static let baseSettings = UserGlobalSettings(customCommands: [], agentProfiles: [codexProfile])
+    id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!, name: "Codex Review",
+    runtime: .codex)
+  private static let baseSettings = UserGlobalSettings(
+    customCommands: [], agentProfiles: [codexProfile])
 
   /// Temp user and repo directories, a client that scans them for real, and hooks to observe reveals
   /// and drive the directory watcher.
@@ -35,12 +37,14 @@ struct WorkflowsSettingsFeatureTests {
     let userDirectory: URL
     let repoRoot: URL
     let revealed = LockIsolated<[URL]>([])
+    let opened = LockIsolated<[URL]>([])
     let watchContinuations = LockIsolated<[AsyncStream<Void>.Continuation]>([])
     var scanError: WorkflowSettingsError?
 
     init() throws {
       root = FileManager.default.temporaryDirectory
-        .appending(path: "prowl-workflows-settings-\(UUID().uuidString)", directoryHint: .isDirectory)
+        .appending(
+          path: "prowl-workflows-settings-\(UUID().uuidString)", directoryHint: .isDirectory)
       userDirectory = root.appending(path: "home/.prowl/workflows", directoryHint: .isDirectory)
       repoRoot = root.appending(path: "repo", directoryHint: .isDirectory)
       try FileManager.default.createDirectory(at: userDirectory, withIntermediateDirectories: true)
@@ -52,7 +56,8 @@ struct WorkflowsSettingsFeatureTests {
     }
 
     func write(_ yaml: String, to name: String) throws {
-      try Data(yaml.utf8).write(to: userDirectory.appending(path: name, directoryHint: .notDirectory))
+      try Data(yaml.utf8).write(
+        to: userDirectory.appending(path: name, directoryHint: .notDirectory))
     }
 
     func scan() throws -> WorkflowSettingsScan {
@@ -69,14 +74,16 @@ struct WorkflowsSettingsFeatureTests {
             repositoryID: "repo", name: "Repo", rootPath: repoRoot.path(percentEncoded: false),
             directory: repoDirectory,
             entries: try WorkflowDiscovery.catalog(
-              sources: WorkflowSources(bundle: nil, user: userDirectory, repo: repoDirectory), context: context))
+              sources: WorkflowSources(bundle: nil, user: userDirectory, repo: repoDirectory),
+              context: context))
         ])
     }
 
     var client: WorkflowSettingsClient {
       WorkflowSettingsClient(
-        scan: { try self.scan() },
-        createWorkflow: { try WorkflowStarterTemplate.write(in: self.userDirectory) },
+        scan: { _ in try self.scan() },
+        createWorkflow: { directory in try WorkflowStarterTemplate.write(in: directory) },
+        runTargets: { _ in [] },
         reveal: { url in self.revealed.withValue { $0.append(url) } },
         watch: { _ in
           let (stream, continuation) = AsyncStream<Void>.makeStream()
@@ -96,7 +103,9 @@ struct WorkflowsSettingsFeatureTests {
 
     /// The rows for explicit settings — the TestStore's expectation closure reads `@Shared`
     /// as it was before the action, so expectations are built from the settings they expect.
-    func expectedCatalog(_ settings: UserGlobalSettings = baseSettings) throws -> WorkflowSettingsCatalog {
+    func expectedCatalog(_ settings: UserGlobalSettings = baseSettings) throws
+      -> WorkflowSettingsCatalog
+    {
       WorkflowSettingsCatalog.build(scan: try scan(), settings: settings)
     }
   }
@@ -114,16 +123,44 @@ struct WorkflowsSettingsFeatureTests {
     } operation: {
       @Shared(.userGlobalSettings) var settings
       $settings.withLock { $0 = Self.baseSettings }
-      return TestStore(initialState: WorkflowsSettingsFeature.State(userDirectory: fixture.userDirectory)) {
+      return TestStore(
+        initialState: WorkflowsSettingsFeature.State(userDirectory: fixture.userDirectory)
+      ) {
         WorkflowsSettingsFeature()
       } withDependencies: {
         $0[WorkflowSettingsClient.self] = fixture.client
+        $0[OpenURLClient.self].open = { url in fixture.opened.withValue { $0.append(url) } }
         $0[CLIServiceStatusClient.self].current = { serviceStatus }
         $0[CLIInstallClient.self].installationStatus = { _ in installStatus }
         $0[CLIInstallClient.self].isUsable = { _ in cliUsable }
         $0.continuousClock = clock
       }
     }
+  }
+
+  @Test func scopeSelectsOnlyTheRowsOwnedByThatSettingsSurface() throws {
+    let fixture = try Fixture()
+    defer { fixture.cleanUp() }
+    try fixture.write(Self.review, to: "review.yaml")
+    let repoDirectory = WorkflowSources.repoDirectory(root: fixture.repoRoot)
+    try FileManager.default.createDirectory(at: repoDirectory, withIntermediateDirectories: true)
+    try Data(Self.review.utf8).write(to: repoDirectory.appending(path: "repo-review.yaml"))
+    let catalog = WorkflowSettingsCatalog.build(
+      scan: try fixture.scan(), settings: Self.baseSettings)
+    var global = WorkflowsSettingsFeature.State(userDirectory: fixture.userDirectory)
+    global.catalog = catalog
+    var repository = WorkflowsSettingsFeature.State(
+      scope: .repository(
+        WorkflowSettingsRepositoryContext(
+          repositoryID: "repo",
+          name: "Repo",
+          rootURL: fixture.repoRoot)),
+      userDirectory: fixture.userDirectory)
+    repository.catalog = catalog
+
+    #expect(global.displayedRows.map(\.scope) == [.user])
+    #expect(repository.displayedRows.map(\.scope) == [.repo])
+    #expect(repository.workflowDirectory == repoDirectory)
   }
 
   @Test(.dependencies) func taskLoadsRowsAndCLIStatuses() async throws {
@@ -157,7 +194,8 @@ struct WorkflowsSettingsFeatureTests {
     let fixture = try Fixture()
     defer { fixture.cleanUp() }
     let store = makeStore(
-      fixture, storage: SettingsTestStorage(), serviceStatus: .failed(.socketAlreadyOwned, path: "/x"))
+      fixture, storage: SettingsTestStorage(),
+      serviceStatus: .failed(.socketAlreadyOwned, path: "/x"))
 
     await store.send(.task) {
       $0.cliInstallStatus = .installed(path: "/usr/local/bin/prowl")
@@ -168,7 +206,8 @@ struct WorkflowsSettingsFeatureTests {
     }
     #expect(
       store.state.cliBlocker
-        == .socketUnavailable(CLIServiceStatus.failed(.socketAlreadyOwned, path: "/x").failureDescription!))
+        == .socketUnavailable(
+          CLIServiceStatus.failed(.socketAlreadyOwned, path: "/x").failureDescription!))
 
     var missing = WorkflowsSettingsFeature.State(userDirectory: fixture.userDirectory)
     missing.cliInstallStatus = .notInstalled
@@ -177,17 +216,23 @@ struct WorkflowsSettingsFeatureTests {
     #expect(missing.cliBlocker == .cliUnusable(.notInstalled))
     // A dangling link, or a real file that is not an executable, is not a usable `prowl` either.
     missing.cliInstallStatus = .broken(path: "/usr/local/bin/prowl", destination: "/gone")
-    #expect(missing.cliBlocker == .cliUnusable(.broken(path: "/usr/local/bin/prowl", destination: "/gone")))
-    missing.cliInstallStatus = .installedDifferentSource(path: "/usr/local/bin/prowl", destination: nil)
     #expect(
-      missing.cliBlocker == .cliUnusable(.installedDifferentSource(path: "/usr/local/bin/prowl", destination: nil)))
+      missing.cliBlocker
+        == .cliUnusable(.broken(path: "/usr/local/bin/prowl", destination: "/gone")))
+    missing.cliInstallStatus = .installedDifferentSource(
+      path: "/usr/local/bin/prowl", destination: nil)
+    #expect(
+      missing.cliBlocker
+        == .cliUnusable(.installedDifferentSource(path: "/usr/local/bin/prowl", destination: nil)))
     // Another build's executable `prowl` is usable (C2's rule); the socket rules first, and a
     // stopped server is unreachable even though it is not a failure.
-    missing.cliInstallStatus = .installedDifferentSource(path: "/usr/local/bin/prowl", destination: "/other")
+    missing.cliInstallStatus = .installedDifferentSource(
+      path: "/usr/local/bin/prowl", destination: "/other")
     missing.cliUsable = true
     #expect(missing.cliBlocker == nil)
     missing.cliServiceStatus = .stopped
-    #expect(missing.cliBlocker == .socketUnavailable(CLIServiceStatus.stopped.unreachableDescription!))
+    #expect(
+      missing.cliBlocker == .socketUnavailable(CLIServiceStatus.stopped.unreachableDescription!))
 
     fixture.finishWatchers()
     await store.finish()
@@ -257,7 +302,9 @@ struct WorkflowsSettingsFeatureTests {
     await store.send(.setRememberedBinding(key, profileID: Self.codexProfile.id)) { [expected] in
       $0.catalog = try fixture.expectedCatalog(expected)
     }
-    #expect(store.state.catalog.user.first?.launchRoles.first?.rememberedProfileID == Self.codexProfile.id)
+    #expect(
+      store.state.catalog.user.first?.launchRoles.first?.rememberedProfileID == Self.codexProfile.id
+    )
 
     expected.forget(workflowBinding: key)
     await store.send(.setRememberedBinding(key, profileID: nil)) { [expected] in
@@ -282,7 +329,7 @@ struct WorkflowsSettingsFeatureTests {
     await store.finish()
   }
 
-  @Test(.dependencies) func newWorkflowWritesTheStarterRevealsItAndReloads() async throws {
+  @Test(.dependencies) func newWorkflowWritesTheStarterOpensItAndReloads() async throws {
     let fixture = try Fixture()
     defer { fixture.cleanUp() }
     let store = makeStore(fixture, storage: SettingsTestStorage())
@@ -294,17 +341,49 @@ struct WorkflowsSettingsFeatureTests {
       $0.catalog = try fixture.expectedCatalog()
     }
 
-    let expectedURL = fixture.userDirectory.appending(path: "new-workflow.yaml", directoryHint: .notDirectory)
+    let expectedURL = fixture.userDirectory.appending(
+      path: "new-workflow.yaml", directoryHint: .notDirectory)
     await store.send(.newWorkflowTapped) {
       $0.scan = try fixture.scan()
       $0.catalog = try fixture.expectedCatalog()
     }
-    await store.receive(.delegate(.notice(.workflowCreated(path: expectedURL.path(percentEncoded: false)))))
+    await store.receive(
+      .delegate(.notice(.workflowCreated(path: expectedURL.path(percentEncoded: false)))))
 
     let row = try #require(store.state.catalog.user.first)
     #expect(row.workflowID == "new-workflow")
     #expect(row.isValid)
-    #expect(fixture.revealed.value == [expectedURL])
+    #expect(fixture.opened.value == [expectedURL])
+    #expect(fixture.revealed.value.isEmpty)
+
+    fixture.finishWatchers()
+    await store.finish()
+  }
+
+  @Test(.dependencies) func anOpenDetailBecomesUnavailableWhenItsFileDisappears() async throws {
+    let fixture = try Fixture()
+    defer { fixture.cleanUp() }
+    try fixture.write(Self.review, to: "review.yaml")
+    let store = makeStore(fixture, storage: SettingsTestStorage())
+    await store.send(.task) {
+      $0.cliInstallStatus = .installed(path: "/usr/local/bin/prowl")
+      $0.cliUsable = true
+      $0.cliServiceStatus = .listening(path: "/tmp/cli.sock")
+      $0.scan = try fixture.scan()
+      $0.catalog = try fixture.expectedCatalog()
+    }
+    let row = try #require(store.state.catalog.user.first)
+    await store.send(.showDetails(rowID: row.id)) {
+      $0.path.append($0.detailState(for: row))
+    }
+    let pathID = try #require(store.state.path.ids.first)
+    try FileManager.default.removeItem(at: row.url)
+
+    await store.send(.reload) {
+      $0.scan = try fixture.scan()
+      $0.catalog = try fixture.expectedCatalog()
+      $0.path[id: pathID]?.row = nil
+    }
 
     fixture.finishWatchers()
     await store.finish()

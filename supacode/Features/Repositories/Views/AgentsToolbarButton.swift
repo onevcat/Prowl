@@ -63,6 +63,7 @@ struct AgentsToolbarButton: View {
   let onManageProfiles: () -> Void
   let onRunWorkflow: (String) -> Void
   let onRunWorkflowWithOptions: (String) -> Void
+  let onShowWorkflowDetails: (WorkflowStartCatalogItem) -> Void
   @State private var isPopoverPresented = false
 
   var body: some View {
@@ -98,6 +99,10 @@ struct AgentsToolbarButton: View {
         onRunWorkflowWithOptions: { key in
           isPopoverPresented = false
           onRunWorkflowWithOptions(key)
+        },
+        onShowWorkflowDetails: { item in
+          isPopoverPresented = false
+          onShowWorkflowDetails(item)
         }
       )
     }
@@ -191,6 +196,7 @@ private struct AgentsPopoverContent: View {
   let onManageProfiles: () -> Void
   let onRunWorkflow: (String) -> Void
   let onRunWorkflowWithOptions: (String) -> Void
+  let onShowWorkflowDetails: (WorkflowStartCatalogItem) -> Void
   @Dependency(WorkflowStartClient.self) private var workflowStartClient
   @State private var workflowItems: [WorkflowStartCatalogItem] = []
 
@@ -218,12 +224,16 @@ private struct AgentsPopoverContent: View {
           if let failure = item.validationFailure {
             // The popover is the diagnostic surface (063.011 decision 3): a
             // failing file stays listed with its reason but offers no action.
-            AgentsWorkflowInvalidRow(name: item.name, reason: failure)
+            AgentsWorkflowInvalidRow(
+              item: item,
+              reason: failure,
+              onShowDetails: { onShowWorkflowDetails(item) })
           } else {
             AgentsWorkflowRow(
               item: item,
               onRun: { onRunWorkflow(item.key) },
-              onRunWithOptions: { onRunWorkflowWithOptions(item.key) }
+              onRunWithOptions: { onRunWorkflowWithOptions(item.key) },
+              onShowDetails: { onShowWorkflowDetails(item) }
             )
           }
         }
@@ -342,15 +352,15 @@ private struct AgentsWorkflowRow: View {
   let item: WorkflowStartCatalogItem
   let onRun: () -> Void
   let onRunWithOptions: () -> Void
+  let onShowDetails: () -> Void
   @State private var isHovered = false
 
   var body: some View {
     HStack(spacing: 0) {
       Button(action: onRun) {
         HStack(alignment: .top, spacing: 8) {
-          Image(systemName: "rectangle.stack.badge.play")
+          WorkflowIconImage(icon: item.icon, pointSize: 16)
             .frame(width: 16)
-            .accessibilityHidden(true)
           VStack(alignment: .leading, spacing: 2) {
             Text(item.name)
               .lineLimit(1)
@@ -370,16 +380,23 @@ private struct AgentsWorkflowRow: View {
       }
       .buttonStyle(.plain)
       .help("Run \(item.name)")
-      Button(action: onRunWithOptions) {
+      Menu {
+        Button("Run with Options…", action: onRunWithOptions)
+        Divider()
+        Button("Show Details in Settings…", action: onShowDetails)
+      } label: {
         Image(systemName: "ellipsis.circle")
           .foregroundStyle(.secondary)
+          .accessibilityHidden(true)
           .frame(width: 20, height: 20)
           .contentShape(.rect)
       }
-      .buttonStyle(.plain)
+      .menuStyle(.borderlessButton)
+      .menuIndicator(.hidden)
+      .fixedSize()
       .padding(.trailing, 6)
-      .help("Run \(item.name) with options…")
-      .accessibilityLabel("Run \(item.name) with options")
+      .help("More actions for \(item.name)")
+      .accessibilityLabel("More actions for \(item.name)")
     }
     .background(
       RoundedRectangle(cornerRadius: 6)
@@ -392,16 +409,16 @@ private struct AgentsWorkflowRow: View {
 /// A workflow file that failed validation: named so the author can find it,
 /// dimmed, and deliberately inert.
 private struct AgentsWorkflowInvalidRow: View {
-  let name: String
+  let item: WorkflowStartCatalogItem
   let reason: String
+  let onShowDetails: () -> Void
 
   var body: some View {
     HStack(alignment: .top, spacing: 8) {
-      Image(systemName: "exclamationmark.triangle")
+      WorkflowIconImage(icon: item.icon, pointSize: 16)
         .frame(width: 16)
-        .accessibilityHidden(true)
       VStack(alignment: .leading, spacing: 2) {
-        Text(name)
+        Text(item.name)
           .lineLimit(1)
         Text(reason)
           .font(.caption)
@@ -409,6 +426,18 @@ private struct AgentsWorkflowInvalidRow: View {
           .fixedSize(horizontal: false, vertical: true)
       }
       Spacer(minLength: 0)
+      Menu {
+        Button("Show Details in Settings…", action: onShowDetails)
+      } label: {
+        Image(systemName: "ellipsis.circle")
+          .foregroundStyle(.secondary)
+          .accessibilityHidden(true)
+          .frame(width: 20, height: 20)
+      }
+      .menuStyle(.borderlessButton)
+      .menuIndicator(.hidden)
+      .fixedSize()
+      .accessibilityLabel("More actions for \(item.name)")
     }
     .padding(.horizontal, 8)
     .padding(.vertical, 6)

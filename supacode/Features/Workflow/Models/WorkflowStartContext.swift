@@ -8,16 +8,60 @@ import Foundation
 
 /// One workflow as an entry point lists it (palette, capsule popover, Active Agents menu).
 nonisolated struct WorkflowStartCatalogItem: Equatable, Sendable, Identifiable {
-  /// `<scope>/<id>` — the key `disabledWorkflowIDs` and the bind-mode override use.
+  /// The scope-qualified preference key used by `disabledWorkflowIDs` and bind-mode overrides.
   let key: String
+  let scope: WorkflowScope
+  let fileURL: URL
   let workflowID: String
   let name: String
   let workflowDescription: String?
+  let icon: String?
   /// Set for a file that failed validation: listed only in the capsule popover, dimmed with this.
   let validationFailure: String?
 
   var id: String { key }
   var isRunnable: Bool { validationFailure == nil }
+
+  /// Shared pure projection for the palette, Agents capsule, and start context. Keeping the
+  /// YAML icon and source identity here prevents entry points from re-reading or partially
+  /// reconstructing a definition.
+  static func make(
+    entry: WorkflowCatalogEntry,
+    disabledWorkflowIDs: Set<String>,
+    repositoryRootPath: String?
+  ) -> Self? {
+    guard !entry.shadowed else { return nil }
+    let file = entry.file
+    guard let workflowID = file.id else {
+      let filename = file.url.lastPathComponent
+      return Self(
+        key: "\(file.scope.rawValue)/file:\(filename)",
+        scope: file.scope,
+        fileURL: file.url,
+        workflowID: filename,
+        name: filename,
+        workflowDescription: nil,
+        icon: nil,
+        validationFailure: "Cannot parse the file.")
+    }
+    guard
+      let key = WorkflowPreferenceKey.make(
+        scope: file.scope,
+        workflowID: workflowID,
+        repositoryRootPath: repositoryRootPath),
+      !disabledWorkflowIDs.contains(key)
+    else { return nil }
+    let errors = file.diagnostics.errorCount
+    return Self(
+      key: key,
+      scope: file.scope,
+      fileURL: file.url,
+      workflowID: workflowID,
+      name: file.definition?.name ?? workflowID,
+      workflowDescription: file.definition?.description,
+      icon: file.definition?.icon,
+      validationFailure: file.isValid ? nil : "\(errors) validation error\(errors == 1 ? "" : "s")")
+  }
 }
 
 /// A pane offered as the `current` source or a `pick` binding. `agentToken == nil` is a bare
@@ -117,12 +161,17 @@ nonisolated struct WorkflowStartContext: Equatable, Sendable {
   /// no `pick` role (those are always an explicit choice), every input has a default, and the
   /// preselected source satisfies the delivery requirement with nothing skipped.
   var canStartImmediately: Bool {
-    guard item.isRunnable, cliInstalled, cliServiceFailure == nil, pickRoles.isEmpty else { return false }
+    guard item.isRunnable, cliInstalled, cliServiceFailure == nil, pickRoles.isEmpty else {
+      return false
+    }
     guard launchRoles.allSatisfy({ $0.effectiveBind == .auto && $0.resolvedProfileID != nil })
     else { return false }
     guard definition.inputs.allSatisfy({ $0.defaultValue != nil }) else { return false }
     guard let source else { return true }
-    guard let preselected = source.candidates.first(where: { $0.surfaceID == source.preselectedSurfaceID })
+    guard
+      let preselected = source.candidates.first(where: {
+        $0.surfaceID == source.preselectedSurfaceID
+      })
     else { return false }
     let needsAgent = WorkflowRunAdmission.deliversToCurrentRole(definition, skipped: [])
     return !needsAgent || preselected.agentToken != nil

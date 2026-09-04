@@ -185,6 +185,136 @@ struct AppFeatureSettingsSelectionTests {
     #expect(shown.value)
   }
 
+  @Test(.dependencies) func workflowDetailsDeepLinkLoadsAndPushesTheExactFile() async throws {
+    let directory = FileManager.default.temporaryDirectory
+      .appending(path: "workflow-deep-link-\(UUID().uuidString)", directoryHint: .isDirectory)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let url = directory.appending(path: "review.yaml")
+    let yaml = """
+      schema: prowl.workflow/v1
+      id: review
+      name: Review
+      icon: magnifyingglass
+      roles:
+        author:
+          source: current
+      steps:
+        - id: ask
+          message: author
+          text: "Review."
+      """
+    try Data(yaml.utf8).write(to: url)
+    let file = WorkflowDiscovery.parse(
+      yaml,
+      url: url,
+      scope: .user,
+      context: WorkflowValidationContext(scope: .user))
+    let entry = WorkflowCatalogEntry(file: file, shadowed: false)
+    let item = try #require(
+      WorkflowStartCatalogItem.make(
+        entry: entry,
+        disabledWorkflowIDs: [],
+        repositoryRootPath: nil))
+    let scan = WorkflowSettingsScan(
+      bundleDirectory: nil,
+      userDirectory: directory,
+      entries: [entry],
+      repositories: [])
+    let shown = LockIsolated(false)
+    let store = TestStore(initialState: AppFeature.State(settings: SettingsFeature.State())) {
+      AppFeature()
+    } withDependencies: {
+      $0[WorkflowSettingsClient.self].scan = { _ in scan }
+      $0.settingsWindowClient.show = { shown.withValue { $0 = true } }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.openWorkflowDetails(item, worktreeID: "unused"))
+    await store.receive(\.settings.setSelection)
+    await store.receive(\.settings.workflows.task)
+    await store.receive(\.settings.workflows.showDetails)
+    await store.finish()
+
+    #expect(store.state.settings.selection == .workflows)
+    #expect(store.state.settings.workflows?.path.first?.row?.url == url)
+    #expect(shown.value)
+  }
+
+  @Test(.dependencies) func repositoryWorkflowDetailsDeepLinkUsesRepositorySettings() async throws {
+    let rootURL = URL(fileURLWithPath: "/tmp/repository-workflow-deep-link")
+    let workflowURL = WorkflowSources.repoDirectory(root: rootURL).appending(path: "review.yaml")
+    let yaml = """
+      schema: prowl.workflow/v1
+      id: review
+      name: Repository Review
+      roles:
+        author:
+          source: current
+      steps:
+        - id: ask
+          message: author
+          text: "Review."
+      """
+    let file = WorkflowDiscovery.parse(
+      yaml,
+      url: workflowURL,
+      scope: .repo,
+      context: WorkflowValidationContext(scope: .repo))
+    let entry = WorkflowCatalogEntry(file: file, shadowed: false)
+    let item = try #require(
+      WorkflowStartCatalogItem.make(
+        entry: entry,
+        disabledWorkflowIDs: [],
+        repositoryRootPath: rootURL.path(percentEncoded: false)))
+    let worktree = Worktree(
+      id: "wt-1",
+      name: "feature",
+      detail: "",
+      workingDirectory: rootURL,
+      repositoryRootURL: rootURL)
+    let repository = Repository(
+      id: "repo-id",
+      rootURL: rootURL,
+      name: "Repo",
+      worktrees: [worktree])
+    let scan = WorkflowSettingsScan(
+      bundleDirectory: nil,
+      userDirectory: URL(filePath: "/tmp/user-workflows"),
+      entries: [],
+      repositories: [
+        WorkflowSettingsRepositoryScan(
+          repositoryID: repository.id,
+          name: repository.name,
+          rootPath: rootURL.path(percentEncoded: false),
+          directory: WorkflowSources.repoDirectory(root: rootURL),
+          entries: [entry])
+      ])
+    let shown = LockIsolated(false)
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: RepositoriesFeature.State(repositories: [repository]),
+        settings: SettingsFeature.State())
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0[WorkflowSettingsClient.self].scan = { _ in scan }
+      $0.settingsWindowClient.show = { shown.withValue { $0 = true } }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.openWorkflowDetails(item, worktreeID: worktree.id))
+    await store.receive(\.settings.setSelection)
+    await store.receive(\.settings.repositorySettings.workflowsAppeared)
+    await store.receive(\.settings.repositorySettings.workflows.task)
+    await store.receive(\.settings.repositorySettings.workflows.showDetails)
+    await store.finish()
+
+    #expect(store.state.settings.selection == .repository(repository.id))
+    #expect(store.state.settings.repositorySettings?.workflows.path.first?.row?.url == workflowURL)
+    #expect(shown.value)
+  }
+
   @Test(arguments: [SettingsSection.general, .commandLineTool])
   func selectingAnotherSectionClearsAgentProfileEditorState(section: SettingsSection) async {
     let profile = AgentProfile(name: "Codex", runtime: .codex)

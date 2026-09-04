@@ -15,16 +15,28 @@ extension AppFeature {
     forceSheet: Bool
   ) -> Effect<Action> {
     guard state.workflowStart == nil else { return .none }
-    let worktree =
-      worktreeID.flatMap { state.repositories.terminalWorktree(for: $0) }
-      ?? actionTargetWorktree(repositories: state.repositories)
-    guard let worktree else { return .none }
+    let worktree: Worktree
+    if let worktreeID {
+      guard let explicitWorktree = state.repositories.terminalWorktree(for: worktreeID) else {
+        return .send(
+          .repositories(
+            .showToast(.warning("The selected worktree is no longer available."))))
+      }
+      worktree = explicitWorktree
+    } else {
+      guard let fallbackWorktree = actionTargetWorktree(repositories: state.repositories) else {
+        return .none
+      }
+      worktree = fallbackWorktree
+    }
     @Dependency(WorkflowStartClient.self) var workflowStartClient
     guard let context = workflowStartClient.context(workflowKey, worktree.id, sourceSurfaceID)
     else {
       return .send(
         .repositories(
-          .showToast(.warning("This workflow cannot start — check its file with `prowl workflow validate`"))))
+          .showToast(
+            .warning("This workflow cannot start — check its file with `prowl workflow validate`")))
+      )
     }
     if !forceSheet, context.canStartImmediately {
       // dsl-spec §3 `bind: auto`: no sheet; C1's status center is the start feedback.

@@ -40,10 +40,10 @@ struct SettingsView: View {
         Section("Agents") {
           Label("Profiles", systemImage: "person.crop.circle")
             .tag(SettingsSection.profiles)
-          Label("Workflows", systemImage: "point.3.connected.trianglepath.dotted")
-            .tag(SettingsSection.workflows)
           Label("CLI & Skills", systemImage: "terminal")
             .tag(SettingsSection.commandLineTool)
+          Label("Workflows", systemImage: "point.3.connected.trianglepath.dotted")
+            .tag(SettingsSection.workflows)
         }
 
         Section("Repositories") {

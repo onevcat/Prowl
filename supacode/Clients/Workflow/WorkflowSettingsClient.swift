@@ -12,10 +12,35 @@ nonisolated struct WorkflowSettingsError: Error, Equatable, Sendable {
   let message: String
 }
 
+nonisolated struct WorkflowSettingsRunTarget: Equatable, Sendable, Identifiable {
+  let id: String
+  let name: String
+  let repositoryName: String
+  let rootPath: String
+  let isPreferred: Bool
+
+  var displayName: String {
+    repositoryName == name ? name : "\(name) — \(repositoryName)"
+  }
+
+  static func visible(
+    _ targets: [Self],
+    in scope: WorkflowSettingsScope
+  ) -> [Self] {
+    switch scope {
+    case .global:
+      return targets
+    case .repository(let repository):
+      return targets.filter { $0.rootPath == repository.rootPath }
+    }
+  }
+}
+
 struct WorkflowSettingsClient: Sendable {
-  var scan: @MainActor @Sendable () throws -> WorkflowSettingsScan
-  /// Writes `WorkflowStarterTemplate` into the user directory and returns the new file.
-  var createWorkflow: @Sendable () throws -> URL
+  var scan: @MainActor @Sendable (_ scope: WorkflowSettingsScope) throws -> WorkflowSettingsScan
+  /// Writes `WorkflowStarterTemplate` into the selected workflow directory and returns the new file.
+  var createWorkflow: @Sendable (_ directory: URL) throws -> URL
+  var runTargets: @MainActor @Sendable (_ scope: WorkflowSettingsScope) -> [WorkflowSettingsRunTarget]
   var reveal: @Sendable (URL) -> Void
   /// One element per change to any of the paths — directories (entries added, removed, renamed)
   /// and files (in-place saves). A path that does not exist yet is watched through its nearest
@@ -25,15 +50,25 @@ struct WorkflowSettingsClient: Sendable {
 
 extension WorkflowSettingsClient: DependencyKey {
   static let liveValue = WorkflowSettingsClient(
-    scan: { throw WorkflowSettingsError(message: "Workflow settings are not available.") },
-    createWorkflow: { throw WorkflowSettingsError(message: "Workflow settings are not available.") },
+    scan: { _ in throw WorkflowSettingsError(message: "Workflow settings are not available.") },
+    createWorkflow: { _ in
+      throw WorkflowSettingsError(message: "Workflow settings are not available.")
+    },
+    runTargets: { _ in [] },
     reveal: { _ in },
     watch: { _ in AsyncStream { $0.finish() } }
   )
 
   static let testValue = WorkflowSettingsClient(
-    scan: { .empty(userDirectory: URL(filePath: "/tmp/prowl-test/.prowl/workflows", directoryHint: .isDirectory)) },
-    createWorkflow: { throw WorkflowSettingsError(message: "No test workflow directory configured.") },
+    scan: { _ in
+      .empty(
+        userDirectory: URL(
+          filePath: "/tmp/prowl-test/.prowl/workflows", directoryHint: .isDirectory))
+    },
+    createWorkflow: { _ in
+      throw WorkflowSettingsError(message: "No test workflow directory configured.")
+    },
+    runTargets: { _ in [] },
     reveal: { _ in },
     watch: { _ in AsyncStream { $0.finish() } }
   )
