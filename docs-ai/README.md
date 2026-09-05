@@ -44,6 +44,7 @@ Living documents hosted here:
 - `063-agent-workflows/dsl-spec.md` — Agent Workflow DSL (`prowl.workflow/v1`) normative spec
 - `063-agent-workflows/release-plan.md` — release/order plan shared by 063 and 064
 - `064-agent-completion-signals/research-agent-completion-signals.md` — per-runtime completion-signal matrix
+- `064-agent-completion-signals/agent-contracts-runbook.md` — runtime contract inventory, low-cost model routes, and planned repeatable T1 checks
 
 Some entries also host verbatim historical attachments migrated from doc-onevcat (e.g.
 `023-shelf-mode/jank-investigation.md`, `017-.../batch-2026-07-06-post-v0.10.5.md`,
@@ -120,6 +121,6 @@ agent-facing manual for that).
 | 061 | [native-toolbar-controls](061-native-toolbar-controls/000-plan.md) | 2026-08-17 | Native macOS toolbar grouping, Liquid Glass ownership, and review standards |
 | 062 | [workspace-child-diff](062-workspace-child-diff/000-plan.md) | 2026-08-19 | Per-repository diff for workspace children via unified DiffTarget routing |
 | 063 | [agent-workflows](063-agent-workflows/000-plan.md) | 2026-08-21 | Agent Workflows: YAML-declared, profile-bound multi-agent orchestration (runner, `prowl workflow` CLI, status center, built-in handoff/adversarial review); successor to 047's fixed handoff flow |
-| 064 | [agent-completion-signals](064-agent-completion-signals/000-plan.md) | 2026-08-22 | Layered agent signal bus (cooperative / launch-scoped hooks / transcript+process+OSC / heuristic), `prowl agents signal` + `agents wait` with source/confidence, per-runtime hook research |
+| 064 | [agent-completion-signals](064-agent-completion-signals/000-plan.md) | 2026-08-22 | Layered agent signal bus (cooperative / launch-scoped hooks / transcript+process+OSC / heuristic), `prowl agents signal` + `agents wait` with source/confidence, per-runtime hook research, and [T1 contract-test plan](064-agent-completion-signals/016-t1-contract-test-plan.md) |
 | 065 | [bundled-agent-skills](065-bundled-agent-skills/000-plan.md) | 2026-08-22 | Bundle Prowl's official agent skills into the app, `prowl skills` install/uninstall via symlinks into agent skill folders, Agent Skills section on Settings › CLI & Skills, shared registry for 063 |
 | 066 | [agent-island](066-agent-island/000-plan.md) | 2026-09-01 | Notch-aware Active Agents island, global keyboard entry, Agents Display settings, and hover-revealed floating placement |
