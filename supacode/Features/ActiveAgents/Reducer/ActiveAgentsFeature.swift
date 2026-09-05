@@ -54,6 +54,7 @@ struct ActiveAgentsFeature {
     /// the wrapped action unchanged; when it presents Prowl UI (`surfacesProwl`) the roster
     /// collapses first and `AppFeature` surfaces the main window before the action runs.
     indirect case island(Action)
+    case islandToggleEnabledTapped
     case islandSettingsTapped
     case islandOpenProwlTapped
     case selectNextEntry
@@ -101,7 +102,7 @@ struct ActiveAgentsFeature {
         }
         return .send(action)
 
-      case .markAsReadTapped:
+      case .markAsReadTapped, .islandToggleEnabledTapped:
         return .none
 
       case .focusedSurfaceChanged(let surfaceID):

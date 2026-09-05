@@ -10,14 +10,11 @@ struct AgentDisplaySettingsView: View {
   var body: some View {
     Form {
       Section("Active Agents") {
-        Toggle(
-          "Show Active Agents panel automatically",
-          isOn: $store.autoShowActiveAgentsPanel
-        )
+        Toggle(isOn: $store.autoShowActiveAgentsPanel) {
+          Text("Show Active Agents panel automatically")
+          Text("Hidden panels reopen as soon as an agent starts or updates.")
+        }
         .help("Open the Active Agents panel when an agent is detected.")
-        Text("Hidden panels reopen as soon as an agent starts or updates.")
-          .foregroundStyle(.secondary)
-          .font(.callout)
         Toggle(
           "Show terminal titles in agent rows",
           isOn: $store.showActiveAgentTabTitles

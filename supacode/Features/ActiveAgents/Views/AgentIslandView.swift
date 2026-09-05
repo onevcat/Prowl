@@ -198,10 +198,16 @@ struct AgentIslandView: View {
       if isFloating {
         floatingDragHandle
           .padding(.leading, 14)
-          .opacity(showsFloatingGrip ? 1 : 0)
+          .animation(gripAnimation) { content in
+            content.opacity(showsFloatingGrip ? 1 : 0)
+          }
           .allowsHitTesting(showsFloatingGrip)
-          .animation(gripAnimation, value: showsFloatingGrip)
       }
+    }
+    // Roster expansion resizes the hosting panel. Keep that layout transaction out of
+    // the hover-only grip animation, including when a click and hover update coincide.
+    .transaction(value: agentsStore.isIslandRosterExpanded) { transaction in
+      transaction.disablesAnimations = true
     }
     .onHover { isBarHovered = $0 }
     .accessibilityLabel(
@@ -274,8 +280,9 @@ struct AgentIslandView: View {
   private var compactContent: some View {
     HStack(spacing: 0) {
       AgentIslandStateSummaryView(summary: stateSummary, size: floatingSummarySize)
-        .offset(x: showsFloatingGrip ? 28 : 0)
-        .animation(gripAnimation, value: showsFloatingGrip)
+        .animation(gripAnimation) { content in
+          content.offset(x: showsFloatingGrip ? 28 : 0)
+        }
         .frame(maxWidth: .infinity, alignment: .leading)
       AgentIslandIconCluster(entries: islandEntries)
     }

@@ -1124,6 +1124,9 @@ struct AppFeature {
         }
         return .none
 
+      case .repositories(.activeAgents(.islandToggleEnabledTapped)):
+        return .send(.settings(.setAgentIslandEnabled(!state.settings.agentIslandEnabled)))
+
       case .repositories(.activeAgents(.islandSettingsTapped)):
         _ = appLifecycleClient.surfaceMainWindow()
         return openSettingsEffect(selecting: .agentDisplay)

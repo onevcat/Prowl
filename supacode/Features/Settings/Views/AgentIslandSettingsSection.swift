@@ -48,7 +48,7 @@ struct AgentIslandSettingsSection: View {
 
   var body: some View {
     Section {
-      Toggle(isOn: $store.agentIslandEnabled) {
+      Toggle(isOn: $store.agentIslandEnabled.sending(\.setAgentIslandEnabled)) {
         Text("Show Agent Island")
         Text("Working stays compact. Blocked and Done appear as stronger agent notifications.")
       }

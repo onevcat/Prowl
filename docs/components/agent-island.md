@@ -66,6 +66,8 @@ and a removed entry disappears with the roster.
 
 - Agent Island does not show hover tooltips. Actions stay discoverable through their visible
   labels, icons, accessibility labels, and the expanded roster's keyboard legend.
+- **The Active Agents panel's top-right button** toggles Show Agent Island directly. Holding
+  Command replaces it with the panel's navigation shortcut hint.
 - **Click the bar** to open or close the full roster. This does not bring Prowl forward.
 - **Hover over a floating bar** to reveal its leading drag grip. The grip fades in while state
   counts shift right inside the fixed-width bar; leaving reverses the animation. Reduce Motion

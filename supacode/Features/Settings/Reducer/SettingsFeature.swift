@@ -192,6 +192,7 @@ struct SettingsFeature {
     case setSystemNotificationsEnabled(Bool)
     case setCommandFinishedNotificationThreshold(String)
     case setTerminalFontSize(Float32?)
+    case setAgentIslandEnabled(Bool)
     case setAgentIslandFloatingPosition(displayID: String, normalizedPosition: Double)
     case setAgentIslandSilentOpacity(Double)
     case setAgentIslandDisplayPreference(AgentIslandDisplayPreference)
@@ -357,6 +358,11 @@ struct SettingsFeature {
           persist(state, captureAnalytics: false, emitSettingsChanged: false),
           .send(.delegate(.terminalFontSizeChanged(fontSize)))
         )
+
+      case .setAgentIslandEnabled(let enabled):
+        state.agentIslandEnabled = enabled
+        state.syncGlobalDefaults(from: state.globalSettings)
+        return persist(state)
 
       case .setAgentIslandFloatingPosition(let displayID, let normalizedPosition):
         state.agentIslandFloatingPositions.setNormalizedPosition(

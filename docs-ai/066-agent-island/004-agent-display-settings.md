@@ -15,6 +15,16 @@ floating island. They belong together under Agents → Display, with a direct en
   in and shifts status counts on hover. Respect Reduce Motion; notched islands remain fixed.
 - Open Agents → Display from the expanded roster footer, collapsing the roster without changing panes.
 
+The Active Agents header also provides a persisted Island visibility toggle. Holding Command
+replaces it with the existing navigation hint, keeping both controls in the same trailing space. The icon stays the same;
+primary foreground means enabled and secondary gray means disabled. The automatic-panel toggle
+keeps its title and explanatory text inside one form row.
+
+Grip motion is scoped to its opacity and the summary offset; roster expansion disables
+animations for the compact subtree so panel resizing cannot replay the hover transition.
+Regression recipe: hover a floating bar, then click to expand and collapse without moving the
+pointer. The grip and counts must stay in their hovered positions; leaving the bar hides the grip.
+
 ## Verification
 
 Cover settings navigation and roster collapse with reducer tests; retain shortcut conflict and
@@ -39,3 +49,10 @@ The footer activates Prowl before opening Display, without issuing terminal focu
 Manual follow-up: inspect Display at the minimum settings window width; record/clear a shortcut
 from each entry point; hover and drag a floating bar, then open its footer gear while Prowl is
 in the background. The bar must not resize, and Settings must open on Agents → Display.
+
+The PR #764 follow-up passed 102 focused app/settings/island tests, including both persisted
+visibility-toggle directions and collapse of an expanded roster when disabling the island.
+
+An isolated Debug follow-up confirmed the panel button switches from Off to On with the correct
+Hide Agent Island tooltip. The UI automation connection again failed on Display navigation, so
+the grouped row and floating animation remain awaiting manual visual confirmation.

@@ -55,6 +55,7 @@ struct SidebarActiveAgentsOverlay: View {
       workflowBadges: state.workflowRoleBadgesBySurfaceID,
       selectedSurfaceID: selectedSurfaceID,
       navigationShortcutHint: shortcutHint,
+      isCommandKeyPressed: commandKeyObserver.isPressed,
       showTabTitles: state.showActiveAgentTabTitles,
       height: panelHeight,
       maximumHeight: maximumPanelHeight,
