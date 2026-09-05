@@ -20,8 +20,9 @@ replaces it with the existing navigation hint, keeping both controls in the same
 primary foreground means enabled and secondary gray means disabled. The automatic-panel toggle
 keeps its title and explanatory text inside one form row.
 
-Grip motion is scoped to its opacity and the summary offset; roster expansion disables
-animations for the compact subtree so panel resizing cannot replay the hover transition.
+Hover changes explicitly carry an animation transaction to the grip opacity and summary offset.
+Roster layout updates carry no hover animation. This replaces the compact-subtree animation
+disabling and implicit scoped animations, which caused missing hover motion and click-time fading.
 Regression recipe: hover a floating bar, then click to expand and collapse without moving the
 pointer. The grip and counts must stay in their hovered positions; leaving the bar hides the grip.
 
@@ -56,3 +57,8 @@ visibility-toggle directions and collapse of an expanded roster when disabling t
 An isolated Debug follow-up confirmed the panel button switches from Off to On with the correct
 Hide Agent Island tooltip. The UI automation connection again failed on Display navigation, so
 the grouped row and floating animation remain awaiting manual visual confirmation.
+
+The hover-transaction follow-up adds two native SwiftUI rendering tests: pointer entry and exit
+must produce intermediate presentation values, roster expansion/collapse must retain the fully
+revealed grip, and Reduce Motion must change immediately. These tests pass in an NSHostingView
+fixture; end-to-end pointer interaction in the live island still requires visual verification.

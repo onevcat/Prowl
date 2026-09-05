@@ -57,6 +57,22 @@ struct AgentIslandRootLayout {
   }
 }
 
+// Carry the hover animation through the island's nonanimated layout transaction. Only the
+// grip opacity and summary offset opt in; roster updates never create their own animation.
+enum AgentIslandHoverAnimation: TransactionKey {
+  static let defaultValue: Animation? = nil
+
+  static func perform(reduceMotion: Bool, _ update: () -> Void) {
+    var transaction = Transaction()
+    transaction[Self.self] = reduceMotion ? nil : .easeOut(duration: 0.18)
+    withTransaction(transaction, update)
+  }
+
+  static func apply(to transaction: inout Transaction) {
+    transaction.animation = transaction[Self.self]
+  }
+}
+
 struct AgentIslandView: View {
   @Bindable private var appStore: StoreOf<AppFeature>
   @Bindable private var agentsStore: StoreOf<ActiveAgentsFeature>
@@ -198,18 +214,17 @@ struct AgentIslandView: View {
       if isFloating {
         floatingDragHandle
           .padding(.leading, 14)
-          .animation(gripAnimation) { content in
-            content.opacity(showsFloatingGrip ? 1 : 0)
-          }
+          .opacity(showsFloatingGrip ? 1 : 0)
+          .transaction(AgentIslandHoverAnimation.apply)
           .allowsHitTesting(showsFloatingGrip)
       }
     }
-    // Roster expansion resizes the hosting panel. Keep that layout transaction out of
-    // the hover-only grip animation, including when a click and hover update coincide.
-    .transaction(value: agentsStore.isIslandRosterExpanded) { transaction in
-      transaction.disablesAnimations = true
+    .onHover { hovering in
+      guard hovering != isBarHovered else { return }
+      AgentIslandHoverAnimation.perform(reduceMotion: reduceMotion) {
+        isBarHovered = hovering
+      }
     }
-    .onHover { isBarHovered = $0 }
     .accessibilityLabel(
       agentsStore.isIslandRosterExpanded ? "Hide Active Agents" : "Show Active Agents"
     )
@@ -238,10 +253,6 @@ struct AgentIslandView: View {
   }
 
   private var showsFloatingGrip: Bool { isBarHovered || isFloatingDragging }
-
-  private var gripAnimation: Animation? {
-    reduceMotion ? nil : .easeOut(duration: 0.18)
-  }
 
   private func notchedCompactContent(layout: AgentIslandNotchLayout) -> some View {
     HStack(spacing: 0) {
@@ -280,9 +291,8 @@ struct AgentIslandView: View {
   private var compactContent: some View {
     HStack(spacing: 0) {
       AgentIslandStateSummaryView(summary: stateSummary, size: floatingSummarySize)
-        .animation(gripAnimation) { content in
-          content.offset(x: showsFloatingGrip ? 28 : 0)
-        }
+        .offset(x: showsFloatingGrip ? 28 : 0)
+        .transaction(AgentIslandHoverAnimation.apply)
         .frame(maxWidth: .infinity, alignment: .leading)
       AgentIslandIconCluster(entries: islandEntries)
     }
