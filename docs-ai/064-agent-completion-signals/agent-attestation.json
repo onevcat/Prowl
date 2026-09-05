@@ -6,7 +6,7 @@
       "attested_version": "2.1.260",
       "binary": "claude",
       "name": "Claude Code",
-      "record": "attestations/c7b43b440b25c9b0c423886ad524e9fda377150b21edfc13487dcdbede8bd3d3.json",
+      "record": "attestations/0a584feae25749f1cb6079fd990d0d1147eb8ea803a6ed9ba0b8b3bc6c8407d1.json",
       "runtime": "claude",
       "version_command": [
         "claude",
@@ -15,10 +15,10 @@
     },
     {
       "attested_on": "2026-09-05",
-      "attested_version": "0.153.2",
+      "attested_version": "0.153.4",
       "binary": "codex",
       "name": "Codex",
-      "record": "attestations/c7b43b440b25c9b0c423886ad524e9fda377150b21edfc13487dcdbede8bd3d3.json",
+      "record": "attestations/0a584feae25749f1cb6079fd990d0d1147eb8ea803a6ed9ba0b8b3bc6c8407d1.json",
       "runtime": "codex",
       "version_command": [
         "codex",
@@ -30,7 +30,7 @@
       "attested_version": "1.0.83",
       "binary": "copilot",
       "name": "GitHub Copilot CLI",
-      "record": "attestations/c7b43b440b25c9b0c423886ad524e9fda377150b21edfc13487dcdbede8bd3d3.json",
+      "record": "attestations/0a584feae25749f1cb6079fd990d0d1147eb8ea803a6ed9ba0b8b3bc6c8407d1.json",
       "runtime": "copilot",
       "version_command": [
         "copilot",
@@ -42,7 +42,7 @@
       "attested_version": "0.210.0",
       "binary": "droid",
       "name": "Factory Droid",
-      "record": "attestations/c7b43b440b25c9b0c423886ad524e9fda377150b21edfc13487dcdbede8bd3d3.json",
+      "record": "attestations/0a584feae25749f1cb6079fd990d0d1147eb8ea803a6ed9ba0b8b3bc6c8407d1.json",
       "runtime": "droid",
       "version_command": [
         "droid",
@@ -54,7 +54,7 @@
       "attested_version": "1.1.31",
       "binary": "qodercli",
       "name": "Qoder CLI",
-      "record": "attestations/c7b43b440b25c9b0c423886ad524e9fda377150b21edfc13487dcdbede8bd3d3.json",
+      "record": "attestations/0a584feae25749f1cb6079fd990d0d1147eb8ea803a6ed9ba0b8b3bc6c8407d1.json",
       "runtime": "qodercli",
       "version_command": [
         "qodercli",
@@ -63,10 +63,10 @@
     },
     {
       "attested_on": "2026-09-05",
-      "attested_version": "0.85.0",
+      "attested_version": "0.85.1",
       "binary": "pi",
       "name": "Pi",
-      "record": "attestations/c7b43b440b25c9b0c423886ad524e9fda377150b21edfc13487dcdbede8bd3d3.json",
+      "record": "attestations/0a584feae25749f1cb6079fd990d0d1147eb8ea803a6ed9ba0b8b3bc6c8407d1.json",
       "runtime": "pi",
       "version_command": [
         "pi",
@@ -78,7 +78,7 @@
       "attested_version": "18.1.10",
       "binary": "omp",
       "name": "Oh My Pi",
-      "record": "attestations/c7b43b440b25c9b0c423886ad524e9fda377150b21edfc13487dcdbede8bd3d3.json",
+      "record": "attestations/0a584feae25749f1cb6079fd990d0d1147eb8ea803a6ed9ba0b8b3bc6c8407d1.json",
       "runtime": "omp",
       "version_command": [
         "omp",
@@ -90,7 +90,7 @@
       "attested_version": "1.18.25",
       "binary": "opencode",
       "name": "OpenCode",
-      "record": "attestations/c7b43b440b25c9b0c423886ad524e9fda377150b21edfc13487dcdbede8bd3d3.json",
+      "record": "attestations/0a584feae25749f1cb6079fd990d0d1147eb8ea803a6ed9ba0b8b3bc6c8407d1.json",
       "runtime": "opencode",
       "version_command": [
         "opencode",

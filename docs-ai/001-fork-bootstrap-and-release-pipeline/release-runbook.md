@@ -10,7 +10,7 @@ Keep `onevcat/Prowl` close to `supabitapp/supacode` while preserving local custo
 
 ### Version Scheme
 
-Date-based versioning: `YYYY.M.DD` (e.g., `2026.3.18`). Same-day collisions append `.N` suffix (e.g., `2026.3.18.2`). Build number is `YYYYMMDD` integer, incrementing for same-day builds.
+Date-based versioning: `YYYY.M.D` (e.g., `2026.9.6`), without leading zeros in the month or day. Same-day collisions append `.N` suffix (e.g., `2026.9.6.2`). Build number is `YYYYMMDD` integer, incrementing for same-day builds.
 
 ### Sparkle Auto-Update
 
@@ -128,6 +128,11 @@ These diagnostics belong in the release conversation/evidence, not public releas
 ```
 
 Or use the `/release` command.
+
+Generate notes with `./scripts/release-notes.sh <VERSION>` before publishing. It uses
+`codex exec` with the local model configuration and writes `build/release-notes.md`.
+Review that file before running the release script. If generation fails, inspect
+`build/release-notes-generation.log`; the script falls back to GitHub auto-notes.
 
 The script handles:
 1. Version bump (date-based) + signed git tag
