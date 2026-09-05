@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Inventory runtime contracts without inference; optionally run Codex config preflight.
+"""Inventory runtime contracts; opt in to config preflight or real headless hook checks.
 
-The live hook suite is deliberately unavailable until T1b/T1c. A preflight pass never
-updates attestation or establishes release readiness. See the maintained contract runbook.
+Inventory is the default and requests no inference. Live mode uses the configured models.
+Neither mode establishes interactive or release-wide readiness. See the contract runbook.
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ import os
 import pathlib
 import re
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -27,7 +28,7 @@ import agent_versions as versions
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 MAX_POLICY_BYTES = 64 * 1024
 MAX_CAPTURE_BYTES = 1024 * 1024
-CODEX_SCENARIOS = ("base", "profile", "override", "cleanup")
+CODEX_SCENARIOS = ("base", "absent", "profile", "override", "cleanup")
 ROUTE_KEYS = {"provider", "model", "base_url", "wire_api", "api_key_env"}
 SAFE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/+\[\]-]{0,199}\Z")
 ENV_NAME = re.compile(r"[A-Z][A-Z0-9_]{0,99}\Z")
@@ -73,13 +74,17 @@ def load_policy(path, required=True):
     runtimes = document["runtimes"]
     if not isinstance(runtimes, dict) or set(runtimes) - set(versions.TIER_A_RUNTIMES):
         raise PolicyError("Configuration contains an unsupported runtime.")
-    for route in runtimes.values():
+    for runtime, route in runtimes.items():
         if not isinstance(route, dict) or set(route) != ROUTE_KEYS:
             raise PolicyError("Each route requires provider, model, base_url, wire_api, and api_key_env only.")
         for field in ("provider", "model"):
             value = route[field]
             if not isinstance(value, str) or not SAFE_NAME.fullmatch(value) or value in {"auto", "openrouter/free"}:
                 raise PolicyError("Provider and model must be explicit identifiers, not automatic routing.")
+        if route["wire_api"] == "runtime-managed":
+            if runtime != "qodercli" or route["provider"] != "qoder" or route["base_url"] is not None or route["api_key_env"] is not None:
+                raise PolicyError("Runtime-managed routes require Qoder with no URL or key reference.")
+            continue
         if route["wire_api"] not in ("responses", "chat-completions", "anthropic-messages"):
             raise PolicyError("Unsupported wire_api.")
         key = route["api_key_env"]
@@ -99,6 +104,43 @@ def load_policy(path, required=True):
         except ValueError:
             raise PolicyError("base_url requires HTTPS (or loopback HTTP), without credentials, query, or fragment.") from None
     return runtimes
+
+
+def load_credentials(path, environment, required=True):
+    """Read a private, literal KEY=value file; never source shell configuration."""
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except FileNotFoundError:
+        if not required:
+            return dict(environment)
+        raise PolicyError("The selected credentials file is missing.") from None
+    except OSError:
+        raise PolicyError("Cannot safely open the credentials file.") from None
+    with os.fdopen(descriptor, "rb") as source:
+        info = os.fstat(source.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
+            raise PolicyError("Credentials require an owner-only regular file.")
+        raw = source.read(MAX_POLICY_BYTES + 1)
+    if len(raw) > MAX_POLICY_BYTES:
+        raise PolicyError("Credentials file exceeds 64 KiB.")
+    try:
+        lines = raw.decode("utf-8").splitlines()
+    except UnicodeError:
+        raise PolicyError("Credentials file must be UTF-8.") from None
+    values = {}
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        name, separator, value = line.partition("=")
+        name, value = name.strip(), value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+            value = value[1:-1]
+        if (not separator or not ENV_NAME.fullmatch(name) or name in values
+                or not re.fullmatch(r"[A-Za-z0-9_./:+=@%-]+", value)):
+            raise PolicyError("Credentials require unique names and literal, nonempty token values.")
+        values[name] = value
+    return {**values, **environment}
 
 
 def route_status(route, environment):
@@ -164,7 +206,7 @@ def inventory(entries, policy, environment, resolve=None, run=run_process, timeo
             "resolution": binary.resolution if binary else None,
             "installed_version": None, "attested_version": entry.attested_version,
             "version_status": "unknown", "route": route_status(policy.get(entry.runtime), environment),
-            "preflight": {"status": "not_run"}, "live": {"status": "not_run", "reason": "not_implemented"},
+            "preflight": {"status": "not_run"}, "live": {"status": "not_run", "reason": "not_requested"},
         }
         if binary is None:
             row["inventory"] = {"status": "blocked", "reason": "binary_missing"}
@@ -257,8 +299,12 @@ def run_preflight(row, directory, resolve, timeout):
 
 
 def source_fingerprint():
-    paths = [ROOT / "Makefile", pathlib.Path(__file__), ROOT / "supacodeTests/CodexConfigReadLiveContractTests.swift"]
+    paths = [ROOT / "Makefile", pathlib.Path(__file__), ROOT / "supacodeTests/CodexConfigReadLiveContractTests.swift",
+             ROOT / "scripts/agent_contract_live.py", ROOT / "supacodeTests/AgentHookContractExportTests.swift"]
     paths += sorted((ROOT / "supacode/Domain/AgentRuntime").glob("*.swift"))
+    paths += sorted((ROOT / "supacode/Domain/AgentProfile").glob("*.swift"))
+    paths += sorted((ROOT / "supacode/CLIService/Shared").glob("*.swift"))
+    paths += sorted((ROOT / "ProwlCLI").rglob("*.swift"))
     paths += sorted((ROOT / "Resources/agent-hooks").rglob("*"))
     digest = hashlib.sha256()
     for path in paths:
@@ -281,35 +327,43 @@ def positive_timeout(value):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--mode", choices=("inventory", "preflight"), default="inventory")
+    parser.add_argument("--mode", choices=("inventory", "preflight", "live"), default="inventory")
     parser.add_argument("--runtime", action="append", choices=versions.TIER_A_RUNTIMES, help="Repeat to select runtimes; default: all eight.")
     parser.add_argument("--config", type=pathlib.Path, help="Secret-free JSON policy; default: ~/.prowl/agent-contracts.json if present.")
+    parser.add_argument("--credentials", type=pathlib.Path, help="Private literal env file; default: ~/.prowl/agent-contracts.env if present.")
     parser.add_argument("--output-dir", type=pathlib.Path, default=ROOT / "build/agent-contracts", help="Parent for unique private report directories.")
     parser.add_argument("--json", action="store_true", help="Print the report as JSON.")
     parser.add_argument("--strict", action="store_true", help="Fail inventory when binaries or credential references are not ready; version drift alone is not failure.")
     parser.add_argument("--no-login-shell", action="store_true")
     parser.add_argument("--timeout", type=positive_timeout, default=20, help="Per-version-command deadline in seconds.")
+    parser.add_argument("--live-timeout", type=positive_timeout, default=90, help="Per-runtime inference deadline; no harness retries.")
     parser.add_argument("--preflight-timeout", type=positive_timeout, default=600, help="Build/test deadline in seconds, including a cold build.")
     args = parser.parse_args(argv)
     try:
         config = args.config or pathlib.Path.home() / ".prowl/agent-contracts.json"
         policy = load_policy(config, required=args.config is not None)
+        credential_path = args.credentials or pathlib.Path.home() / ".prowl/agent-contracts.env"
+        environment = load_credentials(credential_path, os.environ, required=args.credentials is not None)
         entries = versions.load_attestation(versions.ATTESTATION_PATH)
         if args.runtime:
             entries = [entry for entry in entries if entry.runtime in args.runtime]
         resolver = versions.BinaryResolver(use_login_shell=not args.no_login_shell)
-        rows = inventory(entries, policy, os.environ, resolve=resolver, timeout=args.timeout)
+        rows = inventory(entries, policy, environment, resolve=resolver, timeout=args.timeout)
         args.output_dir.mkdir(parents=True, exist_ok=True)
         directory = pathlib.Path(tempfile.mkdtemp(prefix="run-", dir=args.output_dir)).resolve()
         if args.mode == "preflight":
             for row in rows:
                 row["preflight"] = run_preflight(row, directory, resolver, args.preflight_timeout)
+        if args.mode == "live":
+            from agent_contract_live import run_suite
+            run_suite(rows, directory, resolver, environment, args.live_timeout, args.preflight_timeout)
         report = {
             "schema": 1, "mode": args.mode,
             "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "config_path": str(config), "report_path": str(directory / "report.json"),
             "source_fingerprint": source_fingerprint(), "release_ready": False,
-            "inference_requested": False, "attestation_updated": False, "runtimes": rows,
+            "bridge_sha256": hashlib.sha256((ROOT / "Resources/prowl-cli/prowl").read_bytes()).hexdigest() if args.mode == "live" and (ROOT / "Resources/prowl-cli/prowl").exists() else None,
+            "inference_requested": args.mode == "live", "attestation_updated": False, "runtimes": rows,
         }
         write_json(directory / "report.json", report)
     except (PolicyError, versions.AttestationError) as error:
@@ -321,12 +375,14 @@ def main(argv=None):
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))
     else:
-        print("Runtime     Version       Drift       Inventory   Route                Preflight")
+        print("Runtime     Version       Drift       Inventory   Route                Preflight  Live")
         for row in rows:
             print(f"{row['runtime']:<11} {row['installed_version'] or '-':<13} {row['version_status']:<11} "
-                  f"{row['inventory']['status']:<11} {row['route']['status']:<20} {row['preflight']['status']}")
+                  f"{row['inventory']['status']:<11} {row['route']['status']:<20} {row['preflight']['status']:<10} {row['live']['status']}")
         print(f"Report: {report['report_path']}")
-        print("No inference requested. Live contracts not implemented; release readiness not established.")
+        print("Headless live evidence only; release readiness not established." if args.mode == "live" else "No inference requested; release readiness not established.")
+    if args.mode == "live":
+        return int(any(row["live"]["status"] != "passed" for row in rows))
     if args.mode == "preflight":
         return int(any(row["preflight"]["status"] != "passed" for row in rows))
     return int(args.strict and any(row["inventory"]["status"] != "passed" or row["route"]["status"] != "configured" for row in rows))

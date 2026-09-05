@@ -61,6 +61,8 @@ struct CodexConfigReadLiveContractTests {
       explicitNotifyOverride: nil
     )
     try #require(await resolver.resolve(base) == .present(["/tmp/base notifier", "base"]))
+    try "".write(to: home.appending(path: "config.toml"), atomically: true, encoding: .utf8)
+    try #require(await resolver.resolve(base) == .absent)
 
     let profile = CodexLaunchContext(
       inheritedCWD: workspace,
@@ -94,7 +96,7 @@ struct CodexConfigReadLiveContractTests {
       "runtime": "codex",
       "nonce": nonce,
       "executable": executablePath,
-      "scenarios": ["base", "profile", "override", "cleanup"],
+      "scenarios": ["base", "absent", "profile", "override", "cleanup"],
     ]
     let data = try JSONSerialization.data(withJSONObject: receipt, options: [.sortedKeys])
     try data.write(to: URL(filePath: receiptPath), options: [.withoutOverwriting])

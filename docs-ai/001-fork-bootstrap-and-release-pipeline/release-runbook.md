@@ -79,14 +79,13 @@ Before every public release, before bumping the version or creating a tag, follo
 [agent contract runbook](../064-agent-completion-signals/agent-contracts-runbook.md).
 Use the owner's existing DeepSeek V4 Flash configuration for compatible runtimes.
 
-- **Until the full T1 live suite is implemented:** run `make test-agent-contracts` for the
-  available zero-inference inventory and report that live contract verification is not
-  implemented. T1a also supplies the Codex preflight described in the contract runbook;
-  neither mode is a live pass. R2b still requires T1 and D2 under the
+- Run the implemented **full eight-runtime headless live suite and Codex configuration
+  preflight** against the code/resources and installed versions being released; retain both
+  reports. Use the maintained commands in the contract runbook.
+- Keep headless results separate from interactive permission/lifecycle and workflow E2E.
+  Attestation publication remains pending; a successful headless report still has
+  `release_ready: false`. R2b requires the remaining T1 scope and D2 under the
   [release plan](../063-agent-workflows/release-plan.md).
-- **Once T1 is implemented:** run the full eight-runtime live contract suite against the
-  code/resources and installed runtime versions being released; retain its report. Use the
-  exact maintained commands in the contract runbook, not a copied invocation here.
 - Present a short maintainer-facing status with the release-notes confirmation: passed,
   failed, blocked, or not run; name incomplete runtimes and link the evidence. An incomplete
   required check needs resolution or an explicit owner-approved release-scope exception,

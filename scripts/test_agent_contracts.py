@@ -198,12 +198,14 @@ class CommandTests(unittest.TestCase):
         self.env = {**os.environ, "PATH": str(self.bin), "DEEPSEEK_API_KEY": "secret-value"}
         self.output = self.root / "results"
         self.policy = self.root / "empty-policy.json"
+        self.credentials = self.root / "credentials.env"
+        self.credentials.touch(mode=0o600)
         self.policy.write_text('{"schema":1,"runtimes":{}}')
 
     def invoke(self, *args):
         return subprocess.run(
             [sys.executable, str(contracts.__file__), "--runtime", "codex", "--no-login-shell",
-             "--output-dir", str(self.output), "--config", str(self.policy), "--json", *args],
+             "--output-dir", str(self.output), "--config", str(self.policy), "--credentials", str(self.credentials), "--json", *args],
             env=self.env, capture_output=True, text=True, timeout=10,
         )
 

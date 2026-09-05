@@ -220,7 +220,8 @@ replacement process, pane close, or launched-agent exit revokes coverage.
 Codex exposes only one effective notifier. Before launch, Prowl asks Codex's own bounded
 `app-server config/read` protocol for the effective notifier, applies selected-profile and
 final CLI-override precedence, and ignores project-layer `notify` exactly as Codex does. An
-existing notifier is preserved through an owner-only ephemeral forwarding record and is
+absent notifier (including a `null` configuration value) is valid and Prowl installs its own
+notifier without forwarding. An existing notifier is preserved through an owner-only ephemeral forwarding record and is
 `exec`'d with the original payload whether Prowl transport succeeds or fails. If resolution
 or record preparation is uncertain, Prowl launches the original argv unchanged, exposes no
 exact coverage, and reports one non-blocking launch warning.

@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| **Status** | T1a implemented and verified 2026-09-05; T1b/T1c live contracts and inference verification remain pending |
+| **Status** | T1a/T1b and eight-runtime headless T1c checks verified 2026-09-05; scoped publication and interactive acceptance remain pending |
 | **Anchor date** | 2026-09-05 |
 | **Primary PR** | [#767](https://github.com/onevcat/Prowl/pull/767) (T1a) |
 | **Related** | [#726](https://github.com/onevcat/Prowl/issues/726), [T0](015-t0-version-attestation.md), [release plan](../063-agent-workflows/release-plan.md), [operating runbook](agent-contracts-runbook.md) |
@@ -204,3 +204,72 @@ zero skips/failures, including base/profile/explicit precedence, project exclusi
 cleanup. A requested Pi preflight correctly returned `not_run` and a failing exit. Reports
 remain local under `build/agent-contracts/`; no attestation or credential configuration changed.
 The full eight-runtime live gate and D2 E2E remain outstanding.
+
+## Authorized live implementation (2026-09-05)
+
+The owner supplied a DeepSeek key and authorized bounded inference and autonomous decisions.
+Keep it in the owner-only `~/.prowl/agent-contracts.env`, outside the checkout; policy JSON
+contains variable references only. Explicit environment variables take precedence. Never
+source this file as shell code or copy credentials into test artifacts.
+
+Implement a Swift opt-in exporter using the production headless adapters and managed hook
+preparer, then a Python runner with a private workspace, per-launch token and Unix socket.
+The real bundled CLI decodes native events before the socket collector accepts them. Require
+both a successful model response and a matching terminal hook; process exit or an error hook
+alone cannot pass. This checks the binary/renderer/extension/decoder boundary. It does not
+claim GUI lifecycle, app-side caller ancestry, or interactive permission coverage.
+
+Use temporary runtime configuration and the owner's selected DeepSeek route where supported.
+Do not modify normal runtime settings or purchase subscriptions. Bound each launch and retain
+sanitized evidence, including precise failures. Run all available runtimes, then use those
+results to decide the remaining interactive coverage and attestation scope.
+
+
+## Headless implementation and results (2026-09-05)
+
+The opt-in suite passed all eight installed runtimes in `run-sf4oqfd8/report.json` under
+`build/agent-contracts/`. Runtime execution took about 22 seconds total, excluding the
+incremental export build. This is observed duration, not a latency or billing guarantee.
+
+| Runtime | Version | Model route | Observed terminal event |
+| --- | --- | --- | --- |
+| Claude Code | 2.1.260 | Owner DeepSeek key, Anthropic Messages | `Stop` |
+| Codex | 0.153.2 | Owner DeepSeek key, Responses | `agent-turn-complete` |
+| Copilot | 1.0.83 | Owner DeepSeek key, Chat Completions | `Stop` |
+| Droid | 0.210.0 | Owner DeepSeek key, scoped custom model/settings | `Stop` |
+| Qoder | 1.1.31 | Existing account's `deepseek/deepseek-v4-flash-pg` | `Stop` |
+| Pi | 0.85.0 | Owner DeepSeek key, temporary provider | `agent_settled` |
+| OMP | 18.1.10 | Owner DeepSeek key, temporary provider | `session_stop` |
+| OpenCode | 1.18.25 | Owner DeepSeek key, temporary provider/plugin | `session.idle` |
+
+Every row also returned the correct fresh arithmetic response and exited successfully.
+Qoder's route does not establish use of the supplied API key or free account billing.
+No normal runtime settings were modified and no subscription was purchased. The private
+credentials file is `~/.prowl/agent-contracts.env` (0600); the private policy is its `.json`
+sibling. Reports and logs never contain the supplied key or the launch token.
+
+The first sweep exposed a production bug: `CodexConfigReadProcess` used `try?` on an optional
+return, collapsing a successful absent notifier into the same nil as an incomplete response.
+A valid `notify: null` therefore waited until timeout and degraded managed hooks. The read loop
+now treats any successful decode as complete and waits only on `missingResponse`. A real
+process fixture reproduces both null and missing notify while the server keeps stdin open;
+it failed before the fix, then the process/resolver suites passed 15 tests. The real Codex
+preflight now also includes an absent-notifier scenario.
+
+Two harness corrections came from live evidence: Pi 0.85 resolves `${KEY}` references but
+interprets bare `KEY` as a literal, and OMP reports `/var` aliases of `/private/var` workspaces.
+The failed Pi authentication still emitted a terminal hook, confirming why a hook alone
+cannot pass. The collector now canonicalizes directory identity; the production OMP relay
+needed no change. Optional whitespace in an otherwise correct numeric response is accepted.
+
+T1b's three injection families and all eight headless T1c adapters are implemented. Remaining
+T1 acceptance is deliberately separate: scenario-aware attestation publication and interactive
+needs-input/lifecycle coverage, followed by D2's built-in workflow/Debug GUI E2E. The old T0
+attestation is unchanged. A headless all-pass report remains `release_ready: false`.
+
+Final verification: a second full sweep, `run-0p_q17r_/report.json`, again passed 8/8 with
+22.4 seconds of runtime execution. `run-hmnrrqgb/report.json` passed the expanded Codex
+preflight, including absent notify. `make check` passed 115 script tests and strict Swift
+format/lint; `make build-app` passed with zero errors/warnings. The release skill validator
+passed. A supplied-key scan across report/source artifacts found zero matches. These local
+reports remain under `build/agent-contracts/`; this record preserves their scoped conclusions.

@@ -5,14 +5,52 @@ Design and initial machine inventory: [064.016](016-t1-contract-test-plan.md).
 
 ## Availability
 
-T1a provides `make test-agent-contracts`: zero-inference inventory, a secret-free model
-policy, JSON reports, and an explicit Codex configuration preflight. The live hook suite and
-attestation publication remain **unimplemented**; `--live` and `--mode live` are rejected.
-Neither inventory nor preflight establishes release readiness or updates T0.
+`make test-agent-contracts` provides zero-inference inventory, Codex configuration preflight,
+and an opt-in **eight-runtime headless hook suite**. All eight passed on 2026-09-05.
+Seven used the owner's DeepSeek key; Qoder used the account's explicitly selected Flash model.
+Attestation publication and interactive permission/GUI workflow coverage remain pending.
+A headless pass never updates T0 or sets `release_ready: true`.
 
 The [release checklist](../001-fork-bootstrap-and-release-pipeline/release-runbook.md#agent-contract-release-check)
-and `/release` skill link here and surface verification status before publishing. T1b/T1c
-must add the exact full live-suite command here when implemented.
+and `/release` skill require these checks before bump/tag and surface the evidence during
+release-notes confirmation. See the scoped results in [064.016](016-t1-contract-test-plan.md).
+
+## Available now: real headless hook checks
+
+```bash
+# All eight runtimes; explicit opt-in to model requests.
+make test-agent-contracts AGENT_CONTRACT_ARGS="--mode live"
+
+# Repeat a single runtime after an upgrade or while diagnosing a failure.
+make test-agent-contracts AGENT_CONTRACT_ARGS="--mode live --runtime pi"
+```
+
+Each sweep builds an opt-in Swift export test against the current source, reusing Xcode's
+incremental build. That test uses Prowl's headless adapters and managed hook preparer, including
+Droid's file merge. The runner then starts each real binary in a temporary workspace with its
+prepared argv and the bundled hook bridge/extension. A private Unix socket captures frames
+**decoded by the real Prowl CLI**. Temporary state is removed on normal completion or exception.
+Droid and Qoder may read their normal account credentials; no normal runtime settings are edited.
+
+A pass requires a correct answer to a fresh arithmetic challenge (the answer is absent from
+the prompt), exit code 0, and a terminal event matching the launch token, runtime, working
+directory, and a nonempty session ID. Directory aliases are compared by canonical path.
+A native error/StopFailure or a hook after failed authentication cannot pass. The collector
+does not validate the GUI app's process ancestry, pane ownership, or lifecycle store; those
+require interactive E2E and must not be inferred from this report.
+
+Live mode returns 0 only if **every selected runtime** passes. Missing routes, unsupported
+recipes, failed preparation, missing responses/hooks, runtime failures, and timeouts remain
+visible in `report.json` and return nonzero. The report includes exact versions, source and
+bridge fingerprints, route metadata, observed native events, and sanitized per-runtime logs.
+Build receipts require a fresh nonce and exactly one executed, passed, non-skipped export test.
+Do not publish raw logs; review the sanitized evidence before sharing it.
+
+Launches are serial, with one short turn per runtime, no harness retries, a default 90-second
+deadline (`--live-timeout`), and process-group cleanup. Supported clients get 512-token output
+limits and low/off reasoning; Codex and Pi/OMP limits are not universal hard billing caps.
+Actual billed usage is not collected. A time limit is not a provider-side spend limit.
+Ordinary inventory, preflight, and `make check` never request inference.
 
 ## Available now: repeatable zero-inference checks
 
@@ -42,7 +80,7 @@ Every run keeps a unique owner-only directory under `build/agent-contracts/`, co
 `report.json`; `--output-dir` chooses another parent. JSON stdout includes `report_path`.
 Preflight also retains a build log, `.xcresult`, nonce-bound receipt, and test summary.
 
-Inventory reads only installed versions and the selected policy's environment-key presence.
+Inventory reads installed versions and credential presence from the environment/private file.
 It does not inspect agent auth stores, refresh tokens, query models, test credit, or change
 settings. Login-shell PATH lookup is the same fallback as T0; `--no-login-shell` disables it.
 Agent version subprocesses receive a small environment allowlist, excluding provider keys
@@ -59,7 +97,7 @@ These are Python entry-point exit codes; `make` normally maps a failed recipe to
 
 The preflight forwards `TEST_RUNNER_` variables explicitly and requires exactly one passed,
 non-skipped test plus a receipt matching this run's nonce and executable. It checks base
-notify, profile override, explicit override, project exclusion, and temporary parser cleanup.
+notify, an absent notifier, profile override, explicit override, project exclusion, and temporary parser cleanup.
 The first execution may build the app/test host; subsequent executions use Xcode incremental
 builds. `--preflight-timeout` defaults to 600 seconds including the build; `--timeout` bounds
 individual version commands (20 seconds by default). No background model turn is started.
@@ -68,35 +106,46 @@ individual version commands (20 seconds by default). No background model turn is
 
 The optional default is `~/.prowl/agent-contracts.json`. A missing default is reported as
 `not_configured`; an explicit `--config` path must exist. Start from
-`Config/agent-contracts.example.json`, which describes the owner's proposed DeepSeek routes
-for seven runtimes. Qoder is intentionally absent until its account-specific route is proven.
+`Config/agent-contracts.example.json`, which describes the owner's DeepSeek routes
+for seven runtimes. Qoder is intentionally absent because its route is account-specific.
 
 Schema 1 accepts only `schema` and a `runtimes` object keyed by the eight runtime IDs. Each
 route requires `provider`, `model`, `base_url`, `wire_api`, and `api_key_env`. The model is an
-explicit wire model ID, not a runtime-local alias such as Droid's `custom:...`; T1b adapters
-will translate the policy into client settings. Protocol values are `responses`,
+explicit wire model ID, not a runtime-local alias such as Droid's `custom:...`; the live recipes
+translate the policy into client settings. Protocol values are `responses`,
 `chat-completions`, or `anthropic-messages`. `api_key_env` names an environment variable; null
 means an explicitly keyless endpoint. Secret values, helper commands, unknown fields,
 duplicate fields, auto-model routing, and credential-bearing URLs are rejected. HTTPS is
-required except for loopback HTTP. Runtime/provider compatibility is not verified by parsing.
+required except for loopback HTTP. Live recipes additionally check protocol compatibility;
+keyless live recipes are not implemented.
 
-`configured` means the schema is valid and the referenced environment variable is nonempty;
-it does not mean authenticated or sufficient credit. Existing Pi/Droid credentials may be
-usable even when this policy reports `credential_missing`. T1a never copies those credentials
-or requires them for Codex preflight. Do not commit a personal credential file or key value.
+The optional private key file is `~/.prowl/agent-contracts.env`; `--credentials` selects another
+file. Create it with mode **0600**. It accepts literal `NAME=value` lines, optional matching
+quotes, blank lines, and comments. Duplicate names, shell syntax, symlinks, foreign ownership,
+and group/world access are rejected. Never `source` it. Exported environment values take
+precedence. Only the selected route's key reaches a live child; version probes and Xcode
+receive no provider keys. Keep this file outside repositories and never pass a key in argv.
 
-Recheck local flags with `--help`, including `codex exec --help`, `droid exec --help`,
-`opencode run --help`, and `copilot help providers`. Never use a model prompt as a help probe.
-For credential inventory, emit only allowlisted readiness fields. `claude auth status` and
-`codex login status` can report login state; Pi has the following non-refreshing check:
+`configured` means a valid route and a present credential reference, not successful auth.
+The owner's scratch `.env` was moved here with equality verification and then removed.
 
-```bash
-pi auth check --provider deepseek --json --no-refresh
+Qoder may use a catalog-selected runtime-managed route after checking `qodercli --list-models`:
+
+```json
+{
+  "provider": "qoder",
+  "model": "deepseek/deepseek-v4-flash-pg",
+  "base_url": null,
+  "wire_api": "runtime-managed",
+  "api_key_env": null
+}
 ```
 
-Do not add `--credentials` or use `print-api-key`, `print-bearer-token`, or `omp token` in
-captured diagnostic output. A credential file's absence is inconclusive for Keychain/broker
-auth. A `ready` result checks local credential resolution, not remaining credit or inference.
+This is an entry under `runtimes.qodercli`, not a direct-provider API recipe. It uses Qoder's
+existing account/model registration and billing. It does not prove that the supplied DeepSeek
+key is used. The committed example omits it because availability is account-specific; this
+machine's private policy includes the successfully tested route. For your own BYOK model,
+register it through `/model` → Custom and use its exact model ID. Do not invent Qoder settings.
 
 ## Provider policy
 
@@ -114,17 +163,16 @@ explicitly rather than cloning an entire agent home.
 | Runtime | Preferred low-cost candidate | Configuration route and remaining proof |
 | --- | --- | --- |
 | Claude Code | `deepseek-v4-flash` | DeepSeek's Anthropic endpoint through per-process environment and explicit model; official integration exists [1]. Pin helper models too; verify current client handshake. |
-| Codex | `deepseek-v4-flash` | Native custom provider using Responses, an isolated model catalog if required, and environment-key auth [2][3]. Direct DeepSeek support now exists; current local execution remains untested. |
+| Codex | `deepseek-v4-flash` | Native custom provider using Responses, an isolated model catalog if required, and environment-key auth [2][3]. Direct Responses inference and the real notifier passed locally. |
 | Copilot | `deepseek-v4-flash` | `COPILOT_PROVIDER_*` environment, `COPILOT_MODEL`; Chat Completions supports streaming/tools and BYOK needs no GitHub login according to installed help [4]. |
-| Droid | `custom:deepseek-v4-flash` | Already in this machine's catalog; `customModels`, `generic-chat-completion-api`, `-m` [5]. Validate scoped settings merge and account requirement before using it as a reusable recipe. |
+| Droid | `custom:deepseek-v4-flash` | Already in this machine's catalog; `customModels`, `generic-chat-completion-api`, `-m` [5]. Scoped settings merge and inference passed on this machine; a Factory account may still be required. |
 | Qoder | Flash if available to this account | Local catalog lists `deepseek/deepseek-v4-flash-pg`; billing is unverified. `--model` accepts custom model IDs. Official BYOK setup is the `/model` Custom wizard; providers and access are account-dependent [6]. Do not invent a settings schema. |
-| Pi | Explicit DeepSeek Flash provider/model | `models.json` supports OpenAI-compatible providers; select with `--provider`/`--model` [7]. This machine resolves a DeepSeek credential; verify exact model metadata and request once. |
-| OMP | Explicit DeepSeek Flash provider/model | Custom `models.yml` provider plus `--model`; isolated profile/config and broker credentials need verification [8]. No confirmed usable DeepSeek route on this machine yet. |
+| Pi | Explicit DeepSeek Flash provider/model | `models.json` supports OpenAI-compatible providers; select with `--provider`/`--model` [7]. Verified with a temporary provider; Pi 0.85 requires `${DEEPSEEK_API_KEY}`, not a bare variable name. |
+| OMP | Explicit DeepSeek Flash provider/model | Custom `models.yml` provider plus `--model`; isolated profile/config and broker credentials need verification [8]. Verified with temporary `PI_CODING_AGENT_DIR` and `models.yml`. |
 | OpenCode | DeepSeek Flash; optional explicit Zen free model | `-m provider/model`, custom provider configuration or Zen catalog [9][10]. Verify plugin loading is retained in the isolated setup. |
 
-The candidates above are documentation/configuration evidence, not eight successful model
-connections. BYOK may remove the need for a runtime subscription, but account gates and
-provider credits still need checking. Never infer entitlement from a model appearing in help.
+All eight selected routes passed the headless contract on this machine. This is not an
+entitlement promise for other accounts; inventory alone still cannot establish usable credit.
 
 ### Cost baseline and free alternatives
 
@@ -157,45 +205,24 @@ does not establish entitlement, sustained availability, or successful inference;
 pricing and access before use. This alternative is deferred while the owner's existing
 DeepSeek route works. Catalog refresh is outside the required T1 scope and the offline gate.
 
-### Proposed budget controls
+## Repetition and remaining acceptance
 
-- Inventory/preflight must not issue inference, even when credentials happen to be present.
-- Live mode requires an explicit model route. Keep credentials out of argv/logs and committed
-  configuration; use existing sanctioned environment/key-store references.
-- Start serially, one short turn per runtime, no tools for the hook-only scenario, no automatic
-  harness retry. Disable unrelated plugins/MCP/background work without disabling Prowl hooks.
-- Request a small supported output limit (initial target 256); select low/off reasoning where
-  supported. If a runtime cannot enforce a limit, say so in its plan/report before execution.
-- Initial proposed deadline: 60 seconds per live attempt. Stop owned child processes on
-  timeout/cancel. Report provider usage when available, otherwise `unknown`, never zero.
-- Treat a per-sweep USD estimate as a planning bound. Only a provider-side spend limit or a
-  verified runtime budget control is a hard cap; elapsed-time limits are not billing controls.
+- During ordinary development, run offline regressions and select one live runtime when its
+  adapter, provider recipe, or installed binary changes.
+- After shared renderer/decoder/CLI/relay changes, rerun affected runtimes; before each public
+  release, run the full headless command plus the Codex configuration preflight above.
+- Inspect failures before retrying. A retry creates a new private report and does not erase
+  earlier evidence. Do not silently change models or remove a runtime from the release scope.
+- Keep the headless report separate from T0's interactive attestation. Publication with a
+  scenario-aware schema and interactive needs-input/session lifecycle acceptance still needs
+  implementation. Do not update all T0 version rows based on a headless sweep.
+- D2 must run the bundled workflow skill through a Debug Prowl instance; use the
+  [S3c acceptance record](011-s3c-action.md) and the
+  [workflow release cadence](../063-agent-workflows/release-plan.md#cadence-and-working-rules).
+  This headless suite does not replace D2's GUI/workflow protocol acceptance.
 
-## Remaining live operating sequence for T1b/T1c
-
-T1b/T1c must add exact tested live command lines here. Inventory and Codex preflight above
-exist; the following full workflow is not yet available:
-
-1. Inventory selected runtimes, exact executable paths/versions, auth readiness, model routes,
-   hook-resource/source fingerprints, and build-product freshness. Stop before inference.
-2. Run zero-inference preflight. Show unsupported scenarios and access blockers individually.
-3. Run a selected live contract using a synthetic directory and a fresh capture socket.
-   Require successful inference plus the expected correlated hook frame, not just process exit.
-4. Inspect the report. Preserve errors such as authentication, credit, trust, missing hook,
-   decode mismatch, timeout, and provider outage separately. Never clear a failure by retrying
-   invisibly or swapping the model.
-5. After a runtime upgrade, rerun that runtime. After shared renderer/decoder/CLI/relay changes,
-   rerun all affected runtimes. Before release, require all eight mandated runtime routes.
-6. Publish attestation only after required scenarios pass, explicitly and per runtime. Link
-   durable sanitized evidence; keep preflight/headless/interactive coverage distinguishable.
-7. Drive D2 from the bundled skill through an isolated Debug Prowl instance. Use the
-   [S3c acceptance record](011-s3c-action.md) for the existing interactive setup and the
-   [workflow release cadence](../063-agent-workflows/release-plan.md#cadence-and-working-rules).
-   Synthetic workflow/tool-delivery checks precede any review of real repository content.
-
-Normal development can run one runtime without the other seven subscriptions. A missing
-account produces a useful blocked result, but never a full-gate success. If access cannot be
-obtained, record an explicit release-scope decision instead of weakening assertions.
+Missing accounts remain explicit blockers. Only the owner can approve a release-scope
+exception; autonomous implementation authorization is not a waiver of release acceptance.
 
 ## Maintaining the harness
 
