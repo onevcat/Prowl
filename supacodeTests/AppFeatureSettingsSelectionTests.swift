@@ -185,6 +185,55 @@ struct AppFeatureSettingsSelectionTests {
     #expect(shown.value)
   }
 
+  @Test(.dependencies) func settingsWorkflowStartKeepsItsWindowAndReturnsToItsDetail() async throws {
+    let root = URL(filePath: "/tmp/settings-run")
+    let worktree = Worktree(
+      id: "settings-run", name: "main", detail: "", workingDirectory: root, repositoryRootURL: root)
+    let repository = Repository(id: "repo", rootURL: root, name: "Repo", worktrees: [worktree])
+    let definition = try #require(WorkflowDocumentParser.parse(WorkflowStartContextTests.worktreeOnly).definition)
+    let context = WorkflowStartContext(
+      item: WorkflowStartCatalogItem(
+        key: "user/worktree-only", scope: .user, fileURL: root.appending(path: "flow.yaml"),
+        workflowID: definition.id, name: definition.name, workflowDescription: nil,
+        icon: nil, validationFailure: nil),
+      definition: definition, worktreeID: worktree.id, worktreeName: worktree.name,
+      source: nil, launchRoles: [], pickRoles: [], cliInstalled: true, bindModeOverride: nil)
+    var state = AppFeature.State(
+      repositories: RepositoriesFeature.State(repositories: [repository]),
+      settings: SettingsFeature.State())
+    state.settings.selection = .workflows
+    state.settings.workflows = .init()
+    let surfaced = LockIsolated(false)
+    let focused = LockIsolated(false)
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    } withDependencies: {
+      $0[WorkflowStartClient.self].context = { _, _, _ in context }
+      $0.appLifecycleClient.surfaceMainWindow = {
+        surfaced.setValue(true)
+        return true
+      }
+      $0.terminalClient.send = { _ in focused.setValue(true) }
+    }
+    store.exhaustivity = .off
+    await store.send(
+      .settings(
+        .workflows(
+          .delegate(
+            .runWorkflow(
+              workflowKey: context.item.key, worktreeID: worktree.id, forceSheet: true)))))
+    #expect(store.state.workflowStart?.context == context)
+    #expect(store.state.workflowStartFromSettings)
+    #expect(!surfaced.value)
+    await store.send(.workflowStart(.presented(.cancelTapped)))
+    await store.receive(\.workflowStart.presented.delegate)
+    await store.finish()
+    #expect(store.state.workflowStart == nil)
+    #expect(!store.state.workflowStartFromSettings)
+    #expect(store.state.settings.selection == .workflows)
+    #expect(!focused.value)
+  }
+
   @Test(.dependencies) func workflowDetailsDeepLinkLoadsAndPushesTheExactFile() async throws {
     let directory = FileManager.default.temporaryDirectory
       .appending(path: "workflow-deep-link-\(UUID().uuidString)", directoryHint: .isDirectory)

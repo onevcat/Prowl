@@ -40,6 +40,10 @@ struct WorkflowSettingsClient: Sendable {
   var scan: @MainActor @Sendable (_ scope: WorkflowSettingsScope) throws -> WorkflowSettingsScan
   /// Writes `WorkflowStarterTemplate` into the selected workflow directory and returns the new file.
   var createWorkflow: @Sendable (_ directory: URL) throws -> URL
+  /// Moves the selected source file to Trash, leaving it recoverable in Finder.
+  var trashWorkflow: @Sendable (URL) throws -> Void = { _ in
+    throw WorkflowSettingsError(message: "Workflow deletion is not available.")
+  }
   var runTargets: @MainActor @Sendable (_ scope: WorkflowSettingsScope) -> [WorkflowSettingsRunTarget]
   var reveal: @Sendable (URL) -> Void
   /// One element per change to any of the paths — directories (entries added, removed, renamed)

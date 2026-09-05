@@ -33,6 +33,7 @@ struct AppFeature {
     var leftSidebarVisibility: NavigationSplitViewVisibility = .all
     @Presents var handoffHud: HandoffHudFeature.State?
     @Presents var workflowStart: WorkflowStartFeature.State?
+    var workflowStartFromSettings = false
     /// Workflows visible to the action-target worktree, refreshed when the palette opens.
     var workflowPaletteItems: [WorkflowStartCatalogItem] = []
     @Presents var alert: AlertState<Alert>?
@@ -596,13 +597,13 @@ struct AppFeature {
           .repositorySettings(
             .workflows(
               .delegate(.runWorkflow(let workflowKey, let worktreeID, let forceSheet))))):
-        _ = appLifecycleClient.surfaceMainWindow()
         return openWorkflowStart(
           state: &state,
           workflowKey: workflowKey,
           worktreeID: worktreeID,
           sourceSurfaceID: nil,
-          forceSheet: forceSheet)
+          forceSheet: forceSheet,
+          fromSettings: true)
 
       case .settings(.workflows(.delegate(.notice(let notice)))),
         .settings(.repositorySettings(.workflows(.delegate(.notice(let notice))))):
@@ -1193,6 +1194,10 @@ struct AppFeature {
         .workflowStart(.presented(.delegate(.started))),
         .workflowStart(.dismiss):
         state.workflowStart = nil
+        if state.workflowStartFromSettings {
+          state.workflowStartFromSettings = false
+          return .none
+        }
         guard let worktree = actionTargetWorktree(repositories: state.repositories) else {
           return .none
         }

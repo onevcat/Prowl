@@ -221,21 +221,12 @@ private struct AgentsPopoverContent: View {
           .padding(.top, 4)
           .padding(.bottom, 2)
         ForEach(workflowItems) { item in
-          if let failure = item.validationFailure {
-            // The popover is the diagnostic surface (063.011 decision 3): a
-            // failing file stays listed with its reason but offers no action.
-            AgentsWorkflowInvalidRow(
-              item: item,
-              reason: failure,
-              onShowDetails: { onShowWorkflowDetails(item) })
-          } else {
-            AgentsWorkflowRow(
-              item: item,
-              onRun: { onRunWorkflow(item.key) },
-              onRunWithOptions: { onRunWorkflowWithOptions(item.key) },
-              onShowDetails: { onShowWorkflowDetails(item) }
-            )
-          }
+          AgentsWorkflowRow(
+            item: item,
+            onRun: { onRunWorkflow(item.key) },
+            onRunWithOptions: { onRunWorkflowWithOptions(item.key) },
+            onShowDetails: { onShowWorkflowDetails(item) }
+          )
         }
         Divider().padding(.vertical, 4)
       }
@@ -303,7 +294,7 @@ private struct AgentsPopoverRow: View {
 
   var body: some View {
     Button(action: action) {
-      HStack(alignment: .top, spacing: 8) {
+      HStack(alignment: .center, spacing: 8) {
         if let iconSource {
           AgentProfileIconImage(source: iconSource, pointSize: 16)
             .frame(width: 16)
@@ -345,9 +336,8 @@ private struct AgentsPopoverRow: View {
   }
 }
 
-/// A runnable workflow row: the wide button starts it (skipping the sheet when
-/// nothing is undecided), the trailing control forces the start sheet — the
-/// "Run with Options…" escape hatch (docs-ai 063.011 decision 5).
+/// Valid and invalid workflows share geometry; only the launch action is disabled
+/// for invalid files, so their Settings diagnostics remain accessible.
 private struct AgentsWorkflowRow: View {
   let item: WorkflowStartCatalogItem
   let onRun: () -> Void
@@ -358,13 +348,13 @@ private struct AgentsWorkflowRow: View {
   var body: some View {
     HStack(spacing: 0) {
       Button(action: onRun) {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .center, spacing: 8) {
           WorkflowIconImage(icon: item.icon, pointSize: 16)
             .frame(width: 16)
           VStack(alignment: .leading, spacing: 2) {
             Text(item.name)
               .lineLimit(1)
-            if let description = item.workflowDescription {
+            if let description = item.validationFailure ?? item.workflowDescription {
               Text(description)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -379,10 +369,13 @@ private struct AgentsWorkflowRow: View {
         .contentShape(.rect)
       }
       .buttonStyle(.plain)
-      .help("Run \(item.name)")
+      .disabled(!item.isRunnable)
+      .help(item.validationFailure ?? "Run \(item.name)")
       Menu {
-        Button("Run with Options…", action: onRunWithOptions)
-        Divider()
+        if item.isRunnable {
+          Button("Run with Options…", action: onRunWithOptions)
+          Divider()
+        }
         Button("Show Details in Settings…", action: onShowDetails)
       } label: {
         Image(systemName: "ellipsis.circle")
@@ -403,45 +396,5 @@ private struct AgentsWorkflowRow: View {
         .fill(isHovered ? Color.accentColor.opacity(0.2) : Color.clear)
     )
     .onHover { isHovered = $0 }
-  }
-}
-
-/// A workflow file that failed validation: named so the author can find it,
-/// dimmed, and deliberately inert.
-private struct AgentsWorkflowInvalidRow: View {
-  let item: WorkflowStartCatalogItem
-  let reason: String
-  let onShowDetails: () -> Void
-
-  var body: some View {
-    HStack(alignment: .top, spacing: 8) {
-      WorkflowIconImage(icon: item.icon, pointSize: 16)
-        .frame(width: 16)
-      VStack(alignment: .leading, spacing: 2) {
-        Text(item.name)
-          .lineLimit(1)
-        Text(reason)
-          .font(.caption)
-          .foregroundStyle(.secondary)
-          .fixedSize(horizontal: false, vertical: true)
-      }
-      Spacer(minLength: 0)
-      Menu {
-        Button("Show Details in Settings…", action: onShowDetails)
-      } label: {
-        Image(systemName: "ellipsis.circle")
-          .foregroundStyle(.secondary)
-          .accessibilityHidden(true)
-          .frame(width: 20, height: 20)
-      }
-      .menuStyle(.borderlessButton)
-      .menuIndicator(.hidden)
-      .fixedSize()
-      .accessibilityLabel("More actions for \(item.name)")
-    }
-    .padding(.horizontal, 8)
-    .padding(.vertical, 6)
-    .opacity(0.5)
-    .help("Fix the file, then reopen this menu — `prowl workflow validate` shows the errors.")
   }
 }

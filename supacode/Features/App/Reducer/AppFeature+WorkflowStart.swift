@@ -12,7 +12,8 @@ extension AppFeature {
     workflowKey: String,
     worktreeID: Worktree.ID?,
     sourceSurfaceID: UUID?,
-    forceSheet: Bool
+    forceSheet: Bool,
+    fromSettings: Bool = false
   ) -> Effect<Action> {
     guard state.workflowStart == nil else { return .none }
     let worktree: Worktree
@@ -47,6 +48,7 @@ extension AppFeature {
         }
       }
     }
+    state.workflowStartFromSettings = fromSettings
     state.workflowStart = WorkflowStartFeature.State(context: context)
     return .none
   }

@@ -149,12 +149,15 @@ The detail page owns these controls and explanations:
 
 | Section | Effect |
 |---|---|
-| **Workflow** | identity, source, effective status, and **Enabled**. Disabled workflows disappear from launch surfaces and `prowl workflow run` refuses them with `WORKFLOW_DISABLED`. Repository settings are keyed by canonical repository root plus workflow id, so the same id in two repositories remains independent. |
+| **Workflow** | identity, effective status, and **Enabled**. Disabled workflows disappear from launch surfaces and `prowl workflow run` refuses them with `WORKFLOW_DISABLED`. Repository settings are keyed by canonical repository root plus workflow id, so the same id in two repositories remains independent. |
 | **Run** | **Run in <worktree>** names the actual target. Its menu lists other legal worktrees and **Run with Options…**. Repository workflows only list worktrees from that repository. Every choice uses the same admission path as the other GUI and CLI entry points; if that explicit worktree closes first, Prowl refuses the run instead of falling back to another target. |
 | **Roles** | every `current`, `pick`, and `launch` role with a plain-language behavior summary. Only a `launch` role has a **Preferred Agent Profile** menu; **Choose Automatically** forgets the preference and lets Prowl resolve a qualifying profile at start. Unqualified profiles remain visible with the reason but cannot be selected. **Manage Agent Profiles…** appears once per page. |
 | **Run Setup** | **Follow Workflow**, **Always Review Before Running**, or **Run Directly When Possible**. The last choice starts immediately only when profiles, required role choices, inputs, and validation are already resolved; otherwise the review sheet still opens. |
 | **Validation** | every diagnostic as message, source location, and stable code. Saving the YAML revalidates automatically; there is no separate Validate button. |
-| **Source File** | **Open Workflow** uses the default YAML app; the folder button reveals it in Finder. Built-ins are marked read-only. YAML remains the source of truth—Settings does not embed an editor. |
+| **Source File** | **Open Workflow** uses the default YAML app; the folder button reveals it in Finder. **Delete Workflow…** asks for confirmation, then moves a personal or repository workflow to Trash and returns to the list. Failed deletions keep the detail open with an error. Built-ins are read-only and cannot be deleted. YAML remains the source of truth—Settings does not embed an editor. |
+
+Starting from Settings keeps the review panel in the Settings window. Cancelling
+returns to the same detail without bringing the main window or terminal forward.
 
 **New Workflow…** writes a validated starter (`new-workflow.yaml`, then
 `new-workflow-2.yaml`, …) into the current page's workflow folder and opens it

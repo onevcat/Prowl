@@ -75,6 +75,14 @@ extension SupacodeApp {
             message: "Could not create the workflow file: \(error.localizedDescription)")
         }
       },
+      trashWorkflow: { url in
+        do {
+          try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+        } catch {
+          throw WorkflowSettingsError(
+            message: "Could not move the workflow to Trash: \(error.localizedDescription)")
+        }
+      },
       runTargets: { scope in
         guard let appStore = storeBox.store else { return [] }
         let snapshot = makeWorkflowRuntimeSnapshot(

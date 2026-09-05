@@ -20,23 +20,66 @@ struct WorkflowSettingsDetailFeatureTests {
         text: "Review this change."
     """
 
-  private func row() throws -> WorkflowSettingsRow {
+  private func row(scope: WorkflowScope = .user) throws -> WorkflowSettingsRow {
     let url = URL(filePath: "/tmp/review.yaml")
     let file = WorkflowDiscovery.parse(
       Self.yaml,
       url: url,
-      scope: .user,
-      context: WorkflowValidationContext(scope: .user))
+      scope: scope,
+      context: WorkflowValidationContext(scope: scope))
     let scan = WorkflowSettingsScan(
       bundleDirectory: nil,
       userDirectory: URL(filePath: "/tmp"),
       entries: [WorkflowCatalogEntry(file: file, shadowed: false)],
       repositories: [])
-    return try #require(
-      WorkflowSettingsCatalog.build(
-        scan: scan,
-        settings: UserGlobalSettings(customCommands: [], agentProfiles: [])
-      ).user.first)
+    let catalog = WorkflowSettingsCatalog.build(
+      scan: scan, settings: UserGlobalSettings(customCommands: [], agentProfiles: []))
+    return try #require((catalog.user + catalog.bundle).first)
+  }
+
+  @Test func deletionRequiresConfirmationAndUsesTheExactFile() async throws {
+    let row = try row()
+    let trashed = LockIsolated<[URL]>([])
+    let store = TestStore(initialState: WorkflowSettingsDetailFeature.State(row: row, runTargets: [])) {
+      WorkflowSettingsDetailFeature()
+    } withDependencies: {
+      $0[WorkflowSettingsClient.self].trashWorkflow = { url in trashed.withValue { $0.append(url) } }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.deleteTapped)
+    #expect(store.state.alert != nil)
+    #expect(trashed.value.isEmpty)
+    await store.send(.alert(.dismiss))
+    #expect(trashed.value.isEmpty)
+    await store.send(.deleteTapped)
+    await store.send(.alert(.presented(.confirmDeletion(row.url))))
+    await store.receive(.delegate(.deleted))
+    #expect(trashed.value == [row.url])
+  }
+
+  @Test func deletionFailureKeepsTheDetailAndExplainsTheError() async throws {
+    let row = try row()
+    let store = TestStore(initialState: WorkflowSettingsDetailFeature.State(row: row, runTargets: [])) {
+      WorkflowSettingsDetailFeature()
+    } withDependencies: {
+      $0[WorkflowSettingsClient.self].trashWorkflow = { _ in
+        throw WorkflowSettingsError(message: "The file is read-only.")
+      }
+    }
+    store.exhaustivity = .off
+    await store.send(.deleteTapped)
+    await store.send(.alert(.presented(.confirmDeletion(row.url))))
+    #expect(store.state.row == row)
+    #expect(store.state.alert?.title == TextState("Could Not Delete Workflow"))
+  }
+
+  @Test func builtInAndUnavailableWorkflowsCannotBeDeleted() async throws {
+    let row = try row(scope: .bundle)
+    let store = TestStore(initialState: WorkflowSettingsDetailFeature.State(row: row, runTargets: [])) {
+      WorkflowSettingsDetailFeature()
+    }
+    await store.send(.deleteTapped)
   }
 
   @Test func repositoryScopeFiltersRunTargetsWithoutChangingGlobalOrder() {
@@ -89,6 +132,7 @@ struct WorkflowSettingsDetailFeatureTests {
 
     await store.send(.openWorkflowTapped)
     await store.send(.revealInFinderTapped)
+    await store.send(.deleteTapped)
     await store.send(.runTapped(worktreeID: "wt-1", forceSheet: false))
   }
 

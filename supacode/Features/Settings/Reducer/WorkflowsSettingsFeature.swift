@@ -262,6 +262,10 @@ struct WorkflowsSettingsFeature {
       case .path(.element(id: _, action: .delegate(.manageProfiles))):
         return .send(.delegate(.openProfiles))
 
+      case .path(.element(id: let id, action: .delegate(.deleted))):
+        state.path.pop(from: id)
+        return .send(.reload)
+
       case .path:
         return .none
 

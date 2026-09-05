@@ -27,6 +27,7 @@ struct WorkflowSettingsDetailView: View {
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    .alert($store.scope(state: \.alert, action: \.alert))
   }
 
   private func workflowSection(_ row: WorkflowSettingsRow) -> some View {
@@ -54,8 +55,6 @@ struct WorkflowSettingsDetailView: View {
             .textSelection(.enabled)
         }
       }
-
-      LabeledContent("Source", value: sourceName(row.scope))
 
       if row.settingsKey != nil {
         Toggle(
@@ -124,7 +123,7 @@ struct WorkflowSettingsDetailView: View {
   @ViewBuilder
   private func rolesSection(_ row: WorkflowSettingsRow) -> some View {
     Section("Roles") {
-      ForEach(Array(row.roles.enumerated()), id: \.element.id) { index, role in
+      ForEach(row.roles) { role in
         VStack(alignment: .leading, spacing: 8) {
           HStack(alignment: .firstTextBaseline) {
             Text(role.name)
@@ -145,10 +144,6 @@ struct WorkflowSettingsDetailView: View {
           }
         }
         .padding(.vertical, 2)
-
-        if index != row.roles.indices.last {
-          Divider()
-        }
       }
 
       if !row.launchRoles.isEmpty {
@@ -293,6 +288,11 @@ struct WorkflowSettingsDetailView: View {
           Text("Built-in · Read Only")
             .font(.callout)
             .foregroundStyle(.secondary)
+        } else {
+          Button("Delete Workflow…", role: .destructive) {
+            store.send(.deleteTapped)
+          }
+          .help("Move \(row.fileName) to Trash after confirmation")
         }
       }
 
@@ -318,14 +318,6 @@ struct WorkflowSettingsDetailView: View {
 
   private func runHelp(_ row: WorkflowSettingsRow, target: WorkflowSettingsRunTarget) -> String {
     unavailableRunReason(row) ?? "Run this workflow in \(target.displayName)"
-  }
-
-  private func sourceName(_ scope: WorkflowScope) -> String {
-    switch scope {
-    case .bundle: "Built-in"
-    case .user: "Your Workflows"
-    case .repo: "Repository"
-    }
   }
 
   private func sourceLabel(_ source: WorkflowRoleSource) -> String {

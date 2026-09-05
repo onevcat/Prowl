@@ -26,8 +26,8 @@ struct WorkflowStartOverlayView: View {
             .zIndex(1)
           Spacer(minLength: 0)
         }
-        .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
         .padding(.top, max(0, geometry.size.height * 0.16))
+        .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
       }
     }
   }

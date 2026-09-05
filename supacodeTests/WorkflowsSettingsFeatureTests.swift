@@ -389,6 +389,29 @@ struct WorkflowsSettingsFeatureTests {
     await store.finish()
   }
 
+  @Test(.dependencies) func confirmedDeletionReturnsToTheRefreshedIndex() async throws {
+    let fixture = try Fixture()
+    defer { fixture.cleanUp() }
+    try fixture.write(Self.review, to: "review.yaml")
+    let store = makeStore(fixture, storage: SettingsTestStorage())
+    store.dependencies[WorkflowSettingsClient.self].trashWorkflow = { url in
+      try FileManager.default.removeItem(at: url)
+    }
+    store.exhaustivity = .off
+    await store.send(.task)
+    let row = try #require(store.state.catalog.user.first)
+    await store.send(.showDetails(rowID: row.id))
+    let id = try #require(store.state.path.ids.first)
+    await store.send(.path(.element(id: id, action: .deleteTapped)))
+    await store.send(.path(.element(id: id, action: .alert(.presented(.confirmDeletion(row.url))))))
+    await store.receive(.path(.element(id: id, action: .delegate(.deleted))))
+    await store.receive(.reload)
+    #expect(store.state.path.isEmpty)
+    #expect(store.state.catalog.user.isEmpty)
+    fixture.finishWatchers()
+    await store.finish()
+  }
+
   @Test(.dependencies) func directoryChangesReloadAfterTheQuietPeriod() async throws {
     let fixture = try Fixture()
     defer { fixture.cleanUp() }

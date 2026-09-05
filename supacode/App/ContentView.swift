@@ -178,7 +178,9 @@ struct ContentView: View {
       }
     }
     .overlay {
-      if let workflowStartStore = store.scope(state: \.workflowStart, action: \.workflowStart.presented) {
+      if !store.workflowStartFromSettings,
+        let workflowStartStore = store.scope(state: \.workflowStart, action: \.workflowStart.presented)
+      {
         WorkflowStartOverlayView(store: workflowStartStore)
       }
     }

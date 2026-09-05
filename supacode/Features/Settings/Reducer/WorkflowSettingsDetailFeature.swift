@@ -8,6 +8,7 @@ struct WorkflowSettingsDetailFeature {
     let rowID: String
     var row: WorkflowSettingsRow?
     var runTargets: [WorkflowSettingsRunTarget]
+    @Presents var alert: AlertState<Alert>?
 
     init(row: WorkflowSettingsRow, runTargets: [WorkflowSettingsRunTarget]) {
       rowID = row.id
@@ -28,7 +29,13 @@ struct WorkflowSettingsDetailFeature {
     case revealInFinderTapped
     case runTapped(worktreeID: String, forceSheet: Bool)
     case manageProfilesTapped
+    case deleteTapped
+    case alert(PresentationAction<Alert>)
     case delegate(Delegate)
+  }
+
+  enum Alert: Equatable {
+    case confirmDeletion(URL)
   }
 
   @CasePathable
@@ -38,6 +45,7 @@ struct WorkflowSettingsDetailFeature {
     case setPreferredProfile(WorkflowBindingMemoryKey, UUID?)
     case runWorkflow(workflowKey: String, worktreeID: String, forceSheet: Bool)
     case manageProfiles
+    case deleted
   }
 
   @Dependency(OpenURLClient.self) var openURLClient
@@ -85,9 +93,44 @@ struct WorkflowSettingsDetailFeature {
       case .manageProfilesTapped:
         return .send(.delegate(.manageProfiles))
 
+      case .deleteTapped:
+        guard let row = state.row, row.scope != .bundle else { return .none }
+        state.alert = AlertState {
+          TextState("Delete Workflow?")
+        } actions: {
+          ButtonState(role: .cancel) { TextState("Cancel") }
+          ButtonState(role: .destructive, action: .confirmDeletion(row.url)) {
+            TextState("Move to Trash")
+          }
+        } message: {
+          TextState("“\(row.name)” (\(row.fileName)) will be moved to Trash. You can restore it in Finder.")
+        }
+        return .none
+
+      case .alert(.presented(.confirmDeletion(let url))):
+        guard let row = state.row, row.scope != .bundle, row.url == url else { return .none }
+        do {
+          try client.trashWorkflow(url)
+          return .send(.delegate(.deleted))
+        } catch {
+          let message = (error as? WorkflowSettingsError)?.message ?? error.localizedDescription
+          state.alert = AlertState {
+            TextState("Could Not Delete Workflow")
+          } actions: {
+            ButtonState { TextState("OK") }
+          } message: {
+            TextState(message)
+          }
+          return .none
+        }
+
+      case .alert:
+        return .none
+
       case .delegate:
         return .none
       }
     }
+    .ifLet(\.$alert, action: \.alert)
   }
 }
