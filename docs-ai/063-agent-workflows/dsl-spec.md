@@ -1,5 +1,7 @@
 # Agent Workflow DSL — `prowl.workflow/v1` (living spec)
 
+> This document specifies current V1 behavior. The proposed replacement for actions, packaging, context, and control flow is [063.015](015-action-bundles-and-control-flow.md), under design review; it is not implemented yet.
+
 > Living document: the normative definition of the workflow file format, run semantics,
 > and the CLI participant protocol. Updated in place as the design settles and the
 > implementation lands; history and rationale live in [000-plan.md](000-plan.md).

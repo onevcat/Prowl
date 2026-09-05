@@ -7,6 +7,8 @@
 | **Primary PRs** | R1: #709 (C0), #710 (A1), #713 (A1b), #714 (A2) — shipped in v2026.8.29; R2a: #740 (B1), #743 (B2, [007](007-b2-runner-core.md)); #744 (B3, [008](008-b3-runner-wiring.md)); #747 (C1, [010](010-c1-workflow-status-center.md)); R2b: #752 (C2, [011](011-c2-start-sheet.md)), #754 (D1 skill), #761 (D1 rest, [013](013-d1-workflows-settings.md)), D1 Settings UI refinement (#763, [014](014-workflow-settings-ui-refinement.md)); D2–D3 TBD |
 | **Related** | [047 cross-agent-handoff](../047-cross-agent-handoff/000-plan.md), [049 agents-toolbar-entry](../049-agents-toolbar-entry/000-plan.md), [053 agent-profiles](../053-agent-profiles/000-plan.md), [055 agent-profile-runtimes](../055-agent-profile-runtimes/000-plan.md), [059 agent-transcript-snapshots](../059-agent-transcript-snapshots/000-plan.md), [060 cli-targeting-and-contract-governance](../060-prowl-cli-targeting-and-contract-governance/000-plan.md), [061 native-toolbar-controls](../061-native-toolbar-controls/toolbar-controls.md), [064 agent-completion-signals](../064-agent-completion-signals/000-plan.md) (signal bus, `agents signal` / `agents wait`), [#699 `prowl create pane`](https://github.com/onevcat/Prowl/issues/699), [PR #651 (direction reference, not merged)](https://github.com/onevcat/Prowl/pull/651), [DSL spec (living)](dsl-spec.md), [release plan (living)](release-plan.md), `docs/components/handoff.md`, `docs/components/agent-profiles.md`, `docs/components/cli.md` |
 
+> Design amendment under review: [015 — action bundles, context, and control flow](015-action-bundles-and-control-flow.md). The owner redirected the current session to this foundation before handoff implementation. The existing V1 specification describes current behavior; the amendment describes proposed replacements.
+
 ## Background
 
 Prowl already runs several coding agents side by side, identifies them per pane, launches
@@ -664,3 +666,5 @@ attaches hooks through A2's launch boundary.
 - Updated 2026-09-05 (T1 closure): Full eight-runtime verification and explicit scoped publication passed; the baseline and matrix were advanced while preserving interactive history. Release guidance now uses `verify` then `publish`. See [064.016](../064-agent-completion-signals/016-t1-contract-test-plan.md). Merge this closure, then proceed to D2; GUI E2E is outside #726 T1.
 
 - Updated 2026-09-05 (owner sequencing decision): D3 moves before D2 into R2b; handoff/checkpoint carry the first built-in Debug E2E. Consider R2b release after acceptance, with adversarial review deferred to R3. This supersedes earlier D2-first/migrate-handoff-last ordering; CLI retirement and artifact contracts remain unchanged.
+
+- Updated 2026-09-05: Recorded accepted action/bundle authorization, workflow-wide context, typed state, conditions/unbounded loops, sequential scheduling, and no recovery decisions in [015](015-action-bundles-and-control-flow.md). Consolidated syntax remains under review; no implementation yet.
