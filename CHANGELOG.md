@@ -1,5 +1,24 @@
 # Changelog
 
+## [2026.9.6](https://github.com/onevcat/Prowl/releases/tag/v2026.9.6)
+
+Meet **Agent Island**: all your agents' status at your Mac's notch, with a new way to navigate built for speed and muscle memory. See who is working, waiting for you, finished, or idle at a glance, then jump straight to any agent—even from another app.
+
+### New
+
+- **All-agent status at the notch.** Agent Island brings together status counts for every agent, with visible reminders for agents waiting for input or with unread results. It fits around the notch on your chosen display, or appears as a draggable floating bar on displays without one.
+- **Agent navigation that becomes muscle memory.** Assign **Toggle Agent Island** in Display or Shortcuts settings, then use the same quick sequence from any app: open the roster, select with arrow keys, and press Return to jump to the pane. Number keys 1–9 jump directly to an agent on the current page; agents waiting for input and unread completions get priority when the roster opens. You can also expand the island and click any agent.
+- **Off by default, easy to enable.** Turn on **Show Agent Island** in **Settings → Agents → Display**, or use the island toggle in the **Active Agents** panel.
+- Active Agents and Agent Island preferences now live together in Settings → Agents → Display, including placement, opacity, and whether to hide the island when empty.
+- Settings → Agents → CLI & Skills now shows whether the CLI connection is listening, with a reason when it is unavailable.
+
+### Fixed
+
+- Closing a pane or tab now asks for confirmation if an affected terminal received editing input within the last 10 seconds or still has active input-method composition.
+- Agent status now follows explicit runtime indicators more reliably, including Pi and OMP working indicators, Codex background-terminal waits, and Copilot streaming output. Claude Code and Copilot workspace-trust prompts correctly appear as Blocked.
+- Adding a Custom Command now scrolls to and focuses its name editor, so typing renames the command instead of the repository.
+- Fixed completion-hook setup for Codex configurations without an existing notifier.
+
 ## [2026.8.31](https://github.com/onevcat/Prowl/releases/tag/v2026.8.31)
 
 This release lays the groundwork for Agent Workflows — multi-step, multi-agent orchestrations that Prowl runs and supervises for you. The engine and CLI are ready to try today; the complete experience, including starting and managing runs from the UI, arrives together with the workflow interface in an upcoming release.
