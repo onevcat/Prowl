@@ -210,8 +210,12 @@ nonisolated struct CodexConfigReadProcess: Sendable {
         guard transcript.count <= 1_024 * 1_024 else {
           throw CodexConfigReadProcessError.outputTooLarge
         }
-        if (try? CodexConfigReadProtocol.decodeNotify(from: transcript)) != nil {
+        do {
+          // A decoded nil is a complete response with no notifier, not missing output.
+          _ = try CodexConfigReadProtocol.decodeNotify(from: transcript)
           return transcript
+        } catch CodexConfigReadError.missingResponse {
+          continue
         }
       } else if count == 0 {
         throw CodexConfigReadProcessError.processFailed

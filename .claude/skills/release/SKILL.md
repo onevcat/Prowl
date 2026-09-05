@@ -12,6 +12,12 @@ Build, sign, notarize, and publish a Prowl release.
 2. Verify working tree is clean: `git status --porcelain`
    - If dirty, list the changes and ask whether to proceed or abort
 3. Sync the docs to the code being released — **before** the version bump and tag:
+   - First read `docs-ai/001-fork-bootstrap-and-release-pipeline/release-runbook.md`'s
+     **Agent contract release check** and surface its status to the user. Follow the linked
+     contract runbook for the implemented full eight-runtime headless live check and Codex
+     configuration preflight, using the owner's configured model routes before bump/tag.
+     Report headless results separately from pending interactive/workflow acceptance;
+     inventory alone is not a live pass, and headless success is not full T1/D2 readiness.
    - Run the `sync-docs` skill. It diffs `docs/.sync-meta.json`'s `last_synced_commit`
      against the current `main` HEAD (the code about to ship), updates any docs whose
      implementation changed, and sets `last_synced_commit` to the **current HEAD** —
@@ -35,6 +41,9 @@ Build, sign, notarize, and publish a Prowl release.
      PR descriptions, and generates user-facing notes via LLM into `build/release-notes.md`.
    - Read the generated `build/release-notes.md`, show the content to the user, and wait
      for explicit confirmation. If the user wants changes, edit the file directly.
+   - Alongside that maintainer-facing confirmation, report the agent contract check result
+     and evidence location, including any blocked or untested runtimes. Keep this diagnostic
+     summary out of the public release notes; apply the release runbook's scope policy.
    - **Do NOT proceed to the next step until the user confirms the release notes.**
 6. Run the release script: `./scripts/release.sh <VERSION>`
    - The script reads `build/release-notes.md` (required — refuses to run without it).

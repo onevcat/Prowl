@@ -19,6 +19,7 @@ make measure-cpu                 # Steady-state CPU + per-symbol attribution of 
 make capture-spike               # Sample the running Prowl Debug app when CPU crosses a threshold
 make measure-titles              # Black-box check that animated tab titles stay coalesced (~1 change/s)
 make agent-versions              # Compare installed tier-A agent CLI versions with the managed-hook attestation (docs-ai 064)
+make test-agent-contracts        # Zero-inference runtime inventory; AGENT_CONTRACT_ARGS="--mode preflight --runtime codex"
 make log-stream                  # Stream app logs (subsystem: com.onevcat.prowl)
 make build-cli                   # Build CLI (prowl) via SwiftPM
 make test-cli-smoke              # Run CLI executable smoke tests

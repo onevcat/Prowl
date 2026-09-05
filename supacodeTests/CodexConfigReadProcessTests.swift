@@ -38,6 +38,28 @@ import Testing
     }
   }
 
+  @Test(arguments: [#"{"notify":null}"#, "{}"])
+  func absentNotifierCompletesWhileServerRemainsOpen(config: String) async throws {
+    let root = temporaryDirectory("codex-absent-notifier")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let executable = root.appending(path: "no-notifier.py")
+    try """
+    #!/usr/bin/python3
+    import sys
+    for _ in range(3):
+        sys.stdin.readline()
+    print('{"id":2,"result":{"config":\(config)}}', flush=True)
+    sys.stdin.read()
+    """.write(to: executable, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: executable.path)
+    let process = CodexConfigReadProcess(executableURL: executable, temporaryBaseDirectory: root, timeout: 2)
+    let transcript = try await process.query(
+      CodexConfigQuery(kind: .base, codexHome: root, cwd: root, overrides: [])
+    )
+    #expect(try CodexConfigReadProtocol.decodeNotify(from: transcript) == nil)
+  }
+
   @Test func requestStdinStaysOpenUntilTheConfigReadResponseArrives() async throws {
     // Codex 0.149.1's app-server tears down on stdin EOF and drops any request it has not
     // answered yet, so the request pipe must outlive the response.

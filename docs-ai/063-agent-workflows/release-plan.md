@@ -29,13 +29,13 @@ user-facing surface may merge before "their" release and stay dormant. Four rele
 R2a, R2b, R3 (R2 was split on 2026-08-29); the [cadence rules](#cadence-and-working-rules)
 say when each is cut:
 
-### Status (2026-09-04)
+### Status (2026-09-05)
 
 | Release | State | Next action |
 | --- | --- | --- |
 | R1 | **Shipped** — v2026.8.29 (2026-08-29) | — |
 | R2a | **Shipped** — v2026.8.31 (2026-08-31) | — |
-| R2b | In progress — C2 and D1 merged (#752/#754/#761) | D1's post-merge Settings UI refinement ([063.014](014-workflow-settings-ui-refinement.md)), then #726 T1, then D2 |
+| R2b | In progress — C2 and D1, including Settings refinement, merged (#752/#754/#761/#763) | #726 T1a inventory/configuration preflight implemented; eight-runtime headless checks verified; scoped publication/interactive acceptance remain, then D2 |
 | R3 | Planned | after R2b ships |
 
 #### R2b PR ledger
@@ -45,8 +45,8 @@ say when each is cut:
 | C2 | Merged | #752: start sheet + capsule popover / palette / Active Agents entry points; [063.011](011-c2-start-sheet.md) |
 | D1 (skill) | Merged | #754: `prowl-workflow` bundled authoring skill (shipped ahead of the rest of D1) |
 | D1 (rest) | Merged | #761: Settings › Agents › Workflows page, `docs/components/workflows.md`, CLI reachability status (deferred from C0); [063.013](013-d1-workflows-settings.md) |
-| D1 (UI refinement) | In progress | Post-merge native list/detail refinement, repository-local workflow Settings, Run Setup copy, explicit run targets, file opening, and capsule YAML icons; [063.014](014-workflow-settings-ui-refinement.md) |
-| #726 T1 | Planned | `make test-agent-contracts` — after the D1 UI refinement |
+| D1 (UI refinement) | Merged | #763: post-merge native list/detail refinement, repository-local workflow Settings, Run Setup copy, explicit run targets, file opening, and capsule YAML icons; [063.014](014-workflow-settings-ui-refinement.md) |
+| #726 T1 | In progress — inventory/preflight and eight-runtime headless checks in #767 | [064.016](../064-agent-completion-signals/016-t1-contract-test-plan.md): zero-inference inventory and production configuration preflight verified; [runbook](../064-agent-completion-signals/agent-contracts-runbook.md). Eight-runtime headless checks pass; scoped publication and interactive acceptance remain pending. |
 | D2 | Planned | `prowl.adversarial-review` built-in + reviewer skill + E2E — after #726 T1 |
 
 #### R1 PR ledger
@@ -205,6 +205,10 @@ R3+: V2 / S5 rest;  delete HANDOFF_RETIRED stubs
 
 ## Change log
 
+- 2026-09-05 — Implemented #726 T1a: `make test-agent-contracts` now provides zero-inference inventory, secret-free model policy, private reports, and a production configuration preflight with nonce/test-count evidence. Live contracts remain pending. The release skill/runbook surface this distinction before bump/tag; [064.016](../064-agent-completion-signals/016-t1-contract-test-plan.md).
+
+- 2026-09-05 — Confirmed #763 merged and corrected the stale D1 status. Inventoried all eight installed tier-A runtimes (all newer than T0), researched low-cost/BYOK routes, and proposed T1's repeatable probe and evidence boundaries in [064.016](../064-agent-completion-signals/016-t1-contract-test-plan.md). Implementation and inference verification remain pending; T1 still precedes D2.
+
 - 2026-09-05 — Implemented and verified the grilled D1 Settings refinement (#763): compact global/repository lists, shared reducer-owned detail navigation, explicit Run targets through existing admission, repository-qualified preference migration, direct YAML opening, YAML icons and exact-detail routing from the Agents capsule, and synchronized user docs. `make check`, the full app test suite, Debug build, and Normal/Shelf/Canvas visual gates passed. Result: [063.014](014-workflow-settings-ui-refinement.md).
 - 2026-09-04 — After #761 merged, owner review and an `impeccable`/native-macOS design pass found the Workflows root rows too dense and the repository placement misleading. The grilled refinement makes the root a minimal list, pushes configuration into a shared detail, places repository workflows directly in each repository's Settings, clarifies Run Setup and role preferences, makes run targets explicit, opens YAML directly, repository-qualifies local preferences, and carries YAML icons into the Agents capsule. Plan: [063.014](014-workflow-settings-ui-refinement.md).
 - 2026-09-04 — D1 (rest) started on `feat/workflow-settings-d1` after the C2 (#752) and D1-skill
@@ -296,3 +300,5 @@ R3+: V2 / S5 rest;  delete HANDOFF_RETIRED stubs
   064-S2.
 - 2026-08-22 — 065 bundled-agent-skills joins R1 (S0/K1 ∥ A1, then K2, K3); `embed-skills`
   and the skill registry move from 063-D1 to 065-K1, D1 depends on it.
+
+- 2026-09-05 — Continued #726 in #767: all eight real headless runtime/hook checks passed; seven use the owner's DeepSeek key and Qoder uses its existing Flash catalog route. Fixed absent-notifier configuration reads found by the suite. Release preparation now points at implemented live/preflight commands. Scoped attestation publication and interactive acceptance remain before T1 closure; D2 remains separate.

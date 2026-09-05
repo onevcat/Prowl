@@ -5,8 +5,12 @@ import Testing
 
 struct CodexConfigReadLiveContractTests {
   @Test(.enabled(if: ProcessInfo.processInfo.environment["PROWL_RUN_LIVE_CODEX_CONTRACT"] == "1"))
-  func codex0149ScratchPrecedenceAndProjectExclusion() async throws {
-    let executable = URL(filePath: "/opt/homebrew/bin/codex", directoryHint: .notDirectory)
+  func scratchPrecedenceAndProjectExclusion() async throws {
+    let environment = ProcessInfo.processInfo.environment
+    let executablePath = try #require(environment["PROWL_CONTRACT_CODEX_EXECUTABLE"])
+    let receiptPath = try #require(environment["PROWL_CONTRACT_RECEIPT"])
+    let nonce = try #require(environment["PROWL_CONTRACT_NONCE"])
+    let executable = URL(filePath: executablePath, directoryHint: .notDirectory)
     let root = FileManager.default.temporaryDirectory.appending(
       path: "prowl-codex-live-contract-\(UUID().uuidString)",
       directoryHint: .isDirectory
@@ -56,7 +60,9 @@ struct CodexConfigReadLiveContractTests {
       profileName: nil,
       explicitNotifyOverride: nil
     )
-    #expect(await resolver.resolve(base) == .present(["/tmp/base notifier", "base"]))
+    try #require(await resolver.resolve(base) == .present(["/tmp/base notifier", "base"]))
+    try "".write(to: home.appending(path: "config.toml"), atomically: true, encoding: .utf8)
+    try #require(await resolver.resolve(base) == .absent)
 
     let profile = CodexLaunchContext(
       inheritedCWD: workspace,
@@ -66,7 +72,7 @@ struct CodexConfigReadLiveContractTests {
       profileName: "selected",
       explicitNotifyOverride: nil
     )
-    #expect(
+    try #require(
       await resolver.resolve(profile)
         == .present(["/tmp/profile notifier", "profile 界", ""])
     )
@@ -79,7 +85,21 @@ struct CodexConfigReadLiveContractTests {
       profileName: "selected",
       explicitNotifyOverride: #"notify=["/tmp/cli notifier","cli"]"#
     )
-    #expect(await resolver.resolve(override) == .present(["/tmp/cli notifier", "cli"]))
-    #expect((try? FileManager.default.contentsOfDirectory(atPath: parser.path))?.isEmpty == true)
+    try #require(await resolver.resolve(override) == .present(["/tmp/cli notifier", "cli"]))
+    try #require((try? FileManager.default.contentsOfDirectory(atPath: parser.path))?.isEmpty == true)
+
+    // A nonce-bound receipt plus xcresult counts prevents an opt-in test skipped by Xcode
+    // environment forwarding from being mistaken for a verified real-binary contract.
+    let receipt: [String: Any] = [
+      "schema": 1,
+      "mode": "preflight",
+      "runtime": "codex",
+      "nonce": nonce,
+      "executable": executablePath,
+      "scenarios": ["base", "absent", "profile", "override", "cleanup"],
+    ]
+    let data = try JSONSerialization.data(withJSONObject: receipt, options: [.sortedKeys])
+    try data.write(to: URL(filePath: receiptPath), options: [.withoutOverwriting])
+    try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: receiptPath)
   }
 }

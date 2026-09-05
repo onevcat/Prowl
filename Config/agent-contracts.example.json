@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "runtimes": {
+    "claude": {
+      "provider": "deepseek",
+      "model": "deepseek-v4-flash",
+      "base_url": "https://api.deepseek.com/anthropic",
+      "wire_api": "anthropic-messages",
+      "api_key_env": "DEEPSEEK_API_KEY"
+    },
+    "codex": {
+      "provider": "deepseek",
+      "model": "deepseek-v4-flash",
+      "base_url": "https://api.deepseek.com",
+      "wire_api": "responses",
+      "api_key_env": "DEEPSEEK_API_KEY"
+    },
+    "copilot": {
+      "provider": "deepseek",
+      "model": "deepseek-v4-flash",
+      "base_url": "https://api.deepseek.com/v1",
+      "wire_api": "chat-completions",
+      "api_key_env": "DEEPSEEK_API_KEY"
+    },
+    "droid": {
+      "provider": "deepseek",
+      "model": "deepseek-v4-flash",
+      "base_url": "https://api.deepseek.com/v1",
+      "wire_api": "chat-completions",
+      "api_key_env": "DEEPSEEK_API_KEY"
+    },
+    "pi": {
+      "provider": "deepseek",
+      "model": "deepseek-v4-flash",
+      "base_url": "https://api.deepseek.com/v1",
+      "wire_api": "chat-completions",
+      "api_key_env": "DEEPSEEK_API_KEY"
+    },
+    "omp": {
+      "provider": "deepseek",
+      "model": "deepseek-v4-flash",
+      "base_url": "https://api.deepseek.com/v1",
+      "wire_api": "chat-completions",
+      "api_key_env": "DEEPSEEK_API_KEY"
+    },
+    "opencode": {
+      "provider": "deepseek",
+      "model": "deepseek-v4-flash",
+      "base_url": "https://api.deepseek.com/v1",
+      "wire_api": "chat-completions",
+      "api_key_env": "DEEPSEEK_API_KEY"
+    }
+  }
+}

@@ -73,6 +73,30 @@ make build-app
 
 ## Release Workflow
 
+### Agent contract release check
+
+Before every public release, before bumping the version or creating a tag, follow the
+[agent contract runbook](../064-agent-completion-signals/agent-contracts-runbook.md).
+Use the owner's existing DeepSeek V4 Flash configuration for compatible runtimes.
+
+- Run the implemented **full eight-runtime headless live suite and Codex configuration
+  preflight** against the code/resources and installed versions being released; retain both
+  reports. Use the maintained commands in the contract runbook.
+- Keep headless results separate from interactive permission/lifecycle and workflow E2E.
+  Attestation publication remains pending; a successful headless report still has
+  `release_ready: false`. R2b requires the remaining T1 scope and D2 under the
+  [release plan](../063-agent-workflows/release-plan.md).
+- Present a short maintainer-facing status with the release-notes confirmation: passed,
+  failed, blocked, or not run; name incomplete runtimes and link the evidence. An incomplete
+  required check needs resolution or an explicit owner-approved release-scope exception,
+  recorded in the release plan. It must not be silently treated as success.
+- Add targeted Debug workflow E2E for workflow behavior changes and important release
+  acceptance; the first R2b/D2 delivery requires its full planned E2E.
+
+The `/release` skill surfaces this reminder. Direct invocation of `scripts/release.sh` does
+not currently enforce T1; maintainers running the script must complete this check first.
+These diagnostics belong in the release conversation/evidence, not public release notes.
+
 ### Full Public Release
 
 ```bash
