@@ -32,6 +32,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var autoShowActiveAgentsPanel: Bool
   var showActiveAgentTabTitles: Bool
   var showActiveAgentStatusInShelf: Bool
+  var agentIslandOnlyShowWithAgents: Bool
   var agentIslandEnabled: Bool
   var agentIslandDisplayPreference: AgentIslandDisplayPreference
   var agentIslandFloatingPositions: AgentIslandFloatingPositions
@@ -130,6 +131,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     autoShowActiveAgentsPanel: Bool = false,
     showActiveAgentTabTitles: Bool = false,
     showActiveAgentStatusInShelf: Bool = true,
+    agentIslandOnlyShowWithAgents: Bool = false,
     agentIslandEnabled: Bool = false,
     agentIslandDisplayPreference: AgentIslandDisplayPreference = .automatic,
     agentIslandFloatingPositions: AgentIslandFloatingPositions = .init(),
@@ -176,6 +178,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     self.autoShowActiveAgentsPanel = autoShowActiveAgentsPanel
     self.showActiveAgentTabTitles = showActiveAgentTabTitles
     self.showActiveAgentStatusInShelf = showActiveAgentStatusInShelf
+    self.agentIslandOnlyShowWithAgents = agentIslandOnlyShowWithAgents
     self.agentIslandEnabled = agentIslandEnabled
     self.agentIslandDisplayPreference = agentIslandDisplayPreference
     self.agentIslandFloatingPositions = agentIslandFloatingPositions
@@ -225,6 +228,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     try container.encode(autoShowActiveAgentsPanel, forKey: .autoShowActiveAgentsPanel)
     try container.encode(showActiveAgentTabTitles, forKey: .showActiveAgentTabTitles)
     try container.encode(showActiveAgentStatusInShelf, forKey: .showActiveAgentStatusInShelf)
+    try container.encode(agentIslandOnlyShowWithAgents, forKey: .agentIslandOnlyShowWithAgents)
     try container.encode(agentIslandEnabled, forKey: .agentIslandEnabled)
     try container.encode(agentIslandDisplayPreference, forKey: .agentIslandDisplayPreference)
     try container.encode(agentIslandFloatingPositions, forKey: .agentIslandFloatingPositions)
@@ -276,6 +280,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     case autoShowActiveAgentsPanel
     case showActiveAgentTabTitles
     case showActiveAgentStatusInShelf
+    case agentIslandOnlyShowWithAgents
     case agentIslandEnabled
     case agentIslandDisplayPreference
     case agentIslandFloatingPositions
@@ -384,7 +389,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
       try container.decodeIfPresent(Bool.self, forKey: .showActiveAgentStatusInShelf)
       ?? Self.default.showActiveAgentStatusInShelf
     let islandSettings = try Self.decodeAgentIslandSettings(from: container)
-    agentIslandEnabled = islandSettings.enabled
+    (agentIslandEnabled, agentIslandOnlyShowWithAgents) = (islandSettings.enabled, islandSettings.onlyShowWithAgents)
     agentIslandDisplayPreference = islandSettings.displayPreference
     (agentIslandFloatingPositions, agentIslandSilentOpacity) = islandSettings.floatingPresentation
     (windowTintMode, windowTintCustomColor) = try Self.decodeWindowTint(from: container)
@@ -402,6 +407,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
 
   private struct DecodedAgentIslandSettings {
     let enabled: Bool
+    let onlyShowWithAgents: Bool
     let displayPreference: AgentIslandDisplayPreference
     let floatingPositions: AgentIslandFloatingPositions
     let silentOpacity: Double
@@ -431,6 +437,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     )
     return DecodedAgentIslandSettings(
       enabled: enabled,
+      onlyShowWithAgents: try container.decodeIfPresent(Bool.self, forKey: .agentIslandOnlyShowWithAgents) ?? false,
       displayPreference: preference,
       floatingPositions: floatingPositions,
       silentOpacity: silentOpacity

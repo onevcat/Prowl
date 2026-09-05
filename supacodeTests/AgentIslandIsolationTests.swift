@@ -7,6 +7,31 @@ import Testing
 
 @MainActor
 struct AgentIslandIsolationTests {
+  @Test func visibilityCombinesEnablementAndEmptyBarPreference() {
+    for enabled in [false, true] {
+      for onlyWithAgents in [false, true] {
+        for hasEntries in [false, true] {
+          let visible = AgentIslandVisibilityPolicy.isVisible(
+            isEnabled: enabled, onlyShowWithAgents: onlyWithAgents, hasEntries: hasEntries
+          )
+          #expect(visible == (enabled && (hasEntries || !onlyWithAgents)))
+        }
+      }
+    }
+  }
+
+  @Test func emptyIslandSupportsBackgroundShortcutWhenAlwaysVisible() {
+    let visible = AgentIslandVisibilityPolicy.isVisible(
+      isEnabled: true, onlyShowWithAgents: false, hasEntries: false
+    )
+    let binding = Keybinding(key: "p", modifiers: .init(command: true, shift: true))
+    let configuration = AgentIslandGlobalHotKeyConfiguration(
+      toggleBinding: binding, isIslandVisible: visible, isAppActive: false
+    )
+    #expect(configuration.binding == binding)
+    #expect(AgentIslandHotKeyAction.resolve(isRosterExpanded: false, isIslandVisible: visible) == .toggleIslandRoster)
+  }
+
   @Test(.dependencies) func panelFollowsTheSettingThroughObservation() async {
     let store: StoreOf<AppFeature> = Store(initialState: AppFeature.State()) {
       Scope(state: \.settings, action: \.settings) {
@@ -68,17 +93,17 @@ struct AgentIslandIsolationTests {
     #expect(
       AgentIslandHotKeyAction.resolve(
         isRosterExpanded: false,
-        hasEntries: true
+        isIslandVisible: true
       ) == .toggleIslandRoster)
     #expect(
       AgentIslandHotKeyAction.resolve(
         isRosterExpanded: true,
-        hasEntries: true
+        isIslandVisible: true
       ) == .collapseIsland)
     #expect(
       AgentIslandHotKeyAction.resolve(
         isRosterExpanded: false,
-        hasEntries: false
+        isIslandVisible: false
       ) == nil)
   }
 
@@ -89,22 +114,22 @@ struct AgentIslandIsolationTests {
     )
     let registered = AgentIslandGlobalHotKeyConfiguration(
       toggleBinding: binding,
-      hasEntries: true,
+      isIslandVisible: true,
       isAppActive: false
     )
     let noEntries = AgentIslandGlobalHotKeyConfiguration(
       toggleBinding: binding,
-      hasEntries: false,
+      isIslandVisible: false,
       isAppActive: false
     )
     let appActive = AgentIslandGlobalHotKeyConfiguration(
       toggleBinding: binding,
-      hasEntries: true,
+      isIslandVisible: true,
       isAppActive: true
     )
     let unassigned = AgentIslandGlobalHotKeyConfiguration(
       toggleBinding: nil,
-      hasEntries: true,
+      isIslandVisible: true,
       isAppActive: false
     )
     let appActiveWithChangedBinding = AgentIslandGlobalHotKeyConfiguration(
@@ -112,7 +137,7 @@ struct AgentIslandIsolationTests {
         key: "j",
         modifiers: .init(command: true, option: true)
       ),
-      hasEntries: true,
+      isIslandVisible: true,
       isAppActive: true
     )
 

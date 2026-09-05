@@ -7,12 +7,12 @@ enum AgentIslandHotKeyAction: Equatable {
 
   static func resolve(
     isRosterExpanded: Bool,
-    hasEntries: Bool
+    isIslandVisible: Bool
   ) -> Self? {
     if isRosterExpanded {
       return .collapseIsland
     }
-    return hasEntries ? .toggleIslandRoster : nil
+    return isIslandVisible ? .toggleIslandRoster : nil
   }
 }
 
@@ -100,11 +100,11 @@ struct AgentIslandGlobalHotKeyConfiguration: Equatable {
 
   init(
     toggleBinding: Keybinding?,
-    hasEntries: Bool,
+    isIslandVisible: Bool,
     isAppActive: Bool
   ) {
     configuredBinding = toggleBinding
-    binding = hasEntries && !isAppActive ? toggleBinding : nil
+    binding = isIslandVisible && !isAppActive ? toggleBinding : nil
   }
 
   func requiresRefresh(from previous: Self?, force: Bool = false) -> Bool {

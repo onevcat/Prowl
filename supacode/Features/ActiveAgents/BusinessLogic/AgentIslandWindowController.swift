@@ -442,7 +442,7 @@ final class AgentIslandWindowController {
     guard
       let action = AgentIslandHotKeyAction.resolve(
         isRosterExpanded: activeAgents.isIslandRosterExpanded,
-        hasEntries: !activeAgents.entries.isEmpty
+        isIslandVisible: shouldShowIsland
       )
     else {
       return
@@ -455,13 +455,21 @@ final class AgentIslandWindowController {
     }
   }
 
+  private var shouldShowIsland: Bool {
+    AgentIslandVisibilityPolicy.isVisible(
+      isEnabled: appStore.settings.agentIslandEnabled,
+      onlyShowWithAgents: appStore.settings.agentIslandOnlyShowWithAgents,
+      hasEntries: !appStore.repositories.activeAgents.entries.isEmpty
+    )
+  }
+
   private func refreshGlobalHotKeys(force: Bool = false) {
     let toggleBinding = appStore.resolvedKeybindings.keybinding(
       for: AppShortcuts.CommandID.toggleAgentIsland
     )
     let configuration = AgentIslandGlobalHotKeyConfiguration(
       toggleBinding: toggleBinding,
-      hasEntries: !appStore.repositories.activeAgents.entries.isEmpty,
+      isIslandVisible: shouldShowIsland,
       isAppActive: NSApp.isActive
     )
     guard
@@ -503,7 +511,7 @@ final class AgentIslandWindowController {
       _ = appStore.resolvedKeybindings.keybinding(
         for: AppShortcuts.CommandID.toggleAgentIsland
       )
-      _ = appStore.repositories.activeAgents.entries.isEmpty
+      _ = shouldShowIsland
     } onChange: { [weak self] in
       Task { @MainActor [weak self] in
         guard let self, self.panel != nil, self.observationGeneration == generation else { return }

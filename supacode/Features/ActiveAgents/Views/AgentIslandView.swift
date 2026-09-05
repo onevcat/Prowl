@@ -299,7 +299,7 @@ struct AgentIslandView: View {
   }
 
   private var notchedLeadingContent: some View {
-    AgentIslandStateSummaryView(summary: stateSummary, size: .compact)
+    compactStateSummary(size: .compact)
   }
 
   private var notchedTrailingContent: some View {
@@ -319,11 +319,24 @@ struct AgentIslandView: View {
   /// The floating pill shows the same per-state counts as the notched wing, one size up.
   private var compactContent: some View {
     HStack(spacing: 0) {
-      AgentIslandStateSummaryView(summary: stateSummary, size: floatingSummarySize)
+      compactStateSummary(size: floatingSummarySize)
         .offset(x: showsFloatingGrip ? 28 : 0)
         .transaction(AgentIslandHoverAnimation.apply)
         .frame(maxWidth: .infinity, alignment: .leading)
       AgentIslandIconCluster(entries: islandEntries)
+    }
+  }
+
+  @ViewBuilder
+  private func compactStateSummary(size: AgentIslandStateSummaryView.Size) -> some View {
+    if islandEntries.isEmpty {
+      Image(nsImage: NSApp.applicationIconImage)
+        .resizable()
+        .scaledToFit()
+        .frame(width: 24, height: 24)
+        .accessibilityLabel("Prowl")
+    } else {
+      AgentIslandStateSummaryView(summary: stateSummary, size: size)
     }
   }
 
@@ -495,7 +508,11 @@ struct AgentIslandView: View {
   }
 
   private var isVisible: Bool {
-    appStore.settings.agentIslandEnabled && !agentsStore.entries.isEmpty
+    AgentIslandVisibilityPolicy.isVisible(
+      isEnabled: appStore.settings.agentIslandEnabled,
+      onlyShowWithAgents: appStore.settings.agentIslandOnlyShowWithAgents,
+      hasEntries: !agentsStore.entries.isEmpty
+    )
   }
 
   private func publishPresentation(size: CGSize? = nil) {

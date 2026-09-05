@@ -78,3 +78,16 @@ must pass with screen-coordinate reconciliation, followed by a real animated exi
 The stationary-pointer regression was observed failing before reconciliation and passing after it.
 All 38 focused hover, screen layout, and isolation tests passed. The intermittent live-window
 behavior has not been independently reproduced through actual mouse interaction.
+
+## Empty island
+
+When enabled, Agent Island now remains visible without sessions by default. An optional
+`agentIslandOnlyShowWithAgents` setting restores hiding the empty bar. Missing keys decode to
+false. The empty compact summary shows the app icon; the roster shows “No running agents”
+and retains its settings gear while omitting unavailable navigation hints. Menu and global
+shortcut eligibility use the same visibility policy as the bar. Session presence includes all
+Active Agents states, not only Working.
+
+Validated with 103 focused tests, `make check`, and `make build-app`. An isolated empty-session
+Debug instance displayed the app icon and opened “No running agents” through the menu command,
+with the settings gear visible. UI automation disconnected when testing the gear's navigation.

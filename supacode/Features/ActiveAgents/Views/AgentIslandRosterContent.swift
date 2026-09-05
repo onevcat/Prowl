@@ -40,6 +40,12 @@ struct AgentIslandRosterContent: View {
     )
     VStack(spacing: 0) {
       VStack(spacing: 0) {
+        if store.entries.isEmpty {
+          Text("No running agents")
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 24)
+        }
         ForEach(Array(layout.entryRange.enumerated()), id: \.element) { visibleIndex, entryIndex in
           let entry = store.entries[entryIndex]
           Button {
@@ -114,11 +120,15 @@ struct AgentIslandRosterContent: View {
       }
 
       HStack(spacing: 14) {
-        keyboardLegend(keys: ["↑ K", "↓ J"], action: "Select")
+        if !store.entries.isEmpty {
+          keyboardLegend(keys: ["↑ K", "↓ J"], action: "Select")
+        }
         if layout.pageCount > 1 {
           keyboardLegend(keys: ["← H", "→ L"], action: "Page")
         }
-        keyboardLegend(keys: ["↩", "Space"], action: "Open")
+        if !store.entries.isEmpty {
+          keyboardLegend(keys: ["↩", "Space"], action: "Open")
+        }
         Spacer(minLength: 0)
         Button {
           store.send(.islandSettingsTapped)

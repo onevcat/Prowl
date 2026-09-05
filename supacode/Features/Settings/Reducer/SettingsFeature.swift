@@ -39,6 +39,7 @@ struct SettingsFeature {
     var autoShowActiveAgentsPanel: Bool
     var showActiveAgentTabTitles: Bool
     var showActiveAgentStatusInShelf: Bool
+    var agentIslandOnlyShowWithAgents: Bool
     var agentIslandEnabled: Bool
     var agentIslandDisplayPreference: AgentIslandDisplayPreference
     var agentIslandFloatingPositions: AgentIslandFloatingPositions
@@ -111,6 +112,7 @@ struct SettingsFeature {
       autoShowActiveAgentsPanel = settings.autoShowActiveAgentsPanel
       showActiveAgentTabTitles = settings.showActiveAgentTabTitles
       showActiveAgentStatusInShelf = settings.showActiveAgentStatusInShelf
+      agentIslandOnlyShowWithAgents = settings.agentIslandOnlyShowWithAgents
       agentIslandEnabled = settings.agentIslandEnabled
       agentIslandDisplayPreference = settings.agentIslandDisplayPreference
       agentIslandFloatingPositions = settings.agentIslandFloatingPositions
@@ -165,6 +167,7 @@ struct SettingsFeature {
         autoShowActiveAgentsPanel: autoShowActiveAgentsPanel,
         showActiveAgentTabTitles: showActiveAgentTabTitles,
         showActiveAgentStatusInShelf: showActiveAgentStatusInShelf,
+        agentIslandOnlyShowWithAgents: agentIslandOnlyShowWithAgents,
         agentIslandEnabled: agentIslandEnabled,
         agentIslandDisplayPreference: agentIslandDisplayPreference,
         agentIslandFloatingPositions: agentIslandFloatingPositions,
@@ -302,6 +305,7 @@ struct SettingsFeature {
         state.autoShowActiveAgentsPanel = normalizedSettings.autoShowActiveAgentsPanel
         state.showActiveAgentTabTitles = normalizedSettings.showActiveAgentTabTitles
         state.showActiveAgentStatusInShelf = normalizedSettings.showActiveAgentStatusInShelf
+        state.agentIslandOnlyShowWithAgents = normalizedSettings.agentIslandOnlyShowWithAgents
         state.agentIslandEnabled = normalizedSettings.agentIslandEnabled
         state.agentIslandDisplayPreference = normalizedSettings.agentIslandDisplayPreference
         state.agentIslandFloatingPositions = normalizedSettings.agentIslandFloatingPositions

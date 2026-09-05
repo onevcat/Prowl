@@ -13,8 +13,9 @@ finished agent is visible while another application is in front. It does not det
 track acknowledgement on its own: every label and transition comes from the same `Working`,
 `Blocked`, `Done`, and `Idle` entries the sidebar panel shows.
 
-The island is off by default. When enabled it appears whenever the roster has at least one
-entry. On a notched display it merges with the top edge, exactly as tall as the menu bar, with
+The island is off by default. When enabled, its bar remains visible even with no agent sessions.
+An empty bar shows the Prowl app icon; expanding it shows “No running agents” and the settings gear.
+Enable **Only show when agents are running** to hide the bar when the roster is empty. On a notched display it merges with the top edge, exactly as tall as the menu bar, with
 content in two wings on either side of the camera cutout; on other displays it is a centered
 floating bar overlaid directly on the menu bar at the same height. It
 stays visible across Spaces and over fullscreen applications and never becomes the active window.
@@ -82,7 +83,7 @@ and a removed entry disappears with the roster.
 - **Press the Agent Island shortcut** to open or close the roster like a hot window. It ships
   unassigned to avoid taking an established shortcut from the frontmost application; assign it
   under Settings → Agents → Display or Settings → Shortcuts if desired. Prowl registers that shortcut globally only while the
-  island has entries and Prowl is in the background. In Prowl it uses the normal menu shortcut.
+  island is enabled and allowed to appear (including the empty bar) and Prowl is in the background. In Prowl it uses the normal menu shortcut.
   While globally registered, Prowl receives the chord ahead of the frontmost application, so that
   application cannot use the same shortcut until the island becomes inactive or Prowl returns to
   the foreground.
@@ -123,6 +124,8 @@ and a removed entry disappears with the roster.
 Settings → Agents → Display → **Agent Island**:
 
 - **Show Agent Island** (`agentIslandEnabled`, default `false`).
+- **Only show when agents are running** (`agentIslandOnlyShowWithAgents`, default `false`).
+  Counts all current agent sessions, including Working, Blocked, Done, and Idle.
 - **Monitor** (`agentIslandDisplayPreference`, default Automatic). Automatic follows the display
   that contains Prowl's main window, then a built-in notched display, then the macOS main display.
   A specific display is remembered by its hardware identifier, so it survives renames and system

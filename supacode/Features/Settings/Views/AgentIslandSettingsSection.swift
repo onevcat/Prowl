@@ -53,6 +53,12 @@ struct AgentIslandSettingsSection: View {
         Text("Working stays compact. Blocked and Done appear as stronger agent notifications.")
       }
       .help("Show active agent status at the top of the selected display")
+      Toggle(isOn: $store.agentIslandOnlyShowWithAgents) {
+        Text("Only show when agents are running")
+        Text("Hide the bar when no agent sessions are running. Off by default.")
+      }
+      .help("Keep Agent Island visible without running agents when this is off")
+      .disabled(!store.agentIslandEnabled)
       Picker(selection: displaySelection) {
         Text("Automatic").tag(AgentIslandDisplaySelection.automatic)
         ForEach(displayCatalog.screens) { screen in
