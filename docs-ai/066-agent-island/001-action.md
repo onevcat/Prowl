@@ -26,7 +26,7 @@
 | 2026-09-04 | Final shortcut hardening: physical `digit_N` recorder tokens now conflict with logical `N` bindings throughout app and Custom Command precedence; the Carbon registrar also tears itself down on deinitialization. | #758 |
 | 2026-09-04 | The floating drag grip now uses an active tracking area so its open-hand hover and closed-hand drag cursors remain reliable while the nonactivating island panel is in the background. | #758 |
 
-## Outcome & current state (as of 2026-09-04)
+## Outcome & current state (as of 2026-09-05)
 
 Agent Island projects the existing Active Agents roster into one top-of-screen panel. It adds no
 agent state, acknowledgement flag, or lifecycle signal.
@@ -53,10 +53,14 @@ agent state, acknowledgement flag, or lifecycle signal.
   are rejected or marked Unavailable; Carbon registration failures remain visible in Settings
   until the binding changes, registers successfully, is cleared, or the island is disabled.
 - **Placement** — notched screens merge the bar with the cutout at the physical top edge; other
-  screens get a floating pill that overlays the menu-bar band at the same height. Its center grip
+  screens get a floating pill that overlays the menu-bar band at the same height. Its leading grip appears on hover and
   supports horizontal-only movement and persists a normalized position per display. Automatic
   follows the Prowl window's display, then a notched built-in display, then the main display. A
   pinned display is stored by CG UUID and falls back to Automatic while disconnected.
+
+Presentation preferences and the shared global-shortcut recorder now live under Agents → Display,
+reachable from the roster footer. Silent opacity is configured there, not on the floating bar.
+See [004-agent-display-settings.md](004-agent-display-settings.md).
 
 Key files:
 
@@ -79,7 +83,7 @@ Key files:
   menu shared with `ActiveAgentsPanel.swift`.
 - `supacode/Features/Settings/Models/AgentIslandDisplayPreference.swift`,
   `supacode/Features/Settings/Views/AgentIslandSettingsSection.swift` — preference model and the
-  Notifications section; `GlobalSettings.swift` carries enablement, display preference, floating
+  Agents → Display section; `GlobalSettings.swift` carries enablement, display preference, floating
   positions, and silent opacity with legacy defaults.
 - `supacode/App/supacodeApp.swift` — controller start/stop in the app delegate.
 

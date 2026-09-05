@@ -119,7 +119,18 @@ struct AgentIslandRosterContent: View {
           keyboardLegend(keys: ["← H", "→ L"], action: "Page")
         }
         keyboardLegend(keys: ["↩", "Space"], action: "Open")
+        Spacer(minLength: 0)
+        Button {
+          store.send(.islandSettingsTapped)
+        } label: {
+          Image(systemName: "gearshape")
+        }
+        .buttonStyle(.borderless)
+        .help("Open Settings → Agents → Display")
+        .accessibilityLabel("Agent display settings")
+        .accessibilityIdentifier("agent-island-settings")
       }
+      .padding(.horizontal, 12)
       .frame(height: 24)
     }
     .padding(.vertical, 4)

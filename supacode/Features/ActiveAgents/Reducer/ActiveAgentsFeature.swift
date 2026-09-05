@@ -54,6 +54,7 @@ struct ActiveAgentsFeature {
     /// the wrapped action unchanged; when it presents Prowl UI (`surfacesProwl`) the roster
     /// collapses first and `AppFeature` surfaces the main window before the action runs.
     indirect case island(Action)
+    case islandSettingsTapped
     case islandOpenProwlTapped
     case selectNextEntry
     case selectPreviousEntry
@@ -130,7 +131,7 @@ struct ActiveAgentsFeature {
         }
         return .none
 
-      case .islandCollapseRoster, .islandOpenProwlTapped:
+      case .islandCollapseRoster, .islandOpenProwlTapped, .islandSettingsTapped:
         state.isIslandRosterExpanded = false
         state.islandNavigation = .init()
         return .none

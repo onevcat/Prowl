@@ -40,7 +40,10 @@ enum AgentIslandDisplaySelection: Hashable {
 
 struct AgentIslandSettingsSection: View {
   @Bindable var store: StoreOf<SettingsFeature>
+  let effectiveKeybindings: ResolvedKeybindingMap
+  let customCommands: [EffectiveCustomCommand]
   let globalHotKeyRegistrationFailure: Keybinding?
+  @State private var silentOpacityDraft: Double?
   @State private var displayCatalog = AgentIslandDisplayCatalog.shared
 
   var body: some View {
@@ -59,11 +62,48 @@ struct AgentIslandSettingsSection: View {
           Text(disconnected.name).tag(AgentIslandDisplaySelection.display(id: disconnected.id))
         }
       } label: {
-        Text("Display")
+        Text("Monitor")
         Text(displayCaption)
       }
-      .help("Choose where Agent Island appears")
+      .help("Choose the built-in or external monitor that shows Agent Island")
       .disabled(!store.agentIslandEnabled)
+
+      ShortcutSettingsEditor(
+        store: store,
+        effectiveKeybindings: effectiveKeybindings,
+        customCommands: customCommands,
+        islandHotKeyRegistrationFailure: globalHotKeyRegistrationFailure,
+        commandID: AppShortcuts.CommandID.toggleAgentIsland
+      )
+      Text(ShortcutSettingsEditor.globalShortcutHelp)
+        .font(.callout)
+        .foregroundStyle(.secondary)
+
+      LabeledContent {
+        HStack(spacing: 8) {
+          Slider(
+            value: Binding(
+              get: { silentOpacityDraft ?? store.agentIslandSilentOpacity },
+              set: { silentOpacityDraft = $0 }
+            ),
+            in: AgentIslandOpacityPolicy.minimumSilentOpacity...AgentIslandOpacityPolicy.maximumSilentOpacity,
+            step: 0.05,
+            onEditingChanged: { isEditing in
+              if !isEditing { commitSilentOpacity() }
+            }
+          )
+          .frame(width: 140)
+          .accessibilityLabel("Silent opacity")
+          Text("\(Int(((silentOpacityDraft ?? store.agentIslandSilentOpacity) * 100).rounded()))%")
+            .monospacedDigit()
+            .frame(width: 40, alignment: .trailing)
+        }
+      } label: {
+        Text("Silent Opacity")
+        Text("Monitors without a notch only. Fades after three seconds without hover or strong reminders.")
+      }
+      .help("Set the floating island's opacity while quiet; notched monitors always stay fully opaque")
+      .onDisappear { commitSilentOpacity() }
 
       LabeledContent {
         Button("Reset") {
@@ -77,27 +117,14 @@ struct AgentIslandSettingsSection: View {
       .help("Reset Agent Island's saved floating positions")
     } header: {
       Text("Agent Island")
-    } footer: {
-      VStack(alignment: .leading, spacing: 4) {
-        if let globalHotKeyRegistrationFailure {
-          Text("macOS could not register \(globalHotKeyRegistrationFailure.display) globally.")
-            .foregroundStyle(.red)
-        }
-
-        Button(shortcutLinkTitle) {
-          store.send(.showShortcutButtonTapped(commandID: AppShortcuts.CommandID.toggleAgentIsland))
-        }
-        .buttonStyle(.link)
-        .help("Open Shortcuts and show Toggle Agent Island")
-      }
     }
   }
 
-  private var shortcutLinkTitle: String {
-    if globalHotKeyRegistrationFailure == nil {
-      return "Set a shortcut for Toggle Agent Island…"
-    }
-    return "Choose another shortcut for Toggle Agent Island…"
+  private func commitSilentOpacity() {
+    guard let silentOpacityDraft else { return }
+    self.silentOpacityDraft = nil
+    guard silentOpacityDraft != store.agentIslandSilentOpacity else { return }
+    store.send(.setAgentIslandSilentOpacity(silentOpacityDraft))
   }
 
   private var displaySelection: Binding<AgentIslandDisplaySelection> {
@@ -126,10 +153,10 @@ struct AgentIslandSettingsSection: View {
   private var displayCaption: String {
     switch store.agentIslandDisplayPreference {
     case .automatic:
-      return "Follows the display containing Prowl's main window."
+      return "With external monitors connected, follows the monitor containing Prowl's main window."
     case .display(let id, let name):
       if let screen = displayCatalog.screens.first(where: { $0.id == id }) {
-        return "Pinned to \(screen.name)."
+        return "Shows only on \(screen.name), even when Prowl moves to another monitor."
       }
       return "\(name) is disconnected. Using Automatic until it returns."
     }

@@ -91,7 +91,7 @@ roster; the sidebar's row and panel layout are otherwise untouched.
 
 Settings add `agentIslandEnabled` (default `false`) and `agentIslandDisplayPreference`
 (`AgentIslandDisplayPreference`: `.automatic` or `.display(id:name:)`) to `GlobalSettings`, with a
-section on Settings › Notifications (`AgentIslandSettingsSection`). Automatic follows the Prowl
+section on Settings › Agents › Display (`AgentIslandSettingsSection`). Automatic follows the Prowl
 window's display, then a built-in notched display, the macOS main display, then the first screen.
 A fixed display stores its UUID plus last-known name; when absent, placement follows Automatic
 until it reconnects. The picker matches by UUID only (`AgentIslandDisplaySelection`).
@@ -121,8 +121,8 @@ until it reconnects. The picker matches by UUID only (`AgentIslandDisplaySelecti
   key only for its temporary keyboard context and never becomes main or activates Prowl.
 - **Global keyDown monitor for roster navigation** — rejected because it needs Accessibility or
   Input Monitoring. The expanded key panel handles navigation locally instead.
-- **Toolbar button or dedicated settings destination** — rejected; opt-in section in
-  Notifications.
+- **Toolbar button** — rejected. Agent presentation preferences live under Agents → Display,
+  reachable from the roster footer.
 - **Custom expansion transition** — removed; the roster appears directly while the panel resizes.
 - **Directly clickable carousel icons** — considered on 2026-09-02 and declined: the compact bar
   stays a single toggle, and per-agent focus lives in the attention cells and the roster.
@@ -143,3 +143,6 @@ until it reconnects. The picker matches by UUID only (`AgentIslandDisplaySelecti
 - Updated 2026-09-04: replaced state-dependent global number grabs with one opt-in global entry
   and a priority-anchored local handling loop — see
   [003-prowl-shortcut-loop.md](003-prowl-shortcut-loop.md).
+
+- Updated 2026-09-05: consolidated agent presentation settings and refined the floating grip — see
+  [004-agent-display-settings.md](004-agent-display-settings.md).

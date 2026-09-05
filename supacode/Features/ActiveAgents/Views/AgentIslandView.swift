@@ -18,7 +18,6 @@ enum AgentIslandFloatingDragEvent {
 
 struct AgentIslandRootLayout {
   static let floatingCompactWidth: CGFloat = 340
-  static let floatingControlsReservedWidth: CGFloat = 68
   static let fallbackFloatingCompactHeight: CGFloat = 40
   static let rosterWidth: CGFloat = 420
 
@@ -71,8 +70,9 @@ struct AgentIslandView: View {
   @State private var contentSize = CGSize(width: 420, height: 40)
   @State private var isHovering = false
   @State private var isSilent = false
-  @State private var isOpacityControlPresented = false
-  @State private var silentOpacityDraft: Double?
+  @State private var isBarHovered = false
+  @State private var isFloatingDragging = false
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   init(
     store: StoreOf<AppFeature>,
@@ -154,7 +154,7 @@ struct AgentIslandView: View {
         isSilent: isSilent,
         isRosterExpanded: agentsStore.isIslandRosterExpanded,
         hasAttentionEntries: !agentsStore.islandAttentionEntries.isEmpty,
-        silentOpacity: effectiveSilentOpacity
+        silentOpacity: appStore.settings.agentIslandSilentOpacity
       )
     )
     .animation(.easeOut(duration: 0.2), value: isSilent)
@@ -194,14 +194,16 @@ struct AgentIslandView: View {
     }
     .buttonStyle(.plain)
     .background(.black, in: compactShape)
-    .overlay {
+    .overlay(alignment: .leading) {
       if isFloating {
-        HStack(spacing: 4) {
-          floatingDragHandle
-          floatingOpacityControl
-        }
+        floatingDragHandle
+          .padding(.leading, 14)
+          .opacity(showsFloatingGrip ? 1 : 0)
+          .allowsHitTesting(showsFloatingGrip)
+          .animation(gripAnimation, value: showsFloatingGrip)
       }
     }
+    .onHover { isBarHovered = $0 }
     .accessibilityLabel(
       agentsStore.isIslandRosterExpanded ? "Hide Active Agents" : "Show Active Agents"
     )
@@ -213,57 +215,26 @@ struct AgentIslandView: View {
       Image(systemName: "line.3.horizontal")
         .font(.caption2.weight(.semibold))
         .foregroundStyle(.secondary)
-      AgentIslandDragCaptureView(dragChanged: floatingDragChanged)
+      AgentIslandDragCaptureView { event in
+        switch event {
+        case .began:
+          isFloatingDragging = true
+        case .ended:
+          isFloatingDragging = false
+        case .changed:
+          break
+        }
+        floatingDragChanged(event)
+      }
     }
-    .frame(width: 44, height: 20)
+    .frame(width: 24, height: 20)
     .accessibilityHidden(true)
   }
 
-  private var floatingOpacityControl: some View {
-    Button {
-      if !isOpacityControlPresented {
-        silentOpacityDraft = appStore.settings.agentIslandSilentOpacity
-      }
-      isOpacityControlPresented.toggle()
-    } label: {
-      Image(systemName: "circle.lefthalf.filled")
-        .font(.caption2.weight(.semibold))
-        .foregroundStyle(.secondary)
-        .frame(width: 20, height: 20)
-        .background(.white.opacity(0.08), in: Circle())
-    }
-    .buttonStyle(.plain)
-    .accessibilityLabel("Silent opacity")
-    .popover(isPresented: $isOpacityControlPresented, arrowEdge: .top) {
-      VStack(alignment: .leading, spacing: 8) {
-        HStack {
-          Text("Silent Opacity")
-            .font(.headline)
-          Spacer()
-          Text(silentOpacityPercentage)
-            .font(.caption.monospacedDigit())
-            .foregroundStyle(.secondary)
-        }
-        Slider(
-          value: silentOpacityBinding,
-          in: AgentIslandOpacityPolicy
-            .minimumSilentOpacity...AgentIslandOpacityPolicy.maximumSilentOpacity,
-          step: 0.05,
-          onEditingChanged: { isEditing in
-            if !isEditing {
-              commitSilentOpacity()
-            }
-          }
-        )
-      }
-      .padding(12)
-      .frame(width: 220)
-    }
-    .onChange(of: isOpacityControlPresented) { _, isPresented in
-      if !isPresented {
-        commitSilentOpacity()
-      }
-    }
+  private var showsFloatingGrip: Bool { isBarHovered || isFloatingDragging }
+
+  private var gripAnimation: Animation? {
+    reduceMotion ? nil : .easeOut(duration: 0.18)
   }
 
   private func notchedCompactContent(layout: AgentIslandNotchLayout) -> some View {
@@ -303,12 +274,10 @@ struct AgentIslandView: View {
   private var compactContent: some View {
     HStack(spacing: 0) {
       AgentIslandStateSummaryView(summary: stateSummary, size: floatingSummarySize)
+        .offset(x: showsFloatingGrip ? 28 : 0)
+        .animation(gripAnimation, value: showsFloatingGrip)
         .frame(maxWidth: .infinity, alignment: .leading)
-      Color.clear
-        .frame(width: AgentIslandRootLayout.floatingControlsReservedWidth)
-        .accessibilityHidden(true)
       AgentIslandIconCluster(entries: islandEntries)
-        .frame(maxWidth: .infinity, alignment: .trailing)
     }
   }
 
@@ -448,28 +417,6 @@ struct AgentIslandView: View {
     appStore.send(.settings(.setAgentIslandDisplayPreference(preference)))
   }
 
-  private var silentOpacityBinding: Binding<Double> {
-    Binding(
-      get: { effectiveSilentOpacity },
-      set: { silentOpacityDraft = AgentIslandOpacityPolicy.normalizedSilentOpacity($0) }
-    )
-  }
-
-  private var effectiveSilentOpacity: Double {
-    silentOpacityDraft ?? appStore.settings.agentIslandSilentOpacity
-  }
-
-  private var silentOpacityPercentage: String {
-    "\(Int((effectiveSilentOpacity * 100).rounded()))%"
-  }
-
-  private func commitSilentOpacity() {
-    guard let silentOpacityDraft else { return }
-    self.silentOpacityDraft = nil
-    guard silentOpacityDraft != appStore.settings.agentIslandSilentOpacity else { return }
-    appStore.send(.settings(.setAgentIslandSilentOpacity(silentOpacityDraft)))
-  }
-
   private var notchLayout: AgentIslandNotchLayout? {
     presentation.notchSize.map { AgentIslandNotchLayout(cutoutSize: $0) }
   }
@@ -489,7 +436,7 @@ struct AgentIslandView: View {
       isRosterExpanded: agentsStore.isIslandRosterExpanded,
       hasAttentionEntries: !agentsStore.islandAttentionEntries.isEmpty,
       isHovering: isHovering,
-      isControlPresented: isOpacityControlPresented
+      isControlPresented: isFloatingDragging
     )
   }
 

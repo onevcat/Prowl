@@ -441,7 +441,7 @@ struct AppFeature {
           state.settings.repositorySettings = repoSettingsState
           state.settings.globalCustomCommands = nil
           state.settings.agentProfiles = nil
-        case .general, .notifications, .shortcuts, .worktree, .updates, .advanced, .github,
+        case .general, .agentDisplay, .notifications, .shortcuts, .worktree, .updates, .advanced, .github,
           .commandLineTool,
           .workflows:
           // `settings.agentSkills` and `settings.workflows` are owned by SettingsFeature.setSelection.
@@ -1123,6 +1123,10 @@ struct AppFeature {
           _ = appLifecycleClient.surfaceMainWindow()
         }
         return .none
+
+      case .repositories(.activeAgents(.islandSettingsTapped)):
+        _ = appLifecycleClient.surfaceMainWindow()
+        return openSettingsEffect(selecting: .agentDisplay)
 
       case .repositories(.activeAgents(.islandOpenProwlTapped)):
         _ = appLifecycleClient.surfaceMainWindow()

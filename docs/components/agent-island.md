@@ -24,7 +24,7 @@ stays visible across Spaces and over fullscreen applications and never becomes t
 Agent Island reveals capabilities contextually instead of presenting every control at once. A
 control, hint, or callout appears only when the current state makes it useful and immediately
 actionable: paging requires multiple pages, display switching requires multiple connected
-displays, and opacity requires floating mode.
+displays, and the drag grip appears on hover only in floating mode.
 Secondary capabilities stay in the expanded roster or Settings. New island affordances should
 define their exposure condition explicitly; permanent visibility requires a clear reason.
 
@@ -67,21 +67,17 @@ and a removed entry disappears with the roster.
 - Agent Island does not show hover tooltips. Actions stay discoverable through their visible
   labels, icons, accessibility labels, and the expanded roster's keyboard legend.
 - **Click the bar** to open or close the full roster. This does not bring Prowl forward.
-- **Drag the small grip at the top center** of a floating island to reposition it horizontally.
-  The pointer becomes an open hand over the grip and a closed hand while dragging.
-  Prowl remembers the position independently for each display and keeps the full island inside
-  the visible screen bounds. The bar stays inside the menu bar band while moving; notched displays
-  remain anchored to the physical cutout.
-- **Use the half-filled circle at the center** of a floating island to set its silent opacity.
-  The island returns to full opacity on hover and fades to the chosen level three seconds after
-  the pointer leaves. Any Blocked or unviewed Done reminder keeps the full island at 100% opacity
-  until all strong reminders clear. Opening the roster by click or its assigned shortcut also
-  keeps it fully opaque; after the roster closes, a new three-second delay begins. Slider changes
-  remain local while dragging and persist once the adjustment ends. This control is not shown on
-  notched displays.
+- **Hover over a floating bar** to reveal its leading drag grip. The grip fades in while state
+  counts shift right inside the fixed-width bar; leaving reverses the animation. Reduce Motion
+  makes this change immediate. Drag horizontally to reposition it; the grip stays visible during
+  the drag. Prowl remembers positions per monitor. Notched displays remain fixed to the cutout
+  and do not show a grip.
+- **Silent Opacity** lives in Settings → Agents → Display. It affects floating monitors only.
+  The island fades three seconds after the pointer leaves, returns to full opacity on hover,
+  and stays fully opaque while the roster is open or Blocked/unviewed Done reminders exist.
 - **Press the Agent Island shortcut** to open or close the roster like a hot window. It ships
   unassigned to avoid taking an established shortcut from the frontmost application; assign it
-  under Settings → Shortcuts if desired. Prowl registers that shortcut globally only while the
+  under Settings → Agents → Display or Settings → Shortcuts if desired. Prowl registers that shortcut globally only while the
   island has entries and Prowl is in the background. In Prowl it uses the normal menu shortcut.
   While globally registered, Prowl receives the chord ahead of the frontmost application, so that
   application cannot use the same shortcut until the island becomes inactive or Prowl returns to
@@ -109,6 +105,8 @@ and a removed entry disappears with the roster.
   labels use the tab bar's caption scale, and a compact legend for
   movement, paging, and confirmation stays visible; the paging hint appears only when the roster
   has more than one page.
+- **The footer gear** opens Settings → Agents → Display and collapses the roster without
+  selecting another pane.
 - **Open Prowl** in the roster header brings the main window forward without changing the
   selected agent.
 - **Click outside or press `Esc`** to collapse the roster. The expanded island is a temporary
@@ -118,10 +116,10 @@ and a removed entry disappears with the roster.
 
 ## Settings
 
-Settings → Notifications → **Agent Island**:
+Settings → Agents → Display → **Agent Island**:
 
 - **Show Agent Island** (`agentIslandEnabled`, default `false`).
-- **Display** (`agentIslandDisplayPreference`, default Automatic). Automatic follows the display
+- **Monitor** (`agentIslandDisplayPreference`, default Automatic). Automatic follows the display
   that contains Prowl's main window, then a built-in notched display, then the macOS main display.
   A specific display is remembered by its hardware identifier, so it survives renames and system
   language changes; while it is disconnected the island temporarily follows Automatic and the
@@ -129,9 +127,16 @@ Settings → Notifications → **Agent Island**:
 - **Floating Positions** resets saved horizontal positions for displays without a notch. The
   default position is centered.
 
-The section footer provides a link that opens Settings → Shortcuts already filtered to
-**Toggle Agent Island**. If macOS rejects the current global registration, the footer also
-identifies the unavailable binding and keeps the same direct link for choosing another shortcut.
+- **Toggle Agent Island** records the same binding as Shortcuts, with shared conflict, clear,
+  and reset behavior. The globe indicates system-wide scope; its tooltip explains the global grab.
+  Failed registration appears in the shortcut row.
+- **Silent Opacity** (`agentIslandSilentOpacity`, default 35%, range 20–100%) controls the quiet
+  floating bar. It does not affect notched monitors. Slider changes persist when editing ends.
+
+With an external and built-in monitor connected, there is still only one island. Automatic follows
+Prowl's main window; a pinned monitor stays selected while that window moves elsewhere. Disconnecting
+it temporarily uses Automatic, and reconnecting it restores the pinned choice. A pinned notched
+monitor uses notch placement; a monitor without a notch uses the draggable floating bar.
 
 With Reduce Motion enabled, icon changes fade instead of sliding and the state rings keep their
 color without rotating.

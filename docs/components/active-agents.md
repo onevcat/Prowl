@@ -85,6 +85,8 @@ When nothing is running: "New agents will appear here".
 
 ## Settings
 
+Settings → Agents → Display:
+
 - `autoShowActiveAgentsPanel` — pop the panel open when an agent appears.
 - `showActiveAgentTabTitles` — show each agent's pane title (surface title,
   falling back to the tab title) instead of its branch.

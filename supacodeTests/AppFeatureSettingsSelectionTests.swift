@@ -179,6 +179,34 @@ struct AppFeatureSettingsSelectionTests {
     }
   }
 
+  @Test(.dependencies) func islandSettingsOpensDisplayAndCollapsesRosterWithoutFocusingAPane() async {
+    let shown = LockIsolated(false)
+    let surfaced = LockIsolated(false)
+    var state = AppFeature.State(settings: SettingsFeature.State())
+    state.repositories.activeAgents.isIslandRosterExpanded = true
+    state.repositories.activeAgents.islandNavigation.selectedEntryID = UUID()
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    } withDependencies: {
+      $0.settingsWindowClient.show = { shown.setValue(true) }
+      $0.appLifecycleClient.surfaceMainWindow = {
+        surfaced.setValue(true)
+        return true
+      }
+    }
+
+    await store.send(.repositories(.activeAgents(.islandSettingsTapped))) {
+      $0.repositories.activeAgents.isIslandRosterExpanded = false
+      $0.repositories.activeAgents.islandNavigation = .init()
+    }
+    await store.receive(\.settings.setSelection) {
+      $0.settings.selection = .agentDisplay
+    }
+    await store.finish()
+    #expect(shown.value)
+    #expect(surfaced.value)
+  }
+
   @Test(.dependencies) func openAgentProfilesSettingsSelectsProfiles() async {
     let shown = LockIsolated(false)
     var state = AppFeature.State(settings: SettingsFeature.State())
@@ -380,7 +408,7 @@ struct AppFeatureSettingsSelectionTests {
     #expect(shown.value)
   }
 
-  @Test(arguments: [SettingsSection.general, .commandLineTool])
+  @Test(arguments: [SettingsSection.general, .agentDisplay, .commandLineTool])
   func selectingAnotherSectionClearsAgentProfileEditorState(section: SettingsSection) async {
     let profile = AgentProfile(name: "Codex", runtime: .codex)
     var state = AppFeature.State(settings: SettingsFeature.State())
@@ -413,7 +441,7 @@ struct AppFeatureSettingsSelectionTests {
     }
   }
 
-  @Test(arguments: [SettingsSection.general, .profiles])
+  @Test(arguments: [SettingsSection.general, .agentDisplay, .profiles])
   func selectingAnotherSectionClearsAgentSkillsState(section: SettingsSection) async {
     var state = AppFeature.State(settings: SettingsFeature.State())
     state.settings.selection = .commandLineTool

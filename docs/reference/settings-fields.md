@@ -57,6 +57,7 @@ JSON is pretty-printed with sorted keys. Legacy `~/.supacode` is migrated to
 | `autoShowActiveAgentsPanel` | Bool | `false` | Auto-open the Active Agents panel on a new agent. |
 | `showActiveAgentTabTitles` | Bool | `false` | Show pane titles (surface title, falling back to the tab title; vs. branch) in the agents panel. |
 | `showActiveAgentStatusInShelf` | Bool | `true` | Show agent status markers on Shelf tab icons. |
+| `agentIslandSilentOpacity` | Double | `0.35` | Quiet floating island opacity (0.2–1.0), under Agents → Display. Notched monitors stay fully opaque. |
 | `agentIslandEnabled` | Bool | `false` | Show Agent Island while the Active Agents roster is non-empty. |
 | `agentIslandDisplayPreference` | object (`{"mode":"automatic"}` or `{"mode":"display","id":"<CG display UUID>","name":"<last known name>"}`) | `{"mode":"automatic"}` | Select Agent Island placement. A missing fixed display temporarily follows Automatic while preserving its UUID for reconnection. |
 | `windowTintMode` | enum (`none`/`repositoryColor`/`custom`) | `repositoryColor` | How the window chrome is tinted. |
