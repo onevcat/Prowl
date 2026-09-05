@@ -10,6 +10,11 @@ model policy, scoped attestation publication, and report format below are **plan
 invoke `make test-agent-contracts` yet or treat this document as a successful live sweep.
 No model inference was performed for the initial inventory.
 
+The [release checklist](../001-fork-bootstrap-and-release-pipeline/release-runbook.md#agent-contract-release-check)
+and `/release` skill link here and surface the verification status before publishing. When
+T1 lands, add its exact full-suite command and report location here as part of delivery;
+verify the reminder works without the maintainer having to remember this runbook.
+
 ## Available now: repeatable zero-inference checks
 
 Run from the repository root:

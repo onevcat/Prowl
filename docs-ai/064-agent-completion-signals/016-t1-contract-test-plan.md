@@ -134,13 +134,20 @@ and record their difference from the interactive route.
 | --- | --- | --- |
 | T1a | Inventory/report skeleton, safe configuration contract, no-inference Codex preflight | Default invocation cannot call a model; missing credentials and zero executed tests are visible |
 | T1b | Production end-to-end hook harness, first Codex/Droid/Pi adapters | Three distinct injection families pass on one explicitly selected low-cost route each; setup and usage are recorded |
-| T1c | Copilot, Qoder, OMP, OpenCode, Claude adapters; scoped attestation and runbook commands | All eight are represented; required scenarios pass or report precise access blockers; publication rejects incomplete coverage |
+| T1c | Copilot, Qoder, OMP, OpenCode, Claude adapters; scoped attestation, runbook commands, and release reminder integration | All eight are represented; required scenarios pass or report precise access blockers; publication rejects incomplete coverage; the release skill/runbook guide the maintainer through the implemented full-suite command and report |
 | D2 gate | Full selected live suite, then the built-in workflow through a Debug app | Eight required runtime contracts pass on recorded routes, plus D2 E2E; any scope waiver requires an explicit release-plan decision |
 
 These are implementation milestones inside #726 T1, not additional releases. If Qoder cannot
 run with the available account, finish its adapter and report the blocker; do not purchase a
 subscription or silently remove it from the gate. Local development may run a subset without
 claiming release readiness.
+
+The owner requested that release preparation actively remind them, rather than relying on
+memory. The [release runbook](../001-fork-bootstrap-and-release-pipeline/release-runbook.md#agent-contract-release-check)
+and `.claude/skills/release/SKILL.md` now carry the conditional reminder. T1's completion must
+replace the contract runbook's planned operations with tested commands and verify that the
+release instructions reach them before bump/tag and show the result during release approval.
+This is maintainer guidance; no automatic gate in `scripts/release.sh` is implemented here.
 
 ## Alternatives and open questions
 
