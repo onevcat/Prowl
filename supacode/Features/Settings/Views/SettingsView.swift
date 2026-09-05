@@ -38,6 +38,8 @@ struct SettingsView: View {
           .tag(SettingsSection.advanced)
 
         Section("Agents") {
+          Label("Display", systemImage: "display")
+            .tag(SettingsSection.agentDisplay)
           Label("Profiles", systemImage: "person.crop.circle")
             .tag(SettingsSection.profiles)
           Label("CLI & Skills", systemImage: "terminal")
@@ -68,12 +70,8 @@ struct SettingsView: View {
         }
       case .notifications:
         SettingsDetailView {
-          NotificationsSettingsView(
-            store: settingsStore,
-            islandHotKeyRegistrationFailure: store.repositories.activeAgents
-              .islandHotKeyRegistrationFailure
-          )
-          .navigationTitle("Notifications")
+          NotificationsSettingsView(store: settingsStore)
+            .navigationTitle("Notifications")
         }
       case .shortcuts:
         SettingsDetailView {
@@ -118,6 +116,16 @@ struct SettingsView: View {
             ProgressView()
               .frame(maxWidth: .infinity, maxHeight: .infinity)
           }
+        }
+      case .agentDisplay:
+        SettingsDetailView {
+          AgentDisplaySettingsView(
+            store: settingsStore,
+            effectiveKeybindings: store.resolvedKeybindings,
+            customCommands: store.selectedCustomCommands,
+            islandHotKeyRegistrationFailure: store.repositories.activeAgents.islandHotKeyRegistrationFailure
+          )
+          .navigationTitle("Display")
         }
       case .profiles:
         SettingsDetailView {

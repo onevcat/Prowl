@@ -14,6 +14,7 @@ struct ActiveAgentsPanel: View {
   /// Merged "⌥⌃↑↓" hint shown while Cmd is held; `nil` hides it (bindings customized
   /// or Cmd not held). Resolved by the parent so the panel stays presentational.
   let navigationShortcutHint: String?
+  let isCommandKeyPressed: Bool
   let showTabTitles: Bool
   let height: Double
   let maximumHeight: Double
@@ -30,15 +31,35 @@ struct ActiveAgentsPanel: View {
           .font(.caption)
           .foregroundStyle(.secondary)
         Spacer()
-        if let navigationShortcutHint, !store.entries.isEmpty {
-          ShortcutHintView(text: navigationShortcutHint, color: .secondary)
+        ZStack(alignment: .trailing) {
+          if isCommandKeyPressed {
+            if let navigationShortcutHint, !store.entries.isEmpty {
+              ShortcutHintView(text: navigationShortcutHint, color: .secondary)
+                .transition(.opacity)
+            }
+          } else {
+            Button {
+              store.send(.islandToggleEnabledTapped)
+            } label: {
+              Image(systemName: "inset.filled.topthird.rectangle")
+                .font(.caption)
+                .foregroundStyle(store.isIslandEnabled ? .primary : .secondary)
+                .frame(width: 20, height: 16)
+            }
+            .buttonStyle(.plain)
+            .help(store.isIslandEnabled ? "Hide Agent Island" : "Show Agent Island")
+            .accessibilityLabel("Show Agent Island")
+            .accessibilityValue(store.isIslandEnabled ? "On" : "Off")
+            .accessibilityIdentifier("active-agents-toggle-island")
             .transition(.opacity)
+          }
         }
+        .frame(height: 16)
       }
       .padding(.horizontal, 12)
       .padding(.top, 8)
       .padding(.bottom, 4)
-      .animation(.easeInOut(duration: 0.15), value: navigationShortcutHint)
+      .animation(.easeInOut(duration: 0.15), value: isCommandKeyPressed)
 
       if store.entries.isEmpty {
         Spacer(minLength: 0)

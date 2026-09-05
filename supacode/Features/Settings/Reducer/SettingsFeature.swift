@@ -39,6 +39,7 @@ struct SettingsFeature {
     var autoShowActiveAgentsPanel: Bool
     var showActiveAgentTabTitles: Bool
     var showActiveAgentStatusInShelf: Bool
+    var agentIslandOnlyShowWithAgents: Bool
     var agentIslandEnabled: Bool
     var agentIslandDisplayPreference: AgentIslandDisplayPreference
     var agentIslandFloatingPositions: AgentIslandFloatingPositions
@@ -111,6 +112,7 @@ struct SettingsFeature {
       autoShowActiveAgentsPanel = settings.autoShowActiveAgentsPanel
       showActiveAgentTabTitles = settings.showActiveAgentTabTitles
       showActiveAgentStatusInShelf = settings.showActiveAgentStatusInShelf
+      agentIslandOnlyShowWithAgents = settings.agentIslandOnlyShowWithAgents
       agentIslandEnabled = settings.agentIslandEnabled
       agentIslandDisplayPreference = settings.agentIslandDisplayPreference
       agentIslandFloatingPositions = settings.agentIslandFloatingPositions
@@ -165,6 +167,7 @@ struct SettingsFeature {
         autoShowActiveAgentsPanel: autoShowActiveAgentsPanel,
         showActiveAgentTabTitles: showActiveAgentTabTitles,
         showActiveAgentStatusInShelf: showActiveAgentStatusInShelf,
+        agentIslandOnlyShowWithAgents: agentIslandOnlyShowWithAgents,
         agentIslandEnabled: agentIslandEnabled,
         agentIslandDisplayPreference: agentIslandDisplayPreference,
         agentIslandFloatingPositions: agentIslandFloatingPositions,
@@ -192,6 +195,7 @@ struct SettingsFeature {
     case setSystemNotificationsEnabled(Bool)
     case setCommandFinishedNotificationThreshold(String)
     case setTerminalFontSize(Float32?)
+    case setAgentIslandEnabled(Bool)
     case setAgentIslandFloatingPosition(displayID: String, normalizedPosition: Double)
     case setAgentIslandSilentOpacity(Double)
     case setAgentIslandDisplayPreference(AgentIslandDisplayPreference)
@@ -301,6 +305,7 @@ struct SettingsFeature {
         state.autoShowActiveAgentsPanel = normalizedSettings.autoShowActiveAgentsPanel
         state.showActiveAgentTabTitles = normalizedSettings.showActiveAgentTabTitles
         state.showActiveAgentStatusInShelf = normalizedSettings.showActiveAgentStatusInShelf
+        state.agentIslandOnlyShowWithAgents = normalizedSettings.agentIslandOnlyShowWithAgents
         state.agentIslandEnabled = normalizedSettings.agentIslandEnabled
         state.agentIslandDisplayPreference = normalizedSettings.agentIslandDisplayPreference
         state.agentIslandFloatingPositions = normalizedSettings.agentIslandFloatingPositions
@@ -357,6 +362,11 @@ struct SettingsFeature {
           persist(state, captureAnalytics: false, emitSettingsChanged: false),
           .send(.delegate(.terminalFontSizeChanged(fontSize)))
         )
+
+      case .setAgentIslandEnabled(let enabled):
+        state.agentIslandEnabled = enabled
+        state.syncGlobalDefaults(from: state.globalSettings)
+        return persist(state)
 
       case .setAgentIslandFloatingPosition(let displayID, let normalizedPosition):
         state.agentIslandFloatingPositions.setNormalizedPosition(

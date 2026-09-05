@@ -101,26 +101,6 @@ struct AppearanceSettingsView: View {
           )
           .help("Fade split panes that aren't focused so the active one stands out.")
         }
-        Section("Active Agents") {
-          Toggle(
-            "Show Active Agents panel automatically",
-            isOn: $store.autoShowActiveAgentsPanel
-          )
-          .help("Open the Active Agents panel when an agent is detected.")
-          Text("Hidden panels reopen as soon as an agent starts or updates.")
-            .foregroundStyle(.secondary)
-            .font(.callout)
-          Toggle(
-            "Show terminal titles in agent rows",
-            isOn: $store.showActiveAgentTabTitles
-          )
-          .help("Display each agent's own terminal title in the row and show the branch name on hover.")
-          Toggle(
-            "Show agent status in Shelf tabs",
-            isOn: $store.showActiveAgentStatusInShelf
-          )
-          .help("Overlay detected agent status on the owning tab icon in Shelf View.")
-        }
         Section("Default Views") {
           Picker("Open when launching Prowl", selection: $store.defaultViewMode) {
             ForEach(DefaultViewMode.allCases) { mode in

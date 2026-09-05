@@ -30,6 +30,12 @@ nonisolated struct AgentIslandFloatingPositions: Codable, Equatable, Sendable {
   }
 }
 
+nonisolated enum AgentIslandVisibilityPolicy {
+  static func isVisible(isEnabled: Bool, onlyShowWithAgents: Bool, hasEntries: Bool) -> Bool {
+    isEnabled && (!onlyShowWithAgents || hasEntries)
+  }
+}
+
 nonisolated enum AgentIslandOpacityPolicy {
   static let defaultSilentOpacity = 0.35
   static let minimumSilentOpacity = 0.2

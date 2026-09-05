@@ -25,14 +25,15 @@ and opens that section's root.
 
 | Section | Controls |
 |-----|----------|
-| **General** | Appearance (system/light/dark), default app for opening worktrees, diff tool, confirm-before-quit, default view mode, window chrome tint, automatic repository icon detection, toolbar buttons (Run / Open-in-editor), dim unfocused splits, Active Agents panel auto-show & terminal titles. |
-| **Notifications** | In-app alerts, notification sound picker (Never / system sounds / Prowl Classic), macOS system notifications, move-notified-to-top, command-finished notification + threshold, Dock badge & bounce, and the opt-in Agent Island display controls. → [notifications](notifications.md), [agent-island](agent-island.md) |
+| **General** | Appearance (system/light/dark), default app for opening worktrees, diff tool, confirm-before-quit, default view mode, window chrome tint, automatic repository icon detection, toolbar buttons (Run / Open-in-editor), dim unfocused splits. |
+| **Notifications** | In-app alerts, notification sound picker (Never / system sounds / Prowl Classic), macOS system notifications, move-notified-to-top, command-finished notification + threshold, Dock badge & bounce. → [notifications](notifications.md) |
 | **Shortcuts** | Remap app keyboard shortcuts; view defaults; resolve conflicts. → [keyboard-shortcuts](../reference/keyboard-shortcuts.md) |
 | **Worktree** | Worktree creation/deletion defaults: prompt on create, fetch before create, base directory, copy ignored/untracked files, automatic local-branch cleanup, merged-worktree action, archived auto-delete period. |
 | **Updates** | Auto-check toggle, "Check for Updates Now". → [updates](updates.md) |
 | **GitHub** | Enable GitHub integration (uses the `gh` CLI). → [github-pull-requests](github-pull-requests.md) |
 | **Commands** | Global Custom Commands. Enabled commands appear in the window toolbar; each repo can independently hide a Global command. → [custom-actions](custom-actions.md) |
 | **Advanced** | Analytics, crash reports, restore terminal layout on launch (experimental) + clear saved layout. |
+| **Agents → Display** | Active Agents panel auto-show, terminal titles, Shelf status markers, and Agent Island enablement, Monitor, global shortcut, silent opacity, and floating-position reset. → [active-agents](active-agents.md), [agent-island](agent-island.md) |
 | **Agents → Profiles** | Named launch presets for supported agent runtimes (model, effort, execution mode, tab/split placement, extra arguments, opt-in dedicated home for a separate account) with a live launch preview. List order is the recommendation fallback. → [agent-profiles](agent-profiles.md) |
 | **Agents → CLI & Skills** | Install/status for the bundled `prowl` CLI, the local socket path it uses to reach the app and whether this app is **listening** on it, and the **Agent Skills** section that links the bundled skills into your agents' skill folders. → [cli](cli.md) |
 | **Agents → Workflows** | Compact Built-in and personal workflow lists. Select a row for Enabled, explicit Run target, role profile preferences, Run Setup, validation, and source-file actions; **New Workflow…**, **Ask an Agent…**, and the CLI dependency banner remain on the index. → [workflows](workflows.md) |

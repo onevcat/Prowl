@@ -83,7 +83,14 @@ A row whose pane is bound to an active workflow run replaces its subtitle with
 
 When nothing is running: "New agents will appear here".
 
+The top-right button toggles **Show Agent Island**, using the same persisted setting as
+Settings → Agents → Display. The top-inset icon uses the primary theme color when enabled and neutral gray when disabled.
+Its tooltip names the next action. Holding Command replaces the button with the existing agent
+navigation shortcut hint; customized bindings keep the existing hint-suppression behavior.
+
 ## Settings
+
+Settings → Agents → Display:
 
 - `autoShowActiveAgentsPanel` — pop the panel open when an agent appears.
 - `showActiveAgentTabTitles` — show each agent's pane title (surface title,

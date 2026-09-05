@@ -1,6 +1,7 @@
 import ComposableArchitecture
 import DependenciesTestSupport
 import Foundation
+import Sharing
 import Testing
 
 @testable import supacode
@@ -8,6 +9,31 @@ import Testing
 /// Island-originated actions surface the main window before reusing the sidebar's own paths.
 @MainActor
 struct AppFeatureAgentIslandTests {
+  @Test(.dependencies, arguments: [false, true])
+  func panelTogglePersistsIslandSettingAndSynchronizesPresentation(initiallyEnabled: Bool) async {
+    var settings = GlobalSettings.default
+    settings.agentIslandEnabled = initiallyEnabled
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = settings }
+    var state = AppFeature.State(settings: SettingsFeature.State(settings: settings))
+    state.repositories.activeAgents.isIslandRosterExpanded = initiallyEnabled
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    }
+    store.exhaustivity = .off
+
+    await store.send(.repositories(.activeAgents(.islandToggleEnabledTapped)))
+    await store.receive(\.settings.setAgentIslandEnabled)
+    await store.receive(\.settings.delegate.settingsChanged)
+    await store.receive(\.repositories.activeAgents.islandEnabledChanged)
+    await store.finish()
+
+    #expect(store.state.settings.agentIslandEnabled == !initiallyEnabled)
+    #expect(settingsFile.global.agentIslandEnabled == !initiallyEnabled)
+    #expect(store.state.repositories.activeAgents.isIslandEnabled == !initiallyEnabled)
+    #expect(!store.state.repositories.activeAgents.isIslandRosterExpanded)
+  }
+
   @Test(.dependencies) func agentIslandEntrySurfacesProwlBeforeReusingAgentFocusPath() async {
     let entryID = UUID()
     let worktreeID = "/tmp/repo/worktree"

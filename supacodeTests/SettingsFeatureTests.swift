@@ -675,6 +675,22 @@ struct SettingsFeatureTests {
     #expect(settingsFile.global.showActiveAgentStatusInShelf == false)
   }
 
+  @Test(.dependencies) func emptyIslandVisibilitySettingPersistsBothDirections() async {
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = .default }
+    let store = TestStore(initialState: SettingsFeature.State(settings: .default)) {
+      SettingsFeature()
+    }
+    #expect(!store.state.agentIslandOnlyShowWithAgents)
+    for enabled in [true, false] {
+      await store.send(.binding(.set(\.agentIslandOnlyShowWithAgents, enabled))) {
+        $0.agentIslandOnlyShowWithAgents = enabled
+      }
+      await store.receive(\.delegate.settingsChanged)
+      #expect(settingsFile.global.agentIslandOnlyShowWithAgents == enabled)
+    }
+  }
+
   @Test(.dependencies) func agentIslandSettingsPersistChanges() async {
     let initialSettings = GlobalSettings.default
     @Shared(.settingsFile) var settingsFile

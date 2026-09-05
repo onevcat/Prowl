@@ -200,7 +200,7 @@ final class AgentIslandWindowController {
       floatingHorizontalPosition: appStore.settings.agentIslandFloatingPositions
         .normalizedPosition(for: screen.id)
     )
-    panel.setFrame(frame, display: panel.isVisible)
+    setPanelFrame(frame, screen: screen, display: panel.isVisible)
     if isVisible {
       if isRosterExpanded {
         panel.makeKeyAndOrderFront(nil)
@@ -210,6 +210,24 @@ final class AgentIslandWindowController {
     } else {
       panel.orderOut(nil)
     }
+  }
+
+  private func setPanelFrame(_ frame: CGRect, screen: AgentIslandScreenDescriptor, display: Bool) {
+    let barHeight = AgentIslandRootLayout.compactHeight(
+      notchCompactHeight: nil,
+      floatingMenuBarHeight: screen.menuBarHeight
+    )
+    let barFrame =
+      screen.hasNotch
+      ? nil
+      : AgentIslandRootLayout.floatingBarScreenFrame(
+        in: frame, height: barHeight
+      )
+    // Publish the final hit region before AppKit refreshes tracking areas for the resized panel.
+    if presentation.floatingBarScreenFrame != barFrame {
+      presentation.floatingBarScreenFrame = barFrame
+    }
+    panel?.setFrame(frame, display: display)
   }
 
   private var mainProwlWindow: NSWindow? {
@@ -261,7 +279,7 @@ final class AgentIslandWindowController {
       screen: screen,
       floatingHorizontalPosition: normalizedPosition
     )
-    panel.setFrame(frame, display: true)
+    setPanelFrame(frame, screen: screen, display: true)
 
     guard case .ended = event else { return }
     floatingDragPointerOffsetX = nil
@@ -424,7 +442,7 @@ final class AgentIslandWindowController {
     guard
       let action = AgentIslandHotKeyAction.resolve(
         isRosterExpanded: activeAgents.isIslandRosterExpanded,
-        hasEntries: !activeAgents.entries.isEmpty
+        isIslandVisible: shouldShowIsland
       )
     else {
       return
@@ -437,13 +455,21 @@ final class AgentIslandWindowController {
     }
   }
 
+  private var shouldShowIsland: Bool {
+    AgentIslandVisibilityPolicy.isVisible(
+      isEnabled: appStore.settings.agentIslandEnabled,
+      onlyShowWithAgents: appStore.settings.agentIslandOnlyShowWithAgents,
+      hasEntries: !appStore.repositories.activeAgents.entries.isEmpty
+    )
+  }
+
   private func refreshGlobalHotKeys(force: Bool = false) {
     let toggleBinding = appStore.resolvedKeybindings.keybinding(
       for: AppShortcuts.CommandID.toggleAgentIsland
     )
     let configuration = AgentIslandGlobalHotKeyConfiguration(
       toggleBinding: toggleBinding,
-      hasEntries: !appStore.repositories.activeAgents.entries.isEmpty,
+      isIslandVisible: shouldShowIsland,
       isAppActive: NSApp.isActive
     )
     guard
@@ -485,7 +511,7 @@ final class AgentIslandWindowController {
       _ = appStore.resolvedKeybindings.keybinding(
         for: AppShortcuts.CommandID.toggleAgentIsland
       )
-      _ = appStore.repositories.activeAgents.entries.isEmpty
+      _ = shouldShowIsland
     } onChange: { [weak self] in
       Task { @MainActor [weak self] in
         guard let self, self.panel != nil, self.observationGeneration == generation else { return }

@@ -33,7 +33,12 @@ struct SidebarCommands: Commands {
       }
       .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.toggleAgentIsland)))
       .help(helpText(title: "Agent Island", commandID: AppShortcuts.CommandID.toggleAgentIsland))
-      .disabled(!store.repositories.activeAgents.isIslandEnabled || store.repositories.activeAgents.entries.isEmpty)
+      .disabled(
+        !AgentIslandVisibilityPolicy.isVisible(
+          isEnabled: store.settings.agentIslandEnabled,
+          onlyShowWithAgents: store.settings.agentIslandOnlyShowWithAgents,
+          hasEntries: !store.repositories.activeAgents.entries.isEmpty
+        ))
       Button("Select Next Agent") {
         store.send(.repositories(.activeAgents(.selectNextEntry)))
       }

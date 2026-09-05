@@ -10,6 +10,7 @@ struct SettingsFilePersistenceTests {
   @Test func legacyGlobalSettingsDefaultsAgentIslandFields() throws {
     let encoded = try JSONEncoder().encode(GlobalSettings.default)
     var dictionary = try #require(try JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+    dictionary.removeValue(forKey: "agentIslandOnlyShowWithAgents")
     dictionary.removeValue(forKey: "agentIslandEnabled")
     dictionary.removeValue(forKey: "agentIslandDisplayPreference")
     dictionary.removeValue(forKey: "agentIslandFloatingPositions")
@@ -18,6 +19,7 @@ struct SettingsFilePersistenceTests {
     let legacyData = try JSONSerialization.data(withJSONObject: dictionary)
     let decoded = try JSONDecoder().decode(GlobalSettings.self, from: legacyData)
 
+    #expect(!decoded.agentIslandOnlyShowWithAgents)
     #expect(!decoded.agentIslandEnabled)
     #expect(decoded.agentIslandDisplayPreference == .automatic)
     #expect(decoded.agentIslandFloatingPositions.isEmpty)
@@ -26,6 +28,7 @@ struct SettingsFilePersistenceTests {
 
   @Test func agentIslandDisplayPreferenceRoundTripsStableDisplayID() throws {
     var settings = GlobalSettings.default
+    settings.agentIslandOnlyShowWithAgents = true
     settings.agentIslandEnabled = true
     settings.agentIslandDisplayPreference = .display(id: "display-uuid", name: "Studio Display")
     settings.agentIslandFloatingPositions.setNormalizedPosition(0.25, for: "display-uuid")
@@ -34,6 +37,7 @@ struct SettingsFilePersistenceTests {
     let data = try JSONEncoder().encode(settings)
     let decoded = try JSONDecoder().decode(GlobalSettings.self, from: data)
 
+    #expect(decoded.agentIslandOnlyShowWithAgents)
     #expect(decoded.agentIslandEnabled)
     #expect(
       decoded.agentIslandDisplayPreference == .display(id: "display-uuid", name: "Studio Display"))
