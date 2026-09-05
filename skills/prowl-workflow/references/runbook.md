@@ -10,21 +10,34 @@ invocation shapes).
    overrides, and `--skip` choices; errors use the codes below.
 2. **Binding resolution** picks a profile for every `launch` role: remembered binding →
    enabled profile matching `suggest` exactly → the worktree's Recommended profile filtered
-   by `agents` → ask. In the GUI, `bind: ask` roles (and any ambiguity or missing required
+   by `agents` when explicitly constrained → ask. Omit `agents` by default so all qualifying
+   profiles remain available; runtime restrictions require a user instruction or a concrete
+   task requirement (see [authoring](authoring.md#runtime-constraints-and-preferences)).
+   In the GUI, `bind: ask` roles (and any ambiguity or missing required
    input) present the start sheet; `bind: auto` with nothing undecided starts silently. The
    CLI never shows UI; unresolved bindings fail instead — pass `--role r=<profile|auto>`.
 3. Chosen bindings and rendered launch plans are **frozen into the run** — later profile
    edits do not affect it. The `run` response (with `--json`) carries the run id and every
    frozen binding.
 
+Static validation checks structure and semantic constraints, not live readiness. Admission
+can still fail because a profile or source pane is unavailable, required inputs are missing,
+or the CLI cannot reach the intended Prowl instance.
+
+When the caller is the `current` role and the first step messages that role, the `run`
+response returns the task directly in `self_initiated` (`.data.self_initiated` in JSON):
+`line`, optional `instruction_path`, and `completion`. The agent that invoked `run` must
+perform it and deliver; there is no separate injected first message to wait for.
+
 ## While it runs
 
 - Steps execute strictly in order; one step is active at a time. A `message` step injects
   only when its target is idle — the run sits in "waiting for role to be idle" while the
   agent works. Nothing is ever typed into a busy pane.
-- Waiting is supervised by a state-driven watchdog, not wall-clock: a working agent is
-  never interrupted; an agent whose turn ends without delivering gets one typed nudge with
-  the completion command; `expect.timeout` (when declared) is the hard cap.
+- Without an explicit deadline, the watchdog responds to participant state: a working
+  agent is left to work; a turn ending without delivery may lead to a nudge and then
+  attention. An explicit `expect.timeout` can expire even while the agent is working;
+  its configured policy governs the run, not the lifetime of the agent process.
 - Attention states (timeout with `on_timeout: attention`, provisional deliveries under
   `strict: false`, blocked agents) pause the step and surface in Prowl's status center for
   the user to resolve (Accept / Ask again / Skip / Cancel); the CLI sees them in
@@ -36,6 +49,7 @@ invocation shapes).
 - Neither finishing nor `prowl workflow cancel <run-id>` (which revokes all outstanding
   delivery tokens) closes a pane: a `completed` run leaves every launched pane open unless an
   explicit `close:` step (authored by the workflow) closed it.
+  Cancelling stops orchestration; it does not stop already-running agent work or undo edits.
 - Run states (`status.state`): `running`, `needs_attention` (the panel waits for the user),
   then one terminal state — `completed`, `max_rounds_reached` (a `repeat` hit `max` with
   `until` unsatisfied, or had no `until` — steps after the loop do NOT execute), `skipped`
@@ -43,6 +57,13 @@ invocation shapes).
   earlier app instance; V1 does not resume it).
 
 ## Watching a run
+
+For a `done --json` response, inspect `.data.delivery.state`: `delivered` is accepted,
+whereas `provisional` may still return `ok` and an output path but leaves the run in
+`needs_attention`. The user can Accept, Ask again, Skip, or Cancel. **Ask again** returns
+the activation to waiting so the participant can submit a corrected delivery; repeated
+submissions while it is still provisional are rejected. Under `strict: true`, an invalid
+delivery is rejected instead and the participant can correct it while the step is waiting.
 
 `prowl workflow status <run-id> --json` is the poll target (the text form omits timestamps):
 
@@ -68,7 +89,7 @@ Everything lives under the source worktree:
 ├── log.md                       # timestamped timeline (start here)
 ├── run.json                     # machine record: bindings, invocations, step states, outputs
 ├── outputs/
-│   ├── <name>.<ordinal>.md      # the ledger — one immutable file per delivery
+│   ├── <name>.<ordinal>.md      # output for an invocation; corrected submissions can replace it
 │   └── <name>.md                # "latest" view, replaced atomically on each delivery
 ├── instructions/
 │   └── <step>.<ordinal>.md      # `instruction:` bodies of message steps (empty for `text:` steps)
@@ -85,9 +106,11 @@ Everything lives under the source worktree:
   in order. A `repeat` whose `until` was already satisfied before entry is recorded in
   `run.json` with step state `skipped`: the loop was skipped, unrelated to the run's `skipped`
   terminal state.
-- `<name>.md` always holds the newest accepted delivery of that name: deliveries are
-  serialized, persisted before the run advances, and the file is swapped via atomic rename —
-  a reader never sees a half-written or stale-after-advance file.
+- `<name>.md` is the newest persisted body of that name, swapped via atomic rename so a
+  reader never sees a half-written file. Persistence happens before acceptance: provisional
+  bodies appear here too. Corrections after **Ask again** reuse the invocation ordinal and
+  replace both files, so this is not an immutable history of every submission. Use the
+  delivery receipt and run state to distinguish persisted content from accepted results.
 - Output bodies are capped (1 MiB default, 4 MiB hard maximum).
 - To summarize or debug a finished run: read `log.md`, then walk `outputs/` in ordinal
   order; `run.json` maps each ordinal to its step and loop iteration.

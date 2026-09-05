@@ -32,6 +32,12 @@ The file format is `schema: prowl.workflow/v1`. Roles have a `source`:
 | `launch` | a new agent Prowl starts from an [Agent Profile](agent-profiles.md) | remembered profile → profile matching the role's `suggest` → the repository's Recommended profile → the sheet asks |
 | `pick` | an existing detected agent pane in the same worktree | always chosen at start |
 
+For a `launch` role, omit `agents` by default to allow any qualifying Agent Profile.
+Only add a runtime allow-list for an explicit user requirement or a concrete runtime-specific
+capability. `agents: []` allows none; `any` and `*` are not wildcard tokens. Leave `suggest`
+unset unless there is a specific preference to express; profile selection normally belongs
+to the user's saved preferences and the start-sheet picker.
+
 Steps are `message` (type one line or point the role at a materialized
 instruction file), `launch` (start a launch role with a kickoff prompt),
 `repeat … until outputs.<name>.verdict == <value>` (bounded loop),

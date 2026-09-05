@@ -34,10 +34,25 @@ Pick the section for the task; load a reference file only when that task is at h
 
 ## Authoring loop
 
-Draft → `prowl workflow validate <file>` → fix → place the file → run. Validation is static
-and strict; if it passes, the file is runnable. `validate` and `prowl workflow schema` (the
-authoritative JSON Schema) work with Prowl closed. Never hand over an unvalidated workflow,
-and read `references/authoring.md` before drafting — several rules are not guessable.
+Read `references/authoring.md`, draft the requested workflow, validate it with
+`prowl workflow validate <file>`, and fix errors while assessing warnings. `validate` and
+`prowl workflow schema` work with Prowl closed. Passing static validation does not guarantee
+start-time admission or successful execution: profiles, panes, inputs, CLI connectivity,
+and the agents' work still matter. If validation cannot run, disclose that limitation.
+Creating a definition does not itself require starting it; run it when that is part of
+the user's request.
+
+For launch roles, **omit `agents` unless the user explicitly requires particular runtimes
+or the task has a concrete runtime-specific requirement**. Omission allows any qualifying
+Agent Profile. Do not invent an allow-list from your own runtime, installed profiles,
+example tokens, or assumptions about which model is best. Leave `suggest` unset too unless
+it expresses a user-provided preference or a concrete task requirement; let Prowl's profile
+picker and saved preferences choose the agent by default.
+
+Examples demonstrate individual capabilities, not a mandatory architecture. Use the roles,
+steps, and output contracts the task needs; add loops, deadlines, and automatic pane closure
+only when their behavior serves the requested outcome. The authoring reference explains
+data dependencies, loop exits, and unsupported V1 constructs.
 
 ## Running a workflow
 
@@ -55,6 +70,10 @@ prowl workflow cancel <run-id> [--json]
   is the run's; outside a pane the focused worktree is used, and a workflow with a `current`
   role fails with `SOURCE_REQUIRED`. Required inputs without defaults must be passed via
   `--input k=v`.
+- When starting from the `current` role's own pane, inspect the `run` response for
+  `self_initiated` (`.data.self_initiated` with `--json`). If present, follow its `line` or
+  `instruction_path` and completion command yourself; Prowl does not type that first task
+  back into the same pane. Waiting for another message would leave your own step unfinished.
 - The run is asynchronous: `run` returns the run id and frozen bindings; poll
   `prowl workflow status <run-id> --json` (`.data.status.state` is `running`,
   `needs_attention`, or a terminal state; `.data.finished_at` appears when it ended) or read
@@ -68,7 +87,9 @@ prowl workflow cancel <run-id> [--json]
 
 ## Participating in a run
 
-When a line like this appears in the pane, this agent is a workflow participant:
+An active task delivered by Prowl in this pane, a launched role's kickoff protocol, or a
+`self_initiated` task in the run response makes this agent a participant. A message task
+looks like this:
 
 ```
 [Prowl] <instruction…> — finish with: PROWL_WORKFLOW_TOKEN=<token> prowl workflow done [--verdict <v>] -
@@ -78,8 +99,13 @@ When a line like this appears in the pane, this agent is a workflow participant:
 2. Deliver by running the **exact rendered command** with the body on stdin as markdown
    (`printf '…' | PROWL_WORKFLOW_TOKEN=… prowl workflow done -`). When verdict variants are
    offered, pick exactly one and run that variant.
-3. Include the declared sections; an empty body is rejected, and a body missing declared
-   sections/verdict is held as provisional and bothers the user — deliver properly instead.
+3. Include the declared sections, format, and verdict. Empty bodies are rejected; other
+   contract mismatches are provisional by default or rejected under `strict: true`. Check
+   the receipt: **Delivered** means accepted; **Provisional** still needs resolution, even
+   when the command exits successfully. Do not report a step completed merely because its
+   output file exists. A provisional delivery waits for the user's decision; **Ask again**
+   reopens delivery so you can correct it. Do not blindly resubmit or invent a replacement
+   token; [runbook](references/runbook.md) explains the states.
 4. Lost? `prowl workflow status` (no arguments) answers "who am I": this pane's run, role,
    awaited step, its requirements and completion command.
 5. Never use `prowl agents dispatch-complete` for a workflow activation — it is rejected
