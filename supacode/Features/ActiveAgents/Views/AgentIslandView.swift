@@ -332,7 +332,7 @@ struct AgentIslandView: View {
     if islandEntries.isEmpty {
       Image("AgentIslandAppIcon")
         .interpolation(.high)
-        .frame(width: 24, height: 24)
+        .frame(width: 22, height: 22)
         .clipShape(.rect(cornerRadius: 5))
         .accessibilityLabel("Prowl")
     } else {
