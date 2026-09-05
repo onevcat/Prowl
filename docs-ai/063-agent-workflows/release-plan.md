@@ -35,7 +35,7 @@ say when each is cut:
 | --- | --- | --- |
 | R1 | **Shipped** — v2026.8.29 (2026-08-29) | — |
 | R2a | **Shipped** — v2026.8.31 (2026-08-31) | — |
-| R2b | In progress — C2 and D1, including Settings refinement, merged (#752/#754/#761/#763) | #726 T1a inventory/configuration preflight implemented; eight-runtime headless checks verified; scoped publication/interactive acceptance remain, then D2 |
+| R2b | In progress — C2 and D1, including Settings refinement, merged (#752/#754/#761/#763) | #726 T1a inventory/configuration preflight implemented; eight-runtime headless checks verified; T1 verification and scoped publication complete (merge pending), then D2 |
 | R3 | Planned | after R2b ships |
 
 #### R2b PR ledger
@@ -46,7 +46,7 @@ say when each is cut:
 | D1 (skill) | Merged | #754: `prowl-workflow` bundled authoring skill (shipped ahead of the rest of D1) |
 | D1 (rest) | Merged | #761: Settings › Agents › Workflows page, `docs/components/workflows.md`, CLI reachability status (deferred from C0); [063.013](013-d1-workflows-settings.md) |
 | D1 (UI refinement) | Merged | #763: post-merge native list/detail refinement, repository-local workflow Settings, Run Setup copy, explicit run targets, file opening, and capsule YAML icons; [063.014](014-workflow-settings-ui-refinement.md) |
-| #726 T1 | In progress — inventory/preflight and eight-runtime headless checks in #767 | [064.016](../064-agent-completion-signals/016-t1-contract-test-plan.md): zero-inference inventory and production configuration preflight verified; [runbook](../064-agent-completion-signals/agent-contracts-runbook.md). Eight-runtime headless checks pass; scoped publication and interactive acceptance remain pending. |
+| #726 T1 | Implemented and verified — #767 merged; closure [#769](https://github.com/onevcat/Prowl/pull/769) awaiting merge | [064.016](../064-agent-completion-signals/016-t1-contract-test-plan.md): zero-inference inventory and production configuration preflight verified; [runbook](../064-agent-completion-signals/agent-contracts-runbook.md). Eight-runtime headless checks pass; T1 verification and scoped publication are complete (merge pending); GUI acceptance belongs to D2. |
 | D2 | Planned | `prowl.adversarial-review` built-in + reviewer skill + E2E — after #726 T1 |
 
 #### R1 PR ledger
@@ -301,4 +301,6 @@ R3+: V2 / S5 rest;  delete HANDOFF_RETIRED stubs
 - 2026-08-22 — 065 bundled-agent-skills joins R1 (S0/K1 ∥ A1, then K2, K3); `embed-skills`
   and the skill registry move from 063-D1 to 065-K1, D1 depends on it.
 
-- 2026-09-05 — Continued #726 in #767: all eight real headless runtime/hook checks passed; seven use the owner's DeepSeek key and Qoder uses its existing Flash catalog route. Fixed absent-notifier configuration reads found by the suite. Release preparation now points at implemented live/preflight commands. Scoped attestation publication and interactive acceptance remain before T1 closure; D2 remains separate.
+- 2026-09-05 — Continued #726 in #767: all eight real headless runtime/hook checks passed; seven use the owner's DeepSeek key and Qoder uses its existing Flash catalog route. Fixed absent-notifier configuration reads found by the suite. Release preparation now points at implemented live/preflight commands. Scoped attestation publication remained before T1 closure; interactive acceptance belongs to D2; D2 remains separate.
+
+- Updated 2026-09-05 (T1 closure): Full eight-runtime verification and explicit scoped publication passed; the baseline and matrix were advanced while preserving interactive history. Release guidance now uses `verify` then `publish`. See [064.016](../064-agent-completion-signals/016-t1-contract-test-plan.md). Merge this closure, then proceed to D2; GUI E2E is outside #726 T1.

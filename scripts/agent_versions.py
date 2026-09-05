@@ -342,14 +342,14 @@ def warnings_for(reports: Sequence[RuntimeReport]) -> list:
             warnings.append(
                 f"warning: {item.binary} {report.installed.text} is newer than the attested"
                 f" {item.attested_version} ({provenance}); the managed-hook contract is unverified"
-                f" against it — run `make test-agent-contracts` (#726 T1) and update"
-                f" {ATTESTATION_PATH.relative_to(ROOT)} on a pass"
+                f" against it — run `make test-agent-contracts AGENT_CONTRACT_ARGS=\"--mode verify\"` (#726 T1),"
+                f" then publish its report as documented in agent-contracts-runbook.md"
             )
         elif report.status == "older":
             warnings.append(
                 f"warning: {item.binary} {report.installed.text} is older than the attested"
                 f" {item.attested_version} ({provenance}); upgrade, or re-run"
-                f" `make test-agent-contracts` (#726 T1) against this build"
+                f" `make test-agent-contracts AGENT_CONTRACT_ARGS=\"--mode verify\"` (#726 T1) against this build"
             )
         elif report.status == "missing":
             warnings.append(f"warning: {report.detail}; its managed-hook contract cannot be checked on this machine")

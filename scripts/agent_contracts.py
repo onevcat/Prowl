@@ -24,6 +24,7 @@ import urllib.parse
 import uuid
 
 import agent_versions as versions
+import agent_contract_expectations as rules
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 MAX_POLICY_BYTES = 64 * 1024
@@ -293,14 +294,15 @@ def run_preflight(row, directory, resolve, timeout):
     write_json(directory / "codex-test-summary.json", test_summary)
     return {
         **evidence, "status": "passed", "reason": "configuration_contract_verified",
-        "executed_tests": 1, "scenarios": list(CODEX_SCENARIOS),
+        "executed_tests": 1, "scenarios": list(CODEX_SCENARIOS), "nonce": nonce,
         "receipt": env["PROWL_CONTRACT_RECEIPT"], "xcresult": env["PROWL_CONTRACT_RESULT"],
     }
 
 
 def source_fingerprint():
     paths = [ROOT / "Makefile", pathlib.Path(__file__), ROOT / "supacodeTests/CodexConfigReadLiveContractTests.swift",
-             ROOT / "scripts/agent_contract_live.py", ROOT / "supacodeTests/AgentHookContractExportTests.swift"]
+             ROOT / "scripts/agent_contract_live.py", ROOT / "scripts/agent_contract_expectations.py",
+             ROOT / "scripts/agent_contract_attestation.py", ROOT / "scripts/agent_versions.py", ROOT / "supacodeTests/AgentHookContractExportTests.swift"]
     paths += sorted((ROOT / "supacode/Domain/AgentRuntime").glob("*.swift"))
     paths += sorted((ROOT / "supacode/Domain/AgentProfile").glob("*.swift"))
     paths += sorted((ROOT / "supacode/CLIService/Shared").glob("*.swift"))
@@ -315,6 +317,31 @@ def source_fingerprint():
     return digest.hexdigest()
 
 
+def file_hash(path):
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def verify_passed(rows):
+    if not rows:
+        return False
+    for row in rows:
+        if row.get("inventory", {}).get("status") != "passed" or row.get("live", {}).get("status") != "passed":
+            return False
+        if row["runtime"] == "codex" and row.get("preflight", {}).get("status") != "passed":
+            return False
+        lifecycle = row.get("lifecycle", {})
+        if row["runtime"] in rules.ZERO_TURN:
+            if lifecycle.get("status") != "passed":
+                return False
+        elif lifecycle != {"status": "not_applicable", "reason": rules.ZERO_TURN_UNSUPPORTED[row["runtime"]]}:
+            return False
+    return True
+
+
 def positive_timeout(value):
     try:
         number = float(value)
@@ -327,7 +354,8 @@ def positive_timeout(value):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--mode", choices=("inventory", "preflight", "live"), default="inventory")
+    parser.add_argument("--mode", choices=("inventory", "preflight", "live", "verify", "publish"), default="inventory")
+    parser.add_argument("--report", type=pathlib.Path, help="Completed verify report to publish without inference.")
     parser.add_argument("--runtime", action="append", choices=versions.TIER_A_RUNTIMES, help="Repeat to select runtimes; default: all eight.")
     parser.add_argument("--config", type=pathlib.Path, help="Secret-free JSON policy; default: ~/.prowl/agent-contracts.json if present.")
     parser.add_argument("--credentials", type=pathlib.Path, help="Private literal env file; default: ~/.prowl/agent-contracts.env if present.")
@@ -342,6 +370,17 @@ def main(argv=None):
     try:
         config = args.config or pathlib.Path.home() / ".prowl/agent-contracts.json"
         policy = load_policy(config, required=args.config is not None)
+        if args.mode == "publish":
+            if args.report is None or args.runtime:
+                raise PolicyError("Publish requires --report and does not accept runtime filtering.")
+            from agent_contract_attestation import publish
+            published = publish(args.report, policy)
+            print(json.dumps(published, indent=2) if args.json else "Published headless evidence: " + published["record"])
+            return 0
+        if args.report is not None:
+            raise PolicyError("--report is only valid with --mode publish.")
+        started_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        started_fingerprint = source_fingerprint()
         credential_path = args.credentials or pathlib.Path.home() / ".prowl/agent-contracts.env"
         environment = load_credentials(credential_path, os.environ, required=args.credentials is not None)
         entries = versions.load_attestation(versions.ATTESTATION_PATH)
@@ -351,22 +390,34 @@ def main(argv=None):
         rows = inventory(entries, policy, environment, resolve=resolver, timeout=args.timeout)
         args.output_dir.mkdir(parents=True, exist_ok=True)
         directory = pathlib.Path(tempfile.mkdtemp(prefix="run-", dir=args.output_dir)).resolve()
-        if args.mode == "preflight":
+        if args.mode in ("live", "verify"):
             for row in rows:
-                row["preflight"] = run_preflight(row, directory, resolver, args.preflight_timeout)
-        if args.mode == "live":
+                if row["executable"]:
+                    row["executable_sha256"] = file_hash(pathlib.Path(row["executable"]))
+        if args.mode in ("preflight", "verify"):
+            for row in rows:
+                if args.mode == "preflight" or row["runtime"] == "codex":
+                    row["preflight"] = run_preflight(row, directory, resolver, args.preflight_timeout)
+                else:
+                    row["preflight"] = {"status": "not_applicable"}
+        export_nonce = None
+        if args.mode in ("live", "verify"):
             from agent_contract_live import run_suite
-            run_suite(rows, directory, resolver, environment, args.live_timeout, args.preflight_timeout)
+            export_nonce = run_suite(rows, directory, resolver, environment, args.live_timeout, args.preflight_timeout, verify=args.mode == "verify")
         report = {
-            "schema": 1, "mode": args.mode,
+            "schema": 1, "contract_revision": rules.REVISION, "mode": args.mode,
+            "started_at": started_at, "started_source_fingerprint": started_fingerprint, "export_nonce": export_nonce,
             "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "config_path": str(config), "report_path": str(directory / "report.json"),
             "source_fingerprint": source_fingerprint(), "release_ready": False,
-            "bridge_sha256": hashlib.sha256((ROOT / "Resources/prowl-cli/prowl").read_bytes()).hexdigest() if args.mode == "live" and (ROOT / "Resources/prowl-cli/prowl").exists() else None,
-            "inference_requested": args.mode == "live", "attestation_updated": False, "runtimes": rows,
+            "bridge_sha256": hashlib.sha256((ROOT / "Resources/prowl-cli/prowl").read_bytes()).hexdigest() if args.mode in ("live", "verify") and (ROOT / "Resources/prowl-cli/prowl").exists() else None,
+            "inference_requested": args.mode in ("live", "verify"), "attestation_updated": False, "runtimes": rows,
         }
+        report["source_stable"] = started_fingerprint == report["source_fingerprint"]
+        report["contract_passed"] = args.mode == "verify" and report["source_stable"] and verify_passed(rows)
+        report["artifacts"] = {path.name: file_hash(path) for path in sorted(directory.iterdir()) if path.is_file()}
         write_json(directory / "report.json", report)
-    except (PolicyError, versions.AttestationError) as error:
+    except (PolicyError, EvidenceError, versions.AttestationError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
     except OSError:
@@ -375,12 +426,16 @@ def main(argv=None):
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))
     else:
-        print("Runtime     Version       Drift       Inventory   Route                Preflight  Live")
+        print("Runtime     Version       Drift       Inventory   Route                Preflight       Live       Lifecycle")
         for row in rows:
             print(f"{row['runtime']:<11} {row['installed_version'] or '-':<13} {row['version_status']:<11} "
-                  f"{row['inventory']['status']:<11} {row['route']['status']:<20} {row['preflight']['status']:<10} {row['live']['status']}")
+                  f"{row['inventory']['status']:<11} {row['route']['status']:<20} {row['preflight']['status']:<15} {row['live']['status']:<10} {row.get('lifecycle', {}).get('status', 'not_run')}")
         print(f"Report: {report['report_path']}")
-        print("Headless live evidence only; release readiness not established." if args.mode == "live" else "No inference requested; release readiness not established.")
+        if args.mode == "verify":
+            print("Required headless contracts: " + ("passed" if report["contract_passed"] else "failed"))
+        print("Headless live evidence only; release readiness not established." if args.mode in ("live", "verify") else "No inference requested; release readiness not established.")
+    if args.mode == "verify":
+        return int(not report["contract_passed"])
     if args.mode == "live":
         return int(any(row["live"]["status"] != "passed" for row in rows))
     if args.mode == "preflight":
@@ -389,4 +444,6 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    # Lazy scenario modules import this module; preserve exception identity at the CLI entry.
+    sys.modules["agent_contracts"] = sys.modules[__name__]
     raise SystemExit(main())

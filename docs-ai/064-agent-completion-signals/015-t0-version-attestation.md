@@ -42,14 +42,16 @@ sweep.
 | `runtimes[].record` | the `docs-ai/064` file that documents the sweep; must exist next to the JSON |
 
 Every key is required and no other key is allowed, so a typo fails `make test-scripts` rather
-than silently going unread. Update rule until T1 exists: after a live sweep that passes for a
-runtime, set its `attested_version` / `attested_on` / `record` by hand and run
-`scripts/agent_versions.py --write-matrix`. T1's `make test-agent-contracts` is meant to do the
-same on a passing run.
+than silently going unread. T1 now advances these fields through an explicit `--mode publish`
+operation after `--mode verify`; follow the [runbook](agent-contracts-runbook.md). Publication
+preserves entry schema 1 and links immutable, scoped headless evidence. The original interactive
+baseline is archived in `agent-attestation-interactive.json`; headless publication never advances
+that archive or implies a new Profile/GUI acceptance. The provenance below describes the original
+T0 sweep, not the current headless baseline.
 
 ### Attested versions and their provenance
 
-All eight entries point at the S3c live acceptance in [011-s3c-action.md](011-s3c-action.md),
+The original eight entries pointed at the S3c live acceptance in [011-s3c-action.md](011-s3c-action.md),
 the last sweep that exercised every tier-A runtime through a Prowl-launched Profile: Pi 0.84.3,
 Oh My Pi 18.0.6, OpenCode 1.18.23, plus the "regression on the same build" row for Claude
 2.1.245, Codex 0.149.1, Copilot 1.0.80, Droid 0.203.0, and Qoder 1.1.29 (PASS ×5). Two

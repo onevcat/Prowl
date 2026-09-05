@@ -1,0 +1,78 @@
+{
+  "schema": 1,
+  "description": "Managed-hook contract attestation for the tier-A runtimes (docs-ai 064, #726 T0). One entry per runtime: the version its launch-scoped hook contract last passed a live sweep against, the date, the record that attested it, and the command that prints the version. Checked by `make agent-versions`; the research matrix's generated `Tier-A attestation` line is derived from this file (`make test-scripts` fails on drift). Schema and update rules: 015-t0-version-attestation.md.",
+  "runtimes": [
+    {
+      "runtime": "claude",
+      "name": "Claude Code",
+      "binary": "claude",
+      "version_command": ["claude", "--version"],
+      "attested_version": "2.1.245",
+      "attested_on": "2026-08-26",
+      "record": "011-s3c-action.md"
+    },
+    {
+      "runtime": "codex",
+      "name": "Codex",
+      "binary": "codex",
+      "version_command": ["codex", "--version"],
+      "attested_version": "0.149.1",
+      "attested_on": "2026-08-26",
+      "record": "011-s3c-action.md"
+    },
+    {
+      "runtime": "copilot",
+      "name": "GitHub Copilot CLI",
+      "binary": "copilot",
+      "version_command": ["copilot", "--version"],
+      "attested_version": "1.0.80",
+      "attested_on": "2026-08-26",
+      "record": "011-s3c-action.md"
+    },
+    {
+      "runtime": "droid",
+      "name": "Factory Droid",
+      "binary": "droid",
+      "version_command": ["droid", "--version"],
+      "attested_version": "0.203.0",
+      "attested_on": "2026-08-26",
+      "record": "011-s3c-action.md"
+    },
+    {
+      "runtime": "qodercli",
+      "name": "Qoder CLI",
+      "binary": "qodercli",
+      "version_command": ["qodercli", "--version"],
+      "attested_version": "1.1.29",
+      "attested_on": "2026-08-26",
+      "record": "011-s3c-action.md"
+    },
+    {
+      "runtime": "pi",
+      "name": "Pi",
+      "binary": "pi",
+      "version_command": ["pi", "--version"],
+      "attested_version": "0.84.3",
+      "attested_on": "2026-08-26",
+      "record": "011-s3c-action.md"
+    },
+    {
+      "runtime": "omp",
+      "name": "Oh My Pi",
+      "binary": "omp",
+      "version_command": ["omp", "--version"],
+      "attested_version": "18.0.6",
+      "attested_on": "2026-08-26",
+      "record": "011-s3c-action.md"
+    },
+    {
+      "runtime": "opencode",
+      "name": "OpenCode",
+      "binary": "opencode",
+      "version_command": ["opencode", "--version"],
+      "attested_version": "1.18.23",
+      "attested_on": "2026-08-26",
+      "record": "011-s3c-action.md"
+    }
+  ]
+}
