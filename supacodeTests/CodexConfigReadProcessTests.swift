@@ -43,17 +43,19 @@ import Testing
     let root = temporaryDirectory("codex-absent-notifier")
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: root) }
-    let executable = root.appending(path: "no-notifier.py")
+    let executable = root.appending(path: "no-notifier.sh")
     try """
-    #!/usr/bin/python3
-    import sys
-    for _ in range(3):
-        sys.stdin.readline()
-    print('{"id":2,"result":{"config":\(config)}}', flush=True)
-    sys.stdin.read()
+    #!/bin/sh
+    for request in 1 2 3; do
+      IFS= read -r line || exit 1
+    done
+    printf '%s\\n' '{"id":2,"result":{"config":\(config)}}'
+    while IFS= read -r line; do :; done
     """.write(to: executable, atomically: true, encoding: .utf8)
     try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: executable.path)
-    let process = CodexConfigReadProcess(executableURL: executable, temporaryBaseDirectory: root, timeout: 2)
+    // This asserts response semantics, not startup latency under parallel CI load. Keep the
+    // server open using shell builtins and allow the same budget as the other response fixtures.
+    let process = CodexConfigReadProcess(executableURL: executable, temporaryBaseDirectory: root, timeout: 15)
     let transcript = try await process.query(
       CodexConfigQuery(kind: .base, codexHome: root, cwd: root, overrides: [])
     )
