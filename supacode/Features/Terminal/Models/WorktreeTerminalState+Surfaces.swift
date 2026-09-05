@@ -37,13 +37,16 @@ extension WorktreeTerminalState {
 
   func closeProtectionCandidates(surfaceIDs: [UUID]) -> [TerminalCloseProtectionCandidate] {
     let now = Date()
+    let uptime = ProcessInfo.processInfo.systemUptime
     return surfaceIDs.map { surfaceID in
       let agentState = surfaceAgentStates[surfaceID]
       let runningDuration = surfaceRunningStartedAtById[surfaceID].map { now.timeIntervalSince($0) }
       return TerminalCloseProtectionCandidate(
         hasAgent: agentState?.detectedAgent != nil,
         agentDisplayState: agentState?.displayState,
-        commandRunningDuration: runningDuration
+        commandRunningDuration: runningDuration,
+        editingAge: surfaces[surfaceID]?.lastEditingAt.map { uptime - $0 },
+        hasMarkedText: surfaces[surfaceID]?.hasMarkedText() ?? false
       )
     }
   }

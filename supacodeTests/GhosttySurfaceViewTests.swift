@@ -7,6 +7,43 @@ import Testing
 
 @MainActor
 struct GhosttySurfaceViewTests {
+  @Test func editingAndCompositionAreLocalToEachSurface() {
+    let runtime = GhosttyRuntime()
+    let edited = GhosttySurfaceView(
+      runtime: runtime, workingDirectory: nil, context: GHOSTTY_SURFACE_CONTEXT_TAB,
+      skipsSurfaceCreationForTesting: true
+    )
+    let sibling = GhosttySurfaceView(
+      runtime: runtime, workingDirectory: nil, context: GHOSTTY_SURFACE_CONTEXT_TAB,
+      skipsSurfaceCreationForTesting: true
+    )
+    let state = WorktreeTerminalState(
+      runtime: runtime,
+      worktree: Worktree(
+        id: "/tmp/input-test", name: "input-test", detail: "",
+        workingDirectory: URL(fileURLWithPath: "/tmp/input-test"),
+        repositoryRootURL: URL(fileURLWithPath: "/tmp")
+      ),
+      skipsSurfaceCreationForTesting: true
+    )
+    state.surfaces[edited.id] = edited
+    state.surfaces[sibling.id] = sibling
+    #expect(edited.lastEditingAt == nil)
+    edited.setMarkedText("draft", selectedRange: NSRange(location: 5, length: 0), replacementRange: NSRange())
+    #expect(edited.hasMarkedText())
+    #expect(edited.lastEditingAt != nil)
+    #expect(sibling.lastEditingAt == nil)
+    #expect(!sibling.hasMarkedText())
+    let candidates = state.closeProtectionCandidates(surfaceIDs: [edited.id, sibling.id])
+    #expect(candidates[0].hasMarkedText)
+    #expect(candidates[0].editingAge != nil)
+    #expect(candidates[1].editingAge == nil)
+    #expect(TerminalCloseConfirmationPolicy.decision(for: candidates).protectedPaneCount == 1)
+    edited.unmarkText()
+    #expect(!edited.hasMarkedText())
+    #expect(edited.lastEditingAt != nil)
+  }
+
   @Test func mainMenuExactMatchRejectsShiftVariantOfCommandComma() throws {
     let menu = NSMenu()
     let item = NSMenuItem(title: "Settings", action: nil, keyEquivalent: ",")

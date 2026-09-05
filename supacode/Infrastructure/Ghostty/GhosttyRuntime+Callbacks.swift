@@ -251,6 +251,7 @@ extension GhosttyRuntime {
     guard let value = NSPasteboard.ghostty(location)?.getOpinionatedStringContents() else {
       return false
     }
+    if !value.isEmpty { bridge.surfaceView?.recordEditingActivity() }
     value.withCString { ptr in
       ghostty_surface_complete_clipboard_request(surface, ptr, state, false)
     }
@@ -269,6 +270,7 @@ extension GhosttyRuntime {
     guard let bridge = surfaceBridge(fromUserdata: userdata), let surface = bridge.surface else {
       return
     }
+    if !value.isEmpty { bridge.surfaceView?.recordEditingActivity() }
     value.withCString { ptr in
       ghostty_surface_complete_clipboard_request(surface, ptr, state, true)
     }
