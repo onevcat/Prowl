@@ -274,12 +274,18 @@ nonisolated private func hasOMPAskPrompt(_ content: String) -> Bool {
 }
 
 nonisolated private func hasOMPWorkingLine(_ content: String) -> Bool {
-  content.split(separator: "\n", omittingEmptySubsequences: false).contains { line in
-    let trimmed = line.trimmingCharacters(in: .whitespaces)
-    return isPiWorkingText(trimmed)
-      || hasOMPInterruptHint(trimmed)
-      || hasLabeledBrailleSpinner(trimmed)
-  }
+  let lines = content.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+    .filter { !$0.isEmpty }
+  return lines.contains { line in
+    isPiWorkingText(line) || hasOMPInterruptHint(line) || hasLabeledBrailleSpinner(line)
+  } || lines.suffix(5).contains(where: hasOMPLeadingEscapeHint)
+}
+
+nonisolated private func hasOMPLeadingEscapeHint(_ line: String) -> Bool {
+  // OMP 18.1.10 puts its theme's Esc symbol before the loader message.
+  let parts = line.split(maxSplits: 1, whereSeparator: \.isWhitespace)
+  guard parts.count == 2, ["󱊷", "⎋", "esc"].contains(String(parts[0])) else { return false }
+  return piWorkingMessages.contains(String(parts[1]))
 }
 
 nonisolated private let piWorkingMessages: Set<String> = ["Working...", "Working…", "Interrupting…"]
@@ -387,15 +393,33 @@ nonisolated private func detectOpenCode(_ content: String) -> AgentRawState {
 
 nonisolated private func detectCopilot(_ content: String) -> AgentRawState {
   let lower = content.lowercased()
-  if lower.contains("│ do you want")
+  let lines = lower.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+    .filter { !$0.isEmpty }
+  if hasCopilotSelectionPrompt(lines)
+    || lower.contains("│ do you want")
     || (lower.contains("confirm with") && lower.contains("enter"))
   {
     return .blocked
   }
-  if lower.contains("esc to cancel") {
+  let hasWorkingFooter = lines.suffix(5).contains { line in
+    line.split(whereSeparator: \.isWhitespace).prefix(4)
+      .elementsEqual(["◎", "working", "esc", "interrupt"])
+  }
+  if hasWorkingFooter || lower.contains("esc to cancel") {
     return .working
   }
   return .idle
+}
+
+nonisolated private func hasCopilotSelectionPrompt(_ lines: [String]) -> Bool {
+  // The trust/permission picker shares "esc to cancel" with the legacy working footer.
+  // Require live dialog chrome so a completed choice in transcript history does not block.
+  guard lines.last?.hasPrefix("╰") == true,
+    lines.suffix(3).contains(where: { $0.contains("enter to select") && $0.contains("esc to cancel") })
+  else { return false }
+  return lines.suffix(16).contains { line in
+    line.range(of: #"^│\s*❯\s*\d+\."#, options: .regularExpression) != nil
+  }
 }
 
 nonisolated private func detectKimi(_ content: String) -> AgentRawState {

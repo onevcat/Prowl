@@ -60,8 +60,12 @@ at a `~/.grok/` install (so Cursor's own `agent` entrypoint stays Cursor).
    `Async agents · N agent(s) running`, and multi-job `Async agents · background`
    layouts carry the same signal; completed, paused, and failed cards use static
    glyphs and remain idle. Other agent families keep their own patterns (including
-   Oh My Pi's `Working… ⟦esc⟧` loader, braille frames, symbol cycles, Cursor's
-   hexagons, Kimi's moon phases, etc.).
+   Oh My Pi's `Working… ⟦esc⟧` loader and bottom-of-screen `󱊷 Working…`
+   (also `⎋`/`esc`) prefix form, braille frames, symbol cycles, Cursor's
+   hexagons, Kimi's moon phases, etc.). Copilot recognizes the bottom
+   `◎ Working esc interrupt` footer. Its live boxed numbered choices with
+   `enter to select · esc to cancel` are **Blocked**, including folder trust;
+   that picker takes precedence over the older `esc to cancel` working cue.
    Claude's live status row (`● <label>… (<elapsed> · …)`) accepts a multi-word
    label and a compound elapsed segment such as `28m 34s` or `1h 4m 2s`, so a turn
    keeps reporting **Working** after it passes a minute.
