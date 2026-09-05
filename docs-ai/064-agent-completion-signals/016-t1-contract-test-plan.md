@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | T1 implemented and verified 2026-09-05; scoped baseline published; merge pending; D2 GUI acceptance remains separate |
 | **Anchor date** | 2026-09-05 |
-| **Primary PR** | [#767](https://github.com/onevcat/Prowl/pull/767) (T1a) |
+| **Primary PR** | [#767](https://github.com/onevcat/Prowl/pull/767) (inventory/live); [#769](https://github.com/onevcat/Prowl/pull/769) (closure, open) |
 | **Related** | [#726](https://github.com/onevcat/Prowl/issues/726), [T0](015-t0-version-attestation.md), [release plan](../063-agent-workflows/release-plan.md), [operating runbook](agent-contracts-runbook.md) |
 
 ## Decision to make
