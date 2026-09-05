@@ -188,6 +188,7 @@ struct AgentsQuickLaunchButton: View {
 /// (recommended profile first) so the shared purpose is stated once instead
 /// of repeated per row, and the manage entry closes the list.
 private struct AgentsPopoverContent: View {
+  @Dependency(FeatureFlags.self) private var featureFlags
   let capsule: AgentsCapsuleState?
   let launcherItems: [AgentsLauncherItem]
   let workflowsWorktreeID: Worktree.ID?
@@ -269,7 +270,7 @@ private struct AgentsPopoverContent: View {
     .task { await AgentRuntimeAvailabilityProbe.refresh() }
     // Workflows re-list on every open so file edits show without a relaunch.
     .task {
-      guard let workflowsWorktreeID else { return }
+      guard featureFlags.workflowUI, let workflowsWorktreeID else { return }
       workflowItems = workflowStartClient.catalog(workflowsWorktreeID)
     }
   }

@@ -162,6 +162,32 @@ struct AppFeatureWorkflowNoticeTests {
     #expect(contextRequests.value == 0)
   }
 
+  @Test func hiddenWorkflowUIBlocksNavigationAndNotices() async {
+    let worktree = makeWorktree(id: "selected")
+    var repositories = RepositoriesFeature.State(repositories: [makeRepository(worktrees: [worktree])])
+    repositories.selection = .worktree(worktree.id)
+    let requests = LockIsolated(0)
+    let store = TestStore(initialState: AppFeature.State(repositories: repositories)) {
+      AppFeature()
+    } withDependencies: {
+      $0.featureFlags = FeatureFlags(environment: [:])
+      $0.workflowStartClient.context = { _, _, _ in
+        requests.withValue { $0 += 1 }
+        return nil
+      }
+      $0.workflowRuntimeClient.notify = { _, _ in
+        requests.withValue { $0 += 1 }
+      }
+    }
+    await store.send(
+      .openWorkflowStart(
+        workflowKey: "user/review", worktreeID: worktree.id, sourceSurfaceID: nil, forceSheet: true))
+    await store.send(.workflowRuns(.delegate(.notice(makeNotice(kind: .completed, worktree: worktree)))))
+    #expect(requests.value == 0)
+    #expect(store.state.workflowStart == nil)
+    #expect(store.state.repositories.statusToast == nil)
+  }
+
   private func makeNotice(
     kind: WorkflowRunNotice.Kind,
     worktree: Worktree

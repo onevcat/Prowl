@@ -2,6 +2,7 @@ import ComposableArchitecture
 import SwiftUI
 
 struct SettingsView: View {
+  @Dependency(FeatureFlags.self) private var featureFlags
   @Bindable var store: StoreOf<AppFeature>
   @Bindable var settingsStore: StoreOf<SettingsFeature>
   @Environment(\.dismiss) private var dismiss
@@ -44,8 +45,10 @@ struct SettingsView: View {
             .tag(SettingsSection.profiles)
           Label("CLI & Skills", systemImage: "terminal")
             .tag(SettingsSection.commandLineTool)
-          Label("Workflows", systemImage: "point.3.connected.trianglepath.dotted")
-            .tag(SettingsSection.workflows)
+          if featureFlags.workflowUI {
+            Label("Workflows", systemImage: "point.3.connected.trianglepath.dotted")
+              .tag(SettingsSection.workflows)
+          }
         }
 
         Section("Repositories") {
@@ -141,11 +144,13 @@ struct SettingsView: View {
         }
       case .workflows:
         SettingsDetailView {
-          if let workflowsStore = settingsStore.scope(state: \.workflows, action: \.workflows) {
-            WorkflowsSettingsView(store: workflowsStore)
-          } else {
-            ProgressView()
-              .frame(maxWidth: .infinity, maxHeight: .infinity)
+          if featureFlags.workflowUI {
+            if let workflowsStore = settingsStore.scope(state: \.workflows, action: \.workflows) {
+              WorkflowsSettingsView(store: workflowsStore)
+            } else {
+              ProgressView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
           }
         }
       case .commandLineTool:
@@ -186,7 +191,7 @@ struct SettingsView: View {
     .frame(minWidth: 800, minHeight: 600)
     .disabled(store.workflowStartFromSettings)
     .overlay {
-      if store.workflowStartFromSettings,
+      if featureFlags.workflowUI, store.workflowStartFromSettings,
         let workflowStartStore = store.scope(state: \.workflowStart, action: \.workflowStart.presented)
       {
         WorkflowStartOverlayView(store: workflowStartStore)

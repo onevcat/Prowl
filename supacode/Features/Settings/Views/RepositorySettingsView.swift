@@ -4,6 +4,7 @@ import Sharing
 import SwiftUI
 
 struct RepositorySettingsView: View {
+  @Dependency(FeatureFlags.self) private var featureFlags
   @Bindable var store: StoreOf<RepositorySettingsFeature>
   @State private var isBranchPickerPresented = false
   @State private var branchSearchText = ""
@@ -288,7 +289,9 @@ struct RepositorySettingsView: View {
           }
         }
 
-        WorkflowSettingsSections(store: workflowsStore, showsIntroduction: false)
+        if featureFlags.workflowUI {
+          WorkflowSettingsSections(store: workflowsStore, showsIntroduction: false)
+        }
 
         Section {
           ScriptEnvironmentRow(
@@ -388,8 +391,10 @@ struct RepositorySettingsView: View {
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
       .task {
         store.send(.task)
-        store.send(.workflowsAppeared)
-        workflowsStore.send(.task)
+        if featureFlags.workflowUI {
+          store.send(.workflowsAppeared)
+          workflowsStore.send(.task)
+        }
         await githubIdentityViewModel.load()
       }
       .alert($workflowsStore.scope(state: \.alert, action: \.alert))
@@ -404,7 +409,9 @@ struct RepositorySettingsView: View {
         }
       }
     } destination: { detailStore in
-      WorkflowSettingsDetailView(store: detailStore)
+      if featureFlags.workflowUI {
+        WorkflowSettingsDetailView(store: detailStore)
+      }
     }
     .onDisappear { workflowsStore.send(.teardown) }
   }

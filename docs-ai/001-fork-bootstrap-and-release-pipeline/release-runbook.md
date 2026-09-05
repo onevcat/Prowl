@@ -73,6 +73,22 @@ make build-app
 
 ## Release Workflow
 
+### Workflow UI release scope
+
+For the next public release, ship the merged Agent Island and runtime detection improvements;
+action bundles, handoff migration, and adversarial review remain deferred. Follow the
+[workflow release scope](../063-agent-workflows/release-plan.md).
+
+- Launch the candidate without `PROWL_WORKFLOW_UI`: no workflow sections, launch rows,
+  status controls, role labels, or workflow skill row should appear in the UI.
+- A fresh process with `PROWL_WORKFLOW_UI=1` restores the development UI. This variable is
+  runtime-only; do not set it in distribution defaults or turn it into a build flag.
+- Confirm the CLI still lists/validates/runs workflows and exposes the bundled workflow skill.
+  Keep workflows out of this release's advertised UI features; do not require completion of
+  deferred action/D3/D2 work to release the hidden-UI candidate.
+- Keep normal signing/notarization, version checks, and runtime contract verification below.
+  Surface these results in maintainer approval before publishing.
+
 ### Agent contract release check
 
 Before every public release, before bumping the version or creating a tag, follow the
@@ -94,7 +110,8 @@ Use the owner's existing DeepSeek V4 Flash configuration for compatible runtimes
   required check needs resolution or an explicit owner-approved release-scope exception,
   recorded in the release plan. It must not be silently treated as success.
 - Add targeted Debug workflow E2E for workflow behavior changes and important release
-  acceptance; R2b/D3 handoff requires first built-in E2E; R3/D2 adds review-loop E2E.
+  acceptance. D3 handoff and D2 review require their own E2E when they ship; they are not
+  acceptance gates for the intervening release with workflow UI hidden.
 
 The `/release` skill surfaces this reminder. Direct invocation of `scripts/release.sh` does
 not currently enforce T1; maintainers running the script must complete this check first.

@@ -241,6 +241,7 @@ struct SettingsFeature {
     case cliInstallCompleted(CLIInstallResultMessage)
   }
 
+  @Dependency(FeatureFlags.self) private var featureFlags
   @Dependency(AnalyticsClient.self) private var analyticsClient
   @Dependency(SystemNotificationClient.self) private var systemNotificationClient
   @Dependency(NotificationSoundClient.self) private var notificationSoundClient
@@ -531,7 +532,7 @@ struct SettingsFeature {
         return .none
 
       case .setSelection(let selection):
-        let resolvedSelection = selection ?? .general
+        let resolvedSelection = selection == .workflows && !featureFlags.workflowUI ? .profiles : selection ?? .general
         state.selection = resolvedSelection
         // Owned here rather than in AppFeature so `ifLet` observes the removal and cancels an
         // in-flight link effect (or the Workflows page's directory watcher) instead of letting

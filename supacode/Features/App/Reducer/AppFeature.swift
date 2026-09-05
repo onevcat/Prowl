@@ -118,6 +118,7 @@ struct AppFeature {
   @Dependency(AnalyticsClient.self) var analyticsClient
   @Dependency(\.date.now) var now
   @Dependency(RepositoryPersistenceClient.self) var repositoryPersistence
+  @Dependency(FeatureFlags.self) var featureFlags
   @Dependency(WorkspaceClient.self) var workspaceClient
   @Dependency(SettingsWindowClient.self) var settingsWindowClient
   @Dependency(AppLifecycleClient.self) var appLifecycleClient
@@ -812,6 +813,7 @@ struct AppFeature {
         return openSettingsEffect(selecting: .profiles)
 
       case .openWorkflowDetails(let item, let worktreeID):
+        guard featureFlags.workflowUI else { return .none }
         let selection: SettingsSection
         let load: Effect<Action>
         let show: Effect<Action>
@@ -1154,6 +1156,7 @@ struct AppFeature {
         return reduceCommandPaletteAction(action, state: &state)
 
       case .workflowRuns(.delegate(.notice(let notice))):
+        guard featureFlags.workflowUI else { return .none }
         guard let worktree = state.repositories.worktree(for: notice.worktreeID) else {
           return .none
         }

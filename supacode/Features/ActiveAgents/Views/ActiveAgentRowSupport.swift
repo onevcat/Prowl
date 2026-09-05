@@ -39,6 +39,7 @@ enum ActiveAgentRowPresentation {
 }
 
 struct ActiveAgentRowContextMenu: View {
+  @Dependency(FeatureFlags.self) private var featureFlags
   let entry: ActiveAgentEntry
   let directory: URL?
   let send: (ActiveAgentsFeature.Action) -> Void
@@ -51,7 +52,9 @@ struct ActiveAgentRowContextMenu: View {
     }
     .help("Save this agent's progress and hand the task off to another agent")
 
-    runWorkflowMenu
+    if featureFlags.workflowUI {
+      runWorkflowMenu
+    }
 
     Button("Mark as Read") {
       send(.markAsReadTapped(entry.id))
