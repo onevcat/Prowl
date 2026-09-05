@@ -14,6 +14,9 @@ struct ShortcutsSettingsView: View {
   }
 
   @Bindable var store: StoreOf<SettingsFeature>
+  let effectiveKeybindings: ResolvedKeybindingMap
+  let customCommands: [EffectiveCustomCommand]
+  let islandHotKeyRegistrationFailure: Keybinding?
 
   @State private var searchText = ""
   @State private var recordingCommandID: String?
@@ -22,7 +25,7 @@ struct ShortcutsSettingsView: View {
   @State private var pendingConflict: ShortcutConflict?
   @State private var pendingResetConflict: ResetConflict?
   @State private var pendingOverride: PendingOverride?
-  @State private var focusedConflictCommandID: String?
+  @State private var focusedCommandID: String?
   @State private var hoveredRecorderCommandID: String?
   private let keyTokenResolver = ShortcutKeyTokenResolver()
 
@@ -121,6 +124,11 @@ struct ShortcutsSettingsView: View {
     .onDisappear {
       stopRecorderMonitor()
     }
+    .task(id: store.shortcutNavigationTargetCommandID) {
+      guard let commandID = store.shortcutNavigationTargetCommandID else { return }
+      focusCommand(commandID)
+      store.send(.shortcutNavigationTargetConsumed)
+    }
     .alert(
       "Shortcut Conflict",
       isPresented: isConflictAlertPresented,
@@ -165,6 +173,10 @@ struct ShortcutsSettingsView: View {
     let source = resolvedBindings.binding(for: command.id)?.source ?? .appDefault
     let hasOverride = store.keybindingUserOverrides.overrides[command.id] != nil
     let isHoveringRecorder = hoveredRecorderCommandID == command.id
+    let availabilityMessage = availabilityMessage(
+      commandID: command.id,
+      resolvedBinding: resolvedBinding
+    )
 
     VStack(alignment: .leading, spacing: 6) {
       HStack(alignment: .center, spacing: 12) {
@@ -174,8 +186,12 @@ struct ShortcutsSettingsView: View {
           .frame(minWidth: ShortcutTableLayout.commandColumnMinWidth, maxWidth: .infinity, alignment: .leading)
           .layoutPriority(1)
 
-        sourceChip(source, resolvedBinding: resolvedBinding)
-          .frame(width: ShortcutTableLayout.statusColumnWidth, alignment: .leading)
+        sourceChip(
+          source,
+          resolvedBinding: resolvedBinding,
+          isUnavailable: availabilityMessage != nil
+        )
+        .frame(width: ShortcutTableLayout.statusColumnWidth, alignment: .leading)
 
         shortcutRecorderField(
           commandID: command.id,
@@ -233,13 +249,17 @@ struct ShortcutsSettingsView: View {
         Text(invalid)
           .font(.caption)
           .foregroundStyle(.red)
+      } else if let availabilityMessage {
+        Text(availabilityMessage)
+          .font(.caption)
+          .foregroundStyle(.red)
       }
     }
     .padding(.vertical, 2)
   }
 
   private func rowBackground(for commandID: String) -> some View {
-    let isFocused = focusedConflictCommandID == commandID
+    let isFocused = focusedCommandID == commandID
     return RoundedRectangle(cornerRadius: 6)
       .fill(isFocused ? Color.orange.opacity(0.15) : .clear)
   }
@@ -317,7 +337,30 @@ struct ShortcutsSettingsView: View {
     return Color(nsColor: .separatorColor)
   }
 
-  private func sourceChip(_ source: KeybindingSource, resolvedBinding: Keybinding?) -> some View {
+  private func sourceChip(
+    _ source: KeybindingSource,
+    resolvedBinding: Keybinding?,
+    isUnavailable: Bool
+  ) -> some View {
+    if isUnavailable {
+      return AnyView(
+        Text("Unavailable")
+          .font(.caption2.monospaced())
+          .lineLimit(1)
+          .minimumScaleFactor(0.8)
+          .frame(width: ShortcutTableLayout.statusChipWidth, height: ShortcutTableLayout.statusChipHeight)
+          .foregroundStyle(AnyShapeStyle(Color.red))
+          .background(
+            Capsule()
+              .fill(Color.red.opacity(0.2))
+          )
+          .overlay(
+            Capsule()
+              .strokeBorder(Color.red.opacity(0.35), lineWidth: 1)
+          )
+      )
+    }
+
     let isDefault = source == .appDefault
     guard !isDefault else {
       return AnyView(
@@ -449,7 +492,7 @@ struct ShortcutsSettingsView: View {
 
   private func toggleRecording(for commandID: String) {
     invalidMessageByCommandID[commandID] = nil
-    focusedConflictCommandID = nil
+    focusedCommandID = nil
     if recordingCommandID == commandID {
       recordingCommandID = nil
       return
@@ -460,7 +503,7 @@ struct ShortcutsSettingsView: View {
   private func clearShortcut(for commandID: String) {
     store.send(.clearShortcutButtonTapped(commandID: commandID))
     invalidMessageByCommandID[commandID] = nil
-    focusedConflictCommandID = nil
+    focusedCommandID = nil
     stopRecording()
   }
 
@@ -522,9 +565,17 @@ struct ShortcutsSettingsView: View {
 
   private func applyRecordedBinding(_ binding: Keybinding, to commandID: String) {
     invalidMessageByCommandID[commandID] = nil
-    focusedConflictCommandID = nil
+    focusedCommandID = nil
 
     guard let command = editableCommands.first(where: { $0.id == commandID }) else {
+      stopRecording()
+      return
+    }
+
+    if let conflictingCommand = activeCustomCommandConflict(for: binding) {
+      invalidMessageByCommandID[commandID] =
+        "“\(binding.display)” is used by the \(conflictingCommand.source.displayTitle.lowercased()) "
+        + "custom command “\(conflictingCommand.command.resolvedTitle)”. Choose another shortcut."
       stopRecording()
       return
     }
@@ -548,6 +599,34 @@ struct ShortcutsSettingsView: View {
       replaceConflictCommandID: nil
     )
     stopRecording()
+  }
+
+  private func availabilityMessage(
+    commandID: String,
+    resolvedBinding: Keybinding?
+  ) -> String? {
+    guard let resolvedBinding else { return nil }
+    if let command = activeCustomCommandConflict(for: resolvedBinding) {
+      return
+        "Unavailable while the \(command.source.displayTitle.lowercased()) custom command "
+        + "“\(command.command.resolvedTitle)” uses \(resolvedBinding.display). Custom Commands take precedence."
+    }
+    if commandID == AppShortcuts.CommandID.toggleAgentIsland,
+      islandHotKeyRegistrationFailure == resolvedBinding
+    {
+      return "macOS could not register this shortcut globally. Choose another shortcut."
+    }
+    return nil
+  }
+
+  private func activeCustomCommandConflict(
+    for binding: Keybinding
+  ) -> EffectiveCustomCommand? {
+    ShortcutConflictDetector.firstActiveCustomCommandConflict(
+      binding: binding,
+      customCommands: customCommands,
+      resolvedKeybindings: effectiveKeybindings
+    )
   }
 
   private func firstConflict(
@@ -602,9 +681,14 @@ struct ShortcutsSettingsView: View {
   }
 
   private func focusConflictCommand(_ conflict: ShortcutConflict) {
-    focusedConflictCommandID = conflict.existingCommandID
-    searchText = conflict.existingCommandTitle
     clearPendingConflict()
+    store.send(.showShortcutButtonTapped(commandID: conflict.existingCommandID))
+  }
+
+  private func focusCommand(_ commandID: String) {
+    guard let command = editableCommands.first(where: { $0.id == commandID }) else { return }
+    focusedCommandID = commandID
+    searchText = command.title
   }
 
   private func saveOverride(
@@ -657,8 +741,8 @@ struct ShortcutsSettingsView: View {
     if let recordingCommandID, commandIDs.contains(recordingCommandID) {
       stopRecording()
     }
-    if let focusedConflictCommandID, commandIDs.contains(focusedConflictCommandID) {
-      self.focusedConflictCommandID = nil
+    if let focusedCommandID, commandIDs.contains(focusedCommandID) {
+      self.focusedCommandID = nil
     }
     clearPendingResetConflict()
   }

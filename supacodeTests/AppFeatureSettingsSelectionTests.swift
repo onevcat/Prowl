@@ -163,6 +163,22 @@ struct AppFeatureSettingsSelectionTests {
     }
   }
 
+  @Test func showingShortcutNavigatesThroughAppSettingsSelection() async {
+    var state = AppFeature.State(settings: SettingsFeature.State())
+    state.settings.selection = .notifications
+    let commandID = AppShortcuts.CommandID.toggleAgentIsland
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    }
+
+    await store.send(.settings(.showShortcutButtonTapped(commandID: commandID))) {
+      $0.settings.shortcutNavigationTargetCommandID = commandID
+    }
+    await store.receive(\.settings.setSelection) {
+      $0.settings.selection = .shortcuts
+    }
+  }
+
   @Test(.dependencies) func openAgentProfilesSettingsSelectsProfiles() async {
     let shown = LockIsolated(false)
     var state = AppFeature.State(settings: SettingsFeature.State())

@@ -93,6 +93,7 @@ enum AppShortcuts {
     static let openPullRequest = "open_pull_request"
     static let toggleLeftSidebar = "toggle_left_sidebar"
     static let toggleActiveAgentsPanel = "toggle_active_agents_panel"
+    static let toggleAgentIsland = "toggle_agent_island"
     static let selectNextActiveAgent = "select_next_active_agent"
     static let selectPreviousActiveAgent = "select_previous_active_agent"
     static let refreshWorktrees = "refresh_worktrees"
@@ -169,7 +170,7 @@ enum AppShortcuts {
     let id: String
     let title: String
     let scope: Scope
-    let shortcut: AppShortcut
+    let shortcut: AppShortcut?
   }
 
   struct CustomCommandOverrideConflict: Equatable {
@@ -430,6 +431,12 @@ enum AppShortcuts {
       title: "Toggle Active Agents Panel",
       scope: .configurableAppAction,
       shortcut: toggleActiveAgentsPanel
+    ),
+    .init(
+      id: CommandID.toggleAgentIsland,
+      title: "Toggle Agent Island",
+      scope: .configurableAppAction,
+      shortcut: nil
     ),
     .init(
       id: CommandID.selectNextActiveAgent,
@@ -962,7 +969,7 @@ enum AppShortcuts {
     }
 
     for (commandID, _) in ghosttyManagedActionBindings {
-      if let defaultUnbind = binding(for: commandID)?.shortcut.ghosttyUnbindArgument {
+      if let defaultUnbind = binding(for: commandID)?.shortcut?.ghosttyUnbindArgument {
         appendUnbindArgument(defaultUnbind)
       }
     }

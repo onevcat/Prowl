@@ -68,13 +68,23 @@ struct SettingsView: View {
         }
       case .notifications:
         SettingsDetailView {
-          NotificationsSettingsView(store: settingsStore)
-            .navigationTitle("Notifications")
+          NotificationsSettingsView(
+            store: settingsStore,
+            islandHotKeyRegistrationFailure: store.repositories.activeAgents
+              .islandHotKeyRegistrationFailure
+          )
+          .navigationTitle("Notifications")
         }
       case .shortcuts:
         SettingsDetailView {
-          ShortcutsSettingsView(store: settingsStore)
-            .navigationTitle("Shortcuts")
+          ShortcutsSettingsView(
+            store: settingsStore,
+            effectiveKeybindings: store.resolvedKeybindings,
+            customCommands: store.selectedCustomCommands,
+            islandHotKeyRegistrationFailure: store.repositories.activeAgents
+              .islandHotKeyRegistrationFailure
+          )
+          .navigationTitle("Shortcuts")
         }
       case .worktree:
         SettingsDetailView {

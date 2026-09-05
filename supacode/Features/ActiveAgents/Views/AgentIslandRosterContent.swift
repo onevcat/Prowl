@@ -2,21 +2,26 @@ import ComposableArchitecture
 import SwiftUI
 
 struct AgentIslandRosterLayout: Equatable {
-  static let estimatedRowHeight: CGFloat = 50
-  static let maximumViewportHeight: CGFloat = 360
+  static let pageSize = AgentIslandNavigation.pageSize
 
-  let viewportHeight: CGFloat
-  let isScrollable: Bool
+  let pageIndex: Int
+  let pageCount: Int
+  let entryRange: Range<Int>
 
   static func layout(
     entryCount: Int,
-    measuredContentHeight: CGFloat?
+    requestedPageIndex: Int
   ) -> Self {
-    let estimatedContentHeight = CGFloat(entryCount) * estimatedRowHeight
-    let contentHeight = max(0, measuredContentHeight ?? estimatedContentHeight)
+    guard entryCount > 0 else {
+      return Self(pageIndex: 0, pageCount: 0, entryRange: 0..<0)
+    }
+    let pageCount = Int(ceil(Double(entryCount) / Double(pageSize)))
+    let pageIndex = min(max(0, requestedPageIndex), pageCount - 1)
+    let lowerBound = pageIndex * pageSize
     return Self(
-      viewportHeight: min(contentHeight, maximumViewportHeight),
-      isScrollable: contentHeight > maximumViewportHeight
+      pageIndex: pageIndex,
+      pageCount: pageCount,
+      entryRange: lowerBound..<min(lowerBound + pageSize, entryCount)
     )
   }
 }
@@ -27,29 +32,43 @@ struct AgentIslandRosterContent: View {
   let rowDisplays: [ActiveAgentEntry.ID: ActiveAgentRowDisplay]
   let workflowBadges: [UUID: String]
   let selectedSurfaceID: UUID?
-  @State private var measuredContentHeight: CGFloat?
 
   var body: some View {
     let layout = AgentIslandRosterLayout.layout(
       entryCount: store.entries.count,
-      measuredContentHeight: measuredContentHeight
+      requestedPageIndex: store.islandNavigation.pageIndex
     )
-    ScrollView {
-      LazyVStack(spacing: 0) {
-        ForEach(store.entries) { entry in
+    VStack(spacing: 0) {
+      VStack(spacing: 0) {
+        ForEach(Array(layout.entryRange.enumerated()), id: \.element) { visibleIndex, entryIndex in
+          let entry = store.entries[entryIndex]
           Button {
             store.send(.island(.entryTapped(entry.id)))
           } label: {
-            ActiveAgentRow(
-              entry: entry,
-              repositoryName: repositoryName(for: entry),
-              subtitle: subtitle(for: entry),
-              repositoryColor: repositoryColor(for: entry),
-              isDimmed: isDimmed(entry)
-            )
+            HStack(spacing: 4) {
+              ActiveAgentRow(
+                entry: entry,
+                repositoryName: repositoryName(for: entry),
+                subtitle: subtitle(for: entry),
+                repositoryColor: repositoryColor(for: entry),
+                isDimmed: isDimmed(entry)
+              )
+              ShortcutHintView(text: "\(visibleIndex + 1)", color: .secondary, font: .caption)
+                .monospaced()
+                .padding(.trailing, 10)
+            }
+            .background {
+              if store.islandNavigation.selectedEntryID == entry.id {
+                RoundedRectangle(cornerRadius: 7)
+                  .fill(Color.accentColor.opacity(0.24))
+                  .padding(.horizontal, 4)
+              }
+            }
           }
           .buttonStyle(.plain)
-          .help(helpText(for: entry))
+          .accessibilityValue(
+            store.islandNavigation.selectedEntryID == entry.id ? "Selected" : ""
+          )
           .contextMenu {
             ActiveAgentRowContextMenu(
               entry: entry,
@@ -59,17 +78,64 @@ struct AgentIslandRosterContent: View {
           }
         }
       }
-      .onGeometryChange(for: CGFloat.self) { proxy in
-        proxy.size.height
-      } action: { height in
-        measuredContentHeight = height
-      }
+
+      Divider()
+      keyboardFooter(layout: layout)
     }
-    .scrollIndicators(.never)
-    .scrollDisabled(!layout.isScrollable)
-    .frame(height: layout.viewportHeight)
-    .onChange(of: store.entries.count) { _, _ in
-      measuredContentHeight = nil
+  }
+
+  private func keyboardFooter(layout: AgentIslandRosterLayout) -> some View {
+    VStack(spacing: 5) {
+      if layout.pageCount > 1 {
+        HStack(spacing: 8) {
+          Button {
+            store.send(.islandMovePage(.previous))
+          } label: {
+            Label("Previous page", systemImage: "chevron.left")
+              .labelStyle(.iconOnly)
+          }
+          .buttonStyle(.borderless)
+          .disabled(layout.pageIndex == 0)
+
+          Text("\(layout.pageIndex + 1) / \(layout.pageCount)")
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(.secondary)
+
+          Button {
+            store.send(.islandMovePage(.next))
+          } label: {
+            Label("Next page", systemImage: "chevron.right")
+              .labelStyle(.iconOnly)
+          }
+          .buttonStyle(.borderless)
+          .disabled(layout.pageIndex == layout.pageCount - 1)
+        }
+        .frame(height: 24)
+      }
+
+      HStack(spacing: 14) {
+        keyboardLegend(keys: ["↑ K", "↓ J"], action: "Select")
+        if layout.pageCount > 1 {
+          keyboardLegend(keys: ["← H", "→ L"], action: "Page")
+        }
+        keyboardLegend(keys: ["↩", "Space"], action: "Open")
+      }
+      .frame(height: 24)
+    }
+    .padding(.vertical, 4)
+  }
+
+  private func keyboardLegend(keys: [String], action: String) -> some View {
+    HStack(spacing: 4) {
+      HStack(spacing: 2) {
+        ForEach(keys, id: \.self) { key in
+          ShortcutHintView(text: key, color: .primary)
+            .monospaced()
+        }
+      }
+      Text(action)
+        .font(.caption2)
+        .foregroundStyle(.secondary)
     }
   }
 
@@ -94,10 +160,9 @@ struct AgentIslandRosterContent: View {
   }
 
   private func isDimmed(_ entry: ActiveAgentEntry) -> Bool {
-    selectedSurfaceID.map { entry.surfaceID != $0 } ?? false
-  }
-
-  private func helpText(for entry: ActiveAgentEntry) -> String {
-    "Open \(entry.displayName) in Prowl"
+    if let selectedEntryID = store.islandNavigation.selectedEntryID {
+      return entry.id != selectedEntryID
+    }
+    return selectedSurfaceID.map { entry.surfaceID != $0 } ?? false
   }
 }

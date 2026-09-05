@@ -51,7 +51,8 @@ struct AgentIslandIconCluster: View {
         ForEach(projection.entries) { entry in
           AgentIslandRuntimeIcon(
             entry: entry,
-            pointSize: pointSize
+            pointSize: pointSize,
+            allowsRingAnimation: false
           )
           .transition(iconTransition)
         }
@@ -119,7 +120,18 @@ struct AgentIslandRingPresentation: Equatable {
 struct AgentIslandRuntimeIcon: View {
   let entry: ActiveAgentEntry
   let pointSize: CGFloat
+  let allowsRingAnimation: Bool
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+  init(
+    entry: ActiveAgentEntry,
+    pointSize: CGFloat,
+    allowsRingAnimation: Bool = true
+  ) {
+    self.entry = entry
+    self.pointSize = pointSize
+    self.allowsRingAnimation = allowsRingAnimation
+  }
 
   var body: some View {
     ZStack {
@@ -137,12 +149,13 @@ struct AgentIslandRuntimeIcon: View {
       .foregroundStyle(.white.opacity(0.92))
     }
     // The ring circle is one point wider in radius than the glyph budget so the glyph and the
-    // rotating ring do not touch.
+    // state ring do not touch.
     .frame(width: pointSize + 2, height: pointSize + 2)
     .overlay {
       AgentIslandStateRing(
         state: entry.displayState,
-        reduceMotion: reduceMotion
+        reduceMotion: reduceMotion,
+        allowsAnimation: allowsRingAnimation
       )
       .allowsHitTesting(false)
     }
@@ -154,15 +167,16 @@ struct AgentIslandRuntimeIcon: View {
 private struct AgentIslandStateRing: NSViewRepresentable {
   let state: AgentDisplayState
   let reduceMotion: Bool
+  let allowsAnimation: Bool
 
   func makeNSView(context: Context) -> AgentIslandStateRingView {
     let view = AgentIslandStateRingView()
-    view.update(state: state, reduceMotion: reduceMotion)
+    view.update(state: state, reduceMotion: reduceMotion, allowsAnimation: allowsAnimation)
     return view
   }
 
   func updateNSView(_ nsView: AgentIslandStateRingView, context: Context) {
-    nsView.update(state: state, reduceMotion: reduceMotion)
+    nsView.update(state: state, reduceMotion: reduceMotion, allowsAnimation: allowsAnimation)
   }
 }
 
@@ -176,6 +190,7 @@ final class AgentIslandStateRingView: NSView {
   private var rotationDuration: TimeInterval?
   private var currentState = AgentDisplayState.idle
   private var currentReduceMotion = false
+  private var currentAllowsAnimation = true
 
   override init(frame frameRect: NSRect) {
     super.init(frame: frameRect)
@@ -226,9 +241,14 @@ final class AgentIslandStateRingView: NSView {
     applyPresentation()
   }
 
-  func update(state: AgentDisplayState, reduceMotion: Bool) {
+  func update(
+    state: AgentDisplayState,
+    reduceMotion: Bool,
+    allowsAnimation: Bool = true
+  ) {
     currentState = state
     currentReduceMotion = reduceMotion
+    currentAllowsAnimation = allowsAnimation
     applyPresentation()
   }
 
@@ -236,25 +256,30 @@ final class AgentIslandStateRingView: NSView {
     animatedRingLayer.animation(forKey: Self.rotationAnimationKey) != nil
   }
 
+  var isAnimatedRingVisible: Bool {
+    !animatedRingLayer.isHidden
+  }
+
   private func applyPresentation() {
     let presentation = AgentIslandRingPresentation.presentation(for: currentState)
     let color = resolvedColor(for: currentState)
+    let presentsAnimatedRing = presentation.animates && currentAllowsAnimation
     CATransaction.begin()
     CATransaction.setDisableActions(true)
-    baseRingLayer.strokeColor = color.withAlphaComponent(presentation.animates ? 0.2 : 0.42).cgColor
-    baseRingLayer.lineWidth = presentation.animates ? 1.1 : 1
-    animatedRingLayer.isHidden = !presentation.animates
+    baseRingLayer.strokeColor = color.withAlphaComponent(presentsAnimatedRing ? 0.2 : 0.42).cgColor
+    baseRingLayer.lineWidth = presentsAnimatedRing ? 1.1 : 1
+    animatedRingLayer.isHidden = !presentsAnimatedRing
     animatedRingLayer.colors = Self.gradientAlphas.map {
       color.withAlphaComponent($0).cgColor
     }
     animatedRingLayer.locations = Self.gradientLocations
     animatedRingLayer.shadowColor = color.cgColor
-    animatedRingLayer.shadowOpacity = presentation.animates ? 0.3 : 0
+    animatedRingLayer.shadowOpacity = presentsAnimatedRing ? 0.3 : 0
     animatedRingLayer.shadowRadius = 1.4
     animatedRingLayer.shadowOffset = .zero
     CATransaction.commit()
 
-    if presentation.animates, !currentReduceMotion {
+    if presentsAnimatedRing, !currentReduceMotion {
       startRotation(duration: presentation.rotationDuration)
     } else {
       stopRotation()

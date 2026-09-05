@@ -247,6 +247,34 @@ struct SettingsFeatureTests {
     }
   }
 
+  @Test(.dependencies) func showShortcutNavigatesToAndTargetsEditableCommand() async {
+    var state = SettingsFeature.State()
+    state.selection = .notifications
+    let commandID = AppShortcuts.CommandID.toggleAgentIsland
+    let store = TestStore(initialState: state) {
+      SettingsFeature()
+    }
+
+    await store.send(.showShortcutButtonTapped(commandID: commandID)) {
+      $0.shortcutNavigationTargetCommandID = commandID
+    }
+    await store.receive(\.setSelection) {
+      $0.selection = .shortcuts
+    }
+    await store.send(.shortcutNavigationTargetConsumed) {
+      $0.shortcutNavigationTargetCommandID = nil
+    }
+  }
+
+  @Test(.dependencies) func showShortcutIgnoresFixedAndUnknownCommands() async {
+    let store = TestStore(initialState: SettingsFeature.State()) {
+      SettingsFeature()
+    }
+
+    await store.send(.showShortcutButtonTapped(commandID: AppShortcuts.CommandID.quitApplication))
+    await store.send(.showShortcutButtonTapped(commandID: "unknown_command"))
+  }
+
   @Test(.dependencies) func loadingSettingsDoesNotResetSelection() async {
     let rootURL = URL(fileURLWithPath: "/tmp/repo")
     let selection = SettingsSection.repository("repo-id")
@@ -661,12 +689,17 @@ struct SettingsFeatureTests {
     }
     await store.receive(\.delegate.settingsChanged)
     await store.send(
-      .binding(
-        .set(
-          \.agentIslandDisplayPreference,
-          .display(id: "display-uuid", name: "Studio Display")
-        )
-      )
+      .setAgentIslandFloatingPosition(displayID: "display-uuid", normalizedPosition: 0.25)
+    ) {
+      $0.agentIslandFloatingPositions.setNormalizedPosition(0.25, for: "display-uuid")
+    }
+    await store.receive(\.delegate.settingsChanged)
+    await store.send(.setAgentIslandSilentOpacity(0.6)) {
+      $0.agentIslandSilentOpacity = 0.6
+    }
+    await store.receive(\.delegate.settingsChanged)
+    await store.send(
+      .setAgentIslandDisplayPreference(.display(id: "display-uuid", name: "Studio Display"))
     ) {
       $0.agentIslandDisplayPreference = .display(id: "display-uuid", name: "Studio Display")
     }
@@ -677,6 +710,29 @@ struct SettingsFeatureTests {
       settingsFile.global.agentIslandDisplayPreference
         == .display(id: "display-uuid", name: "Studio Display")
     )
+    #expect(
+      settingsFile.global.agentIslandFloatingPositions.normalizedPosition(for: "display-uuid")
+        == 0.25
+    )
+    #expect(settingsFile.global.agentIslandSilentOpacity == 0.6)
+  }
+
+  @Test(.dependencies) func resettingAgentIslandFloatingPositionsPersists() async {
+    var initialSettings = GlobalSettings.default
+    initialSettings.agentIslandFloatingPositions.setNormalizedPosition(0.25, for: "display-uuid")
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = initialSettings }
+
+    let store = TestStore(initialState: SettingsFeature.State(settings: initialSettings)) {
+      SettingsFeature()
+    }
+
+    await store.send(.resetIslandFloatingPositionsTapped) {
+      $0.agentIslandFloatingPositions = .init()
+    }
+    await store.receive(\.delegate.settingsChanged)
+
+    #expect(settingsFile.global.agentIslandFloatingPositions.isEmpty)
   }
 
   @Test(.dependencies) func disablingAnalyticsResetsClient() async {

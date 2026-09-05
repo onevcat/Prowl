@@ -34,6 +34,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var showActiveAgentStatusInShelf: Bool
   var agentIslandEnabled: Bool
   var agentIslandDisplayPreference: AgentIslandDisplayPreference
+  var agentIslandFloatingPositions: AgentIslandFloatingPositions
+  var agentIslandSilentOpacity: Double
   var windowTintMode: WindowTintMode
   var windowTintCustomColor: TintColor
   var showRunButtonInToolbar: Bool
@@ -82,6 +84,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     showActiveAgentStatusInShelf: true,
     agentIslandEnabled: false,
     agentIslandDisplayPreference: .automatic,
+    agentIslandFloatingPositions: .init(),
+    agentIslandSilentOpacity: AgentIslandOpacityPolicy.defaultSilentOpacity,
     windowTintMode: .repositoryColor,
     windowTintCustomColor: .default,
     showRunButtonInToolbar: true,
@@ -128,6 +132,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     showActiveAgentStatusInShelf: Bool = true,
     agentIslandEnabled: Bool = false,
     agentIslandDisplayPreference: AgentIslandDisplayPreference = .automatic,
+    agentIslandFloatingPositions: AgentIslandFloatingPositions = .init(),
+    agentIslandSilentOpacity: Double = AgentIslandOpacityPolicy.defaultSilentOpacity,
     windowTintMode: WindowTintMode = .repositoryColor,
     windowTintCustomColor: TintColor = .default,
     showRunButtonInToolbar: Bool = true,
@@ -172,6 +178,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     self.showActiveAgentStatusInShelf = showActiveAgentStatusInShelf
     self.agentIslandEnabled = agentIslandEnabled
     self.agentIslandDisplayPreference = agentIslandDisplayPreference
+    self.agentIslandFloatingPositions = agentIslandFloatingPositions
+    self.agentIslandSilentOpacity = AgentIslandOpacityPolicy.normalizedSilentOpacity(agentIslandSilentOpacity)
     self.windowTintMode = windowTintMode
     self.windowTintCustomColor = windowTintCustomColor
     self.showRunButtonInToolbar = showRunButtonInToolbar
@@ -219,6 +227,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     try container.encode(showActiveAgentStatusInShelf, forKey: .showActiveAgentStatusInShelf)
     try container.encode(agentIslandEnabled, forKey: .agentIslandEnabled)
     try container.encode(agentIslandDisplayPreference, forKey: .agentIslandDisplayPreference)
+    try container.encode(agentIslandFloatingPositions, forKey: .agentIslandFloatingPositions)
+    try container.encode(agentIslandSilentOpacity, forKey: .agentIslandSilentOpacity)
     try container.encode(windowTintMode, forKey: .windowTintMode)
     try container.encode(windowTintCustomColor, forKey: .windowTintCustomColor)
     try container.encode(showRunButtonInToolbar, forKey: .showRunButtonInToolbar)
@@ -268,6 +278,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     case showActiveAgentStatusInShelf
     case agentIslandEnabled
     case agentIslandDisplayPreference
+    case agentIslandFloatingPositions
+    case agentIslandSilentOpacity
     case windowTintMode
     case windowTintCustomColor
     case showRunButtonInToolbar
@@ -371,7 +383,10 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     showActiveAgentStatusInShelf =
       try container.decodeIfPresent(Bool.self, forKey: .showActiveAgentStatusInShelf)
       ?? Self.default.showActiveAgentStatusInShelf
-    (agentIslandEnabled, agentIslandDisplayPreference) = try Self.decodeAgentIslandSettings(from: container)
+    let islandSettings = try Self.decodeAgentIslandSettings(from: container)
+    agentIslandEnabled = islandSettings.enabled
+    agentIslandDisplayPreference = islandSettings.displayPreference
+    (agentIslandFloatingPositions, agentIslandSilentOpacity) = islandSettings.floatingPresentation
     (windowTintMode, windowTintCustomColor) = try Self.decodeWindowTint(from: container)
     (shelfSpineTintFallback, shelfSpineTintFollowsRepositoryColor) = try Self.decodeShelfSpineTint(from: container)
     (externalDiffToolID, externalDiffCustomCommand) = try Self.decodeExternalDiffSettings(from: container)
@@ -385,9 +400,20 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     showNotificationDotOnDock = toolbarAndDock.showNotificationDotOnDock
   }
 
+  private struct DecodedAgentIslandSettings {
+    let enabled: Bool
+    let displayPreference: AgentIslandDisplayPreference
+    let floatingPositions: AgentIslandFloatingPositions
+    let silentOpacity: Double
+
+    var floatingPresentation: (AgentIslandFloatingPositions, Double) {
+      (floatingPositions, silentOpacity)
+    }
+  }
+
   private static func decodeAgentIslandSettings(
     from container: KeyedDecodingContainer<CodingKeys>
-  ) throws -> (Bool, AgentIslandDisplayPreference) {
+  ) throws -> DecodedAgentIslandSettings {
     let enabled =
       try container.decodeIfPresent(Bool.self, forKey: .agentIslandEnabled)
       ?? Self.default.agentIslandEnabled
@@ -395,7 +421,20 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
       try container.decodeIfPresent(
         AgentIslandDisplayPreference.self, forKey: .agentIslandDisplayPreference)
       ?? Self.default.agentIslandDisplayPreference
-    return (enabled, preference)
+    let floatingPositions =
+      try container.decodeIfPresent(
+        AgentIslandFloatingPositions.self, forKey: .agentIslandFloatingPositions)
+      ?? Self.default.agentIslandFloatingPositions
+    let silentOpacity = AgentIslandOpacityPolicy.normalizedSilentOpacity(
+      try container.decodeIfPresent(Double.self, forKey: .agentIslandSilentOpacity)
+        ?? Self.default.agentIslandSilentOpacity
+    )
+    return DecodedAgentIslandSettings(
+      enabled: enabled,
+      displayPreference: preference,
+      floatingPositions: floatingPositions,
+      silentOpacity: silentOpacity
+    )
   }
 
   private static func decodeViewSettings(

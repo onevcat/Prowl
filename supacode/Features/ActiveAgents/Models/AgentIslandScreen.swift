@@ -1,4 +1,68 @@
 import CoreGraphics
+import Foundation
+
+nonisolated struct AgentIslandFloatingPositions: Codable, Equatable, Sendable {
+  private static let centeredPosition = 0.5
+  private static let centeringTolerance = 0.0001
+
+  private var positionsByDisplayID: [String: Double] = [:]
+
+  init() {}
+
+  var isEmpty: Bool { positionsByDisplayID.isEmpty }
+
+  func normalizedPosition(for displayID: String) -> Double {
+    Self.normalized(positionsByDisplayID[displayID] ?? Self.centeredPosition)
+  }
+
+  mutating func setNormalizedPosition(_ position: Double, for displayID: String) {
+    let position = Self.normalized(position)
+    if abs(position - Self.centeredPosition) < Self.centeringTolerance {
+      positionsByDisplayID.removeValue(forKey: displayID)
+    } else {
+      positionsByDisplayID[displayID] = position
+    }
+  }
+
+  private static func normalized(_ position: Double) -> Double {
+    guard position.isFinite else { return centeredPosition }
+    return min(max(position, 0), 1)
+  }
+}
+
+nonisolated enum AgentIslandOpacityPolicy {
+  static let defaultSilentOpacity = 0.35
+  static let minimumSilentOpacity = 0.2
+  static let maximumSilentOpacity = 1.0
+  static let silenceDelay: Duration = .seconds(3)
+
+  static func normalizedSilentOpacity(_ opacity: Double) -> Double {
+    guard opacity.isFinite else { return defaultSilentOpacity }
+    return min(max(opacity, minimumSilentOpacity), maximumSilentOpacity)
+  }
+
+  static func opacity(
+    isFloating: Bool,
+    isSilent: Bool,
+    isRosterExpanded: Bool,
+    hasAttentionEntries: Bool,
+    silentOpacity: Double
+  ) -> Double {
+    guard isFloating, isSilent, !isRosterExpanded, !hasAttentionEntries else { return 1 }
+    return normalizedSilentOpacity(silentOpacity)
+  }
+
+  static func shouldEnterSilentState(
+    isFloating: Bool,
+    isRosterExpanded: Bool,
+    hasAttentionEntries: Bool,
+    isHovering: Bool,
+    isControlPresented: Bool
+  ) -> Bool {
+    isFloating && !isRosterExpanded && !hasAttentionEntries && !isHovering
+      && !isControlPresented
+  }
+}
 
 struct AgentIslandScreenDescriptor: Equatable, Identifiable {
   let id: String
@@ -9,6 +73,7 @@ struct AgentIslandScreenDescriptor: Equatable, Identifiable {
   let notchFrame: CGRect?
 
   var hasNotch: Bool { notchFrame != nil }
+  var menuBarHeight: CGFloat { max(0, frame.maxY - visibleFrame.maxY) }
 }
 
 struct AgentIslandNotchLayout: Equatable {
@@ -40,7 +105,7 @@ struct AgentIslandNotchLayout: Equatable {
 }
 
 enum AgentIslandScreenLayout {
-  static let floatingTopOffset: CGFloat = 8
+  static let floatingSideInset: CGFloat = 8
 
   static func notchFrame(
     screenFrame: CGRect,
@@ -94,15 +159,38 @@ enum AgentIslandScreenLayout {
 
   static func panelFrame(
     contentSize: CGSize,
-    screen: AgentIslandScreenDescriptor
+    screen: AgentIslandScreenDescriptor,
+    floatingHorizontalPosition: Double = 0.5
   ) -> CGRect {
-    let top = screen.hasNotch ? screen.frame.maxY : screen.visibleFrame.maxY - floatingTopOffset
-    let anchorX = screen.notchFrame?.midX ?? screen.frame.midX
+    let top = screen.frame.maxY
+    let anchorX =
+      screen.notchFrame?.midX
+      ?? floatingAnchorX(
+        contentWidth: contentSize.width,
+        normalizedPosition: floatingHorizontalPosition,
+        screen: screen
+      )
     return CGRect(
       x: anchorX - (contentSize.width / 2),
       y: top - contentSize.height,
       width: contentSize.width,
       height: contentSize.height
+    )
+  }
+
+  private static func floatingAnchorX(
+    contentWidth: CGFloat,
+    normalizedPosition: Double,
+    screen: AgentIslandScreenDescriptor
+  ) -> CGFloat {
+    let availableFrame = screen.visibleFrame.insetBy(dx: floatingSideInset, dy: 0)
+    guard contentWidth < availableFrame.width else { return availableFrame.midX }
+
+    let requestedAnchor = screen.frame.minX + (screen.frame.width * CGFloat(normalizedPosition))
+    let halfWidth = contentWidth / 2
+    return min(
+      max(requestedAnchor, availableFrame.minX + halfWidth),
+      availableFrame.maxX - halfWidth
     )
   }
 }

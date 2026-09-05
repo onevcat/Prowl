@@ -10,28 +10,32 @@ struct AgentIslandAttentionCollectionTests {
     #expect(layout.columnCount == 1)
     #expect(layout.rowCount == 1)
     #expect(layout.width == 286)
-    #expect(layout.viewportHeight == 44)
-    #expect(!layout.isScrollable)
+    #expect(layout.viewportHeight == 52)
+    #expect(layout.visibleEntryCount == 1)
+    #expect(layout.overflowCount == 0)
   }
 
-  @Test func multipleEntriesUseTwoColumnCollection() {
+  @Test func collectionShowsAtMostTwoColumnsAndThreeRows() {
     let layout = AgentIslandAttentionLayout.layout(entryCount: 5)
 
     #expect(layout.columnCount == 2)
     #expect(layout.rowCount == 3)
     #expect(layout.width == 380)
-    #expect(layout.viewportHeight == 144)
-    #expect(!layout.isScrollable)
+    #expect(layout.viewportHeight == 168)
+    #expect(layout.visibleEntryCount == 5)
+    #expect(layout.overflowCount == 0)
   }
 
-  @Test func collectionScrollsBeyondThreeRows() {
+  @Test func collectionOverflowTracksRemindersBeyondTheSixVisibleCards() {
     let layout = AgentIslandAttentionLayout.layout(entryCount: 7)
 
     #expect(layout.columnCount == 2)
-    #expect(layout.rowCount == 4)
+    #expect(layout.rowCount == 3)
     #expect(layout.width == 380)
-    #expect(layout.viewportHeight == 144)
-    #expect(layout.isScrollable)
+    #expect(layout.viewportHeight == 168)
+    #expect(layout.visibleEntryCount == 6)
+    #expect(layout.overflowCount == 1)
+    #expect(AgentIslandAttentionLayout.layout(entryCount: 9).overflowCount == 3)
   }
 
   @Test func blockedPresentationUsesSharedLabelAndResolvedWorktree() {

@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct AgentIslandAttentionLayout: Equatable {
-  static let cellHeight: CGFloat = 44
+  static let cellHeight: CGFloat = 52
   static let spacing: CGFloat = 6
   static let maximumVisibleRows = 3
 
@@ -9,7 +9,8 @@ struct AgentIslandAttentionLayout: Equatable {
   let rowCount: Int
   let width: CGFloat
   let viewportHeight: CGFloat
-  let isScrollable: Bool
+  let visibleEntryCount: Int
+  let overflowCount: Int
 
   static func layout(entryCount: Int) -> Self {
     guard entryCount > 0 else {
@@ -18,21 +19,23 @@ struct AgentIslandAttentionLayout: Equatable {
         rowCount: 0,
         width: 286,
         viewportHeight: 0,
-        isScrollable: false
+        visibleEntryCount: 0,
+        overflowCount: 0
       )
     }
     let columnCount = entryCount == 1 ? 1 : 2
-    let rowCount = (entryCount + columnCount - 1) / columnCount
-    let visibleRows = min(rowCount, maximumVisibleRows)
+    let visibleEntryCount = min(entryCount, columnCount * maximumVisibleRows)
+    let rowCount = (visibleEntryCount + columnCount - 1) / columnCount
     let viewportHeight =
-      CGFloat(visibleRows) * cellHeight
-      + CGFloat(max(0, visibleRows - 1)) * spacing
+      CGFloat(rowCount) * cellHeight
+      + CGFloat(max(0, rowCount - 1)) * spacing
     return Self(
       columnCount: columnCount,
       rowCount: rowCount,
       width: columnCount == 1 ? 286 : 380,
       viewportHeight: viewportHeight,
-      isScrollable: rowCount > maximumVisibleRows
+      visibleEntryCount: visibleEntryCount,
+      overflowCount: entryCount - visibleEntryCount
     )
   }
 }
@@ -74,15 +77,11 @@ struct AgentIslandAttentionCollection: View {
 
   var body: some View {
     let layout = AgentIslandAttentionLayout.layout(entryCount: entries.count)
-    ScrollView(.vertical) {
-      LazyVGrid(columns: columns(for: layout), spacing: AgentIslandAttentionLayout.spacing) {
-        ForEach(entries) { entry in
-          attentionCell(entry)
-        }
+    LazyVGrid(columns: columns(for: layout), spacing: AgentIslandAttentionLayout.spacing) {
+      ForEach(Array(entries.prefix(layout.visibleEntryCount))) { entry in
+        attentionCell(entry)
       }
     }
-    .scrollIndicators(.never)
-    .scrollDisabled(!layout.isScrollable)
     .frame(height: layout.viewportHeight)
     .padding(6)
     .frame(width: layout.width)
@@ -91,7 +90,28 @@ struct AgentIslandAttentionCollection: View {
       RoundedRectangle(cornerRadius: 12)
         .stroke(.white.opacity(0.12), lineWidth: 0.75)
     }
+    .overlay(alignment: .bottomTrailing) {
+      if layout.overflowCount > 0 {
+        overflowBadge(count: layout.overflowCount)
+          .padding(9)
+      }
+    }
     .accessibilityIdentifier("agent-island-attention")
+  }
+
+  private func overflowBadge(count: Int) -> some View {
+    Text("+\(count)")
+      .font(.caption2.weight(.bold).monospacedDigit())
+      .foregroundStyle(.white.opacity(0.9))
+      .padding(.horizontal, 5)
+      .padding(.vertical, 2)
+      .background(.black.opacity(0.92), in: Capsule())
+      .overlay {
+        Capsule()
+          .stroke(.white.opacity(0.18), lineWidth: 0.5)
+      }
+      .allowsHitTesting(false)
+      .accessibilityIdentifier("agent-island-attention-overflow")
   }
 
   private func columns(for layout: AgentIslandAttentionLayout) -> [GridItem] {
@@ -149,9 +169,9 @@ struct AgentIslandAttentionCollection: View {
       RoundedRectangle(cornerRadius: 10)
         .stroke(entry.displayState.foregroundStyle.opacity(0.34), lineWidth: 0.8)
     }
-    .help("Open \(entry.displayName) in Prowl")
     .accessibilityLabel(
       "\(presentation.statusLabel), \(presentation.agentName), \(presentation.repositoryName), \(presentation.subtitle)"
     )
+    .accessibilityHint("Open in Prowl")
   }
 }

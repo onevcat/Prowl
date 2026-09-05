@@ -5,6 +5,7 @@ import SwiftUI
 
 struct NotificationsSettingsView: View {
   @Bindable var store: StoreOf<SettingsFeature>
+  let islandHotKeyRegistrationFailure: Keybinding?
   @State private var thresholdText = ""
 
   var body: some View {
@@ -56,7 +57,10 @@ struct NotificationsSettingsView: View {
           }
           .help("Bounce the Prowl app icon in the Dock when a notification is received.")
         }
-        AgentIslandSettingsSection(store: store)
+        AgentIslandSettingsSection(
+          store: store,
+          globalHotKeyRegistrationFailure: islandHotKeyRegistrationFailure
+        )
         Section("System") {
           Toggle(
             "System notifications",

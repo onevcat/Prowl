@@ -88,6 +88,119 @@ struct ShortcutConflictDetectorTests {
     #expect(conflictID == nil)
   }
 
+  @Test func findsActiveCustomCommandConflictFromEffectiveBindings() throws {
+    let shortcut = binding("k", modifiers: .init(command: true, option: true))
+    let command = EffectiveCustomCommand(
+      source: .repository,
+      command: UserCustomCommand(
+        id: "build",
+        title: "Build",
+        systemImage: "hammer",
+        command: "make build",
+        execution: .shellScript,
+        shortcut: shortcut.userCustomShortcut
+      )
+    )
+    let resolved = KeybindingResolver.resolve(
+      schema: .appResolverSchema(effectiveCustomCommands: [command]),
+      migratedOverrides: LegacyCustomCommandShortcutMigration.migrate(commands: [command]).overrides
+    )
+
+    let conflict = ShortcutConflictDetector.firstActiveCustomCommandConflict(
+      binding: shortcut,
+      customCommands: [command],
+      resolvedKeybindings: resolved
+    )
+
+    #expect(try #require(conflict).id == command.id)
+  }
+
+  @Test func treatsPhysicalAndLogicalDigitBindingsAsTheSameAppConflict() {
+    let logicalDigit = binding("1", modifiers: .init(command: true))
+    let physicalDigit = binding("digit_1", modifiers: .init(command: true))
+    let schema = testSchema([
+      testCommand(
+        id: "command.one",
+        title: "One",
+        conflictPolicy: .warnAndPreferUserOverride,
+        defaultBinding: logicalDigit
+      ),
+      testCommand(
+        id: "command.two",
+        title: "Two",
+        conflictPolicy: .warnAndPreferUserOverride,
+        defaultBinding: binding("2", modifiers: .init(command: true))
+      ),
+    ])
+
+    let conflictID = ShortcutConflictDetector.firstConflictCommandID(
+      commandID: "command.two",
+      binding: physicalDigit,
+      policy: .warnAndPreferUserOverride,
+      schema: schema,
+      userOverrides: .empty
+    )
+
+    #expect(conflictID == "command.one")
+  }
+
+  @Test func treatsPhysicalAndLogicalDigitBindingsAsTheSameCustomCommandConflict() throws {
+    let physicalDigit = binding("digit_1", modifiers: .init(command: true))
+    let command = EffectiveCustomCommand(
+      source: .repository,
+      command: UserCustomCommand(
+        id: "build",
+        title: "Build",
+        systemImage: "hammer",
+        command: "make build",
+        execution: .shellScript,
+        shortcut: physicalDigit.userCustomShortcut
+      )
+    )
+    let resolved = KeybindingResolver.resolve(
+      schema: .appResolverSchema(effectiveCustomCommands: [command]),
+      migratedOverrides: LegacyCustomCommandShortcutMigration.migrate(commands: [command]).overrides
+    )
+
+    let conflict = ShortcutConflictDetector.firstActiveCustomCommandConflict(
+      binding: physicalDigit,
+      customCommands: [command],
+      resolvedKeybindings: resolved
+    )
+
+    #expect(try #require(conflict).id == command.id)
+  }
+
+  @Test func ignoresCustomCommandWithoutAnEffectiveBinding() {
+    let shortcut = binding("k", modifiers: .init(command: true, option: true))
+    let command = EffectiveCustomCommand(
+      source: .repository,
+      command: UserCustomCommand(
+        id: "build",
+        title: "Build",
+        systemImage: "hammer",
+        command: "make build",
+        execution: .shellScript,
+        shortcut: shortcut.userCustomShortcut
+      )
+    )
+    let resolved = KeybindingResolver.resolve(
+      schema: .appResolverSchema(effectiveCustomCommands: [command]),
+      userOverrides: KeybindingUserOverrideStore(
+        overrides: [command.keybindingID: .init(binding: nil, isEnabled: false)]
+      ),
+      migratedOverrides: LegacyCustomCommandShortcutMigration.migrate(commands: [command]).overrides
+    )
+
+    #expect(
+      ShortcutConflictDetector.firstActiveCustomCommandConflict(
+        binding: shortcut,
+        customCommands: [command],
+        resolvedKeybindings: resolved
+      ) == nil
+    )
+  }
+
   private func testSchema(_ commands: [KeybindingCommandSchema]) -> KeybindingSchemaDocument {
     KeybindingSchemaDocument(
       version: KeybindingSchemaDocument.currentVersion,

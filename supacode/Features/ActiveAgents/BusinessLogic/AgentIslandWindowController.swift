@@ -1,9 +1,12 @@
 import AppKit
+import Carbon
 import ComposableArchitecture
 import SwiftUI
 
 final class AgentIslandPanel: NSPanel {
-  override var canBecomeKey: Bool { false }
+  var acceptsKeyboardInput = false
+
+  override var canBecomeKey: Bool { acceptsKeyboardInput }
   override var canBecomeMain: Bool { false }
 }
 
@@ -13,19 +16,6 @@ enum AgentIslandInteractionPolicy {
     isRosterExpanded: Bool
   ) -> Bool {
     isVisible && isRosterExpanded
-  }
-}
-
-struct AgentIslandEscapeKeyTracker {
-  private var wasPressed: Bool
-
-  init(isPressed: Bool = false) {
-    wasPressed = isPressed
-  }
-
-  mutating func observe(isPressed: Bool) -> Bool {
-    defer { wasPressed = isPressed }
-    return isPressed && !wasPressed
   }
 }
 
@@ -45,12 +35,16 @@ final class AgentIslandWindowController {
   private var observers: [NSObjectProtocol] = []
   private var localEventMonitor: Any?
   private var globalEventMonitor: Any?
-  private var escapePollTimer: Timer?
-  private var escapeKeyTracker = AgentIslandEscapeKeyTracker()
+  private var keyboardLayoutObserver: NSObjectProtocol?
+  private var globalHotKeys: AgentIslandGlobalHotKeys?
+  private var registeredGlobalHotKeyConfiguration: AgentIslandGlobalHotKeyConfiguration?
+  private(set) var observationGeneration = 0
   private var isVisible = false
   private var isRosterExpanded = false
   private var displayPreference: AgentIslandDisplayPreference = .automatic
   private var contentSize = CGSize(width: 420, height: 40)
+  private var floatingDragPointerOffsetX: CGFloat?
+  private weak var previousKeyWindow: NSWindow?
 
   init(
     store: StoreOf<AppFeature>,
@@ -94,6 +88,8 @@ final class AgentIslandWindowController {
 
   func start() {
     guard panel == nil else { return }
+    observationGeneration &+= 1
+    let generation = observationGeneration
     let panel = AgentIslandPanel(
       contentRect: CGRect(origin: .zero, size: contentSize),
       styleMask: [.borderless, .nonactivatingPanel],
@@ -130,16 +126,31 @@ final class AgentIslandWindowController {
           preference: preference,
           size: size
         )
+      } floatingDragChanged: { [weak self] event in
+        self?.handleFloatingDrag(event)
       }
     )
     self.panel = panel
+    globalHotKeys = AgentIslandGlobalHotKeys { [weak self] command in
+      self?.handleGlobalHotKey(command)
+    }
     installObservers()
+    refreshGlobalHotKeys()
+    observeGlobalHotKeyState(generation: generation)
+    observeFloatingPositions(generation: generation)
     refreshPlacement()
   }
 
   func stop() {
+    observationGeneration &+= 1
     removeObservers()
     removeEventMonitors()
+    globalHotKeys?.stop()
+    globalHotKeys = nil
+    registeredGlobalHotKeyConfiguration = nil
+    setGlobalHotKeyRegistrationFailure(nil)
+    floatingDragPointerOffsetX = nil
+    restoreKeyWindowAfterCollapse()
     panel?.orderOut(nil)
     panel = nil
   }
@@ -150,8 +161,16 @@ final class AgentIslandWindowController {
     preference: AgentIslandDisplayPreference,
     size: CGSize
   ) {
+    let wasRosterExpanded = self.isRosterExpanded
+    if !wasRosterExpanded, isRosterExpanded, NSApp.isActive {
+      previousKeyWindow = NSApp.keyWindow === panel ? mainProwlWindow : NSApp.keyWindow
+    }
     self.isVisible = isVisible
     self.isRosterExpanded = isRosterExpanded
+    panel?.acceptsKeyboardInput = isRosterExpanded
+    if wasRosterExpanded, !isRosterExpanded {
+      restoreKeyWindowAfterCollapse()
+    }
     displayPreference = preference
     if size.width > 0, size.height > 0 {
       contentSize = size
@@ -162,16 +181,7 @@ final class AgentIslandWindowController {
 
   private func refreshPlacement() {
     guard let panel else { return }
-    let mainWindowScreenID = displayCatalog.descriptor(for: mainProwlWindow?.screen)?.id
-    let mainScreenID = displayCatalog.descriptor(for: NSScreen.main)?.id
-    guard
-      let screen = AgentIslandScreenLayout.resolve(
-        preference: displayPreference,
-        screens: displayCatalog.screens,
-        mainWindowScreenID: mainWindowScreenID,
-        mainScreenID: mainScreenID
-      )
-    else {
+    guard let screen = resolvedScreen else {
       panel.orderOut(nil)
       return
     }
@@ -180,10 +190,23 @@ final class AgentIslandWindowController {
     if presentation.notchSize != notchSize {
       presentation.notchSize = notchSize
     }
-    let frame = AgentIslandScreenLayout.panelFrame(contentSize: contentSize, screen: screen)
+    let floatingMenuBarHeight = screen.hasNotch ? nil : screen.menuBarHeight
+    if presentation.floatingMenuBarHeight != floatingMenuBarHeight {
+      presentation.floatingMenuBarHeight = floatingMenuBarHeight
+    }
+    let frame = AgentIslandScreenLayout.panelFrame(
+      contentSize: contentSize,
+      screen: screen,
+      floatingHorizontalPosition: appStore.settings.agentIslandFloatingPositions
+        .normalizedPosition(for: screen.id)
+    )
     panel.setFrame(frame, display: panel.isVisible)
     if isVisible {
-      panel.orderFrontRegardless()
+      if isRosterExpanded {
+        panel.makeKeyAndOrderFront(nil)
+      } else {
+        panel.orderFrontRegardless()
+      }
     } else {
       panel.orderOut(nil)
     }
@@ -191,6 +214,66 @@ final class AgentIslandWindowController {
 
   private var mainProwlWindow: NSWindow? {
     NSApplication.shared.windows.first { $0.identifier?.rawValue == WindowID.main }
+  }
+
+  private func restoreKeyWindowAfterCollapse() {
+    guard panel?.isKeyWindow == true else {
+      previousKeyWindow = nil
+      return
+    }
+    if NSApp.isActive {
+      let target = previousKeyWindow?.isVisible == true ? previousKeyWindow : mainProwlWindow
+      target?.makeKey()
+    } else {
+      panel?.orderOut(nil)
+    }
+    previousKeyWindow = nil
+  }
+
+  private var resolvedScreen: AgentIslandScreenDescriptor? {
+    let mainWindowScreenID = displayCatalog.descriptor(for: mainProwlWindow?.screen)?.id
+    let mainScreenID = displayCatalog.descriptor(for: NSScreen.main)?.id
+    return AgentIslandScreenLayout.resolve(
+      preference: displayPreference,
+      screens: displayCatalog.screens,
+      mainWindowScreenID: mainWindowScreenID,
+      mainScreenID: mainScreenID
+    )
+  }
+
+  private func handleFloatingDrag(_ event: AgentIslandFloatingDragEvent) {
+    guard let panel, let screen = resolvedScreen, !screen.hasNotch else { return }
+
+    let pointerX: CGFloat
+    switch event {
+    case .began(let pointerX):
+      floatingDragPointerOffsetX = panel.frame.midX - pointerX
+      return
+    case .changed(let currentPointerX), .ended(let currentPointerX):
+      pointerX = currentPointerX
+    }
+    guard let pointerOffsetX = floatingDragPointerOffsetX else { return }
+
+    let requestedAnchorX = pointerX + pointerOffsetX
+    let normalizedPosition = Double((requestedAnchorX - screen.frame.minX) / screen.frame.width)
+    let frame = AgentIslandScreenLayout.panelFrame(
+      contentSize: contentSize,
+      screen: screen,
+      floatingHorizontalPosition: normalizedPosition
+    )
+    panel.setFrame(frame, display: true)
+
+    guard case .ended = event else { return }
+    floatingDragPointerOffsetX = nil
+    let persistedPosition = Double((frame.midX - screen.frame.minX) / screen.frame.width)
+    appStore.send(
+      .settings(
+        .setAgentIslandFloatingPosition(
+          displayID: screen.id,
+          normalizedPosition: persistedPosition
+        )
+      )
+    )
   }
 
   private func installObservers() {
@@ -210,6 +293,21 @@ final class AgentIslandWindowController {
         return
       }
       self.refreshPlacement()
+    }
+    observe(NSApplication.didBecomeActiveNotification, object: NSApp) { [weak self] _ in
+      self?.refreshGlobalHotKeys()
+    }
+    observe(NSApplication.didResignActiveNotification, object: NSApp) { [weak self] _ in
+      self?.refreshGlobalHotKeys()
+    }
+    keyboardLayoutObserver = DistributedNotificationCenter.default().addObserver(
+      forName: Notification.Name(kTISNotifySelectedKeyboardInputSourceChanged as String),
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated {
+        self?.refreshGlobalHotKeys(force: true)
+      }
     }
   }
 
@@ -236,6 +334,10 @@ final class AgentIslandWindowController {
       NotificationCenter.default.removeObserver(observer)
     }
     observers.removeAll()
+    if let keyboardLayoutObserver {
+      DistributedNotificationCenter.default().removeObserver(keyboardLayoutObserver)
+      self.keyboardLayoutObserver = nil
+    }
   }
 
   private func installEventMonitors() {
@@ -245,8 +347,25 @@ final class AgentIslandWindowController {
     ]) {
       [weak self] event in
       guard let self else { return event }
-      if event.type == .keyDown, event.keyCode == 53, isRosterExpanded {
-        appStore.send(.repositories(.activeAgents(.islandCollapseRoster)))
+      if event.type == .keyDown, event.window === panel, isRosterExpanded {
+        if AgentIslandShortcutEventMatcher.matches(
+          keyCode: event.keyCode,
+          charactersIgnoringModifiers: event.charactersIgnoringModifiers,
+          modifiers: event.modifierFlags,
+          binding: appStore.resolvedKeybindings.keybinding(
+            for: AppShortcuts.CommandID.toggleAgentIsland
+          )
+        ) {
+          handleToggleHotKey()
+          return nil
+        }
+        if let command = AgentIslandKeyboardCommand.resolve(
+          keyCode: event.keyCode,
+          characters: event.charactersIgnoringModifiers,
+          modifiers: event.modifierFlags
+        ) {
+          handleKeyboardCommand(command)
+        }
         return nil
       }
       if event.window !== panel, isRosterExpanded {
@@ -263,7 +382,6 @@ final class AgentIslandWindowController {
         self.appStore.send(.repositories(.activeAgents(.islandCollapseRoster)))
       }
     }
-    startEscapePolling()
   }
 
   private func removeEventMonitors() {
@@ -275,31 +393,118 @@ final class AgentIslandWindowController {
       NSEvent.removeMonitor(globalEventMonitor)
       self.globalEventMonitor = nil
     }
-    escapePollTimer?.invalidate()
-    escapePollTimer = nil
   }
 
-  private func startEscapePolling() {
-    guard escapePollTimer == nil else { return }
-    escapeKeyTracker = AgentIslandEscapeKeyTracker(isPressed: Self.isEscapePressed)
-    let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
-      MainActor.assumeIsolated {
-        self?.pollEscapeKey()
-      }
+  private func handleKeyboardCommand(_ command: AgentIslandKeyboardCommand) {
+    let action: ActiveAgentsFeature.Action
+    switch command {
+    case .collapse:
+      action = .islandCollapseRoster
+    case .move(let direction):
+      action = .islandMoveSelection(direction)
+    case .page(let direction):
+      action = .islandMovePage(direction)
+    case .activateSelection:
+      action = .islandActivateSelection
+    case .activateVisibleEntry(let index):
+      action = .islandActivateVisibleEntry(index)
     }
-    RunLoop.main.add(timer, forMode: .common)
-    escapePollTimer = timer
+    appStore.send(.repositories(.activeAgents(action)))
   }
 
-  private func pollEscapeKey() {
-    guard isRosterExpanded else { return }
-    if escapeKeyTracker.observe(isPressed: Self.isEscapePressed) {
+  private func handleGlobalHotKey(_ command: AgentIslandGlobalHotKeyCommand) {
+    switch command {
+    case .toggleRoster:
+      handleToggleHotKey()
+    }
+  }
+
+  private func handleToggleHotKey() {
+    let activeAgents = appStore.repositories.activeAgents
+    guard
+      let action = AgentIslandHotKeyAction.resolve(
+        isRosterExpanded: activeAgents.isIslandRosterExpanded,
+        hasEntries: !activeAgents.entries.isEmpty
+      )
+    else {
+      return
+    }
+    switch action {
+    case .toggleIslandRoster:
+      appStore.send(.repositories(.activeAgents(.islandToggleRoster)))
+    case .collapseIsland:
       appStore.send(.repositories(.activeAgents(.islandCollapseRoster)))
     }
   }
 
-  private static var isEscapePressed: Bool {
-    CGEventSource.keyState(.combinedSessionState, key: 53)
+  private func refreshGlobalHotKeys(force: Bool = false) {
+    let toggleBinding = appStore.resolvedKeybindings.keybinding(
+      for: AppShortcuts.CommandID.toggleAgentIsland
+    )
+    let configuration = AgentIslandGlobalHotKeyConfiguration(
+      toggleBinding: toggleBinding,
+      hasEntries: !appStore.repositories.activeAgents.entries.isEmpty,
+      isAppActive: NSApp.isActive
+    )
+    guard
+      configuration.requiresRefresh(
+        from: registeredGlobalHotKeyConfiguration,
+        force: force
+      )
+    else { return }
+    if registeredGlobalHotKeyConfiguration?.configuredBinding != configuration.configuredBinding {
+      setGlobalHotKeyRegistrationFailure(nil)
+    }
+    let result = globalHotKeys?.register(binding: configuration.binding)
+    if let binding = configuration.binding {
+      switch result {
+      case .registered:
+        setGlobalHotKeyRegistrationFailure(nil)
+      case .failed, nil:
+        setGlobalHotKeyRegistrationFailure(binding)
+      case .inactive:
+        break
+      }
+    }
+    registeredGlobalHotKeyConfiguration = configuration
+  }
+
+  private func setGlobalHotKeyRegistrationFailure(_ binding: Keybinding?) {
+    guard
+      appStore.repositories.activeAgents.islandHotKeyRegistrationFailure != binding
+    else { return }
+    appStore.send(
+      .repositories(
+        .activeAgents(.setIslandHotKeyRegistrationFailure(binding))
+      )
+    )
+  }
+
+  private func observeGlobalHotKeyState(generation: Int) {
+    withObservationTracking {
+      _ = appStore.resolvedKeybindings.keybinding(
+        for: AppShortcuts.CommandID.toggleAgentIsland
+      )
+      _ = appStore.repositories.activeAgents.entries.isEmpty
+    } onChange: { [weak self] in
+      Task { @MainActor [weak self] in
+        guard let self, self.panel != nil, self.observationGeneration == generation else { return }
+        self.refreshGlobalHotKeys()
+        self.observeGlobalHotKeyState(generation: generation)
+      }
+    }
+  }
+
+  private func observeFloatingPositions(generation: Int) {
+    withObservationTracking {
+      _ = appStore.settings.agentIslandFloatingPositions
+    } onChange: { [weak self] in
+      Task { @MainActor [weak self] in
+        guard let self, self.panel != nil, self.observationGeneration == generation else { return }
+        self.refreshPlacement()
+        self.observeFloatingPositions(generation: generation)
+      }
+    }
   }
 
   private func updateEventMonitors() {

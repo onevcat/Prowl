@@ -28,6 +28,12 @@ struct SidebarCommands: Commands {
         KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.toggleActiveAgentsPanel))
       )
       .help(helpText(title: "Active Agents", commandID: AppShortcuts.CommandID.toggleActiveAgentsPanel))
+      Button("Agent Island") {
+        store.send(.repositories(.activeAgents(.islandToggleRoster)))
+      }
+      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.toggleAgentIsland)))
+      .help(helpText(title: "Agent Island", commandID: AppShortcuts.CommandID.toggleAgentIsland))
+      .disabled(!store.repositories.activeAgents.isIslandEnabled || store.repositories.activeAgents.entries.isEmpty)
       Button("Select Next Agent") {
         store.send(.repositories(.activeAgents(.selectNextEntry)))
       }

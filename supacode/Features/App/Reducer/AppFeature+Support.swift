@@ -192,7 +192,10 @@ extension AppFeature {
       .filter { $0.source == .repository }
       .compactMap { resolved.keybinding(for: $0.keybindingID) }
     for command in customCommands where command.source == .global {
-      guard let binding = resolved.keybinding(for: command.keybindingID), localBindings.contains(binding) else {
+      guard
+        let binding = resolved.keybinding(for: command.keybindingID),
+        localBindings.contains(where: { $0.hasSameTrigger(as: binding) })
+      else {
         continue
       }
       guard let resolvedBinding = resolved.binding(for: command.keybindingID) else { continue }
@@ -210,7 +213,7 @@ extension AppFeature {
     for binding in AppShortcuts.bindings where binding.scope == .configurableAppAction {
       guard let resolvedBinding = resolved.binding(for: binding.id),
         let shortcut = resolvedBinding.binding,
-        customCommandBindings.contains(shortcut)
+        customCommandBindings.contains(where: { $0.hasSameTrigger(as: shortcut) })
       else {
         continue
       }

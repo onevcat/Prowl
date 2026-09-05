@@ -41,6 +41,7 @@ Symbols: **⌘** Command · **⇧** Shift · **⌥** Option · **⌃** Control �
 |--------|---------|------------|------------|
 | Toggle Left Sidebar | ⌘⌃S | `toggle_left_sidebar` | yes |
 | Toggle Active Agents Panel | ⌘⌥P | `toggle_active_agents_panel` | yes |
+| Toggle Agent Island hot window | Unassigned | `toggle_agent_island` | yes |
 | Select Next Agent (in panel) | ⌥⌃↓ | `select_next_active_agent` | yes |
 | Select Previous Agent (in panel) | ⌥⌃↑ | `select_previous_active_agent` | yes |
 | Jump to Latest Unread | ⌘⌥U | `jump_to_latest_unread` | yes |
@@ -48,6 +49,21 @@ Symbols: **⌘** Command · **⇧** Shift · **⌥** Option · **⌃** Control �
 | Show Outgoing Changes | ⌘⌥⇧Y | `outgoing_changes` | yes |
 | Toggle Canvas | ⌘⌥↩ | `toggle_canvas` | yes |
 | Toggle Shelf | ⌘⇧↩ | `toggle_shelf` | yes |
+
+Agent Island deliberately ships without a shortcut. Assign **Toggle Agent Island** under
+Settings → Shortcuts if a keyboard entry gesture is useful. The Agent Island settings footer links
+directly to the filtered **Toggle Agent Island** row. Prowl registers the resolved shortcut globally
+only while Agent Island has entries and Prowl is in the background; while Prowl is active, the
+normal menu key equivalent handles it. A globally registered chord takes precedence over the
+frontmost application's matching shortcut until the island becomes inactive or Prowl returns to
+the foreground. If macOS cannot register the shortcut globally, the
+Shortcuts row and Agent Island settings footer report the failure until the binding changes or a
+later registration succeeds. Reset returns the command to Unassigned.
+
+In the open roster, Arrow Up or `k` and Arrow Down or `j` select; Arrow Left or `h` and Arrow Right
+or `l` page; Return opens (Space is an alias); `1`…`9` directly opens a current-page row even when
+shortcut modifiers remain held; and `Esc` closes. Opening selects the newest Blocked reminder
+first, then the newest unviewed Done reminder, before falling back to the focused agent.
 
 ## Shelf view
 
@@ -138,7 +154,8 @@ their own hotkey — see [`components/custom-actions.md`](../components/custom-a
   Rename Branch) are remappable and conflict-checked against all remappable actions.
 - **Custom Command** hotkeys take precedence over app shortcuts within the focused
   repository. Local commands win global-command collisions; global bindings use a
-  separate internal command ID namespace. Conflicts are surfaced when recording.
+  separate internal command ID namespace. Recording an app shortcut already used by an active
+  Custom Command is rejected; pre-existing collisions are marked Unavailable in Shortcuts.
 - Disabling a Custom Command unregisters its hotkey with every other command surface,
   but preserves the configured key so re-enabling restores it.
 - **Terminal engine keys** are owned by Ghostty. Prowl automatically *unbinds*

@@ -7,10 +7,19 @@ import SwiftUI
 @Observable
 final class AgentIslandPresentationModel {
   var notchSize: CGSize?
+  var floatingMenuBarHeight: CGFloat?
+}
+
+enum AgentIslandFloatingDragEvent {
+  case began(pointerX: CGFloat)
+  case changed(pointerX: CGFloat)
+  case ended(pointerX: CGFloat)
 }
 
 struct AgentIslandRootLayout {
-  static let floatingCompactWidth: CGFloat = 300
+  static let floatingCompactWidth: CGFloat = 340
+  static let floatingControlsReservedWidth: CGFloat = 68
+  static let fallbackFloatingCompactHeight: CGFloat = 40
   static let rosterWidth: CGFloat = 420
 
   static func width(
@@ -26,6 +35,27 @@ struct AgentIslandRootLayout {
     let attentionWidth = AgentIslandAttentionLayout.layout(entryCount: attentionEntryCount).width
     return max(compactWidth, attentionWidth)
   }
+
+  static func compactHeight(
+    notchCompactHeight: CGFloat?,
+    floatingMenuBarHeight: CGFloat?
+  ) -> CGFloat {
+    if let notchCompactHeight {
+      return notchCompactHeight
+    }
+    guard let floatingMenuBarHeight, floatingMenuBarHeight > 0 else {
+      return fallbackFloatingCompactHeight
+    }
+    return floatingMenuBarHeight
+  }
+
+  static func showsDisplayControl(connectedDisplayCount: Int) -> Bool {
+    connectedDisplayCount > 1
+  }
+
+  static func usesCompactFloatingSummary(stateCount: Int) -> Bool {
+    stateCount >= AgentIslandStateSummary.order.count
+  }
 }
 
 struct AgentIslandView: View {
@@ -34,15 +64,22 @@ struct AgentIslandView: View {
   @Bindable private var presentation: AgentIslandPresentationModel
   private let terminalManager: WorktreeTerminalManager
   @Shared(.repositoryAppearances) private var repositoryAppearances
+  @State private var displayCatalog = AgentIslandDisplayCatalog.shared
 
   let presentationChanged: (Bool, Bool, AgentIslandDisplayPreference, CGSize) -> Void
+  let floatingDragChanged: (AgentIslandFloatingDragEvent) -> Void
   @State private var contentSize = CGSize(width: 420, height: 40)
+  @State private var isHovering = false
+  @State private var isSilent = false
+  @State private var isOpacityControlPresented = false
+  @State private var silentOpacityDraft: Double?
 
   init(
     store: StoreOf<AppFeature>,
     terminalManager: WorktreeTerminalManager,
     presentation: AgentIslandPresentationModel,
-    presentationChanged: @escaping (Bool, Bool, AgentIslandDisplayPreference, CGSize) -> Void
+    presentationChanged: @escaping (Bool, Bool, AgentIslandDisplayPreference, CGSize) -> Void,
+    floatingDragChanged: @escaping (AgentIslandFloatingDragEvent) -> Void
   ) {
     appStore = store
     agentsStore = store.scope(
@@ -52,6 +89,7 @@ struct AgentIslandView: View {
     self.terminalManager = terminalManager
     self.presentation = presentation
     self.presentationChanged = presentationChanged
+    self.floatingDragChanged = floatingDragChanged
   }
 
   var body: some View {
@@ -104,6 +142,36 @@ struct AgentIslandView: View {
       }
     }
     .frame(width: rootWidth)
+    // Keep the opacity animation outside a transaction-free content subtree. Otherwise, when
+    // `isSilent` clears in the same update that opens the roster, SwiftUI also animates the
+    // roster's layout from the compact panel and its footer briefly crosses the floating bar.
+    .transaction { transaction in
+      transaction.animation = nil
+    }
+    .opacity(
+      AgentIslandOpacityPolicy.opacity(
+        isFloating: isFloating,
+        isSilent: isSilent,
+        isRosterExpanded: agentsStore.isIslandRosterExpanded,
+        hasAttentionEntries: !agentsStore.islandAttentionEntries.isEmpty,
+        silentOpacity: effectiveSilentOpacity
+      )
+    )
+    .animation(.easeOut(duration: 0.2), value: isSilent)
+    .onHover { isHovering = $0 }
+    .task(id: shouldEnterSilentState) {
+      guard shouldEnterSilentState else {
+        isSilent = false
+        return
+      }
+      do {
+        try await Task.sleep(for: AgentIslandOpacityPolicy.silenceDelay)
+      } catch {
+        return
+      }
+      guard !Task.isCancelled else { return }
+      isSilent = true
+    }
   }
 
   private var compactIsland: some View {
@@ -119,18 +187,83 @@ struct AgentIslandView: View {
             compactChevron
           }
           .padding(.horizontal, 14)
-          .frame(width: 300, height: 40)
+          .frame(width: AgentIslandRootLayout.floatingCompactWidth, height: compactHeight)
         }
       }
       .contentShape(.rect)
     }
     .buttonStyle(.plain)
     .background(.black, in: compactShape)
-    .help(agentsStore.isIslandRosterExpanded ? "Hide Active Agents" : "Show Active Agents")
+    .overlay {
+      if isFloating {
+        HStack(spacing: 4) {
+          floatingDragHandle
+          floatingOpacityControl
+        }
+      }
+    }
     .accessibilityLabel(
       agentsStore.isIslandRosterExpanded ? "Hide Active Agents" : "Show Active Agents"
     )
     .accessibilityIdentifier("agent-island-compact")
+  }
+
+  private var floatingDragHandle: some View {
+    ZStack {
+      Image(systemName: "line.3.horizontal")
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(.secondary)
+      AgentIslandDragCaptureView(dragChanged: floatingDragChanged)
+    }
+    .frame(width: 44, height: 20)
+    .accessibilityHidden(true)
+  }
+
+  private var floatingOpacityControl: some View {
+    Button {
+      if !isOpacityControlPresented {
+        silentOpacityDraft = appStore.settings.agentIslandSilentOpacity
+      }
+      isOpacityControlPresented.toggle()
+    } label: {
+      Image(systemName: "circle.lefthalf.filled")
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(.secondary)
+        .frame(width: 20, height: 20)
+        .background(.white.opacity(0.08), in: Circle())
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel("Silent opacity")
+    .popover(isPresented: $isOpacityControlPresented, arrowEdge: .top) {
+      VStack(alignment: .leading, spacing: 8) {
+        HStack {
+          Text("Silent Opacity")
+            .font(.headline)
+          Spacer()
+          Text(silentOpacityPercentage)
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(.secondary)
+        }
+        Slider(
+          value: silentOpacityBinding,
+          in: AgentIslandOpacityPolicy
+            .minimumSilentOpacity...AgentIslandOpacityPolicy.maximumSilentOpacity,
+          step: 0.05,
+          onEditingChanged: { isEditing in
+            if !isEditing {
+              commitSilentOpacity()
+            }
+          }
+        )
+      }
+      .padding(12)
+      .frame(width: 220)
+    }
+    .onChange(of: isOpacityControlPresented) { _, isPresented in
+      if !isPresented {
+        commitSilentOpacity()
+      }
+    }
   }
 
   private func notchedCompactContent(layout: AgentIslandNotchLayout) -> some View {
@@ -168,11 +301,20 @@ struct AgentIslandView: View {
 
   /// The floating pill shows the same per-state counts as the notched wing, one size up.
   private var compactContent: some View {
-    HStack(spacing: 8) {
-      AgentIslandStateSummaryView(summary: stateSummary, size: .regular)
-      Spacer(minLength: 6)
+    HStack(spacing: 0) {
+      AgentIslandStateSummaryView(summary: stateSummary, size: floatingSummarySize)
+        .frame(maxWidth: .infinity, alignment: .leading)
+      Color.clear
+        .frame(width: AgentIslandRootLayout.floatingControlsReservedWidth)
+        .accessibilityHidden(true)
       AgentIslandIconCluster(entries: islandEntries)
+        .frame(maxWidth: .infinity, alignment: .trailing)
     }
+  }
+
+  private var floatingSummarySize: AgentIslandStateSummaryView.Size {
+    AgentIslandRootLayout.usesCompactFloatingSummary(stateCount: stateSummary.items.count)
+      ? .compact : .regular
   }
 
   private var stateSummary: AgentIslandStateSummary {
@@ -201,11 +343,17 @@ struct AgentIslandView: View {
           Label("Open Prowl", systemImage: "arrow.up.forward.app")
         }
         .buttonStyle(.borderless)
-        .help("Bring Prowl to the front")
         .accessibilityIdentifier("agent-island-open-prowl")
       }
       .padding(.horizontal, 14)
       .frame(height: 44)
+      .overlay {
+        if AgentIslandRootLayout.showsDisplayControl(
+          connectedDisplayCount: displayCatalog.screens.count
+        ) {
+          displayMenu
+        }
+      }
 
       Divider()
 
@@ -245,21 +393,104 @@ struct AgentIslandView: View {
   }
 
   private var compactShape: AnyShape {
-    if notchLayout != nil {
-      return AnyShape(
-        UnevenRoundedRectangle(
-          topLeadingRadius: 0,
-          bottomLeadingRadius: 12,
-          bottomTrailingRadius: 12,
-          topTrailingRadius: 0
-        )
+    AnyShape(
+      UnevenRoundedRectangle(
+        topLeadingRadius: 0,
+        bottomLeadingRadius: 12,
+        bottomTrailingRadius: 12,
+        topTrailingRadius: 0
       )
+    )
+  }
+
+  private var displayMenu: some View {
+    Menu {
+      Button {
+        setDisplayPreference(.automatic)
+      } label: {
+        displayMenuLabel(
+          "Automatic", isSelected: appStore.settings.agentIslandDisplayPreference == .automatic)
+      }
+      Divider()
+      ForEach(displayCatalog.screens) { screen in
+        Button {
+          setDisplayPreference(.display(id: screen.id, name: screen.name))
+        } label: {
+          displayMenuLabel(screen.name, isSelected: isSelectedDisplay(screen.id))
+        }
+      }
+    } label: {
+      Image(systemName: "display.2")
+        .frame(width: 24, height: 24)
     }
-    return AnyShape(Capsule())
+    .menuStyle(.borderlessButton)
+    .fixedSize()
+    .accessibilityLabel("Agent Island display")
+  }
+
+  @ViewBuilder
+  private func displayMenuLabel(_ title: String, isSelected: Bool) -> some View {
+    if isSelected {
+      Label(title, systemImage: "checkmark")
+    } else {
+      Text(title)
+    }
+  }
+
+  private func isSelectedDisplay(_ id: String) -> Bool {
+    guard case .display(let selectedID, _) = appStore.settings.agentIslandDisplayPreference else {
+      return false
+    }
+    return selectedID == id
+  }
+
+  private func setDisplayPreference(_ preference: AgentIslandDisplayPreference) {
+    appStore.send(.settings(.setAgentIslandDisplayPreference(preference)))
+  }
+
+  private var silentOpacityBinding: Binding<Double> {
+    Binding(
+      get: { effectiveSilentOpacity },
+      set: { silentOpacityDraft = AgentIslandOpacityPolicy.normalizedSilentOpacity($0) }
+    )
+  }
+
+  private var effectiveSilentOpacity: Double {
+    silentOpacityDraft ?? appStore.settings.agentIslandSilentOpacity
+  }
+
+  private var silentOpacityPercentage: String {
+    "\(Int((effectiveSilentOpacity * 100).rounded()))%"
+  }
+
+  private func commitSilentOpacity() {
+    guard let silentOpacityDraft else { return }
+    self.silentOpacityDraft = nil
+    guard silentOpacityDraft != appStore.settings.agentIslandSilentOpacity else { return }
+    appStore.send(.settings(.setAgentIslandSilentOpacity(silentOpacityDraft)))
   }
 
   private var notchLayout: AgentIslandNotchLayout? {
     presentation.notchSize.map { AgentIslandNotchLayout(cutoutSize: $0) }
+  }
+
+  private var compactHeight: CGFloat {
+    AgentIslandRootLayout.compactHeight(
+      notchCompactHeight: notchLayout?.compactHeight,
+      floatingMenuBarHeight: presentation.floatingMenuBarHeight
+    )
+  }
+
+  private var isFloating: Bool { notchLayout == nil }
+
+  private var shouldEnterSilentState: Bool {
+    AgentIslandOpacityPolicy.shouldEnterSilentState(
+      isFloating: isFloating,
+      isRosterExpanded: agentsStore.isIslandRosterExpanded,
+      hasAttentionEntries: !agentsStore.islandAttentionEntries.isEmpty,
+      isHovering: isHovering,
+      isControlPresented: isOpacityControlPresented
+    )
   }
 
   private var rootWidth: CGFloat {
@@ -281,5 +512,91 @@ struct AgentIslandView: View {
       appStore.settings.agentIslandDisplayPreference,
       size ?? contentSize
     )
+  }
+}
+
+private struct AgentIslandDragCaptureView: NSViewRepresentable {
+  let dragChanged: (AgentIslandFloatingDragEvent) -> Void
+
+  func makeNSView(context: Context) -> AgentIslandDragCaptureNSView {
+    AgentIslandDragCaptureNSView(dragChanged: dragChanged)
+  }
+
+  func updateNSView(_ nsView: AgentIslandDragCaptureNSView, context: Context) {
+    nsView.dragChanged = dragChanged
+  }
+}
+
+private final class AgentIslandDragCaptureNSView: NSView {
+  var dragChanged: (AgentIslandFloatingDragEvent) -> Void
+  private var hoverTrackingArea: NSTrackingArea?
+  private var isDragging = false
+
+  init(dragChanged: @escaping (AgentIslandFloatingDragEvent) -> Void) {
+    self.dragChanged = dragChanged
+    super.init(frame: .zero)
+  }
+
+  @available(*, unavailable)
+  required init?(coder: NSCoder) {
+    fatalError("init(coder:) has not been implemented")
+  }
+
+  override func updateTrackingAreas() {
+    if let hoverTrackingArea {
+      removeTrackingArea(hoverTrackingArea)
+    }
+    super.updateTrackingAreas()
+
+    let hoverTrackingArea = NSTrackingArea(
+      rect: .zero,
+      options: [.mouseEnteredAndExited, .cursorUpdate, .activeAlways, .inVisibleRect],
+      owner: self,
+      userInfo: nil
+    )
+    addTrackingArea(hoverTrackingArea)
+    self.hoverTrackingArea = hoverTrackingArea
+  }
+
+  override func mouseEntered(with event: NSEvent) {
+    currentDragCursor.set()
+  }
+
+  override func mouseExited(with event: NSEvent) {
+    if !isDragging {
+      NSCursor.arrow.set()
+    }
+  }
+
+  override func cursorUpdate(with event: NSEvent) {
+    currentDragCursor.set()
+  }
+
+  override func mouseDown(with event: NSEvent) {
+    isDragging = true
+    window?.invalidateCursorRects(for: self)
+    currentDragCursor.set()
+    dragChanged(.began(pointerX: NSEvent.mouseLocation.x))
+  }
+
+  override func mouseDragged(with event: NSEvent) {
+    currentDragCursor.set()
+    dragChanged(.changed(pointerX: NSEvent.mouseLocation.x))
+  }
+
+  override func mouseUp(with event: NSEvent) {
+    isDragging = false
+    window?.invalidateCursorRects(for: self)
+    let pointer = convert(event.locationInWindow, from: nil)
+    (bounds.contains(pointer) ? NSCursor.openHand : .arrow).set()
+    dragChanged(.ended(pointerX: NSEvent.mouseLocation.x))
+  }
+
+  override func resetCursorRects() {
+    addCursorRect(bounds, cursor: currentDragCursor)
+  }
+
+  private var currentDragCursor: NSCursor {
+    isDragging ? .closedHand : .openHand
   }
 }

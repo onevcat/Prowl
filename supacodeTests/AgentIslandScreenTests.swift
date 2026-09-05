@@ -73,7 +73,8 @@ struct AgentIslandScreenTests {
 
     let frame = AgentIslandScreenLayout.panelFrame(
       contentSize: CGSize(width: 420, height: 180),
-      screen: display
+      screen: display,
+      floatingHorizontalPosition: 0.1
     )
 
     #expect(frame.midX == display.notchFrame?.midX)
@@ -109,7 +110,7 @@ struct AgentIslandScreenTests {
     #expect(AgentIslandNotchLayout(cutoutSize: CGSize(width: 208, height: 36)).compactHeight == 36)
   }
 
-  @Test func floatingPillUsesVisibleTopAndSupportsNegativeCoordinates() {
+  @Test func floatingPillOverlaysTheMenuBarAndSupportsNegativeCoordinates() {
     let display = screen(
       id: "external",
       origin: CGPoint(x: -2_560, y: -180),
@@ -122,10 +123,155 @@ struct AgentIslandScreenTests {
     )
 
     #expect(frame.midX == display.frame.midX)
-    #expect(
-      abs(frame.maxY - (display.visibleFrame.maxY - AgentIslandScreenLayout.floatingTopOffset))
-        < 0.001
+    #expect(frame.maxY == display.frame.maxY)
+    #expect(display.menuBarHeight == 32)
+  }
+
+  @Test func floatingPillUsesTheStoredHorizontalPosition() {
+    let display = screen(id: "external")
+
+    let frame = AgentIslandScreenLayout.panelFrame(
+      contentSize: CGSize(width: 300, height: 40),
+      screen: display,
+      floatingHorizontalPosition: 0.25
     )
+
+    #expect(frame.midX == 480)
+  }
+
+  @Test func floatingPillStaysInsideTheVisibleHorizontalBounds() {
+    let display = screen(id: "external")
+
+    let leadingFrame = AgentIslandScreenLayout.panelFrame(
+      contentSize: CGSize(width: 420, height: 200),
+      screen: display,
+      floatingHorizontalPosition: 0
+    )
+    let trailingFrame = AgentIslandScreenLayout.panelFrame(
+      contentSize: CGSize(width: 420, height: 200),
+      screen: display,
+      floatingHorizontalPosition: 1
+    )
+
+    #expect(
+      leadingFrame.minX == display.visibleFrame.minX + AgentIslandScreenLayout.floatingSideInset)
+    #expect(
+      trailingFrame.maxX == display.visibleFrame.maxX - AgentIslandScreenLayout.floatingSideInset)
+  }
+
+  @Test func floatingPositionsAreIndependentAndCenteredByDefault() {
+    var positions = AgentIslandFloatingPositions()
+
+    #expect(positions.normalizedPosition(for: "first") == 0.5)
+    positions.setNormalizedPosition(0.25, for: "first")
+    positions.setNormalizedPosition(0.75, for: "second")
+
+    #expect(positions.normalizedPosition(for: "first") == 0.25)
+    #expect(positions.normalizedPosition(for: "second") == 0.75)
+    #expect(positions.normalizedPosition(for: "unknown") == 0.5)
+  }
+
+  @Test func centeredFloatingPositionDoesNotLeaveRedundantState() {
+    var positions = AgentIslandFloatingPositions()
+    positions.setNormalizedPosition(0.25, for: "external")
+    #expect(!positions.isEmpty)
+
+    positions.setNormalizedPosition(0.5, for: "external")
+
+    #expect(positions.isEmpty)
+  }
+
+  @Test func floatingSilentOpacityIsClampedToTheUsefulRange() {
+    #expect(AgentIslandOpacityPolicy.normalizedSilentOpacity(0.05) == 0.2)
+    #expect(AgentIslandOpacityPolicy.normalizedSilentOpacity(0.6) == 0.6)
+    #expect(AgentIslandOpacityPolicy.normalizedSilentOpacity(2) == 1)
+    #expect(
+      AgentIslandOpacityPolicy.normalizedSilentOpacity(.nan)
+        == AgentIslandOpacityPolicy.defaultSilentOpacity
+    )
+  }
+
+  @Test func onlyAFloatingSilentIslandWithoutAttentionUsesTheConfiguredOpacity() {
+    #expect(
+      AgentIslandOpacityPolicy.opacity(
+        isFloating: true,
+        isSilent: true,
+        isRosterExpanded: false,
+        hasAttentionEntries: false,
+        silentOpacity: 0.4
+      ) == 0.4
+    )
+    #expect(
+      AgentIslandOpacityPolicy.opacity(
+        isFloating: true,
+        isSilent: false,
+        isRosterExpanded: false,
+        hasAttentionEntries: false,
+        silentOpacity: 0.4
+      ) == 1
+    )
+    #expect(
+      AgentIslandOpacityPolicy.opacity(
+        isFloating: false,
+        isSilent: true,
+        isRosterExpanded: false,
+        hasAttentionEntries: false,
+        silentOpacity: 0.4
+      ) == 1
+    )
+    #expect(
+      AgentIslandOpacityPolicy.opacity(
+        isFloating: true,
+        isSilent: true,
+        isRosterExpanded: false,
+        hasAttentionEntries: true,
+        silentOpacity: 0.4
+      ) == 1
+    )
+    #expect(
+      AgentIslandOpacityPolicy.opacity(
+        isFloating: true,
+        isSilent: true,
+        isRosterExpanded: true,
+        hasAttentionEntries: false,
+        silentOpacity: 0.4
+      ) == 1
+    )
+  }
+
+  @Test func silentEligibilityRequiresACollapsedInactiveRoster() {
+    #expect(
+      AgentIslandOpacityPolicy.shouldEnterSilentState(
+        isFloating: true,
+        isRosterExpanded: false,
+        hasAttentionEntries: false,
+        isHovering: false,
+        isControlPresented: false
+      ))
+    #expect(
+      !AgentIslandOpacityPolicy.shouldEnterSilentState(
+        isFloating: true,
+        isRosterExpanded: true,
+        hasAttentionEntries: false,
+        isHovering: false,
+        isControlPresented: false
+      ))
+    #expect(
+      !AgentIslandOpacityPolicy.shouldEnterSilentState(
+        isFloating: true,
+        isRosterExpanded: false,
+        hasAttentionEntries: true,
+        isHovering: false,
+        isControlPresented: false
+      ))
+    #expect(
+      !AgentIslandOpacityPolicy.shouldEnterSilentState(
+        isFloating: true,
+        isRosterExpanded: false,
+        hasAttentionEntries: false,
+        isHovering: true,
+        isControlPresented: false
+      ))
   }
 
   // MARK: Settings picker selection

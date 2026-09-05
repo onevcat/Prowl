@@ -40,10 +40,11 @@ enum AgentIslandDisplaySelection: Hashable {
 
 struct AgentIslandSettingsSection: View {
   @Bindable var store: StoreOf<SettingsFeature>
+  let globalHotKeyRegistrationFailure: Keybinding?
   @State private var displayCatalog = AgentIslandDisplayCatalog.shared
 
   var body: some View {
-    Section("Agent Island") {
+    Section {
       Toggle(isOn: $store.agentIslandEnabled) {
         Text("Show Agent Island")
         Text("Working stays compact. Blocked and Done appear as stronger agent notifications.")
@@ -63,7 +64,40 @@ struct AgentIslandSettingsSection: View {
       }
       .help("Choose where Agent Island appears")
       .disabled(!store.agentIslandEnabled)
+
+      LabeledContent {
+        Button("Reset") {
+          store.send(.resetIslandFloatingPositionsTapped)
+        }
+        .disabled(store.agentIslandFloatingPositions.isEmpty)
+      } label: {
+        Text("Floating Positions")
+        Text("Centers Agent Island on displays without a notch.")
+      }
+      .help("Reset Agent Island's saved floating positions")
+    } header: {
+      Text("Agent Island")
+    } footer: {
+      VStack(alignment: .leading, spacing: 4) {
+        if let globalHotKeyRegistrationFailure {
+          Text("macOS could not register \(globalHotKeyRegistrationFailure.display) globally.")
+            .foregroundStyle(.red)
+        }
+
+        Button(shortcutLinkTitle) {
+          store.send(.showShortcutButtonTapped(commandID: AppShortcuts.CommandID.toggleAgentIsland))
+        }
+        .buttonStyle(.link)
+        .help("Open Shortcuts and show Toggle Agent Island")
+      }
     }
+  }
+
+  private var shortcutLinkTitle: String {
+    if globalHotKeyRegistrationFailure == nil {
+      return "Set a shortcut for Toggle Agent Island…"
+    }
+    return "Choose another shortcut for Toggle Agent Island…"
   }
 
   private var displaySelection: Binding<AgentIslandDisplaySelection> {
