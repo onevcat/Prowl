@@ -4,9 +4,12 @@ struct TerminalCloseProtectionCandidate: Equatable {
   let hasAgent: Bool
   let agentDisplayState: AgentDisplayState?
   let commandRunningDuration: TimeInterval?
+  var editingAge: TimeInterval?
+  var hasMarkedText = false
 }
 
 enum TerminalCloseProtectionReason: Equatable, Hashable {
+  case recentInput
   case agentActive
   case longRunningCommand
 }
@@ -21,6 +24,7 @@ struct TerminalCloseConfirmationDecision: Equatable {
 }
 
 enum TerminalCloseConfirmationPolicy {
+  static let recentEditingThreshold: TimeInterval = 10
   static let longRunningCommandThreshold: TimeInterval = 10
 
   static func decision(
@@ -31,9 +35,16 @@ enum TerminalCloseConfirmationPolicy {
     var reasons: Set<TerminalCloseProtectionReason> = []
 
     for candidate in candidates {
-      guard let reason = protectionReason(for: candidate, threshold: threshold) else { continue }
+      var paneReasons: Set<TerminalCloseProtectionReason> = []
+      if candidate.hasMarkedText || candidate.editingAge.map({ $0 <= recentEditingThreshold }) == true {
+        paneReasons.insert(.recentInput)
+      }
+      if let reason = protectionReason(for: candidate, threshold: threshold) {
+        paneReasons.insert(reason)
+      }
+      guard !paneReasons.isEmpty else { continue }
       protectedPaneCount += 1
-      reasons.insert(reason)
+      reasons.formUnion(paneReasons)
     }
 
     return TerminalCloseConfirmationDecision(
@@ -51,7 +62,18 @@ enum TerminalCloseConfirmationPolicy {
   ) -> String {
     let paneText = decision.protectedPaneCount == 1 ? "pane" : "panes"
     let reasonText: String
-    if decision.reasons == Set([.agentActive]) {
+    if decision.reasons.contains(.recentInput) {
+      var activities = ["recent input"]
+      if decision.reasons.contains(.agentActive) {
+        activities.append("active agent work or an unseen agent result")
+      }
+      if decision.reasons.contains(.longRunningCommand) {
+        activities.append("a command that has been running for at least 10 seconds")
+      }
+      return
+        "This will close \(decision.protectedPaneCount) \(paneText) in “\(worktreeName)” with "
+        + activities.joined(separator: ", ") + ". Closing may lose unsubmitted input."
+    } else if decision.reasons == Set([.agentActive]) {
       reasonText = "active agent work or an unseen agent result"
     } else if decision.reasons == Set([.longRunningCommand]) {
       reasonText = "a command that has been running for at least 10 seconds"

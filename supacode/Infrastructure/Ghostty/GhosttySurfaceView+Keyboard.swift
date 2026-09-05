@@ -478,6 +478,16 @@ extension GhosttySurfaceView {
       composing: composing
     )
     let finalText = text ?? ghosttyCharacters(resolvedEvent)
+    // Bound keys can close a pane synchronously inside ghostty_surface_key.
+    // Never let the close shortcut itself create editing activity.
+    if action != GHOSTTY_ACTION_RELEASE,
+      TerminalEditingActivity.isEditingKey(
+        keyCode: event.keyCode, modifiers: event.modifierFlags, text: finalText
+      ),
+      bindingFlags(for: event, surface: surface) == nil
+    {
+      recordEditingActivity()
+    }
     if let finalText, !finalText.isEmpty,
       let codepoint = finalText.utf8.first, codepoint >= 0x20
     {

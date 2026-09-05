@@ -172,3 +172,16 @@ their own hotkey — see [`components/custom-actions.md`](../components/custom-a
   Command distinguishes them.
 - `select_previous/next_worktree` (⌘⌃↑/↓) is overloaded by design: in Shelf view
   it cycles the open book's **tabs**; elsewhere it changes the selected worktree.
+
+### Recent input close protection
+
+Closing a pane or tab asks for confirmation if any affected pane received text,
+paste, dropped text or file paths, or deletion input within the last 10 seconds.
+Active input-method composition also requires confirmation, even after 10 seconds.
+This applies to idle agents and ordinary terminals, alongside existing protection
+for active agents, unseen results, and long-running commands.
+
+Navigation, copying, scrolling, and the close shortcut itself do not extend this
+window. Enter and Escape do not clear it. This guards against accidental closure
+while editing; it does not detect saved drafts or protect input indefinitely.
+Explicit no-confirmation close operations retain their existing behavior.

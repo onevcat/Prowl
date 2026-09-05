@@ -156,6 +156,12 @@ final class GhosttySurfaceView: NSView, Identifiable {
   var focused = false
   private var detachedFocusClearTask: Task<Void, Never>?
   var markedText = NSMutableAttributedString()
+  private(set) var lastEditingAt: TimeInterval?
+
+  func recordEditingActivity() {
+    lastEditingAt = ProcessInfo.processInfo.systemUptime
+  }
+
   var keyboardLayoutChangeKeyUpSuppression: KeyboardLayoutChangeKeyUpSuppression?
   var keyTextAccumulator: [String]?
   var cellSize: CGSize = .zero

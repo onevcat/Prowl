@@ -29,6 +29,7 @@ extension GhosttySurfaceView: NSTextInputClient {
     default:
       return
     }
+    if markedText.length > 0 { recordEditingActivity() }
     if keyTextAccumulator == nil {
       syncPreedit()
     }
@@ -128,6 +129,7 @@ extension GhosttySurfaceView: NSTextInputClient {
   func insertCommittedTextForBroadcast(_ text: String) {
     guard let surface else { return }
     guard !text.isEmpty else { return }
+    recordEditingActivity()
     unmarkText()
     let len = text.utf8CString.count
     guard len > 0 else { return }
