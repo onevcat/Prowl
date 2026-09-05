@@ -361,13 +361,18 @@ DMG_PATH="build/Prowl.dmg"
 mise exec -- create-dmg "$APP_PATH" build/ \
   --overwrite \
   --dmg-title="Prowl" \
-  --identity="$IDENTITY_SHA"
+  --no-code-sign
 
 DMG_OUTPUT="$(find build -name "*.dmg" -maxdepth 1 -newer build/ExportOptions.plist | head -1)"
 if [[ "$DMG_OUTPUT" != "$DMG_PATH" ]] && [[ -n "$DMG_OUTPUT" ]]; then
   mv "$DMG_OUTPUT" "$DMG_PATH"
 fi
 [[ -f "$DMG_PATH" ]] || die "DMG not found at $DMG_PATH"
+
+log "compressing DMG with LZMA..."
+bash "$SCRIPT_DIR/recompress-dmg.sh" "$DMG_PATH" "$DMG_PATH"
+codesign -s "$IDENTITY_SHA" --timestamp "$DMG_PATH"
+codesign --verify --strict "$DMG_PATH"
 
 # ── Notarize ─────────────────────────────────────────────────────────────────
 

@@ -180,6 +180,7 @@ embed-cli: build-cli-release # Build release CLI and copy into Resources for dis
 	dst="$(CURRENT_MAKEFILE_DIR)/Resources/prowl-cli"; \
 	mkdir -p "$$dst"; \
 	cp "$$bin" "$$dst/prowl"; \
+	strip -S -x "$$dst/prowl"; \
 	chmod +x "$$dst/prowl"; \
 	echo "embedded CLI binary at $$dst/prowl"
 
@@ -366,9 +367,13 @@ test-app: ensure-ghostty # Run app/unit tests via xcodebuild
 		shift 3; \
 		rm -rf "$$result_bundle"; \
 		set +e; \
-		xcodebuild "$$action" -project supacode.xcodeproj -scheme supacode -destination "platform=macOS" -resultBundlePath "$$result_bundle" $(TEST_SIGNING_ARGS) -skipMacroValidation -clonedSourcePackagesDirPath $(SPM_CACHE_DIR) SWIFT_COMPILATION_MODE=incremental "$$@" 2>&1 | mise exec -- xcsift -w --format toon; \
+		xcodebuild "$$action" -project supacode.xcodeproj -scheme supacode -destination "platform=macOS" -resultBundlePath "$$result_bundle" $(TEST_SIGNING_ARGS) -skipMacroValidation -clonedSourcePackagesDirPath $(SPM_CACHE_DIR) -showBuildTimingSummary SWIFT_COMPILATION_MODE=incremental "$$@" 2>&1 | tee "$$result_bundle.log" | mise exec -- xcsift -w --build-info --format toon; \
 		local xcodebuild_status=$${PIPESTATUS[0]}; \
 		set -e; \
+		if [ "$$action" = "test" ] && [ -d "$$result_bundle" ]; then \
+			xcrun xcresulttool get log --path "$$result_bundle" --type build --compact > "$$result_bundle.build.json" \
+				|| echo "warning: could not export Xcode build metrics" >&2; \
+		fi; \
 		if [ "$$xcodebuild_status" -ne 0 ]; then \
 			bash "$(CURRENT_MAKEFILE_DIR)/scripts/print-xcresult-failures.sh" "$$result_bundle" || true; \
 			return "$$xcodebuild_status"; \

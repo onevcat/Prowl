@@ -37,6 +37,7 @@ jobs:
             local name="$1"
             shift
             local log="build/ci-logs/${name}.log"
+            local started=$SECONDS
             echo "::group::${name}"
             # Capture the command's own exit code. Reading $? after an
             # `if cmd; then ...; fi` block yields the `if` status (0 when the
@@ -44,6 +45,7 @@ jobs:
             # failures and let the step pass on a failing build.
             local status=0
             "$@" >"$log" 2>&1 || status=$?
+            printf '| %s | %s | %s |\n' "$name" "$((SECONDS - started))" "$status" >"build/ci-logs/${name}.timing"
             cat "$log"
             echo "::endgroup::"
             return "$status"
@@ -63,7 +65,24 @@ jobs:
           wait "$pid_smoke" || failed=1
           wait "$pid_cli" || failed=1
           wait "$pid_scripts" || failed=1
+          {
+            printf '## Build and test wall time\n\n| Task | Seconds | Exit status |\n| --- | ---: | ---: |\n'
+            cat build/ci-logs/*.timing
+            printf '\nTasks run in parallel; their times must not be added.\n\n'
+            python3 scripts/summarize-xcode-build.py build/test-results/*.build.json
+          } >> "$GITHUB_STEP_SUMMARY"
           exit "$failed"
+      - name: Upload build and test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-test-logs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            build/ci-logs/
+            build/test-results/*.log
+            build/test-results/*.build.json
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Upload xcresult bundle (on failure)
         if: failure()
         uses: actions/upload-artifact@v4
