@@ -4,6 +4,7 @@
 | --- | --- |
 | **Status** | T1a implemented and verified 2026-09-05; T1b/T1c live contracts and inference verification remain pending |
 | **Anchor date** | 2026-09-05 |
+| **Primary PR** | [#767](https://github.com/onevcat/Prowl/pull/767) (T1a) |
 | **Related** | [#726](https://github.com/onevcat/Prowl/issues/726), [T0](015-t0-version-attestation.md), [release plan](../063-agent-workflows/release-plan.md), [operating runbook](agent-contracts-runbook.md) |
 
 ## Decision to make
