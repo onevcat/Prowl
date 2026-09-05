@@ -8,6 +8,7 @@ import SwiftUI
 final class AgentIslandPresentationModel {
   var notchSize: CGSize?
   var floatingMenuBarHeight: CGFloat?
+  var floatingBarScreenFrame: CGRect?
 }
 
 enum AgentIslandFloatingDragEvent {
@@ -48,6 +49,15 @@ struct AgentIslandRootLayout {
     return floatingMenuBarHeight
   }
 
+  static func floatingBarScreenFrame(in panelFrame: CGRect, height: CGFloat) -> CGRect {
+    CGRect(
+      x: panelFrame.midX - floatingCompactWidth / 2,
+      y: panelFrame.maxY - height,
+      width: floatingCompactWidth,
+      height: height
+    )
+  }
+
   static func showsDisplayControl(connectedDisplayCount: Int) -> Bool {
     connectedDisplayCount > 1
   }
@@ -73,6 +83,18 @@ enum AgentIslandHoverAnimation: TransactionKey {
   }
 }
 
+struct AgentIslandBarHoverState {
+  private(set) var isHovered = false
+
+  mutating func update(reportedHover: Bool, pointerLocation: CGPoint, barFrame: CGRect?) -> Bool {
+    // Resizing or reordering the panel can emit exit/entry callbacks without pointer movement.
+    let hovered = barFrame.map { $0.contains(pointerLocation) } ?? reportedHover
+    guard hovered != isHovered else { return false }
+    isHovered = hovered
+    return true
+  }
+}
+
 struct AgentIslandView: View {
   @Bindable private var appStore: StoreOf<AppFeature>
   @Bindable private var agentsStore: StoreOf<ActiveAgentsFeature>
@@ -86,7 +108,7 @@ struct AgentIslandView: View {
   @State private var contentSize = CGSize(width: 420, height: 40)
   @State private var isHovering = false
   @State private var isSilent = false
-  @State private var isBarHovered = false
+  @State private var barHover = AgentIslandBarHoverState()
   @State private var isFloatingDragging = false
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -220,9 +242,16 @@ struct AgentIslandView: View {
       }
     }
     .onHover { hovering in
-      guard hovering != isBarHovered else { return }
+      var nextHover = barHover
+      guard
+        nextHover.update(
+          reportedHover: hovering,
+          pointerLocation: NSEvent.mouseLocation,
+          barFrame: presentation.floatingBarScreenFrame
+        )
+      else { return }
       AgentIslandHoverAnimation.perform(reduceMotion: reduceMotion) {
-        isBarHovered = hovering
+        barHover = nextHover
       }
     }
     .accessibilityLabel(
@@ -252,7 +281,7 @@ struct AgentIslandView: View {
     .accessibilityHidden(true)
   }
 
-  private var showsFloatingGrip: Bool { isBarHovered || isFloatingDragging }
+  private var showsFloatingGrip: Bool { barHover.isHovered || isFloatingDragging }
 
   private func notchedCompactContent(layout: AgentIslandNotchLayout) -> some View {
     HStack(spacing: 0) {

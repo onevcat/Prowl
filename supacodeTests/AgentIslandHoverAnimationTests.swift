@@ -24,6 +24,50 @@ struct AgentIslandHoverAnimationTests {
     #expect(fixture.samples.allSatisfy { $0.last == 0 })
   }
 
+  @Test func layoutHoverCallbacksDoNotReplayGripWhilePointerStaysInside() {
+    let fixture = HoverAnimationFixture()
+    defer { fixture.close() }
+    fixture.updateHover(true)
+
+    for expanded in [true, false] {
+      fixture.updateRoster(expanded)
+      for reportedHover in [false, true, false, true] {
+        fixture.updateHover(reportedHover, pointerInside: true)
+        #expect(fixture.samples.allSatisfy { $0.allSatisfy { $0 == 1 } })
+      }
+    }
+
+    fixture.updateHover(false)
+    #expect(fixture.samples.allSatisfy { $0.contains { $0 > 0 && $0 < 1 } })
+    #expect(fixture.samples.allSatisfy { $0.last == 0 })
+  }
+
+  @Test func compactScreenRegionStaysFixedWhenRosterResizesPanel() {
+    let compact = CGRect(x: -970, y: 860, width: 340, height: 40)
+    let expanded = CGRect(x: -1010, y: 600, width: 420, height: 300)
+    #expect(AgentIslandRootLayout.floatingBarScreenFrame(in: compact, height: 40) == compact)
+    #expect(AgentIslandRootLayout.floatingBarScreenFrame(in: expanded, height: 40) == compact)
+  }
+
+  @Test func hoverTracksActualPointerAndFallsBackWithoutFloatingGeometry() {
+    var state = AgentIslandBarHoverState()
+    let frame = CGRect(x: -970, y: 860, width: 340, height: 40)
+    let inside = CGPoint(x: -800, y: 880)
+    let outside = CGPoint(x: -800, y: 850)
+    let entered = state.update(reportedHover: true, pointerLocation: inside, barFrame: frame)
+    #expect(entered)
+    let layoutExit = state.update(reportedHover: false, pointerLocation: inside, barFrame: frame)
+    #expect(!layoutExit)
+    #expect(state.isHovered)
+    let exited = state.update(reportedHover: true, pointerLocation: outside, barFrame: frame)
+    #expect(exited)
+    #expect(!state.isHovered)
+    let fallbackEntered = state.update(reportedHover: true, pointerLocation: outside, barFrame: nil)
+    #expect(fallbackEntered)
+    let fallbackExited = state.update(reportedHover: false, pointerLocation: inside, barFrame: nil)
+    #expect(fallbackExited)
+  }
+
   @Test func reduceMotionMakesHoverImmediate() {
     let fixture = HoverAnimationFixture()
     defer { fixture.close() }
@@ -95,6 +139,7 @@ private final class HoverAnimationFixture {
   }
 
   private let model = Model()
+  private var hoverState = AgentIslandBarHoverState()
   private let recorder = Recorder()
   private let gripRecorder = Recorder()
   private let window: NSWindow
@@ -116,11 +161,18 @@ private final class HoverAnimationFixture {
     window.orderOut(nil)
   }
 
-  func updateHover(_ hovered: Bool, reduceMotion: Bool = false) {
+  func updateHover(_ hovered: Bool, reduceMotion: Bool = false, pointerInside: Bool? = nil) {
     recorder.samples = []
     gripRecorder.samples = []
-    AgentIslandHoverAnimation.perform(reduceMotion: reduceMotion) {
-      model.hovered = hovered
+    let inside = pointerInside ?? hovered
+    if hoverState.update(
+      reportedHover: hovered,
+      pointerLocation: CGPoint(x: inside ? 20 : 400, y: 20),
+      barFrame: CGRect(x: 0, y: 0, width: 340, height: 40)
+    ) {
+      AgentIslandHoverAnimation.perform(reduceMotion: reduceMotion) {
+        model.hovered = hoverState.isHovered
+      }
     }
     render()
   }

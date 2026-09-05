@@ -71,7 +71,8 @@ and a removed entry disappears with the roster.
 - **Click the bar** to open or close the full roster. This does not bring Prowl forward.
 - **Hover over a floating bar** to reveal its leading drag grip. The grip fades in while state
   counts shift right inside the fixed-width bar; leaving reverses the animation. Opening or closing
-  the roster while hovered keeps the grip visible without replaying its fade. Reduce Motion
+  the roster while hovered keeps the grip visible without replaying its fade. Panel layout changes
+  do not count as leaving the bar; the pointer must move outside its screen area. Reduce Motion
   makes this change immediate. Drag horizontally to reposition it; the grip stays visible during
   the drag. Prowl remembers positions per monitor. Notched displays remain fixed to the cutout
   and do not show a grip.

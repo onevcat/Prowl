@@ -62,3 +62,19 @@ The hover-transaction follow-up adds two native SwiftUI rendering tests: pointer
 must produce intermediate presentation values, roster expansion/collapse must retain the fully
 revealed grip, and Reduce Motion must change immediately. These tests pass in an NSHostingView
 fixture; end-to-end pointer interaction in the live island still requires visual verification.
+
+## Stable hover during panel changes
+
+Hover-origin animation alone does not distinguish real pointer movement from transient tracking
+callbacks caused by panel resizing or ordering. The bar now retains its hover state while the
+pointer remains inside the compact bar's screen rectangle. The window controller publishes that
+rectangle before changing the panel frame, independently of intermediate SwiftUI layout. A real
+pointer exit still animates normally; no timeout or click-duration lock is involved.
+
+The rendering regression sends alternating exit/entry callbacks with a stationary pointer during
+both roster expansion and collapse. It fails when callbacks directly drive the hover state and
+must pass with screen-coordinate reconciliation, followed by a real animated exit.
+
+The stationary-pointer regression was observed failing before reconciliation and passing after it.
+All 38 focused hover, screen layout, and isolation tests passed. The intermittent live-window
+behavior has not been independently reproduced through actual mouse interaction.
