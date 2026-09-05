@@ -56,7 +56,7 @@ Three sources, later ones winning for the same `id`:
 
 | Source | Location | Notes |
 |---|---|---|
-| Built-in | `Prowl.app/Contents/Resources/workflows/` | ids `prowl.*` are reserved for it. No built-in ships yet; the first (`prowl.adversarial-review`) arrives in a later release. |
+| Built-in | `Prowl.app/Contents/Resources/workflows/` | ids `prowl.*` are reserved for it. No built-in ships yet. |
 | Your workflows | `~/.prowl/workflows/*.yaml` | personal; not tied to a repository |
 | Repository | `<repo root>/.prowl/workflows/*.yaml` | travels with the repo; seen only from that repository's worktrees |
 

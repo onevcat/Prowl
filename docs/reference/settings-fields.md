@@ -58,7 +58,9 @@ JSON is pretty-printed with sorted keys. Legacy `~/.supacode` is migrated to
 | `showActiveAgentTabTitles` | Bool | `false` | Show pane titles (surface title, falling back to the tab title; vs. branch) in the agents panel. |
 | `showActiveAgentStatusInShelf` | Bool | `true` | Show agent status markers on Shelf tab icons. |
 | `agentIslandSilentOpacity` | Double | `0.35` | Quiet floating island opacity (0.2–1.0), under Agents → Display. Notched monitors stay fully opaque. |
-| `agentIslandEnabled` | Bool | `false` | Show Agent Island while the Active Agents roster is non-empty. |
+| `agentIslandEnabled` | Bool | `false` | Show Agent Island, including its empty state unless `agentIslandOnlyShowWithAgents` is enabled. |
+| `agentIslandOnlyShowWithAgents` | Bool | `false` | Hide Agent Island when the Active Agents roster is empty. |
+| `agentIslandFloatingPositions` | object (`{"positionsByDisplayID":{}}`) | Empty positions | Saved horizontal positions per display UUID (0–1); absent entries use the center. Applies to displays without a notch. |
 | `agentIslandDisplayPreference` | object (`{"mode":"automatic"}` or `{"mode":"display","id":"<CG display UUID>","name":"<last known name>"}`) | `{"mode":"automatic"}` | Select Agent Island placement. A missing fixed display temporarily follows Automatic while preserving its UUID for reconnection. |
 | `windowTintMode` | enum (`none`/`repositoryColor`/`custom`) | `repositoryColor` | How the window chrome is tinted. |
 | `windowTintCustomColor` | color | default | The custom tint color (when `windowTintMode = custom`). |
@@ -112,10 +114,10 @@ memory for the Recommended resolution). See
 [`components/agent-profiles.md`](../components/agent-profiles.md).
 
 **Workflows** also persist in `global.onevcat.json`: `disabledWorkflowIDs`
-(`<scope>/<id>` keys of workflow definitions switched off — the checkbox on
-Settings → Agents → Workflows), `workflowBindModeOverrides` (`{workflow_key,
+(`bundle/<id>`, `user/<id>`, or `repo:<canonical root>/<id>` keys of workflow definitions switched off — the Enabled control in
+Workflow Settings), `workflowBindModeOverrides` (`{workflow_key,
 mode}` entries, `mode` `ask` | `auto`; absent = follow the file's `bind` — the
-page's Bindings picker and the start sheet's "Don't ask again"), and
+detail's Run Setup picker and the start sheet's "Don't ask again"), and
 `workflowBindings` (remembered `launch`-role Profile bindings, one per
 requirements digest — the page's per-role pickers, or a start that resolved
 the role). Prefer the page over editing them by hand. See

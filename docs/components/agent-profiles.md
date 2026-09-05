@@ -27,9 +27,9 @@ respawn.
 ## Launching
 
 - **Toolbar Agents capsule** — always opens a popover. With a detected agent it
-  leads with Hand Off; a "Run a workflow" section follows when the worktree can
+  leads with Hand Off; a "Workflows" section follows when `PROWL_WORKFLOW_UI=1` and the worktree can
   see workflows (each row starts the workflow, its trailing `ellipsis.circle`
-  control — "Run with Options…" — forces the start sheet, and files that fail
+  menu offers "Run with Options…" and "Show Details in Settings…", and files that fail
   validation are listed dimmed with their reason; see
   [workflows](workflows.md)); launch rows follow under a
   "New agent in this worktree" section header, the current worktree's

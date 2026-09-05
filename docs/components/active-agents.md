@@ -101,7 +101,7 @@ Settings → Agents → Display:
   tab icons.
 - Panel height and hidden/shown state are persisted automatically.
 - [Agent Island](agent-island.md) projects this same roster at the top of a selected display;
-  its Working carousel and Blocked/Done callouts do not introduce separate state or read logic.
+  its state counts and Blocked/Done callouts do not introduce separate state or read logic.
 
 ## Relationship to other features
 

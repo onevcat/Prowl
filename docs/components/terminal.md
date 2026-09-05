@@ -168,5 +168,7 @@ launch. Notification bodies are not persisted.
   truth.
 - Closing the **last** tab leaves the worktree with no visible terminal (Shelf
   removes the book; Canvas drops the card).
+- Closing a pane or tab asks for confirmation after editing within the last 10 seconds or
+  during input-method composition. See [recent input close protection](../reference/keyboard-shortcuts.md#recent-input-close-protection).
 - `--capture` and stable reads depend on the pane's shell integration; agents
   running full-screen TUIs may need `read --wait-stable` rather than `--capture`.

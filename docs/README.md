@@ -50,7 +50,7 @@ its keyboard shortcuts, detailed behavior, settings, and gotchas.
 | [`components/view-modes.md`](components/view-modes.md) | Switching between Normal / Canvas / Shelf layouts and what each is good for. |
 | [`components/command-palette.md`](components/command-palette.md) | `⌘P` searchable command launcher; every action category it exposes. |
 | [`components/active-agents.md`](components/active-agents.md) | The Active Agents panel: a live list of every running agent and its status, with one-click jump-to-agent. |
-| [`components/agent-island.md`](components/agent-island.md) | A notch-aware Active Agents projection with a Working carousel, Blocked/Done callouts, and full roster. |
+| [`components/agent-island.md`](components/agent-island.md) | A notch-aware Active Agents projection with state counts, Blocked/Done callouts, and full roster. |
 | [`components/agent-detection.md`](components/agent-detection.md) | How Prowl knows an agent is Working / Blocked / Idle / Done, which agents it recognizes, and how the status indicator works. |
 | [`components/agent-profiles.md`](components/agent-profiles.md) | Agent Profiles: named launch presets for Claude Code/Codex (model, effort, mode, placement), the Agents launcher menu, recommended-profile resolution, and opt-in dedicated homes for separate accounts. |
 | [`components/notifications.md`](components/notifications.md) | Agent-finished reminders, command-finished notifications, the bell/unread indicators, and Dock badge/bounce. |
