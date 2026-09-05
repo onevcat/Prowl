@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| **Status** | Proposed route after inventory; implementation and inference verification have not started |
+| **Status** | T1a implemented and verified 2026-09-05; T1b/T1c live contracts and inference verification remain pending |
 | **Anchor date** | 2026-09-05 |
 | **Related** | [#726](https://github.com/onevcat/Prowl/issues/726), [T0](015-t0-version-attestation.md), [release plan](../063-agent-workflows/release-plan.md), [operating runbook](agent-contracts-runbook.md) |
 
@@ -15,8 +15,11 @@ confirmed its marginal cost is negligible, so maintaining free-model discovery i
 deliverable. Free hosted or already-installed local models are alternatives only when a
 runtime cannot use that DeepSeek route, never implicit fallbacks.
 
-The owner requested an inventory and plan first. This record proposes implementation scope;
-it does not authorize changing production hook semantics or claim the release gate passed.
+The owner approved autonomous T1a implementation after the inventory and route review.
+T1a implements inventory, a strict secret-free model policy, reports, and the production
+Codex configuration preflight. It does not change production hook semantics or claim the
+live release gate passed. Default inventory needs no Xcode build or model request; explicit
+preflight builds/runs the existing Swift test through the repository's Xcode setup.
 
 ## Verified starting point
 
@@ -52,11 +55,11 @@ Existing reusable boundaries:
   the bundled CLI, because extensions resolve `../../prowl-cli/prowl` themselves.
 - `supacode/CLIService/Shared/AgentNativeHookPayload.swift`: production event decoding.
 - `supacodeTests/CodexConfigReadLiveContractTests.swift`: existing real-binary preflight,
-  currently opt-in and tied to a fixed executable path.
+  now supplied the resolved executable and nonce-bound receipt location by the unified entry point.
 - `scripts/test_agent_hooks.py`: zero-inference relay tests against simulated runtime events;
   useful regression coverage, not proof that a real runtime emits those events.
-- `Makefile`: test result/count checks and reusable build products. There is currently no
-  `test-agent-contracts` target.
+- `Makefile`: test result/count checks and reusable build products. There is no
+  live contract runner beyond T1a inventory/preflight.
 
 ## Evidence boundaries
 
@@ -166,3 +169,37 @@ This is maintainer guidance; no automatic gate in `scripts/release.sh` is implem
   copy the recipe's embedded bearer token, global config replacement, or high-effort defaults.
 - Confirm how each client caps total requests, helper models, and reasoning tokens. Cost
   estimates are not hard spend limits unless enforced by the runtime/provider.
+
+
+## T1a implementation result (2026-09-05)
+
+- `scripts/agent_contracts.py` and `make test-agent-contracts` now inventory selected runtimes
+  (all eight by default), reuse T0 binary/version handling, and write a unique private JSON
+  report. A valid version on a failing command does not count as a successful inventory.
+- `Config/agent-contracts.example.json` describes proposed DeepSeek wire routes for seven
+  runtimes; Qoder remains absent pending its account-specific configuration. Schema 1 permits
+  only explicit model/provider/protocol/URL and environment-key references. Unknown/duplicate
+  fields, embedded URL credentials, helper commands, and auto routing are rejected. Inventory
+  checks presence only and never reads agent credential stores or copies a key.
+- Explicit preflight calls the existing Swift production configuration resolver/process in
+  `CodexConfigReadLiveContractTests`, with a temporary home and selected executable. The
+  internal Makefile target forwards `TEST_RUNNER_` variables. A matching nonce/executable
+  receipt and exactly one passed, non-skipped xcresult test are both required for success.
+- Reports keep inventory, route readiness, preflight, and live states separate. `--strict`
+  checks inventory/config readiness, not attestation equality. Unsupported preflights return
+  `not_run` and a failing exit; no live mode or attestation publication is exposed.
+- Default inventory has no build dependency. Preflight uses normal Xcode incremental `test`
+  builds, rather than a new cache or standalone binary. Both modes avoid model requests.
+  The process wrapper strips provider credentials and parent pane/workflow identity, applies
+  deadlines, and terminates its process group on timeout/cancellation.
+- The [runbook](agent-contracts-runbook.md), `AGENTS.md`, and release reminder now distinguish
+  implemented inventory/preflight from the remaining live suite.
+
+Verification: 22 new Python tests observed red then green; `make check` passed 104 script
+tests plus Swift formatting/lint. All eight installed version probes succeeded and reported
+newer-than-attested. Strict inventory with the example policy correctly reported a missing
+credential reference. The real 0.153.2 configuration preflight passed one executed test with
+zero skips/failures, including base/profile/explicit precedence, project exclusion, and scratch
+cleanup. A requested Pi preflight correctly returned `not_run` and a failing exit. Reports
+remain local under `build/agent-contracts/`; no attestation or credential configuration changed.
+The full eight-runtime live gate and D2 E2E remain outstanding.

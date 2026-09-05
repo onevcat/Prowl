@@ -35,7 +35,7 @@ say when each is cut:
 | --- | --- | --- |
 | R1 | **Shipped** — v2026.8.29 (2026-08-29) | — |
 | R2a | **Shipped** — v2026.8.31 (2026-08-31) | — |
-| R2b | In progress — C2 and D1, including Settings refinement, merged (#752/#754/#761/#763) | #726 T1 inventory complete; review the [proposed route](../064-agent-completion-signals/016-t1-contract-test-plan.md), then implement T1 and D2 |
+| R2b | In progress — C2 and D1, including Settings refinement, merged (#752/#754/#761/#763) | #726 T1a inventory/configuration preflight implemented; T1b/T1c live contracts next, then D2 |
 | R3 | Planned | after R2b ships |
 
 #### R2b PR ledger
@@ -46,7 +46,7 @@ say when each is cut:
 | D1 (skill) | Merged | #754: `prowl-workflow` bundled authoring skill (shipped ahead of the rest of D1) |
 | D1 (rest) | Merged | #761: Settings › Agents › Workflows page, `docs/components/workflows.md`, CLI reachability status (deferred from C0); [063.013](013-d1-workflows-settings.md) |
 | D1 (UI refinement) | Merged | #763: post-merge native list/detail refinement, repository-local workflow Settings, Run Setup copy, explicit run targets, file opening, and capsule YAML icons; [063.014](014-workflow-settings-ui-refinement.md) |
-| #726 T1 | Planned — inventory complete | [064.016](../064-agent-completion-signals/016-t1-contract-test-plan.md): proposed zero-inference inventory and scoped low-cost live contracts; [runbook](../064-agent-completion-signals/agent-contracts-runbook.md). No live contract pass claimed. |
+| #726 T1 | In progress — T1a implemented | [064.016](../064-agent-completion-signals/016-t1-contract-test-plan.md): zero-inference inventory and production configuration preflight verified; [runbook](../064-agent-completion-signals/agent-contracts-runbook.md). T1b/T1c live contracts remain pending. |
 | D2 | Planned | `prowl.adversarial-review` built-in + reviewer skill + E2E — after #726 T1 |
 
 #### R1 PR ledger
@@ -204,6 +204,8 @@ R3+: V2 / S5 rest;  delete HANDOFF_RETIRED stubs
 ```
 
 ## Change log
+
+- 2026-09-05 — Implemented #726 T1a: `make test-agent-contracts` now provides zero-inference inventory, secret-free model policy, private reports, and a production configuration preflight with nonce/test-count evidence. Live contracts remain pending. The release skill/runbook surface this distinction before bump/tag; [064.016](../064-agent-completion-signals/016-t1-contract-test-plan.md).
 
 - 2026-09-05 — Confirmed #763 merged and corrected the stale D1 status. Inventoried all eight installed tier-A runtimes (all newer than T0), researched low-cost/BYOK routes, and proposed T1's repeatable probe and evidence boundaries in [064.016](../064-agent-completion-signals/016-t1-contract-test-plan.md). Implementation and inference verification remain pending; T1 still precedes D2.
 

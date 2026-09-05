@@ -60,6 +60,7 @@ endif
 
 .DEFAULT_GOAL := help
 .PHONY: build-ghostty-xcframework ensure-ghostty sync-ghostty _record-ghostty-hash build-app build-cli build-cli-release embed-cli-debug embed-cli embed-docs embed-skills run-app install-dev-build install-release archive export-archive format format-changed format-lint lint check test test-app test-scripts test-cli-smoke test-cli-unit test-cli-integration benchmark-build bump-version log-stream agent-versions
+.PHONY: test-agent-contracts _test-agent-contract-codex
 
 help:  # Display this help.
 	@-+echo "Run make with one of the following targets:"
@@ -472,6 +473,23 @@ measure-titles: # Black-box check that animated tab titles stay coalesced to ~1 
 AGENT_VERSIONS_ARGS ?=
 agent-versions: # Compare installed tier-A agent CLI versions with the managed-hook attestation (AGENT_VERSIONS_ARGS="--json" / "--strict" / "--check-matrix")
 	@python3 "$(CURRENT_MAKEFILE_DIR)/scripts/agent_versions.py" $(AGENT_VERSIONS_ARGS)
+
+AGENT_CONTRACT_ARGS ?=
+test-agent-contracts: # Inventory runtime contracts without inference (AGENT_CONTRACT_ARGS="--mode preflight --runtime codex")
+	@python3 "$(CURRENT_MAKEFILE_DIR)/scripts/agent_contracts.py" $(AGENT_CONTRACT_ARGS)
+
+_test-agent-contract-codex: ensure-ghostty embed-cli-debug embed-docs embed-skills
+	@: "$${PROWL_CONTRACT_CODEX_EXECUTABLE:?Use test-agent-contracts --mode preflight}" \
+		"$${PROWL_CONTRACT_RECEIPT:?}" "$${PROWL_CONTRACT_NONCE:?}" "$${PROWL_CONTRACT_RESULT:?}"
+	TEST_RUNNER_PROWL_RUN_LIVE_CODEX_CONTRACT=1 \
+	TEST_RUNNER_PROWL_CONTRACT_CODEX_EXECUTABLE="$$PROWL_CONTRACT_CODEX_EXECUTABLE" \
+	TEST_RUNNER_PROWL_CONTRACT_RECEIPT="$$PROWL_CONTRACT_RECEIPT" \
+	TEST_RUNNER_PROWL_CONTRACT_NONCE="$$PROWL_CONTRACT_NONCE" \
+		xcodebuild test -project supacode.xcodeproj -scheme supacode -destination "platform=macOS" \
+		-resultBundlePath "$$PROWL_CONTRACT_RESULT" $(TEST_SIGNING_ARGS) -skipMacroValidation \
+		-clonedSourcePackagesDirPath "$(SPM_CACHE_DIR)" SWIFT_COMPILATION_MODE=incremental \
+		-only-testing:'supacodeTests/CodexConfigReadLiveContractTests/scratchPrecedenceAndProjectExclusion()' \
+		2>&1 | mise exec -- xcsift -w --format toon
 
 format: # Format all Swift code with swift-format (full-tree cleanup)
 	swift-format -p --in-place --recursive --configuration ./.swift-format.json supacode supacodeTests

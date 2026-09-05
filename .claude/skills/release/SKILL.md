@@ -16,7 +16,8 @@ Build, sign, notarize, and publish a Prowl release.
      **Agent contract release check** and surface its status to the user. Follow the linked
      contract runbook for commands and evidence: once T1 is implemented, run the full
      eight-runtime live check using the owner's DeepSeek configuration before bump/tag.
-     Until then, report T1 as not implemented rather than inventing a command or a pass.
+     Until then, run the available zero-inference inventory and report the live suite as
+     not implemented rather than inventing a command or a pass.
    - Run the `sync-docs` skill. It diffs `docs/.sync-meta.json`'s `last_synced_commit`
      against the current `main` HEAD (the code about to ship), updates any docs whose
      implementation changed, and sets `last_synced_commit` to the **current HEAD** —

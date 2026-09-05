@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| **Status** | In progress — S1 #715, S2 #718, S3 wave 1 #721/#723/#725/#728, and follow-ups #732/#736 shipped in v2026.8.29; #733 re-dispatch (#741) and #726 T0 (#739) shipped in R2a; #726 T1 inventory complete and route proposed in [016](016-t1-contract-test-plan.md) for R2b; S4/S5 planned |
+| **Status** | In progress — S1 #715, S2 #718, S3 wave 1 #721/#723/#725/#728, and follow-ups #732/#736 shipped in v2026.8.29; #733 re-dispatch (#741) and #726 T0 (#739) shipped in R2a; #726 T1a inventory/configuration preflight implemented in [016](016-t1-contract-test-plan.md) for R2b; T1b/T1c live contracts pending; S4/S5 planned |
 | **Anchor date** | 2026-08-22 |
 | **Primary PRs** | #715 (S1); #718 (S2); #721, #723 (S3a); #725 (S3b); #728 (S3c); #732 (012); #736 (013); #741 (re-dispatch); #739 (T0) |
 | **Related** | [063 agent-workflows](../063-agent-workflows/000-plan.md) (consumer; defines the `ObservedAgentState` observer this entry feeds), [030 agent-status-detection](../030-agent-status-detection/000-plan.md), [045 native-agent-session-detection](../045-native-agent-session-detection/000-plan.md), [055 agent-profile-runtimes](../055-agent-profile-runtimes/000-plan.md), [059 agent-transcript-snapshots](../059-agent-transcript-snapshots/000-plan.md), [060 cli-targeting-and-contract-governance](../060-prowl-cli-targeting-and-contract-governance/000-plan.md), [#473](https://github.com/onevcat/Prowl/issues/473), [#676](https://github.com/onevcat/Prowl/issues/676), `docs/components/agent-detection.md`, `docs/components/cli.md` |
@@ -349,3 +349,5 @@ opencode; partial for qodercli/qwen/amp; docs/bundle for the rest). Key conclusi
   slice, followed by S2 and S3 wave 1.
 
 - Updated 2026-09-05 (#726 T1 planning): Inventoried all eight newer-than-attested binaries and researched low-cost/BYOK routes. Proposed a zero-inference default, scoped live evidence, and explicit attestation publication in [016-t1-contract-test-plan.md](016-t1-contract-test-plan.md); repeatable operations live in [agent-contracts-runbook.md](agent-contracts-runbook.md). Implementation and inference verification remain pending.
+
+- Updated 2026-09-05 (#726 T1a): Implemented the zero-inference entry point, strict model policy, private reports, and production configuration preflight with receipt/test-count checks; [016](016-t1-contract-test-plan.md) records validation and the [runbook](agent-contracts-runbook.md) now contains working commands. Live contracts and attestation publication remain pending.

@@ -5,30 +5,85 @@ Design and initial machine inventory: [064.016](016-t1-contract-test-plan.md).
 
 ## Availability
 
-T0 and the commands in "Available now" exist. The unified inventory/preflight/live runner,
-model policy, scoped attestation publication, and report format below are **planned**. Do not
-invoke `make test-agent-contracts` yet or treat this document as a successful live sweep.
-No model inference was performed for the initial inventory.
+T1a provides `make test-agent-contracts`: zero-inference inventory, a secret-free model
+policy, JSON reports, and an explicit Codex configuration preflight. The live hook suite and
+attestation publication remain **unimplemented**; `--live` and `--mode live` are rejected.
+Neither inventory nor preflight establishes release readiness or updates T0.
 
 The [release checklist](../001-fork-bootstrap-and-release-pipeline/release-runbook.md#agent-contract-release-check)
-and `/release` skill link here and surface the verification status before publishing. When
-T1 lands, add its exact full-suite command and report location here as part of delivery;
-verify the reminder works without the maintainer having to remember this runbook.
+and `/release` skill link here and surface verification status before publishing. T1b/T1c
+must add the exact full live-suite command here when implemented.
 
 ## Available now: repeatable zero-inference checks
 
 Run from the repository root:
 
 ```bash
-make agent-versions AGENT_VERSIONS_ARGS=--json
+# No model requests, no Xcode build; inventory all eight runtimes.
+make test-agent-contracts
+
+# Machine-readable report for one runtime; repeat --runtime to select more.
+make test-agent-contracts AGENT_CONTRACT_ARGS="--runtime codex --json"
+
+# Validate the example policy and report credential-reference presence only.
+make test-agent-contracts AGENT_CONTRACT_ARGS="--config Config/agent-contracts.example.json"
+
+# Real Codex config/read through production Swift code; no model or credentials needed.
+make test-agent-contracts AGENT_CONTRACT_ARGS="--mode preflight --runtime codex"
+
+# Existing version evidence and synthetic relay regressions.
 make agent-versions AGENT_VERSIONS_ARGS=--check-matrix
 python3 -m unittest discover -s scripts -p test_agent_hooks.py
 ```
 
-The first command compares installed versions with previous evidence; newer/missing is a
-warning, not a new attestation. Add `--strict` when equality with the recorded baseline is
-required. The second checks generated documentation consistency. The third exercises shipped
-relays with synthetic runtime events; it does not launch the real agents.
+`AGENT_CONTRACT_ARGS` is the Makefile argument variable. For paths containing shell-special
+characters, call `python3 scripts/agent_contracts.py` directly with ordinary quoted arguments.
+Every run keeps a unique owner-only directory under `build/agent-contracts/`, containing
+`report.json`; `--output-dir` chooses another parent. JSON stdout includes `report_path`.
+Preflight also retains a build log, `.xcresult`, nonce-bound receipt, and test summary.
+
+Inventory reads only installed versions and the selected policy's environment-key presence.
+It does not inspect agent auth stores, refresh tokens, query models, test credit, or change
+settings. Login-shell PATH lookup is the same fallback as T0; `--no-login-shell` disables it.
+Agent version subprocesses receive a small environment allowlist, excluding provider keys
+and the parent pane/workflow identity. A newer version is drift evidence, not a failed version
+read and not a newly attested contract.
+
+Exit codes: inventory normally returns 0 after producing its report, even when entries are
+blocked. `--strict` requires every selected binary to be readable and its route's credential
+reference to be present (or explicitly keyless); drift alone is allowed. Preflight returns 0
+only when every selected preflight passes, otherwise 1. T1a implements preflight only for
+Codex, so select `--runtime codex`; other runtimes report `not_run`. Invalid configuration or
+report I/O returns 2. A passed preflight still has `release_ready: false` and live `not_run`.
+These are Python entry-point exit codes; `make` normally maps a failed recipe to exit 2.
+
+The preflight forwards `TEST_RUNNER_` variables explicitly and requires exactly one passed,
+non-skipped test plus a receipt matching this run's nonce and executable. It checks base
+notify, profile override, explicit override, project exclusion, and temporary parser cleanup.
+The first execution may build the app/test host; subsequent executions use Xcode incremental
+builds. `--preflight-timeout` defaults to 600 seconds including the build; `--timeout` bounds
+individual version commands (20 seconds by default). No background model turn is started.
+
+### Local model policy
+
+The optional default is `~/.prowl/agent-contracts.json`. A missing default is reported as
+`not_configured`; an explicit `--config` path must exist. Start from
+`Config/agent-contracts.example.json`, which describes the owner's proposed DeepSeek routes
+for seven runtimes. Qoder is intentionally absent until its account-specific route is proven.
+
+Schema 1 accepts only `schema` and a `runtimes` object keyed by the eight runtime IDs. Each
+route requires `provider`, `model`, `base_url`, `wire_api`, and `api_key_env`. The model is an
+explicit wire model ID, not a runtime-local alias such as Droid's `custom:...`; T1b adapters
+will translate the policy into client settings. Protocol values are `responses`,
+`chat-completions`, or `anthropic-messages`. `api_key_env` names an environment variable; null
+means an explicitly keyless endpoint. Secret values, helper commands, unknown fields,
+duplicate fields, auto-model routing, and credential-bearing URLs are rejected. HTTPS is
+required except for loopback HTTP. Runtime/provider compatibility is not verified by parsing.
+
+`configured` means the schema is valid and the referenced environment variable is nonempty;
+it does not mean authenticated or sufficient credit. Existing Pi/Droid credentials may be
+usable even when this policy reports `credential_missing`. T1a never copies those credentials
+or requires them for Codex preflight. Do not commit a personal credential file or key value.
 
 Recheck local flags with `--help`, including `codex exec --help`, `droid exec --help`,
 `opencode run --help`, and `copilot help providers`. Never use a model prompt as a help probe.
@@ -116,10 +171,10 @@ DeepSeek route works. Catalog refresh is outside the required T1 scope and the o
 - Treat a per-sweep USD estimate as a planning bound. Only a provider-side spend limit or a
   verified runtime budget control is a hard cap; elapsed-time limits are not billing controls.
 
-## Proposed operating sequence once T1 is implemented
+## Remaining live operating sequence for T1b/T1c
 
-The implementation must add exact tested command lines here. These are steps, not commands
-available today:
+T1b/T1c must add exact tested live command lines here. Inventory and Codex preflight above
+exist; the following full workflow is not yet available:
 
 1. Inventory selected runtimes, exact executable paths/versions, auth readiness, model routes,
    hook-resource/source fingerprints, and build-product freshness. Stop before inference.
