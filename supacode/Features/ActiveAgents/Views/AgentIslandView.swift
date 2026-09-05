@@ -330,10 +330,10 @@ struct AgentIslandView: View {
   @ViewBuilder
   private func compactStateSummary(size: AgentIslandStateSummaryView.Size) -> some View {
     if islandEntries.isEmpty {
-      Image(nsImage: NSApp.applicationIconImage)
-        .resizable()
-        .scaledToFit()
+      Image("AgentIslandAppIcon")
+        .interpolation(.high)
         .frame(width: 24, height: 24)
+        .clipShape(.rect(cornerRadius: 5))
         .accessibilityLabel("Prowl")
     } else {
       AgentIslandStateSummaryView(summary: stateSummary, size: size)

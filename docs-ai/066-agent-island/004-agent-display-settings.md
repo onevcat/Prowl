@@ -91,3 +91,9 @@ Active Agents states, not only Working.
 Validated with 103 focused tests, `make check`, and `make build-app`. An isolated empty-session
 Debug instance displayed the app icon and opened “No running agents” through the menu command,
 with the settings gear visible. UI automation disconnected when testing the gear's navigation.
+
+The empty-bar icon uses `AgentIslandAppIcon.imageset` at its native 24pt size, with 24px and
+48px PNGs downsampled from `AppIcon.appiconset/appicon-macOS-Dark-1024x1024@1x.png` using
+`sips --resampleHeightWidth`. A 5pt continuous rounded clip preserves the compact icon shape.
+This avoids runtime representation selection and resizing of `NSApp.applicationIconImage`.
+Regenerate both PNGs from the app-icon source when that artwork changes.
