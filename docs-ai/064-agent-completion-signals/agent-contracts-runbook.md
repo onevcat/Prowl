@@ -10,7 +10,7 @@ and an opt-in **eight-runtime contract verification and explicit attestation pub
 Seven routes use the owner's DeepSeek key; Qoder uses the account's explicitly selected Flash
 model. `verify` combines configuration, supported zero-turn lifecycle, and headless model-turn
 scenarios. `publish` advances only the verified rows in T0 and the generated research matrix.
-GUI permission handling and workflow E2E belong to D2; reports keep `release_ready: false`.
+GUI permission handling and first built-in E2E belong to R2b/D3 handoff; D2 review follows in R3; reports keep `release_ready: false`.
 
 The [release checklist](../001-fork-bootstrap-and-release-pipeline/release-runbook.md#agent-contract-release-check)
 and `/release` skill require these checks before bump/tag and surface the evidence during
@@ -263,16 +263,15 @@ DeepSeek route works. Catalog refresh is outside the required T1 scope and the o
 - During ordinary development, run offline regressions and select one live runtime when its
   adapter, provider recipe, or installed binary changes.
 - After shared renderer/decoder/CLI/relay changes, rerun affected runtimes; before each public
-  release, run the full headless command plus the Codex configuration preflight above.
+  release, run the full `verify` suite and explicitly `publish` its successful report above.
 - Inspect failures before retrying. A retry creates a new private report and does not erase
   earlier evidence. Do not silently change models or remove a runtime from the release scope.
-- Keep the headless report separate from T0's interactive attestation. Publication with a
-  scenario-aware schema and interactive needs-input/session lifecycle acceptance still needs
-  implementation. Do not update all T0 version rows based on a headless sweep.
-- D2 must run the bundled workflow skill through a Debug Prowl instance; use the
+- Publish only through the validated entry point; scoped headless receipts preserve the
+  archived interactive baseline and do not claim GUI acceptance.
+- D3 handoff in R2b, then D2 review in R3, must run the bundled workflow skill through a Debug Prowl instance; use the
   [S3c acceptance record](011-s3c-action.md) and the
   [workflow release cadence](../063-agent-workflows/release-plan.md#cadence-and-working-rules).
-  This headless suite does not replace D2's GUI/workflow protocol acceptance.
+  This headless suite does not replace either slice's GUI/workflow protocol acceptance.
 
 Missing accounts remain explicit blockers. Only the owner can approve a release-scope
 exception; autonomous implementation authorization is not a waiver of release acceptance.

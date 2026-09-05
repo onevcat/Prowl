@@ -2,9 +2,9 @@
 
 | | |
 | --- | --- |
-| **Status** | T1 implemented and verified 2026-09-05; scoped baseline published; merge pending; D2 GUI acceptance remains separate |
+| **Status** | T1 implemented and verified 2026-09-05; scoped baseline published; #769 merged; R2b/D3 handoff GUI acceptance remains separate |
 | **Anchor date** | 2026-09-05 |
-| **Primary PR** | [#767](https://github.com/onevcat/Prowl/pull/767) (inventory/live); [#769](https://github.com/onevcat/Prowl/pull/769) (closure, open) |
+| **Primary PR** | [#767](https://github.com/onevcat/Prowl/pull/767) (inventory/live); [#769](https://github.com/onevcat/Prowl/pull/769) (closure, merged) |
 | **Related** | [#726](https://github.com/onevcat/Prowl/issues/726), [T0](015-t0-version-attestation.md), [release plan](../063-agent-workflows/release-plan.md), [operating runbook](agent-contracts-runbook.md) |
 
 ## Decision to make
@@ -335,3 +335,11 @@ passed. The final report still matches the current source fingerprint. A scan of
 and final report artifacts found no occurrence of the supplied provider key. Publication tests
 cover stale/partial reports, binary/route changes, artifact mutation, missing/zero-count receipts,
 incorrect responses/events, subset preservation, idempotency, and rollback after a write failure.
+
+## Release-order amendment (2026-09-05)
+
+The owner moved D3 handoff/checkpoint into R2b as the first built-in E2E and release candidate
+boundary; D2 adversarial review now follows in R3. Earlier D2-first references in this record
+describe the original delivery order. T1 #769 is merged, remains prerequisite to both, and
+does not claim either slice's GUI/workflow acceptance. The release plan and operating runbook
+carry the current order; headless evidence and publication semantics are unchanged.

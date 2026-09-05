@@ -88,13 +88,13 @@ Use the owner's existing DeepSeek V4 Flash configuration for compatible runtimes
   Follow the linked runbook for exact commands and version/matrix checks.
 - Keep headless results separate from interactive permission/lifecycle and workflow E2E.
   A successful report has `contract_passed: true` and `release_ready: false`. T1's headless
-  scope does not replace D2 under the [release plan](../063-agent-workflows/release-plan.md).
+  scope does not replace D3/D2 workflow acceptance under the [release plan](../063-agent-workflows/release-plan.md).
 - Present a short maintainer-facing status with the release-notes confirmation: passed,
   failed, blocked, or not run; name incomplete runtimes and link the evidence. An incomplete
   required check needs resolution or an explicit owner-approved release-scope exception,
   recorded in the release plan. It must not be silently treated as success.
 - Add targeted Debug workflow E2E for workflow behavior changes and important release
-  acceptance; the first R2b/D2 delivery requires its full planned E2E.
+  acceptance; R2b/D3 handoff requires first built-in E2E; R3/D2 adds review-loop E2E.
 
 The `/release` skill surfaces this reminder. Direct invocation of `scripts/release.sh` does
 not currently enforce T1; maintainers running the script must complete this check first.
