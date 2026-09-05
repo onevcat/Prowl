@@ -73,7 +73,7 @@ identical:
 - **Command Palette** (`⌘P`) → **Run Workflow: <name>** — one row per
   runnable workflow visible to the selected worktree.
   → [command-palette](command-palette.md)
-- **Toolbar Agents capsule** → the **Workflows** section — each row uses the
+- **Toolbar Agents capsule** → the **Run a workflow** section — each row uses the
   workflow's YAML icon and starts the workflow. Its trailing `ellipsis.circle`
   menu offers **Run with Options…** (which forces the start sheet) and **Show
   Details in Settings…**. Files that fail validation remain dimmed with their
