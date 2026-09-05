@@ -15,6 +15,7 @@ import threading
 import time
 
 import agent_contracts as core
+import agent_contract_expectations as rules
 
 
 def same_directory(left, right):
@@ -50,8 +51,10 @@ def evaluate(returncode, timed_out, response, hook):
 
 class Collector:
     """Length-framed CLI transport. No synthetic native events are generated here."""
-    def __init__(self, path, runtime, token, cwd):
+    def __init__(self, path, runtime, token, cwd, scope="headless"):
         self.runtime, self.token, self.cwd = runtime, token, cwd
+        self.scope = scope
+        self.complete = threading.Event()
         self.events = []
         self.terminal = False
         self.error = False
@@ -93,6 +96,8 @@ class Collector:
                         signal = payload['signal']
                         self.events.append({key: signal[key] for key in ('event', 'native_event', 'cwd', 'session_id') if key in signal})
                         self.terminal |= accept_signal(payload, self.runtime, self.token, self.cwd)
+                        if rules.validate_events(self.runtime, self.events, self.cwd, self.scope) == "verified":
+                            self.complete.set()
                     connection.sendall(struct.pack('>I', 2) + b'{}')
                 except (OSError, ValueError, KeyError, TypeError):
                     self.error = True
@@ -190,7 +195,8 @@ def runtime_configuration(runtime, route, directory):
 def validate_export(exported, counts, nonce, requests):
     expected = [item['runtime'] for item in requests]
     try:
-        valid = (exported['schema'] == 1 and exported['nonce'] == nonce and counts['result'] == 'Passed'
+        valid = (type(exported['schema']) is int and exported['schema'] == 1
+                 and isinstance(nonce, str) and bool(nonce) and exported['nonce'] == nonce and counts['result'] == 'Passed'
                  and all(type(counts[k]) is int and counts[k] == v for k, v in
                          [('totalTestCount', 1), ('passedTests', 1), ('failedTests', 0), ('skippedTests', 0)])
                  and [item['runtime'] for item in exported['launches']] == expected)
@@ -223,11 +229,13 @@ def export_launches(requests, directory, search_path, timeout):
     except (OSError, ValueError, KeyError):
         raise core.EvidenceError('Production launch export lacks a matching executed-test receipt.') from None
     core.write_json(directory / 'export-test-summary.json', counts)
-    return exported['launches']
+    return exported['launches'], nonce
 
 
 def run_one(launch, request, row, environment, path, directory, timeout, expected):
     runtime = row['runtime']
+    scope = request.get('scenario', 'headless')
+    log_name = runtime + '-' + scope
     token = secrets.token_hex(24)
     child_environment = core.probe_environment(environment, path)
     child_environment.update(request['environment'])
@@ -245,7 +253,7 @@ def run_one(launch, request, row, environment, path, directory, timeout, expecte
     with tempfile.TemporaryDirectory(prefix='pwl-', dir='/tmp') as short:
         socket_path = Path(short) / 's'
         child_environment.update(PROWL_AGENT_HOOK_TOKEN=token, PROWL_CLI_SOCKET=str(socket_path))
-        with Collector(socket_path, runtime, token, launch['cwd']) as collector:
+        with Collector(socket_path, runtime, token, launch['cwd'], scope) as collector:
             with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
                 process = subprocess.Popen([launch['executable'], *launch['arguments']],
                     cwd=launch['cwd'], env=child_environment, stdin=subprocess.DEVNULL,
@@ -253,6 +261,7 @@ def run_one(launch, request, row, environment, path, directory, timeout, expecte
                 timed_out = False
                 try:
                     process.wait(timeout=timeout)
+                    collector.complete.wait(timeout=2)
                 except subprocess.TimeoutExpired:
                     timed_out = True
                 finally:
@@ -262,7 +271,13 @@ def run_one(launch, request, row, environment, path, directory, timeout, expecte
                 out = stdout.read(core.MAX_CAPTURE_BYTES).decode('utf-8', errors='replace')
                 err = stderr.read(core.MAX_CAPTURE_BYTES).decode('utf-8', errors='replace')
             response = verify_response(out, expected)
-            reason = evaluate(process.returncode, timed_out, response, collector.terminal)
+            if scope == 'zero-turn':
+                reason = 'runtime_timeout' if timed_out else rules.zero_turn_result(
+                    runtime, process.returncode, out, err, collector.events, launch['cwd'])
+            else:
+                reason = evaluate(process.returncode, timed_out, response, collector.terminal)
+                if reason == 'verified':
+                    reason = rules.validate_events(runtime, collector.events, launch['cwd'])
             if reason == 'verified' and collector.error:
                 reason = 'capture_protocol_error'
             events = list(collector.events)
@@ -270,17 +285,18 @@ def run_one(launch, request, row, environment, path, directory, timeout, expecte
     for value in (key, token):
         if value:
             out, err = out.replace(value, '[REDACTED]'), err.replace(value, '[REDACTED]')
-    write_text(directory / (runtime + '-stdout.log'), out)
-    write_text(directory / (runtime + '-stderr.log'), err)
+    write_text(directory / (log_name + '-stdout.log'), out)
+    write_text(directory / (log_name + '-stderr.log'), err)
     return {'status': 'passed' if reason == 'verified' else ('timed_out' if timed_out else 'contract_failed'),
             'reason': reason, 'response_verified': response, 'events': events,
             'exit_code': process.returncode, 'elapsed_seconds': round(time.monotonic() - started, 3),
-            'scope': 'headless-terminal-hook', 'stdout': str(directory / (runtime + '-stdout.log')),
-            'stderr': str(directory / (runtime + '-stderr.log'))}
+            'scope': scope, 'cwd': launch['cwd'], 'response_expected': expected,
+            'required_events': [list(pair) for pair in (rules.ZERO_TURN if scope == 'zero-turn' else rules.HEADLESS)[runtime]], 'stdout': str(directory / (log_name + '-stdout.log')),
+            'stderr': str(directory / (log_name + '-stderr.log'))}
 
 
-def run_suite(rows, directory, resolver, environment, timeout, build_timeout):
-    requests, selected, expected = [], [], {}
+def run_suite(rows, directory, resolver, environment, timeout, build_timeout, verify=False):
+    requests, selected = [], []
     with tempfile.TemporaryDirectory(prefix='prowl-contract-') as scratch:
         root = Path(scratch).resolve()
         resources = core.ROOT / 'Resources'
@@ -299,36 +315,44 @@ def run_suite(rows, directory, resolver, environment, timeout, build_timeout):
             if not binary or binary.path != row['executable']:
                 row['live']['reason'] = 'binary_changed'
                 continue
-            workspace = root / row['runtime']
-            workspace.mkdir(mode=0o700)
-            try:
-                model, arguments, config = runtime_configuration(row['runtime'], row['route'], workspace)
-            except core.PolicyError:
-                row['live']['reason'] = 'unsupported_live_route'
-                continue
-            number = 10000 + secrets.randbelow(80000)
-            expected[row['runtime']] = 'RESULT:' + str(number + 1739)
-            prompt = f'Compute {number} + 1739. Reply only RESULT: followed immediately by the decimal sum. Do not use tools.'
-            requests.append({'runtime': row['runtime'], 'executable': binary.path, 'workspace': str(workspace),
-                'resources': str(resources), 'model': model, 'arguments': arguments,
-                'environment': {**config, 'HOME': str(Path.home())}, 'prompt': prompt})
-            selected.append((row, binary.search_path))
+            scopes = (['zero-turn', 'headless'] if verify and row['runtime'] in rules.ZERO_TURN else ['headless'])
+            row['lifecycle'] = ({'status': 'not_run'} if row['runtime'] in rules.ZERO_TURN else
+                                {'status': 'not_applicable', 'reason': rules.ZERO_TURN_UNSUPPORTED[row['runtime']]})
+            for scope in scopes:
+                workspace = root / (row['runtime'] + '-' + scope)
+                workspace.mkdir(mode=0o700)
+                try:
+                    model, arguments, config = runtime_configuration(row['runtime'], row['route'], workspace)
+                except core.PolicyError:
+                    row['live']['reason'] = 'unsupported_live_route'
+                    continue
+                number = 10000 + secrets.randbelow(80000)
+                answer = 'RESULT:' + str(number + 1739)
+                prompt = (f'Compute {number} + 1739. Reply only RESULT: followed immediately by the decimal sum. Do not use tools.'
+                          if scope == 'headless' else '')
+                requests.append({'runtime': row['runtime'], 'executable': binary.path, 'workspace': str(workspace),
+                    'resources': str(resources), 'model': model, 'arguments': arguments, 'scenario': scope,
+                    'environment': {**config, 'HOME': str(Path.home())}, 'prompt': prompt})
+                selected.append((row, binary.search_path, answer))
         if not requests:
             return
         try:
-            launches = export_launches(requests, directory, selected[0][1], build_timeout)
+            launches, nonce = export_launches(requests, directory, selected[0][1], build_timeout)
         except core.EvidenceError as error:
-            for row, _ in selected:
+            for row, _, _ in selected:
                 row['live'] = {'status': 'blocked', 'reason': 'production_export_failed'}
             print(str(error), file=sys.stderr, flush=True)
             return
-        for launch, request, (row, path) in zip(launches, requests, selected):
+        for launch, request, (row, path, answer) in zip(launches, requests, selected):
+            field = "lifecycle" if request["scenario"] == "zero-turn" else "live"
             if launch['status'] != 'prepared':
-                row['live'] = launch
+                row[field] = launch
                 continue
-            print('Live contract: ' + row['runtime'], file=sys.stderr, flush=True)
+            print(request['scenario'] + ' contract: ' + row['runtime'], file=sys.stderr, flush=True)
             try:
-                row['live'] = run_one(launch, request, row, environment, path, directory, timeout, expected[row['runtime']])
+                row[field] = run_one(launch, request, row, environment, path, directory, timeout, answer)
             except OSError:
-                row['live'] = {'status': 'blocked', 'reason': 'runtime_or_capture_io_failed'}
-            print(row['runtime'] + ': ' + row['live']['reason'], file=sys.stderr, flush=True)
+                row[field] = {'status': 'blocked', 'reason': 'runtime_or_capture_io_failed'}
+            print(row['runtime'] + ': ' + row[field]['reason'], file=sys.stderr, flush=True)
+
+        return nonce

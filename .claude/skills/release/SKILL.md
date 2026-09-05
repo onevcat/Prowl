@@ -14,10 +14,12 @@ Build, sign, notarize, and publish a Prowl release.
 3. Sync the docs to the code being released — **before** the version bump and tag:
    - First read `docs-ai/001-fork-bootstrap-and-release-pipeline/release-runbook.md`'s
      **Agent contract release check** and surface its status to the user. Follow the linked
-     contract runbook for the implemented full eight-runtime headless live check and Codex
-     configuration preflight, using the owner's configured model routes before bump/tag.
-     Report headless results separately from pending interactive/workflow acceptance;
-     inventory alone is not a live pass, and headless success is not full T1/D2 readiness.
+     contract runbook: run the full `--mode verify` suite with the owner's configured model
+     routes, then `--mode publish --report PATH` before bump/tag. Commit the generated receipt,
+     version baseline, and matrix. Publication requires the original artifacts/result bundles
+     and unchanged source, binaries, and routes within 24 hours; rerun after relevant changes.
+     Report T1 headless results separately from D2 interactive/workflow acceptance;
+     inventory alone is not a contract pass, and T1 success does not establish D2 readiness.
    - Run the `sync-docs` skill. It diffs `docs/.sync-meta.json`'s `last_synced_commit`
      against the current `main` HEAD (the code about to ship), updates any docs whose
      implementation changed, and sets `last_synced_commit` to the **current HEAD** —

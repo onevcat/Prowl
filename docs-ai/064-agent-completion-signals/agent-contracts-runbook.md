@@ -6,23 +6,31 @@ Design and initial machine inventory: [064.016](016-t1-contract-test-plan.md).
 ## Availability
 
 `make test-agent-contracts` provides zero-inference inventory, Codex configuration preflight,
-and an opt-in **eight-runtime headless hook suite**. All eight passed on 2026-09-05.
-Seven used the owner's DeepSeek key; Qoder used the account's explicitly selected Flash model.
-Attestation publication and interactive permission/GUI workflow coverage remain pending.
-A headless pass never updates T0 or sets `release_ready: true`.
+and an opt-in **eight-runtime contract verification and explicit attestation publisher**.
+Seven routes use the owner's DeepSeek key; Qoder uses the account's explicitly selected Flash
+model. `verify` combines configuration, supported zero-turn lifecycle, and headless model-turn
+scenarios. `publish` advances only the verified rows in T0 and the generated research matrix.
+GUI permission handling and workflow E2E belong to D2; reports keep `release_ready: false`.
 
 The [release checklist](../001-fork-bootstrap-and-release-pipeline/release-runbook.md#agent-contract-release-check)
 and `/release` skill require these checks before bump/tag and surface the evidence during
 release-notes confirmation. See the scoped results in [064.016](016-t1-contract-test-plan.md).
 
-## Available now: real headless hook checks
+## Required verification and publication
 
 ```bash
-# All eight runtimes; explicit opt-in to model requests.
-make test-agent-contracts AGENT_CONTRACT_ARGS="--mode live"
+# Full T1 suite: eight short model turns, configuration and supported zero-turn checks.
+make test-agent-contracts AGENT_CONTRACT_ARGS="--mode verify"
 
-# Repeat a single runtime after an upgrade or while diagnosing a failure.
-make test-agent-contracts AGENT_CONTRACT_ARGS="--mode live --runtime pi"
+# Publish the successful report path printed by that command; no model requests.
+make test-agent-contracts AGENT_CONTRACT_ARGS="--mode publish --report build/agent-contracts/run-EXAMPLE/report.json"
+
+# Confirm the updated version baseline and generated matrix separately.
+make agent-versions AGENT_VERSIONS_ARGS=--strict
+make agent-versions AGENT_VERSIONS_ARGS=--check-matrix
+
+# After a runtime-only upgrade, verify and publish just that runtime.
+make test-agent-contracts AGENT_CONTRACT_ARGS="--mode verify --runtime pi"
 ```
 
 Each sweep builds an opt-in Swift export test against the current source, reusing Xcode's
@@ -32,14 +40,36 @@ prepared argv and the bundled hook bridge/extension. A private Unix socket captu
 **decoded by the real Prowl CLI**. Temporary state is removed on normal completion or exception.
 Droid and Qoder may read their normal account credentials; no normal runtime settings are edited.
 
-A pass requires a correct answer to a fresh arithmetic challenge (the answer is absent from
-the prompt), exit code 0, and a terminal event matching the launch token, runtime, working
-directory, and a nonempty session ID. Directory aliases are compared by canonical path.
+A headless pass requires a correct answer to a fresh arithmetic challenge (the answer is absent
+from the prompt), exit code 0, and every required native event in order, matching the launch
+token, runtime, working directory, and one nonempty session ID. Directory aliases are compared
+by canonical path. Requirements are fixed independently of the production decoder:
+
+| Runtime | Required headless native events, in order | Zero-turn scenario |
+| --- | --- | --- |
+| Claude | `SessionStart`, `Stop`, `SessionEnd` | Empty prompt: start/end plus the known missing-input exit 1 |
+| Codex | `agent-turn-complete` | Not applicable: native notifier has no session lifecycle |
+| Copilot | `SessionStart`, `Stop`, `SessionEnd` | Not applicable: empty prompt rejected before session |
+| Droid | `SessionStart`, `Stop`, `SessionEnd` | Not applicable: empty prompt exits without lifecycle |
+| Qoder | `SessionStart`, `Stop`, `SessionEnd` | Not applicable: empty prompt has no session start |
+| Pi | `session_start`, `agent_settled`, `session_shutdown` | Empty prompt: start/shutdown, exit 0, no response |
+| OMP | `session_start`, `session_stop` | Not applicable: empty prompt can start a model turn |
+| OpenCode | `session.idle` | Not applicable: native plugin has no session lifecycle |
+
+OMP's one-shot host can exit before its queued shutdown relay starts. A two-second relay drain
+still did not consistently deliver shutdown; the headless contract requires start/stop and
+validates shutdown if received. This does not attest OMP interactive shutdown. Never run an
+empty OMP prompt as a zero-inference check. Codex additionally runs all configuration scenarios
+listed below. Unsupported zero-turn scenarios have fixed reasons; they cannot excuse a missing
+required headless event.
 A native error/StopFailure or a hook after failed authentication cannot pass. The collector
 does not validate the GUI app's process ancestry, pane ownership, or lifecycle store; those
 require interactive E2E and must not be inferred from this report.
 
-Live mode returns 0 only if **every selected runtime** passes. Missing routes, unsupported
+`verify` returns 0 only when every selected runtime passes every required scenario, with
+`contract_passed: true` and stable source fingerprints. `live` remains a diagnostic mode that
+checks model turns only; its reports cannot be published. Live mode returns 0 only if
+**every selected runtime** passes. Missing routes, unsupported
 recipes, failed preparation, missing responses/hooks, runtime failures, and timeouts remain
 visible in `report.json` and return nonzero. The report includes exact versions, source and
 bridge fingerprints, route metadata, observed native events, and sanitized per-runtime logs.
@@ -51,6 +81,29 @@ deadline (`--live-timeout`), and process-group cleanup. Supported clients get 51
 limits and low/off reasoning; Codex and Pi/OMP limits are not universal hard billing caps.
 Actual billed usage is not collected. A time limit is not a provider-side spend limit.
 Ordinary inventory, preflight, and `make check` never request inference.
+
+### Publication and repetition
+
+Before every release, run the full `verify` suite and explicitly `publish` its successful report
+before bump/tag. Also repeat after changing runtime adapters, hook resources/decoding, model
+routes, or runtime versions. For ordinary unrelated edits, offline checks suffice; a runtime-only
+upgrade may use `--runtime`. A subset pass updates only that subset and never claims all-eight
+coverage. Review and commit the generated receipt, baseline, and matrix with the change.
+
+Publication requires a current-revision `verify` report completed within 24 hours, unchanged
+source/bridge fingerprints, the same installed binary/version and policy route, all hashed
+artifacts, and the original non-skipped Xcode result bundles. Keep the entire local run directory
+until publication. Missing/failed scenarios, old `live` reports, modified evidence, and zero-test
+results fail before writes. An invalid report returns 2; rerun verification after correcting its
+cause. Publication runs version probes but never loads the credential file or calls a model.
+
+The publisher writes an immutable, sanitized `attestations/<sha256>.json` receipt, advances T0's
+version/date/record for selected runtimes, and regenerates the research matrix line. Replaying
+the same eligible report is idempotent. It preserves the original Profile/interactive baseline
+in `agent-attestation-interactive.json`; a headless receipt explicitly says
+`interactive_verified: false`. Raw logs, local paths, hook tokens, and credential values do not
+belong in the durable receipt. This is local evidence validation, not a cryptographic attestation
+against an adversary who can rewrite both the report and artifacts.
 
 ## Available now: repeatable zero-inference checks
 

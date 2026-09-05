@@ -1,78 +1,102 @@
 {
-  "schema": 1,
-  "description": "Managed-hook contract attestation for the tier-A runtimes (docs-ai 064, #726 T0). One entry per runtime: the version its launch-scoped hook contract last passed a live sweep against, the date, the record that attested it, and the command that prints the version. Checked by `make agent-versions`; the research matrix's generated `Tier-A attestation` line is derived from this file (`make test-scripts` fails on drift). Schema and update rules: 015-t0-version-attestation.md.",
+  "description": "Managed-hook version baseline. Each linked record states its tested scope; headless verification does not imply GUI or interactive coverage. The original interactive baseline is preserved in agent-attestation-interactive.json. See agent-contracts-runbook.md for explicit verification/publication.",
   "runtimes": [
     {
-      "runtime": "claude",
-      "name": "Claude Code",
+      "attested_on": "2026-09-05",
+      "attested_version": "2.1.260",
       "binary": "claude",
-      "version_command": ["claude", "--version"],
-      "attested_version": "2.1.245",
-      "attested_on": "2026-08-26",
-      "record": "011-s3c-action.md"
+      "name": "Claude Code",
+      "record": "attestations/c7b43b440b25c9b0c423886ad524e9fda377150b21edfc13487dcdbede8bd3d3.json",
+      "runtime": "claude",
+      "version_command": [
+        "claude",
+        "--version"
+      ]
     },
     {
-      "runtime": "codex",
-      "name": "Codex",
+      "attested_on": "2026-09-05",
+      "attested_version": "0.153.2",
       "binary": "codex",
-      "version_command": ["codex", "--version"],
-      "attested_version": "0.149.1",
-      "attested_on": "2026-08-26",
-      "record": "011-s3c-action.md"
+      "name": "Codex",
+      "record": "attestations/c7b43b440b25c9b0c423886ad524e9fda377150b21edfc13487dcdbede8bd3d3.json",
+      "runtime": "codex",
+      "version_command": [
+        "codex",
+        "--version"
+      ]
     },
     {
-      "runtime": "copilot",
-      "name": "GitHub Copilot CLI",
+      "attested_on": "2026-09-05",
+      "attested_version": "1.0.83",
       "binary": "copilot",
-      "version_command": ["copilot", "--version"],
-      "attested_version": "1.0.80",
-      "attested_on": "2026-08-26",
-      "record": "011-s3c-action.md"
+      "name": "GitHub Copilot CLI",
+      "record": "attestations/c7b43b440b25c9b0c423886ad524e9fda377150b21edfc13487dcdbede8bd3d3.json",
+      "runtime": "copilot",
+      "version_command": [
+        "copilot",
+        "--version"
+      ]
     },
     {
-      "runtime": "droid",
-      "name": "Factory Droid",
+      "attested_on": "2026-09-05",
+      "attested_version": "0.210.0",
       "binary": "droid",
-      "version_command": ["droid", "--version"],
-      "attested_version": "0.203.0",
-      "attested_on": "2026-08-26",
-      "record": "011-s3c-action.md"
+      "name": "Factory Droid",
+      "record": "attestations/c7b43b440b25c9b0c423886ad524e9fda377150b21edfc13487dcdbede8bd3d3.json",
+      "runtime": "droid",
+      "version_command": [
+        "droid",
+        "--version"
+      ]
     },
     {
-      "runtime": "qodercli",
-      "name": "Qoder CLI",
+      "attested_on": "2026-09-05",
+      "attested_version": "1.1.31",
       "binary": "qodercli",
-      "version_command": ["qodercli", "--version"],
-      "attested_version": "1.1.29",
-      "attested_on": "2026-08-26",
-      "record": "011-s3c-action.md"
+      "name": "Qoder CLI",
+      "record": "attestations/c7b43b440b25c9b0c423886ad524e9fda377150b21edfc13487dcdbede8bd3d3.json",
+      "runtime": "qodercli",
+      "version_command": [
+        "qodercli",
+        "--version"
+      ]
     },
     {
-      "runtime": "pi",
-      "name": "Pi",
+      "attested_on": "2026-09-05",
+      "attested_version": "0.85.0",
       "binary": "pi",
-      "version_command": ["pi", "--version"],
-      "attested_version": "0.84.3",
-      "attested_on": "2026-08-26",
-      "record": "011-s3c-action.md"
+      "name": "Pi",
+      "record": "attestations/c7b43b440b25c9b0c423886ad524e9fda377150b21edfc13487dcdbede8bd3d3.json",
+      "runtime": "pi",
+      "version_command": [
+        "pi",
+        "--version"
+      ]
     },
     {
-      "runtime": "omp",
-      "name": "Oh My Pi",
+      "attested_on": "2026-09-05",
+      "attested_version": "18.1.10",
       "binary": "omp",
-      "version_command": ["omp", "--version"],
-      "attested_version": "18.0.6",
-      "attested_on": "2026-08-26",
-      "record": "011-s3c-action.md"
+      "name": "Oh My Pi",
+      "record": "attestations/c7b43b440b25c9b0c423886ad524e9fda377150b21edfc13487dcdbede8bd3d3.json",
+      "runtime": "omp",
+      "version_command": [
+        "omp",
+        "--version"
+      ]
     },
     {
-      "runtime": "opencode",
-      "name": "OpenCode",
+      "attested_on": "2026-09-05",
+      "attested_version": "1.18.25",
       "binary": "opencode",
-      "version_command": ["opencode", "--version"],
-      "attested_version": "1.18.23",
-      "attested_on": "2026-08-26",
-      "record": "011-s3c-action.md"
+      "name": "OpenCode",
+      "record": "attestations/c7b43b440b25c9b0c423886ad524e9fda377150b21edfc13487dcdbede8bd3d3.json",
+      "runtime": "opencode",
+      "version_command": [
+        "opencode",
+        "--version"
+      ]
     }
-  ]
+  ],
+  "schema": 1
 }

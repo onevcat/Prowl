@@ -79,13 +79,16 @@ Before every public release, before bumping the version or creating a tag, follo
 [agent contract runbook](../064-agent-completion-signals/agent-contracts-runbook.md).
 Use the owner's existing DeepSeek V4 Flash configuration for compatible runtimes.
 
-- Run the implemented **full eight-runtime headless live suite and Codex configuration
-  preflight** against the code/resources and installed versions being released; retain both
-  reports. Use the maintained commands in the contract runbook.
+- Run `make test-agent-contracts AGENT_CONTRACT_ARGS="--mode verify"` against the release
+  source/resources and installed versions. This composes all eight headless checks, required
+  configuration checks, and supported zero-turn lifecycle checks in one report.
+- Publish that report using `--mode publish --report PATH`, then commit the generated receipt,
+  T0 baseline, and research matrix. Keep the local run directory and Xcode result bundles until
+  publication; reports expire after 24 hours and source/binary/route changes require a rerun.
+  Follow the linked runbook for exact commands and version/matrix checks.
 - Keep headless results separate from interactive permission/lifecycle and workflow E2E.
-  Attestation publication remains pending; a successful headless report still has
-  `release_ready: false`. R2b requires the remaining T1 scope and D2 under the
-  [release plan](../063-agent-workflows/release-plan.md).
+  A successful report has `contract_passed: true` and `release_ready: false`. T1's headless
+  scope does not replace D2 under the [release plan](../063-agent-workflows/release-plan.md).
 - Present a short maintainer-facing status with the release-notes confirmation: passed,
   failed, blocked, or not run; name incomplete runtimes and link the evidence. An incomplete
   required check needs resolution or an explicit owner-approved release-scope exception,

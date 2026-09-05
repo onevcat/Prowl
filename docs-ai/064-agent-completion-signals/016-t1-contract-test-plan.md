@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| **Status** | T1a/T1b and eight-runtime headless T1c checks verified 2026-09-05; scoped publication and interactive acceptance remain pending |
+| **Status** | T1 implemented and verified 2026-09-05; scoped baseline published; merge pending; D2 GUI acceptance remains separate |
 | **Anchor date** | 2026-09-05 |
 | **Primary PR** | [#767](https://github.com/onevcat/Prowl/pull/767) (T1a) |
 | **Related** | [#726](https://github.com/onevcat/Prowl/issues/726), [T0](015-t0-version-attestation.md), [release plan](../063-agent-workflows/release-plan.md), [operating runbook](agent-contracts-runbook.md) |
@@ -263,9 +263,8 @@ cannot pass. The collector now canonicalizes directory identity; the production 
 needed no change. Optional whitespace in an otherwise correct numeric response is accepted.
 
 T1b's three injection families and all eight headless T1c adapters are implemented. Remaining
-T1 acceptance is deliberately separate: scenario-aware attestation publication and interactive
-needs-input/lifecycle coverage, followed by D2's built-in workflow/Debug GUI E2E. The old T0
-attestation is unchanged. A headless all-pass report remains `release_ready: false`.
+T1 acceptance at that point still required scenario-aware attestation publication. Interactive
+needs-input/GUI coverage belongs to D2, not #726 T1. The old T0 attestation was unchanged by #767. A headless all-pass report remains `release_ready: false`.
 
 Final verification: a second full sweep, `run-0p_q17r_/report.json`, again passed 8/8 with
 22.4 seconds of runtime execution. `run-hmnrrqgb/report.json` passed the expanded Codex
@@ -273,3 +272,66 @@ preflight, including absent notify. `make check` passed 115 script tests and str
 format/lint; `make build-app` passed with zero errors/warnings. The release skill validator
 passed. A supplied-key scan across report/source artifacts found zero matches. These local
 reports remain under `build/agent-contracts/`; this record preserves their scoped conclusions.
+
+## T1 closure implementation plan (2026-09-05)
+
+The owner authorized the remaining headless contract and attestation work. Correct the earlier
+scope expansion: #726 explicitly excludes GUI/interactive automation; that remains D2/release
+acceptance, not a T1 implementation prerequisite.
+
+- Define fixed per-runtime native event/mapping expectations, required lifecycle events where
+  supported, one-session identity, and event order. Probe zero-turn lifecycle support with
+  real binaries before declaring requirements; document unsupported native one-shot behavior.
+- Add `--mode verify` to compose required preflight and live scenarios in one report. Default
+  inventory remains free of inference. Missing required scenarios fail the aggregate gate.
+- Add explicit `--mode publish --report PATH`: reject incomplete, failed, skipped, stale,
+  changed-source, changed-binary, or mismatched-route evidence before writing any baseline.
+  Persist sanitized immutable scenario records, update only the verified runtime rows, and
+  regenerate the matrix. Preserve the legacy interactive baseline separately. Keep T0's
+  entry schema; each linked evidence record states its scope instead of implying GUI coverage.
+- Tests cover event identity/order and publication refusal/no-write paths. Run the real suite,
+  publish its result, verify version/matrix agreement, then update the runbook and release
+  guidance. No subscription purchase or changes to normal runtime configuration.
+
+
+## T1 closure result (2026-09-05)
+
+`--mode verify` now composes the configuration preflight, two supported zero-turn lifecycle
+probes, and eight real short model turns. Required native events, mappings, session identity,
+working directory, and order are fixed in `agent_contract_expectations.py`, independently of
+the production decoder. `--mode live` remains diagnostic and cannot publish evidence.
+
+Two complete verification sweeps passed (`run-qt4qpxlr`, then final `run-14n7jk2w`). The final
+report passed 8/8 headless turns, Claude/Pi zero-turn lifecycle, and all five Codex configuration
+scenarios through one executed, non-skipped preflight test. The launch exporter likewise ran
+exactly one passed test. Versions and provider routes match the table above.
+
+The discovery probe established that Copilot/Droid cannot emit a complete empty-prompt session,
+Qoder only emits the end, and OMP may start inference on empty input. These are explicit
+zero-turn exclusions, not skipped required scenarios. OMP headless reliably emits start/stop;
+its host can exit before the queued shutdown relay starts, even with a two-second drain.
+Shutdown is validated when received but is not attested by this headless contract. Full GUI
+lifecycle and workflow admission/permission behavior remain D2's responsibility, as #726 excludes
+interactive GUI automation.
+
+`--mode publish --report PATH` revalidates fresh source/bridge and binary hashes, model policy,
+scenario coverage, response logs, artifact hashes, nonce receipts, and original Xcode result
+summaries before updating any baseline. Evidence expires after 24 hours. Publication writes a
+sanitized immutable [headless receipt](attestations/c7b43b440b25c9b0c423886ad524e9fda377150b21edfc13487dcdbede8bd3d3.json),
+updates selected T0 rows and the generated matrix, and preserves the original interactive
+baseline in `agent-attestation-interactive.json`. This is local provenance validation, not a
+signature against malicious report rewriting. No model request is made during publication.
+
+Final publication advanced all eight versions; `make agent-versions --strict` (through
+`AGENT_VERSIONS_ARGS=--strict`) and the separate matrix check passed. Replaying the report is
+idempotent; older live evidence and the now-stale earlier verify report are rejected without
+writes. The runbook and release skill now guide full verify/publication before bump/tag and
+show T1 evidence separately from D2 during release confirmation. No global runtime settings
+or subscriptions changed.
+
+Validation after publication: `make check` passed 131 Python script tests and strict Swift
+format/lint; `make build-app` passed with zero warnings/errors. The release skill validator
+passed. The final report still matches the current source fingerprint. A scan of changed files
+and final report artifacts found no occurrence of the supplied provider key. Publication tests
+cover stale/partial reports, binary/route changes, artifact mutation, missing/zero-count receipts,
+incorrect responses/events, subset preservation, idempotency, and rollback after a write failure.

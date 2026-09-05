@@ -256,6 +256,9 @@ class CommandTests(unittest.TestCase):
         self.assertEqual(report["runtimes"][0]["live"]["status"], "not_run")
 
     def test_strict_inventory_fails_on_missing_route_but_not_version_drift(self):
+        baseline = next(row for row in versions.load_attestation(versions.ATTESTATION_PATH) if row.runtime == "codex")
+        next_major = int(baseline.attested_version.split(".")[0]) + 1
+        (self.bin / "codex").write_text(f'#!/bin/sh\necho "codex-cli {next_major}.0.0"\n')
         self.assertEqual(self.invoke("--strict").returncode, 1)
         config = self.root / "policy.json"
         config.write_text(json.dumps({"schema": 1, "runtimes": {"codex": route()}}))
