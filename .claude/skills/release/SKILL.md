@@ -18,8 +18,8 @@ Build, sign, notarize, and publish a Prowl release.
      routes, then `--mode publish --report PATH` before bump/tag. Commit the generated receipt,
      version baseline, and matrix. Publication requires the original artifacts/result bundles
      and unchanged source, binaries, and routes within 24 hours; rerun after relevant changes.
-     Report T1 headless results separately from D2 interactive/workflow acceptance;
-     inventory alone is not a contract pass, and T1 success does not establish D2 readiness.
+     Report T1 headless results separately from D3 handoff acceptance in R2b and D2 review acceptance in R3;
+     inventory alone is not a contract pass, and T1 success does not establish workflow release readiness.
    - Run the `sync-docs` skill. It diffs `docs/.sync-meta.json`'s `last_synced_commit`
      against the current `main` HEAD (the code about to ship), updates any docs whose
      implementation changed, and sets `last_synced_commit` to the **current HEAD** —

@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| **Status** | In progress — R1 shipped in v2026.8.29; R2a shipped in v2026.8.31: B1 (#740, [006](006-b1-definitions.md)), #733 (#741), #726 T0 (#739), B2 (#743, [007](007-b2-runner-core.md)), B3 (#744, [008](008-b3-runner-wiring.md)), and C1 (#747, [010](010-c1-workflow-status-center.md)); R2b in progress: C2 (#752, [011](011-c2-start-sheet.md)) and D1 (#754/#761, [013](013-d1-workflows-settings.md)) merged; D1's post-merge Settings UI refinement merged in #763 ([014](014-workflow-settings-ui-refinement.md)); #726 T1a inventory/configuration preflight is implemented in [064.016](../064-agent-completion-signals/016-t1-contract-test-plan.md); eight-runtime headless checks verified; T1 verification and scoped publication complete (merge pending), then D2 |
+| **Status** | In progress — R1 shipped in v2026.8.29; R2a shipped in v2026.8.31: B1 (#740, [006](006-b1-definitions.md)), #733 (#741), #726 T0 (#739), B2 (#743, [007](007-b2-runner-core.md)), B3 (#744, [008](008-b3-runner-wiring.md)), and C1 (#747, [010](010-c1-workflow-status-center.md)); R2b in progress: C2 (#752, [011](011-c2-start-sheet.md)) and D1 (#754/#761, [013](013-d1-workflows-settings.md)) merged; D1's post-merge Settings UI refinement merged in #763 ([014](014-workflow-settings-ui-refinement.md)); #726 T1a inventory/configuration preflight is implemented in [064.016](../064-agent-completion-signals/016-t1-contract-test-plan.md); eight-runtime headless checks verified; T1 verification and scoped publication merged (#769); D3 handoff and first built-in E2E next for R2b; D2 deferred to R3 |
 | **Anchor date** | 2026-08-21 |
 | **Primary PRs** | R1: #709 (C0), #710 (A1), #713 (A1b), #714 (A2) — shipped in v2026.8.29; R2a: #740 (B1), #743 (B2, [007](007-b2-runner-core.md)); #744 (B3, [008](008-b3-runner-wiring.md)); #747 (C1, [010](010-c1-workflow-status-center.md)); R2b: #752 (C2, [011](011-c2-start-sheet.md)), #754 (D1 skill), #761 (D1 rest, [013](013-d1-workflows-settings.md)), D1 Settings UI refinement (#763, [014](014-workflow-settings-ui-refinement.md)); D2–D3 TBD |
 | **Related** | [047 cross-agent-handoff](../047-cross-agent-handoff/000-plan.md), [049 agents-toolbar-entry](../049-agents-toolbar-entry/000-plan.md), [053 agent-profiles](../053-agent-profiles/000-plan.md), [055 agent-profile-runtimes](../055-agent-profile-runtimes/000-plan.md), [059 agent-transcript-snapshots](../059-agent-transcript-snapshots/000-plan.md), [060 cli-targeting-and-contract-governance](../060-prowl-cli-targeting-and-contract-governance/000-plan.md), [061 native-toolbar-controls](../061-native-toolbar-controls/toolbar-controls.md), [064 agent-completion-signals](../064-agent-completion-signals/000-plan.md) (signal bus, `agents signal` / `agents wait`), [#699 `prowl create pane`](https://github.com/onevcat/Prowl/issues/699), [PR #651 (direction reference, not merged)](https://github.com/onevcat/Prowl/pull/651), [DSL spec (living)](dsl-spec.md), [release plan (living)](release-plan.md), `docs/components/handoff.md`, `docs/components/agent-profiles.md`, `docs/components/cli.md` |
@@ -409,8 +409,8 @@ Shapes are intentionally close to what exists so the runner and the CLI share on
 This section defines **what** each slice contains. **When** it ships and in what order —
 including the interleaving with 064's signal slices — is owned by the living
 [release-plan.md](release-plan.md) (R1 CLI primitives + signals, R2a workflow engine + CLI,
-R2b workflow GUI + first built-in, R3 handoff migration; decisions 2026-08-22 and
-2026-08-29). Only two couplings cross the two
+R2b workflow GUI + handoff migration, R3 adversarial review; latest ordering decision
+2026-09-05). Only two couplings cross the two
 entries: 064-S1 delivers the `ObservedAgentState` observer that B3 consumes, and 064-S3
 attaches hooks through A2's launch boundary.
 
@@ -426,8 +426,8 @@ attaches hooks through A2's launch boundary.
 | **C1** | C | B3 | Status center fifth state + run panel + attention triggers + notifications (061 visual verification). Runs become visible. |
 | **C2** | C | B3 | Start sheet (bindings, suggestion-based profile creation, don't-ask-again, `--skip` equivalent) + entry points (capsule popover, palette, Active Agents context menu). GUI-initiated runs. |
 | **D1** | D | B1, C2, 065-K1 | `prowl-workflow` authoring skill (registered by adding it to `skills/`; embedding and the registry come from [065](../065-bundled-agent-skills/000-plan.md)), `docs/components/workflows.md`, Settings › Workflows page (enable/validate/Reveal/New/Ask-agent/per-workflow auto) added to the Agents group. Distribution and docs. |
-| **D2** | D | A2, C2, D1, 064-S3 wave 1, #733, #726 T1 | `prowl.adversarial-review` built-in + reviewer skill + E2E self-verification (the exact-signal watchdog's first proof in a real flow). Proves the engine on a fresh flow before touching shipped behavior. |
-| **D3** | D | D2 | `prowl.handoff` + `prowl.handoff-checkpoint` built-ins + `handoff.transition`/`handoff.checkpoint` actions; `prowl handoff to\|save` → `HANDOFF_RETIRED` stubs; remove `HandoffHudFeature`, `HandoffCommandHandler`, `HandoffRequestRegistry`; rewrite `docs/components/handoff.md` and the `prowl-cli` skill. Migrate the shipped feature last. |
+| **D2** | D | D3 acceptance / R2b shipped; A2, C2, D1, 064-S3 wave 1, #733, #726 T1 | `prowl.adversarial-review` built-in + reviewer skill + loop/verdict/watchdog E2E. Deferred to R3 after handoff validates the first built-in path. |
+| **D3** | D | A2, C2, D1, 064-S3 wave 1, #733, #726 T1 | `prowl.handoff` + `prowl.handoff-checkpoint` built-ins + `handoff.transition`/`handoff.checkpoint` actions; `prowl handoff to\|save` → `HANDOFF_RETIRED` stubs; remove `HandoffHudFeature`, `HandoffCommandHandler`, `HandoffRequestRegistry`; rewrite `docs/components/handoff.md` and the `prowl-cli` skill. First built-in workflow and Debug E2E in R2b; release candidate after handoff/checkpoint acceptance. |
 | **V2** | — | — | observe mode (`expect.status` + `agents read` / hook `last_assistant_message`), `on_attention: ask <role>`, fan-out (`count`, `wait all`), run persistence/resume, retention, cross-worktree roles, GUI editor. |
 
 ## Alternatives & decisions
@@ -509,16 +509,15 @@ attaches hooks through A2's launch boundary.
   / Execution model). Detection is heuristic, so every trigger is designed to be harmless
   when wrong: grace before acting, a nudge that only asks the agent to finish with `done`
   when it is truly complete, and attention states that never discard a late delivery.
-- **PR order / releases** (revised 2026-08-22): three releases — R1 = C0, A1, A2,
-  064-S1/S2/S3-wave-1, 065-S0/K1/K2/K3 (CLI orchestration + signals + skill distribution);
-  R2 = B1, B2, B3, C1, C2, D1, D2
-  (Agent Workflows); R3 = D3, 064-S4, first V2 items (handoff migration). S3 has no wave 2:
-  runtimes that require global-config, dedicated-home, or project-file writes do not receive
-  Prowl-managed hooks. The single source for order and release assignment is
-  [release-plan.md](release-plan.md);
-  the slice tables in 063/064 define contents only. The new Adversarial Review flow
-  validates the engine before the shipped handoff is migrated; the `ObservedAgentState`
-  observer moved from B3 to 064-S1 so R1 can ship `agents wait`.
+- **PR order / releases** (revised 2026-09-05): R1 CLI/signals and R2a workflow engine/CLI
+  have shipped. R2b = C2, D1, T1, then D3 handoff/checkpoint migration and first built-in E2E;
+  consider releasing at that boundary. D2 adversarial review moves to the next release, R3;
+  064-S4 remains independently planned there. Slice IDs remain stable. Handoff's simpler flow
+  now validates the engine first; D2 adds loop/verdict-specific acceptance later. Preserve
+  the one-release non-executing CLI retirement period from handoff's actual release. The
+  single source for order and release assignment is [release-plan.md](release-plan.md).
+  S3 has no wave 2: runtimes requiring global-config, dedicated-home, or project-file writes
+  do not receive Prowl-managed hooks.
 - **Review round (2026-08-22)** — accepted corrections: runner as an `AppFeature` child
   fed by the single event subscription + a per-surface multicast observer for CLI waits;
   opaque per-step delivery tokens for `done`; `LegacyHandoffAdapter` with a full parameter
@@ -663,3 +662,5 @@ attaches hooks through A2's launch boundary.
 - Updated 2026-09-05: Confirmed D1 refinement #763 merged; T1 remains before D2, with inventory, low-cost model candidates, and a proposed repeatable harness in [064.016](../064-agent-completion-signals/016-t1-contract-test-plan.md). No inference verification performed.
 
 - Updated 2026-09-05 (T1 closure): Full eight-runtime verification and explicit scoped publication passed; the baseline and matrix were advanced while preserving interactive history. Release guidance now uses `verify` then `publish`. See [064.016](../064-agent-completion-signals/016-t1-contract-test-plan.md). Merge this closure, then proceed to D2; GUI E2E is outside #726 T1.
+
+- Updated 2026-09-05 (owner sequencing decision): D3 moves before D2 into R2b; handoff/checkpoint carry the first built-in Debug E2E. Consider R2b release after acceptance, with adversarial review deferred to R3. This supersedes earlier D2-first/migrate-handoff-last ordering; CLI retirement and artifact contracts remain unchanged.
