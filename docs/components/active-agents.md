@@ -1,5 +1,7 @@
 # Active Agents Panel
 
+> Workflow launch menus and role labels are shown only when Prowl starts with `PROWL_WORKFLOW_UI=1`. Agent Island and ordinary agent controls remain available without the flag.
+
 > A live list of every running agent across all worktrees, with status and
 > one-click jump-to-agent. Your mission-control roster.
 

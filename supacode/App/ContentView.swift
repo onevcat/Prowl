@@ -10,6 +10,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct ContentView: View {
+  @Dependency(FeatureFlags.self) private var featureFlags
   @Bindable var store: StoreOf<AppFeature>
   @Bindable var repositoriesStore: StoreOf<RepositoriesFeature>
   let terminalManager: WorktreeTerminalManager
@@ -167,7 +168,7 @@ struct ContentView: View {
             ? terminalManager.canvasFocusedWorktreeID
             : nil,
           ghosttyCommands: ghosttyShortcuts.commandPaletteEntries,
-          workflowItems: store.workflowPaletteItems
+          workflowItems: featureFlags.workflowUI ? store.workflowPaletteItems : []
         ),
         resolvedKeybindings: store.resolvedKeybindings
       )
@@ -178,7 +179,7 @@ struct ContentView: View {
       }
     }
     .overlay {
-      if !store.workflowStartFromSettings,
+      if featureFlags.workflowUI, !store.workflowStartFromSettings,
         let workflowStartStore = store.scope(state: \.workflowStart, action: \.workflowStart.presented)
       {
         WorkflowStartOverlayView(store: workflowStartStore)

@@ -1,5 +1,7 @@
 # Command Palette
 
+> Workflow launch entries are hidden unless Prowl starts with `PROWL_WORKFLOW_UI=1`; other commands are unaffected.
+
 > The `⌘P` searchable launcher for (almost) every action in Prowl. Type a name,
 > hit Return.
 

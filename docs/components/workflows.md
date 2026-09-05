@@ -1,5 +1,7 @@
 # Agent Workflows
 
+> Workflow UI is currently an opt-in preview. Start Prowl with `PROWL_WORKFLOW_UI=1` to show workflow launch menus, Settings, status controls, and role labels. Without it, the `prowl workflow` CLI and execution engine remain available. The flag is read at process startup; relaunch to change it.
+
 > Multi-step, multi-agent orchestrations that Prowl runs and supervises for
 > you: a YAML file declares the roles (the pane you start from, an agent Prowl
 > launches, an agent you pick) and the steps (message a role, launch one, loop

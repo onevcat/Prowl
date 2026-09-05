@@ -13,7 +13,7 @@ Build, sign, notarize, and publish a Prowl release.
    - If dirty, list the changes and ask whether to proceed or abort
 3. Sync the docs to the code being released — **before** the version bump and tag:
    - First read `docs-ai/001-fork-bootstrap-and-release-pipeline/release-runbook.md`'s
-     **Agent contract release check** and surface its status to the user. Follow the linked
+     **Workflow UI release scope** and **Agent contract release check**, and surface their status to the user. Follow the linked
      contract runbook: run the full `--mode verify` suite with the owner's configured model
      routes, then `--mode publish --report PATH` before bump/tag. Commit the generated receipt,
      version baseline, and matrix. Publication requires the original artifacts/result bundles

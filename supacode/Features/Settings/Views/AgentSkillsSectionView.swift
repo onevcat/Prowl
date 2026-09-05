@@ -5,7 +5,12 @@ import SwiftUI
 /// skill, with one full-width line per detected target (status, link folder, action).
 /// Link behavior stays in `AgentSkillsFeature`; this view only presents it.
 struct AgentSkillsSectionView: View {
+  @Dependency(FeatureFlags.self) private var featureFlags
   @Bindable var store: StoreOf<AgentSkillsFeature>
+
+  private var visibleSkills: [AgentSkillsFeature.SkillRow] {
+    store.skills.filter { featureFlags.showsSkill($0.id) }
+  }
 
   var body: some View {
     Section {
@@ -41,7 +46,7 @@ struct AgentSkillsSectionView: View {
         }
       }
       .font(.callout)
-    } else if store.skills.isEmpty {
+    } else if visibleSkills.isEmpty {
       Text("This app bundles no installable skills.")
         .foregroundStyle(.secondary)
         .font(.callout)
@@ -55,9 +60,9 @@ struct AgentSkillsSectionView: View {
         .foregroundStyle(.secondary)
         .font(.callout)
       }
-      ForEach(store.skills) { row in
+      ForEach(visibleSkills) { row in
         skillRow(row)
-        if row.id != store.skills.last?.id {
+        if row.id != visibleSkills.last?.id {
           Divider()
         }
       }

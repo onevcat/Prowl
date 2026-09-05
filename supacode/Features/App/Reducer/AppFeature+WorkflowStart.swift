@@ -15,7 +15,7 @@ extension AppFeature {
     forceSheet: Bool,
     fromSettings: Bool = false
   ) -> Effect<Action> {
-    guard state.workflowStart == nil else { return .none }
+    guard featureFlags.workflowUI, state.workflowStart == nil else { return .none }
     let worktree: Worktree
     if let worktreeID {
       guard let explicitWorktree = state.repositories.terminalWorktree(for: worktreeID) else {
@@ -58,7 +58,7 @@ extension AppFeature {
   /// Palette rows come from a state snapshot because the assembler runs on every body
   /// evaluation; the catalog scan happens only when the palette opens.
   func refreshWorkflowPaletteItems(state: inout State) {
-    guard let worktree = actionTargetWorktree(repositories: state.repositories) else {
+    guard featureFlags.workflowUI, let worktree = actionTargetWorktree(repositories: state.repositories) else {
       state.workflowPaletteItems = []
       return
     }
@@ -71,7 +71,7 @@ extension AppFeature {
   /// The Active Agents rows' `in <workflow> · <role>` subtitles (000-plan entry points),
   /// derived from the live runs' bindings whenever WorkflowRunsFeature state changes.
   func syncWorkflowRoleBadges(state: inout State) {
-    let badges = Self.workflowRoleBadges(for: state.workflowRuns)
+    let badges = featureFlags.workflowUI ? Self.workflowRoleBadges(for: state.workflowRuns) : [:]
     if state.repositories.workflowRoleBadgesBySurfaceID != badges {
       state.repositories.workflowRoleBadgesBySurfaceID = badges
     }

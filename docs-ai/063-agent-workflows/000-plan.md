@@ -9,6 +9,8 @@
 
 > Design amendment under review: [015 — action bundles, context, and control flow](015-action-bundles-and-control-flow.md). The owner redirected the current session to this foundation before handoff implementation. The existing V1 specification describes current behavior; the amendment describes proposed replacements.
 
+> Release scope update: [016 — workflow UI gate](016-workflow-ui-release-gate.md). The next release ships Island/detection improvements with workflow UI hidden by default; action bundles, handoff migration, and review workflows are deferred.
+
 ## Background
 
 Prowl already runs several coding agents side by side, identifies them per pane, launches
@@ -668,3 +670,5 @@ attaches hooks through A2's launch boundary.
 - Updated 2026-09-05 (owner sequencing decision): D3 moves before D2 into R2b; handoff/checkpoint carry the first built-in Debug E2E. Consider R2b release after acceptance, with adversarial review deferred to R3. This supersedes earlier D2-first/migrate-handoff-last ordering; CLI retirement and artifact contracts remain unchanged.
 
 - Updated 2026-09-05: Recorded accepted action/bundle authorization, workflow-wide context, typed state, conditions/unbounded loops, sequential scheduling, and no recovery decisions in [015](015-action-bundles-and-control-flow.md). Consolidated syntax remains under review; no implementation yet.
+
+- Updated 2026-09-05: Added the process-scoped workflow UI release gate in [016](016-workflow-ui-release-gate.md); the CLI/runtime remain available and future workflow slices do not block this release.

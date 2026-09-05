@@ -5,6 +5,14 @@
 > slices themselves — what each PR contains — are defined in the owning plan's
 > "Delivery slicing" section. Update this file when scope moves between releases.
 
+> **Next public release (owner decision, 2026-09-05):** ship the merged Agent Island,
+> Pi/OMP/Copilot detection fixes, terminal-close protection, and other accepted changes.
+> Workflow UI is off unless Prowl starts with `PROWL_WORKFLOW_UI=1`; CLI/runtime capabilities
+> remain available. Action bundles, D3 handoff migration, and D2 adversarial review are deferred
+> and are not gates for this release. The [UI gate](016-workflow-ui-release-gate.md) is the final
+> planned implementation PR before release preparation. The R2b/R3 tables below describe the
+> deferred workflow roadmap, not the scope of this intervening release.
+
 ## Ownership
 
 | Prefix | Owner | Meaning |
@@ -321,3 +329,5 @@ R3+: V2 / S5 rest
 - Updated 2026-09-05 (T1 closure): Full eight-runtime verification and explicit scoped publication passed; the baseline and matrix were advanced while preserving interactive history. Release guidance now uses `verify` then `publish`. See [064.016](../064-agent-completion-signals/016-t1-contract-test-plan.md). Merge this closure, then proceed to D2; GUI E2E is outside #726 T1.
 
 - 2026-09-05 — Owner changed the release order: D3 handoff/checkpoint migrates in R2b and supplies the first built-in E2E; consider releasing after its acceptance. D2 adversarial review moves to R3. Keep slice IDs and CLI retirement semantics; remove stubs one release after their actual introduction. T1 #769 is merged.
+
+- Updated 2026-09-05 (release scope): #770/#771 merged. Release the Island/detection improvements now with workflow UI opt-in; defer action bundles, handoff, and review workflow acceptance. See [016](016-workflow-ui-release-gate.md).
