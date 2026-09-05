@@ -401,14 +401,18 @@ nonisolated private func detectCopilot(_ content: String) -> AgentRawState {
   {
     return .blocked
   }
-  let hasWorkingFooter = lines.suffix(5).contains { line in
-    line.split(whereSeparator: \.isWhitespace).prefix(4)
-      .elementsEqual(["◎", "working", "esc", "interrupt"])
-  }
+  let hasWorkingFooter = lines.suffix(5).contains(where: isCopilotWorkingFooter)
   if hasWorkingFooter || lower.contains("esc to cancel") {
     return .working
   }
   return .idle
+}
+
+nonisolated private func isCopilotWorkingFooter(_ line: String) -> Bool {
+  // Copilot 1.0.83 uses these frames in its normal and alternate-screen animations.
+  // Streaming response size is optional and appears before the interrupt shortcut.
+  let pattern = #"^[∙∘○◎◉]\s+working(?:\s+·\s+\d+(?:\.\d+)?\s+[kmgt]?i?b)?\s+esc\s+interrupt(?:\s|$)"#
+  return line.range(of: pattern, options: .regularExpression) != nil
 }
 
 nonisolated private func hasCopilotSelectionPrompt(_ lines: [String]) -> Bool {

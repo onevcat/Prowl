@@ -39,9 +39,31 @@ struct OMPAndCopilotScreenTests {
     #expect(DetectedAgent.copilot.detectState(in: screen) == .working)
   }
 
+  @Test(arguments: ["∙", "∘", "○", "◎", "◉"], ["", " · 101 B", " · 1.2 KB", " · 12.3 MB"])
+  func copilotRecognizesEveryWorkingFrameAndByteCount(frame: String, byteCount: String) {
+    let screen = """
+      ~/project [⎇ main] [#123]                   Session: 8.33 AIC used
+
+      \(frame) Working\(byteCount) esc interrupt          gpt-5.1
+      """
+    #expect(DetectedAgent.copilot.detectState(in: screen) == .working)
+  }
+
+  @Test func copilotWorkingCounterStillRequiresRuntimeChrome() {
+    for screen in [
+      "◉ Working · some prose esc interrupt",
+      "Text: ◉ Working · 101 B esc interrupt",
+      "● Working · 101 B esc interrupt",
+      "◉ Working · 101 B esc interrupted",
+      "◉ Working · 101 B esc interrupt\nResult\nOne\nTwo\nThree\nFour\nReady",
+    ] {
+      #expect(DetectedAgent.copilot.detectState(in: screen) == .idle)
+    }
+  }
+
   @Test func copilotSelectionFooterIsBlockedEvenWithWorkingTextAbove() {
     let screen = """
-      ◎ Working esc interrupt
+      ◉ Working · 101 B esc interrupt
       ╭──────────────────────────────────────╮
       │ Confirm folder trust                 │
       │ Do you trust the files in this folder?│

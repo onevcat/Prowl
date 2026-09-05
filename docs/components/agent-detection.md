@@ -63,7 +63,8 @@ at a `~/.grok/` install (so Cursor's own `agent` entrypoint stays Cursor).
    Oh My Pi's `Working… ⟦esc⟧` loader and bottom-of-screen `󱊷 Working…`
    (also `⎋`/`esc`) prefix form, braille frames, symbol cycles, Cursor's
    hexagons, Kimi's moon phases, etc.). Copilot recognizes the bottom
-   `◎ Working esc interrupt` footer. Its live boxed numbered choices with
+   `Working … esc interrupt` footer across its `∙ ∘ ○ ◎ ◉` animation frames,
+   including an optional streaming-size field such as `· 101 B` or `· 1.2 KB`. Its live boxed numbered choices with
    `enter to select · esc to cancel` are **Blocked**, including folder trust;
    that picker takes precedence over the older `esc to cancel` working cue.
    Claude's live status row (`● <label>… (<elapsed> · …)`) accepts a multi-word
