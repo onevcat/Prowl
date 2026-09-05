@@ -17,17 +17,28 @@ extension SupacodeApp {
     let client = WorkflowStartClient(
       catalog: { worktreeID in
         guard let appStore = storeBox.store else { return [] }
-        let snapshot = makeWorkflowRuntimeSnapshot(appStore: appStore, terminalManager: terminalManager)
-        guard let entries = try? workflowCatalogEntries(worktreeID: worktreeID, snapshot: snapshot) else {
+        let snapshot = makeWorkflowRuntimeSnapshot(
+          appStore: appStore, terminalManager: terminalManager)
+        guard let entries = try? workflowCatalogEntries(worktreeID: worktreeID, snapshot: snapshot)
+        else {
           return []
         }
-        return entries.compactMap { startCatalogItem($0, snapshot: snapshot) }
+        let repositoryRootPath = snapshot.resolution.worktrees.first { $0.id == worktreeID }?
+          .rootPath
+        return entries.compactMap {
+          WorkflowStartCatalogItem.make(
+            entry: $0,
+            disabledWorkflowIDs: snapshot.disabledWorkflowIDs,
+            repositoryRootPath: repositoryRootPath)
+        }
       },
       context: { workflowKey, worktreeID, preferredSource in
         guard let appStore = storeBox.store else { return nil }
-        let snapshot = makeWorkflowRuntimeSnapshot(appStore: appStore, terminalManager: terminalManager)
+        let snapshot = makeWorkflowRuntimeSnapshot(
+          appStore: appStore, terminalManager: terminalManager)
         return makeWorkflowStartContext(
-          workflowKey: workflowKey, worktreeID: worktreeID, preferredSourceSurfaceID: preferredSource,
+          workflowKey: workflowKey, worktreeID: worktreeID,
+          preferredSourceSurfaceID: preferredSource,
           assembly: WorkflowStartAssembly(
             snapshot: snapshot, appStore: appStore, terminalManager: terminalManager,
             reservations: reservations))
@@ -37,17 +48,21 @@ extension SupacodeApp {
           return .failed(
             code: CLIErrorCode.transportFailed, message: "Workflow runtime is not available.")
         }
-        let snapshot = makeWorkflowRuntimeSnapshot(appStore: appStore, terminalManager: terminalManager)
-        guard let worktree = snapshot.resolution.worktrees.first(where: { $0.id == request.worktreeID })
+        let snapshot = makeWorkflowRuntimeSnapshot(
+          appStore: appStore, terminalManager: terminalManager)
+        guard
+          let worktree = snapshot.resolution.worktrees.first(where: { $0.id == request.worktreeID })
         else {
           return .failed(
-            code: CLIErrorCode.targetNotFound, message: "The source worktree is no longer available.")
+            code: CLIErrorCode.targetNotFound,
+            message: "The source worktree is no longer available.")
         }
         let source = WorkflowRunSource(
           worktree: worktree, paneID: request.sourceSurfaceID, paneIsCaller: false)
         let input = WorkflowInput(
           action: .run,
-          target: request.sourceSurfaceID.map { .pane($0.uuidString) } ?? .worktree(request.worktreeID),
+          target: request.sourceSurfaceID.map { .pane($0.uuidString) }
+            ?? .worktree(request.worktreeID),
           workflow: request.workflowID,
           roleBindings: request.roleBindings,
           inputValues: request.inputValues,
@@ -88,32 +103,6 @@ extension SupacodeApp {
     }
   }
 
-  /// nil hides the entry everywhere: shadowed duplicates and definitions disabled in Settings
-  /// (011 decision 3). A file that fails validation stays listed (the popover dims it); one
-  /// that does not even parse keeps a file-based key so the popover can still name it.
-  @MainActor
-  private static func startCatalogItem(
-    _ entry: WorkflowCatalogEntry, snapshot: WorkflowRuntimeSnapshot
-  ) -> WorkflowStartCatalogItem? {
-    guard !entry.shadowed else { return nil }
-    let file = entry.file
-    guard let id = file.id else {
-      let filename = file.url.lastPathComponent
-      return WorkflowStartCatalogItem(
-        key: "\(file.scope.rawValue)/file:\(filename)", workflowID: filename, name: filename,
-        workflowDescription: nil, validationFailure: "Cannot parse the file.")
-    }
-    let key = WorkflowCommandHandler.disabledKey(scope: file.scope, id: id)
-    guard !snapshot.disabledWorkflowIDs.contains(key) else { return nil }
-    let errors = file.diagnostics.errorCount
-    return WorkflowStartCatalogItem(
-      key: key,
-      workflowID: id,
-      name: file.definition?.name ?? id,
-      workflowDescription: file.definition?.description,
-      validationFailure: file.isValid ? nil : "\(errors) validation error\(errors == 1 ? "" : "s")")
-  }
-
   // MARK: - Context
 
   /// The app-side facts one start-context assembly reads.
@@ -138,9 +127,17 @@ extension SupacodeApp {
     guard
       let entries = try? workflowCatalogEntries(worktreeID: worktreeID, snapshot: snapshot),
       let entry = entries.first(where: { candidate in
-        startCatalogItem(candidate, snapshot: snapshot)?.key == workflowKey
+        WorkflowStartCatalogItem.make(
+          entry: candidate,
+          disabledWorkflowIDs: snapshot.disabledWorkflowIDs,
+          repositoryRootPath: snapshot.resolution.worktrees.first { $0.id == worktreeID }?.rootPath
+        )?.key == workflowKey
       }),
-      let item = startCatalogItem(entry, snapshot: snapshot),
+      let item = WorkflowStartCatalogItem.make(
+        entry: entry,
+        disabledWorkflowIDs: snapshot.disabledWorkflowIDs,
+        repositoryRootPath: snapshot.resolution.worktrees.first { $0.id == worktreeID }?.rootPath
+      ),
       let definition = entry.file.definition,
       let worktree = snapshot.resolution.worktrees.first(where: { $0.id == worktreeID }),
       let domainWorktree = resolveCLITerminalWorktree(
@@ -227,7 +224,8 @@ extension SupacodeApp {
       cliInstalled: cliInstalled,
       bindModeOverride: bindOverride,
       cliServiceFailure: cliServiceStatus.current().unreachableDescription,
-      cliInstallStatus: cliInstalled ? nil : cliInstallClient.installationStatus(cliDefaultInstallPath))
+      cliInstallStatus: cliInstalled
+        ? nil : cliInstallClient.installationStatus(cliDefaultInstallPath))
   }
 
   /// dsl-spec §3 binding resolution, presented: the resolver's pre-selection per launch role,
@@ -288,7 +286,8 @@ extension SupacodeApp {
         } ?? false
       return WorkflowStartLaunchRole(
         name: role.name,
-        effectiveBind: bindOverride.map { $0 == .auto ? WorkflowBindMode.auto : .ask } ?? requirements.bind,
+        effectiveBind: bindOverride.map { $0 == .auto ? WorkflowBindMode.auto : .ask }
+          ?? requirements.bind,
         resolvedProfileID: resolvedProfileID,
         candidates: candidates,
         suggestion: hasExactSuggestionMatch ? nil : (suggestion ?? requirements.suggest),

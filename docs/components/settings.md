@@ -34,9 +34,9 @@ and opens that section's root.
 | **Commands** | Global Custom Commands. Enabled commands appear in the window toolbar; each repo can independently hide a Global command. → [custom-actions](custom-actions.md) |
 | **Advanced** | Analytics, crash reports, restore terminal layout on launch (experimental) + clear saved layout. |
 | **Agents → Profiles** | Named launch presets for supported agent runtimes (model, effort, execution mode, tab/split placement, extra arguments, opt-in dedicated home for a separate account) with a live launch preview. List order is the recommendation fallback. → [agent-profiles](agent-profiles.md) |
-| **Agents → Workflows** | Every workflow definition Prowl can see (built-in, `~/.prowl/workflows`, each repository's `.prowl/workflows`) with validation diagnostics, an enable checkbox, the per-workflow bind mode, and the remembered profile per launch role; **New Workflow…**, **Ask an Agent…**, and the CLI dependency banner. → [workflows](workflows.md) |
 | **Agents → CLI & Skills** | Install/status for the bundled `prowl` CLI, the local socket path it uses to reach the app and whether this app is **listening** on it, and the **Agent Skills** section that links the bundled skills into your agents' skill folders. → [cli](cli.md) |
-| **Repositories / Repo Settings** | Per-repository: setup/archive/run scripts, **Custom Commands**, Global-command visibility, **Default Agent Profile**, default base ref & directory, copy-files overrides, open-with app, custom title, icon & color, PR merge strategy, line-diff & PR-state fetching. Reached from the sidebar context menu → "Repo Settings". → [custom-actions](custom-actions.md), [repositories-and-worktrees](repositories-and-worktrees.md) |
+| **Agents → Workflows** | Compact Built-in and personal workflow lists. Select a row for Enabled, explicit Run target, role profile preferences, Run Setup, validation, and source-file actions; **New Workflow…**, **Ask an Agent…**, and the CLI dependency banner remain on the index. → [workflows](workflows.md) |
+| **Repositories / Repo Settings** | Per-repository: setup/archive/run scripts, **Custom Commands**, Global-command visibility, **Default Agent Profile**, a direct **Workflows** list, default base ref & directory, copy-files overrides, open-with app, custom title, icon & color, PR merge strategy, line-diff & PR-state fetching. Reached from the sidebar context menu → "Repo Settings". → [custom-actions](custom-actions.md), [repositories-and-worktrees](repositories-and-worktrees.md), [workflows](workflows.md) |
 
 ## Where settings live on disk
 
@@ -64,12 +64,14 @@ the Workflows page, since workflow participants deliver through `prowl`.
 
 ## Workflows
 
-**Agents → Workflows** is the GUI over `prowl workflow list` plus the settings
-the workflow runtime stores: enable/disable per file, the bind-mode override
-(Follow file / Always ask / Automatic), and the remembered profile per `launch`
-role. It also creates a starter file (**New Workflow…**) and hands out an agent
-prompt for authoring (**Ask an Agent…**). Rows follow the folders live. Details
-and every control: [workflows](workflows.md#settings--agents--workflows).
+**Agents → Workflows** lists Built-in and personal workflows; repository
+workflows appear in the matching Repository Settings immediately after
+**Agents**. Select any compact row for **Enabled**, **Run in <worktree>**, every
+role's behavior, **Preferred Agent Profile** for launch roles, **Run Setup**
+(Follow Workflow / Always Review Before Running / Run Directly When Possible),
+validation, and source-file actions. **New Workflow…** opens a starter YAML in
+the default app, while **Ask an Agent…** provides an authoring prompt. Rows and
+open details follow file changes live. See [workflows](workflows.md#settings--agents--workflows).
 
 ## Agent Skills
 

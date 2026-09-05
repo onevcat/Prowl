@@ -40,10 +40,10 @@ struct SettingsView: View {
         Section("Agents") {
           Label("Profiles", systemImage: "person.crop.circle")
             .tag(SettingsSection.profiles)
-          Label("Workflows", systemImage: "point.3.connected.trianglepath.dotted")
-            .tag(SettingsSection.workflows)
           Label("CLI & Skills", systemImage: "terminal")
             .tag(SettingsSection.commandLineTool)
+          Label("Workflows", systemImage: "point.3.connected.trianglepath.dotted")
+            .tag(SettingsSection.workflows)
         }
 
         Section("Repositories") {
@@ -166,6 +166,19 @@ struct SettingsView: View {
     .navigationSplitViewStyle(.balanced)
     .alert($settingsStore.scope(state: \.alert, action: \.alert))
     .frame(minWidth: 800, minHeight: 600)
+    .disabled(store.workflowStartFromSettings)
+    .overlay {
+      if store.workflowStartFromSettings,
+        let workflowStartStore = store.scope(state: \.workflowStart, action: \.workflowStart.presented)
+      {
+        WorkflowStartOverlayView(store: workflowStartStore)
+      }
+    }
+    .onDisappear {
+      if store.workflowStartFromSettings {
+        store.send(.workflowStart(.dismiss))
+      }
+    }
     .focusedSceneAction(\.closeSettingsWindowAction, enabled: true) {
       dismiss()
     }

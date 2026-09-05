@@ -40,11 +40,13 @@ struct WorkflowCommandHandlerTests {
       try FileManager.default.createDirectory(
         at: WorkflowSources.repoDirectory(root: repoRoot), withIntermediateDirectories: true)
       try write("demo", to: userWorkflows.appending(path: "demo.yaml"))
-      try write("repo-only", to: WorkflowSources.repoDirectory(root: repoRoot).appending(path: "repo.yaml"))
+      try write(
+        "repo-only", to: WorkflowSources.repoDirectory(root: repoRoot).appending(path: "repo.yaml"))
     }
 
     func write(_ id: String, to url: URL) throws {
-      try Data(WorkflowCommandHandlerTests.minimal.replacingOccurrences(of: "%ID%", with: id).utf8).write(to: url)
+      try Data(WorkflowCommandHandlerTests.minimal.replacingOccurrences(of: "%ID%", with: id).utf8)
+        .write(to: url)
     }
 
     func cleanUp() {
@@ -59,7 +61,8 @@ struct WorkflowCommandHandlerTests {
         skipsSurfaceCreationForTesting: true
       )
       let pane = TargetResolutionSnapshot.Pane(
-        id: paneID, handle: 1, title: "shell", cwd: repoRoot.path(percentEncoded: false), isFocusedInTab: true,
+        id: paneID, handle: 1, title: "shell", cwd: repoRoot.path(percentEncoded: false),
+        isFocusedInTab: true,
         surfaceView: surfaceView)
       let tab = TargetResolutionSnapshot.Tab(
         id: UUID(), handle: 1, title: "Tab", selected: true, panes: [pane], focusedPaneID: paneID)
@@ -67,7 +70,8 @@ struct WorkflowCommandHandlerTests {
         id: "wt-1", name: "main", path: repoRoot.path(percentEncoded: false),
         rootPath: repoRoot.path(percentEncoded: false), kind: .git, tabs: [tab])
       return WorkflowRuntimeSnapshot(
-        resolution: TargetResolutionSnapshot(worktrees: [worktree], focusedWorktreeID: focused ? "wt-1" : nil),
+        resolution: TargetResolutionSnapshot(
+          worktrees: [worktree], focusedWorktreeID: focused ? "wt-1" : nil),
         paneByShellPID: [shellPID: CallerPane(worktreeID: "wt-1", surfaceID: paneID)],
         bundleWorkflowsURL: nil,
         userWorkflowsURL: userWorkflows,
@@ -81,12 +85,17 @@ struct WorkflowCommandHandlerTests {
   }
 
   private func list(
-    _ handler: WorkflowCommandHandler, target: TargetSelector = .none, context: CLICommandContext = CLICommandContext()
+    _ handler: WorkflowCommandHandler, target: TargetSelector = .none,
+    context: CLICommandContext = CLICommandContext()
   ) async throws -> (CommandResponse, WorkflowListPayload?) {
-    let envelope = CommandEnvelope(output: .json, command: .workflow(WorkflowInput(action: .list, target: target)))
+    let envelope = CommandEnvelope(
+      output: .json, command: .workflow(WorkflowInput(action: .list, target: target)))
     let response = await handler.handle(envelope: envelope, context: context)
     guard let data = response.data else { return (response, nil) }
-    guard case .list(let payload) = try JSONDecoder().decode(WorkflowCommandPayload.self, from: data.bytes) else {
+    guard
+      case .list(let payload) = try JSONDecoder().decode(
+        WorkflowCommandPayload.self, from: data.bytes)
+    else {
       return (response, nil)
     }
     return (response, payload)
@@ -95,7 +104,9 @@ struct WorkflowCommandHandlerTests {
   @Test func callerPaneSelectsItsWorktreeAndTheRepoSource() async throws {
     let fixture = try Fixture()
     defer { fixture.cleanUp() }
-    let handler = WorkflowCommandHandler { fixture.snapshot(focused: false, disabled: ["user/demo"]) }
+    let handler = WorkflowCommandHandler {
+      fixture.snapshot(focused: false, disabled: ["user/demo"])
+    }
     let context = CLICommandContext(
       callerProcessID: 9999,
       callerProcessAncestry: [CallerProcessIdentity(processID: fixture.shellPID, startedAt: nil)])
@@ -105,7 +116,9 @@ struct WorkflowCommandHandlerTests {
     #expect(response.schemaVersion == "prowl.cli.workflow.v1")
     let listed = try #require(payload)
     #expect(listed.worktree?.id == "wt-1")
-    #expect(listed.sources.repo == WorkflowSources.repoDirectory(root: fixture.repoRoot).path(percentEncoded: false))
+    #expect(
+      listed.sources.repo
+        == WorkflowSources.repoDirectory(root: fixture.repoRoot).path(percentEncoded: false))
     #expect(listed.sources.bundle == nil)
     #expect(listed.workflows.map(\.id) == ["demo", "repo-only"])
     #expect(listed.workflows.map(\.scope) == [.user, .repo])
@@ -158,8 +171,19 @@ struct WorkflowCommandHandlerTests {
     #expect(response.error?.code == CLIErrorCode.workflowFailed)
   }
 
-  @Test func disabledKeysCombineScopeAndID() {
-    #expect(WorkflowCommandHandler.disabledKey(scope: .repo, id: "review") == "repo/review")
+  @Test func repositoryEnabledStateUsesTheResolvedRepositoryIdentity() async throws {
+    let fixture = try Fixture()
+    defer { fixture.cleanUp() }
+    let disabledKey = WorkflowPreferenceKey.make(
+      scope: .repo(repositoryID: fixture.repoRoot.path(percentEncoded: false)),
+      workflowID: "repo-only")
+    let handler = WorkflowCommandHandler {
+      fixture.snapshot(focused: true, disabled: [disabledKey])
+    }
+
+    let (_, payload) = try await list(handler)
+
+    #expect(payload?.workflows.map(\.enabled) == [true, false])
   }
 
   @Test func routerStubsWorkflowUntilWired() async {

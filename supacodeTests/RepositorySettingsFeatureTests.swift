@@ -14,7 +14,32 @@ struct RepositorySettingsFeatureTests {
     let data = try JSONEncoder().encode(settings)
     let decoded = try JSONDecoder().decode(RepositorySettings.self, from: data)
 
-    #expect(decoded.githubAccountOverride == GithubAccountOverride(host: "github.com", login: "work"))
+    #expect(
+      decoded.githubAccountOverride == GithubAccountOverride(host: "github.com", login: "work"))
+  }
+
+  @Test func workflowsUseTheOwningRepositoryScope() async {
+    let rootURL = URL(fileURLWithPath: "/tmp/workflow-repository")
+    var settings = RepositorySettings.default
+    settings.customTitle = "Workflow Repo"
+    let store = TestStore(
+      initialState: RepositorySettingsFeature.State(
+        rootURL: rootURL,
+        repositoryID: "repo-id",
+        repositoryKind: .git,
+        settings: settings,
+        userSettings: .default)
+    ) {
+      RepositorySettingsFeature()
+    }
+
+    await store.send(.workflowsAppeared) {
+      $0.workflows.settingsScope = .repository(
+        WorkflowSettingsRepositoryContext(
+          repositoryID: "repo-id",
+          name: "Workflow Repo",
+          rootURL: rootURL))
+    }
   }
 
   @Test(.dependencies) func plainFolderTaskLoadsWithoutGitRequests() async throws {
@@ -154,7 +179,8 @@ struct RepositorySettingsFeatureTests {
     }
     await store.receive(\.delegate.settingsChanged)
 
-    let savedData = try #require(localStorage.data(at: SupacodePaths.userRepositorySettingsURL(for: rootURL)))
+    let savedData = try #require(
+      localStorage.data(at: SupacodePaths.userRepositorySettingsURL(for: rootURL)))
     let decoded = try JSONDecoder().decode(UserRepositorySettings.self, from: savedData)
     #expect(decoded.customCommands.first?.shortcut == conflicted.customCommands.first?.shortcut)
   }

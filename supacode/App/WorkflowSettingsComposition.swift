@@ -12,13 +12,13 @@ extension SupacodeApp {
     terminalManager: WorktreeTerminalManager,
     storeBox: SupacodeAppStoreBox
   ) -> WorkflowSettingsClient {
-    let userDirectory = WorkflowSources.userDirectory(home: FileManager.default.homeDirectoryForCurrentUser)
-    return WorkflowSettingsClient(
-      scan: {
+    WorkflowSettingsClient(
+      scan: { scope in
         guard let appStore = storeBox.store else {
           throw WorkflowSettingsError(message: "Workflow settings are not available yet.")
         }
-        let snapshot = makeWorkflowRuntimeSnapshot(appStore: appStore, terminalManager: terminalManager)
+        let snapshot = makeWorkflowRuntimeSnapshot(
+          appStore: appStore, terminalManager: terminalManager)
         func context(_ scope: WorkflowScope) -> WorkflowValidationContext {
           WorkflowValidationContext(
             scope: scope,
@@ -28,38 +28,75 @@ extension SupacodeApp {
             enabledProfiles: snapshot.enabledProfiles)
         }
         do {
-          let entries = try WorkflowDiscovery.catalog(
-            sources: WorkflowSources(bundle: snapshot.bundleWorkflowsURL, user: snapshot.userWorkflowsURL, repo: nil),
-            context: context)
-          let repositoriesState = appStore.state.repositories
-          let repositories = try repositoriesState.repositories.map { repository in
-            let directory = WorkflowSources.repoDirectory(root: repository.rootURL)
-            let repoEntries = try WorkflowDiscovery.catalog(
+          switch scope {
+          case .global:
+            let entries = try WorkflowDiscovery.catalog(
               sources: WorkflowSources(
-                bundle: snapshot.bundleWorkflowsURL, user: snapshot.userWorkflowsURL, repo: directory),
+                bundle: snapshot.bundleWorkflowsURL,
+                user: snapshot.userWorkflowsURL,
+                repo: nil),
               context: context)
-            return WorkflowSettingsRepositoryScan(
-              repositoryID: repository.id,
-              name: repositoriesState.repositoryCustomTitles[repository.id] ?? repository.name,
-              rootPath: repository.rootURL.path(percentEncoded: false),
-              directory: directory,
-              entries: repoEntries)
+            return WorkflowSettingsScan(
+              bundleDirectory: snapshot.bundleWorkflowsURL,
+              userDirectory: snapshot.userWorkflowsURL,
+              entries: entries,
+              repositories: [])
+
+          case .repository(let repository):
+            let entries = try WorkflowDiscovery.catalog(
+              sources: WorkflowSources(
+                bundle: snapshot.bundleWorkflowsURL,
+                user: snapshot.userWorkflowsURL,
+                repo: repository.directory),
+              context: context)
+            return WorkflowSettingsScan(
+              bundleDirectory: snapshot.bundleWorkflowsURL,
+              userDirectory: snapshot.userWorkflowsURL,
+              entries: entries.filter { $0.file.scope != .repo },
+              repositories: [
+                WorkflowSettingsRepositoryScan(
+                  repositoryID: repository.repositoryID,
+                  name: repository.name,
+                  rootPath: repository.rootPath,
+                  directory: repository.directory,
+                  entries: entries)
+              ])
           }
-          return WorkflowSettingsScan(
-            bundleDirectory: snapshot.bundleWorkflowsURL,
-            userDirectory: snapshot.userWorkflowsURL,
-            entries: entries,
-            repositories: repositories)
         } catch {
-          throw WorkflowSettingsError(message: "Could not read a workflow folder: \(error.localizedDescription)")
+          throw WorkflowSettingsError(
+            message: "Could not read a workflow folder: \(error.localizedDescription)")
         }
       },
-      createWorkflow: {
+      createWorkflow: { directory in
         do {
-          return try WorkflowStarterTemplate.write(in: userDirectory)
+          return try WorkflowStarterTemplate.write(in: directory)
         } catch {
-          throw WorkflowSettingsError(message: "Could not create the workflow file: \(error.localizedDescription)")
+          throw WorkflowSettingsError(
+            message: "Could not create the workflow file: \(error.localizedDescription)")
         }
+      },
+      trashWorkflow: { url in
+        do {
+          try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+        } catch {
+          throw WorkflowSettingsError(
+            message: "Could not move the workflow to Trash: \(error.localizedDescription)")
+        }
+      },
+      runTargets: { scope in
+        guard let appStore = storeBox.store else { return [] }
+        let snapshot = makeWorkflowRuntimeSnapshot(
+          appStore: appStore, terminalManager: terminalManager)
+        let targets = snapshot.resolution.worktrees.map { worktree in
+          WorkflowSettingsRunTarget(
+            id: worktree.id,
+            name: worktree.name,
+            repositoryName: URL(filePath: worktree.rootPath, directoryHint: .isDirectory)
+              .lastPathComponent,
+            rootPath: worktree.rootPath,
+            isPreferred: worktree.id == snapshot.resolution.focusedWorktreeID)
+        }
+        return WorkflowSettingsRunTarget.visible(targets, in: scope)
       },
       reveal: WorkflowSettingsClient.reveal,
       watch: WorkflowSettingsClient.watchPaths

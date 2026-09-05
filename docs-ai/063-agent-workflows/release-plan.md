@@ -35,7 +35,7 @@ say when each is cut:
 | --- | --- | --- |
 | R1 | **Shipped** — v2026.8.29 (2026-08-29) | — |
 | R2a | **Shipped** — v2026.8.31 (2026-08-31) | — |
-| R2b | In progress — C2 merged (#752), D1 skill merged (#754) | the rest of D1 (Settings › Workflows, `workflows.md`, CLI reachability), then #726 T1, then D2 |
+| R2b | In progress — C2 and D1 merged (#752/#754/#761) | D1's post-merge Settings UI refinement ([063.014](014-workflow-settings-ui-refinement.md)), then #726 T1, then D2 |
 | R3 | Planned | after R2b ships |
 
 #### R2b PR ledger
@@ -44,8 +44,9 @@ say when each is cut:
 | --- | --- | --- |
 | C2 | Merged | #752: start sheet + capsule popover / palette / Active Agents entry points; [063.011](011-c2-start-sheet.md) |
 | D1 (skill) | Merged | #754: `prowl-workflow` bundled authoring skill (shipped ahead of the rest of D1) |
-| D1 (rest) | Open | #761: Settings › Agents › Workflows page, `docs/components/workflows.md`, CLI reachability status (deferred from C0); [063.013](013-d1-workflows-settings.md) |
-| #726 T1 | Planned | `make test-agent-contracts` — after D1 |
+| D1 (rest) | Merged | #761: Settings › Agents › Workflows page, `docs/components/workflows.md`, CLI reachability status (deferred from C0); [063.013](013-d1-workflows-settings.md) |
+| D1 (UI refinement) | In progress | Post-merge native list/detail refinement, repository-local workflow Settings, Run Setup copy, explicit run targets, file opening, and capsule YAML icons; [063.014](014-workflow-settings-ui-refinement.md) |
+| #726 T1 | Planned | `make test-agent-contracts` — after the D1 UI refinement |
 | D2 | Planned | `prowl.adversarial-review` built-in + reviewer skill + E2E — after #726 T1 |
 
 #### R1 PR ledger
@@ -204,6 +205,8 @@ R3+: V2 / S5 rest;  delete HANDOFF_RETIRED stubs
 
 ## Change log
 
+- 2026-09-05 — Implemented and verified the grilled D1 Settings refinement (#763): compact global/repository lists, shared reducer-owned detail navigation, explicit Run targets through existing admission, repository-qualified preference migration, direct YAML opening, YAML icons and exact-detail routing from the Agents capsule, and synchronized user docs. `make check`, the full app test suite, Debug build, and Normal/Shelf/Canvas visual gates passed. Result: [063.014](014-workflow-settings-ui-refinement.md).
+- 2026-09-04 — After #761 merged, owner review and an `impeccable`/native-macOS design pass found the Workflows root rows too dense and the repository placement misleading. The grilled refinement makes the root a minimal list, pushes configuration into a shared detail, places repository workflows directly in each repository's Settings, clarifies Run Setup and role preferences, makes run targets explicit, opens YAML directly, repository-qualifies local preferences, and carries YAML icons into the Agents capsule. Plan: [063.014](014-workflow-settings-ui-refinement.md).
 - 2026-09-04 — D1 (rest) started on `feat/workflow-settings-d1` after the C2 (#752) and D1-skill
   (#754) rows were entered in the ledger above (both merges had left the Status table at
   "C2 starts next"). Scope and decisions: [063.013](013-d1-workflows-settings.md).

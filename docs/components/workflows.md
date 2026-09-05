@@ -32,6 +32,12 @@ The file format is `schema: prowl.workflow/v1`. Roles have a `source`:
 | `launch` | a new agent Prowl starts from an [Agent Profile](agent-profiles.md) | remembered profile → profile matching the role's `suggest` → the repository's Recommended profile → the sheet asks |
 | `pick` | an existing detected agent pane in the same worktree | always chosen at start |
 
+For a `launch` role, omit `agents` by default to allow any qualifying Agent Profile.
+Only add a runtime allow-list for an explicit user requirement or a concrete runtime-specific
+capability. `agents: []` allows none; `any` and `*` are not wildcard tokens. Leave `suggest`
+unset unless there is a specific preference to express; profile selection normally belongs
+to the user's saved preferences and the start-sheet picker.
+
 Steps are `message` (type one line or point the role at a materialized
 instruction file), `launch` (start a launch role with a kickoff prompt),
 `repeat … until outputs.<name>.verdict == <value>` (bounded loop),
@@ -65,10 +71,11 @@ identical:
 - **Command Palette** (`⌘P`) → **Run Workflow: <name>** — one row per
   runnable workflow visible to the selected worktree.
   → [command-palette](command-palette.md)
-- **Toolbar Agents capsule** → the **Workflows** section — each row starts the
-  workflow; its trailing `ellipsis.circle` ("Run with Options…") forces the
-  start sheet even when the workflow would start silently; files that fail
-  validation are listed dimmed with their reason. → [agent-profiles](agent-profiles.md#launching)
+- **Toolbar Agents capsule** → the **Workflows** section — each row uses the
+  workflow's YAML icon and starts the workflow. Its trailing `ellipsis.circle`
+  menu offers **Run with Options…** (which forces the start sheet) and **Show
+  Details in Settings…**. Files that fail validation remain dimmed with their
+  reason and still link to their Settings detail. → [agent-profiles](agent-profiles.md#launching)
 - **Active Agents** → right-click a row → **Run Workflow ▸** — starts it with
   that pane fixed as the `current` role's source. → [active-agents](active-agents.md)
 - **CLI** — `prowl workflow run <id|name> [source] [--role r=…] [--input k=v] [--skip step]`.
@@ -92,9 +99,9 @@ The sheet collects what the run needs before it exists:
   without a default must be filled before Run enables.
 - **Skip <step>** — for steps whose output nothing later depends on; the sheet
   says whether skipping ends the run early.
-- **Don't ask again for this workflow** — writes the per-workflow **Automatic**
-  bind mode (same control as Settings → Workflows → Bindings), so the next start
-  skips the sheet when nothing is undecided.
+- **Don't ask again for this workflow** — writes **Run Directly When Possible**
+  (the same choice shown under Settings → Workflows → Run Setup), so the next
+  start skips the sheet when nothing is undecided.
 - A banner blocks Run when the `prowl` CLI is not usable or when Prowl is not
   listening on its socket (participants could not deliver). Inline action per
   state: **Install** when missing, **Repair** for a dangling link, **Reinstall**
@@ -134,34 +141,45 @@ version beside it), and `skills/`. Read `log.md` first to learn what happened.
 
 ## Settings → Agents → Workflows
 
-The page lists every file Prowl can see, grouped by source — **Built-in**,
-**Your Workflows** (`~/.prowl/workflows`), and one section per repository that
-holds files — and follows the folders live: edit a file in your editor and its
-status updates without leaving Settings.
+The global page is a compact index of **Built-in** and **Your Workflows**
+(`~/.prowl/workflows`) only. A row shows the YAML icon, name, id, description,
+and one effective status: **Ready**, **Disabled**, **Invalid**, or
+**Superseded**. Select the row to open its detail; the index itself contains no
+workflow-specific controls.
 
-Per row:
+Repository workflows live directly in the matching Repository Settings, in a
+**Workflows** section immediately after **Agents**. It uses the same compact
+rows and the same detail page—there is no intermediate workflow page.
 
-| Control | Effect |
+The detail page owns these controls and explanations:
+
+| Section | Effect |
 |---|---|
-| Checkbox | enable/disable (`disabledWorkflowIDs`, keyed `<scope>/<id>`). Disabled workflows appear in no entry point and `prowl workflow run` refuses them with `WORKFLOW_DISABLED`. The same id in two repositories shares one key. |
-| Status line | **Valid**, **Valid, N warnings**, or **N errors** with **Show Details** listing every diagnostic as `line:column message code` — everything `prowl workflow validate` reports, plus the availability warnings only the running app can know (an `agents` allow-list with no installed runtime, a `suggest` no enabled profile matches). An **Overridden …** note names the file or repository whose same-id definition wins. |
-| **Reveal** | shows the file in Finder |
-| **Bindings** (workflows with `launch` roles) | **Follow file** (the YAML's `bind`), **Always ask**, or **Automatic** — the tri-state override the start sheet's "Don't ask again" also writes |
-| Role pickers (one per `launch` role) | the remembered profile for that role, or **Ask at start** to forget it. Every enabled profile is listed; the ones that do not qualify are dimmed with the resolver's reason (wrong runtime for the role's `agents`, no launch-prompt support) and cannot be chosen. A remembered profile that was disabled since stays listed as "Disabled in Settings"; a deleted one reads "Deleted profile" — either way the next start resolves the role afresh (a profile matching `suggest`, then the repository's Recommended profile) and asks only when nothing qualifies. **Manage Profiles…** jumps to Settings → Agents → Profiles. |
+| **Workflow** | identity, effective status, and **Enabled**. Disabled workflows disappear from launch surfaces and `prowl workflow run` refuses them with `WORKFLOW_DISABLED`. Repository settings are keyed by canonical repository root plus workflow id, so the same id in two repositories remains independent. |
+| **Run** | **Run in <worktree>** names the actual target. Its menu lists other legal worktrees and **Run with Options…**. Repository workflows only list worktrees from that repository. Every choice uses the same admission path as the other GUI and CLI entry points; if that explicit worktree closes first, Prowl refuses the run instead of falling back to another target. |
+| **Roles** | every `current`, `pick`, and `launch` role with a plain-language behavior summary. Only a `launch` role has a **Preferred Agent Profile** menu; **Choose Automatically** forgets the preference and lets Prowl resolve a qualifying profile at start. Unqualified profiles remain visible with the reason but cannot be selected. **Manage Agent Profiles…** appears once per page. |
+| **Run Setup** | **Follow Workflow**, **Always Review Before Running**, or **Run Directly When Possible**. The last choice starts immediately only when profiles, required role choices, inputs, and validation are already resolved; otherwise the review sheet still opens. |
+| **Validation** | every diagnostic as message, source location, and stable code. Saving the YAML revalidates automatically; there is no separate Validate button. |
+| **Source File** | **Open Workflow** uses the default YAML app; the folder button reveals it in Finder. **Delete Workflow…** asks for confirmation, then moves a personal or repository workflow to Trash and returns to the list. Failed deletions keep the detail open with an error. Built-ins are read-only and cannot be deleted. YAML remains the source of truth—Settings does not embed an editor. |
 
-Page actions (under Your Workflows): **New Workflow…** writes a validated
-starter file (`new-workflow.yaml`, then `new-workflow-2.yaml`, …; its id is the
-file name) into `~/.prowl/workflows` and reveals it; **Ask an Agent…** shows a
-copyable, localized prompt that points your coding agent at the bundled
-`prowl-workflow` skill and this manual and asks it to write, validate, and place
-a workflow for you; **Show Folder** reveals `~/.prowl/workflows` (creating it).
+Starting from Settings keeps the review panel in the Settings window. Cancelling
+returns to the same detail without bringing the main window or terminal forward.
 
-A banner at the top mirrors the start sheet's preflight: Install when `prowl`
-is missing (Repair when the link is dangling, Reinstall when a foreign link is
-not executable; a real file or folder in the slot gets no button, only the
-instruction to remove it), or the reason Prowl is not listening on its socket
-(also shown as the **Status** row under Settings → Agents → CLI & Skills →
-Connection).
+**New Workflow…** writes a validated starter (`new-workflow.yaml`, then
+`new-workflow-2.yaml`, …) into the current page's workflow folder and opens it
+in the default YAML app. **Ask an Agent…** provides a copyable prompt that
+points at the bundled `prowl-workflow` skill and this manual. The folder button
+reveals the current workflow folder, creating it when needed.
+
+The page follows its source folders live, so saving, adding, deleting, or
+renaming YAML updates the index and an open detail automatically. If an open
+file disappears, its detail becomes **Workflow Unavailable** instead of
+silently switching to another workflow.
+
+A banner mirrors start admission: Install when `prowl` is missing (Repair for a
+dangling link, Reinstall for a foreign non-executable link), or the reason Prowl
+is not listening on its socket. The same status appears under Settings → Agents
+→ CLI & Skills → Connection.
 
 ## Gotchas for agents
 

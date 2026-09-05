@@ -87,8 +87,14 @@ struct WorkflowStartFeatureTests {
     }
     return WorkflowStartContext(
       item: WorkflowStartCatalogItem(
-        key: "user/\(definition.id)", workflowID: definition.id, name: definition.name,
-        workflowDescription: nil, validationFailure: nil),
+        key: "user/\(definition.id)",
+        scope: .user,
+        fileURL: URL(filePath: "/tmp/\(definition.id).yaml"),
+        workflowID: definition.id,
+        name: definition.name,
+        workflowDescription: nil,
+        icon: definition.icon,
+        validationFailure: nil),
       definition: definition,
       worktreeID: "/tmp/wt/", worktreeName: "main",
       source: WorkflowStartSource(
@@ -125,7 +131,8 @@ struct WorkflowStartFeatureTests {
 
   @Test func unreachableSocketBlocksRun() throws {
     let context = try makeContext(
-      resolvedProfileID: Self.profileID, cliServiceFailure: "Another Prowl instance owns the socket.")
+      resolvedProfileID: Self.profileID,
+      cliServiceFailure: "Another Prowl instance owns the socket.")
     var state = WorkflowStartFeature.State(context: context)
     state.inputValues["goal"] = "x"
     #expect(!state.canRun)
@@ -228,7 +235,7 @@ struct WorkflowStartFeatureTests {
     let url = URL(fileURLWithPath: "/tmp/prowl-global-settings-\(UUID().uuidString).json")
     let context = try makeContext(resolvedProfileID: Self.profileID, bindModeOverride: .auto)
 
-    try await withDependencies {
+    await withDependencies {
       $0.settingsFileStorage = storage.storage
       $0.userGlobalSettingsURL = url
     } operation: {
@@ -325,7 +332,7 @@ struct WorkflowStartFeatureTests {
     // The first-session path: no enabled profile qualifies for the role at all.
     let context = try makeContext(suggestion: suggestion, includeCandidates: false)
 
-    try await withDependencies {
+    await withDependencies {
       $0.settingsFileStorage = storage.storage
       $0.userGlobalSettingsURL = url
     } operation: {
@@ -358,7 +365,7 @@ struct WorkflowStartFeatureTests {
 
     let storage = UserGlobalSettingsTestStorage()
     let url = URL(fileURLWithPath: "/tmp/prowl-global-settings-\(UUID().uuidString).json")
-    try await withDependencies {
+    await withDependencies {
       $0.settingsFileStorage = storage.storage
       $0.userGlobalSettingsURL = url
     } operation: {

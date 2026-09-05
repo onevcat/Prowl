@@ -128,6 +128,40 @@ struct AppFeatureWorkflowNoticeTests {
     #expect(store.state.repositories.statusToast == .warning(notice.title))
   }
 
+  @Test func aMissingExplicitWorkflowTargetNeverFallsBackToTheSelectedWorktree() async {
+    let selected = makeWorktree(id: "selected")
+    var repositories = RepositoriesFeature.State(
+      repositories: [makeRepository(worktrees: [selected])]
+    )
+    repositories.selection = .worktree(selected.id)
+    let contextRequests = LockIsolated(0)
+    let store = TestStore(
+      initialState: AppFeature.State(repositories: repositories)
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.workflowStartClient.context = { _, _, _ in
+        contextRequests.withValue { $0 += 1 }
+        return nil
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(
+      .openWorkflowStart(
+        workflowKey: "user/review",
+        worktreeID: "closed-worktree",
+        sourceSurfaceID: nil,
+        forceSheet: false))
+    await store.receive(
+      \.repositories.showToast,
+      .warning("The selected worktree is no longer available.")
+    ) {
+      $0.repositories.statusToast = .warning("The selected worktree is no longer available.")
+    }
+    #expect(contextRequests.value == 0)
+  }
+
   private func makeNotice(
     kind: WorkflowRunNotice.Kind,
     worktree: Worktree

@@ -275,7 +275,11 @@ struct WorkflowRunAdmissionTests {
     if case .failure(let failure) = broken {
       #expect(failure.details?.valid == false)
     }
-    fixture.disabled = ["repo/context"]
+    fixture.disabled = [
+      WorkflowPreferenceKey.make(
+        scope: .repo(repositoryID: fixture.repoRoot.path(percentEncoded: false)),
+        workflowID: "context")
+    ]
     #expect(
       code(admit(fixture, workflow: "context", pane: fixture.authorPane))
         == CLIErrorCode.workflowDisabled)
@@ -324,7 +328,8 @@ struct WorkflowRunAdmissionTests {
     defer { fixture.cleanUp() }
     try fixture.write(Self.review, to: "review")
     fixture.pendingDispatches = [fixture.authorPane: "launch-dispatch"]
-    let current = admit(fixture, workflow: "review", pane: fixture.authorPane, roles: ["partner=p2"])
+    let current = admit(
+      fixture, workflow: "review", pane: fixture.authorPane, roles: ["partner=p2"])
     #expect(code(current) == CLIErrorCode.dispatchPending)
     if case .failure(let failure) = current {
       #expect(failure.message.contains("launch-dispatch"))
@@ -435,7 +440,8 @@ struct WorkflowRunAdmissionTests {
     #expect(admitted.session.run.phase == .launching(ordinal: 1))
     // Restrict the role to Amp, whose runtime cannot start with a prompt: the resolver reaches `.ask`.
     try fixture.write(
-      Self.worktreeOnly.replacing("source: launch", with: "source: launch\n    agents: [amp]"), to: "launch-only")
+      Self.worktreeOnly.replacing("source: launch", with: "source: launch\n    agents: [amp]"),
+      to: "launch-only")
     #expect(
       code(admit(fixture, workflow: "launch-only", pane: nil, isCaller: false))
         == CLIErrorCode.profileNotFound)

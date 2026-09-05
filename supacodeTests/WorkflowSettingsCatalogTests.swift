@@ -25,9 +25,11 @@ struct WorkflowSettingsCatalogTests {
 
   private static let broken = "schema: prowl.workflow/v1\nid: [\n"
 
-  private static let userDirectory = URL(filePath: "/tmp/home/.prowl/workflows", directoryHint: .isDirectory)
+  private static let userDirectory = URL(
+    filePath: "/tmp/home/.prowl/workflows", directoryHint: .isDirectory)
   private static let codexProfile = AgentProfile(
-    id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!, name: "Codex Review", runtime: .codex)
+    id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!, name: "Codex Review",
+    runtime: .codex)
   private static let claudeProfile = AgentProfile(
     id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!, name: "Claude", runtime: .claude)
 
@@ -36,7 +38,9 @@ struct WorkflowSettingsCatalogTests {
     file: String = "review.yaml", shadowed: Bool = false
   ) -> WorkflowCatalogEntry {
     let directory =
-      scope == .repo ? URL(filePath: "/tmp/repo/.prowl/workflows", directoryHint: .isDirectory) : Self.userDirectory
+      scope == .repo
+      ? URL(filePath: "/tmp/repo/.prowl/workflows", directoryHint: .isDirectory)
+      : Self.userDirectory
     let parsed = WorkflowDiscovery.parse(
       yaml.replacing("%ID%", with: id).replacing("%BIND%", with: bind),
       url: directory.appending(path: file, directoryHint: .notDirectory),
@@ -49,7 +53,8 @@ struct WorkflowSettingsCatalogTests {
     entries: [WorkflowCatalogEntry], repositories: [WorkflowSettingsRepositoryScan] = []
   ) -> WorkflowSettingsScan {
     WorkflowSettingsScan(
-      bundleDirectory: nil, userDirectory: Self.userDirectory, entries: entries, repositories: repositories)
+      bundleDirectory: nil, userDirectory: Self.userDirectory, entries: entries,
+      repositories: repositories)
   }
 
   private func settings(
@@ -75,6 +80,7 @@ struct WorkflowSettingsCatalogTests {
     #expect(row.declaredBind == .ask)
     #expect(row.bindModeOverride == nil)
     #expect(row.shadowNote == nil)
+    #expect(row.status == .ready)
 
     let role = try #require(row.launchRoles.first)
     #expect(role.name == "reviewer")
@@ -93,7 +99,8 @@ struct WorkflowSettingsCatalogTests {
     let key = WorkflowBindingResolver.memoryKey(scope: .user, workflowID: "review", role: role)
     stored.remember(workflowBinding: key, profileID: Self.codexProfile.id)
 
-    let row = try #require(WorkflowSettingsCatalog.build(scan: scan(entries: [parsed]), settings: stored).user.first)
+    let row = try #require(
+      WorkflowSettingsCatalog.build(scan: scan(entries: [parsed]), settings: stored).user.first)
     #expect(!row.isEnabled)
     #expect(row.bindModeOverride == .auto)
     #expect(row.launchRoles.first?.rememberedProfileID == Self.codexProfile.id)
@@ -106,10 +113,12 @@ struct WorkflowSettingsCatalogTests {
     let parsed = entry(Self.review)
     let role = try #require(parsed.file.definition?.roles.first { $0.name == "reviewer" })
     stored.remember(
-      workflowBinding: WorkflowBindingResolver.memoryKey(scope: .user, workflowID: "review", role: role),
+      workflowBinding: WorkflowBindingResolver.memoryKey(
+        scope: .user, workflowID: "review", role: role),
       profileID: disabledCodex.id)
 
-    let row = try #require(WorkflowSettingsCatalog.build(scan: scan(entries: [parsed]), settings: stored).user.first)
+    let row = try #require(
+      WorkflowSettingsCatalog.build(scan: scan(entries: [parsed]), settings: stored).user.first)
     let launchRole = try #require(row.launchRoles.first)
     #expect(launchRole.rememberedProfileID == disabledCodex.id)
     // Settings order (the profiles' recommendation order): the enabled Claude with its own
@@ -139,9 +148,10 @@ struct WorkflowSettingsCatalogTests {
 
     #expect(catalog.repositories.map(\.name) == ["Alpha"])
     let repoRow = try #require(catalog.repositories.first?.rows.first)
-    #expect(repoRow.settingsKey == "repo/review")
+    #expect(repoRow.settingsKey == "repo:/tmp/repo/review")
     #expect(repoRow.launchRoles.first?.memoryKey.scope == "repo:/tmp/repo/")
     #expect(repoRow.shadowNote == nil)
+    #expect(repoRow.precedenceNote == "Overrides your personal workflow in this repository.")
     #expect(catalog.user.first?.shadowNote == "Overridden in Alpha")
   }
 
@@ -149,7 +159,8 @@ struct WorkflowSettingsCatalogTests {
     let winner = entry(Self.review, file: "a.yaml")
     let loser = entry(Self.review, file: "b.yaml", shadowed: true)
 
-    let catalog = WorkflowSettingsCatalog.build(scan: scan(entries: [winner, loser]), settings: settings())
+    let catalog = WorkflowSettingsCatalog.build(
+      scan: scan(entries: [winner, loser]), settings: settings())
 
     #expect(catalog.user.map(\.shadowNote) == [nil, "Overridden by a.yaml"])
     #expect(
@@ -173,11 +184,73 @@ struct WorkflowSettingsCatalogTests {
     #expect(row.errorCount >= 1)
   }
 
+  @Test func listStatusPrioritizesRecoveryAndEffectiveAvailability() throws {
+    let warning = Self.review.replacing(
+      "    prompt: \"Review.\"",
+      with: "    prompt: \"Review.\"\n    expect: { output: report, timeout: 3h }")
+    let ready = try #require(
+      WorkflowSettingsCatalog.build(
+        scan: scan(entries: [entry(Self.review)]),
+        settings: settings()
+      ).user.first)
+    let disabled = try #require(
+      WorkflowSettingsCatalog.build(
+        scan: scan(entries: [entry(Self.review)]),
+        settings: settings(disabled: ["user/review"])
+      ).user.first)
+    let warned = try #require(
+      WorkflowSettingsCatalog.build(
+        scan: scan(entries: [entry(warning)]),
+        settings: settings()
+      ).user.first)
+    let invalid = try #require(
+      WorkflowSettingsCatalog.build(
+        scan: scan(entries: [entry(Self.broken, file: "broken.yaml")]),
+        settings: settings()
+      ).user.first)
+    let superseded = try #require(
+      WorkflowSettingsCatalog.build(
+        scan: scan(entries: [
+          entry(Self.review, file: "winner.yaml"),
+          entry(Self.review, file: "loser.yaml", shadowed: true),
+        ]),
+        settings: settings()
+      ).user.last)
+
+    #expect(ready.status == .ready)
+    #expect(disabled.status == .disabled)
+    #expect(warned.status == .readyWithWarnings(warned.warningCount))
+    #expect(invalid.status == .invalid(errors: invalid.errorCount))
+    #expect(superseded.status == .superseded)
+  }
+
+  @Test func rolesDescribeEverySourceAndOnlyLaunchRolesCarryProfiles() throws {
+    let yaml = Self.review.replacing(
+      "  reviewer:\n    source: launch",
+      with: "  partner:\n    source: pick\n  reviewer:\n    source: launch")
+    let row = try #require(
+      WorkflowSettingsCatalog.build(
+        scan: scan(entries: [entry(yaml)]),
+        settings: settings()
+      ).user.first)
+
+    #expect(row.roles.map(\.name) == ["author", "partner", "reviewer"])
+    #expect(
+      row.roles.map(\.behaviorDescription) == [
+        "Uses the pane that starts this workflow.",
+        "Choose an existing agent when starting.",
+        "Prowl launches a new agent in a split on the right.",
+      ])
+    #expect(row.roles.compactMap(\.launch).count == 1)
+    #expect(row.launchRoles.map(\.name) == ["reviewer"])
+  }
+
   @Test func mixedDeclaredBindsReportNoUniformBind() throws {
     let yaml = Self.review.replacing(
       "    bind: %BIND%\n",
       with: "    bind: %BIND%\n  second:\n    source: launch\n    bind: auto\n")
-    let catalog = WorkflowSettingsCatalog.build(scan: scan(entries: [entry(yaml)]), settings: settings())
+    let catalog = WorkflowSettingsCatalog.build(
+      scan: scan(entries: [entry(yaml)]), settings: settings())
     #expect(catalog.user.first?.declaredBind == nil)
     #expect(catalog.user.first?.launchRoles.map(\.name) == ["reviewer", "second"])
   }

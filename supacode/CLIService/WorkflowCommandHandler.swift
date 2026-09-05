@@ -32,10 +32,6 @@ final class WorkflowCommandHandler: CommandHandler {
     self.runtime = runtime
   }
 
-  nonisolated static func disabledKey(scope: WorkflowScope, id: String) -> String {
-    "\(scope.rawValue)/\(id)"
-  }
-
   func handle(envelope: CommandEnvelope) async -> CommandResponse {
     await handle(envelope: envelope, context: CLICommandContext())
   }
@@ -69,7 +65,8 @@ final class WorkflowCommandHandler: CommandHandler {
       }
     case .run, .status, .done, .cancel:
       guard let runtime else { return notConfigured() }
-      return await handleRuntime(input, runtime: runtime, snapshot: snapshot, callerPane: callerPane)
+      return await handleRuntime(
+        input, runtime: runtime, snapshot: snapshot, callerPane: callerPane)
     }
   }
 
@@ -81,7 +78,8 @@ final class WorkflowCommandHandler: CommandHandler {
   ) async -> CommandResponse {
     switch input.action {
     case .list:
-      return failure(code: CLIErrorCode.invalidArgument, message: "Expected a runtime workflow action.")
+      return failure(
+        code: CLIErrorCode.invalidArgument, message: "Expected a runtime workflow action.")
     case .run:
       switch resolveSource(input.target, snapshot: snapshot, callerPane: callerPane) {
       case .failure(let refusal):
@@ -222,9 +220,12 @@ final class WorkflowCommandHandler: CommandHandler {
     }
     let workflows = catalog.map { entry in
       let enabled =
-        entry.file.id.map {
-          !snapshot.disabledWorkflowIDs.contains(Self.disabledKey(scope: entry.file.scope, id: $0))
-        } ?? false
+        entry.file.id.flatMap {
+          WorkflowPreferenceKey.make(
+            scope: entry.file.scope,
+            workflowID: $0,
+            repositoryRootPath: worktree?.rootPath)
+        }.map { !snapshot.disabledWorkflowIDs.contains($0) } ?? false
       return WorkflowListEntry(entry: entry, enabled: enabled)
     }
     return WorkflowListPayload(
