@@ -43,8 +43,8 @@ Verified against the working tree:
   `supacode/Features/Settings/Models/GlobalSettings.swift`, backed by
   `supacode/Features/Settings/Models/ShelfSpineTintFallback.swift`.
 - **Agent status**: `showActiveAgentStatusInShelf` setting; the status values come from
-  the detection subsystem (entry 030), whose 3-second working hold lives at
-  `supacode/Domain/AgentDetection/PaneAgentState.swift` (`workingStateHold`).
+  the detection subsystem (entry 030). Its former 3-second Working hold was retired by
+  [030.015](../030-agent-status-detection/015-deterministic-live-footer-coverage.md).
 - **Jank-fix survivors**: `CommandKeyObserver.shouldShowShortcuts(for:)` in
   `supacode/App/CommandKeyObserver.swift` still gates hint mode to bare ⌘/⌃; the
   single-`ForEach` layout is current. The "sidebar `.onKeyPress` disabled while Shelf is

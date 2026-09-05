@@ -47,14 +47,16 @@ at a `~/.grok/` install (so Cursor's own `agent` entrypoint stays Cursor).
    push the live row out of view and a status row quoted inside a `⏺` block cannot
    read as live. Confirmation text is consulted only around a current numbered
    selection row such as `❯ 1. Yes`; a bare input prompt cuts off the preceding transcript.
-   Codex uses an exact bottom-of-screen `•`/`◦ Working (... esc to interrupt)` footer
-   fallback. Its confirmation detector requires a numbered selected row such as `› 1. Yes`
+   Codex uses exact bottom-of-screen `•`/`◦ Working (... esc to interrupt)` and
+   `•`/`◦ Waiting for background terminal (... esc to interrupt)` footer fallbacks.
+   Its confirmation detector requires a numbered selected row such as `› 1. Yes`
    paired with a live bottom footer or an explicit Yes/No choice structure. It also recognizes
    the current directory-trust, hook-review, and initial sign-in menus as **Blocked** from
    their complete selected-choice and footer structures. Ordinary prompt text and completed
    responses are not confirmation boundaries.
-   Pi also treats the adjacent `async subagent … · background` header and matching
-   braille job row as **Working**. The compact `subagents (N/M running)`, progressive
+   Pi also treats its bottom `── <braille spinner> Working ──` footer and the adjacent
+   `async subagent … · background` header with a matching braille job row as **Working**.
+   The compact `subagents (N/M running)`, progressive
    `Async agents · N agent(s) running`, and multi-job `Async agents · background`
    layouts carry the same signal; completed, paused, and failed cards use static
    glyphs and remain idle. Other agent families keep their own patterns (including
@@ -80,20 +82,20 @@ because it can differ from the visible viewport when a pane is scrolled; the def
 
 `prowl agents --json` may also include `detection_reason`, a stable classifier rule or
 fallback identifier for the latest screen scan. Codex reports runtime-owned IDs for trust,
-hook, sign-in, confirmation, and working-footer matches. Claude does the same for viewer,
+hook, sign-in, confirmation, foreground-working, and background-terminal matches. Claude
+does the same for viewer,
 blocker, spinner, elapsed-status, background-work, and current-composer regions; current
 history-search chrome such as `⌕ Filter history…` reports `claude.viewer` and preserves
 the last trusted state. An ordinary migrated-profile miss reports
 `fallback.noRuleMatched`. Reasons never include screen text, and the text-mode command and
 app UI remain unchanged.
 
-To avoid flicker, detection **stabilizes**: it tolerates several consecutive
-misses before declaring an agent gone, and a working agent gets a short (~3s)
-hold so brief pauses between thinking and output don't drop it out of
-"working" (a genuine finish therefore reports up to ~3s late; "blocked"
-bypasses the hold and surfaces immediately). Viewer overlays (Claude's
-transcript / history-search views) cover the live status area, so frames
-showing their chrome keep the last trusted state instead of forcing idle.
+Detection tolerates several consecutive process-probe misses before declaring an
+agent gone. Screen state itself is deterministic: a recognized Working, Blocked, or
+Idle frame takes effect on the next active scan, without a time-based Working hold or
+generic screen-motion inference. Viewer overlays (Claude's transcript / history-search
+views) are an explicit exception: their chrome covers the live status area, so those
+frames keep the last trusted state instead of forcing Idle.
 
 ## The state machine
 
@@ -270,7 +272,8 @@ which takes precedence over the agent indicator.
 It's a single coarse running/idle bit (it can't distinguish background agents
 from a long command). For the agent's finer state use the
 [Active Agents panel](active-agents.md) or [`prowl agents`](cli.md). Expect up to
-~2 s before it lights on a warm pane, and the ~3 s working-hold before it clears.
+~2 s before it lights on a warm pane; panes with a detected agent rescan about every
+300 ms.
 
 ## Settings
 

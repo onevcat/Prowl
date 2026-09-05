@@ -48,4 +48,6 @@ Badges render in `supacode/Features/Shelf/Views/ShelfSpineView.swift`
 (`ShelfMetrics.agentStatusMarkerSize`); the setting lives in
 `supacode/Features/Settings/Models/GlobalSettings.swift`
 (`showActiveAgentStatusInShelf`). Wrap-around navigation and the swipe gesture are
-covered by `supacodeTests/ShelfFeatureTests.swift`.
+covered by `supacodeTests/ShelfFeatureTests.swift`. The 3-second Working hold described
+above was retired on 2026-09-05; see
+[030.015](../030-agent-status-detection/015-deterministic-live-footer-coverage.md).

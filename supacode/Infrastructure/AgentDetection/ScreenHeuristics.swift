@@ -108,7 +108,10 @@ nonisolated private func detectPi(_ content: String) -> AgentRawState {
   let lines = content.split(separator: "\n", omittingEmptySubsequences: false).map {
     $0.trimmingCharacters(in: .whitespaces)
   }
-  return lines.contains(where: isPiWorkingText) || hasPiRunningAsyncSubagentCard(lines)
+  let liveFooterLines = lines.filter { !$0.isEmpty }.suffix(5)
+  return lines.contains(where: isPiWorkingText)
+    || liveFooterLines.contains(where: isPiFramedWorkingFooter)
+    || hasPiRunningAsyncSubagentCard(lines)
     ? .working
     : .idle
 }
@@ -293,6 +296,12 @@ nonisolated private func isPiWorkingText(_ line: String) -> Bool {
   }
   let message = String(line.unicodeScalars.dropFirst()).trimmingCharacters(in: .whitespaces)
   return piWorkingMessages.contains(message)
+}
+
+nonisolated private func isPiFramedWorkingFooter(_ line: String) -> Bool {
+  guard line.hasPrefix("── "), line.hasSuffix("──") else { return false }
+  let content = line.trimmingCharacters(in: CharacterSet(charactersIn: "─ "))
+  return labeledBrailleSpinnerContent(content) == "Working"
 }
 
 nonisolated private func hasOMPInterruptHint(_ line: String) -> Bool {

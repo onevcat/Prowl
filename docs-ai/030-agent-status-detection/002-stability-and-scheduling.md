@@ -33,8 +33,10 @@ A month of live use surfaced two distinct false-idle classes and one cost proble
   for a 30 s window at the 2 s cadence, and only a detected runtime promotes to `active`
   (300 ms). Losing the agent demotes back through warm to cold, tearing the task down.
 
-The 3 s hold is a deliberate, kept decision: the 2026-06-12 herdr upstream review
-explicitly chose not to adopt herdr's later detection refactor.
+The 3 s hold was a deliberate decision at the time: the 2026-06-12 herdr upstream
+review explicitly chose not to adopt herdr's later detection refactor. It was retired
+on 2026-09-05 after generic time and screen-motion inference proved too aggressive;
+see [015](015-deterministic-live-footer-coverage.md).
 
 ## Refs
 
@@ -45,8 +47,9 @@ explicitly chose not to adopt herdr's later detection refactor.
 
 ## Current state
 
-Verified 2026-07-12: `workingStateHold = 3.0` and the `.unknown`-keeps-previous branch in
-`supacode/Domain/AgentDetection/PaneAgentState.swift`; `AgentDetectionSchedule.warmWindow = 30`,
-`activeAgentDetectionInterval = 300 ms`, `idleAgentDetectionInterval = 2 s`. Covered by
-`PaneAgentStateTests` (hold parameterized over claude/codex/gemini, 3 s boundary, blocked
-bypass, unknown semantics) and `AgentDetectionScheduleTests`.
+Verified 2026-09-05: the time-based Working hold has been removed; explicit
+working/blocked/idle observations apply immediately, while `.unknown` keeps the previous
+state in `supacode/Domain/AgentDetection/PaneAgentState.swift`.
+`AgentDetectionSchedule.warmWindow = 30`, `activeAgentDetectionInterval = 300 ms`, and
+`idleAgentDetectionInterval = 2 s`. Covered by `PaneAgentStateTests` and
+`AgentDetectionScheduleTests`.

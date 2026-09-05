@@ -10,9 +10,10 @@
 ## Background
 
 Prowl's per-pane agent status (`working` / `blocked` / `idle` / `done`) comes from
-heuristic screen and process detection (030/045, `supacode/Domain/AgentDetection/PaneAgentState.swift`)
-plus the 3 s working hold. It is good enough for the sidebar and Active Agents, and #676
-documents the states it still misreports. Two consumers need something stronger:
+heuristic screen and process detection (030/045, `supacode/Domain/AgentDetection/PaneAgentState.swift`).
+Explicit screen states apply immediately since 030.015 retired the former 3 s Working hold.
+The detector is good enough for the sidebar and Active Agents, and #676 documents the states
+it still misreports. Two consumers need something stronger:
 
 - An agent orchestrating other agents through the `prowl` CLI (the "route B" flow that
   onevcat runs daily and that 063 formalizes) has to *wait* for a sibling agent to finish.

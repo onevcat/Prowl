@@ -18,9 +18,9 @@ final class AgentDispatchCommandHandler: CommandHandler {
   typealias CancelDispatch = @MainActor (String) -> Void
 
   /// How long the precondition lets the evidence settle before refusing: a runtime
-  /// `turn-ended` the detector has not corroborated yet (its three-second working hold after a
-  /// turn), or a detector-only idle view that still needs its two seconds of stability. A pane
-  /// the evidence already calls working or blocked is refused at once.
+  /// `turn-ended` the detector has not corroborated yet, or a detector-only idle view that still
+  /// needs its two seconds of stability. A pane the evidence already calls working or blocked is
+  /// refused at once.
   nonisolated static let idleGraceMilliseconds = 5_000
 
   private enum IdleVerdict {

@@ -33,6 +33,32 @@ struct ScreenHeuristicsTests {
     #expect(DetectedAgent.pi.detectState(in: "Done") == .idle)
   }
 
+  @Test func piDetectsFramedWorkingFooter() {
+    let screen = """
+      Planning state delegation for run targets
+
+      ── ⠧ Working ────────────────────────────────────────────────────────────────
+
+      ──────────────────────────────────────────────────────────────────────────────
+      ~/Sync/github/Prowl (fix/workflow-settings-ui)
+      ↑270k ↓28k R4.9M CH99.9% $4.347 (sub) 75.6%/272k (auto) · gpt-5.6-sol · xhigh
+      """
+
+    #expect(DetectedAgent.pi.detectState(in: screen) == .working)
+    #expect(
+      DetectedAgent.pi.detectState(
+        in: """
+          ── ⠧ Working ────────────────────────────────────────────────────────────────
+          retained transcript line 1
+          retained transcript line 2
+          retained transcript line 3
+          retained transcript line 4
+          retained transcript line 5
+          """
+      ) == .idle
+    )
+  }
+
   @Test func piDetectsRunningAsyncSubagentCardAfterParentTurnSettles() {
     let screen = """
       第二轮 reviewer 已启动并订阅完成通知喵：
@@ -671,6 +697,26 @@ struct ScreenHeuristicsTests {
     #expect(codexProfileState(in: "Ready for input") == .idle)
   }
 
+  @Test func codexDetectsBackgroundTerminalWaitFooter() {
+    let footers = [
+      "• Waiting for background terminal (2m 34s • esc to interrupt)"
+        + " · 1 background terminal running · /ps to view · /stop to close",
+      "• Waiting for background terminals (2m 34s • esc to interrupt)"
+        + " · 2 background terminals running · /ps to view · /stop to close",
+    ]
+
+    for footer in footers {
+      let detection = DetectedAgent.codex.detectScreen(
+        in: """
+          \(footer)
+            └ xcodebuild test
+          """
+      )
+      #expect(detection.state == .working)
+      #expect(detection.reason == .matched(CodexScreenProfile.RuleID.backgroundTerminalFooter))
+    }
+  }
+
   @Test func codexCurrentPreSessionBlockersAreBlocked() {
     #expect(
       codexProfileState(
@@ -885,6 +931,18 @@ struct ScreenHeuristicsTests {
       codexProfileState(
         in: """
           • Working (4s • esc to interrupt)
+          • Completed line 1
+            Completed line 2
+            Completed line 3
+          › Improve documentation in @filename
+          gpt-5.6-terra xhigh · Context 5% used
+          """
+      ) == .idle
+    )
+    #expect(
+      codexProfileState(
+        in: """
+          • Waiting for background terminal (2m 34s • esc to interrupt) · 1 background terminal running
           • Completed line 1
             Completed line 2
             Completed line 3

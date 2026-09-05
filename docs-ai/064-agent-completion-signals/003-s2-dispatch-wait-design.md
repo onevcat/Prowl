@@ -302,8 +302,7 @@ exact evidence, `high` accepts exact or high, and `heuristic` accepts all three 
 - when a verified-live channel covers the requested condition, heuristic changes update
   diagnostics and invalidate stale terminal facts but cannot resolve the wait;
 - without such a channel, an already-stabilized screen/process observation may resolve the
-  wait with `confidence: heuristic` after the existing 3-second working hold and an
-  additional 2 seconds of unchanged normalized state;
+  wait with `confidence: heuristic` after 2 seconds of unchanged normalized state;
 - `changed` requires a post-baseline normalized state or signal change and is never
   satisfied by the initial snapshot;
 - `exit` accepts exact/high matching `session-end`, exact surface closure, or stabilized

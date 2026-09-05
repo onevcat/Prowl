@@ -8,6 +8,7 @@ enum CodexScreenProfile {
     nonisolated static let confirmationFooter = AgentScreenRuleID("codex.confirmationFooter")
     nonisolated static let confirmationChoices = AgentScreenRuleID("codex.confirmationChoices")
     nonisolated static let workingFooter = AgentScreenRuleID("codex.workingFooter")
+    nonisolated static let backgroundTerminalFooter = AgentScreenRuleID("codex.backgroundTerminalFooter")
 
     // Keep exhaustive so prefix and uniqueness tests cover every emitted ID.
     nonisolated static let all = [
@@ -17,6 +18,7 @@ enum CodexScreenProfile {
       confirmationFooter,
       confirmationChoices,
       workingFooter,
+      backgroundTerminalFooter,
     ]
   }
 
@@ -40,6 +42,9 @@ enum CodexScreenProfile {
     }
     if hasWorkingFooter(regions) {
       return AgentScreenDetection(state: .working, reason: .matched(RuleID.workingFooter))
+    }
+    if hasBackgroundTerminalFooter(regions) {
+      return AgentScreenDetection(state: .working, reason: .matched(RuleID.backgroundTerminalFooter))
     }
     return AgentScreenDetection(state: .idle, reason: .noRuleMatched)
   }
@@ -156,11 +161,28 @@ enum CodexScreenProfile {
   }
 
   nonisolated private static func hasWorkingFooter(_ regions: CodexScreenRegions) -> Bool {
+    hasInterruptibleFooter(regions, prefixes: [" Working ("])
+  }
+
+  nonisolated private static func hasBackgroundTerminalFooter(_ regions: CodexScreenRegions) -> Bool {
+    hasInterruptibleFooter(
+      regions,
+      prefixes: [
+        " Waiting for background terminal (",
+        " Waiting for background terminals (",
+      ]
+    )
+  }
+
+  nonisolated private static func hasInterruptibleFooter(
+    _ regions: CodexScreenRegions,
+    prefixes: [String]
+  ) -> Bool {
     regions.workingFooter.split(separator: "\n").contains { line in
       let trimmed = line.trimmingCharacters(in: .whitespaces)
       guard trimmed.first == "•" || trimmed.first == "◦" else { return false }
       let body = trimmed.dropFirst()
-      guard body.hasPrefix(" Working (") else { return false }
+      guard prefixes.contains(where: body.hasPrefix) else { return false }
       guard let hint = body.range(of: "esc to interrupt)") else { return false }
       let trailing = body[hint.upperBound...]
       return trailing.isEmpty || trailing.hasPrefix(" · ")
@@ -196,7 +218,9 @@ private struct CodexScreenRegions: Sendable {
     self.signInInteractionText = signInMenuLines[signInStart...]
       .joined(separator: "\n")
       .trimmingCharacters(in: .newlines)
-    self.workingFooter = agentDetectionRecentLines(snapshot.text, limit: 3)
+    // Background-terminal waits add a `└ command` detail row below the live
+    // footer, before the composer and status line.
+    self.workingFooter = agentDetectionRecentLines(snapshot.text, limit: 4)
   }
 
   nonisolated private static func makeSelectedChoice(from lines: [String]) -> SelectedChoice? {

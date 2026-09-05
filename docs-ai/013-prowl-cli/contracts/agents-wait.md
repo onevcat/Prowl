@@ -57,9 +57,9 @@ Checks run in this order, before any text is typed:
    corroboration (idle/done); a detector-only idle view counts after two seconds unchanged, and
    only where the wait would fall back to the detector (no covering `verified_live` channel, or
    one holding no terminal level). Idle by one source alone — a `turn-ended` the detector has
-   not corroborated yet (its working hold after a turn), or a detector view still stabilizing —
-   is not a refusal: the precondition polls every 200 ms for up to five seconds, as the wait
-   would, and refuses only when the budget expires. A working or blocked detector state without
+   not corroborated yet, or a detector view still stabilizing — is not a refusal: the
+   precondition polls every 200 ms for up to five seconds, as the wait would, and refuses only
+   when the budget expires. A working or blocked detector state without
    such evidence, or a runtime `needs-input` level, refuses immediately.
    `error.details.observation` and `signals` carry the evidence.
 
