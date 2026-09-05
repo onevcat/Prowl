@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-09-05T06:12:26Z",
+  "cli_version": "1.0.83",
+  "capture_source": "prowl-read-detection",
+  "terminal": {
+    "columns": 139,
+    "rows": 79
+  },
+  "redactions": [
+    "working directory replaced with a placeholder while preserving terminal columns"
+  ],
+  "issue": null
+}
