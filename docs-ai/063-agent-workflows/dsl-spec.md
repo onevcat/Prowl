@@ -375,3 +375,7 @@ The shipped sample is Repository Context (`prowl.repository-context`). Agent rev
 are authored from roles, deliveries, typed state, and control flow. There is no global script
 registry, remote action download, parallel DSL branch, automatic retry, rollback, or resume.
 Headless roles and additional action backends are outside this contract.
+
+`context.source` preserves the initiating `pane_id` and `tab_id` (null for worktree-only starts).
+`exists(value) && predicate` and `!exists(value) || predicate` support optional data
+without requiring a missing value on the short-circuited path.

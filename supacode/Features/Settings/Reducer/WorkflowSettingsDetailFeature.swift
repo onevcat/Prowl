@@ -83,7 +83,7 @@ struct WorkflowSettingsDetailFeature {
         return .none
 
       case .reviewFileSelected(let path):
-        guard state.bundleReview?.snapshot.files[path] != nil else { return .none }
+        guard state.bundleReview?.filePaths.contains(path) == true else { return .none }
         state.bundleReview?.selectedFile = path
         return .none
 

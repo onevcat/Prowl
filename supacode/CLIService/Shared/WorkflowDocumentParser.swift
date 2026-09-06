@@ -30,6 +30,10 @@ nonisolated public enum WorkflowDocumentParser {
       collector.error("document_not_mapping", "The workflow file must be a YAML mapping.", at: root?.sourceLocation)
       return WorkflowParseResult(definition: nil, diagnostics: collector.diagnostics)
     }
+    do { try WorkflowYAMLValue.validateStructure(root) } catch {
+      collector.error("document_limit", "\(error)", at: root.sourceLocation)
+      return WorkflowParseResult(definition: nil, diagnostics: collector.diagnostics)
+    }
     let definition = parseDocument(mapping)
     let diagnostics = collector.diagnostics
     return WorkflowParseResult(definition: diagnostics.hasErrors ? nil : definition, diagnostics: diagnostics)

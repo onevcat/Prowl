@@ -36,7 +36,11 @@ extension WorkflowRun {
         "captured_at": .string(timestamp),
       ]),
       "source": (context.sourcePaneID ?? bindings.values.first { $0.source == .current }?.pane?.surfaceID).map {
-        .object(["pane_id": .string($0.uuidString)])
+        .object([
+          "pane_id": .string($0.uuidString),
+          "tab_id": (context.sourceTabID ?? bindings.values.first { $0.source == .current }?.pane?.tabID)
+            .map { .string($0.uuidString) } ?? .null,
+        ])
       } ?? .null,
       "roles": WorkflowJSON.object(roles),
       "step": .object([

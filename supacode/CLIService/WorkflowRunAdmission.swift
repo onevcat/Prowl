@@ -213,6 +213,7 @@ enum WorkflowRunAdmission {
         id: worktree.id, name: worktree.name, branch: environment.branchName(worktree),
         path: worktree.workingDirectory.path(percentEncoded: false)))
     context.sourcePaneID = source.paneID
+    context.sourceTabID = source.worktree.tabs.first { tab in tab.panes.contains { $0.id == source.paneID } }?.id
     context.literalActionInputs = admission.literalActionInputs
     let runID = environment.makeRunID()
     if let snapshot = entry.file.snapshot {

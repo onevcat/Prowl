@@ -231,6 +231,16 @@ struct WorkflowRunAdmissionTests {
           inputs: ["root": .string("{{ literal.directory }}")])))
   }
 
+  @Test func sourceContextPreservesTheInitiatingTab() throws {
+    let fixture = try Fixture()
+    defer { fixture.cleanUp() }
+    try fixture.write(Self.contextOnly, to: "context")
+    let admitted = try admit(fixture, workflow: "context", pane: fixture.authorPane).get()
+    #expect(
+      try WorkflowExpression.evaluate("context.source.tab_id", values: admitted.session.run.stepValues)
+        == .string(fixture.tabID.uuidString))
+  }
+
   @Test func aCompleteRequestFreezesEveryBindingAndWritesTheInitialRecord() throws {
     let fixture = try Fixture()
     defer { fixture.cleanUp() }

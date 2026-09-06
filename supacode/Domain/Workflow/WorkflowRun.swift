@@ -140,6 +140,7 @@ nonisolated struct WorkflowRunContext: Equatable, Sendable {
   let worktree: WorkflowRunWorktree
   var bundle: WorkflowPreparedBundle?
   var sourcePaneID: UUID?
+  var sourceTabID: UUID?
   var literalActionInputs = false
 }
 

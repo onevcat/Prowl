@@ -211,6 +211,19 @@ extension WorkflowExpressionNode {
     }
   }
 
+  private func existingPaths(when truth: Bool) -> [[String]] {
+    switch self {
+    case .call("exists", let arguments) where truth && arguments.count == 1:
+      return arguments[0].staticPath.map { [$0] } ?? []
+    case .unary("!", let argument): return argument.existingPaths(when: !truth)
+    case .binary("&&", let left, let right) where truth:
+      return left.existingPaths(when: true) + right.existingPaths(when: true)
+    case .binary("||", let left, let right) where !truth:
+      return left.existingPaths(when: false) + right.existingPaths(when: false)
+    default: return []
+    }
+  }
+
   var requiredReferences: [[String]] {
     if let staticPath { return [staticPath] }
     switch self {
@@ -219,6 +232,12 @@ extension WorkflowExpressionNode {
     case .index(let parent, let index): return parent.requiredReferences + index.requiredReferences
     case .array(let items): return items.flatMap(\.requiredReferences)
     case .binary("??", _, let right): return right.requiredReferences
+    case .binary(let operation, let left, let right) where operation == "&&" || operation == "||":
+      let guards = left.existingPaths(when: operation == "&&")
+      return left.requiredReferences
+        + right.requiredReferences.filter { path in
+          !guards.contains { path.starts(with: $0) }
+        }
     case .binary(_, let left, let right): return left.requiredReferences + right.requiredReferences
     case .call("exists", _): return []
     case .call(_, let arguments): return arguments.flatMap(\.requiredReferences)

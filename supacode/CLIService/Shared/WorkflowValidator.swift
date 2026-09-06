@@ -539,7 +539,7 @@ nonisolated private final class Walker {
     let fields: [String: Set<String>] = [
       "run": ["id", "workflow_id", "directory"],
       "worktree": ["id", "path", "name", "branch", "captured_at"],
-      "source": ["pane_id"], "step": ["id", "iteration", "captured_at"],
+      "source": ["pane_id", "tab_id"], "step": ["id", "iteration", "captured_at"],
       "execution": ["id", "step_id", "attempt", "cwd", "artifact_dir"],
     ]
     if parts[1] == "execution", !checkingActionInputs { return false }

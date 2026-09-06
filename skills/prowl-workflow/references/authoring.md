@@ -196,3 +196,7 @@ when it must survive the branch or iteration.
 `context.worktree.branch` is refreshed before steps. `context.roles.<role>.observed`
 contains the observed `exists` and `state` fields, or is null when unavailable. Observations
 are a step snapshot, not a guarantee that an agent will remain idle.
+
+`context.source` preserves the initiating `pane_id` and `tab_id` (null for worktree-only starts).
+`exists(value) && predicate` and `!exists(value) || predicate` support optional data
+without requiring a missing value on the short-circuited path.

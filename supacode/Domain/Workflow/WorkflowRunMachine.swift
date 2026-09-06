@@ -137,7 +137,7 @@ nonisolated enum WorkflowSkipConsequence: Equatable, Sendable {
   case noOutput
   /// Only optional action inputs read the output; those actions run without the key.
   case continues(optionalInputs: [String])
-  /// A template, `until`, or required action input reads the output: the run ends `skipped`.
+  /// A template, condition, or required action input reads the output: the run ends `skipped`.
   case endsRun(dependent: String)
 }
 
@@ -536,9 +536,7 @@ nonisolated struct WorkflowRunMachine {
     return startConsequence(forStep: stepID, definition: definition, preSkipped: alreadySkipped)
   }
 
-  /// The start-time slice of the Skip rule: only top-level steps up to (and including) the first
-  /// `repeat` without `until` can run — nothing after it does, so it ends the run as
-  /// `max_rounds_reached` and later readers never count.
+  /// Before execution, conservatively inspect every branch that could consume a skipped output.
   private static func startConsequence(
     forStep stepID: String, definition: WorkflowDefinition, preSkipped: Set<String>
   ) -> WorkflowSkipConsequence {
@@ -549,9 +547,7 @@ nonisolated struct WorkflowRunMachine {
     return consequence(of: name, forStep: stepID, remaining: remaining, preSkipped: preSkipped)
   }
 
-  /// The §5 Skip rule, resolved at the moment of the skip (decision H11): every step that can
-  /// still run — the rest of the current loop body (the next iteration re-reads all of it),
-  /// its `until`, and the top-level steps after it — is scanned for a reader of the output.
+  /// Inspect the cursor's remaining steps, including subsequent loop iterations, for required readers.
   private static func skipConsequence(forStep stepID: String, in run: WorkflowRun)
     -> WorkflowSkipConsequence
   {
@@ -1100,7 +1096,7 @@ nonisolated struct WorkflowRunMachine {
   }
 
   /// "Accept as delivered" / "Accept with verdict": a declared verdict must be supplied when the
-  /// delivery lacked one, otherwise the accepted output could not drive `until` or templates.
+  /// delivery lacked one, otherwise the accepted output could not drive conditions or templates.
   private mutating func acceptProvisionalDelivery(verdict: String?, effects: inout [WorkflowRunEffect]) {
     guard let attention = run.status.attention, let activation = run.activeActivation,
       activation.state == .provisional, let delivery = activation.pendingDelivery
@@ -1412,15 +1408,13 @@ nonisolated struct WorkflowRunMachine {
     }
   }
 
-  /// Renders a template; on a missing output the run ends `skipped`, on any other failure the
-  /// step enters attention. Returns nil in both cases.
+  /// Rendering failures enter attention; skip dependency checks run before advancing.
   private mutating func render(_ text: String, step: WorkflowStepDefinition, effects: inout [WorkflowRunEffect])
     -> String?
   {
     do {
       return try WorkflowExpression.renderText(text, values: run.stepValues)
-    } catch WorkflowTemplateError.missingOutput(let name) {
-      finish(.skipped(step: run.skippedOutputs[name] ?? name, dependent: step.id), effects: &effects)
+
     } catch {
       let ordinal = run.currentInvocation?.ordinal
       raiseAttention(

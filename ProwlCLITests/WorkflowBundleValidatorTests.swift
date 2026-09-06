@@ -59,6 +59,29 @@ struct WorkflowBundleValidatorTests {
       """).isEmpty)
   }
 
+  @Test func optionalOutputGuardsAllowShortCircuitedAccess() {
+    for condition in [
+      "exists(actions.missing.output) && actions.missing.output.count > 0",
+      "!exists(actions.missing.output) || actions.missing.output.count > 0",
+    ] {
+      #expect(codes("  - id: branch\n    if: '" + condition + "'\n    then: [{id: done, notify: done}]").isEmpty)
+    }
+    #expect(codes("""
+      - id: branch
+        if: 'exists(actions.other.output) && actions.missing.output.count > 0'
+        then: [{id: done, notify: done}]
+      """).contains("unknown_variable"))
+  }
+
+  @Test func nestedWorkflowStructureHasABoundedDepth() {
+    var step = "{id: done, notify: done}"
+    for index in 0..<70 { step = "{id: branch" + String(index) + ", if: 'true', then: [" + step + "]}" }
+    let parsed = WorkflowDocumentParser.parse(
+      "schema: prowl.workflow/v1\nid: deep\nname: Deep\nsteps: [" + step + "]")
+    #expect(parsed.definition == nil)
+    #expect(parsed.diagnostics.contains { $0.code == "document_limit" })
+  }
+
   @Test func missingDataRequiresExplicitHandling() {
     #expect(codes("""
         - id: consume

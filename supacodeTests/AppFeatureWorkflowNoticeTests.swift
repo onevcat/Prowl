@@ -170,7 +170,7 @@ struct AppFeatureWorkflowNoticeTests {
     let store = TestStore(initialState: AppFeature.State(repositories: repositories)) {
       AppFeature()
     } withDependencies: {
-      $0.featureFlags = FeatureFlags(environment: [:])
+      $0.featureFlags = FeatureFlags(environment: ["PROWL_WORKFLOW_UI": "0"])
       $0.workflowStartClient.context = { _, _, _ in
         requests.withValue { $0 += 1 }
         return nil
