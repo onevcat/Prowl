@@ -1,5 +1,8 @@
 # 016.006 — CI Source Cache Reuse
 
+Follow-up: [007](007-app-incremental-and-module-boundaries.md) records the later App
+incremental-state and Shared module experiments, which extend this CLI-only change.
+
 ## Context
 
 An exact CLI build-cache hit still recompiles checked-out sources. SwiftPM uses source
