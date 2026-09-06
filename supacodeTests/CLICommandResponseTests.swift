@@ -2,6 +2,7 @@
 // Contract tests for CommandResponse and RawJSON encoding/decoding.
 
 import Foundation
+import ProwlCLIShared
 import Testing
 
 @testable import supacode

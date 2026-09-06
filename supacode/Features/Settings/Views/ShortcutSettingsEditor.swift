@@ -1,5 +1,6 @@
 import AppKit
 import ComposableArchitecture
+import ProwlCLIShared
 import SwiftUI
 
 struct ShortcutSettingsEditor: View {

@@ -1,4 +1,5 @@
 import AppKit
+import ProwlCLIShared
 import SwiftUI
 
 /// Shared inline table editor for custom commands. Hosts pass the command

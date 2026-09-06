@@ -1,5 +1,6 @@
 import ComposableArchitecture
 import Foundation
+import ProwlCLIShared
 
 /// Settings → Agents → CLI & Skills → Agent Skills (docs-ai 065): the `user`-audience
 /// skills bundled in this app, one status chip per detected user target, and one explicit

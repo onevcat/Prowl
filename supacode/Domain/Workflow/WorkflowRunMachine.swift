@@ -4,6 +4,7 @@
 // happens here; every transport concern is an effect.
 
 import Foundation
+import ProwlCLIShared
 
 // MARK: - Watchdog vocabulary shared with the driver
 

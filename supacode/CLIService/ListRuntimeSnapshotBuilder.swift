@@ -1,4 +1,5 @@
 import Foundation
+import ProwlCLIShared
 
 @MainActor
 enum ListRuntimeSnapshotBuilder {

@@ -1,4 +1,5 @@
 import Foundation
+import ProwlCLIShared
 
 /// What the app did with a cooperative signal from a live caller pane.
 nonisolated enum AgentSignalRecordOutcome: Equatable, Sendable {

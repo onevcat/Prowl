@@ -3,6 +3,7 @@ import ComposableArchitecture
 import Foundation
 import IdentifiedCollections
 import PostHog
+import ProwlCLIShared
 import SwiftUI
 
 nonisolated let githubIntegrationRecoveryInterval: Duration = .seconds(15)

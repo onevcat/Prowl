@@ -1,6 +1,7 @@
 // supacode/CLIService/TabCommandHandler.swift
 
 import Foundation
+import ProwlCLIShared
 
 struct TabResolvedTarget: Sendable, Equatable {
   let worktreeID: String

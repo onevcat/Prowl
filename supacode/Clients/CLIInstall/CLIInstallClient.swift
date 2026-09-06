@@ -1,5 +1,6 @@
 import ComposableArchitecture
 import Foundation
+import ProwlCLIShared
 
 typealias CLIInstallStatus = SymlinkInstallStatus
 

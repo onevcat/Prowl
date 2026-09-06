@@ -1,4 +1,5 @@
 import Foundation
+import ProwlCLIShared
 
 nonisolated struct AgentSignalHookCapability: Equatable, Sendable {
   let runtime: AgentNativeHookRuntime

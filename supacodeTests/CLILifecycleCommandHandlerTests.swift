@@ -1,5 +1,6 @@
 import Clocks
 import Foundation
+import ProwlCLIShared
 import Testing
 
 @testable import supacode

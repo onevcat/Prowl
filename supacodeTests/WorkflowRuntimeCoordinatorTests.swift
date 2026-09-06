@@ -2,6 +2,7 @@
 // `prowl workflow status / done / cancel` attribution and responses (docs-ai 063 B3, W1/W3/W5).
 
 import Foundation
+import ProwlCLIShared
 import Testing
 
 @testable import supacode

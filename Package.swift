@@ -29,7 +29,8 @@ let package = Package(
       dependencies: [
         .product(name: "Yams", package: "Yams"),
       ],
-      path: "supacode/CLIService/Shared"
+      path: "supacode/CLIService/Shared",
+      exclude: ["Package.swift"]
     ),
     .executableTarget(
       name: "prowl",

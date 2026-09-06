@@ -1,4 +1,5 @@
 import Foundation
+import ProwlCLIShared
 
 nonisolated enum SupacodePaths {
   static var baseDirectory: URL {

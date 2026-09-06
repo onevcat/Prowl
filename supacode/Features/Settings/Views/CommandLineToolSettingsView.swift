@@ -1,4 +1,5 @@
 import ComposableArchitecture
+import ProwlCLIShared
 import SwiftUI
 
 /// Settings → Agents → CLI & Skills: install/status for the bundled `prowl`

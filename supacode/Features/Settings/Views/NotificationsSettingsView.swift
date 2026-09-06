@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import ComposableArchitecture
+import ProwlCLIShared
 import SwiftUI
 
 struct NotificationsSettingsView: View {

@@ -16,6 +16,7 @@ jobs:
     permissions:
       contents: read
     env:
+      PROWL_DERIVED_DATA_PATH: ${{ github.workspace }}/build/ci-derived-data
       MISE_HTTP_TIMEOUT: 120
       MISE_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -70,8 +71,10 @@ jobs:
             python3 scripts/summarize-xcode-build.py build/test-results/*.build.json
           } >> "$GITHUB_STEP_SUMMARY"
           exit "$failed"
-      - name: Save CLI source times
-        run: python3 scripts/ci-source-mtimes.py save
+      - name: Save build input times
+        run: |
+          python3 scripts/ci-source-mtimes.py save
+          python3 scripts/ci-source-mtimes.py save --scope app --manifest "$PROWL_DERIVED_DATA_PATH/source-times.json"
       - name: Upload build and test logs
         if: always()
         uses: actions/upload-artifact@v4

@@ -1,6 +1,7 @@
 import ComposableArchitecture
 import Foundation
 import IdentifiedCollections
+import ProwlCLIShared
 
 extension RepositoriesFeature.State {
   var selectedWorktreeID: Worktree.ID? {

@@ -1,5 +1,6 @@
 import ComposableArchitecture
 import Foundation
+import ProwlCLIShared
 import Sharing
 
 /// Shared workflow Settings domain for the global Built-in/personal index and one repository's

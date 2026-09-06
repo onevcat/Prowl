@@ -1,3 +1,4 @@
+import ProwlCLIShared
 import Testing
 
 @testable import supacode

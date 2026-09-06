@@ -1,4 +1,5 @@
 import Foundation
+import ProwlCLIShared
 
 struct LifecycleResolvedTarget: Sendable, Equatable {
   let resource: LifecycleResource

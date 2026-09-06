@@ -6,6 +6,7 @@
 
 import Darwin
 import Foundation
+import ProwlCLIShared
 
 // MARK: - run.json
 

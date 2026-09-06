@@ -2,6 +2,7 @@
 // Handles `prowl send` by resolving target, delivering text, and optionally waiting.
 
 import Foundation
+import ProwlCLIShared
 
 private let sendLogger = SupaLogger("SendCommandHandler")
 

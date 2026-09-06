@@ -1,4 +1,5 @@
 import Foundation
+import ProwlCLIShared
 
 struct AgentsRuntimeSnapshot {
   let repositoriesState: RepositoriesFeature.State

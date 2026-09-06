@@ -1,4 +1,5 @@
 import Foundation
+import ProwlCLIShared
 
 struct ListRuntimeSnapshot: Sendable {
   struct Worktree: Sendable {

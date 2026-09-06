@@ -6,6 +6,7 @@
 
 import CryptoKit
 import Foundation
+import ProwlCLIShared
 
 /// The four-tuple key of the binding memory. Codable so the wiring layer can keep it in
 /// `@Shared` storage; the digest is SHA-256 over the canonical requirement JSON.

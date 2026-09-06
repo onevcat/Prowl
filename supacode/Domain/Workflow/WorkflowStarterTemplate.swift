@@ -4,6 +4,7 @@
 // the file's stem so several starters never shadow each other.
 
 import Foundation
+import ProwlCLIShared
 
 nonisolated enum WorkflowStarterTemplate {
   static let fileStem = "new-workflow"

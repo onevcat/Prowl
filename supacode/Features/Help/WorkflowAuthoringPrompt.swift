@@ -1,4 +1,5 @@
 import Foundation
+import ProwlCLIShared
 
 /// The copyable prompt behind Settings › Agents › Workflows › "Ask an Agent…" (docs-ai 063
 /// D1): it points a coding agent at the bundled `prowl-workflow` skill and the workflows

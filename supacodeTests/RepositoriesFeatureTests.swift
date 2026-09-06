@@ -4,6 +4,7 @@ import CustomDump
 import DependenciesTestSupport
 import Foundation
 import IdentifiedCollections
+import ProwlCLIShared
 import Sharing
 import Testing
 

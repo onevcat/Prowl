@@ -1,6 +1,7 @@
 import ComposableArchitecture
 import DependenciesTestSupport
 import Foundation
+import ProwlCLIShared
 import Testing
 
 @testable import supacode

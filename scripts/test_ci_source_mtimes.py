@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import subprocess
 import unittest
 
 spec = importlib.util.spec_from_file_location(
@@ -27,6 +28,20 @@ class SourceMtimeTests(unittest.TestCase):
 
     def save(self):
         module.save(self.root, ["Source.swift"], self.manifest)
+
+    def test_app_scope_excludes_cli_owned_inputs(self):
+        files = ["Package.swift", "supacode/CLIService/Shared/Model.swift",
+                 "supacode/Support/Model.swift", "supacodeTests/ModelTests.swift"]
+        for name in files:
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("source")
+        subprocess.run(["git", "init", "-q", str(self.root)], check=True)
+        subprocess.run(["git", "-C", str(self.root), "add", "--", *files], check=True)
+        app = set(module.tracked_inputs(self.root, "app"))
+        cli = set(module.tracked_inputs(self.root, "cli"))
+        self.assertEqual(app, {"supacode/Support/Model.swift", "supacodeTests/ModelTests.swift"})
+        self.assertFalse(app & cli)
 
     def test_restores_only_identical_content(self):
         self.save()

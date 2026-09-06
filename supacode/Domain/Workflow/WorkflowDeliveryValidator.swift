@@ -3,6 +3,7 @@
 // caps, format, required sections, and the verdict declaration.
 
 import Foundation
+import ProwlCLIShared
 
 nonisolated struct WorkflowDeliveryLimits: Equatable, Sendable {
   static let defaultMaximumBytes = 1 << 20

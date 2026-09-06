@@ -96,3 +96,5 @@ Anchor wave, all landed 2026-04-04/05:
   [005-build-test-time-optimization.md](005-build-test-time-optimization.md)
 - Updated 2026-09-06: content-checked CLI source timestamps and cache input coverage — see
   [006-ci-source-cache-reuse.md](006-ci-source-cache-reuse.md)
+- Updated 2026-09-06: App incremental-state reuse and measured module extraction — see
+  [007-app-incremental-and-module-boundaries.md](007-app-incremental-and-module-boundaries.md)

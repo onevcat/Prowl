@@ -1,4 +1,5 @@
 import Foundation
+import ProwlCLIShared
 
 /// The one-line, self-contained request the UI types into the live source
 /// agent. The agent composes the heredoc itself — nothing multi-line is ever

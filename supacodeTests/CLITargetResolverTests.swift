@@ -1,5 +1,6 @@
 import Foundation
 import GhosttyKit
+import ProwlCLIShared
 import Testing
 
 @testable import supacode

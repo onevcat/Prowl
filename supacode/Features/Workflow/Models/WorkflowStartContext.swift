@@ -5,6 +5,7 @@
 // nothing here re-derives eligibility beyond presenting the resolver's own answer.
 
 import Foundation
+import ProwlCLIShared
 
 /// One workflow as an entry point lists it (palette, capsule popover, Active Agents menu).
 nonisolated struct WorkflowStartCatalogItem: Equatable, Sendable, Identifiable {

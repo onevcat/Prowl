@@ -3,6 +3,7 @@
 
 import Foundation
 import GhosttyKit
+import ProwlCLIShared
 
 /// Fully resolved target with metadata for response payload.
 struct ResolvedTarget: Sendable {

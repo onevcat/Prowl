@@ -1,4 +1,5 @@
 import Foundation
+import ProwlCLIShared
 
 nonisolated struct AgentReadRuntimeSnapshot: Sendable {
   let target: ReadTarget

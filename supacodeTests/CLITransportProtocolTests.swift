@@ -2,6 +2,7 @@
 // Tests for the length-prefixed JSON transport encoding/decoding.
 
 import Foundation
+import ProwlCLIShared
 import Testing
 
 @testable import supacode

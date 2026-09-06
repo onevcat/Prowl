@@ -1,6 +1,7 @@
 import Dependencies
 import DependenciesTestSupport
 import Foundation
+import ProwlCLIShared
 import Sharing
 import Testing
 

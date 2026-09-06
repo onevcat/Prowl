@@ -1,6 +1,7 @@
 import ComposableArchitecture
 import Foundation
 import IdentifiedCollections
+import ProwlCLIShared
 import Testing
 
 @testable import supacode

@@ -1,4 +1,5 @@
 import Foundation
+import ProwlCLIShared
 
 struct CanvasFocusRequest: Equatable, Sendable {
   enum Target: Equatable, Sendable {

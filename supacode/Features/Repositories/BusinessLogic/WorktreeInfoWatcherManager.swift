@@ -1,5 +1,6 @@
 import Dispatch
 import Foundation
+import ProwlCLIShared
 
 @MainActor
 final class WorktreeInfoWatcherManager {

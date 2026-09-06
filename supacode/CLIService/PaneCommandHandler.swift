@@ -1,6 +1,7 @@
 // supacode/CLIService/PaneCommandHandler.swift
 
 import Foundation
+import ProwlCLIShared
 
 @MainActor
 final class PaneCommandHandler: CommandHandler {

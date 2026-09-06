@@ -4,6 +4,7 @@
 
 import AppKit
 import Foundation
+import ProwlCLIShared
 
 // MARK: - Resolution
 

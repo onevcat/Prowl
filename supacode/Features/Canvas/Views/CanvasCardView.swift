@@ -1,4 +1,5 @@
 import AppKit
+import ProwlCLIShared
 import SwiftUI
 
 struct CanvasCardView: View {

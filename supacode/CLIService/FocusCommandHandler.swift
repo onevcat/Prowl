@@ -2,6 +2,7 @@
 // Handles `prowl focus` by resolving, focusing, and returning final pane context.
 
 import Foundation
+import ProwlCLIShared
 
 /// Resolved target metadata for focus payload construction.
 struct FocusResolvedTarget: Sendable {

@@ -34,9 +34,9 @@ runs:
       uses: actions/cache@v4
       with:
         path: .build
-        key: ${{ runner.os }}-${{ runner.arch }}-cli-spm-v2-${{ env.XCODE_CACHE_ID }}-${{ hashFiles('Package.swift', 'Package.resolved', 'Makefile', 'supacode.xcodeproj/project.pbxproj', '.github/actions/setup-macos/action.yml', '.github/workflows/test.yml', 'scripts/ci-source-mtimes.py') }}-${{ hashFiles('ProwlCLI/**/*.swift', 'ProwlCLITests/**', 'ProwlCLIContracts/**', 'supacode/CLIService/Shared/**/*.swift') }}
+        key: ${{ runner.os }}-${{ runner.arch }}-cli-spm-v2-${{ env.XCODE_CACHE_ID }}-${{ hashFiles('Package.swift', 'Package.resolved', 'supacode/CLIService/Shared/Package.swift', 'Makefile', 'supacode.xcodeproj/project.pbxproj', '.github/actions/setup-macos/action.yml', '.github/workflows/test.yml', 'scripts/ci-source-mtimes.py') }}-${{ hashFiles('ProwlCLI/**/*.swift', 'ProwlCLITests/**', 'ProwlCLIContracts/**', 'supacode/CLIService/Shared/**/*.swift') }}
         restore-keys: |
-          ${{ runner.os }}-${{ runner.arch }}-cli-spm-v2-${{ env.XCODE_CACHE_ID }}-${{ hashFiles('Package.swift', 'Package.resolved', 'Makefile', 'supacode.xcodeproj/project.pbxproj', '.github/actions/setup-macos/action.yml', '.github/workflows/test.yml', 'scripts/ci-source-mtimes.py') }}-
+          ${{ runner.os }}-${{ runner.arch }}-cli-spm-v2-${{ env.XCODE_CACHE_ID }}-${{ hashFiles('Package.swift', 'Package.resolved', 'supacode/CLIService/Shared/Package.swift', 'Makefile', 'supacode.xcodeproj/project.pbxproj', '.github/actions/setup-macos/action.yml', '.github/workflows/test.yml', 'scripts/ci-source-mtimes.py') }}-
           ${{ runner.os }}-${{ runner.arch }}-cli-spm-v2-${{ env.XCODE_CACHE_ID }}-
 
     - name: Restore unchanged CLI source times
@@ -93,3 +93,24 @@ runs:
         restore-keys: |
           ${{ runner.os }}-${{ runner.arch }}-xcode-compilation-cache-v2-${{ env.XCODE_CACHE_ID }}-${{ hashFiles('supacode.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'supacode.xcodeproj/project.pbxproj', 'supacode.xcodeproj/xcshareddata/xcschemes/**', 'Makefile', '.github/actions/setup-macos/action.yml', '.github/workflows/test.yml') }}-
           ${{ runner.os }}-${{ runner.arch }}-xcode-compilation-cache-v2-${{ env.XCODE_CACHE_ID }}-
+
+    - name: App incremental cache identity
+      shell: bash
+      run: |
+        set -euo pipefail
+        # A changed file roster starts a fresh build to exclude stale source/resource outputs.
+        APP_INPUT_PATHS_ID="$(git ls-files -z -- supacode supacodeTests Resources docs skills | shasum -a 256 | cut -d ' ' -f 1)"
+        APP_WORKSPACE_ID="$(pwd -P | shasum -a 256 | cut -d ' ' -f 1)"
+        printf '%s\n' "APP_INPUT_PATHS_ID=$APP_INPUT_PATHS_ID" "APP_WORKSPACE_ID=$APP_WORKSPACE_ID" >> "$GITHUB_ENV"
+    - name: App incremental build cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ env.PROWL_DERIVED_DATA_PATH }}
+        # Incremental state needs a stricter boundary than the content-addressed cache.
+        # Reuse across source edits, but not changed paths, build settings or toolchains.
+        key: ${{ runner.os }}-${{ runner.arch }}-app-incremental-v1-${{ env.XCODE_CACHE_ID }}-${{ env.APP_WORKSPACE_ID }}-${{ env.GHOSTTY_SHA }}-${{ env.APP_INPUT_PATHS_ID }}-${{ hashFiles('Package.swift', 'Package.resolved', 'supacode/CLIService/Shared/Package.swift', 'supacode.xcodeproj/**', 'Makefile', '.github/actions/setup-macos/action.yml', '.github/workflows/test.yml', 'scripts/ci-source-mtimes.py') }}-${{ hashFiles('supacode/**/*.swift', 'supacodeTests/**/*.swift') }}
+        restore-keys: |
+          ${{ runner.os }}-${{ runner.arch }}-app-incremental-v1-${{ env.XCODE_CACHE_ID }}-${{ env.APP_WORKSPACE_ID }}-${{ env.GHOSTTY_SHA }}-${{ env.APP_INPUT_PATHS_ID }}-${{ hashFiles('Package.swift', 'Package.resolved', 'supacode/CLIService/Shared/Package.swift', 'supacode.xcodeproj/**', 'Makefile', '.github/actions/setup-macos/action.yml', '.github/workflows/test.yml', 'scripts/ci-source-mtimes.py') }}-
+    - name: Restore unchanged App source times
+      shell: bash
+      run: python3 scripts/ci-source-mtimes.py restore --scope app --manifest "$PROWL_DERIVED_DATA_PATH/source-times.json"

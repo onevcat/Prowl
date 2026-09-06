@@ -6,6 +6,7 @@
 // synchronously inside `store.send` cannot race past the waiter — the answer is buffered.
 
 import Foundation
+import ProwlCLIShared
 
 @MainActor
 final class WorkflowCLIRendezvous {

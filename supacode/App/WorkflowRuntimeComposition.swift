@@ -6,6 +6,7 @@
 
 import ComposableArchitecture
 import Foundation
+import ProwlCLIShared
 
 /// Lets the responder dependency (installed before the store exists) reach the coordinator that
 /// is built with the CLI router.

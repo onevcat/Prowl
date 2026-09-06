@@ -73,7 +73,7 @@ agent-facing manual for that).
 | 013 | [prowl-cli](013-prowl-cli/000-plan.md) | 2026-03-30 | Contract-first `prowl` CLI: socket service, v1 commands, hardening, agents |
 | 014 | [terminal-layout-persistence](014-terminal-layout-persistence/000-plan.md) | 2026-03-31 | Layout snapshot save/restore; font-size persistence; launch races |
 | 015 | [repositories-feature-refactor](015-repositories-feature-refactor/000-plan.md) | 2026-04-03 | TCA decomposition of RepositoriesFeature and later code-health splits |
-| 016 | [dev-build-and-ci-workflow](016-dev-build-and-ci-workflow/000-plan.md) | 2026-04-04 | Build/test tooling, CI parallelism, Debug identity, content-checked cache reuse |
+| 016 | [dev-build-and-ci-workflow](016-dev-build-and-ci-workflow/000-plan.md) | 2026-04-04 | Build/test tooling, CI parallelism, Debug identity, incremental caching, Shared module boundary |
 | 017 | [upstream-sync-process](017-upstream-sync-process/000-plan.md) | 2026-04-08 | Upstream review discipline, baselines, batch decisions |
 | 018 | [archived-worktrees](018-archived-worktrees/000-plan.md) | 2026-04-09 | Archived worktree discoverability and auto-delete |
 | 019 | [worktree-creation-and-lifecycle](019-worktree-creation-and-lifecycle/000-plan.md) | 2026-04-12 | Creation/merge flows, safe deletion, Add-to-Prowl redesign |

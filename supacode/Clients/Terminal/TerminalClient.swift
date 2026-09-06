@@ -1,5 +1,6 @@
 import ComposableArchitecture
 import Foundation
+import ProwlCLIShared
 
 struct TerminalClient {
   var send: @MainActor @Sendable (Command) -> Void

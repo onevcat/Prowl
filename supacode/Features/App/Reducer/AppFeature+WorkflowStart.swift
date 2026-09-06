@@ -1,5 +1,6 @@
 import ComposableArchitecture
 import Foundation
+import ProwlCLIShared
 
 extension AppFeature {
   /// Open the workflow start sheet, or start the run at once when nothing is undecided

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Preserve SwiftPM input times only when cached content still matches checkout."""
+"""Preserve build input times only when cached content still matches checkout."""
 
 import argparse
 import hashlib
@@ -12,6 +12,21 @@ INPUTS = [
     "Package.swift", "Package.resolved", "ProwlCLI", "ProwlCLITests",
     "ProwlCLIContracts", "supacode/CLIService/Shared",
 ]
+
+
+def tracked_inputs(root, scope):
+    def listed(paths):
+        output = subprocess.check_output(
+            ["git", "ls-files", "-z", "--", *paths], cwd=root, text=True
+        )
+        return {name for name in output.split("\0") if name}
+
+    cli = listed(INPUTS)
+    if scope == "cli":
+        return sorted(cli)
+    # The CLI cache owns shared-source timestamps. Restoring a second timestamp
+    # for those files would invalidate SwiftPM's restored incremental state.
+    return sorted(listed(["supacode", "supacodeTests", "supacode.xcodeproj"]) - cli)
 
 
 def regular_input(root, name):
@@ -69,19 +84,20 @@ def restore(root, names, manifest):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=["save", "restore"])
+    parser.add_argument("--scope", choices=["cli", "app"], default="cli")
+    parser.add_argument("--manifest", type=Path)
     args = parser.parse_args()
     root = Path.cwd().resolve()
-    names = subprocess.check_output(
-        ["git", "ls-files", "-z", "--", *INPUTS], text=True
-    ).split("\0")
-    names = [name for name in names if name]
-    manifest = root / ".build/prowl-ci-source-mtimes.json"
+    names = tracked_inputs(root, args.scope)
+    manifest = args.manifest or root / ".build/prowl-ci-source-mtimes.json"
+    if args.scope == "app" and args.manifest is None:
+        parser.error("--scope app requires --manifest")
     if args.action == "save":
         save(root, names, manifest)
-        print("Saved CLI source content and modification times.")
+        print(f"Saved {args.scope} source content and modification times.")
     else:
         count = restore(root, names, manifest)
-        print(f"Restored modification times for {count} unchanged CLI inputs.")
+        print(f"Restored modification times for {count} unchanged {args.scope} inputs.")
 
 
 if __name__ == "__main__":

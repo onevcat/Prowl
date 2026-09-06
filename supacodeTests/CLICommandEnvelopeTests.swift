@@ -2,6 +2,7 @@
 // Contract tests for CommandEnvelope, CommandResponse, and shared types.
 
 import Foundation
+import ProwlCLIShared
 import Testing
 
 @testable import supacode

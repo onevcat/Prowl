@@ -1,4 +1,5 @@
 import Foundation
+import ProwlCLIShared
 
 nonisolated struct WorkflowRunNotice: Equatable, Sendable {
   enum Kind: Equatable, Sendable {

@@ -5,6 +5,7 @@
 // the caller pane and routed to the runtime coordinator.
 
 import Foundation
+import ProwlCLIShared
 
 struct WorkflowRuntimeSnapshot {
   let resolution: TargetResolutionSnapshot

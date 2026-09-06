@@ -1,5 +1,6 @@
 import AppKit
 import Carbon
+import ProwlCLIShared
 
 /// Maps canonical CLI key tokens to macOS NSEvent parameters.
 struct CLIKeySpec {

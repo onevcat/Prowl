@@ -23,7 +23,7 @@ CLI_SOURCE_INPUTS := \
 	$(CURRENT_MAKEFILE_DIR)/Package.swift \
 	$(CURRENT_MAKEFILE_DIR)/Package.resolved \
 	$(CURRENT_MAKEFILE_DIR)/supacode.xcodeproj/project.pbxproj \
-	$(shell find $(CLI_SOURCE_DIRS) -type f 2>/dev/null)
+	$(shell find $(CLI_SOURCE_DIRS) -name .build -prune -o -type f -print 2>/dev/null)
 VERSION ?=
 BUILD ?=
 XCODEBUILD_FLAGS ?=
@@ -366,6 +366,9 @@ test-app: ensure-ghostty # Run app/unit tests via xcodebuild
 		local expected_test_count="$$3"; \
 		shift 3; \
 		rm -rf "$$result_bundle"; \
+		if [ -n "$${PROWL_DERIVED_DATA_PATH:-}" ]; then \
+			set -- -derivedDataPath "$$PROWL_DERIVED_DATA_PATH" "$$@"; \
+		fi; \
 		set +e; \
 		xcodebuild "$$action" -project supacode.xcodeproj -scheme supacode -destination "platform=macOS" -resultBundlePath "$$result_bundle" $(TEST_SIGNING_ARGS) -skipMacroValidation -clonedSourcePackagesDirPath $(SPM_CACHE_DIR) -showBuildTimingSummary SWIFT_COMPILATION_MODE=incremental "$$@" 2>&1 | tee "$$result_bundle.log" | mise exec -- xcsift -w --build-info --format toon; \
 		local xcodebuild_status=$${PIPESTATUS[0]}; \

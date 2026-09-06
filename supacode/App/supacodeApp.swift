@@ -10,6 +10,7 @@ import ComposableArchitecture
 import Foundation
 import GhosttyKit
 import PostHog
+import ProwlCLIShared
 import Sentry
 import Sharing
 import SwiftUI

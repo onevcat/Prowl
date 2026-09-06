@@ -6,6 +6,7 @@
 // effect beyond the run directory it may have created for a run that then started.
 
 import Foundation
+import ProwlCLIShared
 
 /// The pane (or worktree only) the run is started from, as the handler resolved it.
 struct WorkflowRunSource: Sendable {
