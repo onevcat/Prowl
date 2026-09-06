@@ -22,7 +22,8 @@ final class WorkflowDiscoveryTests: XCTestCase {
   }
 
   private func write(_ yaml: String, to directory: URL, name: String) throws {
-    try Data(yaml.utf8).write(to: directory.appending(path: name))
+    try FileManager.default.createDirectory(at: directory.appending(path: name), withIntermediateDirectories: true)
+    try Data(yaml.utf8).write(to: directory.appending(path: name + "/workflow.yaml"))
   }
 
   private func context(_ scope: WorkflowScope) -> WorkflowValidationContext {
@@ -31,7 +32,7 @@ final class WorkflowDiscoveryTests: XCTestCase {
 
   func testUnreadableDirectoriesThrowInsteadOfHidingTheirFiles() throws {
     let user = try directory("user")
-    try write(WorkflowFixtures.minimal(id: "demo"), to: user, name: "demo.yaml")
+    try write(WorkflowFixtures.minimal(id: "demo"), to: user, name: "demo.pwlworkflow")
     try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: user.path(percentEncoded: false))
     defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: user.path(percentEncoded: false)) }
     XCTAssertThrowsError(try WorkflowDiscovery.files(in: user, scope: .user, context: context(.user)))
@@ -47,14 +48,14 @@ final class WorkflowDiscoveryTests: XCTestCase {
 
   func testFilesAreParsedValidatedAndOrderedByName() throws {
     let user = try directory("user")
-    try write(WorkflowFixtures.minimal(id: "zeta"), to: user, name: "zeta.yml")
-    try write(WorkflowFixtures.minimal(id: "alpha"), to: user, name: "alpha.yaml")
-    try write("not: [valid", to: user, name: "broken.yaml")
+    try write(WorkflowFixtures.minimal(id: "zeta"), to: user, name: "zeta.pwlworkflow")
+    try write(WorkflowFixtures.minimal(id: "alpha"), to: user, name: "alpha.pwlworkflow")
+    try write("not: [valid", to: user, name: "broken.pwlworkflow")
     try write("ignored", to: user, name: "notes.txt")
-    try write(WorkflowFixtures.minimal(id: "hidden"), to: user, name: ".hidden.yaml")
+    try write(WorkflowFixtures.minimal(id: "hidden"), to: user, name: ".hidden.pwlworkflow")
 
     let files = try WorkflowDiscovery.files(in: user, scope: .user, context: context(.user))
-    XCTAssertEqual(files.map(\.url.lastPathComponent), ["alpha.yaml", "broken.yaml", "zeta.yml"])
+    XCTAssertEqual(files.map(\.url.lastPathComponent), ["alpha.pwlworkflow", "broken.pwlworkflow", "zeta.pwlworkflow"])
     XCTAssertEqual(files.map(\.id), ["alpha", nil, "zeta"])
     XCTAssertEqual(files.map(\.isValid), [true, false, true])
     XCTAssertEqual(files[1].diagnostics.map(\.code), ["yaml_syntax"])
@@ -63,7 +64,7 @@ final class WorkflowDiscoveryTests: XCTestCase {
 
   func testValidationDiagnosticsFollowParseDiagnostics() throws {
     let user = try directory("user")
-    try write(WorkflowFixtures.minimal(id: "prowl.mine"), to: user, name: "mine.yaml")
+    try write(WorkflowFixtures.minimal(id: "prowl.mine"), to: user, name: "mine.pwlworkflow")
     let files = try WorkflowDiscovery.files(in: user, scope: .user, context: context(.user))
     XCTAssertEqual(files.map(\.isValid), [false])
     XCTAssertEqual(files[0].diagnostics.map(\.code), ["reserved_id"])
@@ -74,13 +75,13 @@ final class WorkflowDiscoveryTests: XCTestCase {
     let bundle = try directory("bundle")
     let user = try directory("user")
     let repo = try directory("repo")
-    try write(WorkflowFixtures.adversarialReview, to: bundle, name: "adversarial-review.yaml")
-    try write(WorkflowFixtures.minimal(id: "shared"), to: bundle, name: "shared.yaml")
-    try write(WorkflowFixtures.minimal(id: "shared"), to: user, name: "shared.yaml")
-    try write(WorkflowFixtures.minimal(id: "demo"), to: user, name: "demo.yaml")
-    try write(WorkflowFixtures.minimal(id: "demo"), to: user, name: "demo-copy.yaml")
-    try write(WorkflowFixtures.adversarialReview, to: user, name: "override.yaml")
-    try write(WorkflowFixtures.minimal(id: "demo"), to: repo, name: "demo.yaml")
+    try write(WorkflowFixtures.adversarialReview, to: bundle, name: "adversarial-review.pwlworkflow")
+    try write(WorkflowFixtures.minimal(id: "shared"), to: bundle, name: "shared.pwlworkflow")
+    try write(WorkflowFixtures.minimal(id: "shared"), to: user, name: "shared.pwlworkflow")
+    try write(WorkflowFixtures.minimal(id: "demo"), to: user, name: "demo.pwlworkflow")
+    try write(WorkflowFixtures.minimal(id: "demo"), to: user, name: "demo-copy.pwlworkflow")
+    try write(WorkflowFixtures.adversarialReview, to: user, name: "override.pwlworkflow")
+    try write(WorkflowFixtures.minimal(id: "demo"), to: repo, name: "demo.pwlworkflow")
 
     let catalog = try WorkflowDiscovery.catalog(
       sources: WorkflowSources(bundle: bundle, user: user, repo: repo), context: context)
@@ -88,31 +89,31 @@ final class WorkflowDiscoveryTests: XCTestCase {
     XCTAssertEqual(
       rows,
       [
-        "demo repo demo.yaml wins",
-        "demo user demo-copy.yaml shadowed",
-        "demo user demo.yaml shadowed",
-        "prowl.adversarial-review bundle adversarial-review.yaml wins",
-        "prowl.adversarial-review user override.yaml invalid",
-        "shared user shared.yaml wins",
-        "shared bundle shared.yaml shadowed",
+        "demo repo demo.pwlworkflow wins",
+        "demo user demo-copy.pwlworkflow shadowed",
+        "demo user demo.pwlworkflow shadowed",
+        "prowl.adversarial-review bundle adversarial-review.pwlworkflow wins",
+        "prowl.adversarial-review user override.pwlworkflow invalid",
+        "shared user shared.pwlworkflow wins",
+        "shared bundle shared.pwlworkflow shadowed",
       ]
     )
   }
 
   func testSameSourceDuplicatesKeepTheFirstFileByName() throws {
     let user = try directory("user")
-    try write(WorkflowFixtures.minimal(id: "demo"), to: user, name: "b.yaml")
-    try write(WorkflowFixtures.minimal(id: "demo"), to: user, name: "a.yaml")
+    try write(WorkflowFixtures.minimal(id: "demo"), to: user, name: "b.pwlworkflow")
+    try write(WorkflowFixtures.minimal(id: "demo"), to: user, name: "a.pwlworkflow")
     let catalog = try WorkflowDiscovery.catalog(
       sources: WorkflowSources(bundle: nil, user: user, repo: nil), context: context)
-    XCTAssertEqual(catalog.map { "\($0.file.url.lastPathComponent) \($0.shadowed)" }, ["a.yaml false", "b.yaml true"])
+    XCTAssertEqual(catalog.map { "\($0.file.url.lastPathComponent) \($0.shadowed)" }, ["a.pwlworkflow false", "b.pwlworkflow true"])
   }
 
   func testInvalidFilesNeverShadowValidOnes() throws {
     let user = try directory("user")
     let repo = try directory("repo")
-    try write(WorkflowFixtures.minimal(id: "demo"), to: user, name: "demo.yaml")
-    try write(WorkflowFixtures.minimal(id: "demo", extraSteps: "  - id: x\n    close: ghost"), to: repo, name: "demo.yaml")
+    try write(WorkflowFixtures.minimal(id: "demo"), to: user, name: "demo.pwlworkflow")
+    try write(WorkflowFixtures.minimal(id: "demo", extraSteps: "  - id: x\n    close: ghost"), to: repo, name: "demo.pwlworkflow")
     let catalog = try WorkflowDiscovery.catalog(
       sources: WorkflowSources(bundle: nil, user: user, repo: repo), context: context)
     XCTAssertEqual(
@@ -120,22 +121,22 @@ final class WorkflowDiscoveryTests: XCTestCase {
       ["user valid=true shadowed=false", "repo valid=false shadowed=false"])
   }
 
-  func testOnlyRegularFilesAndLinksToThemAreRead() throws {
+  func testSymlinksAndSpecialFilesAreReportedAsInvalidBundles() throws {
     let user = try directory("user")
-    try write(WorkflowFixtures.minimal(id: "real"), to: user, name: "real.yaml")
-    try FileManager.default.createDirectory(at: user.appending(path: "folder.yaml"), withIntermediateDirectories: true)
+    try write(WorkflowFixtures.minimal(id: "real"), to: user, name: "real.pwlworkflow")
+    try FileManager.default.createDirectory(at: user.appending(path: "folder.pwlworkflow"), withIntermediateDirectories: true)
     let elsewhere = try directory("elsewhere")
-    try write(WorkflowFixtures.minimal(id: "linked"), to: elsewhere, name: "source.yaml")
+    try write(WorkflowFixtures.minimal(id: "linked"), to: elsewhere, name: "source.pwlworkflow")
     try FileManager.default.createSymbolicLink(
-      at: user.appending(path: "link.yaml"), withDestinationURL: elsewhere.appending(path: "source.yaml"))
+      at: user.appending(path: "link.pwlworkflow"), withDestinationURL: elsewhere.appending(path: "source.pwlworkflow"))
     try FileManager.default.createSymbolicLink(
-      at: user.appending(path: "dangling.yaml"), withDestinationURL: elsewhere.appending(path: "missing.yaml"))
+      at: user.appending(path: "dangling.pwlworkflow"), withDestinationURL: elsewhere.appending(path: "missing.pwlworkflow"))
 
-    XCTAssertEqual(mkfifo(user.appending(path: "pipe.yaml").path(percentEncoded: false), 0o644), 0)
+    XCTAssertEqual(mkfifo(user.appending(path: "pipe.pwlworkflow").path(percentEncoded: false), 0o644), 0)
 
     let files = try WorkflowDiscovery.files(in: user, scope: .user, context: context(.user))
-    XCTAssertEqual(files.map(\.url.lastPathComponent), ["link.yaml", "real.yaml"])
-    XCTAssertEqual(files.map(\.id), ["linked", "real"])
+    XCTAssertEqual(files.map(\.url.lastPathComponent), ["dangling.pwlworkflow", "folder.pwlworkflow", "link.pwlworkflow", "pipe.pwlworkflow", "real.pwlworkflow"])
+    XCTAssertEqual(files.map(\.id), [nil, nil, nil, nil, "real"])
   }
 
   func testSourceDirectoryHelpers() {

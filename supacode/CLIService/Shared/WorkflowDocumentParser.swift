@@ -30,6 +30,10 @@ nonisolated public enum WorkflowDocumentParser {
       collector.error("document_not_mapping", "The workflow file must be a YAML mapping.", at: root?.sourceLocation)
       return WorkflowParseResult(definition: nil, diagnostics: collector.diagnostics)
     }
+    do { try WorkflowYAMLValue.validateStructure(root) } catch {
+      collector.error("document_limit", "\(error)", at: root.sourceLocation)
+      return WorkflowParseResult(definition: nil, diagnostics: collector.diagnostics)
+    }
     let definition = parseDocument(mapping)
     let diagnostics = collector.diagnostics
     return WorkflowParseResult(definition: diagnostics.hasErrors ? nil : definition, diagnostics: diagnostics)
@@ -38,7 +42,7 @@ nonisolated public enum WorkflowDocumentParser {
   // MARK: - Document
 
   private static func parseDocument(_ document: MappingReader) -> WorkflowDefinition? {
-    document.checkKeys(["schema", "id", "name", "description", "icon", "inputs", "roles", "steps"])
+    document.checkKeys(["schema", "id", "name", "description", "icon", "inputs", "roles", "steps", "state"])
     let schema = document.requiredString("schema")
     if let schema, schema != WorkflowSchema.identifier {
       document.collector.error(
@@ -52,7 +56,7 @@ nonisolated public enum WorkflowDocumentParser {
     let inputs = document.mapping("inputs").map(parseInputs) ?? []
     let roles = document.mapping("roles").map(parseRoles) ?? []
     let steps =
-      document.requiredSequence("steps").map { parseSteps($0, insideRepeat: false, at: document.location) } ?? []
+      document.requiredSequence("steps").map { parseSteps($0, insideLoop: false, at: document.location) } ?? []
     guard let id, let name else { return nil }
     return WorkflowDefinition(
       id: id,
@@ -61,7 +65,8 @@ nonisolated public enum WorkflowDocumentParser {
       icon: document.string("icon"),
       inputs: inputs,
       roles: roles,
-      steps: steps
+      steps: steps,
+      state: parseState(document.mapping("state"))
     )
   }
 
@@ -169,18 +174,20 @@ nonisolated public enum WorkflowDocumentParser {
 
   // MARK: - Steps
 
-  private static let verbKeys = ["message", "launch", "action", "notify", "close", "repeat"]
+  private static let verbKeys = [
+    "message", "launch", "action", "notify", "close", "if", "while", "set", "break", "continue",
+  ]
 
   private static func parseSteps(
-    _ steps: SequenceReader, insideRepeat: Bool, at location: WorkflowSourceLocation?
+    _ steps: SequenceReader, insideLoop: Bool, at location: WorkflowSourceLocation?
   ) -> [WorkflowStepDefinition] {
     if steps.isEmpty {
       steps.collector.error("steps_empty", "'\(steps.path)' needs at least one step.", at: location)
     }
-    return steps.mappings().compactMap { parseStep($0, insideRepeat: insideRepeat) }
+    return steps.mappings().compactMap { parseStep($0, insideLoop: insideLoop) }
   }
 
-  private static func parseStep(_ step: MappingReader, insideRepeat: Bool) -> WorkflowStepDefinition? {
+  private static func parseStep(_ step: MappingReader, insideLoop: Bool) -> WorkflowStepDefinition? {
     let verbs = verbKeys.filter(step.has)
     guard verbs.count == 1, let verb = verbs.first else {
       step.collector.error(
@@ -193,15 +200,15 @@ nonisolated public enum WorkflowDocumentParser {
       return nil
     }
     let idNode = step.requiredString("id")
-    let action = parseAction(verb: verb, step, insideRepeat: insideRepeat)
+    let action = parseAction(verb: verb, step, insideLoop: insideLoop)
     guard let id = idNode, let action else { return nil }
     return WorkflowStepDefinition(id: id, title: step.string("title"), action: action, location: step.location)
   }
 
-  private static func parseAction(verb: String, _ step: MappingReader, insideRepeat: Bool) -> WorkflowStepAction? {
+  private static func parseAction(verb: String, _ step: MappingReader, insideLoop: Bool) -> WorkflowStepAction? {
     switch verb {
     case "message": return parseMessage(step)
-    case "launch": return parseLaunch(step, insideRepeat: insideRepeat)
+    case "launch": return parseLaunch(step, insideLoop: insideLoop)
     case "action": return parseNativeAction(step)
     case "notify":
       step.checkKeys(["id", "title", "notify", "expect"])
@@ -211,7 +218,7 @@ nonisolated public enum WorkflowDocumentParser {
       step.checkKeys(["id", "title", "close", "expect"])
       rejectExpect(step)
       return step.requiredString("close").map { WorkflowStepAction.close(role: $0) }
-    case "repeat": return parseRepeat(step, insideRepeat: insideRepeat)
+    case "if", "while", "set", "break", "continue": return parseControl(verb, step, insideLoop: insideLoop)
     default: return nil
     }
   }
@@ -244,10 +251,12 @@ nonisolated public enum WorkflowDocumentParser {
     return .message(role: role, content: content, expect: expect)
   }
 
-  private static func parseLaunch(_ step: MappingReader, insideRepeat: Bool) -> WorkflowStepAction? {
+  private static func parseLaunch(_ step: MappingReader, insideLoop: Bool) -> WorkflowStepAction? {
     step.checkKeys(["id", "title", "launch", "prompt", "skill", "expect"])
-    if insideRepeat {
-      step.collector.error("launch_inside_repeat", "'launch' is not allowed inside 'repeat'.", at: step.location)
+    if insideLoop {
+      step.collector.error(
+        "launch_in_loop", "Launch each role before its loop; use message for repeated work.",
+        at: step.location)
     }
     let role = step.requiredString("launch")
     let prompt = step.requiredString("prompt")
@@ -260,79 +269,92 @@ nonisolated public enum WorkflowDocumentParser {
     step.checkKeys(["id", "title", "action", "with", "expect"])
     rejectExpect(step)
     guard let id = step.requiredString("action") else { return nil }
-    var inputs: [String: String] = [:]
+    var inputs: [String: WorkflowJSONValue] = [:]
     if let with = step.mapping("with") {
       for (key, node) in with.entries() {
-        if let value = with.scalarText(node, key: key) {
-          inputs[key] = value
-        }
+        inputs[key] = jsonValue(node, collector: with.collector)
       }
     }
     return .action(id: id, inputs: inputs)
   }
 
-  private static func parseRepeat(_ step: MappingReader, insideRepeat: Bool) -> WorkflowStepAction? {
-    step.checkKeys(["id", "title", "repeat", "steps"])
-    rejectExpect(step)
-    if insideRepeat {
-      step.collector.error("nested_repeat", "'repeat' cannot be nested.", at: step.location)
-    }
-    guard let body = MappingReader(node: step.node(for: "repeat"), collector: step.collector, path: "repeat") else {
+  private static func jsonValue(_ node: Node, collector: DiagnosticCollector) -> WorkflowJSONValue? {
+    do {
+      let value = try WorkflowYAMLValue.decode(node)
+      try WorkflowJSON.validate(value)
+      return value
+    } catch {
+      collector.error("invalid_json_value", "Invalid JSON value: \(error)", at: node.sourceLocation)
       return nil
     }
-    body.checkKeys(["max", "until"])
-    let max = parseRepeatBound(body)
-    let until = body.string("until").flatMap { parseUntil($0, at: body.location(of: "until"), body.collector) }
-    let steps = step.requiredSequence("steps").map { parseSteps($0, insideRepeat: true, at: step.location) }
-    guard let max, let steps else { return nil }
-    return .repeat(max: max, until: until, steps: steps)
   }
 
-  private static func parseRepeatBound(_ body: MappingReader) -> WorkflowRepeatBound? {
-    guard let node = body.node(for: "max") else {
-      body.collector.error("missing_key", "'repeat' needs 'max'.", at: body.location)
-      return nil
+  private static func parseState(_ mapping: MappingReader?) -> [String: WorkflowStateDeclaration] {
+    guard let mapping else { return [:] }
+    var result: [String: WorkflowStateDeclaration] = [:]
+    for (name, node) in mapping.entries() {
+      guard let field = MappingReader(node: node, collector: mapping.collector, path: "state.\(name)") else { continue }
+      field.checkKeys(["type", "initial"])
+      guard let type = field.requiredString("type"), let initial = field.node(for: "initial"),
+        let value = jsonValue(initial, collector: mapping.collector)
+      else {
+        mapping.collector.error(
+          "state_initial_required", "State '\(name)' requires an initial value.", at: node.sourceLocation)
+        continue
+      }
+      do { try WorkflowTypedState.check(value, type: type) } catch {
+        mapping.collector.error("state_type", "State '\(name)': \(error)", at: node.sourceLocation)
+      }
+      result[name] = WorkflowStateDeclaration(type: type, initial: value)
     }
-    if node.isPlainScalar, let value = node.int {
-      return .literal(value)
-    }
-    if let text = node.string, WorkflowTemplate.containsReference(text) {
-      return .template(text)
-    }
-    body.collector.error(
-      "repeat_max",
-      "'max' must be a positive integer literal or a template of one integer input.",
-      at: body.location(of: "max")
-    )
-    return nil
+    return result
   }
 
-  private static func parseUntil(
-    _ text: String, at location: WorkflowSourceLocation?, _ collector: DiagnosticCollector
-  ) -> WorkflowUntilCondition? {
-    // The same grammar as the published schema's `until` pattern: slug tokens only.
-    let pattern =
-      /^outputs\.([a-z0-9][a-z0-9_-]{0,63})\.verdict\s*(?:==\s*([a-z0-9][a-z0-9_-]{0,63})|in\s*\[([^\]]*)\])$/
-    guard let match = text.wholeMatch(of: pattern) else {
-      collector.error(
-        "until_syntax",
-        "'until' must be 'outputs.<name>.verdict == <value>' or 'outputs.<name>.verdict in [<values>]'.",
-        at: location
-      )
-      return nil
+  private static func parseControl(_ verb: String, _ step: MappingReader, insideLoop: Bool) -> WorkflowStepAction? {
+    switch verb {
+    case "break", "continue":
+      step.checkKeys(["id", "title", verb])
+      if !insideLoop {
+        step.collector.error(
+          "loop_control_outside_loop", "'\(verb)' requires an enclosing while loop.", at: step.location)
+      }
+      guard step.bool(verb) == true else {
+        step.collector.error("loop_control_value", "'\(verb)' must be true.", at: step.location)
+        return nil
+      }
+      return .control(verb == "break" ? .breakLoop : .continueLoop)
+    case "set":
+      step.checkKeys(["id", "title", "set"])
+      guard let assignments = step.mapping("set") else { return nil }
+      var expressions: [String: String] = [:]
+      for (key, node) in assignments.entries() {
+        expressions[key] = assignments.scalarText(node, key: key)
+      }
+      return .control(.set(expressions))
+    case "if":
+      step.checkKeys(["id", "title", "if", "then", "else"])
+      guard let condition = step.requiredString("if"), let body = step.requiredSequence("then") else { return nil }
+      let yes = parseSteps(body, insideLoop: insideLoop, at: step.location)
+      let otherwise =
+        step.has("else")
+        ? step.requiredSequence("else").map {
+          parseSteps($0, insideLoop: insideLoop, at: step.location)
+        } ?? [] : []
+      return .control(.conditional(condition: condition, then: yes, else: otherwise))
+    case "while":
+      step.checkKeys(["id", "title", "while", "steps", "max_iterations"])
+      guard let condition = step.requiredString("while"), let body = step.requiredSequence("steps") else { return nil }
+      let maximum = step.int("max_iterations")
+      if let maximum, maximum < 1 {
+        step.collector.error("loop_limit", "max_iterations must be positive.", at: step.location)
+      }
+      return .control(
+        .loop(
+          condition: condition, maximum: maximum,
+          steps: parseSteps(body, insideLoop: true, at: step.location)))
+    default: return nil
     }
-    let output = String(match.1)
-    let values: [String]
-    if let single = match.2 {
-      values = [String(single)]
-    } else {
-      values = (match.3 ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
-        .filter { !$0.isEmpty }
-    }
-    return WorkflowUntilCondition(output: output, values: values, location: location)
   }
-
-  // MARK: - Expect
 
   private static func parseExpect(_ step: MappingReader) -> WorkflowExpectation? {
     guard let expect = MappingReader(node: step.node(for: "expect"), collector: step.collector, path: "expect") else {

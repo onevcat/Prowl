@@ -32,6 +32,10 @@ enum WorkflowFixtures {
         direction: right
         background: false
 
+    state:
+      verdict: {type: string, initial: issues}
+      findings_path: {type: string, initial: ""}
+
     steps:
       - id: brief
         title: "Author writing the brief"
@@ -48,28 +52,35 @@ enum WorkflowFixtures {
         skill: prowl.adversarial-reviewer
         expect: { output: findings, sections: ["## Findings", "## Verdict"], verdict: [clean, issues], timeout: 30m }
 
+      - id: remember
+        set:
+          verdict: outputs.findings.verdict
+          findings_path: outputs.findings.path
+
       - id: rounds
-        repeat:
-          max: "{{ inputs.max_rounds }}"
-          until: outputs.findings.verdict == clean
+        while: state.verdict != 'clean'
+        max_iterations: 10
         steps:
           - id: fix
-            title: "Round {{ loop.index }}: author addressing findings"
+            title: "Round {{ context.step.iteration }}: author addressing findings"
             message: author
-            text: "Findings: {{ outputs.findings.path }}. Fix or rebut each item, then deliver your disposition."
+            text: "Findings: {{ state.findings_path }}. Fix or rebut each item."
             expect: { output: disposition, timeout: 30m }
           - id: rereview
-            title: "Round {{ loop.index }}: reviewer re-checking"
             message: reviewer
-            text: "Disposition: {{ outputs.disposition.path }}. Re-review and deliver findings with a verdict."
-            expect: { output: findings, verdict: [clean, issues], timeout: 30m }
+            text: "Disposition: {{ outputs.disposition.path }}. Re-review."
+            expect: { output: round_findings, verdict: [clean, issues], timeout: 30m }
+          - id: retain
+            set:
+              verdict: outputs.round_findings.verdict
+              findings_path: outputs.round_findings.path
 
       - id: context
-        action: git.context
-        with: { root: "{{ worktree.path }}" }
+        action: builtin:git.context
+        with: { root: "{{ context.worktree.path }}" }
 
       - id: done
-        notify: "Adversarial review: {{ outputs.findings.verdict }} after {{ loop.count }} round(s)"
+        notify: "Adversarial review: {{ state.verdict }}"
 
       - id: cleanup
         close: reviewer

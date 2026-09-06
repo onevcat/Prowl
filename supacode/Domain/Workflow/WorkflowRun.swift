@@ -138,6 +138,10 @@ nonisolated struct WorkflowRunContext: Equatable, Sendable {
   let scope: WorkflowRunScope
   let definitionPath: String?
   let worktree: WorkflowRunWorktree
+  var bundle: WorkflowPreparedBundle?
+  var sourcePaneID: UUID?
+  var sourceTabID: UUID?
+  var literalActionInputs = false
 }
 
 /// Every path under a run directory, derived from validated slugs and the run UUID only.
@@ -217,7 +221,7 @@ nonisolated enum WorkflowInvocationKind: String, Equatable, Sendable, Codable {
 nonisolated struct WorkflowInvocation: Equatable, Sendable {
   let ordinal: Int
   let stepID: String
-  /// 1-based iteration when the step sits inside a `repeat`.
+  /// 1-based iteration when the step sits inside a loop.
   let iteration: Int?
   let role: String
   let kind: WorkflowInvocationKind
@@ -248,19 +252,6 @@ nonisolated struct WorkflowOutputRecord: Equatable, Sendable, Codable {
 }
 
 // MARK: - Position and step records
-
-nonisolated struct WorkflowRunPosition: Equatable, Sendable {
-  struct Loop: Equatable, Sendable {
-    /// 1-based iteration.
-    var iteration: Int
-    var bodyIndex: Int
-    let max: Int
-  }
-
-  /// Index into the top-level step list.
-  var index: Int
-  var loop: Loop?
-}
 
 nonisolated enum WorkflowStepState: String, Equatable, Sendable, Codable {
   case active
@@ -385,21 +376,21 @@ nonisolated struct WorkflowRun: Equatable, Sendable {
   var bindings: [String: WorkflowRoleBinding]
   var status: WorkflowRunStatus = .running
   var phase: WorkflowRunPhase = .idle
-  var position = WorkflowRunPosition(index: 0, loop: nil)
   var invocations: [WorkflowInvocation] = []
   /// Latest delivered output per name (latest wins across steps).
   var outputs: [String: WorkflowOutputRecord] = [:]
-  var actionOutputs: [String: [String: String]] = [:]
+  var actionOutputs: [String: [String: WorkflowJSONValue]] = [:]
+  var controlCursor: WorkflowControlCursor?
+  var stepValues: [String: WorkflowJSONValue] = [:]
+  var observations: [String: WorkflowJSONValue] = [:]
+  var actionExecutionID: String?
+  var actionAttempts: [String: Int] = [:]
   /// Output name → the step whose skip made it missing.
   var skippedOutputs: [String: String] = [:]
   /// Steps skipped at start (`--skip` / the start sheet).
   let preSkippedSteps: Set<String>
-  /// Iterations completed by the latest `repeat`.
-  var loopCount = 0
   var stepRecords: [WorkflowStepRecord] = []
   var nextOrdinal = 1
-  /// Resolved `repeat.max` per repeat step id.
-  let repeatBounds: [String: Int]
   /// The first step's rendered line when the run was started from the `current` role's own
   /// pane: returned to the caller instead of being typed (dsl-spec §9).
   var selfInitiatedLine: String?
@@ -434,15 +425,8 @@ nonisolated struct WorkflowRun: Equatable, Sendable {
   }
 
   /// The step the position cursor points at; nil past the end of the sequence it is in.
-  var currentStep: WorkflowStepDefinition? {
-    guard position.index < definition.steps.count else { return nil }
-    let step = definition.steps[position.index]
-    guard let loop = position.loop else { return step }
-    guard case .repeat(_, _, let body) = step.action, loop.bodyIndex < body.count else { return nil }
-    return body[loop.bodyIndex]
-  }
-
-  var currentIteration: Int? { position.loop?.iteration }
+  var currentStep: WorkflowStepDefinition? { controlCursor?.currentStep }
+  var currentIteration: Int? { controlCursor?.iteration }
 
   /// Whether the runner will deliver a `message` to the `current` role (dsl-spec §3).
   func deliversToCurrentRole() -> Bool {

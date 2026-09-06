@@ -160,6 +160,7 @@ struct WorkflowStatusCenterPresentationTests {
         message: "Choose how to continue."
       ))
 
+    session.run.stepValues = session.run.expressionValues(capturedAt: Self.now)
     let run = WorkflowRunPresentation(run: session.run, now: Self.now)
 
     #expect(run.attentionControls.map(\.action) == WorkflowAttentionAction.allCases)
@@ -187,12 +188,14 @@ struct WorkflowStatusCenterPresentationTests {
     )
   }
 
-  @Test func stepListPreservesDocumentOrderAndGroupsRepeatIterations() throws {
+  @Test func stepListPreservesDocumentOrderAndGroupsLoopIterations() throws {
     var session = try makeSession(id: UUID(6), worktreeID: "selected", updatedAt: Self.now)
-    session.run.position = WorkflowRunPosition(
-      index: 1,
-      loop: WorkflowRunPosition.Loop(iteration: 2, bodyIndex: 0, max: 3)
-    )
+    var cursor = try #require(session.run.controlCursor)
+    for _ in 0..<3 {
+      cursor.complete()
+      _ = try cursor.next(values: session.run.expressionValues(capturedAt: Self.now))
+    }
+    session.run.controlCursor = cursor
     session.run.stepRecords = [
       WorkflowStepRecord(stepID: "brief", iteration: nil, state: .completed, ordinal: 1),
       WorkflowStepRecord(stepID: "fix", iteration: 1, state: .completed, ordinal: 2),
@@ -223,6 +226,7 @@ struct WorkflowStatusCenterPresentationTests {
     ]
     session.run.phase = .waitingForRole(role: "author", ordinal: 4)
 
+    session.run.stepValues = session.run.expressionValues(capturedAt: Self.now)
     let run = WorkflowRunPresentation(run: session.run, now: Self.now)
     let expectedInstruction =
       "Read /tmp/selected/.prowl/workflow-runs/\(run.id.uuidString)/outputs/brief.md "
@@ -270,8 +274,9 @@ struct WorkflowStatusCenterPresentationTests {
         "reviewer": .launch(Self.reviewerProfile, pane: nil),
       ]
     )
-    session.run.position = WorkflowRunPosition(index: session.run.definition.steps.count, loop: nil)
+    session.run.controlCursor = nil
 
+    session.run.stepValues = session.run.expressionValues(capturedAt: Self.now)
     let run = WorkflowRunPresentation(run: session.run, now: Self.now)
 
     #expect(run.roles.map(\.displayName) == ["Author", "Pi Reviewer"])
@@ -386,16 +391,16 @@ struct WorkflowStatusCenterPresentationTests {
         instruction: "Write a brief."
         expect: { output: brief }
       - id: rounds
-        repeat:
-          max: 3
+        while: 'true'
+        max_iterations: 3
         steps:
           - id: fix
-            title: "Round {{ loop.index }}: address findings"
+            title: "Round {{ context.step.iteration }}: address findings"
             message: author
-            instruction: "Read {{ outputs.brief.path }} and address the findings in round {{ loop.index }}."
+            instruction: "Read {{ outputs.brief.path }} and address the findings in round {{ context.step.iteration }}."
             expect: { output: disposition }
           - id: rereview
-            title: "Round {{ loop.index }}: re-review"
+            title: "Round {{ context.step.iteration }}: re-review"
             message: author
             text: "Review again."
             expect: { output: findings, verdict: [clean, issues] }

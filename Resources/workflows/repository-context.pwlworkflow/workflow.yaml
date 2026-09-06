@@ -1,0 +1,10 @@
+schema: prowl.workflow/v1
+id: prowl.repository-context
+name: Repository Context
+description: Save the selected worktree's branch, status, and diff summary in a run artifact.
+icon: doc.text.magnifyingglass
+steps:
+  - id: snapshot
+    action: builtin:git.context
+  - id: done
+    notify: 'Repository context saved: {{ actions.snapshot.output.path }}'

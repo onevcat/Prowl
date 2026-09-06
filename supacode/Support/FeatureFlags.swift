@@ -1,12 +1,12 @@
 import ComposableArchitecture
 import Foundation
 
-/// Process-scoped opt-ins for unfinished UI. Flags never gate CLI/runtime capabilities.
+/// Process-scoped UI switches. Flags never gate CLI/runtime capabilities.
 nonisolated struct FeatureFlags: Equatable, Sendable {
   let workflowUI: Bool
 
   init(environment: [String: String]) {
-    workflowUI = environment["PROWL_WORKFLOW_UI"] == "1"
+    workflowUI = environment["PROWL_WORKFLOW_UI"].map { $0 == "1" } ?? true
   }
 
   func showsSkill(_ id: String) -> Bool {
@@ -16,7 +16,7 @@ nonisolated struct FeatureFlags: Equatable, Sendable {
 
 extension FeatureFlags: DependencyKey {
   static let liveValue = FeatureFlags(environment: ProcessInfo.processInfo.environment)
-  // Existing workflow feature tests exercise the opt-in UI; release-gate tests inject off.
+  // Workflow feature tests exercise the default UI; switch tests inject off.
   static let testValue = FeatureFlags(environment: ["PROWL_WORKFLOW_UI": "1"])
 }
 

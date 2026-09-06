@@ -65,8 +65,8 @@ struct WorkflowRunsFeatureTests {
         placement: tab
     steps:
       - id: context
-        action: git.context
-        with: { root: "{{ worktree.path }}" }
+        action: builtin:git.context
+        with: { root: "{{ context.worktree.path }}" }
       - id: launch
         launch: reviewer
         prompt: "Review."
@@ -312,8 +312,8 @@ struct WorkflowRunsFeatureTests {
     private let startedStream = AsyncStream<Void>.makeStream()
     private let releaseStream = AsyncStream<Void>.makeStream()
 
-    func execute(actionID: String, inputs: [String: String], context: WorkflowActionContext) async throws
-      -> [String: String]
+    func execute(actionID: String, inputs: [String: WorkflowJSONValue], context: WorkflowActionContext) async throws
+      -> [String: WorkflowJSONValue]
     {
       startedStream.continuation.yield()
       for await _ in releaseStream.stream { break }
@@ -729,7 +729,8 @@ struct WorkflowRunsFeatureTests {
     #expect(
       effects.contains(
         .runAction(
-          stepID: "context", actionID: "git.context", inputs: ["root": fixture.root.path(percentEncoded: false)])))
+          stepID: "context", actionID: "builtin:git.context",
+          inputs: ["root": .string(fixture.root.path(percentEncoded: false))])))
     await store.send(.started(session, effects: effects))
     await queue.reached()
     #expect(store.state.sessions[runID]?.run.phase == .runningAction(stepID: "context"))
@@ -741,8 +742,8 @@ struct WorkflowRunsFeatureTests {
     await store.finish(timeout: Self.timeout)
     let log = try String(
       contentsOf: session.store.directory(for: runID).appending(path: "log.md"), encoding: .utf8)
-    #expect(log.contains("Step 'context': native action 'git.context' not started; the run had moved on."))
-    #expect(!log.contains("finished after the run moved on"))
+    #expect(log.contains("Run finished: cancelled."))
+    #expect(!log.contains("action completed"))
   }
 
   /// An action that already left the main actor runs to completion; the run that was cancelled
@@ -764,9 +765,7 @@ struct WorkflowRunsFeatureTests {
     #expect(store.state.sessions[runID]?.run.actionOutputs.isEmpty == true)
     let log = try String(
       contentsOf: session.store.directory(for: runID).appending(path: "log.md"), encoding: .utf8)
-    #expect(
-      log.contains(
-        "Step 'context': native action 'git.context' finished after the run moved on; result discarded."))
+    #expect(!log.contains("action completed"))
     #expect(!log.contains("not started"))
     #expect(log.contains("Run finished: cancelled."))
   }
@@ -895,7 +894,7 @@ struct WorkflowRunsFeatureTests {
     await store.finish(timeout: Self.timeout)
     let log = try String(
       contentsOf: session.store.directory(for: runID).appending(path: "log.md"), encoding: .utf8)
-    #expect(log.contains("Step 'context': native action 'git.context' not started; the run had moved on."))
+    #expect(log.contains("Step 'context': native action 'builtin:git.context' not started; the run had moved on."))
     #expect(!log.contains("finished after the run moved on"))
   }
 
@@ -939,7 +938,7 @@ struct WorkflowRunsFeatureTests {
       WorkflowRunEffect.inject(role: "r", surfaceID: pane, ordinal: 1, line: "l", opensActivation: true).isRevocable)
     #expect(WorkflowRunEffect.typeLine(role: "r", surfaceID: pane, line: "l").isRevocable)
     #expect(WorkflowRunEffect.launch(request).isRevocable)
-    #expect(WorkflowRunEffect.runAction(stepID: "s", actionID: "git.context", inputs: [:]).isRevocable)
+    #expect(WorkflowRunEffect.runAction(stepID: "s", actionID: "builtin:git.context", inputs: [:]).isRevocable)
     #expect(!WorkflowRunEffect.completeActivation(dispatchID: "d", summary: "s").isRevocable)
     #expect(!WorkflowRunEffect.abandonActivation(dispatchID: "d", reason: "r").isRevocable)
     #expect(!WorkflowRunEffect.persist.isRevocable)

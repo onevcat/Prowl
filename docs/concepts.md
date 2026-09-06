@@ -80,7 +80,7 @@ all agents and their statuses is the
 - **Per-repository settings:** `~/.prowl/repo/<repo-name>/prowl.json`
 - **Per-repository user custom commands:** `~/.prowl/repo/<repo-name>/prowl.onevcat.json`
 - **Per-workspace metadata:** `<workspace>/.prowl/workspace.json`
-- **Workflow files:** `~/.prowl/workflows/*.yaml` and `<repo root>/.prowl/workflows/*.yaml`;
+- **Workflow files:** `~/.prowl/workflows/*.pwlworkflow` and `<repo root>/.prowl/workflows/*.pwlworkflow`;
   runs leave `<worktree root>/.prowl/workflow-runs/<run id>/`
 - **CLI socket:** `~/Library/Application Support/com.onevcat.prowl/cli.sock`
   (overridable with `PROWL_CLI_SOCKET`)

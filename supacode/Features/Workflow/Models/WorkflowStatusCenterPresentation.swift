@@ -111,38 +111,23 @@ nonisolated struct WorkflowRunPresentation: Equatable, Sendable, Identifiable {
     return remainingHours == 0 ? "\(days)d" : "\(days)d \(remainingHours)h"
   }
 
-  private static func templateContext(
-    for run: WorkflowRun,
-    iteration: Int?
-  ) -> WorkflowTemplateContext {
-    WorkflowTemplateContext(
-      run: WorkflowTemplateContext.Run(
-        id: run.id.uuidString,
-        directory: WorkflowRunPaths.path(run.runDirectory)
-      ),
-      worktree: WorkflowTemplateContext.Worktree(
-        path: run.context.worktree.path,
-        name: run.context.worktree.name,
-        branch: run.context.worktree.branch
-      ),
-      roles: run.bindings.mapValues(\.templateRole),
-      outputs: run.outputs.mapValues {
-        WorkflowTemplateContext.Output(path: $0.latestPath, verdict: $0.verdict)
-      },
-      skippedOutputs: Set(run.skippedOutputs.keys),
-      actions: run.actionOutputs,
-      inputs: run.inputs,
-      loop: WorkflowTemplateContext.Loop(index: iteration, count: run.loopCount)
-    )
+  private static func templateContext(for run: WorkflowRun, iteration: Int?) -> [String: WorkflowJSONValue] {
+    var values = run.stepValues.isEmpty ? run.expressionValues(capturedAt: run.updatedAt) : run.stepValues
+    if case .object(var context) = values["context"], case .object(var step) = context["step"] {
+      step["iteration"] = iteration.map(WorkflowJSONValue.integer) ?? .null
+      context["step"] = .object(step)
+      values["context"] = .object(context)
+    }
+    return values
   }
 
   private static func title(
     for step: WorkflowStepDefinition?,
-    context: WorkflowTemplateContext
+    context: [String: WorkflowJSONValue]
   ) -> String? {
     guard let step else { return nil }
     guard let title = step.title else { return Self.fallbackTitle(for: step) }
-    return (try? WorkflowTemplate.render(title, context: context)) ?? title
+    return (try? WorkflowExpression.renderText(title, values: context)) ?? title
   }
 
   private static func fallbackTitle(for step: WorkflowStepDefinition) -> String {
@@ -152,13 +137,13 @@ nonisolated struct WorkflowRunPresentation: Equatable, Sendable, Identifiable {
     case .action(let id, _): "Run \(id)"
     case .notify: "Send notification"
     case .close(let role): "Close \(role)"
-    case .repeat: step.id
+    case .control: step.id
     }
   }
 
   private static func instruction(
     for step: WorkflowStepDefinition?,
-    context: WorkflowTemplateContext
+    context: [String: WorkflowJSONValue]
   ) -> String? {
     guard let step else { return nil }
     let source: String?
@@ -168,30 +153,30 @@ nonisolated struct WorkflowRunPresentation: Equatable, Sendable, Identifiable {
     case .launch(_, let prompt, _, _):
       source = prompt
     case .action(let id, _):
-      source = "Run native action \(id)."
+      source = "Run action \(id)."
     case .notify(let text):
       source = text
     case .close(let role):
       source = "Close the pane bound to \(role)."
-    case .repeat:
+    case .control:
       source = nil
     }
     guard let source else { return nil }
-    return (try? WorkflowTemplate.render(source, context: context)) ?? source
+    return (try? WorkflowExpression.renderText(source, values: context)) ?? source
   }
 
   private static func stepItems(for run: WorkflowRun) -> [WorkflowStepListItem] {
     var items: [WorkflowStepListItem] = []
     for step in run.definition.steps {
       switch step.action {
-      case .repeat(let bound, _, let body):
-        let maximum = run.repeatBounds[step.id] ?? bound.literalValue ?? 1
+      case .control(.loop(_, let maximum, let children)):
+        let body = children.flatMap { [$0] + $0.action.descendants }
         let recordedIterations = run.stepRecords.compactMap { record in
           body.contains { $0.id == record.stepID } ? record.iteration : nil
         }
         var iterations = Set(recordedIterations)
-        if run.definition.steps[safe: run.position.index]?.id == step.id,
-          let current = run.position.loop?.iteration
+        if body.contains(where: { $0.id == run.currentStep?.id }),
+          let current = run.currentIteration
         {
           iterations.insert(current)
         }
@@ -227,6 +212,17 @@ nonisolated struct WorkflowRunPresentation: Equatable, Sendable, Identifiable {
                   steps: steps
                 )))
           }
+        }
+      case .control(.conditional(_, let yes, let otherwise)):
+        for child in [step] + (yes + otherwise).flatMap({ [$0] + $0.action.descendants }) {
+          let record = run.stepRecords.last { $0.stepID == child.id }
+          let context = templateContext(for: run, iteration: record?.iteration)
+          items.append(
+            .step(
+              .init(
+                id: child.id, stepID: child.id,
+                title: title(for: child, context: context) ?? child.id,
+                state: record.map { .init($0.state) } ?? .pending)))
         }
       default:
         let record = run.stepRecords.last { $0.stepID == step.id && $0.iteration == nil }
@@ -283,7 +279,7 @@ nonisolated enum WorkflowStepListItem: Equatable, Sendable, Identifiable {
 nonisolated struct WorkflowRoundPresentation: Equatable, Sendable, Identifiable {
   let id: String
   let index: Int
-  let maximum: Int
+  let maximum: Int?
   let steps: [WorkflowStepPresentation]
 }
 
@@ -434,12 +430,6 @@ nonisolated struct WorkflowAttentionControl: Equatable, Sendable, Identifiable {
     case .endsRun(let dependent):
       "Skip step '\(stepID)'? This ends the run because step '\(dependent)' depends on its output."
     }
-  }
-}
-nonisolated extension WorkflowRepeatBound {
-  fileprivate var literalValue: Int? {
-    if case .literal(let value) = self { return value }
-    return nil
   }
 }
 nonisolated extension String {

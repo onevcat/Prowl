@@ -33,17 +33,14 @@ struct WorkflowCommandExecutor {
     guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false), isDirectory: &isDirectory) else {
       throw ExitError(code: CLIErrorCode.pathNotFound, message: "No file at \(url.path(percentEncoded: false)).")
     }
-    guard !isDirectory.boolValue else {
-      throw ExitError(
-        code: CLIErrorCode.invalidArgument, message: "\(url.path(percentEncoded: false)) is a directory, not a workflow file.")
-    }
     let scope = explicitScope ?? inferredScope(of: url)
     let context = WorkflowValidationContext(scope: scope, bundledSkillIDs: bundledSkillIDs)
     return WorkflowValidatePayload(file: WorkflowDiscovery.load(url: url, scope: scope, context: context))
   }
 
-  func schema() throws -> WorkflowSchemaPayload {
-    WorkflowSchemaPayload(schema: RawJSON(Data(WorkflowJSONSchema.definitionSchemaJSON.utf8)))
+  func schema(action: Bool = false) throws -> WorkflowSchemaPayload {
+    let json = action ? WorkflowActionDefinitionSchema.json : WorkflowJSONSchema.definitionSchemaJSON
+    return WorkflowSchemaPayload(schema: RawJSON(Data(json.utf8)))
   }
 
   /// `~/.prowl/workflows/*` is user scope; any other `.prowl/workflows/*` is repo scope (the

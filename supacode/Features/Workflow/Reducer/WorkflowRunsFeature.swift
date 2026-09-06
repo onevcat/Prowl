@@ -102,6 +102,8 @@ struct WorkflowRunsFeature {
     /// A self-initiated run passes the CLI request to answer once its first activation is open.
     case started(WorkflowRunSession, effects: [WorkflowRunEffect], requestID: UUID? = nil)
     case event(runID: UUID, WorkflowRunEvent)
+    case executeAction(
+      runID: UUID, stepID: String, actionID: String, inputs: [String: WorkflowJSONValue], executionID: String)
     case deliver(WorkflowDeliveryRequest)
     case userAction(runID: UUID, WorkflowUserAction)
     case markInterruptedRuns(worktreeRoots: [String])
@@ -145,12 +147,20 @@ struct WorkflowRunsFeature {
           statusNotice(from: nil, to: session.run, effects: effects)
         )
 
+      case .executeAction(let runID, let stepID, let actionID, let inputs, let executionID):
+        guard let session = state.sessions[runID], !session.run.status.isTerminal,
+          session.run.actionExecutionID == executionID
+        else { return .none }
+        return executeAction(
+          session: session, stepID: stepID, actionID: actionID, inputs: inputs, executionID: executionID)
+
       case .event(let runID, let event):
         guard var session = state.sessions[runID], !session.run.status.isTerminal else {
           return lateEventCleanup(event, runID: runID, session: state.sessions[runID])
         }
         let timestamp = now
         let generator = uuid
+        session.run.observations = runtime.observe(session.run)
         var machine = session.machine(now: { timestamp }, makeToken: { generator().uuidString })
         let effects = machine.apply(event)
         let previous = session.run
@@ -180,6 +190,7 @@ struct WorkflowRunsFeature {
         }
         let timestamp = now
         let generator = uuid
+        session.run.observations = runtime.observe(session.run)
         var machine = session.machine(now: { timestamp }, makeToken: { generator().uuidString })
         let (result, effects) = machine.deliver(
           ordinal: request.ordinal, selector: request.selector, body: request.body,
@@ -207,6 +218,7 @@ struct WorkflowRunsFeature {
         }
         let timestamp = now
         let generator = uuid
+        session.run.observations = runtime.observe(session.run)
         var machine = session.machine(now: { timestamp }, makeToken: { generator().uuidString })
         let effects = machine.apply(.user(userAction))
         let previous = session.run
@@ -447,6 +459,7 @@ struct WorkflowRunsFeature {
 
   nonisolated private enum CancelID: Hashable, Sendable {
     case executor(UUID)
+    case action(UUID)
     case roleWait(UUID, Int)
     case watchdog(UUID, Int)
     case observers(UUID)
@@ -509,6 +522,7 @@ struct WorkflowRunsFeature {
       case .finished:
         ordered.append(effect)
         observers.append(.cancel(id: CancelID.observers(runID)))
+        observers.append(.cancel(id: CancelID.action(runID)))
       default:
         ordered.append(effect)
       }
@@ -518,6 +532,33 @@ struct WorkflowRunsFeature {
       queue.enqueue(runID, WorkflowEffectBatch(session: session, effects: ordered))
     }
     return .merge(observers)
+  }
+
+  private func executeAction(
+    session: WorkflowRunSession, stepID: String, actionID: String,
+    inputs: [String: WorkflowJSONValue], executionID: String
+  ) -> Effect<Action> {
+    let run = session.run
+    let timestamp = now
+    let context = WorkflowActionContext(
+      runID: run.id, rootURL: run.context.worktree.rootURL,
+      roleAgents: run.bindings.mapValues { $0.templateRole.agent }, outgoingAgent: nil, now: timestamp,
+      stepID: stepID, executionID: executionID, attempt: run.actionAttempts[stepID] ?? 1,
+      bundle: run.context.bundle, values: run.stepValues)
+    return .run { send in
+      do {
+        let outputs = try await actionExecutor.execute(actionID: actionID, inputs: inputs, context: context)
+        await send(.event(runID: run.id, .actionCompleted(stepID: stepID, outputs: outputs, executionID: executionID)))
+      } catch {
+        guard !Task.isCancelled else { return }
+        await send(
+          .event(
+            runID: run.id,
+            .actionFailed(
+              stepID: stepID, reason: "\(error)", executionID: executionID,
+              retryAllowed: !(error is WorkflowBundleIntegrityError))))
+      }
+    }.cancellable(id: CancelID.action(run.id), cancelInFlight: true)
   }
 
   /// The idle wait of a `message` step (dsl-spec §10): ends as `.roleIdle`, or as the failed
@@ -580,7 +621,6 @@ struct WorkflowRunsFeature {
     sequence: Int
   ) async -> StepOutcome {
     let store = session.store
-    let timestamp = now
     let queue = queue
     // Read on the main actor right before a pane is touched: no cancel can slip in between.
     let isLive: @MainActor () -> Bool = { !queue.isStale(runID, sequence) }
@@ -694,42 +734,13 @@ struct WorkflowRunsFeature {
       }
 
     case .runAction(let stepID, let actionID, let inputs):
-      let context = WorkflowActionContext(
-        runID: runID,
-        rootURL: session.run.context.worktree.rootURL,
-        roleAgents: session.run.bindings.mapValues {
-          $0.templateRole.agent.isEmpty ? nil : $0.templateRole.agent
-        },
-        outgoingAgent: session.run.bindings.values.first { $0.source == .current }?.pane?.agent,
-        now: timestamp)
-      // The last main-actor operation before the action starts. A cancel that lands during the
-      // hop to the action's executor can no longer stop it: the action runs to completion (its
-      // writes are the handoff store's own atomic operations) and the result is discarded. The
-      // run log records which of the two happened rather than guessing at cancel time.
-      guard isLive() else {
-        appendLog(
-          "Step '\(stepID)': native action '\(actionID)' not started; the run had moved on.", store: store,
-          runID: runID)
-        return .stop
-      }
-      do {
-        let outputs = try await actionExecutor.execute(actionID: actionID, inputs: inputs, context: context)
-        guard isLive() else {
-          appendLog(
-            "Step '\(stepID)': native action '\(actionID)' finished after the run moved on; result discarded.",
-            store: store, runID: runID)
-          return .stop
-        }
-        await send(.event(runID: runID, .actionCompleted(stepID: stepID, outputs: outputs)))
-      } catch {
-        guard isLive() else {
-          appendLog(
-            "Step '\(stepID)': native action '\(actionID)' failed after the run moved on (\(error)); ignored.",
-            store: store, runID: runID)
-          return .stop
-        }
-        await send(.event(runID: runID, .actionFailed(stepID: stepID, reason: "\(error)")))
-      }
+      guard isLive(), let executionID = session.run.actionExecutionID else { return .stop }
+      await send(
+        .executeAction(runID: runID, stepID: stepID, actionID: actionID, inputs: inputs, executionID: executionID))
+
+    case .yieldControl:
+      await Task.yield()
+      await send(.event(runID: runID, .continueControlFlow))
 
     case .notify(let text):
       runtime.notify(
@@ -802,7 +813,7 @@ extension WorkflowRunEffect {
     case .openActivation, .inject, .typeLine, .launch, .runAction, .close: true
     case .awaitRoleIdle, .cancelRoleWait, .materializeInstruction, .materializeSkill, .notify,
       .abandonActivation, .completeActivation, .armWatchdog, .disarmWatchdog, .persistOutput, .persist, .log,
-      .finished:
+      .finished, .yieldControl:
       false
     }
   }

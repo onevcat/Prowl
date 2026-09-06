@@ -38,6 +38,21 @@ struct WorkflowSettingsDetailFeatureTests {
     return try #require((catalog.user + catalog.bundle).first)
   }
 
+  @Test func removedBundleFilesCanBeSelectedForReview() async throws {
+    let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    try Self.yaml.write(to: directory.appending(path: "workflow.yaml"), atomically: true, encoding: .utf8)
+    let snapshot = try WorkflowBundleSnapshot.read(directory)
+    var state = WorkflowSettingsDetailFeature.State(row: try row(), runTargets: [])
+    state.bundleReview = WorkflowBundleReview(
+      snapshot: snapshot, scripts: [],
+      changes: [.init(path: "removed.py", kind: .removed)], approved: false)
+    let store = TestStore(initialState: state) { WorkflowSettingsDetailFeature() }
+    await store.send(.reviewFileSelected("removed.py")) { $0.bundleReview?.selectedFile = "removed.py" }
+    #expect(store.state.bundleReview?.preview == "This file was removed from the bundle.")
+  }
+
   @Test func deletionRequiresConfirmationAndUsesTheExactFile() async throws {
     let row = try row()
     let trashed = LockIsolated<[URL]>([])
@@ -153,7 +168,7 @@ struct WorkflowSettingsDetailFeatureTests {
     await store.send(.openWorkflowTapped)
     await store.send(.revealInFinderTapped)
 
-    #expect(opened.value == [row.url])
+    #expect(opened.value == [row.url.appending(path: "workflow.yaml")])
     #expect(revealed.value == [row.url])
   }
 }

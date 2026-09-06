@@ -1,6 +1,6 @@
 # Active Agents Panel
 
-> Workflow launch menus and role labels are shown only when Prowl starts with `PROWL_WORKFLOW_UI=1`. Agent Island and ordinary agent controls remain available without the flag.
+> Workflow UI is enabled by default. Start Prowl with `PROWL_WORKFLOW_UI=0` to hide its UI and skill row; CLI workflow and skill commands remain available. The switch is read at process startup.
 
 > A live list of every running agent across all worktrees, with status and
 > one-click jump-to-agent. Your mission-control roster.

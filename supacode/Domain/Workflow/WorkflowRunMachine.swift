@@ -58,8 +58,9 @@ nonisolated enum WorkflowRunEvent: Equatable, Sendable {
   case injectionFailed(ordinal: Int, WorkflowInjectionFailure)
   case launched(ordinal: Int, pane: WorkflowPaneIdentity, dispatchID: String?)
   case launchFailed(ordinal: Int, reason: String)
-  case actionCompleted(stepID: String, outputs: [String: String])
-  case actionFailed(stepID: String, reason: String)
+  case actionCompleted(stepID: String, outputs: [String: WorkflowJSONValue], executionID: String = "")
+  case actionFailed(stepID: String, reason: String, executionID: String = "", retryAllowed: Bool = true)
+  case continueControlFlow
   /// The `.persistOutput` effect of a delivery succeeded / failed (dsl-spec §5: validate,
   /// persist, then complete the record).
   case outputPersisted(ordinal: Int)
@@ -100,7 +101,8 @@ nonisolated enum WorkflowRunEffect: Equatable, Sendable {
   /// Type a line without opening an activation (the nudge).
   case typeLine(role: String, surfaceID: UUID, line: String)
   case launch(WorkflowLaunchRequest)
-  case runAction(stepID: String, actionID: String, inputs: [String: String])
+  case runAction(stepID: String, actionID: String, inputs: [String: WorkflowJSONValue])
+  case yieldControl
   case notify(String)
   case close(role: String, surfaceID: UUID)
   case abandonActivation(dispatchID: String, reason: String)
@@ -135,14 +137,13 @@ nonisolated enum WorkflowSkipConsequence: Equatable, Sendable {
   case noOutput
   /// Only optional action inputs read the output; those actions run without the key.
   case continues(optionalInputs: [String])
-  /// A template, `until`, or required action input reads the output: the run ends `skipped`.
+  /// A template, condition, or required action input reads the output: the run ends `skipped`.
   case endsRun(dependent: String)
 }
 
 nonisolated enum WorkflowRunStartError: Error, Equatable, Sendable {
   case invalidInput(name: String, reason: String)
   case unsafePath(String)
-  case invalidRepeatBound(step: String)
   case unknownSkipStep(String)
   /// `--skip` names a step without an `expect`; only awaited outputs can be skipped at start.
   case skipNotExpecting(String)
@@ -210,12 +211,11 @@ nonisolated struct WorkflowRunMachine {
     guard WorkflowRenderedText.isSingleLine(context.worktree.path) else {
       throw .unsafePath(context.worktree.path)
     }
-    let repeatBounds = try resolveRepeatBounds(definition: definition, inputs: inputs)
     for role in definition.roles where bindings[role.name] == nil {
       throw .missingBinding(role: role.name)
     }
     let startedAt = now()
-    let run = WorkflowRun(
+    var run = WorkflowRun(
       id: runID,
       definition: definition,
       context: context,
@@ -223,9 +223,11 @@ nonisolated struct WorkflowRunMachine {
       startedAt: startedAt,
       updatedAt: startedAt,
       bindings: bindings,
-      preSkippedSteps: skippedSteps,
-      repeatBounds: repeatBounds
+      preSkippedSteps: skippedSteps
     )
+    do { run.controlCursor = try WorkflowControlCursor(definition: definition) } catch {
+      throw .invalidInput(name: "state", reason: "\(error)")
+    }
     let flattened = definition.flattenedSteps
     for stepID in skippedSteps.sorted() {
       guard let step = flattened.first(where: { $0.id == stepID }) else { throw .unknownSkipStep(stepID) }
@@ -288,28 +290,6 @@ nonisolated struct WorkflowRunMachine {
     return resolved
   }
 
-  private static func resolveRepeatBounds(
-    definition: WorkflowDefinition, inputs: [String: String]
-  ) throws(WorkflowRunStartError) -> [String: Int] {
-    var bounds: [String: Int] = [:]
-    for step in definition.steps {
-      guard case .repeat(let max, _, _) = step.action else { continue }
-      let value: Int?
-      switch max {
-      case .literal(let literal):
-        value = literal
-      case .template(let text):
-        let reference = (try? WorkflowTemplate.references(in: text))?.first
-        value = reference.flatMap { $0.components.count == 2 ? inputs[$0.components[1]] : nil }.flatMap(Int.init)
-      }
-      guard let value, (1...WorkflowSchema.repeatMaximum).contains(value) else {
-        throw .invalidRepeatBound(step: step.id)
-      }
-      bounds[step.id] = value
-    }
-    return bounds
-  }
-
   // MARK: Events
 
   mutating func apply(_ event: WorkflowRunEvent) -> [WorkflowRunEffect] {
@@ -328,10 +308,13 @@ nonisolated struct WorkflowRunMachine {
       applyLaunched(ordinal: ordinal, pane: pane, dispatchID: dispatchID, effects: &effects)
     case .launchFailed(let ordinal, let reason):
       applyLaunchFailed(ordinal: ordinal, reason: reason, effects: &effects)
-    case .actionCompleted(let stepID, let outputs):
-      applyActionCompleted(stepID: stepID, outputs: outputs, effects: &effects)
-    case .actionFailed(let stepID, let reason):
-      applyActionFailed(stepID: stepID, reason: reason, effects: &effects)
+    case .actionCompleted(let stepID, let outputs, let executionID):
+      applyActionCompleted(stepID: stepID, outputs: outputs, executionID: executionID, effects: &effects)
+    case .actionFailed(let stepID, let reason, let executionID, let retryAllowed):
+      applyActionFailed(
+        stepID: stepID, reason: reason, executionID: executionID, retryAllowed: retryAllowed, effects: &effects)
+    case .continueControlFlow:
+      continueControlFlow(effects: &effects)
     case .outputPersisted(let ordinal):
       applyOutputPersisted(ordinal: ordinal, effects: &effects)
     case .outputPersistFailed(let ordinal, let reason):
@@ -342,6 +325,11 @@ nonisolated struct WorkflowRunMachine {
       applyUser(action, effects: &effects)
     }
     return effects
+  }
+
+  private mutating func continueControlFlow(effects: inout [WorkflowRunEffect]) {
+    guard run.phase == .idle else { return }
+    advance(effects: &effects)
   }
 
   private mutating func applyInjectionFailed(
@@ -386,15 +374,23 @@ nonisolated struct WorkflowRunMachine {
       .launchFailed(reason), stepID: invocation.stepID, role: invocation.role, ordinal: ordinal, effects: &effects)
   }
 
-  private mutating func applyActionFailed(stepID: String, reason: String, effects: inout [WorkflowRunEffect]) {
-    guard case .runningAction(stepID) = run.phase, run.currentStep?.id == stepID else { return }
-    raiseAttention(.actionFailed(reason), stepID: stepID, role: nil, ordinal: nil, effects: &effects)
+  private mutating func applyActionFailed(
+    stepID: String, reason: String, executionID: String, retryAllowed: Bool, effects: inout [WorkflowRunEffect]
+  ) {
+    guard run.actionExecutionID == executionID, case .runningAction(stepID) = run.phase,
+      run.currentStep?.id == stepID
+    else { return }
+    raiseAttention(
+      .actionFailed(reason), stepID: stepID, role: nil, ordinal: nil, effects: &effects,
+      allowedActions: retryAllowed ? nil : [.cancel])
   }
 
   private mutating func applyActionCompleted(
-    stepID: String, outputs: [String: String], effects: inout [WorkflowRunEffect]
+    stepID: String, outputs: [String: WorkflowJSONValue], executionID: String, effects: inout [WorkflowRunEffect]
   ) {
-    guard case .runningAction(stepID) = run.phase, run.currentStep?.id == stepID else { return }
+    guard run.actionExecutionID == executionID, case .runningAction(stepID) = run.phase,
+      run.currentStep?.id == stepID
+    else { return }
     run.actionOutputs[stepID] = outputs
     completeCurrentStep(effects: &effects)
     effects.append(.log("Step '\(stepID)': action completed."))
@@ -540,69 +536,34 @@ nonisolated struct WorkflowRunMachine {
     return startConsequence(forStep: stepID, definition: definition, preSkipped: alreadySkipped)
   }
 
-  /// The start-time slice of the Skip rule: only top-level steps up to (and including) the first
-  /// `repeat` without `until` can run — nothing after it does, so it ends the run as
-  /// `max_rounds_reached` and later readers never count.
+  /// Before execution, conservatively inspect every branch that could consume a skipped output.
   private static func startConsequence(
     forStep stepID: String, definition: WorkflowDefinition, preSkipped: Set<String>
   ) -> WorkflowSkipConsequence {
     guard let name = definition.flattenedSteps.first(where: { $0.id == stepID })?.outputName else {
       return .noOutput
     }
-    var remaining: [WorkflowStepDefinition] = []
-    for step in definition.steps {
-      remaining.append(step)
-      if case .repeat(_, nil, _) = step.action { break }
-    }
+    let remaining = definition.steps
     return consequence(of: name, forStep: stepID, remaining: remaining, preSkipped: preSkipped)
   }
 
-  /// The §5 Skip rule, resolved at the moment of the skip (decision H11): every step that can
-  /// still run — the rest of the current loop body (the next iteration re-reads all of it),
-  /// its `until`, and the top-level steps after it — is scanned for a reader of the output.
+  /// Inspect the cursor's remaining steps, including subsequent loop iterations, for required readers.
   private static func skipConsequence(forStep stepID: String, in run: WorkflowRun)
     -> WorkflowSkipConsequence
   {
-    let steps = run.definition.steps
     guard let name = run.definition.flattenedSteps.first(where: { $0.id == stepID })?.outputName else {
       return .noOutput
     }
-    var remaining: [WorkflowStepDefinition] = []
-    var loopUntil: WorkflowUntilCondition?
-    var loopID: String?
-    if let loop = run.position.loop, case .repeat(_, let until, let body) = steps[run.position.index].action {
-      // Readers later in this iteration always count; readers earlier in the body only when
-      // another iteration can follow; steps after the loop only when an `until` can exit it
-      // (without one the loop ends the run as `max_rounds_reached`).
-      if let index = body.firstIndex(where: { $0.id == stepID }) {
-        remaining = Array(body[(index + 1)...])
-        if loop.iteration < loop.max {
-          remaining += body[..<index]
-        }
-      } else {
-        remaining = body
-      }
-      loopUntil = until
-      loopID = steps[run.position.index].id
-      if until != nil {
-        remaining += steps[(run.position.index + 1)...]
-      }
-    } else {
-      remaining = Array(steps[(run.position.index + 1)...])
-    }
     return consequence(
-      of: name, forStep: stepID, remaining: remaining, preSkipped: run.preSkippedSteps,
-      loopUntil: loopUntil, loopID: loopID)
+      of: name, forStep: stepID,
+      remaining: run.controlCursor?.remainingSteps ?? run.definition.steps, preSkipped: run.preSkippedSteps)
   }
 
   private static func consequence(
     of name: String, forStep stepID: String, remaining: [WorkflowStepDefinition],
-    preSkipped: Set<String>, loopUntil: WorkflowUntilCondition? = nil, loopID: String? = nil
+    preSkipped: Set<String>
   ) -> WorkflowSkipConsequence {
     var optional: [String] = []
-    if let loopUntil, loopUntil.output == name, let loopID {
-      return .endsRun(dependent: loopID)
-    }
     for step in remaining where step.id != stepID && !preSkipped.contains(step.id) {
       if let dependent = reader(of: name, in: step, preSkipped: preSkipped, optional: &optional) {
         return .endsRun(dependent: dependent)
@@ -625,27 +586,44 @@ nonisolated struct WorkflowRunMachine {
       if references(name, in: text) { return step.id }
     case .close:
       break
-    case .action(let id, let inputs):
-      let schema = WorkflowActionRegistry.schema(for: id)
-      for (key, value) in inputs.sorted(by: { $0.key < $1.key }) where references(name, in: value) {
-        if schema?.input(named: key)?.required == false {
-          optional.append(step.id)
-        } else {
-          return step.id
-        }
-      }
-    case .repeat(_, let until, let body):
-      if until?.output == name { return step.id }
-      for inner in body where !preSkipped.contains(inner.id) {
-        if let dependent = reader(of: name, in: inner, preSkipped: preSkipped, optional: &optional) { return dependent }
-      }
+    case .action(_, let inputs):
+      if inputs.values.contains(where: { references(name, in: $0) }) { return step.id }
+    case .control(let control):
+      return controlReader(of: name, in: step, control: control, preSkipped: preSkipped, optional: &optional)
+    }
+
+    return nil
+  }
+
+  private static func controlReader(
+    of name: String, in step: WorkflowStepDefinition, control: WorkflowControlStep,
+    preSkipped: Set<String>, optional: inout [String]
+  ) -> String? {
+    let expressions: [String]
+    switch control {
+    case .set(let assignments): expressions = Array(assignments.values)
+    case .conditional(let condition, _, _), .loop(let condition, _, _): expressions = [condition]
+    case .breakLoop, .continueLoop: expressions = []
+    }
+    if expressions.contains(where: { references(name, in: "{{ " + $0 + " }}") }) { return step.id }
+    for inner in step.action.children where !preSkipped.contains(inner.id) {
+      if let dependent = reader(of: name, in: inner, preSkipped: preSkipped, optional: &optional) { return dependent }
     }
     return nil
   }
 
   private static func references(_ name: String, in text: String) -> Bool {
-    guard let references = try? WorkflowTemplate.references(in: text) else { return false }
-    return references.contains { $0.components.count == 3 && $0.components[0] == "outputs" && $0.components[1] == name }
+    guard let paths = try? WorkflowExpression.requiredReferences(in: text) else { return false }
+    return paths.contains { $0.count >= 2 && $0[0] == "outputs" && $0[1] == name }
+  }
+
+  private static func references(_ name: String, in value: WorkflowJSONValue) -> Bool {
+    switch value {
+    case .string(let text): references(name, in: text)
+    case .array(let items): items.contains { references(name, in: $0) }
+    case .object(let fields): fields.values.contains { references(name, in: $0) }
+    default: false
+    }
   }
 
   // MARK: Advancing
@@ -659,14 +637,12 @@ nonisolated struct WorkflowRunMachine {
     guard run.status == .running else { return }
     run.phase = .idle
     while run.status == .running {
+      guard prepareControlStep(effects: &effects) else { return }
       guard let step = run.currentStep else {
-        if run.position.loop != nil {
-          finishIteration(effects: &effects)
-          continue
-        }
         finish(.completed, effects: &effects)
         return
       }
+      run.stepValues = run.expressionValues(capturedAt: now())
       if run.preSkippedSteps.contains(step.id) {
         skipAtStart(step, effects: &effects)
         continue
@@ -685,8 +661,8 @@ nonisolated struct WorkflowRunMachine {
         guard enterNotify(step, text: text, effects: &effects) else { return }
       case .close(let role):
         enterClose(step, role: role, effects: &effects)
-      case .repeat(_, let until, _):
-        guard enterRepeat(step, until: until, effects: &effects) else { return }
+      case .control:
+        return
       }
     }
   }
@@ -723,81 +699,8 @@ nonisolated struct WorkflowRunMachine {
     moveNext()
   }
 
-  /// Evaluates `until` before entry (while-loop semantics); false when the run ended.
-  private mutating func enterRepeat(
-    _ step: WorkflowStepDefinition, until: WorkflowUntilCondition?, effects: inout [WorkflowRunEffect]
-  ) -> Bool {
-    guard run.position.loop == nil else {
-      // Unreachable: a loop position always resolves to a body step or the iteration end.
-      moveNext()
-      return true
-    }
-    run.loopCount = 0
-    switch evaluate(until) {
-    case .satisfied:
-      recordStep(step, state: .skipped, ordinal: nil)
-      effects.append(.log("Step '\(step.id)': 'until' already satisfied; loop skipped."))
-      moveNext()
-    case .notSatisfied:
-      guard let max = run.repeatBounds[step.id] else {
-        finish(.cancelled, effects: &effects)
-        return false
-      }
-      run.position.loop = WorkflowRunPosition.Loop(iteration: 1, bodyIndex: 0, max: max)
-      effects.append(.log("Step '\(step.id)': round 1 of at most \(max)."))
-    case .skippedOutput(let skippedStep):
-      finish(.skipped(step: skippedStep, dependent: step.id), effects: &effects)
-      return false
-    }
-    return true
-  }
-
-  private mutating func finishIteration(effects: inout [WorkflowRunEffect]) {
-    guard var loop = run.position.loop, case .repeat(_, let until, _) = run.definition.steps[run.position.index].action
-    else { return }
-    let step = run.definition.steps[run.position.index]
-    run.loopCount += 1
-    switch evaluate(until) {
-    case .satisfied:
-      run.position.loop = nil
-      recordStep(step, state: .completed, ordinal: nil)
-      effects.append(.log("Step '\(step.id)': 'until' satisfied after \(run.loopCount) round(s)."))
-      moveNext()
-    case .notSatisfied:
-      if loop.iteration >= loop.max {
-        finish(.maxRoundsReached, effects: &effects)
-        return
-      }
-      loop.iteration += 1
-      loop.bodyIndex = 0
-      run.position.loop = loop
-      effects.append(.log("Step '\(step.id)': round \(loop.iteration) of at most \(loop.max)."))
-    case .skippedOutput(let skippedStep):
-      finish(.skipped(step: skippedStep, dependent: step.id), effects: &effects)
-    }
-  }
-
-  private enum UntilResult {
-    case satisfied
-    case notSatisfied
-    case skippedOutput(step: String)
-  }
-
-  private func evaluate(_ until: WorkflowUntilCondition?) -> UntilResult {
-    guard let until else { return .notSatisfied }
-    if let skippedStep = run.skippedOutputs[until.output] {
-      return .skippedOutput(step: skippedStep)
-    }
-    guard let verdict = run.outputs[until.output]?.verdict else { return .notSatisfied }
-    return until.values.contains(verdict) ? .satisfied : .notSatisfied
-  }
-
   private mutating func moveNext() {
-    if run.position.loop != nil {
-      run.position.loop?.bodyIndex += 1
-    } else {
-      run.position.index += 1
-    }
+    run.controlCursor?.complete()
   }
 
   // MARK: Step entry
@@ -901,6 +804,12 @@ nonisolated struct WorkflowRunMachine {
 
   private mutating func enterLaunch(_ step: WorkflowStepDefinition, effects: inout [WorkflowRunEffect]) {
     guard case .launch(let role, let prompt, let skill, let expect) = step.action else { return }
+    guard run.bindings[role]?.pane == nil else {
+      raiseAttention(
+        .launchFailed("Role '\(role)' was already launched. Use message for repeated work."),
+        stepID: step.id, role: role, ordinal: nil, effects: &effects, allowedActions: [.cancel])
+      return
+    }
     let ordinal = mintOrdinal()
     run.invocations.append(
       WorkflowInvocation(
@@ -945,7 +854,7 @@ nonisolated struct WorkflowRunMachine {
         outputName: outputName, dispatchID: nil, state: .waiting)
       updateInvocation(ordinal: ordinal) { $0.activation = activation }
       environment[WorkflowSchema.tokenEnvironmentKey] = activation.token
-      let title = step.title.flatMap { try? WorkflowTemplate.render($0, context: templateContext()) }
+      let title = step.title.flatMap { try? WorkflowExpression.renderText($0, values: run.stepValues) }
       protocolBlock = activation.completion.protocolBlock(
         runID: run.id.uuidString, workflowName: run.definition.name, role: role, stepTitle: title, expect: expect)
     }
@@ -982,36 +891,70 @@ nonisolated struct WorkflowRunMachine {
   }
 
   private mutating func enterAction(
-    _ step: WorkflowStepDefinition, id: String, inputs: [String: String], effects: inout [WorkflowRunEffect]
+    _ step: WorkflowStepDefinition, id: String, inputs: [String: WorkflowJSONValue], effects: inout [WorkflowRunEffect]
   ) {
     recordStep(step, state: .active, ordinal: nil)
-    let schema = WorkflowActionRegistry.schema(for: id)
-    var resolved: [String: String] = [:]
-    let context = templateContext()
-    for (key, value) in inputs.sorted(by: { $0.key < $1.key }) {
-      let input = schema?.input(named: key)
-      if input?.kind == .role {
-        resolved[key] = value
-        continue
-      }
-      do {
-        resolved[key] = try WorkflowTemplate.render(value, context: context)
-      } catch WorkflowTemplateError.missingOutput(let name) where input?.required == false {
-        effects.append(.log("Step '\(step.id)': optional input '\(key)' omitted; output '\(name)' was skipped."))
-      } catch WorkflowTemplateError.missingOutput(let name) {
-        finish(.skipped(step: run.skippedOutputs[name] ?? name, dependent: step.id), effects: &effects)
-        return
-      } catch {
-        raiseAttention(
-          .actionFailed("input '\(key)' cannot be rendered: \(error)"), stepID: step.id, role: nil, ordinal: nil,
-          effects: &effects)
-        return
-      }
+    let executionID = makeToken()
+    run.actionExecutionID = executionID
+    run.actionAttempts[step.id, default: 0] += 1
+    var values = run.stepValues
+    let directory = run.runDirectory.appending(path: "actions/\(step.id)/\(executionID)")
+    if case .object(var context) = values["context"] {
+      context["execution"] = .object([
+        "id": .string(executionID), "step_id": .string(step.id),
+        "attempt": .integer(run.actionAttempts[step.id] ?? 1),
+        "cwd": .string(run.context.worktree.path),
+        "artifact_dir": .string(directory.appending(path: "artifacts").path),
+      ])
+      values["context"] = .object(context)
     }
-    run.phase = .runningAction(stepID: step.id)
-    effects.append(.persist)
-    effects.append(.log("Step '\(step.id)': running action '\(id)'."))
-    effects.append(.runAction(stepID: step.id, actionID: id, inputs: resolved))
+    run.stepValues = values
+    do {
+      let resolved =
+        try run.context.literalActionInputs
+        ? inputs : inputs.mapValues { try WorkflowExpression.renderValue($0, values: values) }
+      run.phase = .runningAction(stepID: step.id)
+      effects.append(.persist)
+      effects.append(.log("Step '\(step.id)': running action '\(id)' (\(executionID))."))
+      effects.append(.runAction(stepID: step.id, actionID: id, inputs: resolved))
+    } catch {
+      raiseAttention(
+        .actionFailed("Action input evaluation failed: \(error)"), stepID: step.id,
+        role: nil, ordinal: nil, effects: &effects)
+    }
+  }
+
+  private mutating func prepareControlStep(effects: inout [WorkflowRunEffect]) -> Bool {
+    guard var cursor = run.controlCursor else { return true }
+    do {
+      let outcome = try cursor.next(values: run.expressionValues(capturedAt: now()))
+      run.controlCursor = cursor
+      for evaluation in cursor.evaluations {
+        // Pure control steps keep their latest evaluation; state-only loops cannot grow history forever.
+        run.stepRecords.removeAll { $0.stepID == evaluation.stepID }
+        run.stepRecords.append(
+          .init(
+            stepID: evaluation.stepID, iteration: evaluation.iteration,
+            state: evaluation.skipped ? .skipped : .completed, ordinal: nil))
+      }
+      for name in cursor.expiredOutputs { run.outputs.removeValue(forKey: name) }
+      for name in cursor.expiredActions { run.actionOutputs.removeValue(forKey: name) }
+      switch outcome {
+      case .step: return true
+      case .finished: finish(.completed, effects: &effects)
+      case .yielded: effects.append(.yieldControl)
+      }
+    } catch let limit as WorkflowLoopLimit {
+      run.controlCursor = cursor
+      effects.append(.log("Loop '\(limit.stepID)' reached max_iterations while its condition remained true."))
+      finish(.maxRoundsReached, effects: &effects)
+    } catch {
+      run.controlCursor = cursor
+      raiseAttention(
+        .actionFailed("Control evaluation failed: \(error)"), stepID: run.currentStep?.id ?? "control",
+        role: nil, ordinal: nil, effects: &effects, allowedActions: [.cancel])
+    }
+    return false
   }
 
   // MARK: Waiting and watchdog
@@ -1153,7 +1096,7 @@ nonisolated struct WorkflowRunMachine {
   }
 
   /// "Accept as delivered" / "Accept with verdict": a declared verdict must be supplied when the
-  /// delivery lacked one, otherwise the accepted output could not drive `until` or templates.
+  /// delivery lacked one, otherwise the accepted output could not drive conditions or templates.
   private mutating func acceptProvisionalDelivery(verdict: String?, effects: inout [WorkflowRunEffect]) {
     guard let attention = run.status.attention, let activation = run.activeActivation,
       activation.state == .provisional, let delivery = activation.pendingDelivery
@@ -1307,7 +1250,8 @@ nonisolated struct WorkflowRunMachine {
   // MARK: Attention and finishing
 
   private mutating func raiseAttention(
-    _ reason: WorkflowAttentionReason, stepID: String, role: String?, ordinal: Int?, effects: inout [WorkflowRunEffect]
+    _ reason: WorkflowAttentionReason, stepID: String, role: String?, ordinal: Int?, effects: inout [WorkflowRunEffect],
+    allowedActions: [WorkflowAttentionAction]? = nil
   ) {
     let isLaunchRole = role.flatMap { run.bindings[$0]?.source } == .launch
     let actions: [WorkflowAttentionAction] =
@@ -1328,7 +1272,7 @@ nonisolated struct WorkflowRunMachine {
         ]
       }
     let attention = WorkflowAttention(
-      reason: reason, stepID: stepID, role: role, ordinal: ordinal, actions: actions,
+      reason: reason, stepID: stepID, role: role, ordinal: ordinal, actions: allowedActions ?? actions,
       message: attentionMessage(reason, stepID: stepID, role: role))
     run.status = .needsAttention(attention)
     effects.append(.log("Step '\(stepID)': needs attention — \(attention.message)"))
@@ -1464,15 +1408,13 @@ nonisolated struct WorkflowRunMachine {
     }
   }
 
-  /// Renders a template; on a missing output the run ends `skipped`, on any other failure the
-  /// step enters attention. Returns nil in both cases.
+  /// Rendering failures enter attention; skip dependency checks run before advancing.
   private mutating func render(_ text: String, step: WorkflowStepDefinition, effects: inout [WorkflowRunEffect])
     -> String?
   {
     do {
-      return try WorkflowTemplate.render(text, context: templateContext())
-    } catch WorkflowTemplateError.missingOutput(let name) {
-      finish(.skipped(step: run.skippedOutputs[name] ?? name, dependent: step.id), effects: &effects)
+      return try WorkflowExpression.renderText(text, values: run.stepValues)
+
     } catch {
       let ordinal = run.currentInvocation?.ordinal
       raiseAttention(
@@ -1482,17 +1424,4 @@ nonisolated struct WorkflowRunMachine {
     return nil
   }
 
-  func templateContext() -> WorkflowTemplateContext {
-    WorkflowTemplateContext(
-      run: WorkflowTemplateContext.Run(id: run.id.uuidString, directory: WorkflowRunPaths.path(run.runDirectory)),
-      worktree: WorkflowTemplateContext.Worktree(
-        path: run.context.worktree.path, name: run.context.worktree.name, branch: run.context.worktree.branch),
-      roles: run.bindings.mapValues(\.templateRole),
-      outputs: run.outputs.mapValues { WorkflowTemplateContext.Output(path: $0.latestPath, verdict: $0.verdict) },
-      skippedOutputs: Set(run.skippedOutputs.keys),
-      actions: run.actionOutputs,
-      inputs: run.inputs,
-      loop: WorkflowTemplateContext.Loop(index: run.currentIteration, count: run.loopCount)
-    )
-  }
 }

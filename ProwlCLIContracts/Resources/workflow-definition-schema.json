@@ -53,6 +53,27 @@
       "items": {
         "$ref": "#/$defs/step"
       }
+    },
+    "state": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/slug"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "type",
+          "initial"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "pattern": "^(boolean|integer|number|string|array<.+>)$"
+          },
+          "initial": {}
+        }
+      }
     }
   },
   "$defs": {
@@ -271,23 +292,19 @@
           "$ref": "#/$defs/closeStep"
         },
         {
-          "$ref": "#/$defs/repeatStep"
-        }
-      ]
-    },
-    "loopStep": {
-      "oneOf": [
-        {
-          "$ref": "#/$defs/messageStep"
+          "$ref": "#/$defs/ifStep"
         },
         {
-          "$ref": "#/$defs/actionStep"
+          "$ref": "#/$defs/whileStep"
         },
         {
-          "$ref": "#/$defs/notifyStep"
+          "$ref": "#/$defs/setStep"
         },
         {
-          "$ref": "#/$defs/closeStep"
+          "$ref": "#/$defs/breakStep"
+        },
+        {
+          "$ref": "#/$defs/continueStep"
         }
       ]
     },
@@ -375,24 +392,15 @@
           "$ref": "#/$defs/template"
         },
         "action": {
-          "enum": [
-            "handoff.transition",
-            "handoff.checkpoint",
-            "git.context"
-          ]
+          "type": "string",
+          "pattern": "^(builtin:git\\.context|local:[a-z0-9][a-z0-9_-]{0,63})$"
         },
         "with": {
           "type": "object",
           "propertyNames": {
             "$ref": "#/$defs/slug"
           },
-          "additionalProperties": {
-            "type": [
-              "string",
-              "number",
-              "boolean"
-            ]
-          }
+          "additionalProperties": {}
         }
       }
     },
@@ -431,56 +439,6 @@
         },
         "close": {
           "$ref": "#/$defs/slug"
-        }
-      }
-    },
-    "repeatStep": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "id",
-        "repeat",
-        "steps"
-      ],
-      "properties": {
-        "id": {
-          "$ref": "#/$defs/slug"
-        },
-        "title": {
-          "$ref": "#/$defs/template"
-        },
-        "repeat": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "max"
-          ],
-          "properties": {
-            "max": {
-              "oneOf": [
-                {
-                  "type": "integer",
-                  "minimum": 1,
-                  "maximum": 20
-                },
-                {
-                  "type": "string",
-                  "pattern": "^\\s*\\{\\{\\s*inputs\\.[a-z0-9_-]+\\s*\\}\\}\\s*$"
-                }
-              ]
-            },
-            "until": {
-              "type": "string",
-              "pattern": "^outputs\\.[a-z0-9_-]+\\.verdict\\s*(==\\s*[a-z0-9_-]+|in\\s*\\[[^\\]]*\\])$"
-            }
-          }
-        },
-        "steps": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "$ref": "#/$defs/loopStep"
-          }
         }
       }
     },
@@ -533,6 +491,130 @@
         "on_timeout": [
           "timeout"
         ]
+      }
+    },
+    "ifStep": {
+      "type": "object",
+      "required": [
+        "id",
+        "if",
+        "then"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/slug"
+        },
+        "title": {
+          "type": "string"
+        },
+        "if": {
+          "type": "string"
+        },
+        "then": {
+          "$ref": "#/$defs/stepList"
+        },
+        "else": {
+          "$ref": "#/$defs/stepList"
+        }
+      }
+    },
+    "whileStep": {
+      "type": "object",
+      "required": [
+        "id",
+        "while",
+        "steps"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/slug"
+        },
+        "title": {
+          "type": "string"
+        },
+        "while": {
+          "type": "string"
+        },
+        "steps": {
+          "$ref": "#/$defs/stepList"
+        },
+        "max_iterations": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "setStep": {
+      "type": "object",
+      "required": [
+        "id",
+        "set"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/slug"
+        },
+        "title": {
+          "type": "string"
+        },
+        "set": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "string",
+              "boolean",
+              "number"
+            ]
+          }
+        }
+      }
+    },
+    "breakStep": {
+      "type": "object",
+      "required": [
+        "id",
+        "break"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/slug"
+        },
+        "title": {
+          "type": "string"
+        },
+        "break": {
+          "const": true
+        }
+      }
+    },
+    "continueStep": {
+      "type": "object",
+      "required": [
+        "id",
+        "continue"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/slug"
+        },
+        "title": {
+          "type": "string"
+        },
+        "continue": {
+          "const": true
+        }
+      }
+    },
+    "stepList": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/step"
       }
     }
   }

@@ -1,0 +1,71 @@
+import Darwin
+import Foundation
+
+/// App-owned ownership records survive a crash. Repository files never authorize process termination.
+nonisolated struct WorkflowActionProcessRegistry: Sendable {
+  struct Identity: Codable, Equatable, Sendable {
+    let pid: Int32
+    let seconds: UInt64
+    let microseconds: UInt64
+
+    static func capture(_ pid: Int32) -> Self? {
+      guard let info = ProcessDetection.processBSDInfo(pid: pid) else { return nil }
+      return Self(pid: pid, seconds: info.pbi_start_tvsec, microseconds: info.pbi_start_tvusec)
+    }
+
+    var isCurrent: Bool { Self.capture(pid) == self }
+  }
+
+  struct Record: Codable, Sendable {
+    let owner: Identity
+    let process: Identity
+  }
+
+  let directory: URL
+  var processGroup: @Sendable (Int32) -> Int32 = { getpgid($0) }
+  var terminateGroup: @Sendable (Int32) -> Bool = { kill(-$0, SIGKILL) == 0 }
+
+  init(
+    directory: URL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+      .appending(path: "Prowl/WorkflowActionProcesses")
+  ) {
+    self.directory = directory
+  }
+
+  func register(executionID: String, pid: Int32) throws {
+    guard UUID(uuidString: executionID) != nil, let owner = Identity.capture(getpid()),
+      let process = Identity.capture(pid), processGroup(pid) == pid
+    else {
+      throw WorkflowActionError.failed("Cannot record action process ownership.")
+    }
+    try FileManager.default.createDirectory(
+      at: directory, withIntermediateDirectories: true,
+      attributes: [.posixPermissions: 0o700])
+    try JSONEncoder().encode(Record(owner: owner, process: process))
+      .write(to: directory.appending(path: executionID + ".json"), options: .atomic)
+  }
+
+  func remove(executionID: String) {
+    guard UUID(uuidString: executionID) != nil else { return }
+    try? FileManager.default.removeItem(at: directory.appending(path: executionID + ".json"))
+  }
+
+  @discardableResult func recoverAbandonedProcesses() throws -> Int {
+    guard FileManager.default.fileExists(atPath: directory.path) else { return 0 }
+    let files = try FileManager.default.contentsOfDirectory(
+      at: directory,
+      includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles])
+    var terminated = 0
+    for file in files where file.pathExtension == "json" {
+      guard UUID(uuidString: file.deletingPathExtension().lastPathComponent) != nil,
+        let record = try? JSONDecoder().decode(Record.self, from: Data(contentsOf: file))
+      else { continue }
+      guard !record.owner.isCurrent else { continue }
+      if record.process.isCurrent, processGroup(record.process.pid) == record.process.pid {
+        if terminateGroup(record.process.pid) { terminated += 1 }
+      }
+      try FileManager.default.removeItem(at: file)
+    }
+    return terminated
+  }
+}

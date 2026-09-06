@@ -1,6 +1,6 @@
 # Settings
 
-> Workflow Settings (global and repository-local) and the `prowl-workflow` skill row are hidden unless Prowl starts with `PROWL_WORKFLOW_UI=1`. CLI workflow and skill commands remain available.
+> Workflow UI is enabled by default. Start Prowl with `PROWL_WORKFLOW_UI=0` to hide its UI and skill row; CLI workflow and skill commands remain available. The switch is read at process startup.
 
 > The Settings window (`⌘,`): what each tab controls. For the exhaustive
 > field-by-field list, see [`reference/settings-fields.md`](../reference/settings-fields.md).
@@ -45,7 +45,7 @@ and opens that section's root.
 
 - **Global:** `~/.prowl/settings.json`
 - **Global custom commands + agent profiles + workflow settings:** `~/.prowl/global.onevcat.json`
-- **Your workflow files:** `~/.prowl/workflows/*.yaml` (per repository: `<repo root>/.prowl/workflows/`)
+- **Your workflow files:** `~/.prowl/workflows/*.pwlworkflow` (per repository: `<repo root>/.prowl/workflows/*.pwlworkflow`)
 - **Per-repo:** `~/.prowl/repo/<repo-name>/prowl.json`
 - **Per-repo custom commands + agent profile default/memory:** `~/.prowl/repo/<repo-name>/prowl.onevcat.json`
 - **Dedicated agent profile homes:** `~/.prowl/agent-profiles/<uuid>/`

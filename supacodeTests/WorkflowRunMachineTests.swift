@@ -16,6 +16,10 @@ struct WorkflowRunMachineTests {
       max_rounds: { type: integer, default: 5, min: 1, max: 30 }
       focus:      { type: string,  default: "" }
       mode:       { type: enum, values: [strict, lenient], default: strict }
+    state:
+      verdict: {type: string, initial: ''}
+      path: {type: string, initial: ''}
+      rounds: {type: integer, initial: 0}
     roles:
       author:
         source: current
@@ -38,26 +42,34 @@ struct WorkflowRunMachineTests {
         prompt: "Read {{ outputs.brief.path }} and review ({{ inputs.mode }})."
         skill: prowl.adversarial-reviewer
         expect: { output: findings, sections: ["## Findings", "## Verdict"], verdict: [clean, issues] }
+      - id: remember
+        set:
+          verdict: outputs.findings.verdict
+          path: outputs.findings.path
       - id: rounds
-        repeat:
-          max: "{{ inputs.max_rounds }}"
-          until: outputs.findings.verdict == clean
+        while: "state.verdict != 'clean'"
+        max_iterations: 3
         steps:
           - id: fix
-            title: "Round {{ loop.index }}: author addressing findings"
+            title: "Round {{ context.step.iteration }}: author addressing findings"
             message: author
-            text: "Findings: {{ outputs.findings.path }}. Fix or rebut each item."
+            text: "Findings: {{ state.path }}. Fix or rebut each item."
             expect: { output: disposition }
           - id: rereview
-            title: "Round {{ loop.index }}: reviewer re-checking"
+            title: "Round {{ context.step.iteration }}: reviewer re-checking"
             message: reviewer
             text: "Disposition: {{ outputs.disposition.path }}. Re-review."
-            expect: { output: findings, verdict: [clean, issues] }
+            expect: { output: round_findings, verdict: [clean, issues] }
+          - id: retain
+            set:
+              verdict: outputs.round_findings.verdict
+              path: outputs.round_findings.path
+              rounds: state.rounds + 1
       - id: context
-        action: git.context
-        with: { root: "{{ worktree.path }}" }
+        action: builtin:git.context
+        with: { root: "{{ context.worktree.path }}" }
       - id: done
-        notify: "Adversarial review: {{ outputs.findings.verdict }} after {{ loop.count }} round(s)"
+        notify: "Adversarial review: {{ state.verdict }} after {{ state.rounds }} round(s)"
       - id: cleanup
         close: reviewer
     """
@@ -80,13 +92,13 @@ struct WorkflowRunMachineTests {
           Write the handoff briefing.
         expect: { output: brief, sections: ["## Objective"] }
       - id: transition
-        action: handoff.transition
-        with: { briefing: "{{ outputs.brief.path }}", from: source, to: receiver }
+        action: local:prepare
+        with: { briefing: "{{ outputs.brief.path ?? '' }}", from: source, to: receiver }
       - id: launch
         launch: receiver
-        prompt: "{{ actions.transition.kickoff_prompt }}"
+        prompt: "{{ actions.transition.output.kickoff_prompt }}"
       - id: done
-        notify: "Handed off to {{ roles.receiver.name }}"
+        notify: "Handed off to {{ context.roles.receiver.name }}"
     """
 
   nonisolated static let authorPane = WorkflowPaneIdentity(
@@ -178,8 +190,10 @@ struct WorkflowRunMachineTests {
   }
 
   /// Drives the fixture through `brief` → `launch` → findings delivery and returns the machine.
-  private func machineAfterFindings(verdict: String, inputs: [String: String] = [:]) throws -> WorkflowRunMachine {
-    var (machine, _) = try makeMachine(inputs: inputs)
+  private func machineAfterFindings(
+    verdict: String, inputs: [String: String] = [:], yaml: String = Self.adversarialReview
+  ) throws -> WorkflowRunMachine {
+    var (machine, _) = try makeMachine(yaml, inputs: inputs)
     _ = machine.apply(.roleIdle(ordinal: 1))
     _ = machine.apply(.injectionSucceeded(ordinal: 1, dispatchID: "d1"))
     try deliverPersisted(&machine, ordinal: 1, token: "TOKEN-1", body: "# Brief\n## Scope\nx\n## Claims\ny")
@@ -382,15 +396,15 @@ struct WorkflowRunMachineTests {
         if case .armWatchdog(let request) = $0 { return request.ordinal == 2 && request.dispatchID == "d2" }
         return false
       })
-    #expect(machine.templateContext().roles["reviewer"]?.pane == "p2")
+    #expect(machine.run.bindings["reviewer"]?.pane?.handle == "p2")
   }
 
   @Test func strictStepsRejectMissingSectionsAndVerdicts() throws {
     let yaml = Self.adversarialReview
       .replacing("timeout: 10m }", with: "timeout: 10m, strict: true }")
       .replacing(
-        "verdict: [clean, issues] }\n  - id: rounds",
-        with: "verdict: [clean, issues], strict: true }\n  - id: rounds")
+        "verdict: [clean, issues] }\n  - id: remember",
+        with: "verdict: [clean, issues], strict: true }\n  - id: remember")
     var (machine, _) = try makeMachine(yaml)
     _ = machine.apply(.roleIdle(ordinal: 1))
     _ = machine.apply(.injectionSucceeded(ordinal: 1, dispatchID: "d1"))
@@ -459,7 +473,7 @@ struct WorkflowRunMachineTests {
     #expect(machine.run.status.attention != nil)
     _ = machine.apply(.user(.acceptDelivery(verdict: "clean")))
     #expect(machine.run.outputs["findings"]?.verdict == "clean")
-    #expect(machine.run.loopCount == 0)
+    #expect(machine.run.controlCursor?.state.values["rounds"] == .integer(0))
     #expect(machine.run.phase == .runningAction(stepID: "context"))
   }
 
@@ -511,13 +525,13 @@ struct WorkflowRunMachineTests {
 
   @Test func cleanVerdictBeforeTheLoopSkipsItAndFinishesTheRun() throws {
     var machine = try machineAfterFindings(verdict: "clean")
-    #expect(machine.run.loopCount == 0)
+    #expect(machine.run.controlCursor?.state.values["rounds"] == .integer(0))
     #expect(machine.run.phase == .runningAction(stepID: "context"))
-    #expect(
-      machine.run.stepRecords.contains(
-        WorkflowStepRecord(stepID: "rounds", iteration: nil, state: .skipped, ordinal: nil)))
+    #expect(machine.run.stepRecords.first { $0.stepID == "fix" }?.state == .skipped)
     let effects = machine.apply(
-      .actionCompleted(stepID: "context", outputs: ["path": "/repo/.prowl/handoff/context.md", "branch": "feat/x"]))
+      .actionCompleted(
+        stepID: "context", outputs: ["path": "/repo/.prowl/handoff/context.md", "branch": "feat/x"],
+        executionID: machine.run.actionExecutionID ?? ""))
     #expect(effects.contains(.notify("Adversarial review: clean after 0 round(s)")))
     #expect(effects.contains(.close(role: "reviewer", surfaceID: Self.reviewerPane.surfaceID)))
     #expect(effects.last == .finished(.completed))
@@ -528,7 +542,7 @@ struct WorkflowRunMachineTests {
 
   @Test func issuesVerdictRunsRoundsUntilCleanWithLatestWinsOutputs() throws {
     var machine = try machineAfterFindings(verdict: "issues", inputs: ["max_rounds": "3"])
-    #expect(machine.run.position.loop == WorkflowRunPosition.Loop(iteration: 1, bodyIndex: 0, max: 3))
+    #expect(machine.run.currentIteration == 1)
     #expect(machine.run.phase == .waitingForRole(role: "author", ordinal: 3))
     #expect(machine.run.stepRecords.last == WorkflowStepRecord(stepID: "fix", iteration: 1, state: .active, ordinal: 3))
 
@@ -548,12 +562,12 @@ struct WorkflowRunMachineTests {
     _ = machine.apply(.injectionSucceeded(ordinal: 4, dispatchID: "d4"))
     let round1 = try deliverPersisted(
       &machine, ordinal: 4, token: "TOKEN-4", body: "# Findings\nstill", verdict: "issues")
-    #expect(round1.contains(.persistOutput(name: "findings", ordinal: 4, body: "# Findings\nstill\n")))
-    #expect(machine.run.outputs["findings"]?.ordinal == 4)
-    #expect(machine.run.outputs["findings"]?.path == "\(runDir)/outputs/findings.4.md")
-    #expect(machine.run.loopCount == 1)
-    #expect(machine.run.position.loop == WorkflowRunPosition.Loop(iteration: 2, bodyIndex: 0, max: 3))
-    #expect(machine.templateContext().loop == WorkflowTemplateContext.Loop(index: 2, count: 1))
+    #expect(round1.contains(.persistOutput(name: "round_findings", ordinal: 4, body: "# Findings\nstill\n")))
+    #expect(machine.run.outputs["round_findings"] == nil)
+    #expect(machine.run.controlCursor?.state.values["path"] == .string("\(runDir)/outputs/round_findings.md"))
+    #expect(machine.run.controlCursor?.state.values["rounds"] == .integer(1))
+    #expect(machine.run.currentIteration == 2)
+    #expect(machine.run.currentIteration == 2)
 
     _ = machine.apply(.roleIdle(ordinal: 5))
     _ = machine.apply(.injectionSucceeded(ordinal: 5, dispatchID: "d5"))
@@ -561,16 +575,18 @@ struct WorkflowRunMachineTests {
     _ = machine.apply(.roleIdle(ordinal: 6))
     _ = machine.apply(.injectionSucceeded(ordinal: 6, dispatchID: "d6"))
     try deliverPersisted(&machine, ordinal: 6, token: "TOKEN-6", body: "# Findings\nnone", verdict: "clean")
-    #expect(machine.run.loopCount == 2)
-    #expect(machine.run.position.loop == nil)
+    #expect(machine.run.controlCursor?.state.values["rounds"] == .integer(2))
+    #expect(machine.run.currentIteration == nil)
     #expect(machine.run.phase == .runningAction(stepID: "context"))
-    let effects = machine.apply(.actionCompleted(stepID: "context", outputs: [:]))
+    let effects = machine.apply(
+      .actionCompleted(stepID: "context", outputs: [:], executionID: machine.run.actionExecutionID ?? ""))
     #expect(effects.contains(.notify("Adversarial review: clean after 2 round(s)")))
     #expect(machine.run.status == .completed)
   }
 
   @Test func reachingMaxWithIssuesEndsAsMaxRoundsReached() throws {
-    var machine = try machineAfterFindings(verdict: "issues", inputs: ["max_rounds": "1"])
+    var machine = try machineAfterFindings(
+      verdict: "issues", yaml: Self.adversarialReview.replacing("max_iterations: 3", with: "max_iterations: 1"))
     _ = machine.apply(.roleIdle(ordinal: 3))
     _ = machine.apply(.injectionSucceeded(ordinal: 3, dispatchID: "d3"))
     try deliverPersisted(&machine, ordinal: 3, token: "TOKEN-3", body: "# Done")
@@ -579,15 +595,12 @@ struct WorkflowRunMachineTests {
     let effects = try deliverPersisted(&machine, ordinal: 4, token: "TOKEN-4", body: "# Findings", verdict: "issues")
     #expect(machine.run.status == .maxRoundsReached)
     #expect(effects.last == .finished(.maxRoundsReached))
-    #expect(machine.run.loopCount == 1)
+    #expect(machine.run.controlCursor?.state.values["rounds"] == .integer(1))
   }
 
   // MARK: - Start validation
 
   @Test func startValidatesInputsRepeatBoundsPathAndBindings() throws {
-    #expect(throws: WorkflowRunStartError.invalidRepeatBound(step: "rounds")) {
-      try makeMachine(inputs: ["max_rounds": "25"])
-    }
     #expect(throws: WorkflowRunStartError.invalidInput(name: "max_rounds", reason: "40 is above the maximum 30.")) {
       try makeMachine(inputs: ["max_rounds": "40"])
     }
@@ -677,63 +690,12 @@ struct WorkflowRunMachineTests {
     _ = machine.apply(.roleIdle(ordinal: 3))
     _ = machine.apply(.injectionSucceeded(ordinal: 3, dispatchID: "d3"))
     try deliverPersisted(&machine, ordinal: 3, token: "TOKEN-3", body: "# Done")
-    #expect(machine.skipConsequence(forStep: "rereview") == .endsRun(dependent: "rounds"))
+    #expect(machine.skipConsequence(forStep: "rereview") == .endsRun(dependent: "retain"))
     #expect(machine.skipConsequence(forStep: "fix") == .endsRun(dependent: "rereview"))
     _ = machine.apply(.roleIdle(ordinal: 4))
     _ = machine.apply(.injectionSucceeded(ordinal: 4, dispatchID: "d4"))
     _ = machine.apply(.user(.skip))
-    #expect(machine.run.status == .skipped(step: "rereview", dependent: "rounds"))
-  }
-
-  @Test func skipInTheFinalIterationWithoutUntilIgnoresReadersThatCannotRunAgain() throws {
-    let yaml = """
-      schema: prowl.workflow/v1
-      id: rounds-only
-      name: Rounds
-      roles:
-        author:
-          source: current
-      steps:
-        - id: seed
-          message: author
-          text: "seed"
-          expect: { output: x }
-        - id: rounds
-          repeat:
-            max: 2
-          steps:
-            - id: read
-              message: author
-              text: "read {{ outputs.x.path }}"
-            - id: produce
-              message: author
-              text: "produce"
-              expect: { output: x }
-        - id: after
-          notify: "after {{ outputs.x.path }}"
-      """
-    var (machine, _) = try makeMachine(yaml, roles: ["author": .current(Self.authorPane)])
-    _ = machine.apply(.roleIdle(ordinal: 1))
-    _ = machine.apply(.injectionSucceeded(ordinal: 1, dispatchID: "d1"))
-    try deliverPersisted(&machine, ordinal: 1, token: "TOKEN-1", body: "# x")
-    // iteration 1: `read` (no expect) then `produce`
-    _ = machine.apply(.roleIdle(ordinal: 2))
-    _ = machine.apply(.injectionSucceeded(ordinal: 2, dispatchID: nil))
-    #expect(machine.run.phase == .waitingForRole(role: "author", ordinal: 3))
-    // Another iteration can follow: the earlier body reader still counts.
-    #expect(machine.skipConsequence(forStep: "produce") == .endsRun(dependent: "read"))
-    _ = machine.apply(.roleIdle(ordinal: 3))
-    _ = machine.apply(.injectionSucceeded(ordinal: 3, dispatchID: "d3"))
-    try deliverPersisted(&machine, ordinal: 3, token: "TOKEN-2", body: "# x2")
-    // iteration 2 (the last, no `until`): `read` ran, `produce` is current.
-    _ = machine.apply(.roleIdle(ordinal: 4))
-    _ = machine.apply(.injectionSucceeded(ordinal: 4, dispatchID: nil))
-    #expect(machine.run.position.loop == WorkflowRunPosition.Loop(iteration: 2, bodyIndex: 1, max: 2))
-    #expect(machine.skipConsequence(forStep: "produce") == .continues(optionalInputs: []))
-    _ = machine.apply(.roleIdle(ordinal: 5))
-    _ = machine.apply(.injectionSucceeded(ordinal: 5, dispatchID: "d5"))
-    _ = machine.apply(.user(.skip))
-    #expect(machine.run.status == .maxRoundsReached)
+    #expect(machine.run.status == .skipped(step: "rereview", dependent: "retain"))
   }
 
   @Test func startSkipConsequenceForTheStartSheet() throws {
@@ -748,7 +710,7 @@ struct WorkflowRunMachineTests {
     let handoff = try definition(Self.handoff)
     #expect(
       WorkflowRunMachine.startSkipConsequence(forStep: "brief", definition: handoff, alreadySkipped: [])
-        == .continues(optionalInputs: ["transition"]))
+        == .continues(optionalInputs: []))
   }
 
   @Test func startSkipConsequenceIgnoresReadersAlreadySkipped() throws {
@@ -780,47 +742,11 @@ struct WorkflowRunMachineTests {
         == .continues(optionalInputs: []))
   }
 
-  @Test func startTimeSkipIgnoresReadersAfterALoopWithoutUntil() throws {
-    let yaml = """
-      schema: prowl.workflow/v1
-      id: seed-rounds
-      name: Seed rounds
-      roles:
-        author:
-          source: current
-      steps:
-        - id: seed
-          message: author
-          text: "seed"
-          expect: { output: x }
-        - id: rounds
-          repeat:
-            max: 1
-          steps:
-            - id: work
-              message: author
-              text: "work"
-        - id: after
-          notify: "after {{ outputs.x.path }}"
-      """
-    let (machine, _) = try makeMachine(yaml, roles: ["author": .current(Self.authorPane)], skipped: ["seed"])
-    #expect(machine.run.phase == .waitingForRole(role: "author", ordinal: 1))
-    let reading = yaml.replacing("text: \"work\"", with: "text: \"work {{ outputs.x.path }}\"")
-    #expect(throws: WorkflowRunStartError.skipNotAllowed(step: "seed", dependent: "work")) {
-      try makeMachine(reading, roles: ["author": .current(Self.authorPane)], skipped: ["seed"])
-    }
-    let exiting = yaml.replacing("      max: 1\n", with: "      max: 1\n      until: outputs.x.verdict == ok\n")
-      .replacing("expect: { output: x }", with: "expect: { output: x, verdict: [ok, bad] }")
-    #expect(throws: WorkflowRunStartError.skipNotAllowed(step: "seed", dependent: "rounds")) {
-      try makeMachine(exiting, roles: ["author": .current(Self.authorPane)], skipped: ["seed"])
-    }
-  }
-
   @Test func skipOfAnOptionalActionInputContinuesWithoutTheKey() throws {
     var (machine, _) = try makeMachine(
       Self.handoff,
       roles: ["source": .current(Self.authorPane), "receiver": .launch(Self.reviewerProfile, pane: nil)])
-    #expect(machine.skipConsequence(forStep: "brief") == .continues(optionalInputs: ["transition"]))
+    #expect(machine.skipConsequence(forStep: "brief") == .continues(optionalInputs: []))
     _ = machine.apply(.roleIdle(ordinal: 1))
     _ = machine.apply(.injectionSucceeded(ordinal: 1, dispatchID: "d1"))
     let effects = machine.apply(.user(.skip))
@@ -828,11 +754,14 @@ struct WorkflowRunMachineTests {
     #expect(machine.run.skippedOutputs == ["brief": "brief"])
     #expect(
       effects.contains(
-        .runAction(stepID: "transition", actionID: "handoff.transition", inputs: ["from": "source", "to": "receiver"])))
+        .runAction(
+          stepID: "transition", actionID: "local:prepare", inputs: ["briefing": "", "from": "source", "to": "receiver"])
+      ))
     #expect(machine.run.phase == .runningAction(stepID: "transition"))
     let launch = machine.apply(
       .actionCompleted(
-        stepID: "transition", outputs: ["kickoff_prompt": "Take over.", "artifact_path": "/x", "has_briefing": "false"])
+        stepID: "transition", outputs: ["output": .object(["kickoff_prompt": "Take over."])],
+        executionID: machine.run.actionExecutionID ?? "")
     )
     guard
       case .launch(let request)? = launch.first(where: { if case .launch = $0 { return true } else { return false } })
@@ -861,7 +790,9 @@ struct WorkflowRunMachineTests {
     #expect(machine.run.invocations.isEmpty)
     #expect(
       effects.contains(
-        .runAction(stepID: "transition", actionID: "handoff.transition", inputs: ["from": "source", "to": "receiver"])))
+        .runAction(
+          stepID: "transition", actionID: "local:prepare", inputs: ["briefing": "", "from": "source", "to": "receiver"])
+      ))
     #expect(!machine.run.deliversToCurrentRole())
     let (unskipped, _) = try makeMachine(
       Self.handoff, roles: ["source": .current(Self.authorPane), "receiver": .launch(Self.reviewerProfile, pane: nil)])
@@ -1107,7 +1038,7 @@ struct WorkflowRunMachineTests {
     _ = machine.apply(.watchdog(ordinal: 4, .attention(.agentGone(.sessionEnded))))
     let attention = try #require(machine.run.status.attention)
     #expect(attention.actions == [.relaunch, .skip, .cancel])
-    #expect(attention.message == "reviewer (Pi Reviewer)'s agent session ended before it delivered findings.")
+    #expect(attention.message == "reviewer (Pi Reviewer)'s agent session ended before it delivered round_findings.")
 
     let effects = machine.apply(.user(.relaunch))
     #expect(
@@ -1139,7 +1070,7 @@ struct WorkflowRunMachineTests {
       machine.deliver(ordinal: 4, selector: .token("TOKEN-4"), body: "# Findings", verdict: "clean").result
         == .failure(.stepNotExpecting))
     try deliverPersisted(&machine, ordinal: 5, token: "TOKEN-5", body: "# Findings", verdict: "clean")
-    #expect(machine.run.position.loop == nil)
+    #expect(machine.run.currentIteration == nil)
   }
 
   @Test func aGoneCurrentRoleOffersNoRelaunch() throws {
@@ -1169,20 +1100,21 @@ struct WorkflowRunMachineTests {
         return false
       })
     _ = machine.apply(.launchFailed(ordinal: 3, reason: "again"))
-    #expect(machine.skipConsequence(forStep: "launch") == .endsRun(dependent: "rounds"))
+    #expect(machine.skipConsequence(forStep: "launch") == .endsRun(dependent: "remember"))
     _ = machine.apply(.user(.skip))
-    #expect(machine.run.status == .skipped(step: "launch", dependent: "rounds"))
+    #expect(machine.run.status == .skipped(step: "launch", dependent: "remember"))
   }
 
   @Test func actionFailureOffersRetryAndCancelOnly() throws {
     var machine = try machineAfterFindings(verdict: "clean")
-    _ = machine.apply(.actionFailed(stepID: "context", reason: "git is unavailable"))
+    _ = machine.apply(
+      .actionFailed(stepID: "context", reason: "git is unavailable", executionID: machine.run.actionExecutionID ?? ""))
     let attention = try #require(machine.run.status.attention)
     #expect(attention.reason == .actionFailed("git is unavailable"))
     #expect(attention.actions == [.retry, .cancel])
     #expect(machine.apply(.user(.skip)).isEmpty)
     let retry = machine.apply(.user(.retry))
-    #expect(retry.contains(.runAction(stepID: "context", actionID: "git.context", inputs: ["root": "/repo"])))
+    #expect(retry.contains(.runAction(stepID: "context", actionID: "builtin:git.context", inputs: ["root": "/repo"])))
     #expect(machine.run.status == .running)
   }
 

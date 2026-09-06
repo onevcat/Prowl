@@ -24,241 +24,617 @@ nonisolated public enum WorkflowJSONSchema {
       "description": "Declarative multi-agent workflow run by Prowl (docs-ai 063 dsl-spec.md).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["schema", "id", "name", "steps"],
+      "required": [
+        "schema",
+        "id",
+        "name",
+        "steps"
+      ],
       "properties": {
-        "schema": { "const": "prowl.workflow/v1" },
-        "id": { "$ref": "#/$defs/workflowId" },
-        "name": { "type": "string", "minLength": 1 },
-        "description": { "type": "string" },
-        "icon": { "type": "string", "description": "SF Symbol name" },
+        "schema": {
+          "const": "prowl.workflow/v1"
+        },
+        "id": {
+          "$ref": "#/$defs/workflowId"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string"
+        },
+        "icon": {
+          "type": "string",
+          "description": "SF Symbol name"
+        },
         "inputs": {
           "type": "object",
-          "propertyNames": { "$ref": "#/$defs/slug" },
-          "additionalProperties": { "$ref": "#/$defs/input" }
+          "propertyNames": {
+            "$ref": "#/$defs/slug"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/input"
+          }
         },
         "roles": {
           "type": "object",
-          "propertyNames": { "$ref": "#/$defs/slug" },
-          "additionalProperties": { "$ref": "#/$defs/role" }
+          "propertyNames": {
+            "$ref": "#/$defs/slug"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/role"
+          }
         },
-        "steps": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/step" } }
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/step"
+          }
+        },
+        "state": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/slug"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "type",
+              "initial"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "type": {
+                "type": "string",
+                "pattern": "^(boolean|integer|number|string|array<.+>)$"
+              },
+              "initial": {}
+            }
+          }
+        }
       },
       "$defs": {
-        "slug": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$" },
-        "workflowId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$" },
-        "template": { "type": "string" },
+        "slug": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+        },
+        "workflowId": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$"
+        },
+        "template": {
+          "type": "string"
+        },
         "input": {
           "oneOf": [
-            { "$ref": "#/$defs/integerInput" },
-            { "$ref": "#/$defs/stringInput" },
-            { "$ref": "#/$defs/enumInput" }
+            {
+              "$ref": "#/$defs/integerInput"
+            },
+            {
+              "$ref": "#/$defs/stringInput"
+            },
+            {
+              "$ref": "#/$defs/enumInput"
+            }
           ]
         },
         "integerInput": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["type"],
+          "required": [
+            "type"
+          ],
           "properties": {
-            "type": { "const": "integer" },
-            "default": { "type": "integer" },
-            "min": { "type": "integer" },
-            "max": { "type": "integer" },
-            "prompt": { "type": "string" }
+            "type": {
+              "const": "integer"
+            },
+            "default": {
+              "type": "integer"
+            },
+            "min": {
+              "type": "integer"
+            },
+            "max": {
+              "type": "integer"
+            },
+            "prompt": {
+              "type": "string"
+            }
           }
         },
         "stringInput": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["type"],
+          "required": [
+            "type"
+          ],
           "properties": {
-            "type": { "const": "string" },
-            "default": { "type": "string" },
-            "prompt": { "type": "string" }
+            "type": {
+              "const": "string"
+            },
+            "default": {
+              "type": "string"
+            },
+            "prompt": {
+              "type": "string"
+            }
           }
         },
         "enumInput": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["type", "values"],
+          "required": [
+            "type",
+            "values"
+          ],
           "properties": {
-            "type": { "const": "enum" },
-            "values": {
-              "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 }
+            "type": {
+              "const": "enum"
             },
-            "default": { "type": "string" },
-            "prompt": { "type": "string" }
+            "values": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "default": {
+              "type": "string"
+            },
+            "prompt": {
+              "type": "string"
+            }
           }
         },
         "role": {
           "oneOf": [
-            { "$ref": "#/$defs/currentRole" },
-            { "$ref": "#/$defs/pickRole" },
-            { "$ref": "#/$defs/launchRole" }
+            {
+              "$ref": "#/$defs/currentRole"
+            },
+            {
+              "$ref": "#/$defs/pickRole"
+            },
+            {
+              "$ref": "#/$defs/launchRole"
+            }
           ]
         },
         "currentRole": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["source"],
-          "properties": { "source": { "const": "current" } }
+          "required": [
+            "source"
+          ],
+          "properties": {
+            "source": {
+              "const": "current"
+            }
+          }
         },
         "pickRole": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["source"],
-          "properties": { "source": { "const": "pick" } }
+          "required": [
+            "source"
+          ],
+          "properties": {
+            "source": {
+              "const": "pick"
+            }
+          }
         },
         "launchRole": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["source"],
+          "required": [
+            "source"
+          ],
           "properties": {
-            "source": { "const": "launch" },
-            "kind": { "const": "interactive" },
-            "agents": { "type": "array", "items": { "type": "string", "minLength": 1 } },
-            "suggest": { "$ref": "#/$defs/suggest" },
-            "bind": { "enum": ["ask", "auto"] },
-            "placement": { "enum": ["split", "tab"] },
-            "direction": { "enum": ["right", "left", "up", "down"] },
-            "background": { "type": "boolean" }
+            "source": {
+              "const": "launch"
+            },
+            "kind": {
+              "const": "interactive"
+            },
+            "agents": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "suggest": {
+              "$ref": "#/$defs/suggest"
+            },
+            "bind": {
+              "enum": [
+                "ask",
+                "auto"
+              ]
+            },
+            "placement": {
+              "enum": [
+                "split",
+                "tab"
+              ]
+            },
+            "direction": {
+              "enum": [
+                "right",
+                "left",
+                "up",
+                "down"
+              ]
+            },
+            "background": {
+              "type": "boolean"
+            }
           }
         },
         "suggest": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "agent": { "type": "string" },
-            "model": { "type": "string" },
-            "reasoning_effort": { "type": "string" },
-            "execution_mode": { "type": "string" }
+            "agent": {
+              "type": "string"
+            },
+            "model": {
+              "type": "string"
+            },
+            "reasoning_effort": {
+              "type": "string"
+            },
+            "execution_mode": {
+              "type": "string"
+            }
           }
         },
         "step": {
           "oneOf": [
-            { "$ref": "#/$defs/messageStep" },
-            { "$ref": "#/$defs/launchStep" },
-            { "$ref": "#/$defs/actionStep" },
-            { "$ref": "#/$defs/notifyStep" },
-            { "$ref": "#/$defs/closeStep" },
-            { "$ref": "#/$defs/repeatStep" }
-          ]
-        },
-        "loopStep": {
-          "oneOf": [
-            { "$ref": "#/$defs/messageStep" },
-            { "$ref": "#/$defs/actionStep" },
-            { "$ref": "#/$defs/notifyStep" },
-            { "$ref": "#/$defs/closeStep" }
+            {
+              "$ref": "#/$defs/messageStep"
+            },
+            {
+              "$ref": "#/$defs/launchStep"
+            },
+            {
+              "$ref": "#/$defs/actionStep"
+            },
+            {
+              "$ref": "#/$defs/notifyStep"
+            },
+            {
+              "$ref": "#/$defs/closeStep"
+            },
+            {
+              "$ref": "#/$defs/ifStep"
+            },
+            {
+              "$ref": "#/$defs/whileStep"
+            },
+            {
+              "$ref": "#/$defs/setStep"
+            },
+            {
+              "$ref": "#/$defs/breakStep"
+            },
+            {
+              "$ref": "#/$defs/continueStep"
+            }
           ]
         },
         "messageStep": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["id", "message"],
+          "required": [
+            "id",
+            "message"
+          ],
           "properties": {
-            "id": { "$ref": "#/$defs/slug" },
-            "title": { "$ref": "#/$defs/template" },
-            "message": { "$ref": "#/$defs/slug" },
-            "text": { "$ref": "#/$defs/template" },
-            "instruction": { "$ref": "#/$defs/template" },
-            "expect": { "$ref": "#/$defs/expect" }
+            "id": {
+              "$ref": "#/$defs/slug"
+            },
+            "title": {
+              "$ref": "#/$defs/template"
+            },
+            "message": {
+              "$ref": "#/$defs/slug"
+            },
+            "text": {
+              "$ref": "#/$defs/template"
+            },
+            "instruction": {
+              "$ref": "#/$defs/template"
+            },
+            "expect": {
+              "$ref": "#/$defs/expect"
+            }
           },
-          "oneOf": [{ "required": ["text"] }, { "required": ["instruction"] }]
+          "oneOf": [
+            {
+              "required": [
+                "text"
+              ]
+            },
+            {
+              "required": [
+                "instruction"
+              ]
+            }
+          ]
         },
         "launchStep": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["id", "launch", "prompt"],
+          "required": [
+            "id",
+            "launch",
+            "prompt"
+          ],
           "properties": {
-            "id": { "$ref": "#/$defs/slug" },
-            "title": { "$ref": "#/$defs/template" },
-            "launch": { "$ref": "#/$defs/slug" },
-            "prompt": { "$ref": "#/$defs/template" },
-            "skill": { "$ref": "#/$defs/workflowId" },
-            "expect": { "$ref": "#/$defs/expect" }
+            "id": {
+              "$ref": "#/$defs/slug"
+            },
+            "title": {
+              "$ref": "#/$defs/template"
+            },
+            "launch": {
+              "$ref": "#/$defs/slug"
+            },
+            "prompt": {
+              "$ref": "#/$defs/template"
+            },
+            "skill": {
+              "$ref": "#/$defs/workflowId"
+            },
+            "expect": {
+              "$ref": "#/$defs/expect"
+            }
           }
         },
         "actionStep": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["id", "action"],
+          "required": [
+            "id",
+            "action"
+          ],
           "properties": {
-            "id": { "$ref": "#/$defs/slug" },
-            "title": { "$ref": "#/$defs/template" },
-            "action": { "enum": ["handoff.transition", "handoff.checkpoint", "git.context"] },
+            "id": {
+              "$ref": "#/$defs/slug"
+            },
+            "title": {
+              "$ref": "#/$defs/template"
+            },
+            "action": {
+              "type": "string",
+              "pattern": "^(builtin:git\\.context|local:[a-z0-9][a-z0-9_-]{0,63})$"
+            },
             "with": {
               "type": "object",
-              "propertyNames": { "$ref": "#/$defs/slug" },
-              "additionalProperties": { "type": ["string", "number", "boolean"] }
+              "propertyNames": {
+                "$ref": "#/$defs/slug"
+              },
+              "additionalProperties": {}
             }
           }
         },
         "notifyStep": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["id", "notify"],
+          "required": [
+            "id",
+            "notify"
+          ],
           "properties": {
-            "id": { "$ref": "#/$defs/slug" },
-            "title": { "$ref": "#/$defs/template" },
-            "notify": { "$ref": "#/$defs/template" }
+            "id": {
+              "$ref": "#/$defs/slug"
+            },
+            "title": {
+              "$ref": "#/$defs/template"
+            },
+            "notify": {
+              "$ref": "#/$defs/template"
+            }
           }
         },
         "closeStep": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["id", "close"],
+          "required": [
+            "id",
+            "close"
+          ],
           "properties": {
-            "id": { "$ref": "#/$defs/slug" },
-            "title": { "$ref": "#/$defs/template" },
-            "close": { "$ref": "#/$defs/slug" }
-          }
-        },
-        "repeatStep": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["id", "repeat", "steps"],
-          "properties": {
-            "id": { "$ref": "#/$defs/slug" },
-            "title": { "$ref": "#/$defs/template" },
-            "repeat": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["max"],
-              "properties": {
-                "max": {
-                  "oneOf": [
-                    { "type": "integer", "minimum": 1, "maximum": 20 },
-                    {
-                      "type": "string",
-                      "pattern": "^\\s*\\{\\{\\s*inputs\\.[a-z0-9_-]+\\s*\\}\\}\\s*$"
-                    }
-                  ]
-                },
-                "until": {
-                  "type": "string",
-                  "pattern":
-                    "^outputs\\.[a-z0-9_-]+\\.verdict\\s*(==\\s*[a-z0-9_-]+|in\\s*\\[[^\\]]*\\])$"
-                }
-              }
+            "id": {
+              "$ref": "#/$defs/slug"
             },
-            "steps": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/loopStep" } }
+            "title": {
+              "$ref": "#/$defs/template"
+            },
+            "close": {
+              "$ref": "#/$defs/slug"
+            }
           }
         },
         "expect": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "output": { "$ref": "#/$defs/slug" },
-            "format": { "enum": ["markdown", "text", "json"] },
-            "sections": { "type": "array", "items": { "type": "string", "minLength": 1 } },
-            "verdict": {
-              "type": "array", "minItems": 2, "maxItems": 4, "uniqueItems": true, "items": { "$ref": "#/$defs/slug" }
+            "output": {
+              "$ref": "#/$defs/slug"
             },
-            "timeout": { "type": "string", "pattern": "^\\d+\\s*[smh]$" },
-            "on_timeout": { "enum": ["attention", "skip", "cancel"] },
-            "strict": { "type": "boolean" }
+            "format": {
+              "enum": [
+                "markdown",
+                "text",
+                "json"
+              ]
+            },
+            "sections": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "verdict": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 4,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/slug"
+              }
+            },
+            "timeout": {
+              "type": "string",
+              "pattern": "^\\d+\\s*[smh]$"
+            },
+            "on_timeout": {
+              "enum": [
+                "attention",
+                "skip",
+                "cancel"
+              ]
+            },
+            "strict": {
+              "type": "boolean"
+            }
           },
-          "dependentRequired": { "on_timeout": ["timeout"] }
+          "dependentRequired": {
+            "on_timeout": [
+              "timeout"
+            ]
+          }
+        },
+        "ifStep": {
+          "type": "object",
+          "required": [
+            "id",
+            "if",
+            "then"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/slug"
+            },
+            "title": {
+              "type": "string"
+            },
+            "if": {
+              "type": "string"
+            },
+            "then": {
+              "$ref": "#/$defs/stepList"
+            },
+            "else": {
+              "$ref": "#/$defs/stepList"
+            }
+          }
+        },
+        "whileStep": {
+          "type": "object",
+          "required": [
+            "id",
+            "while",
+            "steps"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/slug"
+            },
+            "title": {
+              "type": "string"
+            },
+            "while": {
+              "type": "string"
+            },
+            "steps": {
+              "$ref": "#/$defs/stepList"
+            },
+            "max_iterations": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "setStep": {
+          "type": "object",
+          "required": [
+            "id",
+            "set"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/slug"
+            },
+            "title": {
+              "type": "string"
+            },
+            "set": {
+              "type": "object",
+              "additionalProperties": {
+                "type": [
+                  "string",
+                  "boolean",
+                  "number"
+                ]
+              }
+            }
+          }
+        },
+        "breakStep": {
+          "type": "object",
+          "required": [
+            "id",
+            "break"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/slug"
+            },
+            "title": {
+              "type": "string"
+            },
+            "break": {
+              "const": true
+            }
+          }
+        },
+        "continueStep": {
+          "type": "object",
+          "required": [
+            "id",
+            "continue"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/slug"
+            },
+            "title": {
+              "type": "string"
+            },
+            "continue": {
+              "const": true
+            }
+          }
+        },
+        "stepList": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/step"
+          }
         }
       }
     }

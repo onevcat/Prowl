@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A906AC710000000000000003 /* OrderedCollections in Frameworks */ = {isa = PBXBuildFile; productRef = A906AC710000000000000004 /* OrderedCollections */; };
+		A906AC710000000000000001 /* workflows in Resources */ = {isa = PBXBuildFile; fileRef = A906AC710000000000000002 /* workflows */; };
 		A77100000000000000000003 /* ProwlCLIShared in Frameworks */ = {isa = PBXBuildFile; productRef = A77100000000000000000002 /* ProwlCLIShared */; };
 		A77100000000000000000004 /* ProwlCLIShared in Frameworks */ = {isa = PBXBuildFile; productRef = A77100000000000000000002 /* ProwlCLIShared */; };
 
@@ -41,6 +43,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		A906AC710000000000000002 /* workflows */ = {isa = PBXFileReference; lastKnownFileType = folder; name = workflows; path = Resources/workflows; sourceTree = "<group>"; };
 		D64162AD2F23CAF100260CA3 /* ghostty */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ghostty; path = Resources/ghostty; sourceTree = "<group>"; };
 		D64162AE2F23CAF100260CA3 /* terminfo */ = {isa = PBXFileReference; lastKnownFileType = folder; name = terminfo; path = Resources/terminfo; sourceTree = "<group>"; };
 		D64162AF2F23CAF100260CA3 /* git-wt */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "git-wt"; path = "Resources/git-wt"; sourceTree = "<group>"; };
@@ -111,6 +114,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D63D00F72F2A5EEE00018D05 /* DependenciesTestSupport in Frameworks */,
+				A906AC710000000000000003 /* OrderedCollections in Frameworks */,
 				A77100000000000000000004 /* ProwlCLIShared in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -122,6 +126,7 @@
 			isa = PBXGroup;
 			children = (
 				D6DOC0022F99000300000001 /* docs */,
+				A906AC710000000000000002 /* workflows */,
 				D6SKL0022F99000500000001 /* skills */,
 				D64162AD2F23CAF100260CA3 /* ghostty */,
 				D64162AF2F23CAF100260CA3 /* git-wt */,
@@ -208,6 +213,7 @@
 			name = supacodeTests;
 			packageProductDependencies = (
 				D63D00F62F2A5EEE00018D05 /* DependenciesTestSupport */,
+				A906AC710000000000000004 /* OrderedCollections */,
 				A77100000000000000000002 /* ProwlCLIShared */,
 			);
 			productName = supacodeTests;
@@ -270,6 +276,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D6DOC0012F99000300000001 /* docs in Resources */,
+				A906AC710000000000000001 /* workflows in Resources */,
 				D6SKL0012F99000500000001 /* skills in Resources */,
 				D64162B02F23CAF100260CA3 /* ghostty in Resources */,
 				D64162B12F23CAF100260CA3 /* terminfo in Resources */,
@@ -756,6 +763,7 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		A906AC710000000000000004 /* OrderedCollections */ = {isa = XCSwiftPackageProductDependency; productName = OrderedCollections; };
 		A77100000000000000000002 /* ProwlCLIShared */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A77100000000000000000001 /* XCLocalSwiftPackageReference "Shared" */;

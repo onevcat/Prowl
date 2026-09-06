@@ -40,14 +40,15 @@ struct WorkflowCommandHandlerTests {
       try FileManager.default.createDirectory(at: userWorkflows, withIntermediateDirectories: true)
       try FileManager.default.createDirectory(
         at: WorkflowSources.repoDirectory(root: repoRoot), withIntermediateDirectories: true)
-      try write("demo", to: userWorkflows.appending(path: "demo.yaml"))
+      try write("demo", to: userWorkflows.appending(path: "demo.pwlworkflow"))
       try write(
-        "repo-only", to: WorkflowSources.repoDirectory(root: repoRoot).appending(path: "repo.yaml"))
+        "repo-only", to: WorkflowSources.repoDirectory(root: repoRoot).appending(path: "repo.pwlworkflow"))
     }
 
     func write(_ id: String, to url: URL) throws {
+      try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
       try Data(WorkflowCommandHandlerTests.minimal.replacingOccurrences(of: "%ID%", with: id).utf8)
-        .write(to: url)
+        .write(to: url.appending(path: "workflow.yaml"))
     }
 
     func cleanUp() {

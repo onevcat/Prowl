@@ -75,7 +75,18 @@ struct WorkflowsSettingsFeature {
       guard let scan else { return [workflowDirectory] }
       let directories = [scan.userDirectory] + scan.repositories.map(\.directory)
       let files =
-        scan.entries.map(\.file.url) + scan.repositories.flatMap { $0.entries.map(\.file.url) }
+        (scan.entries + scan.repositories.flatMap(\.entries)).flatMap { entry in
+          [entry.file.url]
+            + (entry.file.snapshot?.files.keys.flatMap { path -> [URL] in
+              var urls: [URL] = []
+              var relative = path
+              while !relative.isEmpty {
+                urls.append(entry.file.url.appending(path: relative))
+                relative = relative.split(separator: "/").dropLast().joined(separator: "/")
+              }
+              return urls
+            } ?? [])
+        }
       var seen: Set<String> = []
       return (directories + files).filter { seen.insert($0.path(percentEncoded: false)).inserted }
     }
@@ -197,7 +208,7 @@ struct WorkflowsSettingsFeature {
         do {
           let url = try client.createWorkflow(state.workflowDirectory)
           reload(&state)
-          openURLClient.open(url)
+          openURLClient.open(url.appending(path: "workflow.yaml"))
           return .merge(
             watch(state),
             .send(.delegate(.notice(.workflowCreated(path: url.path(percentEncoded: false)))))

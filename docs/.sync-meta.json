@@ -1,6 +1,6 @@
 {
   "_comment": "Metadata for the docs/ manual. The last_synced_commit is the commit at which docs/ was last verified against the implementation; the sync-docs skill (.claude/skills/sync-docs/SKILL.md) diffs HEAD against it and updates this file. Committed to git on purpose so the baseline persists across sessions and machines. A dotfile + .json so a future docs website does not render it as a page.",
-  "last_synced_commit": "b485fbb4b26877533078897b4bc405ead2fb6423",
+  "last_synced_commit": "63c24a0918c1745c4adfa4b8bc01a1dfd2f9f6e3",
   "last_synced_date": "2026-09-06",
-  "note": "Verified Agent Island, deterministic runtime detection, recent-input close protection, workflow UI gating, Settings, and CLI changes since 25f26a3e. Corrected Island state-summary and visibility references, added persisted Island settings, updated repository-qualified workflow preference keys and gated launch documentation, and removed the stale built-in workflow order."
+  "note": "Verified workflow v1 bundles, default-on workflow UI, local action approval and execution, typed state/control flow, CLI test-action and schema commands, and the workflow skill. Intervening shared-module extraction and release build changes do not change operator behavior. Corrected workflow directories in Settings and Concepts."
 }

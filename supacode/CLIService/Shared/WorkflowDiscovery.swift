@@ -12,12 +12,19 @@ nonisolated public struct WorkflowSourceFile: Equatable, Sendable {
   public let definition: WorkflowDefinition?
   /// Parse diagnostics followed by validation diagnostics.
   public let diagnostics: [WorkflowDiagnostic]
+  public let snapshot: WorkflowBundleSnapshot?
+  public let actions: [String: WorkflowScriptAction]
 
-  public init(scope: WorkflowScope, url: URL, definition: WorkflowDefinition?, diagnostics: [WorkflowDiagnostic]) {
+  public init(
+    scope: WorkflowScope, url: URL, definition: WorkflowDefinition?, diagnostics: [WorkflowDiagnostic],
+    snapshot: WorkflowBundleSnapshot? = nil, actions: [String: WorkflowScriptAction] = [:]
+  ) {
     self.scope = scope
     self.url = url
     self.definition = definition
     self.diagnostics = diagnostics
+    self.snapshot = snapshot
+    self.actions = actions
   }
 
   public var id: String? { definition?.id }
@@ -81,7 +88,7 @@ nonisolated public enum WorkflowDiscovery {
       at: directory, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])
     return
       contents
-      .filter { fileExtensions.contains($0.pathExtension.lowercased()) && isRegularFile($0, fileManager) }
+      .filter { $0.pathExtension == "pwlworkflow" || fileExtensions.contains($0.pathExtension.lowercased()) }
       .sorted { $0.lastPathComponent < $1.lastPathComponent }
       .map { url in load(url: url, scope: scope, context: context) }
   }
@@ -96,15 +103,42 @@ nonisolated public enum WorkflowDiscovery {
 
   /// Parses and validates one file. A file that cannot be read is an `unreadable` error.
   public static func load(url: URL, scope: WorkflowScope, context: WorkflowValidationContext) -> WorkflowSourceFile {
-    let yaml: String
+    guard url.pathExtension == "pwlworkflow" else {
+      return WorkflowSourceFile(
+        scope: scope, url: url, definition: nil,
+        diagnostics: [
+          .error("unsupported_format", "Use a .pwlworkflow directory containing workflow.yaml (prowl.workflow/v1).")
+        ])
+    }
     do {
-      yaml = try String(contentsOf: url, encoding: .utf8)
+      let snapshot = try WorkflowBundleSnapshot.read(url)
+      guard let data = snapshot.files["workflow.yaml"], let yaml = String(data: data, encoding: .utf8) else {
+        throw WorkflowExpressionError.type("workflow.yaml must be UTF-8.")
+      }
+      var actions: [String: WorkflowScriptAction] = [:]
+      for path in snapshot.files.keys.sorted() {
+        let parts = path.split(separator: "/")
+        guard parts.count == 3, parts[0] == "actions", parts[2] == "action.yaml",
+          let data = snapshot.files[path], let source = String(data: data, encoding: .utf8)
+        else { continue }
+        let id = String(parts[1])
+        let action = try WorkflowScriptAction.parse(source, id: id, files: snapshot.files)
+        guard snapshot.files["actions/\(id)/\(action.entrypoint)"] != nil else {
+          throw WorkflowExpressionError.missing("Entrypoint for local:\(id): \(action.entrypoint)")
+        }
+        actions[id] = action
+      }
+      var validationContext = context
+      validationContext.localActions = actions
+      let parsed = parse(yaml, url: url, scope: scope, context: validationContext)
+      return WorkflowSourceFile(
+        scope: scope, url: url, definition: parsed.definition,
+        diagnostics: parsed.diagnostics, snapshot: snapshot, actions: actions)
     } catch {
       return WorkflowSourceFile(
         scope: scope, url: url, definition: nil,
-        diagnostics: [.error("unreadable", "Cannot read the file: \(error.localizedDescription)")])
+        diagnostics: [.error("bundle_invalid", "\(error)")])
     }
-    return parse(yaml, url: url, scope: scope, context: context)
   }
 
   public static func parse(

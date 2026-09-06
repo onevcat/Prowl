@@ -75,6 +75,10 @@ extension SupacodeApp {
     terminalManager: WorktreeTerminalManager,
     storeBox: SupacodeAppStoreBox
   ) -> WorkflowRuntimeInstallation {
+    do {
+      let count = try WorkflowActionProcessRegistry().recoverAbandonedProcesses()
+      if count > 0 { workflowLogger.notice("Terminated \(count) abandoned action process group(s).") }
+    } catch { workflowLogger.warning("Action process recovery failed: \(error)") }
     let bridge = makeWorkflowActivationBridge(terminalManager: terminalManager, storeBox: storeBox)
     let coordinatorBox = WorkflowCoordinatorBox()
     let reservations = WorkflowPaneReservations()
@@ -193,6 +197,22 @@ extension SupacodeApp {
     reservations: WorkflowPaneReservations = WorkflowPaneReservations()
   ) -> WorkflowRuntimeClient {
     WorkflowRuntimeClient(
+      observe: { run in
+        var values: [String: WorkflowJSONValue] = [
+          "branch": WorktreeBranchReader.branchName(of: run.context.worktree.rootURL).map(WorkflowJSONValue.string)
+            ?? .null
+        ]
+        for pane in run.bindings.values.compactMap(\.pane) {
+          let snapshot = makeWorkflowConditionSnapshot(
+            surfaceID: pane.surfaceID,
+            terminalManager: terminalManager, storeBox: storeBox)
+          values[pane.surfaceID.uuidString] = .object([
+            "exists": .boolean(snapshot.isLive),
+            "state": .string(AgentConditionEvidence.normalizedState(snapshot)),
+          ])
+        }
+        return values
+      },
       waitForRole: { surfaceID in
         await waitForWorkflowRole(
           surfaceID: surfaceID, terminalManager: terminalManager, storeBox: storeBox)

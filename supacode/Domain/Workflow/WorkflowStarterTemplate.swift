@@ -12,7 +12,7 @@ nonisolated enum WorkflowStarterTemplate {
   static func yaml(id: String) -> String {
     """
     # A Prowl Agent Workflow (schema prowl.workflow/v1).
-    # Check it with `prowl workflow validate <this file>`; a validated file is runnable from
+    # Check it with `prowl workflow validate <this bundle>`; a validated file is runnable from
     # the Command Palette ("Run Workflow: …"), the toolbar Agents menu, or `prowl workflow run`.
     # The bundled prowl-workflow skill (`prowl skills install prowl-workflow`) teaches an agent
     # to write and run these; `prowl workflow schema` prints the full reference.
@@ -61,12 +61,12 @@ nonisolated enum WorkflowStarterTemplate {
     """
   }
 
-  /// `new-workflow.yaml`, then `new-workflow-2.yaml`, … — the first name no file uses.
+  /// `new-workflow.pwlworkflow`, then `new-workflow-2.pwlworkflow`, … — the first name no file uses.
   static func uniqueFileURL(in directory: URL, fileManager: FileManager = .default) -> URL {
     var attempt = 1
     while true {
       let stem = attempt == 1 ? fileStem : "\(fileStem)-\(attempt)"
-      let url = directory.appending(path: "\(stem).yaml", directoryHint: .notDirectory)
+      let url = directory.appending(path: "\(stem).pwlworkflow", directoryHint: .isDirectory)
       if !fileManager.fileExists(atPath: url.path(percentEncoded: false)) { return url }
       attempt += 1
     }
@@ -76,7 +76,9 @@ nonisolated enum WorkflowStarterTemplate {
   static func write(in directory: URL, fileManager: FileManager = .default) throws -> URL {
     try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
     let url = uniqueFileURL(in: directory, fileManager: fileManager)
-    try Data(yaml(id: url.deletingPathExtension().lastPathComponent).utf8).write(to: url, options: .atomic)
+    try fileManager.createDirectory(at: url, withIntermediateDirectories: false)
+    try Data(yaml(id: url.deletingPathExtension().lastPathComponent).utf8)
+      .write(to: url.appending(path: "workflow.yaml"), options: .atomic)
     return url
   }
 }

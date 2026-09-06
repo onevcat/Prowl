@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| **Status** | Design for review; interview decisions accepted, detailed syntax proposed; not implemented |
+| **Status** | Implementation follows the accepted decisions and [017](017-action-bundle-implementation.md) |
 | **Date** | 2026-09-05 |
 | **Related** | [Workflow plan](000-plan.md), [current V1 specification](dsl-spec.md), [release order](release-plan.md) |
 
@@ -15,7 +15,7 @@ will later consume these general capabilities instead of dedicated handoff actio
 
 This is a proposed replacement for the affected V1 language surfaces, not a claim about
 current behavior. The existing runner, profile launch, delivery, and status UI remain reusable.
-Do not implement before the owner reviews the consolidated design. Do not expand R2b release
+The owner authorized implementation on 2026-09-06 and delegated the remaining decisions. Do not expand R2b release
 scope silently: action/language work now precedes handoff, with release assignment reassessed
 when the implementation slices are agreed.
 
@@ -82,7 +82,9 @@ an ordinary directory suitable for source control. Discovery retains app/user/re
 and the reserved `prowl.*` workflow namespace. Local action IDs derive from action directories;
 references are explicit: `local:collect-context` versus `builtin:git.context`.
 
-Use `prowl.workflow/v2` for the new workflow shape and `prowl.action/v1` for action declarations.
+Use `prowl.workflow/v1` for the bundle workflow and `prowl.action/v1` for action declarations.
+The owner confirmed on 2026-09-06 that workflows have never shipped: define the bundle format
+as v1 directly, without version migration or compatibility behavior.
 A script declaration names a literal interpreter and bundle-contained entrypoint; input values
 never become shell command fragments. Fixed arguments may be supported, without expression
 interpolation into executable selection. Resolve and record the interpreter at run preparation;

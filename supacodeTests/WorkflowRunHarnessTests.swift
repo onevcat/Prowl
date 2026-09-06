@@ -146,10 +146,14 @@ final class WorkflowRunHarness {
           outgoingAgent: machine.run.bindings.values.first { $0.source == .current }?.pane?.agent, now: now)
         do {
           let outputs = try await actions.execute(actionID: actionID, inputs: inputs, context: context)
-          try await apply(.actionCompleted(stepID: stepID, outputs: outputs))
+          try await apply(
+            .actionCompleted(stepID: stepID, outputs: outputs, executionID: machine.run.actionExecutionID ?? ""))
         } catch {
-          try await apply(.actionFailed(stepID: stepID, reason: "\(error)"))
+          try await apply(
+            .actionFailed(stepID: stepID, reason: "\(error)", executionID: machine.run.actionExecutionID ?? ""))
         }
+      case .yieldControl:
+        try await apply(.continueControlFlow)
       case .notify(let text):
         notifications.append(text)
       case .close(let role, _):
@@ -187,12 +191,14 @@ struct WorkflowRunHarnessTests {
 
   private struct FakeActions: WorkflowActionExecuting {
     func execute(
-      actionID: String, inputs: [String: String], context: WorkflowActionContext
-    ) throws -> [String: String] {
-      switch actionID {
-      case "git.context": ["path": "\(inputs["root"] ?? "")/.prowl/handoff/context.md", "branch": "feat/x"]
-      default: ["kickoff_prompt": "Take over.", "artifact_path": "/a", "has_briefing": "false"]
-      }
+      actionID: String, inputs: [String: WorkflowJSONValue], context: WorkflowActionContext
+    ) throws -> [String: WorkflowJSONValue] {
+      [
+        "output": .object([
+          "path": .string(context.directory.appending(path: "artifacts/context.md").path),
+          "branch": .string("feat/x"), "kickoff_prompt": .string("Take over."),
+        ]), "result_path": .string(context.directory.appending(path: "result.json").path),
+      ]
     }
   }
 
@@ -294,10 +300,11 @@ struct WorkflowRunHarnessTests {
     ).sorted()
     #expect(
       outputs == [
-        "brief.1.md", "brief.md", "disposition.3.md", "disposition.md", "findings.2.md", "findings.4.md", "findings.md",
+        "brief.1.md", "brief.md", "disposition.3.md", "disposition.md", "findings.2.md", "findings.md",
+        "round_findings.4.md", "round_findings.md",
       ])
     #expect(
-      try String(contentsOf: runDirectory.appending(path: "outputs/findings.md"), encoding: .utf8)
+      try String(contentsOf: runDirectory.appending(path: "outputs/round_findings.md"), encoding: .utf8)
         == "# Findings\nnone\n")
     let record = try harness.store.readRecord(runID: harness.run.id)
     #expect(record.run.status.state == "completed")
@@ -306,10 +313,13 @@ struct WorkflowRunHarnessTests {
       record.invocations.compactMap(\.activation?.dispatchID) == [
         "dispatch-1", "dispatch-2", "dispatch-3", "dispatch-4",
       ])
-    #expect(record.loop.count == 1)
+    #expect(record.state?["rounds"] == .integer(1))
     let log = try String(contentsOf: runDirectory.appending(path: "log.md"), encoding: .utf8)
     #expect(log.contains("Run finished: completed."))
-    #expect(!log.contains("TOKEN-"))
+    #expect(!log.contains("TOKEN-1"))
+    #expect(!log.contains("TOKEN-2"))
+    #expect(!log.contains("TOKEN-3"))
+    #expect(!log.contains("TOKEN-4"))
     #expect(try String(contentsOf: harness.store.runsDirectory.appending(path: ".gitignore"), encoding: .utf8) == "*\n")
   }
 
@@ -409,21 +419,15 @@ struct WorkflowRunHarnessTests {
     let root = try makeRoot()
     defer { try? FileManager.default.removeItem(at: root) }
     let harness = try await makeHarness(
-      WorkflowRunMachineTests.handoff, root: root, skipped: ["brief"], actions: WorkflowNativeActionRunner())
+      WorkflowRunMachineTests.handoff, root: root, skipped: ["brief"])
     #expect(harness.finished == .completed)
     #expect(harness.typedLines.isEmpty)
     #expect(harness.launches.count == 1)
-    #expect(harness.launches[0].prompt == HandoffCommandHandler.kickoffPrompt(hasBriefing: false))
+    #expect(try #require(harness.launches.first).prompt == "Take over.")
     #expect(!harness.launches[0].expectsDelivery)
     #expect(harness.notifications == ["Handed off to Pi Reviewer"])
-    #expect(
-      FileManager.default.fileExists(
-        atPath: root.appending(path: ".prowl/handoff/context.md").path(percentEncoded: false)))
-    #expect(
-      !FileManager.default.fileExists(
-        atPath: root.appending(path: ".prowl/handoff/current.md").path(percentEncoded: false)))
     let record = try harness.store.readRecord(runID: harness.run.id)
     #expect(record.skippedOutputs == ["brief": "brief"])
-    #expect(record.actions["transition"]?["has_briefing"] == "false")
+    #expect(record.actions["transition"]?["output"] != nil)
   }
 }

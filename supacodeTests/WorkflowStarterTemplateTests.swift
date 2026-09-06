@@ -25,10 +25,12 @@ struct WorkflowStarterTemplateTests {
     let first = try WorkflowStarterTemplate.write(in: directory)
     let second = try WorkflowStarterTemplate.write(in: directory)
 
-    #expect(first.lastPathComponent == "new-workflow.yaml")
-    #expect(second.lastPathComponent == "new-workflow-2.yaml")
-    let secondDefinition = WorkflowDocumentParser.parse(try String(contentsOf: second, encoding: .utf8)).definition
+    #expect(first.lastPathComponent == "new-workflow.pwlworkflow")
+    #expect(second.lastPathComponent == "new-workflow-2.pwlworkflow")
+    let secondDefinition = WorkflowDocumentParser.parse(
+      try String(contentsOf: second.appending(path: "workflow.yaml"), encoding: .utf8)
+    ).definition
     #expect(secondDefinition?.id == "new-workflow-2")
-    #expect(WorkflowStarterTemplate.uniqueFileURL(in: directory).lastPathComponent == "new-workflow-3.yaml")
+    #expect(WorkflowStarterTemplate.uniqueFileURL(in: directory).lastPathComponent == "new-workflow-3.pwlworkflow")
   }
 }

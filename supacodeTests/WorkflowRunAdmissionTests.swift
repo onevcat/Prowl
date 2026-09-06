@@ -2,6 +2,7 @@
 // Preflight of `prowl workflow run` (docs-ai 063 B3): definition selection, source and binding
 // legality, one run per pane, frozen plans, and the initial record.
 
+import ConcurrencyExtras
 import Foundation
 import GhosttyKit
 import ProwlCLIShared
@@ -48,8 +49,8 @@ struct WorkflowRunAdmissionTests {
         source: current
     steps:
       - id: ctx
-        action: git.context
-        with: { root: "{{ worktree.path }}" }
+        action: builtin:git.context
+        with: { root: "{{ context.worktree.path }}" }
     """
 
   private static let worktreeOnly = """
@@ -104,13 +105,17 @@ struct WorkflowRunAdmissionTests {
       ]
     }
 
+    nonisolated let nextRunID = LockIsolated(UUID(uuidString: "0BADCAFE-0000-4000-8000-000000000042")!)
+
     func cleanUp() {
       try? FileManager.default.removeItem(at: root)
     }
 
     func write(_ yaml: String, to name: String, scope: WorkflowScope = .repo) throws {
       let directory = scope == .repo ? WorkflowSources.repoDirectory(root: repoRoot) : userWorkflows
-      try Data(yaml.utf8).write(to: directory.appending(path: "\(name).yaml"))
+      let bundle = directory.appending(path: "\(name).pwlworkflow")
+      try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+      try Data(yaml.utf8).write(to: bundle.appending(path: "workflow.yaml"))
     }
 
     var worktree: Worktree {
@@ -176,7 +181,12 @@ struct WorkflowRunAdmissionTests {
             dedicatedHome: nil)
         },
         now: Date(timeIntervalSince1970: 1_760_000_000),
-        makeRunID: { UUID(uuidString: "0BADCAFE-0000-4000-8000-000000000042")! },
+        makeRunID: { [self] in
+          nextRunID.withValue { value in
+            defer { value = UUID() }
+            return value
+          }
+        },
         makeToken: { "TOKEN" })
     }
 
@@ -202,6 +212,33 @@ struct WorkflowRunAdmissionTests {
   private func code(_ result: Result<WorkflowAdmittedRun, WorkflowAdmissionFailure>) -> String? {
     if case .failure(let failure) = result { return failure.code }
     return nil
+  }
+
+  @Test func testActionTreatsJSONInputAsLiteralData() throws {
+    let fixture = try Fixture()
+    defer { fixture.cleanUp() }
+    try fixture.write(Self.contextOnly, to: "context")
+    let admitted = try WorkflowRunAdmission.admit(
+      WorkflowInput(
+        action: .run, workflow: "context", testAction: "builtin:git.context",
+        actionInputs: ["root": .string("{{ literal.directory }}")]),
+      source: fixture.source(pane: nil), snapshot: fixture.snapshot(), environment: fixture.environment
+    ).get()
+    #expect(
+      admitted.effects.contains(
+        .runAction(
+          stepID: "action-test", actionID: "builtin:git.context",
+          inputs: ["root": .string("{{ literal.directory }}")])))
+  }
+
+  @Test func sourceContextPreservesTheInitiatingTab() throws {
+    let fixture = try Fixture()
+    defer { fixture.cleanUp() }
+    try fixture.write(Self.contextOnly, to: "context")
+    let admitted = try admit(fixture, workflow: "context", pane: fixture.authorPane).get()
+    #expect(
+      try WorkflowExpression.evaluate("context.source.tab_id", values: admitted.session.run.stepValues)
+        == .string(fixture.tabID.uuidString))
   }
 
   @Test func aCompleteRequestFreezesEveryBindingAndWritesTheInitialRecord() throws {
