@@ -18,6 +18,7 @@ is the wire contract.
 ```bash
 prowl workflow list [target] [--target|--worktree|--tab|--pane <selector>] [--json]
 prowl workflow run <id|name> [source] [--role <role>=<binding>]... [--input <name>=<value>]... [--skip <step>]... [--json]
+prowl workflow read [resource-id] --run <run-id> --invocation <number> [--offset <bytes>] [--json]
 prowl workflow status [run-id] [--json]
 prowl workflow done (-|--file <path>) [--verdict <v>] [--token <t>] [--run <run-id> --step <step>] [--force] [--json]
 prowl workflow cancel <run-id> [--json]
@@ -26,11 +27,40 @@ prowl workflow schema [--json]
 ```
 
 Wire request: `command: "workflow"` with `action` (`list` | `run` | `status` | `done` |
-`cancel`), `target` (060 selector), and the action's fields — `workflow`, `roleBindings[]`,
+`cancel` | `read`), `target` (060 selector), and the action's fields — `workflow`, `roleBindings[]`,
 `inputValues[]`, `skippedSteps[]` (`run`); `runID` (`status`, `cancel`, `done`); `stepID`,
 `body`, `verdict`, `token`, `force` (`done`). The CLI reads the `done` body itself (stdin or
 `--file`, UTF-8, at most 4 MiB → `OUTPUT_TOO_LARGE` client-side) and fills `token` from
 `--token` or `$PROWL_WORKFLOW_TOKEN`.
+
+### `read` assigned content
+
+The socket request uses `action: "read"`, `runID` (UUID), `invocation` (positive
+ordinal), optional `contentResource` (default `instruction`), and `contentOffset`
+(default 0). The caller is resolved from socket peer ancestry. There is no read token
+and no arbitrary path argument. The pane must own this run and the invocation must
+be its role's last assigned task. Skipped/revoked activations and cancelled runs are
+rejected. Normal completion preserves the last assignment until reassignment,
+history cleanup, or app exit. Attribution is checked again after filesystem I/O.
+
+Successful `data` has `action: "read"`, `run`, `invocation`, `role`, `step`, `resource`,
+`body`, `encoding` (`utf-8` or `base64`), `resources` (objects with `id` and `name`),
+`offset`, `total_bytes`, and optional `next_offset`. Each page contains at most
+64 KiB. Repeat the same run/invocation/resource with `--offset <next_offset>` until
+that field is absent. Decode each page independently and concatenate its bytes.
+Resources expose assigned skills and explicitly passed output/action artifacts.
+A directory resource body is a JSON array of its contained file IDs and names.
+
+Read errors use the usual workflow error envelope:
+
+| Code | Condition |
+| --- | --- |
+| `SOURCE_REQUIRED` | No caller pane can be resolved. |
+| `STEP_NOT_EXPECTING` | Run/invocation does not match the current assignment, the task was skipped/revoked, or attribution changed during I/O. |
+| `WORKFLOW_FAILED` | Resource is unknown, history is missing/unsafe/unreadable, or offset is outside the resource. |
+
+Missing required CLI options and malformed numeric options fail argument parsing
+before a socket request. Reading never completes a task or delivers an output.
 
 ### Sources and precedence
 

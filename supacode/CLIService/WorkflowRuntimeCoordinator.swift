@@ -218,7 +218,8 @@ final class WorkflowRuntimeCoordinator {
       !session.run.status.isTerminal || session.run.status == .completed,
       let role = Self.role(of: pane, in: session),
       let invocation = session.run.invocations.last(where: { $0.role == role }),
-      invocation.ordinal == input.invocation, invocation.content != nil
+      invocation.ordinal == input.invocation, invocation.content != nil,
+      invocation.activation?.state != .skipped, invocation.activation?.state != .revoked
     else { return nil }
     return (session, invocation)
   }

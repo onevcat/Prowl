@@ -31,7 +31,9 @@ final class WorkflowSchemaTests: XCTestCase {
       ###"{"ok":true,"command":"workflow","schema_version":"prowl.cli.workflow.v1","data":{"action":"cancel",\###(Self.runFields)}}"###
     let done =
       ###"{"ok":true,"command":"workflow","schema_version":"prowl.cli.workflow.v1","data":{"action":"done","run":{\###(Self.runFields)},"delivery":{"state":"provisional","ordinal":1,"step":"brief","role":"author","output":\###(Self.output),"warnings":[{"code":"missing_sections","message":"missing ## Claims"}]}}}"###
-    for instance in [list, listWithoutWorktree, validate, schema, error, run, status, cancel, done] {
+    let read =
+      #"{"ok":true,"command":"workflow","schema_version":"prowl.cli.workflow.v1","data":{"action":"read","run":"0BADCAFE-0000-4000-8000-000000000042","invocation":1,"role":"author","step":"brief","resource":"instruction","body":"Read","encoding":"utf-8","resources":[],"offset":0,"next_offset":4,"total_bytes":8}}"#
+    for instance in [list, listWithoutWorktree, validate, schema, error, run, status, cancel, done, read] {
       try assertValidity(instance, expected: true)
     }
   }
@@ -48,6 +50,24 @@ final class WorkflowSchemaTests: XCTestCase {
     for instance in [badDeliveryState, badBindingSource, badState, missingRunDirectory] {
       try assertValidity(instance, expected: false)
     }
+  }
+
+  func testReadSchemaRejectsInvalidEncodingAndMissingInvocation() throws {
+    let payload = WorkflowCommandPayload.read(WorkflowContentPayload(
+      run: UUID().uuidString, invocation: 1, role: "author", step: "brief", resource: "resource-1",
+      body: "AA==", encoding: "base64", resources: [], offset: 4, totalBytes: 5))
+    let response = try CommandResponse(
+      ok: true, command: "workflow", schemaVersion: "prowl.cli.workflow.v1", data: RawJSON(encoding: payload))
+    let data = try JSONEncoder().encode(response)
+    let json = String(decoding: data, as: UTF8.self)
+    try assertValidity(json, expected: true)
+    try assertValidity(json.replacing("base64", with: "hex"), expected: false)
+    var object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    var fields = try XCTUnwrap(object["data"] as? [String: Any])
+    fields.removeValue(forKey: "invocation")
+    object["data"] = fields
+    let missingInvocation = try JSONSerialization.data(withJSONObject: object)
+    try assertValidity(String(decoding: missingInvocation, as: UTF8.self), expected: false)
   }
 
   func testRuntimePayloadsRoundTripThroughCodable() throws {

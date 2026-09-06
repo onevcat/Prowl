@@ -39,6 +39,23 @@ struct WorkflowHistoryFeatureTests {
     }
   }
 
+  @Test func successfulKeepAndExportClearPreviousErrors() async {
+    var state = WorkflowHistoryFeature.State()
+    state.error = "occupied"
+    let store = TestStore(initialState: state) { WorkflowHistoryFeature() }
+    await store.send(.keep(URL(filePath: "/fixture"), true)) { $0.isBusy = true }
+    await store.receive(\.loaded) {
+      $0.isBusy = false
+      $0.error = nil
+    }
+    await store.send(.failed("occupied")) { $0.error = "occupied" }
+    await store.send(.export(URL(filePath: "/fixture"))) { $0.isBusy = true }
+    await store.receive(.exported(nil)) {
+      $0.isBusy = false
+      $0.error = nil
+    }
+  }
+
   @Test func failedLoadShowsErrorAndClearsBusyState() async {
     let store = TestStore(initialState: WorkflowHistoryFeature.State()) {
       WorkflowHistoryFeature()

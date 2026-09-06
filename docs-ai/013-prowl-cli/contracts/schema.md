@@ -22,7 +22,7 @@ The bundle has one versioned success-or-error response schema for every wire com
 | `agents.wait` | `#/$defs/agentsWaitResponse` (errors may carry `#/$defs/agentsWaitErrorDetails`) |
 | `profiles` | `#/$defs/profilesResponse` |
 | `skills` (local-only) | `#/$defs/skillsResponse` |
-| `workflow` (`list`, `run`, `status`, `done`, `cancel` over the socket; `validate`/`schema` local-only) | `#/$defs/workflowResponse` |
+| `workflow` (`list`, `run`, `status`, `done`, `cancel`, `read` over the socket; `validate`/`schema` local-only) | `#/$defs/workflowResponse` |
 | `focus` | `#/$defs/focusResponse` |
 | `send` | `#/$defs/sendResponse` |
 | `key` | `#/$defs/keyResponse` |

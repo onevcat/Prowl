@@ -100,6 +100,7 @@ struct WorkflowHistoryFeature {
           }
         }
       case .loaded(let preview):
+        state.error = nil
         state.isBusy = false
         state.preview = preview
         return .none
@@ -128,6 +129,7 @@ struct WorkflowHistoryFeature {
           }
         }
       case .exported(let destination):
+        state.error = nil
         state.isBusy = false
         state.result = destination.map { "Exported to \($0.path). This ZIP is independent of history cleanup." }
         return .none

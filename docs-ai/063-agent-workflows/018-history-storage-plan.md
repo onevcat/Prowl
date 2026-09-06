@@ -123,3 +123,27 @@ allowing only the test socket enabled CLI transport. No model calls were used.
 Native approval behavior is covered by reducer tests. Live human script approval
 and model-driven instruction retrieval/output delivery remain manual acceptance
 steps. Existing user App processes were not replaced or restarted.
+
+## Review follow-up
+
+Admission must remove its unpublished run directory on failure while preserving any
+pre-existing run. Task reads must reject skipped and revoked activations. Log appends
+must reject hard links, and process ownership files must use the history containment
+checks. Complete the public read contract and socket/schema coverage. Successful history
+operations must clear stale errors. Add focused regression tests before each logic fix;
+these changes keep the existing storage and attribution design.
+
+The five logic regressions were reproduced before their fixes and then passed.
+Admission rollback now holds catalog coordination until publication or rollback and
+never removes an existing UUID. Tests cover rejected input, initial-record failure,
+and UUID collisions. Read tests reject skipped/revoked activations while retaining
+normal-completion access. Filesystem tests preserve external hard-link targets and
+reject a linked process registry. Reducer tests clear previous errors on successful
+Keep/Export. Public read documentation now includes wire fields, pagination, and
+errors; schema and mock-socket tests cover the contract.
+
+The full workflow suite passed 293 tests. CLI unit tests passed 277 tests and socket
+integration passed 111 tests. The change does not alter layout or toolbar controls;
+the stale-error fix is verified through reducer state transitions.
+
+`make check`, CLI build/smoke checks, and the final App build passed.

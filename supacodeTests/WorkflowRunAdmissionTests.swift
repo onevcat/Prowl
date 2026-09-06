@@ -2,6 +2,7 @@
 // Preflight of `prowl workflow run` (docs-ai 063 B3): definition selection, source and binding
 // legality, one run per pane, frozen plans, and the initial record.
 
+import ComposableArchitecture
 import ConcurrencyExtras
 import Foundation
 import GhosttyKit
@@ -106,6 +107,7 @@ struct WorkflowRunAdmissionTests {
     }
 
     nonisolated let nextRunID = LockIsolated(UUID())
+    nonisolated let beforeToken = LockIsolated<(@Sendable () throws -> Void)?>(nil)
 
     func cleanUp() {
       try? FileManager.default.removeItem(at: root)
@@ -187,7 +189,10 @@ struct WorkflowRunAdmissionTests {
             return value
           }
         },
-        makeToken: { "TOKEN" })
+        makeToken: { [self] in
+          try? beforeToken.value?()
+          return "TOKEN"
+        })
     }
 
     func source(pane: UUID?, isCaller: Bool = true) -> WorkflowRunSource {
@@ -484,6 +489,68 @@ struct WorkflowRunAdmissionTests {
     #expect(
       code(admit(fixture, workflow: "launch-only", pane: nil, isCaller: false))
         == CLIErrorCode.profileNotFound)
+  }
+
+  @Test func rejectedStartLeavesNoHistory() throws {
+    let fixture = try Fixture()
+    defer { fixture.cleanUp() }
+    try fixture.write(Self.review, to: "review")
+    let storage = WorkflowHistoryStorage(baseURL: fixture.root.appending(path: "history"))
+    withDependencies {
+      $0[WorkflowHistoryStorageKey.self] = storage
+    } operation: {
+      #expect(
+        code(
+          admit(
+            fixture, workflow: "review", pane: fixture.authorPane,
+            roles: ["partner=p2"], inputs: ["rounds=9"])) == CLIErrorCode.invalidArgument)
+    }
+    #expect(try storage.directories().isEmpty)
+  }
+
+  @Test func initialRecordFailureLeavesNoHistory() throws {
+    let fixture = try Fixture()
+    defer { fixture.cleanUp() }
+    try fixture.write(Self.review, to: "review")
+    let storage = WorkflowHistoryStorage(baseURL: fixture.root.appending(path: "history"))
+    let directory = storage.directory(
+      root: fixture.repoRoot, createdAt: fixture.environment.now, runID: fixture.nextRunID.value)
+    fixture.beforeToken.setValue {
+      try FileManager.default.createDirectory(
+        at: directory.appending(path: "run.json"), withIntermediateDirectories: true)
+    }
+    withDependencies {
+      $0[WorkflowHistoryStorageKey.self] = storage
+    } operation: {
+      #expect(
+        code(
+          admit(
+            fixture, workflow: "review", pane: fixture.authorPane, roles: ["partner=p2"]))
+          == CLIErrorCode.workflowFailed)
+    }
+    #expect(try storage.directories().isEmpty)
+  }
+
+  @Test func duplicateRunIDFailurePreservesExistingHistory() throws {
+    let fixture = try Fixture()
+    defer { fixture.cleanUp() }
+    try fixture.write(Self.review, to: "review")
+    let storage = WorkflowHistoryStorage(baseURL: fixture.root.appending(path: "history"))
+    let directory = storage.directory(
+      root: fixture.repoRoot, createdAt: fixture.environment.now, runID: fixture.nextRunID.value)
+    try storage.prepare(directory)
+    let marker = directory.appending(path: "existing.txt")
+    try Data("existing".utf8).write(to: marker)
+    withDependencies {
+      $0[WorkflowHistoryStorageKey.self] = storage
+    } operation: {
+      #expect(
+        code(
+          admit(
+            fixture, workflow: "review", pane: fixture.authorPane, roles: ["partner=p2"]))
+          == CLIErrorCode.workflowFailed)
+    }
+    #expect(try Data(contentsOf: marker) == Data("existing".utf8))
   }
 
   @Test func startTimeValidationMapsToInvalidArgument() throws {

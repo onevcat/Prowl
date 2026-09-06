@@ -159,6 +159,19 @@ struct WorkflowRunStoreTests {
     #expect(try String(contentsOf: victim, encoding: .utf8) == "original\n")
   }
 
+  @Test func hardLinkedLogCannotModifyAnExternalFile() throws {
+    let root = try makeRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let store = WorkflowRunStore(rootURL: root)
+    let runID = UUID()
+    try store.ensureLayout(runID: runID)
+    let victim = root.appending(path: "victim.txt")
+    try Data("original".utf8).write(to: victim)
+    try FileManager.default.linkItem(at: victim, to: store.directory(for: runID).appending(path: "log.md"))
+    #expect(throws: WorkflowRunStoreError.self) { try store.appendLog(runID: runID, line: "changed", now: Self.now) }
+    #expect(try String(contentsOf: victim, encoding: .utf8) == "original")
+  }
+
   @Test func recordDecodingToleratesUnknownKeys() throws {
     let root = try makeRoot()
     defer { try? FileManager.default.removeItem(at: root) }

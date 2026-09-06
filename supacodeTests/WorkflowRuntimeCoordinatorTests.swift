@@ -118,6 +118,20 @@ struct WorkflowRuntimeCoordinatorTests {
     #expect(await fixture.coordinator.read(request, callerPane: Self.authorCaller).ok == false)
   }
 
+  @Test func skippedAndRevokedTasksCannotBeRead() async throws {
+    let fixture = try Fixture()
+    defer { fixture.cleanUp() }
+    var session = try fixture.waitingSession()
+    try session.store.ensureLayout(runID: session.run.id)
+    let request = WorkflowInput(action: .read, invocation: 1, runID: session.run.id.uuidString)
+    session.run.invocations[0].activation?.state = .skipped
+    fixture.sessions = [session]
+    #expect(await fixture.coordinator.read(request, callerPane: Self.authorCaller).ok == false)
+    session.run.invocations[0].activation?.state = .revoked
+    fixture.sessions = [session]
+    #expect(await fixture.coordinator.read(request, callerPane: Self.authorCaller).ok == false)
+  }
+
   @Test func completedTaskRemainsReadableUntilReassignmentOrHistoryRemoval() async throws {
     let fixture = try Fixture()
     defer { fixture.cleanUp() }

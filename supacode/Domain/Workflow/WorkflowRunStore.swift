@@ -395,7 +395,7 @@ nonisolated struct WorkflowRunStore: Sendable {
   // MARK: log.md
 
   /// Appends through an `O_NOFOLLOW` descriptor: a `log.md` swapped for a symbolic link is
-  /// refused instead of followed, so the run can never append to a file outside its directory.
+  /// refused instead of followed. The descriptor must also have a single hard link.
   func appendLog(runID: UUID, line: String, now: Date) throws {
     let runDirectory = try containedRunDirectory(runID: runID)
     let logURL = runDirectory.appending(path: Self.logFileName, directoryHint: .notDirectory)
@@ -410,7 +410,9 @@ nonisolated struct WorkflowRunStore: Sendable {
     let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
     defer { try? handle.close() }
     var statistics = stat()
-    guard fstat(descriptor, &statistics) == 0, (statistics.st_mode & S_IFMT) == S_IFREG else {
+    guard fstat(descriptor, &statistics) == 0, (statistics.st_mode & S_IFMT) == S_IFREG,
+      statistics.st_nlink == 1
+    else {
       throw WorkflowRunStoreError.unsafePath(path)
     }
     var entry = ""

@@ -23,13 +23,15 @@ nonisolated struct WorkflowActionProcessRegistry: Sendable {
   }
 
   let directory: URL
+  private let storage: WorkflowHistoryStorage
   var processGroup: @Sendable (Int32) -> Int32 = { getpgid($0) }
   var terminateGroup: @Sendable (Int32) -> Bool = { kill(-$0, SIGKILL) == 0 }
 
   init(
     directory: URL = WorkflowHistoryStorage.configured.baseURL.appending(path: ".processes")
   ) {
-    self.directory = directory
+    storage = WorkflowHistoryStorage(baseURL: directory.deletingLastPathComponent())
+    self.directory = storage.baseURL.appending(path: directory.lastPathComponent)
   }
 
   func register(executionID: String, pid: Int32) throws {
@@ -38,19 +40,21 @@ nonisolated struct WorkflowActionProcessRegistry: Sendable {
     else {
       throw WorkflowActionError.failed("Cannot record action process ownership.")
     }
-    try FileManager.default.createDirectory(
-      at: directory, withIntermediateDirectories: true,
-      attributes: [.posixPermissions: 0o700])
-    try JSONEncoder().encode(Record(owner: owner, process: process))
-      .write(to: directory.appending(path: executionID + ".json"), options: .atomic)
+    try storage.prepare(directory)
+    let file = directory.appending(path: executionID + ".json")
+    try storage.validate(file, allowMissing: true)
+    try JSONEncoder().encode(Record(owner: owner, process: process)).write(to: file, options: .atomic)
   }
 
   func remove(executionID: String) {
     guard UUID(uuidString: executionID) != nil else { return }
-    try? FileManager.default.removeItem(at: directory.appending(path: executionID + ".json"))
+    let file = directory.appending(path: executionID + ".json")
+    guard (try? storage.validate(file)) != nil else { return }
+    try? FileManager.default.removeItem(at: file)
   }
 
   @discardableResult func recoverAbandonedProcesses() throws -> Int {
+    try storage.validate(directory, allowMissing: true)
     guard FileManager.default.fileExists(atPath: directory.path) else { return 0 }
     let files = try FileManager.default.contentsOfDirectory(
       at: directory,
@@ -58,12 +62,13 @@ nonisolated struct WorkflowActionProcessRegistry: Sendable {
     var terminated = 0
     for file in files where file.pathExtension == "json" {
       guard UUID(uuidString: file.deletingPathExtension().lastPathComponent) != nil,
-        let record = try? JSONDecoder().decode(Record.self, from: Data(contentsOf: file))
+        let record = try? JSONDecoder().decode(Record.self, from: storage.read(file))
       else { continue }
       guard !record.owner.isCurrent else { continue }
       if record.process.isCurrent, processGroup(record.process.pid) == record.process.pid {
         if terminateGroup(record.process.pid) { terminated += 1 }
       }
+      try storage.validate(file)
       try FileManager.default.removeItem(at: file)
     }
     return terminated

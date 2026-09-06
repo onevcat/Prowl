@@ -525,7 +525,7 @@ prowl workflow schema [--action] [--json]                          # workflow or
   instruction (default) or a resource ID returned with it. Prowl checks the caller pane,
   run, and invocation against the current task assignment. Reads need no token.
   Normal completion keeps the last task readable until reassignment, history cleanup,
-  or app exit; cancellation revokes access. `--json` returns `body`, `encoding`
+  or app exit; cancellation, Skip, and activation revocation revoke access. `--json` returns `body`, `encoding`
   (`utf-8` or `base64`), `resources`, `invocation`, `offset`, `next_offset`, and `total_bytes`.
   Reads return at most 64 KiB. Continue with `--offset <next_offset>` until `next_offset` is absent;
   decode each chunk according to its encoding and concatenate its bytes. Resources
@@ -598,7 +598,7 @@ prowl workflow cancel "$(printf '%s\n' "$run" | jq -r '.data.id')"
 ```
 
 JSON is `prowl.cli.workflow.v1` with `data.action` = `list` | `run` | `status` | `done` |
-`cancel` | `validate` | `schema`; `run`, `status`, and `cancel` share the run shape, `done`
+`cancel` | `read` | `validate` | `schema`; `run`, `status`, and `cancel` share the run shape, `done`
 nests it under `.data.run` beside `.data.delivery`.
 
 `prowl workflow test-action <workflow> <action> [source] --input-json '<JSON object>' [--json]`
