@@ -19,9 +19,10 @@ lockfile paths rather than searching restored dependency trees. Run CLI smoke/un
 checks sequentially within one parallel branch, because they share SwiftPM's build lock.
 
 Keep Xcode CAS caching. Do not add full DerivedData caching in this change: the measured
-Build directory adds 1.4 GB before compression, and existing repository caches already total
-10.4 GB. A local same-path experiment reduced build time from 43.7 s to 25.6 s by retaining
-incremental state, but archive transfer and fresh-checkout invalidation need separate trials.
+Build directory adds 1.4 GB before compression (291 MB with zstd), and existing repository
+caches already total 10.4 GB. A local same-path experiment reduced build time from 43.7 s
+to 25.6 s by retaining incremental state, but archive transfer and fresh-checkout
+invalidation need separate trials.
 
 The App compiles 532 Swift files as one module. With clean DerivedData and a warm CAS, a
 single comment change caused 22 Swift compilation misses plus one module-emission miss.
@@ -41,4 +42,9 @@ Six source-time regression tests pass. After updating modification times for all
 inputs and restoring 106 content-matched files, `swift build --product prowl` completed in
 0.57 s without source compilation. Touching one file without restoration compiled that
 file and emitted its module. `make check`, CLI build/smoke/unit/integration checks, and all 143 script tests pass.
-GitHub cross-run verification is pending.
+The App build, actionlint, and diff checks also pass. GitHub cache-population and reuse
+runs are linked in PR #773; source-time correctness tests remain part of every CI run.
+
+Performance decisions use repeated local comparisons with fixed paths and toolchains.
+Hosted CI validates cross-run cache restoration and test correctness; its wall times are
+not a controlled performance comparison because runner capacity varies.
