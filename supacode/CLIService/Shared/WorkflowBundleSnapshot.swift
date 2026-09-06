@@ -92,7 +92,7 @@ nonisolated public struct WorkflowBundleSnapshot: Equatable, Sendable {
       let target = destination.appending(path: path)
       try fileManager.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
       try data.write(to: target, options: .atomic)
-      try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: target.path)
+      try fileManager.setAttributes([.posixPermissions: 0o400], ofItemAtPath: target.path)
     }
     guard try Self.read(destination).fingerprint == fingerprint else {
       throw WorkflowExpressionError.type("Definition copy failed integrity verification.")

@@ -222,7 +222,7 @@ again. A run uses a fixed definition copy; changes to that copy invalidate execu
 Use `prowl workflow test-action <workflow-id> local:<id> --input-json '{}'` to exercise one
 approved action in a real run. Then run the workflow to test its agent interactions and data
 flow. Tests have the same side effects as normal execution. Each attempt records its request,
-result, metadata, stderr, and artifacts under the run's `actions/<step>/<execution UUID>/`.
+result, metadata, bounded raw stdout/stderr, and artifacts under the run's `actions/<step>/<execution UUID>/`.
 Retries create a fresh attempt and can repeat side effects. Cancel and timeout terminate the
 owned script process group; neither operation rolls back completed work.
 

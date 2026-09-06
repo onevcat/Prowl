@@ -10,6 +10,7 @@ nonisolated public struct WorkflowScriptExecutionResult: Equatable, Sendable {
 nonisolated public struct WorkflowScriptExecutionError: Error, Equatable, Sendable {
   public let code: String
   public let message: String
+  public let stdout: Data
   public let stderr: Data
 }
 
@@ -123,10 +124,10 @@ nonisolated public enum WorkflowScriptExecutor {
     return pid
   }
 
-  fileprivate static func failure(_ code: String, _ message: String, stderr: Data = Data())
+  fileprivate static func failure(_ code: String, _ message: String, stdout: Data = Data(), stderr: Data = Data())
     -> WorkflowScriptExecutionError
   {
-    WorkflowScriptExecutionError(code: code, message: message, stderr: stderr)
+    WorkflowScriptExecutionError(code: code, message: message, stdout: stdout, stderr: stderr)
   }
 }
 
@@ -207,8 +208,12 @@ nonisolated private final class ScriptPump {
       if now - started >= timeout { stop("timeout", at: now) }
       if let stopTime, now - stopTime >= 0.25 { kill(-pid, SIGKILL) }
       writeInput()
-      try drain(pipes.output[0], into: &stdout, kind: "stdout_limit", now: now)
-      try drain(pipes.error[0], into: &stderr, kind: "stderr_limit", now: now)
+      do {
+        try drain(pipes.output[0], into: &stdout, kind: "stdout_limit", now: now)
+        try drain(pipes.error[0], into: &stderr, kind: "stderr_limit", now: now)
+      } catch let error as WorkflowScriptExecutionError {
+        throw WorkflowScriptExecutor.failure(error.code, error.message, stdout: stdout, stderr: stderr)
+      }
       var status: Int32 = 0
       if exitStatus == nil, waitpid(pid, &status, WNOHANG) == pid {
         exitStatus = status
@@ -227,7 +232,9 @@ nonisolated private final class ScriptPump {
       ]
       _ = poll(&descriptors, nfds_t(descriptors.count), 20)
     }
-    if let stopReason { throw WorkflowScriptExecutor.failure(stopReason, "Action \(stopReason).", stderr: stderr) }
+    if let stopReason {
+      throw WorkflowScriptExecutor.failure(stopReason, "Action \(stopReason).", stdout: stdout, stderr: stderr)
+    }
     guard exitStatus == 0 else {
       let status = exitStatus ?? -1
       let signal = status & 0x7f
@@ -235,7 +242,7 @@ nonisolated private final class ScriptPump {
         signal == 0
         ? "Action exited with status \((status >> 8) & 0xff)."
         : "Action terminated by signal \(signal)."
-      throw WorkflowScriptExecutor.failure("exit", message, stderr: stderr)
+      throw WorkflowScriptExecutor.failure("exit", message, stdout: stdout, stderr: stderr)
     }
     return WorkflowScriptExecutionResult(stdout: stdout, stderr: stderr, exitStatus: 0)
   }
@@ -272,7 +279,7 @@ nonisolated private final class ScriptPump {
       }
       if count < 0 {
         if errno == EAGAIN || errno == EINTR { return }
-        throw WorkflowScriptExecutor.failure("pipe", "Cannot read action pipe.", stderr: stderr)
+        throw WorkflowScriptExecutor.failure("pipe", "Cannot read action pipe.")
       }
       let remaining = max(0, outputLimit - data.count)
       data.append(contentsOf: buffer.prefix(min(count, remaining)))

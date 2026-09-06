@@ -125,15 +125,18 @@ worktree as for `workflow run`. Tests create real runs and have real side effect
 the whole workflow to verify expressions, result scopes, and agent handoffs together.
 
 Each attempt uses a new UUID under `actions/<step>/<execution>/`, with `request.json`,
-`result.json` on success, `execution.json`, `stderr.log`, and `artifacts/`. Inspect these
-records after failures. Manual retry can repeat side effects; no automatic retry or rollback
+`result.json` on success, `execution.json`, bounded `stdout.log`/`stderr.log`, and `artifacts/`. Inspect these
+records after failures; raw stdout is retained even for invalid JSON or nonzero exit.
+Raw logs have the same local access as the request/result records. Manual retry can repeat side effects; no automatic retry or rollback
 is promised. Cancel/timeout terminates the owned script process group. It does not undo work
 already done or stop independent agent tasks.
 
 Default timeout: 30 seconds. Stdout and stderr: 1 MiB each. Request: 1 MiB. JSON depth: 64.
 Bundle: 16 MiB and 2048 files. Interpreter environment starts with PATH, HOME, TMPDIR, LANG,
 and LC_ALL when present. `backend.environment` names extra inherited variables; `PROWL_*`
-control variables are always stripped. Environment values are not recorded in the request.
+control variables are always stripped. Prowl sets `PYTHONDONTWRITEBYTECODE=1` so Python
+helper imports do not add cache files to the fixed bundle. Environment values are not
+recorded in the request.
 
 ## Built-in repository context
 

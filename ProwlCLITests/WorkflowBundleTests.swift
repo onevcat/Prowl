@@ -29,6 +29,9 @@ struct WorkflowBundleTests {
     }
     let snapshot = try WorkflowBundleSnapshot.read(root)
     try snapshot.copy(to: copy)
+    let permissions = try FileManager.default.attributesOfItem(atPath: copy.appending(path: "helper.txt").path)
+    #expect((permissions[.posixPermissions] as? NSNumber)?.intValue == 0o400)
+    #expect(throws: (any Error).self) { try Data("edit".utf8).write(to: copy.appending(path: "helper.txt")) }
     try Data("edit".utf8).write(to: root.appending(path: "helper.txt"))
     #expect(try WorkflowBundleSnapshot.read(copy).fingerprint == snapshot.fingerprint)
     #expect(try WorkflowBundleSnapshot.read(root).fingerprint != snapshot.fingerprint)

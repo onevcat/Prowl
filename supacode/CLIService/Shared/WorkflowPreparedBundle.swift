@@ -55,6 +55,9 @@ nonisolated public struct WorkflowPreparedBundle: Equatable, Sendable {
 
   public static func environment(for action: WorkflowScriptAction, inherited: [String: String]) -> [String: String] {
     let names = Set(["PATH", "HOME", "TMPDIR", "LANG", "LC_ALL"] + action.environment)
-    return inherited.filter { names.contains($0.key) && !$0.key.hasPrefix("PROWL_") }
+    var result = inherited.filter { names.contains($0.key) && !$0.key.hasPrefix("PROWL_") }
+    // Python helper imports must not add bytecode to the integrity-checked definition.
+    result["PYTHONDONTWRITEBYTECODE"] = "1"
+    return result
   }
 }

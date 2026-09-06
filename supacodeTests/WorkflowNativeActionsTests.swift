@@ -114,6 +114,81 @@ struct WorkflowNativeActionsTests {
     }
   }
 
+  @Test func pythonHelpersDoNotMutateTheFixedBundle() async throws {
+    let root = try makeRepo()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let source = root.appending(path: "python.pwlworkflow")
+    let action = source.appending(path: "actions/report")
+    try FileManager.default.createDirectory(at: action, withIntermediateDirectories: true)
+    try """
+    schema: prowl.workflow/v1
+    id: python
+    name: Python
+    steps: [{id: report, action: 'local:report'}]
+    """.write(to: source.appending(path: "workflow.yaml"), atomically: true, encoding: .utf8)
+    try """
+    schema: prowl.action/v1
+    name: Report
+    input_schema: {type: object}
+    output_schema: {type: object, properties: {count: {type: integer}}, required: [count]}
+    backend: {type: script, interpreter: /usr/bin/python3, entrypoint: main.py}
+    """.write(to: action.appending(path: "action.yaml"), atomically: true, encoding: .utf8)
+    // Apple Python redirects caches globally; use the standard CPython cache location.
+    try "import sys; sys.pycache_prefix = None; import json, helpers; print(json.dumps({'count': helpers.count}))"
+      .write(to: action.appending(path: "main.py"), atomically: true, encoding: .utf8)
+    try "count = 3\n".write(to: action.appending(path: "helpers.py"), atomically: true, encoding: .utf8)
+    let file = WorkflowDiscovery.load(url: source, scope: .repo, context: .init(scope: .repo))
+    let prepared = try WorkflowPreparedBundle(source: file, directory: root.appending(path: "copy"), environment: [:])
+    for _ in 0..<2 {
+      let invocation = WorkflowActionContext(
+        runID: UUID(), rootURL: root, roleAgents: [:], outgoingAgent: nil, now: Self.now, bundle: prepared)
+      let result = try await WorkflowNativeActionRunner().execute(
+        actionID: "local:report", inputs: [:], context: invocation)
+      #expect(result["output"] == .object(["count": .integer(3)]))
+      try prepared.verifyIntegrity()
+    }
+  }
+
+  @Test func failedScriptsRetainRawOutputWithoutPublishingAResult() async throws {
+    let root = try makeRepo()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let source = root.appending(path: "failure.pwlworkflow")
+    let action = source.appending(path: "actions/report")
+    try FileManager.default.createDirectory(at: action, withIntermediateDirectories: true)
+    try """
+    schema: prowl.workflow/v1
+    id: failure
+    name: Failure
+    steps: [{id: report, action: 'local:report'}]
+    """.write(to: source.appending(path: "workflow.yaml"), atomically: true, encoding: .utf8)
+    try """
+    schema: prowl.action/v1
+    name: Report
+    input_schema: {type: object}
+    output_schema: {type: object}
+    backend: {type: script, interpreter: /bin/sh, entrypoint: main.sh}
+    """.write(to: action.appending(path: "action.yaml"), atomically: true, encoding: .utf8)
+    for script in ["printf broken; printf diagnostic >&2", "printf broken; printf diagnostic >&2; exit 7"] {
+      try script.write(to: action.appending(path: "main.sh"), atomically: true, encoding: .utf8)
+      let file = WorkflowDiscovery.load(url: source, scope: .repo, context: .init(scope: .repo))
+      let prepared = try WorkflowPreparedBundle(
+        source: file, directory: root.appending(path: UUID().uuidString), environment: [:])
+      let invocation = WorkflowActionContext(
+        runID: UUID(), rootURL: root, roleAgents: [:], outgoingAgent: nil, now: Self.now, bundle: prepared)
+      await #expect(throws: (any Error).self) {
+        try await WorkflowNativeActionRunner().execute(actionID: "local:report", inputs: [:], context: invocation)
+      }
+      #expect(
+        (try? String(contentsOf: invocation.directory.appending(path: "stdout.log"), encoding: .utf8)) == "broken")
+      #expect(
+        (try? String(contentsOf: invocation.directory.appending(path: "stderr.log"), encoding: .utf8)) == "diagnostic")
+      #expect(!FileManager.default.fileExists(atPath: invocation.directory.appending(path: "result.json").path))
+      for name in ["request.json", "execution.json"] {
+        #expect(FileManager.default.fileExists(atPath: invocation.directory.appending(path: name).path))
+      }
+    }
+  }
+
   @Test func nativeActionRejectsOutsideRootAndRemovedActions() async throws {
     let root = try makeRepo()
     defer { try? FileManager.default.removeItem(at: root) }

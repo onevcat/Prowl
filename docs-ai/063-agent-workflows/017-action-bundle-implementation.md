@@ -41,13 +41,18 @@ This amendment resolves the specification details left open in 015.
   arguments are literal strings. Resolve executable paths before a run starts.
 - Base environment contains PATH, HOME, TMPDIR, LANG, and LC_ALL when present. Explicit
   inherited variable names may add values; PROWL_* control variables are always removed.
-  Request and metadata records contain no inherited environment values.
-- Each action attempt has a UUID, request/result/metadata/stderr files and an artifacts
-  directory. Completions must match that UUID; failures expose manual retry/cancel.
+  Set `PYTHONDONTWRITEBYTECODE=1` to prevent normal Python helper imports from changing
+  the fixed bundle. Request and metadata records contain no inherited environment values.
+- Each action attempt has a UUID, request/result/metadata/raw stdout/stderr files and an artifacts
+  directory. Bounded raw stdout survives malformed JSON and nonzero exit; only validated
+  success produces `result.json`. Completions must match that UUID; failures expose manual retry/cancel.
 - Script-bearing bundles require native UI approval of canonical source plus SHA-256
   fingerprint. Reject symlinks, special files, and colliding paths. Include helpers/assets.
   Approval cannot be granted through CLI. A reviewed candidate becomes the run's fixed copy;
-  verify its integrity before each action. Mutation is an integrity failure.
+  verify its integrity before each action. Copied files are owner-read-only. Directories
+  retain owner write access for normal run cleanup; content checks detect replacement or
+  added files. This is not isolation from code running as the same user. Mutation is an
+  integrity failure.
 - UI review shows source, changed files, interpreter/entrypoint declarations, and local-user
   permissions. Review and approve are explicit actions. Approval does not start a run.
 - Cancellation and timeout terminate the owned process group, then force termination after

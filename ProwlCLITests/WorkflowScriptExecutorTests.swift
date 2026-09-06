@@ -23,6 +23,7 @@ struct WorkflowScriptExecutorTests {
       } catch let error as WorkflowScriptExecutionError {
         #expect(error.code == expected)
         if expected == "exit" { #expect(error.message == "Action exited with status 7.") }
+        if expected == "stdout_limit" { #expect(error.stdout.count == 1024) }
       } catch { Issue.record("Unexpected error: \(error)") }
     }
   }

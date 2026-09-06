@@ -83,6 +83,7 @@ nonisolated struct WorkflowNativeActionRunner: WorkflowActionExecuting {
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
     let requestData = try encoder.encode(request)
     try requestData.write(to: directory.appending(path: "request.json"), options: .atomic)
+    try Data().write(to: directory.appending(path: "stdout.log"), options: .atomic)
     try Data().write(to: directory.appending(path: "stderr.log"), options: .atomic)
     try record(context, state: "running", detail: nil)
     do {
@@ -103,6 +104,7 @@ nonisolated struct WorkflowNativeActionRunner: WorkflowActionExecuting {
       return ["output": output, "result_path": .string(resultURL.path)]
     } catch {
       if let processError = error as? WorkflowScriptExecutionError {
+        try? processError.stdout.write(to: directory.appending(path: "stdout.log"), options: .atomic)
         try? processError.stderr.write(to: directory.appending(path: "stderr.log"), options: .atomic)
       }
       try? record(
@@ -151,6 +153,7 @@ nonisolated struct WorkflowNativeActionRunner: WorkflowActionExecuting {
       onSpawn: { pid in
         try WorkflowActionProcessRegistry().register(executionID: context.executionID, pid: pid)
       })
+    try result.stdout.write(to: context.directory.appending(path: "stdout.log"), options: .atomic)
     try result.stderr.write(to: context.directory.appending(path: "stderr.log"), options: .atomic)
     let output = try JSONDecoder().decode(WorkflowJSONValue.self, from: result.stdout)
     try action.validateOutput(output)

@@ -337,7 +337,8 @@ A script receives one JSON object on stdin: `protocol`, typed `input`, and `cont
 exit zero and emit one schema-conforming object on stdout. Stderr is diagnostic. Request,
 stdout, and stderr each have a 1 MiB limit; JSON nesting is limited to 64. Base environment:
 PATH, HOME, TMPDIR, LANG, LC_ALL; named inherited variables may extend it. Strip PROWL_* control
-variables. Environment values are not included in request or execution metadata.
+variables. Set `PYTHONDONTWRITEBYTECODE=1` to keep Python helper imports from writing
+bytecode into the fixed bundle. Environment values are not included in request or execution metadata.
 
 Native approval binds canonical source location to the whole content fingerprint. The review
 sheet shows source, scripts, changed files (including removals), and permission implications.
@@ -364,6 +365,7 @@ actions/<step>/<execution UUID>/
   request.json
   result.json                       Only after validated success
   execution.json                    Started/final state and failure detail
+  stdout.log                        Bounded raw script output, including failed attempts
   stderr.log
   artifacts/
 ```

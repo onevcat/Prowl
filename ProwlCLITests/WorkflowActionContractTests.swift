@@ -25,6 +25,19 @@ struct WorkflowActionContractTests {
     timeout: 30s
     """
 
+  @Test func scriptEnvironmentDisablesBytecodeAndKeepsOnlyAllowedValues() throws {
+    let source = yaml.replacing("entrypoint: main.py", with:
+      "entrypoint: main.py\n  environment: [SELECTED_VALUE, PYTHONDONTWRITEBYTECODE]")
+    let action = try WorkflowScriptAction.parse(source, id: "count")
+    let environment = WorkflowPreparedBundle.environment(for: action, inherited: [
+      "PATH": "/usr/bin:/bin", "SELECTED_VALUE": "included", "UNSELECTED_VALUE": "excluded",
+      "PROWL_WORKFLOW_TOKEN": "excluded", "PYTHONDONTWRITEBYTECODE": "",
+    ])
+    #expect(environment == [
+      "PATH": "/usr/bin:/bin", "SELECTED_VALUE": "included", "PYTHONDONTWRITEBYTECODE": "1",
+    ])
+  }
+
   @Test func validatesTypesWithoutApplyingDefaults() throws {
     let contract = try WorkflowScriptAction.parse(yaml, id: "count")
     try contract.validateInput(.object(["count": .integer(3)]))
