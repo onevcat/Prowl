@@ -120,6 +120,35 @@ struct WorkflowHistoryRetentionTests {
     #expect(preview.protectedEntries.count == 2)
   }
 
+  @Test func missingOrChangedHistoryMetadataPreventsDeletion() throws {
+    let base = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: base) }
+    let history = WorkflowHistory(storage: .init(baseURL: base))
+    let directory = try write(history, days: 40)
+    let file = directory.appending(path: "run.json")
+    let data = try Data(contentsOf: file)
+    try data.write(to: file, options: .atomic)
+    #expect(try history.preview(now: now).candidates.isEmpty)
+    try FileManager.default.removeItem(at: directory.appending(path: WorkflowHistoryMetadata.fileName))
+    #expect(try history.preview(now: now).candidates.isEmpty)
+  }
+
+  @Test func failedRecordPublicationInvalidatesThePreviousHeader() throws {
+    let base = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: base) }
+    let history = WorkflowHistory(storage: .init(baseURL: base))
+    let directory = try write(history, days: 40)
+    let file = directory.appending(path: "run.json")
+    try FileManager.default.removeItem(at: file)
+    try FileManager.default.createDirectory(at: file, withIntermediateDirectories: false)
+    let metadata = WorkflowHistoryMetadata(
+      id: UUID(uuidString: directory.lastPathComponent)!, name: "Test", root: "/project", state: "running",
+      startedAt: now, finishedAt: nil)
+    #expect(throws: (any Error).self) { try metadata.write(record: Data(), directory: directory, storage: history.storage) }
+    #expect(!FileManager.default.fileExists(atPath: directory.appending(path: WorkflowHistoryMetadata.fileName).path))
+    #expect(try history.preview(now: now).candidates.isEmpty)
+  }
+
   private func entry(days: Double, protection: String? = nil) -> WorkflowHistoryEntry {
     WorkflowHistoryEntry(
       id: UUID(), directory: URL(filePath: "/test"), name: "Run", root: "/project", state: "completed",
@@ -137,7 +166,9 @@ struct WorkflowHistoryRetentionTests {
               "started_at": date.ISO8601Format(), "finished_at": date.ISO8601Format()],
       "worktree": ["path": "/project"],
     ]
-    try JSONSerialization.data(withJSONObject: object).write(to: directory.appending(path: "run.json"))
+    try WorkflowHistoryMetadata(
+      id: id, name: "Test", root: "/project", state: state, startedAt: date, finishedAt: date
+    ).write(record: JSONSerialization.data(withJSONObject: object), directory: directory, storage: history.storage)
     try Data("artifact".utf8).write(to: directory.appending(path: "output.md"))
     return directory
   }

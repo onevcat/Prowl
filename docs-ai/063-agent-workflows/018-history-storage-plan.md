@@ -86,7 +86,7 @@ through action teardown. Transient action-process ownership records use the hidd
 Task content is in memory and bound to the reducer's current pane owner, run, and
 invocation number. The CLI rechecks attribution after I/O. Resource IDs expose only explicitly
 passed output/action paths and assigned skills. Directory resources return file lists;
-64 KiB pages preserve binary data through base64 when needed. A task input cannot grant
+256 KiB pages preserve binary data through base64 when needed. A task input cannot grant
 run metadata or another role's instructions. Cancellation revokes access.
 
 File access and Unix-socket access are separate sandbox permissions. Prowl uses the
@@ -147,3 +147,25 @@ integration passed 111 tests. The change does not alter layout or toolbar contro
 the stale-error fix is verified through reducer state transitions.
 
 `make check`, CLI build/smoke checks, and the final App build passed.
+
+## Larger payloads and independent history metadata
+
+Use fixed limits of 16 MiB for deliveries and action input/stdout, 4 MiB for stderr,
+256 KiB content pages, 128 KiB launch prompts, and 64 MiB/8192 bundle entries.
+Allow JSON transport overhead separately. Keep the 5 GiB soft history budget.
+
+Persist a bounded `history.json` independently of the full `run.json`. Invalidate
+old history metadata before replacing the record, then publish new metadata with
+its record file identity. Missing metadata or a changed record remains protected;
+no legacy reads or migration is added. History selection/export eligibility must
+not load action outputs. Test large valid outputs through preview, export, and
+expiry, plus interrupted publication and record changes.
+
+Validation passed 313 App workflow/socket tests, 282 CLI unit tests, and 112 CLI
+integration tests. Valid 1 MiB and 16 MiB JSON action outputs remain visible,
+exportable, and eligible for expiry. Tests also cover missing/stale metadata,
+failed record publication, full-size delivery escaping, independent stderr limits,
+larger bundle limits, and 128 KiB prompts. CLI build/smoke and `make check` passed.
+The JSON frame limit is 96 MiB + 64 KiB, allowing sixfold escaping plus envelope
+fields while keeping application payload validation at 16 MiB.
+The final App build passed with no warnings.

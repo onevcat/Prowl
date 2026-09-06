@@ -30,7 +30,7 @@ Wire request: `command: "workflow"` with `action` (`list` | `run` | `status` | `
 `cancel` | `read`), `target` (060 selector), and the action's fields — `workflow`, `roleBindings[]`,
 `inputValues[]`, `skippedSteps[]` (`run`); `runID` (`status`, `cancel`, `done`); `stepID`,
 `body`, `verdict`, `token`, `force` (`done`). The CLI reads the `done` body itself (stdin or
-`--file`, UTF-8, at most 4 MiB → `OUTPUT_TOO_LARGE` client-side) and fills `token` from
+`--file`, UTF-8, at most 16 MiB → `OUTPUT_TOO_LARGE` client-side) and fills `token` from
 `--token` or `$PROWL_WORKFLOW_TOKEN`.
 
 ### `read` assigned content
@@ -46,7 +46,7 @@ history cleanup, or app exit. Attribution is checked again after filesystem I/O.
 Successful `data` has `action: "read"`, `run`, `invocation`, `role`, `step`, `resource`,
 `body`, `encoding` (`utf-8` or `base64`), `resources` (objects with `id` and `name`),
 `offset`, `total_bytes`, and optional `next_offset`. Each page contains at most
-64 KiB. Repeat the same run/invocation/resource with `--offset <next_offset>` until
+256 KiB. Repeat the same run/invocation/resource with `--offset <next_offset>` until
 that field is absent. Decode each page independently and concatenate its bytes.
 Resources expose assigned skills and explicitly passed output/action artifacts.
 A directory resource body is a JSON array of its contained file IDs and names.

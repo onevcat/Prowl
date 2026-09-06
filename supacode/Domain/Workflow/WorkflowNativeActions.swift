@@ -83,7 +83,10 @@ nonisolated struct WorkflowNativeActionRunner: WorkflowActionExecuting {
       "input": WorkflowJSON.object(inputs), "context": snapshot,
     ])
     let encoder = JSONEncoder()
-    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+    encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+    guard try encoder.encode(WorkflowJSON.object(inputs)).count <= WorkflowSizeLimits.payload else {
+      throw WorkflowActionError.failed("Action input exceeds 16 MiB.")
+    }
     let requestData = try encoder.encode(request)
     try requestData.write(to: directory.appending(path: "request.json"), options: .atomic)
     try Data().write(to: directory.appending(path: "stdout.log"), options: .atomic)

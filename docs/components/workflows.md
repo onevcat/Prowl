@@ -280,3 +280,29 @@ retrofit new sandbox grants into it. No project-local staging is automatic.
 For isolated Debug acceptance, `PROWL_DEBUG_DATA_DIRECTORY` selects temporary
 settings, cache, and workflow-history storage. Use a separate Debug process and
 matching `PROWL_CLI_SOCKET`. Release builds ignore this directory override.
+
+### Fixed size limits
+
+| Content | Limit |
+| --- | --- |
+| Action input and `test-action --input-json` | 16 MiB |
+| Action stdout | 16 MiB |
+| Action stderr | 4 MiB |
+| `workflow done` body (CLI and App) | 16 MiB of UTF-8 |
+| `workflow read` page | 256 KiB; continue with `next_offset` |
+| Complete launch prompt, including protocol text | 128 KiB |
+| Frozen workflow bundle | 64 MiB / 8192 entries |
+| `history.json` | 64 KiB |
+| JSON socket frame / serialized action request | 96 MiB + 64 KiB, including escaping and envelope fields |
+
+Action input is measured as compact JSON; request context and JSON escaping have
+separate transport headroom. These are Prowl limits; an agent runtime can impose
+a smaller launch limit. Larger results should use action artifacts. Individual
+artifacts and complete runs have no hard byte cap; the 5 GiB history budget remains soft.
+
+`history.json` holds bounded display and lifecycle fields, separately from full
+action/state data in `run.json`. Long workflow names are shortened only in history
+metadata. History scans check the record's file identity without decoding its
+contents. Missing metadata or a changed record protects the run from cleanup and
+export until it can be inspected. Record replacement invalidates the old metadata
+before publishing the new pair. No old-history migration or fallback is performed.

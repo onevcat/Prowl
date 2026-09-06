@@ -45,7 +45,7 @@ struct WorkflowHistoryStorageTests {
     let storage = WorkflowHistoryStorage(baseURL: base)
     try storage.prepare(storage.baseURL)
     let file = storage.baseURL.appending(path: "artifact.bin")
-    let bytes = Data((0..<150_000).map { UInt8($0 % 256) })
+    let bytes = Data((0..<(WorkflowSizeLimits.contentPage * 2 + 123)).map { UInt8($0 % 256) })
     try bytes.write(to: file)
     let first = try storage.readChunk(file, offset: 0)
     let second = try storage.readChunk(file, offset: first.nextOffset!)
@@ -53,7 +53,7 @@ struct WorkflowHistoryStorageTests {
     #expect(first.data + second.data + third.data == bytes)
     #expect(third.nextOffset == nil)
     #expect(throws: (any Error).self) { try storage.readChunk(file, offset: -1) }
-    #expect(throws: (any Error).self) { try storage.readChunk(file, offset: 150_001) }
+    #expect(throws: (any Error).self) { try storage.readChunk(file, offset: Int64(bytes.count + 1)) }
   }
 
   @Test func occupancyCoordinatesAcrossProcesses() throws {

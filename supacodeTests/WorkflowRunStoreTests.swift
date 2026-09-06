@@ -43,6 +43,28 @@ struct WorkflowRunStoreTests {
     return machine.run
   }
 
+  @Test(arguments: [1, 16]) func largeActionRecordsRemainExportableAndExpire(mebibytes: Int) throws {
+    let root = try makeRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let storage = WorkflowHistoryStorage(baseURL: root.appending(path: "history"))
+    var run = try makeRun(root: root)
+    run.status = .completed
+    run.finishedAt = Self.now
+    let json = Data(("\"" + String(repeating: "x", count: mebibytes * 1024 * 1024 - 2) + "\"").utf8)
+    run.actionOutputs["large"] = ["result": try JSONDecoder().decode(WorkflowJSONValue.self, from: json)]
+    let directory = storage.directory(root: root, createdAt: Self.now, runID: run.id)
+    let store = WorkflowRunStore(rootURL: root, directory: directory, storage: storage)
+    try store.ensureLayout(runID: run.id)
+    try store.writeRecord(WorkflowRunRecord(run: run))
+    let history = WorkflowHistory(storage: storage)
+    let later = Self.now.addingTimeInterval(31 * 86400)
+    #expect(try history.preview(now: later).candidates.map(\.id) == [run.id])
+    let zip = root.appending(path: "export.zip")
+    try history.export(directory, to: zip)
+    #expect(try history.cleanup(candidates: [run.id], now: later).removed == [run.id])
+    #expect(FileManager.default.fileExists(atPath: zip.path))
+  }
+
   @Test func layoutCreatesPersonalHistoryWithoutProjectRuntimeData() throws {
     let root = try makeRoot()
     defer { try? FileManager.default.removeItem(at: root) }

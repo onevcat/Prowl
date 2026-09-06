@@ -57,3 +57,26 @@ struct WorkflowScriptExecutorTests {
     #expect(errno == ESRCH)
   }
 }
+
+extension WorkflowScriptExecutorTests {
+  @Test func acceptsSixteenMiBRequestAndStdout() async throws {
+    let bytes = Data(repeating: 120, count: 16 * 1024 * 1024)
+    let result = try await WorkflowScriptExecutor.run(
+      .init(executable: "/bin/cat", arguments: [], directory: FileManager.default.temporaryDirectory,
+            environment: [:]).limits(timeout: 30), request: bytes)
+    #expect(result.stdout == bytes)
+  }
+
+  @Test func stderrStopsAtFourMiB() async throws {
+    do {
+      _ = try await WorkflowScriptExecutor.run(
+        .init(executable: "/bin/sh", arguments: ["-c", "yes diagnostic >&2"],
+              directory: FileManager.default.temporaryDirectory, environment: ["PATH": "/usr/bin:/bin"])
+          .limits(timeout: 30), request: Data())
+      Issue.record("Expected stderr limit")
+    } catch let error as WorkflowScriptExecutionError {
+      #expect(error.code == "stderr_limit")
+      #expect(error.stderr.count == 4 * 1024 * 1024)
+    }
+  }
+}

@@ -59,18 +59,6 @@ nonisolated public struct WorkflowHistoryCleanup: Equatable, Sendable {
   public var failures: [String] = []
 }
 
-/// Reads only the header required for retention; unknown versions and states never qualify.
-nonisolated struct WorkflowHistoryHeader: Decodable {
-  struct Worktree: Decodable { let path: String }
-  let version: Int
-  let run: WorkflowHistoryRunHeader
-  let worktree: Worktree
-
-  var terminal: Bool {
-    ["completed", "cancelled", "skipped", "max_rounds_reached", "interrupted"].contains(run.status.state)
-  }
-}
-
 nonisolated public struct WorkflowHistory: Sendable {
   public let storage: WorkflowHistoryStorage
   public init(storage: WorkflowHistoryStorage) { self.storage = storage }
@@ -146,7 +134,7 @@ nonisolated public struct WorkflowHistory: Sendable {
     lock.close()
     defer { occupancy.close() }
     let record = try header(directory)
-    guard record.terminal, let finish = record.run.finishedAt, finish >= record.run.startedAt else {
+    guard record.terminal, let finish = record.finishedAt, finish >= record.startedAt else {
       throw WorkflowHistoryError.protectedRun
     }
     let snapshot = try fingerprints(directory)
@@ -204,17 +192,17 @@ nonisolated public struct WorkflowHistory: Sendable {
         throw WorkflowHistoryError.invalidRecord
       }
       let record = try header(directory)
-      name = record.run.workflowName
-      root = record.worktree.path
-      state = record.run.status.state
-      finished = record.run.finishedAt
+      name = record.name
+      root = record.root
+      state = record.state
+      finished = record.finishedAt
       let keepURL = directory.appending(path: "keep.json")
       if FileManager.default.fileExists(atPath: keepURL.path) {
         pinned = try JSONDecoder().decode(Bool.self, from: storage.read(keepURL))
       }
       if !record.terminal {
         protection = "Active or unknown state"
-      } else if let finish = finished, finish >= record.run.startedAt {
+      } else if let finish = finished, finish >= record.startedAt {
         if now.timeIntervalSince(finish) < WorkflowHistoryPreview.grace { protection = "24-hour diagnostic window" }
       } else {
         protection = "Missing or invalid finish time"
@@ -234,18 +222,11 @@ nonisolated public struct WorkflowHistory: Sendable {
       bytes: bytes, pinned: pinned, protection: protection)
   }
 
-  private func header(_ directory: URL) throws -> WorkflowHistoryHeader {
+  private func header(_ directory: URL) throws -> WorkflowHistoryMetadata {
     guard !FileManager.default.fileExists(atPath: directory.appending(path: ".cleanup-failed").path) else {
       throw WorkflowHistoryError.invalidRecord
     }
-    let decoder = JSONDecoder()
-    decoder.dateDecodingStrategy = .iso8601
-    let record = try decoder.decode(
-      WorkflowHistoryHeader.self, from: storage.read(directory.appending(path: "run.json")))
-    guard record.version == 1, record.run.id == UUID(uuidString: directory.lastPathComponent) else {
-      throw WorkflowHistoryError.invalidRecord
-    }
-    return record
+    return try WorkflowHistoryMetadata.read(directory: directory, storage: storage)
   }
 
   private func fingerprints(_ directory: URL) throws -> [String: String] {
@@ -271,20 +252,5 @@ nonisolated public struct WorkflowHistory: Sendable {
     try process.run()
     process.waitUntilExit()
     guard process.terminationStatus == 0 else { throw WorkflowHistoryError.exportFailed }
-  }
-}
-
-nonisolated struct WorkflowHistoryStatusHeader: Decodable { let state: String }
-nonisolated struct WorkflowHistoryRunHeader: Decodable {
-  let id: UUID
-  let workflowName: String
-  let status: WorkflowHistoryStatusHeader
-  let startedAt: Date
-  let finishedAt: Date?
-  enum CodingKeys: String, CodingKey {
-    case id, status
-    case workflowName = "workflow_name"
-    case startedAt = "started_at"
-    case finishedAt = "finished_at"
   }
 }

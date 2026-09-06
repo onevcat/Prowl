@@ -367,8 +367,10 @@ nonisolated struct WorkflowRunStore: Sendable {
     let runDirectory = try containedRunDirectory(runID: record.run.id)
     let data = try WorkflowRunRecord.makeEncoder().encode(record)
     try requireNotSymbolicLink(runDirectory.appending(path: WorkflowRunRecord.fileName, directoryHint: .notDirectory))
-    try data.write(
-      to: runDirectory.appending(path: WorkflowRunRecord.fileName, directoryHint: .notDirectory), options: .atomic)
+    let metadata = WorkflowHistoryMetadata(
+      id: record.run.id, name: record.run.workflowName, root: record.worktree.path,
+      state: record.run.status.state, startedAt: record.run.startedAt, finishedAt: record.run.finishedAt)
+    try metadata.write(record: data, directory: runDirectory, storage: storage)
   }
 
   func readRecord(runID: UUID) throws -> WorkflowRunRecord {

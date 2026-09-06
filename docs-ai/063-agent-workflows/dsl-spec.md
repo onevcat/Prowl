@@ -25,7 +25,7 @@ schemas are part of the same bundle. Validation takes the bundle directory.
 Discovery precedence by workflow ID: app bundle, `~/.prowl/workflows/*.pwlworkflow`, then
 `<repository root>/.prowl/workflows/*.pwlworkflow`. Only app-bundled definitions may use
 `prowl.*` IDs. A disabled or invalid bundle cannot start. Loose YAML is not a workflow bundle.
-Symlinks, special files, path collisions, more than 2048 entries, and more than 16 MiB are
+Symlinks, special files, path collisions, more than 8192 entries, and more than 64 MiB are
 rejected. File contents, including helpers/assets, contribute to the SHA-256 fingerprint.
 
 ## 3. Roles
@@ -226,7 +226,7 @@ expect:
   several steps produce the same output name); `outputs/<name>.md` is the "latest" view,
   replaced atomically (temp file + rename); `run.json` records the invocation → step /
   iteration / activation / file mapping.
-- Output bodies are capped (default 1 MiB, hard max 4 MiB → `OUTPUT_TOO_LARGE`).
+- Output bodies are capped (16 MiB in both the CLI and App → `OUTPUT_TOO_LARGE`).
 - **Skip rule.** Skipping an expected delivery marks its output absent. The runner examines
   remaining expressions, nested control steps, and typed action inputs. A required reader
   ends the run as `skipped`; explicit `exists`/`??` handling permits continuation. Optional
@@ -301,7 +301,7 @@ Error codes: `WORKFLOW_NOT_FOUND`, `WORKFLOW_INVALID`, `RUN_NOT_FOUND`, `PANE_BU
 `VERDICT_REQUIRED` (`strict: true` only),
 `PROFILE_NOT_FOUND`, `PROFILE_NOT_UNIQUE`, `SKILL_NOT_FOUND`, `RENDERED_TEXT_INVALID`
 (a rendered `text`/pointer/`--input` value would not survive as one terminal line),
-`UNSAFE_PATH`, `PROMPT_TOO_LARGE` (a rendered `launch` prompt above 32 KiB),
+`UNSAFE_PATH`, `PROMPT_TOO_LARGE` (a rendered `launch` prompt above 128 KiB),
 `WORKFLOW_DELIVERY_REQUIRED` (`agents dispatch-complete` from a pane whose pending record is a
 workflow activation; the message carries the exact `prowl workflow done` replacement).
 (`AGENT_GONE` and `WAIT_TIMEOUT` belong to the `agents wait` contract, not to
@@ -334,8 +334,9 @@ references and anchors. Defaults remain annotations. `prowl workflow schema --ac
 the manifest shape. The built-in repository collector uses the same value/schema validator.
 
 A script receives one JSON object on stdin: `protocol`, typed `input`, and `context`. It must
-exit zero and emit one schema-conforming object on stdout. Stderr is diagnostic. Request,
-stdout, and stderr each have a 1 MiB limit; JSON nesting is limited to 64. Base environment:
+exit zero and emit one schema-conforming JSON value on stdout. Stderr is diagnostic.
+Input and stdout each have a 16 MiB limit; stderr has a 4 MiB limit. The serialized
+request allows JSON/context overhead up to 96 MiB + 64 KiB; JSON nesting is limited to 64. Base environment:
 PATH, HOME, TMPDIR, LANG, LC_ALL; named inherited variables may extend it. Strip PROWL_* control
 variables. Set `PYTHONDONTWRITEBYTECODE=1` to keep Python helper imports from writing
 bytecode into the fixed bundle. Environment values are not included in request or execution metadata.

@@ -527,7 +527,7 @@ prowl workflow schema [--action] [--json]                          # workflow or
   Normal completion keeps the last task readable until reassignment, history cleanup,
   or app exit; cancellation, Skip, and activation revocation revoke access. `--json` returns `body`, `encoding`
   (`utf-8` or `base64`), `resources`, `invocation`, `offset`, `next_offset`, and `total_bytes`.
-  Reads return at most 64 KiB. Continue with `--offset <next_offset>` until `next_offset` is absent;
+  Reads return at most 256 KiB. Continue with `--offset <next_offset>` until `next_offset` is absent;
   decode each chunk according to its encoding and concatenate its bytes. Resources
   include only assigned skills and explicitly passed workflow inputs/artifacts. A granted
   artifact directory returns a JSON list of its contained file IDs; read each ID separately.

@@ -1285,6 +1285,24 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     XCTAssertTrue(text.stdout.contains("1 warning(s)"), text.stdout)
   }
 
+  func testWorkflowDoneAcceptsSixteenMiBWithJSONEscaping() throws {
+    let file = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: file) }
+    let body = Data(repeating: 10, count: WorkflowSizeLimits.payload)
+    try body.write(to: file)
+    let response = CommandResponse(
+      ok: false, command: "workflow", schemaVersion: "prowl.cli.workflow.v1",
+      error: .init(code: "STEP_NOT_EXPECTING", message: "No assigned task."))
+    let (request, result) = try runWithMockServer(
+      socketPath: temporarySocketPath(suffix: "workflow-large-done"), response: response,
+      args: ["workflow", "done", "--file", file.path, "--json"])
+    XCTAssertEqual(result.exitCode, 1)
+    XCTAssertGreaterThan(request.count, 32 * 1024 * 1024)
+    let envelope = try JSONDecoder().decode(CommandEnvelope.self, from: request)
+    guard case .workflow(let input) = envelope.command else { return XCTFail("Expected workflow input") }
+    XCTAssertEqual(input.body?.utf8.count, body.count)
+  }
+
   func testWorkflowReadRoundTripsPagedContentWithoutAToken() throws {
     let runID = UUID().uuidString
     let payload = WorkflowCommandPayload.read(WorkflowContentPayload(

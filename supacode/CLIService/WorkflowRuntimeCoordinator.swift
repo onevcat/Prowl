@@ -180,7 +180,7 @@ final class WorkflowRuntimeCoordinator {
             listings[resource]
             ?? Data((grant.text + (invocation.activation?.completion.instructionTrailer() ?? "")).utf8)
           guard offset >= 0, offset <= full.count else { throw WorkflowHistoryError.protectedRun }
-          let end = min(Int(offset) + 64 * 1024, full.count)
+          let end = min(Int(offset) + WorkflowSizeLimits.contentPage, full.count)
           data = full.subdata(in: Int(offset)..<end)
           total = Int64(full.count)
           next = end < full.count ? Int64(end) : nil

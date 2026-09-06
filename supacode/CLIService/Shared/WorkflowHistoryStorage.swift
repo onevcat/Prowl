@@ -208,7 +208,7 @@ nonisolated public struct WorkflowHistoryStorage: Equatable, Sendable {
       info.st_nlink == 1, offset >= 0, offset <= info.st_size
     else { throw WorkflowHistoryError.unsafePath(url.path) }
     try handle.seek(toOffset: UInt64(offset))
-    let data = try handle.read(upToCount: 64 * 1024) ?? Data()
+    let data = try handle.read(upToCount: WorkflowSizeLimits.contentPage) ?? Data()
     let next = offset + Int64(data.count)
     return WorkflowHistoryChunk(data: data, total: info.st_size, nextOffset: next < info.st_size ? next : nil)
   }
