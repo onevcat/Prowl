@@ -173,7 +173,9 @@ pre-change median, and both were below the requested five-to-six-minute steady-s
   first successful `main` run for that toolchain populates the default-branch cache; later
   PRs can restore it, and changed PR source states save updated entries.
 - An exact-source rerun is the upper-bound cache case. Ordinary source changes restore the
-  newest compatible CAS through the toolchain/project prefix, then compile affected files.
+  newest compatible CAS through the toolchain/project prefix. With clean DerivedData,
+  a change in one App file can invalidate every App compilation batch; see
+  [006-ci-source-cache-reuse.md](006-ci-source-cache-reuse.md).
 - GitHub runner/network variance remains visible: the two equivalent warm jobs differed by
   82 s. Trend decisions should continue to use multiple samples and step-level timings.
 - Full DerivedData remains uncached; only compiler CAS and deterministic dependency/build

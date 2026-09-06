@@ -34,10 +34,14 @@ runs:
       uses: actions/cache@v4
       with:
         path: .build
-        key: ${{ runner.os }}-${{ runner.arch }}-cli-spm-v1-${{ env.XCODE_CACHE_ID }}-${{ hashFiles('Package.swift', 'Package.resolved') }}-${{ hashFiles('ProwlCLI/**/*.swift', 'ProwlCLITests/**/*.swift', 'supacode/CLIService/Shared/**/*.swift') }}
+        key: ${{ runner.os }}-${{ runner.arch }}-cli-spm-v2-${{ env.XCODE_CACHE_ID }}-${{ hashFiles('Package.swift', 'Package.resolved', 'Makefile', 'supacode.xcodeproj/project.pbxproj', '.github/actions/setup-macos/action.yml', '.github/workflows/test.yml', 'scripts/ci-source-mtimes.py') }}-${{ hashFiles('ProwlCLI/**/*.swift', 'ProwlCLITests/**', 'ProwlCLIContracts/**', 'supacode/CLIService/Shared/**/*.swift') }}
         restore-keys: |
-          ${{ runner.os }}-${{ runner.arch }}-cli-spm-v1-${{ env.XCODE_CACHE_ID }}-${{ hashFiles('Package.swift', 'Package.resolved') }}-
-          ${{ runner.os }}-${{ runner.arch }}-cli-spm-v1-${{ env.XCODE_CACHE_ID }}-
+          ${{ runner.os }}-${{ runner.arch }}-cli-spm-v2-${{ env.XCODE_CACHE_ID }}-${{ hashFiles('Package.swift', 'Package.resolved', 'Makefile', 'supacode.xcodeproj/project.pbxproj', '.github/actions/setup-macos/action.yml', '.github/workflows/test.yml', 'scripts/ci-source-mtimes.py') }}-
+          ${{ runner.os }}-${{ runner.arch }}-cli-spm-v2-${{ env.XCODE_CACHE_ID }}-
+
+    - name: Restore unchanged CLI source times
+      shell: bash
+      run: python3 scripts/ci-source-mtimes.py restore
 
     - name: Ghostty cache key
       shell: bash
@@ -73,7 +77,7 @@ runs:
       uses: actions/cache@v4
       with:
         path: ~/Library/Caches/supacode-spm-cache/SourcePackages
-        key: ${{ runner.os }}-${{ runner.arch }}-spm-v0-${{ hashFiles('**/Package.resolved') }}
+        key: ${{ runner.os }}-${{ runner.arch }}-spm-v0-${{ hashFiles('supacode.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
         restore-keys: |
           ${{ runner.os }}-${{ runner.arch }}-spm-v0-
 
@@ -85,7 +89,7 @@ runs:
         # successful changed build saves newly compiled objects; restore-keys select the
         # newest compatible CAS. Never restore across Xcode builds because compiler cache
         # keys and storage formats are toolchain-specific.
-        key: ${{ runner.os }}-${{ runner.arch }}-xcode-compilation-cache-v2-${{ env.XCODE_CACHE_ID }}-${{ hashFiles('Package.resolved', 'supacode.xcodeproj/project.pbxproj') }}-${{ hashFiles('supacode/**/*.swift', 'supacodeTests/**/*.swift') }}
+        key: ${{ runner.os }}-${{ runner.arch }}-xcode-compilation-cache-v2-${{ env.XCODE_CACHE_ID }}-${{ hashFiles('supacode.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'supacode.xcodeproj/project.pbxproj', 'supacode.xcodeproj/xcshareddata/xcschemes/**', 'Makefile', '.github/actions/setup-macos/action.yml', '.github/workflows/test.yml') }}-${{ hashFiles('supacode/**/*.swift', 'supacodeTests/**/*.swift') }}
         restore-keys: |
-          ${{ runner.os }}-${{ runner.arch }}-xcode-compilation-cache-v2-${{ env.XCODE_CACHE_ID }}-${{ hashFiles('Package.resolved', 'supacode.xcodeproj/project.pbxproj') }}-
+          ${{ runner.os }}-${{ runner.arch }}-xcode-compilation-cache-v2-${{ env.XCODE_CACHE_ID }}-${{ hashFiles('supacode.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'supacode.xcodeproj/project.pbxproj', 'supacode.xcodeproj/xcshareddata/xcschemes/**', 'Makefile', '.github/actions/setup-macos/action.yml', '.github/workflows/test.yml') }}-
           ${{ runner.os }}-${{ runner.arch }}-xcode-compilation-cache-v2-${{ env.XCODE_CACHE_ID }}-
