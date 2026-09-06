@@ -1,37 +1,40 @@
-// supacode/Domain/Workflow/WorkflowNativeActions.swift
-// Execution of the V1 native actions (dsl-spec §4, decision H12): `handoff.transition` and
-// `handoff.checkpoint` over the `.prowl/handoff/` coordinator, `git.context` over the same
-// context generator. Typed inputs and outputs follow `WorkflowActionRegistry`.
-
-import Darwin
 import Foundation
 import ProwlCLIShared
 
 nonisolated struct WorkflowActionContext: Sendable {
   let runID: UUID
-  /// The source worktree root; every path input must stay inside it.
   let rootURL: URL
-  /// Role → detected / frozen agent token (nil for a bare shell).
   let roleAgents: [String: String?]
-  /// The agent token of the `current` role: the outgoing side of a checkpoint or context.
   let outgoingAgent: String?
   let sessionContext: HandoffStore.SessionContext?
   let now: Date
+  let stepID: String
+  let executionID: String
+  let attempt: Int
+  let bundle: WorkflowPreparedBundle?
+  let values: [String: WorkflowJSONValue]
 
   init(
-    runID: UUID,
-    rootURL: URL,
-    roleAgents: [String: String?],
-    outgoingAgent: String?,
-    sessionContext: HandoffStore.SessionContext? = nil,
-    now: Date
+    runID: UUID, rootURL: URL, roleAgents: [String: String?], outgoingAgent: String?,
+    sessionContext: HandoffStore.SessionContext? = nil, now: Date, stepID: String = "action",
+    executionID: String = UUID().uuidString, attempt: Int = 1, bundle: WorkflowPreparedBundle? = nil,
+    values: [String: WorkflowJSONValue] = [:]
   ) {
     self.runID = runID
-    self.rootURL = rootURL.standardizedFileURL
+    self.rootURL = rootURL
     self.roleAgents = roleAgents
     self.outgoingAgent = outgoingAgent
     self.sessionContext = sessionContext
     self.now = now
+    self.stepID = stepID
+    self.executionID = executionID
+    self.attempt = attempt
+    self.bundle = bundle
+    self.values = values
+  }
+
+  var directory: URL {
+    WorkflowRunPaths.runDirectory(root: rootURL, runID: runID).appending(path: "actions/\(stepID)/\(executionID)")
   }
 }
 
@@ -40,212 +43,166 @@ nonisolated enum WorkflowActionError: Error, Equatable, Sendable {
   case missingInput(String)
   case unknownRole(String)
   case unreadableBriefing(path: String)
-  /// The briefing lacks the required sections; nothing was written.
   case invalidBriefing(path: String)
-  /// A path input resolves outside the worktree root.
   case unsafePath(String)
   case failed(String)
 
-  var message: String {
-    switch self {
-    case .unknownAction(let id): "Unknown action '\(id)'."
-    case .missingInput(let name): "Input '\(name)' is required."
-    case .unknownRole(let role): "Role '\(role)' is not bound in this run."
-    case .unreadableBriefing(let path): "The briefing at \(path) cannot be read."
-    case .invalidBriefing(let path): HandoffCommandHandler.invalidBriefMessage() + " (\(path))"
-    case .unsafePath(let path): "The path \(path) lies outside the worktree."
-    case .failed(let detail): detail
-    }
-  }
+  var message: String { String(describing: self) }
 }
 
-/// The boundary the run machine's `.runAction` effect is executed through; B3 passes the
-/// native runner, tests pass fakes.
 protocol WorkflowActionExecuting: Sendable {
-  func execute(actionID: String, inputs: [String: String], context: WorkflowActionContext) async throws -> [String:
-    String]
+  func execute(actionID: String, inputs: [String: WorkflowJSONValue], context: WorkflowActionContext) async throws
+    -> [String: WorkflowJSONValue]
 }
 
 nonisolated struct WorkflowNativeActionRunner: WorkflowActionExecuting {
-  func execute(actionID: String, inputs: [String: String], context: WorkflowActionContext) async throws -> [String:
-    String]
+  func execute(actionID: String, inputs: [String: WorkflowJSONValue], context: WorkflowActionContext) async throws
+    -> [String: WorkflowJSONValue]
   {
-    switch actionID {
-    case "handoff.transition":
-      return try await transition(inputs: inputs, context: context)
-    case "handoff.checkpoint":
-      return try await checkpoint(inputs: inputs, context: context)
-    case "git.context":
-      return try await gitContext(inputs: inputs, context: context)
-    default:
-      throw WorkflowActionError.unknownAction(actionID)
+    try Task.checkCancellation()
+    guard WorkflowSchema.isSlug(context.stepID), UUID(uuidString: context.executionID) != nil else {
+      throw WorkflowActionError.unsafePath(context.executionID)
     }
-  }
-
-  // MARK: handoff.transition
-
-  /// Archive-first transition; without `briefing` it is the context-only transition: the
-  /// outgoing `current.md` is archived and removed so a stale briefing never impersonates a
-  /// fresh one, `context.md` is regenerated, and the context-only kickoff prompt is returned.
-  private func transition(inputs: [String: String], context: WorkflowActionContext) async throws -> [String: String] {
-    guard let fromRole = inputs["from"] else { throw WorkflowActionError.missingInput("from") }
-    guard let toRole = inputs["to"] else { throw WorkflowActionError.missingInput("to") }
-    guard let fromAgent = context.roleAgents[fromRole] else { throw WorkflowActionError.unknownRole(fromRole) }
-    guard let toAgent = context.roleAgents[toRole] else { throw WorkflowActionError.unknownRole(toRole) }
-    let store = HandoffStore(rootURL: context.rootURL)
-    let coordinator = HandoffCoordinator(store: store)
-    let briefing = try prepareBriefing(path: inputs["briefing"], coordinator: coordinator, context: context)
-    let artifacts: HandoffCoordinator.TransitionArtifacts
+    defer { WorkflowActionProcessRegistry().remove(executionID: context.executionID) }
+    let directory = context.directory
+    let artifacts = try prepareDirectory(context)
+    var snapshot = context.values["context"] ?? .object([:])
+    if case .object(var fields) = snapshot {
+      fields["execution"] = .object([
+        "id": .string(context.executionID), "step_id": .string(context.stepID),
+        "attempt": .integer(context.attempt), "cwd": .string(context.rootURL.path),
+        "artifact_dir": .string(artifacts.path),
+      ])
+      snapshot = .object(fields)
+    }
+    let request = WorkflowJSONValue.object([
+      "protocol": .string("prowl.action/v1"),
+      "input": WorkflowJSON.object(inputs), "context": snapshot,
+    ])
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+    let requestData = try encoder.encode(request)
+    try requestData.write(to: directory.appending(path: "request.json"), options: .atomic)
+    try Data().write(to: directory.appending(path: "stderr.log"), options: .atomic)
+    try record(context, state: "running", detail: nil)
     do {
-      artifacts = try await coordinator.makeTransitionArtifacts(
-        outgoingAgent: fromAgent,
-        toAgent: toAgent ?? "agent",
-        sessionContext: context.sessionContext,
-        briefing: briefing,
-        now: context.now)
+      try context.bundle?.verifyIntegrity()
+      let output: WorkflowJSONValue
+      if actionID == "builtin:git.context" {
+        try WorkflowActionRegistry.gitContextInput.validate(.object(inputs))
+        output = try await gitContext(inputs: inputs, context: context, artifacts: artifacts)
+        try WorkflowActionRegistry.gitContextOutput.validate(output)
+      } else {
+        output = try await script(actionID: actionID, inputs: inputs, context: context, request: requestData)
+      }
+      try Task.checkCancellation()
+      try context.bundle?.verifyIntegrity()
+      let resultURL = directory.appending(path: "result.json")
+      try encoder.encode(output).write(to: resultURL, options: .atomic)
+      try record(context, state: "succeeded", detail: nil)
+      return ["output": output, "result_path": .string(resultURL.path)]
     } catch {
-      throw WorkflowActionError.failed("Failed to prepare the handoff: \(error)")
-    }
-    await coordinator.logTransition(
-      from: fromAgent ?? "agent",
-      toAgent: toAgent ?? "agent",
-      disposition: .requested,
-      briefing: artifacts.briefing,
-      archivedPath: artifacts.archivedPath,
-      note: inputs["note"],
-      source: "workflow \(context.runID.uuidString)",
-      now: context.now)
-    return [
-      "kickoff_prompt": HandoffCommandHandler.kickoffPrompt(hasBriefing: artifacts.hasBriefing),
-      "artifact_path": artifacts.save.artifactPath,
-      "has_briefing": artifacts.hasBriefing ? "true" : "false",
-    ]
-  }
-
-  // MARK: handoff.checkpoint
-
-  /// Installs a fresh briefing when one is given (archiving the replaced one) and refreshes
-  /// `context.md`; without `briefing` an earlier valid `current.md` stays in place.
-  private func checkpoint(inputs: [String: String], context: WorkflowActionContext) async throws -> [String: String] {
-    let store = HandoffStore(rootURL: context.rootURL)
-    let coordinator = HandoffCoordinator(store: store)
-    let briefing = try prepareBriefing(path: inputs["briefing"], coordinator: coordinator, context: context)
-    do {
-      let (save, outcome) = try await coordinator.makeCheckpoint(
-        outgoingAgent: context.outgoingAgent,
-        sessionContext: context.sessionContext,
-        note: inputs["note"] ?? "workflow \(context.runID.uuidString)",
-        briefing: briefing,
-        now: context.now)
-      return [
-        "artifact_path": save.artifactPath,
-        "has_briefing": outcome.wroteBriefing ? "true" : "false",
-      ]
-    } catch {
-      throw WorkflowActionError.failed("Failed to save the checkpoint: \(error)")
+      if let processError = error as? WorkflowScriptExecutionError {
+        try? processError.stderr.write(to: directory.appending(path: "stderr.log"), options: .atomic)
+      }
+      try? record(
+        context,
+        state: (error is CancellationError || (error as? WorkflowScriptExecutionError)?.code == "cancelled")
+          ? "cancelled" : "failed", detail: "\(error)")
+      throw error
     }
   }
 
-  // MARK: git.context
-
-  /// The handoff context generator: writes `<root>/.prowl/handoff/context.md` and appends one
-  /// line to the handoff log; `root` defaults to the worktree and must stay inside it.
-  private func gitContext(inputs: [String: String], context: WorkflowActionContext) async throws -> [String: String] {
-    let root = try containedPath(inputs["root"], context: context) ?? context.rootURL.resolvingSymlinksInPath()
-    // The handoff store works on paths; re-walk the root without following links right before
-    // it starts so a link planted after the containment check is refused (the residual window
-    // inside the store's own writes stays on the pre-existing handoff trust model).
-    let rootDescriptor = try Self.openContainedDirectory(root, root: context.rootURL.resolvingSymlinksInPath())
-    _ = Darwin.close(rootDescriptor)
-    let store = HandoffStore(rootURL: root)
-    do {
-      let save = try await Task.detached {
-        try store.save(
-          outgoingAgent: context.outgoingAgent,
-          sessionContext: nil,
-          note: "workflow \(context.runID.uuidString) git.context",
-          now: context.now)
-      }.value
-      return [
-        "path": store.contextURL.path(percentEncoded: false),
-        "branch": save.repos.first?.branch ?? "",
-      ]
-    } catch {
-      throw WorkflowActionError.failed("Failed to generate the context: \(error)")
+  private func prepareDirectory(_ context: WorkflowActionContext) throws -> URL {
+    let store = WorkflowRunStore(rootURL: context.rootURL)
+    try store.ensureLayout(runID: context.runID)
+    var directory = try store.containedRunDirectory(runID: context.runID)
+    for component in ["actions", context.stepID, context.executionID, "artifacts"] {
+      directory = directory.appending(path: component, directoryHint: .isDirectory)
+      if let attributes = try? FileManager.default.attributesOfItem(atPath: directory.path) {
+        guard attributes[.type] as? FileAttributeType == .typeDirectory,
+          component != context.executionID
+        else { throw WorkflowActionError.unsafePath(directory.path) }
+      } else {
+        try FileManager.default.createDirectory(
+          at: directory, withIntermediateDirectories: false,
+          attributes: [.posixPermissions: 0o700])
+      }
     }
+    return directory
   }
 
-  // MARK: Helpers
-
-  private func prepareBriefing(
-    path: String?, coordinator: HandoffCoordinator, context: WorkflowActionContext
-  ) throws -> HandoffPreparedBriefing {
-    guard let path else { return .contextOnly }
-    guard let url = try containedPath(path, context: context) else { return .contextOnly }
-    let text = try Self.readRegularFile(url, root: context.rootURL.resolvingSymlinksInPath(), reportedPath: path)
-    do {
-      return try coordinator.collectBriefing(.inline(text))
-    } catch {
-      throw WorkflowActionError.invalidBriefing(path: path)
-    }
+  private func script(
+    actionID: String, inputs: [String: WorkflowJSONValue], context: WorkflowActionContext,
+    request: Data
+  ) async throws -> WorkflowJSONValue {
+    guard actionID.hasPrefix("local:"), let bundle = context.bundle,
+      let action = bundle.actions[String(actionID.dropFirst(6))], let interpreter = bundle.interpreters[action.id]
+    else { throw WorkflowActionError.unknownAction(actionID) }
+    try action.validateInput(WorkflowJSON.object(inputs))
+    let entrypoint = bundle.directory.appending(path: "actions/\(action.id)/\(action.entrypoint)")
+    let result = try await WorkflowScriptExecutor.run(
+      .init(
+        executable: interpreter,
+        arguments: [entrypoint.path] + action.arguments, directory: context.rootURL,
+        environment: WorkflowPreparedBundle.environment(for: action, inherited: ProcessInfo.processInfo.environment)
+      ).limits(timeout: TimeInterval(action.timeoutSeconds)),
+      request: request,
+      onSpawn: { pid in
+        try WorkflowActionProcessRegistry().register(executionID: context.executionID, pid: pid)
+      })
+    try result.stderr.write(to: context.directory.appending(path: "stderr.log"), options: .atomic)
+    let output = try JSONDecoder().decode(WorkflowJSONValue.self, from: result.stdout)
+    try action.validateOutput(output)
+    return output
   }
 
-  /// A path input resolved against the worktree root and required to stay inside it. The
-  /// canonical (symlink-resolved) URL is what the action operates on, so the containment
-  /// that was checked is the containment that is used.
-  private func containedPath(_ path: String?, context: WorkflowActionContext) throws -> URL? {
-    guard let path, !path.isEmpty else { return nil }
-    let url = URL(filePath: path, relativeTo: context.rootURL).standardizedFileURL
-    let canonical = url.resolvingSymlinksInPath()
-    let base = context.rootURL.resolvingSymlinksInPath()
-    guard canonical == base || AgentProfileLaunchPlanner.isContained(canonical, in: base) else {
-      throw WorkflowActionError.unsafePath(path)
+  private func gitContext(inputs: [String: WorkflowJSONValue], context: WorkflowActionContext, artifacts: URL)
+    async throws -> WorkflowJSONValue
+  {
+    guard Set(inputs.keys).isSubset(of: ["root"]) else {
+      throw WorkflowActionError.failed("Unknown git.context input.")
     }
-    return canonical
+    var root = context.rootURL.resolvingSymlinksInPath()
+    if let input = inputs["root"] {
+      guard case .string(let path) = input else { throw WorkflowActionError.failed("root must be a string.") }
+      let candidate = URL(filePath: path, relativeTo: root).standardizedFileURL.resolvingSymlinksInPath()
+      guard candidate == root || candidate.path.hasPrefix(root.path + "/") else {
+        throw WorkflowActionError.unsafePath(path)
+      }
+      root = candidate
+    }
+    let branch = try await git(["branch", "--show-current"], root: root, executionID: context.executionID)
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    let status = try await git(["status", "--short"], root: root, executionID: context.executionID)
+    let diff = try await git(["diff", "--stat"], root: root, executionID: context.executionID)
+    let path = artifacts.appending(path: "context.md")
+    try "# Repository Context\n\nBranch: \(branch)\n\n## Status\n\n\(status)\n## Diff\n\n\(diff)"
+      .write(to: path, atomically: true, encoding: .utf8)
+    return .object(["path": .string(path.path), "branch": .string(branch)])
   }
 
-  /// Opens `directory` (a canonical path inside `root`) by walking every component from the
-  /// root with `O_NOFOLLOW | O_DIRECTORY`, so a component swapped for a link after the
-  /// containment check is refused rather than followed. Returns an owned descriptor.
-  private static func openContainedDirectory(_ directory: URL, root: URL) throws -> Int32 {
-    let rootPath = AgentProfileLaunchPlanner.pathString(root)
-    var descriptor = Darwin.open(rootPath, O_RDONLY | O_DIRECTORY | O_NOFOLLOW)
-    guard descriptor >= 0 else { throw WorkflowActionError.unsafePath(rootPath) }
-    let rootComponents = root.standardizedFileURL.pathComponents
-    let components = directory.standardizedFileURL.pathComponents
-    guard components.count >= rootComponents.count, Array(components.prefix(rootComponents.count)) == rootComponents
-    else {
-      _ = Darwin.close(descriptor)
-      throw WorkflowActionError.unsafePath(AgentProfileLaunchPlanner.pathString(directory))
-    }
-    for component in components.dropFirst(rootComponents.count) {
-      let next = openat(descriptor, component, O_RDONLY | O_DIRECTORY | O_NOFOLLOW)
-      _ = Darwin.close(descriptor)
-      guard next >= 0 else { throw WorkflowActionError.unsafePath(AgentProfileLaunchPlanner.pathString(directory)) }
-      descriptor = next
-    }
-    return descriptor
+  private func git(_ arguments: [String], root: URL, executionID: String) async throws -> String {
+    let result = try await WorkflowScriptExecutor.run(
+      .init(
+        executable: "/usr/bin/git", arguments: arguments,
+        directory: root, environment: ["PATH": "/usr/bin:/bin", "GIT_TERMINAL_PROMPT": "0"]
+      ).limits(timeout: 30),
+      request: Data(),
+      onSpawn: { pid in
+        try WorkflowActionProcessRegistry().register(executionID: executionID, pid: pid)
+      })
+    return String(bytes: result.stdout, encoding: .utf8) ?? ""
   }
 
-  /// Reads a briefing by walking its directory from the worktree root without following links
-  /// and opening the leaf with `O_NOFOLLOW`; requires a regular file.
-  private static func readRegularFile(_ url: URL, root: URL, reportedPath: String) throws -> String {
-    let directoryDescriptor = try openContainedDirectory(url.deletingLastPathComponent(), root: root)
-    let descriptor = openat(directoryDescriptor, url.lastPathComponent, O_RDONLY | O_NOFOLLOW)
-    _ = Darwin.close(directoryDescriptor)
-    guard descriptor >= 0 else {
-      if errno == ELOOP { throw WorkflowActionError.unsafePath(reportedPath) }
-      throw WorkflowActionError.unreadableBriefing(path: reportedPath)
-    }
-    let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
-    defer { try? handle.close() }
-    var statistics = stat()
-    guard fstat(descriptor, &statistics) == 0, (statistics.st_mode & S_IFMT) == S_IFREG else {
-      throw WorkflowActionError.unreadableBriefing(path: reportedPath)
-    }
-    guard let data = try? handle.readToEnd(), let text = String(data: data, encoding: .utf8) else {
-      throw WorkflowActionError.unreadableBriefing(path: reportedPath)
-    }
-    return text
+  private func record(_ context: WorkflowActionContext, state: String, detail: String?) throws {
+    let record = WorkflowJSONValue.object([
+      "id": .string(context.executionID), "step_id": .string(context.stepID),
+      "attempt": .integer(context.attempt), "state": .string(state),
+      "started_at": .string(context.now.ISO8601Format()),
+      "finished_at": state == "running" ? .null : .string(Date().ISO8601Format()),
+      "detail": detail.map(WorkflowJSONValue.string) ?? .null,
+    ])
+    try JSONEncoder().encode(record).write(to: context.directory.appending(path: "execution.json"), options: .atomic)
   }
 }

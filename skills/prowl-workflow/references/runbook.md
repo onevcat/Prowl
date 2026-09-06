@@ -42,19 +42,23 @@ perform it and deliver; there is no separate injected first message to wait for.
   `strict: false`, blocked agents) pause the step and surface in Prowl's status center for
   the user to resolve (Accept / Ask again / Skip / Cancel); the CLI sees them in
   `prowl workflow status`.
-- Skipping a step marks its output missing. A missing output is tolerated only by an
-  action's optional `with` input; any other reference (`text`/`instruction`/`prompt`/
-  `notify` templates, a `repeat` `until`) ends the run as `skipped` — the consequence is
-  computed and shown before the skip is confirmed.
+- Skipping a step makes its output absent. Required downstream references end the run as
+  `skipped`; explicit `exists`/`??` handling can permit continuation. The UI shows the
+  consequence before confirmation. Nested control expressions and action inputs count too.
 - Neither finishing nor `prowl workflow cancel <run-id>` (which revokes all outstanding
   delivery tokens) closes a pane: a `completed` run leaves every launched pane open unless an
   explicit `close:` step (authored by the workflow) closed it.
   Cancelling stops orchestration; it does not stop already-running agent work or undo edits.
 - Run states (`status.state`): `running`, `needs_attention` (the panel waits for the user),
-  then one terminal state — `completed`, `max_rounds_reached` (a `repeat` hit `max` with
-  `until` unsatisfied, or had no `until` — steps after the loop do NOT execute), `skipped`
-  (a skipped output had a consumer), `cancelled`, or `interrupted` (left unfinished by an
-  earlier app instance; V1 does not resume it).
+  then one terminal state — `completed`, `max_rounds_reached` (a `while` condition stayed
+  true at `max_iterations`; later steps do not execute), `skipped` (required output skipped),
+  `cancelled`, or `interrupted` (unfinished in an earlier app instance; never resumed).
+
+Script-bearing bundles require native approval before a start or single-action test. The
+CLI cannot approve them. The approved bundle is copied into the run; source edits apply to
+future starts and require a new grant. An invalidated run copy must be cancelled. See
+[actions](actions.md) for process limits, environment, approval, and per-attempt records.
+
 
 ## Watching a run
 
@@ -103,7 +107,7 @@ Everything lives under the source worktree:
 - **Invocation ordinals** — `log.md` says `(invocation 4)`, `run.json` lists them under
   `invocations[]` — are run-global and monotonic across all steps and iterations
   (fire-and-forget steps consume them too), so sorting the ledger by number replays the run
-  in order. A `repeat` whose `until` was already satisfied before entry is recorded in
+  in order. A loop whose condition was false at entry has no executed body records in
   `run.json` with step state `skipped`: the loop was skipped, unrelated to the run's `skipped`
   terminal state.
 - `<name>.md` is the newest persisted body of that name, swapped via atomic rename so a

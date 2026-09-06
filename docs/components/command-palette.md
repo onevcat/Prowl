@@ -1,6 +1,6 @@
 # Command Palette
 
-> Workflow launch entries are hidden unless Prowl starts with `PROWL_WORKFLOW_UI=1`; other commands are unaffected.
+> Workflow UI is enabled by default. Start Prowl with `PROWL_WORKFLOW_UI=0` to hide its UI and skill row; CLI workflow and skill commands remain available. The switch is read at process startup.
 
 > The `⌘P` searchable launcher for (almost) every action in Prowl. Type a name,
 > hit Return.

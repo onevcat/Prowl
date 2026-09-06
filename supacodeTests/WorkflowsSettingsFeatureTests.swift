@@ -57,8 +57,9 @@ struct WorkflowsSettingsFeatureTests {
     }
 
     func write(_ yaml: String, to name: String) throws {
-      try Data(yaml.utf8).write(
-        to: userDirectory.appending(path: name, directoryHint: .notDirectory))
+      let bundle = userDirectory.appending(path: name, directoryHint: .isDirectory)
+      try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+      try Data(yaml.utf8).write(to: bundle.appending(path: "workflow.yaml"))
     }
 
     func scan() throws -> WorkflowSettingsScan {
@@ -142,10 +143,12 @@ struct WorkflowsSettingsFeatureTests {
   @Test func scopeSelectsOnlyTheRowsOwnedByThatSettingsSurface() throws {
     let fixture = try Fixture()
     defer { fixture.cleanUp() }
-    try fixture.write(Self.review, to: "review.yaml")
+    try fixture.write(Self.review, to: "review.pwlworkflow")
     let repoDirectory = WorkflowSources.repoDirectory(root: fixture.repoRoot)
     try FileManager.default.createDirectory(at: repoDirectory, withIntermediateDirectories: true)
-    try Data(Self.review.utf8).write(to: repoDirectory.appending(path: "repo-review.yaml"))
+    let repoBundle = repoDirectory.appending(path: "repo-review.pwlworkflow")
+    try FileManager.default.createDirectory(at: repoBundle, withIntermediateDirectories: true)
+    try Data(Self.review.utf8).write(to: repoBundle.appending(path: "workflow.yaml"))
     let catalog = WorkflowSettingsCatalog.build(
       scan: try fixture.scan(), settings: Self.baseSettings)
     var global = WorkflowsSettingsFeature.State(userDirectory: fixture.userDirectory)
@@ -167,7 +170,7 @@ struct WorkflowsSettingsFeatureTests {
   @Test(.dependencies) func taskLoadsRowsAndCLIStatuses() async throws {
     let fixture = try Fixture()
     defer { fixture.cleanUp() }
-    try fixture.write(Self.review, to: "review.yaml")
+    try fixture.write(Self.review, to: "review.pwlworkflow")
     let store = makeStore(fixture, storage: SettingsTestStorage())
 
     await store.send(.task) {
@@ -242,7 +245,7 @@ struct WorkflowsSettingsFeatureTests {
   @Test(.dependencies) func disablingWritesTheKeyAndUpdatesTheRow() async throws {
     let fixture = try Fixture()
     defer { fixture.cleanUp() }
-    try fixture.write(Self.review, to: "review.yaml")
+    try fixture.write(Self.review, to: "review.pwlworkflow")
     let storage = SettingsTestStorage()
     let store = makeStore(fixture, storage: storage)
     await store.send(.task) {
@@ -280,7 +283,7 @@ struct WorkflowsSettingsFeatureTests {
   @Test(.dependencies) func bindModeAndRememberedBindingPersist() async throws {
     let fixture = try Fixture()
     defer { fixture.cleanUp() }
-    try fixture.write(Self.review, to: "review.yaml")
+    try fixture.write(Self.review, to: "review.pwlworkflow")
     let storage = SettingsTestStorage()
     let store = makeStore(fixture, storage: storage)
     await store.send(.task) {
@@ -343,7 +346,7 @@ struct WorkflowsSettingsFeatureTests {
     }
 
     let expectedURL = fixture.userDirectory.appending(
-      path: "new-workflow.yaml", directoryHint: .notDirectory)
+      path: "new-workflow.pwlworkflow", directoryHint: .isDirectory)
     await store.send(.newWorkflowTapped) {
       $0.scan = try fixture.scan()
       $0.catalog = try fixture.expectedCatalog()
@@ -354,7 +357,7 @@ struct WorkflowsSettingsFeatureTests {
     let row = try #require(store.state.catalog.user.first)
     #expect(row.workflowID == "new-workflow")
     #expect(row.isValid)
-    #expect(fixture.opened.value == [expectedURL])
+    #expect(fixture.opened.value == [expectedURL.appending(path: "workflow.yaml")])
     #expect(fixture.revealed.value.isEmpty)
 
     fixture.finishWatchers()
@@ -364,7 +367,7 @@ struct WorkflowsSettingsFeatureTests {
   @Test(.dependencies) func anOpenDetailBecomesUnavailableWhenItsFileDisappears() async throws {
     let fixture = try Fixture()
     defer { fixture.cleanUp() }
-    try fixture.write(Self.review, to: "review.yaml")
+    try fixture.write(Self.review, to: "review.pwlworkflow")
     let store = makeStore(fixture, storage: SettingsTestStorage())
     await store.send(.task) {
       $0.cliInstallStatus = .installed(path: "/usr/local/bin/prowl")
@@ -393,7 +396,7 @@ struct WorkflowsSettingsFeatureTests {
   @Test(.dependencies) func confirmedDeletionReturnsToTheRefreshedIndex() async throws {
     let fixture = try Fixture()
     defer { fixture.cleanUp() }
-    try fixture.write(Self.review, to: "review.yaml")
+    try fixture.write(Self.review, to: "review.pwlworkflow")
     let store = makeStore(fixture, storage: SettingsTestStorage())
     store.dependencies[WorkflowSettingsClient.self].trashWorkflow = { url in
       try FileManager.default.removeItem(at: url)
@@ -433,7 +436,7 @@ struct WorkflowsSettingsFeatureTests {
     await clock.advance(by: .milliseconds(100))
     continuation.yield()
     await store.receive(.directoriesChanged)
-    try fixture.write(Self.review, to: "review.yaml")
+    try fixture.write(Self.review, to: "review.pwlworkflow")
     await clock.advance(by: WorkflowsSettingsFeature.reloadDebounce)
     await store.receive(.reload) {
       $0.scan = try fixture.scan()

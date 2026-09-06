@@ -53,8 +53,8 @@ final class WorkflowDocumentParserTests: XCTestCase {
     XCTAssertEqual(reviewer.direction, .right)
     XCTAssertFalse(reviewer.background)
 
-    XCTAssertEqual(workflow.steps.map(\.id), ["brief", "launch", "rounds", "context", "done", "cleanup"])
-    XCTAssertEqual(workflow.flattenedSteps.map(\.id), ["brief", "launch", "rounds", "fix", "rereview", "context", "done", "cleanup"])
+    XCTAssertEqual(workflow.steps.map(\.id), ["brief", "launch", "remember", "rounds", "context", "done", "cleanup"])
+    XCTAssertEqual(workflow.flattenedSteps.map(\.id), ["brief", "launch", "remember", "rounds", "fix", "rereview", "retain", "context", "done", "cleanup"])
 
     guard case .message(let role, .instruction(let instruction), let briefExpect) = workflow.steps[0].action else {
       return XCTFail("brief should be an instruction message")
@@ -75,27 +75,22 @@ final class WorkflowDocumentParserTests: XCTestCase {
     XCTAssertEqual(launchExpect?.verdict, ["clean", "issues"])
     XCTAssertEqual(launchExpect?.timeoutSeconds, 1800)
 
-    guard case .repeat(.template(let max), let until, let body) = workflow.steps[2].action else {
-      return XCTFail("rounds should be a repeat")
+    guard case .control(.loop(let condition, let maximum, let body)) = workflow.steps[3].action else {
+      return XCTFail("rounds should be a while loop")
     }
-    XCTAssertEqual(max, "{{ inputs.max_rounds }}")
-    XCTAssertEqual(until?.output, "findings")
-    XCTAssertEqual(until?.values, ["clean"])
-    XCTAssertEqual(body.map(\.id), ["fix", "rereview"])
-    XCTAssertEqual(body[0].title, "Round {{ loop.index }}: author addressing findings")
-
-    guard case .action("git.context", let inputs) = workflow.steps[3].action else {
-      return XCTFail("context should be a native action")
+    XCTAssertEqual(condition, "state.verdict != 'clean'")
+    XCTAssertEqual(maximum, 10)
+    XCTAssertEqual(body.map(\.id), ["fix", "rereview", "retain"])
+    guard case .action("builtin:git.context", let inputs) = workflow.steps[4].action else {
+      return XCTFail("context should be a built-in action")
     }
-    XCTAssertEqual(inputs, ["root": "{{ worktree.path }}"])
-    guard case .notify(let text) = workflow.steps[4].action else { return XCTFail("done should notify") }
-    XCTAssertTrue(text.hasPrefix("Adversarial review:"))
-    XCTAssertEqual(workflow.steps[5].action, .close(role: "reviewer"))
+    XCTAssertEqual(inputs, ["root": "{{ context.worktree.path }}"])
+    XCTAssertEqual(workflow.steps[6].action, .close(role: "reviewer"))
   }
 
   func testStepLocationsAreOneBased() throws {
     let workflow = try WorkflowFixtures.parse(WorkflowFixtures.adversarialReview)
-    XCTAssertEqual(workflow.steps[0].location, WorkflowSourceLocation(line: 29, column: 5))
+    XCTAssertEqual(workflow.steps[0].location, WorkflowSourceLocation(line: 33, column: 5))
     XCTAssertEqual(workflow.roles[1].location?.line, 16)
   }
 
@@ -121,7 +116,7 @@ final class WorkflowDocumentParserTests: XCTestCase {
   func testMissingRequiredKeysAndUnsupportedSchema() {
     XCTAssertEqual(WorkflowFixtures.parseCodes("id: demo\nname: Demo\n"), ["missing_key", "missing_key"])
     XCTAssertEqual(
-      WorkflowFixtures.parseCodes("schema: prowl.workflow/v2\nid: demo\nname: Demo\nsteps:\n  - id: a\n    notify: hi\n"),
+      WorkflowFixtures.parseCodes("schema: prowl.workflow/v99\nid: demo\nname: Demo\nsteps:\n  - id: a\n    notify: hi\n"),
       ["unsupported_schema"])
   }
 
@@ -190,61 +185,7 @@ final class WorkflowDocumentParserTests: XCTestCase {
     }
   }
 
-  func testRepeatRules() {
-    let nested = WorkflowFixtures.minimal(
-      extraSteps: """
-          - id: outer
-            repeat: { max: 2 }
-            steps:
-              - id: inner
-                repeat: { max: 2 }
-                steps:
-                  - id: leaf
-                    notify: hi
-        """)
-    XCTAssertEqual(WorkflowFixtures.parseCodes(nested), ["nested_repeat"])
-    let launchInside = WorkflowFixtures.minimal(
-      extraSteps: """
-          - id: loop
-            repeat: { max: 2 }
-            steps:
-              - id: l
-                launch: r
-                prompt: go
-        """,
-      extraRoles: "  r:\n    source: launch")
-    XCTAssertEqual(WorkflowFixtures.parseCodes(launchInside), ["launch_inside_repeat"])
-    let noMax = WorkflowFixtures.minimal(extraSteps: "  - id: loop\n    repeat: {}\n    steps:\n      - id: x\n        notify: hi")
-    XCTAssertEqual(WorkflowFixtures.parseCodes(noMax), ["missing_key"])
-    let badMax = WorkflowFixtures.minimal(extraSteps: "  - id: loop\n    repeat: { max: five }\n    steps:\n      - id: x\n        notify: hi")
-    XCTAssertEqual(WorkflowFixtures.parseCodes(badMax), ["repeat_max"])
-  }
 
-  func testRepeatBoundsAndUntilForms() throws {
-    let yaml = WorkflowFixtures.minimal(
-      extraSteps: """
-          - id: a
-            repeat: { max: 3 }
-            steps:
-              - id: x
-                notify: hi
-          - id: b
-            repeat: { max: "{{ inputs.n }}", until: "outputs.f.verdict in [clean, done]" }
-            steps:
-              - id: y
-                notify: hi
-        """)
-    let workflow = try WorkflowFixtures.parse(yaml)
-    guard case .repeat(.literal(3), nil, _) = workflow.steps[1].action else { return XCTFail("literal max") }
-    guard case .repeat(.template("{{ inputs.n }}"), let until?, _) = workflow.steps[2].action else {
-      return XCTFail("template max with until")
-    }
-    XCTAssertEqual(until.output, "f")
-    XCTAssertEqual(until.values, ["clean", "done"])
-    let garbage = WorkflowFixtures.minimal(
-      extraSteps: "  - id: c\n    repeat: { max: 2, until: \"findings is clean\" }\n    steps:\n      - id: z\n        notify: hi")
-    XCTAssertEqual(WorkflowFixtures.parseCodes(garbage), ["until_syntax"])
-  }
 
   func testDurationsAndOnTimeout() {
     XCTAssertEqual(WorkflowDocumentParser.parseDuration("90s"), 90)
@@ -260,14 +201,14 @@ final class WorkflowDocumentParserTests: XCTestCase {
     XCTAssertEqual(WorkflowFixtures.parseCodes(orphanPolicy), ["on_timeout_requires_timeout"])
   }
 
-  func testActionInputsKeepScalarSourceText() throws {
+  func testActionInputsPreserveJSONTypes() throws {
     let yaml = WorkflowFixtures.minimal(
       extraSteps: "  - id: b\n    action: handoff.transition\n    with: { from: author, to: author, note: 42 }")
     let workflow = try WorkflowFixtures.parse(yaml)
     guard case .action("handoff.transition", let inputs) = workflow.steps[1].action else { return XCTFail("action") }
-    XCTAssertEqual(inputs, ["from": "author", "to": "author", "note": "42"])
+    XCTAssertEqual(inputs, ["from": .string("author"), "to": .string("author"), "note": .integer(42)])
     let nested = WorkflowFixtures.minimal(extraSteps: "  - id: b\n    action: git.context\n    with: { root: [a] }")
-    XCTAssertEqual(WorkflowFixtures.parseCodes(nested), ["type_mismatch"])
+    XCTAssertEqual(WorkflowFixtures.parseCodes(nested), [])
   }
 
   // MARK: - Round 1 review findings
@@ -284,7 +225,7 @@ final class WorkflowDocumentParserTests: XCTestCase {
   func testStepsMustNotBeEmpty() {
     XCTAssertEqual(
       WorkflowFixtures.parseCodes("schema: prowl.workflow/v1\nid: demo\nname: Demo\nsteps: []\n"), ["steps_empty"])
-    let emptyBody = WorkflowFixtures.minimal(extraSteps: "  - id: loop\n    repeat: { max: 2 }\n    steps: []")
+    let emptyBody = WorkflowFixtures.minimal(extraSteps: "  - id: loop\n    while: \"true\"\n    steps: []")
     XCTAssertEqual(WorkflowFixtures.parseCodes(emptyBody), ["steps_empty"])
   }
 
@@ -306,14 +247,7 @@ final class WorkflowDocumentParserTests: XCTestCase {
     let paddedTimeout = WorkflowFixtures.minimal(
       extraSteps: "  - id: b\n    message: author\n    text: hi\n    expect: { timeout: \" 10m\" }")
     XCTAssertEqual(WorkflowFixtures.parseCodes(paddedTimeout), ["timeout_syntax"])
-    let paddedUntil = WorkflowFixtures.minimal(
-      extraSteps: "  - id: loop\n    repeat: { max: 2, until: \" outputs.f.verdict == clean\" }\n    steps:\n      - id: x\n        notify: hi")
-    XCTAssertEqual(WorkflowFixtures.parseCodes(paddedUntil), ["until_syntax"])
-    for until in ["outputs.Brief.verdict == clean", "outputs.brief.verdict == Clean", "outputs.a.b.verdict == x"] {
-      let yaml = WorkflowFixtures.minimal(
-        extraSteps: "  - id: loop\n    repeat: { max: 2, until: \"\(until)\" }\n    steps:\n      - id: x\n        notify: hi")
-      XCTAssertEqual(WorkflowFixtures.parseCodes(yaml), ["until_syntax"], until)
-    }
+    let legacy = WorkflowFixtures.minimal(extraSteps: "  - id: loop\n    repeat: {max: 2}\n    steps: [{id: x, notify: hi}]")
+    XCTAssertEqual(WorkflowFixtures.parseCodes(legacy), ["step_verb"])
   }
 }
-

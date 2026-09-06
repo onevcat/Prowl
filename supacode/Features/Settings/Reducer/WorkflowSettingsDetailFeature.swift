@@ -9,6 +9,7 @@ struct WorkflowSettingsDetailFeature {
     let rowID: String
     var row: WorkflowSettingsRow?
     var runTargets: [WorkflowSettingsRunTarget]
+    var bundleReview: WorkflowBundleReview?
     @Presents var alert: AlertState<Alert>?
 
     init(row: WorkflowSettingsRow, runTargets: [WorkflowSettingsRunTarget]) {
@@ -27,6 +28,10 @@ struct WorkflowSettingsDetailFeature {
     case runSetupChanged(WorkflowBindModeOverride.Mode?)
     case preferredProfileChanged(WorkflowBindingMemoryKey, UUID?)
     case openWorkflowTapped
+    case reviewBundleTapped
+    case reviewFileSelected(String)
+    case approveBundleTapped
+    case dismissBundleReview
     case revealInFinderTapped
     case runTapped(worktreeID: String, forceSheet: Bool)
     case manageProfilesTapped
@@ -66,9 +71,38 @@ struct WorkflowSettingsDetailFeature {
       case .preferredProfileChanged(let key, let profileID):
         return .send(.delegate(.setPreferredProfile(key, profileID)))
 
+      case .reviewBundleTapped:
+        guard let row = state.row else { return .none }
+        do { state.bundleReview = try WorkflowBundleReview.load(url: row.url, scope: row.scope) } catch {
+          state.alert = AlertState {
+            TextState("Cannot Review Bundle")
+          } message: {
+            TextState(String(describing: error))
+          }
+        }
+        return .none
+
+      case .reviewFileSelected(let path):
+        guard state.bundleReview?.snapshot.files[path] != nil else { return .none }
+        state.bundleReview?.selectedFile = path
+        return .none
+
+      case .approveBundleTapped:
+        guard let review = state.bundleReview, !review.approved, !review.scripts.isEmpty else { return .none }
+        do {
+          try WorkflowBundleApprovalStore().approve(review.snapshot, now: Date())
+          state.bundleReview?.approved = true
+          state.bundleReview?.error = nil
+        } catch { state.bundleReview?.error = "\(error)" }
+        return .none
+
+      case .dismissBundleReview:
+        state.bundleReview = nil
+        return .none
+
       case .openWorkflowTapped:
         guard let row = state.row else { return .none }
-        openURLClient.open(row.url)
+        openURLClient.open(row.url.appending(path: "workflow.yaml"))
         return .none
 
       case .revealInFinderTapped:

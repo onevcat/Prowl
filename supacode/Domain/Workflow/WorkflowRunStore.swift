@@ -108,10 +108,6 @@ nonisolated struct WorkflowRunRecord: Codable, Equatable, Sendable {
     let ordinal: Int?
   }
 
-  struct Loop: Codable, Equatable, Sendable {
-    let count: Int
-  }
-
   let version: Int
   let run: WorkflowRunRecordInfo
   let worktree: WorkflowRunWorktree
@@ -120,9 +116,10 @@ nonisolated struct WorkflowRunRecord: Codable, Equatable, Sendable {
   let bindings: [String: Binding]
   let invocations: [WorkflowRunRecordInvocation]
   let outputs: [String: WorkflowOutputRecord]
-  let actions: [String: [String: String]]
+  let actions: [String: [String: WorkflowJSONValue]]
+  let state: [String: WorkflowJSONValue]?
+  let actionAttempts: [String: Int]?
   let skippedOutputs: [String: String]
-  let loop: Loop
   let steps: [Step]
 
   enum CodingKeys: String, CodingKey {
@@ -134,8 +131,9 @@ nonisolated struct WorkflowRunRecord: Codable, Equatable, Sendable {
     case invocations
     case outputs
     case actions
+    case state
+    case actionAttempts = "action_attempts"
     case skippedOutputs = "skipped_outputs"
-    case loop
     case steps
   }
 
@@ -172,8 +170,9 @@ nonisolated struct WorkflowRunRecord: Codable, Equatable, Sendable {
     }
     outputs = run.outputs
     actions = run.actionOutputs
+    state = run.controlCursor?.state.values
+    actionAttempts = run.actionAttempts
     skippedOutputs = run.skippedOutputs
-    loop = Loop(count: run.loopCount)
     steps = run.stepRecords.map { Step(id: $0.stepID, iteration: $0.iteration, state: $0.state, ordinal: $0.ordinal) }
   }
 
@@ -196,8 +195,9 @@ nonisolated struct WorkflowRunRecord: Codable, Equatable, Sendable {
     invocations = record.invocations
     outputs = record.outputs
     actions = record.actions
+    state = record.state
+    actionAttempts = record.actionAttempts
     skippedOutputs = record.skippedOutputs
-    loop = record.loop
     steps = record.steps
   }
 

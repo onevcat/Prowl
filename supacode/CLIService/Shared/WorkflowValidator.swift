@@ -21,6 +21,7 @@ nonisolated public struct WorkflowValidationContext: Sendable {
   /// Preset fields of the enabled Agent Profiles; nil = the `suggest` match warning is skipped.
   public let enabledProfiles: [WorkflowProfileSuggestion]?
   public let actions: [WorkflowActionSchema]
+  public var localActions: [String: WorkflowScriptAction] = [:]
 
   public init(
     scope: WorkflowScope,
@@ -106,9 +107,9 @@ nonisolated private final class Walker {
   private var ordinal = 0
   /// Action steps visible to the step being validated: outer sequences first, current last.
   private var actionScopes: [[String: WorkflowActionSchema]] = [[:]]
-  private var insideRepeat = false
+  private var checkingActionInputs = false
   private var currentLoopID: String?
-  private var loopSeen = false
+  private var outerOutputNames: Set<String> = []
   /// `on_timeout: skip` expectations, kept apart from `outputs` so folding a skippable loop
   /// cannot lose them before the consumers are reported.
   private var skipOutputs: [SkipRecord] = []
@@ -268,8 +269,8 @@ nonisolated private final class Walker {
       if let definitionRole = requireRole(role, at: step.location), definitionRole.source != .launch {
         collector.error("close_role_source", "'close' applies to launch roles only.", at: step.location)
       }
-    case .repeat(let max, let until, let body):
-      checkRepeat(step, max: max, until: until, body: body)
+    case .control(let control):
+      checkControl(step, control: control)
     }
   }
 
@@ -326,28 +327,46 @@ nonisolated private final class Walker {
     }
   }
 
-  private func checkAction(_ step: WorkflowStepDefinition, id: String, inputs: [String: String]) {
+  private func checkAction(_ step: WorkflowStepDefinition, id: String, inputs: [String: WorkflowJSONValue]) {
+    checkingActionInputs = true
+    defer { checkingActionInputs = false }
+    for value in inputs.values { checkJSONTemplates(value, at: step.location) }
+    if id.hasPrefix("local:") {
+      let name = String(id.dropFirst(6))
+      guard let contract = context.localActions[name] else {
+        collector.error("unknown_action", "Bundle has no action '\(id)'.", at: step.location)
+        return
+      }
+      var fields = WorkflowJSONValue.object([:])
+      if case .object(var object) = fields {
+        for (key, value) in inputs { object[key] = value }
+        fields = .object(object)
+      }
+      if !String(describing: fields).contains("{{") {
+        do { try contract.validateInput(fields) } catch {
+          collector.error("action_input_schema", "\(error)", at: step.location)
+        }
+      }
+      actionScopes[actionScopes.count - 1][step.id] = WorkflowActionSchema(
+        id: id, description: contract.name, inputs: [],
+        outputs: [
+          WorkflowActionOutput(name: "output", description: "Typed action output"),
+          WorkflowActionOutput(name: "result_path", description: "Result JSON path"),
+        ])
+      return
+    }
     guard let schema = WorkflowActionRegistry.schema(for: id, in: context.actions) else {
       collector.error("unknown_action", "Unknown action '\(id)'.", at: step.location)
       return
     }
     for (key, value) in inputs.sorted(by: { $0.key < $1.key }) {
-      guard let input = schema.input(named: key) else {
+      guard schema.input(named: key) != nil else {
         collector.error("unknown_action_input", "Action '\(id)' has no input '\(key)'.", at: step.location)
         continue
       }
-      switch input.kind {
-      case .role:
-        if WorkflowTemplate.containsReference(value) {
-          collector.error(
-            "role_input_literal", "Action '\(id)' input '\(key)' must name a role literally, not a template.",
-            at: step.location)
-        } else if definition.role(named: value) == nil {
-          collector.error(
-            "unknown_role", "Action '\(id)' input '\(key)' names undefined role '\(value)'.", at: step.location)
-        }
-      case .string, .path:
-        checkTemplate(value, at: step.location, consumer: input.required ? .requiredActionInput : .optionalActionInput)
+      guard case .string = value else {
+        collector.error("action_input_type", "Action '\(id)' input '\(key)' must be a string.", at: step.location)
+        continue
       }
     }
     for input in schema.inputs where input.required && inputs[input.name] == nil {
@@ -356,106 +375,66 @@ nonisolated private final class Walker {
     actionScopes[actionScopes.count - 1][step.id] = schema
   }
 
-  private func checkRepeat(
-    _ step: WorkflowStepDefinition, max: WorkflowRepeatBound, until: WorkflowUntilCondition?,
-    body: [WorkflowStepDefinition]
-  ) {
-    checkRepeatBound(max, at: step.location)
-    let before = outputs
-    insideRepeat = true
-    currentLoopID = step.id
-    actionScopes.append([:])
-    body.forEach(checkStep)
-    actionScopes.removeLast()
-    insideRepeat = false
-    currentLoopID = nil
-    loopSeen = true
-    guard let until else { return }
-    checkUntil(until, loopID: step.id, before: before, at: until.location ?? step.location)
-    foldSkippableLoopOutputs(before: before)
-  }
-
-  /// A loop with `until` may run zero times: outputs first produced inside it are not visible
-  /// afterwards, and an output also produced before keeps only the verdicts both producers
-  /// declare.
-  private func foldSkippableLoopOutputs(before: [String: OutputInfo]) {
-    for (name, info) in outputs {
-      guard let earlier = before[name] else {
-        outputs[name] = nil
-        continue
-      }
-      var folded = info
-      if let outer = earlier.latestVerdicts, let inner = info.latestVerdicts {
-        folded.latestVerdicts = outer.intersection(inner)
-      } else {
-        folded.latestVerdicts = nil
-      }
-      outputs[name] = folded
+  private func checkJSONTemplates(_ value: WorkflowJSONValue, at location: WorkflowSourceLocation?) {
+    switch value {
+    case .string(let text): checkTemplate(text, at: location, consumer: .requiredActionInput)
+    case .array(let values): for value in values { checkJSONTemplates(value, at: location) }
+    case .object(let fields): for value in fields.values { checkJSONTemplates(value, at: location) }
+    default: break
     }
   }
 
-  private func checkRepeatBound(_ max: WorkflowRepeatBound, at location: WorkflowSourceLocation?) {
-    switch max {
-    case .literal(let value):
-      if !(1...WorkflowSchema.repeatMaximum).contains(value) {
-        collector.error("repeat_max_range", "'max' must lie in 1…\(WorkflowSchema.repeatMaximum).", at: location)
+  private func checkControl(_ step: WorkflowStepDefinition, control: WorkflowControlStep) {
+    let expressions: [String]
+    switch control {
+    case .set(let assignments):
+      expressions = Array(assignments.values)
+      for name in assignments.keys where definition.state[name] == nil {
+        collector.error("unknown_state", "Unknown state field '\(name)'.", at: step.location)
       }
-    case .template(let text):
-      let references = (try? WorkflowTemplate.references(in: text)) ?? []
-      guard WorkflowTemplate.isSingleReference(text), references.count == 1,
-        let reference = references.first, reference.components.count == 2, reference.components[0] == "inputs",
-        let input = definition.input(named: reference.components[1]), input.type == .integer
-      else {
-        collector.error(
-          "repeat_max_template", "'max' may only be a template of exactly one integer input.", at: location)
-        return
-      }
+    case .conditional(let condition, _, _), .loop(let condition, _, _): expressions = [condition]
+    case .breakLoop, .continueLoop: expressions = []
     }
-  }
-
-  /// `until` reads the latest delivery of its output: before entry that is the last producer
-  /// before the loop, after each iteration any producer in the body — every one of them must
-  /// declare a verdict set that holds the literals.
-  private func checkUntil(
-    _ until: WorkflowUntilCondition, loopID: String, before: [String: OutputInfo], at location: WorkflowSourceLocation?
-  ) {
-    guard let info = outputs[until.output] else {
-      collector.error(
-        "until_output", "'until' references output '\(until.output)', which no earlier or enclosed step produces.",
-        at: location)
-      return
+    for expression in expressions {
+      do {
+        var parser = try WorkflowExpressionParser(expression)
+        let node = try parser.parse()
+        for parts in node.requiredReferences {
+          checkReference(
+            WorkflowTemplate.Reference(path: parts.joined(separator: ".")), at: step.location, consumer: .template)
+        }
+      } catch { collector.error("expression_syntax", "\(error)", at: step.location) }
     }
-    // Only the body's final producer is read after an iteration; before entry the latest
-    // pre-loop state applies, already folded when it came out of a skippable loop.
-    var candidates: [Set<String>?] = []
-    if let final = info.producers.last(where: { $0.loopID == loopID }) {
-      candidates.append(final.verdicts)
+    let previousOutputs = outputs
+    let previousOuterNames = outerOutputNames
+    outerOutputNames.formUnion(outputs.keys)
+    defer { outerOutputNames = previousOuterNames }
+    let previousRoles = launchedRoles
+    let branches: [[WorkflowStepDefinition]]
+    if case .conditional(_, let yes, let otherwise) = control {
+      branches = [yes, otherwise]
+    } else {
+      branches = [step.action.children]
     }
-    if let earlier = before[until.output] {
-      candidates.append(earlier.latestVerdicts)
+    for branch in branches {
+      actionScopes.append([:])
+      branch.forEach(checkStep)
+      actionScopes.removeLast()
+      outputs = previousOutputs
+      launchedRoles = previousRoles
     }
-    let sets = candidates.compactMap { $0 }
-    guard sets.count == candidates.count, let first = sets.first else {
-      collector.error("until_verdict_undeclared", "Output '\(until.output)' declares no verdict.", at: location)
-      return
-    }
-    let verdicts = sets.dropFirst().reduce(first) { $0.intersection($1) }
-    if until.values.isEmpty {
-      collector.error("until_syntax", "'until' needs at least one verdict value.", at: location)
-    }
-    for value in until.values where !verdicts.contains(value) {
-      collector.error(
-        "until_verdict_literal", "'\(value)' is not a declared verdict of output '\(until.output)'.", at: location)
-    }
-    // `until` reads the output before entry and after every iteration: a skip anywhere in
-    // the loop body feeds it, so it counts as a reader inside that loop.
-    consumers[until.output, default: []].append(OutputUse(consumer: .until, ordinal: ordinal, loopID: loopID))
   }
 
   // MARK: Expect
 
   private func checkExpect(_ expect: WorkflowExpectation?, step: WorkflowStepDefinition) {
     guard let expect, let name = step.outputName else { return }
+    if outerOutputNames.contains(name) {
+      collector.error(
+        "output_shadowing",
+        "Output '\(name)' would overwrite an outer scope. Use a distinct output name and retain values in state.",
+        at: step.location)
+    }
     let location = expect.location ?? step.location
     if !WorkflowSchema.isSlug(name) {
       collector.error("output_name_slug", "Output name '\(name)' is not a valid slug.", at: location)
@@ -513,16 +492,27 @@ nonisolated private final class Walker {
   // MARK: Templates
 
   private func checkTemplate(_ text: String, at location: WorkflowSourceLocation?, consumer: OutputConsumer) {
-    let references: [WorkflowTemplate.Reference]
+    var remaining = text[...]
+    while let start = remaining.range(of: "{{") {
+      remaining = remaining[start.upperBound...]
+      guard let end = remaining.range(of: "}}") else {
+        collector.error("template_syntax", "Unclosed expression.", at: location)
+        return
+      }
+      checkExpression(String(remaining[..<end.lowerBound]), at: location, consumer: consumer)
+      remaining = remaining[end.upperBound...]
+    }
+    if remaining.contains("}}") { collector.error("template_syntax", "Unexpected expression delimiter.", at: location) }
+  }
+
+  private func checkExpression(_ expression: String, at location: WorkflowSourceLocation?, consumer: OutputConsumer) {
     do {
-      references = try WorkflowTemplate.references(in: text)
-    } catch {
-      collector.error("template_syntax", "Malformed template placeholder: \(error).", at: location)
-      return
-    }
-    for reference in references {
-      checkReference(reference, at: location, consumer: consumer)
-    }
+      var parser = try WorkflowExpressionParser(expression)
+      let node = try parser.parse()
+      for parts in node.requiredReferences {
+        checkReference(WorkflowTemplate.Reference(path: parts.joined(separator: ".")), at: location, consumer: consumer)
+      }
+    } catch { collector.error("expression_syntax", "\(error)", at: location) }
   }
 
   private func checkReference(
@@ -530,20 +520,38 @@ nonisolated private final class Walker {
   ) {
     let parts = reference.components
     let valid: Bool
-    switch (parts.first, parts.count) {
-    case ("run", 2): valid = ["id", "dir"].contains(parts[1])
-    case ("worktree", 2): valid = ["path", "name", "branch"].contains(parts[1])
-    case ("inputs", 2): valid = definition.input(named: parts[1]) != nil
-    case ("loop", 2): valid = parts[1] == "index" ? insideRepeat : (parts[1] == "count" && (insideRepeat || loopSeen))
-    case ("roles", 3): valid = checkRoleReference(parts, at: location)
-    case ("outputs", 3): valid = checkOutputReference(parts, at: location, consumer: consumer)
-    case ("actions", 3): valid = checkActionReference(parts)
+    switch parts.first {
+    case "context":
+      valid = checkContextReference(parts)
+    case "inputs": valid = parts.count >= 2 && definition.input(named: parts[1]) != nil
+    case "state": valid = parts.count >= 2 && definition.state[parts[1]] != nil
+    case "outputs": valid = parts.count == 3 && checkOutputReference(parts, at: location, consumer: consumer)
+    case "actions": valid = parts.count >= 3 && checkActionReference(parts)
     default: valid = false
     }
     if !valid {
-      collector.error(
-        "unknown_variable", "Unknown or premature template variable '{{ \(reference.path) }}'.", at: location)
+      collector.error("unknown_variable", "Unknown or unavailable variable '{{ \(reference.path) }}'.", at: location)
     }
+  }
+
+  private func checkContextReference(_ parts: [String]) -> Bool {
+    guard parts.count >= 2 else { return true }
+    let fields: [String: Set<String>] = [
+      "run": ["id", "workflow_id", "directory"],
+      "worktree": ["id", "path", "name", "branch", "captured_at"],
+      "source": ["pane_id"], "step": ["id", "iteration", "captured_at"],
+      "execution": ["id", "step_id", "attempt", "cwd", "artifact_dir"],
+    ]
+    if parts[1] == "execution", !checkingActionInputs { return false }
+    if parts[1] == "roles" {
+      guard parts.count > 2 else { return true }
+      guard definition.role(named: parts[2]) != nil else { return false }
+      return parts.count == 3
+        || (parts.count == 4 && ["source", "name", "agent", "pane", "observed"].contains(parts[3]))
+        || (parts.count == 5 && parts[3] == "observed" && ["exists", "state"].contains(parts[4]))
+    }
+    guard let allowed = fields[parts[1]] else { return false }
+    return parts.count == 2 || (parts.count == 3 && allowed.contains(parts[2]))
   }
 
   private func checkRoleReference(_ parts: [String], at location: WorkflowSourceLocation?) -> Bool {

@@ -10,6 +10,18 @@ struct WorkflowSettingsDetailView: View {
       if let row = store.row {
         Form {
           workflowSection(row)
+          if row.scriptActionCount > 0 {
+            Section("Script Actions") {
+              Text(
+                """
+                This bundle contains \(row.scriptActionCount) script action(s).
+                Scripts run with your local user permissions.
+                """
+              )
+              Button("Review Bundle…") { store.send(.reviewBundleTapped) }
+                .help("Inspect all bundle files and approve this version before running scripts")
+            }
+          }
           runSection(row)
           rolesSection(row)
           runSetupSection(row)
@@ -29,6 +41,11 @@ struct WorkflowSettingsDetailView: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     .alert($store.scope(state: \.alert, action: \.alert))
+    .sheet(
+      isPresented: Binding(get: { store.bundleReview != nil }, set: { if !$0 { store.send(.dismissBundleReview) } })
+    ) {
+      WorkflowBundleReviewView(store: store)
+    }
   }
 
   private func workflowSection(_ row: WorkflowSettingsRow) -> some View {

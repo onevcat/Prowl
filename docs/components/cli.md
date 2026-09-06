@@ -469,12 +469,12 @@ from the GUI (Install / Remove / Repair / Replace per skill × detected target) 
 the same status as `prowl skills list` — see [settings](settings.md#agent-skills).
 
 ### `prowl workflow`
-Discover, validate, and **run** Agent Workflow definitions — YAML files
+Discover, validate, and **run** Agent Workflow definitions — `.pwlworkflow` bundles
 (`schema: prowl.workflow/v1`) that declare a multi-agent flow Prowl runs (roles, `message` /
-`launch` steps with expected outputs, `repeat … until`, native actions). Definitions come from
+`launch` steps with expected outputs, typed state, nested conditions/loops, and built-in/local actions). Definitions come from
 three sources, later ones winning for the same id: the app bundle
 (`Prowl.app/Contents/Resources/workflows/`, ids `prowl.*` are reserved for it) <
-`~/.prowl/workflows/*.yaml` < `<repo>/.prowl/workflows/*.yaml`. `validate` and `schema` run
+`~/.prowl/workflows/*.pwlworkflow` < `<repo>/.prowl/workflows/*.pwlworkflow`. `validate` and `schema` run
 **locally** and work with Prowl closed; every other subcommand needs the app. The bundled
 `prowl-workflow` skill (`skills/prowl-workflow/SKILL.md`, linked by `prowl skills install`)
 teaches an agent to author, validate, run, and take part in workflows. The feature as a
@@ -487,8 +487,8 @@ prowl workflow run <id|name> [source] [--role r=<binding>]... [--input k=v]... [
 prowl workflow status [run-id] [--json]                 # no args: the calling pane's run, role, awaited step
 prowl workflow done [-|--file <path>] [--verdict <v>] [--token <t>] [--run <id> --step <id>] [--force] [--json]
 prowl workflow cancel <run-id> [--json]
-prowl workflow validate <file> [--scope bundle|user|repo] [--json]   # parse + validate one file; exit 1 on errors
-prowl workflow schema [--json]                          # JSON Schema (Draft 2020-12) of a workflow file
+prowl workflow validate <bundle.pwlworkflow> [--scope bundle|user|repo] [--json]   # validate a bundle; exit 1 on errors
+prowl workflow schema [--action] [--json]                          # workflow or action manifest JSON Schema (Draft 2020-12)
 ```
 
 - `list` searches the repo source of one worktree: the caller's own pane's worktree, else the
@@ -572,7 +572,7 @@ prowl workflow schema [--json]                          # JSON Schema (Draft 202
   `validate` only.
 
 ```bash
-prowl workflow validate .prowl/workflows/review.yaml
+prowl workflow validate .prowl/workflows/review.pwlworkflow
 prowl workflow list --json | jq '.data.workflows[] | select(.valid) | .id'
 run="$(prowl workflow run review --role reviewer=Codex --input max_rounds=3 --json)"
 printf '%s\n' "$run" | jq -r '.data.self_initiated.line'      # what to do now, when this pane is the current role
@@ -587,6 +587,15 @@ prowl workflow cancel "$(printf '%s\n' "$run" | jq -r '.data.id')"
 JSON is `prowl.cli.workflow.v1` with `data.action` = `list` | `run` | `status` | `done` |
 `cancel` | `validate` | `schema`; `run`, `status`, and `cancel` share the run shape, `done`
 nests it under `.data.run` beside `.data.delivery`.
+
+`prowl workflow test-action <workflow> <action> [source] --input-json '<JSON object>' [--json]`
+starts a real single-action run from a discovered bundle. Use `builtin:git.context` or
+`local:<id>`. Script bundles require prior native approval in Settings > Agents > Workflows;
+`WORKFLOW_APPROVAL_REQUIRED` tells you to review the bundle. This command cannot grant approval.
+It uses the same worktree, fixed bundle copy, process limits, cancellation, and action records
+as a workflow run. Poll the returned run ID with `workflow status` and inspect its run directory.
+
+`validate` accepts the bundle directory, not its `workflow.yaml`. Loose YAML files are not workflow bundles. See [Workflows](workflows.md#script-actions-and-bundles) for approval and results.
 
 ### `prowl read [target]`
 Read a pane's content.

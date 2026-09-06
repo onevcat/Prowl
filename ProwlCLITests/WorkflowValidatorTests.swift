@@ -75,14 +75,14 @@ final class WorkflowValidatorTests: XCTestCase {
       ["message_before_launch"])
     let twice = "  - id: l1\n    launch: r\n    prompt: go\n  - id: l2\n    launch: r\n    prompt: again"
     XCTAssertEqual(WorkflowFixtures.codes(minimal(steps: twice, roles: role)), ["launch_twice"])
-    let ordered = "  - id: l1\n    launch: r\n    prompt: go\n  - id: m\n    message: r\n    text: \"pane {{ roles.r.pane }}\""
+    let ordered = "  - id: l1\n    launch: r\n    prompt: go\n  - id: m\n    message: r\n    text: \"pane {{ context.roles.r.pane }}\""
     XCTAssertEqual(WorkflowFixtures.codes(minimal(steps: ordered, roles: role)), [])
   }
 
   func testDuplicateStepIdsAcrossNesting() {
     let steps = """
         - id: loop
-          repeat: { max: 2 }
+          while: "true"
           steps:
             - id: ask
               notify: hi
@@ -117,17 +117,17 @@ final class WorkflowValidatorTests: XCTestCase {
     func codes(_ text: String, roles: String = "") -> [String] {
       WorkflowFixtures.codes(minimal(steps: "  - id: b\n    notify: \"\(text)\"", roles: roles))
     }
-    XCTAssertEqual(codes("{{ run.id }} {{ run.dir }} {{ worktree.path }} {{ worktree.branch }}"), [])
-    XCTAssertEqual(codes("{{ roles.author.name }} {{ roles.author.agent }} {{ roles.author.pane }}"), [])
+    XCTAssertEqual(codes("{{ context.run.id }} {{ context.run.directory }} {{ context.worktree.path }} {{ context.worktree.branch }}"), [])
+    XCTAssertEqual(codes("{{ context.roles.author.name }} {{ context.roles.author.agent }} {{ context.roles.author.pane }}"), [])
     XCTAssertEqual(codes("{{ nope.x }}"), ["unknown_variable"])
-    XCTAssertEqual(codes("{{ worktree.owner }}"), ["unknown_variable"])
+    XCTAssertEqual(codes("{{ context.worktree.owner }}"), ["unknown_variable"])
     XCTAssertEqual(codes("{{ inputs.missing }}"), ["unknown_variable"])
     XCTAssertEqual(codes("{{ outputs.brief.path }}"), ["unknown_variable"], "no producer yet")
-    XCTAssertEqual(codes("{{ roles.r.pane }}", roles: role), ["unknown_variable"], "launch role not launched")
-    XCTAssertEqual(codes("{{ loop.index }}"), ["unknown_variable"], "outside repeat")
+    XCTAssertEqual(codes("{{ context.roles.r.pane }}", roles: role), [], "unlaunched pane is explicitly null")
+    XCTAssertEqual(codes("{{ context.step.iteration }}"), [], "outside a loop iteration is explicitly null")
     XCTAssertEqual(codes("{{ loop.count }}"), ["unknown_variable"], "before any loop")
     XCTAssertEqual(codes("{{ open"), ["template_syntax"])
-    XCTAssertEqual(codes("{{ }}"), ["template_syntax"])
+    XCTAssertEqual(codes("{{ }}"), ["expression_syntax"])
   }
 
   func testOutputAndActionReferencesFollowProducers() {
@@ -137,9 +137,9 @@ final class WorkflowValidatorTests: XCTestCase {
           text: hi
           expect: { output: brief }
         - id: ctx
-          action: git.context
+          action: builtin:git.context
         - id: n
-          notify: "{{ outputs.brief.path }} {{ actions.ctx.path }} {{ actions.ctx.branch }}"
+          notify: "{{ outputs.brief.path }} {{ actions.ctx.output.path }} {{ actions.ctx.output.branch }}"
         - id: v
           notify: "{{ outputs.brief.verdict }}"
         - id: k
@@ -151,14 +151,14 @@ final class WorkflowValidatorTests: XCTestCase {
   func testActionsInsideALoopAreNotVisibleAfterIt() {
     let steps = """
         - id: loop
-          repeat: { max: 2 }
+          while: "true"
           steps:
             - id: ctx
-              action: git.context
+              action: builtin:git.context
             - id: inside
-              notify: "{{ actions.ctx.path }} round {{ loop.index }}"
+              notify: "{{ actions.ctx.output.path }} round {{ context.step.iteration }}"
         - id: after
-          notify: "{{ loop.count }} {{ actions.ctx.path }}"
+          notify: "{{ actions.ctx.output.path }}"
       """
     XCTAssertEqual(WorkflowFixtures.codes(minimal(steps: steps)), ["unknown_variable"])
   }
@@ -168,70 +168,17 @@ final class WorkflowValidatorTests: XCTestCase {
   func testActionInputsFollowTheRegistry() {
     XCTAssertEqual(WorkflowFixtures.codes(minimal(steps: "  - id: b\n    action: fs.delete")), ["unknown_action"])
     XCTAssertEqual(
-      WorkflowFixtures.codes(minimal(steps: "  - id: b\n    action: git.context\n    with: { depth: 3 }")),
+      WorkflowFixtures.codes(minimal(steps: "  - id: b\n    action: builtin:git.context\n    with: { depth: 3 }")),
       ["unknown_action_input"])
     XCTAssertEqual(
       WorkflowFixtures.codes(minimal(steps: "  - id: b\n    action: handoff.transition\n    with: { from: author }")),
-      ["missing_action_input"])
+      ["unknown_action"])
   }
 
   // MARK: - Repeat and until
 
-  func testRepeatMaxBounds() {
-    func loop(_ max: String) -> String {
-      minimal(steps: "  - id: loop\n    repeat: { max: \(max) }\n    steps:\n      - id: x\n        notify: hi")
-    }
-    XCTAssertEqual(WorkflowFixtures.codes(loop("0")), ["repeat_max_range"])
-    XCTAssertEqual(WorkflowFixtures.codes(loop("21")), ["repeat_max_range"])
-    XCTAssertEqual(WorkflowFixtures.codes(loop("20")), [])
-    XCTAssertEqual(
-      WorkflowFixtures.codes(loop("\"{{ inputs.n }}\"") + "inputs:\n  n: { type: integer }\n"), [])
-    XCTAssertEqual(
-      WorkflowFixtures.codes(loop("\"{{ inputs.n }}\"") + "inputs:\n  n: { type: string }\n"), ["repeat_max_template"])
-    XCTAssertEqual(
-      WorkflowFixtures.codes(loop("\"{{ inputs.n }} rounds\"") + "inputs:\n  n: { type: integer }\n"),
-      ["repeat_max_template"])
-  }
 
-  func testUntilNeedsADeclaredVerdict() {
-    func loop(until: String, producer: String) -> String {
-      minimal(
-        steps: """
-          \(producer)
-            - id: loop
-              repeat: { max: 2, until: "\(until)" }
-              steps:
-                - id: x
-                  notify: hi
-          """)
-    }
-    let verdictProducer = "  - id: p\n    message: author\n    text: hi\n    expect: { output: f, verdict: [clean, issues] }"
-    let plainProducer = "  - id: p\n    message: author\n    text: hi\n    expect: { output: f }"
-    XCTAssertEqual(WorkflowFixtures.codes(loop(until: "outputs.f.verdict == clean", producer: verdictProducer)), [])
-    XCTAssertEqual(
-      WorkflowFixtures.codes(loop(until: "outputs.f.verdict == done", producer: verdictProducer)),
-      ["until_verdict_literal"])
-    XCTAssertEqual(
-      WorkflowFixtures.codes(loop(until: "outputs.f.verdict == clean", producer: plainProducer)),
-      ["until_verdict_undeclared"])
-    XCTAssertEqual(
-      WorkflowFixtures.codes(loop(until: "outputs.g.verdict == clean", producer: verdictProducer)), ["until_output"])
-  }
 
-  func testUntilMayReferenceAnOutputProducedInsideTheLoop() {
-    let steps = """
-        - id: loop
-          repeat: { max: 2, until: "outputs.f.verdict == clean" }
-          steps:
-            - id: x
-              message: author
-              text: hi
-              expect: { output: f, verdict: [clean, issues] }
-      """
-    XCTAssertEqual(WorkflowFixtures.codes(minimal(steps: steps)), [])
-  }
-
-  // MARK: - Expect
 
   func testVerdictRules() {
     func expect(_ verdict: String) -> String {
@@ -277,8 +224,8 @@ final class WorkflowValidatorTests: XCTestCase {
           text: hi
           expect: { output: brief, timeout: 5m, on_timeout: skip }
         - id: t
-          action: handoff.checkpoint
-          with: { briefing: "{{ outputs.brief.path }}" }
+          action: builtin:git.context
+          with: { root: "{{ outputs.brief.path ?? context.worktree.path }}" }
       """
     XCTAssertEqual(WorkflowFixtures.codes(minimal(steps: optional)), [])
   }
@@ -303,14 +250,6 @@ final class WorkflowValidatorTests: XCTestCase {
       WorkflowFixtures.codes(minimal(steps: "  - id: b\n    message: author\n    text: \"a\\tb\"")), ["text_multiline"])
   }
 
-  func testRoleInputsOfNativeActionsMustNameDeclaredRoles() {
-    let missing = "  - id: t\n    action: handoff.transition\n    with: { from: missing, to: also-missing }"
-    XCTAssertEqual(WorkflowFixtures.codes(minimal(steps: missing)), ["unknown_role", "unknown_role"])
-    let templated = "  - id: t\n    action: handoff.transition\n    with: { from: \"{{ roles.author.name }}\", to: author }"
-    XCTAssertEqual(WorkflowFixtures.codes(minimal(steps: templated)), ["role_input_literal"])
-    let valid = "  - id: t\n    action: handoff.transition\n    with: { from: author, to: author }"
-    XCTAssertEqual(WorkflowFixtures.codes(minimal(steps: valid)), [])
-  }
 
   func testVerdictReferencesFollowTheLatestProducer() {
     let stale = """
@@ -341,56 +280,6 @@ final class WorkflowValidatorTests: XCTestCase {
     XCTAssertEqual(WorkflowFixtures.codes(minimal(steps: refreshed)), [])
   }
 
-  func testOutputsProducedOnlyInsideASkippableLoopAreNotVisibleAfterIt() {
-    let skippable = """
-        - id: initial
-          message: author
-          text: Initial
-          expect: { output: verdict, verdict: [clean, issues] }
-        - id: retry
-          repeat: { max: 2, until: "outputs.verdict.verdict == clean" }
-          steps:
-            - id: produce
-              message: author
-              text: Retry
-              expect: { output: retry_result }
-        - id: report
-          notify: "{{ outputs.retry_result.path }}"
-      """
-    XCTAssertEqual(WorkflowFixtures.codes(minimal(steps: skippable)), ["unknown_variable"])
-    let unconditional = """
-        - id: retry
-          repeat: { max: 2 }
-          steps:
-            - id: produce
-              message: author
-              text: Retry
-              expect: { output: retry_result }
-        - id: report
-          notify: "{{ outputs.retry_result.path }}"
-      """
-    XCTAssertEqual(WorkflowFixtures.codes(minimal(steps: unconditional)), [])
-    let produced_before_and_inside = """
-        - id: initial
-          message: author
-          text: Initial
-          expect: { output: findings, verdict: [clean, issues] }
-        - id: loop
-          repeat: { max: 2, until: "outputs.findings.verdict == clean" }
-          steps:
-            - id: again
-              message: author
-              text: Again
-              expect: { output: findings }
-        - id: path
-          notify: "{{ outputs.findings.path }}"
-        - id: verdict
-          notify: "{{ outputs.findings.verdict }}"
-      """
-    XCTAssertEqual(
-      WorkflowFixtures.codes(minimal(steps: produced_before_and_inside)), ["until_verdict_undeclared", "unknown_variable"],
-      "the in-loop producer declares no verdict: until cannot read it and neither can a later reference")
-  }
 
   func testSuggestWarnsWhenNoEnabledProfileMatches() {
     let role = "  r:\n    source: launch\n    suggest: { agent: codex, reasoning_effort: xhigh }"
@@ -403,69 +292,8 @@ final class WorkflowValidatorTests: XCTestCase {
 
   // MARK: - Round 2 review findings
 
-  func testUntilReadsOnlyTheFinalProducerOfTheLoopBody() {
-    let steps = """
-        - id: initial
-          message: author
-          text: Initial
-          expect: { output: result, verdict: [retry, stop] }
-        - id: loop
-          repeat: { max: 3, until: "outputs.result.verdict == stop" }
-          steps:
-            - id: intermediate
-              message: author
-              text: Working
-              expect: { output: result, verdict: [working, failed] }
-            - id: final
-              message: author
-              text: Final
-              expect: { output: result, verdict: [retry, stop] }
-      """
-    XCTAssertEqual(WorkflowFixtures.codes(minimal(steps: steps)), [])
-  }
 
-  func testALaterSkippableLoopSeesTheFoldedStateOfAnEarlierOne() {
-    let steps = """
-        - id: initial
-          message: author
-          text: Initial
-          expect: { output: findings, verdict: [clean, issues] }
-        - id: first
-          repeat: { max: 2, until: "outputs.findings.verdict == clean" }
-          steps:
-            - id: again
-              message: author
-              text: Again
-              expect: { output: findings, verdict: [needs-work, clean] }
-        - id: second
-          repeat: { max: 2, until: "outputs.findings.verdict == needs-work" }
-          steps:
-            - id: poke
-              notify: "round {{ loop.index }}"
-      """
-    XCTAssertEqual(
-      WorkflowFixtures.codes(minimal(steps: steps)), ["until_verdict_literal"],
-      "if the first loop is skipped the latest findings verdict set is {clean, issues}; needs-work is not in it")
-  }
 
-  func testSkipWarningsSurviveFoldingASkippableLoop() {
-    let steps = """
-        - id: initial
-          message: author
-          text: Initial
-          expect: { output: gate, verdict: [go, stop] }
-        - id: loop
-          repeat: { max: 2, until: "outputs.gate.verdict == stop" }
-          steps:
-            - id: produce
-              message: author
-              text: Produce
-              expect: { output: draft, timeout: 5m, on_timeout: skip }
-            - id: consume
-              notify: "{{ outputs.draft.path }}"
-      """
-    XCTAssertEqual(WorkflowFixtures.codes(minimal(steps: steps)), ["skip_ends_run"])
-  }
 
   func testBlankNamesAndTokensAreRejectedLikeTheSchemaDoes() {
     XCTAssertEqual(
@@ -493,24 +321,5 @@ final class WorkflowValidatorTests: XCTestCase {
           expect: { output: brief, timeout: 5m, on_timeout: skip }
       """
     XCTAssertEqual(WorkflowFixtures.codes(minimal(steps: consumedBefore)), [], "nothing after the skip depends on it")
-    let loopCarried = """
-        - id: seed
-          message: author
-          text: Seed
-          expect: { output: draft, verdict: [go, stop] }
-        - id: loop
-          repeat: { max: 3, until: "outputs.draft.verdict == stop" }
-          steps:
-            - id: use
-              notify: "{{ outputs.draft.path }}"
-            - id: redo
-              message: author
-              text: Redo
-              expect: { output: draft, verdict: [go, stop], timeout: 5m, on_timeout: skip }
-      """
-    XCTAssertEqual(
-      WorkflowFixtures.codes(minimal(steps: loopCarried)), ["skip_ends_run"],
-      "the next iteration and the until check read the skipped output")
   }
 }
-

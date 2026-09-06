@@ -122,13 +122,22 @@ enum WorkflowRunAdmission {
     case .failure(let failure): return .failure(failure)
     case .success(let value): entry = value
     }
-    guard let definition = entry.file.definition, entry.file.isValid else {
+    guard var definition = entry.file.definition, entry.file.isValid else {
       return .failure(
         .init(
           code: CLIErrorCode.workflowInvalid,
           message:
             "Workflow '\(name)' has \(entry.file.diagnostics.errorCount) validation error(s); fix the file first.",
           details: WorkflowValidatePayload(file: entry.file)))
+    }
+    if let actionID = input.testAction {
+      let localID = actionID.hasPrefix("local:") ? String(actionID.dropFirst(6)) : ""
+      guard actionID == "builtin:git.context" || entry.file.actions[localID] != nil else {
+        return .failure(.init(code: CLIErrorCode.invalidArgument, message: "Unknown bundle action '\(actionID)'."))
+      }
+      definition = WorkflowDefinition(
+        id: definition.id, name: definition.name + " · Action Test",
+        steps: [.init(id: "action-test", action: .action(id: actionID, inputs: input.actionInputs ?? [:]))])
     }
     guard
       let preferenceKey = WorkflowPreferenceKey.make(
@@ -173,7 +182,7 @@ enum WorkflowRunAdmission {
     return start(
       Admission(
         definition: definition, entry: entry, worktree: worktree, arguments: arguments,
-        binder: binder, source: source,
+        binder: binder, source: source, literalActionInputs: input.testAction != nil,
         environment: environment))
   }
 
@@ -186,6 +195,7 @@ enum WorkflowRunAdmission {
     let arguments: Arguments
     let binder: RoleBinder
     let source: WorkflowRunSource
+    let literalActionInputs: Bool
     let environment: WorkflowAdmissionEnvironment
   }
 
@@ -196,13 +206,34 @@ enum WorkflowRunAdmission {
       admission.definition, admission.entry, admission.worktree, admission.arguments
     )
     let (binder, source, environment) = (admission.binder, admission.source, admission.environment)
-    let context = WorkflowRunContext(
+    var context = WorkflowRunContext(
       scope: binder.scope,
       definitionPath: entry.file.url.path(percentEncoded: false),
       worktree: WorkflowRunWorktree(
         id: worktree.id, name: worktree.name, branch: environment.branchName(worktree),
         path: worktree.workingDirectory.path(percentEncoded: false)))
+    context.sourcePaneID = source.paneID
+    context.literalActionInputs = admission.literalActionInputs
     let runID = environment.makeRunID()
+    if let snapshot = entry.file.snapshot {
+      do {
+        if !entry.file.actions.isEmpty, try !WorkflowBundleApprovalStore().isApproved(snapshot) {
+          return .failure(
+            .init(
+              code: "WORKFLOW_APPROVAL_REQUIRED",
+              message:
+                "Review and approve this script bundle in Settings > Agents > Workflows, then start the run again."))
+        }
+        try WorkflowRunStore(rootURL: context.worktree.rootURL).ensureLayout(runID: runID)
+        context.bundle = try WorkflowPreparedBundle(
+          source: entry.file,
+          directory: WorkflowRunPaths.runDirectory(root: context.worktree.rootURL, runID: runID).appending(
+            path: "definition"),
+          environment: ProcessInfo.processInfo.environment)
+      } catch {
+        return .failure(.init(code: CLIErrorCode.workflowFailed, message: "Bundle preparation failed: \(error)"))
+      }
+    }
     let now = environment.now
     let started: (machine: WorkflowRunMachine, effects: [WorkflowRunEffect])
     do {
@@ -639,10 +670,6 @@ enum WorkflowRunAdmission {
       .init(
         code: CLIErrorCode.unsafePath,
         message: "The worktree path cannot be rendered on one line: \(path)")
-    case .invalidRepeatBound(let step):
-      .init(
-        code: CLIErrorCode.invalidArgument,
-        message: "Step '\(step)': repeat.max must resolve to 1…\(WorkflowSchema.repeatMaximum).")
     case .unknownSkipStep(let step):
       .init(code: CLIErrorCode.invalidArgument, message: "--skip \(step): no such step.")
     case .skipNotExpecting(let step):

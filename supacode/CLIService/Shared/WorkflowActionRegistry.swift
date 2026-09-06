@@ -60,50 +60,41 @@ nonisolated public struct WorkflowActionSchema: Equatable, Sendable {
 }
 
 nonisolated public enum WorkflowActionRegistry {
+  public static var gitContextInput: WorkflowActionJSONSchema {
+    get throws {
+      try WorkflowActionJSONSchema(
+        .object([
+          "type": "object", "properties": .object(["root": .object(["type": "string"])]),
+          "additionalProperties": .boolean(false),
+        ]), path: "builtin/git-context-input.json")
+    }
+  }
+
+  public static var gitContextOutput: WorkflowActionJSONSchema {
+    get throws {
+      try WorkflowActionJSONSchema(
+        .object([
+          "type": "object",
+          "properties": .object([
+            "path": .object(["type": "string"]), "branch": .object(["type": "string"]),
+          ]), "required": .array(["path", "branch"]), "additionalProperties": .boolean(false),
+        ]), path: "builtin/git-context-output.json")
+    }
+  }
+
   public static let all: [WorkflowActionSchema] = [
     WorkflowActionSchema(
-      id: "handoff.transition",
-      description:
-        "Archive-first `.prowl/handoff/` transition from one role to another; without a briefing "
-        + "it becomes a context-only transition.",
+      id: "builtin:git.context",
+      description: "Save repository status and diff summary to this action's artifacts.",
       inputs: [
         WorkflowActionInput(
-          name: "briefing", required: false, kind: .path, description: "Path to the validated briefing"),
-        WorkflowActionInput(name: "from", required: true, kind: .role, description: "Outgoing role"),
-        WorkflowActionInput(name: "to", required: true, kind: .role, description: "Receiving role"),
-        WorkflowActionInput(name: "note", required: false, description: "Log note"),
+          name: "root", required: false, kind: .path,
+          description: "Repository path within the selected worktree; defaults to the worktree")
       ],
       outputs: [
-        WorkflowActionOutput(name: "kickoff_prompt", description: "Kickoff prompt for the receiver"),
-        WorkflowActionOutput(name: "artifact_path", description: "Path of the handoff artifact"),
-        WorkflowActionOutput(name: "has_briefing", description: "Whether a briefing was delivered"),
-      ]
-    ),
-    WorkflowActionSchema(
-      id: "handoff.checkpoint",
-      description: "Save progress for a later successor; regenerates `context.md`.",
-      inputs: [
-        WorkflowActionInput(
-          name: "briefing", required: false, kind: .path, description: "Path to the validated briefing"),
-        WorkflowActionInput(name: "note", required: false, description: "Log note"),
-      ],
-      outputs: [
-        WorkflowActionOutput(name: "artifact_path", description: "Path of the handoff artifact"),
-        WorkflowActionOutput(name: "has_briefing", description: "Whether a briefing was delivered"),
-      ]
-    ),
-    WorkflowActionSchema(
-      id: "git.context",
-      description: "Generate a markdown summary of the worktree's repository state.",
-      inputs: [
-        WorkflowActionInput(
-          name: "root", required: false, kind: .path, description: "Repository root; defaults to the worktree")
-      ],
-      outputs: [
-        WorkflowActionOutput(name: "path", description: "Path to the generated markdown summary"),
-        WorkflowActionOutput(name: "branch", description: "Checked-out branch"),
-      ]
-    ),
+        WorkflowActionOutput(name: "output", description: "JSON object containing path and branch"),
+        WorkflowActionOutput(name: "result_path", description: "Path to this invocation's result.json"),
+      ])
   ]
 
   public static func schema(for id: String, in actions: [WorkflowActionSchema] = all) -> WorkflowActionSchema? {

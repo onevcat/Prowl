@@ -10,13 +10,14 @@ struct WorkflowCommand: ParsableCommand {
     commandName: "workflow",
     abstract: "Discover, validate, and run Agent Workflow definitions.",
     discussion: """
-      Definitions are YAML files (`prowl.workflow/v1`) found in the app bundle, ~/.prowl/workflows, \
+      Definitions are .pwlworkflow bundles (`prowl.workflow/v1`) found in the app bundle, ~/.prowl/workflows, \
       and <repo>/.prowl/workflows. `validate` and `schema` work with Prowl closed; every other \
       subcommand needs the running app.
       """,
     subcommands: [
       WorkflowListCommand.self,
       WorkflowRunCommand.self,
+      WorkflowTestActionCommand.self,
       WorkflowStatusCommand.self,
       WorkflowDoneCommand.self,
       WorkflowCancelCommand.self,
@@ -270,9 +271,10 @@ struct WorkflowValidateCommand: ParsableCommand {
 struct WorkflowSchemaCommand: ParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "schema",
-    abstract: "Print the JSON Schema of a workflow file (for authoring agents and editors)."
+    abstract: "Print the JSON Schema of a workflow bundle (for authoring agents and editors)."
   )
 
+  @Flag(help: "Print the local script action manifest schema.") var action = false
   @OptionGroup var options: GlobalOptions
 
   mutating func run() throws {
@@ -281,7 +283,7 @@ struct WorkflowSchemaCommand: ParsableCommand {
       colorEnabled: options.colorEnabled
     ) {
       try WorkflowCommandRunner.render(
-        .schema(try WorkflowCommandExecutor.current().schema()), options: options)
+        .schema(try WorkflowCommandExecutor.current().schema(action: action)), options: options)
     }
   }
 }
@@ -306,5 +308,30 @@ enum WorkflowCommandRunner {
       data: try RawJSON(encoding: payload)
     )
     OutputRenderer.render(response, mode: options.outputMode)
+  }
+}
+
+
+struct WorkflowTestActionCommand: ParsableCommand {
+  static let configuration = CommandConfiguration(commandName: "test-action",
+    abstract: "Run one action from an installed workflow bundle with the same native approval policy.")
+
+  @Argument(help: "Workflow id or unique name.") var workflow: String
+  @Argument(help: "builtin:git.context or local:<action-id>.") var action: String
+  @Argument(help: "Source worktree or pane.") var source: String?
+  @Option(name: .long, help: "JSON object supplied to the action.") var inputJSON = "{}"
+  @OptionGroup var selector: SelectorOptions
+  @OptionGroup var options: GlobalOptions
+
+  mutating func run() throws {
+    guard let data = inputJSON.data(using: .utf8), data.count <= 1_048_576,
+      let value = try? JSONDecoder().decode(WorkflowJSONValue.self, from: data), case .object(let inputs) = value
+    else { throw ValidationError("--input-json must be a JSON object of at most 1 MiB.") }
+    try WorkflowJSON.validate(value)
+    try WorkflowSocketCommand.execute(options: options) {
+      CommandEnvelope(output: options.outputMode, command: .workflow(WorkflowInput(action: .run,
+        target: try selector.resolve(positionalTarget: source), workflow: workflow,
+        testAction: action, actionInputs: inputs)))
+    }
   }
 }

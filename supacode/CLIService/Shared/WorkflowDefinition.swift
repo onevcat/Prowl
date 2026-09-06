@@ -8,7 +8,6 @@ nonisolated public enum WorkflowSchema {
   public static let identifier = "prowl.workflow/v1"
   /// `prowl.*` ids are reserved for definitions shipped inside the app bundle.
   public static let reservedIDPrefix = "prowl."
-  public static let repeatMaximum = 20
   public static let verdictRange = 2...4
   /// Carries an activation's delivery token to `prowl workflow done`: typed as the line's
   /// environment prefix for a `message` step, set in the child environment for a `launch` step.
@@ -91,6 +90,7 @@ nonisolated public struct WorkflowDefinition: Equatable, Sendable {
   public let inputs: [WorkflowInputDefinition]
   public let roles: [WorkflowRoleDefinition]
   public let steps: [WorkflowStepDefinition]
+  public let state: [String: WorkflowStateDeclaration]
 
   public init(
     id: String,
@@ -99,7 +99,8 @@ nonisolated public struct WorkflowDefinition: Equatable, Sendable {
     icon: String? = nil,
     inputs: [WorkflowInputDefinition] = [],
     roles: [WorkflowRoleDefinition] = [],
-    steps: [WorkflowStepDefinition] = []
+    steps: [WorkflowStepDefinition] = [],
+    state: [String: WorkflowStateDeclaration] = [:]
   ) {
     self.id = id
     self.name = name
@@ -108,6 +109,7 @@ nonisolated public struct WorkflowDefinition: Equatable, Sendable {
     self.inputs = inputs
     self.roles = roles
     self.steps = steps
+    self.state = state
   }
 
   public func role(named name: String) -> WorkflowRoleDefinition? {
@@ -121,10 +123,10 @@ nonisolated public struct WorkflowDefinition: Equatable, Sendable {
   /// Every step in document order, `repeat` bodies inlined after their `repeat` step.
   public var flattenedSteps: [WorkflowStepDefinition] {
     steps.flatMap { step -> [WorkflowStepDefinition] in
-      if case .repeat(_, _, let body) = step.action {
-        return [step] + body
-      }
-      return [step]
+      [step]
+        + step.action.children.flatMap { child in
+          [child] + child.action.descendants
+        }
     }
   }
 }
@@ -342,33 +344,14 @@ nonisolated public enum WorkflowMessageContent: Equatable, Sendable {
   }
 }
 
-nonisolated public enum WorkflowRepeatBound: Equatable, Sendable {
-  case literal(Int)
-  /// The raw template, e.g. `{{ inputs.max_rounds }}`; must reference exactly one integer input.
-  case template(String)
-}
-
-nonisolated public struct WorkflowUntilCondition: Equatable, Sendable {
-  public let output: String
-  /// Allowed verdict literals; one value for `==`, several for `in [...]`.
-  public let values: [String]
-  public let location: WorkflowSourceLocation?
-
-  public init(output: String, values: [String], location: WorkflowSourceLocation? = nil) {
-    self.output = output
-    self.values = values
-    self.location = location
-  }
-}
-
 nonisolated public enum WorkflowStepAction: Equatable, Sendable {
   case message(role: String, content: WorkflowMessageContent, expect: WorkflowExpectation?)
   case launch(role: String, prompt: String, skill: String?, expect: WorkflowExpectation?)
-  /// `with` values are templated strings; YAML scalars are kept as their source text.
-  case action(id: String, inputs: [String: String])
+  /// `with` preserves JSON values and evaluates embedded expressions.
+  case action(id: String, inputs: [String: WorkflowJSONValue])
+  case control(WorkflowControlStep)
   case notify(String)
   case close(role: String)
-  case `repeat`(max: WorkflowRepeatBound, until: WorkflowUntilCondition?, steps: [WorkflowStepDefinition])
 
   public var verb: String {
     switch self {
@@ -377,14 +360,14 @@ nonisolated public enum WorkflowStepAction: Equatable, Sendable {
     case .action: "action"
     case .notify: "notify"
     case .close: "close"
-    case .repeat: "repeat"
+    case .control(let control): control.verb
     }
   }
 
   public var expect: WorkflowExpectation? {
     switch self {
     case .message(_, _, let expect), .launch(_, _, _, let expect): expect
-    case .action, .notify, .close, .repeat: nil
+    case .action, .notify, .close, .control: nil
     }
   }
 
@@ -392,7 +375,7 @@ nonisolated public enum WorkflowStepAction: Equatable, Sendable {
   public var targetRole: String? {
     switch self {
     case .message(let role, _, _), .launch(let role, _, _, _), .close(let role): role
-    case .action, .notify, .repeat: nil
+    case .action, .notify, .control: nil
     }
   }
 }

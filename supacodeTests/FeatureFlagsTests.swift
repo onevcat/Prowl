@@ -5,8 +5,10 @@ import Testing
 
 @MainActor
 struct FeatureFlagsTests {
-  @Test func workflowUIRequiresExplicitOptIn() {
-    for environment in [[:], ["PROWL_WORKFLOW_UI": ""], ["PROWL_WORKFLOW_UI": "0"], ["PROWL_WORKFLOW_UI": "true"]] {
+  @Test func workflowUIIsEnabledByDefaultAndCanBeDisabled() {
+
+    #expect(FeatureFlags(environment: [:]).workflowUI)
+    for environment in [["PROWL_WORKFLOW_UI": ""], ["PROWL_WORKFLOW_UI": "0"], ["PROWL_WORKFLOW_UI": "true"]] {
       #expect(!FeatureFlags(environment: environment).workflowUI)
     }
     #expect(FeatureFlags(environment: ["PROWL_WORKFLOW_UI": "1"]).workflowUI)
@@ -16,7 +18,7 @@ struct FeatureFlagsTests {
     let store = TestStore(initialState: SettingsFeature.State()) {
       SettingsFeature()
     } withDependencies: {
-      $0.featureFlags = FeatureFlags(environment: [:])
+      $0.featureFlags = FeatureFlags(environment: ["PROWL_WORKFLOW_UI": "0"])
     }
     await store.send(.setSelection(.workflows)) {
       $0.selection = .profiles
@@ -25,7 +27,7 @@ struct FeatureFlagsTests {
   }
 
   @Test func workflowSkillVisibilityDoesNotHideOtherSkills() {
-    let flags = FeatureFlags(environment: [:])
+    let flags = FeatureFlags(environment: ["PROWL_WORKFLOW_UI": "0"])
     #expect(!flags.showsSkill("prowl-workflow"))
     #expect(flags.showsSkill("prowl-cli"))
     #expect(FeatureFlags(environment: ["PROWL_WORKFLOW_UI": "1"]).showsSkill("prowl-workflow"))

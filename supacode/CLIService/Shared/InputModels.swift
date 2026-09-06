@@ -705,6 +705,8 @@ nonisolated public struct WorkflowInput: Codable, Sendable {
   public let target: TargetSelector
   /// `run`: workflow id or unique name.
   public let workflow: String?
+  public let testAction: String?
+  public let actionInputs: [String: WorkflowJSONValue]?
   /// `run`: `<role>=<binding>` overrides (dsl-spec §9).
   public let roleBindings: [String]
   /// `run`: `<name>=<value>` inputs.
@@ -726,6 +728,8 @@ nonisolated public struct WorkflowInput: Codable, Sendable {
     action: WorkflowInputAction = .list,
     target: TargetSelector = .none,
     workflow: String? = nil,
+    testAction: String? = nil,
+    actionInputs: [String: WorkflowJSONValue]? = nil,
     roleBindings: [String] = [],
     inputValues: [String] = [],
     skippedSteps: [String] = [],
@@ -739,6 +743,8 @@ nonisolated public struct WorkflowInput: Codable, Sendable {
     self.action = action
     self.target = target
     self.workflow = workflow
+    self.testAction = testAction
+    self.actionInputs = actionInputs
     self.roleBindings = roleBindings
     self.inputValues = inputValues
     self.skippedSteps = skippedSteps

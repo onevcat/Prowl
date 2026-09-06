@@ -2,7 +2,7 @@
 name: prowl-workflow
 description: >-
   Author, validate, run, and participate in Prowl Agent Workflows — the `prowl.workflow/v1`
-  YAML files that orchestrate several live coding agents (launch, message, loop on verdicts,
+  bundles that orchestrate several live coding agents (launch, message, loop on verdicts,
   collect outputs) inside the running Prowl app. Reach for this whenever the user wants a
   workflow created or edited ("write me a Prowl workflow that has two agents review each
   other", "add an input to the guessing-game workflow"), wants one executed ("use Prowl's
@@ -12,30 +12,31 @@ description: >-
   a participant in a run and must deliver through the workflow protocol. Not for driving
   individual panes directly (use prowl-cli) and not for Prowl settings/UI questions.
 metadata:
-  prowl-summary: Teaches an agent to write, validate, and run Prowl Agent Workflow YAML files, to act as a participant when a workflow messages it, and to read a run's logs and output files. Link it into a runtime's skill folder so the agent can build and drive multi-agent workflows on request.
+  prowl-summary: Teaches an agent to write, validate, and run Prowl Agent Workflow bundles, to act as a participant when a workflow messages it, and to read a run's logs and output files. Link it into a runtime's skill folder so the agent can build and drive multi-agent workflows on request.
 ---
 
 # Prowl Agent Workflows
 
-A workflow is one YAML file (`schema: prowl.workflow/v1`) that scripts several live agents:
-who takes part (`roles`), and what happens in order (`steps` — launch an agent, message one,
-loop until a verdict, ring a notification, close a pane). The running Prowl app executes it;
-every participant is a real terminal pane. Definitions are discovered from three sources,
-later shadowing earlier by id: the app bundle (ids `prowl.*`, reserved), user
-(`~/.prowl/workflows/*.yaml`), repo (`<repo root>/.prowl/workflows/*.yaml`).
+A workflow is a `.pwlworkflow` directory with `workflow.yaml` (`schema: prowl.workflow/v1`)
+and optional local script actions, helpers, schemas, and assets. It declares roles and
+sequential steps, typed state, nested conditions and loops. Prowl executes it; agent roles
+use real terminal panes. Sources, later shadowing earlier by ID: app bundle (`prowl.*`
+reserved), user (`~/.prowl/workflows/*.pwlworkflow`), repo
+(`<repo root>/.prowl/workflows/*.pwlworkflow`). Pass bundle directories, not loose YAML files.
 
 Pick the section for the task; load a reference file only when that task is at hand:
 
 | Task | Where |
 | --- | --- |
 | Write or edit a workflow | read [references/authoring.md](references/authoring.md) first — full DSL, validator rules, patterns, worked example |
+| Create or test a script action | [references/actions.md](references/actions.md) — package layout, JSON protocol, approval, result records |
 | Start a workflow, inspect or debug a run, decode an error | [Running](#running-a-workflow) below; details in [references/runbook.md](references/runbook.md) |
 | A `[Prowl] …` line appeared in this pane | [Participating](#participating-in-a-run) below |
 
 ## Authoring loop
 
 Read `references/authoring.md`, draft the requested workflow, validate it with
-`prowl workflow validate <file>`, and fix errors while assessing warnings. `validate` and
+`prowl workflow validate <bundle.pwlworkflow>`, and fix errors while assessing warnings. `validate` and
 `prowl workflow schema` work with Prowl closed. Passing static validation does not guarantee
 start-time admission or successful execution: profiles, panes, inputs, CLI connectivity,
 and the agents' work still matter. If validation cannot run, disclose that limitation.
@@ -52,7 +53,7 @@ picker and saved preferences choose the agent by default.
 Examples demonstrate individual capabilities, not a mandatory architecture. Use the roles,
 steps, and output contracts the task needs; add loops, deadlines, and automatic pane closure
 only when their behavior serves the requested outcome. The authoring reference explains
-data dependencies, loop exits, and unsupported V1 constructs.
+data dependencies, loop exits, and typed state and result scopes.
 
 ## Running a workflow
 
@@ -82,7 +83,7 @@ prowl workflow cancel <run-id> [--json]
   closes launched panes; only a `close:` step does.
 - The GUI starts (Command Palette, Agents capsule popover, Active Agents context menu) go
   through the same admission — behavior is identical to the CLI. Settings › Agents › Workflows
-  lists every file with the same validation diagnostics, the enable toggle (a disabled workflow
+  lists every bundle with the same validation diagnostics, the enable toggle (a disabled workflow
   is `WORKFLOW_DISABLED` for `run`), and the remembered profile per launch role.
 
 ## Participating in a run

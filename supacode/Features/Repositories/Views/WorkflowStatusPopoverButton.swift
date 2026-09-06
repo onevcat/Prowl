@@ -327,7 +327,7 @@ private struct WorkflowRunPanelView: View {
             stepRow(step, currentInstruction: run.currentInstruction)
           case .round(let round):
             VStack(alignment: .leading, spacing: 6) {
-              Text("Round \(round.index) / \(round.maximum)")
+              Text(round.maximum.map { "Round \(round.index) / \($0)" } ?? "Round \(round.index)")
                 .font(.caption)
                 .foregroundStyle(.secondary)
               ForEach(round.steps) { step in

@@ -28,6 +28,7 @@ let package = Package(
       name: "ProwlCLIShared",
       dependencies: [
         .product(name: "Yams", package: "Yams"),
+        .product(name: "JSONSchema", package: "swift-json-schema"),
       ],
       path: "supacode/CLIService/Shared",
       exclude: ["Package.swift"]

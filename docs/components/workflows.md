@@ -1,9 +1,9 @@
 # Agent Workflows
 
-> Workflow UI is currently an opt-in preview. Start Prowl with `PROWL_WORKFLOW_UI=1` to show workflow launch menus, Settings, status controls, and role labels. Without it, the `prowl workflow` CLI and execution engine remain available. The flag is read at process startup; relaunch to change it.
+> Workflow UI is enabled by default. Start Prowl with `PROWL_WORKFLOW_UI=0` to hide its UI and skill row; CLI workflow and skill commands remain available. The switch is read at process startup.
 
 > Multi-step, multi-agent orchestrations that Prowl runs and supervises for
-> you: a YAML file declares the roles (the pane you start from, an agent Prowl
+> you: a workflow bundle declares the roles (the pane you start from, an agent Prowl
 > launches, an agent you pick) and the steps (message a role, launch one, loop
 > until a verdict, notify, close); Prowl types the instructions into the right
 > panes, waits for each delivery, and shows the run in the toolbar. This page
@@ -12,13 +12,13 @@
 > see [`cli.md`](cli.md#prowl-workflow); to write or debug a workflow, an agent
 > should load the bundled `prowl-workflow` skill.
 
-**Keywords:** workflow, workflows, agent workflow, orchestration, multi-agent, adversarial review, roles, steps, repeat until, verdict, yaml, prowl.workflow/v1, start sheet, run workflow, bindings, don't ask again, workflow status, run panel, needs attention, nudge, skip step, cancel run, workflow-runs, settings workflows, new workflow, ask an agent
+**Keywords:** workflow, workflows, agent workflow, orchestration, multi-agent, adversarial review, roles, steps, typed state, while, if, action bundle, verdict, yaml, prowl.workflow/v1, start sheet, run workflow, bindings, don't ask again, workflow status, run panel, needs attention, nudge, skip step, cancel run, workflow-runs, settings workflows, new workflow, ask an agent
 
 **Related:** [cli](cli.md) · [agent-profiles](agent-profiles.md) · [command-palette](command-palette.md) · [active-agents](active-agents.md) · [settings](settings.md) · [notifications](notifications.md)
 
 ## What it is
 
-A workflow file scripts several live agents: who takes part and what happens in
+A workflow bundle scripts several live agents: who takes part and what happens in
 order. Prowl executes it — every participant is a real terminal pane you can
 watch — and agents take part only through the `prowl` CLI, so any runtime Prowl
 recognizes can play any role. A typical workflow: the pane you are working in
@@ -26,7 +26,8 @@ writes a brief, Prowl launches a reviewer beside it from an Agent Profile, the
 reviewer reports findings with a verdict, and the two loop until the verdict is
 `clean` or the round cap is hit.
 
-The file format is `schema: prowl.workflow/v1`. Roles have a `source`:
+A `.pwlworkflow` directory contains `workflow.yaml` with `schema: prowl.workflow/v1`,
+and optional local script actions and assets. Workflow definitions are loaded from bundle directories. Roles have a `source`:
 
 | `source` | Meaning | How it is chosen |
 |---|---|---|
@@ -42,13 +43,13 @@ to the user's saved preferences and the start-sheet picker.
 
 Steps are `message` (type one line or point the role at a materialized
 instruction file), `launch` (start a launch role with a kickoff prompt),
-`repeat … until outputs.<name>.verdict == <value>` (bounded loop),
-`action` (a native Prowl action), `notify`, and `close`. A `message` or
+`set`, nested `if`/`else`, `while`, `break`/`continue`,
+`action` (built-in or local script), `notify`, and `close`. A `message` or
 `launch` step may `expect` an output: the role finishes by running the exact
 `prowl workflow done …` command Prowl typed into its pane, with the body on
 stdin. The full DSL, validator rules, and authoring patterns are the
 `prowl-workflow` skill's job (`prowl skills install prowl-workflow`);
-`prowl workflow schema` prints the JSON Schema.
+`prowl workflow schema` prints the workflow JSON Schema; `prowl workflow schema --action` prints the action manifest schema.
 
 ## Where workflow files live
 
@@ -56,9 +57,9 @@ Three sources, later ones winning for the same `id`:
 
 | Source | Location | Notes |
 |---|---|---|
-| Built-in | `Prowl.app/Contents/Resources/workflows/` | ids `prowl.*` are reserved for it. No built-in ships yet. |
-| Your workflows | `~/.prowl/workflows/*.yaml` | personal; not tied to a repository |
-| Repository | `<repo root>/.prowl/workflows/*.yaml` | travels with the repo; seen only from that repository's worktrees |
+| Built-in | `Prowl.app/Contents/Resources/workflows/` | ids `prowl.*` are reserved for it. Includes Repository Context (`builtin:git.context`). |
+| Your workflows | `~/.prowl/workflows/*.pwlworkflow` | personal; not tied to a repository |
+| Repository | `<repo root>/.prowl/workflows/*.pwlworkflow` | travels with the repo; seen only from that repository's worktrees |
 
 A file that fails validation is never offered for a run; a file with the same
 id in two sources is offered once (the repository file wins over yours). A
@@ -122,7 +123,7 @@ the feedback.
   count when several runs share the worktree. Hover previews the run panel;
   click pins it.
 - The **run panel** lists every active run in that worktree: role chips (click
-  focuses that pane), repeat rounds, the step list with the current instruction,
+  focuses that pane), loop iterations, the step list with the current instruction,
   the run folder and log, and **Cancel Run**.
 - **Needs attention** is a state, not a deadline: a late delivery is still
   accepted. The panel offers exactly the recoveries the runner permits — Focus
@@ -167,8 +168,8 @@ The detail page owns these controls and explanations:
 Starting from Settings keeps the review panel in the Settings window. Cancelling
 returns to the same detail without bringing the main window or terminal forward.
 
-**New Workflow…** writes a validated starter (`new-workflow.yaml`, then
-`new-workflow-2.yaml`, …) into the current page's workflow folder and opens it
+**New Workflow…** writes a validated starter (`new-workflow.pwlworkflow/workflow.yaml`, then
+`new-workflow-2.pwlworkflow/workflow.yaml`, …) into the current page's workflow folder and opens it
 in the default YAML app. **Ask an Agent…** provides a copyable prompt that
 points at the bundled `prowl-workflow` skill and this manual. The folder button
 reveals the current workflow folder, creating it when needed.
@@ -185,7 +186,7 @@ is not listening on its socket. The same status appears under Settings → Agent
 
 ## Gotchas for agents
 
-- Validate before handing over: `prowl workflow validate <file>` works with Prowl
+- Validate before handing over: `prowl workflow validate <bundle.pwlworkflow>` works with Prowl
   closed and is the static check; Settings shows the same diagnostics plus
   availability warnings (installed runtimes, enabled profiles) that only the
   app can evaluate. Errors, not warnings, make a file unrunnable — and its row
@@ -202,3 +203,33 @@ is not listening on its socket. The same status appears under Settings → Agent
   workflow activation with `WORKFLOW_DELIVERY_REQUIRED`.
 - Nothing is closed automatically; a launched reviewer pane stays open after the
   run unless the workflow has a `close:` step.
+
+## Script actions and bundles
+
+Local actions live under `actions/<id>/action.yaml` in a `.pwlworkflow` bundle, with scripts,
+helpers, and assets beside them. Steps reference `local:<id>` or `builtin:git.context`.
+Action inputs and results are typed JSON; validated results appear at
+`actions.<step>.output` and `actions.<step>.result_path`. The built-in repository context
+writes per-invocation artifacts, not shared handoff files. Legacy `prowl handoff` remains a
+separate CLI feature. These actions are also distinct from shell-command Custom Actions.
+
+Scripts have your local user permissions. In Settings > Agents > Workflows, open the bundle's
+script review, inspect the source location, interpreter, entrypoint, and changed files, then
+approve that version. Approval does not start the workflow. CLI starts and single-action tests
+use the same approval; the CLI cannot grant it. Changing or moving a bundle requires review
+again. A run uses a fixed definition copy; changes to that copy invalidate execution.
+
+Use `prowl workflow test-action <workflow-id> local:<id> --input-json '{}'` to exercise one
+approved action in a real run. Then run the workflow to test its agent interactions and data
+flow. Tests have the same side effects as normal execution. Each attempt records its request,
+result, metadata, stderr, and artifacts under the run's `actions/<step>/<execution UUID>/`.
+Retries create a fresh attempt and can repeat side effects. Cancel and timeout terminate the
+owned script process group; neither operation rolls back completed work.
+
+Typed `state` retains values explicitly. Branch and loop iteration results leave scope on
+exit. Use state to carry a verdict/path to the next iteration. A loop with no cap is permitted;
+a loop whose condition remains true at `max_iterations` ends as `max_rounds_reached`.
+A role stays bound for the run: launch it once, then send messages for repeated work.
+
+Install the `prowl-workflow` skill for bundle examples, the action manifest and JSON protocol,
+approval guidance, expression rules, and test commands.

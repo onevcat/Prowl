@@ -1,6 +1,6 @@
 # Settings
 
-> Workflow Settings (global and repository-local) and the `prowl-workflow` skill row are hidden unless Prowl starts with `PROWL_WORKFLOW_UI=1`. CLI workflow and skill commands remain available.
+> Workflow UI is enabled by default. Start Prowl with `PROWL_WORKFLOW_UI=0` to hide its UI and skill row; CLI workflow and skill commands remain available. The switch is read at process startup.
 
 > The Settings window (`⌘,`): what each tab controls. For the exhaustive
 > field-by-field list, see [`reference/settings-fields.md`](../reference/settings-fields.md).

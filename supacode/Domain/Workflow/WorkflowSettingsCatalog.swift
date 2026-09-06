@@ -134,6 +134,7 @@ nonisolated struct WorkflowSettingsRow: Equatable, Sendable, Identifiable {
   let shadowNote: String?
   /// Set on an effective repository definition when it overrides a personal definition.
   let precedenceNote: String?
+  var scriptActionCount: Int = 0
 
   /// Files are unique per path even when two of them declare the same id.
   var id: String { url.path(percentEncoded: false) }
@@ -284,7 +285,8 @@ nonisolated struct WorkflowSettingsCatalog: Equatable, Sendable {
         declaredBind: binds.count == 1 ? binds.first : nil,
         roles: roles,
         shadowNote: shadowNote(for: entry, siblings: siblings),
-        precedenceNote: precedenceNote(for: entry, siblings: siblings))
+        precedenceNote: precedenceNote(for: entry, siblings: siblings),
+        scriptActionCount: file.actions.count)
     }
 
     private func precedenceNote(

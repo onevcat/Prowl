@@ -1183,8 +1183,9 @@ final class ProwlCLIIntegrationTests: XCTestCase {
       .appending(path: "prowl-workflow-cli-\(UUID().uuidString)", directoryHint: .isDirectory)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: directory) }
-    let file = directory.appending(path: "flow.yaml")
-    try Data(yaml.utf8).write(to: file)
+    let file = directory.appending(path: "flow.pwlworkflow")
+    try FileManager.default.createDirectory(at: file, withIntermediateDirectories: true)
+    try Data(yaml.utf8).write(to: file.appending(path: "workflow.yaml"))
     try body(file, directory.appending(path: "missing.sock").path(percentEncoded: false))
   }
 
@@ -1336,6 +1337,15 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     XCTAssertEqual(runInput.roleBindings, ["reviewer=Codex"])
     XCTAssertEqual(runInput.inputValues, ["rounds=2"])
     XCTAssertEqual(runInput.skippedSteps, ["x"])
+    let (actionRequest, actionResult) = try runWithMockServer(
+      socketPath: temporarySocketPath(suffix: "workflow-test-action"), response: runResponse,
+      args: ["workflow", "test-action", "review", "local:count", "p3", "--input-json", "{\"count\":3}", "--json"])
+    XCTAssertEqual(actionResult.exitCode, 0, actionResult.stderr)
+    let actionEnvelope = try JSONDecoder().decode(CommandEnvelope.self, from: actionRequest)
+    guard case .workflow(let actionInput) = actionEnvelope.command else { return XCTFail("Expected workflow input") }
+    XCTAssertEqual(actionInput.testAction, "local:count")
+    XCTAssertEqual(actionInput.actionInputs, ["count": .integer(3)])
+    XCTAssertEqual(actionInput.target, .auto("p3"))
     let runOutput = try jsonObject(from: runResult.stdout)
     XCTAssertEqual(((runOutput["data"] as? [String: Any])?["self_initiated"] as? [String: Any])?["instruction_path"] as? String,
       "/Projects/App/.prowl/workflow-runs/R/instructions/brief.1.md")

@@ -1,3 +1,7 @@
+> **2026-09-06 action bundle implementation:** Workflow UI is enabled by default in this
+> change. `PROWL_WORKFLOW_UI=0` remains available to hide it. The earlier intervening-release
+> opt-in gate below is historical; see [017](017-action-bundle-implementation.md).
+
 # Agent Workflows (063) + Agent Completion Signals (064) — release plan (living)
 
 > Living document: the single place that says **when** and **in what order** the slices of

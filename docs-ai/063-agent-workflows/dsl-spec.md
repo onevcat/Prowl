@@ -1,51 +1,32 @@
 # Agent Workflow DSL — `prowl.workflow/v1` (living spec)
 
-> This document specifies current V1 behavior. The proposed replacement for actions, packaging, context, and control flow is [063.015](015-action-bundles-and-control-flow.md), under design review; it is not implemented yet.
+Updated 2026-09-06 for action bundles. Workflows have not been formally released. This is
+the v1 bundle format, not a version migration. This specification supersedes the earlier
+loose-document, `repeat/until`, and workflow-handoff-action design. The separate handoff CLI
+remains unchanged. Design rationale: [015](015-action-bundles-and-control-flow.md) and
+[017 implementation contract](017-action-bundle-implementation.md).
 
-> Living document: the normative definition of the workflow file format, run semantics,
-> and the CLI participant protocol. Updated in place as the design settles and the
-> implementation lands; history and rationale live in [000-plan.md](000-plan.md).
->
-> Status: **draft, revised 2026-08-29** after R1 shipped — B1 (definitions) landed in #740; §4, §5, §9,
-> §10, and §12 were aligned with the shipped dispatch model (064-S2/S3, #733) on 2026-08-29
-> (decisions in [006-b1-definitions.md](006-b1-definitions.md)); the B2 runner decisions of
-> [007-b2-runner-core.md](007-b2-runner-core.md) (Relaunch scope, immediate Skip consequence, `run.json`
-> contents, `git.context` location, action failure) were folded in the same day. Sections marked *TBD* are open.
+## 1. Execution model
 
-## 1. Principles
+A workflow runs sequential steps against one fixed worktree. Agent roles use real terminal
+panes and frozen profile bindings. A message/launch with `expect` waits for an accepted
+explicit delivery. Without `expect`, successful injection/launch advances the workflow;
+agent work may still continue. Actions await a validated result. State/control steps execute
+in-process and yield after a bounded batch. Cancellation stops scheduling and owned script
+process groups, without undoing side effects or stopping independent agent work.
 
-1. **The DSL describes intent; the runner owns transport.** A file says "ask the reviewer
-   for findings", never "inject via ghostty" or "use adapter X". Transports can change
-   without touching workflow files.
-2. **Declarative and sequential.** No shell, no scripts, no expressions. V1 control flow is
-   ordered steps plus one bounded `repeat … until <verdict>`.
-3. **Long content goes through files; only one line ever enters a TUI.**
-4. **Portable by construction.** A file never names a local Agent Profile, pane, or run id.
-   Bindings are resolved locally at start and remembered.
-5. **Only run-bound panes are touched.** A workflow can speak only to its own roles.
+## 2. Workflow bundles
 
-## 2. Document structure
+A directory `<name>.pwlworkflow` contains `workflow.yaml`, with `schema`, `id`, `name`, optional
+`description`, `icon`, `inputs`, `roles`, `state`, and nonempty `steps`. Local action manifests
+live at `actions/<slug>/action.yaml`; their entrypoints, helpers, assets, and referenced
+schemas are part of the same bundle. Validation takes the bundle directory.
 
-```yaml
-schema: prowl.workflow/v1            # required
-id: prowl.adversarial-review         # required slug; `prowl.` prefix reserved for bundled workflows
-name: Adversarial Review             # required; UI title
-description: …                       # optional; popover/Settings subtitle
-icon: magnifyingglass.circle         # optional SF Symbol
-
-inputs:                              # optional; provided by the start sheet or `--input k=v`
-  max_rounds: { type: integer, default: 5, min: 1, max: 10 }
-  focus:      { type: string,  default: "", prompt: "What should the reviewer focus on?" }   # string inputs are single-line (no line terminators / control characters), validated at start
-  mode:       { type: enum, values: [strict, lenient], default: strict }
-
-roles:   …                           # §3
-steps:   …                           # §4
-```
-
-Sources and precedence: bundle (`Resources/workflows/`, ids `prowl.*`) < user
-(`~/.prowl/workflows/*.yaml`) < repo (`<root>/.prowl/workflows/*.yaml`). A user/repo file may
-not reuse a `prowl.*` id; the same non-reserved id in user and repo scope resolves to the
-repo file for that worktree.
+Discovery precedence by workflow ID: app bundle, `~/.prowl/workflows/*.pwlworkflow`, then
+`<repository root>/.prowl/workflows/*.pwlworkflow`. Only app-bundled definitions may use
+`prowl.*` IDs. A disabled or invalid bundle cannot start. Loose YAML is not a workflow bundle.
+Symlinks, special files, path collisions, more than 2048 entries, and more than 16 MiB are
+rejected. File contents, including helpers/assets, contribute to the SHA-256 fingerprint.
 
 ## 3. Roles
 
@@ -72,7 +53,7 @@ roles:
 | Field | Rules |
 | --- | --- |
 | `source` | At most one `current` role per workflow. A `current` role must host a detected agent only if the runner will actually **deliver** to it — i.e. at least one `message` step targeting it is not skipped at start (`--skip <step>` / the start sheet's skip option, §9); otherwise a bare shell pane is a valid source (e.g. a context-only handoff). A workflow without a `current` role needs an explicit worktree at start. `pick` roles are chosen from the detected agents of the source worktree at start; a pane already in a run is not offered. |
-| `kind` | Only for `launch`. V1 accepts `interactive` only; `headless` is reserved (§12) because no executor/output protocol exists yet. |
+| `kind` | Only for `launch`. accepts `interactive` only; `headless` is reserved (§12) because no executor/output protocol exists yet. |
 | `agents` | Tokens from the detected-agent catalog. Validator warns (not errors) when none is installed locally. |
 | `suggest` | Subset of profile preset fields (`agent`, `model`, `reasoning_effort`, `execution_mode`). Never a reference to a profile name or UUID. |
 | `bind` | `ask`: the start sheet always shows the role picker (pre-filled). `auto`: the sheet appears only when resolution is ambiguous. |
@@ -92,103 +73,97 @@ frozen into the run together with its launch plan; later profile edits do not af
 run. CLI overrides are source-specific (§9): `--role <launch-role>=<profile name|uuid|auto>`,
 `--role <pick-role>=<agent pane: pN | pane UUID>`; `current` roles take no override.
 
-## 4. Steps
 
-Each step has `id` (unique within the workflow), optional `title` (templated; shown in the
-status center and panel), exactly one verb, and — on `message` and `launch` steps only —
-an optional `expect` (§5) whose delivery role is the step's target role. `action`,
-`notify`, and `close` cannot carry `expect` (validation error): they have no pane that
-could deliver; native actions return synchronous typed outputs instead.
+## Typed values and expressions
+
+Read-only namespaces:
+
+| Namespace | Meaning |
+| --- | --- |
+| `context.run` | `id`, `workflow_id`, `directory` |
+| `context.worktree` | target `id`, `path`, `name`, `branch`, `captured_at` |
+| `context.source` | original source pane identity, or null for a worktree-only start |
+| `context.roles.<role>` | binding `source`, `name`, `agent`, `pane` |
+| `context.step` | `id`, `iteration` (null outside loops), `captured_at` |
+| `context.execution` | action-only `id`, `step_id`, `attempt`, `cwd`, `artifact_dir` |
+| `inputs.<name>` | typed start-time inputs |
+| `outputs.<name>` | agent delivery `path` and nullable `verdict` |
+| `actions.<step>` | action `output` object and `result_path` |
+| `state.<name>` | explicitly declared, mutable typed state |
+
+Use `{{ expression }}` in text and action inputs. A complete expression in an action input
+retains its type; text interpolation accepts scalars, not arrays/objects. No implicit
+string-to-number or string-to-boolean conversion occurs. Missing fields are errors;
+`exists(outputs.optional.path)` and `outputs.optional.path ?? ''` handle absence explicitly.
+`exists` does not hide arithmetic/type errors. `&&`, `||`, and `??` short-circuit.
+
+Expressions support null, booleans, numbers, single/double quoted strings, arrays,
+field/index access, parentheses, unary `!`/`-`, arithmetic `* / % + -`, comparisons
+`< <= > >=`, equality `== !=`, `&&`, `||`, and `??` (listed strongest to weakest).
+Functions: `length(value)`, `append(array, item)`, `slice(array, start, end)` (end exclusive),
+and `exists(reference)`. Integers must stay within ±9007199254740991; numbers must be finite.
+Overflow and division by zero fail. This language does not execute arbitrary code.
+
+## State and control flow
 
 ```yaml
+state:
+  count: {type: integer, initial: 0}
+  files: {type: 'array<string>', initial: []}
 steps:
-  - id: brief
-    title: "Author writing the brief"
-    message: author                          # ① speak to a live interactive role
-    instruction: |                           #    multi-line → materialized to a run instruction file (run.dir/instructions/brief.<ordinal>.md); one pointer line is typed
-      Write a short brief for an adversarial reviewer: ## Scope, ## Claims, ## How to verify.
-      Deliver it with the generated completion command.   # never spell `prowl workflow done` yourself — the runner appends the tokenized command
-    expect: { output: brief, sections: ["## Scope", "## Claims"], timeout: 10m }
-
-  - id: launch
-    title: "Reviewer starting round 1"
-    launch: reviewer                         # ② start a launch role with a kickoff prompt
-    prompt: "Read {{ outputs.brief.path }} and the bundled reviewer skill, then review."
-    skill: prowl.adversarial-reviewer        #    optional; bundled skill materialized to run.dir/skills/<id>/SKILL.md and referenced
-    expect: { output: findings, sections: ["## Findings", "## Verdict"], verdict: [clean, issues], timeout: 30m }
-
-  - id: rounds
-    repeat:                                  # ③ bounded loop (V1: not nested; no `launch` inside)
-      max: "{{ inputs.max_rounds }}"
-      until: outputs.findings.verdict == clean
+  - id: collect
+    while: state.count < 3
     steps:
-      - id: fix
-        title: "Round {{ loop.index }}: author addressing findings"
-        message: author
-        text: "Findings: {{ outputs.findings.path }}. Fix or rebut each item, commit, then deliver your disposition with the generated completion command."
-        expect: { output: disposition, timeout: 30m }
-      - id: rereview
-        title: "Round {{ loop.index }}: reviewer re-checking"
-        message: reviewer
-        text: "Disposition: {{ outputs.disposition.path }}. Re-review the new commits and deliver findings with the generated completion command, choosing the verdict clean or issues."
-        expect: { output: findings, verdict: [clean, issues], timeout: 30m }
-
-  - id: context
-    action: git.context                      # ④ built-in native action (Swift); outputs under {{ actions.<id>.* }}
-    with: { root: "{{ worktree.path }}" }
-
-  - id: done
-    notify: "Adversarial review: {{ outputs.findings.verdict }} after {{ loop.count }} round(s)"   # ⑤
-
-  - id: cleanup
-    close: reviewer                          # ⑥ only launch roles; closes the pane the run launched, no confirmation
+      - id: update
+        set:
+          count: state.count + 1
+          files: "append(state.files, 'README.md')"
+      - id: stop
+        if: state.count == 2
+        then:
+          - id: exit
+            break: true
+  - id: report
+    notify: "Collected {{ length(state.files) }} entries"
 ```
 
-| Verb | Payload keys | Allowed target | Notes |
-| --- | --- | --- | --- |
-| `message: <role>` | `text` (single line, typed verbatim) **or** `instruction` (multi-line, materialized + pointer) | live interactive role (`current`, `pick`, or a `launch` role already launched) | Injection is gated: `blocked` → not typed, run → `needsAttention`; `working` → not typed either — the step waits in `waitingForRole` until the role is idle/done (064.012 corroboration rules), then injects and opens its activation, so an activation is only ever created against an idle agent (§5). The panel shows what it is waiting for. |
-| `launch: <role>` | `prompt` (kickoff, templated), optional `skill` (an id from the embedded skill registry — same pattern as a workflow id, e.g. `prowl.adversarial-reviewer`; it must resolve to a bundled skill, unknown ids are validation errors; custom skills are V2) | `launch` role, at most once per run (V1) | Profile plan with `AgentStartIntent.prompt`. The rendered prompt is passed whole through the launch boundary's prompt carrier (A2's `PROWL_LAUNCH_PROMPT`; no PTY line limit): multi-line prompts are allowed, NUL is rejected, and a rendered prompt above 32 KiB is `PROMPT_TOO_LARGE`. Materialization applies to `message` only. When the step has an `expect`, the runner appends the workflow completion protocol block (below) in place of S2's plain dispatch protocol. |
-| `action: <id>` | `with` (templated map) | — | V1 registry: `handoff.transition` (inputs `briefing?`, `from`, `to`; performs archive-first `.prowl/handoff/` transition; outputs `kickoff_prompt`, `artifact_path`, `has_briefing`), `handoff.checkpoint`, `git.context`. Every registered action declares a typed schema for its `with` inputs (required/optional) and its output keys; `prowl workflow schema` prints them. |
-| `notify: <text>` | — | — | Bell pipeline; click focuses the `current` role's pane, or — when the workflow has no `current` role — the source worktree (status panel). |
-| `close: <role>` | — | `launch` roles | Never implicit. Closes the pane this run launched without a confirmation — the step is the author's explicit ask and the run owns the pane (B3 decision W7). Cancel never closes panes: a close still queued when the run is cancelled is dropped, and a pane another run has bound since is left alone. |
-| `repeat` | `max` (required), `until` (optional), `steps` | — | While-loop semantics: `until` is evaluated **before entering** and **after every iteration**, so a verdict already satisfied by an earlier step skips the loop. `until` compares a declared verdict only: `outputs.<name>.verdict == <value>` or `in [..]`, every literal must belong to that output's declared `verdict` set. `max` is either a positive integer literal or a template that references exactly one `integer` input (nothing else); it is resolved at start, must lie in `1…20` (the V1 ceiling), and an invalid value is `WORKFLOW_INVALID` (literal) or a start-time `INVALID_ARGUMENT` (input). Reaching `max` with `until` still unsatisfied (or absent) ends the run as `max_rounds_reached`. |
+State types: `integer`, `number`, `boolean`, `string`, and nested `array<T>`.
+`set` values are **expressions**, evaluated against the same old state and committed
+atomically. To assign literal text, use an expression string such as `label: "'ready'"`.
+No step implicitly changes state from an action result.
 
-**Typed line formats and the completion-command renderer.** Every line Prowl types into a
-pane starts with `[Prowl] ` so its origin is visible. `text` → `[Prowl] <text>`;
-`instruction` → `[Prowl] Read <absolute path> and follow it`. Every *rendered* line is
-checked before insertion: it must contain no line terminator or control character
-(§10, "Rendered-text boundary"). When the step has an `expect`, one **completion-command
-renderer** — the only place that spells the command — appends the activation's command
-(§5): without `verdict`, ` — finish with: PROWL_WORKFLOW_TOKEN=<token> prowl workflow done
--`; with `verdict: [clean, issues]`, one complete, directly executable command per allowed
-value joined by ` or `: ` — finish with: PROWL_WORKFLOW_TOKEN=<token> prowl workflow done
---verdict clean -  or  PROWL_WORKFLOW_TOKEN=<token> prowl workflow done --verdict issues -`
-(no placeholders, nothing to substitute; `verdict` is limited to 2–4 values so the line
-stays bounded). The materialized instruction file and `prowl workflow status` list the
-same commands. The same renderer produces the watchdog nudge
-(`[Prowl] When your work for this step is fully complete, finish with: <rendered command>`)
-and every re-delivery after Relaunch, so no path ever shows a token-less or
-verdict-less command. Authors never spell the command (the validator warns when
-`text`/`instruction` contains `prowl workflow done`).
+`if` has `then` and optional `else`. `while` has `steps` and optional literal
+`max_iterations`. Conditions must be boolean. The loop tests its condition before each
+iteration. If it stays true at the cap, the run ends as `max_rounds_reached`; it does not
+report success or execute later steps. For an ordinary counted loop, express the count in
+its condition. Omit the cap when the task calls for an unlimited loop.
 
-**Where the token travels.** For a `message` step the token is part of the typed line
-(`PROWL_WORKFLOW_TOKEN=<token> …`, the same environment-prefix technique as today's
-`PROWL_HANDOFF_REQUEST_ID`). For a `launch` step it is placed in the launched surface's
-environment exactly like `PROWL_DISPATCH_ID`, and the **workflow protocol block** the runner
-appends to the kickoff prompt spells the command without a prefix: it names the run, the
-role, the expected sections, and one complete `prowl workflow done [--verdict <v>] -` command
-per allowed verdict. A `prowl agents dispatch-complete` issued from a pane whose pending
-record is a workflow activation is rejected with `WORKFLOW_DELIVERY_REQUIRED`, whose message
-carries the exact replacement command — it never completes the step with a missing output.
+Nested `break: true` and `continue: true` target the innermost loop. Step IDs are globally
+unique. Outputs from a branch or iteration leave scope on exit and are absent at the next
+entry. Retain needed values in state **inside** that scope. Roles remain bound across
+iterations; launch a role once, then use `message` for repeated work.
 
-**V1 native action schemas** (normative summary; `prowl workflow schema` prints the full
-JSON Schema):
+For a review loop, retain the initial verdict/path in state, loop while
+`state.verdict != 'clean'`, ask the author to address `state.path`, ask the reviewer for a
+fresh expected delivery, then update state from that delivery. Do not depend on the last
+iteration's output being implicitly visible ; use the declared state and `while` condition.
 
-| Action | `with` inputs | Outputs |
-| --- | --- | --- |
-| `handoff.transition` | `briefing` (path, optional — **absent = context-only transition**: archive the outgoing `current.md`/`context.md`, then *remove* `current.md` so a stale briefing can never impersonate a fresh one, regenerate `context.md`, and select the context/archive-only kickoff prompt), `from` (role, required), `to` (role, required; its agent token is the frozen profile binding's agent), `note` (string, optional) | `kickoff_prompt` (string; briefing or context-only variant), `artifact_path` (path), `has_briefing` (bool) |
-| `handoff.checkpoint` | `briefing` (path, optional — absent = context-only checkpoint: regenerate `context.md`, keep an earlier valid `current.md` if present), `note` (string, optional) | `artifact_path` (path), `has_briefing` (bool, for this invocation) |
-| `git.context` | `root` (path, optional; default worktree) | `path` (path to the generated markdown summary — the handoff context generator: it writes `<root>/.prowl/handoff/context.md` and appends one line to the handoff log), `branch` (string) |
+## Step verbs
+
+Each step has `id`, optional templated `title`, and one verb.
+
+| Verb | Payload and behavior |
+| --- | --- |
+| `message: role` | `text` (one line) or `instruction` (file-backed multiline); waits for the role to be idle before injection; optional `expect` |
+| `launch: role` | `prompt`, optional bundled `skill`, optional `expect`; at most once per persistent role |
+| `action: builtin:git.context` or `local:id` | typed `with` object; awaits validated result; no `expect`; see [actions](../../skills/prowl-workflow/references/actions.md) |
+| `notify: text` | notification |
+| `close: role` | closes a launch role's pane; use only when the requested workflow needs cleanup |
+| `set` | atomic state assignments |
+| `if` | boolean expression, `then`, optional `else` |
+| `while` | boolean expression, `steps`, optional `max_iterations` |
+| `break: true` / `continue: true` | innermost loop control |
+
 
 ## 5. `expect`
 
@@ -232,7 +207,7 @@ expect:
   `workflow status` expose each activation's dispatch id, so `prowl agents wait --dispatch`
   works on workflow activations too; there is no separate `WorkflowRequestRegistry`.
 - **Invocation and activation identity.** Every execution of a `message` or `launch` step
-  — once for a plain step, once per iteration inside `repeat`, again after Relaunch —
+  — once for a plain step, once per iteration inside a loop, again after Relaunch —
   mints a run-global, monotonic **invocation ordinal** (1, 2, 3, … across all steps and
   iterations) on entry, whether or not the step waits; it names the step's artifacts
   (`instructions/<step>.<ordinal>.md`). When the step has an `expect`, the same invocation
@@ -247,88 +222,14 @@ expect:
   replaced atomically (temp file + rename); `run.json` records the invocation → step /
   iteration / activation / file mapping.
 - Output bodies are capped (default 1 MiB, hard max 4 MiB → `OUTPUT_TOO_LARGE`).
-- **Skip rule.** Skipping an `expect` (panel Skip, `on_timeout: skip`, or a skip chosen at
-  start via `--skip <step>` / the start sheet) marks its output missing. A missing output is tolerated by exactly one kind of
-  consumer: a `with` input that the action's registry schema declares **optional** — the
-  key is then absent from the action's effective input (this is how `handoff.transition`
-  degrades to a context-only transition, i.e. the old HUD's "Context Only"). Every other
-  reference — `text` / `instruction` / `prompt` / `notify` templates, required action
-  inputs, or the `until` of an enclosing `repeat` — makes the run end as `skipped` instead
-  of advancing, because V1 has no optional template values; the consequence is resolved at the
-  moment of the skip (the remaining steps, including the enclosing loop body and its `until`,
-  are scanned for a non-optional reader), not when the reader is reached. The panel states the
-  consequence ("continues without a briefing" vs. "ends the run; step X depends on it")
-  before the user confirms Skip; the validator warns when `on_timeout: skip` would end the
-  run this way.
+- **Skip rule.** Skipping an expected delivery marks its output absent. The runner examines
+  remaining expressions, nested control steps, and typed action inputs. A required reader
+  ends the run as `skipped`; explicit `exists`/`??` handling permits continuation. Optional
+  action schema fields do not implicitly remove missing expressions. The panel shows the
+  consequence before confirmation. The validator warns about `on_timeout: skip` consumers.
 - Waiting is supervised by the state-driven watchdog (§10), not by wall-clock time; a
   `working` role is never interrupted.
 
-## 6. Template variables (whitelist; substitution only)
-
-| Variable | Value |
-| --- | --- |
-| `run.id`, `run.dir` | run UUID, `<root>/.prowl/workflow-runs/<run-id>` |
-| `worktree.path`, `worktree.name`, `worktree.branch` | source worktree |
-| `roles.<r>.name`, `roles.<r>.agent`, `roles.<r>.pane` | `launch`: frozen profile display name, agent token, pane short handle (`p12`) once launched — referencing `pane` before the role's `launch` step is a validation error. `current` / `pick`: the pane's launch-profile name when Prowl launched it, otherwise the detected agent's display name (or `shell` when none); `agent` is the detected token or empty. |
-| `outputs.<name>.path`, `outputs.<name>.verdict` | latest delivered output; referencing an output before any step can have produced it is a validation error |
-| `actions.<step>.<key>` | native action outputs; `<step>` must be an `action` step, `<key>` a key declared by that action's registry schema, and the producer must dominate the reference in control flow (earlier in the same sequence; inside `repeat`, earlier in the same iteration body or outside the loop before it) — otherwise `WORKFLOW_INVALID` |
-| `inputs.<k>` | start inputs |
-| `loop.index`, `loop.count` | 1-based iteration inside `repeat`; `loop.count` = iterations completed (usable after the loop; `0` when the pre-entry `until` check skipped the loop) |
-
-No expressions, defaults, or inlined output text (`outputs.<name>.text` does not exist).
-
-## 7. Validation (`prowl workflow validate`, Settings status)
-
-Errors: unknown `schema`/keys; undefined role; `kind: headless` (reserved); `message` to
-a `launch` role before its `launch` step; a `launch` role launched twice; `close` of a
-non-`launch` role; `expect` on `action` / `notify` / `close`; duplicate step ids; `repeat`
-without `max`, nested `repeat`, or `launch` inside `repeat`; `until` referencing an
-undeclared verdict; unknown template variable or premature `outputs.*` / `roles.<r>.pane` /
-`actions.<step>.<key>` reference (unknown action step, undeclared key, or a producer that
-does not dominate the consumer); unknown `action` id or `with` keys violating the action's
-schema; `repeat.max` that is neither a positive integer literal in `1…20` nor a template
-of exactly one `integer` input; `text` containing a line terminator; a string input default
-containing a line terminator or control character; `skill` that does not match the
-workflow-id pattern or does not resolve to a bundled skill; `verdict` with fewer than 2 or
-more than 4 values, duplicate values, or a value that is not a safe slug; an `until`
-literal outside the declared set; user file using a `prowl.` id; more than one `current`
-role; ids that are not safe slugs — workflow `id` and `skill` ids must match
-`^[a-z0-9][a-z0-9_.-]{0,63}$` (a leading alphanumeric rules out `.`/`..`); step ids, role
-names, output names, input names, and verdict values must match
-`^[a-z0-9][a-z0-9_-]{0,63}$` — because they become path components and CLI arguments.
-Warnings: no installed agent satisfies `agents`; no enabled profile matches `suggest`;
-`timeout` above 2h; `text`/`instruction` spelling out `prowl workflow done` (the runner
-appends the rendered command itself); `on_timeout: skip` on an output that a later
-non-optional consumer references (the run would end as `skipped`).
-
-## 8. Run directory
-
-```
-<root>/.prowl/workflow-runs/<run-id>/
-  run.json                  # state snapshot (`version: 1`): workflow id/name/scope, frozen role bindings (profile UUID/name/agent, pane ids),
-                            # invocation records with their activation's dispatch id and output, step states, timestamps;
-                            # never delivery tokens, env values, extra arguments, home paths, or credentials
-  log.md                    # human-readable, append-only
-  instructions/<step>.<ordinal>.md   # materialized `instruction` / `prompt` text, one per invocation (run-global ordinal, §5)
-  skills/<id>/SKILL.md      # materialized bundled skills
-  outputs/<name>.md         # latest validated output (atomically replaced); every output version is also kept as <name>.<ordinal>.md
-```
-
-`<root>/.prowl/workflow-runs/.gitignore` contains `*` (self-ignoring, as `.prowl/handoff/`).
-Definitions shipped with a repo live in `<root>/.prowl/workflows/` (not ignored).
-
-Safety: the run directory and every file below it are created only from validated slugs
-and the run UUID, under canonical containment checks against
-`<root>/.prowl/workflow-runs/` (no symlink leaf, resolved parent + leaf compared to the
-resolved base — the `AgentProfileHomeProvisioner` gate). Repo-scoped definitions are
-untrusted input; nothing from a workflow file is interpolated into a path except validated
-slugs. Outputs are agent-authored content persisted at the agent's request, within the
-size caps of §5; they are kept until the user removes the run folder (retention policy:
-V2). Privacy
-wording as in §10: Prowl-authored persisted and response metadata (`run.json`, `log.md`,
-the non-body fields of CLI payloads) carries profile UUID/name and agent tokens only —
-never extra arguments, environment values, home paths, or credentials; the agent-provided
-output body is excluded from that claim.
 
 ## 9. CLI participant protocol
 
@@ -341,7 +242,7 @@ prowl workflow run <id|name> [source] [--role r=<binding>]... [--input k=v]... [
 prowl workflow status [run-id] [--json]                       # no args: "who am I" — caller pane's run, role, awaited step and its requirements
 prowl workflow done [-|--file <path>] [--verdict <v>] [--token <token>] [--run <id> --step <id>] [--force] [--json]
 prowl workflow cancel <run-id> [--json]
-prowl workflow validate <file> [--json]
+prowl workflow validate <bundle.pwlworkflow> [--json]
 prowl workflow schema                                         # JSON Schema / reference for authoring agents
 ```
 
@@ -415,63 +316,62 @@ already satisfies `--until`, report `source`/`confidence`, and map `removed` /
 `surfaceClosed` to the terminal error `AGENT_GONE` (never to `done`) unless `--until
 changed` / `exit` was requested.
 
-## 10. Run semantics
 
-| Topic | Rule |
-| --- | --- |
-| Start | Resolve bindings, freeze plans, create run dir, write `run.json`, then execute step 1. `current` role must not already be in a run (`PANE_BUSY`). |
-| Advance | A step completes when its `expect` is satisfied (or it has none and its effect succeeded). `repeat` evaluates `until` before entry and after each iteration; `max` reached with `until` still false ends the run as `max_rounds_reached`. |
-| Message delivery | A `message` step first waits for its role to be idle/done (`waitingForRole`; a `working` role is never injected into — §4, §5 activation rule; a later `turn-start` signal may relax this, §12), then injects synchronously (`insertCommittedText` + submit, treated as one operation) and opens the activation. A `message` step advances only after a successful injection; a `blocked` role, a missing surface, or a failed injection leaves the step active in `needsAttention` (Retry / Skip / Cancel). If the insert succeeded but the submit failed, the attention text says that the line may still sit unsubmitted in the pane's input (Focus pane lets the user press Enter there). **Retry** re-executes the step as a new invocation: it mints a new ordinal (and, when the step has an `expect`, revokes the previous activation's token and mints a new one) and injects the freshly rendered line. At most one pending injection per role; Cancel / Skip / Relaunch drop it. |
-| Binding scope | As defined in §3 (four-tuple key with the canonical role-requirements digest); §3 is normative. |
-| Invocation / activation | Defined in §5: every `message`/`launch` execution mints a run-global invocation ordinal (artifact naming); a waiting invocation is an activation with its own token; one delivery per activation; revocation is per activation; outputs and instructions are versioned by ordinal. |
-| Rendered-text boundary | Every string that reaches `insertCommittedText` + submit — rendered `text`, pointer lines, completion commands, nudges — is validated after template substitution: no line terminators (`\n`, `\r`, U+2028/2029) and no C0/C1 control characters; violations stop the step with `RENDERED_TEXT_INVALID` (`needsAttention`, never a partial injection). String inputs and `--input` values are validated the same way at start; a worktree path that cannot be rendered on one line is rejected at start (`UNSAFE_PATH`). Multi-line content always goes through `instruction` / materialized files. |
-| Watchdog | Exact signals first, heuristics as fallback (decision 2026-08-29; 064-S5's watchdog part). The runner subscribes to the role's surface through `TerminalClient.observeAgentState` (064-S1 multicast: `snapshot` first, then `changed` / `removed` / `surfaceClosed` / `.signal`) and to the activation through `observeAgentDispatch`, plus an injected clock. When a step starts waiting the watchdog reads the current state first and schedules cancellable deadlines; it never depends on a later event alone. With a `verified_live` channel: `needs-input` → `needsAttention` immediately (Focus pane / Cancel); `turn-ended` without a delivery → `turn_grace` (default 15 s, floor 5 s; at expiry the state is re-read, and a role that is `working` again or has since reported `session-start` / `progress` re-arms instead of nudging) → one automatic nudge (`[Prowl] When your work for this step is fully complete, finish with: <the active activation's completion command, from the §4 renderer — token and verdict choices included>`) → `idle_grace` (default 3 min) → `needsAttention` (Nudge again / Keep waiting / Skip / Cancel); `session-end` or agent process gone → `needsAttention` (Relaunch role / Skip / Cancel; Relaunch is offered for `launch` roles only — it abandons the current activation, mints a new invocation of the *current* step, and re-delivers that step's content as the kickoff prompt of a fresh launch of the frozen profile, rebinding the role's pane; a gone `current` / `pick` role offers Skip / Cancel). Without a channel (manually launched or tier-B runtimes) the heuristic rules apply, using 064.012's corroboration for arm-time state: `blocked` ≥ `blocked_grace` (default 30 s) → `needsAttention`; `idle`/`done` ≥ `idle_grace` without a delivery → nudge, then `needsAttention` after another `idle_grace`. `working` never triggers anything. Grace values are global settings. |
-| `needsAttention` | A UI state (orange status slot + notification), never a deadline: a late `done` is still accepted; only an explicit Skip marks the output missing and rejects later deliveries. A provisional delivery (§5) is a `needsAttention` of its own with Accept / Accept with verdict / Ask again / Skip / Cancel; until the user accepts it the output is on disk but not yet the step's output. |
-| Explicit `timeout` | Only when an author sets `expect.timeout`: `attention` (default) enters `needsAttention`; `skip` / `cancel` act automatically. |
-| Cancel | Stops advancing and injecting; keeps all panes and outputs; logs. |
-| Failure | Launch/plan/provision failure → `needsAttention` with Retry / Skip role / Cancel; a native action failure → `needsAttention` with Retry / Cancel (action outputs have no "missing" semantics, so an action cannot be skipped); outputs already delivered are kept. |
-| Concurrency | One run per pane; many runs per worktree; the status center shows the selected worktree's most recent active run, the panel lists all. |
-| Restart | V1: runs found on disk at launch are marked `interrupted`; no resume. |
-| Privacy | Prowl-authored response metadata and persisted metadata (`run.json`, logs, the non-body fields of CLI payloads) carry profile UUID/name and agent tokens only — never extra arguments, environment values, home paths, or credentials. The agent-provided output body of `workflow done` is explicitly excluded from that claim: it is persisted as delivered, under the self-ignored run directory, within the size caps of §5. |
 
-## 11. Built-in workflows (V1)
+## Action contract, approval, and records
 
-- `prowl.handoff` — roles `source: current`, `receiver: launch` (`placement: tab`,
-  `background: true`, no `agents` restriction — any adapter with seeded-prompt support);
-  steps: `message source` (brief, sections `## Objective`, `## Current State`,
-  `## Next Steps`) → `action handoff.transition` (archive-first `.prowl/handoff/`
-  contract, `with: { briefing: "{{ outputs.brief.path }}", from: source, to: receiver }`)
-  → `launch receiver` (`prompt: "{{ actions.transition.kickoff_prompt }}"`) → `notify`.
-  Skipping `brief` (start sheet, `--skip brief`, or the panel) yields the context-only
-  transition through the §5 Skip rule — the replacement for the old HUD's "Context Only".
-- `prowl.handoff-checkpoint` — `message source` (brief) → `action handoff.checkpoint`;
-  the "save progress for a later successor" use case (no receiver, no launch).
-- `prowl.adversarial-review` — as in §4; interactive reviewer in a right split by default.
+`prowl.action/v1` manifests declare a name, object-root `input_schema`/`output_schema`, a script
+backend (`interpreter`, action-relative `entrypoint`, optional literal `arguments` and inherited
+`environment` names), and optional timeout (1s...86400s; default 30s). JSON Schema Draft 2020-12
+validates the schema, effective input, and result. Bundle-relative JSON/YAML schema resources
+and fragments are supported without network fetching. `$id` overrides are rejected; use local
+references and anchors. Defaults remain annotations. `prowl workflow schema --action` exports
+the manifest shape. The built-in repository collector uses the same value/schema validator.
 
-**Retirement of `prowl handoff`.** The shipped `prowl handoff to|save` commands are
-retired rather than adapted: for one release they remain as *stubs* that execute nothing
-and return the structured error `HANDOFF_RETIRED` (JSON envelope; plain text + stderr
-otherwise) whose message is the copy-pasteable replacement —
-`prowl workflow run prowl.handoff [--role receiver=<profile|auto>] [--skip brief]` for `to`,
-`prowl workflow run prowl.handoff-checkpoint` for `save`, plus the note that the briefing
-is now delivered with the returned `prowl workflow done -` command. After that release the
-commands, `HandoffCommandHandler`, `HandoffHudFeature`, `HandoffRequestRegistry`, and the
-`prowl.cli.handoff.v2` contract are removed; the `.prowl/handoff/` artifact contract itself
-lives on inside the two actions. `docs/components/handoff.md` and the `prowl-cli` skill are
-rewritten around the workflow commands in the same change.
+A script receives one JSON object on stdin: `protocol`, typed `input`, and `context`. It must
+exit zero and emit one schema-conforming object on stdout. Stderr is diagnostic. Request,
+stdout, and stderr each have a 1 MiB limit; JSON nesting is limited to 64. Base environment:
+PATH, HOME, TMPDIR, LANG, LC_ALL; named inherited variables may extend it. Strip PROWL_* control
+variables. Environment values are not included in request or execution metadata.
 
-## 12. Reserved for V2
+Native approval binds canonical source location to the whole content fingerprint. The review
+sheet shows source, scripts, changed files (including removals), and permission implications.
+Approval does not start a workflow. CLI cannot grant it. A stale displayed candidate cannot be
+approved. Changed content or location needs approval again. Runs use fixed copies and verify
+integrity before actions; an invalid copy offers cancel only. Retry keeps the approved copy,
+creates a new UUID/attempt, and can repeat side effects. It is never automatic.
 
-Observed evidence for several of these items is collected in
-[012-v1-boundary-observations.md](012-v1-boundary-observations.md).
+`builtin:git.context` takes optional `root` within the selected worktree and returns an object
+with `path` and `branch`. It writes invocation artifacts and has no dependency on shared
+handoff files. `local:<slug>` selects only an action from this bundle.
 
-`when:` (conditions on verdicts), `count:` / `wait: { all: […] }` (fan-out),
-`expect.status: idle` + `capture: result` (observe mode via `agents read`), `kind:
-headless` roles backed by a specified `HeadlessAgentExecutor` (cwd/env, stdout/stderr
-bounds, exit/cancel/timeout semantics, per-runtime trusted result extraction), `worktree:`
-on roles (cross-repo review), run resume, output retention policy, nested `repeat`,
-`outputs.<name>.json` field access, custom (non-bundled) `skill:` sources with their own
-rooted discovery and containment rules, `expect … from: <role>` on native actions, a
-`turn-start` runtime signal (Claude `UserPromptSubmit`, Pi/OMP `agent_start`) that would let a
-`message` step inject into a `working` role early while still binding the activation to the
-right turn (V1 waits for idle instead).
+A run directory is `<worktree>/.prowl/workflow-runs/<UUID>/`:
+
+```text
+definition/                         Fixed bundle copy
+run.json                            Status, bindings, typed state, attempts, output references
+log.md                              Timeline
+instructions/<step>.<ordinal>.md   Materialized agent instructions
+outputs/<name>.<ordinal>.md         Accepted/provisional agent delivery
+outputs/<name>.md                   Latest file view
+skills/<skill>/                     Materialized bundled skill
+actions/<step>/<execution UUID>/
+  request.json
+  result.json                       Only after validated success
+  execution.json                    Started/final state and failure detail
+  stderr.log
+  artifacts/
+```
+
+Only the current execution UUID may publish an action result. Cancel terminates the owned
+process group, escalating after a bounded grace period. App-private process ownership records
+use PID plus process start time; restart cleanup skips live owners and stale PID identities.
+Repository run records never authorize killing a process. Previous unfinished runs become
+`interrupted`, for inspection only, with no resume.
+
+## Built-in and unsupported features
+
+The shipped sample is Repository Context (`prowl.repository-context`). Agent review workflows
+are authored from roles, deliveries, typed state, and control flow. There is no global script
+registry, remote action download, parallel DSL branch, automatic retry, rollback, or resume.
+Headless roles and additional action backends are outside this contract.

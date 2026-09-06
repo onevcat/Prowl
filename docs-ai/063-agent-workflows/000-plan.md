@@ -7,9 +7,15 @@
 | **Primary PRs** | R1: #709 (C0), #710 (A1), #713 (A1b), #714 (A2) — shipped in v2026.8.29; R2a: #740 (B1), #743 (B2, [007](007-b2-runner-core.md)); #744 (B3, [008](008-b3-runner-wiring.md)); #747 (C1, [010](010-c1-workflow-status-center.md)); R2b: #752 (C2, [011](011-c2-start-sheet.md)), #754 (D1 skill), #761 (D1 rest, [013](013-d1-workflows-settings.md)), D1 Settings UI refinement (#763, [014](014-workflow-settings-ui-refinement.md)); D2–D3 TBD |
 | **Related** | [047 cross-agent-handoff](../047-cross-agent-handoff/000-plan.md), [049 agents-toolbar-entry](../049-agents-toolbar-entry/000-plan.md), [053 agent-profiles](../053-agent-profiles/000-plan.md), [055 agent-profile-runtimes](../055-agent-profile-runtimes/000-plan.md), [059 agent-transcript-snapshots](../059-agent-transcript-snapshots/000-plan.md), [060 cli-targeting-and-contract-governance](../060-prowl-cli-targeting-and-contract-governance/000-plan.md), [061 native-toolbar-controls](../061-native-toolbar-controls/toolbar-controls.md), [064 agent-completion-signals](../064-agent-completion-signals/000-plan.md) (signal bus, `agents signal` / `agents wait`), [#699 `prowl create pane`](https://github.com/onevcat/Prowl/issues/699), [PR #651 (direction reference, not merged)](https://github.com/onevcat/Prowl/pull/651), [DSL spec (living)](dsl-spec.md), [release plan (living)](release-plan.md), `docs/components/handoff.md`, `docs/components/agent-profiles.md`, `docs/components/cli.md` |
 
-> Design amendment under review: [015 — action bundles, context, and control flow](015-action-bundles-and-control-flow.md). The owner redirected the current session to this foundation before handoff implementation. The existing V1 specification describes current behavior; the amendment describes proposed replacements.
+> Current implementation scope: [015](015-action-bundles-and-control-flow.md) and
+> [017](017-action-bundle-implementation.md) define the authorized action-bundle work.
+> Workflows remain formally unreleased; `.pwlworkflow` is the v1 format directly. The living
+> DSL specification supersedes the old loose-file/repeat/handoff replacement sections below.
+> Legacy `prowl handoff` stays intact; this implementation enables workflow UI by default
+> and retains `PROWL_WORKFLOW_UI=0` as an explicit override.
 
-> Release scope update: [016 — workflow UI gate](016-workflow-ui-release-gate.md). The next release ships Island/detection improvements with workflow UI hidden by default; action bundles, handoff migration, and review workflows are deferred.
+
+> Historical intervening-release scope update: [016 — workflow UI gate](016-workflow-ui-release-gate.md). The next release ships Island/detection improvements with workflow UI hidden by default; action bundles, handoff migration, and review workflows are deferred.
 
 ## Background
 

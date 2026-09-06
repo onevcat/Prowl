@@ -1,4 +1,5 @@
 import Foundation
+import ProwlCLIShared
 import Testing
 
 @testable import supacode
@@ -44,187 +45,85 @@ struct WorkflowNativeActionsTests {
       now: Self.now)
   }
 
-  private let briefing = """
-    # Handoff
-    ## Objective
-    Ship.
-    ## Current State
-    Green.
-    ## Next Steps
-    1. Review.
-    """
-
-  @Test func transitionWithBriefingArchivesFirstAndReturnsTheBriefingKickoff() async throws {
+  @Test func gitContextWritesInvocationArtifactsAndRecords() async throws {
     let root = try makeRepo()
     defer { try? FileManager.default.removeItem(at: root) }
-    let store = HandoffStore(rootURL: root)
-    try store.writeBriefing(
-      "# Handoff\n## Objective\nold\n## Current State\nx\n## Next Steps\ny\n", archivingPrevious: false, now: Self.now)
-    let briefingURL = root.appending(path: "brief.md")
-    try briefing.write(to: briefingURL, atomically: true, encoding: .utf8)
-
+    let invocation = context(root: root)
     let outputs = try await WorkflowNativeActionRunner().execute(
-      actionID: "handoff.transition",
-      inputs: [
-        "briefing": briefingURL.path(percentEncoded: false), "from": "source", "to": "receiver", "note": "round 1",
-      ],
-      context: context(root: root))
-
-    #expect(outputs["has_briefing"] == "true")
-    #expect(outputs["artifact_path"] == store.currentURL.path(percentEncoded: false))
-    #expect(outputs["kickoff_prompt"] == HandoffCommandHandler.kickoffPrompt(hasBriefing: true))
-    #expect(try String(contentsOf: store.currentURL, encoding: .utf8) == briefing + "\n")
-    let archive = try FileManager.default.contentsOfDirectory(
-      atPath: store.archiveDirectory.path(percentEncoded: false))
-    #expect(archive.count == 1)
-    #expect(archive.first?.contains("-claude-to-codex") == true)
-    #expect(FileManager.default.fileExists(atPath: store.contextURL.path(percentEncoded: false)))
-    let log = try String(contentsOf: store.logURL, encoding: .utf8)
-    #expect(log.contains("claude → codex  launch=requested  briefing=inline"))
-    #expect(log.contains("source=workflow 0BADCAFE-0000-4000-8000-000000000042"))
-    #expect(log.contains("note=\"round 1\""))
+      actionID: "builtin:git.context", inputs: [:], context: invocation)
+    guard case .object(let output) = outputs["output"], case .string(let path) = output["path"] else {
+      Issue.record("Missing typed repository result")
+      return
+    }
+    #expect(output["branch"] == .string("main"))
+    #expect(path.hasPrefix(invocation.directory.path + "/artifacts/"))
+    #expect(try String(contentsOf: URL(filePath: path), encoding: .utf8).contains("Branch: main"))
+    for file in ["request.json", "result.json", "execution.json"] {
+      #expect(FileManager.default.fileExists(atPath: invocation.directory.appending(path: file).path))
+    }
+    #expect(!FileManager.default.fileExists(atPath: root.appending(path: ".prowl/handoff").path))
   }
 
-  @Test func transitionWithoutBriefingRemovesTheStaleArtifact() async throws {
+  @Test func scriptPipelinePublishesOnlyValidatedResultsAndKeepsFailureRecords() async throws {
     let root = try makeRepo()
     defer { try? FileManager.default.removeItem(at: root) }
-    let store = HandoffStore(rootURL: root)
-    try store.writeBriefing(
-      "# Handoff\n## Objective\nold\n## Current State\nx\n## Next Steps\ny\n", archivingPrevious: false, now: Self.now)
-
-    let outputs = try await WorkflowNativeActionRunner().execute(
-      actionID: "handoff.transition", inputs: ["from": "source", "to": "receiver"], context: context(root: root))
-
-    #expect(outputs["has_briefing"] == "false")
-    #expect(outputs["kickoff_prompt"] == HandoffCommandHandler.kickoffPrompt(hasBriefing: false))
-    #expect(!store.hasCurrentArtifact)
-    #expect(FileManager.default.fileExists(atPath: store.contextURL.path(percentEncoded: false)))
-    let archive = try FileManager.default.contentsOfDirectory(
-      atPath: store.archiveDirectory.path(percentEncoded: false))
-    #expect(archive.count == 1)
-  }
-
-  @Test func transitionValidatesRolesAndBriefing() async throws {
-    let root = try makeRepo()
-    defer { try? FileManager.default.removeItem(at: root) }
-    let runner = WorkflowNativeActionRunner()
-    await #expect(throws: WorkflowActionError.missingInput("to")) {
-      try await runner.execute(actionID: "handoff.transition", inputs: ["from": "source"], context: context(root: root))
+    let source = root.appending(path: "sample.pwlworkflow")
+    let action = source.appending(path: "actions/echo")
+    try FileManager.default.createDirectory(at: action, withIntermediateDirectories: true)
+    try """
+    schema: prowl.workflow/v1
+    id: sample
+    name: Sample
+    steps: [{id: echo, action: 'local:echo', with: {count: 3}}]
+    """.write(to: source.appending(path: "workflow.yaml"), atomically: true, encoding: .utf8)
+    try """
+    schema: prowl.action/v1
+    name: Echo
+    input_schema: {type: object, properties: {count: {type: integer}}, required: [count]}
+    output_schema: {type: object, properties: {count: {type: integer}}, required: [count]}
+    backend: {type: script, interpreter: /bin/sh, entrypoint: main.sh}
+    """.write(to: action.appending(path: "action.yaml"), atomically: true, encoding: .utf8)
+    try "cat >/dev/null; printf diagnostic >&2; printf '{\"count\":3}'"
+      .write(to: action.appending(path: "main.sh"), atomically: true, encoding: .utf8)
+    let file = WorkflowDiscovery.load(url: source, scope: .repo, context: .init(scope: .repo))
+    #expect(file.isValid)
+    let prepared = try WorkflowPreparedBundle(source: file, directory: root.appending(path: "copy"), environment: [:])
+    func invocation() -> WorkflowActionContext {
+      .init(runID: UUID(), rootURL: root, roleAgents: [:], outgoingAgent: nil, now: Self.now, bundle: prepared)
     }
-    await #expect(throws: WorkflowActionError.unknownRole("ghost")) {
-      try await runner.execute(
-        actionID: "handoff.transition", inputs: ["from": "source", "to": "ghost"], context: context(root: root))
-    }
-    let invalidURL = root.appending(path: "invalid.md")
-    try "just prose".write(to: invalidURL, atomically: true, encoding: .utf8)
-    await #expect(throws: WorkflowActionError.invalidBriefing(path: invalidURL.path(percentEncoded: false))) {
-      try await runner.execute(
-        actionID: "handoff.transition",
-        inputs: ["briefing": invalidURL.path(percentEncoded: false), "from": "source", "to": "receiver"],
-        context: context(root: root))
-    }
-    #expect(!HandoffStore(rootURL: root).hasCurrentArtifact)
-    let missing = root.appending(path: "missing.md").path(percentEncoded: false)
-    await #expect(throws: WorkflowActionError.unreadableBriefing(path: missing)) {
-      try await runner.execute(
-        actionID: "handoff.transition", inputs: ["briefing": missing, "from": "source", "to": "receiver"],
-        context: context(root: root))
-    }
-    await #expect(throws: WorkflowActionError.unsafePath("/etc/passwd")) {
-      try await runner.execute(
-        actionID: "handoff.transition", inputs: ["briefing": "/etc/passwd", "from": "source", "to": "receiver"],
-        context: context(root: root))
-    }
-    await #expect(throws: WorkflowActionError.unknownAction("nope")) {
-      try await runner.execute(actionID: "nope", inputs: [:], context: context(root: root))
-    }
-  }
-
-  @Test func briefingLinksAreResolvedAndMustStayInsideTheWorktree() async throws {
-    let root = try makeRepo()
-    defer { try? FileManager.default.removeItem(at: root) }
-    let briefingURL = root.appending(path: "brief.md")
-    try briefing.write(to: briefingURL, atomically: true, encoding: .utf8)
-    let inside = root.appending(path: "link-inside.md")
-    try FileManager.default.createSymbolicLink(at: inside, withDestinationURL: briefingURL)
-    let outputs = try await WorkflowNativeActionRunner().execute(
-      actionID: "handoff.checkpoint", inputs: ["briefing": inside.path(percentEncoded: false)],
-      context: context(root: root))
-    #expect(outputs["has_briefing"] == "true")
-
-    let outside = root.appending(path: "link-outside.md")
-    try FileManager.default.createSymbolicLink(at: outside, withDestinationURL: URL(filePath: "/etc/hosts"))
-    await #expect(throws: WorkflowActionError.unsafePath(outside.path(percentEncoded: false))) {
+    let valid = invocation()
+    let result = try await WorkflowNativeActionRunner().execute(
+      actionID: "local:echo", inputs: ["count": .integer(3)], context: valid)
+    #expect(result["output"] == .object(["count": .integer(3)]))
+    #expect(try String(contentsOf: valid.directory.appending(path: "stderr.log"), encoding: .utf8) == "diagnostic")
+    let invalid = invocation()
+    await #expect(throws: (any Error).self) {
       try await WorkflowNativeActionRunner().execute(
-        actionID: "handoff.checkpoint", inputs: ["briefing": outside.path(percentEncoded: false)],
-        context: context(root: root))
+        actionID: "local:echo", inputs: ["count": .string("wrong")], context: invalid)
     }
-    let directory = root.appending(path: "dir", directoryHint: .isDirectory)
-    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-    await #expect(throws: WorkflowActionError.unreadableBriefing(path: directory.path(percentEncoded: false))) {
+    #expect(!FileManager.default.fileExists(atPath: invalid.directory.appending(path: "result.json").path))
+    #expect(
+      try String(contentsOf: invalid.directory.appending(path: "execution.json"), encoding: .utf8).contains("failed"))
+    try "changed".write(
+      to: prepared.directory.appending(path: "actions/echo/main.sh"),
+      atomically: true, encoding: .utf8)
+    let modified = invocation()
+    await #expect(throws: WorkflowBundleIntegrityError.self) {
       try await WorkflowNativeActionRunner().execute(
-        actionID: "handoff.checkpoint", inputs: ["briefing": directory.path(percentEncoded: false)],
-        context: context(root: root))
+        actionID: "local:echo", inputs: ["count": .integer(3)], context: modified)
     }
   }
 
-  @Test func briefingSectionsInsideFencesAreNotAccepted() async throws {
+  @Test func nativeActionRejectsOutsideRootAndRemovedActions() async throws {
     let root = try makeRepo()
     defer { try? FileManager.default.removeItem(at: root) }
-    let fencedURL = root.appending(path: "fenced.md")
-    try "# Handoff\n```text\n## Objective\n## Current State\n## Next Steps\n```\n".write(
-      to: fencedURL, atomically: true, encoding: .utf8)
-    #expect(HandoffStore.validatedBriefing(from: try String(contentsOf: fencedURL, encoding: .utf8)) == nil)
-    await #expect(throws: WorkflowActionError.invalidBriefing(path: fencedURL.path(percentEncoded: false))) {
-      try await WorkflowNativeActionRunner().execute(
-        actionID: "handoff.checkpoint", inputs: ["briefing": fencedURL.path(percentEncoded: false)],
-        context: context(root: root))
-    }
-    #expect(!HandoffStore(rootURL: root).hasCurrentArtifact)
-  }
-
-  @Test func checkpointKeepsAnEarlierBriefingWithoutANewOne() async throws {
-    let root = try makeRepo()
-    defer { try? FileManager.default.removeItem(at: root) }
-    let store = HandoffStore(rootURL: root)
-    let earlier = "# Handoff\n## Objective\nold\n## Current State\nx\n## Next Steps\ny\n"
-    try store.writeBriefing(earlier, archivingPrevious: false, now: Self.now)
-
-    let contextOnly = try await WorkflowNativeActionRunner().execute(
-      actionID: "handoff.checkpoint", inputs: [:], context: context(root: root))
-    #expect(contextOnly["has_briefing"] == "false")
-    #expect(try String(contentsOf: store.currentURL, encoding: .utf8) == earlier)
-
-    let briefingURL = root.appending(path: "brief.md")
-    try briefing.write(to: briefingURL, atomically: true, encoding: .utf8)
-    let withBriefing = try await WorkflowNativeActionRunner().execute(
-      actionID: "handoff.checkpoint", inputs: ["briefing": briefingURL.path(percentEncoded: false)],
-      context: context(root: root))
-    #expect(withBriefing["has_briefing"] == "true")
-    #expect(withBriefing["artifact_path"] == store.currentURL.path(percentEncoded: false))
-    #expect(try String(contentsOf: store.currentURL, encoding: .utf8) == briefing + "\n")
-    let archive = try FileManager.default.contentsOfDirectory(
-      atPath: store.archiveDirectory.path(percentEncoded: false))
-    #expect(archive.contains { $0.contains("replaced-current") })
-  }
-
-  @Test func gitContextWritesTheHandoffContextAndReportsTheBranch() async throws {
-    let root = try makeRepo()
-    defer { try? FileManager.default.removeItem(at: root) }
-    let outputs = try await WorkflowNativeActionRunner().execute(
-      actionID: "git.context", inputs: ["root": root.path(percentEncoded: false)], context: context(root: root))
-    let store = HandoffStore(rootURL: root)
-    #expect(outputs["path"] == store.contextURL.path(percentEncoded: false))
-    #expect(outputs["branch"] == "main")
-    let contextText = try String(contentsOf: store.contextURL, encoding: .utf8)
-    #expect(contextText.hasPrefix("# Handoff Context (generated)"))
-    #expect(contextText.contains("Outgoing agent (detected): claude"))
-    let defaulted = try await WorkflowNativeActionRunner().execute(
-      actionID: "git.context", inputs: [:], context: context(root: root))
-    #expect(defaulted["branch"] == "main")
     await #expect(throws: WorkflowActionError.unsafePath("/tmp")) {
       try await WorkflowNativeActionRunner().execute(
-        actionID: "git.context", inputs: ["root": "/tmp"], context: context(root: root))
+        actionID: "builtin:git.context", inputs: ["root": "/tmp"], context: context(root: root))
+    }
+    await #expect(throws: WorkflowActionError.unknownAction("handoff.transition")) {
+      try await WorkflowNativeActionRunner().execute(
+        actionID: "handoff.transition", inputs: [:], context: context(root: root))
     }
   }
 }

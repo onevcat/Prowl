@@ -153,7 +153,7 @@ struct WorkflowSettingsDetailFeatureTests {
     await store.send(.openWorkflowTapped)
     await store.send(.revealInFinderTapped)
 
-    #expect(opened.value == [row.url])
+    #expect(opened.value == [row.url.appending(path: "workflow.yaml")])
     #expect(revealed.value == [row.url])
   }
 }
