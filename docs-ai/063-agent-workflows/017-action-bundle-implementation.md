@@ -86,7 +86,7 @@ regressions fixed red-to-green and summarized in PR comments.
 - Keep the existing handoff collector intact. Native `git.context` uses the same cancellable
   process transport as scripts so workflow cancellation does not block on synchronous git.
 
-## Delivery and remaining acceptance boundary
+## Delivery and acceptance
 
 The implementation includes shared typed parsing/evaluation, the scoped interpreter,
 bundle snapshots and native approval, cancellable script/native backends, invocation
@@ -101,7 +101,15 @@ probes exercise the production process transport. Three custom actions cover inv
 report artifacts, and verification; their bundle validates and their scripts execute through
 the process transport. Unapproved workflow and single-action starts reject admission.
 
-Native approval and visual acceptance remain open: neither available UI automation tool
-could obtain the isolated Debug window. No approval record was inserted to work around it.
-The custom bundle therefore has not completed an approved live workflow run. Reducer and
-backend tests cover the approval/execution boundaries, but do not replace that acceptance.
+Native approval and the approved custom-action workflow passed live verification on
+2026-09-06. The review sheet displayed the bundle files, interpreter entrypoints, source,
+and permission scope. Approval did not start a run; closing review enabled Run on the
+existing start screen. Starting there completed repository context, file inventory, two
+report iterations, state retention of the second report, and report verification. All five
+action invocations succeeded; the verifier returned six lines and `valid: true`. Approved
+CLI single-action testing also completed. Approval was performed through the native UI.
+
+The earlier unattended UI access limitation was resolved with Computer Use targeting the
+exact Debug app path. One source-list selection used a screenshot-based physical click;
+no product or accessibility code changes were required. Run records and screenshots are
+retained in the local validation archive, and the acceptance results are recorded in #774.
