@@ -79,7 +79,7 @@ prowl workflow cancel <run-id> [--json]
 - The run is asynchronous: `run` returns the run id and frozen bindings; poll
   `prowl workflow status <run-id> --json` (`.data.status.state` is `running`,
   `needs_attention`, or a terminal state; `.data.finished_at` appears when it ended) or read
-  the run directory (`<worktree root>/.prowl/workflow-runs/<run-id>/` — `log.md` is the
+  the run directory (`~/.prowl/logs/workflow-runs/<root-name>-<root-hash>/YYYY-MM/<run-id>/` — `log.md` is the
   timeline; field guide, layout, and error tables in `references/runbook.md`). Finishing never
   closes launched panes; only a `close:` step does.
 - The GUI starts (Command Palette, Agents capsule popover, Active Agents context menu) go
@@ -119,3 +119,17 @@ looks like this:
 This skill ships inside the app: `prowl skills install prowl-workflow` links it into every
 detected agent skill folder; `prowl skills list` shows per-target status. `prowl-cli` is
 the companion skill for driving individual panes outside a workflow.
+
+## Assigned content and retention
+
+Use the scoped `prowl workflow read` command supplied with the task to retrieve
+instructions. Read returned resource IDs with the same run ID and invocation number;
+`workflow-resource:` references are handles, not filesystem paths. Use `--json`
+for byte-preserving reads, decode each chunk by its `encoding`, and continue with
+`--offset <next_offset>` until `next_offset` is absent. Only the assigned pane can read this content; reads do not require a token.
+Deliver ordinary text/JSON on stdin with `prowl workflow done -`; no project-local
+temporary output file is needed. Explicit delivery is required.
+
+Run artifacts expire with their run: 30 days for unpinned terminal runs, with a
+5 GiB soft global budget and a 24-hour diagnostic window. Keep Run prevents automatic
+cleanup. Export a terminal run from Execution History for a durable complete ZIP.

@@ -67,7 +67,7 @@ The script receives one JSON object on stdin:
       "step_id": "summarize",
       "attempt": 1,
       "cwd": "/repo",
-      "artifact_dir": "/repo/.prowl/workflow-runs/<run>/actions/summarize/<execution>/artifacts"
+      "artifact_dir": "/Users/example/.prowl/logs/workflow-runs/repo-<hash>/2026-09/<run>/actions/summarize/<execution>/artifacts"
     }
   }
 }

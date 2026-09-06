@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import ProwlCLIShared
 
 /// App-owned ownership records survive a crash. Repository files never authorize process termination.
 nonisolated struct WorkflowActionProcessRegistry: Sendable {
@@ -26,8 +27,7 @@ nonisolated struct WorkflowActionProcessRegistry: Sendable {
   var terminateGroup: @Sendable (Int32) -> Bool = { kill(-$0, SIGKILL) == 0 }
 
   init(
-    directory: URL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-      .appending(path: "Prowl/WorkflowActionProcesses")
+    directory: URL = WorkflowHistoryStorage.configured.baseURL.appending(path: ".processes")
   ) {
     self.directory = directory
   }

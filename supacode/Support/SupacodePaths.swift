@@ -2,7 +2,18 @@ import Foundation
 import ProwlCLIShared
 
 nonisolated enum SupacodePaths {
+  /// Isolates live Debug acceptance from personal settings and runtime data.
+  static var debugDataDirectory: URL? {
+    #if DEBUG
+      if let path = ProcessInfo.processInfo.environment["PROWL_DEBUG_DATA_DIRECTORY"], path.hasPrefix("/") {
+        return URL(filePath: path, directoryHint: .isDirectory)
+      }
+    #endif
+    return nil
+  }
+
   static var baseDirectory: URL {
+    if let directory = debugDataDirectory { return directory }
     let home = FileManager.default.homeDirectoryForCurrentUser
     let prowlDir = home.appending(path: ".prowl", directoryHint: .isDirectory)
     let legacyDir = home.appending(path: ".supacode", directoryHint: .isDirectory)
@@ -20,6 +31,7 @@ nonisolated enum SupacodePaths {
   }
 
   static var appSupportDirectory: URL {
+    if let directory = debugDataDirectory { return directory.appending(path: "app-support") }
     let appSupport =
       FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
       ?? baseDirectory

@@ -4,17 +4,26 @@ import SwiftUI
 /// Settings → Agents → Workflows. The root is intentionally a compact index; every control
 /// whose effect is scoped to one workflow lives on the pushed detail page.
 struct WorkflowsSettingsView: View {
+  @State private var showsHistory = false
+  @State private var historyStore = Store(initialState: WorkflowHistoryFeature.State()) { WorkflowHistoryFeature() }
   @Bindable var store: StoreOf<WorkflowsSettingsFeature>
 
   var body: some View {
     NavigationStack(path: $store.scope(state: \.path, action: \.path)) {
       Form {
         WorkflowSettingsSections(store: store, showsIntroduction: true)
+        Section("Execution History") {
+          Button("Workflow History…", systemImage: "clock") { showsHistory = true }
+            .help("Review personal run history, storage usage, Keep Run, export, and cleanup")
+          Text("Execution records are stored in your home directory, outside project folders.")
+            .foregroundStyle(.secondary)
+        }
       }
       .formStyle(.grouped)
       .navigationTitle("Workflows")
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
       .task { store.send(.task) }
+      .sheet(isPresented: $showsHistory) { WorkflowHistoryView(store: historyStore) }
       .alert($store.scope(state: \.alert, action: \.alert))
       .sheet(isPresented: $store.isAuthoringPromptPresented.sending(\.setAuthoringPromptPresented)) {
         AskAgentHelpView(

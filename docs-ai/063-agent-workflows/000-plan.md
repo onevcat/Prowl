@@ -678,3 +678,5 @@ attaches hooks through A2's launch boundary.
 - Updated 2026-09-05: Recorded accepted action/bundle authorization, workflow-wide context, typed state, conditions/unbounded loops, sequential scheduling, and no recovery decisions in [015](015-action-bundles-and-control-flow.md). Consolidated syntax remains under review; no implementation yet.
 
 - Updated 2026-09-05: Added the process-scoped workflow UI release gate in [016](016-workflow-ui-release-gate.md); the CLI/runtime remain available and future workflow slices do not block this release.
+
+- Updated 2026-09-06: Personal workflow history and fixed retention — see [018-history-storage-plan.md](018-history-storage-plan.md).

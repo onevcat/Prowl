@@ -75,10 +75,6 @@ extension SupacodeApp {
     terminalManager: WorktreeTerminalManager,
     storeBox: SupacodeAppStoreBox
   ) -> WorkflowRuntimeInstallation {
-    do {
-      let count = try WorkflowActionProcessRegistry().recoverAbandonedProcesses()
-      if count > 0 { workflowLogger.notice("Terminated \(count) abandoned action process group(s).") }
-    } catch { workflowLogger.warning("Action process recovery failed: \(error)") }
     let bridge = makeWorkflowActivationBridge(terminalManager: terminalManager, storeBox: storeBox)
     let coordinatorBox = WorkflowCoordinatorBox()
     let reservations = WorkflowPaneReservations()
@@ -544,6 +540,7 @@ extension SupacodeApp {
             URL(filePath: $0, directoryHint: .isDirectory)
           }
         },
+        paneOwner: { appStore.state.workflowRuns.paneOwners[$0] },
         rendezvous: rendezvous
       ))
   }

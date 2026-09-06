@@ -38,7 +38,7 @@ struct WorkflowNativeActionsTests {
 
   private func context(root: URL) -> WorkflowActionContext {
     WorkflowActionContext(
-      runID: UUID(uuidString: "0BADCAFE-0000-4000-8000-000000000042")!,
+      runID: UUID(),
       rootURL: root,
       roleAgents: ["source": "claude", "receiver": "codex", "shell": nil],
       outgoingAgent: "claude",
@@ -62,6 +62,15 @@ struct WorkflowNativeActionsTests {
       #expect(FileManager.default.fileExists(atPath: invocation.directory.appending(path: file).path))
     }
     #expect(!FileManager.default.fileExists(atPath: root.appending(path: ".prowl/handoff").path))
+  }
+
+  @Test func explicitRootAcceptsItsCanonicalDirectoryWithoutATrailingSlash() async throws {
+    let root = try makeRepo()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let path = WorkflowHistoryStorage.canonicalURL(root).path
+    let output = try await WorkflowNativeActionRunner().execute(
+      actionID: "builtin:git.context", inputs: ["root": .string(path)], context: context(root: root))
+    #expect(output["output"] != nil)
   }
 
   @Test func scriptPipelinePublishesOnlyValidatedResultsAndKeepsFailureRecords() async throws {

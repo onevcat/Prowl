@@ -290,7 +290,7 @@ handoff.
 
 **Self-initiated runs.** When `run` is invoked from the pane that becomes the `current`
 role and the first step is a `message` to that role, the response carries that step's
-rendered instruction (or pointer) and its completion command, and the runner does **not**
+rendered instruction (or scoped `workflow read` command) and its completion command, and the runner does **not**
 also type them into the caller's pane — the caller already has them. For an agent this
 makes a self-handoff two commands: `prowl workflow run prowl.handoff`, then the returned
 `… prowl workflow done -` with its briefing on stdin.
@@ -351,7 +351,7 @@ creates a new UUID/attempt, and can repeat side effects. It is never automatic.
 with `path` and `branch`. It writes invocation artifacts and has no dependency on shared
 handoff files. `local:<slug>` selects only an action from this bundle.
 
-A run directory is `<worktree>/.prowl/workflow-runs/<UUID>/`:
+A run directory is `~/.prowl/logs/workflow-runs/<root-name>-<root-hash>/YYYY-MM/<UUID>/`:
 
 ```text
 definition/                         Fixed bundle copy
@@ -369,6 +369,13 @@ actions/<step>/<execution UUID>/
   stderr.log
   artifacts/
 ```
+
+The canonical execution root identifies its history bucket; the UTC month is fixed at
+creation. Global UUID lookup does not depend on open projects. See
+[personal history and retention](018-history-storage-plan.md) for the fixed 30-day
+policy, 5 GiB soft budget, 24-hour protection, Keep Run, and complete ZIP export.
+Agents use `workflow read` with pane/task attribution for instructions and explicitly
+granted output/action resources; ordinary delivery remains `workflow done -` on stdin.
 
 Only the current execution UUID may publish an action result. Cancel terminates the owned
 process group, escalating after a bounded grace period. App-private process ownership records

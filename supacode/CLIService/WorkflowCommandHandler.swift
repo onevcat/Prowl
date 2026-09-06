@@ -64,7 +64,7 @@ final class WorkflowCommandHandler: CommandHandler {
             code: CLIErrorCode.workflowFailed, message: "Failed to list workflows: \(error)")
         }
       }
-    case .run, .status, .done, .cancel:
+    case .run, .status, .done, .cancel, .read:
       guard let runtime else { return notConfigured() }
       return await handleRuntime(
         input, runtime: runtime, snapshot: snapshot, callerPane: callerPane)
@@ -88,6 +88,8 @@ final class WorkflowCommandHandler: CommandHandler {
       case .success(let source):
         return await runtime.run(input, source: source, snapshot: snapshot)
       }
+    case .read:
+      return await runtime.read(input, callerPane: callerPane)
     case .status:
       return runtime.status(input, callerPane: callerPane)
     case .done:

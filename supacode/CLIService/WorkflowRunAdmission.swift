@@ -215,7 +215,6 @@ enum WorkflowRunAdmission {
     context.sourcePaneID = source.paneID
     context.sourceTabID = source.worktree.tabs.first { tab in tab.panes.contains { $0.id == source.paneID } }?.id
     context.literalActionInputs = admission.literalActionInputs
-    let runID = environment.makeRunID()
     if let snapshot = entry.file.snapshot {
       do {
         if !entry.file.actions.isEmpty, try !WorkflowBundleApprovalStore().isApproved(snapshot) {
@@ -225,10 +224,30 @@ enum WorkflowRunAdmission {
               message:
                 "Review and approve this script bundle in Settings > Agents > Workflows, then start the run again."))
         }
-        try WorkflowRunStore(rootURL: context.worktree.rootURL).ensureLayout(runID: runID)
+      } catch {
+        return .failure(
+          .init(code: CLIErrorCode.workflowFailed, message: "Bundle approval could not be checked: \(error)"))
+      }
+    }
+    let runID = environment.makeRunID()
+    let storage = WorkflowHistoryStorage.configured
+    let directory = storage.directory(root: context.worktree.rootURL, createdAt: environment.now, runID: runID)
+    context.historyDirectory = directory
+    do {
+      let coordination = try storage.coordinate()
+      defer { coordination.close() }
+      guard try storage.find(runID) == nil else { throw WorkflowHistoryError.invalidRecord }
+      try storage.prepare(directory)
+      context.occupancy = try WorkflowRunOccupancy(storage.occupy(directory))
+    } catch {
+      return .failure(.init(code: CLIErrorCode.workflowFailed, message: "History storage is unavailable: \(error)"))
+    }
+    if entry.file.snapshot != nil {
+      do {
+        try WorkflowRunStore(rootURL: context.worktree.rootURL, directory: directory).ensureLayout(runID: runID)
         context.bundle = try WorkflowPreparedBundle(
           source: entry.file,
-          directory: WorkflowRunPaths.runDirectory(root: context.worktree.rootURL, runID: runID).appending(
+          directory: directory.appending(
             path: "definition"),
           environment: ProcessInfo.processInfo.environment)
       } catch {

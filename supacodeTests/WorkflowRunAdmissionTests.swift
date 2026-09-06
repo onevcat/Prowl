@@ -105,7 +105,7 @@ struct WorkflowRunAdmissionTests {
       ]
     }
 
-    nonisolated let nextRunID = LockIsolated(UUID(uuidString: "0BADCAFE-0000-4000-8000-000000000042")!)
+    nonisolated let nextRunID = LockIsolated(UUID())
 
     func cleanUp() {
       try? FileManager.default.removeItem(at: root)
@@ -245,13 +245,14 @@ struct WorkflowRunAdmissionTests {
     let fixture = try Fixture()
     defer { fixture.cleanUp() }
     try fixture.write(Self.review, to: "review")
+    let expectedRunID = fixture.nextRunID.value
     let admitted = try admit(
       fixture, workflow: "review", pane: fixture.authorPane,
       roles: ["partner=p2", "reviewer=Codex"],
       inputs: ["rounds=3"]
     ).get()
     let run = admitted.session.run
-    #expect(run.id.uuidString == "0BADCAFE-0000-4000-8000-000000000042")
+    #expect(run.id == expectedRunID)
     #expect(run.context.scope == .repo(repositoryID: fixture.repoRoot.path(percentEncoded: false)))
     #expect(run.context.worktree.branch == "feat/x")
     #expect(run.inputs["rounds"] == "3")

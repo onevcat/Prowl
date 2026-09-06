@@ -16,6 +16,7 @@ struct WorkflowCommand: ParsableCommand {
       """,
     subcommands: [
       WorkflowListCommand.self,
+      WorkflowReadCommand.self,
       WorkflowRunCommand.self,
       WorkflowTestActionCommand.self,
       WorkflowStatusCommand.self,
@@ -332,6 +333,25 @@ struct WorkflowTestActionCommand: ParsableCommand {
       CommandEnvelope(output: options.outputMode, command: .workflow(WorkflowInput(action: .run,
         target: try selector.resolve(positionalTarget: source), workflow: workflow,
         testAction: action, actionInputs: inputs)))
+    }
+  }
+}
+
+struct WorkflowReadCommand: ParsableCommand {
+  static let configuration = CommandConfiguration(
+    commandName: "read", abstract: "Read the current workflow task or one of its granted resources.")
+  @Argument(help: "Resource ID from the task response; omit to read the task.") var resource: String?
+  @Option(name: .long, help: "Byte offset from the previous response; reads at most 64 KiB.") var offset: Int64 = 0
+  @Option(name: .customLong("run"), help: "Assigned workflow run UUID.") var runID: String
+  @Option(name: .long, help: "Assigned invocation number.") var invocation: Int
+  @OptionGroup var options: GlobalOptions
+
+  mutating func run() throws {
+    try WorkflowSocketCommand.execute(options: options) {
+      CommandEnvelope(
+        output: options.outputMode,
+        command: .workflow(WorkflowInput(
+          action: .read, invocation: invocation, contentOffset: offset, contentResource: resource, runID: runID)))
     }
   }
 }

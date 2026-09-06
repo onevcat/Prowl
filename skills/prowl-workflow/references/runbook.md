@@ -86,17 +86,19 @@ delivery is rejected instead and the participant can correct it while the step i
 
 ## Reading a run afterwards
 
-Everything lives under the source worktree:
+Runtime data lives in personal history, outside the execution root:
 
 ```
-<worktree root>/.prowl/workflow-runs/<run-id>/   # self-ignored by Git
+~/.prowl/logs/workflow-runs/<root-name>-<root-hash>/YYYY-MM/<run-id>/
 ├── log.md                       # timestamped timeline (start here)
 ├── run.json                     # machine record: bindings, invocations, step states, outputs
 ├── outputs/
 │   ├── <name>.<ordinal>.md      # output for an invocation; corrected submissions can replace it
 │   └── <name>.md                # "latest" view, replaced atomically on each delivery
+├── definition/                  # frozen workflow bundle
+├── actions/                     # action results and artifacts
 ├── instructions/
-│   └── <step>.<ordinal>.md      # `instruction:` bodies of message steps (empty for `text:` steps)
+│   └── <step>.<ordinal>.md      # task instructions and granted resource references
 └── skills/
     └── <id>/SKILL.md            # bundled skills named by `launch … skill:` (empty otherwise)
 ```

@@ -41,8 +41,8 @@ capability. `agents: []` allows none; `any` and `*` are not wildcard tokens. Lea
 unset unless there is a specific preference to express; profile selection normally belongs
 to the user's saved preferences and the start-sheet picker.
 
-Steps are `message` (type one line or point the role at a materialized
-instruction file), `launch` (start a launch role with a kickoff prompt),
+Steps are `message` (type one line or provide scoped CLI access to persisted
+instructions), `launch` (start a launch role with a kickoff prompt),
 `set`, nested `if`/`else`, `while`, `break`/`continue`,
 `action` (built-in or local script), `notify`, and `close`. A `message` or
 `launch` step may `expect` an output: the role finishes by running the exact
@@ -137,10 +137,39 @@ the feedback.
   of the run; a pane belongs to at most one run at a time.
 - Finishing or cancelling never closes a pane; only an explicit `close:` step does.
 
-Every run leaves `<worktree root>/.prowl/workflow-runs/<run id>/` (self-ignored
-by Git): `log.md` (the timeline), `run.json` (bindings, invocations, step
-states), `instructions/`, `outputs/<name>.md` (latest delivery, with every
-version beside it), and `skills/`. Read `log.md` first to learn what happened.
+Every run, including `workflow test-action`, stores its runtime data in
+`~/.prowl/logs/workflow-runs/<root-name>-<root-hash>/YYYY-MM/<run-id>/`.
+The hash identifies the canonical, symlink-resolved execution directory. Worktrees
+and clones have separate histories; changing a branch keeps the same identity.
+The creation month stays fixed. No project-local runtime files or Git-ignore rules
+are created. Personal and team workflow definitions keep their existing locations.
+
+Each run contains `run.json`, `log.md`, its frozen bundle in `definition/`,
+`instructions/`, `skills/`, `outputs/`, and `actions/`. Metadata records the original
+execution root. `prowl workflow status <run-id>` finds saved history even after that
+root is closed, moved, or deleted. A moved folder does not inherit the old history.
+
+Open **Settings → Agents → Workflows → Execution History** for usage, search,
+**Keep Run**, **Export**, and **Preview Cleanup**. Export creates a complete ZIP of
+a terminal run; choose a location outside workflow history for durable results.
+Outputs and action artifacts inside history expire with their run.
+
+Automatic cleanup retains unpinned terminal runs for 30 days after completion.
+The global budget is **5 GiB, soft**: older eligible runs are removed first when
+history exceeds it. Runs finished in the last 24 hours, kept runs, live runs
+(including Needs Attention), occupied runs, and ambiguous or unsafe records are
+protected. These protections can keep usage above 5 GiB; the history view reports
+why space cannot be reclaimed. The policy is fixed. Startup and completion trigger
+background cleanup with a shared five-minute rate limit.
+
+Manual cleanup shows candidate runs and estimated reclaimed space, then requires
+confirmation. It uses the same protections and checks eligibility again before
+deleting each complete run. Old project-local data is neither migrated nor deleted.
+
+Agents retrieve assigned instructions and explicit input resources with
+`prowl workflow read`, using the run ID, invocation number, and assigned pane. Prowl owns
+persistence; deliver text or JSON through `prowl workflow done -` on stdin. Run
+paths are temporary artifact locations, not durable downstream references.
 
 ## Settings → Agents → Workflows
 
@@ -238,3 +267,16 @@ approval guidance, expression rules, and test commands.
 
 When a script bundle needs approval, the workflow start screen provides **Review Bundle…**
 and keeps Run disabled. Approval returns to the same start screen; it does not start a run.
+
+## Sandbox access
+
+`workflow read` and `workflow done` use the existing Prowl Unix socket. File-read
+access and socket access are separate permissions. If the runtime returns
+`SOCKET_PERMISSION_DENIED`, use its native approval mechanism for the specific
+Prowl command or socket; do not disable sandboxing or grant home-directory access.
+An existing `current` or `pick` pane keeps its launch permissions. Prowl does not
+retrofit new sandbox grants into it. No project-local staging is automatic.
+
+For isolated Debug acceptance, `PROWL_DEBUG_DATA_DIRECTORY` selects temporary
+settings, cache, and workflow-history storage. Use a separate Debug process and
+matching `PROWL_CLI_SOCKET`. Release builds ignore this directory override.

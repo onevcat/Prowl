@@ -17,6 +17,7 @@ struct WorkflowRuntimeCoordinatorTests {
     var sessions: [WorkflowRunSession] = []
     var sent: [WorkflowRunsFeature.Action] = []
     var pendingByPane: [UUID: String] = [:]
+    var contentOwner: UUID?
     let rendezvous = WorkflowCLIRendezvous()
     let requestID = UUID()
     /// What the reducer would answer to a `.deliver`, applied synchronously inside `send`.
@@ -48,6 +49,9 @@ struct WorkflowRuntimeCoordinatorTests {
           },
           pendingDispatchID: { [self] surfaceID in pendingByPane[surfaceID] },
           worktreeRoots: { [self] in [root] },
+          paneOwner: { [self] pane in
+            contentOwner ?? sessions.last(where: { $0.boundSurfaceIDs.contains(pane) })?.run.id
+          },
           rendezvous: rendezvous,
           makeRequestID: { [self] in requestID }))
     }
@@ -83,6 +87,103 @@ struct WorkflowRuntimeCoordinatorTests {
         worktree: Worktree(id: "wt", name: "feature", detail: "", workingDirectory: root, repositoryRootURL: root),
         launchPlans: [:])
     }
+  }
+
+  @Test func contentReadRequiresTheAssignedPaneRunAndInvocation() async throws {
+    let fixture = try Fixture()
+    defer { fixture.cleanUp() }
+    let session = try fixture.waitingSession()
+    fixture.sessions = [session]
+    try session.store.ensureLayout(runID: session.run.id)
+    let grant = try #require(session.run.currentInvocation?.content)
+    let request = WorkflowInput(action: .read, invocation: grant.invocation, runID: grant.runID.uuidString)
+    #expect(await fixture.coordinator.read(request, callerPane: Self.authorCaller).ok)
+    #expect(await fixture.coordinator.read(request, callerPane: Self.strangerCaller).ok == false)
+    #expect(
+      await fixture.coordinator.read(
+        .init(action: .read, invocation: grant.invocation + 1, runID: grant.runID.uuidString),
+        callerPane: Self.authorCaller
+      ).ok == false)
+    #expect(
+      await fixture.coordinator.read(
+        .init(
+          action: .read, invocation: grant.invocation, contentResource: "/etc/passwd", runID: grant.runID.uuidString),
+        callerPane: Self.authorCaller
+      ).ok == false)
+    fixture.contentOwner = UUID()
+    #expect(await fixture.coordinator.read(request, callerPane: Self.authorCaller).ok == false)
+    fixture.contentOwner = nil
+    _ = fixture.coordinator.cancel(
+      .init(action: .cancel, runID: session.run.id.uuidString), callerPane: Self.authorCaller)
+    #expect(await fixture.coordinator.read(request, callerPane: Self.authorCaller).ok == false)
+  }
+
+  @Test func completedTaskRemainsReadableUntilReassignmentOrHistoryRemoval() async throws {
+    let fixture = try Fixture()
+    defer { fixture.cleanUp() }
+    var session = try fixture.waitingSession()
+    session.run.status = .completed
+    session.run.invocations[0].activation = nil
+    try session.store.ensureLayout(runID: session.run.id)
+    fixture.sessions = [session]
+    let request = WorkflowInput(action: .read, invocation: 1, runID: session.run.id.uuidString)
+    #expect(await fixture.coordinator.read(request, callerPane: Self.authorCaller).ok)
+    let wrongRun = WorkflowInput(action: .read, invocation: 1, runID: UUID().uuidString)
+    #expect(await fixture.coordinator.read(wrongRun, callerPane: Self.authorCaller).ok == false)
+    fixture.contentOwner = UUID()
+    #expect(await fixture.coordinator.read(request, callerPane: Self.authorCaller).ok == false)
+    fixture.contentOwner = nil
+    try FileManager.default.removeItem(at: session.run.runDirectory)
+    #expect(await fixture.coordinator.read(request, callerPane: Self.authorCaller).ok == false)
+  }
+
+  @Test func assignedArtifactDirectoryListsOnlyItsContainedFiles() async throws {
+    let fixture = try Fixture()
+    defer { fixture.cleanUp() }
+    var session = try fixture.waitingSession()
+    try session.store.ensureLayout(runID: session.run.id)
+    let directory = session.run.runDirectory.appending(path: "actions/test/artifacts")
+    try session.store.storage.prepare(directory)
+    try Data("artifact bytes".utf8).write(to: directory.appending(path: "result.txt"))
+    let old = try #require(session.run.currentInvocation?.content)
+    session.run.invocations[0].content = .make(
+      text: "Read \(directory.path)", task: (old.runID, old.invocation),
+      runDirectory: session.run.runDirectory,
+      knownPaths: [directory.path], skill: nil)
+    fixture.sessions = [session]
+    let response = await fixture.coordinator.read(
+      .init(action: .read, invocation: old.invocation, contentResource: "resource-1", runID: old.runID.uuidString),
+      callerPane: Self.authorCaller)
+    guard case .read(let listing) = try payload(response) else {
+      Issue.record("Expected directory listing")
+      return
+    }
+    #expect(listing.body.contains("resource-1-file-1"))
+    let file = await fixture.coordinator.read(
+      .init(
+        action: .read, invocation: old.invocation, contentResource: "resource-1-file-1", runID: old.runID.uuidString),
+      callerPane: Self.authorCaller)
+    guard case .read(let content) = try payload(file) else {
+      Issue.record("Expected artifact content")
+      return
+    }
+    #expect(content.body == "artifact bytes")
+  }
+
+  @Test func deletedTerminalHistoryIsNotReturnedFromTheSessionCache() throws {
+    let fixture = try Fixture()
+    defer { fixture.cleanUp() }
+    var session = try fixture.waitingSession()
+    var machine = session.machine(now: { Self.now }, makeToken: { "token" })
+    _ = machine.apply(.user(.cancel))
+    session.run = machine.run
+    try session.store.ensureLayout(runID: session.run.id)
+    try session.store.writeRecord(WorkflowRunRecord(run: session.run))
+    fixture.sessions = [session]
+    let request = WorkflowInput(action: .status, runID: session.run.id.uuidString)
+    #expect(fixture.coordinator.status(request, callerPane: nil).ok)
+    try FileManager.default.removeItem(at: session.run.runDirectory)
+    #expect(fixture.coordinator.status(request, callerPane: nil).error?.code == CLIErrorCode.runNotFound)
   }
 
   private static let authorCaller = CallerPane(
