@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import ProwlCLIShared
 
 struct MirroredTerminalKey: Equatable, Sendable {
   enum Kind: Equatable, Sendable {

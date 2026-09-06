@@ -1,5 +1,6 @@
 import Foundation
 import GhosttyKit
+import ProwlCLIShared
 
 struct CLIWorktreeTerminalSnapshot: Sendable {
   let tabs: [CLITerminalTabSnapshot]

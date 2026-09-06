@@ -1,4 +1,5 @@
 import Foundation
+import ProwlCLIShared
 
 nonisolated struct ShellClientError: LocalizedError, Equatable, Sendable {
   let command: String

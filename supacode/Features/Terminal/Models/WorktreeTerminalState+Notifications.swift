@@ -1,4 +1,5 @@
 import Foundation
+import ProwlCLIShared
 
 extension WorktreeTerminalState {
   /// How recently the user must have typed for us to consider the exit user-initiated.

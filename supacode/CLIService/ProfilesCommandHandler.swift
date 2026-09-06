@@ -1,4 +1,5 @@
 import Foundation
+import ProwlCLIShared
 
 struct ProfilesRuntimeSnapshot {
   let profiles: [AgentProfile]

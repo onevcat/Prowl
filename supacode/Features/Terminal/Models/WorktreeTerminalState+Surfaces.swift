@@ -2,6 +2,7 @@ import AppKit
 import CoreGraphics
 import Foundation
 import GhosttyKit
+import ProwlCLIShared
 
 enum SplitCreationError: Error, Equatable, Sendable {
   case anchorNotFound(UUID)

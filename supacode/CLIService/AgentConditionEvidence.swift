@@ -1,4 +1,5 @@
 import Foundation
+import ProwlCLIShared
 
 /// The per-poll view of one pane that condition evidence is evaluated against.
 struct AgentConditionSnapshot: Sendable {

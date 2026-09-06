@@ -2,6 +2,7 @@
 // Routes incoming command envelopes to the appropriate handler.
 
 import Foundation
+import ProwlCLIShared
 
 @MainActor
 final class CLICommandRouter {

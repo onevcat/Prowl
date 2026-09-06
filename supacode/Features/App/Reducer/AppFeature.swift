@@ -2,6 +2,7 @@ import AppKit
 import ComposableArchitecture
 import Foundation
 import PostHog
+import ProwlCLIShared
 import SwiftUI
 
 @Reducer

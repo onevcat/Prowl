@@ -1,4 +1,5 @@
 import Foundation
+import ProwlCLIShared
 
 nonisolated enum ExternalDiffLaunchMode: Equatable, Sendable {
   case builtIn

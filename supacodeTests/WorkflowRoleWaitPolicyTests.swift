@@ -3,6 +3,7 @@
 // precedence, detector stabilization, blocked grace, appearance grace, pending records.
 
 import Foundation
+import ProwlCLIShared
 import Testing
 
 @testable import supacode

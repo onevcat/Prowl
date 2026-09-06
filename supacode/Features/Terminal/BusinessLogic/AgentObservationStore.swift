@@ -1,4 +1,5 @@
 import Foundation
+import ProwlCLIShared
 
 private let observationLogger = SupaLogger("AgentObservation")
 

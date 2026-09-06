@@ -2,6 +2,7 @@
 // Handles `prowl key` by resolving target, delivering key events, and building response.
 
 import Foundation
+import ProwlCLIShared
 
 private let keyLogger = SupaLogger("KeyCommandHandler")
 

@@ -6,6 +6,7 @@
 
 import ComposableArchitecture
 import Foundation
+import ProwlCLIShared
 
 /// The in-memory part of a run that `run.json` deliberately excludes: the worktree object, the
 /// frozen profile launch plans (their surface environment carries override values), the binding

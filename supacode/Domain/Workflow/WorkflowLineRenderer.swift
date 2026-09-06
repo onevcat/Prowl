@@ -4,6 +4,7 @@
 // and the rendered-text boundary every typed line crosses.
 
 import Foundation
+import ProwlCLIShared
 
 /// A rendered line would not survive as one terminal line (`RENDERED_TEXT_INVALID`).
 nonisolated struct WorkflowRenderedTextError: Error, Equatable, Sendable {

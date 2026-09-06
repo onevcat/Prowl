@@ -1,4 +1,5 @@
 import Foundation
+import ProwlCLIShared
 
 nonisolated struct AgentProcessGeneration: Equatable, Hashable, Sendable {
   let pid: pid_t

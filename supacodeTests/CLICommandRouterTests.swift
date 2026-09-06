@@ -2,6 +2,7 @@
 // Unit tests for CLICommandRouter and StubCommandHandler.
 
 import Foundation
+import ProwlCLIShared
 import Testing
 
 @testable import supacode

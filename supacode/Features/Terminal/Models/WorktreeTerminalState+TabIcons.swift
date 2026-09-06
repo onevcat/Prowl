@@ -1,4 +1,5 @@
 import Foundation
+import ProwlCLIShared
 
 extension WorktreeTerminalState {
   // MARK: - Tab Icon Auto-Detection

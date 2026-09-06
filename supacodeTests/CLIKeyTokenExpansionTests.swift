@@ -1,5 +1,6 @@
 import AppKit
 import Carbon
+import ProwlCLIShared
 import Testing
 
 @testable import supacode

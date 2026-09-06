@@ -4,6 +4,7 @@
 // vocabulary the panel renders. Transitions live in WorkflowRunMachine.
 
 import Foundation
+import ProwlCLIShared
 
 // MARK: - Identity and bindings
 

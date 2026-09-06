@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import ProwlCLIShared
 
 /// How the transition's briefing was (or wasn't) obtained. `current.md` exists
 /// iff a validated briefing produced it, so this value is the whole story of

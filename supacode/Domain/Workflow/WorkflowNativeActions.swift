@@ -5,6 +5,7 @@
 
 import Darwin
 import Foundation
+import ProwlCLIShared
 
 nonisolated struct WorkflowActionContext: Sendable {
   let runID: UUID

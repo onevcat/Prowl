@@ -1,5 +1,6 @@
 import ComposableArchitecture
 import Foundation
+import ProwlCLIShared
 import SwiftUI
 
 @Reducer
@@ -251,7 +252,7 @@ struct SettingsFeature {
 
   var body: some Reducer<State, Action> {
     BindingReducer()
-    Reduce { state, action in
+    Reduce<State, Action> { state, action in
       switch action {
       case .task:
         @Shared(.settingsFile) var settingsFile

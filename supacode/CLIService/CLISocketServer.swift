@@ -2,6 +2,7 @@
 // Unix domain socket server that listens for CLI command requests.
 
 import Foundation
+import ProwlCLIShared
 
 #if canImport(Darwin)
   import Darwin

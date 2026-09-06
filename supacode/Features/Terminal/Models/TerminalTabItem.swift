@@ -1,4 +1,5 @@
 import Foundation
+import ProwlCLIShared
 
 /// Who currently owns a tab's icon slot. The precedence chain runs
 /// `auto < script < user`: stronger owners block weaker writes.

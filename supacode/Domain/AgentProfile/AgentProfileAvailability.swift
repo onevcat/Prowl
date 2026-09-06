@@ -1,4 +1,5 @@
 import Foundation
+import ProwlCLIShared
 
 /// One shared availability judgment for every profile launcher surface
 /// (Agents popover, Command Palette), so entry points can never disagree

@@ -4,6 +4,7 @@
 // overrides, and the binding memory hold — and can be tested without the disk.
 
 import Foundation
+import ProwlCLIShared
 
 nonisolated struct WorkflowSettingsRepositoryContext: Equatable, Sendable {
   let repositoryID: String

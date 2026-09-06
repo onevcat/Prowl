@@ -2,6 +2,7 @@
 // Handles `prowl read` by resolving target and reading snapshot/last text.
 
 import Foundation
+import ProwlCLIShared
 
 private struct ReadCapture {
   let text: String

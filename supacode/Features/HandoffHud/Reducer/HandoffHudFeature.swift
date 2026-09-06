@@ -1,5 +1,6 @@
 import ComposableArchitecture
 import Foundation
+import ProwlCLIShared
 
 /// A row in the hand-off HUD's choose step.
 struct HandoffTargetOption: Equatable, Identifiable, Sendable {

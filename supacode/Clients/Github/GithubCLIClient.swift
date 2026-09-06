@@ -1,6 +1,7 @@
 import ComposableArchitecture
 import Darwin
 import Foundation
+import ProwlCLIShared
 
 // A login shell sources `.zprofile` / `.zlogin` before `gh` runs, so a banner or version-manager
 // line can prepend to captured stdout and corrupt the JSON.

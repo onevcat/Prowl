@@ -3,6 +3,7 @@
 // re-scanned, and a reference to a skipped output is the runtime side of the §5 Skip rule.
 
 import Foundation
+import ProwlCLIShared
 
 nonisolated struct WorkflowTemplateContext: Equatable, Sendable {
   struct Run: Equatable, Sendable {

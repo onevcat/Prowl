@@ -5,6 +5,7 @@
 // state at every expiry so a later event alone never decides anything.
 
 import Foundation
+import ProwlCLIShared
 
 // MARK: - Settings and vocabulary
 

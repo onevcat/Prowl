@@ -1,3 +1,4 @@
+import ProwlCLIShared
 import SwiftUI
 
 struct AppShortcut: Equatable {

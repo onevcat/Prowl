@@ -2,6 +2,7 @@
 // Unit tests for OpenCommandHandler — contract-aligned.
 
 import Foundation
+import ProwlCLIShared
 import Testing
 
 @testable import supacode

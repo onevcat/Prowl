@@ -1,4 +1,5 @@
 import Foundation
+import ProwlCLIShared
 
 struct ActiveAgentEntry: Identifiable, Equatable, Sendable {
   let id: UUID

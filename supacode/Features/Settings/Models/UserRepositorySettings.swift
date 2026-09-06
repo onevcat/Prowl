@@ -1,4 +1,5 @@
 import Foundation
+import ProwlCLIShared
 
 nonisolated struct UserRepositorySettings: Codable, Equatable, Sendable {
   var customCommands: [UserCustomCommand]

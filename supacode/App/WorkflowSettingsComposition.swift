@@ -5,6 +5,7 @@
 
 import ComposableArchitecture
 import Foundation
+import ProwlCLIShared
 
 extension SupacodeApp {
   @MainActor

@@ -1,4 +1,5 @@
 import ComposableArchitecture
+import ProwlCLIShared
 import SwiftUI
 
 /// Settings → Agents → Profiles: the profile list, with a native drill-in editor page per

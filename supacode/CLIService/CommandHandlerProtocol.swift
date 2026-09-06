@@ -2,6 +2,7 @@
 // Protocol for command handlers on the app side.
 
 import Foundation
+import ProwlCLIShared
 
 /// Each CLI command has a corresponding handler that executes
 /// within the app's process context.

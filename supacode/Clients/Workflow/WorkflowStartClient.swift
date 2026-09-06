@@ -5,6 +5,7 @@
 
 import ComposableArchitecture
 import Foundation
+import ProwlCLIShared
 
 struct WorkflowStartClient: Sendable {
   /// Workflows visible to a worktree, for the entry points. Includes validation-failing files

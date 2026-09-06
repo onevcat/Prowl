@@ -5,6 +5,7 @@
 // already holds it (the `role` of the payload).
 
 import Foundation
+import ProwlCLIShared
 
 extension WorkflowRunPayload {
   nonisolated static func makeDateFormatter() -> ISO8601DateFormatter {

@@ -1,6 +1,7 @@
 import AppKit
 import ComposableArchitecture
 import Foundation
+import ProwlCLIShared
 import SwiftUI
 
 struct CommandPaletteOverlayView: View {

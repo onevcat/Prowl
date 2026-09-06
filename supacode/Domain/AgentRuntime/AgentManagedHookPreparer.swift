@@ -1,4 +1,5 @@
 import Foundation
+import ProwlCLIShared
 
 /// Droid's `--settings` takes a path only, so its merged object must be written to an
 /// owner-only file before the argv can name it. The merge is pure; the write belongs to the

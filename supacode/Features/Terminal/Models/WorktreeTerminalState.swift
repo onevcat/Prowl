@@ -3,6 +3,7 @@ import CoreGraphics
 import Foundation
 import GhosttyKit
 import Observation
+import ProwlCLIShared
 import Sharing
 
 let terminalStateLogger = SupaLogger("TerminalState")

@@ -1,5 +1,6 @@
 import ComposableArchitecture
 import Foundation
+import ProwlCLIShared
 
 let appLogger = SupaLogger("App")
 let notificationJumpLogger = SupaLogger("NotificationJump")

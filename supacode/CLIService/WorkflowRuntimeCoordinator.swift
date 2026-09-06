@@ -4,6 +4,7 @@
 // through actions, and awaits the `done` rendezvous (decision W1). It owns no run state.
 
 import Foundation
+import ProwlCLIShared
 
 /// A wire response carried as a failure through `Result`.
 nonisolated struct WorkflowCommandRefusal: Error {

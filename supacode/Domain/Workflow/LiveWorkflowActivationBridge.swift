@@ -1,4 +1,5 @@
 import Foundation
+import ProwlCLIShared
 
 /// Production adapter for B2 activation effects. It resolves the exact live surface at issuance
 /// time, then delegates all lifecycle ownership to the existing dispatch store.

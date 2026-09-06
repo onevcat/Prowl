@@ -1,4 +1,5 @@
 import Foundation
+import ProwlCLIShared
 
 /// The local-settings identity of one effective workflow definition. Bundle and user
 /// definitions are global; repository definitions include the canonical repository root so

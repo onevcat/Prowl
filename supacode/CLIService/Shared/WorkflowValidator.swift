@@ -51,7 +51,7 @@ nonisolated public enum WorkflowValidator {
     return walker.collector.diagnostics
   }
 
-  static func isSingleLine(_ text: String) -> Bool {
+  public static func isSingleLine(_ text: String) -> Bool {
     !text.unicodeScalars.contains { scalar in
       scalar == "\u{2028}" || scalar == "\u{2029}" || scalar.value < 0x20 || (0x7F...0x9F).contains(scalar.value)
     }

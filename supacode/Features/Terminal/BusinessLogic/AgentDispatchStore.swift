@@ -1,4 +1,5 @@
 import Foundation
+import ProwlCLIShared
 
 nonisolated enum AgentDispatchRecord: Equatable, Sendable {
   case pending(id: String, createdAt: Date)

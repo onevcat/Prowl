@@ -1,4 +1,5 @@
 import Foundation
+import ProwlCLIShared
 
 nonisolated enum ClaudeSettingsReadResult: Equatable, Sendable {
   case stable(Data)

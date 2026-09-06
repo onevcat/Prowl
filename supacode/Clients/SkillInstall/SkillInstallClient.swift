@@ -1,6 +1,7 @@
 import AppKit
 import ComposableArchitecture
 import Foundation
+import ProwlCLIShared
 
 struct SkillInstallError: Error, Equatable, Sendable, LocalizedError {
   let message: String

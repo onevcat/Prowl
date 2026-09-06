@@ -26,6 +26,12 @@ Each release produces:
 - `Prowl.app.zip` — signed zip for Sparkle updates
 - `appcast.xml` — Sparkle feed with EdDSA signature
 
+The DMG uses LZMA (`ULMO`). `create-dmg` first produces the Finder layout, then
+`scripts/recompress-dmg.sh` converts the image before signing and notarization.
+Conversion invalidates an existing image signature, so always sign the final image.
+The bundled release CLI has local and debug symbols stripped from its staged copy;
+the SwiftPM executable and its matching dSYM remain available for symbolication.
+
 ## Branch Strategy
 
 - `upstream/main`: source of truth (read-only remote branch)

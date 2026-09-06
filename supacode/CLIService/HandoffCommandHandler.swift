@@ -1,6 +1,7 @@
 // supacode/CLIService/HandoffCommandHandler.swift
 
 import Foundation
+import ProwlCLIShared
 
 /// A handoff source resolved on the main actor: the runnable root to store the
 /// artifact under and the agent currently detected in that pane.

@@ -1,5 +1,6 @@
 import AppKit
 import ComposableArchitecture
+import ProwlCLIShared
 
 extension AppFeature {
   func reduceCommandPaletteAction(

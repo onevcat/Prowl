@@ -1,5 +1,6 @@
 import AppKit
 import ComposableArchitecture
+import ProwlCLIShared
 import SwiftUI
 
 /// Command-palette-style overlay hosting the hand-off flow (docs-ai 047.004).
