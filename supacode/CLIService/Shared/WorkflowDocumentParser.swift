@@ -253,6 +253,11 @@ nonisolated public enum WorkflowDocumentParser {
 
   private static func parseLaunch(_ step: MappingReader, insideLoop: Bool) -> WorkflowStepAction? {
     step.checkKeys(["id", "title", "launch", "prompt", "skill", "expect"])
+    if insideLoop {
+      step.collector.error(
+        "launch_in_loop", "Launch each role before its loop; use message for repeated work.",
+        at: step.location)
+    }
     let role = step.requiredString("launch")
     let prompt = step.requiredString("prompt")
     let expect = parseExpect(step)

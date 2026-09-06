@@ -44,7 +44,10 @@ struct WorkflowSettingsDetailView: View {
     .sheet(
       isPresented: Binding(get: { store.bundleReview != nil }, set: { if !$0 { store.send(.dismissBundleReview) } })
     ) {
-      WorkflowBundleReviewView(store: store)
+      WorkflowBundleReviewView(
+        review: store.bundleReview, selectFile: { store.send(.reviewFileSelected($0)) },
+        approve: { store.send(.approveBundleTapped) }, reveal: { store.send(.revealInFinderTapped) },
+        close: { store.send(.dismissBundleReview) })
     }
   }
 

@@ -2,6 +2,27 @@ import Testing
 @testable import ProwlCLIShared
 
 struct WorkflowBundleParserTests {
+  @Test func launchesInsideLoopsAreRejectedEvenInsideBranches() {
+    let parsed = WorkflowDocumentParser.parse("""
+      schema: prowl.workflow/v1
+      id: loop-launch
+      name: Loop Launch
+      roles: {helper: {source: launch}}
+      steps:
+        - id: loop
+          while: 'true'
+          steps:
+            - id: branch
+              if: 'true'
+              then:
+                - id: start
+                  launch: helper
+                  prompt: Work.
+      """)
+    #expect(parsed.definition == nil)
+    #expect(parsed.diagnostics.contains { $0.code == "launch_in_loop" })
+  }
+
   @Test func parsesTypedActionInputsAndNestedControlFlow() throws {
     let result = WorkflowDocumentParser.parse("""
       schema: prowl.workflow/v1

@@ -31,6 +31,15 @@ struct WorkflowStartOverlayView: View {
         .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
       }
     }
+    .sheet(
+      isPresented: Binding(
+        get: { store.bundleReview != nil }, set: { if !$0 { store.send(.dismissBundleReview) } })
+    ) {
+      WorkflowBundleReviewView(
+        review: store.bundleReview, selectFile: { store.send(.reviewFileSelected($0)) },
+        approve: { store.send(.approveBundleTapped) }, reveal: { store.send(.revealBundleTapped) },
+        close: { store.send(.dismissBundleReview) })
+    }
   }
 }
 
@@ -47,6 +56,13 @@ private struct WorkflowStartCard: View {
             socketBanner(failure)
           } else if !store.cliInstalled {
             cliBanner
+          }
+          if store.requiresBundleApproval {
+            VStack(alignment: .leading, spacing: 8) {
+              Label("Review this script bundle before running it.", systemImage: "checkmark.shield")
+              Button("Review Bundle…") { store.send(.reviewBundleTapped) }
+                .help("Inspect the bundle and approve this version; approval does not start the workflow")
+            }
           }
           if let source = store.context.source {
             sourceSection(source)

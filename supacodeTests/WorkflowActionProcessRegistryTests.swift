@@ -1,3 +1,4 @@
+import ConcurrencyExtras
 import Darwin
 import Foundation
 import ProwlCLIShared
@@ -6,38 +7,27 @@ import Testing
 @testable import supacode
 
 struct WorkflowActionProcessRegistryTests {
-  @Test func recoveryTerminatesOnlyAnAbandonedOwnedGroup() async throws {
+  @Test func recoveryTargetsOnlyAnAbandonedOwnedGroup() throws {
     let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory) }
-    let registry = WorkflowActionProcessRegistry(directory: directory)
+    let terminated = LockIsolated<[Int32]>([])
+    var registry = WorkflowActionProcessRegistry(directory: directory)
+    registry.processGroup = { $0 }
+    registry.terminateGroup = { pid in
+      terminated.withValue { $0.append(pid) }
+      return true
+    }
     let executionID = UUID().uuidString
-    let ready = AsyncStream<Void>.makeStream()
-    let task = Task {
-      defer { ready.continuation.finish() }
-      return try await WorkflowScriptExecutor.run(
-        .init(
-          executable: "/bin/sh", arguments: ["-c", "sleep 30 & wait"],
-          directory: FileManager.default.temporaryDirectory, environment: ["PATH": "/usr/bin:/bin"]
-        ).limits(timeout: 60),
-        request: Data(),
-        onSpawn: { pid in
-          try registry.register(executionID: executionID, pid: pid)
-          ready.continuation.yield()
-        })
-    }
-    defer {
-      task.cancel()
-      ready.continuation.finish()
-    }
-    for await _ in ready.stream { break }
+    try registry.register(executionID: executionID, pid: getpid())
     #expect(try registry.recoverAbandonedProcesses() == 0)
+    #expect(terminated.value.isEmpty)
     let file = directory.appending(path: executionID + ".json")
     let record = try JSONDecoder().decode(WorkflowActionProcessRegistry.Record.self, from: Data(contentsOf: file))
     let abandoned = WorkflowActionProcessRegistry.Record(
       owner: .init(pid: Int32.max, seconds: 1, microseconds: 0), process: record.process)
     try JSONEncoder().encode(abandoned).write(to: file, options: .atomic)
-    try #require(try registry.recoverAbandonedProcesses() == 1)
-    await #expect(throws: (any Error).self) { try await task.value }
+    #expect(try registry.recoverAbandonedProcesses() == 1)
+    #expect(terminated.value == [getpid()])
     #expect(!FileManager.default.fileExists(atPath: file.path))
   }
 

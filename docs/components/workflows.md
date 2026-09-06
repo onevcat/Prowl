@@ -233,3 +233,6 @@ A role stays bound for the run: launch it once, then send messages for repeated 
 
 Install the `prowl-workflow` skill for bundle examples, the action manifest and JSON protocol,
 approval guidance, expression rules, and test commands.
+
+When a script bundle needs approval, the workflow start screen provides **Review Bundle…**
+and keeps Run disabled. Approval returns to the same start screen; it does not start a run.

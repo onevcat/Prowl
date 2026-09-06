@@ -140,6 +140,7 @@ nonisolated struct WorkflowStartContext: Equatable, Sendable {
   /// What occupies the install path when `cliInstalled` is false, for the banner's action
   /// (Install / Repair / Reinstall); nil reads as a plain Install.
   var cliInstallStatus: CLIInstallStatus?
+  var requiresBundleApproval = false
 
   /// nil = nothing the sheet can do (a real file or directory occupies the slot).
   var cliInstallActionTitle: String? {
@@ -162,7 +163,7 @@ nonisolated struct WorkflowStartContext: Equatable, Sendable {
   /// no `pick` role (those are always an explicit choice), every input has a default, and the
   /// preselected source satisfies the delivery requirement with nothing skipped.
   var canStartImmediately: Bool {
-    guard item.isRunnable, cliInstalled, cliServiceFailure == nil, pickRoles.isEmpty else {
+    guard !requiresBundleApproval, item.isRunnable, cliInstalled, cliServiceFailure == nil, pickRoles.isEmpty else {
       return false
     }
     guard launchRoles.allSatisfy({ $0.effectiveBind == .auto && $0.resolvedProfileID != nil })

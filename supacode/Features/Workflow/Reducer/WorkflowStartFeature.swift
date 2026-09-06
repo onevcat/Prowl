@@ -30,11 +30,14 @@ struct WorkflowStartFeature {
     var suggestionProfileName: String = ""
     var isSubmitting = false
     var submissionError: String?
+    var requiresBundleApproval: Bool
+    var bundleReview: WorkflowBundleReview?
     /// Starts as the context's snapshot and flips when the inline Install succeeds.
     var cliInstalled: Bool
 
     init(context: WorkflowStartContext) {
       self.context = context
+      requiresBundleApproval = context.requiresBundleApproval
       cliInstalled = context.cliInstalled
       selectedSourceSurfaceID = context.source?.preselectedSurfaceID
       launchSelections = Dictionary(
@@ -83,7 +86,9 @@ struct WorkflowStartFeature {
     }
 
     var canRun: Bool {
-      guard !isSubmitting, cliInstalled, context.cliServiceFailure == nil, context.item.isRunnable else {
+      guard !requiresBundleApproval, !isSubmitting, cliInstalled, context.cliServiceFailure == nil,
+        context.item.isRunnable
+      else {
         return false
       }
       if let source = context.source {
@@ -134,6 +139,11 @@ struct WorkflowStartFeature {
   }
 
   enum Action: Equatable {
+    case reviewBundleTapped
+    case reviewFileSelected(String)
+    case approveBundleTapped
+    case dismissBundleReview
+    case revealBundleTapped
     case sourceSelected(UUID?)
     case launchProfileSelected(role: String, profileID: UUID?)
     case pickPaneSelected(role: String, surfaceID: UUID?)
@@ -157,6 +167,7 @@ struct WorkflowStartFeature {
     case started
   }
 
+  @Dependency(WorkflowBundleReviewClient.self) var bundleClient
   @Dependency(WorkflowStartClient.self) var workflowStartClient
   @Dependency(CLIInstallClient.self) var cliInstallClient
   @Dependency(\.uuid) var uuid
@@ -169,6 +180,8 @@ struct WorkflowStartFeature {
 
   private func handle(state: inout State, action: Action) -> Effect<Action> {
     switch action {
+    case .reviewBundleTapped, .reviewFileSelected, .approveBundleTapped, .dismissBundleReview, .revealBundleTapped:
+      return handleBundleReview(state: &state, action: action)
     case .sourceSelected, .launchProfileSelected, .pickPaneSelected, .inputChanged,
       .skipToggled, .dontAskAgainToggled:
       return handleEdit(state: &state, action: action)
@@ -178,6 +191,32 @@ struct WorkflowStartFeature {
     default:
       return handleRemainder(state: &state, action: action)
     }
+  }
+
+  private func handleBundleReview(state: inout State, action: Action) -> Effect<Action> {
+    switch action {
+    case .reviewBundleTapped:
+      do { state.bundleReview = try bundleClient.load(state.context.item.fileURL, state.context.item.scope) } catch {
+        state.submissionError = "\(error)"
+      }
+    case .reviewFileSelected(let path):
+      if state.bundleReview?.filePaths.contains(path) == true { state.bundleReview?.selectedFile = path }
+    case .approveBundleTapped:
+      guard let review = state.bundleReview, !review.approved, !review.scripts.isEmpty else { return .none }
+      do {
+        try bundleClient.approve(review.snapshot)
+        state.bundleReview?.approved = true
+        state.bundleReview?.error = nil
+        state.requiresBundleApproval = false
+        state.submissionError = nil
+      } catch { state.bundleReview?.error = "\(error)" }
+    case .dismissBundleReview:
+      if state.bundleReview?.approved == true { state.requiresBundleApproval = false }
+      state.bundleReview = nil
+    case .revealBundleTapped: bundleClient.reveal(state.context.item.fileURL)
+    default: break
+    }
+    return .none
   }
 
   /// Selection, input, and skip edits: pure state changes with no effects.
@@ -312,9 +351,10 @@ struct WorkflowStartFeature {
       Self.persistBindModeChoice(state: state)
       return .send(.delegate(.started))
 
-    case .runResponse(.failed(_, let message)):
+    case .runResponse(.failed(let code, let message)):
       state.isSubmitting = false
       state.submissionError = message
+      if code == "WORKFLOW_APPROVAL_REQUIRED" { state.requiresBundleApproval = true }
       return .none
 
     case .delegate:

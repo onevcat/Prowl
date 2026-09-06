@@ -3,10 +3,14 @@ import ProwlCLIShared
 import SwiftUI
 
 struct WorkflowBundleReviewView: View {
-  let store: StoreOf<WorkflowSettingsDetailFeature>
+  let review: WorkflowBundleReview?
+  let selectFile: (String) -> Void
+  let approve: () -> Void
+  let reveal: () -> Void
+  let close: () -> Void
 
   var body: some View {
-    if let review = store.bundleReview {
+    if let review {
       VStack(alignment: .leading, spacing: 16) {
         Text("Review Workflow Bundle").font(.title2.bold())
         Text(review.snapshot.source.path).font(.callout.monospaced()).textSelection(.enabled)
@@ -28,7 +32,7 @@ struct WorkflowBundleReviewView: View {
         HSplitView {
           List(review.filePaths, id: \.self) { path in
             Button {
-              store.send(.reviewFileSelected(path))
+              selectFile(path)
             } label: {
               HStack {
                 Text(path).fontWeight(path == review.selectedFile ? .semibold : .regular)
@@ -54,13 +58,13 @@ struct WorkflowBundleReviewView: View {
           Label("Approved. Start the workflow when you are ready.", systemImage: "checkmark.shield")
         }
         HStack {
-          Button("Reveal Bundle") { store.send(.revealInFinderTapped) }
+          Button("Reveal Bundle") { reveal() }
             .help("Open the bundle location in Finder")
           Spacer()
-          Button("Close") { store.send(.dismissBundleReview) }.keyboardShortcut(.cancelAction)
+          Button("Close") { close() }.keyboardShortcut(.cancelAction)
             .help("Close this review (Escape)")
           if !review.approved {
-            Button("Approve This Version") { store.send(.approveBundleTapped) }
+            Button("Approve This Version") { approve() }
               .buttonStyle(.borderedProminent)
               .disabled(review.scripts.isEmpty)
               .help("Approve this source and content version; this does not start the workflow")

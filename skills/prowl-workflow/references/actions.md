@@ -147,3 +147,6 @@ remains available for its existing purpose.
 local JSON or YAML files in the same bundle. Network references and `$id` overrides are
 rejected; use local `$ref` paths and anchors. `--input-json` supplies literal JSON data,
 so strings containing `{{` are not evaluated as workflow expressions.
+
+When a script bundle needs approval, the workflow start screen provides **Review Bundle…**
+and keeps Run disabled. Approval returns to the same start screen; it does not start a run.

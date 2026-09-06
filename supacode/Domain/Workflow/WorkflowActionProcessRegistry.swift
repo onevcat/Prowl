@@ -22,6 +22,8 @@ nonisolated struct WorkflowActionProcessRegistry: Sendable {
   }
 
   let directory: URL
+  var processGroup: @Sendable (Int32) -> Int32 = { getpgid($0) }
+  var terminateGroup: @Sendable (Int32) -> Bool = { kill(-$0, SIGKILL) == 0 }
 
   init(
     directory: URL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -32,7 +34,7 @@ nonisolated struct WorkflowActionProcessRegistry: Sendable {
 
   func register(executionID: String, pid: Int32) throws {
     guard UUID(uuidString: executionID) != nil, let owner = Identity.capture(getpid()),
-      let process = Identity.capture(pid), getpgid(pid) == pid
+      let process = Identity.capture(pid), processGroup(pid) == pid
     else {
       throw WorkflowActionError.failed("Cannot record action process ownership.")
     }
@@ -59,8 +61,8 @@ nonisolated struct WorkflowActionProcessRegistry: Sendable {
         let record = try? JSONDecoder().decode(Record.self, from: Data(contentsOf: file))
       else { continue }
       guard !record.owner.isCurrent else { continue }
-      if record.process.isCurrent, getpgid(record.process.pid) == record.process.pid {
-        if kill(-record.process.pid, SIGKILL) == 0 { terminated += 1 }
+      if record.process.isCurrent, processGroup(record.process.pid) == record.process.pid {
+        if terminateGroup(record.process.pid) { terminated += 1 }
       }
       try FileManager.default.removeItem(at: file)
     }

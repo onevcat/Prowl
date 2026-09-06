@@ -200,3 +200,6 @@ are a step snapshot, not a guarantee that an agent will remain idle.
 `context.source` preserves the initiating `pane_id` and `tab_id` (null for worktree-only starts).
 `exists(value) && predicate` and `!exists(value) || predicate` support optional data
 without requiring a missing value on the short-circuited path.
+
+Place `launch` before a `while` loop. Launch steps inside loops (including nested branches)
+are rejected; send `message` to the persistent role for repeated work.

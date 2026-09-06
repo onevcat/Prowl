@@ -44,8 +44,14 @@ extension AppFeature {
       // dsl-spec §3 `bind: auto`: no sheet; C1's status center is the start feedback.
       let request = WorkflowStartFeature.State(context: context).request
       return .run { send in
-        if case .failed(_, let message) = await workflowStartClient.run(request) {
-          await send(.repositories(.showToast(.warning(message))))
+        if case .failed(let code, let message) = await workflowStartClient.run(request) {
+          if code == "WORKFLOW_APPROVAL_REQUIRED" {
+            await send(
+              .openWorkflowStart(
+                workflowKey: workflowKey, worktreeID: worktree.id, sourceSurfaceID: sourceSurfaceID, forceSheet: true))
+          } else {
+            await send(.repositories(.showToast(.warning(message))))
+          }
         }
       }
     }

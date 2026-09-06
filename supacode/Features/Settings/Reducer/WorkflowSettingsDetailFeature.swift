@@ -56,6 +56,7 @@ struct WorkflowSettingsDetailFeature {
 
   @Dependency(OpenURLClient.self) var openURLClient
   @Dependency(WorkflowSettingsClient.self) var client
+  @Dependency(WorkflowBundleReviewClient.self) var bundleClient
 
   var body: some Reducer<State, Action> {
     Reduce { state, action in
@@ -73,7 +74,7 @@ struct WorkflowSettingsDetailFeature {
 
       case .reviewBundleTapped:
         guard let row = state.row else { return .none }
-        do { state.bundleReview = try WorkflowBundleReview.load(url: row.url, scope: row.scope) } catch {
+        do { state.bundleReview = try bundleClient.load(row.url, row.scope) } catch {
           state.alert = AlertState {
             TextState("Cannot Review Bundle")
           } message: {
@@ -90,7 +91,7 @@ struct WorkflowSettingsDetailFeature {
       case .approveBundleTapped:
         guard let review = state.bundleReview, !review.approved, !review.scripts.isEmpty else { return .none }
         do {
-          try WorkflowBundleApprovalStore().approve(review.snapshot, now: Date())
+          try bundleClient.approve(review.snapshot)
           state.bundleReview?.approved = true
           state.bundleReview?.error = nil
         } catch { state.bundleReview?.error = "\(error)" }

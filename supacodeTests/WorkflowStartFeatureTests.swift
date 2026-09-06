@@ -109,6 +109,60 @@ struct WorkflowStartFeatureTests {
       cliServiceFailure: cliServiceFailure)
   }
 
+  @Test func scriptApprovalUsesTheSharedReviewWithoutStartingARun() async throws {
+    let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    try Self.review.write(to: directory.appending(path: "workflow.yaml"), atomically: true, encoding: .utf8)
+    let snapshot = try WorkflowBundleSnapshot.read(directory)
+    let script = try WorkflowScriptAction.parse(
+      """
+      schema: prowl.action/v1
+      name: Echo
+      input_schema: {type: object}
+      output_schema: {type: object}
+      backend: {type: script, interpreter: /bin/sh, entrypoint: main.sh}
+      """, id: "echo", files: ["actions/echo/main.sh": Data("true".utf8)])
+    let review = WorkflowBundleReview(snapshot: snapshot, scripts: [script], changes: [], approved: false)
+    var context = try makeContext(
+      yaml: Self.review.replacing("goal: { type: string }", with: "goal: { type: string, default: Verify }"),
+      resolvedProfileID: Self.profileID, bindModeOverride: .auto)
+    #expect(context.canStartImmediately)
+    context.requiresBundleApproval = true
+    #expect(!context.canStartImmediately)
+    let approvals = LockIsolated<[String]>([])
+    let store = TestStore(initialState: WorkflowStartFeature.State(context: context)) {
+      WorkflowStartFeature()
+    } withDependencies: {
+      $0[WorkflowBundleReviewClient.self].load = { _, _ in review }
+      $0[WorkflowBundleReviewClient.self].approve = { candidate in
+        approvals.withValue { $0.append(candidate.fingerprint) }
+      }
+    }
+    store.exhaustivity = .off
+    #expect(!store.state.canRun)
+    await store.send(.reviewBundleTapped)
+    #expect(store.state.bundleReview == review)
+    await store.send(.approveBundleTapped)
+    #expect(approvals.value == [snapshot.fingerprint])
+    #expect(store.state.bundleReview?.approved == true)
+    #expect(store.state.canRun)
+    #expect(!store.state.isSubmitting)
+    await store.send(.dismissBundleReview)
+    #expect(store.state.bundleReview == nil)
+  }
+
+  @Test func approvalRequiredResponseBlocksAnotherRunUntilReview() async throws {
+    let context = try makeContext(
+      yaml: Self.review.replacing("goal: { type: string }", with: "goal: { type: string, default: Verify }"),
+      resolvedProfileID: Self.profileID)
+    let store = TestStore(initialState: WorkflowStartFeature.State(context: context)) { WorkflowStartFeature() }
+    store.exhaustivity = .off
+    #expect(store.state.canRun)
+    await store.send(.runResponse(.failed(code: "WORKFLOW_APPROVAL_REQUIRED", message: "Review this bundle.")))
+    #expect(!store.state.canRun)
+  }
+
   @Test func initPrefillsFromTheResolverAnswers() throws {
     let context = try makeContext(resolvedProfileID: Self.profileID)
     let state = WorkflowStartFeature.State(context: context)

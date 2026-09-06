@@ -214,7 +214,7 @@ extension SupacodeApp {
     @Dependency(CLIServiceStatusClient.self) var cliServiceStatus
     let cliInstalled = cliInstallClient.isUsable(cliDefaultInstallPath)
 
-    return WorkflowStartContext(
+    var context = WorkflowStartContext(
       item: item,
       definition: definition,
       worktreeID: worktreeID,
@@ -227,6 +227,10 @@ extension SupacodeApp {
       cliServiceFailure: cliServiceStatus.current().unreachableDescription,
       cliInstallStatus: cliInstalled
         ? nil : cliInstallClient.installationStatus(cliDefaultInstallPath))
+    if !entry.file.actions.isEmpty, let snapshot = entry.file.snapshot {
+      context.requiresBundleApproval = (try? WorkflowBundleApprovalStore().isApproved(snapshot)) != true
+    }
+    return context
   }
 
   /// dsl-spec §3 binding resolution, presented: the resolver's pre-selection per launch role,

@@ -1,7 +1,7 @@
 import Foundation
 import ProwlCLIShared
 
-nonisolated struct WorkflowBundleReview: Equatable {
+nonisolated struct WorkflowBundleReview: Equatable, Sendable {
   let snapshot: WorkflowBundleSnapshot
   let scripts: [WorkflowScriptAction]
   let changes: [WorkflowBundleSnapshot.Change]
