@@ -70,13 +70,8 @@ nonisolated public struct WorkflowControlCursor: Equatable, Sendable {
         currentStep = step
         return .step(step)
       }
-      var stepContext = context
-      if case .object(var fields) = stepContext["context"], case .object(var position) = fields["step"] {
-        position["id"] = .string(step.id)
-        position["iteration"] = iteration.map(WorkflowJSONValue.integer) ?? .null
-        fields["step"] = .object(position)
-        stepContext["context"] = .object(fields)
-      }
+      let position = if case .loop = control { 0 } else { iteration }
+      let stepContext = Self.positioned(context, stepID: step.id, iteration: position)
       let currentIteration = iteration
       try execute(control, step: step, context: stepContext)
       evaluations.append(Evaluation(stepID: step.id, iteration: currentIteration, skipped: false))
@@ -132,7 +127,8 @@ nonisolated public struct WorkflowControlCursor: Equatable, Sendable {
     guard let frame = frames.last else { return }
     if let loop = frame.loop, case .control(.loop(let condition, let maximum, _)) = loop.action {
       expire(frame.steps)
-      if try conditionValue(condition, context: context) {
+      let loopContext = Self.positioned(context, stepID: loop.id, iteration: frame.iteration)
+      if try conditionValue(condition, context: loopContext) {
         if let maximum, frame.iteration >= maximum {
           throw WorkflowLoopLimit(stepID: loop.id)
         }
@@ -146,6 +142,19 @@ nonisolated public struct WorkflowControlCursor: Equatable, Sendable {
     }
     if frames.count > 1 { expire(frame.steps) }
     frames.removeLast()
+  }
+
+  private static func positioned(
+    _ context: [String: WorkflowJSONValue], stepID: String, iteration: Int?
+  ) -> [String: WorkflowJSONValue] {
+    var result = context
+    if case .object(var fields) = result["context"], case .object(var position) = fields["step"] {
+      position["id"] = .string(stepID)
+      position["iteration"] = iteration.map(WorkflowJSONValue.integer) ?? .null
+      fields["step"] = .object(position)
+      result["context"] = .object(fields)
+    }
+    return result
   }
 
   private func conditionValue(_ expression: String, context: [String: WorkflowJSONValue]) throws -> Bool {

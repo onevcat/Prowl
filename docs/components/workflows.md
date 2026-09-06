@@ -229,6 +229,8 @@ owned script process group; neither operation rolls back completed work.
 Typed `state` retains values explicitly. Branch and loop iteration results leave scope on
 exit. Use state to carry a verdict/path to the next iteration. A loop with no cap is permitted;
 a loop whose condition remains true at `max_iterations` ends as `max_rounds_reached`.
+In the condition, `context.step.id` names the loop and `context.step.iteration` is the
+completed count, starting at 0. Steps in the body use iteration numbers starting at 1.
 A role stays bound for the run: launch it once, then send messages for repeated work.
 
 Install the `prowl-workflow` skill for bundle examples, the action manifest and JSON protocol,

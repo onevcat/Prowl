@@ -134,7 +134,9 @@ No step implicitly changes state from an action result.
 
 `if` has `then` and optional `else`. `while` has `steps` and optional literal
 `max_iterations`. Conditions must be boolean. The loop tests its condition before each
-iteration. If it stays true at the cap, the run ends as `max_rounds_reached`; it does not
+iteration. In a `while` condition, `context.step.id` is the loop ID and
+`context.step.iteration` is the number of completed iterations (0 on the first check).
+Inside the body, iteration numbers start at 1. If the condition stays true at the cap, the run ends as `max_rounds_reached`; it does not
 report success or execute later steps. For an ordinary counted loop, express the count in
 its condition. Omit the cap when the task calls for an unlimited loop.
 

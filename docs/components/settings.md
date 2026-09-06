@@ -45,7 +45,7 @@ and opens that section's root.
 
 - **Global:** `~/.prowl/settings.json`
 - **Global custom commands + agent profiles + workflow settings:** `~/.prowl/global.onevcat.json`
-- **Your workflow files:** `~/.prowl/workflows/*.yaml` (per repository: `<repo root>/.prowl/workflows/`)
+- **Your workflow files:** `~/.prowl/workflows/*.pwlworkflow` (per repository: `<repo root>/.prowl/workflows/*.pwlworkflow`)
 - **Per-repo:** `~/.prowl/repo/<repo-name>/prowl.json`
 - **Per-repo custom commands + agent profile default/memory:** `~/.prowl/repo/<repo-name>/prowl.onevcat.json`
 - **Dedicated agent profile homes:** `~/.prowl/agent-profiles/<uuid>/`
