@@ -3,7 +3,8 @@ name: prowl-workflow
 description: >-
   Author, validate, run, and participate in Prowl Agent Workflows — the `prowl.workflow/v1`
   bundles that orchestrate several live coding agents (launch, message, loop on verdicts,
-  collect outputs) inside the running Prowl app. Reach for this whenever the user wants a
+  collect outputs, run built-in or local script actions) inside the running Prowl app.
+  Use it to create, test, or debug a workflow action. Reach for this whenever the user wants a
   workflow created or edited ("write me a Prowl workflow that has two agents review each
   other", "add an input to the guessing-game workflow"), wants one executed ("use Prowl's
   adversarial-review workflow on this branch", "run the count-files workflow", "跑一下
@@ -12,7 +13,7 @@ description: >-
   a participant in a run and must deliver through the workflow protocol. Not for driving
   individual panes directly (use prowl-cli) and not for Prowl settings/UI questions.
 metadata:
-  prowl-summary: Teaches an agent to write, validate, and run Prowl Agent Workflow bundles, to act as a participant when a workflow messages it, and to read a run's logs and output files. Link it into a runtime's skill folder so the agent can build and drive multi-agent workflows on request.
+  prowl-summary: Teaches an agent to write, validate, and run Prowl Agent Workflow bundles, to create and test local script actions, to act as a participant when a workflow messages it, and to read a run's logs and output files. Link it into a runtime's skill folder so the agent can build and drive multi-agent workflows on request.
 ---
 
 # Prowl Agent Workflows

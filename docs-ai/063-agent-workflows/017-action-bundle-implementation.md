@@ -2,7 +2,7 @@
 
 ## Status and authorization
 
-Implementation in progress, 2026-09-06. The owner authorized implementation of 015,
+Implemented in [PR #774](https://github.com/onevcat/Prowl/pull/774), 2026-09-06. The owner authorized implementation of 015,
 delegated the remaining contract decisions, and requested tests, a PR, self-review,
 at least two adversarial reviews, real action/workflow verification, and documentation.
 This amendment resolves the specification details left open in 015.
@@ -27,6 +27,9 @@ This amendment resolves the specification details left open in 015.
   `break: true` and `continue: true` target the innermost loop. IDs are globally unique.
   Each branch/iteration owns its outputs; leaving that scope removes those values.
   Retention requires an explicit state assignment. Roles remain persistent bindings.
+- A `while` condition uses its own step ID and completed iteration count (0 initially);
+  steps in the body use 1-based positions. Launch roles before a loop and use `message`
+  inside it; static validation rejects repeated launches.
 - Interpreter batches yield after at most 64 control steps so cancellation stays responsive.
 
 ## Execution and approval decisions
@@ -77,3 +80,23 @@ regressions fixed red-to-green and summarized in PR comments.
   On startup, recover groups whose owner no longer exists; never trust a repository PID.
 - Keep the existing handoff collector intact. Native `git.context` uses the same cancellable
   process transport as scripts so workflow cancellation does not block on synchronous git.
+
+## Delivery and remaining acceptance boundary
+
+The implementation includes shared typed parsing/evaluation, the scoped interpreter,
+bundle snapshots and native approval, cancellable script/native backends, invocation
+records, CLI action testing, Settings/start review, shipped Repository Context, and the
+workflow authoring/action references. Self-review and adversarial review corrections are
+recorded in the PR; regression fixes use test-first evidence.
+
+The full app suite, focused workflow/reducer suites, CLI gates, lint, and Debug build pass.
+Live verification completed Repository Context and a repository-context → agent task →
+repository-context workflow with an accepted output. Installed shell, Python, and Ruby
+probes exercise the production process transport. Three custom actions cover inventory,
+report artifacts, and verification; their bundle validates and their scripts execute through
+the process transport. Unapproved workflow and single-action starts reject admission.
+
+Native approval and visual acceptance remain open: neither available UI automation tool
+could obtain the isolated Debug window. No approval record was inserted to work around it.
+The custom bundle therefore has not completed an approved live workflow run. Reducer and
+backend tests cover the approval/execution boundaries, but do not replace that acceptance.

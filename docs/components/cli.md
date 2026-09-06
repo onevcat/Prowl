@@ -484,6 +484,7 @@ whole — entry points, the start sheet, the run panel, Settings → Agents → 
 ```bash
 prowl workflow list [target] [--json]                   # every definition visible to a worktree, with status
 prowl workflow run <id|name> [source] [--role r=<binding>]... [--input k=v]... [--skip <step>]... [--json]
+prowl workflow test-action <workflow> <action> [source] --input-json '<JSON object>' [--json]
 prowl workflow status [run-id] [--json]                 # no args: the calling pane's run, role, awaited step
 prowl workflow done [-|--file <path>] [--verdict <v>] [--token <t>] [--run <id> --step <id>] [--force] [--json]
 prowl workflow cancel <run-id> [--json]
