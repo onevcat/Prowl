@@ -29,12 +29,16 @@ nonisolated public enum WorkflowScriptExecutor {
     public var directory: URL
     public var environment: [String: String]
     public var timeout: TimeInterval = 30
-    public var outputLimit: Int = 1_048_576
+    public var outputLimit: Int = WorkflowSizeLimits.payload
+    public var errorLimit: Int = WorkflowSizeLimits.stderr
 
-    public func limits(timeout: TimeInterval, outputLimit: Int = 1_048_576) -> Self {
+    public func limits(
+      timeout: TimeInterval, outputLimit: Int = WorkflowSizeLimits.payload, errorLimit: Int = WorkflowSizeLimits.stderr
+    ) -> Self {
       var copy = self
       copy.timeout = timeout
       copy.outputLimit = outputLimit
+      copy.errorLimit = errorLimit
       return copy
     }
 
@@ -71,8 +75,10 @@ nonisolated public enum WorkflowScriptExecutor {
     let timeout = configuration.timeout
     let outputLimit = configuration.outputLimit
     guard !cancellation.isCancelled else { throw failure("cancelled", "Action cancelled.") }
-    guard timeout > 0, timeout.isFinite, outputLimit > 0, request.count <= 1_048_576 else {
-      throw failure("request_limit", "Invalid execution limits or request exceeds 1 MiB.")
+    guard timeout > 0, timeout.isFinite, outputLimit > 0, configuration.errorLimit > 0,
+      request.count <= WorkflowSizeLimits.transportFrame
+    else {
+      throw failure("request_limit", "Invalid execution limits or request exceeds the JSON transport limit.")
     }
     let pipes = try ScriptPipes()
     defer { pipes.closeAll() }
@@ -84,7 +90,8 @@ nonisolated public enum WorkflowScriptExecutor {
       while waitpid(pid, &status, 0) < 0 && errno == EINTR {}
       throw error
     }
-    let pump = ScriptPump(pid: pid, pipes: pipes, request: request, outputLimit: outputLimit)
+    let pump = ScriptPump(
+      pid: pid, pipes: pipes, request: request, outputLimit: outputLimit, errorLimit: configuration.errorLimit)
     return try pump.run(timeout: timeout, cancelled: { cancellation.isCancelled })
   }
 
@@ -178,6 +185,7 @@ nonisolated private final class ScriptPump {
   let pipes: ScriptPipes
   let request: Data
   let outputLimit: Int
+  let errorLimit: Int
   private var stdout = Data()
   private var stderr = Data()
   private var written = 0
@@ -185,11 +193,12 @@ nonisolated private final class ScriptPump {
   private var stopReason: String?
   private var stopTime: TimeInterval?
 
-  init(pid: pid_t, pipes: ScriptPipes, request: Data, outputLimit: Int) {
+  init(pid: pid_t, pipes: ScriptPipes, request: Data, outputLimit: Int, errorLimit: Int) {
     self.pid = pid
     self.pipes = pipes
     self.request = request
     self.outputLimit = outputLimit
+    self.errorLimit = errorLimit
   }
 
   func run(timeout: TimeInterval, cancelled: () -> Bool) throws -> WorkflowScriptExecutionResult {
@@ -281,7 +290,7 @@ nonisolated private final class ScriptPump {
         if errno == EAGAIN || errno == EINTR { return }
         throw WorkflowScriptExecutor.failure("pipe", "Cannot read action pipe.")
       }
-      let remaining = max(0, outputLimit - data.count)
+      let remaining = max(0, (kind == "stderr_limit" ? errorLimit : outputLimit) - data.count)
       data.append(contentsOf: buffer.prefix(min(count, remaining)))
       if count > remaining {
         stop(kind, at: now)

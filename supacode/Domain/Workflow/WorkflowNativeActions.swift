@@ -13,12 +13,13 @@ nonisolated struct WorkflowActionContext: Sendable {
   let attempt: Int
   let bundle: WorkflowPreparedBundle?
   let values: [String: WorkflowJSONValue]
+  let runDirectory: URL?
 
   init(
     runID: UUID, rootURL: URL, roleAgents: [String: String?], outgoingAgent: String?,
     sessionContext: HandoffStore.SessionContext? = nil, now: Date, stepID: String = "action",
     executionID: String = UUID().uuidString, attempt: Int = 1, bundle: WorkflowPreparedBundle? = nil,
-    values: [String: WorkflowJSONValue] = [:]
+    values: [String: WorkflowJSONValue] = [:], runDirectory: URL? = nil
   ) {
     self.runID = runID
     self.rootURL = rootURL
@@ -31,10 +32,12 @@ nonisolated struct WorkflowActionContext: Sendable {
     self.attempt = attempt
     self.bundle = bundle
     self.values = values
+    self.runDirectory = runDirectory
   }
 
   var directory: URL {
-    WorkflowRunPaths.runDirectory(root: rootURL, runID: runID).appending(path: "actions/\(stepID)/\(executionID)")
+    (runDirectory ?? WorkflowRunPaths.runDirectory(root: rootURL, runID: runID))
+      .appending(path: "actions/\(stepID)/\(executionID)")
   }
 }
 
@@ -80,7 +83,10 @@ nonisolated struct WorkflowNativeActionRunner: WorkflowActionExecuting {
       "input": WorkflowJSON.object(inputs), "context": snapshot,
     ])
     let encoder = JSONEncoder()
-    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+    encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+    guard try encoder.encode(WorkflowJSON.object(inputs)).count <= WorkflowSizeLimits.payload else {
+      throw WorkflowActionError.failed("Action input exceeds 16 MiB.")
+    }
     let requestData = try encoder.encode(request)
     try requestData.write(to: directory.appending(path: "request.json"), options: .atomic)
     try Data().write(to: directory.appending(path: "stdout.log"), options: .atomic)
@@ -116,7 +122,7 @@ nonisolated struct WorkflowNativeActionRunner: WorkflowActionExecuting {
   }
 
   private func prepareDirectory(_ context: WorkflowActionContext) throws -> URL {
-    let store = WorkflowRunStore(rootURL: context.rootURL)
+    let store = WorkflowRunStore(rootURL: context.rootURL, directory: context.runDirectory)
     try store.ensureLayout(runID: context.runID)
     var directory = try store.containedRunDirectory(runID: context.runID)
     for component in ["actions", context.stepID, context.executionID, "artifacts"] {
@@ -166,11 +172,11 @@ nonisolated struct WorkflowNativeActionRunner: WorkflowActionExecuting {
     guard Set(inputs.keys).isSubset(of: ["root"]) else {
       throw WorkflowActionError.failed("Unknown git.context input.")
     }
-    var root = context.rootURL.resolvingSymlinksInPath()
+    var root = WorkflowHistoryStorage.canonicalURL(context.rootURL)
     if let input = inputs["root"] {
       guard case .string(let path) = input else { throw WorkflowActionError.failed("root must be a string.") }
-      let candidate = URL(filePath: path, relativeTo: root).standardizedFileURL.resolvingSymlinksInPath()
-      guard candidate == root || candidate.path.hasPrefix(root.path + "/") else {
+      let candidate = WorkflowHistoryStorage.canonicalURL(URL(filePath: path, relativeTo: root))
+      guard candidate.path == root.path || candidate.path.hasPrefix(root.path + "/") else {
         throw WorkflowActionError.unsafePath(path)
       }
       root = candidate

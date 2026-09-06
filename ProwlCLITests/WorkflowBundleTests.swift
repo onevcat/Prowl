@@ -61,3 +61,26 @@ struct WorkflowBundleTests {
     return root
   }
 }
+
+extension WorkflowBundleTests {
+  @Test func largerBundlesHaveExplicitByteAndEntryLimits() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    try Data().write(to: root.appending(path: "workflow.yaml"))
+    let file = root.appending(path: "asset.bin")
+    try Data(repeating: 0, count: 17 * 1024 * 1024).write(to: file)
+    #expect(try WorkflowBundleSnapshot.read(root).files["asset.bin"]?.count == 17 * 1024 * 1024)
+    let handle = try FileHandle(forWritingTo: file)
+    try handle.truncate(atOffset: UInt64(WorkflowSizeLimits.bundle + 1))
+    try handle.close()
+    #expect(throws: (any Error).self) { try WorkflowBundleSnapshot.read(root) }
+    try FileManager.default.removeItem(at: file)
+    for index in 0..<(WorkflowSizeLimits.bundleEntries - 1) {
+      try Data().write(to: root.appending(path: "file-\(index)"))
+    }
+    #expect(try WorkflowBundleSnapshot.read(root).files.count == WorkflowSizeLimits.bundleEntries)
+    try Data().write(to: root.appending(path: "one-too-many"))
+    #expect(throws: (any Error).self) { try WorkflowBundleSnapshot.read(root) }
+  }
+}

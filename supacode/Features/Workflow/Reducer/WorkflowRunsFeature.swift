@@ -36,7 +36,7 @@ nonisolated struct WorkflowRunSession: Equatable, Sendable {
     self.limits = limits
   }
 
-  var store: WorkflowRunStore { WorkflowRunStore(rootURL: run.context.worktree.rootURL) }
+  var store: WorkflowRunStore { WorkflowRunStore(rootURL: run.context.worktree.rootURL, directory: run.runDirectory) }
 
   /// Every pane the run currently occupies (dsl-spec §10: one run per pane).
   var boundSurfaceIDs: Set<UUID> {
@@ -115,6 +115,7 @@ struct WorkflowRunsFeature {
     case notice(WorkflowRunNotice)
   }
 
+  @Dependency(WorkflowHistoryStorageKey.self) var historyStorage
   @Dependency(WorkflowRuntimeClient.self) var runtime
   @Dependency(WorkflowActivationClient.self) var activation
   @Dependency(WorkflowWatchdogClient.self) var watchdog
@@ -233,26 +234,24 @@ struct WorkflowRunsFeature {
         )
 
       case .markInterruptedRuns(let roots):
-        let pending = roots.filter { !state.scannedWorktreeRoots.contains($0) }
-        guard !pending.isEmpty else { return .none }
-        state.scannedWorktreeRoots.formUnion(pending)
-        // Read only for a record that is marked: a scan that finds nothing needs no clock.
+        guard state.scannedWorktreeRoots.isEmpty else { return .none }
+        state.scannedWorktreeRoots.formUnion(roots.isEmpty ? ["global"] : roots)
+        let storage = historyStorage
         let clock = _now
         return .run { _ in
-          for root in pending {
-            let store = WorkflowRunStore(rootURL: URL(filePath: root, directoryHint: .isDirectory))
+          await Task.detached(priority: .utility) {
             do {
-              let result = try store.markInterruptedRuns(now: { clock.wrappedValue })
+              _ = try WorkflowActionProcessRegistry(directory: storage.baseURL.appending(path: ".processes"))
+                .recoverAbandonedProcesses()
+              let store = WorkflowRunStore(rootURL: storage.baseURL, storage: storage)
+              let result = try store.markInterruptedRuns(now: { clock.wrappedValue }, allRoots: true)
               if !result.interrupted.isEmpty || !result.unreadable.isEmpty {
                 Self.logger.info(
-                  "[Workflow] \(root): \(result.interrupted.count) run(s) marked interrupted, "
-                    + "\(result.unreadable.count) unreadable.")
+                  "Workflow history: \(result.interrupted.count) interrupted, \(result.unreadable.count) unreadable.")
               }
-            } catch {
-              Self.logger.warning(
-                "[Workflow] Could not scan \(root) for interrupted runs: \(error)")
-            }
-          }
+              _ = try WorkflowHistory(storage: storage).maintenance(now: clock.wrappedValue)
+            } catch { Self.logger.warning("Workflow history maintenance failed: \(error)") }
+          }.value
         }
 
       case .delegate:
@@ -544,8 +543,10 @@ struct WorkflowRunsFeature {
       runID: run.id, rootURL: run.context.worktree.rootURL,
       roleAgents: run.bindings.mapValues { $0.templateRole.agent }, outgoingAgent: nil, now: timestamp,
       stepID: stepID, executionID: executionID, attempt: run.actionAttempts[stepID] ?? 1,
-      bundle: run.context.bundle, values: run.stepValues)
+      bundle: run.context.bundle, values: run.stepValues, runDirectory: run.runDirectory)
+    run.context.occupancy?.beginActivity()
     return .run { send in
+      defer { run.context.occupancy?.endActivity() }
       do {
         let outputs = try await actionExecutor.execute(actionID: actionID, inputs: inputs, context: context)
         await send(.event(runID: run.id, .actionCompleted(stepID: stepID, outputs: outputs, executionID: executionID)))
@@ -648,12 +649,12 @@ struct WorkflowRunsFeature {
         try store.ensureLayout(runID: runID)
         _ = try store.writeInstruction(runID: runID, stepID: stepID, ordinal: ordinal, text: text)
       } catch {
-        await send(
-          .event(
-            runID: runID,
-            .injectionFailed(
-              ordinal: ordinal,
-              .activationUnavailable("the instruction file could not be written: \(error)"))))
+        let reason = "The instruction could not be persisted: \(error)"
+        let event: WorkflowRunEvent =
+          session.run.invocations.first { $0.ordinal == ordinal }?.kind == .launch
+          ? .launchFailed(ordinal: ordinal, reason: reason)
+          : .injectionFailed(ordinal: ordinal, .activationUnavailable(reason))
+        await send(.event(runID: runID, event))
         return .stop
       }
 
@@ -787,6 +788,14 @@ struct WorkflowRunsFeature {
 
     case .finished:
       queue.finish(runID)
+      session.run.context.occupancy?.finish()
+      let storage = store.storage
+      let timestamp = now
+      await Task.detached(priority: .utility) {
+        do { _ = try WorkflowHistory(storage: storage).maintenance(now: timestamp) } catch {
+          Self.logger.warning("Workflow history maintenance failed: \(error)")
+        }
+      }.value
     }
     return .continue
   }

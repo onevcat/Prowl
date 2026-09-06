@@ -516,10 +516,22 @@ prowl workflow schema [--action] [--json]                          # workflow or
   response is the run (`.data.id`, `.data.status`, `.data.step`, frozen
   `.data.bindings`, `.data.run_directory`); when the run was started from the pane that is
   its `current` role and the first step messages that role, `.data.self_initiated` carries the
-  line the runner would have typed (instruction path and completion command included) and
+  line the runner would have typed (scoped read and completion commands included) and
   nothing is typed into the caller — read it and follow it yourself. The run directory is
-  `<worktree>/.prowl/workflow-runs/<run id>/` (`run.json`, `log.md`, `instructions/`,
-  `outputs/`, `skills/`), self-ignored by Git.
+  `~/.prowl/logs/workflow-runs/<root-name>-<root-hash>/YYYY-MM/<run-id>/`, including
+  its frozen bundle and all runtime artifacts. The UUID remains searchable after the
+  execution root is closed, moved, or deleted. See [history retention](workflows.md).
+- `read [resource-id] --run <run-uuid> --invocation <number>` retrieves the assigned
+  instruction (default) or a resource ID returned with it. Prowl checks the caller pane,
+  run, and invocation against the current task assignment. Reads need no token.
+  Normal completion keeps the last task readable until reassignment, history cleanup,
+  or app exit; cancellation, Skip, and activation revocation revoke access. `--json` returns `body`, `encoding`
+  (`utf-8` or `base64`), `resources`, `invocation`, `offset`, `next_offset`, and `total_bytes`.
+  Reads return at most 256 KiB. Continue with `--offset <next_offset>` until `next_offset` is absent;
+  decode each chunk according to its encoding and concatenate its bytes. Resources
+  include only assigned skills and explicitly passed workflow inputs/artifacts. A granted
+  artifact directory returns a JSON list of its contained file IDs; read each ID separately.
+  Reading content never delivers an output or completes a step.
 - `done` delivers the output of the step this pane is working on: the body comes from piped
   stdin (`-`) or `--file`; `--verdict` supplies the declared verdict when the step requires
   one. Prowl attributes the delivery by the **caller pane** (its pending workflow activation) and
@@ -586,7 +598,7 @@ prowl workflow cancel "$(printf '%s\n' "$run" | jq -r '.data.id')"
 ```
 
 JSON is `prowl.cli.workflow.v1` with `data.action` = `list` | `run` | `status` | `done` |
-`cancel` | `validate` | `schema`; `run`, `status`, and `cancel` share the run shape, `done`
+`cancel` | `read` | `validate` | `schema`; `run`, `status`, and `cancel` share the run shape, `done`
 nests it under `.data.run` beside `.data.delivery`.
 
 `prowl workflow test-action <workflow> <action> [source] --input-json '<JSON object>' [--json]`

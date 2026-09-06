@@ -177,7 +177,11 @@ struct WorkflowRunMachineTests {
     return (started.machine, started.effects)
   }
 
-  private var runDir: String { "/repo/.prowl/workflow-runs/\(Self.runID.uuidString)" }
+  private var runDir: String {
+    WorkflowRunPaths.path(
+      WorkflowRunPaths.runDirectory(
+        root: URL(filePath: "/repo"), runID: Self.runID, createdAt: Self.start))
+  }
 
   /// A successful delivery followed by its persistence: the effects of both phases.
   @discardableResult
@@ -232,7 +236,8 @@ struct WorkflowRunMachineTests {
       effects.contains(
         .inject(
           role: "author", surfaceID: Self.authorPane.surfaceID, ordinal: 1,
-          line: "[Prowl] Read \(path) and follow it — finish with: PROWL_WORKFLOW_TOKEN=TOKEN-1 prowl workflow done -",
+          line: "[Prowl] " + (machine.run.invocations[0].content?.guidance ?? "")
+            + " — finish with: PROWL_WORKFLOW_TOKEN=TOKEN-1 prowl workflow done -",
           opensActivation: true)))
     #expect(machine.run.phase == .injecting(ordinal: 1))
     #expect(machine.run.invocations[0].activation?.token == "TOKEN-1")
@@ -314,7 +319,7 @@ struct WorkflowRunMachineTests {
     #expect(request.profile == Self.reviewerProfile)
     #expect(
       request.prompt.hasPrefix(
-        "Read \(runDir)/outputs/brief.md and review (strict).\n\n---\nProwl workflow completion protocol v1:"))
+        "Read workflow-resource:resource-1 and review (strict)."))
     #expect(
       request.prompt.contains("\nprowl workflow done --verdict clean -\nor:\nprowl workflow done --verdict issues -\n"))
     #expect(request.prompt.contains("Reviewer starting round 1"))
@@ -551,8 +556,9 @@ struct WorkflowRunMachineTests {
       inject.contains(
         .inject(
           role: "author", surfaceID: Self.authorPane.surfaceID, ordinal: 3,
-          line: "[Prowl] Findings: \(runDir)/outputs/findings.md. Fix or rebut each item. — finish with: "
-            + "PROWL_WORKFLOW_TOKEN=TOKEN-3 prowl workflow done -",
+          line: "[Prowl] Findings: workflow-resource:resource-1. Fix or rebut each item. "
+            + (machine.run.currentInvocation?.content?.guidance ?? "")
+            + " — finish with: PROWL_WORKFLOW_TOKEN=TOKEN-3 prowl workflow done -",
           opensActivation: true)))
     _ = machine.apply(.injectionSucceeded(ordinal: 3, dispatchID: "d3"))
     try deliverPersisted(&machine, ordinal: 3, token: "TOKEN-3", body: "# Done\nfixed")
@@ -769,9 +775,12 @@ struct WorkflowRunMachineTests {
       Issue.record("expected a launch effect")
       return
     }
-    #expect(request.prompt == "Take over.")
+    #expect(request.prompt.hasPrefix("Take over.\n"))
     #expect(!request.expectsDelivery)
-    #expect(request.environment == ["PROWL_WORKFLOW_RUN": Self.runID.uuidString, "PROWL_WORKFLOW_ROLE": "receiver"])
+    #expect(
+      request.environment == [
+        "PROWL_WORKFLOW_RUN": Self.runID.uuidString, "PROWL_WORKFLOW_ROLE": "receiver",
+      ])
     #expect(request.placement == .tab)
     #expect(request.background)
     let done = machine.apply(.launched(ordinal: 2, pane: Self.reviewerPane, dispatchID: nil))
@@ -1056,7 +1065,7 @@ struct WorkflowRunMachineTests {
     #expect(request.ordinal == 5)
     #expect(
       request.prompt.hasPrefix(
-        "Disposition: \(runDir)/outputs/disposition.md. Re-review.\n\n---\nProwl workflow completion protocol v1:"))
+        "Disposition: workflow-resource:resource-1. Re-review."))
     #expect(request.environment["PROWL_WORKFLOW_TOKEN"] == "TOKEN-5")
     #expect(machine.run.bindings["reviewer"]?.pane == nil)
     #expect(machine.run.invocations[3].activation?.state == .revoked)
@@ -1138,7 +1147,7 @@ struct WorkflowRunMachineTests {
     let line = try #require(machine.run.selfInitiatedLine)
     #expect(
       line.hasPrefix(
-        "[Prowl] Read \(runDir)/instructions/brief.1.md and follow it — finish with: PROWL_WORKFLOW_TOKEN=TOKEN-1"))
+        "[Prowl] Read the assigned task with `prowl workflow read --run \(Self.runID.uuidString) --invocation 1`"))
     #expect(machine.run.phase == .injecting(ordinal: 1))
     var continued = machine
     _ = continued.apply(.injectionSucceeded(ordinal: 1, dispatchID: "d1"))
@@ -1173,7 +1182,10 @@ struct WorkflowRunMachineTests {
     let effects = machine.apply(.user(.relaunch))
     #expect(
       effects.contains {
-        if case .launch(let request) = $0 { return request.redelivery && request.prompt.hasPrefix("hello\n\n---\n") }
+        if case .launch(let request) = $0 {
+          return request.redelivery && request.prompt.hasPrefix("hello\n\n")
+            && request.prompt.contains("prowl workflow read")
+        }
         return false
       })
   }

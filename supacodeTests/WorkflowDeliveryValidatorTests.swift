@@ -158,26 +158,25 @@ struct WorkflowDeliveryValidatorTests {
   }
 
   @Test func sizeCapsUseTheDefaultAndClampToTheHardMaximum() {
-    #expect(WorkflowDeliveryLimits.defaultMaximumBytes == 1 << 20)
-    #expect(WorkflowDeliveryLimits.hardMaximumBytes == 4 << 20)
-    #expect(WorkflowDeliveryLimits(maximumBytes: 10 << 20).maximumBytes == 4 << 20)
+    #expect(WorkflowDeliveryLimits.defaultMaximumBytes == 16 << 20)
+    #expect(WorkflowDeliveryLimits.hardMaximumBytes == 16 << 20)
+    #expect(WorkflowDeliveryLimits(maximumBytes: 32 << 20).maximumBytes == 16 << 20)
     #expect(WorkflowDeliveryLimits(maximumBytes: 0).maximumBytes == 1)
 
-    let tooBig = "# a\n" + String(repeating: "x", count: 1 << 20)
+    let tooBig = "# a\n" + String(repeating: "x", count: 16 << 20)
     guard case .failure(let error) = validate(tooBig) else {
       Issue.record("expected OUTPUT_TOO_LARGE")
       return
     }
     #expect(error.code == "OUTPUT_TOO_LARGE")
-    #expect(error == .outputTooLarge(bytes: tooBig.utf8.count, limit: 1 << 20))
+    #expect(error == .outputTooLarge(bytes: tooBig.utf8.count, limit: 16 << 20))
 
-    let raised = WorkflowDeliveryLimits(maximumBytes: 2 << 20)
-    #expect(throws: Never.self) { try validate(tooBig, limits: raised).get() }
+    #expect(throws: Never.self) { try validate("# ok\n" + String(repeating: "x", count: (16 << 20) - 5)).get() }
   }
 
   @Test func sizeIsMeasuredOnTheRawBodyBeforeNormalization() {
     let expect = WorkflowExpectation(format: .markdown)
-    let preamble = String(repeating: "p", count: (1 << 20) - 5)
+    let preamble = String(repeating: "p", count: (16 << 20) - 5)
     let body = preamble + "\n# ok\n"
     guard case .failure(let error) = validate(body, expect: expect) else {
       Issue.record("expected OUTPUT_TOO_LARGE")

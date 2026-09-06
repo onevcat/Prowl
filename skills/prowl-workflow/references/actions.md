@@ -67,7 +67,7 @@ The script receives one JSON object on stdin:
       "step_id": "summarize",
       "attempt": 1,
       "cwd": "/repo",
-      "artifact_dir": "/repo/.prowl/workflow-runs/<run>/actions/summarize/<execution>/artifacts"
+      "artifact_dir": "/Users/example/.prowl/logs/workflow-runs/repo-<hash>/2026-09/<run>/actions/summarize/<execution>/artifacts"
     }
   }
 }
@@ -75,7 +75,7 @@ The script receives one JSON object on stdin:
 
 `context` also contains the workflow's step snapshot; see [authoring](authoring.md).
 The working directory is the selected worktree. Write exactly one schema-conforming JSON
-object to stdout; put diagnostics on stderr. Exit zero is necessary for success.
+value to stdout; put diagnostics on stderr. Exit zero is necessary for success.
 
 ```python
 import json
@@ -131,8 +131,8 @@ Raw logs have the same local access as the request/result records. Manual retry 
 is promised. Cancel/timeout terminates the owned script process group. It does not undo work
 already done or stop independent agent tasks.
 
-Default timeout: 30 seconds. Stdout and stderr: 1 MiB each. Request: 1 MiB. JSON depth: 64.
-Bundle: 16 MiB and 2048 files. Interpreter environment starts with PATH, HOME, TMPDIR, LANG,
+Default timeout: 30 seconds. Input and stdout: 16 MiB each. Stderr: 4 MiB. The JSON request envelope has separate transport headroom. JSON depth: 64.
+Bundle: 64 MiB and 8192 entries. Interpreter environment starts with PATH, HOME, TMPDIR, LANG,
 and LC_ALL when present. `backend.environment` names extra inherited variables; `PROWL_*`
 control variables are always stripped. Prowl sets `PYTHONDONTWRITEBYTECODE=1` so Python
 helper imports do not add cache files to the fixed bundle. Environment values are not

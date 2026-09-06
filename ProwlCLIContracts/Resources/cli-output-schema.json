@@ -3840,6 +3840,9 @@
         },
         {
           "$ref": "#/$defs/workflowSchemaData"
+        },
+        {
+          "$ref": "#/$defs/workflowReadData"
         }
       ]
     },
@@ -4793,6 +4796,84 @@
         },
         "schema": {
           "type": "object"
+        }
+      }
+    },
+    "workflowReadData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "run",
+        "role",
+        "step",
+        "resource",
+        "body",
+        "encoding",
+        "resources",
+        "offset",
+        "total_bytes",
+        "invocation"
+      ],
+      "properties": {
+        "action": {
+          "const": "read"
+        },
+        "run": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        },
+        "step": {
+          "type": "string"
+        },
+        "resource": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "encoding": {
+          "enum": [
+            "utf-8",
+            "base64"
+          ]
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "next_offset": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "resources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "name"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "invocation": {
+          "type": "integer",
+          "minimum": 1
         }
       }
     }

@@ -142,18 +142,21 @@ nonisolated struct WorkflowRunContext: Equatable, Sendable {
   var sourcePaneID: UUID?
   var sourceTabID: UUID?
   var literalActionInputs = false
+  var historyDirectory: URL?
+  var occupancy: WorkflowRunOccupancy?
 }
 
 /// Every path under a run directory, derived from validated slugs and the run UUID only.
 nonisolated enum WorkflowRunPaths {
-  static let runsRelativePath = ".prowl/workflow-runs"
-
   static func runsDirectory(root: URL) -> URL {
-    root.appending(path: runsRelativePath, directoryHint: .isDirectory).standardizedFileURL
+    let storage = WorkflowHistoryStorage.configured
+    return storage.baseURL.appending(path: storage.rootKey(root))
   }
 
-  static func runDirectory(root: URL, runID: UUID) -> URL {
-    runsDirectory(root: root).appending(path: runID.uuidString, directoryHint: .isDirectory)
+  static func runDirectory(root: URL, runID: UUID, createdAt: Date? = nil) -> URL {
+    let storage = WorkflowHistoryStorage.configured
+    if createdAt == nil, let existing = try? storage.find(runID) { return existing }
+    return storage.directory(root: root, createdAt: createdAt ?? Date(), runID: runID)
   }
 
   static func instructionURL(runDirectory: URL, stepID: String, ordinal: Int) -> URL {
@@ -227,6 +230,7 @@ nonisolated struct WorkflowInvocation: Equatable, Sendable {
   let kind: WorkflowInvocationKind
   let startedAt: Date
   var instructionPath: String?
+  var content: WorkflowTaskContent?
   var activation: WorkflowActivation?
   var endedAt: Date?
 }
@@ -396,7 +400,8 @@ nonisolated struct WorkflowRun: Equatable, Sendable {
   var selfInitiatedLine: String?
 
   var runDirectory: URL {
-    WorkflowRunPaths.runDirectory(root: context.worktree.rootURL, runID: id)
+    context.historyDirectory
+      ?? WorkflowRunPaths.runDirectory(root: context.worktree.rootURL, runID: id, createdAt: startedAt)
   }
 
   var currentInvocation: WorkflowInvocation? {

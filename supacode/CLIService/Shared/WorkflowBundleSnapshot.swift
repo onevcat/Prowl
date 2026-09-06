@@ -35,8 +35,8 @@ nonisolated public struct WorkflowBundleSnapshot: Equatable, Sendable {
     while let path = pending.popLast() {
       let file = root.appending(path: path)
       let normalized = path.precomposedStringWithCanonicalMapping.lowercased()
-      guard seen.insert(normalized).inserted, seen.count <= 2048 else {
-        throw WorkflowExpressionError.limit("Bundle contains colliding paths or more than 2048 entries.")
+      guard seen.insert(normalized).inserted, seen.count <= WorkflowSizeLimits.bundleEntries else {
+        throw WorkflowExpressionError.limit("Bundle contains colliding paths or more than 8192 entries.")
       }
       let attributes = try fileManager.attributesOfItem(atPath: file.path)
       let type = attributes[.type] as? FileAttributeType
@@ -49,12 +49,14 @@ nonisolated public struct WorkflowBundleSnapshot: Equatable, Sendable {
         throw WorkflowExpressionError.type("Bundle entry '\(path)' must be a regular file; symlinks are not supported.")
       }
       let size = (attributes[.size] as? NSNumber)?.intValue ?? 0
-      guard size <= 16 * 1024 * 1024 - totalBytes else {
-        throw WorkflowExpressionError.limit("Bundle exceeds 16 MiB.")
+      guard size <= WorkflowSizeLimits.bundle - totalBytes else {
+        throw WorkflowExpressionError.limit("Bundle exceeds 64 MiB.")
       }
       let data = try Data(contentsOf: file)
       totalBytes += data.count
-      guard totalBytes <= 16 * 1024 * 1024 else { throw WorkflowExpressionError.limit("Bundle exceeds 16 MiB.") }
+      guard totalBytes <= WorkflowSizeLimits.bundle else {
+        throw WorkflowExpressionError.limit("Bundle exceeds 64 MiB.")
+      }
       files[path] = data
     }
     guard files["workflow.yaml"] != nil else { throw WorkflowExpressionError.missing("workflow.yaml") }

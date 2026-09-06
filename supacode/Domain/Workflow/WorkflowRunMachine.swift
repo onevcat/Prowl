@@ -780,19 +780,28 @@ nonisolated struct WorkflowRunMachine {
       }
       completion = activation.completion
     }
+    let grant = taskContent(
+      text: rendered, ordinal: ordinal, skill: nil)
+    updateInvocation(ordinal: ordinal) { $0.content = grant }
     do {
       switch content {
       case .text:
-        return try WorkflowTypedLine.text(rendered, completion: completion)
+        let path = WorkflowRunPaths.instructionURL(runDirectory: run.runDirectory, stepID: step.id, ordinal: ordinal)
+        updateInvocation(ordinal: ordinal) { $0.instructionPath = WorkflowRunPaths.path(path) }
+        effects.append(
+          .materializeInstruction(
+            ordinal: ordinal, stepID: step.id, text: grant.text + (completion?.instructionTrailer() ?? "")))
+        return try WorkflowTypedLine.text(
+          grant.text + (grant.resources.isEmpty ? "" : " " + grant.guidance), completion: completion)
       case .instruction:
         let url = WorkflowRunPaths.instructionURL(runDirectory: run.runDirectory, stepID: step.id, ordinal: ordinal)
         let path = WorkflowRunPaths.path(url)
-        var text = rendered
+        var text = grant.text
         if !text.hasSuffix("\n") { text += "\n" }
         if let completion { text += completion.instructionTrailer() }
         updateInvocation(ordinal: ordinal) { $0.instructionPath = path }
         effects.append(.materializeInstruction(ordinal: ordinal, stepID: step.id, text: text))
-        return try WorkflowTypedLine.pointer(to: path, completion: completion)
+        return try WorkflowTypedLine.text(grant.guidance, completion: completion)
       }
     } catch {
       run.phase = .injecting(ordinal: ordinal)
@@ -858,7 +867,17 @@ nonisolated struct WorkflowRunMachine {
       protocolBlock = activation.completion.protocolBlock(
         runID: run.id.uuidString, workflowName: run.definition.name, role: role, stepTitle: title, expect: expect)
     }
-    let prompt = WorkflowLaunchPrompt.render(userPrompt: userPrompt, protocolBlock: protocolBlock)
+    let grant = taskContent(text: userPrompt, ordinal: ordinal, skill: skill)
+    let instruction = WorkflowRunPaths.instructionURL(runDirectory: run.runDirectory, stepID: step.id, ordinal: ordinal)
+    updateInvocation(ordinal: ordinal) {
+      $0.content = grant
+      $0.instructionPath = WorkflowRunPaths.path(instruction)
+    }
+    effects.append(
+      .materializeInstruction(
+        ordinal: ordinal, stepID: step.id, text: grant.text + "\n\n" + (protocolBlock ?? "")))
+    let prompt = WorkflowLaunchPrompt.render(
+      userPrompt: grant.text + "\n\n" + grant.guidance, protocolBlock: protocolBlock)
     do {
       try WorkflowLaunchPrompt.validate(prompt)
     } catch {
@@ -888,6 +907,23 @@ nonisolated struct WorkflowRunMachine {
           role: role, ordinal: ordinal, profile: profile, prompt: prompt, environment: environment,
           placement: requirements.placement, direction: requirements.direction, background: requirements.background,
           anchorSurfaceID: anchor, skill: skill, expectsDelivery: expect != nil, redelivery: redelivery)))
+  }
+
+  private func taskContent(text: String, ordinal: Int, skill: String?) -> WorkflowTaskContent {
+    func paths(_ value: WorkflowJSONValue) -> [String] {
+      switch value {
+      case .string(let value): return [value]
+      case .array(let values): return values.flatMap(paths)
+      case .object(let values): return values.values.flatMap(paths)
+      default: return []
+      }
+    }
+    let known =
+      run.outputs.values.flatMap { [$0.path, $0.latestPath] }
+      + run.actionOutputs.values.flatMap { $0.values.flatMap(paths) }
+      + run.stepValues.values.flatMap(paths)
+    return WorkflowTaskContent.make(
+      text: text, task: (run.id, ordinal), runDirectory: run.runDirectory, knownPaths: known, skill: skill)
   }
 
   private mutating func enterAction(

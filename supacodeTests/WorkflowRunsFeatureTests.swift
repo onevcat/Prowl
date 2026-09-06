@@ -1138,7 +1138,12 @@ struct WorkflowRunsFeatureTests {
 
   // MARK: - Restart scan
 
-  @Test(.dependencies) func interruptedRunsAreMarkedOncePerWorktreeRoot() async throws {
+  @Test(
+    .dependencies {
+      $0[WorkflowHistoryStorageKey.self] = WorkflowHistoryStorage(
+        baseURL: FileManager.default.temporaryDirectory.appending(path: "workflow-recovery-\(UUID().uuidString)"))
+    })
+  func recoveryRunsOnceGlobally() async throws {
     let fixture = try Fixture()
     defer { fixture.cleanUp() }
     let (session, _) = try fixture.session()

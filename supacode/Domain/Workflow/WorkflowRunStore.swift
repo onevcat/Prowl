@@ -1,5 +1,5 @@
 // supacode/Domain/Workflow/WorkflowRunStore.swift
-// The run directory (dsl-spec §8): `<root>/.prowl/workflow-runs/<run-id>/` with `run.json`,
+// Personal run directories contain `run.json`,
 // an append-only `log.md`, materialized instructions and skills, and versioned outputs with an
 // atomically replaced latest view. Every path is built from validated slugs and the run UUID
 // under the same physical containment gate as profile homes.
@@ -17,6 +17,8 @@ nonisolated struct WorkflowRunRecordInvocation: Codable, Equatable, Sendable {
   let role: String
   let kind: WorkflowInvocationKind
   let instructionPath: String?
+  let resources: [String: String]?
+  let skill: String?
   let activation: WorkflowRunRecordActivation?
   let startedAt: Date
   let endedAt: Date?
@@ -28,6 +30,8 @@ nonisolated struct WorkflowRunRecordInvocation: Codable, Equatable, Sendable {
     case role
     case kind
     case instructionPath = "instruction_path"
+    case resources
+    case skill
     case activation
     case startedAt = "started_at"
     case endedAt = "ended_at"
@@ -161,6 +165,8 @@ nonisolated struct WorkflowRunRecord: Codable, Equatable, Sendable {
         role: invocation.role,
         kind: invocation.kind,
         instructionPath: invocation.instructionPath,
+        resources: invocation.content?.resources.mapValues { String($0.dropFirst(run.runDirectory.path.count + 1)) },
+        skill: invocation.content?.skill,
         activation: invocation.activation.map {
           WorkflowRunRecordActivation(dispatchID: $0.dispatchID, state: $0.state, output: $0.outputName)
         },
@@ -245,7 +251,7 @@ extension WorkflowRunRecord.Status {
   }
 
   nonisolated var isTerminal: Bool {
-    state != "running" && state != "needs_attention"
+    ["completed", "cancelled", "skipped", "max_rounds_reached", "interrupted"].contains(state)
   }
 }
 
@@ -315,59 +321,43 @@ nonisolated struct WorkflowInterruptedRuns: Equatable, Sendable {
 }
 
 nonisolated struct WorkflowRunStore: Sendable {
-  static let ignoreFileName = ".gitignore"
   static let logFileName = "log.md"
 
   let rootURL: URL
+  let storage: WorkflowHistoryStorage
+  let fixedDirectory: URL?
 
-  init(rootURL: URL) {
+  init(rootURL: URL, directory: URL? = nil, storage: WorkflowHistoryStorage = .configured) {
     self.rootURL = rootURL.standardizedFileURL
+    self.storage = storage
+    fixedDirectory = directory
   }
 
-  var runsDirectory: URL { WorkflowRunPaths.runsDirectory(root: rootURL) }
+  var runsDirectory: URL { storage.baseURL.appending(path: storage.rootKey(rootURL)) }
 
   func directory(for runID: UUID) -> URL {
-    WorkflowRunPaths.runDirectory(root: rootURL, runID: runID)
+    if let fixedDirectory { return fixedDirectory }
+    if let existing = try? storage.find(runID) { return existing }
+    return storage.directory(root: rootURL, createdAt: Date(), runID: runID)
   }
 
   // MARK: Layout
 
-  /// Creates `<runs>/.gitignore` and the run directory with its subdirectories, after proving
-  /// that the run directory is physically inside the runs directory (no symlink leaf).
+  /// Creates only personal storage. No project-local pointer or ignore file is needed.
   func ensureLayout(runID: UUID) throws {
-    let fileManager = FileManager.default
-    try requireOwnedBase()
-    try fileManager.createDirectory(at: runsDirectory, withIntermediateDirectories: true)
-    try requireOwnedBase()
-    let ignoreURL = runsDirectory.appending(path: Self.ignoreFileName, directoryHint: .notDirectory)
-    if !fileManager.fileExists(atPath: ignoreURL.path(percentEncoded: false)) {
-      try "*\n".write(to: ignoreURL, atomically: true, encoding: .utf8)
-    }
-    let runDirectory = try containedRunDirectory(runID: runID)
-    try fileManager.createDirectory(at: runDirectory, withIntermediateDirectories: true)
+    let runDirectory = directory(for: runID)
+    try storage.prepare(runDirectory)
     for name in ["instructions", "outputs", "skills"] {
-      let subdirectory = runDirectory.appending(path: name, directoryHint: .isDirectory)
-      try requireNotSymbolicLink(subdirectory)
-      try fileManager.createDirectory(at: subdirectory, withIntermediateDirectories: true)
+      try storage.prepare(runDirectory.appending(path: name))
     }
   }
 
-  /// The run directory after the containment gate (`AgentProfileHomeProvisioner` pattern):
-  /// lexical containment, no symlink leaf, canonical parent + leaf inside the canonical base.
   func containedRunDirectory(runID: UUID) throws -> URL {
-    try requireOwnedBase()
     let runDirectory = directory(for: runID)
-    let path = AgentProfileLaunchPlanner.pathString(runDirectory)
-    guard AgentProfileLaunchPlanner.isContained(runDirectory, in: runsDirectory) else {
-      throw WorkflowRunStoreError.unsafePath(path)
+    guard UUID(uuidString: runDirectory.lastPathComponent) == runID else {
+      throw WorkflowRunStoreError.unsafePath(runDirectory.path)
     }
-    do {
-      try AgentProfileHomeProvisioner.validatePhysicalContainment(home: runDirectory, base: runsDirectory)
-    } catch AgentProfileLaunchPlanError.homeIsSymbolicLink {
-      throw WorkflowRunStoreError.symbolicLink(path)
-    } catch {
-      throw WorkflowRunStoreError.unsafePath(path)
-    }
+    try storage.validate(runDirectory)
     return runDirectory
   }
 
@@ -377,8 +367,10 @@ nonisolated struct WorkflowRunStore: Sendable {
     let runDirectory = try containedRunDirectory(runID: record.run.id)
     let data = try WorkflowRunRecord.makeEncoder().encode(record)
     try requireNotSymbolicLink(runDirectory.appending(path: WorkflowRunRecord.fileName, directoryHint: .notDirectory))
-    try data.write(
-      to: runDirectory.appending(path: WorkflowRunRecord.fileName, directoryHint: .notDirectory), options: .atomic)
+    let metadata = WorkflowHistoryMetadata(
+      id: record.run.id, name: record.run.workflowName, root: record.worktree.path,
+      state: record.run.status.state, startedAt: record.run.startedAt, finishedAt: record.run.finishedAt)
+    try metadata.write(record: data, directory: runDirectory, storage: storage)
   }
 
   func readRecord(runID: UUID) throws -> WorkflowRunRecord {
@@ -405,7 +397,7 @@ nonisolated struct WorkflowRunStore: Sendable {
   // MARK: log.md
 
   /// Appends through an `O_NOFOLLOW` descriptor: a `log.md` swapped for a symbolic link is
-  /// refused instead of followed, so the run can never append to a file outside its directory.
+  /// refused instead of followed. The descriptor must also have a single hard link.
   func appendLog(runID: UUID, line: String, now: Date) throws {
     let runDirectory = try containedRunDirectory(runID: runID)
     let logURL = runDirectory.appending(path: Self.logFileName, directoryHint: .notDirectory)
@@ -420,7 +412,9 @@ nonisolated struct WorkflowRunStore: Sendable {
     let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
     defer { try? handle.close() }
     var statistics = stat()
-    guard fstat(descriptor, &statistics) == 0, (statistics.st_mode & S_IFMT) == S_IFREG else {
+    guard fstat(descriptor, &statistics) == 0, (statistics.st_mode & S_IFMT) == S_IFREG,
+      statistics.st_nlink == 1
+    else {
       throw WorkflowRunStoreError.unsafePath(path)
     }
     var entry = ""
@@ -470,8 +464,7 @@ nonisolated struct WorkflowRunStore: Sendable {
 
   // MARK: Skills
 
-  /// Copies a bundled skill directory to `skills/<id>/` so a sandboxed agent can read it from
-  /// the worktree. Only bundled skills are materialized (dsl-spec §4).
+  /// Freezes the assigned bundled skill for scoped CLI retrieval.
   @discardableResult
   func materializeSkill(runID: UUID, skill: BundledSkill) throws -> URL {
     let runDirectory = try containedRunDirectory(runID: runID)
@@ -496,17 +489,22 @@ nonisolated struct WorkflowRunStore: Sendable {
   /// `interrupted`. Only a small header (`version`, `run.status.state`) is read before a run is
   /// selected, so a record of another version is left alone; a v1 record that cannot be decoded
   /// or a run directory that fails the containment gate is reported and left untouched.
-  func markInterruptedRuns(now: () -> Date) throws -> WorkflowInterruptedRuns {
-    let fileManager = FileManager.default
-    guard fileManager.fileExists(atPath: runsDirectory.path(percentEncoded: false)) else {
-      return WorkflowInterruptedRuns(interrupted: [], unreadable: [])
+  func markInterruptedRuns(now: () -> Date, allRoots: Bool = false) throws -> WorkflowInterruptedRuns {
+    let coordination = try storage.coordinate()
+    defer { coordination.close() }
+    let entries = try storage.directories().filter {
+      allRoots
+        || $0.deletingLastPathComponent().deletingLastPathComponent().lastPathComponent == storage.rootKey(rootURL)
     }
-    try requireOwnedBase()
-    let entries = try fileManager.contentsOfDirectory(
-      at: runsDirectory, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles])
     var interrupted: [UUID] = []
     var unreadable: [String] = []
     for entry in entries.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+      let occupancy: WorkflowHistoryLock
+      do { occupancy = try storage.occupy(entry) } catch WorkflowHistoryError.occupied { continue } catch {
+        unreadable.append(entry.path)
+        continue
+      }
+      defer { occupancy.close() }
       guard let runID = UUID(uuidString: entry.lastPathComponent) else { continue }
       let runDirectory: URL
       do {
@@ -516,17 +514,23 @@ nonisolated struct WorkflowRunStore: Sendable {
         continue
       }
       let recordURL = runDirectory.appending(path: WorkflowRunRecord.fileName, directoryHint: .notDirectory)
-      guard fileManager.fileExists(atPath: recordURL.path(percentEncoded: false)) else { continue }
+      guard FileManager.default.fileExists(atPath: recordURL.path(percentEncoded: false)) else { continue }
       let recordPath = recordURL.path(percentEncoded: false)
       guard let header = try? Self.decodeHeader(at: recordURL) else {
         unreadable.append(recordPath)
         continue
       }
-      guard header.version == WorkflowRunRecord.currentVersion, !header.isTerminal else { continue }
+      guard header.version == WorkflowRunRecord.currentVersion,
+        ["running", "needs_attention"].contains(header.run.status.state)
+      else { continue }
       let record: WorkflowRunRecord
       do {
         record = try Self.decodeRecord(at: recordURL)
       } catch {
+        unreadable.append(recordPath)
+        continue
+      }
+      guard record.run.id == runID else {
         unreadable.append(recordPath)
         continue
       }
@@ -545,16 +549,6 @@ nonisolated struct WorkflowRunStore: Sendable {
   }
 
   // MARK: Helpers
-
-  /// `<root>/.prowl` and `<root>/.prowl/workflow-runs` are Prowl-owned directories: a link in
-  /// their place (which a repository can ship) would move every run artifact elsewhere, so
-  /// both are refused when they are symbolic links. Static links are the threat this closes;
-  /// a concurrent local process swapping directories between check and use is outside the
-  /// model (it already runs as the user).
-  private func requireOwnedBase() throws {
-    try requireNotSymbolicLink(rootURL.appending(path: ".prowl", directoryHint: .isDirectory))
-    try requireNotSymbolicLink(runsDirectory)
-  }
 
   private func requireNotSymbolicLink(_ url: URL) throws {
     try Self.requireNotSymbolicLinkStatic(url)

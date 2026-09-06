@@ -253,7 +253,7 @@ struct WorkflowRunHarnessTests {
     #expect(harness.typedLines.count == 1)
     #expect(
       harness.typedLines[0].line.hasPrefix(
-        "[Prowl] Read \(runDirectory.path(percentEncoded: false))instructions/brief.1.md and follow it"))
+        "[Prowl] Read the assigned task with `prowl workflow read --run \(harness.run.id.uuidString) --invocation 1`"))
     #expect(harness.typedLines[0].line.contains("PROWL_WORKFLOW_TOKEN=TOKEN-1 prowl workflow done -"))
     #expect(harness.bridge.opened.map(\.dispatchID) == ["dispatch-1"])
     #expect(harness.run.phase == .waitingForDelivery(ordinal: 1))
@@ -269,7 +269,7 @@ struct WorkflowRunHarnessTests {
     #expect(harness.launches.count == 1)
     #expect(
       harness.launches[0].prompt.hasPrefix(
-        "Read \(runDirectory.path(percentEncoded: false))outputs/brief.md and review (strict)."))
+        "Read workflow-resource:resource-1 and review (strict)."))
     #expect(harness.launches[0].environment["PROWL_WORKFLOW_TOKEN"] == "TOKEN-2")
     #expect(
       FileManager.default.fileExists(
@@ -281,7 +281,8 @@ struct WorkflowRunHarnessTests {
     #expect(harness.typedLines.count == 2)
     #expect(
       harness.typedLines[1].line
-        == "[Prowl] Findings: \(runDirectory.path(percentEncoded: false))outputs/findings.md. Fix or rebut each item."
+        == "[Prowl] Findings: workflow-resource:resource-1. Fix or rebut each item. "
+        + (harness.run.currentInvocation?.content?.guidance ?? "")
         + " — finish with: PROWL_WORKFLOW_TOKEN=TOKEN-3 prowl workflow done -")
     _ = try await harness.deliver(token: "TOKEN-3", body: "# Done")
     #expect(harness.typedLines[2].surfaceID == harness.run.bindings["reviewer"]?.pane?.surfaceID)
@@ -320,7 +321,7 @@ struct WorkflowRunHarnessTests {
     #expect(!log.contains("TOKEN-2"))
     #expect(!log.contains("TOKEN-3"))
     #expect(!log.contains("TOKEN-4"))
-    #expect(try String(contentsOf: harness.store.runsDirectory.appending(path: ".gitignore"), encoding: .utf8) == "*\n")
+    #expect(!FileManager.default.fileExists(atPath: harness.store.rootURL.appending(path: ".prowl/workflow-runs").path))
   }
 
   @Test func aFailingStoreLeavesTheDeliveryInAttentionUntilRetried() async throws {
@@ -423,7 +424,7 @@ struct WorkflowRunHarnessTests {
     #expect(harness.finished == .completed)
     #expect(harness.typedLines.isEmpty)
     #expect(harness.launches.count == 1)
-    #expect(try #require(harness.launches.first).prompt == "Take over.")
+    #expect(try #require(harness.launches.first).prompt.hasPrefix("Take over.\n"))
     #expect(!harness.launches[0].expectsDelivery)
     #expect(harness.notifications == ["Handed off to Pi Reviewer"])
     let record = try harness.store.readRecord(runID: harness.run.id)

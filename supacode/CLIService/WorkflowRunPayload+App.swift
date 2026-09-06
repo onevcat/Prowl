@@ -78,7 +78,9 @@ extension WorkflowRunPayload {
         id: record.worktree.id, name: record.worktree.name, branch: record.worktree.branch,
         path: record.worktree.path),
       runDirectory: WorkflowRunPaths.path(
-        WorkflowRunPaths.runDirectory(root: record.worktree.rootURL, runID: record.run.id)),
+        (try? WorkflowHistoryStorage.configured.find(record.run.id))
+          ?? WorkflowRunPaths.runDirectory(
+            root: record.worktree.rootURL, runID: record.run.id, createdAt: record.run.startedAt)),
       bindings: record.bindings.mapValues {
         WorkflowBindingPayload(source: $0.source, profile: $0.profile, pane: $0.pane)
       },

@@ -81,7 +81,7 @@ all agents and their statuses is the
 - **Per-repository user custom commands:** `~/.prowl/repo/<repo-name>/prowl.onevcat.json`
 - **Per-workspace metadata:** `<workspace>/.prowl/workspace.json`
 - **Workflow files:** `~/.prowl/workflows/*.pwlworkflow` and `<repo root>/.prowl/workflows/*.pwlworkflow`;
-  runs leave `<worktree root>/.prowl/workflow-runs/<run id>/`
+  runs leave `~/.prowl/logs/workflow-runs/<root-name>-<root-hash>/YYYY-MM/<run-id>/`
 - **CLI socket:** `~/Library/Application Support/com.onevcat.prowl/cli.sock`
   (overridable with `PROWL_CLI_SOCKET`)
 - Legacy `~/.supacode` is migrated to `~/.prowl` on first launch. (Prowl is a fork

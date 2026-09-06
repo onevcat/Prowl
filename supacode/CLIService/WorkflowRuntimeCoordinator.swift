@@ -22,6 +22,7 @@ final class WorkflowRuntimeCoordinator {
     let pendingDispatchID: @MainActor (UUID) -> String?
     /// Working directories of every known worktree, for `status` of a run that is not live (W5).
     let worktreeRoots: @MainActor () -> [URL]
+    let paneOwner: @MainActor (UUID) -> UUID?
     let rendezvous: WorkflowCLIRendezvous
     let makeRequestID: @Sendable () -> UUID
 
@@ -31,6 +32,7 @@ final class WorkflowRuntimeCoordinator {
       send: @escaping @MainActor (WorkflowRunsFeature.Action) -> Void,
       pendingDispatchID: @escaping @MainActor (UUID) -> String?,
       worktreeRoots: @escaping @MainActor () -> [URL],
+      paneOwner: @escaping @MainActor (UUID) -> UUID? = { _ in nil },
       rendezvous: WorkflowCLIRendezvous = WorkflowCLIRendezvous(),
       makeRequestID: @escaping @Sendable () -> UUID = { UUID() }
     ) {
@@ -39,6 +41,7 @@ final class WorkflowRuntimeCoordinator {
       self.send = send
       self.pendingDispatchID = pendingDispatchID
       self.worktreeRoots = worktreeRoots
+      self.paneOwner = paneOwner
       self.rendezvous = rendezvous
       self.makeRequestID = makeRequestID
     }
@@ -94,7 +97,9 @@ final class WorkflowRuntimeCoordinator {
         return Self.failure(
           code: CLIErrorCode.invalidArgument, message: "'\(reference)' is not a run UUID.")
       }
-      if let session = dependencies.sessions().first(where: { $0.run.id == runID }) {
+      if let session = dependencies.sessions().first(where: { $0.run.id == runID }),
+        !session.run.status.isTerminal || readRecord(runID: runID) != nil
+      {
         let role = callerPane.flatMap { Self.role(of: $0.surfaceID, in: session) }
         return Self.success(
           .status(
@@ -103,7 +108,7 @@ final class WorkflowRuntimeCoordinator {
       guard let record = readRecord(runID: runID) else {
         return Self.failure(
           code: CLIErrorCode.runNotFound,
-          message: "No workflow run \(runID.uuidString) is live or recorded in a known worktree.")
+          message: "No workflow run \(runID.uuidString) is live or recorded in personal history.")
       }
       return Self.success(.status(WorkflowRunPayload(record: record)))
     }
@@ -123,6 +128,100 @@ final class WorkflowRuntimeCoordinator {
     let role = Self.role(of: callerPane.surfaceID, in: session)
     return Self.success(
       .status(WorkflowRunPayload(run: session.run, callerRole: role, includeSelfInitiated: false)))
+  }
+
+  // MARK: - Scoped task content
+
+  func read(_ input: WorkflowInput, callerPane: CallerPane?) async -> CommandResponse {
+    guard let callerPane else {
+      return Self.failure(code: CLIErrorCode.sourceRequired, message: "Read workflow content from its assigned pane.")
+    }
+    guard let (session, invocation) = assignedContent(input, pane: callerPane.surfaceID),
+      let grant = invocation.content
+    else {
+      return Self.failure(code: CLIErrorCode.stepNotExpecting, message: "This task is no longer assigned to this pane.")
+    }
+    let role = invocation.role
+    let storage = session.store.storage
+    let directory = session.run.runDirectory
+    let requestResource = input.contentResource
+    let offset = input.contentOffset ?? 0
+    do {
+      let payload = try await Task.detached(priority: .utility) {
+        try storage.validate(directory)
+        var resources = grant.resources
+        if let skill = grant.skill {
+          let skillDirectory = WorkflowRunPaths.skillDirectory(runDirectory: directory, skillID: skill)
+          for (index, file) in try storage.files(in: skillDirectory).enumerated() {
+            resources["skill-\(index + 1)"] = file.path
+          }
+        }
+        var listings: [String: Data] = [:]
+        for (id, path) in grant.resources.sorted(by: { $0.key < $1.key }) {
+          let url = URL(filePath: path)
+          try storage.validate(url)
+          if try url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true {
+            let children = try storage.files(in: url).sorted { $0.path < $1.path }
+            var names: [WorkflowContentResource] = []
+            for (index, file) in children.enumerated() {
+              let childID = "\(id)-file-\(index + 1)"
+              resources[childID] = file.path
+              names.append(.init(id: childID, name: String(file.path.dropFirst(url.path.count + 1))))
+            }
+            listings[id] = try JSONEncoder().encode(names)
+          }
+        }
+        let resource = requestResource ?? "instruction"
+        let data: Data
+        let total: Int64
+        let next: Int64?
+        if resource == "instruction" || listings[resource] != nil {
+          let full =
+            listings[resource]
+            ?? Data((grant.text + (invocation.activation?.completion.instructionTrailer() ?? "")).utf8)
+          guard offset >= 0, offset <= full.count else { throw WorkflowHistoryError.protectedRun }
+          let end = min(Int(offset) + WorkflowSizeLimits.contentPage, full.count)
+          data = full.subdata(in: Int(offset)..<end)
+          total = Int64(full.count)
+          next = end < full.count ? Int64(end) : nil
+        } else {
+          guard let path = resources[resource] else { throw WorkflowHistoryError.protectedRun }
+          let chunk = try storage.readChunk(URL(filePath: path), offset: offset)
+          data = chunk.data
+          total = chunk.total
+          next = chunk.nextOffset
+        }
+        let text = String(data: data, encoding: .utf8)
+        let names = resources.sorted { $0.key < $1.key }.map { key, path in
+          WorkflowContentResource(id: key, name: String(path.dropFirst(directory.path.count + 1)))
+        }
+        return WorkflowContentPayload(
+          run: session.run.id.uuidString, invocation: invocation.ordinal, role: role, step: invocation.stepID,
+          resource: resource, body: text ?? data.base64EncodedString(), encoding: text == nil ? "base64" : "utf-8",
+          resources: names, offset: offset, nextOffset: next, totalBytes: total)
+      }.value
+      // Do not return bytes if cancellation or reassignment won during the filesystem read.
+      guard assignedContent(input, pane: callerPane.surfaceID) != nil else {
+        return Self.failure(code: CLIErrorCode.stepNotExpecting, message: "The task changed during content retrieval.")
+      }
+      return Self.success(.read(payload))
+    } catch {
+      return Self.failure(code: CLIErrorCode.workflowFailed, message: "Cannot read the assigned resource: \(error)")
+    }
+  }
+
+  private func assignedContent(_ input: WorkflowInput, pane: UUID) -> (WorkflowRunSession, WorkflowInvocation)? {
+    guard input.stepID == nil, !input.force, input.token == nil,
+      let reference = input.runID, let runID = UUID(uuidString: reference),
+      dependencies.paneOwner(pane) == runID,
+      let session = dependencies.sessions().first(where: { $0.run.id == runID }),
+      !session.run.status.isTerminal || session.run.status == .completed,
+      let role = Self.role(of: pane, in: session),
+      let invocation = session.run.invocations.last(where: { $0.role == role }),
+      invocation.ordinal == input.invocation, invocation.content != nil,
+      invocation.activation?.state != .skipped, invocation.activation?.state != .revoked
+    else { return nil }
+    return (session, invocation)
   }
 
   // MARK: - done
@@ -343,18 +442,9 @@ final class WorkflowRuntimeCoordinator {
 
   /// A v1 record from any known worktree root; nothing is reconstructed from it (decision W5).
   private func readRecord(runID: UUID) -> WorkflowRunRecord? {
-    for root in dependencies.worktreeRoots() {
-      let store = WorkflowRunStore(rootURL: root)
-      let recordURL = store.directory(for: runID).appending(
-        path: WorkflowRunRecord.fileName, directoryHint: .notDirectory)
-      guard FileManager.default.fileExists(atPath: recordURL.path(percentEncoded: false)) else {
-        continue
-      }
-      if let record = try? store.readRecord(runID: runID) {
-        return record
-      }
-    }
-    return nil
+    let storage = WorkflowHistoryStorage.configured
+    guard let directory = try? storage.find(runID) else { return nil }
+    return try? WorkflowRunStore(rootURL: directory, directory: directory, storage: storage).readRecord(runID: runID)
   }
 
   static func success(_ payload: WorkflowCommandPayload) -> CommandResponse {

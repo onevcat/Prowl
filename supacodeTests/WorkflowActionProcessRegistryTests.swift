@@ -31,6 +31,29 @@ struct WorkflowActionProcessRegistryTests {
     #expect(!FileManager.default.fileExists(atPath: file.path))
   }
 
+  @Test func linkedRegistryCannotWriteReadOrRemoveExternalRecords() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let outside = root.appending(path: "outside")
+    try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+    let directory = root.appending(path: ".processes")
+    try FileManager.default.createSymbolicLink(at: directory, withDestinationURL: outside)
+    let executionID = UUID().uuidString
+    let victim = outside.appending(path: executionID + ".json")
+    let record = WorkflowActionProcessRegistry.Record(
+      owner: .init(pid: Int32.max, seconds: 1, microseconds: 0),
+      process: .init(pid: Int32.max, seconds: 1, microseconds: 0))
+    let data = try JSONEncoder().encode(record)
+    try data.write(to: victim)
+    var registry = WorkflowActionProcessRegistry(directory: directory)
+    registry.processGroup = { $0 }
+    #expect(throws: (any Error).self) { try registry.register(executionID: UUID().uuidString, pid: getpid()) }
+    #expect(throws: (any Error).self) { try registry.recoverAbandonedProcesses() }
+    registry.remove(executionID: executionID)
+    #expect(try Data(contentsOf: victim) == data)
+    #expect(try FileManager.default.contentsOfDirectory(atPath: outside.path) == [executionID + ".json"])
+  }
+
   @Test func stalePIDIdentityCannotAuthorizeTermination() throws {
     let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory) }

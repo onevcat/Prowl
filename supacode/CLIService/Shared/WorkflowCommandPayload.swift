@@ -9,6 +9,7 @@ nonisolated public enum WorkflowCommandPayload: Codable, Equatable, Sendable {
   public static let schemaVersion = "prowl.cli.workflow.v1"
   public static let commandName = "workflow"
 
+  case read(WorkflowContentPayload)
   case list(WorkflowListPayload)
   case run(WorkflowRunPayload)
   case status(WorkflowRunPayload)
@@ -19,6 +20,7 @@ nonisolated public enum WorkflowCommandPayload: Codable, Equatable, Sendable {
 
   public var action: WorkflowCommandAction {
     switch self {
+    case .read: .read
     case .list: .list
     case .run: .run
     case .status: .status
@@ -36,6 +38,7 @@ nonisolated public enum WorkflowCommandPayload: Codable, Equatable, Sendable {
   public init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     switch try container.decode(WorkflowCommandAction.self, forKey: .action) {
+    case .read: self = .read(try WorkflowContentPayload(from: decoder))
     case .list: self = .list(try WorkflowListPayload(from: decoder))
     case .run: self = .run(try WorkflowRunPayload(from: decoder))
     case .status: self = .status(try WorkflowRunPayload(from: decoder))
@@ -50,6 +53,7 @@ nonisolated public enum WorkflowCommandPayload: Codable, Equatable, Sendable {
     var container = encoder.container(keyedBy: CodingKeys.self)
     try container.encode(action, forKey: .action)
     switch self {
+    case .read(let payload): try payload.encode(to: encoder)
     case .list(let payload): try payload.encode(to: encoder)
     case .run(let payload), .status(let payload), .cancel(let payload):
       try payload.encode(to: encoder)
@@ -61,6 +65,7 @@ nonisolated public enum WorkflowCommandPayload: Codable, Equatable, Sendable {
 }
 
 nonisolated public enum WorkflowCommandAction: String, Codable, Equatable, Sendable {
+  case read
   case list
   case run
   case status

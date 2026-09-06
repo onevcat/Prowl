@@ -6,8 +6,8 @@ import Foundation
 import ProwlCLIShared
 
 nonisolated struct WorkflowDeliveryLimits: Equatable, Sendable {
-  static let defaultMaximumBytes = 1 << 20
-  static let hardMaximumBytes = 4 << 20
+  static let defaultMaximumBytes = WorkflowSizeLimits.payload
+  static let hardMaximumBytes = WorkflowSizeLimits.payload
 
   /// Bytes of UTF-8 a delivered body may have; clamped to `1…hardMaximumBytes`.
   let maximumBytes: Int

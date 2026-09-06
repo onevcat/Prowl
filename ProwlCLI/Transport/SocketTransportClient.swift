@@ -11,7 +11,7 @@ import ProwlCLIShared
 #endif
 
 enum SocketTransportClient {
-  private static let maximumResponseLength = 32 * 1_024 * 1_024
+  private static let maximumResponseLength = WorkflowSizeLimits.transportFrame
 
   /// Send a command envelope to the Prowl app and receive a response.
   static func send(

@@ -14,7 +14,7 @@ private let cliSocketLogger = SupaLogger("CLISocketServer")
 
 @MainActor
 final class CLISocketServer {
-  private static let maximumFrameLength = 32 * 1_024 * 1_024
+  private static let maximumFrameLength = WorkflowSizeLimits.transportFrame
 
   private let router: CLICommandRouter
   private let socketPath: String

@@ -16,6 +16,7 @@ struct WorkflowCommand: ParsableCommand {
       """,
     subcommands: [
       WorkflowListCommand.self,
+      WorkflowReadCommand.self,
       WorkflowRunCommand.self,
       WorkflowTestActionCommand.self,
       WorkflowStatusCommand.self,
@@ -111,7 +112,7 @@ struct WorkflowDoneCommand: ParsableCommand {
   )
 
   /// The body always travels with the request; the hard cap of dsl-spec §5 (`OUTPUT_TOO_LARGE`).
-  static let maximumBodyBytes = 4 * 1024 * 1024
+  static let maximumBodyBytes = WorkflowSizeLimits.payload
 
   @Argument(help: "'-' reads the output body from piped stdin (or use --file).") var input: String?
   @Option(name: .long, help: "Read the UTF-8 output body from this file instead of stdin.")
@@ -324,14 +325,33 @@ struct WorkflowTestActionCommand: ParsableCommand {
   @OptionGroup var options: GlobalOptions
 
   mutating func run() throws {
-    guard let data = inputJSON.data(using: .utf8), data.count <= 1_048_576,
+    guard let data = inputJSON.data(using: .utf8), data.count <= WorkflowSizeLimits.payload,
       let value = try? JSONDecoder().decode(WorkflowJSONValue.self, from: data), case .object(let inputs) = value
-    else { throw ValidationError("--input-json must be a JSON object of at most 1 MiB.") }
+    else { throw ValidationError("--input-json must be a JSON object of at most 16 MiB.") }
     try WorkflowJSON.validate(value)
     try WorkflowSocketCommand.execute(options: options) {
       CommandEnvelope(output: options.outputMode, command: .workflow(WorkflowInput(action: .run,
         target: try selector.resolve(positionalTarget: source), workflow: workflow,
         testAction: action, actionInputs: inputs)))
+    }
+  }
+}
+
+struct WorkflowReadCommand: ParsableCommand {
+  static let configuration = CommandConfiguration(
+    commandName: "read", abstract: "Read the current workflow task or one of its granted resources.")
+  @Argument(help: "Resource ID from the task response; omit to read the task.") var resource: String?
+  @Option(name: .long, help: "Byte offset from the previous response; reads at most 256 KiB.") var offset: Int64 = 0
+  @Option(name: .customLong("run"), help: "Assigned workflow run UUID.") var runID: String
+  @Option(name: .long, help: "Assigned invocation number.") var invocation: Int
+  @OptionGroup var options: GlobalOptions
+
+  mutating func run() throws {
+    try WorkflowSocketCommand.execute(options: options) {
+      CommandEnvelope(
+        output: options.outputMode,
+        command: .workflow(WorkflowInput(
+          action: .read, invocation: invocation, contentOffset: offset, contentResource: resource, runID: runID)))
     }
   }
 }

@@ -689,6 +689,7 @@ public struct PaneInput: Codable, Sendable {
 // MARK: - Workflow
 
 nonisolated public enum WorkflowInputAction: String, Codable, Sendable {
+  case read
   case list
   case run
   case status
@@ -705,6 +706,9 @@ nonisolated public struct WorkflowInput: Codable, Sendable {
   public let target: TargetSelector
   /// `run`: workflow id or unique name.
   public let workflow: String?
+  public let invocation: Int?
+  public let contentOffset: Int64?
+  public let contentResource: String?
   public let testAction: String?
   public let actionInputs: [String: WorkflowJSONValue]?
   /// `run`: `<role>=<binding>` overrides (dsl-spec §9).
@@ -728,6 +732,9 @@ nonisolated public struct WorkflowInput: Codable, Sendable {
     action: WorkflowInputAction = .list,
     target: TargetSelector = .none,
     workflow: String? = nil,
+    invocation: Int? = nil,
+    contentOffset: Int64? = nil,
+    contentResource: String? = nil,
     testAction: String? = nil,
     actionInputs: [String: WorkflowJSONValue]? = nil,
     roleBindings: [String] = [],
@@ -743,6 +750,9 @@ nonisolated public struct WorkflowInput: Codable, Sendable {
     self.action = action
     self.target = target
     self.workflow = workflow
+    self.invocation = invocation
+    self.contentOffset = contentOffset
+    self.contentResource = contentResource
     self.testAction = testAction
     self.actionInputs = actionInputs
     self.roleBindings = roleBindings

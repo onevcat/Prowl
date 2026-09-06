@@ -215,20 +215,43 @@ enum WorkflowRunAdmission {
     context.sourcePaneID = source.paneID
     context.sourceTabID = source.worktree.tabs.first { tab in tab.panes.contains { $0.id == source.paneID } }?.id
     context.literalActionInputs = admission.literalActionInputs
+    if let failure = approvalFailure(entry.file) { return .failure(failure) }
     let runID = environment.makeRunID()
-    if let snapshot = entry.file.snapshot {
-      do {
-        if !entry.file.actions.isEmpty, try !WorkflowBundleApprovalStore().isApproved(snapshot) {
-          return .failure(
-            .init(
-              code: "WORKFLOW_APPROVAL_REQUIRED",
-              message:
-                "Review and approve this script bundle in Settings > Agents > Workflows, then start the run again."))
+    let storage = WorkflowHistoryStorage.configured
+    let directory = storage.directory(root: context.worktree.rootURL, createdAt: environment.now, runID: runID)
+    context.historyDirectory = directory
+    var coordination: WorkflowHistoryLock?
+    var allocated = false
+    var published = false
+    defer {
+      if allocated && !published {
+        do {
+          if FileManager.default.fileExists(atPath: directory.path) {
+            _ = try storage.files(in: directory)
+            try FileManager.default.removeItem(at: directory)
+          }
+        } catch {
+          SupaLogger("WorkflowAdmission").warning("Cannot remove unpublished run at \(directory.path): \(error)")
         }
-        try WorkflowRunStore(rootURL: context.worktree.rootURL).ensureLayout(runID: runID)
+        context.occupancy?.finish()
+      }
+      coordination?.close()
+    }
+    do {
+      coordination = try storage.coordinate()
+      guard try storage.find(runID) == nil else { throw WorkflowHistoryError.invalidRecord }
+      allocated = true
+      try storage.prepare(directory)
+      context.occupancy = try WorkflowRunOccupancy(storage.occupy(directory))
+    } catch {
+      return .failure(.init(code: CLIErrorCode.workflowFailed, message: "History storage is unavailable: \(error)"))
+    }
+    if entry.file.snapshot != nil {
+      do {
+        try WorkflowRunStore(rootURL: context.worktree.rootURL, directory: directory).ensureLayout(runID: runID)
         context.bundle = try WorkflowPreparedBundle(
           source: entry.file,
-          directory: WorkflowRunPaths.runDirectory(root: context.worktree.rootURL, runID: runID).appending(
+          directory: directory.appending(
             path: "definition"),
           environment: ProcessInfo.processInfo.environment)
       } catch {
@@ -273,15 +296,27 @@ enum WorkflowRunAdmission {
       try session.store.ensureLayout(runID: runID)
       try session.store.writeRecord(WorkflowRunRecord(run: session.run))
     } catch {
-      return .failure(
-        .init(
-          code: CLIErrorCode.workflowFailed,
-          message: "The run directory could not be created under \(context.worktree.path): \(error)"
-        ))
+      let message = "The run directory could not be created at \(directory.path): \(error)"
+      return .failure(.init(code: CLIErrorCode.workflowFailed, message: message))
     }
+    published = true
     let effects = binder.startLog.map(WorkflowRunEffect.log) + started.effects
     return .success(
       WorkflowAdmittedRun(session: session, effects: effects, callerRole: binder.callerRole))
+  }
+
+  private static func approvalFailure(_ file: WorkflowSourceFile) -> WorkflowAdmissionFailure? {
+    guard let snapshot = file.snapshot, !file.actions.isEmpty else { return nil }
+    do {
+      guard try WorkflowBundleApprovalStore().isApproved(snapshot) else {
+        return .init(
+          code: "WORKFLOW_APPROVAL_REQUIRED",
+          message: "Review and approve this script bundle in Settings > Agents > Workflows, then start the run again.")
+      }
+      return nil
+    } catch {
+      return .init(code: CLIErrorCode.workflowFailed, message: "Bundle approval could not be checked: \(error)")
+    }
   }
 
   // MARK: - Arguments

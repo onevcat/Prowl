@@ -86,17 +86,19 @@ delivery is rejected instead and the participant can correct it while the step i
 
 ## Reading a run afterwards
 
-Everything lives under the source worktree:
+Runtime data lives in personal history, outside the execution root:
 
 ```
-<worktree root>/.prowl/workflow-runs/<run-id>/   # self-ignored by Git
+~/.prowl/logs/workflow-runs/<root-name>-<root-hash>/YYYY-MM/<run-id>/
 ├── log.md                       # timestamped timeline (start here)
 ├── run.json                     # machine record: bindings, invocations, step states, outputs
 ├── outputs/
 │   ├── <name>.<ordinal>.md      # output for an invocation; corrected submissions can replace it
 │   └── <name>.md                # "latest" view, replaced atomically on each delivery
+├── definition/                  # frozen workflow bundle
+├── actions/                     # action results and artifacts
 ├── instructions/
-│   └── <step>.<ordinal>.md      # `instruction:` bodies of message steps (empty for `text:` steps)
+│   └── <step>.<ordinal>.md      # task instructions and granted resource references
 └── skills/
     └── <id>/SKILL.md            # bundled skills named by `launch … skill:` (empty otherwise)
 ```
@@ -115,7 +117,7 @@ Everything lives under the source worktree:
   bodies appear here too. Corrections after **Ask again** reuse the invocation ordinal and
   replace both files, so this is not an immutable history of every submission. Use the
   delivery receipt and run state to distinguish persisted content from accepted results.
-- Output bodies are capped (1 MiB default, 4 MiB hard maximum).
+- Output bodies are capped (16 MiB in both the CLI and App).
 - To summarize or debug a finished run: read `log.md`, then walk `outputs/` in ordinal
   order; `run.json` maps each ordinal to its step and loop iteration.
 
@@ -145,4 +147,4 @@ Every awaited step mints a fresh token for its activation; Skip/Cancel/Relaunch 
 | `TOKEN_REQUIRED` / `TOKEN_INVALID` / `STEP_NOT_EXPECTING` | delivering without/with a stale token, or the step has moved on — check `prowl workflow status` |
 | `OUTPUT_INVALID` / `VERDICT_REQUIRED` / `OUTPUT_TOO_LARGE` | empty body / missing mandatory verdict under `strict` / body over the cap |
 | `WORKFLOW_DELIVERY_REQUIRED` | `dispatch-complete` was used inside a workflow activation — run the `prowl workflow done` command the error echoes |
-| `PROMPT_TOO_LARGE` / `RENDERED_TEXT_INVALID` | a rendered launch prompt over 32 KiB / a rendered line that isn't one clean terminal line — shorten, or move content into an `instruction` |
+| `PROMPT_TOO_LARGE` / `RENDERED_TEXT_INVALID` | a rendered launch prompt over 128 KiB / a rendered line that isn't one clean terminal line — shorten, or move content into an `instruction` |

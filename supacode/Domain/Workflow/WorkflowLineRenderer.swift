@@ -189,7 +189,7 @@ nonisolated enum WorkflowLaunchPromptError: Error, Equatable, Sendable {
 /// The kickoff prompt of a `launch` step: passed whole through A2's prompt carrier, so it may
 /// span lines, but NUL is rejected and the rendered prompt is capped (dsl-spec §4).
 nonisolated enum WorkflowLaunchPrompt {
-  static let maximumBytes = 32 * 1024
+  static let maximumBytes = WorkflowSizeLimits.launchPrompt
 
   static func validate(_ prompt: String) throws(WorkflowLaunchPromptError) {
     guard !prompt.contains("\0") else { throw .containsNUL }

@@ -9,6 +9,10 @@ struct WorkflowLineRendererTests {
 
   // MARK: - Completion command
 
+  @Test func launchPromptAccepts128KiB() throws {
+    try WorkflowLaunchPrompt.validate(String(repeating: "x", count: 128 * 1024))
+  }
+
   @Test func messageCommandCarriesTokenPrefixAndOneCommandPerVerdict() {
     let plain = WorkflowCompletionCommand(token: token, verdicts: nil)
     #expect(plain.messageCommands == ["PROWL_WORKFLOW_TOKEN=\(token) prowl workflow done -"])

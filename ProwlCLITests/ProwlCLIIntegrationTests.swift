@@ -1285,6 +1285,52 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     XCTAssertTrue(text.stdout.contains("1 warning(s)"), text.stdout)
   }
 
+  func testWorkflowDoneAcceptsSixteenMiBWithJSONEscaping() throws {
+    let file = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: file) }
+    let body = Data(repeating: 10, count: WorkflowSizeLimits.payload)
+    try body.write(to: file)
+    let response = CommandResponse(
+      ok: false, command: "workflow", schemaVersion: "prowl.cli.workflow.v1",
+      error: .init(code: "STEP_NOT_EXPECTING", message: "No assigned task."))
+    let (request, result) = try runWithMockServer(
+      socketPath: temporarySocketPath(suffix: "workflow-large-done"), response: response,
+      args: ["workflow", "done", "--file", file.path, "--json"])
+    XCTAssertEqual(result.exitCode, 1)
+    XCTAssertGreaterThan(request.count, 32 * 1024 * 1024)
+    let envelope = try JSONDecoder().decode(CommandEnvelope.self, from: request)
+    guard case .workflow(let input) = envelope.command else { return XCTFail("Expected workflow input") }
+    XCTAssertEqual(input.body?.utf8.count, body.count)
+  }
+
+  func testWorkflowReadRoundTripsPagedContentWithoutAToken() throws {
+    let runID = UUID().uuidString
+    let payload = WorkflowCommandPayload.read(WorkflowContentPayload(
+      run: runID, invocation: 3, role: "author", step: "brief", resource: "resource-1",
+      body: "AA==", encoding: "base64", resources: [.init(id: "resource-1", name: "outputs/brief.md")],
+      offset: 4, nextOffset: 5, totalBytes: 8))
+    let response = try CommandResponse(
+      ok: true, command: "workflow", schemaVersion: "prowl.cli.workflow.v1", data: RawJSON(encoding: payload))
+    let (request, result) = try runWithMockServer(
+      socketPath: temporarySocketPath(suffix: "workflow-read"), response: response,
+      args: ["workflow", "read", "resource-1", "--run", runID, "--invocation", "3", "--offset", "4", "--json"])
+    XCTAssertEqual(result.exitCode, 0, result.stderr)
+    let envelope = try JSONDecoder().decode(CommandEnvelope.self, from: request)
+    guard case .workflow(let input) = envelope.command else { return XCTFail("Expected workflow input") }
+    XCTAssertEqual(input.action, .read)
+    XCTAssertEqual(input.runID, runID)
+    XCTAssertEqual(input.invocation, 3)
+    XCTAssertEqual(input.contentResource, "resource-1")
+    XCTAssertEqual(input.contentOffset, 4)
+    XCTAssertNil(input.token)
+    let output = try jsonObject(from: result.stdout)
+    let content = try XCTUnwrap(output["data"] as? [String: Any])
+    XCTAssertEqual(content["body"] as? String, "AA==")
+    XCTAssertEqual(content["encoding"] as? String, "base64")
+    XCTAssertEqual(content["next_offset"] as? Int, 5)
+    XCTAssertEqual(content["total_bytes"] as? Int, 8)
+  }
+
   func testWorkflowRunAndDoneRoundTripThroughTheSocket() throws {
     let output = WorkflowOutputPayload(
       name: "brief", ordinal: 1, path: "/Projects/App/.prowl/workflow-runs/R/outputs/brief.1.md",
