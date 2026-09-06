@@ -16,6 +16,28 @@ struct WorkflowBundleValidatorTests {
     return WorkflowValidator.validate(definition, context: .init(scope: .user)).map(\.code)
   }
 
+  @Test func conditionalLaunchFactsJoinAcrossBranches() {
+    let header = "roles: {helper: {source: launch}}"
+    let choice = """
+      - id: choose
+        if: 'true'
+        then: [{id: strict, launch: helper, prompt: Review strictly.}]
+        else: [{id: normal, launch: helper, prompt: Review normally.}]
+      """
+    #expect(codes(choice + "\n- id: work\n  message: helper\n  text: Review.", state: header).isEmpty)
+    #expect(codes(choice + "\n- id: again\n  launch: helper\n  prompt: Review.", state: header)
+      .contains("launch_twice"))
+    let partial = """
+      - id: choose
+        if: 'true'
+        then: [{id: strict, launch: helper, prompt: Review strictly.}]
+      """
+    #expect(codes(partial + "\n- id: work\n  message: helper\n  text: Review.", state: header)
+      .contains("message_before_launch"))
+    #expect(codes(partial + "\n- id: again\n  launch: helper\n  prompt: Review.", state: header)
+      .contains("launch_twice"))
+  }
+
   @Test func skippedBranchAndLoopOutputsAreUnavailableOutsideTheirScope() {
     for control in ["if: 'true'\n    then:", "while: 'false'\n    steps:"] {
       let diagnostics = codes("""

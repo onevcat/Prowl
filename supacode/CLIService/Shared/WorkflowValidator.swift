@@ -101,6 +101,7 @@ nonisolated private final class Walker {
 
   private var stepIDs: Set<String> = []
   private var launchedRoles: Set<String> = []
+  private var possiblyLaunchedRoles: Set<String> = []
   private var outputs: [String: OutputInfo] = [:]
   private var consumers: [String: [OutputUse]] = [:]
   /// Walk position of the step being checked; 0 before the first step.
@@ -299,7 +300,7 @@ nonisolated private final class Walker {
     if let definitionRole = requireRole(role, at: step.location) {
       if definitionRole.source != .launch {
         collector.error("launch_role_source", "'launch' applies to launch roles only.", at: step.location)
-      } else if launchedRoles.contains(role) {
+      } else if possiblyLaunchedRoles.contains(role) {
         collector.error("launch_twice", "Launch role '\(role)' is launched more than once.", at: step.location)
       }
     }
@@ -310,6 +311,7 @@ nonisolated private final class Walker {
     }
     checkExpect(expect, step: step)
     launchedRoles.insert(role)
+    possiblyLaunchedRoles.insert(role)
   }
 
   private func checkSkill(_ skill: String, at location: WorkflowSourceLocation?) {
@@ -410,6 +412,9 @@ nonisolated private final class Walker {
     outerOutputNames.formUnion(outputs.keys)
     defer { outerOutputNames = previousOuterNames }
     let previousRoles = launchedRoles
+    let previousPossibleRoles = possiblyLaunchedRoles
+    var branchRoles: [Set<String>] = []
+    var possibleRoles = previousPossibleRoles
     let branches: [[WorkflowStepDefinition]]
     if case .conditional(_, let yes, let otherwise) = control {
       branches = [yes, otherwise]
@@ -419,9 +424,16 @@ nonisolated private final class Walker {
     for branch in branches {
       actionScopes.append([:])
       branch.forEach(checkStep)
+      branchRoles.append(launchedRoles)
+      possibleRoles.formUnion(possiblyLaunchedRoles)
       actionScopes.removeLast()
       outputs = previousOutputs
       launchedRoles = previousRoles
+      possiblyLaunchedRoles = previousPossibleRoles
+    }
+    if case .conditional = control, let first = branchRoles.first {
+      launchedRoles = branchRoles.dropFirst().reduce(first) { $0.intersection($1) }
+      possiblyLaunchedRoles = possibleRoles
     }
   }
 

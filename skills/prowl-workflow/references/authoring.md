@@ -98,6 +98,9 @@ Nested `break: true` and `continue: true` target the innermost loop. Step IDs ar
 unique. Outputs from a branch or iteration leave scope on exit and are absent at the next
 entry. Retain needed values in state **inside** that scope. Roles remain bound across
 iterations; launch a role once, then use `message` for repeated work.
+Mutually exclusive `if` branches may launch the same role with different prompts. A later
+shared step can use the role only if every branch launches it. A later launch is rejected
+if any earlier branch could already have launched that role.
 
 For a review loop, retain the initial verdict/path in state, loop while
 `state.verdict != 'clean'`, ask the author to address `state.path`, ask the reviewer for a
