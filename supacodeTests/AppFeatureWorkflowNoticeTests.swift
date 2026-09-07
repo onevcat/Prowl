@@ -103,7 +103,7 @@ struct AppFeatureWorkflowNoticeTests {
     #expect(store.state.repositories.statusToast == .success("Review completed"))
   }
 
-  @Test(arguments: [WorkflowRunNotice.Kind.skipped, .maxRoundsReached])
+  @Test(arguments: [WorkflowRunNotice.Kind.skipped, .iterationLimitReached])
   func selectedNonSuccessTerminalOutcomeShowsAWarning(kind: WorkflowRunNotice.Kind) async {
     let worktree = makeWorktree(id: "selected")
     var repositories = RepositoriesFeature.State(
@@ -197,7 +197,7 @@ struct AppFeatureWorkflowNoticeTests {
       case .needsAttention: "Review needs attention"
       case .completed: "Review completed"
       case .skipped: "Review ended after a skipped step"
-      case .maxRoundsReached: "Review reached its round limit"
+      case .iterationLimitReached: "Review reached its iteration limit"
       }
     return WorkflowRunNotice(
       kind: kind,

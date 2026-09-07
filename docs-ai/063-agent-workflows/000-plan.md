@@ -1,3 +1,8 @@
+> **Current naming (2026-09-07):** [019](019-workflow-naming.md) and the
+> [DSL specification](dsl-spec.md) define the current authoring contract. Earlier
+> slice descriptions below record design history; loose YAML, repeat/until, and
+> dedicated handoff actions are superseded. D3 remains future work.
+
 # 063 — Agent Workflows: Plan
 
 | | |
@@ -65,7 +70,7 @@ contract governance of 060.
 - Surface runs in the toolbar's central status slot (`Adversarial Review · 3/6 · Round 2:
   reviewer re-checking`) with a popover for steps, role panes, and controls; keep every
   existing entry point (Agents capsule popover, Command Palette, Active Agents context menu).
-- Let agents participate through the `prowl` CLI only (`prowl workflow done`), so every
+- Let agents participate through the `prowl` CLI only (`prowl workflow deliver`), so every
   recognized runtime can play any interactive role, and keep the pure-CLI route (an agent
   orchestrating others by hand) first-class by shipping the missing primitives.
 - Ship two built-in workflows — `prowl.handoff` (replacing the current implementation) and
@@ -97,7 +102,7 @@ contract governance of 060.
 | Role | A participant: `source: current` (the pane the run was started from; it must host a detected agent only if the runner will actually deliver a `message` to it — steps skipped at start via `--skip` / the start sheet do not count — so a bare shell can still be the source of a context-only handoff), `pick` (an existing detected agent pane in the same worktree, chosen at start), or `launch` (a new agent Prowl starts). V1 launch roles are interactive (TUI in a tab/split); `kind: headless` is reserved for V2 (see Alternatives). |
 | Binding | Role → concrete Agent Profile (or, for `pick`, an existing pane), resolved at start and frozen into the run. |
 | Step | One verb: `message` (say something to a live role), `launch` (start a launch role), `action` (built-in Swift action), `notify`, `close`; plus `repeat` blocks. Each step has a `title` for the status slot and an optional `expect`. |
-| Expect | Only on `message` / `launch` steps: what must happen before the run advances — a named `output` delivered by the step's target role via the generated `prowl workflow done` command, optional `sections`/`format` validation, optional `verdict` enum (safe slugs), optional `timeout` / `on_timeout`. |
+| Expect | Only on `message` / `launch` steps: what must happen before the run advances — a named `delivery` submitted by the step's target role via the generated `prowl workflow deliver` command, optional `sections`/`format` validation, optional `verdicts` list (safe slugs), optional `timeout` / `on_timeout`. |
 | Run | One execution: state snapshot + artifacts under `<root>/.prowl/workflow-runs/<run-id>/`. |
 
 ### Execution model: Prowl runs, agents participate
@@ -124,11 +129,11 @@ that advances one step at a time through existing terminal boundaries:
   rendered and injected (the injected text carries it); every `repeat` iteration and every
   Retry/Relaunch is a new invocation. One delivery per activation. The token is placed in
   the generated completion command
-  (`PROWL_WORKFLOW_TOKEN=<token> prowl workflow done -`, the same env-prefix technique as
+  (`PROWL_WORKFLOW_TOKEN=<token> prowl workflow deliver -`, the same env-prefix technique as
   today's `PROWL_HANDOFF_REQUEST_ID`; `--token <token>` is the explicit form). The entry
-  is claimable exactly once; a `done` that arrives without the token, with a revoked token
+  is claimable exactly once; a `deliver` that arrives without the token, with a revoked token
   (Skip / Cancel / Relaunch revoke), or from a pane other than the role's is rejected — so
-  a delayed or duplicated `done` from a pane that has since moved on to another step can
+  a delayed or duplicated `deliver` from a pane that has since moved on to another step can
   never be misattributed. Tokens are never written into YAML, and the **generated
   command is the only spelling agents ever see**: one completion-command renderer produces
   the initial hint, every nudge, and every re-delivery (token always present; for verdict
@@ -136,7 +141,7 @@ that advances one step at a time through existing terminal boundaries:
   line, materialized instruction, and `prowl workflow status` — never a placeholder);
   built-ins and examples say
   "finish with the generated completion command"; the validator warns when
-  `text`/`instruction` spells out `prowl workflow done`. `expect` is valid only on
+  `text`/`instruction` spells out `prowl workflow deliver`. `expect` is valid only on
   `message` and `launch` (their target role delivers); native actions return typed
   outputs synchronously. Skipping a step whose expected output is referenced by a later
   template ends the run as `skipped` (the panel says which step depends on it) — V1 has
@@ -144,7 +149,7 @@ that advances one step at a time through existing terminal boundaries:
   tolerated consumer is a `with` input declared optional by the action's schema: the key is
   simply absent, which is how skipping the brief turns `prowl.handoff` into a context-only
   transition (the old HUD's "Context Only" fallback, now a generic rule).
-- `action` → a registry of native Swift actions (`handoff.transition`, `git.context`).
+- `action` → native or bundle-local actions (`builtin:collect-worktree-context`, `local:<verb-object>`).
 - `notify`/`close` → the existing bell pipeline and protected close path.
 
 **Data channels.** Inbound to an agent is always *file + short pointer*: long
@@ -152,7 +157,7 @@ that advances one step at a time through existing terminal boundaries:
 invocation ordinal — the DSL spec §§5/8 are normative for run-directory layout) and one
 line is typed (or passed as the kickoff prompt); short `text` is typed verbatim (single
 line).
-Outbound is `prowl workflow done [--verdict v] -` (stdin): the caller pane identifies the
+Outbound is `prowl workflow deliver [--verdict v] -` (stdin): the caller pane identifies the
 run/role, the delivery token identifies the awaited step — the YAML itself carries nothing
 machine-specific. Transcript observation (`agents read`) and headless adapter capture are
 V2 channels (see Alternatives).
@@ -188,13 +193,13 @@ cancellation removes the subscriber, and `surfaceClosed` terminates the stream. 
 subscriber receives an explicit `bufferOverflow` error instead of silently losing signal or
 lifecycle evidence; S2's `agents wait` re-subscribes and evaluates the newer snapshot before
 surfacing an error. `agents wait` maps `removed` /
-`surfaceClosed` to a terminal `AGENT_GONE` error (not to `done`) unless `--until exit`
+`surfaceClosed` to a terminal `AGENT_GONE` error (not to `deliver`) unless `--until exit`
 was requested. The runner's watchdog likewise reads the role's *current* state first and
 schedules cancellable grace deadlines on the injected clock; it never relies on a later
 event alone.
 
 **Data bus.** `<root>/.prowl/workflow-runs/<run-id>/` holds `run.json`, `log.md`,
-`instructions/` and `outputs/` (both versioned by the run-global invocation ordinal, latest
+`instructions/` and `deliveries/` (both versioned by the run-global invocation ordinal, latest
 output view replaced atomically — layout normative in the DSL spec §8), `skills/`
 (materialized from the embedded skill registry only — `skill:` ids are safe slugs that must
 resolve to a bundled skill).
@@ -234,20 +239,20 @@ the existing detection events (`agentEntryChanged` / `agentEntryRemoved`, produc
 periodic detection schedule) with grace periods, because detection is heuristic and a
 wrong guess must be harmless: a role `blocked` for ≥ `blocked_grace` (default 30 s) →
 `needsAttention` (Focus pane / Cancel); a role `idle`/`done` for ≥ `idle_grace` (default
-3 min) without `done` → Prowl **auto-nudges once** (types `[Prowl] When your work for this
+3 min) without `deliver` → Prowl **auto-nudges once** (types `[Prowl] When your work for this
 step is fully complete, finish with: <the activation's rendered completion command — token
 and, for verdict steps, one executable command per value>`, harmless if the agent was in
 fact still working — the runtime just queues the line) and escalates to
 `needsAttention` (Nudge again / Keep
 waiting / Skip / Cancel) only after another `idle_grace`; the role's agent process
 disappearing → `needsAttention` (Relaunch role / Skip / Cancel). `needsAttention` is a UI
-state, never a deadline: a late `done` is still accepted. Grace values are global settings
+state, never a deadline: a late `deliver` is still accepted. Grace values are global settings
 (Settings › Workflows); an author may still add an explicit `expect.timeout` with
 `on_timeout: attention|skip|cancel` for hard caps.
 
 **Invariants** (carried from 047/053/#651): a pane belongs to at most one run at a time
 (`PANE_BUSY`); injection only into panes bound to the run; roles and their plans are frozen
-at start; `done` is accepted only from the bound pane with a live delivery token, unless an
+at start; `deliver` is accepted only from the bound pane with a live delivery token, unless an
 explicit `--run/--step` (manual, logged) or `--force` is given; attention states wait for a
 person, they never discard delivered outputs; cancel never closes a pane; Prowl-originated
 metadata (requests, payloads, `run.json`, logs) never carries extra arguments, environment
@@ -324,7 +329,7 @@ writes.
 ### CLI (per 060's four-layer rule)
 
 `prowl workflow list | run <id> [source] [--role r=…] [--input k=v] [--skip <step>] | status
-[run] | done [-|--file] [--verdict v] [--token t] [--run --step] [--force] | cancel <run> |
+[run] | deliver [-|--file] [--verdict v] [--token t] [--run --step] [--force] | cancel <run> |
 validate <file> | schema` — `[source]` is 060's `GenericTarget` (`pN`, `tN`, UUID,
 worktree ref); omitted,
 the source is the caller pane when the workflow has a `current` role, and a worktree
@@ -342,13 +347,19 @@ run …` replacement, then removal (see Built-ins).
 
 ### Built-ins and distribution
 
+> The design below predates action bundles and is historical. The current distribution
+> unit is a `.pwlworkflow` directory. D3 will compose general-purpose actions and agent
+> steps; dedicated handoff actions are no longer planned. See [015](015-action-bundles-and-control-flow.md)
+> and [019](019-workflow-naming.md) before implementing a built-in.
+
+
 - `Resources/workflows/*.yaml` are embedded like `docs/` (`Makefile` `embed-docs` pattern);
   `Resources/skills/` and the bundled-skill registry are owned by
   [065-bundled-agent-skills](../065-bundled-agent-skills/000-plan.md) (`embed-skills`,
   `ProwlSkills`); `skill:` references resolve through that registry and are materialized
   into the run directory so sandboxed agents can read them.
 - `prowl.adversarial-review`: interactive reviewer in a right split (transparency and user
-  trust outweigh headless precision), `repeat … until outputs.findings.verdict == clean`
+  trust outweigh headless precision), `repeat … until deliveries.findings.verdict == clean`
   with `max_rounds`.
 - `prowl.handoff`: `message source` (brief) → `action handoff.transition` (keeps the
   `.prowl/handoff/` artifact contract; outputs `kickoff_prompt`, `artifact_path`,
@@ -364,7 +375,7 @@ run …` replacement, then removal (see Built-ins).
   stubs returning `HANDOFF_RETIRED` with the copy-pasteable replacement
   (`prowl workflow run prowl.handoff [--role receiver=…] [--skip brief]` /
   `prowl workflow run prowl.handoff-checkpoint`, briefing delivered with the returned
-  `prowl workflow done -`); afterwards the commands, `HandoffCommandHandler`,
+  `prowl workflow deliver -`); afterwards the commands, `HandoffCommandHandler`,
   `HandoffHudFeature`, `HandoffRequestRegistry`, and the `prowl.cli.handoff.v2` contract
   are deleted. A self-initiated run returns the first step's instruction and completion
   command in its response instead of typing them into the caller's own pane, so an agent's
@@ -428,16 +439,16 @@ attaches hooks through A2's launch boundary.
 | --- | --- | --- | --- |
 | **C0** | C | — | Settings IA: `Section("Agents")` with **Profiles** (today's Agents page, renamed) and **Command Line Tool** (moved from Advanced); the Workflows page comes with D1. Independent, small; decides where everything lands. |
 | **A1** | A | 060 | `prowl create pane` (#699) + target-surface split primitive returning the surface id; CLI four layers. Foundation for every `launch` into a split. |
-| **A1b** | A | A1 | `PROWL_PANE_ID` injected into every pane's environment (beside `PROWL_WORKTREE_PATH` / `PROWL_ROOT_PATH`), documented in `docs/components/cli.md`, and the `prowl-cli` skill's self-identification rewritten around it. Convenience identity only — trusted attribution (064 `agents signal`, `workflow done`) stays on caller-PID resolution. |
+| **A1b** | A | A1 | `PROWL_PANE_ID` injected into every pane's environment (beside `PROWL_WORKTREE_PATH` / `PROWL_ROOT_PATH`), documented in `docs/components/cli.md`, and the `prowl-cli` skill's self-identification rewritten around it. Convenience identity only — trusted attribution (064 `agents signal`, `workflow deliver`) stays on caller-PID resolution. |
 | **A2** | A | A1 | Profile launch boundary (`.prompt`, placement override, anchor, background, synchronous `LaunchedSurface` result) + `prowl create tab/pane --profile --prompt -` + `prowl profiles list`; exposes the seam 064-S3 uses for launch-scoped hooks. Unlocks the CLI-driven route; the runner's `launch` boundary. |
 | **B1** | B | — | Definitions: Yams, `AgentWorkflow` model + validator + JSON Schema, three-source discovery, `prowl workflow list/validate/schema`. Makes the DSL concrete and authorable (no user-facing surface until R2). Lives in `ProwlCLIShared` so `validate`/`schema` run without the app; `list` goes through the socket and reads a hidden enabled set (`@Shared`, all enabled until D1's page). Record: [006](006-b1-definitions.md). |
 | **B2** | B | B1 | Runner core (pure): run state machine incl. `repeat`, run store, template renderer, action registry, watchdog with injected clock that consumes exact signals first (064-S5's watchdog part, moved here 2026-08-29) — tested against fake boundaries. Activations live in the shared dispatch store; there is no separate `WorkflowRequestRegistry` (decision 2026-08-29). |
-| **B3** | B | A2, 064-S1, B2, #733 | Runner wiring: reducer-owned `WorkflowRunsFeature` effects, per-activation `observeAgentDispatch` + `observeAgentState` watchdog streams, CLI admission preflight, `prowl workflow run/status/done/cancel` + contracts. Engine first powered on. |
+| **B3** | B | A2, 064-S1, B2, #733 | Runner wiring: reducer-owned `WorkflowRunsFeature` effects, per-activation `observeAgentDispatch` + `observeAgentState` watchdog streams, CLI admission preflight, `prowl workflow run/status/deliver/cancel` + contracts. Engine first powered on. |
 | **C1** | C | B3 | Status center fifth state + run panel + attention triggers + notifications (061 visual verification). Runs become visible. |
 | **C2** | C | B3 | Start sheet (bindings, suggestion-based profile creation, don't-ask-again, `--skip` equivalent) + entry points (capsule popover, palette, Active Agents context menu). GUI-initiated runs. |
 | **D1** | D | B1, C2, 065-K1 | `prowl-workflow` authoring skill (registered by adding it to `skills/`; embedding and the registry come from [065](../065-bundled-agent-skills/000-plan.md)), `docs/components/workflows.md`, Settings › Workflows page (enable/validate/Reveal/New/Ask-agent/per-workflow auto) added to the Agents group. Distribution and docs. |
 | **D2** | D | D3 acceptance / R2b shipped; A2, C2, D1, 064-S3 wave 1, #733, #726 T1 | `prowl.adversarial-review` built-in + reviewer skill + loop/verdict/watchdog E2E. Deferred to R3 after handoff validates the first built-in path. |
-| **D3** | D | A2, C2, D1, 064-S3 wave 1, #733, #726 T1 | `prowl.handoff` + `prowl.handoff-checkpoint` built-ins + `handoff.transition`/`handoff.checkpoint` actions; `prowl handoff to\|save` → `HANDOFF_RETIRED` stubs; remove `HandoffHudFeature`, `HandoffCommandHandler`, `HandoffRequestRegistry`; rewrite `docs/components/handoff.md` and the `prowl-cli` skill. First built-in workflow and Debug E2E in R2b; release candidate after handoff/checkpoint acceptance. |
+| **D3** | D | A2, C2, D1, 064-S3 wave 1, #733, #726 T1 | `prowl.handoff` + `prowl.handoff-checkpoint` built-in bundles composed from general-purpose actions and agent steps; `prowl handoff to\|save` → `HANDOFF_RETIRED` stubs; remove `HandoffHudFeature`, `HandoffCommandHandler`, `HandoffRequestRegistry`; rewrite `docs/components/handoff.md` and the `prowl-cli` skill. First built-in workflow and Debug E2E in R2b; release candidate after handoff/checkpoint acceptance. |
 | **V2** | — | — | observe mode (`expect.status` + `agents read` / hook `last_assistant_message`), `on_attention: ask <role>`, fan-out (`count`, `wait all`), run persistence/resume, retention, cross-worktree roles, GUI editor. |
 
 ## Alternatives & decisions
@@ -450,7 +461,7 @@ attaches hooks through A2's launch boundary.
 - **YAML (Yams) as the source of truth; Mermaid render-only.** Multi-line prompts are the
   bulk of a workflow; block scalars are essential. JSON remains valid input. Parsing
   Mermaid into stable orchestration semantics is fragile and was rejected.
-- **`done`-first outbound channel, not transcript observation.** `prowl workflow done` is
+- **`deliver`-first outbound channel, not transcript observation.** `prowl workflow deliver` is
   runtime-agnostic, validated, correlated by caller pane + delivery token, and proven by
   the inline brief. `agents read` covers only Claude/Codex and depends on intermittent
   session attribution; it becomes a V2 assist.
@@ -472,9 +483,9 @@ attaches hooks through A2's launch boundary.
   `--verdict`, never prose. `max` is mandatory. `until` is evaluated **before entering and
   after every iteration** (while-loop semantics), so a first-round `clean` verdict skips
   the loop entirely.
-- **Step completion is `prowl workflow done`, not `submit <name>`.** Prowl knows which
+- **Step completion is `prowl workflow deliver`, not `submit <name>`.** Prowl knows which
   step awaits which pane, so the agent names nothing; output names live in YAML
-  (`expect.output`).
+  (`expect.delivery`).
 - **Run directory under the target root**, mirroring `.prowl/handoff/`: sandboxed agents
   read cwd-relative files most reliably; definitions live beside it in
   `<root>/.prowl/workflows/` so a repo can ship its workflows.
@@ -509,7 +520,7 @@ attaches hooks through A2's launch boundary.
 - **Completion signals split out as 064 (2026-08-22)**: the layered signal bus,
   `prowl agents signal`, launch-scoped hooks, and `prowl agents wait` with
   `source`/`confidence` are an independent entry. 063 V1 does not depend on it (steps
-  complete on `done`; the heuristic watchdog is harmless by design); 064-S1 delivers the
+  complete on `deliver`; the heuristic watchdog is harmless by design); 064-S1 delivers the
   `ObservedAgentState` observer that B3 consumes, 064-S3 builds on the launch boundary
   (A2), and in return 064 sharpens the watchdog and enables 063's V2 observe mode /
   `on_attention: ask <role>`.
@@ -517,7 +528,7 @@ attaches hooks through A2's launch boundary.
   Tool pages (see Design / UI); the CLI install leaves Advanced.
 - **No default wall-clock timeout; state-driven watchdog with grace periods** (see Design
   / Execution model). Detection is heuristic, so every trigger is designed to be harmless
-  when wrong: grace before acting, a nudge that only asks the agent to finish with `done`
+  when wrong: grace before acting, a nudge that only asks the agent to finish with `deliver`
   when it is truly complete, and attention states that never discard a late delivery.
 - **PR order / releases** (revised 2026-09-05): R1 CLI/signals and R2a workflow engine/CLI
   have shipped. R2b = C2, D1, T1, then D3 handoff/checkpoint migration and first built-in E2E;
@@ -530,7 +541,7 @@ attaches hooks through A2's launch boundary.
   do not receive Prowl-managed hooks.
 - **Review round (2026-08-22)** — accepted corrections: runner as an `AppFeature` child
   fed by the single event subscription + a per-surface multicast observer for CLI waits;
-  opaque per-step delivery tokens for `done`; `LegacyHandoffAdapter` with a full parameter
+  opaque per-step delivery tokens for `deliver`; `LegacyHandoffAdapter` with a full parameter
   map instead of a "byte-compatible" claim; binding memory scoped by definition source +
   repository and re-validated; `pick` restricted to the source worktree; `kind: headless`
   moved to V2; output size caps, slug-safe ids, run-directory containment, and the
@@ -557,10 +568,10 @@ attaches hooks through A2's launch boundary.
   bare-shell `current`, privacy phrasing, atomic observer registration, slug patterns).
 - **Review round 4 (2026-08-22; verified item by item before adopting)** — the renderer
   now emits one complete executable command per verdict value on every transport (no
-  placeholders); run-global monotonic activation ordinals make `outputs/<name>.<ordinal>.md`
+  placeholders); run-global monotonic activation ordinals make `deliveries/<name>.<ordinal>.md`
   and `instructions/<step>.<ordinal>.md` collision-free, with atomic "latest" replacement;
   native actions declare typed input/output schemas and `actions.<step>.<key>` is validated
-  like `outputs.*` (known action, declared key, producer dominates consumer); `repeat.max`
+  like `deliveries.*` (known action, declared key, producer dominates consumer); `repeat.max`
   is a positive integer literal or exactly one integer-input template, resolved at start,
   bounded `1…20`; verdict values are unique safe slugs and `until` literals must be
   declared; optional fixes (`UNSAFE_PATH` listed, `tN` in the source grammar, concepts
@@ -587,7 +598,7 @@ attaches hooks through A2's launch boundary.
   join the parity matrix; Retry revokes/re-mints a token only when the step has `expect`.
 - **Review round 8 (2026-08-22; verified before adopting)** — internal-only *seeded
   outputs* give a pre-delivered legacy brief a legal run-store identity (run-global
-  ordinal, `outputs/brief.<ordinal>.md`, `seeded` record, no token/pane), preserving the
+  ordinal, `deliveries/brief.<ordinal>.md`, `seeded` record, no token/pane), preserving the
   invalid-brief-before-any-artifact property; the destination-only binding is
   cross-referenced from the binding model, the `run` response, and `run.json`.
 - **Review round 9 (2026-08-22; verified before adopting, mechanism chosen differently)** —
@@ -627,13 +638,13 @@ attaches hooks through A2's launch boundary.
   Relaunch is offered for `launch` roles only; a Skip resolves its §5 consequence immediately;
   binding resolution is a pure resolver (memory storage and the sheet stay with B3/C2). The
   spec's §4/§5/§8/§10 were clarified accordingly — see [007-b2-runner-core.md](007-b2-runner-core.md).
-- Updated 2026-08-29 (B2, H14): `prowl workflow done` validation became a review gate — a
+- Updated 2026-08-29 (B2, H14): `prowl workflow deliver` validation became a review gate — a
   delivery that misses `sections` / `format` / `verdict` is kept as provisional and the run asks
   the user (Accept / Accept with verdict / Ask again / Skip); `expect.strict: true` restores the
   hard rejection. Spec §5/§9/§10 amended; see [007-b2-runner-core.md](007-b2-runner-core.md).
 - Updated 2026-08-29 (B1 kickoff, grilled): the DSL spec was aligned with what R1 shipped.
   (1) `expect` activations are records in the shared dispatch store — `launch` via the S2
-  prompted-launch path, `message` via #733's re-dispatch — and `workflow done` is the
+  prompted-launch path, `message` via #733's re-dispatch — and `workflow deliver` is the
   body-validating completion of that record; the per-activation token stays for correlation
   only, and the `WorkflowRequestRegistry` of the execution-model section is not built.
   (2) Model, validator, JSON Schema, and discovery live in `ProwlCLIShared`; `validate`/`schema`
@@ -680,3 +691,5 @@ attaches hooks through A2's launch boundary.
 - Updated 2026-09-05: Added the process-scoped workflow UI release gate in [016](016-workflow-ui-release-gate.md); the CLI/runtime remain available and future workflow slices do not block this release.
 
 - Updated 2026-09-06: Personal workflow history and fixed retention — see [018-history-storage-plan.md](018-history-storage-plan.md).
+
+- Updated 2026-09-07: Normalize workflow naming before D3; no aliases or migration — see [019](019-workflow-naming.md).

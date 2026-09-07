@@ -27,7 +27,7 @@ struct WorkflowActionContractTests {
 
   @Test func scriptEnvironmentDisablesBytecodeAndKeepsOnlyAllowedValues() throws {
     let source = yaml.replacing("entrypoint: main.py", with:
-      "entrypoint: main.py\n  environment: [SELECTED_VALUE, PYTHONDONTWRITEBYTECODE]")
+      "entrypoint: main.py\n  inherit_env: [SELECTED_VALUE, PYTHONDONTWRITEBYTECODE]")
     let action = try WorkflowScriptAction.parse(source, id: "count")
     let environment = WorkflowPreparedBundle.environment(for: action, inherited: [
       "PATH": "/usr/bin:/bin", "SELECTED_VALUE": "included", "UNSELECTED_VALUE": "excluded",

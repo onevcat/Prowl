@@ -142,7 +142,7 @@ final class WorkflowRunHarness {
       case .runAction(let stepID, let actionID, let inputs):
         let context = WorkflowActionContext(
           runID: runID, rootURL: machine.run.context.worktree.rootURL,
-          roleAgents: machine.run.bindings.mapValues { $0.templateRole.agent.isEmpty ? nil : $0.templateRole.agent },
+          roleAgents: machine.run.bindings.mapValues { $0.agent.isEmpty ? nil : $0.agent },
           outgoingAgent: machine.run.bindings.values.first { $0.source == .current }?.pane?.agent, now: now)
         do {
           let outputs = try await actions.execute(actionID: actionID, inputs: inputs, context: context)
@@ -197,7 +197,7 @@ struct WorkflowRunHarnessTests {
         "output": .object([
           "path": .string(context.directory.appending(path: "artifacts/context.md").path),
           "branch": .string("feat/x"), "kickoff_prompt": .string("Take over."),
-        ]), "result_path": .string(context.directory.appending(path: "result.json").path),
+        ]), "output_path": .string(context.directory.appending(path: "result.json").path),
       ]
     }
   }
@@ -254,14 +254,14 @@ struct WorkflowRunHarnessTests {
     #expect(
       harness.typedLines[0].line.hasPrefix(
         "[Prowl] Read the assigned task with `prowl workflow read --run \(harness.run.id.uuidString) --invocation 1`"))
-    #expect(harness.typedLines[0].line.contains("PROWL_WORKFLOW_TOKEN=TOKEN-1 prowl workflow done -"))
+    #expect(harness.typedLines[0].line.contains("PROWL_WORKFLOW_TOKEN=TOKEN-1 prowl workflow deliver -"))
     #expect(harness.bridge.opened.map(\.dispatchID) == ["dispatch-1"])
     #expect(harness.run.phase == .waitingForDelivery(ordinal: 1))
     let instruction = try String(contentsOf: runDirectory.appending(path: "instructions/brief.1.md"), encoding: .utf8)
     #expect(
       instruction.hasPrefix(
         "Write a short brief for an adversarial reviewer: ## Scope, ## Claims.\nFocus: the parser\n\n---\n"))
-    #expect(instruction.contains("PROWL_WORKFLOW_TOKEN=TOKEN-1 prowl workflow done -"))
+    #expect(instruction.contains("PROWL_WORKFLOW_TOKEN=TOKEN-1 prowl workflow deliver -"))
 
     _ = try await harness.deliver(token: "TOKEN-1", body: "# Brief\n## Scope\nx\n## Claims\ny")
     #expect(harness.bridge.completed.map(\.dispatchID) == ["dispatch-1"])
@@ -283,7 +283,7 @@ struct WorkflowRunHarnessTests {
       harness.typedLines[1].line
         == "[Prowl] Findings: workflow-resource:resource-1. Fix or rebut each item. "
         + (harness.run.currentInvocation?.content?.guidance ?? "")
-        + " — finish with: PROWL_WORKFLOW_TOKEN=TOKEN-3 prowl workflow done -")
+        + " — finish with: PROWL_WORKFLOW_TOKEN=TOKEN-3 prowl workflow deliver -")
     _ = try await harness.deliver(token: "TOKEN-3", body: "# Done")
     #expect(harness.typedLines[2].surfaceID == harness.run.bindings["reviewer"]?.pane?.surfaceID)
     _ = try await harness.deliver(token: "TOKEN-4", body: "# Findings\nnone", verdict: "clean")
@@ -296,16 +296,16 @@ struct WorkflowRunHarnessTests {
     #expect(harness.bridge.abandoned.isEmpty)
     #expect(harness.watchdogs.map(\.ordinal) == [1, 2, 3, 4])
 
-    let outputs = try FileManager.default.contentsOfDirectory(
-      atPath: runDirectory.appending(path: "outputs").path(percentEncoded: false)
+    let deliveries = try FileManager.default.contentsOfDirectory(
+      atPath: runDirectory.appending(path: "deliveries").path(percentEncoded: false)
     ).sorted()
     #expect(
-      outputs == [
+      deliveries == [
         "brief.1.md", "brief.md", "disposition.3.md", "disposition.md", "findings.2.md", "findings.md",
         "round_findings.4.md", "round_findings.md",
       ])
     #expect(
-      try String(contentsOf: runDirectory.appending(path: "outputs/round_findings.md"), encoding: .utf8)
+      try String(contentsOf: runDirectory.appending(path: "deliveries/round_findings.md"), encoding: .utf8)
         == "# Findings\nnone\n")
     let record = try harness.store.readRecord(runID: harness.run.id)
     #expect(record.run.status.state == "completed")
@@ -328,23 +328,24 @@ struct WorkflowRunHarnessTests {
     let root = try makeRoot()
     defer { try? FileManager.default.removeItem(at: root) }
     let harness = try await makeHarness(root: root)
-    let outputs = harness.store.directory(for: harness.run.id).appending(path: "outputs", directoryHint: .isDirectory)
-    try FileManager.default.removeItem(at: outputs)
+    let deliveries = harness.store.directory(for: harness.run.id).appending(
+      path: "deliveries", directoryHint: .isDirectory)
+    try FileManager.default.removeItem(at: deliveries)
     let elsewhere = root.appending(path: "elsewhere", directoryHint: .isDirectory)
     try FileManager.default.createDirectory(at: elsewhere, withIntermediateDirectories: true)
-    try FileManager.default.createSymbolicLink(at: outputs, withDestinationURL: elsewhere)
+    try FileManager.default.createSymbolicLink(at: deliveries, withDestinationURL: elsewhere)
     let result = try await harness.deliver(token: "TOKEN-1", body: "## Scope\nx\n## Claims\ny")
     #expect((try? result.get()) != nil)
     #expect(harness.run.status.attention?.reason.code == "persist_failed")
     #expect(harness.bridge.completed.isEmpty)
     #expect(harness.launches.isEmpty)
     #expect(try FileManager.default.contentsOfDirectory(atPath: elsewhere.path(percentEncoded: false)).isEmpty)
-    try FileManager.default.removeItem(at: outputs)
-    try FileManager.default.createDirectory(at: outputs, withIntermediateDirectories: true)
+    try FileManager.default.removeItem(at: deliveries)
+    try FileManager.default.createDirectory(at: deliveries, withIntermediateDirectories: true)
     try await harness.user(.retry)
     #expect(harness.bridge.completed.map(\.dispatchID) == ["dispatch-1"])
     #expect(harness.launches.count == 1)
-    #expect(try harness.store.readRecord(runID: harness.run.id).outputs["brief"]?.ordinal == 1)
+    #expect(try harness.store.readRecord(runID: harness.run.id).deliveries["brief"]?.ordinal == 1)
   }
 
   @Test func aProvisionalDeliveryIsKeptOnDiskUntilTheUserAcceptsIt() async throws {
@@ -356,13 +357,13 @@ struct WorkflowRunHarnessTests {
     #expect(harness.run.status.attention?.reason.code == "delivery_issues")
     #expect(harness.bridge.completed.isEmpty)
     #expect(harness.launches.isEmpty)
-    let brief = harness.store.directory(for: harness.run.id).appending(path: "outputs/brief.md")
+    let brief = harness.store.directory(for: harness.run.id).appending(path: "deliveries/brief.md")
     #expect(try String(contentsOf: brief, encoding: .utf8) == "## Scope\nonly\n")
     #expect(try harness.store.readRecord(runID: harness.run.id).run.status.attention?.issues == ["missing_sections"])
     try await harness.user(.acceptDelivery(verdict: nil))
     #expect(harness.bridge.completed.map(\.dispatchID) == ["dispatch-1"])
     #expect(harness.launches.count == 1)
-    #expect(try harness.store.readRecord(runID: harness.run.id).outputs["brief"]?.ordinal == 1)
+    #expect(try harness.store.readRecord(runID: harness.run.id).deliveries["brief"]?.ordinal == 1)
   }
 
   @Test func cancelAbandonsThePendingActivationAndKeepsDeliveredOutputs() async throws {
@@ -378,7 +379,7 @@ struct WorkflowRunHarnessTests {
     #expect(try harness.store.readRecord(runID: harness.run.id).run.status.state == "cancelled")
     #expect(
       FileManager.default.fileExists(
-        atPath: harness.store.directory(for: harness.run.id).appending(path: "outputs/brief.md").path(
+        atPath: harness.store.directory(for: harness.run.id).appending(path: "deliveries/brief.md").path(
           percentEncoded: false)))
     #expect(harness.closed.isEmpty)
   }

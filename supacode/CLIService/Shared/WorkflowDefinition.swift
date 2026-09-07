@@ -9,7 +9,7 @@ nonisolated public enum WorkflowSchema {
   /// `prowl.*` ids are reserved for definitions shipped inside the app bundle.
   public static let reservedIDPrefix = "prowl."
   public static let verdictRange = 2...4
-  /// Carries an activation's delivery token to `prowl workflow done`: typed as the line's
+  /// Carries an activation's delivery token to `prowl workflow deliver`: typed as the line's
   /// environment prefix for a `message` step, set in the child environment for a `launch` step.
   public static let tokenEnvironmentKey = "PROWL_WORKFLOW_TOKEN"
   /// Cross-check hints in a launched surface's child environment; the dispatch store stays the authority.
@@ -17,7 +17,7 @@ nonisolated public enum WorkflowSchema {
   public static let roleEnvironmentKey = "PROWL_WORKFLOW_ROLE"
   /// Workflow and skill ids may contain dots; a leading alphanumeric rules out `.` and `..`.
   public static var workflowIDPattern: Regex<Substring> { /^[a-z0-9][a-z0-9_.-]{0,63}$/ }
-  /// Step ids, role names, output names, input names, and verdict values become path
+  /// Step ids, role names, delivery names, input names, and verdict values become path
   /// components and CLI arguments.
   public static var slugPattern: Regex<Substring> { /^[a-z0-9][a-z0-9_-]{0,63}$/ }
 
@@ -27,6 +27,10 @@ nonisolated public enum WorkflowSchema {
 
   public static func isSlug(_ value: String) -> Bool {
     value.wholeMatch(of: slugPattern) != nil
+  }
+
+  public static func isActionID(_ value: String) -> Bool {
+    value.utf8.count <= 64 && value.wholeMatch(of: /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/) != nil
   }
 }
 
@@ -283,7 +287,7 @@ nonisolated public struct WorkflowRoleDefinition: Equatable, Sendable {
 
 // MARK: - Steps
 
-nonisolated public enum WorkflowOutputFormat: String, Equatable, Sendable, Codable {
+nonisolated public enum WorkflowDeliveryFormat: String, Equatable, Sendable, Codable {
   case markdown
   case text
   case json
@@ -296,34 +300,34 @@ nonisolated public enum WorkflowTimeoutPolicy: String, Equatable, Sendable, Coda
 }
 
 nonisolated public struct WorkflowExpectation: Equatable, Sendable {
-  /// Output name; nil means the step id (see `WorkflowStepDefinition.outputName`).
-  public let output: String?
-  public let format: WorkflowOutputFormat
+  /// Delivery name; nil means the step id (see `WorkflowStepDefinition.deliveryName`).
+  public let delivery: String?
+  public let format: WorkflowDeliveryFormat
   public let sections: [String]
-  /// Declared verdict values; nil when the step has no verdict.
-  public let verdict: [String]?
+  /// Allowed verdict values; nil when the step does not require a verdict.
+  public let verdicts: [String]?
   /// Hard cap in seconds; nil = wait as long as the agent works.
   public let timeoutSeconds: Int?
   public let onTimeout: WorkflowTimeoutPolicy?
-  /// `true`: a delivery that misses `sections`, `format`, or `verdict` is rejected. `false`
+  /// `true`: a delivery that misses `sections`, `format`, or `verdicts` is rejected. `false`
   /// (default): it is kept as provisional and the run asks the user to accept, ask again, or skip.
   public let strict: Bool
   public let location: WorkflowSourceLocation?
 
   public init(
-    output: String? = nil,
-    format: WorkflowOutputFormat = .markdown,
+    delivery: String? = nil,
+    format: WorkflowDeliveryFormat = .markdown,
     sections: [String] = [],
-    verdict: [String]? = nil,
+    verdicts: [String]? = nil,
     timeoutSeconds: Int? = nil,
     onTimeout: WorkflowTimeoutPolicy? = nil,
     strict: Bool = false,
     location: WorkflowSourceLocation? = nil
   ) {
-    self.output = output
+    self.delivery = delivery
     self.format = format
     self.sections = sections
-    self.verdict = verdict
+    self.verdicts = verdicts
     self.timeoutSeconds = timeoutSeconds
     self.onTimeout = onTimeout
     self.strict = strict
@@ -393,9 +397,9 @@ nonisolated public struct WorkflowStepDefinition: Equatable, Sendable {
     self.location = location
   }
 
-  /// The output this step delivers, when it has an `expect`.
-  public var outputName: String? {
+  /// The delivery name this step produces, when it has an `expect`.
+  public var deliveryName: String? {
     guard let expect = action.expect else { return nil }
-    return expect.output ?? id
+    return expect.delivery ?? id
   }
 }

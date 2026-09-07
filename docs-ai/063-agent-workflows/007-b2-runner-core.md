@@ -1,3 +1,7 @@
+> Historical slice record. For executable definitions and current names, use the
+> [DSL specification](dsl-spec.md) and [019 naming contract](019-workflow-naming.md).
+> The old substitution renderer and dedicated handoff actions described below have been removed.
+
 # 063.007 — Workflow Runner Core (B2): Plan
 
 ## Status
@@ -14,7 +18,7 @@ dispatch store a re-dispatch into an existing pane; #726 T0 (#739) added the ver
 B2 is the engine that turns a validated `WorkflowDefinition` into a run: the state machine,
 the run directory, the renderers, delivery validation, the exact-signal-first watchdog, the native
 actions, and pure binding resolution. It ships no user-facing surface and stays dormant on `main`:
-B3 wires it into TCA and the CLI (`prowl workflow run/status/done/cancel`), C1 makes runs visible.
+B3 wires it into TCA and the CLI (`prowl workflow run/status/deliver/cancel`), C1 makes runs visible.
 
 Decisions G1–G6 ([006](006-b1-definitions.md)) and the 2026-08-29 spec amendments are inputs, not
 subjects: activation = dispatch record, no `WorkflowRequestRegistry`, `message` injects only into an
@@ -27,11 +31,11 @@ Every row was either a default derivable from the code base (H1, H3, H9, H13) or
 
 | # | Decision | Alternatives rejected |
 | --- | --- | --- |
-| H1 | **B2 lives in `supacode/Domain/Workflow/` (app target), tests in `supacodeTests/`.** It depends on app types (`AgentSignal`, `ObservedAgentState`, `AgentProfile`, `HandoffStore`, dispatch records) that never enter `ProwlCLIShared`. Two additions go to Shared: `WorkflowSchema.tokenEnvironmentKey` (`PROWL_WORKFLOW_TOKEN`, read by B3's CLI `done`) and the markdown fence/preamble normalizer that `HandoffStore.validatedBriefing` and the delivery validator share. | Putting the text-level helpers (template renderer, completion command, delivery validation) in Shared so `swift test` covers them: nothing in the CLI consumes them in V1 and Shared carries the `nonisolated` / name-collision tax; revisit if B3 wants a local pre-validation in `done`. |
+| H1 | **B2 lives in `supacode/Domain/Workflow/` (app target), tests in `supacodeTests/`.** It depends on app types (`AgentSignal`, `ObservedAgentState`, `AgentProfile`, `HandoffStore`, dispatch records) that never enter `ProwlCLIShared`. Two additions go to Shared: `WorkflowSchema.tokenEnvironmentKey` (`PROWL_WORKFLOW_TOKEN`, read by B3's CLI `deliver`) and the markdown fence/preamble normalizer that `HandoffStore.validatedBriefing` and the delivery validator share. | Putting the text-level helpers (template renderer, completion command, delivery validation) in Shared so `swift test` covers them: nothing in the CLI consumes them in V1 and Shared carries the `nonisolated` / name-collision tax; revisit if B3 wants a local pre-validation in `deliver`. |
 | H2 | **Reducer-style core.** `WorkflowRunMachine.apply(_ event) -> [WorkflowRunEffect]` is a pure, synchronous transition over a `WorkflowRun` value; every transport concern (idle wait, injection, launch, native action, notify, close, persistence, watchdog arming) is an *effect* B3's `WorkflowRunsFeature` interprets with the terminal boundaries. B2 tests drive the machine directly and, for the composition, through a test harness that interprets effects against fakes (store on a temp directory, fake bridge, `TestClock`). The harness is the executable specification of how B3 must interpret each effect. | A stateful `WorkflowRunner` class in B2 that owns state and calls the boundaries itself (B3 would either wrap it as an `@Observable` store beside TCA or discard it; the plan says the runner is reducer-owned). Async methods on the machine (transitions entangled with I/O; the Retry/Relaunch/Skip/Cancel × phase matrix becomes hard to pin). |
 | H3 | **Activation bridge = one protocol, `WorkflowActivationBridge`**, with exactly the dispatch-store operations the effects need: open a message activation (issue + bind to the pane's current epoch, #733's `issueAgentDispatch(boundTo:)`), abandon with a reason, observe a record, complete a record on delivery. The launch activation is opened by the launch boundary itself (S2's issue → attach → launch → bind), so the `.launch` effect carries the token and the environment values and receives the dispatch id back in `.launched`. B2 tests use a fake. | Folding the operations into `TerminalClient` closures now (that is B3's wiring); a second registry (rejected in G1). |
-| H4 | **Token check lives in the machine, not in the store.** Each activation holds its token in `WorkflowRun` state; `done` in B3 resolves the caller pane → its pending dispatch id → the run and activation (through `WorkflowRun.activation(forDispatchID:)`) → `machine.deliver(ordinal:token:body:verdict:)`, which answers `STEP_NOT_EXPECTING` / `TOKEN_REQUIRED` / `TOKEN_INVALID` / `OUTPUT_*` / `VERDICT_REQUIRED` itself. `dispatch-complete` against a workflow activation is refused by B3's handler from the same index (`WORKFLOW_DELIVERY_REQUIRED` with the replacement command rendered by B2). The dispatch store (064 code) is untouched. | Storing the token in `AgentDispatchBinding` and checking it in `AgentDispatchStore.complete` (the store would learn workflow semantics; every 064 completion path would grow a branch). |
-| H5 | **`run.json` is `WorkflowRunRecord` v1**: top-level `version: 1`; `run` (id, workflow id/name, scope, definition path, status, started/updated/finished), `worktree` (id, name, branch, path), `inputs`, `bindings` (per role: source; launch → profile id/name/agent, pane id/handle once launched; current/pick → pane id/handle, detected agent), `invocations` (ordinal, step, iteration, role, kind, instruction path, activation → dispatch id + state `waiting/delivered/skipped/revoked` + output name/path/verdict), `outputs` (latest per name), `actions` (step → declared keys), `loop` (count), `steps` (entered step records with state). **Delivery tokens are not persisted** (correlation only, useless after restart, and the file then carries nothing a reader could replay); dispatch ids are (needed by `status` / `agents wait --dispatch`). No environment values, extra arguments, home paths, or credentials — the frozen launch *plan* stays in memory with B3, only profile id/name/agent reach the file. Readers tolerate unknown keys; the launch-time `interrupted` scan reads only `version` and `run.status`. | Persisting the token (no consumer); persisting the launch plan (its surface environment carries override values); a schemaless dictionary. |
+| H4 | **Token check lives in the machine, not in the store.** Each activation holds its token in `WorkflowRun` state; `deliver` in B3 resolves the caller pane → its pending dispatch id → the run and activation (through `WorkflowRun.activation(forDispatchID:)`) → `machine.deliver(ordinal:token:body:verdict:)`, which answers `STEP_NOT_EXPECTING` / `TOKEN_REQUIRED` / `TOKEN_INVALID` / `OUTPUT_*` / `VERDICT_REQUIRED` itself. `dispatch-complete` against a workflow activation is refused by B3's handler from the same index (`WORKFLOW_DELIVERY_REQUIRED` with the replacement command rendered by B2). The dispatch store (064 code) is untouched. | Storing the token in `AgentDispatchBinding` and checking it in `AgentDispatchStore.complete` (the store would learn workflow semantics; every 064 completion path would grow a branch). |
+| H5 | **`run.json` is `WorkflowRunRecord` v1**: top-level `version: 1`; `run` (id, workflow id/name, scope, definition path, status, started/updated/finished), `worktree` (id, name, branch, path), `inputs`, `bindings` (per role: source; launch → profile id/name/agent, pane id/handle once launched; current/pick → pane id/handle, detected agent), `invocations` (ordinal, step, iteration, role, kind, instruction path, activation → dispatch id + state `waiting/delivered/skipped/revoked` + output name/path/verdict), `deliveries` (latest per name), `actions` (step → declared keys), `loop` (count), `steps` (entered step records with state). **Delivery tokens are not persisted** (correlation only, useless after restart, and the file then carries nothing a reader could replay); dispatch ids are (needed by `status` / `agents wait --dispatch`). No environment values, extra arguments, home paths, or credentials — the frozen launch *plan* stays in memory with B3, only profile id/name/agent reach the file. Readers tolerate unknown keys; the launch-time `interrupted` scan reads only `version` and `run.status`. | Persisting the token (no consumer); persisting the launch plan (its surface environment carries override values); a schemaless dictionary. |
 | H6 | **Watchdog observes per activation**: `observeAgentDispatch(id)` (already epoch-gated by the store: `.needsInput`, `.incomplete` = coalesced `turn-ended`, `.changed(gone)`) for exact evidence and `observeAgentState(surfaceID)` for detector levels, `removed`, `surfaceClosed`, plus a `snapshot(surfaceID:)` re-read at every grace expiry. Two streams and an injected clock per waiting activation, torn down with it. | One bus through `AppFeature`'s single `eventStream` subscription (the 2026-08-22 topology, written before 064-S1 shipped the multicast observer; the spec §10 already names `observeAgentState` / `observeAgentDispatch`). |
 | H7 | **Attention and nudge copy** (the only strings agents and users see from B2): nudge `[Prowl] When your work for this step is fully complete, finish with: <commands>`; attention reasons (panel text, C1 renders): *needs input* "The reviewer is waiting for input in its pane" (Focus pane / Cancel), *idle without delivery* "The reviewer has been idle for 3 min without delivering findings — nudged once" (Nudge again / Keep waiting / Skip / Cancel), *blocked* (heuristic) "The reviewer looks blocked (screen) for 30 s" (Focus pane / Cancel), *agent gone* "The reviewer's agent session ended" / "…pane was closed" / "…process is gone" (Relaunch / Skip / Cancel for launch roles; Skip / Cancel otherwise), *injection failed* "The line could not be typed into the author's pane" with the unsubmitted-line hint when the insert succeeded (Retry / Skip / Cancel), *launch failed* (Retry / Skip / Cancel), *rendered text invalid* (Skip / Cancel), *action failed* (Retry / Cancel), *timeout* (`on_timeout: attention`: Nudge / Keep waiting / Skip / Cancel). | Free-form strings composed in C1 (two places to keep in sync). |
 | H8 | **Relaunch is offered for `launch` roles only.** It abandons the current activation, mints a new invocation for the *current* step, and re-delivers it as the kickoff prompt of a fresh launch of the frozen profile (message content + workflow protocol block); the role's pane is rebound on `.launched`. A `current` / `pick` role that is gone offers Skip / Cancel (a "Rebind pane" action is V2). | Relaunching a `pick` role by re-running the picker (needs C2's sheet; not a runner concern). |
@@ -56,7 +60,7 @@ All new types are `nonisolated` where the app target's MainActor default would o
   display name, agent token), `WorkflowActivation` (ordinal, step, role, token, dispatch id?,
   expect, state), `WorkflowAttention` (reason + `Set<WorkflowAttentionAction>`),
   `WorkflowRunStatus` (`running`, `needsAttention`, `completed`, `cancelled`, `skipped`,
-  `maxRoundsReached`, `interrupted`).
+  `iterationLimitReached`, `interrupted`).
 - `WorkflowRunMachine.swift` — `WorkflowRunEvent` (`roleIdle`, `injectionSucceeded/Failed`,
   `launched/launchFailed`, `actionCompleted/Failed`, `watchdog(ordinal, verdict)`,
   `timeout`, `user(action)`), `WorkflowRunEffect` (`awaitRoleIdle`, `materializeInstruction`,
@@ -78,8 +82,8 @@ All new types are `nonisolated` where the app target's MainActor default would o
   `OUTPUT_TOO_LARGE`).
 - `WorkflowRunStore.swift` — `<root>/.prowl/workflow-runs/<run-id>/` layout, self-ignoring
   `.gitignore`, `WorkflowRunRecord` (Codable, `version` 1), append-only `log.md`,
-  `instructions/<step>.<ordinal>.md`, `outputs/<name>.<ordinal>.md` + atomically replaced
-  `outputs/<name>.md`, `skills/<id>/` copied from the bundle, every path from validated slugs and
+  `instructions/<step>.<ordinal>.md`, `deliveries/<name>.<ordinal>.md` + atomically replaced
+  `deliveries/<name>.md`, `skills/<id>/` copied from the bundle, every path from validated slugs and
   the run UUID under `AgentProfileHomeProvisioner.validatePhysicalContainment`, and
   `markInterruptedRuns()` for launch.
 - `WorkflowWatchdog.swift` — `WorkflowWatchdogSettings` (`turnGrace` 15 s floor 5 s, `idleGrace`
@@ -100,7 +104,7 @@ All new types are `nonisolated` where the app target's MainActor default would o
 
 - Machine: linear run through message → launch → repeat → action → notify → close; `until`
   before entry (satisfied → loop skipped, `loop.count` 0) and after each iteration; `max`
-  reached → `maxRoundsReached`; latest-wins outputs across steps with the same name; `until`
+  reached → `iterationLimitReached`; latest-wins outputs across steps with the same name; `until`
   reading the body's final producer; Skip consequences (template / `until` / required input end
   the run, optional input continues with the key absent, `--skip` at start); every attention
   reason with its action set; Retry mints a new ordinal and token; Relaunch re-delivers the
@@ -135,7 +139,7 @@ All new types are `nonisolated` where the app target's MainActor default would o
 ## What B3 verifies live (B2 has no surface)
 
 Idle wait and re-dispatch against real Claude Code / Codex panes; the typed line reaching the
-composer as one entry with the token prefix; a real `prowl workflow done -` resolving through
+composer as one entry with the token prefix; a real `prowl workflow deliver -` resolving through
 caller ancestry to the activation; `agents wait --dispatch` on an activation id; the launch
 protocol block and `PROWL_WORKFLOW_TOKEN` in the child environment only; the watchdog's nudge
 and attention timings on hooked and unhooked runtimes; `dispatch-complete` refused with
@@ -196,13 +200,13 @@ Everything lives in `supacode/Domain/Workflow/` (app target) plus three Shared t
 
 ### Behaviors worth knowing (beyond the spec text)
 
-- A `repeat` without `until` ends the run as `max_rounds_reached` after `max` iterations, as
+- A `repeat` without `until` ends the run as `iteration_limit_reached` after `max` iterations, as
   §4 says; it never falls through to the steps after it.
 - `roleBusy` from the bridge (the #733 refusal) is not attention: the step returns to
   `waitingForRole` with the same invocation and token.
 - A delivery is two-phase: `deliver` validates and emits `.persistOutput`; the run advances
   and the dispatch record completes only on `.outputPersisted`. While `persisting`, a second
-  `done` is `STEP_NOT_EXPECTING`; Skip / Cancel abandon the record as they would a waiting one.
+  `deliver` is `STEP_NOT_EXPECTING`; Skip / Cancel abandon the record as they would a waiting one.
 - A delivery with issues (H14) becomes `provisional` after persistence: the dispatch record
   stays pending, `outputs[name]` is not set, and the run waits for Accept / Accept with verdict
   / Ask again. Ask again returns the same activation to `waiting` and re-arms the watchdog with
@@ -237,7 +241,7 @@ Everything lives in `supacode/Domain/Workflow/` (app target) plus three Shared t
 carriers (like `attachingDispatch`), issue the dispatch when `expectsDelivery`, then `.launched`;
 `runAction` → `WorkflowNativeActionRunner`; `armWatchdog` → one `WorkflowWatchdog` per request,
 `disarmWatchdog` → `cancel()`; `persist` / `log` → `WorkflowRunStore`; `persistOutput` → `WorkflowRunStore.writeOutput`
-then `.outputPersisted(ordinal)` (or `.outputPersistFailed`), and the CLI `done` response is
+then `.outputPersisted(ordinal)` (or `.outputPersistFailed`), and the CLI `deliver` response is
 sent only after that event;
 `abandonActivation` / `completeActivation` → the bridge; `cancelRoleWait` → stop the idle wait;
 `finished` → tear down. A `.launched` that arrives after the run ended must abandon its
@@ -339,5 +343,5 @@ SwiftPM-only so it could run beside the app builds; briefs and findings under
   (the pre-existing handoff contract); moving it to descriptor-rooted I/O would close the
   remaining check-then-use window that `git.context` inherits from it. Recorded as a follow-up
   for D3, when the handoff actions become the shipped path.
-- B3 must answer `prowl workflow done` only after `.outputPersisted`, cancel a run's watchdog
+- B3 must answer `prowl workflow deliver` only after `.outputPersisted`, cancel a run's watchdog
   on acceptance, and abandon the dispatch of a `.launched` that arrives after the run ended.

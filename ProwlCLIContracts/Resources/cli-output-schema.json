@@ -3830,7 +3830,7 @@
           "$ref": "#/$defs/workflowStatusData"
         },
         {
-          "$ref": "#/$defs/workflowDoneData"
+          "$ref": "#/$defs/workflowDeliverData"
         },
         {
           "$ref": "#/$defs/workflowCancelData"
@@ -3981,7 +3981,7 @@
         "worktree",
         "run_directory",
         "bindings",
-        "outputs",
+        "deliveries",
         "started_at",
         "updated_at"
       ],
@@ -4032,7 +4032,7 @@
         "activation": {
           "$ref": "#/$defs/workflowActivation"
         },
-        "outputs": {
+        "deliveries": {
           "type": "object",
           "additionalProperties": {
             "$ref": "#/$defs/workflowOutput"
@@ -4068,7 +4068,7 @@
         "worktree",
         "run_directory",
         "bindings",
-        "outputs",
+        "deliveries",
         "started_at",
         "updated_at"
       ],
@@ -4119,7 +4119,7 @@
         "activation": {
           "$ref": "#/$defs/workflowActivation"
         },
-        "outputs": {
+        "deliveries": {
           "type": "object",
           "additionalProperties": {
             "$ref": "#/$defs/workflowOutput"
@@ -4155,7 +4155,7 @@
         "worktree",
         "run_directory",
         "bindings",
-        "outputs",
+        "deliveries",
         "started_at",
         "updated_at"
       ],
@@ -4206,7 +4206,7 @@
         "activation": {
           "$ref": "#/$defs/workflowActivation"
         },
-        "outputs": {
+        "deliveries": {
           "type": "object",
           "additionalProperties": {
             "$ref": "#/$defs/workflowOutput"
@@ -4229,7 +4229,7 @@
         }
       }
     },
-    "workflowDoneData": {
+    "workflowDeliverData": {
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -4239,7 +4239,7 @@
       ],
       "properties": {
         "action": {
-          "const": "done"
+          "const": "deliver"
         },
         "run": {
           "$ref": "#/$defs/workflowRun"
@@ -4261,7 +4261,7 @@
         "worktree",
         "run_directory",
         "bindings",
-        "outputs",
+        "deliveries",
         "started_at",
         "updated_at"
       ],
@@ -4309,7 +4309,7 @@
         "activation": {
           "$ref": "#/$defs/workflowActivation"
         },
-        "outputs": {
+        "deliveries": {
           "type": "object",
           "additionalProperties": {
             "$ref": "#/$defs/workflowOutput"
@@ -4346,7 +4346,7 @@
             "completed",
             "cancelled",
             "skipped",
-            "max_rounds_reached",
+            "iteration_limit_reached",
             "interrupted"
           ]
         },
@@ -4577,7 +4577,7 @@
             "type": "string"
           }
         },
-        "verdict": {
+        "verdicts": {
           "type": "array",
           "items": {
             "type": "string"

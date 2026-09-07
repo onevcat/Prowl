@@ -412,7 +412,7 @@ nonisolated public enum WorkflowJSONSchema {
             },
             "action": {
               "type": "string",
-              "pattern": "^(builtin:git\\.context|local:[a-z0-9][a-z0-9_-]{0,63})$"
+              "pattern": "^(builtin:collect-worktree-context|local:(?=[a-z0-9-]{1,64}$)[a-z][a-z0-9]*(?:-[a-z0-9]+)*)$"
             },
             "with": {
               "type": "object",
@@ -465,7 +465,7 @@ nonisolated public enum WorkflowJSONSchema {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "output": {
+            "delivery": {
               "$ref": "#/$defs/slug"
             },
             "format": {
@@ -482,7 +482,7 @@ nonisolated public enum WorkflowJSONSchema {
                 "minLength": 1
               }
             },
-            "verdict": {
+            "verdicts": {
               "type": "array",
               "minItems": 2,
               "maxItems": 4,

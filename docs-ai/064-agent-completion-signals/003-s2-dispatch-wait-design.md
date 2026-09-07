@@ -64,7 +64,7 @@ S2 ships three connected surfaces in one PR:
    heuristics otherwise.
 
 S2 does not install runtime hooks, watch transcript files, infer completion with an LLM,
-persist receipts across app restarts, or change `prowl workflow done` semantics. Those
+persist receipts across app restarts, or change `prowl workflow deliver` semantics. Those
 remain owned by S3/S4, the orchestrating skill, and 063 respectively.
 
 ## Two planes, one observer context
@@ -109,7 +109,7 @@ that needs byte-for-byte prompt delivery can create an interactive pane and use 
 This rule is deliberately scoped to the CLI create request, not every internal consumer of
 the shared profile-launch boundary. The lifecycle request passes an explicit dispatch
 context into the shared launch seam. 063 workflow launches keep their separate
-`prowl workflow done` activation protocol, and future prompt launchers must choose their own
+`prowl workflow deliver` activation protocol, and future prompt launchers must choose their own
 completion contract rather than inheriting dispatch behavior accidentally.
 
 The id must be passed through the launch plan's child-process command environment, not the

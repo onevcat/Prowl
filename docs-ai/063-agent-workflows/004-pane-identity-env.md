@@ -13,7 +13,7 @@ The A1 review (PR #710) showed that the `prowl-cli` skill taught agents to find 
 ## Decisions
 
 - One variable only. Tab and worktree identity are derivable from `prowl list --json` by `pane.id`; `PROWL_WORKTREE_PATH` already exists.
-- Convenience identity, not attribution. The value is inherited and forgeable; `handoff` (and later `workflow done` / `agents signal`) keep resolving the calling pane from process ancestry.
+- Convenience identity, not attribution. The value is inherited and forgeable; `handoff` (and later `workflow deliver` / `agents signal`) keep resolving the calling pane from process ancestry.
 - `create pane` keeps its explicit anchor (no caller-pane default); the recipe is `prowl create pane "$PROWL_PANE_ID" --direction right`.
 
 ## Verification

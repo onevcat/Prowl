@@ -50,7 +50,7 @@ perform it and deliver; there is no separate injected first message to wait for.
   explicit `close:` step (authored by the workflow) closed it.
   Cancelling stops orchestration; it does not stop already-running agent work or undo edits.
 - Run states (`status.state`): `running`, `needs_attention` (the panel waits for the user),
-  then one terminal state — `completed`, `max_rounds_reached` (a `while` condition stayed
+  then one terminal state — `completed`, `iteration_limit_reached` (a `while` condition stayed
   true at `max_iterations`; later steps do not execute), `skipped` (required output skipped),
   `cancelled`, or `interrupted` (unfinished in an earlier app instance; never resumed).
 
@@ -62,7 +62,7 @@ future starts and require a new grant. An invalidated run copy must be cancelled
 
 ## Watching a run
 
-For a `done --json` response, inspect `.data.delivery.state`: `delivered` is accepted,
+For a `deliver --json` response, inspect `.data.delivery.state`: `delivered` is accepted,
 whereas `provisional` may still return `ok` and an output path but leaves the run in
 `needs_attention`. The user can Accept, Ask again, Skip, or Cancel. **Ask again** returns
 the activation to waiting so the participant can submit a corrected delivery; repeated
@@ -76,7 +76,7 @@ delivery is rejected instead and the participant can correct it while the step i
 - `.data.step` — the step in progress; `.data.activation` — the awaited delivery (`step`,
   `role`, `output`, `state` `waiting` | `persisting` | `provisional`, `ordinal`, `deadline`,
   and `expect.completion[]`, the exact commands that complete it).
-- `.data.outputs.<name>` — the latest accepted delivery (`path`, `latest_path`, `ordinal`,
+- `.data.deliveries.<name>` — the latest accepted delivery (`path`, `latest_path`, `ordinal`,
   `verdict`); `.data.bindings` and `.data.run_directory` are frozen at start.
 - `.data.started_at` / `.data.finished_at` carry milliseconds; `log.md` and `run.json` round
   to seconds.
@@ -91,8 +91,8 @@ Runtime data lives in personal history, outside the execution root:
 ```
 ~/.prowl/logs/workflow-runs/<root-name>-<root-hash>/YYYY-MM/<run-id>/
 ├── log.md                       # timestamped timeline (start here)
-├── run.json                     # machine record: bindings, invocations, step states, outputs
-├── outputs/
+├── run.json                     # machine record: bindings, invocations, step states, deliveries
+├── deliveries/
 │   ├── <name>.<ordinal>.md      # output for an invocation; corrected submissions can replace it
 │   └── <name>.md                # "latest" view, replaced atomically on each delivery
 ├── definition/                  # frozen workflow bundle
@@ -118,7 +118,7 @@ Runtime data lives in personal history, outside the execution root:
   replace both files, so this is not an immutable history of every submission. Use the
   delivery receipt and run state to distinguish persisted content from accepted results.
 - Output bodies are capped (16 MiB in both the CLI and App).
-- To summarize or debug a finished run: read `log.md`, then walk `outputs/` in ordinal
+- To summarize or debug a finished run: read `log.md`, then walk `deliveries/` in ordinal
   order; `run.json` maps each ordinal to its step and loop iteration.
 
 ## Where the delivery token travels
@@ -126,7 +126,7 @@ Runtime data lives in personal history, outside the execution root:
 Every awaited step mints a fresh token for its activation; Skip/Cancel/Relaunch revoke it.
 
 - **Launched roles**: the token is in the pane's environment as `PROWL_WORKFLOW_TOKEN`, and
-  the kickoff prompt's protocol block spells the bare `prowl workflow done [--verdict v] -`.
+  the kickoff prompt's protocol block spells the bare `prowl workflow deliver [--verdict v] -`.
 - **Messaged panes** (`current`/`pick`): the token rides the typed line as an environment
   prefix — the command in the `[Prowl] …` line is complete and directly executable.
 - Delivery requires the caller pane and the token to agree; a stale, duplicated, or
@@ -146,5 +146,5 @@ Every awaited step mints a fresh token for its activation; Skip/Cancel/Relaunch 
 | `PROFILE_NOT_FOUND` / `PROFILE_NOT_UNIQUE` | a `--role` override doesn't match exactly one enabled profile |
 | `TOKEN_REQUIRED` / `TOKEN_INVALID` / `STEP_NOT_EXPECTING` | delivering without/with a stale token, or the step has moved on — check `prowl workflow status` |
 | `OUTPUT_INVALID` / `VERDICT_REQUIRED` / `OUTPUT_TOO_LARGE` | empty body / missing mandatory verdict under `strict` / body over the cap |
-| `WORKFLOW_DELIVERY_REQUIRED` | `dispatch-complete` was used inside a workflow activation — run the `prowl workflow done` command the error echoes |
+| `WORKFLOW_DELIVERY_REQUIRED` | `dispatch-complete` was used inside a workflow activation — run the `prowl workflow deliver` command the error echoes |
 | `PROMPT_TOO_LARGE` / `RENDERED_TEXT_INVALID` | a rendered launch prompt over 128 KiB / a rendered line that isn't one clean terminal line — shorten, or move content into an `instruction` |

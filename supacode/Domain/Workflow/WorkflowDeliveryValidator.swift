@@ -1,5 +1,5 @@
 // supacode/Domain/Workflow/WorkflowDeliveryValidator.swift
-// Validation of a `prowl workflow done` body against the step's `expect` (dsl-spec §5): size
+// Validation of a `prowl workflow deliver` body against the step's `expect` (dsl-spec §5): size
 // caps, format, required sections, and the verdict declaration.
 
 import Foundation
@@ -128,7 +128,7 @@ nonisolated enum WorkflowDeliveryValidator {
     }
     var issues: [WorkflowDeliveryIssue] = []
     var acceptedVerdict: String?
-    switch (expect.verdict, verdict) {
+    switch (expect.verdicts, verdict) {
     case (nil, nil):
       break
     case (nil, .some(let value)):

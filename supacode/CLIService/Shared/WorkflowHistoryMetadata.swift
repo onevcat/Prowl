@@ -24,7 +24,7 @@ nonisolated public struct WorkflowHistoryMetadata: Codable, Sendable {
   }
 
   var terminal: Bool {
-    ["completed", "cancelled", "skipped", "max_rounds_reached", "interrupted"].contains(state)
+    ["completed", "cancelled", "skipped", "iteration_limit_reached", "interrupted"].contains(state)
   }
 
   /// Caller holds run occupancy. Missing metadata after a failed write prevents automatic deletion.

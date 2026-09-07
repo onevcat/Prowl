@@ -1,7 +1,7 @@
 // supacode/CLIService/WorkflowRuntimeCoordinator.swift
-// The socket side of `prowl workflow run / status / done / cancel` (docs-ai 063 B3). It reads the
-// reducer's sessions, attributes a `done` to an activation (decision W3), enters the reducer
-// through actions, and awaits the `done` rendezvous (decision W1). It owns no run state.
+// The socket side of `prowl workflow run / status / deliver / cancel` (docs-ai 063 B3). It reads the
+// reducer's sessions, attributes a `deliver` to an activation (decision W3), enters the reducer
+// through actions, and awaits the `deliver` rendezvous (decision W1). It owns no run state.
 
 import Foundation
 import ProwlCLIShared
@@ -48,7 +48,7 @@ final class WorkflowRuntimeCoordinator {
   }
 
   private let dependencies: Dependencies
-  /// The verified caller role of each outstanding `run` / `done`, so the answer spells completion
+  /// The verified caller role of each outstanding `run` / `deliver`, so the answer spells completion
   /// commands only to the pane that owns the activation (never to a manual or forced caller).
   private var callerRoles: [UUID: String] = [:]
   /// Request ids the reducer still owes an answer for; a cancelled waiter frees its rendezvous
@@ -224,9 +224,9 @@ final class WorkflowRuntimeCoordinator {
     return (session, invocation)
   }
 
-  // MARK: - done
+  // MARK: - deliver
 
-  func done(_ input: WorkflowInput, callerPane: CallerPane?) async -> CommandResponse {
+  func deliver(_ input: WorkflowInput, callerPane: CallerPane?) async -> CommandResponse {
     guard let body = input.body else {
       return Self.failure(
         code: CLIErrorCode.invalidArgument, message: "The delivery has no output body.")
@@ -332,7 +332,7 @@ final class WorkflowRuntimeCoordinator {
         return .failure(
           Self.refusal(
             code: CLIErrorCode.sourceRequired,
-            message: "Run `prowl workflow done` inside the pane that received the step, "
+            message: "Run `prowl workflow deliver` inside the pane that received the step, "
               + "or pass --run <run UUID> --step <step id> for a manual delivery."))
       }
       return .failure(
@@ -360,7 +360,7 @@ final class WorkflowRuntimeCoordinator {
         source: source, callerRole: nil))
   }
 
-  /// The reducer's answer to a `run` or `done` request (through `WorkflowCLIResponderClient`).
+  /// The reducer's answer to a `run` or `deliver` request (through `WorkflowCLIResponderClient`).
   func resolve(_ requestID: UUID, _ resolution: WorkflowRequestResolution) {
     inFlight.remove(requestID)
     let callerRole = callerRoles.removeValue(forKey: requestID)
@@ -370,21 +370,21 @@ final class WorkflowRuntimeCoordinator {
       response = Self.success(.run(WorkflowRunPayload(run: run, callerRole: callerRole, includeSelfInitiated: true)))
     case .delivered(let run, let receipt):
       response = Self.success(
-        .done(Self.donePayload(run: run, receipt: receipt, state: .delivered, callerRole: callerRole)))
+        .deliver(Self.deliverPayload(run: run, receipt: receipt, state: .delivered, callerRole: callerRole)))
     case .provisional(let run, let receipt):
       response = Self.success(
-        .done(Self.donePayload(run: run, receipt: receipt, state: .provisional, callerRole: callerRole)))
+        .deliver(Self.deliverPayload(run: run, receipt: receipt, state: .provisional, callerRole: callerRole)))
     case .failed(let code, let message):
       response = Self.failure(code: code, message: message)
     }
     dependencies.rendezvous.resolve(requestID, with: response)
   }
 
-  private static func donePayload(
+  private static func deliverPayload(
     run: WorkflowRun, receipt: WorkflowDeliveryReceipt, state: WorkflowDeliveryState, callerRole: String?
-  ) -> WorkflowDonePayload {
+  ) -> WorkflowDeliverPayload {
     let role = run.invocations.first { $0.ordinal == receipt.ordinal }?.role ?? "-"
-    return WorkflowDonePayload(
+    return WorkflowDeliverPayload(
       run: WorkflowRunPayload(run: run, callerRole: callerRole, includeSelfInitiated: false),
       delivery: WorkflowDeliveryPayload(state: state, receipt: receipt, role: role))
   }

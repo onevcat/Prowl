@@ -8,13 +8,13 @@ extension WorkflowRun {
       let observed = binding.pane.flatMap { observations[$0.surfaceID.uuidString] }
       return .object([
         "source": .string(binding.source.rawValue),
-        "name": .string(binding.templateRole.name),
-        "agent": .string(binding.templateRole.agent),
-        "pane": binding.pane.map { .string($0.surfaceID.uuidString) } ?? .null,
+        "display_name": .string(binding.displayName),
+        "agent": .string(binding.agent),
+        "pane_id": binding.pane.map { .string($0.surfaceID.uuidString) } ?? .null,
         "observed": observed ?? .null,
       ])
     }
-    let outputValues = outputs.mapValues { output -> WorkflowJSONValue in
+    let outputValues = deliveries.mapValues { output -> WorkflowJSONValue in
       .object(["path": .string(output.latestPath), "verdict": output.verdict.map(WorkflowJSONValue.string) ?? .null])
     }
     var typedInputs: [String: WorkflowJSONValue] = [:]
@@ -26,16 +26,14 @@ extension WorkflowRun {
       }
     }
     let contextValue: WorkflowJSONValue = .object([
-      "run": .object([
-        "id": .string(id.uuidString), "workflow_id": .string(definition.id),
-        "directory": .string(runDirectory.path),
-      ]),
+      "workflow": .object(["id": .string(definition.id), "name": .string(definition.name)]),
+      "run": .object(["id": .string(id.uuidString), "path": .string(runDirectory.path)]),
       "worktree": .object([
         "id": .string(context.worktree.id), "path": .string(context.worktree.path),
         "name": .string(context.worktree.name), "branch": observations["branch"] ?? .string(context.worktree.branch),
         "captured_at": .string(timestamp),
       ]),
-      "source": (context.sourcePaneID ?? bindings.values.first { $0.source == .current }?.pane?.surfaceID).map {
+      "initiator": (context.sourcePaneID ?? bindings.values.first { $0.source == .current }?.pane?.surfaceID).map {
         .object([
           "pane_id": .string($0.uuidString),
           "tab_id": (context.sourceTabID ?? bindings.values.first { $0.source == .current }?.pane?.tabID)
@@ -51,7 +49,7 @@ extension WorkflowRun {
     ])
     let values = [
       "context": contextValue, "inputs": WorkflowJSON.object(typedInputs),
-      "outputs": WorkflowJSON.object(outputValues),
+      "deliveries": WorkflowJSON.object(outputValues),
       "actions": WorkflowJSON.object(actionOutputs.mapValues(WorkflowJSON.object)),
     ]
     return controlCursor?.values(over: values) ?? values

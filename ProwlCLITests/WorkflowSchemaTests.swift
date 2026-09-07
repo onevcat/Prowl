@@ -30,7 +30,7 @@ final class WorkflowSchemaTests: XCTestCase {
     let cancel =
       ###"{"ok":true,"command":"workflow","schema_version":"prowl.cli.workflow.v1","data":{"action":"cancel",\###(Self.runFields)}}"###
     let done =
-      ###"{"ok":true,"command":"workflow","schema_version":"prowl.cli.workflow.v1","data":{"action":"done","run":{\###(Self.runFields)},"delivery":{"state":"provisional","ordinal":1,"step":"brief","role":"author","output":\###(Self.output),"warnings":[{"code":"missing_sections","message":"missing ## Claims"}]}}}"###
+      ###"{"ok":true,"command":"workflow","schema_version":"prowl.cli.workflow.v1","data":{"action":"deliver","run":{\###(Self.runFields)},"delivery":{"state":"provisional","ordinal":1,"step":"brief","role":"author","output":\###(Self.output),"warnings":[{"code":"missing_sections","message":"missing ## Claims"}]}}}"###
     let read =
       #"{"ok":true,"command":"workflow","schema_version":"prowl.cli.workflow.v1","data":{"action":"read","run":"0BADCAFE-0000-4000-8000-000000000042","invocation":1,"role":"author","step":"brief","resource":"instruction","body":"Read","encoding":"utf-8","resources":[],"offset":0,"next_offset":4,"total_bytes":8}}"#
     for instance in [list, listWithoutWorktree, validate, schema, error, run, status, cancel, done, read] {
@@ -40,7 +40,7 @@ final class WorkflowSchemaTests: XCTestCase {
 
   func testOutputSchemaRejectsMalformedRuntimePayloads() throws {
     let badDeliveryState =
-      ###"{"ok":true,"command":"workflow","schema_version":"prowl.cli.workflow.v1","data":{"action":"done","run":{\###(Self.runFields)},"delivery":{"state":"accepted","ordinal":1,"step":"brief","role":"author","output":\###(Self.output),"warnings":[]}}}"###
+      ###"{"ok":true,"command":"workflow","schema_version":"prowl.cli.workflow.v1","data":{"action":"deliver","run":{\###(Self.runFields)},"delivery":{"state":"accepted","ordinal":1,"step":"brief","role":"author","output":\###(Self.output),"warnings":[]}}}"###
     let badBindingSource =
       ###"{"ok":true,"command":"workflow","schema_version":"prowl.cli.workflow.v1","data":{"action":"run",\###(Self.runFields.replacingOccurrences(of: #""source":"current""#, with: #""source":"remote""#))}}"###
     let badState =
@@ -73,8 +73,8 @@ final class WorkflowSchemaTests: XCTestCase {
   func testRuntimePayloadsRoundTripThroughCodable() throws {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-    let output = WorkflowOutputPayload(
-      name: "brief", ordinal: 1, path: "/r/outputs/brief.1.md", latestPath: "/r/outputs/brief.md", verdict: nil,
+    let output = WorkflowDeliveryRecordPayload(
+      name: "brief", ordinal: 1, path: "/r/deliveries/brief.1.md", latestPath: "/r/deliveries/brief.md", verdict: nil,
       deliveredAt: "2026-08-30T01:02:03Z")
     let run = WorkflowRunPayload(
       id: "0BADCAFE-0000-4000-8000-000000000042",
@@ -104,19 +104,19 @@ final class WorkflowSchemaTests: XCTestCase {
       activation: WorkflowActivationPayload(
         ordinal: 1, step: "brief", role: "author", state: "provisional", dispatchID: "dispatch-1", output: "brief",
         expect: WorkflowExpectationPayload(
-          format: .markdown, sections: ["## Scope"], verdict: nil, strict: false,
-          completion: ["PROWL_WORKFLOW_TOKEN=T prowl workflow done -"]),
+          format: .markdown, sections: ["## Scope"], verdicts: nil, strict: false,
+          completion: ["PROWL_WORKFLOW_TOKEN=T prowl workflow deliver -"]),
         deadline: nil),
-      outputs: ["brief": output],
+      deliveries: ["brief": output],
       startedAt: "2026-08-30T01:00:00Z",
       updatedAt: "2026-08-30T01:02:03Z",
       finishedAt: nil,
       selfInitiated: WorkflowSelfInitiatedPayload(
-        line: "[Prowl] Read /r/instructions/brief.1.md and follow it — finish with: PROWL_WORKFLOW_TOKEN=T prowl workflow done -",
+        line: "[Prowl] Read /r/instructions/brief.1.md and follow it — finish with: PROWL_WORKFLOW_TOKEN=T prowl workflow deliver -",
         instructionPath: "/r/instructions/brief.1.md",
-        completion: ["PROWL_WORKFLOW_TOKEN=T prowl workflow done -"]))
-    let done = WorkflowCommandPayload.done(
-      WorkflowDonePayload(
+        completion: ["PROWL_WORKFLOW_TOKEN=T prowl workflow deliver -"]))
+    let done = WorkflowCommandPayload.deliver(
+      WorkflowDeliverPayload(
         run: run,
         delivery: WorkflowDeliveryPayload(
           state: .provisional, ordinal: 1, step: "brief", role: "author", output: output,
@@ -132,13 +132,13 @@ final class WorkflowSchemaTests: XCTestCase {
   }
 
   private static let output =
-    #"{"name":"brief","ordinal":1,"path":"/r/outputs/brief.1.md","latest_path":"/r/outputs/brief.md","delivered_at":"2026-08-30T01:02:03Z"}"#
+    #"{"name":"brief","ordinal":1,"path":"/r/deliveries/brief.1.md","latest_path":"/r/deliveries/brief.md","delivered_at":"2026-08-30T01:02:03Z"}"#
 
   private static let runFields =
-    ###""id":"0BADCAFE-0000-4000-8000-000000000042","workflow":{"id":"prowl.adversarial-review","name":"Adversarial Review"},"scope":"repo","definition_path":"/Projects/App/.prowl/workflows/review.yaml","source":"live","status":{"state":"running"},"step":"brief","role":"author","worktree":{"id":"wt","name":"feature","branch":"feat/x","path":"/Projects/App"},"run_directory":"/Projects/App/.prowl/workflow-runs/0BADCAFE-0000-4000-8000-000000000042","bindings":{"author":{"source":"current","pane":{"id":"00000000-0000-0000-0000-000000000001","tab_id":"00000000-0000-0000-0000-000000000011","handle":"p1","display_name":"Claude Code","agent":"claude"}},"reviewer":{"source":"launch","profile":{"id":"00000000-0000-0000-0000-000000000009","name":"Pi Reviewer","agent":"pi"}}},"activation":{"ordinal":1,"step":"brief","role":"author","state":"waiting","dispatch_id":"dispatch-1","output":"brief","expect":{"format":"markdown","sections":["## Scope","## Claims"],"strict":false,"completion":["PROWL_WORKFLOW_TOKEN=T prowl workflow done -"]},"deadline":"2026-08-30T01:10:00Z"},"outputs":{},"started_at":"2026-08-30T01:00:00Z","updated_at":"2026-08-30T01:00:00Z","self_initiated":{"line":"[Prowl] Read /r/instructions/brief.1.md and follow it — finish with: PROWL_WORKFLOW_TOKEN=T prowl workflow done -","instruction_path":"/r/instructions/brief.1.md","completion":["PROWL_WORKFLOW_TOKEN=T prowl workflow done -"]}"###
+    ###""id":"0BADCAFE-0000-4000-8000-000000000042","workflow":{"id":"prowl.adversarial-review","name":"Adversarial Review"},"scope":"repo","definition_path":"/Projects/App/.prowl/workflows/review.yaml","source":"live","status":{"state":"running"},"step":"brief","role":"author","worktree":{"id":"wt","name":"feature","branch":"feat/x","path":"/Projects/App"},"run_directory":"/Projects/App/.prowl/workflow-runs/0BADCAFE-0000-4000-8000-000000000042","bindings":{"author":{"source":"current","pane":{"id":"00000000-0000-0000-0000-000000000001","tab_id":"00000000-0000-0000-0000-000000000011","handle":"p1","display_name":"Claude Code","agent":"claude"}},"reviewer":{"source":"launch","profile":{"id":"00000000-0000-0000-0000-000000000009","name":"Pi Reviewer","agent":"pi"}}},"activation":{"ordinal":1,"step":"brief","role":"author","state":"waiting","dispatch_id":"dispatch-1","output":"brief","expect":{"format":"markdown","sections":["## Scope","## Claims"],"strict":false,"completion":["PROWL_WORKFLOW_TOKEN=T prowl workflow deliver -"]},"deadline":"2026-08-30T01:10:00Z"},"deliveries":{},"started_at":"2026-08-30T01:00:00Z","updated_at":"2026-08-30T01:00:00Z","self_initiated":{"line":"[Prowl] Read /r/instructions/brief.1.md and follow it — finish with: PROWL_WORKFLOW_TOKEN=T prowl workflow deliver -","instruction_path":"/r/instructions/brief.1.md","completion":["PROWL_WORKFLOW_TOKEN=T prowl workflow deliver -"]}"###
 
   private static let recordFields =
-    ###""id":"0BADCAFE-0000-4000-8000-000000000042","workflow":{"id":"prowl.handoff","name":"Hand Off"},"scope":"bundle","source":"record","status":{"state":"interrupted"},"worktree":{"id":"wt","name":"feature","branch":"feat/x","path":"/Projects/App"},"run_directory":"/Projects/App/.prowl/workflow-runs/0BADCAFE-0000-4000-8000-000000000042","bindings":{"source":{"source":"current","pane":{"id":"00000000-0000-0000-0000-000000000001","handle":"p1","display_name":"shell"}}},"outputs":{"brief":\###(WorkflowSchemaTests.output)},"started_at":"2026-08-30T01:00:00Z","updated_at":"2026-08-30T01:05:00Z","finished_at":"2026-08-30T01:05:00Z""###
+    ###""id":"0BADCAFE-0000-4000-8000-000000000042","workflow":{"id":"prowl.handoff","name":"Hand Off"},"scope":"bundle","source":"record","status":{"state":"interrupted"},"worktree":{"id":"wt","name":"feature","branch":"feat/x","path":"/Projects/App"},"run_directory":"/Projects/App/.prowl/workflow-runs/0BADCAFE-0000-4000-8000-000000000042","bindings":{"source":{"source":"current","pane":{"id":"00000000-0000-0000-0000-000000000001","handle":"p1","display_name":"shell"}}},"deliveries":{"brief":\###(WorkflowSchemaTests.output)},"started_at":"2026-08-30T01:00:00Z","updated_at":"2026-08-30T01:05:00Z","finished_at":"2026-08-30T01:05:00Z""###
 
   func testOutputSchemaRejectsUnknownFieldsBadScopesAndCrossActionFields() throws {
     let unknownField =

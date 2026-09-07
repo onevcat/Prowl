@@ -49,7 +49,7 @@ final class WorkflowValidatorTests: XCTestCase {
       WorkflowFixtures.codes(minimal(steps: "  - id: Fix It\n    notify: hi")), ["step_id_slug"])
     XCTAssertEqual(
       WorkflowFixtures.codes(
-        minimal(steps: "  - id: b\n    message: author\n    text: hi\n    expect: { output: Bad.Name }")),
+        minimal(steps: "  - id: b\n    message: author\n    text: hi\n    expect: { delivery: Bad.Name }")),
       ["output_name_slug"])
     XCTAssertEqual(
       WorkflowFixtures.codes(minimal() + "inputs:\n  Max: { type: integer }\n"), ["input_name_slug"])
@@ -75,7 +75,7 @@ final class WorkflowValidatorTests: XCTestCase {
       ["message_before_launch"])
     let twice = "  - id: l1\n    launch: r\n    prompt: go\n  - id: l2\n    launch: r\n    prompt: again"
     XCTAssertEqual(WorkflowFixtures.codes(minimal(steps: twice, roles: role)), ["launch_twice"])
-    let ordered = "  - id: l1\n    launch: r\n    prompt: go\n  - id: m\n    message: r\n    text: \"pane {{ context.roles.r.pane }}\""
+    let ordered = "  - id: l1\n    launch: r\n    prompt: go\n  - id: m\n    message: r\n    text: \"pane {{ context.roles.r.pane_id }}\""
     XCTAssertEqual(WorkflowFixtures.codes(minimal(steps: ordered, roles: role)), [])
   }
 
@@ -117,13 +117,13 @@ final class WorkflowValidatorTests: XCTestCase {
     func codes(_ text: String, roles: String = "") -> [String] {
       WorkflowFixtures.codes(minimal(steps: "  - id: b\n    notify: \"\(text)\"", roles: roles))
     }
-    XCTAssertEqual(codes("{{ context.run.id }} {{ context.run.directory }} {{ context.worktree.path }} {{ context.worktree.branch }}"), [])
-    XCTAssertEqual(codes("{{ context.roles.author.name }} {{ context.roles.author.agent }} {{ context.roles.author.pane }}"), [])
+    XCTAssertEqual(codes("{{ context.run.id }} {{ context.run.path }} {{ context.worktree.path }} {{ context.worktree.branch }}"), [])
+    XCTAssertEqual(codes("{{ context.roles.author.display_name }} {{ context.roles.author.agent }} {{ context.roles.author.pane_id }}"), [])
     XCTAssertEqual(codes("{{ nope.x }}"), ["unknown_variable"])
     XCTAssertEqual(codes("{{ context.worktree.owner }}"), ["unknown_variable"])
     XCTAssertEqual(codes("{{ inputs.missing }}"), ["unknown_variable"])
-    XCTAssertEqual(codes("{{ outputs.brief.path }}"), ["unknown_variable"], "no producer yet")
-    XCTAssertEqual(codes("{{ context.roles.r.pane }}", roles: role), [], "unlaunched pane is explicitly null")
+    XCTAssertEqual(codes("{{ deliveries.brief.path }}"), ["unknown_variable"], "no producer yet")
+    XCTAssertEqual(codes("{{ context.roles.r.pane_id }}", roles: role), [], "unlaunched pane is explicitly null")
     XCTAssertEqual(codes("{{ context.step.iteration }}"), [], "outside a loop iteration is explicitly null")
     XCTAssertEqual(codes("{{ loop.count }}"), ["unknown_variable"], "before any loop")
     XCTAssertEqual(codes("{{ open"), ["template_syntax"])
@@ -135,13 +135,13 @@ final class WorkflowValidatorTests: XCTestCase {
         - id: b
           message: author
           text: hi
-          expect: { output: brief }
+          expect: { delivery: brief }
         - id: ctx
-          action: builtin:git.context
+          action: builtin:collect-worktree-context
         - id: n
-          notify: "{{ outputs.brief.path }} {{ actions.ctx.output.path }} {{ actions.ctx.output.branch }}"
+          notify: "{{ deliveries.brief.path }} {{ actions.ctx.output.path }} {{ actions.ctx.output.branch }}"
         - id: v
-          notify: "{{ outputs.brief.verdict }}"
+          notify: "{{ deliveries.brief.verdict }}"
         - id: k
           notify: "{{ actions.ctx.nope }}"
       """
@@ -154,7 +154,7 @@ final class WorkflowValidatorTests: XCTestCase {
           while: "true"
           steps:
             - id: ctx
-              action: builtin:git.context
+              action: builtin:collect-worktree-context
             - id: inside
               notify: "{{ actions.ctx.output.path }} round {{ context.step.iteration }}"
         - id: after
@@ -168,7 +168,7 @@ final class WorkflowValidatorTests: XCTestCase {
   func testActionInputsFollowTheRegistry() {
     XCTAssertEqual(WorkflowFixtures.codes(minimal(steps: "  - id: b\n    action: fs.delete")), ["unknown_action"])
     XCTAssertEqual(
-      WorkflowFixtures.codes(minimal(steps: "  - id: b\n    action: builtin:git.context\n    with: { depth: 3 }")),
+      WorkflowFixtures.codes(minimal(steps: "  - id: b\n    action: builtin:collect-worktree-context\n    with: { depth: 3 }")),
       ["unknown_action_input"])
     XCTAssertEqual(
       WorkflowFixtures.codes(minimal(steps: "  - id: b\n    action: handoff.transition\n    with: { from: author }")),
@@ -182,7 +182,7 @@ final class WorkflowValidatorTests: XCTestCase {
 
   func testVerdictRules() {
     func expect(_ verdict: String) -> String {
-      minimal(steps: "  - id: b\n    message: author\n    text: hi\n    expect: { verdict: \(verdict) }")
+      minimal(steps: "  - id: b\n    message: author\n    text: hi\n    expect: { verdicts: \(verdict) }")
     }
     XCTAssertEqual(WorkflowFixtures.codes(expect("[clean]")), ["verdict_count"])
     XCTAssertEqual(WorkflowFixtures.codes(expect("[a, b, c, d, e]")), ["verdict_count"])
@@ -203,7 +203,7 @@ final class WorkflowValidatorTests: XCTestCase {
   func testWarnings() {
     let long = minimal(steps: "  - id: b\n    message: author\n    text: hi\n    expect: { timeout: 3h }")
     XCTAssertEqual(WorkflowFixtures.codes(long), ["timeout_long"])
-    let spelled = minimal(steps: "  - id: b\n    message: author\n    text: \"finish with prowl workflow done -\"")
+    let spelled = minimal(steps: "  - id: b\n    message: author\n    text: \"finish with prowl workflow deliver -\"")
     XCTAssertEqual(WorkflowFixtures.codes(spelled), ["spells_completion_command"])
     XCTAssertEqual(WorkflowFixtures.diagnostics(spelled).first?.severity, .warning)
   }
@@ -213,19 +213,19 @@ final class WorkflowValidatorTests: XCTestCase {
         - id: b
           message: author
           text: hi
-          expect: { output: brief, timeout: 5m, on_timeout: skip }
+          expect: { delivery: brief, timeout: 5m, on_timeout: skip }
         - id: n
-          notify: "{{ outputs.brief.path }}"
+          notify: "{{ deliveries.brief.path }}"
       """
     XCTAssertEqual(WorkflowFixtures.codes(minimal(steps: blocking)), ["skip_ends_run"])
     let optional = """
         - id: b
           message: author
           text: hi
-          expect: { output: brief, timeout: 5m, on_timeout: skip }
+          expect: { delivery: brief, timeout: 5m, on_timeout: skip }
         - id: t
-          action: builtin:git.context
-          with: { root: "{{ outputs.brief.path ?? context.worktree.path }}" }
+          action: builtin:collect-worktree-context
+          with: { root: "{{ deliveries.brief.path ?? context.worktree.path }}" }
       """
     XCTAssertEqual(WorkflowFixtures.codes(minimal(steps: optional)), [])
   }
@@ -256,26 +256,26 @@ final class WorkflowValidatorTests: XCTestCase {
         - id: first
           message: author
           text: First
-          expect: { output: result, verdict: [clean, issues] }
+          expect: { delivery: result, verdicts: [clean, issues] }
         - id: second
           message: author
           text: Second
-          expect: { output: result }
+          expect: { delivery: result }
         - id: report
-          notify: "{{ outputs.result.verdict }}"
+          notify: "{{ deliveries.result.verdict }}"
       """
     XCTAssertEqual(WorkflowFixtures.codes(minimal(steps: stale)), ["unknown_variable"])
     let refreshed = """
         - id: first
           message: author
           text: First
-          expect: { output: result }
+          expect: { delivery: result }
         - id: second
           message: author
           text: Second
-          expect: { output: result, verdict: [clean, issues] }
+          expect: { delivery: result, verdicts: [clean, issues] }
         - id: report
-          notify: "{{ outputs.result.verdict }}"
+          notify: "{{ deliveries.result.verdict }}"
       """
     XCTAssertEqual(WorkflowFixtures.codes(minimal(steps: refreshed)), [])
   }
@@ -312,13 +312,13 @@ final class WorkflowValidatorTests: XCTestCase {
         - id: first
           message: author
           text: First
-          expect: { output: brief }
+          expect: { delivery: brief }
         - id: use
-          notify: "{{ outputs.brief.path }}"
+          notify: "{{ deliveries.brief.path }}"
         - id: second
           message: author
           text: Second
-          expect: { output: brief, timeout: 5m, on_timeout: skip }
+          expect: { delivery: brief, timeout: 5m, on_timeout: skip }
       """
     XCTAssertEqual(WorkflowFixtures.codes(minimal(steps: consumedBefore)), [], "nothing after the skip depends on it")
   }

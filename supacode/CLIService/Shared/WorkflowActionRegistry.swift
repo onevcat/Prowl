@@ -60,17 +60,17 @@ nonisolated public struct WorkflowActionSchema: Equatable, Sendable {
 }
 
 nonisolated public enum WorkflowActionRegistry {
-  public static var gitContextInput: WorkflowActionJSONSchema {
+  public static var worktreeContextInput: WorkflowActionJSONSchema {
     get throws {
       try WorkflowActionJSONSchema(
         .object([
           "type": "object", "properties": .object(["root": .object(["type": "string"])]),
           "additionalProperties": .boolean(false),
-        ]), path: "builtin/git-context-input.json")
+        ]), path: "builtin/collect-worktree-context-input.json")
     }
   }
 
-  public static var gitContextOutput: WorkflowActionJSONSchema {
+  public static var worktreeContextOutput: WorkflowActionJSONSchema {
     get throws {
       try WorkflowActionJSONSchema(
         .object([
@@ -78,13 +78,13 @@ nonisolated public enum WorkflowActionRegistry {
           "properties": .object([
             "path": .object(["type": "string"]), "branch": .object(["type": "string"]),
           ]), "required": .array(["path", "branch"]), "additionalProperties": .boolean(false),
-        ]), path: "builtin/git-context-output.json")
+        ]), path: "builtin/collect-worktree-context-output.json")
     }
   }
 
   public static let all: [WorkflowActionSchema] = [
     WorkflowActionSchema(
-      id: "builtin:git.context",
+      id: "builtin:collect-worktree-context",
       description: "Save repository status and diff summary to this action's artifacts.",
       inputs: [
         WorkflowActionInput(
@@ -93,7 +93,7 @@ nonisolated public enum WorkflowActionRegistry {
       ],
       outputs: [
         WorkflowActionOutput(name: "output", description: "JSON object containing path and branch"),
-        WorkflowActionOutput(name: "result_path", description: "Path to this invocation's result.json"),
+        WorkflowActionOutput(name: "output_path", description: "Path to this invocation's result.json"),
       ])
   ]
 

@@ -16,7 +16,8 @@ struct WorkflowAuthoringPromptTests {
     #expect(strings.prompt.contains(skill))
     #expect(strings.prompt.contains(manual))
     #expect(strings.prompt.contains(directory))
-    #expect(strings.prompt.contains("prowl workflow validate"))
+    #expect(strings.prompt.contains("prowl workflow validate <name>.pwlworkflow"))
+    #expect(strings.prompt.contains("workflow.yaml"))
     #expect(!strings.title.isEmpty)
     #expect(!strings.explanation.isEmpty)
   }

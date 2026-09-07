@@ -25,10 +25,10 @@ struct WorkflowStartFeatureTests {
       - id: brief
         message: author
         text: "Brief on {{ inputs.goal }}."
-        expect: { output: brief }
+        expect: { delivery: brief }
       - id: launch
         launch: reviewer
-        prompt: "Read {{ outputs.brief.path }}."
+        prompt: "Read {{ deliveries.brief.path }}."
     """
 
   static let skippableNote = """
@@ -45,7 +45,7 @@ struct WorkflowStartFeatureTests {
       - id: note
         message: author
         text: "Write a note."
-        expect: { output: note }
+        expect: { delivery: note }
       - id: launch
         launch: runner
         prompt: "Just do it."

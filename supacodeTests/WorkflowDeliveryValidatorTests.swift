@@ -91,7 +91,7 @@ struct WorkflowDeliveryValidatorTests {
     }
     #expect(strictJSON.code == "OUTPUT_INVALID")
 
-    let declared = WorkflowExpectation(verdict: ["clean", "issues"])
+    let declared = WorkflowExpectation(verdicts: ["clean", "issues"])
     let missing = try validate("# ok\n", expect: declared).get()
     #expect(missing.issues == [.verdictMissing(allowed: ["clean", "issues"])])
     #expect(missing.verdict == nil)
@@ -107,7 +107,7 @@ struct WorkflowDeliveryValidatorTests {
   }
 
   @Test func emptyBodyIsOutputInvalidForEveryFormat() {
-    for format in [WorkflowOutputFormat.markdown, .text, .json] {
+    for format in [WorkflowDeliveryFormat.markdown, .text, .json] {
       guard case .failure(let error) = validate("  \n\n", expect: WorkflowExpectation(format: format)) else {
         Issue.record("expected failure for \(format)")
         continue
@@ -131,7 +131,7 @@ struct WorkflowDeliveryValidatorTests {
   }
 
   @Test func verdictRulesFollowTheDeclarationUnderStrict() throws {
-    let declared = WorkflowExpectation(verdict: ["clean", "issues"], strict: true)
+    let declared = WorkflowExpectation(verdicts: ["clean", "issues"], strict: true)
     guard case .failure(let required) = validate("# ok\n", expect: declared) else {
       Issue.record("expected VERDICT_REQUIRED")
       return

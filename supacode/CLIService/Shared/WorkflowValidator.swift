@@ -41,7 +41,7 @@ nonisolated public struct WorkflowValidationContext: Sendable {
 }
 
 nonisolated public enum WorkflowValidator {
-  public static let completionCommand = "prowl workflow done"
+  public static let completionCommand = "prowl workflow deliver"
   public static let longTimeoutSeconds = 2 * 3600
 
   public static func validate(
@@ -102,7 +102,7 @@ nonisolated private final class Walker {
   private var stepIDs: Set<String> = []
   private var launchedRoles: Set<String> = []
   private var possiblyLaunchedRoles: Set<String> = []
-  private var outputs: [String: OutputInfo] = [:]
+  private var deliveries: [String: OutputInfo] = [:]
   private var consumers: [String: [OutputUse]] = [:]
   /// Walk position of the step being checked; 0 before the first step.
   private var ordinal = 0
@@ -111,7 +111,7 @@ nonisolated private final class Walker {
   private var checkingActionInputs = false
   private var currentLoopID: String?
   private var outerOutputNames: Set<String> = []
-  /// `on_timeout: skip` expectations, kept apart from `outputs` so folding a skippable loop
+  /// `on_timeout: skip` expectations, kept apart from `deliveries` so folding a skippable loop
   /// cannot lose them before the consumers are reported.
   private var skipOutputs: [SkipRecord] = []
 
@@ -353,7 +353,7 @@ nonisolated private final class Walker {
         id: id, description: contract.name, inputs: [],
         outputs: [
           WorkflowActionOutput(name: "output", description: "Typed action output"),
-          WorkflowActionOutput(name: "result_path", description: "Result JSON path"),
+          WorkflowActionOutput(name: "output_path", description: "Result JSON path"),
         ])
       return
     }
@@ -401,15 +401,16 @@ nonisolated private final class Walker {
       do {
         var parser = try WorkflowExpressionParser(expression)
         let node = try parser.parse()
+        checkReferenceSpelling(node, at: step.location)
         for parts in node.requiredReferences {
           checkReference(
             WorkflowTemplate.Reference(path: parts.joined(separator: ".")), at: step.location, consumer: .template)
         }
       } catch { collector.error("expression_syntax", "\(error)", at: step.location) }
     }
-    let previousOutputs = outputs
+    let previousOutputs = deliveries
     let previousOuterNames = outerOutputNames
-    outerOutputNames.formUnion(outputs.keys)
+    outerOutputNames.formUnion(deliveries.keys)
     defer { outerOutputNames = previousOuterNames }
     let previousRoles = launchedRoles
     let previousPossibleRoles = possiblyLaunchedRoles
@@ -427,7 +428,7 @@ nonisolated private final class Walker {
       branchRoles.append(launchedRoles)
       possibleRoles.formUnion(possiblyLaunchedRoles)
       actionScopes.removeLast()
-      outputs = previousOutputs
+      deliveries = previousOutputs
       launchedRoles = previousRoles
       possiblyLaunchedRoles = previousPossibleRoles
     }
@@ -440,7 +441,7 @@ nonisolated private final class Walker {
   // MARK: Expect
 
   private func checkExpect(_ expect: WorkflowExpectation?, step: WorkflowStepDefinition) {
-    guard let expect, let name = step.outputName else { return }
+    guard let expect, let name = step.deliveryName else { return }
     if outerOutputNames.contains(name) {
       collector.error(
         "output_shadowing",
@@ -454,14 +455,14 @@ nonisolated private final class Walker {
     if expect.sections.contains(where: { $0.trimmingCharacters(in: .whitespaces).isEmpty }) {
       collector.error("section_empty", "'sections' entries must not be empty.", at: location)
     }
-    if let verdict = expect.verdict {
+    if let verdict = expect.verdicts {
       checkVerdict(verdict, at: location)
     }
     if let timeout = expect.timeoutSeconds, timeout > WorkflowValidator.longTimeoutSeconds {
       collector.warning("timeout_long", "'timeout' above 2h; the watchdog already supervises waiting.", at: location)
     }
-    var info = outputs[name] ?? OutputInfo()
-    let verdicts = expect.verdict.map(Set.init)
+    var info = deliveries[name] ?? OutputInfo()
+    let verdicts = expect.verdicts.map(Set.init)
     info.producers.append(OutputProducer(verdicts: verdicts, loopID: currentLoopID))
     info.latestVerdicts = verdicts
     if expect.onTimeout == .skip {
@@ -469,15 +470,15 @@ nonisolated private final class Walker {
         SkipRecord(
           name: name, use: OutputUse(consumer: .template, ordinal: ordinal, loopID: currentLoopID), location: location))
     }
-    outputs[name] = info
+    deliveries[name] = info
   }
 
   private func checkVerdict(_ verdict: [String], at location: WorkflowSourceLocation?) {
     if !WorkflowSchema.verdictRange.contains(verdict.count) {
-      collector.error("verdict_count", "'verdict' declares 2–4 values.", at: location)
+      collector.error("verdict_count", "'verdicts' declares 2–4 values.", at: location)
     }
     if Set(verdict).count != verdict.count {
-      collector.error("verdict_duplicate", "'verdict' repeats a value.", at: location)
+      collector.error("verdict_duplicate", "'verdicts' repeats a value.", at: location)
     }
     for value in verdict where !WorkflowSchema.isSlug(value) {
       collector.error("verdict_slug", "Verdict '\(value)' is not a valid slug.", at: location)
@@ -521,10 +522,29 @@ nonisolated private final class Walker {
     do {
       var parser = try WorkflowExpressionParser(expression)
       let node = try parser.parse()
+      checkReferenceSpelling(node, at: location)
       for parts in node.requiredReferences {
         checkReference(WorkflowTemplate.Reference(path: parts.joined(separator: ".")), at: location, consumer: consumer)
       }
     } catch { collector.error("expression_syntax", "\(error)", at: location) }
+  }
+
+  /// Optional access permits absent values, not unknown namespace or metadata names.
+  private func checkReferenceSpelling(_ node: WorkflowExpressionNode, at location: WorkflowSourceLocation?) {
+    let required = Set(node.requiredReferences)
+    for parts in node.references where !required.contains(parts) {
+      let valid: Bool
+      switch parts.first {
+      case "context": valid = checkContextReference(parts)
+      case "inputs", "state": valid = true
+      case "deliveries": valid = parts.count < 3 || (parts.count == 3 && ["path", "verdict"].contains(parts[2]))
+      case "actions": valid = parts.count < 3 || ["output", "output_path"].contains(parts[2])
+      default: valid = false
+      }
+      if !valid {
+        collector.error("unknown_variable", "Unknown variable '{{ \(parts.joined(separator: ".")) }}'.", at: location)
+      }
+    }
   }
 
   private func checkReference(
@@ -537,7 +557,7 @@ nonisolated private final class Walker {
       valid = checkContextReference(parts)
     case "inputs": valid = parts.count >= 2 && definition.input(named: parts[1]) != nil
     case "state": valid = parts.count >= 2 && definition.state[parts[1]] != nil
-    case "outputs": valid = parts.count == 3 && checkOutputReference(parts, at: location, consumer: consumer)
+    case "deliveries": valid = parts.count == 3 && checkOutputReference(parts, at: location, consumer: consumer)
     case "actions": valid = parts.count >= 3 && checkActionReference(parts)
     default: valid = false
     }
@@ -549,37 +569,28 @@ nonisolated private final class Walker {
   private func checkContextReference(_ parts: [String]) -> Bool {
     guard parts.count >= 2 else { return true }
     let fields: [String: Set<String>] = [
-      "run": ["id", "workflow_id", "directory"],
+      "workflow": ["id", "name"],
+      "run": ["id", "path"],
       "worktree": ["id", "path", "name", "branch", "captured_at"],
-      "source": ["pane_id", "tab_id"], "step": ["id", "iteration", "captured_at"],
-      "execution": ["id", "step_id", "attempt", "cwd", "artifact_dir"],
+      "initiator": ["pane_id", "tab_id"], "step": ["id", "iteration", "captured_at"],
+      "action": ["execution_id", "step_id", "attempt", "working_directory", "artifacts_directory"],
     ]
-    if parts[1] == "execution", !checkingActionInputs { return false }
+    if parts[1] == "action", !checkingActionInputs { return false }
     if parts[1] == "roles" {
       guard parts.count > 2 else { return true }
       guard definition.role(named: parts[2]) != nil else { return false }
       return parts.count == 3
-        || (parts.count == 4 && ["source", "name", "agent", "pane", "observed"].contains(parts[3]))
+        || (parts.count == 4 && ["source", "display_name", "agent", "pane_id", "observed"].contains(parts[3]))
         || (parts.count == 5 && parts[3] == "observed" && ["exists", "state"].contains(parts[4]))
     }
     guard let allowed = fields[parts[1]] else { return false }
     return parts.count == 2 || (parts.count == 3 && allowed.contains(parts[2]))
   }
 
-  private func checkRoleReference(_ parts: [String], at location: WorkflowSourceLocation?) -> Bool {
-    guard let role = definition.role(named: parts[1]), ["name", "agent", "pane"].contains(parts[2]) else {
-      return false
-    }
-    if parts[2] == "pane", role.source == .launch, !launchedRoles.contains(role.name) {
-      return false
-    }
-    return true
-  }
-
   private func checkOutputReference(
     _ parts: [String], at location: WorkflowSourceLocation?, consumer: OutputConsumer
   ) -> Bool {
-    guard let info = outputs[parts[1]], ["path", "verdict"].contains(parts[2]) else { return false }
+    guard let info = deliveries[parts[1]], ["path", "verdict"].contains(parts[2]) else { return false }
     if parts[2] == "verdict", info.latestVerdicts == nil {
       return false
     }

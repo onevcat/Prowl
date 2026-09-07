@@ -2,7 +2,7 @@
 // The reducer that owns every live workflow run (docs-ai 063 B3, decision H2/W1). The pure
 // `WorkflowRunMachine` is reconstructed per transition; this reducer performs its effects against
 // the terminal, dispatch, launch, store, native-action, and watchdog boundaries, answers the CLI
-// `done` rendezvous when an activation leaves `persisting`, and cleans up what arrives late.
+// `deliver` rendezvous when an activation leaves `persisting`, and cleans up what arrives late.
 
 import ComposableArchitecture
 import Foundation
@@ -50,14 +50,14 @@ nonisolated struct WorkflowRunSession: Equatable, Sendable {
   }
 }
 
-/// A CLI `done` accepted by the machine and waiting for its output to reach the run directory.
+/// A CLI `deliver` accepted by the machine and waiting for its output to reach the run directory.
 nonisolated struct WorkflowPendingDelivery: Equatable, Sendable {
   let runID: UUID
   let ordinal: Int
   let receipt: WorkflowDeliveryReceipt
 }
 
-/// `prowl workflow done` after the handler attributed it (decision W3).
+/// `prowl workflow deliver` after the handler attributed it (decision W3).
 nonisolated struct WorkflowDeliveryRequest: Equatable, Sendable {
   let requestID: UUID
   let runID: UUID
@@ -293,7 +293,7 @@ struct WorkflowRunsFeature {
 
   /// Answers a self-initiated `run` once its first activation is open — or once opening it failed
   /// and the run sits in attention or ended — so the caller never holds a completion command
-  /// before the dispatch record `done` is attributed by exists.
+  /// before the dispatch record `deliver` is attributed by exists.
   private func resolvePendingStarts(
     _ state: inout State, runID: UUID, session: WorkflowRunSession
   ) -> Effect<Action> {
@@ -333,7 +333,7 @@ struct WorkflowRunsFeature {
     }
   }
 
-  /// Answers every `done` whose activation left `persisting` (decision W1): delivered and
+  /// Answers every `deliver` whose activation left `persisting` (decision W1): delivered and
   /// provisional succeed; a revoked, skipped, or unpersistable activation and a run that ended fail.
   private func resolvePendingDeliveries(
     _ state: inout State, runID: UUID, session: WorkflowRunSession
@@ -541,7 +541,7 @@ struct WorkflowRunsFeature {
     let timestamp = now
     let context = WorkflowActionContext(
       runID: run.id, rootURL: run.context.worktree.rootURL,
-      roleAgents: run.bindings.mapValues { $0.templateRole.agent }, outgoingAgent: nil, now: timestamp,
+      roleAgents: run.bindings.mapValues { $0.agent }, outgoingAgent: nil, now: timestamp,
       stepID: stepID, executionID: executionID, attempt: run.actionAttempts[stepID] ?? 1,
       bundle: run.context.bundle, values: run.stepValues, runDirectory: run.runDirectory)
     run.context.occupancy?.beginActivity()

@@ -23,7 +23,7 @@ struct WorkflowBundleRunMachineTests {
       .init(
         id: "test", name: "Test",
         steps: [
-          .init(id: "snapshot", action: .action(id: "builtin:git.context", inputs: [:])),
+          .init(id: "snapshot", action: .action(id: "builtin:collect-worktree-context", inputs: [:])),
           .init(id: "end", action: .notify("{{ actions.snapshot.output.branch }}")),
         ]))
     let first = try #require(machine.run.actionExecutionID)
@@ -75,7 +75,7 @@ struct WorkflowBundleRunMachineTests {
               id: "local:echo",
               inputs: [
                 "count": .integer(3),
-                "execution": .string("{{ context.execution.id }}"),
+                "execution": .string("{{ context.action.execution_id }}"),
               ]))
         ]))
     let invocation = try #require(effects.first { if case .runAction = $0 { true } else { false } })
@@ -123,8 +123,8 @@ struct WorkflowBundleRunMachineTests {
                 condition: "true", maximum: 2,
                 steps: [.init(id: "tick", action: .control(.set([:])))])))
         ]))
-    #expect(machine.run.status == .maxRoundsReached)
-    #expect(effects.contains(.finished(.maxRoundsReached)))
+    #expect(machine.run.status == .iterationLimitReached)
+    #expect(effects.contains(.finished(.iterationLimitReached)))
   }
 
   @Test func repeatedLaunchKeepsTheExistingRoleBinding() throws {

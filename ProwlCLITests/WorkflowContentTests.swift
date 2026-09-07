@@ -6,8 +6,8 @@ import Testing
 struct WorkflowContentTests {
   @Test func taskReferencesGrantOnlyExplicitKnownResources() throws {
     let root = URL(filePath: "/history/run")
-    let granted = root.appending(path: "outputs/review.1.md")
-    let other = root.appending(path: "outputs/private.2.md")
+    let granted = root.appending(path: "deliveries/review.1.md")
+    let other = root.appending(path: "deliveries/private.2.md")
     let content = WorkflowTaskContent.make(
       text: "Read \(granted.path)", task: (UUID(), 1), runDirectory: root,
       knownPaths: [granted.path, other.path, "/etc/passwd"], skill: nil)

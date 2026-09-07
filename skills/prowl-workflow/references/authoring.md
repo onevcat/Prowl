@@ -19,9 +19,9 @@ steps:
     message: author
     instruction: |
       Inspect the current changes and write a concise summary.
-    expect: {output: summary, sections: ["## Summary"]}
+    expect: {delivery: summary, sections: ["## Summary"]}
   - id: done
-    notify: "Summary saved to {{ outputs.summary.path }}"
+    notify: "Summary saved to {{ deliveries.summary.path }}"
 ```
 
 Do not add runtime constraints, loops, deadlines, or automatic pane closure unless they
@@ -30,25 +30,32 @@ launch/injection success advances the workflow while the agent may still be work
 
 ## Typed values and expressions
 
+A workflow is a reusable definition; a run is one execution of it. The worktree is
+its execution target (a Git worktree, Prowl workspace, or plain directory). Role keys
+are workflow participant names; `display_name` identifies the bound profile or pane.
+`observed` contains `exists` and `state`, refreshed for the step. `context.initiator`
+contains `pane_id` and nullable `tab_id`, or is null for a worktree-only start.
+
 Read-only namespaces:
 
 | Namespace | Meaning |
 | --- | --- |
-| `context.run` | `id`, `workflow_id`, `directory` |
+| `context.workflow` | definition `id`, `name` |
+| `context.run` | execution `id`, `path` |
 | `context.worktree` | target `id`, `path`, `name`, `branch`, `captured_at` |
-| `context.source` | original source pane identity, or null for a worktree-only start |
-| `context.roles.<role>` | binding `source`, `name`, `agent`, `pane` |
+| `context.initiator` | original source pane identity, or null for a worktree-only start |
+| `context.roles.<role>` | binding `source`, `display_name`, `agent`, `pane_id`, and live `observed` |
 | `context.step` | `id`, `iteration` (null outside loops), `captured_at` |
-| `context.execution` | action-only `id`, `step_id`, `attempt`, `cwd`, `artifact_dir` |
+| `context.action` | action-only `execution_id`, `step_id`, `attempt`, `working_directory`, `artifacts_directory` |
 | `inputs.<name>` | typed start-time inputs |
-| `outputs.<name>` | agent delivery `path` and nullable `verdict` |
-| `actions.<step>` | action `output` object and `result_path` |
+| `deliveries.<name>` | agent delivery `path` and nullable `verdict` |
+| `actions.<step>` | action `output` object and `output_path` |
 | `state.<name>` | explicitly declared, mutable typed state |
 
 Use `{{ expression }}` in text and action inputs. A complete expression in an action input
 retains its type; text interpolation accepts scalars, not arrays/objects. No implicit
 string-to-number or string-to-boolean conversion occurs. Missing fields are errors;
-`exists(outputs.optional.path)` and `outputs.optional.path ?? ''` handle absence explicitly.
+`exists(deliveries.optional.path)` and `deliveries.optional.path ?? ''` handle absence explicitly.
 `exists` does not hide arithmetic/type errors. `&&`, `||`, and `??` short-circuit.
 
 Expressions support null, booleans, numbers, single/double quoted strings, arrays,
@@ -90,7 +97,7 @@ No step implicitly changes state from an action result.
 `max_iterations`. Conditions must be boolean. The loop tests its condition before each
 iteration. In a `while` condition, `context.step.id` is the loop ID and
 `context.step.iteration` is the number of completed iterations (0 on the first check).
-Inside the body, iteration numbers start at 1. If the condition stays true at the cap, the run ends as `max_rounds_reached`; it does not
+Inside the body, iteration numbers start at 1. If the condition stays true at the cap, the run ends as `iteration_limit_reached`; it does not
 report success or execute later steps. For an ordinary counted loop, express the count in
 its condition. Omit the cap when the task calls for an unlimited loop.
 
@@ -109,13 +116,16 @@ iteration's output being implicitly visible ; use the declared state and `while`
 
 ## Step verbs
 
-Each step has `id`, optional templated `title`, and one verb.
+Each step has `id`, optional templated `title`, and one verb. Action IDs use
+`builtin:<verb-object>` or `local:<verb-object>`: for example,
+`builtin:collect-worktree-context` and `local:persist-handoff`. Use verb-first
+kebab-case names for actions; dot-separated expressions address data, not actions.
 
 | Verb | Payload and behavior |
 | --- | --- |
 | `message: role` | `text` (one line) or `instruction` (file-backed multiline); waits for the role to be idle before injection; optional `expect` |
 | `launch: role` | `prompt`, optional bundled `skill`, optional `expect`; at most once per persistent role |
-| `action: builtin:git.context` or `local:id` | typed `with` object; awaits validated result; no `expect`; see [actions](actions.md) |
+| `action: builtin:collect-worktree-context` or `local:id` | typed `with` object; awaits validated result; no `expect`; see [actions](actions.md) |
 | `notify: text` | notification |
 | `close: role` | closes a launch role's pane; use only when the requested workflow needs cleanup |
 | `set` | atomic state assignments |
@@ -173,15 +183,15 @@ satisfies, is a validation warning. `kind` may be omitted (`interactive` is the 
 ## `expect` — waiting for a delivery
 
 A `message` or `launch` step with `expect` waits until the target agent explicitly delivers
-via `prowl workflow done`; without one the step is fire-and-forget — the run advances the
+via `prowl workflow deliver`; without one the step is fire-and-forget — the run advances the
 moment injection/launch succeeds, and there is no "wait without delivery" .
 
 ```yaml
 expect:
-  output: findings          # name for the delivery; default = the step id
+  delivery: findings          # name for the delivery; default = the step id
   format: markdown          # markdown (default) | text | json
   sections: ["## Findings"] # required headings (case/level-forgiving; fenced code ignored)
-  verdict: [clean, issues]  # 2–4 slugs; makes --verdict mandatory for expressions
+  verdicts: [clean, issues]  # 2–4 slugs; makes --verdict mandatory for expressions
   timeout: 30m              # optional hard cap as <n>s|m|h (90s, 10m, 2h); NO default — omit to wait as long as the agent works
   on_timeout: attention     # only together with timeout; attention (default) | skip | cancel
   strict: false             # false: a delivery missing sections/format/verdict is kept as
@@ -189,8 +199,8 @@ expect:
 ```
 
 Prowl appends the completion command itself — the typed line or kickoff prompt ends with
-the exact `PROWL_WORKFLOW_TOKEN=… prowl workflow done [--verdict v] -` to run. **Never
-write `prowl workflow done` into your own `text`/`instruction`/`prompt`** (the validator
+the exact `PROWL_WORKFLOW_TOKEN=… prowl workflow deliver [--verdict v] -` to run. **Never
+write `prowl workflow deliver` into your own `text`/`instruction`/`prompt`** (the validator
 warns); the runner's renderer is the only source of that command.
 
 
@@ -202,7 +212,7 @@ when it must survive the branch or iteration.
 contains the observed `exists` and `state` fields, or is null when unavailable. Observations
 are a step snapshot, not a guarantee that an agent will remain idle.
 
-`context.source` preserves the initiating `pane_id` and `tab_id` (null for worktree-only starts).
+`context.initiator` preserves the initiating `pane_id` and `tab_id` (null for worktree-only starts).
 `exists(value) && predicate` and `!exists(value) || predicate` support optional data
 without requiring a missing value on the short-circuited path.
 

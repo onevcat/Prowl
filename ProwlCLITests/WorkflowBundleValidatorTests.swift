@@ -44,7 +44,7 @@ struct WorkflowBundleValidatorTests {
         - id: branch
           \(control)
             - id: snapshot
-              action: builtin:git.context
+              action: builtin:collect-worktree-context
         - id: consume
           notify: '{{ actions.snapshot.output.path }}'
       """)
@@ -58,7 +58,7 @@ struct WorkflowBundleValidatorTests {
           if: 'true'
           then:
             - id: snapshot
-              action: builtin:git.context
+              action: builtin:collect-worktree-context
           else:
             - id: consume
               notify: '{{ actions.snapshot.output.path }}'
@@ -68,7 +68,7 @@ struct WorkflowBundleValidatorTests {
   @Test func outerOutputsRemainAvailableInsideNestedLoops() {
     #expect(codes("""
         - id: snapshot
-          action: builtin:git.context
+          action: builtin:collect-worktree-context
         - id: outer
           while: 'true'
           max_iterations: 2
@@ -124,12 +124,12 @@ struct WorkflowBundleValidatorTests {
   }
 
   @Test func executionContextOnlyExistsForActionInputs() {
-    #expect(codes("  - id: invalid\n    notify: '{{ context.execution.id }}'") == ["unknown_variable"])
-    #expect(codes("  - id: snapshot\n    action: builtin:git.context\n    with: {root: '{{ context.execution.cwd }}'}").isEmpty)
+    #expect(codes("  - id: invalid\n    notify: '{{ context.action.execution_id }}'") == ["unknown_variable"])
+    #expect(codes("  - id: snapshot\n    action: builtin:collect-worktree-context\n    with: {root: '{{ context.action.working_directory }}'}").isEmpty)
   }
 
   @Test func builtinInputTypesAndRemovedActionsAreRejected() {
-    #expect(codes("  - id: snapshot\n    action: builtin:git.context\n    with: {root: 3}") == ["action_input_type"])
+    #expect(codes("  - id: snapshot\n    action: builtin:collect-worktree-context\n    with: {root: 3}") == ["action_input_type"])
     #expect(codes("  - id: old\n    action: handoff.checkpoint") == ["unknown_action"])
   }
   @Test func aBranchCannotOverwriteAnOuterOutputBinding() {
@@ -137,16 +137,16 @@ struct WorkflowBundleValidatorTests {
       - id: outer
         message: author
         text: Write.
-        expect: {output: report}
+        expect: {delivery: report}
       - id: branch
         if: 'true'
         then:
           - id: inner
             message: author
             text: Write again.
-            expect: {output: report}
+            expect: {delivery: report}
       - id: after
-        notify: '{{ outputs.report.path }}'
+        notify: '{{ deliveries.report.path }}'
     """, state: "roles: {author: {source: current}}")
     #expect(diagnostics.contains("output_shadowing"))
   }

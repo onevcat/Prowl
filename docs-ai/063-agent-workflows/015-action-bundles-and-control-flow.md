@@ -80,7 +80,7 @@ handoff.pwlworkflow/
 `workflow.yaml` is the only workflow manifest; no additional package manifest. The package is
 an ordinary directory suitable for source control. Discovery retains app/user/repository scope
 and the reserved `prowl.*` workflow namespace. Local action IDs derive from action directories;
-references are explicit: `local:collect-context` versus `builtin:git.context`.
+references are explicit: `local:collect-context` versus `builtin:collect-worktree-context`.
 
 Use `prowl.workflow/v1` for the bundle workflow and `prowl.action/v1` for action declarations.
 The owner confirmed on 2026-09-06 that workflows have never shipped: define the bundle format
@@ -133,10 +133,11 @@ not part of the initial protocol. The following is illustrative, not a finalized
   "protocol": "prowl.action/v1",
   "input": { "include_untracked": true },
   "context": {
-    "run": { "id": "...", "workflow_id": "prowl.handoff" },
-    "execution": {
-      "id": "...", "step_id": "snapshot", "attempt": 1,
-      "cwd": "...", "artifact_dir": "..."
+    "workflow": { "id": "prowl.handoff", "name": "Handoff" },
+    "run": { "id": "...", "path": "..." },
+    "action": {
+      "execution_id": "...", "step_id": "snapshot", "attempt": 1,
+      "working_directory": "...", "artifacts_directory": "..."
     },
     "worktree": { "id": "...", "path": "...", "name": "..." }
   }
@@ -149,7 +150,7 @@ manual retries. Proposed run layout:
 ```text
 <run-id>/
   definition/                         # approved package copy
-  outputs/                            # existing agent delivery files
+  deliveries/                            # existing agent delivery files
   actions/<step-id>/<execution-id>/
     request.json
     result.json
@@ -208,12 +209,13 @@ redaction policy must say what it actually covers.
 `context` is workflow-wide, not an action-only API. The same step snapshot feeds condition
 and template evaluation and the action request. Proposed groups:
 
-- `context.run`: run/workflow identity and run directory; frozen for the run.
+- `context.workflow`: definition identity and name; frozen for the run.
+- `context.run`: run identity and path; frozen for the run.
 - `context.worktree`: fixed target identity/path plus timestamped dynamic branch observations.
-- `context.source`: original initiating pane/tab identity, nullable for worktree-only starts.
+- `context.initiator`: original initiating pane/tab identity, nullable for worktree-only starts.
 - `context.roles`: frozen profile bindings plus current pane existence and agent observations.
 - `context.step`: current step/invocation/loop position and snapshot capture time.
-- `context.execution`: action-specific execution ID, cwd, and artifact directory, only available
+- `context.action`: action-specific `execution_id`, `step_id`, `attempt`, `working_directory`, and `artifacts_directory`, only available
   during an action invocation; other steps cannot reference it as though it existed.
 
 The action process has no terminal pane. Never impersonate a source/role pane as the script's
@@ -224,8 +226,8 @@ expensive data remains an explicit action/CLI query. Final field names and the e
 observation set require a schema review before implementation.
 
 Replace V1's parallel `run.*`, `worktree.*`, `roles.*`, and loop references with their documented
-`context.*` equivalents. Keep `inputs.*`, `outputs.*`, `actions.*`, and `state.*` distinct.
-An action exposes `actions.<step>.output` (typed JSON) and `actions.<step>.result_path` (a file).
+`context.*` equivalents. Keep `inputs.*`, `deliveries.*`, `actions.*`, and `state.*` distinct.
+An action exposes `actions.<step>.output` (typed JSON) and `actions.<step>.output_path` (a file).
 A whole-value reference in `with` preserves JSON type. String interpolation accepts scalars,
 not implicit serialization of objects/arrays. Complex agent inputs should use result files.
 
@@ -257,7 +259,7 @@ run bindings. Repeated work uses `message` to an already launched role; launchin
 an error. Dynamic role creation is outside this first design.
 
 Strict result lifetime is accepted: an unexecuted branch has no outputs, and a new loop iteration
-cannot inherit the prior iteration's outputs. Cross-iteration retention requires `set`. Outer
+cannot inherit the prior iteration's deliveries. Cross-iteration retention requires `set`. Outer
 scope results remain available to inner scopes; retain per-invocation history on disk even when
 values leave evaluation scope. Static validation rejects definite unavailable references, while
 runtime checks handle branch-dependent availability. Never inject an empty string or reuse stale
@@ -295,7 +297,7 @@ and visible interruption diagnostics need explicit tests; durable recovery is ex
 Remove the two handoff action declarations, dispatcher branches, JSON schema entries, and
 associated workflow-only fixtures/docs. Do not delete HandoffStore/HandoffCoordinator code
 still used by the shipped legacy HUD/CLI. Extract reusable repository snapshot collection for
-`builtin:git.context`; save to the current invocation's artifacts, never shared handoff paths.
+`builtin:collect-worktree-context`; save to the current invocation's artifacts, never shared handoff paths.
 Old loose YAML and removed-action definitions receive specific unsupported-format/action errors,
 not silent fallback or a compatibility runner. No migration command is planned.
 

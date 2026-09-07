@@ -150,8 +150,8 @@ record is in `.error.details.record`) until you wait for or `dispatch-abandon` t
 one. The prompt is piped stdin (multi-line is fine; it arrives as one message), and the
 reviewer completes with the usual `agents dispatch-complete` — from its own pane, no id needed.
 
-Run a workflow file instead of scripting the rounds yourself (`workflow list` shows what is
-visible to your worktree; `workflow validate <file>` checks a new one locally):
+Run a workflow bundle instead of scripting the rounds yourself (`workflow list` shows what is
+visible to your worktree; `workflow validate <bundle.pwlworkflow>` checks a new one locally):
 
 ```bash
 run="$(prowl workflow run review --role reviewer=Codex --input max_rounds=3 --json)"
@@ -168,16 +168,16 @@ delivers your output. Every step Prowl types into a pane ends with the exact com
 completes it — run it with the output on stdin when your work for that step is fully done:
 
 ```bash
-PROWL_WORKFLOW_TOKEN=… prowl workflow done - <<'EOF'      # the token Prowl handed you; launched roles have it in $PROWL_WORKFLOW_TOKEN
+PROWL_WORKFLOW_TOKEN=… prowl workflow deliver - <<'EOF'      # the token Prowl handed you; launched roles have it in $PROWL_WORKFLOW_TOKEN
 ## Findings
 …
 EOF
 prowl workflow status --json | jq '.data.activation'       # what this pane still owes, with its requirements
 ```
 
-`done` answers after the output is saved: `.data.delivery.state` is `delivered`, or
+`deliver` answers after the output is saved: `.data.delivery.state` is `delivered`, or
 `provisional` when the body had issues a non-strict step tolerates (`.data.delivery.warnings[]`)
-— then the run waits for the user, not for another `done`. A pane whose step moved on gets
+— then the run waits for the user, not for another `deliver`. A pane whose step moved on gets
 `STEP_NOT_EXPECTING`; a wrong token `TOKEN_INVALID`; `agents dispatch-complete` in a workflow
 pane is refused with `WORKFLOW_DELIVERY_REQUIRED` and the command to run instead. `prowl
 workflow cancel <run-id>` ends a run and keeps every pane and output; `status <run-id>` reads a
@@ -328,4 +328,4 @@ Required sections are `## Objective`, `## Current State`, and `## Next Steps`; o
 
 ## Command Set
 
-`list`, `agents`, `agents read`, `agents signal`, `agents dispatch`, `agents dispatch-complete`, `agents dispatch-abandon`, `agents wait`, `profiles list`, `skills list|install|uninstall|path` (local-only), `workflow list|run|status|done|cancel` (`workflow validate|schema` local-only), `read`, `send`, `key`, `focus`, `create tab`, `create pane`, `close`, `handoff to`, `handoff save`, and `open` (default). There is no CLI `quit`; close temporary tabs or panes with an explicit `close`. `tab create`, `tab close`, and `pane close` remain deprecated aliases for one release.
+`list`, `agents`, `agents read`, `agents signal`, `agents dispatch`, `agents dispatch-complete`, `agents dispatch-abandon`, `agents wait`, `profiles list`, `skills list|install|uninstall|path` (local-only), `workflow list|run|status|deliver|cancel` (`workflow validate|schema` local-only), `read`, `send`, `key`, `focus`, `create tab`, `create pane`, `close`, `handoff to`, `handoff save`, and `open` (default). There is no CLI `quit`; close temporary tabs or panes with an explicit `close`. `tab create`, `tab close`, and `pane close` remain deprecated aliases for one release.

@@ -1,3 +1,7 @@
+> Historical slice record. For executable definitions and current names, use the
+> [DSL specification](dsl-spec.md) and [019 naming contract](019-workflow-naming.md).
+> The old substitution renderer and dedicated handoff actions described below have been removed.
+
 # 063.006 — Workflow Definitions (B1): Plan
 
 ## Status
@@ -13,7 +17,7 @@ R1 delivered the primitives the runner needs (A1/A2 launch boundary, 064-S1 obse
 dispatch receipts, S3 hooks on all eight tier-A runtimes, 065 bundled skills), but the DSL
 exists only as a spec. B1 makes it concrete: a file can be parsed, validated, and listed, and
 authoring agents get a machine-readable schema. Nothing runs yet — B2 (runner core) and B3
-(wiring, `run/status/done/cancel`) follow, with #733 re-dispatch landing before B3.
+(wiring, `run/status/deliver/cancel`) follow, with #733 re-dispatch landing before B3.
 
 The spec was written before S2/S3 shipped. Re-reading it against `main` surfaced one
 structural overlap (the `expect` completion channel duplicated the dispatch model) and a few
@@ -23,7 +27,7 @@ stale rules; those are settled here so B2/B3 do not inherit them.
 
 | # | Decision | Alternatives rejected |
 | --- | --- | --- |
-| G1 | **Activation = dispatch.** A workflow activation is a record in `AgentDispatchStore`: `launch` steps create it through the S2 prompted-launch path, `message` steps through #733's re-dispatch into an existing surface. `prowl workflow done` resolves the caller pane to its current pending record (peer PID + ancestry, as `dispatch-complete`), requires the activation token to match (correlation only, never trust), validates the body, persists the output, completes the record. `agents wait --dispatch` works on activations. No `WorkflowRequestRegistry`. | A parallel registry + token protocol as first drafted (two "one pending task per pane" mechanisms with drifting semantics). |
+| G1 | **Activation = dispatch.** A workflow activation is a record in `AgentDispatchStore`: `launch` steps create it through the S2 prompted-launch path, `message` steps through #733's re-dispatch into an existing surface. `prowl workflow deliver` resolves the caller pane to its current pending record (peer PID + ancestry, as `dispatch-complete`), requires the activation token to match (correlation only, never trust), validates the body, persists the output, completes the record. `agents wait --dispatch` works on activations. No `WorkflowRequestRegistry`. | A parallel registry + token protocol as first drafted (two "one pending task per pane" mechanisms with drifting semantics). |
 | G2 | **Definitions live in `ProwlCLIShared`.** Model, Yams decoding, validator, JSON Schema, and three-source discovery are compiled into both the CLI and the app; `prowl workflow validate` / `schema` run without the app; `list` needs the app (enabled state, worktree-scoped repo source). | App-only parsing with every subcommand over the socket (authoring agents and CI could not validate without a running Prowl; Settings and CLI could not share one validator). |
 | G3 | **Watchdog is exact-signal-first and ships in B2** (064-S5's watchdog part moves from D2). `needs-input` → attention immediately; `turn-ended` without delivery → `turn_grace` 15 s (floor 5 s, re-check at expiry) → one nudge → `idle_grace` 3 min → attention; heuristic rules only without a channel. | Heuristic-only watchdog in B2, exact signals retrofitted in D2 (pure rework: hooks already cover all tier-A runtimes). Shorter `turn_grace`: the detector still needs 2 s of heuristic stability plus poll/event skew, and OpenCode can fire `session.idle` twice. |
 | G4 | **`launch.prompt` may be multi-line** (A2's `PROWL_LAUNCH_PROMPT` carrier; NUL rejected; 32 KiB cap → `PROMPT_TOO_LARGE`); materialization stays for `message` only. The runner appends the workflow protocol block instead of S2's dispatch block; `dispatch-complete` against an activation fails with `WORKFLOW_DELIVERY_REQUIRED` carrying the exact replacement command. | Keeping the one-line rule; treating a stray `dispatch-complete` as a body-less completion (the step would advance with a missing output). |
@@ -45,10 +49,10 @@ Owned by 063; nothing here changes 064 code.
   `close`, `repeat`), `expect`, inputs (`integer`, `string`, `enum`). Decoding through Yams
   into `Codable` types; unknown keys are errors (spec §7).
 - **Validator** (`WorkflowValidator`): every error and warning listed in spec §7, including
-  template-variable whitelist checks, producer-dominates-consumer for `outputs.*` /
+  template-variable whitelist checks, producer-dominates-consumer for `deliveries.*` /
   `actions.*` / `roles.<r>.pane`, `repeat` rules, verdict/`until` consistency, slug patterns,
   `skill:` resolution against the bundled registry (`ProwlSkills`, 065), and the
-  "spells `prowl workflow done`" warning. Diagnostics carry YAML line/column where Yams
+  "spells `prowl workflow deliver`" warning. Diagnostics carry YAML line/column where Yams
   provides them.
 - **Action registry (schemas only)**: the V1 native actions `handoff.transition`,
   `handoff.checkpoint`, `git.context` declared with their typed `with` inputs and output keys
@@ -71,12 +75,12 @@ Owned by 063; nothing here changes 064 code.
   new file is enabled by default; no UI (D1).
 - **Docs**: `docs/components/cli.md` gains the three commands; contract page
   `docs-ai/013-prowl-cli/contracts/workflow.md`; `cli-output-schema.json` updated. The
-  `prowl-cli` skill is not taught these commands until B3 makes `run`/`done` real (same rule as
+  `prowl-cli` skill is not taught these commands until B3 makes `run`/`deliver` real (same rule as
   064.012 B1: never name unshipped commands to agents).
 
 ### Non-goals
 
-`prowl workflow run/status/done/cancel`, the runner and watchdog (B2/B3), Settings › Workflows
+`prowl workflow run/status/deliver/cancel`, the runner and watchdog (B2/B3), Settings › Workflows
 (D1), bundled definitions and skills (`prowl.handoff`, `prowl.adversarial-review`; D2/D3),
 the `Resources/workflows` staging in the Makefile (ships with the first bundled definition).
 
@@ -143,7 +147,7 @@ the `Resources/workflows` staging in the Makefile (ships with the first bundled 
   (`kind: headless`, `expect` on `action`/`notify`/`close`, nested `repeat`, `launch` inside
   `repeat`, missing `max`) are parser diagnostics, so a file with them yields no definition.
 - **Validator** (`WorkflowValidator.swift`): one `Walker` pass in document order with a
-  `repeat`-scoped action table; `outputs.*` references need an earlier producer anywhere
+  `repeat`-scoped action table; `deliveries.*` references need an earlier producer anywhere
   (loop bodies included), `actions.*` references need a producer in the same or an enclosing
   sequence, `roles.<r>.pane` needs the role launched, `loop.index` needs a loop, `loop.count`
   a loop before or around. `until` accepts a producer before the loop or inside its body (the
@@ -195,7 +199,7 @@ the app builds.
   `multipliedReportingOverflow` → `timeout_syntax`). P1: `handoff.transition`'s `from`/`to`
   were free strings (now `WorkflowActionInput.Kind.role`, literal declared roles only). P1:
   output metadata accumulated monotonically — a later producer without a verdict still let
-  `{{ outputs.x.verdict }}` validate, and outputs first produced inside a loop with `until`
+  `{{ deliveries.x.verdict }}` validate, and outputs first produced inside a loop with `until`
   stayed visible after a loop that may run zero times (now per-producer tracking with
   `latestVerdicts`, and `foldSkippableLoopOutputs` after a skippable loop). P2: `steps: []` and
   `id: 1` passed the parser but not the published schema (`steps_empty`, `strictText`); a tab

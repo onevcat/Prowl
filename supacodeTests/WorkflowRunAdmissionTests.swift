@@ -31,14 +31,14 @@ struct WorkflowRunAdmissionTests {
       - id: brief
         message: author
         text: "Brief {{ inputs.rounds }}"
-        expect: { output: brief }
+        expect: { delivery: brief }
       - id: launch
         launch: reviewer
-        prompt: "Review {{ outputs.brief.path }}"
-        expect: { output: findings }
+        prompt: "Review {{ deliveries.brief.path }}"
+        expect: { delivery: findings }
       - id: ping
         message: partner
-        text: "Findings: {{ outputs.findings.path }}"
+        text: "Findings: {{ deliveries.findings.path }}"
     """
 
   private static let contextOnly = """
@@ -50,7 +50,7 @@ struct WorkflowRunAdmissionTests {
         source: current
     steps:
       - id: ctx
-        action: builtin:git.context
+        action: builtin:collect-worktree-context
         with: { root: "{{ context.worktree.path }}" }
     """
 
@@ -225,14 +225,14 @@ struct WorkflowRunAdmissionTests {
     try fixture.write(Self.contextOnly, to: "context")
     let admitted = try WorkflowRunAdmission.admit(
       WorkflowInput(
-        action: .run, workflow: "context", testAction: "builtin:git.context",
+        action: .run, workflow: "context", testAction: "builtin:collect-worktree-context",
         actionInputs: ["root": .string("{{ literal.directory }}")]),
       source: fixture.source(pane: nil), snapshot: fixture.snapshot(), environment: fixture.environment
     ).get()
     #expect(
       admitted.effects.contains(
         .runAction(
-          stepID: "action-test", actionID: "builtin:git.context",
+          stepID: "action-test", actionID: "builtin:collect-worktree-context",
           inputs: ["root": .string("{{ literal.directory }}")])))
   }
 
@@ -242,7 +242,7 @@ struct WorkflowRunAdmissionTests {
     try fixture.write(Self.contextOnly, to: "context")
     let admitted = try admit(fixture, workflow: "context", pane: fixture.authorPane).get()
     #expect(
-      try WorkflowExpression.evaluate("context.source.tab_id", values: admitted.session.run.stepValues)
+      try WorkflowExpression.evaluate("context.initiator.tab_id", values: admitted.session.run.stepValues)
         == .string(fixture.tabID.uuidString))
   }
 
@@ -276,7 +276,7 @@ struct WorkflowRunAdmissionTests {
     #expect(admitted.session.bindingMemoryKeys["reviewer"]?.role == "reviewer")
     #expect(admitted.callerRole == "author")
     #expect(
-      run.selfInitiatedLine?.contains("PROWL_WORKFLOW_TOKEN=TOKEN prowl workflow done -") == true)
+      run.selfInitiatedLine?.contains("PROWL_WORKFLOW_TOKEN=TOKEN prowl workflow deliver -") == true)
     #expect(
       run.phase == .injecting(ordinal: 1), "self-initiated: the activation opens without typing")
     #expect(fixture.plannedProfiles == ["Codex"])
@@ -305,7 +305,7 @@ struct WorkflowRunAdmissionTests {
       Self.contextOnly.replacing("id: context", with: "id: other"), to: "other", scope: .user)
     try fixture.write(
       Self.contextOnly.replacing("id: context", with: "id: broken").replacing(
-        "git.context", with: "nope"), to: "broken")
+        "collect-worktree-context", with: "nope"), to: "broken")
 
     #expect(
       code(admit(fixture, workflow: "missing", pane: fixture.authorPane))

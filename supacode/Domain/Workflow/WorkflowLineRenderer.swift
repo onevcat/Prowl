@@ -1,6 +1,6 @@
 // supacode/Domain/Workflow/WorkflowLineRenderer.swift
 // The text a workflow run puts in front of an agent (docs-ai 063, dsl-spec §4/§10): the typed
-// line formats, the single place that spells `prowl workflow done`, the launch protocol block,
+// line formats, the single place that spells `prowl workflow deliver`, the launch protocol block,
 // and the rendered-text boundary every typed line crosses.
 
 import Foundation
@@ -29,12 +29,12 @@ nonisolated enum WorkflowRenderedText {
 }
 
 /// The completion command of one activation. This is the only place that spells
-/// `prowl workflow done`: the typed hint, the materialized instruction trailer, the launch
+/// `prowl workflow deliver`: the typed hint, the materialized instruction trailer, the launch
 /// protocol block, the watchdog nudge, every re-delivery, and the `WORKFLOW_DELIVERY_REQUIRED`
 /// message all read from it, so no path can show a token-less or verdict-less command.
 nonisolated struct WorkflowCompletionCommand: Equatable, Sendable {
   static let protocolVersion = 1
-  static let executable = "prowl workflow done"
+  static let executable = "prowl workflow deliver"
   static let commandSeparator = "  or  "
 
   let token: String
@@ -46,12 +46,12 @@ nonisolated struct WorkflowCompletionCommand: Equatable, Sendable {
     self.verdicts = verdicts
   }
 
-  /// `PROWL_WORKFLOW_TOKEN=<token> prowl workflow done [--verdict v] -`, one per allowed verdict.
+  /// `PROWL_WORKFLOW_TOKEN=<token> prowl workflow deliver [--verdict v] -`, one per allowed verdict.
   var messageCommands: [String] {
     launchCommands.map { "\(WorkflowSchema.tokenEnvironmentKey)=\(token) \($0)" }
   }
 
-  /// `prowl workflow done [--verdict v] -`; the token travels in the launched child's environment.
+  /// `prowl workflow deliver [--verdict v] -`; the token travels in the launched child's environment.
   var launchCommands: [String] {
     guard let verdicts, !verdicts.isEmpty else { return ["\(Self.executable) -"] }
     return verdicts.map { "\(Self.executable) --verdict \($0) -" }
@@ -124,7 +124,7 @@ nonisolated struct WorkflowCompletionCommand: Equatable, Sendable {
       + "deliver the step's output instead with: " + messageCommands.joined(separator: Self.commandSeparator)
   }
 
-  private static func formatDescription(_ format: WorkflowOutputFormat) -> String {
+  private static func formatDescription(_ format: WorkflowDeliveryFormat) -> String {
     switch format {
     case .markdown: "a markdown document"
     case .text: "plain text"

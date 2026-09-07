@@ -15,21 +15,23 @@ struct WorkflowLineRendererTests {
 
   @Test func messageCommandCarriesTokenPrefixAndOneCommandPerVerdict() {
     let plain = WorkflowCompletionCommand(token: token, verdicts: nil)
-    #expect(plain.messageCommands == ["PROWL_WORKFLOW_TOKEN=\(token) prowl workflow done -"])
-    #expect(plain.typedSuffix == " — finish with: PROWL_WORKFLOW_TOKEN=\(token) prowl workflow done -")
+    #expect(plain.messageCommands == ["PROWL_WORKFLOW_TOKEN=\(token) prowl workflow deliver -"])
+    #expect(plain.typedSuffix == " — finish with: PROWL_WORKFLOW_TOKEN=\(token) prowl workflow deliver -")
 
     let verdicts = WorkflowCompletionCommand(token: token, verdicts: ["clean", "issues"])
     #expect(
       verdicts.messageCommands == [
-        "PROWL_WORKFLOW_TOKEN=\(token) prowl workflow done --verdict clean -",
-        "PROWL_WORKFLOW_TOKEN=\(token) prowl workflow done --verdict issues -",
+        "PROWL_WORKFLOW_TOKEN=\(token) prowl workflow deliver --verdict clean -",
+        "PROWL_WORKFLOW_TOKEN=\(token) prowl workflow deliver --verdict issues -",
       ])
     #expect(
       verdicts.typedSuffix
-        == " — finish with: PROWL_WORKFLOW_TOKEN=\(token) prowl workflow done --verdict clean -"
-        + "  or  PROWL_WORKFLOW_TOKEN=\(token) prowl workflow done --verdict issues -")
+        == " — finish with: PROWL_WORKFLOW_TOKEN=\(token) prowl workflow deliver --verdict clean -"
+        + "  or  PROWL_WORKFLOW_TOKEN=\(token) prowl workflow deliver --verdict issues -")
     #expect(
-      verdicts.launchCommands == ["prowl workflow done --verdict clean -", "prowl workflow done --verdict issues -"])
+      verdicts.launchCommands == [
+        "prowl workflow deliver --verdict clean -", "prowl workflow deliver --verdict issues -",
+      ])
   }
 
   @Test func nudgeLineUsesThePrefixAndTheSameCommands() throws {
@@ -39,8 +41,8 @@ struct WorkflowLineRendererTests {
     #expect(
       line
         == "[Prowl] When your work for this step is fully complete, finish with: "
-        + "PROWL_WORKFLOW_TOKEN=\(token) prowl workflow done --verdict clean -"
-        + "  or  PROWL_WORKFLOW_TOKEN=\(token) prowl workflow done --verdict issues -")
+        + "PROWL_WORKFLOW_TOKEN=\(token) prowl workflow deliver --verdict clean -"
+        + "  or  PROWL_WORKFLOW_TOKEN=\(token) prowl workflow deliver --verdict issues -")
   }
 
   @Test func protocolBlockNamesRunRoleSectionsAndEveryCommandWithoutPrefix() {
@@ -53,8 +55,8 @@ struct WorkflowLineRendererTests {
     #expect(block.contains("Adversarial Review"))
     #expect(block.contains("\"reviewer\""))
     #expect(block.contains("## Findings, ## Verdict"))
-    #expect(block.contains("\nprowl workflow done --verdict clean -\n"))
-    #expect(block.contains("\nprowl workflow done --verdict issues -\n"))
+    #expect(block.contains("\nprowl workflow deliver --verdict clean -\n"))
+    #expect(block.contains("\nprowl workflow deliver --verdict issues -\n"))
     #expect(!block.contains("PROWL_WORKFLOW_TOKEN"))
     #expect(block.contains("dispatch-complete"))
   }
@@ -62,11 +64,11 @@ struct WorkflowLineRendererTests {
   @Test func instructionTrailerAndDeliveryRequiredMessageListTheMessageCommands() {
     let command = WorkflowCompletionCommand(token: token, verdicts: nil)
     let trailer = command.instructionTrailer()
-    #expect(trailer.contains("PROWL_WORKFLOW_TOKEN=\(token) prowl workflow done -"))
+    #expect(trailer.contains("PROWL_WORKFLOW_TOKEN=\(token) prowl workflow deliver -"))
     let message = command.deliveryRequiredMessage(runID: "RUN-1", stepID: "brief")
     #expect(message.contains("RUN-1"))
     #expect(message.contains("brief"))
-    #expect(message.contains("PROWL_WORKFLOW_TOKEN=\(token) prowl workflow done -"))
+    #expect(message.contains("PROWL_WORKFLOW_TOKEN=\(token) prowl workflow deliver -"))
   }
 
   // MARK: - Typed lines
@@ -74,11 +76,11 @@ struct WorkflowLineRendererTests {
   @Test func textLineIsPrefixedAndSuffixed() throws {
     let command = WorkflowCompletionCommand(token: token, verdicts: nil)
     #expect(
-      try WorkflowTypedLine.text("Findings: /r/outputs/findings.md", completion: nil)
-        == "[Prowl] Findings: /r/outputs/findings.md")
+      try WorkflowTypedLine.text("Findings: /r/deliveries/findings.md", completion: nil)
+        == "[Prowl] Findings: /r/deliveries/findings.md")
     #expect(
       try WorkflowTypedLine.text("Fix each item.", completion: command)
-        == "[Prowl] Fix each item. — finish with: PROWL_WORKFLOW_TOKEN=\(token) prowl workflow done -")
+        == "[Prowl] Fix each item. — finish with: PROWL_WORKFLOW_TOKEN=\(token) prowl workflow deliver -")
   }
 
   @Test func pointerLineNamesTheAbsolutePath() throws {

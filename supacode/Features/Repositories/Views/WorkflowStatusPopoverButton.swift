@@ -457,11 +457,11 @@ private struct WorkflowRunPanelView: View {
         requestConfirmation(
           intent: .userAction(runID: run.id, action: .cancel),
           label: "Cancel Run",
-          message: "Cancel this workflow run? Its panes and delivered outputs will be kept.",
+          message: "Cancel this workflow run? Its panes and deliveries will be kept.",
           isDestructive: true
         )
       }
-      .help("Cancel the workflow and keep its panes and outputs")
+      .help("Cancel the workflow and keep its panes and deliveries")
     }
     .controlSize(.small)
   }

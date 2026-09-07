@@ -693,7 +693,7 @@ nonisolated public enum WorkflowInputAction: String, Codable, Sendable {
   case list
   case run
   case status
-  case done
+  case deliver
   case cancel
 }
 
@@ -717,15 +717,15 @@ nonisolated public struct WorkflowInput: Codable, Sendable {
   public let inputValues: [String]
   /// `run`: step ids skipped at start.
   public let skippedSteps: [String]
-  /// `status` / `cancel`: the run; `done`: the manual target together with `stepID`.
+  /// `status` / `cancel`: the run; `deliver`: the manual target together with `stepID`.
   public let runID: String?
   public let stepID: String?
-  /// `done`: the delivered output body (already read by the CLI).
+  /// `deliver`: the delivered output body (already read by the CLI).
   public let body: String?
   public let verdict: String?
-  /// `done`: `--token` or `$PROWL_WORKFLOW_TOKEN`; correlation only, never authentication.
+  /// `deliver`: `--token` or `$PROWL_WORKFLOW_TOKEN`; correlation only, never authentication.
   public let token: String?
-  /// `done`: deliver to the explicit target even when the caller pane belongs to another step.
+  /// `deliver`: deliver to the explicit target even when the caller pane belongs to another step.
   public let force: Bool
 
   public init(

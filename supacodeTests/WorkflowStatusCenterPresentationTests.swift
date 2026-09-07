@@ -133,14 +133,14 @@ struct WorkflowStatusCenterPresentationTests {
   @Test func attentionControlsExhaustivelyMapEveryMachineAction() throws {
     var session = try makeSession(id: UUID(5), worktreeID: "selected", updatedAt: Self.now)
     let ordinal = try #require(session.run.currentInvocation?.ordinal)
-    let expectation = WorkflowExpectation(output: "brief", verdict: ["clean", "issues"])
+    let expectation = WorkflowExpectation(delivery: "brief", verdicts: ["clean", "issues"])
     session.run.invocations[0].activation = WorkflowActivation(
       ordinal: ordinal,
       stepID: "brief",
       role: "author",
       token: "token",
       expect: expectation,
-      outputName: "brief",
+      deliveryName: "brief",
       dispatchID: "dispatch",
       state: .provisional,
       pendingDelivery: WorkflowValidatedDelivery(
@@ -202,8 +202,8 @@ struct WorkflowStatusCenterPresentationTests {
       WorkflowStepRecord(stepID: "rereview", iteration: 1, state: .completed, ordinal: 3),
       WorkflowStepRecord(stepID: "fix", iteration: 2, state: .active, ordinal: 4),
     ]
-    let briefPath = "/tmp/selected/.prowl/workflow-runs/\(session.run.id.uuidString)/outputs/brief.md"
-    session.run.outputs["brief"] = WorkflowOutputRecord(
+    let briefPath = "/tmp/selected/.prowl/workflow-runs/\(session.run.id.uuidString)/deliveries/brief.md"
+    session.run.deliveries["brief"] = WorkflowDeliveryRecord(
       name: "brief",
       ordinal: 1,
       path: briefPath,
@@ -229,7 +229,7 @@ struct WorkflowStatusCenterPresentationTests {
     session.run.stepValues = session.run.expressionValues(capturedAt: Self.now)
     let run = WorkflowRunPresentation(run: session.run, now: Self.now)
     let expectedInstruction =
-      "Read /tmp/selected/.prowl/workflow-runs/\(run.id.uuidString)/outputs/brief.md "
+      "Read /tmp/selected/.prowl/workflow-runs/\(run.id.uuidString)/deliveries/brief.md "
       + "and address the findings in round 2."
 
     #expect(run.currentStepTitle == "Round 2: address findings")
@@ -389,7 +389,7 @@ struct WorkflowStatusCenterPresentationTests {
         title: "Write the brief"
         message: author
         instruction: "Write a brief."
-        expect: { output: brief }
+        expect: { delivery: brief }
       - id: rounds
         while: 'true'
         max_iterations: 3
@@ -397,13 +397,14 @@ struct WorkflowStatusCenterPresentationTests {
           - id: fix
             title: "Round {{ context.step.iteration }}: address findings"
             message: author
-            instruction: "Read {{ outputs.brief.path }} and address the findings in round {{ context.step.iteration }}."
-            expect: { output: disposition }
+            instruction: >-
+              Read {{ deliveries.brief.path }} and address the findings in round {{ context.step.iteration }}.
+            expect: { delivery: disposition }
           - id: rereview
             title: "Round {{ context.step.iteration }}: re-review"
             message: author
             text: "Review again."
-            expect: { output: findings, verdict: [clean, issues] }
+            expect: { delivery: findings, verdicts: [clean, issues] }
       - id: finish
         notify: "Done"
     """
@@ -419,7 +420,7 @@ struct WorkflowStatusCenterPresentationTests {
       - id: note
         message: author
         text: "Write an optional note."
-        expect: { output: note }
+        expect: { delivery: note }
       - id: finish
         notify: "Done"
     """

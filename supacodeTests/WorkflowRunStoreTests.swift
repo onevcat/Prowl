@@ -73,7 +73,7 @@ struct WorkflowRunStoreTests {
     try store.ensureLayout(runID: runID)
     let runs = store.directory(for: runID).deletingLastPathComponent()
     #expect(!FileManager.default.fileExists(atPath: root.appending(path: ".prowl").path))
-    for name in ["instructions", "outputs", "skills"] {
+    for name in ["instructions", "deliveries", "skills"] {
       var isDirectory: ObjCBool = false
       let path = runs.appending(path: runID.uuidString).appending(path: name).path(percentEncoded: false)
       #expect(FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) && isDirectory.boolValue)
@@ -329,11 +329,11 @@ struct WorkflowRunStoreTests {
     let store = WorkflowRunStore(rootURL: root)
     let runID = UUID()
     try store.ensureLayout(runID: runID)
-    let outputs = store.directory(for: runID).appending(path: "outputs", directoryHint: .isDirectory)
-    try FileManager.default.removeItem(at: outputs)
+    let deliveries = store.directory(for: runID).appending(path: "deliveries", directoryHint: .isDirectory)
+    try FileManager.default.removeItem(at: deliveries)
     let elsewhere = root.appending(path: "elsewhere", directoryHint: .isDirectory)
     try FileManager.default.createDirectory(at: elsewhere, withIntermediateDirectories: true)
-    try FileManager.default.createSymbolicLink(at: outputs, withDestinationURL: elsewhere)
+    try FileManager.default.createSymbolicLink(at: deliveries, withDestinationURL: elsewhere)
     #expect(throws: WorkflowRunStoreError.self) {
       try store.writeOutput(runID: runID, name: "findings", ordinal: 1, body: "x")
     }

@@ -20,7 +20,8 @@ struct CLISocketServerTests {
     let request = try JSONEncoder().encode(
       CommandEnvelope(
         output: .json,
-        command: .workflow(.init(action: .done, body: String(repeating: "\u{1}", count: WorkflowSizeLimits.payload)))))
+        command: .workflow(.init(action: .deliver, body: String(repeating: "\u{1}", count: WorkflowSizeLimits.payload)))
+      ))
     #expect(request.count > 32 * 1024 * 1024)
     #expect(request.count <= WorkflowSizeLimits.transportFrame)
     let response: Data = try await withCheckedThrowingContinuation { continuation in

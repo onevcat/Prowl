@@ -7,8 +7,8 @@ final class WorkflowDocumentParserTests: XCTestCase {
 
   func testExpectStrictParsesAndDefaultsToFalse() throws {
     let yaml = WorkflowFixtures.minimal(
-      extraSteps: "  - id: a\n    message: author\n    text: x\n    expect: { output: a, strict: true }\n"
-        + "  - id: b\n    message: author\n    text: y\n    expect: { output: b }")
+      extraSteps: "  - id: a\n    message: author\n    text: x\n    expect: { delivery: a, strict: true }\n"
+        + "  - id: b\n    message: author\n    text: y\n    expect: { delivery: b }")
     let workflow = try WorkflowFixtures.parse(yaml)
     XCTAssertEqual(workflow.steps[1].action.expect?.strict, true)
     XCTAssertEqual(workflow.steps[2].action.expect?.strict, false)
@@ -61,18 +61,18 @@ final class WorkflowDocumentParserTests: XCTestCase {
     }
     XCTAssertEqual(role, "author")
     XCTAssertTrue(instruction.hasPrefix("Write a short brief"))
-    XCTAssertEqual(briefExpect?.output, "brief")
+    XCTAssertEqual(briefExpect?.delivery, "brief")
     XCTAssertEqual(briefExpect?.sections, ["## Scope", "## Claims"])
     XCTAssertEqual(briefExpect?.timeoutSeconds, 600)
     XCTAssertEqual(briefExpect?.format, .markdown)
-    XCTAssertNil(briefExpect?.verdict)
-    XCTAssertEqual(workflow.steps[0].outputName, "brief")
+    XCTAssertNil(briefExpect?.verdicts)
+    XCTAssertEqual(workflow.steps[0].deliveryName, "brief")
 
     guard case .launch("reviewer", let prompt, "prowl.adversarial-reviewer", let launchExpect) = workflow.steps[1].action else {
       return XCTFail("launch should target reviewer with a skill")
     }
-    XCTAssertTrue(prompt.contains("{{ outputs.brief.path }}"))
-    XCTAssertEqual(launchExpect?.verdict, ["clean", "issues"])
+    XCTAssertTrue(prompt.contains("{{ deliveries.brief.path }}"))
+    XCTAssertEqual(launchExpect?.verdicts, ["clean", "issues"])
     XCTAssertEqual(launchExpect?.timeoutSeconds, 1800)
 
     guard case .control(.loop(let condition, let maximum, let body)) = workflow.steps[3].action else {
@@ -81,7 +81,7 @@ final class WorkflowDocumentParserTests: XCTestCase {
     XCTAssertEqual(condition, "state.verdict != 'clean'")
     XCTAssertEqual(maximum, 10)
     XCTAssertEqual(body.map(\.id), ["fix", "rereview", "retain"])
-    guard case .action("builtin:git.context", let inputs) = workflow.steps[4].action else {
+    guard case .action("builtin:collect-worktree-context", let inputs) = workflow.steps[4].action else {
       return XCTFail("context should be a built-in action")
     }
     XCTAssertEqual(inputs, ["root": "{{ context.worktree.path }}"])
@@ -105,7 +105,7 @@ final class WorkflowDocumentParserTests: XCTestCase {
       steps:
         - id: a
           notify: hi
-          expect: { output: x }
+          expect: { delivery: x }
       """
     let diagnostics = WorkflowDocumentParser.parse(yaml).diagnostics
     XCTAssertEqual(diagnostics.map(\.code), ["unknown_key", "expect_not_allowed"])
@@ -180,7 +180,7 @@ final class WorkflowDocumentParserTests: XCTestCase {
 
   func testExpectIsRejectedOnActionNotifyAndClose() {
     for verb in ["action: git.context", "notify: hi", "close: author"] {
-      let yaml = WorkflowFixtures.minimal(extraSteps: "  - id: b\n    \(verb)\n    expect: { output: o }")
+      let yaml = WorkflowFixtures.minimal(extraSteps: "  - id: b\n    \(verb)\n    expect: { delivery: o }")
       XCTAssertEqual(WorkflowFixtures.parseCodes(yaml), ["expect_not_allowed"], verb)
     }
   }

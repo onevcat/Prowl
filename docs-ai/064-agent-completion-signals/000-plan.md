@@ -33,7 +33,7 @@ at launch and have the agent report to Prowl through the bundled `prowl` binary.
 
 - Introduce one **agent signal bus** per pane that merges four layers of evidence, each
   tagged with `source` and `confidence`:
-  0. cooperative signals — `prowl agents signal` (and 063's `prowl workflow done`);
+  0. cooperative signals — `prowl agents signal` (and 063's `prowl workflow deliver`);
   1. native hooks installed by Prowl at launch (agent-reported, exact);
   2. deterministic observations — native transcript turn-end markers (059), agent process
      exit, OSC progress/notification sequences the CLI emits itself;
@@ -60,7 +60,7 @@ at launch and have the agent report to Prowl through the bundled `prowl` binary.
   Hooks are attached only through launch-scoped flags/config the adapter has verified; a
   runtime without such a channel simply stays at layers 2–3.
 - Waiting semantics inside 063 workflows: the runner still completes steps only on
-  `prowl workflow done`; this entry improves its watchdog and enables 063's V2 observe mode.
+  `prowl workflow deliver`; this entry improves its watchdog and enables 063's V2 observe mode.
 
 ## Design / Approach
 

@@ -257,8 +257,8 @@ nonisolated struct WorkflowRolePresentation: Equatable, Sendable, Identifiable {
 
   init(role: WorkflowRoleDefinition, binding: WorkflowRoleBinding?) {
     id = role.name
-    displayName = binding?.templateRole.name ?? role.name
-    agent = binding?.templateRole.agent.nilIfEmpty
+    displayName = binding?.displayName ?? role.name
+    agent = binding?.agent.nilIfEmpty
     paneHandle = binding?.pane?.handle
     surfaceID = binding?.pane?.surfaceID
   }
@@ -333,7 +333,7 @@ nonisolated struct WorkflowAttentionControl: Equatable, Sendable, Identifiable {
     self.action = action
     let rolePane = attention.role.flatMap { run.bindings[$0]?.pane }
     focusSurfaceID = action == .focusPane ? rolePane?.surfaceID : nil
-    verdicts = action == .acceptWithVerdict ? (run.activeActivation?.expect.verdict ?? []) : []
+    verdicts = action == .acceptWithVerdict ? (run.activeActivation?.expect.verdicts ?? []) : []
     isDestructive = action == .cancel
     switch action {
     case .focusPane:
@@ -378,7 +378,7 @@ nonisolated struct WorkflowAttentionControl: Equatable, Sendable, Identifiable {
     case .cancel:
       label = "Cancel Run"
       systemImage = "xmark"
-      confirmationMessage = "Cancel this workflow run? Its panes and delivered outputs will be kept."
+      confirmationMessage = "Cancel this workflow run? Its panes and deliveries will be kept."
     }
   }
 

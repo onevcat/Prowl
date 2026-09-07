@@ -1,12 +1,12 @@
 // ProwlShared/WorkflowTemplate.swift
-// `{{ path }}` reference scanning for workflow templates (dsl-spec.md §6). Substitution-only:
-// no expressions, defaults, or filters. Rendering belongs to the runner.
+// Static reference paths and template delimiter scanning.
+// WorkflowExpression parses and evaluates the expressions inside each delimiter pair.
 
 import Foundation
 
 nonisolated public enum WorkflowTemplate {
   public struct Reference: Equatable, Sendable {
-    /// The dotted path as written, e.g. `outputs.findings.path`.
+    /// The dotted path as written, e.g. `deliveries.findings.path`.
     public let path: String
     public let components: [String]
 

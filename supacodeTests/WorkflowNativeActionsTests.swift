@@ -45,12 +45,12 @@ struct WorkflowNativeActionsTests {
       now: Self.now)
   }
 
-  @Test func gitContextWritesInvocationArtifactsAndRecords() async throws {
+  @Test func worktreeContextWritesInvocationArtifactsAndRecords() async throws {
     let root = try makeRepo()
     defer { try? FileManager.default.removeItem(at: root) }
     let invocation = context(root: root)
     let outputs = try await WorkflowNativeActionRunner().execute(
-      actionID: "builtin:git.context", inputs: [:], context: invocation)
+      actionID: "builtin:collect-worktree-context", inputs: [:], context: invocation)
     guard case .object(let output) = outputs["output"], case .string(let path) = output["path"] else {
       Issue.record("Missing typed repository result")
       return
@@ -69,7 +69,7 @@ struct WorkflowNativeActionsTests {
     defer { try? FileManager.default.removeItem(at: root) }
     let path = WorkflowHistoryStorage.canonicalURL(root).path
     let output = try await WorkflowNativeActionRunner().execute(
-      actionID: "builtin:git.context", inputs: ["root": .string(path)], context: context(root: root))
+      actionID: "builtin:collect-worktree-context", inputs: ["root": .string(path)], context: context(root: root))
     #expect(output["output"] != nil)
   }
 
@@ -104,6 +104,19 @@ struct WorkflowNativeActionsTests {
     let result = try await WorkflowNativeActionRunner().execute(
       actionID: "local:echo", inputs: ["count": .integer(3)], context: valid)
     #expect(result["output"] == .object(["count": .integer(3)]))
+    let request = try JSONDecoder().decode(
+      WorkflowJSONValue.self, from: Data(contentsOf: valid.directory.appending(path: "request.json")))
+    guard case .object(let fields) = request, case .object(let context) = fields["context"],
+      case .object(let metadata) = context["action"]
+    else {
+      Issue.record("Missing action request context")
+      return
+    }
+    #expect(metadata["execution_id"] == .string(valid.executionID))
+    #expect(metadata["id"] == nil)
+    #expect(metadata["working_directory"] == .string(root.path))
+    #expect(metadata["artifacts_directory"] == .string(valid.directory.appending(path: "artifacts").path))
+    #expect(result["output_path"] == .string(valid.directory.appending(path: "result.json").path))
     #expect(try String(contentsOf: valid.directory.appending(path: "stderr.log"), encoding: .utf8) == "diagnostic")
     let invalid = invocation()
     await #expect(throws: (any Error).self) {
@@ -203,7 +216,7 @@ struct WorkflowNativeActionsTests {
     defer { try? FileManager.default.removeItem(at: root) }
     await #expect(throws: WorkflowActionError.unsafePath("/tmp")) {
       try await WorkflowNativeActionRunner().execute(
-        actionID: "builtin:git.context", inputs: ["root": "/tmp"], context: context(root: root))
+        actionID: "builtin:collect-worktree-context", inputs: ["root": "/tmp"], context: context(root: root))
     }
     await #expect(throws: WorkflowActionError.unknownAction("handoff.transition")) {
       try await WorkflowNativeActionRunner().execute(
