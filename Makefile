@@ -535,7 +535,11 @@ format-lint: # Check Swift formatting without rewriting files
 lint: # Lint code with swiftlint
 	mise exec -- swiftlint lint --quiet --config .swiftlint.yml
 
-check: format-changed format-lint lint test-scripts # Format changed Swift files, then run swift-format lint, SwiftLint, and the script tests
+.PHONY: check-workflow-naming
+check-workflow-naming: # Check maintained workflow source and references for retired names
+	python3 scripts/check_workflow_naming.py
+
+check: format-changed format-lint lint test-scripts check-workflow-naming # Format changed Swift files, then run linters and checks
 
 log-stream: # Stream logs from the app via log stream
 	log stream --predicate 'subsystem == "com.onevcat.prowl"' --style compact --color always

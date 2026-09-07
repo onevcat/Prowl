@@ -1,6 +1,6 @@
 // supacode/Domain/Workflow/WorkflowRunStore.swift
 // Personal run directories contain `run.json`,
-// an append-only `log.md`, materialized instructions and skills, and versioned outputs with an
+// an append-only `log.md`, materialized instructions and skills, and versioned deliveries with an
 // atomically replaced latest view. Every path is built from validated slugs and the run UUID
 // under the same physical containment gate as profile homes.
 
@@ -119,7 +119,7 @@ nonisolated struct WorkflowRunRecord: Codable, Equatable, Sendable {
   let inputs: [String]
   let bindings: [String: Binding]
   let invocations: [WorkflowRunRecordInvocation]
-  let outputs: [String: WorkflowOutputRecord]
+  let deliveries: [String: WorkflowDeliveryRecord]
   let actions: [String: [String: WorkflowJSONValue]]
   let state: [String: WorkflowJSONValue]?
   let actionAttempts: [String: Int]?
@@ -133,7 +133,7 @@ nonisolated struct WorkflowRunRecord: Codable, Equatable, Sendable {
     case inputs
     case bindings
     case invocations
-    case outputs
+    case deliveries
     case actions
     case state
     case actionAttempts = "action_attempts"
@@ -168,13 +168,13 @@ nonisolated struct WorkflowRunRecord: Codable, Equatable, Sendable {
         resources: invocation.content?.resources.mapValues { String($0.dropFirst(run.runDirectory.path.count + 1)) },
         skill: invocation.content?.skill,
         activation: invocation.activation.map {
-          WorkflowRunRecordActivation(dispatchID: $0.dispatchID, state: $0.state, output: $0.outputName)
+          WorkflowRunRecordActivation(dispatchID: $0.dispatchID, state: $0.state, output: $0.deliveryName)
         },
         startedAt: invocation.startedAt,
         endedAt: invocation.endedAt
       )
     }
-    outputs = run.outputs
+    deliveries = run.deliveries
     actions = run.actionOutputs
     state = run.controlCursor?.state.values
     actionAttempts = run.actionAttempts
@@ -199,7 +199,7 @@ nonisolated struct WorkflowRunRecord: Codable, Equatable, Sendable {
     inputs = record.inputs
     bindings = record.bindings
     invocations = record.invocations
-    outputs = record.outputs
+    deliveries = record.deliveries
     actions = record.actions
     state = record.state
     actionAttempts = record.actionAttempts
@@ -243,15 +243,15 @@ extension WorkflowRunRecord.Status {
       self.init(state: "cancelled", step: nil, dependent: nil, attention: nil)
     case .skipped(let step, let dependent):
       self.init(state: "skipped", step: step, dependent: dependent, attention: nil)
-    case .maxRoundsReached:
-      self.init(state: "max_rounds_reached", step: nil, dependent: nil, attention: nil)
+    case .iterationLimitReached:
+      self.init(state: "iteration_limit_reached", step: nil, dependent: nil, attention: nil)
     case .interrupted:
       self.init(state: "interrupted", step: nil, dependent: nil, attention: nil)
     }
   }
 
   nonisolated var isTerminal: Bool {
-    ["completed", "cancelled", "skipped", "max_rounds_reached", "interrupted"].contains(state)
+    ["completed", "cancelled", "skipped", "iteration_limit_reached", "interrupted"].contains(state)
   }
 }
 
@@ -347,7 +347,7 @@ nonisolated struct WorkflowRunStore: Sendable {
   func ensureLayout(runID: UUID) throws {
     let runDirectory = directory(for: runID)
     try storage.prepare(runDirectory)
-    for name in ["instructions", "outputs", "skills"] {
+    for name in ["instructions", "deliveries", "skills"] {
       try storage.prepare(runDirectory.appending(path: name))
     }
   }
@@ -425,7 +425,7 @@ nonisolated struct WorkflowRunStore: Sendable {
     try handle.write(contentsOf: Data(entry.utf8))
   }
 
-  // MARK: Instructions and outputs
+  // MARK: Instructions and deliveries
 
   @discardableResult
   func writeInstruction(runID: UUID, stepID: String, ordinal: Int, text: String) throws -> URL {
@@ -438,14 +438,14 @@ nonisolated struct WorkflowRunStore: Sendable {
     return url
   }
 
-  /// Writes `outputs/<name>.<ordinal>.md` and replaces `outputs/<name>.md` atomically
+  /// Writes `deliveries/<name>.<ordinal>.md` and replaces `deliveries/<name>.md` atomically
   /// (temp file + rename), so a reader never sees a partially written latest view.
   @discardableResult
   func writeOutput(runID: UUID, name: String, ordinal: Int, body: String) throws -> (versioned: URL, latest: URL) {
     let runDirectory = try containedRunDirectory(runID: runID)
     guard WorkflowSchema.isSlug(name), ordinal > 0 else { throw WorkflowRunStoreError.unsafePath(name) }
-    let versioned = WorkflowRunPaths.outputURL(runDirectory: runDirectory, name: name, ordinal: ordinal)
-    let latest = WorkflowRunPaths.outputURL(runDirectory: runDirectory, name: name, ordinal: nil)
+    let versioned = WorkflowRunPaths.deliveryURL(runDirectory: runDirectory, name: name, ordinal: ordinal)
+    let latest = WorkflowRunPaths.deliveryURL(runDirectory: runDirectory, name: name, ordinal: nil)
     try requireNotSymbolicLink(versioned.deletingLastPathComponent())
     try requireNotSymbolicLink(versioned)
     try requireNotSymbolicLink(latest)

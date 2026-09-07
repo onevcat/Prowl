@@ -76,25 +76,32 @@ run. CLI overrides are source-specific (§9): `--role <launch-role>=<profile nam
 
 ## Typed values and expressions
 
+A workflow is a reusable definition; a run is one execution of it. The worktree is
+its execution target (a Git worktree, Prowl workspace, or plain directory). Role keys
+are workflow participant names; `display_name` identifies the bound profile or pane.
+`observed` contains `exists` and `state`, refreshed for the step. `context.initiator`
+contains `pane_id` and nullable `tab_id`, or is null for a worktree-only start.
+
 Read-only namespaces:
 
 | Namespace | Meaning |
 | --- | --- |
-| `context.run` | `id`, `workflow_id`, `directory` |
+| `context.workflow` | definition `id`, `name` |
+| `context.run` | execution `id`, `path` |
 | `context.worktree` | target `id`, `path`, `name`, `branch`, `captured_at` |
-| `context.source` | original source pane identity, or null for a worktree-only start |
-| `context.roles.<role>` | binding `source`, `name`, `agent`, `pane` |
+| `context.initiator` | original source pane identity, or null for a worktree-only start |
+| `context.roles.<role>` | binding `source`, `display_name`, `agent`, `pane_id`, and live `observed` |
 | `context.step` | `id`, `iteration` (null outside loops), `captured_at` |
-| `context.execution` | action-only `id`, `step_id`, `attempt`, `cwd`, `artifact_dir` |
+| `context.action` | action-only `execution_id`, `step_id`, `attempt`, `working_directory`, `artifacts_directory` |
 | `inputs.<name>` | typed start-time inputs |
-| `outputs.<name>` | agent delivery `path` and nullable `verdict` |
-| `actions.<step>` | action `output` object and `result_path` |
+| `deliveries.<name>` | agent delivery `path` and nullable `verdict` |
+| `actions.<step>` | action `output` object and `output_path` |
 | `state.<name>` | explicitly declared, mutable typed state |
 
 Use `{{ expression }}` in text and action inputs. A complete expression in an action input
 retains its type; text interpolation accepts scalars, not arrays/objects. No implicit
 string-to-number or string-to-boolean conversion occurs. Missing fields are errors;
-`exists(outputs.optional.path)` and `outputs.optional.path ?? ''` handle absence explicitly.
+`exists(deliveries.optional.path)` and `deliveries.optional.path ?? ''` handle absence explicitly.
 `exists` does not hide arithmetic/type errors. `&&`, `||`, and `??` short-circuit.
 
 Expressions support null, booleans, numbers, single/double quoted strings, arrays,
@@ -136,7 +143,7 @@ No step implicitly changes state from an action result.
 `max_iterations`. Conditions must be boolean. The loop tests its condition before each
 iteration. In a `while` condition, `context.step.id` is the loop ID and
 `context.step.iteration` is the number of completed iterations (0 on the first check).
-Inside the body, iteration numbers start at 1. If the condition stays true at the cap, the run ends as `max_rounds_reached`; it does not
+Inside the body, iteration numbers start at 1. If the condition stays true at the cap, the run ends as `iteration_limit_reached`; it does not
 report success or execute later steps. For an ordinary counted loop, express the count in
 its condition. Omit the cap when the task calls for an unlimited loop.
 
@@ -155,13 +162,16 @@ iteration's output being implicitly visible ; use the declared state and `while`
 
 ## Step verbs
 
-Each step has `id`, optional templated `title`, and one verb.
+Each step has `id`, optional templated `title`, and one verb. Action IDs use
+`builtin:<verb-object>` or `local:<verb-object>`: for example,
+`builtin:collect-worktree-context` and `local:persist-handoff`. Use verb-first
+kebab-case names for actions; dot-separated expressions address data, not actions.
 
 | Verb | Payload and behavior |
 | --- | --- |
 | `message: role` | `text` (one line) or `instruction` (file-backed multiline); waits for the role to be idle before injection; optional `expect` |
 | `launch: role` | `prompt`, optional bundled `skill`, optional `expect`; at most once per persistent role |
-| `action: builtin:git.context` or `local:id` | typed `with` object; awaits validated result; no `expect`; see [actions](../../skills/prowl-workflow/references/actions.md) |
+| `action: builtin:collect-worktree-context` or `local:id` | typed `with` object; awaits validated result; no `expect`; see [actions](../../skills/prowl-workflow/references/actions.md) |
 | `notify: text` | notification |
 | `close: role` | closes a launch role's pane; use only when the requested workflow needs cleanup |
 | `set` | atomic state assignments |
@@ -174,10 +184,10 @@ Each step has `id`, optional templated `title`, and one verb.
 
 ```yaml
 expect:
-  output: findings          # output name; default = step id; the same name may be produced by several steps (latest wins)
+  delivery: findings          # output name; default = step id; the same name may be produced by several steps (latest wins)
   format: markdown          # markdown (default) | text | json (parseable)
   sections: ["## Findings"] # markdown: required headings (fence/preamble stripped before checking, as HandoffStore.validatedBriefing)
-  verdict: [clean, issues]  # declares 2–4 allowed values (safe slugs); the rendered completion command then carries `--verdict <value>` and it becomes mandatory
+  verdicts: [clean, issues]  # declares 2–4 allowed values (safe slugs); the rendered completion command then carries `--verdict <value>` and it becomes mandatory
   timeout: 2h               # optional hard cap; NO default — without it Prowl waits as long as the agent works
   on_timeout: attention     # only with `timeout`: attention (default) | skip | cancel
   strict: false             # default false: a delivery that misses sections/format/verdict is kept as
@@ -185,10 +195,10 @@ expect:
 ```
 
 - **Validation is a review gate, not a wall (decision 2026-08-29, [007](007-b2-runner-core.md) H14).**
-  `prowl workflow done` always rejects what the pipeline cannot use at all — a missing or
+  `prowl workflow deliver` always rejects what the pipeline cannot use at all — a missing or
   wrong token, an empty body, a body above the size cap. Everything the *author* declared —
-  `sections`, `format`, `verdict` — is checked too, but by default a delivery that misses
-  them is **persisted as provisional** (`outputs/<name>.<ordinal>.md` is written, the CLI
+  `sections`, `format`, `verdicts` — is checked too, but by default a delivery that misses
+  them is **persisted as provisional** (`deliveries/<name>.<ordinal>.md` is written, the CLI
   answers `ok` with `warnings`), the dispatch record stays pending, and the run enters
   `needsAttention` with **Accept as delivered** (or **Accept with verdict …** when a declared
   verdict is missing or not one of the declared values — the user picks one), **Ask again**
@@ -204,7 +214,7 @@ expect:
   prompted-launch path, a `message` step through #733's re-dispatch into an existing surface.
   One pending record per surface; it is created only while the role is idle (§4), so exactly
   one runtime turn belongs to it and a `turn-ended` without a delivery is the `incomplete`
-  evidence the watchdog consumes (§10). `prowl workflow done` resolves the caller pane to that
+  evidence the watchdog consumes (§10). `prowl workflow deliver` resolves the caller pane to that
   pane's current pending record (kernel peer PID + process ancestry, as `dispatch-complete`
   does) and additionally requires the activation token to match — correlation, not trust —
   then validates the body, persists the output, and completes the record. Skip / Cancel /
@@ -218,12 +228,12 @@ expect:
   (`instructions/<step>.<ordinal>.md`). When the step has an `expect`, the same invocation
   is also its *activation* `(run id, step id, ordinal, delivery role)`: the runner mints a
   fresh delivery token for it, and the previous activation of the same step (if any) is
-  terminal. Exactly one successful `done` is accepted per activation, identified by its
+  terminal. Exactly one successful `deliver` is accepted per activation, identified by its
   token; a later, stale, or token-less delivery gets `STEP_NOT_EXPECTING` /
   `TOKEN_REQUIRED` / `TOKEN_INVALID`. Skip / Cancel / Relaunch revoke the *current*
   activation's token (Relaunch then mints a new invocation/activation). Every delivery is
-  persisted as `outputs/<name>.<ordinal>.md` (collision-free by construction, even when
-  several steps produce the same output name); `outputs/<name>.md` is the "latest" view,
+  persisted as `deliveries/<name>.<ordinal>.md` (collision-free by construction, even when
+  several steps produce the same output name); `deliveries/<name>.md` is the "latest" view,
   replaced atomically (temp file + rename); `run.json` records the invocation → step /
   iteration / activation / file mapping.
 - Output bodies are capped (16 MiB in both the CLI and App → `OUTPUT_TOO_LARGE`).
@@ -245,20 +255,20 @@ prowl workflow run <id|name> [source] [--role r=<binding>]... [--input k=v]... [
                                                               # when the workflow has a `current` role (SOURCE_REQUIRED outside a pane), a
                                                               # worktree reference otherwise
 prowl workflow status [run-id] [--json]                       # no args: "who am I" — caller pane's run, role, awaited step and its requirements
-prowl workflow done [-|--file <path>] [--verdict <v>] [--token <token>] [--run <id> --step <id>] [--force] [--json]
+prowl workflow deliver [-|--file <path>] [--verdict <v>] [--token <token>] [--run <id> --step <id>] [--force] [--json]
 prowl workflow cancel <run-id> [--json]
 prowl workflow validate <bundle.pwlworkflow> [--json]
 prowl workflow schema                                         # JSON Schema / reference for authoring agents
 ```
 
-**Resolution of `done`.** Two independent facts must agree: the **caller pane** (socket
+**Resolution of `deliver`.** Two independent facts must agree: the **caller pane** (socket
 peer PID → process ancestry → shell PID → pane) identifies the run and role, and the
 **delivery token** (`PROWL_WORKFLOW_TOKEN` — set in the launch environment for a `launch`
 step's activation exactly like `PROWL_DISPATCH_ID`, carried as the typed line's environment
 prefix for a `message` step's activation exactly like `PROWL_HANDOFF_REQUEST_ID` today, or
 `--token`) identifies the awaited step. Prowl mints the token when the step starts waiting,
 embeds it in the typed hint, and
-revokes it on Skip / Cancel / Relaunch; a stale or duplicated `done` from a pane that has
+revokes it on Skip / Cancel / Relaunch; a stale or duplicated `deliver` from a pane that has
 moved on to another step is therefore rejected instead of misattributed. A pane belongs
 to at most one run at a time, so no run/step ids are needed in the typed command. Explicit
 `--run --step` is required when no caller pane exists (manual delivery, logged as
@@ -293,7 +303,7 @@ role and the first step is a `message` to that role, the response carries that s
 rendered instruction (or scoped `workflow read` command) and its completion command, and the runner does **not**
 also type them into the caller's pane — the caller already has them. For an agent this
 makes a self-handoff two commands: `prowl workflow run prowl.handoff`, then the returned
-`… prowl workflow done -` with its briefing on stdin.
+`… prowl workflow deliver -` with its briefing on stdin.
 
 Error codes: `WORKFLOW_NOT_FOUND`, `WORKFLOW_INVALID`, `RUN_NOT_FOUND`, `PANE_BUSY`,
 `ROLE_MISMATCH`, `STEP_NOT_EXPECTING`, `TOKEN_REQUIRED`, `TOKEN_INVALID`,
@@ -303,7 +313,7 @@ Error codes: `WORKFLOW_NOT_FOUND`, `WORKFLOW_INVALID`, `RUN_NOT_FOUND`, `PANE_BU
 (a rendered `text`/pointer/`--input` value would not survive as one terminal line),
 `UNSAFE_PATH`, `PROMPT_TOO_LARGE` (a rendered `launch` prompt above 128 KiB),
 `WORKFLOW_DELIVERY_REQUIRED` (`agents dispatch-complete` from a pane whose pending record is a
-workflow activation; the message carries the exact `prowl workflow done` replacement).
+workflow activation; the message carries the exact `prowl workflow deliver` replacement).
 (`AGENT_GONE` and `WAIT_TIMEOUT` belong to the `agents wait` contract, not to
 `prowl workflow`.)
 
@@ -327,7 +337,7 @@ changed` / `exit` was requested.
 
 `prowl.action/v1` manifests declare a name, object-root `input_schema`/`output_schema`, a script
 backend (`interpreter`, action-relative `entrypoint`, optional literal `arguments` and inherited
-`environment` names), and optional timeout (1s...86400s; default 30s). JSON Schema Draft 2020-12
+`inherit_env` names), and optional timeout (1s...86400s; default 30s). JSON Schema Draft 2020-12
 validates the schema, effective input, and result. Bundle-relative JSON/YAML schema resources
 and fragments are supported without network fetching. `$id` overrides are rejected; use local
 references and anchors. Defaults remain annotations. `prowl workflow schema --action` exports
@@ -348,7 +358,7 @@ approved. Changed content or location needs approval again. Runs use fixed copie
 integrity before actions; an invalid copy offers cancel only. Retry keeps the approved copy,
 creates a new UUID/attempt, and can repeat side effects. It is never automatic.
 
-`builtin:git.context` takes optional `root` within the selected worktree and returns an object
+`builtin:collect-worktree-context` takes optional `root` within the selected worktree and returns an object
 with `path` and `branch`. It writes invocation artifacts and has no dependency on shared
 handoff files. `local:<slug>` selects only an action from this bundle.
 
@@ -359,8 +369,8 @@ definition/                         Fixed bundle copy
 run.json                            Status, bindings, typed state, attempts, output references
 log.md                              Timeline
 instructions/<step>.<ordinal>.md   Materialized agent instructions
-outputs/<name>.<ordinal>.md         Accepted/provisional agent delivery
-outputs/<name>.md                   Latest file view
+deliveries/<name>.<ordinal>.md         Accepted/provisional agent delivery
+deliveries/<name>.md                   Latest file view
 skills/<skill>/                     Materialized bundled skill
 actions/<step>/<execution UUID>/
   request.json
@@ -376,7 +386,7 @@ creation. Global UUID lookup does not depend on open projects. See
 [personal history and retention](018-history-storage-plan.md) for the fixed 30-day
 policy, 5 GiB soft budget, 24-hour protection, Keep Run, and complete ZIP export.
 Agents use `workflow read` with pane/task attribution for instructions and explicitly
-granted output/action resources; ordinary delivery remains `workflow done -` on stdin.
+granted output/action resources; ordinary delivery remains `workflow deliver -` on stdin.
 
 Only the current execution UUID may publish an action result. Cancel terminates the owned
 process group, escalating after a bounded grace period. App-private process ownership records
@@ -391,7 +401,7 @@ are authored from roles, deliveries, typed state, and control flow. There is no 
 registry, remote action download, parallel DSL branch, automatic retry, rollback, or resume.
 Headless roles and additional action backends are outside this contract.
 
-`context.source` preserves the initiating `pane_id` and `tab_id` (null for worktree-only starts).
+`context.initiator` preserves the initiating `pane_id` and `tab_id` (null for worktree-only starts).
 `exists(value) && predicate` and `!exists(value) || predicate` support optional data
 without requiring a missing value on the short-circuited path.
 

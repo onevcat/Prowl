@@ -71,10 +71,10 @@ nonisolated struct WorkflowNativeActionRunner: WorkflowActionExecuting {
     let artifacts = try prepareDirectory(context)
     var snapshot = context.values["context"] ?? .object([:])
     if case .object(var fields) = snapshot {
-      fields["execution"] = .object([
-        "id": .string(context.executionID), "step_id": .string(context.stepID),
-        "attempt": .integer(context.attempt), "cwd": .string(context.rootURL.path),
-        "artifact_dir": .string(artifacts.path),
+      fields["action"] = .object([
+        "execution_id": .string(context.executionID), "step_id": .string(context.stepID),
+        "attempt": .integer(context.attempt), "working_directory": .string(context.rootURL.path),
+        "artifacts_directory": .string(artifacts.path),
       ])
       snapshot = .object(fields)
     }
@@ -95,10 +95,10 @@ nonisolated struct WorkflowNativeActionRunner: WorkflowActionExecuting {
     do {
       try context.bundle?.verifyIntegrity()
       let output: WorkflowJSONValue
-      if actionID == "builtin:git.context" {
-        try WorkflowActionRegistry.gitContextInput.validate(.object(inputs))
-        output = try await gitContext(inputs: inputs, context: context, artifacts: artifacts)
-        try WorkflowActionRegistry.gitContextOutput.validate(output)
+      if actionID == "builtin:collect-worktree-context" {
+        try WorkflowActionRegistry.worktreeContextInput.validate(.object(inputs))
+        output = try await collectWorktreeContext(inputs: inputs, context: context, artifacts: artifacts)
+        try WorkflowActionRegistry.worktreeContextOutput.validate(output)
       } else {
         output = try await script(actionID: actionID, inputs: inputs, context: context, request: requestData)
       }
@@ -107,7 +107,7 @@ nonisolated struct WorkflowNativeActionRunner: WorkflowActionExecuting {
       let resultURL = directory.appending(path: "result.json")
       try encoder.encode(output).write(to: resultURL, options: .atomic)
       try record(context, state: "succeeded", detail: nil)
-      return ["output": output, "result_path": .string(resultURL.path)]
+      return ["output": output, "output_path": .string(resultURL.path)]
     } catch {
       if let processError = error as? WorkflowScriptExecutionError {
         try? processError.stdout.write(to: directory.appending(path: "stdout.log"), options: .atomic)
@@ -166,11 +166,13 @@ nonisolated struct WorkflowNativeActionRunner: WorkflowActionExecuting {
     return output
   }
 
-  private func gitContext(inputs: [String: WorkflowJSONValue], context: WorkflowActionContext, artifacts: URL)
+  private func collectWorktreeContext(
+    inputs: [String: WorkflowJSONValue], context: WorkflowActionContext, artifacts: URL
+  )
     async throws -> WorkflowJSONValue
   {
     guard Set(inputs.keys).isSubset(of: ["root"]) else {
-      throw WorkflowActionError.failed("Unknown git.context input.")
+      throw WorkflowActionError.failed("Unknown collect-worktree-context input.")
     }
     var root = WorkflowHistoryStorage.canonicalURL(context.rootURL)
     if let input = inputs["root"] {

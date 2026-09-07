@@ -126,7 +126,7 @@ running toolbar item and pinned run panel were inspected in Normal, Shelf, and C
 normal window size and at macOS half-width. The current title, full instruction, role chip,
 document-order steps, elapsed state, and footer controls remained legible and usable; the fixed
 580-point single-run panel fit the constrained window without clipping. The workflow also completed
-through `prowl workflow done -`, after which the active item disappeared as designed. Temporary
+through `prowl workflow deliver -`, after which the active item disappeared as designed. Temporary
 workflow input was removed; persisted local run records remain under the self-ignored run store.
 
 ### Adversarial review record
@@ -140,7 +140,7 @@ workflow input was removed; persisted local run records remain under the self-ig
   - interacting with panel controls pins the hover-open panel so confirmation menus cannot vanish
     on pointer exit;
   - the workflow popover stays mounted while a toast overlays it, preserving pinned panel state;
-  - selected-worktree `skipped` and `maxRoundsReached` outcomes now receive warning toasts, while
+  - selected-worktree `skipped` and `iterationLimitReached` outcomes now receive warning toasts, while
     successful completion keeps the success toast.
 - The duplicate-edge reducer test now keeps exhaustive TestStore checking enabled through the next
   action, so an unexpected duplicate notice cannot be discarded before the assertion boundary.
@@ -166,7 +166,7 @@ workflow input was removed; persisted local run records remain under the self-ig
   surface, ran a captured shell command successfully, and launched a real Codex profile. This
   directly covers the display-sleep/locked-session surface path; the later final delta only changes
   toolbar view lifetime and received its own focused review and rebuilt-app E2E.
-- A real launch-role happy run completed through the generated `prowl workflow done -` command and
+- A real launch-role happy run completed through the generated `prowl workflow deliver -` command and
   persisted its output with verdict `clean`.
 - Concurrent provisional runs exercised all delivery decisions: `Ask Again` injected the generated
   remediation prompt and accepted a corrected re-delivery; `Accept as Delivered` persisted a valid
@@ -174,7 +174,7 @@ workflow input was removed; persisted local run records remain under the self-ig
   panel and persisted the selected `clean` verdict.
 - Gone-role recovery replaced the dead p22 binding with a new p30 pane and resumed the step. A
   separate run exercised the destructive Cancel confirmation and finished `cancelled` while keeping
-  its pane and outputs.
+  its pane and deliveries.
 - The watchdog reached attention through its real automatic nudge and idle grace. `Nudge Again`
   delivered another completion reminder, `Keep Waiting` re-armed the grace period, and the next
   attention state was actually skipped after confirming the displayed consequence.

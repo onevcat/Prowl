@@ -132,7 +132,7 @@ enum WorkflowRunAdmission {
     }
     if let actionID = input.testAction {
       let localID = actionID.hasPrefix("local:") ? String(actionID.dropFirst(6)) : ""
-      guard actionID == "builtin:git.context" || entry.file.actions[localID] != nil else {
+      guard actionID == "builtin:collect-worktree-context" || entry.file.actions[localID] != nil else {
         return .failure(.init(code: CLIErrorCode.invalidArgument, message: "Unknown bundle action '\(actionID)'."))
       }
       definition = WorkflowDefinition(

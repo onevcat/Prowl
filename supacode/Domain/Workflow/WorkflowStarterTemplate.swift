@@ -45,18 +45,18 @@ nonisolated enum WorkflowStarterTemplate {
           Write a short brief for a reviewer: what changed, what you are unsure about, and how
           to verify it. Focus: {{ inputs.focus }}
           Deliver the brief with the generated completion command.
-        expect: { output: brief }
+        expect: { delivery: brief }
 
       - id: review
         title: Reviewer checking the work
         launch: reviewer
         prompt: |
-          Read {{ outputs.brief.path }} and review the work it describes in this worktree.
+          Read {{ deliveries.brief.path }} and review the work it describes in this worktree.
           Report under "## Findings" and end with "## Verdict".
-        expect: { output: findings, sections: ["## Findings", "## Verdict"], verdict: [clean, issues] }
+        expect: { delivery: findings, sections: ["## Findings", "## Verdict"], verdicts: [clean, issues] }
 
       - id: done
-        notify: "Review finished: {{ outputs.findings.verdict }}"
+        notify: "Review finished: {{ deliveries.findings.verdict }}"
 
     """
   }

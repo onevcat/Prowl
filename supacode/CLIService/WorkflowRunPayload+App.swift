@@ -53,7 +53,7 @@ extension WorkflowRunPayload {
       activation: activation.map {
         WorkflowActivationPayload($0, spellCompletion: spellsCompletion, formatter: formatter)
       },
-      outputs: run.outputs.mapValues { WorkflowOutputPayload($0, formatter: formatter) },
+      deliveries: run.deliveries.mapValues { WorkflowDeliveryRecordPayload($0, formatter: formatter) },
       startedAt: formatter.string(from: run.startedAt),
       updatedAt: formatter.string(from: run.updatedAt),
       finishedAt: run.finishedAt.map(formatter.string(from:)),
@@ -85,7 +85,7 @@ extension WorkflowRunPayload {
         WorkflowBindingPayload(source: $0.source, profile: $0.profile, pane: $0.pane)
       },
       activation: nil,
-      outputs: record.outputs.mapValues { WorkflowOutputPayload($0, formatter: formatter) },
+      deliveries: record.deliveries.mapValues { WorkflowDeliveryRecordPayload($0, formatter: formatter) },
       startedAt: formatter.string(from: record.run.startedAt),
       updatedAt: formatter.string(from: record.run.updatedAt),
       finishedAt: record.run.finishedAt.map(formatter.string(from:)),
@@ -138,11 +138,11 @@ extension WorkflowActivationPayload {
       role: activation.role,
       state: activation.state.rawValue,
       dispatchID: activation.dispatchID,
-      output: activation.outputName,
+      output: activation.deliveryName,
       expect: WorkflowExpectationPayload(
         format: activation.expect.format,
         sections: activation.expect.sections,
-        verdict: activation.expect.verdict,
+        verdicts: activation.expect.verdicts,
         strict: activation.expect.strict,
         completion: spellCompletion ? activation.completion.messageCommands : []),
       deadline: activation.deadline.map(formatter.string(from:))
@@ -150,8 +150,8 @@ extension WorkflowActivationPayload {
   }
 }
 
-extension WorkflowOutputPayload {
-  nonisolated init(_ output: WorkflowOutputRecord, formatter: ISO8601DateFormatter) {
+extension WorkflowDeliveryRecordPayload {
+  nonisolated init(_ output: WorkflowDeliveryRecord, formatter: ISO8601DateFormatter) {
     self.init(
       name: output.name,
       ordinal: output.ordinal,
@@ -170,7 +170,7 @@ extension WorkflowDeliveryPayload {
       ordinal: receipt.ordinal,
       step: receipt.stepID,
       role: role,
-      output: WorkflowOutputPayload(receipt.output, formatter: WorkflowRunPayload.makeDateFormatter()),
+      output: WorkflowDeliveryRecordPayload(receipt.output, formatter: WorkflowRunPayload.makeDateFormatter()),
       warnings: receipt.issues.map {
         WorkflowDeliveryWarningPayload(code: $0.code, message: $0.message)
       }

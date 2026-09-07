@@ -1,6 +1,6 @@
 // supacode/Domain/Workflow/WorkflowRun.swift
 // The state of one workflow run (docs-ai 063 B2, dsl-spec §5/§8/§10): frozen context and
-// bindings, the position cursor, invocations and activations, outputs, and the attention
+// bindings, the position cursor, invocations and activations, deliveries, and the attention
 // vocabulary the panel renders. Transitions live in WorkflowRunMachine.
 
 import Foundation
@@ -62,12 +62,17 @@ nonisolated enum WorkflowRoleBinding: Equatable, Sendable {
   }
 
   /// `roles.<r>.name` / `roles.<r>.agent` as dsl-spec §6 defines them.
-  var templateRole: WorkflowTemplateContext.Role {
+  var displayName: String {
     switch self {
-    case .current(let pane), .pick(let pane):
-      WorkflowTemplateContext.Role(name: pane.displayName, agent: pane.agent ?? "", pane: pane.handle)
-    case .launch(let profile, let pane):
-      WorkflowTemplateContext.Role(name: profile.name, agent: profile.agent, pane: pane?.handle)
+    case .current(let pane), .pick(let pane): pane.displayName
+    case .launch(let profile, _): profile.name
+    }
+  }
+
+  var agent: String {
+    switch self {
+    case .current(let pane), .pick(let pane): pane.agent ?? ""
+    case .launch(let profile, _): profile.agent
     }
   }
 
@@ -164,10 +169,10 @@ nonisolated enum WorkflowRunPaths {
       .appending(path: "\(stepID).\(ordinal).md", directoryHint: .notDirectory)
   }
 
-  /// `outputs/<name>.<ordinal>.md`, or the latest view `outputs/<name>.md` without an ordinal.
-  static func outputURL(runDirectory: URL, name: String, ordinal: Int?) -> URL {
+  /// `deliveries/<name>.<ordinal>.md`, or the latest view `deliveries/<name>.md` without an ordinal.
+  static func deliveryURL(runDirectory: URL, name: String, ordinal: Int?) -> URL {
     let file = ordinal.map { "\(name).\($0).md" } ?? "\(name).md"
-    return runDirectory.appending(path: "outputs", directoryHint: .isDirectory)
+    return runDirectory.appending(path: "deliveries", directoryHint: .isDirectory)
       .appending(path: file, directoryHint: .notDirectory)
   }
 
@@ -202,7 +207,7 @@ nonisolated struct WorkflowActivation: Equatable, Sendable {
   let role: String
   let token: String
   let expect: WorkflowExpectation
-  let outputName: String
+  let deliveryName: String
   var dispatchID: String?
   var state: WorkflowActivationState
   /// `expect.timeout` as an absolute deadline, fixed when the activation opened; a re-armed
@@ -212,7 +217,7 @@ nonisolated struct WorkflowActivation: Equatable, Sendable {
   var pendingDelivery: WorkflowValidatedDelivery?
 
   var completion: WorkflowCompletionCommand {
-    WorkflowCompletionCommand(token: token, verdicts: expect.verdict)
+    WorkflowCompletionCommand(token: token, verdicts: expect.verdicts)
   }
 }
 
@@ -235,12 +240,12 @@ nonisolated struct WorkflowInvocation: Equatable, Sendable {
   var endedAt: Date?
 }
 
-nonisolated struct WorkflowOutputRecord: Equatable, Sendable, Codable {
+nonisolated struct WorkflowDeliveryRecord: Equatable, Sendable, Codable {
   let name: String
   let ordinal: Int
-  /// `outputs/<name>.<ordinal>.md`.
+  /// `deliveries/<name>.<ordinal>.md`.
   let path: String
-  /// `outputs/<name>.md`, the atomically replaced latest view.
+  /// `deliveries/<name>.md`, the atomically replaced latest view.
   let latestPath: String
   let verdict: String?
   let deliveredAt: Date
@@ -341,13 +346,13 @@ nonisolated enum WorkflowRunStatus: Equatable, Sendable {
   case completed
   case cancelled
   case skipped(step: String, dependent: String)
-  case maxRoundsReached
+  case iterationLimitReached
   case interrupted
 
   var isTerminal: Bool {
     switch self {
     case .running, .needsAttention: false
-    case .completed, .cancelled, .skipped, .maxRoundsReached, .interrupted: true
+    case .completed, .cancelled, .skipped, .iterationLimitReached, .interrupted: true
     }
   }
 
@@ -382,7 +387,7 @@ nonisolated struct WorkflowRun: Equatable, Sendable {
   var phase: WorkflowRunPhase = .idle
   var invocations: [WorkflowInvocation] = []
   /// Latest delivered output per name (latest wins across steps).
-  var outputs: [String: WorkflowOutputRecord] = [:]
+  var deliveries: [String: WorkflowDeliveryRecord] = [:]
   var actionOutputs: [String: [String: WorkflowJSONValue]] = [:]
   var controlCursor: WorkflowControlCursor?
   var stepValues: [String: WorkflowJSONValue] = [:]

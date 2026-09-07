@@ -5,6 +5,6 @@ description: Save the selected worktree's branch, status, and diff summary in a 
 icon: doc.text.magnifyingglass
 steps:
   - id: snapshot
-    action: builtin:git.context
+    action: builtin:collect-worktree-context
   - id: done
     notify: 'Repository context saved: {{ actions.snapshot.output.path }}'

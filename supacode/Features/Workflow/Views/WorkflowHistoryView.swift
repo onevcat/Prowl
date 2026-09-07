@@ -109,7 +109,7 @@ struct WorkflowHistoryView: View {
     VStack(alignment: .leading, spacing: 12) {
       Text("Clean Up Workflow History?").font(.title2.bold())
       Text(
-        "Remove \(preview.candidates.count) complete run(s), including outputs and action artifacts. "
+        "Remove \(preview.candidates.count) complete run(s), including deliveries and action artifacts. "
           + "Estimated space: \(size(preview.reclaimedBytes)). This cannot be undone.")
       List(preview.candidates) { entry in
         VStack(alignment: .leading) {
@@ -141,6 +141,6 @@ struct WorkflowHistoryView: View {
 
   private func canExport(_ entry: WorkflowHistoryEntry) -> Bool {
     entry.finishedAt != nil
-      && ["completed", "cancelled", "skipped", "max_rounds_reached", "interrupted"].contains(entry.state)
+      && ["completed", "cancelled", "skipped", "iteration_limit_reached", "interrupted"].contains(entry.state)
   }
 }

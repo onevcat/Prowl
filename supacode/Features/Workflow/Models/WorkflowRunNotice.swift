@@ -6,7 +6,7 @@ nonisolated struct WorkflowRunNotice: Equatable, Sendable {
     case needsAttention
     case completed
     case skipped
-    case maxRoundsReached
+    case iterationLimitReached
   }
 
   let kind: Kind
@@ -39,10 +39,10 @@ nonisolated struct WorkflowRunNotice: Equatable, Sendable {
       kind = .skipped
       title = "\(run.definition.name) ended after a skipped step"
       body = "Step '\(step)' was skipped; step '\(dependent)' depended on its output."
-    case .maxRoundsReached:
-      kind = .maxRoundsReached
-      title = "\(run.definition.name) reached its round limit"
-      body = "The workflow ended after reaching its maximum number of rounds."
+    case .iterationLimitReached:
+      kind = .iterationLimitReached
+      title = "\(run.definition.name) reached its iteration limit"
+      body = "The workflow ended after reaching its maximum number of iterations."
     case .running, .cancelled, .interrupted:
       return nil
     }

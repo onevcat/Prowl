@@ -14,7 +14,7 @@ nonisolated public struct WorkflowTaskContent: Equatable, Sendable {
     var rendered = text
     var resources: [String: String] = [:]
     let paths = Set(knownPaths).filter {
-      ($0.hasPrefix(runDirectory.path + "/outputs/") || $0.hasPrefix(runDirectory.path + "/actions/"))
+      ($0.hasPrefix(runDirectory.path + "/deliveries/") || $0.hasPrefix(runDirectory.path + "/actions/"))
         && text.contains($0)
         && !$0.split(separator: "/").contains("..")
     }.sorted { $0.count == $1.count ? $0 < $1 : $0.count > $1.count }

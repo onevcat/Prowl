@@ -23,8 +23,8 @@ extension OutputRenderer {
       print(workflowListText(list))
     case .run(let run), .status(let run), .cancel(let run):
       print(workflowRunText(run))
-    case .done(let done):
-      print(workflowDoneText(done))
+    case .deliver(let deliver):
+      print(workflowDeliverText(deliver))
     case .validate(let validate):
       print(workflowValidateText(validate))
     case .schema(let schema):
@@ -95,9 +95,9 @@ extension OutputRenderer {
         lines.append(parts.joined(separator: "  "))
       }
     }
-    if !payload.outputs.isEmpty {
-      lines.append("Outputs:")
-      for (name, output) in payload.outputs.sorted(by: { $0.key < $1.key }) {
+    if !payload.deliveries.isEmpty {
+      lines.append("Deliveries:")
+      for (name, output) in payload.deliveries.sorted(by: { $0.key < $1.key }) {
         let verdict = output.verdict.map { "  verdict \($0)" } ?? ""
         lines.append("  \(name.bold)  \(output.latestPath.dim)\(verdict)")
       }
@@ -109,7 +109,7 @@ extension OutputRenderer {
     return lines.joined(separator: "\n")
   }
 
-  static func workflowDoneText(_ payload: WorkflowDonePayload) -> String {
+  static func workflowDeliverText(_ payload: WorkflowDeliverPayload) -> String {
     let delivery = payload.delivery
     var lines: [String] = []
     switch delivery.state {
@@ -140,7 +140,7 @@ extension OutputRenderer {
     case "skipped":
       let detail = [status.step, status.dependent].compactMap { $0 }.joined(separator: " → ")
       return "skipped".yellow + (detail.isEmpty ? "" : " (\(detail))")
-    case "cancelled", "interrupted", "max_rounds_reached":
+    case "cancelled", "interrupted", "iteration_limit_reached":
       return status.state.replacing("_", with: " ").red
     default: return status.state
     }

@@ -2,7 +2,7 @@
 
 Use an action for deterministic file, repository, or tool work. Use an agent role for tasks
 that need judgment. Actions await a result; they cannot declare `expect` or call
-`prowl workflow done`. They are separate from the app's shell-command Custom Actions.
+`prowl workflow deliver`. They are separate from the app's shell-command Custom Actions.
 
 ## Package layout
 
@@ -10,14 +10,14 @@ that need judgment. Actions await a result; they cannot declare `expect` or call
 report.pwlworkflow/
   workflow.yaml
   actions/
-    summarize/
+    summarize-files/
       action.yaml
       main.py
       helpers.py
 ```
 
-Use `action: local:summarize` for that package or `action: builtin:git.context` for Prowl's
-repository collector. Local IDs are slugs. There is no global script registry. Helpers,
+Use `action: local:summarize-files` for that package or `action: builtin:collect-worktree-context` for Prowl's
+repository collector. Local IDs use lowercase kebab-case (up to 64 ASCII characters). There is no global script registry. Helpers,
 schemas, and assets must live inside the workflow bundle. Symlinks and special files are
 rejected. Pass the bundle directory to `prowl workflow validate`, not `workflow.yaml`.
 
@@ -43,7 +43,7 @@ backend:
   interpreter: python3
   entrypoint: main.py
   arguments: []
-  environment: []
+  inherit_env: []
 timeout: 30s
 ```
 
@@ -62,12 +62,12 @@ The script receives one JSON object on stdin:
   "protocol": "prowl.action/v1",
   "input": {"paths": ["README.md"]},
   "context": {
-    "execution": {
-      "id": "<execution UUID>",
+    "action": {
+      "execution_id": "<execution UUID>",
       "step_id": "summarize",
       "attempt": 1,
-      "cwd": "/repo",
-      "artifact_dir": "/Users/example/.prowl/logs/workflow-runs/repo-<hash>/2026-09/<run>/actions/summarize/<execution>/artifacts"
+      "working_directory": "/repo",
+      "artifacts_directory": "/Users/example/.prowl/logs/workflow-runs/repo-<hash>/2026-09/<run>/actions/summarize/<execution>/artifacts"
     }
   }
 }
@@ -89,7 +89,7 @@ The workflow supplies typed values:
 
 ```yaml
 - id: summarize
-  action: local:summarize
+  action: local:summarize-files
   with:
     paths: [README.md, CHANGELOG.md]
 - id: report
@@ -98,7 +98,7 @@ The workflow supplies typed values:
 
 A complete `{{ expression }}` retains its JSON type in `with`; interpolation in larger
 text accepts scalars only. Results appear at `actions.<step>.output` and the invocation's
-JSON file at `actions.<step>.result_path`. Retain results in typed state before leaving a
+JSON file at `actions.<step>.output_path`. Retain results in typed state before leaving a
 branch or loop iteration if later steps need them.
 
 ## Approval and testing
@@ -116,7 +116,7 @@ Cancel an invalidated run and start a newly reviewed version.
 After validation and approval, test one action through the normal runner:
 
 ```bash
-prowl workflow test-action report local:summarize --input-json '{"paths":["README.md"]}' --json
+prowl workflow test-action report local:summarize-files --input-json '{"paths":["README.md"]}' --json
 prowl workflow status <run-id> --json
 ```
 
@@ -133,14 +133,14 @@ already done or stop independent agent tasks.
 
 Default timeout: 30 seconds. Input and stdout: 16 MiB each. Stderr: 4 MiB. The JSON request envelope has separate transport headroom. JSON depth: 64.
 Bundle: 64 MiB and 8192 entries. Interpreter environment starts with PATH, HOME, TMPDIR, LANG,
-and LC_ALL when present. `backend.environment` names extra inherited variables; `PROWL_*`
+and LC_ALL when present. `backend.inherit_env` names extra inherited variables; `PROWL_*`
 control variables are always stripped. Prowl sets `PYTHONDONTWRITEBYTECODE=1` so Python
 helper imports do not add cache files to the fixed bundle. Environment values are not
 recorded in the request.
 
-## Built-in repository context
+## Collect worktree context
 
-`builtin:git.context` takes optional `root`, restricted to the selected worktree, and returns
+`builtin:collect-worktree-context` takes optional `root`, restricted to the selected worktree, and returns
 `output.path` plus `output.branch`. It writes the Markdown repository summary into this
 invocation's `artifacts/context.md`. It does not write shared handoff files. Workflow
 `handoff.transition` and `handoff.checkpoint` were removed; the separate `prowl handoff` CLI
@@ -153,3 +153,9 @@ so strings containing `{{` are not evaluated as workflow expressions.
 
 When a script bundle needs approval, the workflow start screen provides **Review Bundle…**
 and keeps Run disabled. Approval returns to the same start screen; it does not start a run.
+
+The current collector requires a Git directory and collects that directory only. Its
+worktree-oriented name describes the workflow target; multi-repository workspace and
+plain-directory collection are future work. `builtin:collect-agent-context` is planned,
+not registered. Use verb-first kebab-case names for local actions, such as
+`local:write-report`; the runner does not infer behavior or permissions from the name.

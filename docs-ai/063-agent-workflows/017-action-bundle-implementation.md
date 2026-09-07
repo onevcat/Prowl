@@ -57,7 +57,7 @@ This amendment resolves the specification details left open in 015.
   permissions. Review and approve are explicit actions. Approval does not start a run.
 - Cancellation and timeout terminate the owned process group, then force termination after
   a bounded grace period. Already performed side effects are not rolled back.
-- `builtin:git.context` writes to invocation artifacts. Legacy handoff CLI remains intact;
+- `builtin:collect-worktree-context` writes to invocation artifacts. Legacy handoff CLI remains intact;
   workflow-only handoff actions are removed. Restarted runs are inspection-only/interrupted.
 
 ## Validation and delivery
@@ -83,7 +83,7 @@ regressions fixed red-to-green and summarized in PR comments.
 - `test-action --input-json` transports literal JSON; only workflow `with` uses expressions.
 - Track owned subprocess groups in app-private storage with PID and process start time.
   On startup, recover groups whose owner no longer exists; never trust a repository PID.
-- Keep the existing handoff collector intact. Native `git.context` uses the same cancellable
+- Keep the existing handoff collector intact. Native `builtin:collect-worktree-context` uses the same cancellable
   process transport as scripts so workflow cancellation does not block on synchronous git.
 
 ## Delivery and acceptance

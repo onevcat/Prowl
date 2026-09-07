@@ -8,7 +8,7 @@ final class WorkflowCommandParsingTests: XCTestCase {
     XCTAssertTrue(try ProwlCommand.parseAsRoot(["workflow", "list"]) is WorkflowListCommand)
     XCTAssertTrue(try ProwlCommand.parseAsRoot(["workflow", "run", "demo"]) is WorkflowRunCommand)
     XCTAssertTrue(try ProwlCommand.parseAsRoot(["workflow", "status"]) is WorkflowStatusCommand)
-    XCTAssertTrue(try ProwlCommand.parseAsRoot(["workflow", "done", "-"]) is WorkflowDoneCommand)
+    XCTAssertTrue(try ProwlCommand.parseAsRoot(["workflow", "deliver", "-"]) is WorkflowDeliverCommand)
     XCTAssertTrue(
       try ProwlCommand.parseAsRoot(["workflow", "cancel", "00000000-0000-0000-0000-000000000000"])
         is WorkflowCancelCommand)
@@ -48,35 +48,35 @@ final class WorkflowCommandParsingTests: XCTestCase {
   }
 
   func testDoneParsesItsDeliveryOptions() throws {
-    let done = try XCTUnwrap(
+    let deliver = try XCTUnwrap(
       ProwlCommand.parseAsRoot([
-        "workflow", "done", "-", "--verdict", "clean", "--token", "T", "--run",
+        "workflow", "deliver", "-", "--verdict", "clean", "--token", "T", "--run",
         "0BADCAFE-0000-4000-8000-000000000042", "--step", "review", "--force",
-      ]) as? WorkflowDoneCommand)
-    XCTAssertEqual(done.input, "-")
-    XCTAssertEqual(done.verdict, "clean")
-    XCTAssertEqual(done.token, "T")
-    XCTAssertEqual(done.runID, "0BADCAFE-0000-4000-8000-000000000042")
-    XCTAssertEqual(done.step, "review")
-    XCTAssertTrue(done.force)
+      ]) as? WorkflowDeliverCommand)
+    XCTAssertEqual(deliver.input, "-")
+    XCTAssertEqual(deliver.verdict, "clean")
+    XCTAssertEqual(deliver.token, "T")
+    XCTAssertEqual(deliver.runID, "0BADCAFE-0000-4000-8000-000000000042")
+    XCTAssertEqual(deliver.step, "review")
+    XCTAssertTrue(deliver.force)
     let file = try XCTUnwrap(
-      ProwlCommand.parseAsRoot(["workflow", "done", "--file", "/tmp/out.md"])
-        as? WorkflowDoneCommand)
+      ProwlCommand.parseAsRoot(["workflow", "deliver", "--file", "/tmp/out.md"])
+        as? WorkflowDeliverCommand)
     XCTAssertEqual(file.file, "/tmp/out.md")
     XCTAssertNil(file.input)
   }
 
   func testDoneRejectsMissingOrDoubledBodiesAndHalfManualTargets() {
-    XCTAssertThrowsError(try ProwlCommand.parseAsRoot(["workflow", "done"]))
+    XCTAssertThrowsError(try ProwlCommand.parseAsRoot(["workflow", "deliver"]))
     XCTAssertThrowsError(
-      try ProwlCommand.parseAsRoot(["workflow", "done", "-", "--file", "/tmp/out.md"]))
-    XCTAssertThrowsError(try ProwlCommand.parseAsRoot(["workflow", "done", "out.md"]))
-    XCTAssertThrowsError(try ProwlCommand.parseAsRoot(["workflow", "done", "-", "--run", "id"]))
-    XCTAssertThrowsError(try ProwlCommand.parseAsRoot(["workflow", "done", "-", "--step", "s"]))
-    XCTAssertThrowsError(try ProwlCommand.parseAsRoot(["workflow", "done", "-", "--force"]))
+      try ProwlCommand.parseAsRoot(["workflow", "deliver", "-", "--file", "/tmp/out.md"]))
+    XCTAssertThrowsError(try ProwlCommand.parseAsRoot(["workflow", "deliver", "out.md"]))
+    XCTAssertThrowsError(try ProwlCommand.parseAsRoot(["workflow", "deliver", "-", "--run", "id"]))
+    XCTAssertThrowsError(try ProwlCommand.parseAsRoot(["workflow", "deliver", "-", "--step", "s"]))
+    XCTAssertThrowsError(try ProwlCommand.parseAsRoot(["workflow", "deliver", "-", "--force"]))
     XCTAssertNoThrow(
       try ProwlCommand.parseAsRoot([
-        "workflow", "done", "-", "--run", "id", "--step", "s", "--force",
+        "workflow", "deliver", "-", "--run", "id", "--step", "s", "--force",
       ]))
   }
 
@@ -94,19 +94,19 @@ final class WorkflowCommandParsingTests: XCTestCase {
     XCTAssertEqual(run.skip, ["brief"])
   }
 
-  func testWorkflowDoneEnvelopeCarriesTheBodyAndToken() throws {
+  func testWorkflowDeliverEnvelopeCarriesTheBodyAndToken() throws {
     let envelope = CommandEnvelope(
       output: .json,
       command: .workflow(
         WorkflowInput(
-          action: .done, runID: "r", stepID: "s", body: "# Out\n", verdict: "clean", token: "T",
+          action: .deliver, runID: "r", stepID: "s", body: "# Out\n", verdict: "clean", token: "T",
           force: true)))
     let decoded = try JSONDecoder().decode(
       CommandEnvelope.self, from: try JSONEncoder().encode(envelope))
     guard case .workflow(let input) = decoded.command else {
       return XCTFail("Expected a workflow envelope")
     }
-    XCTAssertEqual(input.action, .done)
+    XCTAssertEqual(input.action, .deliver)
     XCTAssertEqual(input.body, "# Out\n")
     XCTAssertEqual(input.token, "T")
     XCTAssertEqual(input.runID, "r")

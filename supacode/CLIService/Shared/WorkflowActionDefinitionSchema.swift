@@ -73,7 +73,7 @@ nonisolated public enum WorkflowActionDefinitionSchema {
                 "type": "string"
               }
             },
-            "environment": {
+            "inherit_env": {
               "type": "array",
               "items": {
                 "type": "string",

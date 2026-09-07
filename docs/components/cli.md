@@ -486,7 +486,7 @@ prowl workflow list [target] [--json]                   # every definition visib
 prowl workflow run <id|name> [source] [--role r=<binding>]... [--input k=v]... [--skip <step>]... [--json]
 prowl workflow test-action <workflow> <action> [source] --input-json '<JSON object>' [--json]
 prowl workflow status [run-id] [--json]                 # no args: the calling pane's run, role, awaited step
-prowl workflow done [-|--file <path>] [--verdict <v>] [--token <t>] [--run <id> --step <id>] [--force] [--json]
+prowl workflow deliver [-|--file <path>] [--verdict <v>] [--token <t>] [--run <id> --step <id>] [--force] [--json]
 prowl workflow cancel <run-id> [--json]
 prowl workflow validate <bundle.pwlworkflow> [--scope bundle|user|repo] [--json]   # validate a bundle; exit 1 on errors
 prowl workflow schema [--action] [--json]                          # workflow or action manifest JSON Schema (Draft 2020-12)
@@ -532,10 +532,10 @@ prowl workflow schema [--action] [--json]                          # workflow or
   include only assigned skills and explicitly passed workflow inputs/artifacts. A granted
   artifact directory returns a JSON list of its contained file IDs; read each ID separately.
   Reading content never delivers an output or completes a step.
-- `done` delivers the output of the step this pane is working on: the body comes from piped
+- `deliver` delivers the output of the step this pane is working on: the body comes from piped
   stdin (`-`) or `--file`; `--verdict` supplies the declared verdict when the step requires
   one. Prowl attributes the delivery by the **caller pane** (its pending workflow activation) and
-  checks the token the step handed out (`PROWL_WORKFLOW_TOKEN=… prowl workflow done -` for a
+  checks the token the step handed out (`PROWL_WORKFLOW_TOKEN=… prowl workflow deliver -` for a
   typed step, the child environment of a launched role, or `--token`): a stale or wrong token
   is `TOKEN_INVALID`, a missing one `TOKEN_REQUIRED`, a pane whose step moved on
   `STEP_NOT_EXPECTING`. `--run <id> --step <step>` is the manual path from outside the role's
@@ -547,7 +547,7 @@ prowl workflow schema [--action] [--json]                          # workflow or
   for a decision in Prowl (accept, ask again, skip). Empty bodies are `OUTPUT_INVALID`, bodies
   above the step's cap `OUTPUT_TOO_LARGE`, and `strict: true` steps reject issues outright.
   `agents dispatch-complete` from a pane that owes a workflow delivery is refused with
-  `WORKFLOW_DELIVERY_REQUIRED` and the exact `done` command to run instead.
+  `WORKFLOW_DELIVERY_REQUIRED` and the exact `deliver` command to run instead.
 - `status` without an argument answers "who am I": the calling pane's active run, its role,
   the step in progress, and — for the role that owes it — the awaited output with its
   requirements and completion commands (`.data.activation`). With a run UUID it reports that
@@ -581,7 +581,7 @@ prowl workflow schema [--action] [--json]                          # workflow or
   `skill_unchecked` warnings instead of errors.
 - `schema` prints the machine-readable definition schema for editors and authoring agents
   (`--json` wraps it as `.data.schema`). Structural rules live in the schema; cross-reference
-  rules (undefined roles, premature `{{ outputs.* }}`, `until` verdicts, …) are enforced by
+  rules (undefined roles, premature `{{ deliveries.* }}`, loop verdicts, …) are enforced by
   `validate` only.
 
 ```bash
@@ -590,19 +590,19 @@ prowl workflow list --json | jq '.data.workflows[] | select(.valid) | .id'
 run="$(prowl workflow run review --role reviewer=Codex --input max_rounds=3 --json)"
 printf '%s\n' "$run" | jq -r '.data.self_initiated.line'      # what to do now, when this pane is the current role
 prowl workflow status --json | jq '.data.activation'           # what this pane owes, and how to deliver it
-PROWL_WORKFLOW_TOKEN=… prowl workflow done - <<'EOF'
+PROWL_WORKFLOW_TOKEN=… prowl workflow deliver - <<'EOF'
 ## Scope
 …
 EOF
 prowl workflow cancel "$(printf '%s\n' "$run" | jq -r '.data.id')"
 ```
 
-JSON is `prowl.cli.workflow.v1` with `data.action` = `list` | `run` | `status` | `done` |
-`cancel` | `read` | `validate` | `schema`; `run`, `status`, and `cancel` share the run shape, `done`
+JSON is `prowl.cli.workflow.v1` with `data.action` = `list` | `run` | `status` | `deliver` |
+`cancel` | `read` | `validate` | `schema`; `run`, `status`, and `cancel` share the run shape, `deliver`
 nests it under `.data.run` beside `.data.delivery`.
 
 `prowl workflow test-action <workflow> <action> [source] --input-json '<JSON object>' [--json]`
-starts a real single-action run from a discovered bundle. Use `builtin:git.context` or
+starts a real single-action run from a discovered bundle. Use `builtin:collect-worktree-context` or
 `local:<id>`. Script bundles require prior native approval in Settings > Agents > Workflows;
 `WORKFLOW_APPROVAL_REQUIRED` tells you to review the bundle. This command cannot grant approval.
 It uses the same worktree, fixed bundle copy, process limits, cancellation, and action records
@@ -903,7 +903,7 @@ artifacts and terminal excerpts do not appear in `git status`.
 | `DISPATCH_TARGET_BUSY` | `agents dispatch` refused: the pane's agent is working or blocked (`.error.details.observation`, `.signals`). Wait for `--until idle`, then retry. |
 | `DISPATCH_ALREADY_TERMINAL` | `dispatch-abandon` targeted a record that already completed, was abandoned, or is gone. |
 | `DISPATCH_FAILED` / `DISPATCH_ABANDONED` / `DISPATCH_NEEDS_INPUT` / `DISPATCH_INCOMPLETE` | `agents wait --dispatch` structured outcomes; `.error.details` retains the record, target, and evidence (see **Dispatch completion and waiting**). |
-| `SOURCE_REQUIRED` | A caller-owned command such as `agents signal`, selector-free `handoff`, `workflow run` of a workflow with a `current` role, `workflow status` without a run id, or `workflow done` without `--run --step` could not map the socket peer ancestry to a Prowl pane. Run it inside the source pane without tmux/detached wrappers, or use an explicit selector where that command permits one. |
+| `SOURCE_REQUIRED` | A caller-owned command such as `agents signal`, selector-free `handoff`, `workflow run` of a workflow with a `current` role, `workflow status` without a run id, or `workflow deliver` without `--run --step` could not map the socket peer ancestry to a Prowl pane. Run it inside the source pane without tmux/detached wrappers, or use an explicit selector where that command permits one. |
 | `AGENT_GONE` | The meaning is mode-specific: a signal caller disappeared, a dispatch worker became terminal, or a generic condition target closed. Inspect `.error.details.mode`; dispatch details retain a record, while condition details retain the requested condition and exact surface observation. |
 | `BLOCKER_UNREADABLE` | A blocked screen was detected but Prowl could not safely extract its current interaction text. Re-run `agents read` or inspect with `read`. |
 | `SESSION_UNRESOLVED` / `RESULT_NOT_FOUND` / `RESULT_INCOMPLETE` / `RESULT_TOO_LARGE` | `agents read --result-only` could not provide one trustworthy complete result. Drop `--result-only` to retain the live snapshot and inspect `.data.result`. |
@@ -914,13 +914,13 @@ artifacts and terminal excerpts do not appear in `git status`.
 | `INVALID_SKILL_FRONTMATTER` | A bundled (or `PROWL_SKILLS_DIR`) skill's `SKILL.md` frontmatter is malformed — fix the override skill, or reinstall Prowl if the bundle itself is damaged. |
 | `WORKFLOW_INVALID` | `workflow validate` found errors, or `workflow run` named a definition with errors; the full diagnostics are in `.error.details` (JSON) or on stdout (text). Fix the file and re-run. |
 | `WORKFLOW_NOT_FOUND` / `WORKFLOW_DISABLED` | No workflow definition with that id or unique name is visible to the worktree, or it is switched off — re-run `workflow list`. |
-| `RUN_NOT_FOUND` | No live run with that UUID (`cancel`, manual `done`), no record of it in any known worktree (`status`), or the calling pane is not part of an active run (`status` without arguments). |
+| `RUN_NOT_FOUND` | No live run with that UUID (`cancel`, manual `deliver`), no record of it in any known worktree (`status`), or the calling pane is not part of an active run (`status` without arguments). |
 | `PANE_BUSY` / `DISPATCH_PENDING` (`workflow run`) | The source pane or a `--role` pane already belongs to another active run, or still holds a pending dispatch record that must be completed or abandoned first. |
 | `PROFILE_NOT_FOUND` / `PROFILE_NOT_UNIQUE` (`workflow run`) | No enabled Profile satisfies a `launch` role (pass `--role <role>=<profile>`), or the given name matches several. |
-| `STEP_NOT_EXPECTING` / `TOKEN_REQUIRED` / `TOKEN_INVALID` | `workflow done`: the calling pane holds no waiting activation (the step moved on, was skipped, or the run ended before the output was saved), the completion command was run without its token, or the token belongs to an earlier step. Re-run the latest completion command Prowl typed. |
-| `ROLE_MISMATCH` | `workflow done --run --step` named a step other than the one the calling pane is waiting for; pass `--force` to deliver there anyway. |
-| `OUTPUT_INVALID` / `OUTPUT_TOO_LARGE` / `VERDICT_REQUIRED` | `workflow done`: empty body (or, for a `strict` step, missing sections / bad format / bad verdict), body above the step's size cap, or a strict step that declares verdicts got none. Non-strict issues are accepted as `delivery.state = provisional` instead. |
-| `WORKFLOW_DELIVERY_REQUIRED` | `agents dispatch-complete` ran in a pane whose pending dispatch is a workflow activation; the message carries the exact `prowl workflow done` command to run instead. |
+| `STEP_NOT_EXPECTING` / `TOKEN_REQUIRED` / `TOKEN_INVALID` | `workflow deliver`: the calling pane holds no waiting activation (the step moved on, was skipped, or the run ended before the output was saved), the completion command was run without its token, or the token belongs to an earlier step. Re-run the latest completion command Prowl typed. |
+| `ROLE_MISMATCH` | `workflow deliver --run --step` named a step other than the one the calling pane is waiting for; pass `--force` to deliver there anyway. |
+| `OUTPUT_INVALID` / `OUTPUT_TOO_LARGE` / `VERDICT_REQUIRED` | `workflow deliver`: empty body (or, for a `strict` step, missing sections / bad format / bad verdict), body above the step's size cap, or a strict step that declares verdicts got none. Non-strict issues are accepted as `delivery.state = provisional` instead. |
+| `WORKFLOW_DELIVERY_REQUIRED` | `agents dispatch-complete` ran in a pane whose pending dispatch is a workflow activation; the message carries the exact `prowl workflow deliver` command to run instead. |
 | `REQUEST_CANCELLED` | The CLI disconnected before an in-app workflow request completed; the run itself was not affected. |
 | `NO_ACTIVE_PANE` | No pane for focused-target; pass an explicit `--pane`. |
 | `EMPTY_INPUT` | `send` got neither argv nor stdin (or both). |

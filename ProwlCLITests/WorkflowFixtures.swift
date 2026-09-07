@@ -43,19 +43,19 @@ enum WorkflowFixtures {
         instruction: |
           Write a short brief for an adversarial reviewer: ## Scope, ## Claims, ## How to verify.
           Deliver it with the generated completion command.
-        expect: { output: brief, sections: ["## Scope", "## Claims"], timeout: 10m }
+        expect: { delivery: brief, sections: ["## Scope", "## Claims"], timeout: 10m }
 
       - id: launch
         title: "Reviewer starting round 1"
         launch: reviewer
-        prompt: "Read {{ outputs.brief.path }} and the bundled reviewer skill, then review. Focus: {{ inputs.focus }}"
+        prompt: "Read {{ deliveries.brief.path }} and the bundled reviewer skill, then review. Focus: {{ inputs.focus }}"
         skill: prowl.adversarial-reviewer
-        expect: { output: findings, sections: ["## Findings", "## Verdict"], verdict: [clean, issues], timeout: 30m }
+        expect: { delivery: findings, sections: ["## Findings", "## Verdict"], verdicts: [clean, issues], timeout: 30m }
 
       - id: remember
         set:
-          verdict: outputs.findings.verdict
-          findings_path: outputs.findings.path
+          verdict: deliveries.findings.verdict
+          findings_path: deliveries.findings.path
 
       - id: rounds
         while: state.verdict != 'clean'
@@ -65,18 +65,18 @@ enum WorkflowFixtures {
             title: "Round {{ context.step.iteration }}: author addressing findings"
             message: author
             text: "Findings: {{ state.findings_path }}. Fix or rebut each item."
-            expect: { output: disposition, timeout: 30m }
+            expect: { delivery: disposition, timeout: 30m }
           - id: rereview
             message: reviewer
-            text: "Disposition: {{ outputs.disposition.path }}. Re-review."
-            expect: { output: round_findings, verdict: [clean, issues], timeout: 30m }
+            text: "Disposition: {{ deliveries.disposition.path }}. Re-review."
+            expect: { delivery: round_findings, verdicts: [clean, issues], timeout: 30m }
           - id: retain
             set:
-              verdict: outputs.round_findings.verdict
-              findings_path: outputs.round_findings.path
+              verdict: deliveries.round_findings.verdict
+              findings_path: deliveries.round_findings.path
 
       - id: context
-        action: builtin:git.context
+        action: builtin:collect-worktree-context
         with: { root: "{{ context.worktree.path }}" }
 
       - id: done

@@ -22,7 +22,7 @@ The owner confirmed these fixed product rules:
 - Keep Run exempts a run. Live, recent, unknown, and corrupt records are protected.
 - Only terminal runs can be exported as complete ZIP files. Exports are independent of retention.
 - Agent reads require current task attribution and expose only assigned instructions, skills,
-  and explicitly passed prior outputs/action artifacts. A UUID alone grants no content access.
+  and explicitly passed prior deliveries/action artifacts. A UUID alone grants no content access.
 
 ## Storage and safety
 
@@ -43,7 +43,7 @@ remain visible when the soft budget cannot be met. Cleanup never stops a script.
 
 ## Agent content transfer
 
-Keep `workflow done -` as the ordinary text/JSON delivery boundary. Add and test a scoped
+Keep `workflow deliver -` as the ordinary text/JSON delivery boundary. Add and test a scoped
 CLI read contract, including pane/run/invocation attribution, bounded content, and resource
 identifiers issued by Prowl. Instructions must teach this route without home-directory grants.
 Do not infer every runtime blocks external reads. Inspect actual sandbox behavior before adding
@@ -100,7 +100,7 @@ The owner approved using existing task identity instead of introducing read cred
 `workflow read --run <UUID> --invocation <ordinal>` checks the caller pane against its
 current assignment. There is no read token, token environment injection, or separate
 credential lifecycle. Normal completion keeps the last assigned task readable until
-reassignment, cleanup, or app exit. Cancellation revokes access. The existing `done`
+reassignment, cleanup, or app exit. Cancellation revokes access. The existing `deliver`
 delivery protocol retains its own validation.
 
 This first release uses fixed retention settings and the existing filesystem/reducer

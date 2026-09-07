@@ -46,7 +46,7 @@ instructions), `launch` (start a launch role with a kickoff prompt),
 `set`, nested `if`/`else`, `while`, `break`/`continue`,
 `action` (built-in or local script), `notify`, and `close`. A `message` or
 `launch` step may `expect` an output: the role finishes by running the exact
-`prowl workflow done …` command Prowl typed into its pane, with the body on
+`prowl workflow deliver …` command Prowl typed into its pane, with the body on
 stdin. The full DSL, validator rules, and authoring patterns are the
 `prowl-workflow` skill's job (`prowl skills install prowl-workflow`);
 `prowl workflow schema` prints the workflow JSON Schema; `prowl workflow schema --action` prints the action manifest schema.
@@ -57,7 +57,7 @@ Three sources, later ones winning for the same `id`:
 
 | Source | Location | Notes |
 |---|---|---|
-| Built-in | `Prowl.app/Contents/Resources/workflows/` | ids `prowl.*` are reserved for it. Includes Repository Context (`builtin:git.context`). |
+| Built-in | `Prowl.app/Contents/Resources/workflows/` | ids `prowl.*` are reserved for it. Includes Repository Context (`builtin:collect-worktree-context`). |
 | Your workflows | `~/.prowl/workflows/*.pwlworkflow` | personal; not tied to a repository |
 | Repository | `<repo root>/.prowl/workflows/*.pwlworkflow` | travels with the repo; seen only from that repository's worktrees |
 
@@ -145,7 +145,7 @@ The creation month stays fixed. No project-local runtime files or Git-ignore rul
 are created. Personal and team workflow definitions keep their existing locations.
 
 Each run contains `run.json`, `log.md`, its frozen bundle in `definition/`,
-`instructions/`, `skills/`, `outputs/`, and `actions/`. Metadata records the original
+`instructions/`, `skills/`, `deliveries/`, and `actions/`. Metadata records the original
 execution root. `prowl workflow status <run-id>` finds saved history even after that
 root is closed, moved, or deleted. A moved folder does not inherit the old history.
 
@@ -168,7 +168,7 @@ deleting each complete run. Old project-local data is neither migrated nor delet
 
 Agents retrieve assigned instructions and explicit input resources with
 `prowl workflow read`, using the run ID, invocation number, and assigned pane. Prowl owns
-persistence; deliver text or JSON through `prowl workflow done -` on stdin. Run
+persistence; deliver text or JSON through `prowl workflow deliver -` on stdin. Run
 paths are temporary artifact locations, not durable downstream references.
 
 ## Settings → Agents → Workflows
@@ -227,7 +227,7 @@ is not listening on its socket. The same status appears under Settings → Agent
 - A remembered binding is keyed by the role's requirements (`agents`,
   `suggest`, …): editing those in the file forgets the binding; editing prompts
   keeps it.
-- Participants must deliver with the exact `prowl workflow done …` command Prowl
+- Participants must deliver with the exact `prowl workflow deliver …` command Prowl
   typed (token included); `prowl agents dispatch-complete` is refused inside a
   workflow activation with `WORKFLOW_DELIVERY_REQUIRED`.
 - Nothing is closed automatically; a launched reviewer pane stays open after the
@@ -236,9 +236,9 @@ is not listening on its socket. The same status appears under Settings → Agent
 ## Script actions and bundles
 
 Local actions live under `actions/<id>/action.yaml` in a `.pwlworkflow` bundle, with scripts,
-helpers, and assets beside them. Steps reference `local:<id>` or `builtin:git.context`.
+helpers, and assets beside them. Steps reference `local:<id>` or `builtin:collect-worktree-context`.
 Action inputs and results are typed JSON; validated results appear at
-`actions.<step>.output` and `actions.<step>.result_path`. The built-in repository context
+`actions.<step>.output` and `actions.<step>.output_path`. The built-in repository context
 writes per-invocation artifacts, not shared handoff files. Legacy `prowl handoff` remains a
 separate CLI feature. These actions are also distinct from shell-command Custom Actions.
 
@@ -257,7 +257,7 @@ owned script process group; neither operation rolls back completed work.
 
 Typed `state` retains values explicitly. Branch and loop iteration results leave scope on
 exit. Use state to carry a verdict/path to the next iteration. A loop with no cap is permitted;
-a loop whose condition remains true at `max_iterations` ends as `max_rounds_reached`.
+a loop whose condition remains true at `max_iterations` ends as `iteration_limit_reached`.
 In the condition, `context.step.id` names the loop and `context.step.iteration` is the
 completed count, starting at 0. Steps in the body use iteration numbers starting at 1.
 A role stays bound for the run: launch it once, then send messages for repeated work.
@@ -270,7 +270,7 @@ and keeps Run disabled. Approval returns to the same start screen; it does not s
 
 ## Sandbox access
 
-`workflow read` and `workflow done` use the existing Prowl Unix socket. File-read
+`workflow read` and `workflow deliver` use the existing Prowl Unix socket. File-read
 access and socket access are separate permissions. If the runtime returns
 `SOCKET_PERMISSION_DENIED`, use its native approval mechanism for the specific
 Prowl command or socket; do not disable sandboxing or grant home-directory access.
@@ -288,7 +288,7 @@ matching `PROWL_CLI_SOCKET`. Release builds ignore this directory override.
 | Action input and `test-action --input-json` | 16 MiB |
 | Action stdout | 16 MiB |
 | Action stderr | 4 MiB |
-| `workflow done` body (CLI and App) | 16 MiB of UTF-8 |
+| `workflow deliver` body (CLI and App) | 16 MiB of UTF-8 |
 | `workflow read` page | 256 KiB; continue with `next_offset` |
 | Complete launch prompt, including protocol text | 128 KiB |
 | Frozen workflow bundle | 64 MiB / 8192 entries |

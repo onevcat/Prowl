@@ -39,17 +39,17 @@ struct WorkflowRunsFeatureTests {
       - id: brief
         message: author
         text: "Write the brief."
-        expect: { output: brief }
+        expect: { delivery: brief }
       - id: launch
         launch: reviewer
-        prompt: "Review {{ outputs.brief.path }}."
-        expect: { output: findings }
+        prompt: "Review {{ deliveries.brief.path }}."
+        expect: { delivery: findings }
       - id: cleanup
         close: reviewer
       - id: summary
         message: author
-        text: "Findings: {{ outputs.findings.path }}. Summarize."
-        expect: { output: summary }
+        text: "Findings: {{ deliveries.findings.path }}. Summarize."
+        expect: { delivery: summary }
     """
 
   /// A native action as the first step: the run starts in `runningAction`.
@@ -65,7 +65,7 @@ struct WorkflowRunsFeatureTests {
         placement: tab
     steps:
       - id: context
-        action: builtin:git.context
+        action: builtin:collect-worktree-context
         with: { root: "{{ context.worktree.path }}" }
       - id: launch
         launch: reviewer
@@ -356,7 +356,7 @@ struct WorkflowRunsFeatureTests {
     #expect(
       fixture.typed[0].instructionExisted,
       "the instruction file must exist before the pointer is typed")
-    #expect(fixture.typed[0].line.contains("PROWL_WORKFLOW_TOKEN=\(Self.firstToken) prowl workflow done -"))
+    #expect(fixture.typed[0].line.contains("PROWL_WORKFLOW_TOKEN=\(Self.firstToken) prowl workflow deliver -"))
     #expect(fixture.armed.map(\.ordinal) == [1])
     let record = try session.store.readRecord(runID: runID)
     #expect(record.run.status.state == "running")
@@ -376,7 +376,7 @@ struct WorkflowRunsFeatureTests {
       return
     }
     #expect(receipt.ordinal == 1)
-    #expect(run.outputs["brief"]?.ordinal == 1)
+    #expect(run.deliveries["brief"]?.ordinal == 1)
     #expect(store.state.pendingDeliveries.isEmpty)
     #expect(fixture.disarmed.first == 1, "the accepted delivery disarms its watchdog")
     #expect(fixture.completed == ["dispatch-1"])
@@ -729,7 +729,7 @@ struct WorkflowRunsFeatureTests {
     #expect(
       effects.contains(
         .runAction(
-          stepID: "context", actionID: "builtin:git.context",
+          stepID: "context", actionID: "builtin:collect-worktree-context",
           inputs: ["root": .string(fixture.root.path(percentEncoded: false))])))
     await store.send(.started(session, effects: effects))
     await queue.reached()
@@ -894,7 +894,9 @@ struct WorkflowRunsFeatureTests {
     await store.finish(timeout: Self.timeout)
     let log = try String(
       contentsOf: session.store.directory(for: runID).appending(path: "log.md"), encoding: .utf8)
-    #expect(log.contains("Step 'context': native action 'builtin:git.context' not started; the run had moved on."))
+    #expect(
+      log.contains(
+        "Step 'context': native action 'builtin:collect-worktree-context' not started; the run had moved on."))
     #expect(!log.contains("finished after the run moved on"))
   }
 
@@ -938,7 +940,8 @@ struct WorkflowRunsFeatureTests {
       WorkflowRunEffect.inject(role: "r", surfaceID: pane, ordinal: 1, line: "l", opensActivation: true).isRevocable)
     #expect(WorkflowRunEffect.typeLine(role: "r", surfaceID: pane, line: "l").isRevocable)
     #expect(WorkflowRunEffect.launch(request).isRevocable)
-    #expect(WorkflowRunEffect.runAction(stepID: "s", actionID: "builtin:git.context", inputs: [:]).isRevocable)
+    #expect(
+      WorkflowRunEffect.runAction(stepID: "s", actionID: "builtin:collect-worktree-context", inputs: [:]).isRevocable)
     #expect(!WorkflowRunEffect.completeActivation(dispatchID: "d", summary: "s").isRevocable)
     #expect(!WorkflowRunEffect.abandonActivation(dispatchID: "d", reason: "r").isRevocable)
     #expect(!WorkflowRunEffect.persist.isRevocable)
@@ -1076,8 +1079,8 @@ struct WorkflowRunsFeatureTests {
     #expect(WorkflowRunNotice.statusEdge(from: running, to: session.run)?.kind == .completed)
     session.run.status = .skipped(step: "brief", dependent: "launch")
     #expect(WorkflowRunNotice.statusEdge(from: running, to: session.run)?.kind == .skipped)
-    session.run.status = .maxRoundsReached
-    #expect(WorkflowRunNotice.statusEdge(from: running, to: session.run)?.kind == .maxRoundsReached)
+    session.run.status = .iterationLimitReached
+    #expect(WorkflowRunNotice.statusEdge(from: running, to: session.run)?.kind == .iterationLimitReached)
     session.run.status = .cancelled
     #expect(WorkflowRunNotice.statusEdge(from: running, to: session.run) == nil)
     #expect(WorkflowRunNotice.statusEdge(from: .completed, to: session.run) == nil)

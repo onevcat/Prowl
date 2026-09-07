@@ -17,7 +17,7 @@ S1 does not add `agents wait`, launch-scoped runtime hooks, workflow completion,
 
 ## Owner decisions fixed before implementation
 
-- Continue the 064 path before the 063 workflow runner. `prowl workflow done` remains the only command that completes a workflow step; agent signals are observation/control-plane evidence.
+- Continue the 064 path before the 063 workflow runner. `prowl workflow deliver` remains the only command that completes a workflow step; agent signals are observation/control-plane evidence.
 - Rename the runtime edge from ambiguous `turn-complete` to `turn-ended`. A runtime hook can prove that a turn ended, not that an assigned task completed.
 - Reserve `dispatch-complete` for S2's paired dispatch protocol. S1 recorded the provisional
   shape; the final owner-reviewed command and receipt contract is in

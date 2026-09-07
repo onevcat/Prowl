@@ -9,7 +9,7 @@ description: >-
   other", "add an input to the guessing-game workflow"), wants one executed ("use Prowl's
   adversarial-review workflow on this branch", "run the count-files workflow", "跑一下
   xxx workflow"), asks about a run's progress or its result files, or when a `[Prowl] …`
-  line with a `prowl workflow done` command appears in this pane — that means this agent is
+  line with a `prowl workflow deliver` command appears in this pane — that means this agent is
   a participant in a run and must deliver through the workflow protocol. Not for driving
   individual panes directly (use prowl-cli) and not for Prowl settings/UI questions.
 metadata:
@@ -94,12 +94,12 @@ An active task delivered by Prowl in this pane, a launched role's kickoff protoc
 looks like this:
 
 ```
-[Prowl] <instruction…> — finish with: PROWL_WORKFLOW_TOKEN=<token> prowl workflow done [--verdict <v>] -
+[Prowl] <instruction…> — finish with: PROWL_WORKFLOW_TOKEN=<token> prowl workflow deliver [--verdict <v>] -
 ```
 
 1. Do the work the instruction asks for, completely, before delivering.
 2. Deliver by running the **exact rendered command** with the body on stdin as markdown
-   (`printf '…' | PROWL_WORKFLOW_TOKEN=… prowl workflow done -`). When verdict variants are
+   (`printf '…' | PROWL_WORKFLOW_TOKEN=… prowl workflow deliver -`). When verdict variants are
    offered, pick exactly one and run that variant.
 3. Include the declared sections, format, and verdict. Empty bodies are rejected; other
    contract mismatches are provisional by default or rejected under `strict: true`. Check
@@ -127,7 +127,7 @@ instructions. Read returned resource IDs with the same run ID and invocation num
 `workflow-resource:` references are handles, not filesystem paths. Use `--json`
 for byte-preserving reads, decode each chunk by its `encoding`, and continue with
 `--offset <next_offset>` until `next_offset` is absent. Only the assigned pane can read this content; reads do not require a token.
-Deliver ordinary text/JSON on stdin with `prowl workflow done -`; no project-local
+Deliver ordinary text/JSON on stdin with `prowl workflow deliver -`; no project-local
 temporary output file is needed. Explicit delivery is required.
 
 Run artifacts expire with their run: 30 days for unpinned terminal runs, with a

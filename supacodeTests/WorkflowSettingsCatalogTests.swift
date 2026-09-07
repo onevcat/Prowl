@@ -188,7 +188,7 @@ struct WorkflowSettingsCatalogTests {
   @Test func listStatusPrioritizesRecoveryAndEffectiveAvailability() throws {
     let warning = Self.review.replacing(
       "    prompt: \"Review.\"",
-      with: "    prompt: \"Review.\"\n    expect: { output: report, timeout: 3h }")
+      with: "    prompt: \"Review.\"\n    expect: { delivery: report, timeout: 3h }")
     let ready = try #require(
       WorkflowSettingsCatalog.build(
         scan: scan(entries: [entry(Self.review)]),

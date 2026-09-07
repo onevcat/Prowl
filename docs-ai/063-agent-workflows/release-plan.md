@@ -1,3 +1,7 @@
+> **2026-09-07 naming slice:** Action bundles (#774) and personal history (#775) are
+> merged. Normalize the unreleased contract before D3; see [019](019-workflow-naming.md).
+> This slice does not implement handoff or adversarial review and does not publish a release.
+
 > **2026-09-06 action bundle implementation:** Workflow UI is enabled by default in this
 > change. `PROWL_WORKFLOW_UI=0` remains available to hide it. The earlier intervening-release
 > opt-in gate below is historical; see [017](017-action-bundle-implementation.md).
@@ -32,7 +36,7 @@ as the slice name; both belong to 064.
 
 Cross-entry couplings (only these two): 064-S1 delivers the `ObservedAgentState` observer
 that 063-B3 consumes; 064-S3 attaches launch-scoped hooks through 063-A2's launch boundary.
-063 V1 does not otherwise depend on 064 (steps complete on `prowl workflow done`).
+063 V1 does not otherwise depend on 064 (steps complete on `prowl workflow deliver`).
 
 ## Releases
 
@@ -129,7 +133,7 @@ User-visible result: onevcat's daily CLI-driven orchestration is first-class
 | 1 | **#733** `prowl agents dispatch <pane> --prompt -`: a new pending dispatch bound to an existing surface, one pending per surface, `dispatch-complete` resolved from the caller's ancestry to the pane's current record, refused while the agent is working or blocked | 064 | S2, 064.012 | a reviewer launched once takes N assignments, each with its own receipt — the transport B3's `message` + `expect` rides on (decision 2026-08-29), and usable from the CLI recipe as soon as it merges |
 | 1 | **#726 T0** version attestation: per-runtime attested version record beside the research matrix + `make agent-versions` | 064 | S3 wave 1 | an installed runtime newer than its attested contract warns before a release |
 | 2 | **B2** runner core (pure state machine, run store, templates, registry, watchdog) — record [063.007](007-b2-runner-core.md) | 063 | B1 | watchdog on exact signals (064-S5 watchdog part, moved from D2); dormant until B3 |
-| 3 | **B3** runner wiring + `workflow run/status/done/cancel` | 063 | A2, S1, B2, #733 | engine powered on |
+| 3 | **B3** runner wiring + `workflow run/status/deliver/cancel` | 063 | A2, S1, B2, #733 | engine powered on |
 | 4 | **C1** status center + run panel + notifications | 063 | B3 | runs visible |
 
 User-visible result: a workflow file runs from the CLI (`prowl workflow run`), its steps and
@@ -246,7 +250,7 @@ R3+: V2 / S5 rest
   name is superseded). Before merge it was driven end to end from fresh agents that saw only
   the skill and the CLI: one ran an existing demo workflow, one authored and ran a new
   two-agent workflow (validated first try, `close:` steps included), and a launched participant
-  loaded the skill from the typed `[Prowl] …` line. That pass surfaced the `max_rounds_reached`
+  loaded the skill from the typed `[Prowl] …` line. That pass surfaced the `iteration_limit_reached`
   trap (a loop is only left through a satisfied `until`; the "poor-man's if" is not an `if`),
   now spelled out in the skill with a gave-up-verdict pattern. D1's remaining scope (Settings ›
   Workflows page, `docs/components/workflows.md`, CLI reachability) is unchanged.

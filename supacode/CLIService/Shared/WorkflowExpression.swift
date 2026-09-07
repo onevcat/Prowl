@@ -202,6 +202,18 @@ nonisolated indirect enum WorkflowExpressionNode {
 }
 
 extension WorkflowExpressionNode {
+  /// Every statically named path, including optional and short-circuited accesses.
+  var references: [[String]] {
+    if let staticPath { return [staticPath] }
+    switch self {
+    case .literal, .name: return []
+    case .field(let parent, _), .unary(_, let parent): return parent.references
+    case .index(let parent, let index): return parent.references + index.references
+    case .array(let items), .call(_, let items): return items.flatMap(\.references)
+    case .binary(_, let left, let right): return left.references + right.references
+    }
+  }
+
   var staticPath: [String]? {
     switch self {
     case .name(let name): return [name]

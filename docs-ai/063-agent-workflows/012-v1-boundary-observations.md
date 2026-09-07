@@ -21,7 +21,7 @@ Evidence runs referenced below (all in `Prowl/.prowl/workflow-runs/`):
 
 ### F1 — By-reference output passing costs agents nothing; the real gap is human-facing surfaces
 
-Agent→agent handover via `{{ outputs.<name>.path }}` was frictionless in every experiment:
+Agent→agent handover via `{{ deliveries.<name>.path }}` was frictionless in every experiment:
 a receiving agent reads the file as its first action, and the guess-number players
 demonstrably consumed each other's rounds through the shared file. The one place the
 "no inlined output text" rule (§6) actually bites is a surface where nobody can
@@ -29,7 +29,7 @@ dereference a path: the `notify` bell. "Put the computed number in the notificat
 is inexpressible.
 
 **V2 input:** if this is ever opened, open it narrowly — e.g. a sanitized, length-capped
-`outputs.<name>.firstline` allowed in `notify` only, passed through the existing
+`deliveries.<name>.firstline` allowed in `notify` only, passed through the existing
 rendered-text validation. The agent→agent case needs nothing.
 
 ### F2 — A poor-man's `if` already exists: `repeat { max: 1, until: <cond> }`
@@ -103,7 +103,7 @@ watchdog/timeout machinery is the only backstop.
 ### F7 — Smaller observations
 
 - **Pre-loop seed delivery.** A loop body whose first step references
-  `{{ outputs.<name>.path }}` needs a producer before the loop to satisfy dominance
+  `{{ deliveries.<name>.path }}` needs a producer before the loop to satisfy dominance
   checking; guess-number seeded it with an opening delivery (verdict `ready`) that also
   burned one of the four verdict slots. Worth documenting as an authoring pattern
   (D1 skill), and worth remembering as pressure on the 2–4 verdict cap.

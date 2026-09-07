@@ -28,7 +28,7 @@ modes. Four behaviors, however, made the documented flows unreliable in practice
    the signal `unbound` (plain shell pane; caller outside the agent's process tree), so the
    caller could not tell that the signal would never count as evidence.
 
-Documentation also referenced a `prowl workflow done` command that does not exist yet (063
+Documentation also referenced a `prowl workflow deliver` command that does not exist yet (063
 R2), and omitted `AGENT_NOT_FOUND` (wait), `DISPATCH_NOT_FOUND`, `DISPATCH_CONTEXT_REQUIRED`,
 and `DISPATCH_ALREADY_TERMINAL`.
 

@@ -127,7 +127,7 @@ nonisolated enum WorkflowDeliverySelector: Equatable, Sendable {
 nonisolated struct WorkflowDeliveryReceipt: Equatable, Sendable {
   let ordinal: Int
   let stepID: String
-  let output: WorkflowOutputRecord
+  let output: WorkflowDeliveryRecord
   /// Non-empty when the delivery was accepted provisionally; the CLI reports them as warnings.
   let issues: [WorkflowDeliveryIssue]
 }
@@ -145,7 +145,7 @@ nonisolated enum WorkflowRunStartError: Error, Equatable, Sendable {
   case invalidInput(name: String, reason: String)
   case unsafePath(String)
   case unknownSkipStep(String)
-  /// `--skip` names a step without an `expect`; only awaited outputs can be skipped at start.
+  /// `--skip` names a step without an `expect`; only awaited deliveries can be skipped at start.
   case skipNotExpecting(String)
   case skipNotAllowed(step: String, dependent: String)
   case missingBinding(role: String)
@@ -441,9 +441,9 @@ nonisolated struct WorkflowRunMachine {
     let effects: [WorkflowRunEffect] = [
       .disarmWatchdog(ordinal: activation.ordinal),
       .log(
-        "Step '\(activation.stepID)': output '\(activation.outputName)' accepted "
+        "Step '\(activation.stepID)': output '\(activation.deliveryName)' accepted "
           + "(invocation \(activation.ordinal))\(issueNote); persisting."),
-      .persistOutput(name: activation.outputName, ordinal: activation.ordinal, body: validated.body),
+      .persistOutput(name: activation.deliveryName, ordinal: activation.ordinal, body: validated.body),
     ]
     return (
       .success(
@@ -453,15 +453,15 @@ nonisolated struct WorkflowRunMachine {
     )
   }
 
-  private func outputRecord(for activation: WorkflowActivation, verdict: String?) -> WorkflowOutputRecord {
-    WorkflowOutputRecord(
-      name: activation.outputName,
+  private func outputRecord(for activation: WorkflowActivation, verdict: String?) -> WorkflowDeliveryRecord {
+    WorkflowDeliveryRecord(
+      name: activation.deliveryName,
       ordinal: activation.ordinal,
       path: WorkflowRunPaths.path(
-        WorkflowRunPaths.outputURL(
-          runDirectory: run.runDirectory, name: activation.outputName, ordinal: activation.ordinal)),
+        WorkflowRunPaths.deliveryURL(
+          runDirectory: run.runDirectory, name: activation.deliveryName, ordinal: activation.ordinal)),
       latestPath: WorkflowRunPaths.path(
-        WorkflowRunPaths.outputURL(runDirectory: run.runDirectory, name: activation.outputName, ordinal: nil)),
+        WorkflowRunPaths.deliveryURL(runDirectory: run.runDirectory, name: activation.deliveryName, ordinal: nil)),
       verdict: verdict,
       deliveredAt: now()
     )
@@ -497,8 +497,8 @@ nonisolated struct WorkflowRunMachine {
   ) {
     let ordinal = activation.ordinal
     let record = outputRecord(for: activation, verdict: verdict)
-    run.outputs[activation.outputName] = record
-    run.skippedOutputs[activation.outputName] = nil
+    run.deliveries[activation.deliveryName] = record
+    run.skippedOutputs[activation.deliveryName] = nil
     updateActivation(ordinal: ordinal) {
       $0.state = .delivered
       $0.pendingDelivery = nil
@@ -508,11 +508,12 @@ nonisolated struct WorkflowRunMachine {
       effects.append(
         .completeActivation(
           dispatchID: dispatchID,
-          summary: "Delivered output '\(activation.outputName)' for workflow step '\(activation.stepID)'\(verdictNote)."
+          summary:
+            "Delivered output '\(activation.deliveryName)' for workflow step '\(activation.stepID)'\(verdictNote)."
         ))
     }
     effects.append(
-      .log("Step '\(activation.stepID)': output '\(activation.outputName)' delivered (invocation \(ordinal))."))
+      .log("Step '\(activation.stepID)': output '\(activation.deliveryName)' delivered (invocation \(ordinal))."))
     run.status = .running
     completeCurrentStep(effects: &effects)
     advance(effects: &effects)
@@ -540,7 +541,7 @@ nonisolated struct WorkflowRunMachine {
   private static func startConsequence(
     forStep stepID: String, definition: WorkflowDefinition, preSkipped: Set<String>
   ) -> WorkflowSkipConsequence {
-    guard let name = definition.flattenedSteps.first(where: { $0.id == stepID })?.outputName else {
+    guard let name = definition.flattenedSteps.first(where: { $0.id == stepID })?.deliveryName else {
       return .noOutput
     }
     let remaining = definition.steps
@@ -551,7 +552,7 @@ nonisolated struct WorkflowRunMachine {
   private static func skipConsequence(forStep stepID: String, in run: WorkflowRun)
     -> WorkflowSkipConsequence
   {
-    guard let name = run.definition.flattenedSteps.first(where: { $0.id == stepID })?.outputName else {
+    guard let name = run.definition.flattenedSteps.first(where: { $0.id == stepID })?.deliveryName else {
       return .noOutput
     }
     return consequence(
@@ -614,7 +615,7 @@ nonisolated struct WorkflowRunMachine {
 
   private static func references(_ name: String, in text: String) -> Bool {
     guard let paths = try? WorkflowExpression.requiredReferences(in: text) else { return false }
-    return paths.contains { $0.count >= 2 && $0[0] == "outputs" && $0[1] == name }
+    return paths.contains { $0.count >= 2 && $0[0] == "deliveries" && $0[1] == name }
   }
 
   private static func references(_ name: String, in value: WorkflowJSONValue) -> Bool {
@@ -669,7 +670,7 @@ nonisolated struct WorkflowRunMachine {
 
   private mutating func skipAtStart(_ step: WorkflowStepDefinition, effects: inout [WorkflowRunEffect]) {
     recordStep(step, state: .skipped, ordinal: nil)
-    if let name = step.outputName {
+    if let name = step.deliveryName {
       run.skippedOutputs[name] = step.id
     }
     effects.append(.log("Step '\(step.id)': skipped at start."))
@@ -766,7 +767,7 @@ nonisolated struct WorkflowRunMachine {
     guard let invocation = invocation(ordinal) else { return nil }
     guard let rendered = render(content.body, step: step, effects: &effects) else { return nil }
     var completion: WorkflowCompletionCommand?
-    if let expect, let outputName = step.outputName {
+    if let expect, let deliveryName = step.deliveryName {
       // A `roleBusy` refusal returns the same invocation to its idle wait: the activation and its
       // token survive, so the command the run already rendered stays valid (dsl-spec §5).
       let activation: WorkflowActivation
@@ -775,7 +776,7 @@ nonisolated struct WorkflowRunMachine {
       } else {
         activation = WorkflowActivation(
           ordinal: ordinal, stepID: step.id, role: invocation.role, token: makeToken(), expect: expect,
-          outputName: outputName, dispatchID: nil, state: .waiting)
+          deliveryName: deliveryName, dispatchID: nil, state: .waiting)
         updateInvocation(ordinal: ordinal) { $0.activation = activation }
       }
       completion = activation.completion
@@ -857,10 +858,10 @@ nonisolated struct WorkflowRunMachine {
       WorkflowSchema.roleEnvironmentKey: role,
     ]
     var protocolBlock: String?
-    if let expect, let outputName = step.outputName {
+    if let expect, let deliveryName = step.deliveryName {
       let activation = WorkflowActivation(
         ordinal: ordinal, stepID: step.id, role: role, token: makeToken(), expect: expect,
-        outputName: outputName, dispatchID: nil, state: .waiting)
+        deliveryName: deliveryName, dispatchID: nil, state: .waiting)
       updateInvocation(ordinal: ordinal) { $0.activation = activation }
       environment[WorkflowSchema.tokenEnvironmentKey] = activation.token
       let title = step.title.flatMap { try? WorkflowExpression.renderText($0, values: run.stepValues) }
@@ -919,7 +920,7 @@ nonisolated struct WorkflowRunMachine {
       }
     }
     let known =
-      run.outputs.values.flatMap { [$0.path, $0.latestPath] }
+      run.deliveries.values.flatMap { [$0.path, $0.latestPath] }
       + run.actionOutputs.values.flatMap { $0.values.flatMap(paths) }
       + run.stepValues.values.flatMap(paths)
     return WorkflowTaskContent.make(
@@ -936,11 +937,11 @@ nonisolated struct WorkflowRunMachine {
     var values = run.stepValues
     let directory = run.runDirectory.appending(path: "actions/\(step.id)/\(executionID)")
     if case .object(var context) = values["context"] {
-      context["execution"] = .object([
-        "id": .string(executionID), "step_id": .string(step.id),
+      context["action"] = .object([
+        "execution_id": .string(executionID), "step_id": .string(step.id),
         "attempt": .integer(run.actionAttempts[step.id] ?? 1),
-        "cwd": .string(run.context.worktree.path),
-        "artifact_dir": .string(directory.appending(path: "artifacts").path),
+        "working_directory": .string(run.context.worktree.path),
+        "artifacts_directory": .string(directory.appending(path: "artifacts").path),
       ])
       values["context"] = .object(context)
     }
@@ -973,7 +974,7 @@ nonisolated struct WorkflowRunMachine {
             stepID: evaluation.stepID, iteration: evaluation.iteration,
             state: evaluation.skipped ? .skipped : .completed, ordinal: nil))
       }
-      for name in cursor.expiredOutputs { run.outputs.removeValue(forKey: name) }
+      for name in cursor.expiredOutputs { run.deliveries.removeValue(forKey: name) }
       for name in cursor.expiredActions { run.actionOutputs.removeValue(forKey: name) }
       switch outcome {
       case .step: return true
@@ -983,7 +984,7 @@ nonisolated struct WorkflowRunMachine {
     } catch let limit as WorkflowLoopLimit {
       run.controlCursor = cursor
       effects.append(.log("Loop '\(limit.stepID)' reached max_iterations while its condition remained true."))
-      finish(.maxRoundsReached, effects: &effects)
+      finish(.iterationLimitReached, effects: &effects)
     } catch {
       run.controlCursor = cursor
       raiseAttention(
@@ -1011,7 +1012,8 @@ nonisolated struct WorkflowRunMachine {
     run.phase = .waitingForDelivery(ordinal: ordinal)
     effects.append(.persist)
     effects.append(
-      .log("Step '\(invocation.stepID)': waiting for output '\(activation.outputName)' from role '\(invocation.role)'.")
+      .log(
+        "Step '\(invocation.stepID)': waiting for output '\(activation.deliveryName)' from role '\(invocation.role)'.")
     )
     armWatchdog(ordinal: ordinal, nudgedAlready: false, effects: &effects)
   }
@@ -1097,8 +1099,8 @@ nonisolated struct WorkflowRunMachine {
         let delivery = activation.pendingDelivery
       {
         run.status = .running
-        effects.append(.log("Step '\(activation.stepID)': retrying to persist output '\(activation.outputName)'."))
-        effects.append(.persistOutput(name: activation.outputName, ordinal: activation.ordinal, body: delivery.body))
+        effects.append(.log("Step '\(activation.stepID)': retrying to persist output '\(activation.deliveryName)'."))
+        effects.append(.persistOutput(name: activation.deliveryName, ordinal: activation.ordinal, body: delivery.body))
         return
       }
       retryCurrentStep(effects: &effects)
@@ -1138,7 +1140,7 @@ nonisolated struct WorkflowRunMachine {
       activation.state == .provisional, let delivery = activation.pendingDelivery
     else { return }
     let accepted: String?
-    if let allowed = activation.expect.verdict {
+    if let allowed = activation.expect.verdicts {
       // The delivery's own valid verdict wins; otherwise the user must pick a declared one.
       if let own = delivery.verdict {
         accepted = own
@@ -1204,7 +1206,7 @@ nonisolated struct WorkflowRunMachine {
     if let index = run.stepRecords.indices.last, run.stepRecords[index].state == .active {
       run.stepRecords[index].state = .skipped
     }
-    if let name = step.outputName {
+    if let name = step.deliveryName {
       run.skippedOutputs[name] = step.id
     }
     run.status = .running
@@ -1320,22 +1322,22 @@ nonisolated struct WorkflowRunMachine {
   private func attentionMessage(_ reason: WorkflowAttentionReason, stepID: String, role: String?) -> String {
     let subject: String
     if let role, let binding = run.bindings[role] {
-      subject = "\(role) (\(binding.templateRole.name))"
+      subject = "\(role) (\(binding.displayName))"
     } else {
       subject = role ?? "the step"
     }
-    let outputName = run.currentActivation?.outputName ?? "its output"
+    let deliveryName = run.currentActivation?.deliveryName ?? "its output"
     switch reason {
     case .needsInput:
       return "\(subject) is waiting for input in its pane."
     case .idleWithoutDelivery:
-      return "\(subject) has been idle without delivering \(outputName); Prowl nudged it once."
+      return "\(subject) has been idle without delivering \(deliveryName); Prowl nudged it once."
     case .blocked:
       return "\(subject) looks blocked on screen."
     case .agentGone(.sessionEnded):
-      return "\(subject)'s agent session ended before it delivered \(outputName)."
+      return "\(subject)'s agent session ended before it delivered \(deliveryName)."
     case .agentGone(.paneClosed):
-      return "\(subject)'s pane was closed before it delivered \(outputName)."
+      return "\(subject)'s pane was closed before it delivered \(deliveryName)."
     case .agentGone(.processGone):
       return "\(subject)'s agent process is gone."
     case .agentGone(.notLaunched):
@@ -1362,7 +1364,7 @@ nonisolated struct WorkflowRunMachine {
     case .persistFailed(let detail):
       return "The delivered output of step '\(stepID)' could not be saved to the run directory: \(detail)"
     case .deliveryIssues(let issues):
-      return "\(subject) delivered \(outputName), but: \(issues.map(\.message).joined(separator: "; "))."
+      return "\(subject) delivered \(deliveryName), but: \(issues.map(\.message).joined(separator: "; "))."
         + " Accept it, ask again, or skip."
     case .timeout:
       return "Step '\(stepID)' reached its timeout without a delivery from \(subject)."
@@ -1395,7 +1397,7 @@ nonisolated struct WorkflowRunMachine {
     case .cancelled: "cancelled"
     case .skipped(let step, let dependent):
       "skipped (step '\(step)' was skipped but '\(dependent)' depends on its output)"
-    case .maxRoundsReached: "max rounds reached"
+    case .iterationLimitReached: "iteration limit reached"
     case .interrupted: "interrupted"
     }
   }

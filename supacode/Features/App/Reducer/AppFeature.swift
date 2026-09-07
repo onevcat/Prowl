@@ -1182,7 +1182,7 @@ struct AppFeature {
             effects.append(
               .send(.repositories(.showToast(.success("\(notice.workflowName) completed"))))
             )
-          case .skipped, .maxRoundsReached:
+          case .skipped, .iterationLimitReached:
             effects.append(.send(.repositories(.showToast(.warning(notice.title)))))
           case .needsAttention:
             break

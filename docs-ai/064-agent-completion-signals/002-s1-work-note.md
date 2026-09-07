@@ -61,7 +61,7 @@ create --profile --prompt
 
 The dispatch receipt survives agent/pane closure but not app restart. A later dispatch cannot
 be satisfied by an older receipt. Internal surface generations remain only an unpaired
-observation fallback. Full workflow output continues through `prowl workflow done -`; large
+observation fallback. Full workflow output continues through `prowl workflow deliver -`; large
 ad-hoc results continue through `agents read` or a future `agents wait --include-result`.
 
 ## Progress log

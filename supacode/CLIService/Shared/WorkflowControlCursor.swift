@@ -47,7 +47,7 @@ nonisolated public struct WorkflowControlCursor: Equatable, Sendable {
   public func values(over context: [String: WorkflowJSONValue]) -> [String: WorkflowJSONValue] {
     var result = context
     result["state"] = Self.object(state.values)
-    for (group, expired) in [("outputs", expiredOutputs), ("actions", expiredActions)] {
+    for (group, expired) in [("deliveries", expiredOutputs), ("actions", expiredActions)] {
       if case .object(var fields) = result[group] {
         for name in expired { fields.removeValue(forKey: name) }
         result[group] = .object(fields)
@@ -82,7 +82,7 @@ nonisolated public struct WorkflowControlCursor: Equatable, Sendable {
   public mutating func complete() {
     guard let step = currentStep, !frames.isEmpty else { return }
     if case .action = step.action { expiredActions.remove(step.id) }
-    if let output = step.outputName { expiredOutputs.remove(output) }
+    if let output = step.deliveryName { expiredOutputs.remove(output) }
     frames[frames.count - 1].index += 1
     currentStep = nil
   }
@@ -174,7 +174,7 @@ nonisolated public struct WorkflowControlCursor: Equatable, Sendable {
   private mutating func expire(_ steps: [WorkflowStepDefinition]) {
     for step in steps {
       if case .action = step.action { expiredActions.insert(step.id) }
-      if let output = step.outputName { expiredOutputs.insert(output) }
+      if let output = step.deliveryName { expiredOutputs.insert(output) }
       expire(step.action.children)
     }
   }

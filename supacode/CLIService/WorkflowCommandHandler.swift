@@ -1,7 +1,7 @@
 // supacode/CLIService/WorkflowCommandHandler.swift
 // Handles `prowl workflow` over the socket (docs-ai 063 B1/B3): `list` resolves the worktree
 // whose repo source is searched and runs three-source discovery; `run` resolves the source pane
-// or worktree and hands admission to the runtime; `status`, `done`, and `cancel` are attributed by
+// or worktree and hands admission to the runtime; `status`, `deliver`, and `cancel` are attributed by
 // the caller pane and routed to the runtime coordinator.
 
 import Foundation
@@ -64,7 +64,7 @@ final class WorkflowCommandHandler: CommandHandler {
             code: CLIErrorCode.workflowFailed, message: "Failed to list workflows: \(error)")
         }
       }
-    case .run, .status, .done, .cancel, .read:
+    case .run, .status, .deliver, .cancel, .read:
       guard let runtime else { return notConfigured() }
       return await handleRuntime(
         input, runtime: runtime, snapshot: snapshot, callerPane: callerPane)
@@ -92,8 +92,8 @@ final class WorkflowCommandHandler: CommandHandler {
       return await runtime.read(input, callerPane: callerPane)
     case .status:
       return runtime.status(input, callerPane: callerPane)
-    case .done:
-      return await runtime.done(input, callerPane: callerPane)
+    case .deliver:
+      return await runtime.deliver(input, callerPane: callerPane)
     case .cancel:
       return runtime.cancel(input, callerPane: callerPane)
     }
