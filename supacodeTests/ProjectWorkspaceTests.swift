@@ -567,7 +567,8 @@ struct ProjectWorkspaceTests {
     #expect(workspace.repositories.map(\.baseRef) == ["main", "origin/main"])
   }
 
-  @Test func createWorkspaceRollsBackCloneWhenCheckoutFails() async throws {
+  @Test(arguments: [false, true])
+  func createWorkspaceRollsBackCloneWhenCheckoutFails(cancelDuringCheckout: Bool) async throws {
     let rootURL = try makeTemporaryWorkspaceRoot()
     let bareURL = try makeTemporaryWorkspaceRoot()
     defer {
@@ -576,48 +577,54 @@ struct ProjectWorkspaceTests {
     }
     let commands = LockIsolated<[ProjectWorkspaceGitCommand]>([])
     let cloneDestination = rootURL.appending(path: "app", directoryHint: .isDirectory)
-    await #expect(throws: ProjectWorkspaceCreationError.self) {
-      try await ProjectWorkspace.create(
-        ProjectWorkspaceCreationRequest(
-          draft: ProjectWorkspaceCreationDraft(
-            title: "Half Done",
-            rootURL: rootURL,
-            repositories: [
-              ProjectWorkspaceRepositoryPlan(
-                id: "api",
-                name: "API",
-                path: "api",
-                sourceKind: .bareRepository,
-                sourceLocation: bareURL.path(percentEncoded: false),
-                checkout: .createBranch(branchName: "codex/api", baseRef: "main")
-              ),
-              ProjectWorkspaceRepositoryPlan(
-                id: "app",
-                name: "App",
-                path: "app",
-                sourceKind: .remote,
-                sourceLocation: "git@github.com:onevcat/app.git",
-                checkout: .createBranch(branchName: "codex/app", baseRef: "origin/main")
-              ),
-            ]
+    await Task {
+      await #expect(throws: ProjectWorkspaceCreationError.self) {
+        try await ProjectWorkspace.create(
+          ProjectWorkspaceCreationRequest(
+            draft: ProjectWorkspaceCreationDraft(
+              title: "Half Done",
+              rootURL: rootURL,
+              repositories: [
+                ProjectWorkspaceRepositoryPlan(
+                  id: "api",
+                  name: "API",
+                  path: "api",
+                  sourceKind: .bareRepository,
+                  sourceLocation: bareURL.path(percentEncoded: false),
+                  checkout: .createBranch(branchName: "codex/api", baseRef: "main")
+                ),
+                ProjectWorkspaceRepositoryPlan(
+                  id: "app",
+                  name: "App",
+                  path: "app",
+                  sourceKind: .remote,
+                  sourceLocation: "git@github.com:onevcat/app.git",
+                  checkout: .createBranch(branchName: "codex/app", baseRef: "origin/main")
+                ),
+              ]
+            ),
+            createdAt: Date(timeIntervalSince1970: 5_678_901)
           ),
-          createdAt: Date(timeIntervalSince1970: 5_678_901)
-        ),
-        gitRunner: ProjectWorkspaceGitRunner { command in
-          commands.withValue { $0.append(command) }
-          if command.arguments.first == "clone" {
-            try FileManager.default.createDirectory(
-              at: cloneDestination, withIntermediateDirectories: true)
+          gitRunner: ProjectWorkspaceGitRunner { command in
+            commands.withValue { $0.append(command) }
+            if command.arguments.first == "clone" {
+              try FileManager.default.createDirectory(
+                at: cloneDestination, withIntermediateDirectories: true)
+            }
+            if command.arguments.contains("remove") {
+              #expect(!Task.isCancelled)
+            }
+            if command.arguments.contains("checkout") {
+              if cancelDuringCheckout { withUnsafeCurrentTask { $0?.cancel() } }
+              throw ProjectWorkspaceCreationError.gitCommandFailed(
+                command: command.displayCommand,
+                message: "boom"
+              )
+            }
           }
-          if command.arguments.contains("checkout") {
-            throw ProjectWorkspaceCreationError.gitCommandFailed(
-              command: command.displayCommand,
-              message: "boom"
-            )
-          }
-        }
-      )
-    }
+        )
+      }
+    }.value
 
     let rootPath = rootURL.path(percentEncoded: false)
     let barePath = normalizedTestPath(bareURL)

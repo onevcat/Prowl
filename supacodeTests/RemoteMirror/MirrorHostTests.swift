@@ -17,8 +17,8 @@ struct MirrorHostTests {
     host.port = String(UInt16.random(in: 49152...65535))
     host.start()
     defer { host.stop() }
-    for await ready in Observations({ host.isRunning || host.error != nil }) {
-      if ready { break }
+    for await ready in Observations({ host.isRunning || host.error != nil }) where ready {
+      break
     }
     #expect(host.error == nil)
     #expect(source.reads == 0)

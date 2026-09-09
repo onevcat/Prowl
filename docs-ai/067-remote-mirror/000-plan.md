@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| **Status** | Initial implementation; complete App verification pending |
+| **Status** | Debug build and focused tests pass; end-to-end UI verification pending |
 | **Anchor date** | 2026-09-09 |
 | **Related** | [061](../061-native-toolbar-controls/000-plan.md), upstream #788 |
 
@@ -53,3 +53,5 @@ capability needed here. Browser clients are outside this implementation.
 ## Amendments
 
 - Updated 2026-09-09: Initial adapter and focused tests added; full App build blocked by dependency downloads — see [001-action.md](001-action.md).
+
+- Updated 2026-09-09: Dependencies, Debug compilation, lint, and App-hosted regression tests now pass; real mirror UI verification remains pending — see [001-action.md](001-action.md).

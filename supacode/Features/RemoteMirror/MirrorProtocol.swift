@@ -102,7 +102,11 @@ nonisolated struct MirrorHistory {
   static let maximumBytes = 2 * 1024 * 1024
 
   init(text: String) {
-    let bounded = String(decoding: text.utf8.suffix(Self.maximumBytes), as: UTF8.self)
+    // A byte limit can split a scalar; discard only its leading continuation bytes.
+    let bytes = text.utf8.suffix(Self.maximumBytes).drop(while: { $0 & 0xC0 == 0x80 })
+    guard let bounded = String(bytes: bytes, encoding: .utf8) else {
+      preconditionFailure("A scalar-aligned suffix of a Swift String must be valid UTF-8")
+    }
     lines = bounded.components(separatedBy: "\n")
   }
 

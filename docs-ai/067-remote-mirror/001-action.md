@@ -8,8 +8,9 @@
 | 2026-09-09 | Validated protocol/Host tests independently from App dependencies | `scripts/test-remote-mirror.sh` |
 
 ## Outcome and current state
-The initial adapter is present. The **complete App has not built or run with these
-changes**. Do not treat the feature as release-ready.
+The complete Debug App now builds against the local Ghostty bridge. App-hosted
+protocol and workspace regression tests pass. Real Host/Client terminal rendering
+and native UI have not yet been verified; the feature is not release-ready.
 
 - Host toolbar control next to notifications, with IP/port settings and start/stop.
 - Add to Prowl includes Remote Mirror Pane, a connection form, and Host pane selection.
@@ -23,7 +24,7 @@ changes**. Do not treat the feature as release-ready.
 - Local Ghostty framework override uses the sibling bridge build; no upstream artifact is relabeled.
 
 ## Verification
-- Seven focused Swift Testing tests passed, including real TLS listener/connection
+- Eight focused Swift Testing tests passed, including UTF-8 history boundaries and real TLS listener/connection
   tests for lazy capture, `PANE_BUSY`, raw input delivery, stop lifecycle, and wrong-key
   metadata denial. The Host test uses an injected terminal source, not an actual Ghostty surface.
 - Production relay exercised under a real PTY: fragmented inbound frames, exact VT
@@ -31,10 +32,17 @@ changes**. Do not treat the feature as release-ready.
 - New adapter types passed Swift type checking with real Ghostty C headers and minimal
   surrounding App stubs. Modified Swift files passed syntax parsing. These checks do
   not replace compilation against the complete App.
-- `make check` passed formatting stages, then stopped because `mise`/SwiftLint are absent.
-- `make build-app` reached CLI dependency resolution. GitHub fetches were extremely
-  slow and failed with HTTP/2 early EOF. Process-local HTTP/1.1 retry also stalled.
-  Downloads were stopped after the user confirmed the proxy was currently unreliable.
+- `make check` passes, including strict SwiftLint and 152 script tests.
+- CLI and complete Debug App compile successfully with Xcode 26.3 / Swift 6.2.4.
+  The `make build-app` log formatter (`xcsift`) was killed by SIGKILL; running the
+  underlying Xcode build directly with a raw log succeeded without changing signing.
+- App-hosted `MirrorProtocolTests`, `MirrorHostTests`, and `ProjectWorkspaceTests`
+  pass: 35 tests, 36 parameterized cases, zero failures. The rollback regression
+  covers both normal failure and cancellation; Git cleanup remains detached while
+  synchronous file deletion no longer captures a non-Sendable FileManager across tasks.
+- Host history dispatch and Ghostty initialization were extracted to satisfy lint.
+  Byte-bounded history now drops an incomplete leading UTF-8 scalar instead of
+  introducing a replacement character. Image sizing uses equivalent `scaledToFit()`.
 - No GUI, two-App, LAN, IME, font scaling, or end-to-end history assertions were made.
 
 ## Deviations and remaining work
@@ -44,8 +52,8 @@ changes**. Do not treat the feature as release-ready.
 - Mirrors occupy the detail area individually; mixed local/remote split trees are not implemented.
 - The pinned Ghostty backend requires a PTY; the internal app relay follows the upstream
   spike instead of modifying Ghostty's IO backend.
-- Finish dependency resolution, install/use the repository build tools, run complete
-  App compilation and lint, then verify real Host/Client surfaces and native UI.
+- Verify real Host/Client surfaces and native UI; build and protocol tests alone
+  do not establish rendering or keyboard parity.
 - Check grid presentation, key focus/IME, and live/history switching in the actual App.
 - Before publishing, pin Prowl's Ghostty submodule to a reachable bridge commit; the
   current local branch deliberately uses `PROWL_GHOSTTY_SOURCE_DIR` instead.

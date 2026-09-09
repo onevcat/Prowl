@@ -178,6 +178,17 @@ struct SupacodeApp: App {
     #endif
   }
 
+  private static func initializeGhostty(resolvedKeybindings: ResolvedKeybindingMap) {
+    let ghosttyArgv = GhosttyCLI.argv(resolvedKeybindings: resolvedKeybindings)
+    ghosttyArgv.withUnsafeBufferPointer { buffer in
+      let argc = UInt(max(0, buffer.count - 1))
+      let argv = UnsafeMutablePointer(mutating: buffer.baseAddress)
+      if ghostty_init(argc, argv) != GHOSTTY_SUCCESS {
+        preconditionFailure("ghostty_init failed")
+      }
+    }
+  }
+
   @MainActor init() {
     MirrorRelay.runIfRequested()
     NSWindow.allowsAutomaticWindowTabbing = false
@@ -192,14 +203,7 @@ struct SupacodeApp: App {
     if let resourceURL = Bundle.main.resourceURL?.appendingPathComponent("ghostty") {
       setenv("GHOSTTY_RESOURCES_DIR", resourceURL.path, 1)
     }
-    let ghosttyArgv = GhosttyCLI.argv(resolvedKeybindings: initialResolvedKeybindings)
-    ghosttyArgv.withUnsafeBufferPointer { buffer in
-      let argc = UInt(max(0, buffer.count - 1))
-      let argv = UnsafeMutablePointer(mutating: buffer.baseAddress)
-      if ghostty_init(argc, argv) != GHOSTTY_SUCCESS {
-        preconditionFailure("ghostty_init failed")
-      }
-    }
+    Self.initializeGhostty(resolvedKeybindings: initialResolvedKeybindings)
     let runtime = GhosttyRuntime(initialColorScheme: initialSettings.appearanceMode.colorScheme)
     _ghostty = State(initialValue: runtime)
     let shortcuts = GhosttyShortcutManager(runtime: runtime)

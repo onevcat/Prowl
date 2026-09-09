@@ -55,4 +55,13 @@ struct MirrorProtocolTests {
       #expect(throws: MirrorProtocolError.self) { try MirrorConnection.parameters(pairingKey: key) }
     }
   }
+
+  @Test func historyByteLimitDiscardsOnlyAnIncompleteLeadingScalar() {
+    let tail = String(repeating: "a", count: MirrorHistory.maximumBytes - 1)
+    let history = MirrorHistory(text: "思" + tail)
+    #expect(history.lines == [tail])
+    let aligned = String(repeating: "a", count: MirrorHistory.maximumBytes - 3)
+    #expect(MirrorHistory(text: "思" + aligned).lines == ["思" + aligned])
+    #expect(MirrorHistory(text: "").lines == [""])
+  }
 }

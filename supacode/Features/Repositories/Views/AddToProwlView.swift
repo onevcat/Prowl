@@ -29,7 +29,7 @@ struct AddToProwlView: View {
       HStack(alignment: .center, spacing: 12) {
         Image(nsImage: NSApp.applicationIconImage)
           .resizable()
-          .aspectRatio(contentMode: .fit)
+          .scaledToFit()
           .frame(width: 38, height: 38)
           .accessibilityHidden(true)
         VStack(alignment: .leading, spacing: 2) {

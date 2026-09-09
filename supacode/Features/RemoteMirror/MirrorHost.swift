@@ -163,25 +163,29 @@ final class MirrorHost {
         else { throw MirrorProtocolError.invalidMessage }
         try source.write(bytes, to: subscription.paneID)
       case .history:
-        guard var subscription = subscriptions[peer.id] else {
-          throw MirrorProtocolError.invalidMessage
-        }
-        if message.historyID == nil {
-          let text = try source.retainedText(subscription.paneID)
-          subscription.history = MirrorHistory(text: text)
-        }
-        guard let history = subscription.history, message.historyID == nil || message.historyID == history.id else {
-          throw MirrorProtocolError.invalidMessage
-        }
-        let page = try history.page(before: message.offset ?? history.lines.count)
-        subscriptions[peer.id] = subscription
-        peer.send(
-          MirrorMessage(
-            kind: .historyPage, historyID: history.id, offset: page.start,
-            lines: page.lines, total: history.lines.count))
+        try sendHistory(message, to: peer)
       default: throw MirrorProtocolError.invalidMessage
       }
     } catch { peer.close(error.localizedDescription) }
+  }
+
+  private func sendHistory(_ message: MirrorMessage, to peer: MirrorConnection) throws {
+    guard var subscription = subscriptions[peer.id] else {
+      throw MirrorProtocolError.invalidMessage
+    }
+    if message.historyID == nil {
+      let text = try source.retainedText(subscription.paneID)
+      subscription.history = MirrorHistory(text: text)
+    }
+    guard let history = subscription.history, message.historyID == nil || message.historyID == history.id else {
+      throw MirrorProtocolError.invalidMessage
+    }
+    let page = try history.page(before: message.offset ?? history.lines.count)
+    subscriptions[peer.id] = subscription
+    peer.send(
+      MirrorMessage(
+        kind: .historyPage, historyID: history.id, offset: page.start,
+        lines: page.lines, total: history.lines.count))
   }
 
   private func poll() {

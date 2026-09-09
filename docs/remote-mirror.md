@@ -27,7 +27,7 @@ panes every 200 ms, and only sends changed frames. A slow link holds at most one
 unacknowledged frame per pane. With no subscriptions, the Host does not read frames.
 
 **History** loads retained text, 200 lines per request, from a bounded snapshot of
-the Host's terminal history and screen (up to 2 MiB of UTF-8 text). **Load Earlier**
+the Host's terminal history and screen (up to 2 MiB of UTF-8 text, trimmed at a complete character boundary). **Load Earlier**
 fetches preceding pages of that same snapshot. **Refresh** requests current retained
 text. Live output does not scroll this view. History currently preserves text, not
 cell styling. Erased transient output is not recorded or recoverable.
