@@ -19,6 +19,9 @@ Quitting Prowl stops the service. This is not a detached terminal daemon.
 Open **Add to Prowl → Remote Mirror Pane**. Enter the Host IP, port, and pairing key.
 Connect, then select an available pane. The mirror appears under **Remote Mirrors**
 in the sidebar. Closing it only disconnects the remote subscription.
+Only already-created terminals in the App instance running Host are listed; project
+entries alone do not start a pane. After opening more terminals on Host, choose
+**Refresh Panes**. **In use** means another mirror occupies that pane.
 The picker shows the repository folder name above the Tab title and worktree name.
 Unnamed terminals fall back to the detected agent or Shell. Multiple tabs and split
 panes include their positions so identical titles remain distinguishable. The sidebar
@@ -71,6 +74,9 @@ repository first, then use:
 PROWL_GHOSTTY_SOURCE_DIR=../ghostty make build-app
 ```
 
-The override copies its built XCFramework and terminal resources without changing
-the pinned upstream artifact or downloading another Ghostty build. Both fork branches
-can remain local until their changes are ready to publish.
+The required bridge is available in `Awhisper/ghostty` on `feat/mirror-bridge`, commit
+`02b3c67044c5b2a0f99c8184e17bf47ab5396d3d`. The override copies its built XCFramework
+and terminal resources without changing the pinned upstream artifact. The default
+submodule/artifact does not yet export the required API: this branch is a Draft
+integration, not a self-contained fresh-checkout build. The Ghostty dependency must
+be integrated before merge.

@@ -8,10 +8,13 @@
 | 2026-09-09 | Validated protocol/Host tests independently from App dependencies | `scripts/test-remote-mirror.sh` |
 
 ## Outcome and current state
-The complete Debug App now builds against the local Ghostty bridge. App-hosted
+The acceptance build at `581e97a7` built against the local Ghostty bridge. App-hosted
 protocol and workspace regression tests pass. Real Host/Client Ghostty surfaces now
 pass App-hosted integration tests; native UI and pixel presentation remain unverified.
-See [002-terminal-integration.md](002-terminal-integration.md). The feature is not release-ready.
+Subsequent user-led two-Mac testing exercised the UI and prompted viewport and naming fixes.
+The Draft now excludes unrelated workspace/compiler and icon changes; earlier build
+results are not evidence of a clean build of this narrowed tree.
+See [003-ui-and-draft-scope.md](003-ui-and-draft-scope.md). The feature is not release-ready.
 
 - Host toolbar control next to notifications, with IP/port settings and start/stop.
 - Add to Prowl includes Remote Mirror Pane, a connection form, and Host pane selection.
@@ -46,7 +49,8 @@ See [002-terminal-integration.md](002-terminal-integration.md). The feature is n
   introducing a replacement character. Image sizing uses equivalent `scaledToFit()`.
 - The initial verification did not cover real terminal surfaces. The follow-up now
   covers terminal state and history through the production network/relay path;
-  GUI, two-App, LAN, physical IME, and pixel presentation remain unverified.
+  subsequent user-led two-App/LAN use is recorded in the follow-up. Physical IME
+  parity and a systematic pixel/toolbar layout audit remain unverified.
 
 ## Deviations and remaining work
 - Native TLS/TCP replaces the originally proposed WebSocket transport; no browser client.

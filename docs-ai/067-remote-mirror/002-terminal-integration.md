@@ -37,3 +37,7 @@ installing tools or switching to another UI automation method during self-verifi
 Two independent App instances, button flows, physical IME, font scaling, and LAN
 behavior remain unverified. Test windows are not shown; temporary terminal processes,
 listeners, settings, and files are disposed without touching the installed App.
+
+This describes the automated integration stage. Later user-led two-Mac feedback
+and the narrowed Draft validation boundary are recorded in
+[003-ui-and-draft-scope.md](003-ui-and-draft-scope.md).

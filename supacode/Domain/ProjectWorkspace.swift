@@ -604,6 +604,7 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
     fileManager: FileManager,
     gitRunner: ProjectWorkspaceGitRunner
   ) async {
+    nonisolated(unsafe) let fileManager = fileManager
     let task = Task.detached {
       for command in ledger.cleanupCommands.reversed() {
         do {
@@ -612,27 +613,27 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
           log.warning("Workspace rollback command failed: \(command.displayCommand): \(error)")
         }
       }
+      let removableURLs =
+        ledger.createdURLs.reversed()
+        + (ledger.createdRoot
+          ? [rootURL]
+          : ledger.createdMetadataDirectory
+            ? [rootURL.appending(path: metadataDirectoryName, directoryHint: .isDirectory)]
+            : [])
+      for url in removableURLs {
+        let path = url.path(percentEncoded: false)
+        guard fileManager.fileExists(atPath: path) || (try? url.checkResourceIsReachable()) == true
+        else {
+          continue
+        }
+        do {
+          try fileManager.removeItem(at: url)
+        } catch {
+          log.warning("Workspace rollback could not remove \(path): \(error)")
+        }
+      }
     }
     await task.value
-    let removableURLs =
-      ledger.createdURLs.reversed()
-      + (ledger.createdRoot
-        ? [rootURL]
-        : ledger.createdMetadataDirectory
-          ? [rootURL.appending(path: metadataDirectoryName, directoryHint: .isDirectory)]
-          : [])
-    for url in removableURLs {
-      let path = url.path(percentEncoded: false)
-      guard fileManager.fileExists(atPath: path) || (try? url.checkResourceIsReachable()) == true
-      else {
-        continue
-      }
-      do {
-        try fileManager.removeItem(at: url)
-      } catch {
-        log.warning("Workspace rollback could not remove \(path): \(error)")
-      }
-    }
   }
 
   // Best-effort worktree removal for a workspace being deleted. Every failure

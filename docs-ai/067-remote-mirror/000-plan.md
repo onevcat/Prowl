@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| **Status** | Real terminal integration passes; native UI verification pending |
+| **Status** | Draft for review; Ghostty dependency integration pending |
 | **Anchor date** | 2026-09-09 |
 | **Related** | [061](../061-native-toolbar-controls/000-plan.md), upstream #788 |
 
@@ -20,7 +20,7 @@ remain usable locally and own the running process throughout the connection.
 - Disconnecting a client or stopping the listener never closes a Host terminal.
 - Retained history is browsable independently from live output; erased transient
   output is not an archive. History requests must not scroll the Host viewport.
-- Local development uses the sibling Ghostty bridge build without remote pushes.
+- Local development uses the sibling Ghostty bridge build pending an upstream dependency pin.
 
 ## Design / Approach
 Keep connection lifecycle and mirror state in a MainActor Observable service next
@@ -59,3 +59,4 @@ capability needed here. Browser clients are outside this implementation.
 
 - Updated 2026-09-09: Dependencies, Debug compilation, lint, and App-hosted regression tests now pass; real mirror UI verification remains pending — see [001-action.md](001-action.md).
 - Updated 2026-09-09: Real terminal integration exposed grid, input encoding, and mode baseline defects; corrected the verification boundary — see [002-terminal-integration.md](002-terminal-integration.md).
+- Updated 2026-09-09: Recorded UI interaction contracts, user-led two-Mac feedback, and the narrowed Draft scope — see [003-ui-and-draft-scope.md](003-ui-and-draft-scope.md).
