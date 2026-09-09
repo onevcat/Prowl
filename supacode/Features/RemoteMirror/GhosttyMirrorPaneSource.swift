@@ -32,9 +32,18 @@ struct GhosttyMirrorPaneSource: MirrorPaneSource {
 
   func write(_ bytes: Data, to id: UUID) throws {
     guard let terminal = view(id)?.surface else { throw MirrorProtocolError.invalidMessage }
-    // Bytes already carry Ghostty's key/paste encoding. The text API would paste them again.
-    let action = "text:" + bytes.map { String(format: "\\x%02x", $0) }.joined()
-    guard action.withCString({ ghostty_surface_binding_action(terminal, $0, UInt(action.utf8.count)) }) else {
+    // The text action accepts a length-delimited byte buffer. Its escape parser
+    // UTF-8-encodes \xNN, so preserve bytes (even split UTF-8) and escape only '\'.
+    // The surface text API is unsuitable here because it applies paste encoding again.
+    var action = Data("text:".utf8)
+    for byte in bytes {
+      action.append(byte)
+      if byte == 0x5C { action.append(byte) }
+    }
+    let written = action.withUnsafeBytes {
+      ghostty_surface_binding_action(terminal, $0.baseAddress!.assumingMemoryBound(to: CChar.self), UInt($0.count))
+    }
+    guard written else {
       throw MirrorProtocolError.invalidMessage
     }
   }

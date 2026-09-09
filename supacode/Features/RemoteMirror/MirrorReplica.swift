@@ -64,8 +64,8 @@ final class MirrorReplica {
       let size = ghostty_surface_size(surface)
       let scale = view?.window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
       displaySize = CGSize(
-        width: CGFloat(frame.columns * size.cell_width_px) / scale,
-        height: CGFloat(frame.rows * size.cell_height_px) / scale)
+        width: CGFloat(size.width_px) / scale,
+        height: CGFloat(size.height_px) / scale)
     }
     if let peer { peer.send(message) } else { pending = message }
   }

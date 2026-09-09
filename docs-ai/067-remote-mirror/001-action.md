@@ -9,8 +9,9 @@
 
 ## Outcome and current state
 The complete Debug App now builds against the local Ghostty bridge. App-hosted
-protocol and workspace regression tests pass. Real Host/Client terminal rendering
-and native UI have not yet been verified; the feature is not release-ready.
+protocol and workspace regression tests pass. Real Host/Client Ghostty surfaces now
+pass App-hosted integration tests; native UI and pixel presentation remain unverified.
+See [002-terminal-integration.md](002-terminal-integration.md). The feature is not release-ready.
 
 - Host toolbar control next to notifications, with IP/port settings and start/stop.
 - Add to Prowl includes Remote Mirror Pane, a connection form, and Host pane selection.
@@ -43,7 +44,9 @@ and native UI have not yet been verified; the feature is not release-ready.
 - Host history dispatch and Ghostty initialization were extracted to satisfy lint.
   Byte-bounded history now drops an incomplete leading UTF-8 scalar instead of
   introducing a replacement character. Image sizing uses equivalent `scaledToFit()`.
-- No GUI, two-App, LAN, IME, font scaling, or end-to-end history assertions were made.
+- The initial verification did not cover real terminal surfaces. The follow-up now
+  covers terminal state and history through the production network/relay path;
+  GUI, two-App, LAN, physical IME, and pixel presentation remain unverified.
 
 ## Deviations and remaining work
 - Native TLS/TCP replaces the originally proposed WebSocket transport; no browser client.
@@ -52,8 +55,8 @@ and native UI have not yet been verified; the feature is not release-ready.
 - Mirrors occupy the detail area individually; mixed local/remote split trees are not implemented.
 - The pinned Ghostty backend requires a PTY; the internal app relay follows the upstream
   spike instead of modifying Ghostty's IO backend.
-- Verify real Host/Client surfaces and native UI; build and protocol tests alone
-  do not establish rendering or keyboard parity.
+- Verify native UI; real terminal integration tests do not establish pixel or
+  physical keyboard/IME parity.
 - Check grid presentation, key focus/IME, and live/history switching in the actual App.
 - Before publishing, pin Prowl's Ghostty submodule to a reachable bridge commit; the
   current local branch deliberately uses `PROWL_GHOSTTY_SOURCE_DIR` instead.

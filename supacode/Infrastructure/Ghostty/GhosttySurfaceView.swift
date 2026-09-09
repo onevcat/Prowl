@@ -626,7 +626,12 @@ final class GhosttySurfaceView: NSView, Identifiable {
     if let grid = mirrorGrid {
       let size = ghostty_surface_size(surface)
       if size.cell_width_px > 0, size.cell_height_px > 0 {
-        ghostty_surface_set_size(surface, grid.columns * size.cell_width_px, grid.rows * size.cell_height_px)
+        // set_size includes padding and fractional-cell space; preserve that inset
+        // when changing the grid instead of shrinking the replica by a row/column.
+        let extraWidth = size.width_px - min(size.width_px, UInt32(size.columns) * size.cell_width_px)
+        let extraHeight = size.height_px - min(size.height_px, UInt32(size.rows) * size.cell_height_px)
+        ghostty_surface_set_size(
+          surface, grid.columns * size.cell_width_px + extraWidth, grid.rows * size.cell_height_px + extraHeight)
       }
       return
     }

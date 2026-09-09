@@ -54,7 +54,9 @@ nonisolated enum MirrorRelay {
         guard message.kind == .frame, let frame = message.frame, let sequence = message.sequence else {
           throw MirrorProtocolError.invalidMessage
         }
-        var output = Data("\u{1b}[?2026h\u{1b}[?1049l\u{1b}[0m\u{1b}[2J\u{1b}[H".utf8)
+        // The formatter emits modes only when they differ from defaults. A full
+        // reset prevents a prior frame's paste/cursor modes from leaking forward.
+        var output = Data("\u{1b}c\u{1b}[?2026h".utf8)
         output.append(frame.bytes)
         output.append(Data("\u{1b}[?2026l".utf8))
         try writeAll(output, to: STDOUT_FILENO)

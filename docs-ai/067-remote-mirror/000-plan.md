@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| **Status** | Debug build and focused tests pass; end-to-end UI verification pending |
+| **Status** | Real terminal integration passes; native UI verification pending |
 | **Anchor date** | 2026-09-09 |
 | **Related** | [061](../061-native-toolbar-controls/000-plan.md), upstream #788 |
 
@@ -35,6 +35,9 @@ are authenticated before pane metadata, terminal content, or input are exchanged
 Length-prefixed messages have explicit size limits. A subscriber must acknowledge
 frames before another frame is sent; slow receivers cannot accumulate snapshots.
 Host dimensions are authoritative. Reconnecting creates a new baseline.
+Each complete frame starts from default terminal state because the formatter emits
+only non-default modes. Replica sizing includes Ghostty's pixel padding. Encoded
+input remains bytes throughout transport and Host injection.
 
 History starts with a bounded retained-text snapshot, paged under a connection-local
 snapshot identifier. This preserves independent scrolling without pretending that
@@ -55,3 +58,4 @@ capability needed here. Browser clients are outside this implementation.
 - Updated 2026-09-09: Initial adapter and focused tests added; full App build blocked by dependency downloads — see [001-action.md](001-action.md).
 
 - Updated 2026-09-09: Dependencies, Debug compilation, lint, and App-hosted regression tests now pass; real mirror UI verification remains pending — see [001-action.md](001-action.md).
+- Updated 2026-09-09: Real terminal integration exposed grid, input encoding, and mode baseline defects; corrected the verification boundary — see [002-terminal-integration.md](002-terminal-integration.md).

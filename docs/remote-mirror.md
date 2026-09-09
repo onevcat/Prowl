@@ -25,6 +25,8 @@ canvas instead of resizing the Host PTY. Colors, cursor location, and changing
 terminal text are transferred as complete VT frames. The Host samples subscribed
 panes every 200 ms, and only sends changed frames. A slow link holds at most one
 unacknowledged frame per pane. With no subscriptions, the Host does not read frames.
+Each frame replaces the replica's display and terminal modes; remote key and paste
+bytes are forwarded to the Host without re-encoding the text.
 
 **History** loads retained text, 200 lines per request, from a bounded snapshot of
 the Host's terminal history and screen (up to 2 MiB of UTF-8 text, trimmed at a complete character boundary). **Load Earlier**
