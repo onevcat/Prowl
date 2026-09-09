@@ -20,7 +20,7 @@ nonisolated struct MirrorMessage: Codable, Sendable {
   enum Kind: String, Codable {
     case list, panes, subscribe, frame, acknowledge, input, history, historyPage, failure, ping,
       pong
-    case subscribed, textFrame, ended
+    case subscribed, textFrame, ended, refresh
   }
   enum Representation: String, Codable, Sendable {
     case terminal = "vt-v1"
@@ -114,6 +114,8 @@ nonisolated struct MirrorTextFrameGate {
   mutating func acknowledge(_ sequence: UInt64) throws {
     try gate.acknowledge(sequence)
   }
+
+  mutating func requestRefresh() { gate.requestRefresh() }
 }
 
 /// One unacknowledged frame per subscriber bounds memory even on a stalled link.
@@ -121,6 +123,8 @@ nonisolated struct MirrorFrameGate {
   private(set) var sequence: UInt64 = 0
   private(set) var outstanding: UInt64?
   private var previous: MirrorFrame?
+
+  mutating func requestRefresh() { previous = nil }
 
   mutating func offer(_ frame: MirrorFrame) -> UInt64? {
     guard outstanding == nil, previous != frame else { return nil }

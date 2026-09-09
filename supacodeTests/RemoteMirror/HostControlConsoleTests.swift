@@ -5,6 +5,28 @@ import Testing
 
 @MainActor
 struct HostControlConsoleTests {
+  @Test func settingsRestoreWithoutLaunchingAnAgent() throws {
+    let suite = "ConsoleSettings-\(UUID())"
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let profile = AgentProfile(name: "Codex", runtime: .codex)
+    let first = HostControlConsole(manager: manager, profiles: [profile], defaults: defaults)
+    #expect(!first.enabled)
+    #expect(first.profile.executionMode == .standard)
+    first.enabled = true
+    first.directory = "/tmp/custom-console"
+    first.profile.model = "test-model"
+    first.profile.executionMode = .unrestricted
+    let restored = HostControlConsole(manager: manager, profiles: [profile], defaults: defaults)
+    #expect(restored.enabled)
+    #expect(restored.directory == "/tmp/custom-console")
+    #expect(restored.profile.model == "test-model")
+    #expect(restored.profile.executionMode == .unrestricted)
+    #expect(!restored.isStarting)
+    #expect(restored.surface == nil)
+  }
+
   @Test func controlContextIsDiscoverableWithoutAddingAFakeRepository() {
     let directory = URL(fileURLWithPath: "/tmp/control-test")
     let control = Worktree(

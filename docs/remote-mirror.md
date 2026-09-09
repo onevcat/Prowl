@@ -73,6 +73,20 @@ view. Markdown already rendered away by an Agent cannot be reconstructed reliabl
 Mobile submission and bounded retained-history capture are not enabled yet; this
 build is a read-only mobile implementation, not the completed mobile feature.
 
+On a Host advertising `refresh`, returning to the foreground requests a fresh text
+frame on the existing subscription. It does not disconnect or compete for its own
+pane again. Refresh preserves the one-outstanding-frame limit. After an actual
+disconnect, Retry still connects only if the pane is free.
+
+The iPad connection editor can update the address, port and pairing key. A new
+address or port opens pane selection; a key update for the same endpoint retries
+the selected pane without taking it from another device. Only verified connection
+details replace the saved Keychain entry.
+
+AI control-console settings remember the enabled option, Profile, model, bypass
+option and working directory. Restoring settings alone does not launch an Agent;
+startup remains tied to starting Host. A removed Profile requires a new choice.
+
 ## Transport and current boundaries
 
 The native connection uses TLS 1.2 with a randomly generated pre-shared pairing

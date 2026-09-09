@@ -7,14 +7,16 @@ import SwiftUI
 @Observable
 final class HostControlConsole {
   static let worktreeID = "prowl:remote-mirror-control"
-  var enabled = false
-  var profile: AgentProfile
-  var directory = ""
+  var enabled = false { didSet { saveConfiguration() } }
+  var profile: AgentProfile { didSet { saveConfiguration() } }
+  var directory = "" { didSet { saveConfiguration() } }
   private(set) var isStarting = false
   private(set) var error: String?
   private(set) var surface: LaunchedSurface?
   let profiles: [AgentProfile]
   var makeServer: (() throws -> CLISocketServer)?
+  @ObservationIgnored private var configurationLoaded = false
+  @ObservationIgnored private let defaults: UserDefaults
   @ObservationIgnored private let manager: WorktreeTerminalManager
   @ObservationIgnored private var server: CLISocketServer?
   @ObservationIgnored private var launchTask: Task<Void, Never>?
@@ -36,7 +38,8 @@ final class HostControlConsole {
     return manager.stateIfExists(for: Self.worktreeID)?.surfaces[surface.surfaceID]?.surface != nil
   }
 
-  init(manager: WorktreeTerminalManager, profiles: [AgentProfile]) {
+  init(manager: WorktreeTerminalManager, profiles: [AgentProfile], defaults: UserDefaults = .standard) {
+    self.defaults = defaults
     self.manager = manager
     let supported = profiles.filter {
       $0.isEnabled && ($0.runtime == .codex || $0.runtime == .claude)
@@ -49,6 +52,44 @@ final class HostControlConsole {
       self.profiles.first(where: { AgentProfileAvailability.isRuntimeInstalled($0.runtime) })
       ?? self.profiles[0]
     self.profile.executionMode = .standard
+    if let data = defaults.data(forKey: Self.configurationKey) {
+      do {
+        let saved = try JSONDecoder().decode(Configuration.self, from: data)
+        if let selected = self.profiles.first(where: { $0.id == saved.profileID })
+          ?? (supported.isEmpty ? self.profiles.first(where: { $0.runtime == saved.runtime }) : nil)
+        {
+          self.profile = selected
+          self.profile.model = saved.model
+          self.profile.executionMode = saved.bypass ? .unrestricted : .standard
+          self.enabled = saved.enabled
+          self.directory = saved.directory
+        } else {
+          self.error = "The saved control Agent is unavailable. Choose an Agent Profile."
+        }
+      } catch { self.error = "Cannot read saved control-console settings: \(error.localizedDescription)" }
+    }
+    configurationLoaded = true
+  }
+
+  private static let configurationKey = "remoteMirrorControlConsole"
+
+  private struct Configuration: Codable {
+    let enabled: Bool
+    let profileID: UUID
+    let runtime: AgentProfileRuntime
+    let model: String?
+    let bypass: Bool
+    let directory: String
+  }
+
+  private func saveConfiguration() {
+    guard configurationLoaded else { return }
+    do {
+      let value = Configuration(
+        enabled: enabled, profileID: profile.id, runtime: profile.runtime, model: profile.model,
+        bypass: profile.executionMode == .unrestricted, directory: directory)
+      defaults.set(try JSONEncoder().encode(value), forKey: Self.configurationKey)
+    } catch { self.error = "Cannot save control-console settings: \(error.localizedDescription)" }
   }
 
   func start() {
@@ -76,6 +117,8 @@ final class HostControlConsole {
             isDirectory.boolValue
           else { throw ConsoleError("Choose an existing absolute working directory.") }
         }
+        // The internal CLI context must exist even when the Agent uses a custom directory.
+        try FileManager.default.createDirectory(at: Self.defaultDirectory, withIntermediateDirectories: true)
         if server == nil {
           guard let makeServer else {
             throw ConsoleError("The control CLI endpoint is unavailable.")

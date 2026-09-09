@@ -4,6 +4,17 @@ import Testing
 @testable import supacode
 
 struct MirrorProtocolTests {
+  @Test func refreshPreservesBackpressureAndSequence() throws {
+    var gate = MirrorTextFrameGate()
+    #expect(gate.offer("unchanged") == 1)
+    gate.requestRefresh()
+    #expect(gate.offer("unchanged") == nil)
+    try gate.acknowledge(1)
+    #expect(gate.offer("unchanged") == 2)
+    try gate.acknowledge(2)
+    #expect(gate.offer("unchanged") == nil)
+  }
+
   @Test func discoveryNegotiatesWithoutBreakingLegacyMessages() throws {
     let request = MirrorMessage(kind: .list, supportedVersions: [2, 1])
     let decoded = try MirrorWire.decode(MirrorWire.encode(request).dropFirst(4))

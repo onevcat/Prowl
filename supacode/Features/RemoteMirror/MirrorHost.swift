@@ -160,7 +160,7 @@ final class MirrorHost {
         peer.send(
           MirrorMessage(
             kind: .panes, panes: panes, selectedVersion: versions[peer.id],
-            capabilities: versions[peer.id] == 2 ? ["vt-v1", "text-v1", "takeover"] : nil,
+            capabilities: versions[peer.id] == 2 ? ["vt-v1", "text-v1", "takeover", "refresh"] : nil,
             hostRunID: hostRunID))
       case .subscribe:
         try subscribe(message, peer: peer)
@@ -175,6 +175,13 @@ final class MirrorHost {
         } else {
           try subscription.gate.acknowledge(sequence)
         }
+        subscriptions[peer.id] = subscription
+      case .refresh:
+        guard message.version == 2, var subscription = subscription(for: message, peer: peer) else {
+          throw MirrorProtocolError.invalidMessage
+        }
+        subscription.gate.requestRefresh()
+        subscription.textGate.requestRefresh()
         subscriptions[peer.id] = subscription
       case .input:
         guard let subscription = subscription(for: message, peer: peer),
