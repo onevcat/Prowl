@@ -13,8 +13,13 @@ final class MirrorConnection {
   private var queuedBytes = 0
   private var heartbeat: Task<Void, Never>?
   private var deadline: Task<Void, Never>?
+  private let clock: any Clock<Duration>
+  private var becameReady = false
 
-  init(_ connection: NWConnection) { self.connection = connection }
+  init(_ connection: NWConnection, clock: any Clock<Duration> = ContinuousClock()) {
+    self.connection = connection
+    self.clock = clock
+  }
 
   static func parameters(pairingKey: String) throws -> NWParameters {
     let key = pairingKey.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -52,16 +57,21 @@ final class MirrorConnection {
         guard let self, !self.closed else { return }
         switch state {
         case .ready:
+          self.becameReady = true
+          self.resetDeadline()
           self.onReady?()
           self.readHeader()
+          let clock = self.clock
           self.heartbeat = Task { [weak self] in
             while !Task.isCancelled {
-              do { try await Task.sleep(for: .seconds(10)) } catch { return }
+              do { try await clock.sleep(for: .seconds(2)) } catch { return }
               self?.send(MirrorMessage(kind: .ping))
             }
           }
         case .failed(let error): self.close(error.localizedDescription)
         case .cancelled: self.close(nil)
+        case .waiting(let error):
+          if self.becameReady { self.close("Connection lost: \(error.localizedDescription)") }
         default: break
         }
       }
@@ -107,9 +117,11 @@ final class MirrorConnection {
 
   private func resetDeadline() {
     deadline?.cancel()
+    let clock = clock
+    let timeout: Duration = becameReady ? .seconds(8) : .seconds(30)
     deadline = Task { [weak self] in
-      do { try await Task.sleep(for: .seconds(30)) } catch { return }
-      self?.close("Remote connection timed out.")
+      do { try await clock.sleep(for: timeout) } catch { return }
+      self?.close("Remote connection timed out. The other side is no longer responding.")
     }
   }
 

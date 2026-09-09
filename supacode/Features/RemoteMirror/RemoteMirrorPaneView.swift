@@ -14,6 +14,9 @@ struct RemoteMirrorSidebar: View {
             HStack {
               Image(systemName: client.isConnected ? "network" : "exclamationmark.circle").accessibilityHidden(true)
               Text(client.selectedPane?.title ?? client.address).lineLimit(1)
+              if !client.isConnected {
+                Text("Disconnected").font(.caption).foregroundStyle(.orange)
+              }
               Spacer(minLength: 0)
             }
             .padding(8)
@@ -40,6 +43,12 @@ struct RemoteMirrorPaneView: View {
         Label(client.selectedPane?.title ?? "Remote Mirror", systemImage: "network")
         Text("\(client.address):\(String(client.port))").font(.caption).foregroundStyle(.secondary)
         Spacer()
+        Label(
+          client.isConnected ? "Connected" : "Disconnected",
+          systemImage: client.isConnected ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+        )
+        .font(.caption)
+        .foregroundStyle(client.isConnected ? Color.green : Color.orange)
         if client.showsHistory {
           Button("Live Terminal") { client.showsHistory = false }
         } else {
@@ -50,11 +59,13 @@ struct RemoteMirrorPaneView: View {
       }
       .padding(10)
       Divider()
-      if let error = client.error {
+      if let error = client.error ?? (client.isConnected ? nil : "Connection to Host was lost.") {
         ContentUnavailableView(
           "Mirror Disconnected", systemImage: "network.slash",
           description: Text(
-            error + " The Host program is unaffected. Close this mirror and connect again from Add to Prowl."))
+            error
+              + " Remote terminal status is unknown. Check Host, then reconnect from Add to Prowl."
+          ))
       } else {
         ZStack {
           if let view = client.replica.view {

@@ -20,6 +20,12 @@ Open **Add to Prowl → Remote Mirror Pane**. Enter the Host IP, port, and pairi
 Connect, then select an available pane. The mirror appears under **Remote Mirrors**
 in the sidebar. Closing it only disconnects the remote subscription.
 After a disconnect, close the mirror and create a new one to get a fresh baseline.
+The pane header and sidebar show **Disconnected**, and the terminal is replaced by
+an explanation with input disabled. An established connection sends a heartbeat
+every 2 seconds and times out after 8 seconds without an incoming message; a silent
+terminal remains connected because heartbeat replies do not depend on output.
+Initial connection setup has a 30-second deadline. After a connection loss, the
+Client cannot determine whether the Host's program is still running.
 
 The Host owns the terminal grid dimensions. A smaller Client scrolls the replica
 canvas instead of resizing the Host PTY. Colors, cursor location, and changing

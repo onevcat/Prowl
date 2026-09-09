@@ -32,6 +32,8 @@ struct MirrorTerminalIntegrationTests {
     try await fixture.waitForMirror(reconnected, containing: "INPUT:after-close")
     fixture.host.stop()
     try await fixture.wait("Client sees Host stop") { !reconnected.isConnected }
+    #expect(reconnected.error != nil)
+    #expect(reconnected.replica.view == nil)
     try fixture.send("after-stop")
     try await fixture.wait("Host survives server stop") { fixture.hostText.contains("INPUT:after-stop") }
   }
