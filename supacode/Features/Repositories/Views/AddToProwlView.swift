@@ -10,9 +10,12 @@ struct AddToProwlView: View {
   @State private var isDragTargeted = false
   @State private var isWorkspaceHovered = false
   @State private var showCloneForm = false
+  @State private var showRemoteForm = false
 
   var body: some View {
-    if showCloneForm {
+    if showRemoteForm {
+      AddRemoteMirrorView(dismiss: dismiss, back: { showRemoteForm = false })
+    } else if showCloneForm {
       CloneRepositoryView(dismiss: dismiss) { clonedURL in
         onCloneCompleted(clonedURL)
       }
@@ -47,6 +50,25 @@ struct AddToProwlView: View {
         .padding(.horizontal, 2)
 
       workspaceRow
+      Button {
+        showRemoteForm = true
+      } label: {
+        HStack(spacing: 16) {
+          Image(systemName: "network").font(.title).accessibilityHidden(true)
+          VStack(alignment: .leading) {
+            Text("Remote Mirror Pane").font(.headline)
+            Text("Connect to a pane on another Prowl").foregroundStyle(.secondary)
+          }
+          Spacer()
+          Image(systemName: "chevron.right").accessibilityHidden(true)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 16))
+      }
+      .buttonStyle(.plain)
+      .padding(.top, 12)
+      .accessibilityIdentifier("add-remote-mirror-button")
 
       HStack {
         Spacer()

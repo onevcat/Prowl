@@ -91,6 +91,7 @@ struct SidebarListView: View {
         // Avoid LazyVStack here: after collapsing and expanding large sections,
         // SwiftUI's lazy placement cache can spin on the main thread while scrolling.
         VStack(spacing: 0) {
+          RemoteMirrorSidebar()
           // When there are no repositories the sidebar stays empty — the
           // detail pane's `EmptyStateView` ("Open a repository or folder")
           // carries the prompt and the Add button instead.

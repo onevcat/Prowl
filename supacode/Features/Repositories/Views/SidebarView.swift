@@ -3,6 +3,7 @@ import Sharing
 import SwiftUI
 
 struct SidebarView: View {
+  @Environment(RemoteMirrorStore.self) private var mirrors
   @Bindable var store: StoreOf<RepositoriesFeature>
   let terminalManager: WorktreeTerminalManager
   @Shared(.appStorage("sidebarCollapsedRepositoryIDs")) private var collapsedRepositoryIDs: [Repository.ID] = []
@@ -37,6 +38,7 @@ struct SidebarView: View {
     // Equatable, so SwiftUI already skips republishing it on no-op body runs.
     .onAppear { syncSidebarSelections(state: state, visibleWorktreeIDs: visibleWorktreeIDs) }
     .onChange(of: state.selection) { _, _ in
+      if state.selection != nil { mirrors.selectedID = nil }
       syncSidebarSelections(state: state, visibleWorktreeIDs: visibleWorktreeIDs)
     }
     .onChange(of: visibleHotkeyRows.map(\.id)) { _, _ in

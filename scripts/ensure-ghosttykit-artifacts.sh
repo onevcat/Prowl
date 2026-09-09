@@ -17,6 +17,23 @@ TERMINFO_RESOURCE_PATH="$PROJECT_DIR/Resources/terminfo"
 GHOSTTY_HASH_FILE="$PROJECT_DIR/.ghostty_hash"
 GHOSTTY_BUILD_STAMP="$PROJECT_DIR/.ghostty_build_stamp"
 
+# A local bridge build is intentionally opt-in; never label it as the pinned upstream artifact.
+if [[ -n "${PROWL_GHOSTTY_SOURCE_DIR:-}" ]]; then
+  source_dir="$(cd "$PROWL_GHOSTTY_SOURCE_DIR" && pwd)"
+  framework="$source_dir/macos/GhosttyKit.xcframework"
+  header="$framework/macos-arm64/Headers/ghostty.h"
+  if [[ ! -f "$header" ]] || ! grep -q 'ghostty_surface_read_snapshot' "$header"; then
+    echo "error: Build the mirror bridge XCFramework in $source_dir first." >&2
+    exit 1
+  fi
+  mkdir -p "$PROJECT_DIR/Frameworks" "$GHOSTTY_RESOURCE_PATH" "$TERMINFO_RESOURCE_PATH"
+  rsync -a --delete "$framework/" "$XCFRAMEWORK_PATH/"
+  rsync -a --delete "$source_dir/zig-out/share/ghostty/" "$GHOSTTY_RESOURCE_PATH/"
+  rsync -a --delete "$source_dir/zig-out/share/terminfo/" "$TERMINFO_RESOURCE_PATH/"
+  printf 'local:%s\n' "$(git -C "$source_dir" rev-parse HEAD)" > "$GHOSTTY_HASH_FILE"
+  exit 0
+fi
+
 hash_file() {
   if command -v shasum >/dev/null 2>&1; then
     shasum -a 256 "$1" | awk '{print $1}'

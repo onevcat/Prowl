@@ -112,6 +112,8 @@ struct WorktreeDetailView: View {
           ),
           actionTargetWorktree: actionTargetWorktree
         )
+      } else {
+        ToolbarItem(placement: .navigation) { MirrorHostButton() }
       }
     }
     .environment(historyStore)
@@ -999,6 +1001,7 @@ struct WorktreeDetailView: View {
           if featureFlags.workflowUI && !historyStore.entries.isEmpty {
             WorkflowHistoryPopoverButton(store: historyStore, onIntent: onHistoryIntent)
           }
+          MirrorHostButton()
           if isUpdateAvailable {
             ToolbarUpdateButton(
               availableVersion: availableUpdateVersion,
