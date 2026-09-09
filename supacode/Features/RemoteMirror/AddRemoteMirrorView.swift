@@ -28,8 +28,8 @@ struct AddRemoteMirrorView: View {
               } label: {
                 HStack {
                   VStack(alignment: .leading) {
-                    Text(pane.title).font(.headline)
-                    Text(pane.directory).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    Text(pane.projectName ?? pane.title).font(.headline).lineLimit(1)
+                    Text(pane.subtitle ?? pane.directory).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                   }
                   Spacer()
                   Text(pane.busy ? "In use" : "Mirror")
@@ -38,7 +38,7 @@ struct AddRemoteMirrorView: View {
               }
               .buttonStyle(.plain)
               .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-              .help(pane.busy ? "This pane already has a remote mirror" : "Connect to this Host pane")
+              .help(pane.title + "\n" + pane.directory)
               .disabled(pane.busy)
             }
           }

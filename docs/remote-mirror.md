@@ -19,6 +19,11 @@ Quitting Prowl stops the service. This is not a detached terminal daemon.
 Open **Add to Prowl → Remote Mirror Pane**. Enter the Host IP, port, and pairing key.
 Connect, then select an available pane. The mirror appears under **Remote Mirrors**
 in the sidebar. Closing it only disconnects the remote subscription.
+The picker shows the repository folder name above the Tab title and worktree name.
+Unnamed terminals fall back to the detected agent or Shell. Multiple tabs and split
+panes include their positions so identical titles remain distinguishable. The sidebar
+and header use the same project/terminal identity; hover for the full path. These
+labels are captured when the pane list is refreshed.
 After a disconnect, close the mirror and create a new one to get a fresh baseline.
 The pane header and sidebar show **Disconnected**, and the terminal is replaced by
 an explanation with input disabled. An established connection sends a heartbeat

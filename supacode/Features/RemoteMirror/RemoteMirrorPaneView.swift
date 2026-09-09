@@ -13,7 +13,13 @@ struct RemoteMirrorSidebar: View {
           } label: {
             HStack {
               Image(systemName: client.isConnected ? "network" : "exclamationmark.circle").accessibilityHidden(true)
-              Text(client.selectedPane?.title ?? client.address).lineLimit(1)
+              VStack(alignment: .leading, spacing: 2) {
+                Text(client.selectedPane?.projectName ?? client.selectedPane?.title ?? client.address).lineLimit(1)
+                if let subtitle = client.selectedPane?.subtitle {
+                  Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
+              }
+              .help(client.selectedPane.map { $0.title + "\n" + $0.directory } ?? client.address)
               if !client.isConnected {
                 Text("Disconnected").font(.caption).foregroundStyle(.orange)
               }
@@ -41,6 +47,8 @@ struct RemoteMirrorPaneView: View {
     VStack(spacing: 0) {
       HStack {
         Label(client.selectedPane?.title ?? "Remote Mirror", systemImage: "network")
+          .lineLimit(1)
+          .help(client.selectedPane.map { $0.title + "\n" + $0.directory } ?? client.address)
         Text("\(client.address):\(String(client.port))").font(.caption).foregroundStyle(.secondary)
         Spacer()
         Label(

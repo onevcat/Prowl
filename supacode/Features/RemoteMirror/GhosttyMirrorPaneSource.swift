@@ -7,10 +7,31 @@ struct GhosttyMirrorPaneSource: MirrorPaneSource {
 
   func panes() -> [MirrorPaneDescriptor] {
     manager.activeWorktreeStates.flatMap { state in
-      state.surfaces.values.filter { $0.surface != nil }.map { view in
-        MirrorPaneDescriptor(
-          id: view.id, title: "\(state.worktree.name) · \(view.id.uuidString.prefix(8))",
-          directory: state.worktree.workingDirectory.path, busy: false)
+      let project = state.worktree.repositoryRootURL.lastPathComponent
+      return state.tabManager.tabs.enumerated().flatMap { tabIndex, tab in
+        let leaves = state.trees[tab.id]?.leaves() ?? []
+        return leaves.enumerated().compactMap { paneIndex, view -> MirrorPaneDescriptor? in
+          guard view.surface != nil else { return nil }
+          let name = tab.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+          let agent = state.surfaceAgentStates[view.id]?.detectedAgent?.rawValue.capitalized
+          let terminal = name.isEmpty || name == "Terminal" ? (agent ?? "Shell") : name
+          var location = [terminal, state.worktree.name]
+          var title = [project, terminal, state.worktree.name]
+          if state.tabManager.tabs.count > 1 {
+            let label = "Tab \(tabIndex + 1)"
+            location.append(label)
+            title.append(label)
+          }
+          if leaves.count > 1 {
+            let label = "Pane \(paneIndex + 1)"
+            location.append(label)
+            title.append(label)
+          }
+          return MirrorPaneDescriptor(
+            id: view.id, title: title.joined(separator: " · "),
+            directory: state.worktree.workingDirectory.path, busy: false,
+            projectName: project, subtitle: location.joined(separator: " · "))
+        }
       }
     }.sorted { $0.title < $1.title }
   }

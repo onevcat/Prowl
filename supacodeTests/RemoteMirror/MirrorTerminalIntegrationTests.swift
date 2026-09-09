@@ -12,6 +12,10 @@ struct MirrorTerminalIntegrationTests {
     let fixture = try Fixture()
     defer { fixture.close() }
     try await fixture.wait("Host program ready") { fixture.hostText.contains("READY") }
+    let descriptor = try #require(fixture.source.panes().first)
+    #expect(descriptor.projectName == fixture.directory.lastPathComponent)
+    #expect(descriptor.subtitle == "Mirror integration · Mirror integration")
+    #expect(!descriptor.title.contains(fixture.hostView.id.uuidString.prefix(8)))
     fixture.host.start()
     try await fixture.wait("Host listener") { fixture.host.isRunning || fixture.host.error != nil }
     #expect(fixture.host.error == nil)
@@ -212,6 +216,8 @@ struct MirrorTerminalIntegrationTests {
       try await wait("pane discovery") { !client.panes.isEmpty || client.error != nil }
       let pane = try #require(client.panes.first)
       #expect(pane.id == hostView.id)
+      #expect(pane.projectName == directory.lastPathComponent)
+      #expect(pane.subtitle == "Mirror integration · Mirror integration")
       client.subscribe(pane)
       try await wait("replica creation") { client.replica.view != nil || client.error != nil }
       attach(try #require(client.replica.view))

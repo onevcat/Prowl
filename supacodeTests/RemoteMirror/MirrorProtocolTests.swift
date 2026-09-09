@@ -4,6 +4,20 @@ import Testing
 @testable import supacode
 
 struct MirrorProtocolTests {
+  @Test func paneLabelsPreserveMetadataAndDecodeOlderHosts() throws {
+    let pane = MirrorPaneDescriptor(
+      id: UUID(), title: "VKChannel · Codex", directory: "/projects/VKChannel", busy: true,
+      projectName: "VKChannel", subtitle: "Codex · master · Pane 2")
+    let wire = try MirrorWire.encode(MirrorMessage(kind: .panes, panes: [pane]))
+    #expect(try MirrorWire.decode(wire.dropFirst(4)).panes == [pane])
+    let legacy = Data(
+      "{\"id\":\"\(pane.id)\",\"title\":\"master\",\"directory\":\"/projects/VKChannel\",\"busy\":false}".utf8)
+    let decoded = try JSONDecoder().decode(MirrorPaneDescriptor.self, from: legacy)
+    #expect(decoded.projectName == nil)
+    #expect(decoded.subtitle == nil)
+    #expect(decoded.title == "master")
+  }
+
   @Test func frameRoundTripKeepsControlBytesAndUnicode() throws {
     let frame = MirrorFrame(columns: 81, rows: 25, bytes: Data("\u{1b}[2J思考中\r结论\u{1b}[H".utf8))
     let wire = try MirrorWire.encode(MirrorMessage(kind: .frame, frame: frame, sequence: 1))

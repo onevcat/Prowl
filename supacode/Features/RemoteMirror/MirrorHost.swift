@@ -127,7 +127,9 @@ final class MirrorHost {
       case .list:
         let busy = Set(subscriptions.values.map(\.paneID))
         let panes = source.panes().map {
-          MirrorPaneDescriptor(id: $0.id, title: $0.title, directory: $0.directory, busy: busy.contains($0.id))
+          MirrorPaneDescriptor(
+            id: $0.id, title: $0.title, directory: $0.directory, busy: busy.contains($0.id),
+            projectName: $0.projectName, subtitle: $0.subtitle)
         }
         peer.send(MirrorMessage(kind: .panes, panes: panes))
       case .subscribe:

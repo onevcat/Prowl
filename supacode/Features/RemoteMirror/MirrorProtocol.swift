@@ -5,6 +5,8 @@ nonisolated struct MirrorPaneDescriptor: Codable, Equatable, Identifiable, Senda
   let title: String
   let directory: String
   let busy: Bool
+  var projectName: String?
+  var subtitle: String?
 }
 
 nonisolated struct MirrorFrame: Codable, Equatable, Sendable {
