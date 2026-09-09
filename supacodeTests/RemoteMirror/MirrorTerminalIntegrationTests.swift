@@ -19,6 +19,7 @@ struct MirrorTerminalIntegrationTests {
     try await fixture.waitForMirror(client, containing: "READY")
 
     try await verifyOutputAndInput(fixture, client: client)
+    try await verifyViewport(fixture, client: client)
     try await verifyRawBytes(fixture, client: client)
     try await verifyHistory(fixture, client: client)
     try await verifyExclusiveSubscription(fixture)
@@ -76,6 +77,29 @@ struct MirrorTerminalIntegrationTests {
     try await fixture.wait("older history") { !client.isLoadingHistory }
     #expect(client.historyOffset < offset)
     #expect(Array(client.historyLines.suffix(latest.count)) == latest)
+  }
+
+  private func verifyViewport(_ fixture: Fixture, client: MirrorClient) async throws {
+    let replica = try #require(client.replica.view)
+    let window = try #require(replica.window)
+    let original = try fixture.frame(replica)
+    let viewport = MirrorTerminalScrollView(surface: replica, displaySize: client.replica.displaySize)
+    window.contentView = viewport
+    viewport.setFrameSize(NSSize(width: 320, height: 240))
+    viewport.layoutSubtreeIfNeeded()
+    #expect(replica.frame.height > viewport.contentSize.height)
+    #expect(viewport.contentView.bounds.minY == 0)
+    let event = try #require(
+      CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 2, wheel1: 80, wheel2: 0, wheel3: 0))
+    replica.scrollWheel(with: try #require(NSEvent(cgEvent: event)))
+    try await fixture.wait("mirror viewport scroll") { viewport.contentView.bounds.minY > 0 }
+    #expect(try fixture.frame(replica) == original)
+    #expect(try fixture.source.snapshot(fixture.hostView.id) == original)
+    viewport.contentView.scroll(to: .zero)
+    viewport.setFrameSize(NSSize(width: 280, height: 200))
+    viewport.layoutSubtreeIfNeeded()
+    #expect(viewport.contentView.bounds.minY == 0)
+    #expect(try fixture.frame(replica) == original)
   }
 
   private func verifyRawBytes(_ fixture: Fixture, client: MirrorClient) async throws {

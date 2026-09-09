@@ -10,6 +10,7 @@ Open the network button next to notifications. Enter the listening IP and port,
 then choose **Start Host**. `0.0.0.0` listens on all IPv4 interfaces; a specific local
 IP restricts the listener to that address. Use this Mac's reachable IP on the Client.
 Copy the random pairing key from the panel. Closing the panel keeps the service on.
+The network icon turns green while Host is listening.
 Stopping Host disconnects mirrors without closing any local pane or program.
 Quitting Prowl stops the service. This is not a detached terminal daemon.
 
@@ -22,7 +23,10 @@ After a disconnect, close the mirror and create a new one to get a fresh baselin
 
 The Host owns the terminal grid dimensions. A smaller Client scrolls the replica
 canvas instead of resizing the Host PTY. Colors, cursor location, and changing
-terminal text are transferred as complete VT frames. The Host samples subscribed
+terminal text are transferred as complete VT frames. Scroll over the live terminal
+to move its canvas vertically or horizontally when it exceeds the Client window.
+The viewport starts at the bottom so the input area remains accessible; use History
+for retained content outside the Host's current screen. The Host samples subscribed
 panes every 200 ms, and only sends changed frames. A slow link holds at most one
 unacknowledged frame per pane. With no subscriptions, the Host does not read frames.
 Each frame replaces the replica's display and terminal modes; remote key and paste

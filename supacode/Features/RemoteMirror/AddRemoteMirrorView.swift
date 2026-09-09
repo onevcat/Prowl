@@ -36,11 +36,14 @@ struct AddRemoteMirrorView: View {
                 }
                 .padding(10).frame(maxWidth: .infinity, alignment: .leading)
               }
+              .buttonStyle(.plain)
+              .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+              .help(pane.busy ? "This pane already has a remote mirror" : "Connect to this Host pane")
               .disabled(pane.busy)
             }
           }
         }
-        .frame(maxHeight: 280)
+        .frame(height: min(280, CGFloat(max(1, client.panes.count)) * 76))
         Button("Refresh Panes") { client.refreshPanes() }
       } else {
         Text("Start Host on the other Mac, then enter its address and pairing key.")

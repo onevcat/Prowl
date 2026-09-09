@@ -9,7 +9,7 @@ struct MirrorHostButton: View {
       isPresented.toggle()
     } label: {
       Label(mirrors.host.isRunning ? "Host Running" : "Start Host", systemImage: "network")
-        .symbolVariant(mirrors.host.isRunning ? .circle.fill : .none)
+        .foregroundStyle(mirrors.host.isRunning ? Color.green : Color.primary)
     }
     .help("Configure Remote Mirror Host")
     .accessibilityIdentifier("remote-mirror-host-button")

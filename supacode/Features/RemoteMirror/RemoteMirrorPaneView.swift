@@ -38,7 +38,7 @@ struct RemoteMirrorPaneView: View {
     VStack(spacing: 0) {
       HStack {
         Label(client.selectedPane?.title ?? "Remote Mirror", systemImage: "network")
-        Text("\(client.address):\(client.port)").font(.caption).foregroundStyle(.secondary)
+        Text("\(client.address):\(String(client.port))").font(.caption).foregroundStyle(.secondary)
         Spacer()
         if client.showsHistory {
           Button("Live Terminal") { client.showsHistory = false }
@@ -58,12 +58,9 @@ struct RemoteMirrorPaneView: View {
       } else {
         ZStack {
           if let view = client.replica.view {
-            ScrollView([.horizontal, .vertical]) {
-              GhosttyTerminalView(surfaceView: view, pinnedSize: client.replica.displaySize)
-                .frame(width: client.replica.displaySize.width, height: client.replica.displaySize.height)
-            }
-            .opacity(client.showsHistory ? 0 : 1)
-            .allowsHitTesting(!client.showsHistory)
+            MirrorTerminalViewport(surface: view, displaySize: client.replica.displaySize)
+              .opacity(client.showsHistory ? 0 : 1)
+              .allowsHitTesting(!client.showsHistory)
           } else {
             ProgressView("Opening mirror…")
           }
