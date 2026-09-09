@@ -63,6 +63,9 @@ the Host's terminal history and screen (up to 2 MiB of UTF-8 text, trimmed at a 
 fetches preceding pages of that same snapshot. **Refresh** requests current retained
 text. Live output does not scroll this view. History currently preserves text, not
 cell styling. Erased transient output is not recorded or recoverable.
+The Client validates page continuity, snapshot identity and the cumulative UTF-8
+budget. A repeated or inconsistent page ends the connection instead of appending
+duplicate or unrelated history. Reaching the first retained line stops pagination.
 
 ## Native mobile client under development
 
@@ -70,8 +73,18 @@ Version-two discovery advertises plain-text mirrors separately from the Mac VT
 representation. The iPad client reflows full ACTIVE-text replacements and retains
 drafts across disconnection. Code fences and pipe tables can open a frozen detail
 view. Markdown already rendered away by an Agent cannot be reconstructed reliably.
-Mobile submission and bounded retained-history capture are not enabled yet; this
-build is a read-only mobile implementation, not the completed mobile feature.
+The working branch includes bounded retained-history capture and an initial Codex
+submission adapter. The Mac integration builds with the local bridge and has real
+terminal capture tests; live Agent submission verification is still incomplete.
+Existing installed builds do not gain these capabilities.
+
+Mobile Send requires an identified, idle Codex process, an editable empty composer
+with placeholder styling, bracketed paste support, and two seconds without changes
+to the observed screen or local editing activity. Input is checked again immediately
+before enqueueing the multiline paste and Return. A delivery receipt confirms the
+terminal enqueue, not that the Agent has completed or even begun the requested work.
+Attached-image evidence, startup, approval prompts and unsupported Agent composers
+keep Send unavailable. Claude and other Agent submission adapters remain incomplete.
 
 On a Host advertising `refresh`, returning to the foreground requests a fresh text
 frame on the existing subscription. It does not disconnect or compete for its own
@@ -109,8 +122,10 @@ repository first, then use:
 PROWL_GHOSTTY_SOURCE_DIR=../ghostty make build-app
 ```
 
-The required bridge is available in `Awhisper/ghostty` on `feat/mirror-bridge`, commit
-`02b3c67044c5b2a0f99c8184e17bf47ab5396d3d`. The override copies its built XCFramework
+The base display bridge is available in `Awhisper/ghostty` on `feat/mirror-bridge`, commit
+`02b3c67044c5b2a0f99c8184e17bf47ab5396d3d`. Mobile history additionally requires the
+local bounded-text bridge on `feat/mobile-mirror-bridge`, commit `df5b32481`.
+The override copies its built XCFramework
 and terminal resources without changing the pinned upstream artifact. The default
 submodule/artifact does not yet export the required API: this branch is a Draft
 integration, not a self-contained fresh-checkout build. The Ghostty dependency must

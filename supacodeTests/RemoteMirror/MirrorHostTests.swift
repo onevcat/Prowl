@@ -15,11 +15,11 @@ struct MirrorHostTests {
     defer { defaults.removePersistentDomain(forName: suite) }
     let host = MirrorHost(source: source, defaults: defaults)
     host.address = "127.0.0.1"
-    host.port = String(UInt16.random(in: 49152...65535))
+    host.port = String(try MirrorTestPort.unusedPort())
     host.start()
     defer { host.stop() }
     for await ready in Observations({ host.isRunning || host.error != nil }) where ready { break }
-    #expect(host.error == nil)
+    try #require(host.error == nil)
     let first = try Peer(port: UInt16(host.port)!, key: host.pairingKey)
     let second = try Peer(port: UInt16(host.port)!, key: host.pairingKey)
     defer {
@@ -77,7 +77,7 @@ struct MirrorHostTests {
     defer { defaults.removePersistentDomain(forName: suite) }
     let host = MirrorHost(source: source, defaults: defaults)
     host.address = "127.0.0.1"
-    host.port = String(UInt16.random(in: 49152...65535))
+    host.port = String(try MirrorTestPort.unusedPort())
     host.start()
     defer { host.stop() }
     for await ready in Observations({ host.isRunning || host.error != nil }) where ready { break }
@@ -114,13 +114,13 @@ struct MirrorHostTests {
     defer { defaults.removePersistentDomain(forName: suite) }
     let host = MirrorHost(source: source, defaults: defaults)
     host.address = "127.0.0.1"
-    host.port = String(UInt16.random(in: 49152...65535))
+    host.port = String(try MirrorTestPort.unusedPort())
     host.start()
     defer { host.stop() }
     for await ready in Observations({ host.isRunning || host.error != nil }) where ready {
       break
     }
-    #expect(host.error == nil)
+    try #require(host.error == nil)
     #expect(source.reads == 0)
     let first = try Peer(port: UInt16(host.port)!, key: host.pairingKey)
     let second = try Peer(port: UInt16(host.port)!, key: host.pairingKey)

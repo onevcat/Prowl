@@ -657,6 +657,10 @@ final class WorktreeTerminalManager {
   }
 
   func agentEvidenceEpochForTesting(surfaceID: UUID) -> UUID? {
+    agentEvidenceEpoch(surfaceID: surfaceID)
+  }
+
+  func agentEvidenceEpoch(surfaceID: UUID) -> UUID? {
     agentObservationStore.currentEvidenceEpoch(surfaceID: surfaceID)
   }
 

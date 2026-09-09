@@ -22,6 +22,8 @@ final class MirrorHost {
   @ObservationIgnored private var subscriptions: [UUID: Subscription] = [:]
   @ObservationIgnored private var pollTask: Task<Void, Never>?
   @ObservationIgnored private var versions: [UUID: Int] = [:]
+  @ObservationIgnored private var submissionLedger = MirrorSubmissionLedger()
+  @ObservationIgnored private var deliveredObservations: [UUID: MirrorAgentState] = [:]
   private(set) var hostRunID: UUID?
 
   private struct Subscription {
@@ -31,6 +33,7 @@ final class MirrorHost {
     var gate = MirrorFrameGate()
     var textGate = MirrorTextFrameGate()
     var history: MirrorHistory?
+    var agentState: MirrorAgentState?
   }
 
   init(source: any MirrorPaneSource, defaults: UserDefaults = .standard) {
@@ -112,6 +115,8 @@ final class MirrorHost {
     subscriptions.removeAll()
     versions.removeAll()
     hostRunID = nil
+    submissionLedger = MirrorSubmissionLedger()
+    deliveredObservations.removeAll()
     subscriberCount = 0
     isRunning = false
     isStarting = false
@@ -160,22 +165,15 @@ final class MirrorHost {
         peer.send(
           MirrorMessage(
             kind: .panes, panes: panes, selectedVersion: versions[peer.id],
-            capabilities: versions[peer.id] == 2 ? ["vt-v1", "text-v1", "takeover", "refresh"] : nil,
+            capabilities: versions[peer.id] == 2
+              ? ["vt-v1", "text-v1", "takeover", "refresh"]
+                + (source.supportsBoundedHistory ? ["history"] : [])
+                + (source.supportsSubmission ? ["agent-state", "submit-text"] : []) : nil,
             hostRunID: hostRunID))
       case .subscribe:
         try subscribe(message, peer: peer)
       case .acknowledge:
-        guard var subscription = subscription(for: message, peer: peer),
-          let sequence = message.sequence
-        else {
-          throw MirrorProtocolError.invalidMessage
-        }
-        if subscription.representation == .text {
-          try subscription.textGate.acknowledge(sequence)
-        } else {
-          try subscription.gate.acknowledge(sequence)
-        }
-        subscriptions[peer.id] = subscription
+        try acknowledge(message, peer: peer)
       case .refresh:
         guard message.version == 2, var subscription = subscription(for: message, peer: peer) else {
           throw MirrorProtocolError.invalidMessage
@@ -189,6 +187,15 @@ final class MirrorHost {
           !bytes.isEmpty, bytes.count <= MirrorWire.maximumInput
         else { throw MirrorProtocolError.invalidMessage }
         try source.write(bytes, to: subscription.paneID)
+      case .submit:
+        try submit(message, peer: peer)
+      case .submissionStatus:
+        guard message.version == 2, let key = submissionKey(message) else { throw MirrorProtocolError.invalidMessage }
+        let outcome =
+          key.run == hostRunID
+          ? submissionLedger.receipt(key)
+          : MirrorSubmitOutcome(status: .unknown, detail: "The Host sharing cycle has changed.")
+        peer.send(submissionReply(key, outcome: outcome))
       case .history:
         try sendHistory(message, to: peer)
       default: throw MirrorProtocolError.invalidMessage
@@ -202,6 +209,18 @@ final class MirrorHost {
       guard message.version == 2, message.subscriptionID == subscription.id else { return nil }
     }
     return subscription
+  }
+
+  private func acknowledge(_ message: MirrorMessage, peer: MirrorConnection) throws {
+    guard var subscription = subscription(for: message, peer: peer), let sequence = message.sequence else {
+      throw MirrorProtocolError.invalidMessage
+    }
+    if subscription.representation == .text {
+      try subscription.textGate.acknowledge(sequence)
+    } else {
+      try subscription.gate.acknowledge(sequence)
+    }
+    subscriptions[peer.id] = subscription
   }
 
   private func subscribe(_ message: MirrorMessage, peer: MirrorConnection) throws {
@@ -234,6 +253,11 @@ final class MirrorHost {
           subscriptionID: next.id, hostRunID: hostRunID))
     }
     if let first { peer.send(first) }
+    if modern, source.supportsSubmission {
+      next.agentState = submissionState(paneID)
+      subscriptions[peer.id] = next
+      peer.send(MirrorMessage(version: 2, kind: .state, subscriptionID: next.id, agentState: next.agentState))
+    }
     if pollTask == nil {
       pollTask = Task { [weak self] in
         while !Task.isCancelled {
@@ -273,16 +297,23 @@ final class MirrorHost {
     guard var subscription = subscription(for: message, peer: peer) else {
       throw MirrorProtocolError.invalidMessage
     }
-    guard subscription.representation == .terminal else {
-      peer.send(
-        MirrorMessage(
-          version: 2, kind: .failure,
-          error: "HISTORY_UNAVAILABLE: Bounded mobile history is not available."))
-      return
-    }
     if message.historyID == nil {
-      let text = try source.retainedText(subscription.paneID)
-      subscription.history = MirrorHistory(text: text)
+      if versions[peer.id] == 2 {
+        do {
+          guard source.supportsBoundedHistory else { throw MirrorProtocolError.invalidMessage }
+          let captured = try source.boundedRetainedText(subscription.paneID)
+          subscription.history = MirrorHistory(text: captured.text, truncated: captured.truncated)
+        } catch {
+          peer.send(
+            MirrorMessage(
+              version: 2, kind: .failure,
+              error: "HISTORY_UNAVAILABLE: Cannot capture history within the supported limits.",
+              subscriptionID: subscription.id))
+          return
+        }
+      } else {
+        subscription.history = MirrorHistory(text: try source.retainedText(subscription.paneID))
+      }
     }
     guard let history = subscription.history,
       message.historyID == nil || message.historyID == history.id
@@ -296,10 +327,80 @@ final class MirrorHost {
         version: versions[peer.id] == 2 ? 2 : 1, kind: .historyPage, historyID: history.id,
         offset: page.start,
         lines: page.lines, total: history.lines.count,
-        subscriptionID: versions[peer.id] == 2 ? subscription.id : nil))
+        subscriptionID: versions[peer.id] == 2 ? subscription.id : nil,
+        capturedAt: history.capturedAt, truncated: history.truncated))
+  }
+
+  private func submissionKey(_ message: MirrorMessage) -> MirrorSubmissionLedger.Key? {
+    guard let run = message.hostRunID, let pane = message.paneID,
+      let generation = message.agentGeneration, let submission = message.submissionID
+    else { return nil }
+    return .init(run: run, pane: pane, generation: generation, submission: submission)
+  }
+
+  private func submissionReply(_ key: MirrorSubmissionLedger.Key, outcome: MirrorSubmitOutcome) -> MirrorMessage {
+    MirrorMessage(
+      version: 2, kind: .submitResult, paneID: key.pane, hostRunID: key.run,
+      submissionID: key.submission, agentGeneration: key.generation, result: outcome)
+  }
+
+  private func submit(_ message: MirrorMessage, peer: MirrorConnection) throws {
+    guard message.version == 2, source.supportsSubmission,
+      let subscription = subscription(for: message, peer: peer), subscription.representation == .text,
+      let key = submissionKey(message), key.run == hostRunID, key.pane == subscription.paneID,
+      let text = message.text, let revision = message.observationRevision
+    else { throw MirrorProtocolError.invalidMessage }
+    switch submissionLedger.reserve(key, text: text) {
+    case .existing(let outcome):
+      peer.send(submissionReply(key, outcome: outcome))
+      return
+    case .refused(let reason):
+      peer.send(submissionReply(key, outcome: .init(status: .rejected, detail: reason)))
+      return
+    case .reserved: break
+    }
+    let owner = peer.id
+    Task { [weak self, weak peer] in
+      guard let self, self.hostRunID == key.run else { return }
+      let state = self.submissionState(key.pane)
+      let outcome: MirrorSubmitOutcome
+      if self.subscriptions[owner]?.id != subscription.id || state.generation != key.generation
+        || state.revision != revision || !state.canSubmit
+      {
+        outcome = .init(status: .rejected, detail: "The pane ownership or Agent state changed. Refresh before sending.")
+      } else {
+        self.deliveredObservations[key.pane] = state
+        outcome = await self.source.submit(text, to: key.pane, expected: state)
+        if self.hostRunID == key.run, outcome.status == .rejected,
+          self.deliveredObservations[key.pane] == state
+        {
+          self.deliveredObservations.removeValue(forKey: key.pane)
+        }
+      }
+      guard self.hostRunID == key.run else { return }
+      let final =
+        outcome.status == .pending
+        ? MirrorSubmitOutcome(status: .unknown, detail: "The Agent did not confirm delivery.") : outcome
+      self.submissionLedger.finish(key, outcome: final)
+      peer?.send(self.submissionReply(key, outcome: final))
+    }
+  }
+
+  private func submissionState(_ pane: UUID) -> MirrorAgentState {
+    let state = source.submissionState(pane)
+    guard let delivered = deliveredObservations[pane], delivered.generation == state.generation,
+      state.revision <= delivered.revision
+    else { return state }
+    return MirrorAgentState(
+      generation: state.generation, revision: state.revision, canSubmit: false,
+      reason: "Waiting for updated Agent state after delivery.", observedAt: state.observedAt)
   }
 
   private func poll() {
+    if !deliveredObservations.isEmpty {
+      let live = Set(source.panes().map(\.id))
+      deliveredObservations = deliveredObservations.filter { live.contains($0.key) }
+    }
     for (id, var subscription) in subscriptions {
       guard let peer = peers[id] else { continue }
       guard source.panes().contains(where: { $0.id == subscription.paneID }) else {
@@ -309,6 +410,18 @@ final class MirrorHost {
         continue
       }
       do {
+        if versions[id] == 2, source.supportsSubmission {
+          let state = submissionState(subscription.paneID)
+          if subscription.agentState?.generation != state.generation
+            || subscription.agentState?.revision != state.revision
+            || subscription.agentState?.canSubmit != state.canSubmit
+            || subscription.agentState?.reason != state.reason
+          {
+            subscription.agentState = state
+            subscriptions[id] = subscription
+            peer.send(MirrorMessage(version: 2, kind: .state, subscriptionID: subscription.id, agentState: state))
+          }
+        }
         if let frame = try capture(&subscription, modern: versions[id] == 2) {
           subscriptions[id] = subscription
           peer.send(frame)

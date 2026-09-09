@@ -2,8 +2,13 @@ import Foundation
 import GhosttyKit
 
 @MainActor
-struct GhosttyMirrorPaneSource: MirrorPaneSource {
+final class GhosttyMirrorPaneSource: MirrorPaneSource {
   let manager: WorktreeTerminalManager
+  var readiness: [UUID: MirrorSubmissionReadiness] = [:]
+
+  init(manager: WorktreeTerminalManager) {
+    self.manager = manager
+  }
 
   func panes() -> [MirrorPaneDescriptor] {
     manager.activeWorktreeStates.flatMap { state in
@@ -57,7 +62,8 @@ struct GhosttyMirrorPaneSource: MirrorPaneSource {
   }
 
   func write(_ bytes: Data, to id: UUID) throws {
-    guard let terminal = view(id)?.surface else { throw MirrorProtocolError.invalidMessage }
+    guard let view = view(id), let terminal = view.surface else { throw MirrorProtocolError.invalidMessage }
+    view.recordEditingActivity()
     // The text action accepts a length-delimited byte buffer. Its escape parser
     // UTF-8-encodes \xNN, so preserve bytes (even split UTF-8) and escape only '\'.
     // The surface text API is unsuitable here because it applies paste encoding again.
@@ -82,17 +88,31 @@ struct GhosttyMirrorPaneSource: MirrorPaneSource {
     return text
   }
 
-  func activeText(_ id: UUID) throws -> String {
-    guard let text = view(id)?.readActiveContentsForCLI() else {
-      throw MirrorProtocolError.invalidMessage
-    }
-    guard text.utf8.count <= MirrorWire.maximumPayload / 8 else {
-      throw MirrorProtocolError.messageTooLarge
-    }
-    return text
+  var supportsBoundedHistory: Bool { true }
+
+  func boundedRetainedText(_ id: UUID) throws -> MirrorRetainedText {
+    try boundedText(id, active: false, maximumBytes: MirrorHistory.maximumBytes)
   }
 
-  private func view(_ id: UUID) -> GhosttySurfaceView? {
+  func activeText(_ id: UUID) throws -> String {
+    try boundedText(id, active: true, maximumBytes: MirrorWire.maximumPayload / 8).text
+  }
+
+  private func boundedText(_ id: UUID, active: Bool, maximumBytes: Int) throws -> MirrorRetainedText {
+    guard let terminal = view(id)?.surface else { throw MirrorProtocolError.invalidMessage }
+    var result = ghostty_text_s()
+    var truncated = false
+    guard ghostty_surface_read_text_bounded(terminal, active, 10_000, UInt(maximumBytes), &result, &truncated) else {
+      throw MirrorProtocolError.messageTooLarge
+    }
+    defer { ghostty_surface_free_text(terminal, &result) }
+    guard let bytes = result.text, result.text_len <= maximumBytes,
+      let text = String(bytes: UnsafeRawBufferPointer(start: bytes, count: Int(result.text_len)), encoding: .utf8)
+    else { throw MirrorProtocolError.invalidMessage }
+    return MirrorRetainedText(text: text, truncated: truncated)
+  }
+
+  func view(_ id: UUID) -> GhosttySurfaceView? {
     manager.activeWorktreeStates.lazy.compactMap { $0.surfaces[id] }.first
   }
 }

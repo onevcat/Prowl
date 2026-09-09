@@ -6,8 +6,44 @@ import Testing
 
 @testable import supacode
 
+@Suite(.serialized)
 @MainActor
 struct MirrorTerminalIntegrationTests {
+  @Test(.timeLimit(.minutes(2))) func boundedCaptureAndSnapshotEvidenceUseRealSurface() async throws {
+    let fixture = try Fixture()
+    defer { fixture.close() }
+    try await fixture.wait("Host program ready") { fixture.hostText.contains("READY") }
+    try fixture.send("history")
+    try await fixture.wait("history output") { fixture.hostText.contains("HISTORY:450") }
+    let before = try fixture.source.snapshot(fixture.hostView.id)
+    let evidence = try #require(MirrorSnapshotEvidence.read(before))
+    #expect(evidence.lines.flatMap { $0.map(\.text) }.joined().contains("HISTORY:450"))
+    let surface = try #require(fixture.hostView.surface)
+    var captured = ghostty_text_s()
+    var truncated = false
+    try #require(ghostty_surface_read_text_bounded(surface, false, 2, 4096, &captured, &truncated))
+    defer { ghostty_surface_free_text(surface, &captured) }
+    let bytes = try #require(captured.text)
+    let text = try #require(
+      String(
+        bytes: UnsafeRawBufferPointer(start: bytes, count: Int(captured.text_len)), encoding: .utf8))
+    #expect(truncated)
+    #expect(text.contains("HISTORY:450"))
+    #expect(!text.contains("HISTORY:001"))
+    #expect(try fixture.source.snapshot(fixture.hostView.id) == before)
+    var untouched = ghostty_text_s()
+    untouched.offset_start = 123
+    untouched.text_len = 456
+    var untouchedTruncated = true
+    #expect(!ghostty_surface_read_text_bounded(surface, true, 1, 1, &untouched, &untouchedTruncated))
+    #expect(untouched.offset_start == 123)
+    #expect(untouched.text_len == 456)
+    #expect(untouched.text == nil)
+    #expect(untouchedTruncated)
+    #expect(try fixture.source.snapshot(fixture.hostView.id) == before)
+    #expect(try fixture.source.activeText(fixture.hostView.id).contains("HISTORY:450"))
+  }
+
   @Test(.timeLimit(.minutes(2))) func realTerminalRoundTripAndLifecycle() async throws {
     let fixture = try Fixture()
     defer { fixture.close() }
@@ -97,7 +133,7 @@ struct MirrorTerminalIntegrationTests {
     let viewport = MirrorTerminalScrollView(
       surface: replica, displaySize: client.replica.displaySize)
     window.contentView = viewport
-    viewport.setFrameSize(NSSize(width: 320, height: 240))
+    window.setContentSize(NSSize(width: 320, height: 240))
     viewport.layoutSubtreeIfNeeded()
     #expect(replica.frame.height > viewport.contentSize.height)
     #expect(viewport.contentView.bounds.minY == 0)
@@ -110,7 +146,7 @@ struct MirrorTerminalIntegrationTests {
     #expect(try fixture.frame(replica) == original)
     #expect(try fixture.source.snapshot(fixture.hostView.id) == original)
     viewport.contentView.scroll(to: .zero)
-    viewport.setFrameSize(NSSize(width: 280, height: 200))
+    window.setContentSize(NSSize(width: 280, height: 200))
     viewport.layoutSubtreeIfNeeded()
     #expect(viewport.contentView.bounds.minY == 0)
     #expect(try fixture.frame(replica) == original)
@@ -210,7 +246,7 @@ struct MirrorTerminalIntegrationTests {
       defaults = try #require(UserDefaults(suiteName: suite))
       host = MirrorHost(source: source, defaults: defaults)
       host.address = "127.0.0.1"
-      host.port = String(try Self.unusedPort())
+      host.port = String(try MirrorTestPort.unusedPort())
       attach(hostView)
     }
 
@@ -317,25 +353,6 @@ struct MirrorTerminalIntegrationTests {
       defaults.removePersistentDomain(forName: suite)
       try? FileManager.default.removeItem(at: directory)
       GhosttyRuntime.shared = previousRuntime
-    }
-
-    private static func unusedPort() throws -> UInt16 {
-      let descriptor = socket(AF_INET, SOCK_STREAM, 0)
-      try #require(descriptor >= 0)
-      defer { Darwin.close(descriptor) }
-      var address = sockaddr_in()
-      address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
-      address.sin_family = sa_family_t(AF_INET)
-      address.sin_addr.s_addr = inet_addr("127.0.0.1")
-      var length = socklen_t(MemoryLayout<sockaddr_in>.size)
-      let result = withUnsafeMutablePointer(to: &address) {
-        $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-          guard Darwin.bind(descriptor, $0, length) == 0 else { return Int32(-1) }
-          return getsockname(descriptor, $0, &length)
-        }
-      }
-      try #require(result == 0)
-      return UInt16(bigEndian: address.sin_port)
     }
 
     private static let program = #"""

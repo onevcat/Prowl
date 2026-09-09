@@ -74,7 +74,8 @@ struct RemoteMirrorPaneView: View {
         if client.showsHistory {
           Button("Live Terminal") { client.showsHistory = false }
         } else {
-          Button("History") { client.loadHistory(refresh: true) }.disabled(!client.isConnected)
+          Button("History") { client.loadHistory(refresh: true) }.disabled(
+            !client.isSubscribed || !client.supportsHistory)
         }
         Button("Close Mirror", systemImage: "xmark") { mirrors.remove(client) }.labelStyle(
           .iconOnly
@@ -109,6 +110,10 @@ struct RemoteMirrorPaneView: View {
         Button("Refresh") { client.loadHistory(refresh: true) }.disabled(client.isLoadingHistory)
         Button("Load Earlier 200 Lines") { client.loadHistory() }
           .disabled(client.isLoadingHistory || client.historyOffset == 0)
+      }
+      if client.historyTruncated {
+        Text("Older lines omitted; the first retained line may be incomplete.")
+          .font(.caption).foregroundStyle(.secondary)
       }
       ScrollView([.horizontal, .vertical]) {
         Text(client.historyLines.joined(separator: "\n"))

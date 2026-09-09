@@ -15,6 +15,8 @@ final class MirrorClient: Identifiable {
   private(set) var error: String?
   private(set) var endReason: MirrorMessage.EndReason?
   private(set) var supportsTakeover = false
+  private(set) var supportsHistory = true
+  private(set) var historyTruncated = false
   private(set) var isSubscribed = false
   var onVerifiedConnection: (() -> Void)?
   private(set) var historyLines: [String] = []
@@ -25,6 +27,7 @@ final class MirrorClient: Identifiable {
   @ObservationIgnored private let pairingKey: String
   @ObservationIgnored private var peer: MirrorConnection?
   @ObservationIgnored private var historyID: UUID?
+  @ObservationIgnored private var historyPageGate = MirrorHistoryPageGate()
   @ObservationIgnored private var subscriptionID: UUID?
   @ObservationIgnored private var version = 1
   @ObservationIgnored private var resumeIntent: MirrorMessage.Intent = .ifFree
@@ -136,7 +139,8 @@ final class MirrorClient: Identifiable {
   }
 
   func loadHistory(refresh: Bool = false) {
-    guard isSubscribed, !isLoadingHistory else { return }
+    guard isSubscribed, supportsHistory, !isLoadingHistory else { return }
+    guard refresh || historyID == nil || historyOffset > 0 else { return }
     if refresh {
       historyID = nil
       historyLines = []
@@ -153,6 +157,7 @@ final class MirrorClient: Identifiable {
   private func receive(_ message: MirrorMessage) {
     switch message.kind {
     case .panes: receivePanes(message)
+    case .state: break
     case .subscribed:
       guard version == 2, message.version == 2, message.paneID == selectedPane?.id,
         let id = message.subscriptionID
@@ -166,17 +171,7 @@ final class MirrorClient: Identifiable {
       historyOffset = 0
       showsHistory = false
     case .ended:
-      guard let reason = message.reason else {
-        peer?.close("Invalid Host status.")
-        return
-      }
-      endReason = reason
-      switch reason {
-      case .takenOver: error = "Another device took over this pane. The last frame is retained."
-      case .hostStopped: error = "Host stopped sharing. The Host program may still be running."
-      case .paneClosed: error = "Host pane closed. Choose another pane from Add to Prowl."
-      }
-      peer?.close()
+      receiveEnd(message)
     case .frame:
       guard selectedPane != nil,
         version == 1 || (subscriptionID != nil && message.subscriptionID == subscriptionID)
@@ -187,27 +182,53 @@ final class MirrorClient: Identifiable {
       isSubscribed = true
       replica.display(message)
     case .historyPage:
-      guard isLoadingHistory, let id = message.historyID, let offset = message.offset,
+      if historyID == nil { historyPageGate = MirrorHistoryPageGate() }
+      guard isLoadingHistory, version == 1 || message.subscriptionID == subscriptionID,
+        let id = message.historyID, let offset = message.offset,
         let lines = message.lines, lines.count <= MirrorHistory.pageSize, offset >= 0,
-        historyID == nil || historyID == id
+        historyID == nil || historyID == id,
+        historyPageGate.accept(message, requiresTimestamp: version == 2)
       else {
         peer?.close("Invalid history page.")
         return
       }
+      historyTruncated = message.truncated ?? false
       historyID = id
       historyOffset = offset
       historyLines.insert(contentsOf: lines, at: 0)
       isLoadingHistory = false
     case .failure:
+      if message.error?.hasPrefix("HISTORY_UNAVAILABLE") == true,
+        message.subscriptionID == subscriptionID
+      {
+        isLoadingHistory = false
+        error = message.error
+        return
+      }
       if message.error?.hasPrefix("PANE_BUSY") == true { endReason = .takenOver }
       peer?.close(message.error ?? "Host rejected the request.")
     default: peer?.close("Unexpected Host message.")
     }
   }
 
+  private func receiveEnd(_ message: MirrorMessage) {
+    guard let reason = message.reason else {
+      peer?.close("Invalid Host status.")
+      return
+    }
+    endReason = reason
+    switch reason {
+    case .takenOver: error = "Another device took over this pane. The last frame is retained."
+    case .hostStopped: error = "Host stopped sharing. The Host program may still be running."
+    case .paneClosed: error = "Host pane closed. Choose another pane from Add to Prowl."
+    }
+    peer?.close()
+  }
+
   private func receivePanes(_ message: MirrorMessage) {
     panes = message.panes ?? []
     version = message.selectedVersion == 2 ? 2 : 1
+    supportsHistory = version == 1 || message.capabilities?.contains("history") == true
     supportsTakeover = version == 2 && message.capabilities?.contains("takeover") == true
     isConnecting = false
     onVerifiedConnection?()

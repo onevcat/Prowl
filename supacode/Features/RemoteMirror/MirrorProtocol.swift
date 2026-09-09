@@ -20,7 +20,7 @@ nonisolated struct MirrorMessage: Codable, Sendable {
   enum Kind: String, Codable {
     case list, panes, subscribe, frame, acknowledge, input, history, historyPage, failure, ping,
       pong
-    case subscribed, textFrame, ended, refresh
+    case subscribed, textFrame, ended, refresh, state, submit, submitResult, submissionStatus
   }
   enum Representation: String, Codable, Sendable {
     case terminal = "vt-v1"
@@ -53,6 +53,14 @@ nonisolated struct MirrorMessage: Codable, Sendable {
   var representation: Representation?
   var intent: Intent?
   var reason: EndReason?
+  var capturedAt: TimeInterval?
+  var truncated: Bool?
+  var agentState: MirrorAgentState?
+  var submissionID: UUID?
+  var agentGeneration: UUID?
+  var observationRevision: UInt64?
+  var result: MirrorSubmitOutcome?
+
 }
 
 nonisolated enum MirrorProtocolError: Error, LocalizedError {
@@ -141,13 +149,21 @@ nonisolated struct MirrorFrameGate {
 }
 
 /// Pages refer to one retained-text snapshot, never moving offsets in a live PTY.
+nonisolated struct MirrorRetainedText {
+  let text: String
+  let truncated: Bool
+}
+
 nonisolated struct MirrorHistory {
   let id = UUID()
   let lines: [String]
+  let capturedAt = Date().timeIntervalSince1970
+  let truncated: Bool
   static let pageSize = 200
   static let maximumBytes = 2 * 1024 * 1024
 
-  init(text: String) {
+  init(text: String, truncated: Bool = false) {
+    self.truncated = truncated || text.utf8.count > Self.maximumBytes
     // A byte limit can split a scalar; discard only its leading continuation bytes.
     let bytes = text.utf8.suffix(Self.maximumBytes).drop(while: { $0 & 0xC0 == 0x80 })
     guard let bounded = String(bytes: bytes, encoding: .utf8) else {
@@ -161,4 +177,18 @@ nonisolated struct MirrorHistory {
     let start = max(0, offset - Self.pageSize)
     return (start, Array(lines[start..<offset]))
   }
+}
+
+nonisolated struct MirrorAgentState: Codable, Equatable, Sendable {
+  let generation: UUID?
+  let revision: UInt64
+  let canSubmit: Bool
+  let reason: String
+  let observedAt: TimeInterval
+}
+
+nonisolated struct MirrorSubmitOutcome: Codable, Equatable, Sendable {
+  enum Status: String, Codable, Sendable { case pending, accepted, rejected, unknown }
+  let status: Status
+  let detail: String
 }
