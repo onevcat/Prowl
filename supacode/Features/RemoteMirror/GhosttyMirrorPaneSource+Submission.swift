@@ -56,21 +56,33 @@ extension GhosttyMirrorPaneSource {
     guard condition.isLive, let terminal = view(id), let agent = condition.agent else {
       return "Waiting for an identified Agent process."
     }
-    guard agent.agent == .codex else { return "Message submission for this Agent is not available yet." }
-    guard let pane = manager.activeWorktreeStates.lazy.compactMap({ $0.surfaceAgentStates[id] }).first,
+    guard agent.agent == .codex || agent.agent == .claude else {
+      return "Message submission for this Agent is not available yet."
+    }
+    guard
+      let pane = manager.activeWorktreeStates.lazy.compactMap({ $0.surfaceAgentStates[id] }).first,
       let pid = pane.launchProcessID ?? pane.agentProcessID,
       ProcessDetection.processStartDate(pid: pid) != nil
     else { return "The Agent process is no longer available." }
     guard terminal.markedText.length == 0 else { return "The Host is composing text." }
-    guard let screen, screen.cursorVisible, screen.bracketedPaste, screen.codexPlaceholder != nil else {
-      return "The Host input is not an empty, editable Codex composer."
+    guard let screen, screen.bracketedPaste,
+      agent.agent == .codex ? screen.codexPlaceholder != nil : screen.hasEmptyClaudeComposer
+    else {
+      return "The Host input is not an empty, editable Agent composer."
     }
     let text = screen.lines.map { $0.map(\.text).joined() }.joined(separator: "\n")
-    guard !text.contains("[Image #") else { return "Check the Host for attached images before sending." }
+    guard !text.contains("[Image #") else {
+      return "Check the Host for attached images before sending."
+    }
     guard !text.contains("Starting MCP servers"), !text.contains("Shutting down...") else {
       return "The Agent is starting or stopping."
     }
-    guard CodexScreenProfile.detect(in: AgentScreenSnapshot(text: text)).state == .idle else {
+    let snapshot = AgentScreenSnapshot(text: text)
+    let detectedState =
+      agent.agent == .codex
+      ? CodexScreenProfile.detect(in: snapshot).state
+      : ClaudeScreenProfile.detect(in: snapshot).state
+    guard detectedState == .idle else {
       return "The Agent is working or needs attention."
     }
     switch AgentConditionEvidence.idleVerdict(for: condition) {

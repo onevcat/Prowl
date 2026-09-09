@@ -21,6 +21,23 @@ nonisolated struct MirrorSnapshotEvidence: Equatable, Sendable {
   let cursorVisible: Bool
   let bracketedPaste: Bool
 
+  /// Claude paints its own inverse-space cursor while hiding the terminal cursor.
+  /// Require the entire single-line composer between its borders to be empty;
+  /// a cursor at column two alone would also match a draft after Home/Ctrl-A.
+  var hasEmptyClaudeComposer: Bool {
+    guard cursorColumn == 2, cursorRow > 0, cursorRow + 1 < lines.count else { return false }
+    let runs = lines[cursorRow]
+    guard runs.map(\.text).joined() == "❯\u{00A0} ",
+      runs.count == 2, runs[0].text == "❯\u{00A0}",
+      !runs[0].style.inverse, !runs[0].style.invisible,
+      runs[1].text == " ", runs[1].style.inverse, !runs[1].style.invisible
+    else { return false }
+    return [cursorRow - 1, cursorRow + 1].allSatisfy { row in
+      let border = lines[row].map(\.text).joined()
+      return border.count >= 3 && border.allSatisfy { $0 == "─" }
+    }
+  }
+
   /// Placeholder evidence alone is not permission to submit: the caller must
   /// also validate the Agent generation, runtime state, attachments and edits.
   var codexPlaceholder: String? {

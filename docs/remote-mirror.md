@@ -78,13 +78,15 @@ submission adapter. The Mac integration builds with the local bridge and has rea
 terminal capture tests; live Agent submission verification is still incomplete.
 Existing installed builds do not gain these capabilities.
 
-Mobile Send requires an identified, idle Codex process, an editable empty composer
-with placeholder styling, bracketed paste support, and two seconds without changes
+Mobile Send requires an identified, idle Codex or Claude Code process, an editable empty composer,
+bracketed paste support, and two seconds without changes
 to the observed screen or local editing activity. Input is checked again immediately
 before enqueueing the multiline paste and Return. A delivery receipt confirms the
 terminal enqueue, not that the Agent has completed or even begun the requested work.
 Attached-image evidence, startup, approval prompts and unsupported Agent composers
-keep Send unavailable. Claude and other Agent submission adapters remain incomplete.
+keep Send unavailable. Codex requires its styled placeholder; Claude Code requires
+an empty single-line composer between its borders and its software-cursor marker.
+Unrecognized composer layouts and other Agents keep Send unavailable.
 
 On a Host advertising `refresh`, returning to the foreground requests a fresh text
 frame on the existing subscription. It does not disconnect or compete for its own
@@ -114,6 +116,32 @@ updates between samples may be skipped. Native app integration is under developm
 see the implementation record for verification status before relying on this build.
 
 ## Local development
+
+The opt-in `MirrorTerminalIntegrationTests/liveCodexComposerRejectsHostDraft()`
+contract launches an installed Codex in a disposable directory with process-local
+configuration. Set `TEST_RUNNER_PROWL_RUN_LIVE_MIRROR_CODEX=1` and
+`TEST_RUNNER_PROWL_MIRROR_CODEX_EXECUTABLE` to its executable when running
+`xcodebuild test`. By default it only checks readiness and local draft protection.
+Adding `TEST_RUNNER_PROWL_MIRROR_CODEX_SEND=1` permits one short inference request
+to verify native terminal delivery and rejection of a stale second submission.
+
+`liveClaudeComposerCapture()` checks the real Claude Code composer, rejects a local
+draft and stale duplicate, and verifies one multiline submission through an installed
+runtime. Enable it with `TEST_RUNNER_PROWL_RUN_LIVE_MIRROR_CLAUDE=1` and supply a JSON
+argv array in `TEST_RUNNER_PROWL_MIRROR_CLAUDE_ARGV`. No personal launcher is required
+by the product; a provider-specific launch command belongs in local test configuration.
+
+`liveControlConsoleReadsItsBundledGuideAndCLI()` exercises the actual control-console
+launch and its private CLI endpoint. Enable `TEST_RUNNER_PROWL_RUN_LIVE_CONTROL_CONSOLE=1`
+and provide an existing, trusted test workspace in `TEST_RUNNER_PROWL_TEST_CONSOLE_DIRECTORY`.
+It uses the installed Codex executable above and an unrestricted test Profile to read
+the packaged instructions and inspect this isolated instance. Prepare directory and
+hook trust before running; hook approval inside the test additionally requires the
+explicit `TEST_RUNNER_PROWL_TEST_TRUST_CODEX_HOOKS=1` opt-in.
+
+Live tests can forward process-local proxy values through `TEST_RUNNER_PROWL_TEST_`
+followed by `HTTP_PROXY`, `HTTPS_PROXY`, `http_proxy`, or `https_proxy`. Keep machine
+addresses and provider configuration in ignored local files, not committed fixtures.
 
 This branch requires the mirror bridge build of Ghostty. Build the sibling Ghostty
 repository first, then use:

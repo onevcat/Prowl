@@ -1,7 +1,9 @@
 import AppKit
+import ComposableArchitecture
 import Darwin
 import GhosttyKit
 import Observation
+import Synchronization
 import Testing
 
 @testable import supacode
@@ -9,6 +11,189 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct MirrorTerminalIntegrationTests {
+  @Test(
+    .enabled(if: ProcessInfo.processInfo.environment["PROWL_RUN_LIVE_CONTROL_CONSOLE"] == "1"),
+    .timeLimit(.minutes(3)))
+  func liveControlConsoleReadsItsBundledGuideAndCLI() async throws {
+    let fixture = try Fixture()
+    defer { fixture.close() }
+    let executable = try #require(ProcessInfo.processInfo.environment["PROWL_MIRROR_CODEX_EXECUTABLE"])
+    var environment = Fixture.liveAgentEnvironment
+    environment["PATH"] =
+      URL(fileURLWithPath: executable).deletingLastPathComponent().path
+      + ":" + (ProcessInfo.processInfo.environment["PATH"] ?? "/usr/bin:/bin")
+    let profile = AgentProfile(
+      name: "Local console smoke", runtime: .codex,
+      environmentOverrides: environment.keys.sorted().map {
+        AgentProfileEnvironmentOverride(name: $0, value: environment[$0]!)
+      })
+    let console = HostControlConsole(manager: fixture.manager, profiles: [profile], defaults: fixture.defaults)
+    console.enabled = true
+    console.directory = try #require(ProcessInfo.processInfo.environment["PROWL_TEST_CONSOLE_DIRECTORY"])
+    console.profile.executionMode = .unrestricted
+    let store = Store(initialState: AppFeature.State()) { AppFeature() }
+    let router = SupacodeApp.makeCLICommandRouter(appStore: store, terminalManager: fixture.manager)
+    let acceptedConnections = Mutex(0)
+    console.makeServer = {
+      let server = CLISocketServer(
+        router: router, socketPath: "/tmp/prowl-console-\(UUID()).sock",
+        onClientAccepted: { acceptedConnections.withLock { $0 += 1 } })
+      try server.start()
+      return server
+    }
+    defer { console.stop() }
+    fixture.host.start()
+    try await fixture.wait("Host listener") { fixture.host.isRunning || fixture.host.error != nil }
+    try #require(fixture.host.error == nil)
+    console.start()
+    try await fixture.wait("Control console launch", timeout: .seconds(30)) {
+      !console.isStarting
+    }
+    try #require(console.error == nil)
+    let launched = try #require(console.surface)
+    let view = try #require(
+      fixture.manager.stateIfExists(for: HostControlConsole.worktreeID)?.surfaces[launched.surfaceID])
+    fixture.attach(view)
+    let text = { view.readScreenContentsForCLI() ?? "" }
+    try await fixture.wait("Control console startup", timeout: .seconds(45)) {
+      text().contains("Hooks need review") || text().contains("ready") || text().contains("Ready")
+    }
+    if text().contains("Hooks need review") {
+      try #require(ProcessInfo.processInfo.environment["PROWL_TEST_TRUST_CODEX_HOOKS"] == "1")
+      try #require(view.sendCLIKeyToken("down"))
+      try await fixture.wait("Trust hooks selected") { text().contains("› 2. Trust all and continue") }
+      try #require(view.sendCLIKeyToken("enter"))
+    }
+    try await fixture.wait("Control console initialization", timeout: .seconds(90)) {
+      let screen = text()
+      return screen.contains("prowl") && (screen.contains("ready") || screen.contains("Ready"))
+        && acceptedConnections.withLock { $0 > 0 }
+        && fixture.source.submissionState(view.id).canSubmit
+    }
+    #expect(console.isAlive)
+    #expect(fixture.manager.controlConsoleSocketPath != nil)
+  }
+
+  @Test(
+    .enabled(if: ProcessInfo.processInfo.environment["PROWL_RUN_LIVE_MIRROR_CLAUDE"] == "1"),
+    .timeLimit(.minutes(2)))
+  func liveClaudeComposerCapture() async throws {
+    let value = try #require(ProcessInfo.processInfo.environment["PROWL_MIRROR_CLAUDE_ARGV"])
+    let arguments = try JSONDecoder().decode([String].self, from: Data(value.utf8))
+    try #require(!arguments.isEmpty)
+    let fixture = try Fixture(agentArguments: arguments)
+    defer { fixture.close() }
+    try await fixture.wait("Claude startup", timeout: .seconds(45)) {
+      fixture.hostText.contains("Quick safety check:")
+        || fixture.hostText.contains("bypass permissions on")
+    }
+    if fixture.hostText.contains("Quick safety check:") {
+      // Only this fixture's newly created, empty directory may be trusted here.
+      let unwrapped = fixture.hostText.filter { !$0.isWhitespace }
+      try #require(unwrapped.contains(fixture.directory.lastPathComponent))
+      #expect(fixture.hostView.sendCLIKeyToken("enter"))
+    }
+    try await fixture.wait("Claude composer", timeout: .seconds(30)) {
+      fixture.hostText.contains("bypass permissions on")
+    }
+    let snapshot = try fixture.source.snapshot(fixture.hostView.id)
+    let evidence = try #require(MirrorSnapshotEvidence.read(snapshot))
+    if let output = ProcessInfo.processInfo.environment["PROWL_MIRROR_CAPTURE_FILE"] {
+      try JSONEncoder().encode(snapshot).write(to: URL(fileURLWithPath: output))
+    }
+    #expect(evidence.lines.flatMap { $0.map(\.text) }.joined().contains("❯"))
+    #expect(evidence.hasEmptyClaudeComposer)
+    try await fixture.wait("Claude submission readiness", timeout: .seconds(30)) {
+      fixture.source.submissionState(fixture.hostView.id).canSubmit
+    }
+    let ready = fixture.source.submissionState(fixture.hostView.id)
+    fixture.hostView.insertText(
+      "LOCAL_DRAFT", replacementRange: NSRange(location: NSNotFound, length: 0))
+    #expect(!fixture.source.submissionState(fixture.hostView.id).canSubmit)
+    #expect(
+      fixture.source.submit("MUST_NOT_SEND", to: fixture.hostView.id, expected: ready).status
+        == .rejected)
+    try await fixture.wait("Claude local draft") { fixture.hostText.contains("LOCAL_DRAFT") }
+    #expect(fixture.hostView.sendCLIKeyToken("ctrl-u"))
+    try await fixture.wait("Claude empty composer restored") {
+      fixture.source.submissionState(fixture.hostView.id).canSubmit
+    }
+    let current = fixture.source.submissionState(fixture.hostView.id)
+    let outcome = fixture.source.submit(
+      "Do not use tools or modify files.\nReply with exactly MIRROR_NATIVE_GLM_OK.",
+      to: fixture.hostView.id, expected: current)
+    try #require(outcome.status == .accepted)
+    #expect(
+      fixture.source.submit("MUST_NOT_DUPLICATE", to: fixture.hostView.id, expected: current).status
+        == .rejected)
+    try await fixture.wait("Claude reply to native submission", timeout: .seconds(45)) {
+      fixture.hostText.split(separator: "\n").contains {
+        $0.trimmingCharacters(in: .whitespaces) == "⏺ MIRROR_NATIVE_GLM_OK"
+      }
+    }
+    #expect(!fixture.hostText.contains("MUST_NOT_SEND"))
+    #expect(!fixture.hostText.contains("MUST_NOT_DUPLICATE"))
+  }
+
+  @Test(
+    .enabled(if: ProcessInfo.processInfo.environment["PROWL_RUN_LIVE_MIRROR_CODEX"] == "1"),
+    .timeLimit(.minutes(2)))
+  func liveCodexComposerRejectsHostDraft() async throws {
+    let executable = try #require(
+      ProcessInfo.processInfo.environment["PROWL_MIRROR_CODEX_EXECUTABLE"])
+    let fixture = try Fixture(codexPath: executable)
+    defer { fixture.close() }
+    try await fixture.wait("Codex startup", timeout: .seconds(45)) {
+      fixture.hostText.contains("Hooks need review")
+        || fixture.source.submissionState(fixture.hostView.id).canSubmit
+    }
+    if fixture.hostText.contains("Hooks need review") {
+      try #require(fixture.hostText.contains("3. Continue without trusting"))
+      let trustHooks = ProcessInfo.processInfo.environment["PROWL_TEST_TRUST_CODEX_HOOKS"] == "1"
+      // Trust requires an explicit local opt-in; ordinary test runs skip hooks.
+      try #require(fixture.hostView.sendCLIKeyToken("down"))
+      if !trustHooks { try #require(fixture.hostView.sendCLIKeyToken("down")) }
+      try #require(fixture.hostView.sendCLIKeyToken("enter"))
+    }
+    do {
+      try await fixture.wait("Codex submission readiness", timeout: .seconds(60)) {
+        fixture.source.submissionState(fixture.hostView.id).canSubmit
+      }
+    } catch {
+      throw Failure(
+        reason: "\(error); \(fixture.source.submissionState(fixture.hostView.id).reason); "
+          + String(reflecting: fixture.hostText.suffix(1200)))
+    }
+    let ready = fixture.source.submissionState(fixture.hostView.id)
+    fixture.hostView.insertText(
+      "LOCAL_DRAFT", replacementRange: NSRange(location: NSNotFound, length: 0))
+    #expect(!fixture.source.submissionState(fixture.hostView.id).canSubmit)
+    let rejected = fixture.source.submit("MUST_NOT_SEND", to: fixture.hostView.id, expected: ready)
+    #expect(rejected.status == .rejected)
+    try await fixture.wait("local draft visible") { fixture.hostText.contains("LOCAL_DRAFT") }
+    #expect(!fixture.hostText.contains("MUST_NOT_SEND"))
+    #expect(fixture.hostView.sendCLIKeyToken("ctrl-u"))
+    try await fixture.wait("empty composer ready again") {
+      fixture.source.submissionState(fixture.hostView.id).canSubmit
+    }
+    if ProcessInfo.processInfo.environment["PROWL_MIRROR_CODEX_SEND"] == "1" {
+      let current = fixture.source.submissionState(fixture.hostView.id)
+      let outcome = fixture.source.submit(
+        "Do not use tools or modify files.\nReply with exactly MIRROR_NATIVE_SUBMIT_OK.",
+        to: fixture.hostView.id, expected: current)
+      try #require(outcome.status == .accepted)
+      #expect(
+        fixture.source.submit("MUST_NOT_DUPLICATE", to: fixture.hostView.id, expected: current)
+          .status == .rejected)
+      try await fixture.wait("Codex reply to native submission", timeout: .seconds(60)) {
+        fixture.hostText.split(separator: "\n").contains {
+          $0.trimmingCharacters(in: .whitespaces) == "• MIRROR_NATIVE_SUBMIT_OK"
+        }
+      }
+      #expect(!fixture.hostText.contains("MUST_NOT_DUPLICATE"))
+    }
+  }
+
   @Test(.timeLimit(.minutes(2))) func boundedCaptureAndSnapshotEvidenceUseRealSurface() async throws {
     let fixture = try Fixture()
     defer { fixture.close() }
@@ -26,7 +211,8 @@ struct MirrorTerminalIntegrationTests {
     let bytes = try #require(captured.text)
     let text = try #require(
       String(
-        bytes: UnsafeRawBufferPointer(start: bytes, count: Int(captured.text_len)), encoding: .utf8))
+        bytes: UnsafeRawBufferPointer(start: bytes, count: Int(captured.text_len)), encoding: .utf8)
+    )
     #expect(truncated)
     #expect(text.contains("HISTORY:450"))
     #expect(!text.contains("HISTORY:001"))
@@ -35,7 +221,8 @@ struct MirrorTerminalIntegrationTests {
     untouched.offset_start = 123
     untouched.text_len = 456
     var untouchedTruncated = true
-    #expect(!ghostty_surface_read_text_bounded(surface, true, 1, 1, &untouched, &untouchedTruncated))
+    #expect(
+      !ghostty_surface_read_text_bounded(surface, true, 1, 1, &untouched, &untouchedTruncated))
     #expect(untouched.offset_start == 123)
     #expect(untouched.text_len == 456)
     #expect(untouched.text == nil)
@@ -221,12 +408,27 @@ struct MirrorTerminalIntegrationTests {
     var clients: [MirrorClient] = []
     var windows: [NSWindow] = []
 
-    init() throws {
+    init(codexPath: String? = nil, agentArguments: [String]? = nil) throws {
       directory = FileManager.default.temporaryDirectory.appending(
-        path: "mirror-terminal-\(UUID())")
+        path: "mirror-terminal-\(UUID())"
+      ).resolvingSymlinksInPath()
       try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
       let script = directory.appending(path: "terminal.sh")
-      try Self.program.write(to: script, atomically: true, encoding: .utf8)
+      let command: String
+      if let agentArguments {
+        command = agentArguments.map { "'" + $0.replacing("'", with: "'\\''") + "'" }.joined(
+          separator: " ")
+      } else if let codexPath {
+        let trust = "projects={\(String(reflecting: directory.path))={trust_level=\"trusted\"}}"
+        command = [
+          codexPath, "--no-alt-screen", "--sandbox", "read-only", "--ask-for-approval", "never",
+          "-C", directory.path, "-c", trust,
+        ]
+        .map { "'" + $0.replacing("'", with: "'\\''") + "'" }.joined(separator: " ")
+      } else {
+        try Self.program.write(to: script, atomically: true, encoding: .utf8)
+        command = "/bin/bash '\(script.path.replacing("'", with: "'\\''"))'"
+      }
       previousRuntime = GhosttyRuntime.shared
       runtime = GhosttyRuntime()
       manager = WorktreeTerminalManager(runtime: runtime)
@@ -236,7 +438,8 @@ struct MirrorTerminalIntegrationTests {
           repositoryRootURL: directory))
       hostView = GhosttySurfaceView(
         runtime: runtime, workingDirectory: directory, context: GHOSTTY_SURFACE_CONTEXT_WINDOW,
-        command: "/bin/bash '\(script.path.replacing("'", with: "'\\''"))'")
+        environment: codexPath == nil ? [:] : Self.liveAgentEnvironment,
+        command: command)
       state.surfaces[hostView.id] = hostView
       let tab = state.tabManager.createTab(title: "Mirror integration", icon: nil)
       state.trees[tab] = SplitTree<GhosttySurfaceView>(view: hostView)
@@ -248,9 +451,20 @@ struct MirrorTerminalIntegrationTests {
       host.address = "127.0.0.1"
       host.port = String(try MirrorTestPort.unusedPort())
       attach(hostView)
+      if codexPath != nil || agentArguments != nil {
+        state.wakeAgentDetection(for: hostView, tabId: tab)
+      }
     }
 
     var hostText: String { hostView.readScreenContentsForCLI() ?? "" }
+
+    static var liveAgentEnvironment: [String: String] {
+      let environment = ProcessInfo.processInfo.environment
+      return ["HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"].reduce(into: [:]) {
+        result, name in
+        if let value = environment["PROWL_TEST_" + name] { result[name] = value }
+      }
+    }
 
     func replicaText(_ client: MirrorClient) -> String {
       client.replica.view?.readScreenContentsForCLI() ?? ""
@@ -328,7 +542,12 @@ struct MirrorTerminalIntegrationTests {
       }
     }
 
-    func wait(_ label: String, until condition: @MainActor () throws -> Bool) async throws {
+    func wait(
+      _ label: String, timeout: Duration = .seconds(15),
+      until condition: @MainActor () throws -> Bool
+    )
+      async throws
+    {
       let (ticks, continuation) = AsyncStream<Void>.makeStream()
       let timer = Timer.scheduledTimer(withTimeInterval: 0.025, repeats: true) { _ in
         continuation.yield(())
@@ -337,10 +556,12 @@ struct MirrorTerminalIntegrationTests {
         timer.invalidate()
         continuation.finish()
       }
-      let deadline = ContinuousClock.now.advanced(by: .seconds(15))
+      let deadline = ContinuousClock.now.advanced(by: timeout)
       for await _ in ticks {
         if try condition() { return }
-        if ContinuousClock.now >= deadline { throw Failure(reason: "Timed out: \(label)") }
+        if ContinuousClock.now >= deadline {
+          throw Failure(reason: "Timed out: \(label); " + String(reflecting: hostText.suffix(1600)))
+        }
       }
       throw CancellationError()
     }
@@ -348,7 +569,7 @@ struct MirrorTerminalIntegrationTests {
     func close() {
       for client in clients { client.close() }
       host.stop()
-      hostView.closeSurface()
+      for state in manager.activeWorktreeStates { state.closeAllSurfaces() }
       for window in windows { window.close() }
       defaults.removePersistentDomain(forName: suite)
       try? FileManager.default.removeItem(at: directory)

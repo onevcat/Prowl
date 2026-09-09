@@ -4,6 +4,24 @@ import Testing
 @testable import supacode
 
 struct MirrorSnapshotEvidenceTests {
+  @Test func claudeSoftwareCursorRequiresTheWholeComposerToBeEmpty() throws {
+    let prefix = "\u{1B}[?25l\u{1B}[?2004h───\r\n"
+    let suffix = "\r\n───\u{1B}[2;3H"
+    let empty = "❯\u{00A0}\u{1B}[7m \u{1B}[0m"
+    let parsed = try #require(MirrorSnapshotEvidence.read(frame(prefix + empty + suffix)))
+    #expect(!parsed.cursorVisible)
+    #expect(parsed.hasEmptyClaudeComposer)
+    for draft in [
+      empty + "draft", empty + " ", "❯\u{00A0}\u{1B}[7mx\u{1B}[0m",
+      "❯\u{00A0} ", empty + "\r\nsecond line", "❯\u{00A0}\u{1B}[7;8m \u{1B}[0m",
+    ] {
+      let evidence = try #require(MirrorSnapshotEvidence.read(frame(prefix + draft + suffix)))
+      #expect(!evidence.hasEmptyClaudeComposer)
+    }
+    let unbordered = try #require(MirrorSnapshotEvidence.read(frame(empty + "\u{1B}[1;3H")))
+    #expect(!unbordered.hasEmptyClaudeComposer)
+  }
+
   private func frame(_ text: String) -> MirrorFrame {
     MirrorFrame(columns: 80, rows: 24, bytes: Data(text.utf8))
   }
