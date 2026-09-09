@@ -11,10 +11,12 @@ struct AddRemoteMirrorView: View {
   @State private var client: MirrorClient?
   @State private var error: String?
   @State private var added = false
+  @State private var restored = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
       Text("Remote Mirror Pane").font(.title2.bold())
+      if let error = mirrors.credentialError { Text(error).font(.caption).foregroundStyle(.red) }
       if let client, client.isConnected {
         Text("Select a Host pane").foregroundStyle(.secondary)
         if client.panes.isEmpty { Text("No open panes on this Host.") }
@@ -28,18 +30,23 @@ struct AddRemoteMirrorView: View {
               } label: {
                 HStack {
                   VStack(alignment: .leading) {
+                    if pane.role == "controlConsole" {
+                      Label("AI Control Console", systemImage: "sparkles").font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
                     Text(pane.projectName ?? pane.title).font(.headline).lineLimit(1)
-                    Text(pane.subtitle ?? pane.directory).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    Text(pane.subtitle ?? pane.directory).font(.caption).foregroundStyle(.secondary)
+                      .lineLimit(1)
                   }
                   Spacer()
-                  Text(pane.busy ? "In use" : "Mirror")
+                  Text(pane.busy ? (client.supportsTakeover ? "Take Over" : "In use") : "Mirror")
                 }
                 .padding(10).frame(maxWidth: .infinity, alignment: .leading)
               }
               .buttonStyle(.plain)
               .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
               .help(pane.title + "\n" + pane.directory)
-              .disabled(pane.busy)
+              .disabled(pane.busy && !client.supportsTakeover)
             }
           }
         }
@@ -54,7 +61,9 @@ struct AddRemoteMirrorView: View {
           SecureField("Pairing Key", text: $pairingKey)
         }
         .disabled(client?.isConnecting == true)
-        if let message = client?.error ?? error { Text(message).foregroundStyle(.red).textSelection(.enabled) }
+        if let message = client?.error ?? error {
+          Text(message).foregroundStyle(.red).textSelection(.enabled)
+        }
       }
       HStack {
         Button("Back") {
@@ -71,6 +80,15 @@ struct AddRemoteMirrorView: View {
       }
     }
     .padding(24).frame(width: 420)
+    .onAppear {
+      guard !restored else { return }
+      restored = true
+      if let saved = mirrors.savedConnection() {
+        address = saved.address
+        port = String(saved.port)
+        pairingKey = saved.pairingKey
+      }
+    }
     .onDisappear { if !added { client?.close() } }
     .accessibilityIdentifier("add-remote-mirror-panel")
   }

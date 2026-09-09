@@ -2,7 +2,8 @@
 
 Remote Mirror connects two Prowl apps to the same running Host terminal. Both the
 Host keyboard and one remote keyboard can send input. Each Host pane permits one
-remote mirror; another subscription receives `PANE_BUSY`.
+remote mirror. With protocol v2, explicitly selecting **Take Over** replaces the
+previous remote owner; automatic recovery never takes ownership from another device.
 
 ## Host
 
@@ -10,6 +11,12 @@ Open the network button next to notifications. Enter the listening IP and port,
 then choose **Start Host**. `0.0.0.0` listens on all IPv4 interfaces; a specific local
 IP restricts the listener to that address. Use this Mac's reachable IP on the Client.
 Copy the random pairing key from the panel. Closing the panel keeps the service on.
+**Copy Pairing Key** writes directly to the clipboard without opening system sharing.
+Optionally enable **AI Control Console** before starting Host. Choose an Agent Profile,
+model, approval mode and working directory. An empty directory uses Application Support.
+The console is a named terminal with an independent **Open AI Control Console** entry;
+its launch failure does not stop sharing. Configuration changes require restarting
+the console. See [the control-console guide](remote-mirror-control.md).
 The network icon turns green while Host is listening.
 Stopping Host disconnects mirrors without closing any local pane or program.
 Quitting Prowl stops the service. This is not a detached terminal daemon.
@@ -21,15 +28,20 @@ Connect, then select an available pane. The mirror appears under **Remote Mirror
 in the sidebar. Closing it only disconnects the remote subscription.
 Only already-created terminals in the App instance running Host are listed; project
 entries alone do not start a pane. After opening more terminals on Host, choose
-**Refresh Panes**. **In use** means another mirror occupies that pane.
+**Refresh Panes**. **Take Over** means another mirror occupies that pane. Older Hosts
+still show a disabled **In use** row because they do not support takeover.
+The last successfully authenticated address, port and key are saved in Keychain and
+prefilled next time. Prefilling does not connect or select a pane automatically.
 The picker shows the repository folder name above the Tab title and worktree name.
 Unnamed terminals fall back to the detected agent or Shell. Multiple tabs and split
 panes include their positions so identical titles remain distinguishable. The sidebar
 and header use the same project/terminal identity; hover for the full path. These
 labels are captured when the pane list is refreshed.
-After a disconnect, close the mirror and create a new one to get a fresh baseline.
-The pane header and sidebar show **Disconnected**, and the terminal is replaced by
-an explanation with input disabled. An established connection sends a heartbeat
+After a disconnect, **Retry** requests a fresh baseline in the same mirror. If another
+device owns the pane, use **Take Over** explicitly. The last display remains available
+but remote input is disabled. Known takeover, Host stop and pane closure are shown
+separately; unexplained connection loss means remote status is unknown.
+An established connection sends a heartbeat
 every 2 seconds and times out after 8 seconds without an incoming message; a silent
 terminal remains connected because heartbeat replies do not depend on output.
 Initial connection setup has a 30-second deadline. After a connection loss, the
@@ -51,6 +63,15 @@ the Host's terminal history and screen (up to 2 MiB of UTF-8 text, trimmed at a 
 fetches preceding pages of that same snapshot. **Refresh** requests current retained
 text. Live output does not scroll this view. History currently preserves text, not
 cell styling. Erased transient output is not recorded or recoverable.
+
+## Native mobile client under development
+
+Version-two discovery advertises plain-text mirrors separately from the Mac VT
+representation. The iPad client reflows full ACTIVE-text replacements and retains
+drafts across disconnection. Code fences and pipe tables can open a frozen detail
+view. Markdown already rendered away by an Agent cannot be reconstructed reliably.
+Mobile submission and bounded retained-history capture are not enabled yet; this
+build is a read-only mobile implementation, not the completed mobile feature.
 
 ## Transport and current boundaries
 

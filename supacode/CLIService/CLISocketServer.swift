@@ -17,6 +17,13 @@ final class CLISocketServer {
   private static let maximumFrameLength = WorkflowSizeLimits.transportFrame
 
   private let router: CLICommandRouter
+
+  func makeControlConsoleEndpoint() throws -> CLISocketServer {
+    let server = CLISocketServer(
+      router: router, socketPath: "/tmp/prowl-control-\(UUID().uuidString).sock")
+    try server.start()
+    return server
+  }
   private let socketPath: String
   private let lockPath: String
   private let onClientAccepted: (@Sendable () -> Void)?

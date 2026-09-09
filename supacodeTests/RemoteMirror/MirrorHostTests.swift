@@ -7,7 +7,107 @@ import Testing
 
 @MainActor
 struct MirrorHostTests {
-  @Test(.timeLimit(.minutes(1))) func subscriptionIsExclusiveAndDiscoveryDoesNotReadTerminal() async throws {
+  @Test(.timeLimit(.minutes(1)))
+  func explicitTakeoverRevokesOldOwnerAndTextReplacesRatherThanAppends() async throws {
+    let source = Source()
+    let suite = "MirrorTakeoverTests-\(UUID())"
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let host = MirrorHost(source: source, defaults: defaults)
+    host.address = "127.0.0.1"
+    host.port = String(UInt16.random(in: 49152...65535))
+    host.start()
+    defer { host.stop() }
+    for await ready in Observations({ host.isRunning || host.error != nil }) where ready { break }
+    #expect(host.error == nil)
+    let first = try Peer(port: UInt16(host.port)!, key: host.pairingKey)
+    let second = try Peer(port: UInt16(host.port)!, key: host.pairingKey)
+    defer {
+      first.connection.close()
+      second.connection.close()
+    }
+    var firstMessages = first.messages.makeAsyncIterator()
+    var secondMessages = second.messages.makeAsyncIterator()
+    first.connection.send(MirrorMessage(kind: .subscribe, paneID: source.id))
+    #expect(await firstMessages.next()?.kind == .frame)
+    second.connection.send(MirrorMessage(kind: .list, supportedVersions: [2, 1]))
+    let list = try #require(await secondMessages.next())
+    #expect(list.selectedVersion == 2)
+    #expect(source.reads == 1)
+    second.connection.send(
+      MirrorMessage(
+        version: 2, kind: .subscribe, paneID: source.id,
+        representation: .text, intent: .ifFree))
+    #expect(await secondMessages.next()?.error?.hasPrefix("PANE_BUSY") == true)
+    #expect(source.reads == 1)
+    second.connection.send(
+      MirrorMessage(
+        version: 2, kind: .subscribe, paneID: source.id,
+        representation: .text, intent: .takeover))
+    let lease = try #require(await secondMessages.next())
+    #expect(lease.kind == .subscribed)
+    #expect(lease.hostRunID == host.hostRunID)
+    let frame = try #require(await secondMessages.next())
+    #expect(frame.text == "thinking")
+    #expect(frame.subscriptionID == lease.subscriptionID)
+    #expect(await firstMessages.next()?.error == "takenOver")
+    #expect(host.subscriberCount == 1)
+    source.text = ""
+    second.connection.send(
+      MirrorMessage(
+        version: 2, kind: .acknowledge, sequence: frame.sequence,
+        subscriptionID: lease.subscriptionID))
+    let cleared = try #require(await secondMessages.next())
+    #expect(cleared.kind == .textFrame)
+    #expect(cleared.text == "")
+    // A text mirror may not bypass mobile submit validation with raw input.
+    second.connection.send(
+      MirrorMessage(
+        version: 2, kind: .input, bytes: Data([3]),
+        subscriptionID: lease.subscriptionID))
+    #expect(await secondMessages.next() == nil)
+    #expect(source.input.isEmpty)
+  }
+
+  @Test(.timeLimit(.minutes(1))) func failedTakeoverCaptureKeepsExistingOwner() async throws {
+    let source = Source()
+    source.textUnavailable = true
+    let suite = "MirrorFailedTakeoverTests-\(UUID())"
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let host = MirrorHost(source: source, defaults: defaults)
+    host.address = "127.0.0.1"
+    host.port = String(UInt16.random(in: 49152...65535))
+    host.start()
+    defer { host.stop() }
+    for await ready in Observations({ host.isRunning || host.error != nil }) where ready { break }
+    let first = try Peer(port: UInt16(host.port)!, key: host.pairingKey)
+    let second = try Peer(port: UInt16(host.port)!, key: host.pairingKey)
+    defer {
+      first.connection.close()
+      second.connection.close()
+    }
+    var firstMessages = first.messages.makeAsyncIterator()
+    var secondMessages = second.messages.makeAsyncIterator()
+    first.connection.send(MirrorMessage(kind: .subscribe, paneID: source.id))
+    #expect(await firstMessages.next()?.kind == .frame)
+    second.connection.send(MirrorMessage(kind: .list, supportedVersions: [2]))
+    _ = await secondMessages.next()
+    second.connection.send(
+      MirrorMessage(
+        version: 2, kind: .subscribe, paneID: source.id,
+        representation: .text, intent: .takeover))
+    #expect(await secondMessages.next() == nil)
+    first.connection.send(MirrorMessage(kind: .input, bytes: Data([3])))
+    first.connection.send(MirrorMessage(kind: .history))
+    #expect(await firstMessages.next()?.kind == .historyPage)
+    #expect(source.input == Data([3]))
+    #expect(host.subscriberCount == 1)
+  }
+
+  @Test(.timeLimit(.minutes(1))) func subscriptionIsExclusiveAndDiscoveryDoesNotReadTerminal()
+    async throws
+  {
     let source = Source()
     let suite = "MirrorHostTests-\(UUID())"
     let defaults = try #require(UserDefaults(suiteName: suite))
@@ -55,7 +155,8 @@ struct MirrorHostTests {
   }
 
   @Test(.timeLimit(.minutes(1))) func wrongPairingKeyCannotReadMetadata() async throws {
-    let listener = try NWListener(using: MirrorConnection.parameters(pairingKey: String(repeating: "a", count: 64)))
+    let listener = try NWListener(
+      using: MirrorConnection.parameters(pairingKey: String(repeating: "a", count: 64)))
     let accepted = AsyncStream.makeStream(of: Bool.self)
     var server: MirrorConnection?
     listener.newConnectionHandler = { connection in
@@ -76,7 +177,8 @@ struct MirrorHostTests {
     }
     var readiness = accepted.stream.makeAsyncIterator()
     _ = await readiness.next()
-    let peer = try Peer(port: try #require(listener.port).rawValue, key: String(repeating: "b", count: 64))
+    let peer = try Peer(
+      port: try #require(listener.port).rawValue, key: String(repeating: "b", count: 64))
     defer { peer.connection.close() }
     var messages = peer.messages.makeAsyncIterator()
     #expect(await messages.next() == nil)
@@ -86,6 +188,13 @@ struct MirrorHostTests {
     let id = UUID()
     var reads = 0
     var input = Data()
+    var text = "thinking"
+    var textUnavailable = false
+    func activeText(_ id: UUID) throws -> String {
+      if textUnavailable { throw MirrorProtocolError.invalidMessage }
+      reads += 1
+      return text
+    }
     func panes() -> [MirrorPaneDescriptor] {
       [MirrorPaneDescriptor(id: id, title: "Fixture", directory: "/", busy: false)]
     }

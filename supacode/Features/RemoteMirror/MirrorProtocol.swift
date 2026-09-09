@@ -7,6 +7,7 @@ nonisolated struct MirrorPaneDescriptor: Codable, Equatable, Identifiable, Senda
   let busy: Bool
   var projectName: String?
   var subtitle: String?
+  var role: String?
 }
 
 nonisolated struct MirrorFrame: Codable, Equatable, Sendable {
@@ -17,7 +18,19 @@ nonisolated struct MirrorFrame: Codable, Equatable, Sendable {
 
 nonisolated struct MirrorMessage: Codable, Sendable {
   enum Kind: String, Codable {
-    case list, panes, subscribe, frame, acknowledge, input, history, historyPage, failure, ping, pong
+    case list, panes, subscribe, frame, acknowledge, input, history, historyPage, failure, ping,
+      pong
+    case subscribed, textFrame, ended
+  }
+  enum Representation: String, Codable, Sendable {
+    case terminal = "vt-v1"
+    case text = "text-v1"
+  }
+  enum Intent: String, Codable, Sendable {
+    case takeover, ifFree
+  }
+  enum EndReason: String, Codable, Sendable {
+    case takenOver, hostStopped, paneClosed
   }
   var version = 1
   let kind: Kind
@@ -31,6 +44,15 @@ nonisolated struct MirrorMessage: Codable, Sendable {
   var lines: [String]?
   var total: Int?
   var error: String?
+  var supportedVersions: [Int]?
+  var selectedVersion: Int?
+  var capabilities: [String]?
+  var text: String?
+  var subscriptionID: UUID?
+  var hostRunID: UUID?
+  var representation: Representation?
+  var intent: Intent?
+  var reason: EndReason?
 }
 
 nonisolated enum MirrorProtocolError: Error, LocalizedError {
@@ -54,7 +76,9 @@ nonisolated enum MirrorWire {
   }
 
   static func frame(_ payload: Data) throws -> Data {
-    guard !payload.isEmpty, payload.count <= maximumPayload else { throw MirrorProtocolError.messageTooLarge }
+    guard !payload.isEmpty, payload.count <= maximumPayload else {
+      throw MirrorProtocolError.messageTooLarge
+    }
     var length = UInt32(payload.count).bigEndian
     var result = withUnsafeBytes(of: &length) { Data($0) }
     result.append(payload)
@@ -71,8 +95,24 @@ nonisolated enum MirrorWire {
   static func decode(_ data: Data) throws -> MirrorMessage {
     guard data.count <= maximumPayload else { throw MirrorProtocolError.messageTooLarge }
     let message = try JSONDecoder().decode(MirrorMessage.self, from: data)
-    guard message.version == 1 else { throw MirrorProtocolError.invalidMessage }
+    guard message.version == 1 || message.version == 2 else {
+      throw MirrorProtocolError.invalidMessage
+    }
     return message
+  }
+}
+
+/// Empty text is a replacement frame, distinct from a subscription with no baseline.
+nonisolated struct MirrorTextFrameGate {
+  private var gate = MirrorFrameGate()
+  var outstanding: UInt64? { gate.outstanding }
+
+  mutating func offer(_ text: String) -> UInt64? {
+    gate.offer(MirrorFrame(columns: 0, rows: 0, bytes: Data(text.utf8)))
+  }
+
+  mutating func acknowledge(_ sequence: UInt64) throws {
+    try gate.acknowledge(sequence)
   }
 }
 

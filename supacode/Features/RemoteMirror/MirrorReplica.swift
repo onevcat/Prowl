@@ -22,6 +22,8 @@ final class MirrorReplica {
   init(runtime: GhosttyRuntime) { self.runtime = runtime }
 
   func start() throws {
+    guard listener == nil, peer == nil, view == nil else { return }
+    stopped = false
     let parameters = NWParameters.tcp
     parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(.loopback), port: .any)
     let listener = try NWListener(using: parameters)

@@ -26,20 +26,25 @@ struct MirrorTerminalIntegrationTests {
     try await verifyViewport(fixture, client: client)
     try await verifyRawBytes(fixture, client: client)
     try await verifyHistory(fixture, client: client)
-    try await verifyExclusiveSubscription(fixture)
+    try await verifyTakeover(fixture, first: client)
 
     client.close()
     try await fixture.wait("unsubscribe") { fixture.host.subscriberCount == 0 }
     try fixture.send("after-close")
-    try await fixture.wait("Host survives mirror close") { fixture.hostText.contains("INPUT:after-close") }
+    try await fixture.wait("Host survives mirror close") {
+      fixture.hostText.contains("INPUT:after-close")
+    }
     let reconnected = try await fixture.connect()
     try await fixture.waitForMirror(reconnected, containing: "INPUT:after-close")
     fixture.host.stop()
     try await fixture.wait("Client sees Host stop") { !reconnected.isConnected }
     #expect(reconnected.error != nil)
-    #expect(reconnected.replica.view == nil)
+    #expect(reconnected.replica.view != nil)
+    #expect(reconnected.endReason == .hostStopped)
     try fixture.send("after-stop")
-    try await fixture.wait("Host survives server stop") { fixture.hostText.contains("INPUT:after-stop") }
+    try await fixture.wait("Host survives server stop") {
+      fixture.hostText.contains("INPUT:after-stop")
+    }
   }
 
   private func verifyOutputAndInput(_ fixture: Fixture, client: MirrorClient) async throws {
@@ -89,14 +94,17 @@ struct MirrorTerminalIntegrationTests {
     let replica = try #require(client.replica.view)
     let window = try #require(replica.window)
     let original = try fixture.frame(replica)
-    let viewport = MirrorTerminalScrollView(surface: replica, displaySize: client.replica.displaySize)
+    let viewport = MirrorTerminalScrollView(
+      surface: replica, displaySize: client.replica.displaySize)
     window.contentView = viewport
     viewport.setFrameSize(NSSize(width: 320, height: 240))
     viewport.layoutSubtreeIfNeeded()
     #expect(replica.frame.height > viewport.contentSize.height)
     #expect(viewport.contentView.bounds.minY == 0)
     let event = try #require(
-      CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 2, wheel1: 80, wheel2: 0, wheel3: 0))
+      CGEvent(
+        scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 2, wheel1: 80, wheel2: 0, wheel3: 0
+      ))
     replica.scrollWheel(with: try #require(NSEvent(cgEvent: event)))
     try await fixture.wait("mirror viewport scroll") { viewport.contentView.bounds.minY > 0 }
     #expect(try fixture.frame(replica) == original)
@@ -132,15 +140,32 @@ struct MirrorTerminalIntegrationTests {
     #expect(normalized.contains("1b 5b 32 30 30 7e e4 b8 ad e6 96 87 1b 5b 32 30 31 7e"))
   }
 
-  private func verifyExclusiveSubscription(_ fixture: Fixture) async throws {
+  private func verifyTakeover(_ fixture: Fixture, first: MirrorClient) async throws {
     let second = fixture.makeClient()
     second.connect()
     try await fixture.wait("second discovery") { !second.panes.isEmpty || second.error != nil }
     let pane = try #require(second.panes.first)
     #expect(pane.busy)
     second.subscribe(pane)
-    try await fixture.wait("exclusive subscription rejection") { second.error != nil }
-    #expect(second.error?.contains("PANE_BUSY") == true)
+    try await fixture.wait("second replica") { second.replica.view != nil || second.error != nil }
+    fixture.attach(try #require(second.replica.view))
+    try await fixture.wait("first taken over") { first.endReason == .takenOver }
+    let frozen = fixture.replicaText(first)
+    let oldReplica = try #require(first.replica.view)
+    oldReplica.insertText(
+      "must-not-forward", replacementRange: NSRange(location: NSNotFound, length: 0))
+    #expect(oldReplica.sendCLIKeyToken("enter"))
+    try fixture.send("after-takeover")
+    try await fixture.waitForMirror(second, containing: "INPUT:after-takeover")
+    #expect(!fixture.hostText.contains("must-not-forward"))
+    #expect(fixture.replicaText(first) == frozen)
+    #expect(try fixture.source.activeText(fixture.hostView.id).contains("INPUT:after-takeover"))
+    first.retry()
+    try await fixture.wait("retry refuses to steal") { first.endReason == .takenOver }
+    #expect(second.isSubscribed)
+    first.retry(takeover: true)
+    try await fixture.waitForMirror(first, containing: "INPUT:after-takeover")
+    try await fixture.wait("second taken over") { second.endReason == .takenOver }
     #expect(fixture.host.subscriberCount == 1)
   }
 
@@ -161,7 +186,8 @@ struct MirrorTerminalIntegrationTests {
     var windows: [NSWindow] = []
 
     init() throws {
-      directory = FileManager.default.temporaryDirectory.appending(path: "mirror-terminal-\(UUID())")
+      directory = FileManager.default.temporaryDirectory.appending(
+        path: "mirror-terminal-\(UUID())")
       try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
       let script = directory.appending(path: "terminal.sh")
       try Self.program.write(to: script, atomically: true, encoding: .utf8)
@@ -190,7 +216,9 @@ struct MirrorTerminalIntegrationTests {
 
     var hostText: String { hostView.readScreenContentsForCLI() ?? "" }
 
-    func replicaText(_ client: MirrorClient) -> String { client.replica.view?.readScreenContentsForCLI() ?? "" }
+    func replicaText(_ client: MirrorClient) -> String {
+      client.replica.view?.readScreenContentsForCLI() ?? ""
+    }
 
     func attach(_ view: GhosttySurfaceView) {
       let window = NSWindow(
@@ -224,7 +252,9 @@ struct MirrorTerminalIntegrationTests {
       return client
     }
 
-    func send(_ command: String) throws { try source.write(Data((command + "\n").utf8), to: hostView.id) }
+    func send(_ command: String) throws {
+      try source.write(Data((command + "\n").utf8), to: hostView.id)
+    }
 
     func frame(_ view: GhosttySurfaceView) throws -> MirrorFrame {
       let surface = try #require(view.surface)
@@ -234,7 +264,8 @@ struct MirrorTerminalIntegrationTests {
       let bytes = try #require(text.text)
       let size = ghostty_surface_size(surface)
       return MirrorFrame(
-        columns: UInt32(size.columns), rows: UInt32(size.rows), bytes: Data(bytes: bytes, count: Int(text.text_len)))
+        columns: UInt32(size.columns), rows: UInt32(size.rows),
+        bytes: Data(bytes: bytes, count: Int(text.text_len)))
     }
 
     func waitForMirror(_ client: MirrorClient, containing text: String) async throws {
@@ -252,7 +283,8 @@ struct MirrorTerminalIntegrationTests {
         let hostTail = Data(host.bytes.suffix(192)).base64EncodedString()
         let replicaTail = replica.map { Data($0.bytes.suffix(192)).base64EncodedString() } ?? "none"
         throw Failure(
-          reason: "\(error); host=\(host.columns)x\(host.rows):\(String(reflecting: hostText.prefix(300))); "
+          reason:
+            "\(error); host=\(host.columns)x\(host.rows):\(String(reflecting: hostText.prefix(300))); "
             + "replica=\(String(describing: replica?.columns))x\(String(describing: replica?.rows)):"
             + "\(String(reflecting: replicaText(client).prefix(300))); "
             + "hostVT=\(hostTail); replicaVT=\(replicaTail)"
@@ -262,7 +294,9 @@ struct MirrorTerminalIntegrationTests {
 
     func wait(_ label: String, until condition: @MainActor () throws -> Bool) async throws {
       let (ticks, continuation) = AsyncStream<Void>.makeStream()
-      let timer = Timer.scheduledTimer(withTimeInterval: 0.025, repeats: true) { _ in continuation.yield(()) }
+      let timer = Timer.scheduledTimer(withTimeInterval: 0.025, repeats: true) { _ in
+        continuation.yield(())
+      }
       defer {
         timer.invalidate()
         continuation.finish()

@@ -30,7 +30,10 @@ struct GhosttyMirrorPaneSource: MirrorPaneSource {
           return MirrorPaneDescriptor(
             id: view.id, title: title.joined(separator: " · "),
             directory: state.worktree.workingDirectory.path, busy: false,
-            projectName: project, subtitle: location.joined(separator: " · "))
+            projectName: state.worktreeID == HostControlConsole.worktreeID
+              ? "AI Control Console" : project,
+            subtitle: location.joined(separator: " · "),
+            role: view.id == manager.controlConsoleSurfaceID ? "controlConsole" : nil)
         }
       }
     }.sorted { $0.title < $1.title }
@@ -41,7 +44,9 @@ struct GhosttyMirrorPaneSource: MirrorPaneSource {
     let size = ghostty_surface_size(terminal)
     guard size.columns > 0, size.rows > 0 else { throw MirrorProtocolError.invalidMessage }
     var text = ghostty_text_s()
-    guard ghostty_surface_read_snapshot(terminal, &text) else { throw MirrorProtocolError.invalidMessage }
+    guard ghostty_surface_read_snapshot(terminal, &text) else {
+      throw MirrorProtocolError.invalidMessage
+    }
     defer { ghostty_surface_free_text(terminal, &text) }
     guard text.text_len <= MirrorWire.maximumPayload / 2, let bytes = text.text else {
       throw MirrorProtocolError.messageTooLarge
@@ -62,7 +67,8 @@ struct GhosttyMirrorPaneSource: MirrorPaneSource {
       if byte == 0x5C { action.append(byte) }
     }
     let written = action.withUnsafeBytes {
-      ghostty_surface_binding_action(terminal, $0.baseAddress!.assumingMemoryBound(to: CChar.self), UInt($0.count))
+      ghostty_surface_binding_action(
+        terminal, $0.baseAddress!.assumingMemoryBound(to: CChar.self), UInt($0.count))
     }
     guard written else {
       throw MirrorProtocolError.invalidMessage
@@ -70,7 +76,19 @@ struct GhosttyMirrorPaneSource: MirrorPaneSource {
   }
 
   func retainedText(_ id: UUID) throws -> String {
-    guard let text = view(id)?.readScreenContentsForCLI() else { throw MirrorProtocolError.invalidMessage }
+    guard let text = view(id)?.readScreenContentsForCLI() else {
+      throw MirrorProtocolError.invalidMessage
+    }
+    return text
+  }
+
+  func activeText(_ id: UUID) throws -> String {
+    guard let text = view(id)?.readActiveContentsForCLI() else {
+      throw MirrorProtocolError.invalidMessage
+    }
+    guard text.utf8.count <= MirrorWire.maximumPayload / 8 else {
+      throw MirrorProtocolError.messageTooLarge
+    }
     return text
   }
 

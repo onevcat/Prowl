@@ -55,6 +55,10 @@ capability needed here. Browser clients are outside this implementation.
 
 ## Amendments
 
+- Updated 2026-09-09: Implemented the v2 text/takeover foundation and optional console; remaining mobile gates are explicit — see [005-mobile-mirror-foundation.md](005-mobile-mirror-foundation.md).
+
+- Updated 2026-09-09: Planned native mobile text mirrors, explicit takeover and Host control console — see [004-mobile-mirror-plan.md](004-mobile-mirror-plan.md).
+
 - Updated 2026-09-09: Initial adapter and focused tests added; full App build blocked by dependency downloads — see [001-action.md](001-action.md).
 
 - Updated 2026-09-09: Dependencies, Debug compilation, lint, and App-hosted regression tests now pass; real mirror UI verification remains pending — see [001-action.md](001-action.md).

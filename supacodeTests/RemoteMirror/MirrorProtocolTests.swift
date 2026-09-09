@@ -4,6 +4,29 @@ import Testing
 @testable import supacode
 
 struct MirrorProtocolTests {
+  @Test func discoveryNegotiatesWithoutBreakingLegacyMessages() throws {
+    let request = MirrorMessage(kind: .list, supportedVersions: [2, 1])
+    let decoded = try MirrorWire.decode(MirrorWire.encode(request).dropFirst(4))
+    #expect(decoded.version == 1)
+    #expect(decoded.supportedVersions == [2, 1])
+    let legacy = try MirrorWire.decode(Data(#"{"version":1,"kind":"list"}"#.utf8))
+    #expect(legacy.supportedVersions == nil)
+    let text = MirrorMessage(version: 2, kind: .textFrame, text: "思考\n", subscriptionID: UUID())
+    #expect(try MirrorWire.decode(MirrorWire.encode(text).dropFirst(4)).text == "思考\n")
+  }
+
+  @Test func textGatePreservesEmptyReplacementAndRejectsStaleAcknowledgements() throws {
+    var gate = MirrorTextFrameGate()
+    #expect(gate.offer("thinking") == 1)
+    #expect(gate.offer("") == nil)
+    #expect(throws: MirrorProtocolError.self) { try gate.acknowledge(99) }
+    try gate.acknowledge(1)
+    #expect(gate.offer("") == 2)
+    try gate.acknowledge(2)
+    #expect(gate.offer("") == nil)
+    #expect(gate.offer("conclusion") == 3)
+  }
+
   @Test func paneLabelsPreserveMetadataAndDecodeOlderHosts() throws {
     let pane = MirrorPaneDescriptor(
       id: UUID(), title: "VKChannel · Codex", directory: "/projects/VKChannel", busy: true,
@@ -11,7 +34,8 @@ struct MirrorProtocolTests {
     let wire = try MirrorWire.encode(MirrorMessage(kind: .panes, panes: [pane]))
     #expect(try MirrorWire.decode(wire.dropFirst(4)).panes == [pane])
     let legacy = Data(
-      "{\"id\":\"\(pane.id)\",\"title\":\"master\",\"directory\":\"/projects/VKChannel\",\"busy\":false}".utf8)
+      "{\"id\":\"\(pane.id)\",\"title\":\"master\",\"directory\":\"/projects/VKChannel\",\"busy\":false}"
+        .utf8)
     let decoded = try JSONDecoder().decode(MirrorPaneDescriptor.self, from: legacy)
     #expect(decoded.projectName == nil)
     #expect(decoded.subtitle == nil)
@@ -30,7 +54,7 @@ struct MirrorProtocolTests {
     #expect(throws: MirrorProtocolError.self) { try MirrorWire.length(Data([0, 0, 0, 0])) }
     #expect(throws: MirrorProtocolError.self) { try MirrorWire.length(Data([255, 255, 255, 255])) }
     #expect(throws: MirrorProtocolError.self) {
-      try MirrorWire.decode(Data(#"{"version":2,"kind":"list"}"#.utf8))
+      try MirrorWire.decode(Data(#"{"version":3,"kind":"list"}"#.utf8))
     }
   }
 

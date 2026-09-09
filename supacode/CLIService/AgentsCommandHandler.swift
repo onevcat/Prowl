@@ -78,9 +78,14 @@ final class AgentsCommandHandler: CommandHandler {
     )
     let terminalContexts = makeTerminalContexts(from: snapshot.listSnapshot)
     let worktreeContexts = Dictionary(
-      ListRuntimeSnapshotBuilder
-        .orderedWorktreeContexts(from: repositoriesState)
-        .map { ($0.id, $0) },
+      snapshot.listSnapshot.worktrees.map {
+        (
+          $0.id,
+          ListRuntimeSnapshotBuilder.WorktreeContext(
+            id: $0.id, name: $0.name,
+            path: $0.path, rootPath: $0.rootPath, kind: $0.kind)
+        )
+      },
       uniquingKeysWith: { first, _ in first }
     )
 
@@ -145,7 +150,9 @@ final class AgentsCommandHandler: CommandHandler {
     return AgentsCommandPayload(count: agents.count, agents: agents)
   }
 
-  private func makeTerminalContexts(from snapshot: ListRuntimeSnapshot) -> [UUID: TerminalAgentContext] {
+  private func makeTerminalContexts(from snapshot: ListRuntimeSnapshot) -> [UUID:
+    TerminalAgentContext]
+  {
     var contexts: [UUID: TerminalAgentContext] = [:]
     for worktree in snapshot.worktrees {
       for tab in worktree.tabs {
@@ -154,7 +161,8 @@ final class AgentsCommandHandler: CommandHandler {
             worktree: worktree,
             tab: tab,
             pane: pane,
-            focused: worktree.id == snapshot.focusedWorktreeID && tab.selected && tab.focusedPaneID == pane.id
+            focused: worktree.id == snapshot.focusedWorktreeID && tab.selected
+              && tab.focusedPaneID == pane.id
           )
         }
       }

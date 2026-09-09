@@ -10,6 +10,7 @@ final class MirrorConnection {
   var onReady: (() -> Void)?
   var onClose: ((String?) -> Void)?
   private var closed = false
+  private var finishing = false
   private var queuedBytes = 0
   private var heartbeat: Task<Void, Never>?
   private var deadline: Task<Void, Never>?
@@ -23,7 +24,9 @@ final class MirrorConnection {
 
   static func parameters(pairingKey: String) throws -> NWParameters {
     let key = pairingKey.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard key.count == 64, key.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }) else {
+    guard key.count == 64,
+      key.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) })
+    else {
       throw MirrorProtocolError.invalidPairingKey
     }
     let tls = NWProtocolTLS.Options()
@@ -80,8 +83,8 @@ final class MirrorConnection {
     connection.start(queue: .main)
   }
 
-  func send(_ message: MirrorMessage) {
-    guard !closed else { return }
+  func send(_ message: MirrorMessage, closeAfterSending: Bool = false) {
+    guard !closed, !finishing else { return }
     do {
       let bytes = try MirrorWire.encode(message)
       guard queuedBytes + bytes.count <= 2 * MirrorWire.maximumPayload else {
@@ -89,13 +92,21 @@ final class MirrorConnection {
         return
       }
       queuedBytes += bytes.count
+      if closeAfterSending {
+        finishing = true
+        heartbeat?.cancel()
+      }
       connection.send(
         content: bytes,
-        completion: .contentProcessed { [weak self] error in
+        completion: .contentProcessed { [self] error in
           Task { @MainActor in
-            guard let self, !self.closed else { return }
+            guard !self.closed else { return }
             self.queuedBytes -= bytes.count
-            if let error { self.close(error.localizedDescription) }
+            if let error {
+              self.close(error.localizedDescription)
+            } else if closeAfterSending {
+              self.close()
+            }
           }
         })
     } catch { close(error.localizedDescription) }
@@ -148,11 +159,14 @@ final class MirrorConnection {
   }
 
   private func read(count: Int, completion: @escaping @MainActor (Data) -> Void) {
-    connection.receive(minimumIncompleteLength: count, maximumLength: count) { [weak self] data, _, done, error in
+    connection.receive(minimumIncompleteLength: count, maximumLength: count) {
+      [weak self] data, _, done, error in
       Task { @MainActor in
         guard let self, !self.closed else { return }
         guard let data, data.count == count, error == nil else {
-          self.close(error?.localizedDescription ?? (done ? "Host disconnected." : "Incomplete remote message."))
+          self.close(
+            error?.localizedDescription
+              ?? (done ? "Host disconnected." : "Incomplete remote message."))
           return
         }
         completion(data)

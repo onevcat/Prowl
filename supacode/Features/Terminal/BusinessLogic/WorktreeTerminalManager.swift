@@ -37,6 +37,14 @@ final class WorktreeTerminalManager {
   private static let eventBufferCap = 2048
   private static let pendingEventCap = 1024
   var selectedWorktreeID: Worktree.ID?
+  private(set) var controlConsoleWorktree: Worktree?
+  var controlConsoleSocketPath: String?
+  var controlConsoleSurfaceID: UUID?
+
+  func registerControlConsole(_ worktree: Worktree) {
+    controlConsoleWorktree = worktree
+    _ = state(for: worktree)
+  }
   /// The worktree+tab focused in Canvas, updated by CanvasView on card tap.
   /// Used by toggleCanvas to know which worktree to return to.
   var canvasFocusedWorktreeID: Worktree.ID?
@@ -48,9 +56,10 @@ final class WorktreeTerminalManager {
     agentObservationBufferCapacity: Int = 64,
     agentDispatchStore: AgentDispatchStore = AgentDispatchStore(),
     codexConfigReadProcess: CodexConfigReadProcess = CodexConfigReadProcess(),
-    codexShellEnvironmentResolver: @escaping @Sendable (URL, String?) async -> CodexShellLaunchEnvironment? = {
-      await CodexShellLaunchEnvironmentProbe.resolve(cwd: $0, pathOverride: $1)
-    },
+    codexShellEnvironmentResolver:
+      @escaping @Sendable (URL, String?) async -> CodexShellLaunchEnvironment? = {
+        await CodexShellLaunchEnvironmentProbe.resolve(cwd: $0, pathOverride: $1)
+      },
     hookResourcesProvider: @escaping @MainActor () -> AgentHookResources? = {
       guard let url = SupacodePaths.bundledCLIURL else { return nil }
       return AgentHookResources(
@@ -69,7 +78,8 @@ final class WorktreeTerminalManager {
     self.layoutPersistence = layoutPersistence
     self.skipsSurfaceCreationForTesting = skipsSurfaceCreationForTesting
     self.preferredFontSize = preferredFontSize
-    self.agentObservationStore = AgentObservationStore(bufferCapacity: agentObservationBufferCapacity)
+    self.agentObservationStore = AgentObservationStore(
+      bufferCapacity: agentObservationBufferCapacity)
     self.agentDispatchStore = agentDispatchStore
     self.codexConfigReadProcess = codexConfigReadProcess
     self.codexShellEnvironmentResolver = codexShellEnvironmentResolver
@@ -121,7 +131,16 @@ final class WorktreeTerminalManager {
       case .failure(let error): return .failure(error)
       }
       latestContext = context
-      let resources = hookResourcesProvider()
+      var resources = hookResourcesProvider()
+      if worktree.id == controlConsoleWorktree?.id, let socket = controlConsoleSocketPath,
+        let original = resources
+      {
+        resources = AgentHookResources(
+          bundledCLIPath: original.bundledCLIPath, socketPath: socket,
+          copilotPluginPath: original.copilotPluginPath, piExtensionPath: original.piExtensionPath,
+          ompExtensionPath: original.ompExtensionPath,
+          opencodePluginPath: original.opencodePluginPath)
+      }
       let codexShellEnvironment: CodexShellLaunchEnvironment?
       if context.request.plan.runtime == .codex, resources != nil {
         codexShellEnvironment = await codexShellEnvironmentResolver(
@@ -242,7 +261,8 @@ final class WorktreeTerminalManager {
         placement: context.request.placement,
         workingDirectoryOverride: context.request.workingDirectoryOverride,
         inheritanceAnchor: context.request.inheritanceAnchor,
-        title: context.request.title
+        title: context.request.title,
+        locksTitle: context.request.locksTitle
       ),
       inheritedCWD: context.inheritedCWD,
       anchorSurfaceID: context.anchorSurfaceID,
@@ -277,7 +297,9 @@ final class WorktreeTerminalManager {
   }
 
   func discardPreparedAgentProfileLaunch(_ preparation: PreparedAgentProfileLaunch) {
-    guard let record = preparation.context.request.plan.hookRegistration?.forwardingRecord else { return }
+    guard let record = preparation.context.request.plan.hookRegistration?.forwardingRecord else {
+      return
+    }
     codexForwardingRecordStore?.discardUnexposed(record)
   }
 
@@ -362,7 +384,8 @@ final class WorktreeTerminalManager {
     case .createTab(let worktree, let runSetupScriptIfNew):
       Task { createTabAsync(in: worktree, runSetupScriptIfNew: runSetupScriptIfNew) }
     case .createTabWithInput(
-      let worktree, let input, let workingDirectory, let runSetupScriptIfNew, let autoCloseOnSuccess,
+      let worktree, let input, let workingDirectory, let runSetupScriptIfNew,
+      let autoCloseOnSuccess,
       let customCommandName, let customCommandIcon):
       Task {
         createTabAsync(
@@ -376,7 +399,8 @@ final class WorktreeTerminalManager {
         )
       }
     case .createSplitWithInput(
-      let worktree, let direction, let input, let autoCloseOnSuccess, let customCommandName, let customCommandIcon):
+      let worktree, let direction, let input, let autoCloseOnSuccess, let customCommandName,
+      let customCommandIcon):
       Task {
         createSplitAsync(
           in: worktree,
@@ -465,7 +489,8 @@ final class WorktreeTerminalManager {
       setCommandFinishedNotification(enabled: enabled, threshold: threshold)
     case .setCanvasMode(let enabled):
       if enabled {
-        terminalLogger.info("[CanvasExit] enteringCanvas previousSelectedWorktree=\(selectedWorktreeID ?? "nil")")
+        terminalLogger.info(
+          "[CanvasExit] enteringCanvas previousSelectedWorktree=\(selectedWorktreeID ?? "nil")")
         selectedWorktreeID = nil
       }
     case .setSelectedWorktreeID(let id):
@@ -491,7 +516,8 @@ final class WorktreeTerminalManager {
       terminalLogger.info("[LayoutRestore] received saveLayoutSnapshot command")
       Task { await persistLayoutSnapshot() }
     case .restoreLayoutSnapshot(let worktrees):
-      terminalLogger.info("[LayoutRestore] received restoreLayoutSnapshot command, worktrees=\(worktrees.count)")
+      terminalLogger.info(
+        "[LayoutRestore] received restoreLayoutSnapshot command, worktrees=\(worktrees.count)")
       Task { await restoreLayoutSnapshot(from: worktrees) }
     case .presentTabIconPicker(let worktree):
       state(for: worktree).presentIconPickerForFocusedTab()
@@ -578,7 +604,9 @@ final class WorktreeTerminalManager {
     surfaceID: UUID
   ) {
     for signal in update.activatedSignals {
-      guard let epoch = agentObservationStore.currentEvidenceEpoch(surfaceID: surfaceID) else { continue }
+      guard let epoch = agentObservationStore.currentEvidenceEpoch(surfaceID: surfaceID) else {
+        continue
+      }
       noteDispatchEvidence(signal, surfaceID: surfaceID, evidenceEpoch: epoch)
     }
     for record in update.revokedForwardingRecords {
@@ -739,7 +767,8 @@ final class WorktreeTerminalManager {
       throw AgentDispatchStoreError.bindingMissing
     }
     refreshEvidenceEpoch(surfaceID: surfaceID)
-    guard let evidenceEpoch = agentObservationStore.currentEvidenceEpoch(surfaceID: surfaceID) else {
+    guard let evidenceEpoch = agentObservationStore.currentEvidenceEpoch(surfaceID: surfaceID)
+    else {
       throw AgentDispatchStoreError.bindingMissing
     }
     guard agentDispatchStore.pendingSnapshot(surfaceID: surfaceID) == nil else {
@@ -797,7 +826,9 @@ final class WorktreeTerminalManager {
     try agentDispatchStore.complete(surfaceID: surfaceID, outcome: outcome, summary: summary)
   }
 
-  func abandonAgentDispatch(dispatchID: String, reason: String) throws -> AgentDispatchMutationResult {
+  func abandonAgentDispatch(dispatchID: String, reason: String) throws
+    -> AgentDispatchMutationResult
+  {
     try agentDispatchStore.abandon(dispatchID: dispatchID, reason: reason)
   }
 
@@ -904,7 +935,8 @@ final class WorktreeTerminalManager {
       self?.syncPreferredFontSize(from: worktree.id)
     }
     state.onCustomCommandSucceeded = { [weak self] name, durationMs in
-      self?.emit(.customCommandSucceeded(worktreeID: worktree.id, name: name, durationMs: durationMs))
+      self?.emit(
+        .customCommandSucceeded(worktreeID: worktree.id, name: name, durationMs: durationMs))
     }
     states[worktree.id] = state
     terminalLogger.info("Created terminal state for worktree \(worktree.id)")
@@ -1028,6 +1060,7 @@ final class WorktreeTerminalManager {
   }
 
   func prune(keeping worktreeIDs: Set<Worktree.ID>) {
+    let worktreeIDs = worktreeIDs.union(controlConsoleWorktree.map { [$0.id] } ?? [])
     var removed: [WorktreeTerminalState] = []
     var removedIDs: Set<Worktree.ID> = []
     for (id, state) in states where !worktreeIDs.contains(id) {
@@ -1251,10 +1284,12 @@ final class WorktreeTerminalManager {
   func persistLayoutSnapshotSync() {
     guard let payload = makeLayoutSnapshotPayload() else {
       terminalLogger.info("[LayoutRestore] persistSync: no active states, clearing snapshot")
-      discardTerminalLayoutSnapshot(at: SupacodePaths.terminalLayoutSnapshotURL, fileManager: .default)
+      discardTerminalLayoutSnapshot(
+        at: SupacodePaths.terminalLayoutSnapshotURL, fileManager: .default)
       return
     }
-    terminalLogger.info("[LayoutRestore] persistSync: saving \(payload.worktrees.count) worktree(s)")
+    terminalLogger.info(
+      "[LayoutRestore] persistSync: saving \(payload.worktrees.count) worktree(s)")
     let saved = saveTerminalLayoutSnapshot(
       payload,
       at: SupacodePaths.terminalLayoutSnapshotURL,
@@ -1282,7 +1317,8 @@ final class WorktreeTerminalManager {
       )
     }
     for (index, worktree) in worktrees.enumerated() {
-      terminalLogger.info("[LayoutRestore] restore: available[\(index)] id=\(worktree.id) name=\(worktree.name)")
+      terminalLogger.info(
+        "[LayoutRestore] restore: available[\(index)] id=\(worktree.id) name=\(worktree.name)")
     }
     let didRestore = applyLayoutSnapshotPayload(payload, availableWorktrees: worktrees)
     terminalLogger.info("[LayoutRestore] restore: applyResult=\(didRestore)")
@@ -1292,14 +1328,16 @@ final class WorktreeTerminalManager {
       )
       emit(.layoutRestored(selectedWorktreeID: payload.selectedWorktreeID))
     } else {
-      terminalLogger.warning("[LayoutRestore] restore: clearing invalid snapshot and emitting failure toast")
+      terminalLogger.warning(
+        "[LayoutRestore] restore: clearing invalid snapshot and emitting failure toast")
       _ = await layoutPersistence.clearSnapshot()
       emit(.layoutRestoreFailed(message: layoutRestoreFailureMessage))
     }
   }
 
   private func makeLayoutSnapshotPayload() -> TerminalLayoutSnapshotPayload? {
-    let activeStates = activeWorktreeStates.sorted { $0.worktreeID < $1.worktreeID }
+    let activeStates = activeWorktreeStates.filter { $0.worktreeID != controlConsoleWorktree?.id }
+      .sorted { $0.worktreeID < $1.worktreeID }
     terminalLogger.info(
       "[LayoutRestore] makePayload: activeWorktreeStates=\(activeStates.count)"
         + " totalStates=\(states.count)"
@@ -1349,7 +1387,8 @@ final class WorktreeTerminalManager {
       terminalLogger.info("[LayoutRestore] apply: restoring worktree \(worktree.id)")
       let state = state(for: worktree)
       guard state.applyLayoutSnapshot(snapshot) else {
-        terminalLogger.warning("[LayoutRestore] apply: applyLayoutSnapshot failed for \(worktree.id)")
+        terminalLogger.warning(
+          "[LayoutRestore] apply: applyLayoutSnapshot failed for \(worktree.id)")
         state.closeAllSurfaces()
         for restored in restoredStates {
           restored.closeAllSurfaces()
@@ -1359,7 +1398,8 @@ final class WorktreeTerminalManager {
       restoredStates.append(state)
     }
 
-    terminalLogger.info("[LayoutRestore] apply: successfully restored \(restoredStates.count) worktree(s)")
+    terminalLogger.info(
+      "[LayoutRestore] apply: successfully restored \(restoredStates.count) worktree(s)")
     return true
   }
 

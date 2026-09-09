@@ -211,7 +211,8 @@ final class WorktreeTerminalState {
   var commandFinishedNotificationEnabled = true
   var commandFinishedNotificationThreshold = 10
   var lastKeyInputTimeBySurface: [UUID: ContinuousClock.Instant] = [:]
-  var commandFinishedWaiters: [UUID: AsyncStream<(exitCode: Int?, durationMs: Int)>.Continuation] = [:]
+  var commandFinishedWaiters: [UUID: AsyncStream<(exitCode: Int?, durationMs: Int)>.Continuation] =
+    [:]
   /// Surfaces that should auto-close on the next `command_finished` event with exit code 0.
   /// Populated by `markSurfaceForAutoClose` and consumed (one-shot) in `handleCommandFinished`.
   var autoCloseSurfaceIds: Set<UUID> = []
@@ -434,7 +435,8 @@ final class WorktreeTerminalState {
 
   func focusedFontSize() -> Float32? {
     guard let surfaceId = currentFocusedSurfaceId() else { return nil }
-    return inheritedSurfaceConfig(fromSurfaceId: surfaceId, context: GHOSTTY_SURFACE_CONTEXT_TAB).fontSize
+    return inheritedSurfaceConfig(fromSurfaceId: surfaceId, context: GHOSTTY_SURFACE_CONTEXT_TAB)
+      .fontSize
   }
 
   func ensureInitialTab(focusing: Bool) {
@@ -518,7 +520,8 @@ final class WorktreeTerminalState {
       context = GHOSTTY_SURFACE_CONTEXT_TAB
       tracksFocusedAnchor = request.inheritanceAnchor == nil
     case .split(let requestedAnchor, _, _):
-      guard let resolved = requestedAnchor ?? currentFocusedSurfaceId(), surfaces[resolved] != nil else {
+      guard let resolved = requestedAnchor ?? currentFocusedSurfaceId(), surfaces[resolved] != nil
+      else {
         return .failure(.splitAnchorUnavailable)
       }
       anchor = resolved
@@ -557,7 +560,9 @@ final class WorktreeTerminalState {
     inheritedCWDOverride: URL? = nil
   ) -> Bool {
     if let anchor = context.anchorSurfaceID, surfaces[anchor] == nil { return false }
-    if context.tracksFocusedAnchor, currentFocusedSurfaceId() != context.anchorSurfaceID { return false }
+    if context.tracksFocusedAnchor, currentFocusedSurfaceId() != context.anchorSurfaceID {
+      return false
+    }
     guard context.tracksInheritedCWD else { return true }
     let surfaceContext: ghostty_surface_context_e =
       switch context.request.placement {
@@ -695,7 +700,7 @@ final class WorktreeTerminalState {
         TabCreation(
           title: request.title ?? plan.profileName,
           icon: Self.launchTabIcon(for: plan.runtime)?.storageString ?? "terminal",
-          isTitleLocked: false,
+          isTitleLocked: request.locksTitle,
           initialInput: runScriptInput(plan.terminalInput),
           focusing: !background,
           selecting: !background,

@@ -12,16 +12,19 @@ struct RemoteMirrorSidebar: View {
             mirrors.selectedID = client.id
           } label: {
             HStack {
-              Image(systemName: client.isConnected ? "network" : "exclamationmark.circle").accessibilityHidden(true)
+              Image(systemName: client.isConnected ? "network" : "exclamationmark.circle")
+                .accessibilityHidden(true)
               VStack(alignment: .leading, spacing: 2) {
-                Text(client.selectedPane?.projectName ?? client.selectedPane?.title ?? client.address).lineLimit(1)
+                Text(
+                  client.selectedPane?.projectName ?? client.selectedPane?.title ?? client.address
+                ).lineLimit(1)
                 if let subtitle = client.selectedPane?.subtitle {
                   Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
               }
               .help(client.selectedPane.map { $0.title + "\n" + $0.directory } ?? client.address)
               if !client.isConnected {
-                Text("Disconnected").font(.caption).foregroundStyle(.orange)
+                Text(client.statusLabel).font(.caption).foregroundStyle(.orange)
               }
               Spacer(minLength: 0)
             }
@@ -52,39 +55,46 @@ struct RemoteMirrorPaneView: View {
         Text("\(client.address):\(String(client.port))").font(.caption).foregroundStyle(.secondary)
         Spacer()
         Label(
-          client.isConnected ? "Connected" : "Disconnected",
-          systemImage: client.isConnected ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+          client.statusLabel,
+          systemImage: client.isConnected
+            ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
         )
         .font(.caption)
         .foregroundStyle(client.isConnected ? Color.green : Color.orange)
+        if !client.isSubscribed, client.endReason != .paneClosed {
+          Button(client.endReason == .takenOver ? "Take Over" : "Retry") {
+            client.retry(takeover: client.endReason == .takenOver)
+          }
+          .disabled(
+            client.isConnecting || (client.endReason == .takenOver && !client.supportsTakeover)
+          )
+          .help("Reconnect to this pane; Retry never takes control from another device")
+          .accessibilityIdentifier("remote-mirror-retry")
+        }
         if client.showsHistory {
           Button("Live Terminal") { client.showsHistory = false }
         } else {
           Button("History") { client.loadHistory(refresh: true) }.disabled(!client.isConnected)
         }
-        Button("Close Mirror", systemImage: "xmark") { mirrors.remove(client) }.labelStyle(.iconOnly)
-          .help("Disconnect this mirror; the Host program continues running")
+        Button("Close Mirror", systemImage: "xmark") { mirrors.remove(client) }.labelStyle(
+          .iconOnly
+        )
+        .help("Disconnect this mirror; the Host program continues running")
       }
       .padding(10)
       Divider()
-      if let error = client.error ?? (client.isConnected ? nil : "Connection to Host was lost.") {
-        ContentUnavailableView(
-          "Mirror Disconnected", systemImage: "network.slash",
-          description: Text(
-            error
-              + " Remote terminal status is unknown. Check Host, then reconnect from Add to Prowl."
-          ))
-      } else {
-        ZStack {
-          if let view = client.replica.view {
-            MirrorTerminalViewport(surface: view, displaySize: client.replica.displaySize)
-              .opacity(client.showsHistory ? 0 : 1)
-              .allowsHitTesting(!client.showsHistory)
-          } else {
-            ProgressView("Opening mirror…")
-          }
-          if client.showsHistory { history }
+      if let error = client.error {
+        Text(error).font(.callout).foregroundStyle(.secondary).padding(10).textSelection(.enabled)
+      }
+      ZStack {
+        if let view = client.replica.view {
+          MirrorTerminalViewport(surface: view, displaySize: client.replica.displaySize)
+            .opacity(client.showsHistory ? 0 : 1)
+            .allowsHitTesting(!client.showsHistory)
+        } else {
+          ProgressView("Opening mirror…")
         }
+        if client.showsHistory { history }
       }
     }
     .toolbar { ToolbarItem(placement: .navigation) { MirrorHostButton() } }
