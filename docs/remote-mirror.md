@@ -92,15 +92,15 @@ submission adapter. The Mac integration builds with the local bridge and has rea
 terminal capture tests; live Agent submission verification is still incomplete.
 Existing installed builds do not gain these capabilities.
 
-Mobile Send requires an identified, idle Codex or Claude Code process, an editable empty composer,
-bracketed paste support, and two seconds without changes
-to the observed screen or local editing activity. Input is checked again immediately
-before enqueueing the multiline paste and Return. A delivery receipt confirms the
-terminal enqueue, not that the Agent has completed or even begun the requested work.
-Attached-image evidence, startup, approval prompts and unsupported Agent composers
-keep Send unavailable. Codex requires its styled placeholder; Claude Code requires
-an empty single-line composer between its borders and its software-cursor marker.
-Unrecognized composer layouts and other Agents keep Send unavailable.
+Mobile Send requires an identified Codex or Claude Code process and two seconds
+without changes to the observed screen or local editing activity. Either Prowl's
+Idle/Done state or a recognized empty, idle terminal composer enables submission.
+Unknown cursor styling does not block the Prowl idle path. A local draft can therefore
+receive appended remote text; conflicts are not automatically discarded.
+Input is checked again immediately before enqueueing the multiline paste and Return.
+A delivery receipt confirms the terminal enqueue, not that the Agent has completed
+or even begun the requested work. Attached-image evidence and startup/shutdown
+screens remain refusals. Other Agent types remain unsupported.
 
 On a Host advertising `refresh`, returning to the foreground requests a fresh text
 frame on the existing subscription. It does not disconnect or compete for its own
@@ -175,8 +175,10 @@ be integrated before merge.
 
 ### Mobile submission readiness
 
-An idle Agent must have a stable, empty composer before the mobile Send button is
-enabled. Local edits, screen changes, process replacement, and busy/approval states
-still revoke readiness. Metadata-only Agent revision updates do not restart the
-quiet period. Plain shells and Agent installers are not supported by the mobile
-message composer; start Codex or Claude on Host before sending a message.
+Submission is enabled when Prowl reports Idle/Done **or** the terminal snapshot
+recognizes an empty, idle Agent composer. Cursor/style recognition is not required
+when Prowl already reports idle. The observation must still settle after local edits
+or screen changes; connection ownership, Agent generation and duplicate checks remain.
+This intentionally permits input when a local Host draft exists: remote text can
+append to that draft. Conflicting input is not automatically discarded or rolled back.
+Plain shells and Agent installers remain unsupported; start Codex or Claude on Host.

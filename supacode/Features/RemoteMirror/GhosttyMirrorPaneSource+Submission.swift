@@ -65,36 +65,37 @@ extension GhosttyMirrorPaneSource {
       ProcessDetection.processStartDate(pid: pid) != nil
     else { return "The Agent process is no longer available." }
     guard terminal.markedText.length == 0 else { return "The Host is composing text." }
-    guard let screen, screen.bracketedPaste,
-      agent.agent == .codex ? screen.codexPlaceholder != nil : screen.hasEmptyClaudeComposer
-    else {
-      return "The Host input is not an empty, editable Agent composer."
-    }
-    let text = screen.lines.map { $0.map(\.text).joined() }.joined(separator: "\n")
+    return Self.inputRefusal(condition: condition, screen: screen)
+  }
+
+  static func inputRefusal(condition: AgentConditionSnapshot, screen: MirrorSnapshotEvidence?) -> String? {
+    guard condition.isLive, let agent = condition.agent,
+      agent.agent == .codex || agent.agent == .claude
+    else { return "Waiting for a supported Agent process." }
+    let text = screen?.lines.map { $0.map(\.text).joined() }.joined(separator: "\n") ?? ""
     guard !text.contains("[Image #") else {
       return "Check the Host for attached images before sending."
     }
     guard !text.contains("Starting MCP servers"), !text.contains("Shutting down...") else {
       return "The Agent is starting or stopping."
     }
+    // Either source can enable input. Runtime idle intentionally does not prove
+    // the Host draft is empty; remote text may append to a local draft.
+    if AgentConditionEvidence.detectorReports(
+      .idle, normalizedState: AgentConditionEvidence.normalizedState(condition))
+    {
+      return nil
+    }
+    guard let screen, screen.bracketedPaste,
+      agent.agent == .codex ? screen.codexPlaceholder != nil : screen.hasEmptyClaudeComposer
+    else {
+      return "Waiting for Prowl idle or an empty Agent composer."
+    }
     let snapshot = AgentScreenSnapshot(text: text)
     let detectedState =
       agent.agent == .codex
       ? CodexScreenProfile.detect(in: snapshot).state
       : ClaudeScreenProfile.detect(in: snapshot).state
-    guard detectedState == .idle else {
-      return "The Agent is working or needs attention."
-    }
-    switch AgentConditionEvidence.idleVerdict(for: condition) {
-    case .idle: return nil
-    case .settling(let state):
-      if AgentConditionEvidence.detectorReports(.idle, normalizedState: state),
-        AgentConditionEvidence.allowsHeuristic(.auto, condition: .idle, snapshot: condition)
-      {
-        return nil
-      }
-      return "Waiting for runtime idle evidence."
-    case .busy: return "The Agent is working or needs attention."
-    }
+    return detectedState == .idle ? nil : "The Agent is working or needs attention."
   }
 }

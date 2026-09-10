@@ -4,6 +4,38 @@ import Testing
 @testable import supacode
 
 struct MirrorSnapshotEvidenceTests {
+  @MainActor @Test func runtimeIdleAllowsUnrecognizedComposerAndLocalDraft() throws {
+    let draft = try #require(MirrorSnapshotEvidence.read(frame("❯ local draft\u{1B}[1;3H")))
+    #expect(!draft.hasEmptyClaudeComposer)
+    for state: AgentDisplayState in [.idle, .done] {
+      #expect(GhosttyMirrorPaneSource.inputRefusal(condition: condition(state), screen: draft) == nil)
+      #expect(GhosttyMirrorPaneSource.inputRefusal(condition: condition(state), screen: nil) == nil)
+    }
+    #expect(GhosttyMirrorPaneSource.inputRefusal(condition: condition(.working), screen: draft) != nil)
+    #expect(GhosttyMirrorPaneSource.inputRefusal(condition: condition(.blocked), screen: nil) != nil)
+    #expect(GhosttyMirrorPaneSource.inputRefusal(condition: condition(.idle, live: false), screen: draft) != nil)
+  }
+
+  @MainActor @Test func emptyComposerCanEnableInputWithoutRuntimeIdle() throws {
+    let screen = try #require(
+      MirrorSnapshotEvidence.read(
+        frame(
+          "\u{1B}[?25l\u{1B}[?2004h───\r\n❯\u{00A0}\u{1B}[7m \u{1B}[0m\r\n───\u{1B}[2;3H")))
+    #expect(screen.hasEmptyClaudeComposer)
+    #expect(GhosttyMirrorPaneSource.inputRefusal(condition: condition(.working), screen: screen) == nil)
+  }
+
+  @MainActor private func condition(_ state: AgentDisplayState, live: Bool = true) -> AgentConditionSnapshot {
+    let id = UUID()
+    let agent = ActiveAgentEntry(
+      id: id, worktreeID: "mirror-test", worktreeName: "Test", workingDirectory: URL(fileURLWithPath: "/tmp"),
+      tabID: TerminalTabID(rawValue: UUID()), paneTitle: "Claude", surfaceID: id, paneIndex: 0,
+      iconLookupToken: "claude", agent: .claude,
+      rawState: state == .working ? .working : state == .blocked ? .blocked : .idle,
+      displayState: state, lastChangedAt: Date(timeIntervalSince1970: 0))
+    return AgentConditionSnapshot(agent: agent, signal: nil, revision: 1, isLive: live, signals: .empty)
+  }
+
   @Test func claudeSoftwareCursorRequiresTheWholeComposerToBeEmpty() throws {
     let prefix = "\u{1B}[?25l\u{1B}[?2004h───\r\n"
     let suffix = "\r\n───\u{1B}[2;3H"
