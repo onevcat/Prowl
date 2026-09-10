@@ -148,22 +148,34 @@ struct HerdrInputContextTests {
     )
 
     #expect(
-      throws: HerdrSocketError.unsupportedProtocol(supported: 21...21, actual: 20)
+      throws: HerdrSocketError.unsupportedProtocol(supported: 21...22, actual: 20)
     ) {
       try HerdrProtocolCompatibility.validate(response)
     }
+  }
+
+  @Test func acceptsSupportedHerdrProtocol22() throws {
+    let response = try JSONDecoder().decode(
+      HerdrResponseEnvelope.self,
+      from: Data(
+        #"{"id":"clean-protocol","result":{"type":"pong","version":"0.9.0","protocol":22,"future_field":true}}"#
+          .utf8
+      )
+    )
+
+    try HerdrProtocolCompatibility.validate(response)
   }
 
   @Test func rejectsUnsupportedFutureHerdrProtocol() throws {
     let response = try JSONDecoder().decode(
       HerdrResponseEnvelope.self,
       from: Data(
-        #"{"id":"clean-protocol","result":{"type":"pong","version":"0.9.0","protocol":22}}"#.utf8
+        #"{"id":"clean-protocol","result":{"type":"pong","version":"0.9.0","protocol":23}}"#.utf8
       )
     )
 
     #expect(
-      throws: HerdrSocketError.unsupportedProtocol(supported: 21...21, actual: 22)
+      throws: HerdrSocketError.unsupportedProtocol(supported: 21...22, actual: 23)
     ) {
       try HerdrProtocolCompatibility.validate(response)
     }
@@ -283,6 +295,25 @@ struct HerdrInputContextTests {
     #expect(server.failureDescription == nil)
   }
 
+  @Test func terminalChromeSnapshotAcceptsCurrentHerdrProtocol22() async throws {
+    let server = try HerdrSingleRequestTestServer(
+      exchanges: [
+        .init(
+          expectedMethod: "session.snapshot",
+          response:
+            #"{"id":"prowl-herdr-sidebar-snapshot","result":{"type":"session_snapshot","snapshot":{"version":"0.9.0","protocol":22,"workspaces":[],"tabs":[],"panes":[],"layouts":[],"agents":[]}}}"#
+        )
+      ]
+    )
+    server.start()
+    defer { server.stop() }
+
+    let snapshot = try await HerdrSocketClient(socketPath: server.socketPath).sessionSnapshot()
+
+    #expect(snapshot.protocolVersion == 22)
+    #expect(server.failureDescription == nil)
+  }
+
   @Test func terminalChromeProcessInfoUsesPaneProcessInfoRequest() async throws {
     let server = try HerdrSingleRequestTestServer(
       exchanges: [
@@ -320,13 +351,13 @@ struct HerdrInputContextTests {
     #expect(server.failureDescription == nil)
   }
 
-  @Test func terminalChromeSnapshotRejectsUnsupportedProtocolFromBusinessResponse() async throws {
+  @Test func terminalChromeSnapshotRejectsUnsupportedFutureProtocolFromBusinessResponse() async throws {
     let server = try HerdrSingleRequestTestServer(
       exchanges: [
         .init(
           expectedMethod: "session.snapshot",
           response:
-            #"{"id":"prowl-herdr-sidebar-snapshot","result":{"type":"session_snapshot","snapshot":{"version":"0.9.0","protocol":22,"workspaces":[],"tabs":[],"panes":[],"layouts":[],"agents":[]}}}"#
+            #"{"id":"prowl-herdr-sidebar-snapshot","result":{"type":"session_snapshot","snapshot":{"version":"0.9.0","protocol":23,"workspaces":[],"tabs":[],"panes":[],"layouts":[],"agents":[]}}}"#
         )
       ]
     )
@@ -334,7 +365,7 @@ struct HerdrInputContextTests {
     defer { server.stop() }
 
     await #expect(
-      throws: HerdrSocketError.unsupportedProtocol(supported: 21...21, actual: 22)
+      throws: HerdrSocketError.unsupportedProtocol(supported: 21...22, actual: 23)
     ) {
       try await HerdrSocketClient(socketPath: server.socketPath).sessionSnapshot()
     }

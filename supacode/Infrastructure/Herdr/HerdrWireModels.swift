@@ -84,7 +84,9 @@ nonisolated internal struct HerdrResponseEnvelope: Decodable, Sendable {
 }
 
 nonisolated internal enum HerdrProtocolCompatibility {
-  internal static let supportedVersions: ClosedRange<UInt32> = 21...21
+  // Protocol 22 changes only the binary client/server wire; the JSON API used by
+  // Prowl remains compatible with the protocol 21 snapshot contract.
+  internal static let supportedVersions: ClosedRange<UInt32> = 21...22
 
   internal static func validate(_ response: HerdrResponseEnvelope) throws {
     guard response.result?.type == "pong" else {
