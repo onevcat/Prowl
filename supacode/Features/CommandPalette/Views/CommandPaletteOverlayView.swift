@@ -527,7 +527,7 @@ private struct CommandPaletteRowView: View {
       .toggleShelf, .showDiff, .outgoingChanges,
       .revealInFinder, .copyPath, .revealInSidebar,
       .runScript, .stopRunScript, .togglePinWorktree, .renameBranch,
-      .openRepositorySettings, .runCustomCommand, .handOff, .launchAgentProfile, .runWorkflow:
+      .openRepositorySettings, .runCustomCommand, .launchAgentProfile, .runWorkflow:
       return nil
     case .deleteWorktree:
       return "Delete"
@@ -622,8 +622,6 @@ private struct CommandPaletteRowView: View {
       return "trash"
     case .runCustomCommand(_, let systemImage):
       return systemImage
-    case .handOff:
-      return "arrow.left.arrow.right"
     case .launchAgentProfile:
       return "play.circle"
     case .runWorkflow:
@@ -653,7 +651,7 @@ private struct CommandPaletteRowView: View {
       .revealInFinder, .copyPath, .revealInSidebar,
       .runScript, .stopRunScript, .togglePinWorktree, .renameBranch,
       .openRepositorySettings,
-      .deleteWorktree, .runCustomCommand, .handOff, .launchAgentProfile, .runWorkflow:
+      .deleteWorktree, .runCustomCommand, .launchAgentProfile, .runWorkflow:
       return true
     case .worktreeSelect:
       return false
@@ -821,8 +819,6 @@ private struct CommandPaletteRowView: View {
       base = "Delete \(row.title)"
     case .runCustomCommand:
       base = "Run Custom Command: \(row.title)"
-    case .handOff:
-      base = row.title
     case .launchAgentProfile:
       base = row.title
     case .runWorkflow:

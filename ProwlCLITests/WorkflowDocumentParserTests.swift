@@ -201,9 +201,9 @@ final class WorkflowDocumentParserTests: XCTestCase {
 
   func testActionInputsPreserveJSONTypes() throws {
     let yaml = WorkflowFixtures.minimal(
-      extraSteps: "  - id: b\n    action: handoff.transition\n    with: { from: author, to: author, note: 42 }")
+      extraSteps: "  - id: b\n    action: removed.action\n    with: { from: author, to: author, note: 42 }")
     let workflow = try WorkflowFixtures.parse(yaml)
-    guard case .action("handoff.transition", let inputs) = workflow.steps[1].action else { return XCTFail("action") }
+    guard case .action("removed.action", let inputs) = workflow.steps[1].action else { return XCTFail("action") }
     XCTAssertEqual(inputs, ["from": .string("author"), "to": .string("author"), "note": .integer(42)])
     let nested = WorkflowFixtures.minimal(extraSteps: "  - id: b\n    action: git.context\n    with: { root: [a] }")
     XCTAssertEqual(WorkflowFixtures.parseCodes(nested), [])

@@ -581,82 +581,6 @@ public struct TabInput: Codable, Sendable {
   }
 }
 
-public enum HandoffAction: String, Codable, Sendable {
-  case save
-  case toAgent = "to"
-}
-
-public struct HandoffInput: Codable, Sendable {
-  /// Environment variable used only by HUD-injected shell commands to carry
-  /// the one-shot request authorization ID to the socket payload.
-  public nonisolated static let requestIDEnvironmentKey = "PROWL_HANDOFF_REQUEST_ID"
-
-  public let action: HandoffAction
-  public let selector: TargetSelector
-  /// Target agent for `to` (e.g. "claude", "codex"). Required for `.to`, nil otherwise.
-  public let toAgent: String?
-  /// Optional free-text note appended to the handoff log.
-  public let note: String?
-  /// When false, `to` refreshes + archives the handoff but does not launch the
-  /// receiving agent (the human takes over manually).
-  public let launch: Bool
-  /// Inline agent-authored briefing text (`--brief`); the primary briefing
-  /// path for self-handoffs.
-  public let brief: String?
-  /// Explicit context-only run (`--no-brief`): no briefing is collected and
-  /// no fork resume is attempted.
-  public let contextOnly: Bool
-  /// Optional ID assigned by the HUD to authorize one injected transition.
-  /// Ordinary CLI handoffs omit it and remain independent of HUD state.
-  public let requestID: UUID?
-
-  enum CodingKeys: String, CodingKey {
-    case action
-    case selector
-    case toAgent = "to_agent"
-    case note
-    case launch
-    case brief
-    case contextOnly = "context_only"
-    case requestID = "request_id"
-
-  }
-
-  public init(
-    action: HandoffAction,
-    selector: TargetSelector = .none,
-    toAgent: String? = nil,
-    note: String? = nil,
-    launch: Bool = true,
-    brief: String? = nil,
-    contextOnly: Bool = false,
-    requestID: UUID? = nil
-
-  ) {
-    self.action = action
-    self.selector = selector
-    self.toAgent = toAgent
-    self.note = note
-    self.launch = launch
-    self.brief = brief
-    self.contextOnly = contextOnly
-    self.requestID = requestID
-
-  }
-
-  public init(from decoder: Decoder) throws {
-    let container = try decoder.container(keyedBy: CodingKeys.self)
-    self.action = try container.decode(HandoffAction.self, forKey: .action)
-    self.selector = try container.decode(TargetSelector.self, forKey: .selector)
-    self.toAgent = try container.decodeIfPresent(String.self, forKey: .toAgent)
-    self.note = try container.decodeIfPresent(String.self, forKey: .note)
-    self.launch = try container.decodeIfPresent(Bool.self, forKey: .launch) ?? true
-    self.brief = try container.decodeIfPresent(String.self, forKey: .brief)
-    self.contextOnly = try container.decodeIfPresent(Bool.self, forKey: .contextOnly) ?? false
-    self.requestID = try container.decodeIfPresent(UUID.self, forKey: .requestID)
-  }
-}
-
 public enum PaneAction: String, Codable, Sendable {
   case close
 }
@@ -686,9 +610,7 @@ public struct PaneInput: Codable, Sendable {
   }
 }
 
-// MARK: - Workflow
-
-nonisolated public enum WorkflowInputAction: String, Codable, Sendable {
+public enum WorkflowInputAction: String, Codable, Sendable {
   case read
   case list
   case run

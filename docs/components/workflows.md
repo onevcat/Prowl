@@ -306,7 +306,7 @@ helpers, and assets beside them. Steps reference `local:<id>` or a registered `b
 Action inputs and results are typed JSON; validated results appear at
 `actions.<step>.output` and `actions.<step>.output_path`. The built-in repository context
 writes per-invocation artifacts. `builtin:save-handoff` saves a briefing and generated context
-under `.prowl/handoff/`. The existing `prowl handoff` CLI remains available. These actions are also distinct from shell-command Custom Actions.
+under `.prowl/handoff/`. These actions are also distinct from shell-command Custom Actions.
 
 Scripts have your local user permissions. In Settings > Agents > Workflows, open the bundle's
 script review, inspect the source location, interpreter, entrypoint, and changed files, then
@@ -396,7 +396,7 @@ When an agent starts the workflow itself, it must follow `self_initiated.line` i
 and deliver its briefing with the supplied token. The run saves nothing until that delivery
 passes its required sections. The receiver reads an independent packet under
 `.prowl/handoff/archive/workflow-<run UUID>.md`; later handoffs do not change that packet.
-`current.md` and `context.md` retain the latest handoff for the existing HUD and CLI.
+`current.md` and `context.md` retain the latest handoff state for workflow inspection.
 
 A completed workflow means the packet was saved and the selected receiver was launched.
 It does not certify that the receiver finished the task. A failed launch keeps the packet;

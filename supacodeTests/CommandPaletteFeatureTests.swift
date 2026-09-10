@@ -1778,7 +1778,7 @@ private func testCategory(for kind: CommandPaletteItem.Kind) -> CommandPaletteIt
     .mergePullRequest, .closePullRequest, .copyFailingJobURL, .copyCiFailureLogs,
     .rerunFailedJobs, .openFailingCheckDetails:
     return .pullRequest
-  case .ghosttyCommand, .handOff, .launchAgentProfile, .runWorkflow:
+  case .ghosttyCommand, .launchAgentProfile, .runWorkflow:
     return .terminal
   case .toggleLeftSidebar, .toggleActiveAgentsPanel, .toggleCanvas,
     .expandCanvasCard, .arrangeCanvasCards, .organizeCanvasCards, .tileCanvasCards, .selectAllCanvasCards,
@@ -1806,7 +1806,7 @@ private func testDefaultSuggestion(for kind: CommandPaletteItem.Kind) -> Bool {
     return true
   case .worktreeSelect, .changeFocusedTabIcon,
     .ghosttyCommand, .openRepositoryOnCodeHost,
-    .deleteWorktree, .runCustomCommand, .handOff, .launchAgentProfile, .runWorkflow:
+    .deleteWorktree, .runCustomCommand, .launchAgentProfile, .runWorkflow:
     return false
   #if DEBUG
     case .debugTestToast, .debugSimulateUpdateFound, .debugLightDockNotificationDot:

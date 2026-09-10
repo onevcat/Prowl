@@ -88,7 +88,6 @@ struct CommandPaletteItem: Identifiable, Equatable {
     case renameBranch
     case openRepositorySettings(Repository.ID)
     case runCustomCommand(EffectiveCustomCommand.Identifier, systemImage: String)
-    case handOff
     case launchAgentProfile(AgentProfile.ID)
     case runWorkflow(String)
     #if DEBUG
@@ -178,7 +177,6 @@ struct CommandPaletteItem: Identifiable, Equatable {
       .deleteWorktree,
       .openRepositorySettings,
       .runCustomCommand,
-      .handOff,
       .launchAgentProfile,
       .runWorkflow:
       return nil

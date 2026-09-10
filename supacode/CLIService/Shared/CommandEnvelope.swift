@@ -1,5 +1,5 @@
 // ProwlShared/CommandEnvelope.swift
-// The handoff contract between CLI parser and app command service.
+// The command contract between CLI parser and app command service.
 
 import Foundation
 
@@ -33,7 +33,6 @@ public enum Command: Codable, Sendable {
   case close(CloseInput)
   case tab(TabInput)
   case pane(PaneInput)
-  case handoff(HandoffInput)
   case workflow(WorkflowInput)
 
   public var name: String {
@@ -57,7 +56,6 @@ public enum Command: Codable, Sendable {
     case .close: "close"
     case .tab: "tab"
     case .pane: "pane"
-    case .handoff: "handoff"
     case .workflow: "workflow"
     }
   }

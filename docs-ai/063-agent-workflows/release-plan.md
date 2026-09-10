@@ -1,3 +1,7 @@
+> **2026-09-10 workflow-only retirement:** The owner superseded D3's additive
+> constraint. `prowl.handoff` is now the sole handoff surface; the legacy CLI, HUD,
+> hardcoded entry points, and compatibility execution path are retired; a one-release non-executing `HANDOFF_RETIRED` CLI stub remains. See [020](020-handoff-workflow.md).
+
 > **2026-09-08 D3 scope:** Add only `prowl.handoff`, with optional receiver launch.
 > Keep the existing handoff HUD and CLI. No checkpoint built-in or legacy retirement
 > in this slice. See [020](020-handoff-workflow.md); this overrides the older D3 scope below.
@@ -55,7 +59,7 @@ say when each is cut:
 | --- | --- | --- |
 | R1 | **Shipped** — v2026.8.29 (2026-08-29) | — |
 | R2a | **Shipped** — v2026.8.31 (2026-08-31) | — |
-| R2b | In progress — C2 and D1, including Settings refinement, merged (#752/#754/#761/#763) | #726 T1a inventory/configuration preflight implemented; eight-runtime headless checks verified; T1 merged (#767/#769); D3 handoff migration and E2E next, then assess R2b release |
+| R2b | In progress — C2 and D1, including Settings refinement, merged (#752/#754/#761/#763) | #726 T1a inventory/configuration preflight implemented; eight-runtime headless checks verified; T1 merged (#767/#769); D3 handoff E2E and workflow-only retirement complete; assess R2b release |
 | R3 | Planned | D2 adversarial review after R2b ships; S4 remains independently planned |
 
 #### R2b PR ledger
@@ -67,7 +71,7 @@ say when each is cut:
 | D1 (rest) | Merged | #761: Settings › Agents › Workflows page, `docs/components/workflows.md`, CLI reachability status (deferred from C0); [063.013](013-d1-workflows-settings.md) |
 | D1 (UI refinement) | Merged | #763: post-merge native list/detail refinement, repository-local workflow Settings, Run Setup copy, explicit run targets, file opening, and capsule YAML icons; [063.014](014-workflow-settings-ui-refinement.md) |
 | #726 T1 | Implemented and verified — #767 merged; closure [#769](https://github.com/onevcat/Prowl/pull/769) merged | [064.016](../064-agent-completion-signals/016-t1-contract-test-plan.md): zero-inference inventory and production configuration preflight verified; [runbook](../064-agent-completion-signals/agent-contracts-runbook.md). Eight-runtime headless checks pass; T1 verification and scoped publication are complete; R2b GUI/workflow acceptance belongs to D3. |
-| D3 | Implemented and Debug-accepted; PR #786 | Added `prowl.handoff` with optional receiver launch; legacy handoff retained. Self-review, two Pi review rounds, and live Codex/Pi E2E complete. See [020](020-handoff-workflow.md). |
+| D3 | Implemented and Debug-accepted; PR #786 | Added `prowl.handoff` with optional receiver launch; legacy handoff execution subsequently retired in favor of the workflow; its one-release `HANDOFF_RETIRED` CLI stub remains. Self-review, two Pi review rounds, and live Codex/Pi E2E complete. See [020](020-handoff-workflow.md). |
 | D2 | Deferred to R3 | `prowl.adversarial-review` built-in + reviewer skill + loop-specific E2E — after the handoff-first R2b release |
 
 #### R1 PR ledger

@@ -213,20 +213,6 @@ struct ActiveAgentsFeatureTests {
     }
   }
 
-  @Test func handOffTappedUpdatesFocusAnchorLikeEntryTapped() async {
-    var state = ActiveAgentsFeature.State()
-    state.entries = sampleEntries()
-    let store = TestStore(initialState: state) {
-      ActiveAgentsFeature()
-    }
-
-    // The context-menu hand off selects the entry's pane (parents focus it),
-    // so the keyboard-nav anchor must move with it exactly like a tap.
-    await store.send(.handOffTapped(UUID(2))) {
-      $0.focusedSurfaceID = UUID(2)
-    }
-  }
-
   @Test func runWorkflowTappedUpdatesFocusAnchorLikeEntryTapped() async {
     var state = ActiveAgentsFeature.State()
     state.entries = sampleEntries()
@@ -504,7 +490,6 @@ struct ActiveAgentsFeatureTests {
 
   @Test func onlyActionsThatPresentProwlUISurfaceTheWindow() {
     #expect(ActiveAgentsFeature.Action.entryTapped(UUID(0)).surfacesProwl)
-    #expect(ActiveAgentsFeature.Action.handOffTapped(UUID(0)).surfacesProwl)
     #expect(
       ActiveAgentsFeature.Action.runWorkflowTapped(UUID(0), workflowKey: "review").surfacesProwl)
     #expect(!ActiveAgentsFeature.Action.markAsReadTapped(UUID(0)).surfacesProwl)
@@ -519,17 +504,6 @@ struct ActiveAgentsFeatureTests {
       ActiveAgentsFeature()
     }
 
-    await store.send(.island(.handOffTapped(UUID(1)))) {
-      $0.isIslandRosterExpanded = false
-      $0.islandNavigation = .init()
-    }
-    await store.receive(.handOffTapped(UUID(1))) {
-      $0.focusedSurfaceID = UUID(1)
-    }
-    await store.send(.islandToggleRoster) {
-      $0.isIslandRosterExpanded = true
-      $0.islandNavigation.selectedEntryID = UUID(2)
-    }
     await store.send(.island(.runWorkflowTapped(UUID(2), workflowKey: "review"))) {
       $0.isIslandRosterExpanded = false
       $0.islandNavigation = .init()

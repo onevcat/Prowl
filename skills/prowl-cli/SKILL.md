@@ -14,7 +14,7 @@ The authoritative per-command reference is Prowl's manual, `components/cli.md` u
 
 ```bash
 prowl_docs="$(dirname "$(dirname "$(readlink -f "$(command -v prowl)")")")/docs"
-ls "$prowl_docs/components/"   # cli.md, agent-detection.md, handoff.md, …
+ls "$prowl_docs/components/"   # cli.md, agent-detection.md, workflows.md, …
 ```
 
 Other `docs/components/*.md` references below live in that same folder.
@@ -315,21 +315,10 @@ context before optionally launching a receiver. See the `prowl-workflow` skill f
 flow. The direct commands below remain available.
 
 
-`prowl handoff to <agent> --brief -` hands your task to another agent. Run it from your own pane (the calling pane is the source — no selector needed) and pipe your briefing on stdin. Prowl finds the calling pane through process ancestry, so any descendant of the pane's shell (an agent, its tool shell) works; under tmux/screen or a detached wrapper that resolution fails with `SOURCE_REQUIRED`, and in exactly those setups `$PROWL_PANE_ID` is not trustworthy either (it names the pane the tmux server started in, which may still exist) — identify your pane by other means (`prowl agents --json`, a unique `pane.cwd`) and pass it with `--pane` explicitly.
-
-```bash
-prowl handoff to codex --brief - <<'EOF'
-# Handoff
-## Objective
-…
-## Current State
-…
-## Next Steps
-…
-EOF
-```
-
-Required sections are `## Objective`, `## Current State`, and `## Next Steps`; optional ones are `## What Has Been Done`, `## Open Questions`, `## Risks / Watch Out`, and `## Suggested Prompt For Next Agent`. The receiver launches in a background tab of the same worktree; your session stays open. `prowl handoff save --brief -` checkpoints the same briefing without launching anyone; `--no-brief` is for an intentional context-only handoff; `--pane` hands off a pane other than your own. Details: `components/handoff.md` in the docs folder.
+Use `prowl workflow run prowl.handoff` for a task handoff; `prowl handoff` is a non-executing `HANDOFF_RETIRED` migration message. Choose a receiver Profile with
+`--role receiver=<Profile>`, or pass `--input next=save` to save without launching a receiver.
+Follow the returned `data.self_initiated.line` and deliver the required briefing through the
+workflow protocol. See `components/handoff.md` and `components/workflows.md` in the docs folder.
 
 ## Command Set
 

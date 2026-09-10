@@ -561,7 +561,7 @@ struct WorkflowRunsFeature {
     let sourceContext =
       actionID == "builtin:save-handoff"
       ? sourcePane.flatMap {
-        terminal.handoffSourceContextForSurface(session.worktree.id, $0)?.sessionContext
+        terminal.handoffSessionContextForSurface(session.worktree.id, $0)
       } : nil
     let context = WorkflowActionContext(
       runID: run.id, rootURL: run.context.worktree.rootURL,

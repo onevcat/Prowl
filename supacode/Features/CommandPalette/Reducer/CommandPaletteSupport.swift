@@ -40,8 +40,6 @@ enum CommandPaletteItemID {
     command.paletteID
   }
 
-  static let handOff = "handoff.open"
-
   static func launchAgentProfile(_ id: AgentProfile.ID) -> String {
     "agent-profile.launch.\(id.uuidString)"
   }
@@ -219,7 +217,7 @@ func delegateAction(for kind: CommandPaletteItem.Kind) -> CommandPaletteFeature.
     .stopRunScript,
     .renameBranch:
     fatalError("appDelegateAction should handle app-level command palette actions")
-  case .handOff, .launchAgentProfile, .runWorkflow:
+  case .launchAgentProfile, .runWorkflow:
     fatalError("agentDelegateAction should handle agent-scoped command palette actions")
   }
 }
@@ -228,8 +226,6 @@ func delegateAction(for kind: CommandPaletteItem.Kind) -> CommandPaletteFeature.
 /// complexity budget.
 func agentDelegateAction(for kind: CommandPaletteItem.Kind) -> CommandPaletteFeature.Delegate? {
   switch kind {
-  case .handOff:
-    return .handOff
   case .launchAgentProfile(let profileID):
     return .launchAgentProfile(profileID)
   case .runWorkflow(let key):
@@ -372,7 +368,6 @@ func pullRequestDelegateAction(
     .deleteWorktree,
     .openRepositorySettings,
     .runCustomCommand,
-    .handOff,
     .launchAgentProfile,
     .runWorkflow:
     return nil

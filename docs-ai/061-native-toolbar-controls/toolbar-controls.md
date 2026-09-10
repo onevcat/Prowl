@@ -37,8 +37,9 @@ exposes `ToolbarContent.sharedBackgroundVisibility(_:)` only on macOS 26+. The a
 | Sidebar | `supacode/Features/Repositories/Views/SidebarListView.swift` | Automatic Add Repository/Workspace item. | Correct single action. |
 | Archived Worktrees | `supacode/Features/Repositories/Views/ArchivedWorktreesDetailView.swift` | Automatic destructive Delete Selected item. | Correct single action. |
 
-`HandoffHudOverlayView`, `CommandPaletteOverlayView`, and terminal tab backgrounds use
-`glassEffect`, but are not window-toolbar content and are deliberately outside this guide.
+`CommandPaletteOverlayView` and terminal tab backgrounds use `glassEffect`, but are not
+window-toolbar content and are deliberately outside this guide. The legacy Handoff HUD and
+dedicated Agents-popover Hand Off action were removed; Handoff now uses the workflow entry.
 
 ## 3. The leading notification/update exception
 

@@ -7,7 +7,7 @@
 
 **Keywords:** agent profile, preset, launch agent, agents menu, dedicated home, account, recommended profile
 
-**Related:** [handoff](handoff.md) · [active-agents](active-agents.md) · [command-palette](command-palette.md) · [settings](settings.md)
+[active-agents](active-agents.md) · [command-palette](command-palette.md) · [settings](settings.md)
 
 ## What a profile is
 

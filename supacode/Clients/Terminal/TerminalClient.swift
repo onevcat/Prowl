@@ -7,8 +7,7 @@ struct TerminalClient {
   /// Creates and selects a tab synchronously so Canvas can target its exact ID.
   var createTabInDirectory: @MainActor @Sendable (Worktree, URL) -> TerminalTabID?
   /// Launches a compiled profile request synchronously and returns the exact tab
-  /// and pane identities. This is the CLI/workflow boundary; the legacy command
-  /// remains event-driven for menu and palette launches.
+  /// and pane identities. This is the CLI/workflow boundary used by workflow starts.
   var launchAgentProfile:
     @MainActor @Sendable (Worktree, AgentProfileLaunchRequest) async -> Result<LaunchedSurface, AgentProfileLaunchError>
   var events: @MainActor @Sendable () -> AsyncStream<Event>
@@ -19,19 +18,10 @@ struct TerminalClient {
   /// synchronously before an async dispatch races against AppKit focus reshuffle
   /// (e.g. when a palette dismisses and the leftmost pane reclaims first responder).
   var selectedSurfaceID: @MainActor @Sendable (Worktree.ID) -> UUID?
-  /// Everything the selected pane knows about the outgoing agent, captured in
-  /// one synchronous read: session context for the artifact, launch
-  /// observation, and the pid-anchored native session.
-  var handoffSourceContext: @MainActor @Sendable (Worktree.ID) -> HandoffSourceContext?
-  /// Same capture as `handoffSourceContext`, but for an explicit pane instead of
-  /// the selected one — the Active Agents context menu targets a specific row.
-  var handoffSourceContextForSurface: @MainActor @Sendable (Worktree.ID, UUID) -> HandoffSourceContext?
+  /// Captures source-pane session context for workflow native actions.
   var handoffSessionContextForSurface: @MainActor @Sendable (Worktree.ID, UUID) -> HandoffStore.SessionContext?
   var latestUnreadNotification: @MainActor @Sendable () -> NotificationLocation?
   var focusSurface: @MainActor @Sendable (Worktree.ID, UUID) -> Bool
-  /// Types a line into a specific pane and submits it. The UI handoff path
-  /// injects its request to the live source agent this way.
-  var sendTextToSurface: @MainActor @Sendable (Worktree.ID, UUID, String) -> Bool
   var markNotificationRead: @MainActor @Sendable (Worktree.ID, UUID) -> Void
   var markNotificationsReadForSurface: @MainActor @Sendable (Worktree.ID, UUID) -> Void
 
@@ -115,12 +105,9 @@ extension TerminalClient: DependencyKey {
     observeAgentState: { _ in fatalError("TerminalClient.observeAgentState not configured") },
     canvasFocusedWorktreeID: { nil },
     selectedSurfaceID: { _ in nil },
-    handoffSourceContext: { _ in nil },
-    handoffSourceContextForSurface: { _, _ in nil },
     handoffSessionContextForSurface: { _, _ in nil },
     latestUnreadNotification: { nil },
     focusSurface: { _, _ in false },
-    sendTextToSurface: { _, _, _ in false },
     markNotificationRead: { _, _ in },
     markNotificationsReadForSurface: { _, _ in }
   )
@@ -133,12 +120,9 @@ extension TerminalClient: DependencyKey {
     observeAgentState: { _ in AgentObservationStream { $0.finish() } },
     canvasFocusedWorktreeID: { nil },
     selectedSurfaceID: { _ in nil },
-    handoffSourceContext: { _ in nil },
-    handoffSourceContextForSurface: { _, _ in nil },
     handoffSessionContextForSurface: { _, _ in nil },
     latestUnreadNotification: { nil },
     focusSurface: { _, _ in false },
-    sendTextToSurface: { _, _, _ in false },
     markNotificationRead: { _, _ in },
     markNotificationsReadForSurface: { _, _ in }
   )

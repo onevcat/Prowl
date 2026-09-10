@@ -171,7 +171,6 @@ struct WorktreeDetailView: View {
         store.send(.runCustomCommand(index))
       },
       onActivateUpdateButton: { store.send(.updates(.activateUpdateButton)) },
-      onHandOff: { store.send(.openHandoffHud) },
       onLaunchProfile: { store.send(.launchAgentProfile($0)) },
       onManageProfiles: { store.send(.openAgentProfilesSettings) },
       onRunWorkflow: { key in
@@ -256,7 +255,6 @@ struct WorktreeDetailView: View {
       notificationGroups: state.notificationGroups,
       unseenNotificationWorktreeCount: state.unseenNotificationWorktreeCount,
       workflowsWorktreeID: state.actionTargetWorktreeID,
-      onHandOff: { store.send(.openHandoffHud) },
       onLaunchProfile: { store.send(.launchAgentProfile($0)) },
       onManageProfiles: { store.send(.openAgentProfilesSettings) },
       onRunWorkflow: { key in
@@ -955,7 +953,6 @@ struct WorktreeDetailView: View {
     let notificationGroups: [ToolbarNotificationRepositoryGroup]
     let unseenNotificationWorktreeCount: Int
     let workflowsWorktreeID: Worktree.ID?
-    let onHandOff: () -> Void
     let onLaunchProfile: (AgentProfile.ID) -> Void
     let onManageProfiles: () -> Void
     let onRunWorkflow: (String) -> Void
@@ -974,7 +971,6 @@ struct WorktreeDetailView: View {
           capsule: agentsCapsule,
           launcherItems: agentsLauncherItems,
           workflowsWorktreeID: workflowsWorktreeID,
-          onHandOff: onHandOff,
           onLaunchProfile: onLaunchProfile,
           onManageProfiles: onManageProfiles,
           onRunWorkflow: onRunWorkflow,
@@ -1025,7 +1021,6 @@ struct WorktreeDetailView: View {
     let onStopRunScript: () -> Void
     let onRunCustomCommand: (EffectiveCustomCommand.Identifier) -> Void
     let onActivateUpdateButton: () -> Void
-    let onHandOff: () -> Void
     let onLaunchProfile: (AgentProfile.ID) -> Void
     let onManageProfiles: () -> Void
     let onRunWorkflow: (String) -> Void
@@ -1042,7 +1037,6 @@ struct WorktreeDetailView: View {
         notificationGroups: toolbarState.shared.notificationGroups,
         unseenNotificationWorktreeCount: toolbarState.shared.unseenNotificationWorktreeCount,
         workflowsWorktreeID: toolbarState.shared.actionTargetWorktreeID,
-        onHandOff: onHandOff,
         onLaunchProfile: onLaunchProfile,
         onManageProfiles: onManageProfiles,
         onRunWorkflow: onRunWorkflow,

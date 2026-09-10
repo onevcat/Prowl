@@ -58,7 +58,7 @@ struct WorkflowNativeActionsTests {
     let source = runDirectory.appending(path: "briefing.md")
     try briefing.write(to: source, atomically: true, encoding: .utf8)
     let store = HandoffStore(rootURL: root)
-    try store.writeBriefing("Previous briefing", archivingPrevious: false, now: Self.now)
+    try store.writeBriefing("Previous briefing", now: Self.now)
 
     let result = try await WorkflowNativeActionRunner().execute(
       actionID: "builtin:save-handoff", inputs: ["briefing": .string(source.path)], context: invocation)
@@ -74,7 +74,7 @@ struct WorkflowNativeActionsTests {
     let archives = try FileManager.default.contentsOfDirectory(
       at: store.archiveDirectory, includingPropertiesForKeys: nil)
     #expect(try archives.contains { try String(contentsOf: $0, encoding: .utf8).contains("Previous briefing") })
-    try store.writeBriefing("Later briefing", archivingPrevious: true, now: Self.now)
+    try store.writeBriefing("Later briefing", now: Self.now)
     #expect(try String(contentsOf: URL(filePath: path), encoding: .utf8) == packet)
   }
 
@@ -277,9 +277,9 @@ struct WorkflowNativeActionsTests {
       try await WorkflowNativeActionRunner().execute(
         actionID: "builtin:collect-worktree-context", inputs: ["root": "/tmp"], context: context(root: root))
     }
-    await #expect(throws: WorkflowActionError.unknownAction("handoff.transition")) {
+    await #expect(throws: WorkflowActionError.unknownAction("removed.action")) {
       try await WorkflowNativeActionRunner().execute(
-        actionID: "handoff.transition", inputs: [:], context: context(root: root))
+        actionID: "removed.action", inputs: [:], context: context(root: root))
     }
   }
 }

@@ -234,7 +234,7 @@ struct WorkflowRunsFeatureTests {
     _ fixture: Fixture, queue: WorkflowEffectQueueClient,
     storage: SettingsTestStorage = SettingsTestStorage(),
     actionExecutor: (any WorkflowActionExecuting)? = nil,
-    handoffSource: HandoffSourceContext? = nil
+    handoffSessionContext: HandoffStore.SessionContext? = nil
   ) -> TestStoreOf<WorkflowRunsFeature> {
     let store = TestStore(initialState: WorkflowRunsFeature.State()) {
       WorkflowRunsFeature()
@@ -242,7 +242,7 @@ struct WorkflowRunsFeatureTests {
       if let actionExecutor {
         $0.workflowActionExecutor = actionExecutor
       }
-      $0[TerminalClient.self].handoffSourceContextForSurface = { _, _ in handoffSource }
+      $0[TerminalClient.self].handoffSessionContextForSurface = { _, _ in handoffSessionContext }
       $0.workflowRuntimeClient = fixture.runtime
       $0.workflowActivationClient = fixture.activation
       $0.workflowWatchdogClient = fixture.watchdog
@@ -798,11 +798,11 @@ struct WorkflowRunsFeatureTests {
     let fixture = try Fixture()
     defer { fixture.cleanUp() }
     let gate = GatedActionExecutor()
-    let source = HandoffSourceContext(
-      sessionContext: .init(
-        agent: "pi", sessionID: "handoff-session", paneID: "source-pane", paneTitle: nil, source: "test",
-        confidence: "exact", excerptText: nil), observation: nil)
-    let store = makeStore(fixture, queue: WorkflowEffectQueue().client, actionExecutor: gate, handoffSource: source)
+    let source = HandoffStore.SessionContext(
+      agent: "pi", sessionID: "handoff-session", paneID: "source-pane", paneTitle: nil, source: "test",
+      confidence: "exact", excerptText: nil)
+    let store = makeStore(
+      fixture, queue: WorkflowEffectQueue().client, actionExecutor: gate, handoffSessionContext: source)
     let (session, effects) = try fixture.session(
       Self.actionFirst
         .replacing("builtin:collect-worktree-context", with: "builtin:save-handoff")

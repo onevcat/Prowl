@@ -58,7 +58,6 @@ struct AgentsToolbarButton: View {
   let launcherItems: [AgentsLauncherItem]
   /// The worktree whose workflows the popover lists; nil hides the section.
   let workflowsWorktreeID: Worktree.ID?
-  let onHandOff: () -> Void
   let onLaunchProfile: (AgentProfile.ID) -> Void
   let onManageProfiles: () -> Void
   let onRunWorkflow: (String) -> Void
@@ -80,10 +79,6 @@ struct AgentsToolbarButton: View {
         capsule: capsule,
         launcherItems: launcherItems,
         workflowsWorktreeID: workflowsWorktreeID,
-        onHandOff: {
-          isPopoverPresented = false
-          onHandOff()
-        },
         onLaunchProfile: { id in
           isPopoverPresented = false
           onLaunchProfile(id)
@@ -183,8 +178,8 @@ struct AgentsQuickLaunchButton: View {
   }
 }
 
-/// The agent-actions popover. Hand-off leads when an agent is detected; the
-/// launcher rows follow under one "New agent in this worktree" section header
+/// The agent-actions popover presents workflow and profile launches under one
+/// "New agent in this worktree" section header
 /// (recommended profile first) so the shared purpose is stated once instead
 /// of repeated per row, and the manage entry closes the list.
 private struct AgentsPopoverContent: View {
@@ -192,7 +187,6 @@ private struct AgentsPopoverContent: View {
   let capsule: AgentsCapsuleState?
   let launcherItems: [AgentsLauncherItem]
   let workflowsWorktreeID: Worktree.ID?
-  let onHandOff: () -> Void
   let onLaunchProfile: (AgentProfile.ID) -> Void
   let onManageProfiles: () -> Void
   let onRunWorkflow: (String) -> Void
@@ -203,17 +197,6 @@ private struct AgentsPopoverContent: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
-      if let capsule {
-        AgentsPopoverRow(
-          title: "Hand Off…",
-          subtitle: capsule.infoLine,
-          systemImage: "arrow.left.arrow.right",
-          action: onHandOff
-        )
-        if !launcherItems.isEmpty || !workflowItems.isEmpty {
-          Divider().padding(.vertical, 4)
-        }
-      }
       if !workflowItems.isEmpty {
         Text("Run a workflow")
           .font(.caption)

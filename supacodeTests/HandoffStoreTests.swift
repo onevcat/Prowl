@@ -185,14 +185,14 @@ struct HandoffStoreTests {
     #expect(HandoffStore.validatedBriefing(from: "# Handoff\n\n## Objective\nOnly this.") == nil)
   }
 
-  // MARK: - writeBriefing / removeCurrentArtifact
+  // MARK: - writeBriefing
 
   @Test func writeBriefingCreatesCurrentArtifact() throws {
     let root = try makeTempRoot()
     defer { remove(root) }
     let store = HandoffStore(rootURL: root)
 
-    try store.writeBriefing(validBriefing + "\n", archivingPrevious: true, now: fixedDate)
+    try store.writeBriefing(validBriefing + "\n", now: fixedDate)
 
     let content = try String(contentsOf: store.currentURL, encoding: .utf8)
     #expect(content == validBriefing + "\n")
@@ -212,7 +212,7 @@ struct HandoffStoreTests {
     try FileManager.default.createDirectory(at: store.handoffDirectory, withIntermediateDirectories: true)
     try previous.write(to: store.currentURL, atomically: true, encoding: .utf8)
 
-    try store.writeBriefing(validBriefing + "\n", archivingPrevious: true, now: fixedDate)
+    try store.writeBriefing(validBriefing + "\n", now: fixedDate)
 
     let archived = try FileManager.default.contentsOfDirectory(
       at: store.archiveDirectory,
@@ -222,40 +222,6 @@ struct HandoffStoreTests {
     #expect(archived.count == 1)
     #expect(try String(contentsOf: backup, encoding: .utf8) == previous)
     #expect(try String(contentsOf: store.currentURL, encoding: .utf8) == validBriefing + "\n")
-  }
-
-  @Test func writeBriefingWithoutArchivingLeavesArchiveAlone() throws {
-    // The transition path archives the outgoing state as a combined snapshot
-    // first, so its write must not add a second backup.
-    let root = try makeTempRoot()
-    defer { remove(root) }
-    let store = HandoffStore(rootURL: root)
-    let previous = "# Handoff\n\n## Objective\nOutgoing round.\n"
-    try FileManager.default.createDirectory(at: store.handoffDirectory, withIntermediateDirectories: true)
-    try previous.write(to: store.currentURL, atomically: true, encoding: .utf8)
-
-    try store.writeBriefing(validBriefing + "\n", archivingPrevious: false, now: fixedDate)
-
-    let archived = try FileManager.default.contentsOfDirectory(
-      at: store.archiveDirectory,
-      includingPropertiesForKeys: nil
-    )
-    #expect(archived.isEmpty)
-    #expect(try String(contentsOf: store.currentURL, encoding: .utf8) == validBriefing + "\n")
-  }
-
-  @Test func removeCurrentArtifactDeletesAndToleratesAbsence() throws {
-    let root = try makeTempRoot()
-    defer { remove(root) }
-    let store = HandoffStore(rootURL: root)
-
-    // Absent: a no-op.
-    try store.removeCurrentArtifact()
-
-    try store.writeBriefing(validBriefing + "\n", archivingPrevious: false, now: fixedDate)
-    #expect(store.hasCurrentArtifact)
-    try store.removeCurrentArtifact()
-    #expect(!store.hasCurrentArtifact)
   }
 
   // MARK: - layout
@@ -314,17 +280,6 @@ struct HandoffStoreTests {
     #expect(result.outgoingAgent == "codex")
     // A non-git root contributes no git repos summary count.
     #expect(result.totalChangedFiles == 0)
-  }
-
-  @Test func saveRecordsBriefingOnLogLine() throws {
-    let root = try makeTempRoot()
-    defer { remove(root) }
-    let store = HandoffStore(rootURL: root)
-
-    _ = try store.save(outgoingAgent: "codex", note: nil, briefing: .inline, now: fixedDate)
-
-    let log = try String(contentsOf: store.logURL, encoding: .utf8)
-    #expect(log.contains("briefing=inline"))
   }
 
   @Test func saveWritesSessionContextExcerpt() throws {
@@ -445,7 +400,7 @@ struct HandoffStoreTests {
     let root = try makeTempRoot()
     defer { remove(root) }
     let store = HandoffStore(rootURL: root)
-    try store.writeBriefing(validBriefing + "\n", archivingPrevious: false, now: fixedDate)
+    try store.writeBriefing(validBriefing + "\n", now: fixedDate)
 
     _ = try store.save(outgoingAgent: "claude", note: nil, now: fixedDate)
 
@@ -455,44 +410,7 @@ struct HandoffStoreTests {
     #expect(context.contains("Outgoing agent (detected): claude"))
   }
 
-  // MARK: - log + archive
-
-  @Test func appendLogGrowsAndArchiveCopies() throws {
-    let root = try makeTempRoot()
-    defer { remove(root) }
-    let store = HandoffStore(rootURL: root)
-
-    try store.writeBriefing(validBriefing + "\n", archivingPrevious: false, now: fixedDate)
-    _ = try store.save(outgoingAgent: "codex", note: nil, now: fixedDate)
-    try store.appendLog("codex → claude", now: fixedDate)
-
-    let log = try String(contentsOf: store.logURL, encoding: .utf8)
-    #expect(log.contains("codex → claude"))
-    #expect(log.split(separator: "\n").filter { $0.hasPrefix("- ") }.count >= 2)
-
-    let archivedRelative = try store.archiveCurrent(from: "codex", toAgent: "claude", now: fixedDate)
-    #expect(archivedRelative != nil)
-    #expect(archivedRelative?.hasPrefix("handoff/archive/") == true)
-    #expect(archivedRelative?.contains("codex-to-claude") == true)
-    let archiveURL = store.handoffDirectory.appending(
-      path: try #require(archivedRelative).replacing("handoff/", with: "")
-    )
-    let archive = try String(contentsOf: archiveURL, encoding: .utf8)
-    #expect(archive.contains("## Objective"))
-    #expect(archive.contains("# Handoff Context (generated)"))
-    // current.md remains until the transition decides its fate.
-    #expect(store.hasCurrentArtifact)
-  }
-
-  @Test func archiveCurrentReturnsNilWithoutArtifact() throws {
-    let root = try makeTempRoot()
-    defer { remove(root) }
-    let store = HandoffStore(rootURL: root)
-
-    _ = try store.save(outgoingAgent: "codex", note: nil, now: fixedDate)
-
-    #expect(try store.archiveCurrent(from: "codex", toAgent: "claude", now: fixedDate) == nil)
-  }
+  // MARK: - Log
 
   @Test func appendLogPreservesConcurrentEntries() async throws {
     let root = try makeTempRoot()
@@ -517,27 +435,4 @@ struct HandoffStoreTests {
     }
   }
 
-  @Test func archiveCurrentKeepsExistingSameTimestampArchives() throws {
-    let root = try makeTempRoot()
-    defer { remove(root) }
-    let store = HandoffStore(rootURL: root)
-
-    try store.writeBriefing(validBriefing + "\n", archivingPrevious: false, now: fixedDate)
-    _ = try store.save(outgoingAgent: "codex", note: nil, now: fixedDate)
-    let first = try #require(try store.archiveCurrent(from: "codex", toAgent: "claude", now: fixedDate))
-    let second = try #require(try store.archiveCurrent(from: "codex", toAgent: "claude", now: fixedDate))
-
-    #expect(first != second)
-    #expect(first.hasSuffix(".md"))
-    #expect(second.hasSuffix("-2.md"))
-
-    let firstURL = store.handoffDirectory.appending(
-      path: first.replacingOccurrences(of: "handoff/", with: "")
-    )
-    let secondURL = store.handoffDirectory.appending(
-      path: second.replacingOccurrences(of: "handoff/", with: "")
-    )
-    #expect(FileManager.default.fileExists(atPath: firstURL.path(percentEncoded: false)))
-    #expect(FileManager.default.fileExists(atPath: secondURL.path(percentEncoded: false)))
-  }
 }
