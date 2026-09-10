@@ -198,6 +198,12 @@ The iPad form has two visible four-character fields, advances after the first ha
 and accepts a complete pasted code in either field. Use Legacy Key supports older
 Hosts. This does not introduce a separate persistent device enrollment credential.
 
+### Host panel sizing
+
+The Host popover reserves a screen-bounded height when opened and keeps that height
+through startup, shutdown, and console state changes. Longer content scrolls instead
+of triggering native popover resize animations during those transitions.
+
 ### Sending commands to a shell pane
 
 The mobile composer can send commands such as `ai glm` to an existing plain shell

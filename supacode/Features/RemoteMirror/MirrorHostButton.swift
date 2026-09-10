@@ -3,10 +3,13 @@ import SwiftUI
 struct MirrorHostButton: View {
   @Environment(RemoteMirrorStore.self) private var mirrors
   @State private var isPresented = false
-  @State private var contentHeight: CGFloat = 300
+  @State private var panelHeight: CGFloat = 700
 
   var body: some View {
     Button {
+      if !isPresented {
+        panelHeight = min(760, max(300, (NSScreen.main?.visibleFrame.height ?? 840) - 140))
+      }
       isPresented.toggle()
     } label: {
       Label(mirrors.host.isRunning ? "Host Running" : "Start Host", systemImage: "network")
@@ -18,15 +21,10 @@ struct MirrorHostButton: View {
       ScrollView {
         MirrorHostSettingsView(host: mirrors.host, console: mirrors.controlConsole)
           .fixedSize(horizontal: false, vertical: true)
-          .onGeometryChange(for: CGFloat.self) {
-            $0.size.height
-          } action: {
-            contentHeight = $0
-          }
       }
-      .frame(
-        width: 460,
-        height: min(contentHeight, max(300, (NSScreen.main?.visibleFrame.height ?? 840) - 140)))
+      // Keep the native popover size stable while Host and console state change.
+      // Content-driven resizing can reenter AppKit's animated layout on macOS 26.
+      .frame(width: 460, height: panelHeight)
     }
   }
 }
