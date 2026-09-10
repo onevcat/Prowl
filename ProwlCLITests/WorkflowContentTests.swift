@@ -21,7 +21,7 @@ struct WorkflowContentTests {
 
   @Test func taskInputsCannotGrantMetadataOrAnotherRolesInstructions() {
     let root = URL(filePath: "/history/run")
-    let paths = [root.appending(path: "run.json").path, root.appending(path: "instructions/private.2.md").path]
+    let paths = [root.appending(path: "run.json").path, root.appending(path: "prompts/private.2.md").path]
     let content = WorkflowTaskContent.make(
       text: paths.joined(separator: " "), task: (UUID(), 1), runDirectory: root, knownPaths: paths, skill: nil)
     #expect(content.resources.isEmpty)

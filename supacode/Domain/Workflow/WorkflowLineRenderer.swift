@@ -29,7 +29,7 @@ nonisolated enum WorkflowRenderedText {
 }
 
 /// The completion command of one activation. This is the only place that spells
-/// `prowl workflow deliver`: the typed hint, the materialized instruction trailer, the launch
+/// `prowl workflow deliver`: the typed hint, the scoped-read completion trailer, the launch
 /// protocol block, the watchdog nudge, every re-delivery, and the `WORKFLOW_DELIVERY_REQUIRED`
 /// message all read from it, so no path can show a token-less or verdict-less command.
 nonisolated struct WorkflowCompletionCommand: Equatable, Sendable {
@@ -57,13 +57,13 @@ nonisolated struct WorkflowCompletionCommand: Equatable, Sendable {
     return verdicts.map { "\(Self.executable) --verdict \($0) -" }
   }
 
-  /// Appended to a typed `text` or pointer line.
+  /// Appended to a typed prompt or scoped-read line.
   var typedSuffix: String {
     " — finish with: " + messageCommands.joined(separator: Self.commandSeparator)
   }
 
-  /// The trailer of a materialized instruction file; lists the same commands as the typed line.
-  func instructionTrailer() -> String {
+  /// Added to the scoped-read response, not to the saved prompt body.
+  func completionTrailer() -> String {
     var lines = ["", "---", "When this step is fully complete, finish with"]
     if messageCommands.count > 1 {
       lines[lines.count - 1] += " exactly one of:"
@@ -144,11 +144,14 @@ nonisolated enum WorkflowTypedLine {
     try validated(prefix + text + (completion?.typedSuffix ?? ""))
   }
 
-  /// `instruction` → `[Prowl] Read <absolute path> and follow it[ — finish with: …]`.
-  static func pointer(to path: String, completion: WorkflowCompletionCommand?) throws(WorkflowRenderedTextError)
-    -> String
+  /// Transport is chosen after template rendering, never by an authored DSL field.
+  static func prompt(_ grant: WorkflowTaskContent, completion: WorkflowCompletionCommand?)
+    throws(WorkflowRenderedTextError) -> String
   {
-    try validated(prefix + "Read \(path) and follow it" + (completion?.typedSuffix ?? ""))
+    let inline = grant.text + (grant.resources.isEmpty ? "" : " " + grant.guidance)
+    let line = prefix + inline + (completion?.typedSuffix ?? "")
+    if line.utf8.count <= 4096 && WorkflowRenderedText.isSingleLine(line) { return line }
+    return try text(grant.guidance, completion: completion)
   }
 
   /// The panel's "Ask again" after a provisional delivery: what was missing, and the command.

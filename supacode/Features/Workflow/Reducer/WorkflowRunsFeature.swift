@@ -670,10 +670,10 @@ struct WorkflowRunsFeature {
           .event(runID: runID, .injectionFailed(ordinal: ordinal, failure.injectionFailure)))
       }
 
-    case .materializeInstruction(let ordinal, let stepID, let text):
+    case .materializePrompt(let ordinal, let stepID, let text):
       do {
         try store.ensureLayout(runID: runID)
-        _ = try store.writeInstruction(runID: runID, stepID: stepID, ordinal: ordinal, text: text)
+        _ = try store.writePrompt(runID: runID, stepID: stepID, ordinal: ordinal, text: text)
       } catch {
         let reason = "The instruction could not be persisted: \(error)"
         let event: WorkflowRunEvent =
@@ -847,7 +847,7 @@ extension WorkflowRunEffect {
   nonisolated var isRevocable: Bool {
     switch self {
     case .openActivation, .inject, .typeLine, .launch, .runAction, .close: true
-    case .awaitRoleIdle, .cancelRoleWait, .materializeInstruction, .materializeSkill, .notify,
+    case .awaitRoleIdle, .cancelRoleWait, .materializePrompt, .materializeSkill, .notify,
       .abandonActivation, .completeActivation, .armWatchdog, .disarmWatchdog, .persistDelivery, .persist, .log,
       .finished, .yieldControl:
       false

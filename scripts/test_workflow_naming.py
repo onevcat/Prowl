@@ -19,6 +19,24 @@ class WorkflowNamingTests(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertTrue(violations(text))
 
+    def test_prompt_names_reject_retired_contracts_but_allow_custom_data(self):
+        for text in (
+            '"instruction_path": "/run/instructions/task.1.md"',
+            "WorkflowMessageContent", "instruction: Review this.",
+            '{"steps":[{"id":"task","message":"author","text":"Review"}]}',
+            '{"command":"workflow","data":{"self_initiated":{"instruction_path":"/run/task.md"}}}',
+        ):
+            with self.subTest(text=text):
+                self.assertTrue(violations(text))
+        for text in (
+            '"prompt_path": "/run/prompts/task.1.md"',
+            "with:\n  instruction: user-defined\n  text: custom\n  instruction_path: custom",
+            '{"steps":[{"id":"task","action":"local:write","with":{"instruction_path":"custom"}}]}',
+            '{"steps":[{"id":"task","action":"local:write","with":{"text":"custom"}}]}',
+        ):
+            with self.subTest(text=text):
+                self.assertFalse(violations(text))
+
     def test_alternative_protocol_syntax(self):
         for text in (
             '{"steps":[{"id":"review","expect":{"output":"findings","verdict":["clean","issues"]}}]}',

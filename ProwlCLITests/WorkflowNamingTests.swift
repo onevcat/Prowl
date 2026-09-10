@@ -30,7 +30,7 @@ struct WorkflowNamingTests {
         id: naming
         name: Naming
         roles: {author: {source: current}}
-        steps: [{id: report, message: author, text: Review., expect: {delivery: report, verdicts: \(values)}}]
+        steps: [{id: report, message: author, prompt: Review., expect: {delivery: report, verdicts: \(values)}}]
         """)
       let definition = try #require(parsed.definition)
       let diagnostics = WorkflowValidator.validate(definition, context: .init(scope: .user))
@@ -56,7 +56,7 @@ struct WorkflowNamingTests {
         id: naming
         name: Naming
         roles: {author: {source: current}}
-        steps: [{id: brief, message: author, text: Write., expect: {\(fields)}}]
+        steps: [{id: brief, message: author, prompt: Write., expect: {\(fields)}}]
         """)
       #expect(parsed.definition == nil)
       #expect(parsed.diagnostics.contains { $0.code == "unknown_key" })
@@ -111,7 +111,7 @@ struct WorkflowNamingTests {
       steps:
         - id: brief
           message: author
-          text: Write a briefing.
+          prompt: Write a briefing.
           expect: {delivery: briefing, verdicts: [ready, blocked]}
       """)
     #expect(parsed.diagnostics.isEmpty)

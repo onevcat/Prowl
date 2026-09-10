@@ -20,7 +20,7 @@ struct WorkflowCommandHandlerTests {
     steps:
       - id: ask
         message: author
-        text: "Say hello."
+        prompt: "Say hello."
     """
 
   private struct Fixture {

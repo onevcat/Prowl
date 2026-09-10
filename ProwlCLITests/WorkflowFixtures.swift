@@ -40,7 +40,7 @@ enum WorkflowFixtures {
       - id: brief
         title: "Author writing the brief"
         message: author
-        instruction: |
+        prompt: |
           Write a short brief for an adversarial reviewer: ## Scope, ## Claims, ## How to verify.
           Deliver it with the generated completion command.
         expect: { delivery: brief, sections: ["## Scope", "## Claims"], timeout: 10m }
@@ -64,11 +64,11 @@ enum WorkflowFixtures {
           - id: fix
             title: "Round {{ context.step.iteration }}: author addressing findings"
             message: author
-            text: "Findings: {{ state.findings_path }}. Fix or rebut each item."
+            prompt: "Findings: {{ state.findings_path }}. Fix or rebut each item."
             expect: { delivery: disposition, timeout: 30m }
           - id: rereview
             message: reviewer
-            text: "Disposition: {{ deliveries.disposition.path }}. Re-review."
+            prompt: "Disposition: {{ deliveries.disposition.path }}. Re-review."
             expect: { delivery: round_findings, verdicts: [clean, issues], timeout: 30m }
           - id: retain
             set:
@@ -99,7 +99,7 @@ enum WorkflowFixtures {
     steps:
       - id: ask
         message: author
-        text: "Say hello."
+        prompt: "Say hello."
     \(extraSteps)
 
     """

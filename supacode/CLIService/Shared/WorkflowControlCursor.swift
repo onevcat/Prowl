@@ -24,6 +24,8 @@ nonisolated public struct WorkflowControlCursor: Equatable, Sendable {
     public let iteration: Int?
     public let skipped: Bool
     public var path: [String] = []
+    public var title: String?
+    public var summary: String?
   }
 
   public private(set) var evaluations: [Evaluation] = []
@@ -82,9 +84,12 @@ nonisolated public struct WorkflowControlCursor: Equatable, Sendable {
       }
       let position = if case .loop = control { 0 } else { iteration }
       let stepContext = Self.positioned(context, stepID: step.id, iteration: position)
-      let positionRecord = Evaluation(stepID: step.id, iteration: iteration, skipped: false, path: iterationPath)
+      var positionRecord = Evaluation(stepID: step.id, iteration: iteration, skipped: false, path: iterationPath)
+      positionRecord.title = step.title.flatMap {
+        try? WorkflowExpression.renderText($0, values: values(over: stepContext))
+      }
       failedPosition = positionRecord
-      try execute(control, step: step, context: stepContext)
+      positionRecord.summary = try execute(control, step: step, context: stepContext)
       evaluations.append(positionRecord)
       failedPosition = nil
     }
@@ -101,11 +106,12 @@ nonisolated public struct WorkflowControlCursor: Equatable, Sendable {
 
   private mutating func execute(
     _ control: WorkflowControlStep, step: WorkflowStepDefinition, context: [String: WorkflowJSONValue]
-  ) throws {
+  ) throws -> String {
     switch control {
     case .set(let assignments):
       try state.assign(assignments, values: values(over: context))
       frames[frames.count - 1].index += 1
+      return "Updated state: " + assignments.keys.sorted().joined(separator: ", ")
     case .conditional(let condition, let yes, let otherwise):
       let selected = try conditionValue(condition, context: context)
       let branch = selected ? yes : otherwise
@@ -113,15 +119,18 @@ nonisolated public struct WorkflowControlCursor: Equatable, Sendable {
       frames[frames.count - 1].index += 1
       expire(step.action.children)
       frames.append(Frame(steps: branch))
+      return "\(selected ? "Then" : "Else") branch selected\n\(condition) = \(selected)"
     case .loop(let condition, let maximum, let body):
       frames[frames.count - 1].index += 1
       expire(body)
-      if try conditionValue(condition, context: context) {
+      let entered = try conditionValue(condition, context: context)
+      if entered {
         if let maximum, maximum <= 0 { throw WorkflowLoopLimit(stepID: step.id) }
         frames.append(Frame(steps: body, loop: step, iteration: 1))
       } else {
         recordSkipped(body)
       }
+      return "\(entered ? "Entered loop" : "Loop not entered")\n\(condition) = \(entered)"
     case .breakLoop, .continueLoop:
       guard let loopIndex = frames.lastIndex(where: { $0.loop != nil }) else {
         throw WorkflowExpressionError.type("Loop control requires an enclosing loop.")
@@ -129,8 +138,10 @@ nonisolated public struct WorkflowControlCursor: Equatable, Sendable {
       while frames.count - 1 > loopIndex { expire(frames.removeLast().steps) }
       if case .breakLoop = control {
         expire(frames.removeLast().steps)
+        return "Exited the loop."
       } else {
         frames[loopIndex].index = frames[loopIndex].steps.count
+        return "Continued to the next loop iteration."
       }
     }
   }
@@ -140,7 +151,17 @@ nonisolated public struct WorkflowControlCursor: Equatable, Sendable {
     if let loop = frame.loop, case .control(.loop(let condition, let maximum, _)) = loop.action {
       expire(frame.steps)
       let loopContext = Self.positioned(context, stepID: loop.id, iteration: frame.iteration)
-      if try conditionValue(condition, context: loopContext) {
+      var evaluation = Evaluation(
+        stepID: loop.id, iteration: frames.dropLast().last(where: { $0.loop != nil })?.iteration,
+        skipped: false, path: Array(iterationPath.dropLast()))
+      evaluation.title = loop.title.flatMap {
+        try? WorkflowExpression.renderText($0, values: values(over: loopContext))
+      }
+      failedPosition = evaluation
+      let matched = try conditionValue(condition, context: loopContext)
+      evaluation.summary = "Loop condition \(matched ? "matched" : "ended the loop")\n\(condition) = \(matched)"
+      evaluations.append(evaluation)
+      if matched {
         if let maximum, frame.iteration >= maximum {
           throw WorkflowLoopLimit(stepID: loop.id)
         }

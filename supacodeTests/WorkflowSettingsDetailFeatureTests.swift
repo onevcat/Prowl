@@ -18,7 +18,7 @@ struct WorkflowSettingsDetailFeatureTests {
     steps:
       - id: ask
         message: author
-        text: "Review this change."
+        prompt: "Review this change."
     """
 
   private func row(scope: WorkflowScope = .user) throws -> WorkflowSettingsRow {

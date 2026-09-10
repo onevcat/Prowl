@@ -52,6 +52,9 @@ exposes `ToolbarContent.sharedBackgroundVisibility(_:)` only on macOS 26+. The a
 - Bell and update form a second capsule immediately after it.
 - The two capsules are separate.
 - Bell retains its `.orange` unread state and `.secondary` idle state.
+- Workflow History uses `checklist` with the same `.secondary` idle tint.
+- Bell and History share a window-local `ToolbarPopoverCoordinator`. Only one owns
+  presentation; late hover/dismiss callbacks from a replaced panel are ignored.
 - Update retains `Color("ProwlAccent")`.
 
 ### Why it is an exception

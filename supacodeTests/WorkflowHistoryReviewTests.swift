@@ -107,7 +107,7 @@ struct WorkflowHistoryReviewTests {
     #expect(work.allSatisfy { $0.subtitle.contains("outer") && $0.subtitle.contains("inner") })
   }
 
-  @Test func legacyActionOutputRequiresOneCompletedOccurrence() throws {
+  @Test func actionHistoryDoesNotReconstructMissingAttemptOutputs() throws {
     var machine = try start(
       """
       schema: prowl.workflow/v1
@@ -127,12 +127,11 @@ struct WorkflowHistoryReviewTests {
       JSONSerialization.jsonObject(
         with: WorkflowRunRecord.makeEncoder().encode(
           WorkflowRunRecord(run: machine.run))) as? [String: Any])
-    json.removeValue(forKey: "step_definitions")
     json["steps"] = [["id": "snapshot", "state": "completed"]]
     let single = try WorkflowRunRecord.makeDecoder().decode(
       WorkflowRunRecord.self,
       from: JSONSerialization.data(withJSONObject: json))
-    #expect(WorkflowHistoryStepGroup.groups(single).first?.attempts.first?.outputs == output)
+    #expect(WorkflowHistoryStepGroup.groups(single).first?.attempts.first?.outputs == nil)
     json["steps"] = [1, 2].map { ["id": "snapshot", "state": "completed", "iteration": $0] as [String: Any] }
     let repeated = try WorkflowRunRecord.makeDecoder().decode(
       WorkflowRunRecord.self,
@@ -152,7 +151,7 @@ struct WorkflowHistoryReviewTests {
       steps:
         - id: review
           message: author
-          instruction: Review
+          prompt: Review
           expect: {delivery: report, sections: ['## Findings']}
       """, roles: ["author": .current(pane)])
     _ = machine.apply(.roleIdle(ordinal: 1))
@@ -195,13 +194,9 @@ struct WorkflowHistoryReviewTests {
     #expect(try String(contentsOfFile: paths[0], encoding: .utf8).contains("First output"))
     #expect(try String(contentsOfFile: paths[1], encoding: .utf8).contains("Corrected output"))
 
-    var legacy = json
-    legacy.removeValue(forKey: "step_definitions")
-    legacy["steps"] = steps.map { $0.filter { ["id", "iteration", "state", "ordinal"].contains($0.key) } }
     let decoded = try WorkflowRunRecord.makeDecoder().decode(
-      WorkflowRunRecord.self,
-      from: JSONSerialization.data(withJSONObject: legacy))
-    #expect(WorkflowHistoryStepGroup.groups(decoded).flatMap(\.attempts).compactMap(\.delivery).count == 1)
+      WorkflowRunRecord.self, from: JSONSerialization.data(withJSONObject: json))
+    #expect(WorkflowHistoryStepGroup.groups(decoded).flatMap(\.attempts).flatMap { $0.submissions ?? [] }.count == 2)
   }
 
   @Test func cancelledSaveRetryKeepsTheSubmittedBody() throws {
@@ -215,7 +210,7 @@ struct WorkflowHistoryReviewTests {
       steps:
         - id: review
           message: author
-          instruction: Review
+          prompt: Review
           expect: {delivery: report, sections: ['## Findings']}
       """, roles: ["author": .current(pane)])
     _ = machine.apply(.roleIdle(ordinal: 1))
@@ -238,17 +233,13 @@ struct WorkflowHistoryReviewTests {
     #expect(record.steps.last?.submissions?.first?.accepted == false)
   }
 
-  @Test func textPreviewKeepsMultibyteBoundariesAndRejectsInvalidData() {
-    for scalar in ["é", "中", "🐈"] {
-      for offset in 1..<scalar.utf8.count {
-        let prefix = String(repeating: "a", count: 4096 - offset)
-        let data = Data((prefix + scalar + "tail").utf8)
-        #expect(WorkflowHistoryOutputPreview.text(data) == prefix)
-      }
+  @Test func textPreviewKeepsMultibyteCharacterBoundaries() {
+    for character in ["é", "中", "🐈", "🐈‍⬛"] {
+      let prefix = String(repeating: "a", count: 199) + character
+      let preview = WorkflowHistoryTextPreview(prefix + "tail")
+      #expect(preview.text == prefix)
+      #expect(preview.remainingCharacters == 4)
     }
-    #expect(WorkflowHistoryOutputPreview.text(Data("hello".utf8)) == "hello")
-    #expect(WorkflowHistoryOutputPreview.text(Data([0xFF, 0x61])) == nil)
-    #expect(WorkflowHistoryOutputPreview.text(Data(repeating: 0x61, count: 4095) + Data([0xFF, 0x61])) == nil)
   }
 
   @Test func groupingKeepsTenThousandRoundsInNumericOrder() throws {
@@ -275,6 +266,6 @@ struct WorkflowHistoryReviewTests {
 
   @Test func longKeysCannotEscapeThePreviewBudget() {
     let key = String(repeating: "k", count: 1_000_000)
-    #expect(WorkflowHistoryOutputPreview.json(["output": .object([key: .string("value")])]).utf8.count <= 4096)
+    #expect(WorkflowHistoryOutputField(key: key, value: .string("value")).displayKey.count == 100)
   }
 }

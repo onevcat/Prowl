@@ -1365,8 +1365,8 @@ final class ProwlCLIIntegrationTests: XCTestCase {
       updatedAt: "2026-08-30T01:00:00.000Z",
       finishedAt: nil,
       selfInitiated: WorkflowSelfInitiatedPayload(
-        line: "[Prowl] Read /Projects/App/.prowl/workflow-runs/R/instructions/brief.1.md and follow it — finish with: PROWL_WORKFLOW_TOKEN=T prowl workflow deliver -",
-        instructionPath: "/Projects/App/.prowl/workflow-runs/R/instructions/brief.1.md",
+        line: "[Prowl] Read /Projects/App/.prowl/workflow-runs/R/prompts/brief.1.md and follow it — finish with: PROWL_WORKFLOW_TOKEN=T prowl workflow deliver -",
+        promptPath: "/Projects/App/.prowl/workflow-runs/R/prompts/brief.1.md",
         completion: ["PROWL_WORKFLOW_TOKEN=T prowl workflow deliver -"]))
     let runResponse = try CommandResponse(
       ok: true, command: "workflow", schemaVersion: "prowl.cli.workflow.v1",
@@ -1393,8 +1393,8 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     XCTAssertEqual(actionInput.actionInputs, ["count": .integer(3)])
     XCTAssertEqual(actionInput.target, .auto("p3"))
     let runOutput = try jsonObject(from: runResult.stdout)
-    XCTAssertEqual(((runOutput["data"] as? [String: Any])?["self_initiated"] as? [String: Any])?["instruction_path"] as? String,
-      "/Projects/App/.prowl/workflow-runs/R/instructions/brief.1.md")
+    XCTAssertEqual(((runOutput["data"] as? [String: Any])?["self_initiated"] as? [String: Any])?["prompt_path"] as? String,
+      "/Projects/App/.prowl/workflow-runs/R/prompts/brief.1.md")
     let runText = try runWithMockServer(
       socketPath: temporarySocketPath(suffix: "workflow-run-text"), response: runResponse,
       args: ["workflow", "run", "review", "--no-color"]).1

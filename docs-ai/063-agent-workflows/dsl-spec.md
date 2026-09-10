@@ -169,7 +169,7 @@ kebab-case names for actions; dot-separated expressions address data, not action
 
 | Verb | Payload and behavior |
 | --- | --- |
-| `message: role` | `text` (one line) or `instruction` (file-backed multiline); waits for the role to be idle before injection; optional `expect` |
+| `message: role` | required `prompt` (single-line or multiline); waits for the role to be idle before delivery; optional `expect` |
 | `launch: role` | `prompt`, optional bundled `skill`, optional `expect`; at most once per persistent role |
 | `action: builtin:collect-worktree-context` or `local:id` | typed `with` object; awaits validated result; no `expect`; see [actions](../../skills/prowl-workflow/references/actions.md) |
 | `notify: text` | notification |
@@ -179,6 +179,14 @@ kebab-case names for actions; dot-separated expressions address data, not action
 | `while` | boolean expression, `steps`, optional `max_iterations` |
 | `break: true` / `continue: true` | innermost loop control |
 
+
+The runner chooses message transport after rendering. A safe single-line prompt whose
+complete typed line is at most 4 KiB is injected directly; otherwise Prowl injects a
+pane-scoped `workflow read` command. Launch uses the kickoff carrier (128 KiB cap).
+Both verbs save only the rendered task body under `prompts/<step>.<ordinal>.md`,
+with granted resource references. `prompt_path` identifies that file. Completion
+commands are added by the transport and scoped-read response, not stored in the body.
+The default read resource is `prompt`. There are no alternate content keys or aliases.
 
 ## 5. `expect`
 
@@ -225,7 +233,7 @@ expect:
   — once for a plain step, once per iteration inside a loop, again after Relaunch —
   mints a run-global, monotonic **invocation ordinal** (1, 2, 3, … across all steps and
   iterations) on entry, whether or not the step waits; it names the step's artifacts
-  (`instructions/<step>.<ordinal>.md`). When the step has an `expect`, the same invocation
+  (`prompts/<step>.<ordinal>.md`). When the step has an `expect`, the same invocation
   is also its *activation* `(run id, step id, ordinal, delivery role)`: the runner mints a
   fresh delivery token for it, and the previous activation of the same step (if any) is
   terminal. Exactly one successful `deliver` is accepted per activation, identified by its
@@ -300,7 +308,7 @@ handoff.
 
 **Self-initiated runs.** When `run` is invoked from the pane that becomes the `current`
 role and the first step is a `message` to that role, the response carries that step's
-rendered instruction (or scoped `workflow read` command) and its completion command, and the runner does **not**
+rendered prompt (or scoped `workflow read` command) and its completion command, and the runner does **not**
 also type them into the caller's pane — the caller already has them. For an agent this
 makes a self-handoff two commands: `prowl workflow run prowl.handoff`, then the returned
 `… prowl workflow deliver -` with its briefing on stdin.
@@ -310,7 +318,7 @@ Error codes: `WORKFLOW_NOT_FOUND`, `WORKFLOW_INVALID`, `RUN_NOT_FOUND`, `PANE_BU
 `OUTPUT_INVALID` (empty body; sections/format/verdict only under `strict: true`), `OUTPUT_TOO_LARGE`,
 `VERDICT_REQUIRED` (`strict: true` only),
 `PROFILE_NOT_FOUND`, `PROFILE_NOT_UNIQUE`, `SKILL_NOT_FOUND`, `RENDERED_TEXT_INVALID`
-(a rendered `text`/pointer/`--input` value would not survive as one terminal line),
+(a generated protocol line or `--input` value would not survive as one terminal line),
 `UNSAFE_PATH`, `PROMPT_TOO_LARGE` (a rendered `launch` prompt above 128 KiB),
 `WORKFLOW_DELIVERY_REQUIRED` (`agents dispatch-complete` from a pane whose pending record is a
 workflow activation; the message carries the exact `prowl workflow deliver` replacement).
@@ -368,7 +376,7 @@ A run directory is `~/.prowl/logs/workflow-runs/<root-name>-<root-hash>/YYYY-MM/
 definition/                         Fixed bundle copy
 run.json                            Status, bindings, typed state, attempts, output references
 log.md                              Timeline
-instructions/<step>.<ordinal>.md   Materialized agent instructions
+prompts/<step>.<ordinal>.md   Rendered task body without completion protocol
 deliveries/<name>.<ordinal>.md         Accepted/provisional agent delivery
 deliveries/<name>.md                   Latest file view
 skills/<skill>/                     Materialized bundled skill
@@ -385,7 +393,7 @@ The canonical execution root identifies its history bucket; the UTC month is fix
 creation. Global UUID lookup does not depend on open projects. See
 [personal history and retention](018-history-storage-plan.md) for the fixed 30-day
 policy, 5 GiB soft budget, 24-hour protection, Keep Run, and complete ZIP export.
-Agents use `workflow read` with pane/task attribution for instructions and explicitly
+Agents use `workflow read` with pane/task attribution for prompts and explicitly
 granted output/action resources; ordinary delivery remains `workflow deliver -` on stdin.
 
 Only the current execution UUID may publish an action result. Cancel terminates the owned

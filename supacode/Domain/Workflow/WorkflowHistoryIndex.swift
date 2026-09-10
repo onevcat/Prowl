@@ -71,10 +71,15 @@ nonisolated struct WorkflowHistoryStepDefinition: Codable, Equatable, Sendable {
   let id: String
   let title: String
   let loop: String?
+  var kind: String = ""
+  var actionID: String?
 
   static func flatten(_ steps: [WorkflowStepDefinition], loop: String? = nil) -> [Self] {
     steps.flatMap { step in
-      let current = Self(id: step.id, title: step.title ?? step.historyTitle, loop: loop)
+      // Dynamic titles are captured at execution, not evaluated later against changed state.
+      let title = step.title.flatMap { $0.contains("{{") ? nil : $0 } ?? step.historyTitle
+      var current = Self(id: step.id, title: title, loop: loop, kind: step.action.verb)
+      if case .action(let id, _) = step.action { current.actionID = id }
       let nestedLoop: String?
       if case .control(.loop) = step.action { nestedLoop = step.id } else { nestedLoop = loop }
       return [current] + flatten(step.action.children, loop: nestedLoop)
@@ -88,9 +93,16 @@ nonisolated extension WorkflowStepDefinition {
     case .message(let role, _, _): "Message \(role)"
     case .launch(let role, _, _, _): "Launch \(role)"
     case .action(let id, _): "Run \(id)"
-    case .notify: "Send notification"
+    case .notify: "Send to Prowl Notifications"
     case .close(let role): "Close \(role)"
-    case .control: id
+    case .control(let control):
+      switch control {
+      case .conditional: "Choose a branch"
+      case .loop: "Loop \(id)"
+      case .set: "Update workflow state"
+      case .breakLoop: "Exit loop"
+      case .continueLoop: "Continue loop"
+      }
     }
   }
 }

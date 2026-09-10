@@ -7,15 +7,15 @@ final class WorkflowDocumentParserTests: XCTestCase {
 
   func testExpectStrictParsesAndDefaultsToFalse() throws {
     let yaml = WorkflowFixtures.minimal(
-      extraSteps: "  - id: a\n    message: author\n    text: x\n    expect: { delivery: a, strict: true }\n"
-        + "  - id: b\n    message: author\n    text: y\n    expect: { delivery: b }")
+      extraSteps: "  - id: a\n    message: author\n    prompt: x\n    expect: { delivery: a, strict: true }\n"
+        + "  - id: b\n    message: author\n    prompt: y\n    expect: { delivery: b }")
     let workflow = try WorkflowFixtures.parse(yaml)
     XCTAssertEqual(workflow.steps[1].action.expect?.strict, true)
     XCTAssertEqual(workflow.steps[2].action.expect?.strict, false)
     XCTAssertEqual(
       WorkflowFixtures.codes(
         WorkflowFixtures.minimal(
-          extraSteps: "  - id: a\n    message: author\n    text: x\n    expect: { strict: yes please }")),
+          extraSteps: "  - id: a\n    message: author\n    prompt: x\n    expect: { strict: yes please }")),
       ["type_mismatch"])
   }
 
@@ -56,11 +56,11 @@ final class WorkflowDocumentParserTests: XCTestCase {
     XCTAssertEqual(workflow.steps.map(\.id), ["brief", "launch", "remember", "rounds", "context", "done", "cleanup"])
     XCTAssertEqual(workflow.flattenedSteps.map(\.id), ["brief", "launch", "remember", "rounds", "fix", "rereview", "retain", "context", "done", "cleanup"])
 
-    guard case .message(let role, .instruction(let instruction), let briefExpect) = workflow.steps[0].action else {
+    guard case .message(let role, let prompt, let briefExpect) = workflow.steps[0].action else {
       return XCTFail("brief should be an instruction message")
     }
     XCTAssertEqual(role, "author")
-    XCTAssertTrue(instruction.hasPrefix("Write a short brief"))
+    XCTAssertTrue(prompt.hasPrefix("Write a short brief"))
     XCTAssertEqual(briefExpect?.delivery, "brief")
     XCTAssertEqual(briefExpect?.sections, ["## Scope", "## Claims"])
     XCTAssertEqual(briefExpect?.timeoutSeconds, 600)
@@ -171,11 +171,9 @@ final class WorkflowDocumentParserTests: XCTestCase {
     XCTAssertEqual(WorkflowFixtures.parseCodes(two), ["step_verb"])
   }
 
-  func testMessageNeedsExactlyOneOfTextOrInstruction() {
-    let neither = WorkflowFixtures.minimal(extraSteps: "  - id: b\n    message: author")
-    XCTAssertEqual(WorkflowFixtures.parseCodes(neither), ["message_content"])
-    let both = WorkflowFixtures.minimal(extraSteps: "  - id: b\n    message: author\n    text: a\n    instruction: b")
-    XCTAssertEqual(WorkflowFixtures.parseCodes(both), ["message_content"])
+  func testMessageRequiresPrompt() {
+    let missing = WorkflowFixtures.minimal(extraSteps: "  - id: b\n    message: author")
+    XCTAssertEqual(WorkflowFixtures.parseCodes(missing), ["missing_key"])
   }
 
   func testExpectIsRejectedOnActionNotifyAndClose() {
@@ -194,10 +192,10 @@ final class WorkflowDocumentParserTests: XCTestCase {
     XCTAssertNil(WorkflowDocumentParser.parseDuration("10"))
     XCTAssertNil(WorkflowDocumentParser.parseDuration("1d"))
     let badTimeout = WorkflowFixtures.minimal(
-      extraSteps: "  - id: b\n    message: author\n    text: hi\n    expect: { timeout: 1d }")
+      extraSteps: "  - id: b\n    message: author\n    prompt: hi\n    expect: { timeout: 1d }")
     XCTAssertEqual(WorkflowFixtures.parseCodes(badTimeout), ["timeout_syntax"])
     let orphanPolicy = WorkflowFixtures.minimal(
-      extraSteps: "  - id: b\n    message: author\n    text: hi\n    expect: { on_timeout: skip }")
+      extraSteps: "  - id: b\n    message: author\n    prompt: hi\n    expect: { on_timeout: skip }")
     XCTAssertEqual(WorkflowFixtures.parseCodes(orphanPolicy), ["on_timeout_requires_timeout"])
   }
 
@@ -218,7 +216,7 @@ final class WorkflowDocumentParserTests: XCTestCase {
     XCTAssertNil(WorkflowDocumentParser.parseDuration("99999999999999999999s"))
     XCTAssertEqual(WorkflowDocumentParser.parseDuration("2562047788015215h"), 2562047788015215 * 3600)
     let overflow = WorkflowFixtures.minimal(
-      extraSteps: "  - id: b\n    message: author\n    text: hi\n    expect: { timeout: 9223372036854775807h }")
+      extraSteps: "  - id: b\n    message: author\n    prompt: hi\n    expect: { timeout: 9223372036854775807h }")
     XCTAssertEqual(WorkflowFixtures.parseCodes(overflow), ["timeout_syntax"])
   }
 
@@ -245,7 +243,7 @@ final class WorkflowDocumentParserTests: XCTestCase {
     XCTAssertNil(WorkflowDocumentParser.parseDuration(" 10m"))
     XCTAssertNil(WorkflowDocumentParser.parseDuration("10m "))
     let paddedTimeout = WorkflowFixtures.minimal(
-      extraSteps: "  - id: b\n    message: author\n    text: hi\n    expect: { timeout: \" 10m\" }")
+      extraSteps: "  - id: b\n    message: author\n    prompt: hi\n    expect: { timeout: \" 10m\" }")
     XCTAssertEqual(WorkflowFixtures.parseCodes(paddedTimeout), ["timeout_syntax"])
     let legacy = WorkflowFixtures.minimal(extraSteps: "  - id: loop\n    repeat: {max: 2}\n    steps: [{id: x, notify: hi}]")
     XCTAssertEqual(WorkflowFixtures.parseCodes(legacy), ["step_verb"])

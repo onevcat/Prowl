@@ -39,7 +39,7 @@ struct WorkflowStartFeatureTests {
     steps:
       - id: brief
         message: author
-        text: "Brief on {{ inputs.goal }}."
+        prompt: "Brief on {{ inputs.goal }}."
         expect: { delivery: brief }
       - id: launch
         launch: reviewer
@@ -59,7 +59,7 @@ struct WorkflowStartFeatureTests {
     steps:
       - id: note
         message: author
-        text: "Write a note."
+        prompt: "Write a note."
         expect: { delivery: note }
       - id: launch
         launch: runner

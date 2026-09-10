@@ -61,9 +61,9 @@ struct WorkflowLineRendererTests {
     #expect(block.contains("dispatch-complete"))
   }
 
-  @Test func instructionTrailerAndDeliveryRequiredMessageListTheMessageCommands() {
+  @Test func completionTrailerAndDeliveryRequiredMessageListTheMessageCommands() {
     let command = WorkflowCompletionCommand(token: token, verdicts: nil)
-    let trailer = command.instructionTrailer()
+    let trailer = command.completionTrailer()
     #expect(trailer.contains("PROWL_WORKFLOW_TOKEN=\(token) prowl workflow deliver -"))
     let message = command.deliveryRequiredMessage(runID: "RUN-1", stepID: "brief")
     #expect(message.contains("RUN-1"))
@@ -83,10 +83,16 @@ struct WorkflowLineRendererTests {
         == "[Prowl] Fix each item. — finish with: PROWL_WORKFLOW_TOKEN=\(token) prowl workflow deliver -")
   }
 
-  @Test func pointerLineNamesTheAbsolutePath() throws {
-    let line = try WorkflowTypedLine.pointer(
-      to: "/repo/.prowl/workflow-runs/R/instructions/brief.1.md", completion: nil)
-    #expect(line == "[Prowl] Read /repo/.prowl/workflow-runs/R/instructions/brief.1.md and follow it")
+  @Test func promptTransportUsesScopedReadForLongOrUnsafeLines() throws {
+    let root = URL(filePath: "/tmp/workflow-run")
+    for body in ["First\nSecond", "Tab\ttext", "Escape\u{1B}", String(repeating: "x", count: 4096)] {
+      let grant = WorkflowTaskContent.make(
+        text: body, task: (UUID(), 1), runDirectory: root, knownPaths: [], skill: nil)
+      #expect(try WorkflowTypedLine.prompt(grant, completion: nil) == "[Prowl] " + grant.guidance)
+    }
+    let grant = WorkflowTaskContent.make(
+      text: "Review.", task: (UUID(), 1), runDirectory: root, knownPaths: [], skill: nil)
+    #expect(try WorkflowTypedLine.prompt(grant, completion: nil) == "[Prowl] Review.")
   }
 
   @Test func renderedTextBoundaryRejectsTerminatorsAndControls() {

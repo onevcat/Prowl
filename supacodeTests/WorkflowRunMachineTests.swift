@@ -32,7 +32,7 @@ struct WorkflowRunMachineTests {
       - id: brief
         title: "Author writing the brief"
         message: author
-        instruction: |
+        prompt: |
           Write a short brief for an adversarial reviewer: ## Scope, ## Claims.
           Focus: {{ inputs.focus }}
         expect: { delivery: brief, sections: ["## Scope", "## Claims"], timeout: 10m }
@@ -53,12 +53,12 @@ struct WorkflowRunMachineTests {
           - id: fix
             title: "Round {{ context.step.iteration }}: author addressing findings"
             message: author
-            text: "Findings: {{ state.path }}. Fix or rebut each item."
+            prompt: "Findings: {{ state.path }}. Fix or rebut each item."
             expect: { delivery: disposition }
           - id: rereview
             title: "Round {{ context.step.iteration }}: reviewer re-checking"
             message: reviewer
-            text: "Disposition: {{ deliveries.disposition.path }}. Re-review."
+            prompt: "Disposition: {{ deliveries.disposition.path }}. Re-review."
             expect: { delivery: round_findings, verdicts: [clean, issues] }
           - id: retain
             set:
@@ -88,7 +88,7 @@ struct WorkflowRunMachineTests {
     steps:
       - id: brief
         message: source
-        instruction: |
+        prompt: |
           Write the handoff briefing.
         expect: { delivery: brief, sections: ["## Objective"] }
       - id: transition
@@ -225,17 +225,15 @@ struct WorkflowRunMachineTests {
     #expect(machine.run.inputs == ["max_rounds": "5", "focus": "", "mode": "strict"])
   }
 
-  @Test func roleIdleMaterializesTheInstructionAndInjectsThePointerLineWithTheToken() throws {
+  @Test func roleIdleSavesThePromptAndInjectsTheScopedReadLineWithTheToken() throws {
     var (machine, _) = try makeMachine(inputs: ["focus": "the parser"])
     let effects = machine.apply(.roleIdle(ordinal: 1))
-    let path = "\(runDir)/instructions/brief.1.md"
-    let command = WorkflowCompletionCommand(token: "TOKEN-1", verdicts: nil)
+    let path = "\(runDir)/prompts/brief.1.md"
     #expect(
       effects.contains(
-        .materializeInstruction(
+        .materializePrompt(
           ordinal: 1, stepID: "brief",
-          text: "Write a short brief for an adversarial reviewer: ## Scope, ## Claims.\nFocus: the parser\n"
-            + command.instructionTrailer())))
+          text: "Write a short brief for an adversarial reviewer: ## Scope, ## Claims.\nFocus: the parser\n")))
     #expect(
       effects.contains(
         .inject(
@@ -245,7 +243,7 @@ struct WorkflowRunMachineTests {
           opensActivation: true)))
     #expect(machine.run.phase == .injecting(ordinal: 1))
     #expect(machine.run.invocations[0].activation?.token == "TOKEN-1")
-    #expect(machine.run.invocations[0].instructionPath == path)
+    #expect(machine.run.invocations[0].promptPath == path)
   }
 
   @Test func injectionSuccessOpensTheActivationAndArmsTheWatchdog() throws {
@@ -740,11 +738,11 @@ struct WorkflowRunMachineTests {
       steps:
         - id: produce
           message: author
-          text: "Write it."
+          prompt: "Write it."
           expect: { delivery: draft }
         - id: consume
           message: author
-          text: "Polish {{ deliveries.draft.path }}."
+          prompt: "Polish {{ deliveries.draft.path }}."
           expect: { delivery: final }
         - id: done
           notify: "done"
@@ -1184,7 +1182,7 @@ struct WorkflowRunMachineTests {
           expect: { delivery: ready }
         - id: ping
           message: reviewer
-          text: "hello"
+          prompt: "hello"
           expect: { delivery: pong }
       """
     var (machine, _) = try makeMachine(yaml, skipped: ["launch"])

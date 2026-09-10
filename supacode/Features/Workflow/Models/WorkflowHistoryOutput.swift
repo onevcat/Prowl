@@ -18,11 +18,20 @@ enum WorkflowHistoryOutput {
       try storage.validate(url)
       NSWorkspace.shared.activateFileViewerSelecting([url])
     case .copyFile(let url):
-      let data = try await Task.detached(priority: .utility) { try storage.read(url, limit: 64 * 1024 * 1024) }.value
+      let data = try await Task.detached(priority: .utility) {
+        try storage.read(url, limit: WorkflowHistoryTextPreview.maximumBytes)
+      }.value
       guard let text = String(bytes: data, encoding: .utf8) else {
         throw CocoaError(.fileReadInapplicableStringEncoding)
       }
       copy(text)
+    case .copyText(let text): copy(text)
+    case .openArtifact(let url, let worktree):
+      try WorkflowHistoryArtifact.validate(url, worktree: worktree, storage: storage)
+      guard NSWorkspace.shared.open(url) else { throw CocoaError(.fileReadUnknown) }
+    case .revealArtifact(let url, let worktree):
+      try WorkflowHistoryArtifact.validate(url, worktree: worktree, storage: storage)
+      NSWorkspace.shared.activateFileViewerSelecting([url])
     case .openText(let text, let name):
       try await openData(Data(text.utf8), name: name)
     case .openJSON(let output):

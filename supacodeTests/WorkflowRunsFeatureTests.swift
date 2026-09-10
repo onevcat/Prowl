@@ -38,7 +38,7 @@ struct WorkflowRunsFeatureTests {
     steps:
       - id: brief
         message: author
-        text: "Write the brief."
+        prompt: "Write the brief."
         expect: { delivery: brief }
       - id: launch
         launch: reviewer
@@ -48,7 +48,7 @@ struct WorkflowRunsFeatureTests {
         close: reviewer
       - id: summary
         message: author
-        text: "Findings: {{ deliveries.findings.path }}. Summarize."
+        prompt: "Findings: {{ deliveries.findings.path }}. Summarize."
         expect: { delivery: summary }
     """
 
@@ -500,7 +500,7 @@ struct WorkflowRunsFeatureTests {
     // The run directory's `instructions` leaf becomes a link, which the store refuses.
     try session.store.ensureLayout(runID: runID)
     let instructions = session.store.directory(for: runID).appending(
-      path: "instructions", directoryHint: .isDirectory)
+      path: "prompts", directoryHint: .isDirectory)
     try FileManager.default.removeItem(at: instructions)
     let elsewhere = fixture.root.appending(path: "elsewhere", directoryHint: .isDirectory)
     try FileManager.default.createDirectory(at: elsewhere, withIntermediateDirectories: true)

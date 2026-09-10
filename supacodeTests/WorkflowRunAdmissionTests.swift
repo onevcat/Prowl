@@ -30,7 +30,7 @@ struct WorkflowRunAdmissionTests {
     steps:
       - id: brief
         message: author
-        text: "Brief {{ inputs.rounds }}"
+        prompt: "Brief {{ inputs.rounds }}"
         expect: { delivery: brief }
       - id: launch
         launch: reviewer
@@ -38,7 +38,7 @@ struct WorkflowRunAdmissionTests {
         expect: { delivery: findings }
       - id: ping
         message: partner
-        text: "Findings: {{ deliveries.findings.path }}"
+        prompt: "Findings: {{ deliveries.findings.path }}"
     """
 
   private static let contextOnly = """

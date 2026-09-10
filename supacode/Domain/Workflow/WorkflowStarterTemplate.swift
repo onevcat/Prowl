@@ -41,7 +41,7 @@ nonisolated enum WorkflowStarterTemplate {
       - id: brief
         title: Author writing the brief
         message: author
-        instruction: |
+        prompt: |
           Write a short brief for a reviewer: what changed, what you are unsure about, and how
           to verify it. Focus: {{ inputs.focus }}
           Deliver the brief with the generated completion command.

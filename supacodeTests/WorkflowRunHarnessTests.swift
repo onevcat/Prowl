@@ -109,8 +109,8 @@ final class WorkflowRunHarness {
       case .openActivation(_, let surfaceID, let ordinal):
         let dispatchID = bridge.openLaunchActivation(surfaceID: surfaceID)
         try await apply(.injectionSucceeded(ordinal: ordinal, dispatchID: dispatchID))
-      case .materializeInstruction(let ordinal, let stepID, let text):
-        try store.writeInstruction(runID: runID, stepID: stepID, ordinal: ordinal, text: text)
+      case .materializePrompt(let ordinal, let stepID, let text):
+        try store.writePrompt(runID: runID, stepID: stepID, ordinal: ordinal, text: text)
       case .materializeSkill(let id):
         let skill = BundledSkill(
           id: id, name: id, description: "d", audience: .workflow,
@@ -257,11 +257,9 @@ struct WorkflowRunHarnessTests {
     #expect(harness.typedLines[0].line.contains("PROWL_WORKFLOW_TOKEN=TOKEN-1 prowl workflow deliver -"))
     #expect(harness.bridge.opened.map(\.dispatchID) == ["dispatch-1"])
     #expect(harness.run.phase == .waitingForDelivery(ordinal: 1))
-    let instruction = try String(contentsOf: runDirectory.appending(path: "instructions/brief.1.md"), encoding: .utf8)
-    #expect(
-      instruction.hasPrefix(
-        "Write a short brief for an adversarial reviewer: ## Scope, ## Claims.\nFocus: the parser\n\n---\n"))
-    #expect(instruction.contains("PROWL_WORKFLOW_TOKEN=TOKEN-1 prowl workflow deliver -"))
+    let prompt = try String(contentsOf: runDirectory.appending(path: "prompts/brief.1.md"), encoding: .utf8)
+    #expect(prompt == "Write a short brief for an adversarial reviewer: ## Scope, ## Claims.\nFocus: the parser\n")
+    #expect(!prompt.contains("PROWL_WORKFLOW_TOKEN"))
 
     _ = try await harness.deliver(token: "TOKEN-1", body: "# Brief\n## Scope\nx\n## Claims\ny")
     #expect(harness.bridge.completed.map(\.dispatchID) == ["dispatch-1"])

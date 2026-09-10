@@ -84,7 +84,7 @@ prowl workflow cancel <run-id> [--json]
   `--input k=v`.
 - When starting from the `current` role's own pane, inspect the `run` response for
   `self_initiated` (`.data.self_initiated` with `--json`). If present, follow its `line` or
-  `instruction_path` and completion command yourself; Prowl does not type that first task
+  `prompt_path` and completion command yourself; Prowl does not type that first task
   back into the same pane. Waiting for another message would leave your own step unfinished.
 - The run is asynchronous: `run` returns the run id and frozen bindings; poll
   `prowl workflow status <run-id> --json` (`.data.status.state` is `running`,
@@ -104,10 +104,10 @@ An active task delivered by Prowl in this pane, a launched role's kickoff protoc
 looks like this:
 
 ```
-[Prowl] <instruction…> — finish with: PROWL_WORKFLOW_TOKEN=<token> prowl workflow deliver [--verdict <v>] -
+[Prowl] <prompt or scoped-read command…> — finish with: PROWL_WORKFLOW_TOKEN=<token> prowl workflow deliver [--verdict <v>] -
 ```
 
-1. Do the work the instruction asks for, completely, before delivering.
+1. Do the work the prompt asks for, completely, before delivering.
 2. Deliver by running the **exact rendered command** with the body on stdin as markdown
    (`printf '…' | PROWL_WORKFLOW_TOKEN=… prowl workflow deliver -`). When verdict variants are
    offered, pick exactly one and run that variant.
@@ -133,7 +133,7 @@ the companion skill for driving individual panes outside a workflow.
 ## Assigned content and retention
 
 Use the scoped `prowl workflow read` command supplied with the task to retrieve
-instructions. Read returned resource IDs with the same run ID and invocation number;
+the prompt. Read returned resource IDs with the same run ID and invocation number;
 `workflow-resource:` references are handles, not filesystem paths. Use `--json`
 for byte-preserving reads, decode each chunk by its `encoding`, and continue with
 `--offset <next_offset>` until `next_offset` is absent. Only the assigned pane can read this content; reads do not require a token.

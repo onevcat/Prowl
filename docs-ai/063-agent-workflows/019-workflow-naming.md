@@ -32,6 +32,24 @@ This change does not implement handoff migration, new context collectors, or rev
 - Delivery diagnostics use `delivery_shadowing` and `delivery_name_slug`.
 - The terminal loop-limit state is `iteration_limit_reached`.
 
+## Prompt contract follow-up (2026-09-09)
+
+Implemented: `message` and `launch` both require `prompt`. Remove `message.text`,
+`message.instruction`, and `WorkflowMessageContent`; reject the retired YAML fields.
+There are no aliases, migrations, or old-record compatibility requirements.
+
+The runner chooses transport after rendering: short, safe single-line messages may be
+injected directly; other messages use the pane-scoped read command. Launch keeps its
+kickoff transport. `expect` alone determines whether the runner waits for a delivery.
+Persist task-only bodies under `prompts/<step>.<ordinal>.md`; expose `prompt_path`
+and the `prompt` read resource. Completion guidance stays in the transport protocol,
+not in the saved task body. Update schemas, bundles, templates, tests, authoring skills,
+and maintained design references together.
+
+History details use execution-time target snapshots, rendered notification bodies,
+condition outcomes, and each action execution's saved request. They never reconstruct
+past inputs from current variables or associate an old attempt with a relaunched pane.
+
 ## Verification
 
 Add parser, expression/runtime, command/schema, and retired-name rejection coverage.

@@ -491,20 +491,20 @@ nonisolated public struct WorkflowDeliveryRecordPayload: Codable, Equatable, Sen
 nonisolated public struct WorkflowSelfInitiatedPayload: Codable, Equatable, Sendable {
   /// The line the runner would have typed, completion command included.
   public let line: String
-  /// The materialized instruction file the line points at, for `instruction` steps.
-  public let instructionPath: String?
+  /// The saved task-only prompt for this invocation.
+  public let promptPath: String?
   /// The `prowl workflow deliver` commands that complete the step, one per allowed verdict.
   public let completion: [String]
 
   enum CodingKeys: String, CodingKey {
     case line
-    case instructionPath = "instruction_path"
+    case promptPath = "prompt_path"
     case completion
   }
 
-  public init(line: String, instructionPath: String?, completion: [String]) {
+  public init(line: String, promptPath: String?, completion: [String]) {
     self.line = line
-    self.instructionPath = instructionPath
+    self.promptPath = promptPath
     self.completion = completion
   }
 }

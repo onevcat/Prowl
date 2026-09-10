@@ -1,6 +1,6 @@
 // supacode/Domain/Workflow/WorkflowRunStore.swift
 // Personal run directories contain `run.json`,
-// an append-only `log.md`, materialized instructions and skills, and versioned deliveries with an
+// an append-only `log.md`, saved prompts and skills, and versioned deliveries with an
 // atomically replaced latest view. Every path is built from validated slugs and the run UUID
 // under the same physical containment gate as profile homes.
 
@@ -16,20 +16,22 @@ nonisolated struct WorkflowRunRecordInvocation: Codable, Equatable, Sendable {
   let iteration: Int?
   let role: String
   let kind: WorkflowInvocationKind
-  let instructionPath: String?
+  let promptPath: String?
   let resources: [String: String]?
   let skill: String?
   let activation: WorkflowRunRecordActivation?
   let startedAt: Date
   let endedAt: Date?
+  var target: WorkflowRunRecord.Binding?
 
   enum CodingKeys: String, CodingKey {
+    case target
     case ordinal
     case step
     case iteration
     case role
     case kind
-    case instructionPath = "instruction_path"
+    case promptPath = "prompt_path"
     case resources
     case skill
     case activation
@@ -118,13 +120,14 @@ nonisolated struct WorkflowRunRecord: Codable, Equatable, Sendable {
     var delivery: WorkflowDeliveryRecord?
     var submissions: [WorkflowHistorySubmission]?
     var actionExecutionID: String?
+    var summary: String?
   }
 
   var historyIsPartial: Bool?
   var sourcePaneID: UUID?
   var sourceSessionIdentity: String?
   var participants: [String: [WorkflowPaneIdentity]]?
-  var stepDefinitions: [WorkflowHistoryStepDefinition]?
+  var stepDefinitions: [WorkflowHistoryStepDefinition]
   let version: Int
   let run: WorkflowRunRecordInfo
   let worktree: WorkflowRunWorktree
@@ -187,14 +190,15 @@ nonisolated struct WorkflowRunRecord: Codable, Equatable, Sendable {
         iteration: invocation.iteration,
         role: invocation.role,
         kind: invocation.kind,
-        instructionPath: invocation.instructionPath,
+        promptPath: invocation.promptPath,
         resources: invocation.content?.resources.mapValues { String($0.dropFirst(run.runDirectory.path.count + 1)) },
         skill: invocation.content?.skill,
         activation: invocation.activation.map {
           WorkflowRunRecordActivation(dispatchID: $0.dispatchID, state: $0.state, delivery: $0.deliveryName)
         },
         startedAt: invocation.startedAt,
-        endedAt: invocation.endedAt
+        endedAt: invocation.endedAt,
+        target: invocation.target
       )
     }
     deliveries = run.deliveries
@@ -206,7 +210,8 @@ nonisolated struct WorkflowRunRecord: Codable, Equatable, Sendable {
       Step(
         id: $0.stepID, iteration: $0.iteration, state: $0.state, ordinal: $0.ordinal,
         iterationPath: $0.iterationPath, branchExcluded: $0.branchExcluded, title: $0.title, error: $0.error,
-        outputs: $0.outputs, delivery: $0.delivery, submissions: $0.submissions, actionExecutionID: $0.actionExecutionID
+        outputs: $0.outputs, delivery: $0.delivery, submissions: $0.submissions,
+        actionExecutionID: $0.actionExecutionID, summary: $0.summary
       )
     }
   }
@@ -381,7 +386,7 @@ nonisolated struct WorkflowRunStore: Sendable {
   func ensureLayout(runID: UUID) throws {
     let runDirectory = directory(for: runID)
     try storage.prepare(runDirectory)
-    for name in ["instructions", "deliveries", "skills"] {
+    for name in ["prompts", "deliveries", "skills"] {
       try storage.prepare(runDirectory.appending(path: name))
     }
   }
@@ -467,13 +472,13 @@ nonisolated struct WorkflowRunStore: Sendable {
     try handle.write(contentsOf: Data(entry.utf8))
   }
 
-  // MARK: Instructions and deliveries
+  // MARK: Prompts and deliveries
 
   @discardableResult
-  func writeInstruction(runID: UUID, stepID: String, ordinal: Int, text: String) throws -> URL {
+  func writePrompt(runID: UUID, stepID: String, ordinal: Int, text: String) throws -> URL {
     let runDirectory = try containedRunDirectory(runID: runID)
     guard WorkflowSchema.isSlug(stepID), ordinal > 0 else { throw WorkflowRunStoreError.unsafePath(stepID) }
-    let url = WorkflowRunPaths.instructionURL(runDirectory: runDirectory, stepID: stepID, ordinal: ordinal)
+    let url = WorkflowRunPaths.promptURL(runDirectory: runDirectory, stepID: stepID, ordinal: ordinal)
     try requireNotSymbolicLink(url.deletingLastPathComponent())
     try requireNotSymbolicLink(url)
     try text.write(to: url, atomically: true, encoding: .utf8)

@@ -313,7 +313,8 @@
       "additionalProperties": false,
       "required": [
         "id",
-        "message"
+        "message",
+        "prompt"
       ],
       "properties": {
         "id": {
@@ -325,28 +326,13 @@
         "message": {
           "$ref": "#/$defs/slug"
         },
-        "text": {
-          "$ref": "#/$defs/template"
-        },
-        "instruction": {
+        "prompt": {
           "$ref": "#/$defs/template"
         },
         "expect": {
           "$ref": "#/$defs/expect"
         }
-      },
-      "oneOf": [
-        {
-          "required": [
-            "text"
-          ]
-        },
-        {
-          "required": [
-            "instruction"
-          ]
-        }
-      ]
+      }
     },
     "launchStep": {
       "type": "object",

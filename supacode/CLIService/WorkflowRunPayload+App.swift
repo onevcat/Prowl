@@ -26,7 +26,7 @@ extension WorkflowRunPayload {
       if includeSelfInitiated, let line = run.selfInitiatedLine {
         WorkflowSelfInitiatedPayload(
           line: line,
-          instructionPath: run.invocations.first?.instructionPath,
+          promptPath: run.invocations.first?.promptPath,
           completion: run.invocations.first?.activation?.completion.messageCommands ?? [])
       } else {
         nil

@@ -335,21 +335,8 @@ nonisolated public struct WorkflowExpectation: Equatable, Sendable {
   }
 }
 
-nonisolated public enum WorkflowMessageContent: Equatable, Sendable {
-  /// One line, typed verbatim.
-  case text(String)
-  /// Multi-line, materialized to a run file; one pointer line is typed.
-  case instruction(String)
-
-  public var body: String {
-    switch self {
-    case .text(let value), .instruction(let value): value
-    }
-  }
-}
-
 nonisolated public enum WorkflowStepAction: Equatable, Sendable {
-  case message(role: String, content: WorkflowMessageContent, expect: WorkflowExpectation?)
+  case message(role: String, prompt: String, expect: WorkflowExpectation?)
   case launch(role: String, prompt: String, skill: String?, expect: WorkflowExpectation?)
   /// `with` preserves JSON values and evaluates embedded expressions.
   case action(id: String, inputs: [String: WorkflowJSONValue])

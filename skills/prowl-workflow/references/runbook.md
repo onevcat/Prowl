@@ -26,7 +26,7 @@ or the CLI cannot reach the intended Prowl instance.
 
 When the caller is the `current` role and the first step messages that role, the `run`
 response returns the task directly in `self_initiated` (`.data.self_initiated` in JSON):
-`line`, optional `instruction_path`, and `completion`. The agent that invoked `run` must
+`line`, optional `prompt_path`, and `completion`. The agent that invoked `run` must
 perform it and deliver; there is no separate injected first message to wait for.
 
 ## While it runs
@@ -97,8 +97,8 @@ Runtime data lives in personal history, outside the execution root:
 │   └── <name>.md                # "latest" view, replaced atomically on each delivery
 ├── definition/                  # frozen workflow bundle
 ├── actions/                     # action results and artifacts
-├── instructions/
-│   └── <step>.<ordinal>.md      # task instructions and granted resource references
+├── prompts/
+│   └── <step>.<ordinal>.md      # task-only prompts and granted resource references
 └── skills/
     └── <id>/SKILL.md            # bundled skills named by `launch … skill:` (empty otherwise)
 ```
@@ -147,7 +147,7 @@ Every awaited step mints a fresh token for its activation; Skip/Cancel/Relaunch 
 | `TOKEN_REQUIRED` / `TOKEN_INVALID` / `STEP_NOT_EXPECTING` | delivering without/with a stale token, or the step has moved on — check `prowl workflow status` |
 | `OUTPUT_INVALID` / `VERDICT_REQUIRED` / `OUTPUT_TOO_LARGE` | empty body / missing mandatory verdict under `strict` / body over the cap |
 | `WORKFLOW_DELIVERY_REQUIRED` | `dispatch-complete` was used inside a workflow activation — run the `prowl workflow deliver` command the error echoes |
-| `PROMPT_TOO_LARGE` / `RENDERED_TEXT_INVALID` | a rendered launch prompt over 128 KiB / a rendered line that isn't one clean terminal line — shorten, or move content into an `instruction` |
+| `PROMPT_TOO_LARGE` / `RENDERED_TEXT_INVALID` | a rendered launch prompt over 128 KiB / a rendered line that isn't one clean terminal line — shorten the kickoff prompt or inspect the generated protocol line; multiline message prompts automatically use scoped read |
 
 The `workflow deliver --json` receipt exposes its delivery record at
 `.data.delivery.record`; `.data.activation.delivery` in a status response is the expected delivery name.

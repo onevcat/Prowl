@@ -32,7 +32,7 @@ final class WorkflowSchemaTests: XCTestCase {
     let deliver =
       ###"{"ok":true,"command":"workflow","schema_version":"prowl.cli.workflow.v1","data":{"action":"deliver","run":{\###(Self.runFields)},"delivery":{"state":"provisional","ordinal":1,"step":"brief","role":"author","record":\###(Self.output),"warnings":[{"code":"missing_sections","message":"missing ## Claims"}]}}}"###
     let read =
-      #"{"ok":true,"command":"workflow","schema_version":"prowl.cli.workflow.v1","data":{"action":"read","run":"0BADCAFE-0000-4000-8000-000000000042","invocation":1,"role":"author","step":"brief","resource":"instruction","body":"Read","encoding":"utf-8","resources":[],"offset":0,"next_offset":4,"total_bytes":8}}"#
+      #"{"ok":true,"command":"workflow","schema_version":"prowl.cli.workflow.v1","data":{"action":"read","run":"0BADCAFE-0000-4000-8000-000000000042","invocation":1,"role":"author","step":"brief","resource":"prompt","body":"Read","encoding":"utf-8","resources":[],"offset":0,"next_offset":4,"total_bytes":8}}"#
     for instance in [list, listWithoutWorktree, validate, schema, error, run, status, cancel, deliver, read] {
       try assertValidity(instance, expected: true)
     }
@@ -112,8 +112,8 @@ final class WorkflowSchemaTests: XCTestCase {
       updatedAt: "2026-08-30T01:02:03Z",
       finishedAt: nil,
       selfInitiated: WorkflowSelfInitiatedPayload(
-        line: "[Prowl] Read /r/instructions/brief.1.md and follow it — finish with: PROWL_WORKFLOW_TOKEN=T prowl workflow deliver -",
-        instructionPath: "/r/instructions/brief.1.md",
+        line: "[Prowl] Read /r/prompts/brief.1.md and follow it — finish with: PROWL_WORKFLOW_TOKEN=T prowl workflow deliver -",
+        promptPath: "/r/prompts/brief.1.md",
         completion: ["PROWL_WORKFLOW_TOKEN=T prowl workflow deliver -"]))
     let runObject = try XCTUnwrap(JSONSerialization.jsonObject(with: encoder.encode(run)) as? [String: Any])
     let activationObject = try XCTUnwrap(runObject["activation"] as? [String: Any])
@@ -163,7 +163,7 @@ final class WorkflowSchemaTests: XCTestCase {
     #"{"name":"brief","ordinal":1,"path":"/r/deliveries/brief.1.md","latest_path":"/r/deliveries/brief.md","delivered_at":"2026-08-30T01:02:03Z"}"#
 
   private static let runFields =
-    ###""id":"0BADCAFE-0000-4000-8000-000000000042","workflow":{"id":"prowl.adversarial-review","name":"Adversarial Review"},"scope":"repo","definition_path":"/Projects/App/.prowl/workflows/review.pwlworkflow","source":"live","status":{"state":"running"},"step":"brief","role":"author","worktree":{"id":"wt","name":"feature","branch":"feat/x","path":"/Projects/App"},"run_directory":"/Projects/App/.prowl/workflow-runs/0BADCAFE-0000-4000-8000-000000000042","bindings":{"author":{"source":"current","pane":{"id":"00000000-0000-0000-0000-000000000001","tab_id":"00000000-0000-0000-0000-000000000011","handle":"p1","display_name":"Claude Code","agent":"claude"}},"reviewer":{"source":"launch","profile":{"id":"00000000-0000-0000-0000-000000000009","name":"Pi Reviewer","agent":"pi"}}},"activation":{"ordinal":1,"step":"brief","role":"author","state":"waiting","dispatch_id":"dispatch-1","delivery":"brief","expect":{"format":"markdown","sections":["## Scope","## Claims"],"strict":false,"completion":["PROWL_WORKFLOW_TOKEN=T prowl workflow deliver -"]},"deadline":"2026-08-30T01:10:00Z"},"deliveries":{},"started_at":"2026-08-30T01:00:00Z","updated_at":"2026-08-30T01:00:00Z","self_initiated":{"line":"[Prowl] Read /r/instructions/brief.1.md and follow it — finish with: PROWL_WORKFLOW_TOKEN=T prowl workflow deliver -","instruction_path":"/r/instructions/brief.1.md","completion":["PROWL_WORKFLOW_TOKEN=T prowl workflow deliver -"]}"###
+    ###""id":"0BADCAFE-0000-4000-8000-000000000042","workflow":{"id":"prowl.adversarial-review","name":"Adversarial Review"},"scope":"repo","definition_path":"/Projects/App/.prowl/workflows/review.pwlworkflow","source":"live","status":{"state":"running"},"step":"brief","role":"author","worktree":{"id":"wt","name":"feature","branch":"feat/x","path":"/Projects/App"},"run_directory":"/Projects/App/.prowl/workflow-runs/0BADCAFE-0000-4000-8000-000000000042","bindings":{"author":{"source":"current","pane":{"id":"00000000-0000-0000-0000-000000000001","tab_id":"00000000-0000-0000-0000-000000000011","handle":"p1","display_name":"Claude Code","agent":"claude"}},"reviewer":{"source":"launch","profile":{"id":"00000000-0000-0000-0000-000000000009","name":"Pi Reviewer","agent":"pi"}}},"activation":{"ordinal":1,"step":"brief","role":"author","state":"waiting","dispatch_id":"dispatch-1","delivery":"brief","expect":{"format":"markdown","sections":["## Scope","## Claims"],"strict":false,"completion":["PROWL_WORKFLOW_TOKEN=T prowl workflow deliver -"]},"deadline":"2026-08-30T01:10:00Z"},"deliveries":{},"started_at":"2026-08-30T01:00:00Z","updated_at":"2026-08-30T01:00:00Z","self_initiated":{"line":"[Prowl] Read /r/prompts/brief.1.md and follow it — finish with: PROWL_WORKFLOW_TOKEN=T prowl workflow deliver -","prompt_path":"/r/prompts/brief.1.md","completion":["PROWL_WORKFLOW_TOKEN=T prowl workflow deliver -"]}"###
 
   private static let recordFields =
     ###""id":"0BADCAFE-0000-4000-8000-000000000042","workflow":{"id":"prowl.handoff","name":"Hand Off"},"scope":"bundle","source":"record","status":{"state":"interrupted"},"worktree":{"id":"wt","name":"feature","branch":"feat/x","path":"/Projects/App"},"run_directory":"/Projects/App/.prowl/workflow-runs/0BADCAFE-0000-4000-8000-000000000042","bindings":{"source":{"source":"current","pane":{"id":"00000000-0000-0000-0000-000000000001","handle":"p1","display_name":"shell"}}},"deliveries":{"brief":\###(WorkflowSchemaTests.output)},"started_at":"2026-08-30T01:00:00Z","updated_at":"2026-08-30T01:05:00Z","finished_at":"2026-08-30T01:05:00Z""###
@@ -228,7 +228,7 @@ final class WorkflowSchemaTests: XCTestCase {
       extraSteps: "  - id: loop\n    repeat: { max: 2 }\n    steps:\n      - id: l\n        launch: r\n        prompt: go",
       extraRoles: "  r:\n    source: launch")
     let orphanPolicy = WorkflowFixtures.minimal(
-      extraSteps: "  - id: b\n    message: author\n    text: hi\n    expect: { on_timeout: skip }")
+      extraSteps: "  - id: b\n    message: author\n    prompt: hi\n    expect: { on_timeout: skip }")
     for (name, yaml) in [
       ("unknownKey", unknownKey), ("twoVerbs", twoVerbs), ("headless", headless), ("badMax", badMax),
       ("launchInLoop", launchInLoop), ("orphanPolicy", orphanPolicy),

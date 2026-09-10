@@ -17,7 +17,7 @@ roles:
 steps:
   - id: summary
     message: author
-    instruction: |
+    prompt: |
       Inspect the current changes and write a concise summary.
     expect: {delivery: summary, sections: ["## Summary"]}
   - id: done
@@ -123,7 +123,7 @@ kebab-case names for actions; dot-separated expressions address data, not action
 
 | Verb | Payload and behavior |
 | --- | --- |
-| `message: role` | `text` (one line) or `instruction` (file-backed multiline); waits for the role to be idle before injection; optional `expect` |
+| `message: role` | required `prompt` (single-line or multiline); Prowl selects direct delivery or scoped read after rendering; waits for idle; optional `expect` |
 | `launch: role` | `prompt`, optional bundled `skill`, optional `expect`; at most once per persistent role |
 | `action: builtin:collect-worktree-context` or `local:id` | typed `with` object; awaits validated result; no `expect`; see [actions](actions.md) |
 | `notify: text` | notification |
@@ -200,7 +200,7 @@ expect:
 
 Prowl appends the completion command itself — the typed line or kickoff prompt ends with
 the exact `PROWL_WORKFLOW_TOKEN=… prowl workflow deliver [--verdict v] -` to run. **Never
-write `prowl workflow deliver` into your own `text`/`instruction`/`prompt`** (the validator
+write `prowl workflow deliver` into your own `prompt`** (the validator
 warns); the runner's renderer is the only source of that command.
 
 

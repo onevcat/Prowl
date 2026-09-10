@@ -168,8 +168,8 @@ nonisolated enum WorkflowRunPaths {
     return storage.directory(root: root, createdAt: createdAt ?? Date(), runID: runID)
   }
 
-  static func instructionURL(runDirectory: URL, stepID: String, ordinal: Int) -> URL {
-    runDirectory.appending(path: "instructions", directoryHint: .isDirectory)
+  static func promptURL(runDirectory: URL, stepID: String, ordinal: Int) -> URL {
+    runDirectory.appending(path: "prompts", directoryHint: .isDirectory)
       .appending(path: "\(stepID).\(ordinal).md", directoryHint: .notDirectory)
   }
 
@@ -243,7 +243,8 @@ nonisolated struct WorkflowInvocation: Equatable, Sendable {
   let role: String
   let kind: WorkflowInvocationKind
   let startedAt: Date
-  var instructionPath: String?
+  var promptPath: String?
+  var target: WorkflowRunRecord.Binding?
   var content: WorkflowTaskContent?
   var activation: WorkflowActivation?
   var endedAt: Date?
@@ -298,6 +299,7 @@ nonisolated struct WorkflowStepRecord: Equatable, Sendable {
   var delivery: WorkflowDeliveryRecord?
   var submissions: [WorkflowHistorySubmission]?
   var actionExecutionID: String?
+  var summary: String?
 }
 
 // MARK: - Attention and status

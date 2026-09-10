@@ -29,6 +29,7 @@ struct WorktreeDetailView: View {
   /// True while a Canvas card is expanded in place, so the otherwise-transparent
   /// Canvas toolbar gets a matching material scrim instead of showing through.
   @State private var isCanvasCardExpanded = false
+  @State private var toolbarPopovers = ToolbarPopoverCoordinator()
   @State private var historyStore = Store(initialState: WorkflowStepHistoryFeature.State()) {
     WorkflowStepHistoryFeature()
   }
@@ -114,6 +115,7 @@ struct WorktreeDetailView: View {
       }
     }
     .environment(historyStore)
+    .environment(toolbarPopovers)
     .task { loadWorkflowHistory(context: historyContext, runs: state.workflowRuns.sessions.values.map(\.run)) }
     .onChange(of: historyContext) { _, context in historyStore.send(.context(context)) }
     .onChange(of: state.workflowRuns.sessions) { _, sessions in
@@ -209,7 +211,8 @@ struct WorktreeDetailView: View {
           currentSignal: terminalManager.currentAgentSignalEvidenceSnapshot(surfaceID: entry.surfaceID)
             .latestManagedHook)
       },
-      worktreeID: worktree?.id, livePaneIDs: Set(repositories.activeAgents.entries.map(\.surfaceID)))
+      worktreeID: worktree?.id,
+      livePaneIDs: Set(terminalManager.activeWorktreeStates.flatMap { $0.surfaces.keys }))
   }
 
   private func toolbarSharedState(

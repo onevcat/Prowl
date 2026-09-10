@@ -46,7 +46,7 @@ nonisolated struct WorkflowRunPresentation: Equatable, Sendable, Identifiable {
   let elapsedText: String
   let status: Status
   let currentStepTitle: String
-  let currentInstruction: String?
+  let currentPrompt: String?
   let roles: [WorkflowRolePresentation]
   let stepItems: [WorkflowStepListItem]
   let attentionControls: [WorkflowAttentionControl]
@@ -64,7 +64,7 @@ nonisolated struct WorkflowRunPresentation: Equatable, Sendable, Identifiable {
     status = run.status.attention.map { .needsAttention($0.message) } ?? .running
     let context = Self.templateContext(for: run, iteration: run.currentIteration)
     currentStepTitle = Self.title(for: run.currentStep, context: context) ?? "Finishing workflow"
-    currentInstruction = Self.instruction(for: run.currentStep, context: context)
+    currentPrompt = Self.prompt(for: run.currentStep, context: context)
     roles = run.definition.roles.map { role in
       WorkflowRolePresentation(role: role, binding: run.bindings[role.name])
     }
@@ -134,15 +134,15 @@ nonisolated struct WorkflowRunPresentation: Equatable, Sendable, Identifiable {
     step.historyTitle
   }
 
-  private static func instruction(
+  private static func prompt(
     for step: WorkflowStepDefinition?,
     context: [String: WorkflowJSONValue]
   ) -> String? {
     guard let step else { return nil }
     let source: String?
     switch step.action {
-    case .message(_, let content, _):
-      source = content.body
+    case .message(_, let prompt, _):
+      source = prompt
     case .launch(_, let prompt, _, _):
       source = prompt
     case .action(let id, _):

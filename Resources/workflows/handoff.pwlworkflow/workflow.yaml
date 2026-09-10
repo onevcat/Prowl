@@ -20,7 +20,7 @@ steps:
   - id: briefing
     title: Prepare handoff briefing
     message: author
-    instruction: |
+    prompt: |
       Prepare a concise handoff of the task in this conversation. Include these headings:
       ## Objective
       ## Current State

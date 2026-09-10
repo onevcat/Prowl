@@ -49,7 +49,7 @@ final class WorkflowValidatorTests: XCTestCase {
       WorkflowFixtures.codes(minimal(steps: "  - id: Fix It\n    notify: hi")), ["step_id_slug"])
     XCTAssertEqual(
       WorkflowFixtures.codes(
-        minimal(steps: "  - id: b\n    message: author\n    text: hi\n    expect: { delivery: Bad.Name }")),
+        minimal(steps: "  - id: b\n    message: author\n    prompt: hi\n    expect: { delivery: Bad.Name }")),
       ["delivery_name_slug"])
     XCTAssertEqual(
       WorkflowFixtures.codes(minimal() + "inputs:\n  Max: { type: integer }\n"), ["input_name_slug"])
@@ -61,7 +61,7 @@ final class WorkflowValidatorTests: XCTestCase {
   }
 
   func testUndefinedRolesAndRoleSources() {
-    XCTAssertEqual(WorkflowFixtures.codes(minimal(steps: "  - id: b\n    message: ghost\n    text: hi")), ["undefined_role"])
+    XCTAssertEqual(WorkflowFixtures.codes(minimal(steps: "  - id: b\n    message: ghost\n    prompt: hi")), ["undefined_role"])
     XCTAssertEqual(WorkflowFixtures.codes(minimal(steps: "  - id: b\n    close: ghost")), ["undefined_role"])
     XCTAssertEqual(WorkflowFixtures.codes(minimal(steps: "  - id: b\n    close: author")), ["close_role_source"])
     XCTAssertEqual(
@@ -71,11 +71,11 @@ final class WorkflowValidatorTests: XCTestCase {
   func testLaunchOrderingRules() {
     let role = "  r:\n    source: launch"
     XCTAssertEqual(
-      WorkflowFixtures.codes(minimal(steps: "  - id: b\n    message: r\n    text: hi", roles: role)),
+      WorkflowFixtures.codes(minimal(steps: "  - id: b\n    message: r\n    prompt: hi", roles: role)),
       ["message_before_launch"])
     let twice = "  - id: l1\n    launch: r\n    prompt: go\n  - id: l2\n    launch: r\n    prompt: again"
     XCTAssertEqual(WorkflowFixtures.codes(minimal(steps: twice, roles: role)), ["launch_twice"])
-    let ordered = "  - id: l1\n    launch: r\n    prompt: go\n  - id: m\n    message: r\n    text: \"pane {{ context.roles.r.pane_id }}\""
+    let ordered = "  - id: l1\n    launch: r\n    prompt: go\n  - id: m\n    message: r\n    prompt: \"pane {{ context.roles.r.pane_id }}\""
     XCTAssertEqual(WorkflowFixtures.codes(minimal(steps: ordered, roles: role)), [])
   }
 
@@ -134,7 +134,7 @@ final class WorkflowValidatorTests: XCTestCase {
     let steps = """
         - id: b
           message: author
-          text: hi
+          prompt: hi
           expect: { delivery: brief }
         - id: ctx
           action: builtin:collect-worktree-context
@@ -182,7 +182,7 @@ final class WorkflowValidatorTests: XCTestCase {
 
   func testVerdictRules() {
     func expect(_ verdict: String) -> String {
-      minimal(steps: "  - id: b\n    message: author\n    text: hi\n    expect: { verdicts: \(verdict) }")
+      minimal(steps: "  - id: b\n    message: author\n    prompt: hi\n    expect: { verdicts: \(verdict) }")
     }
     XCTAssertEqual(WorkflowFixtures.codes(expect("[clean]")), ["verdict_count"])
     XCTAssertEqual(WorkflowFixtures.codes(expect("[a, b, c, d, e]")), ["verdict_count"])
@@ -191,19 +191,19 @@ final class WorkflowValidatorTests: XCTestCase {
     XCTAssertEqual(WorkflowFixtures.codes(expect("[clean, issues]")), [])
   }
 
-  func testTextMustBeOneLineButInstructionsMayNot() {
-    let text = minimal(steps: "  - id: b\n    message: author\n    text: \"two\\nlines\"")
-    XCTAssertEqual(WorkflowFixtures.codes(text), ["text_multiline"])
-    let instruction = minimal(steps: "  - id: b\n    message: author\n    instruction: |\n      two\n      lines")
+  func testPromptsAcceptQuotedNewlinesAndBlockScalars() {
+    let text = minimal(steps: "  - id: b\n    message: author\n    prompt: \"two\\nlines\"")
+    XCTAssertEqual(WorkflowFixtures.codes(text), [])
+    let instruction = minimal(steps: "  - id: b\n    message: author\n    prompt: |\n      two\n      lines")
     XCTAssertEqual(WorkflowFixtures.codes(instruction), [])
   }
 
   // MARK: - Warnings
 
   func testWarnings() {
-    let long = minimal(steps: "  - id: b\n    message: author\n    text: hi\n    expect: { timeout: 3h }")
+    let long = minimal(steps: "  - id: b\n    message: author\n    prompt: hi\n    expect: { timeout: 3h }")
     XCTAssertEqual(WorkflowFixtures.codes(long), ["timeout_long"])
-    let spelled = minimal(steps: "  - id: b\n    message: author\n    text: \"finish with prowl workflow deliver -\"")
+    let spelled = minimal(steps: "  - id: b\n    message: author\n    prompt: \"finish with prowl workflow deliver -\"")
     XCTAssertEqual(WorkflowFixtures.codes(spelled), ["spells_completion_command"])
     XCTAssertEqual(WorkflowFixtures.diagnostics(spelled).first?.severity, .warning)
   }
@@ -212,7 +212,7 @@ final class WorkflowValidatorTests: XCTestCase {
     let blocking = """
         - id: b
           message: author
-          text: hi
+          prompt: hi
           expect: { delivery: brief, timeout: 5m, on_timeout: skip }
         - id: n
           notify: "{{ deliveries.brief.path }}"
@@ -221,7 +221,7 @@ final class WorkflowValidatorTests: XCTestCase {
     let optional = """
         - id: b
           message: author
-          text: hi
+          prompt: hi
           expect: { delivery: brief, timeout: 5m, on_timeout: skip }
         - id: t
           action: builtin:collect-worktree-context
@@ -242,12 +242,12 @@ final class WorkflowValidatorTests: XCTestCase {
 
   // MARK: - Round 1 review findings
 
-  func testControlCharactersIncludingTabsAreRejectedInTypedText() {
+  func testInputDefaultsRemainSingleLineButPromptsAllowTabs() {
     XCTAssertEqual(
       WorkflowFixtures.codes(minimal() + "inputs:\n  s: { type: string, default: \"has\\ttab\" }\n"),
       ["input_default_multiline"])
     XCTAssertEqual(
-      WorkflowFixtures.codes(minimal(steps: "  - id: b\n    message: author\n    text: \"a\\tb\"")), ["text_multiline"])
+      WorkflowFixtures.codes(minimal(steps: "  - id: b\n    message: author\n    prompt: \"a\\tb\"")), [])
   }
 
 
@@ -255,11 +255,11 @@ final class WorkflowValidatorTests: XCTestCase {
     let stale = """
         - id: first
           message: author
-          text: First
+          prompt: First
           expect: { delivery: result, verdicts: [clean, issues] }
         - id: second
           message: author
-          text: Second
+          prompt: Second
           expect: { delivery: result }
         - id: report
           notify: "{{ deliveries.result.verdict }}"
@@ -268,11 +268,11 @@ final class WorkflowValidatorTests: XCTestCase {
     let refreshed = """
         - id: first
           message: author
-          text: First
+          prompt: First
           expect: { delivery: result }
         - id: second
           message: author
-          text: Second
+          prompt: Second
           expect: { delivery: result, verdicts: [clean, issues] }
         - id: report
           notify: "{{ deliveries.result.verdict }}"
@@ -311,13 +311,13 @@ final class WorkflowValidatorTests: XCTestCase {
     let consumedBefore = """
         - id: first
           message: author
-          text: First
+          prompt: First
           expect: { delivery: brief }
         - id: use
           notify: "{{ deliveries.brief.path }}"
         - id: second
           message: author
-          text: Second
+          prompt: Second
           expect: { delivery: brief, timeout: 5m, on_timeout: skip }
       """
     XCTAssertEqual(WorkflowFixtures.codes(minimal(steps: consumedBefore)), [], "nothing after the skip depends on it")

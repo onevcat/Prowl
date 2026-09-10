@@ -94,7 +94,7 @@ nonisolated enum WorkflowRunEffect: Equatable, Sendable {
   case cancelRoleWait(ordinal: Int)
   /// Self-initiated first step: open the activation record without typing anything.
   case openActivation(role: String, surfaceID: UUID, ordinal: Int)
-  case materializeInstruction(ordinal: Int, stepID: String, text: String)
+  case materializePrompt(ordinal: Int, stepID: String, text: String)
   case materializeSkill(id: String)
   /// Issue + bind the activation (when `opensActivation`) and type the line as one operation.
   case inject(role: String, surfaceID: UUID, ordinal: Int, line: String, opensActivation: Bool)
@@ -397,6 +397,9 @@ nonisolated struct WorkflowRunMachine {
     }
     run.participants[invocation.role, default: []].append(pane)
     run.bindings[invocation.role] = binding.binding(pane: pane)
+    updateInvocation(ordinal: ordinal) {
+      $0.target = .init(source: binding.source, profile: binding.profile, pane: pane)
+    }
     effects.append(.log("Step '\(invocation.stepID)': role '\(invocation.role)' launched in \(pane.handle)."))
     openWaiting(ordinal: ordinal, dispatchID: dispatchID, effects: &effects)
   }
@@ -645,8 +648,8 @@ nonisolated struct WorkflowRunMachine {
   ) -> String? {
     if let title = step.title, references(name, in: title) { return step.id }
     switch step.action {
-    case .message(_, let content, _):
-      if references(name, in: content.body) { return step.id }
+    case .message(_, let prompt, _):
+      if references(name, in: prompt) { return step.id }
     case .launch(_, let prompt, _, _):
       if references(name, in: prompt) { return step.id }
     case .notify(let text):
@@ -749,6 +752,7 @@ nonisolated struct WorkflowRunMachine {
   {
     guard let rendered = render(text, step: step, effects: &effects) else { return false }
     recordStep(step, state: .completed, ordinal: nil)
+    run.stepRecords[run.stepRecords.count - 1].summary = rendered
     effects.append(.notify(rendered))
     effects.append(.log("Step '\(step.id)': notified \"\(rendered)\"."))
     moveNext()
@@ -758,9 +762,11 @@ nonisolated struct WorkflowRunMachine {
   private mutating func enterClose(_ step: WorkflowStepDefinition, role: String, effects: inout [WorkflowRunEffect]) {
     recordStep(step, state: .completed, ordinal: nil)
     if let surfaceID = run.bindings[role]?.pane?.surfaceID {
+      run.stepRecords[run.stepRecords.count - 1].summary = "Requested closure of role '\(role)'."
       effects.append(.close(role: role, surfaceID: surfaceID))
       effects.append(.log("Step '\(step.id)': close requested for role '\(role)'."))
     } else {
+      run.stepRecords[run.stepRecords.count - 1].summary = "Role '\(role)' has no pane to close."
       effects.append(.log("Step '\(step.id)': role '\(role)' has no pane to close."))
     }
     moveNext()
@@ -775,7 +781,7 @@ nonisolated struct WorkflowRunMachine {
   private mutating func enterMessage(
     _ step: WorkflowStepDefinition, selfInitiated: Bool, effects: inout [WorkflowRunEffect]
   ) {
-    guard case .message(let role, let content, let expect) = step.action else { return }
+    guard case .message(let role, let prompt, let expect) = step.action else { return }
     let ordinal = mintOrdinal()
     run.invocations.append(
       WorkflowInvocation(
@@ -790,7 +796,7 @@ nonisolated struct WorkflowRunMachine {
     let isCurrentRole = run.definition.role(named: role)?.source == .current
     if selfInitiated, isCurrentRole {
       guard
-        let line = renderMessageLine(ordinal: ordinal, step: step, content: content, expect: expect, effects: &effects)
+        let line = renderMessageLine(ordinal: ordinal, step: step, prompt: prompt, expect: expect, effects: &effects)
       else { return }
       run.selfInitiatedLine = line
       effects.append(.log("Step '\(step.id)': returned to the caller's own pane instead of being typed."))
@@ -810,28 +816,28 @@ nonisolated struct WorkflowRunMachine {
   }
 
   private mutating func injectCurrentMessage(ordinal: Int, effects: inout [WorkflowRunEffect]) {
-    guard let step = run.currentStep, case .message(let role, let content, let expect) = step.action,
+    guard let step = run.currentStep, case .message(let role, let prompt, let expect) = step.action,
       let pane = run.bindings[role]?.pane
     else { return }
     guard
-      let line = renderMessageLine(ordinal: ordinal, step: step, content: content, expect: expect, effects: &effects)
+      let line = renderMessageLine(ordinal: ordinal, step: step, prompt: prompt, expect: expect, effects: &effects)
     else { return }
     run.phase = .injecting(ordinal: ordinal)
     effects.append(
       .inject(role: role, surfaceID: pane.surfaceID, ordinal: ordinal, line: line, opensActivation: expect != nil))
   }
 
-  /// Renders the typed line (materializing an instruction first) and opens the activation
+  /// Renders the typed line (saving the prompt first) and opens the activation
   /// token; nil when rendering failed, in which case the run is already in attention or ended.
   private mutating func renderMessageLine(
     ordinal: Int,
     step: WorkflowStepDefinition,
-    content: WorkflowMessageContent,
+    prompt: String,
     expect: WorkflowExpectation?,
     effects: inout [WorkflowRunEffect]
   ) -> String? {
     guard let invocation = invocation(ordinal) else { return nil }
-    guard let rendered = render(content.body, step: step, effects: &effects) else { return nil }
+    guard let rendered = render(prompt, step: step, effects: &effects) else { return nil }
     var completion: WorkflowCompletionCommand?
     if let expect, let deliveryName = step.deliveryName {
       // A `roleBusy` refusal returns the same invocation to its idle wait: the activation and its
@@ -850,26 +856,11 @@ nonisolated struct WorkflowRunMachine {
     let grant = taskContent(
       text: rendered, ordinal: ordinal, skill: nil)
     updateInvocation(ordinal: ordinal) { $0.content = grant }
+    let url = WorkflowRunPaths.promptURL(runDirectory: run.runDirectory, stepID: step.id, ordinal: ordinal)
+    updateInvocation(ordinal: ordinal) { $0.promptPath = WorkflowRunPaths.path(url) }
+    effects.append(.materializePrompt(ordinal: ordinal, stepID: step.id, text: grant.text))
     do {
-      switch content {
-      case .text:
-        let path = WorkflowRunPaths.instructionURL(runDirectory: run.runDirectory, stepID: step.id, ordinal: ordinal)
-        updateInvocation(ordinal: ordinal) { $0.instructionPath = WorkflowRunPaths.path(path) }
-        effects.append(
-          .materializeInstruction(
-            ordinal: ordinal, stepID: step.id, text: grant.text + (completion?.instructionTrailer() ?? "")))
-        return try WorkflowTypedLine.text(
-          grant.text + (grant.resources.isEmpty ? "" : " " + grant.guidance), completion: completion)
-      case .instruction:
-        let url = WorkflowRunPaths.instructionURL(runDirectory: run.runDirectory, stepID: step.id, ordinal: ordinal)
-        let path = WorkflowRunPaths.path(url)
-        var text = grant.text
-        if !text.hasSuffix("\n") { text += "\n" }
-        if let completion { text += completion.instructionTrailer() }
-        updateInvocation(ordinal: ordinal) { $0.instructionPath = path }
-        effects.append(.materializeInstruction(ordinal: ordinal, stepID: step.id, text: text))
-        return try WorkflowTypedLine.text(grant.guidance, completion: completion)
-      }
+      return try WorkflowTypedLine.prompt(grant, completion: completion)
     } catch {
       run.phase = .injecting(ordinal: ordinal)
       updateActivation(ordinal: ordinal) { $0.state = .revoked }
@@ -935,14 +926,12 @@ nonisolated struct WorkflowRunMachine {
         runID: run.id.uuidString, workflowName: run.definition.name, role: role, stepTitle: title, expect: expect)
     }
     let grant = taskContent(text: userPrompt, ordinal: ordinal, skill: skill)
-    let instruction = WorkflowRunPaths.instructionURL(runDirectory: run.runDirectory, stepID: step.id, ordinal: ordinal)
+    let promptURL = WorkflowRunPaths.promptURL(runDirectory: run.runDirectory, stepID: step.id, ordinal: ordinal)
     updateInvocation(ordinal: ordinal) {
       $0.content = grant
-      $0.instructionPath = WorkflowRunPaths.path(instruction)
+      $0.promptPath = WorkflowRunPaths.path(promptURL)
     }
-    effects.append(
-      .materializeInstruction(
-        ordinal: ordinal, stepID: step.id, text: grant.text + "\n\n" + (protocolBlock ?? "")))
+    effects.append(.materializePrompt(ordinal: ordinal, stepID: step.id, text: grant.text))
     let prompt = WorkflowLaunchPrompt.render(
       userPrompt: grant.text + "\n\n" + grant.guidance, protocolBlock: protocolBlock)
     do {
@@ -1051,7 +1040,7 @@ nonisolated struct WorkflowRunMachine {
         run.stepRecords.append(
           .init(
             stepID: position.stepID, iteration: position.iteration, state: .active,
-            ordinal: nil, iterationPath: position.path))
+            ordinal: nil, iterationPath: position.path, title: position.title))
       }
       raiseAttention(
         .actionFailed("Control evaluation failed: \(error)"), stepID: cursor.failedPosition?.stepID ?? "control",
@@ -1070,7 +1059,8 @@ nonisolated struct WorkflowRunMachine {
         .init(
           stepID: evaluation.stepID, iteration: evaluation.iteration,
           state: evaluation.skipped ? .skipped : .completed, ordinal: nil,
-          iterationPath: evaluation.path, branchExcluded: evaluation.skipped))
+          iterationPath: evaluation.path, branchExcluded: evaluation.skipped,
+          title: evaluation.title, summary: evaluation.summary))
     }
     for name in cursor.expiredDeliveries { run.deliveries.removeValue(forKey: name) }
     for name in cursor.expiredActions { run.actionOutputs.removeValue(forKey: name) }
@@ -1331,14 +1321,14 @@ nonisolated struct WorkflowRunMachine {
     switch step.action {
     case .launch:
       advance(effects: &effects)
-    case .message(_, let content, let expect):
+    case .message(_, let prompt, let expect):
       let ordinal = mintOrdinal()
       run.invocations.append(
         WorkflowInvocation(
           ordinal: ordinal, stepID: step.id, iteration: run.currentIteration, role: role, kind: .launch,
           startedAt: now()))
       recordStep(step, state: .active, ordinal: ordinal)
-      guard let rendered = render(content.body, step: step, effects: &effects) else { return }
+      guard let rendered = render(prompt, step: step, effects: &effects) else { return }
       launch(
         LaunchPlan(
           step: step, ordinal: ordinal, role: role, userPrompt: rendered, skill: nil, expect: expect, redelivery: true),
@@ -1508,6 +1498,11 @@ nonisolated struct WorkflowRunMachine {
   }
 
   private mutating func recordStep(_ step: WorkflowStepDefinition, state: WorkflowStepState, ordinal: Int?) {
+    if let ordinal, let role = step.action.targetRole, let binding = run.bindings[role] {
+      updateInvocation(ordinal: ordinal) {
+        $0.target = .init(source: binding.source, profile: binding.profile, pane: binding.pane)
+      }
+    }
     run.stepRecords.append(
       WorkflowStepRecord(
         stepID: step.id, iteration: run.currentIteration, state: state, ordinal: ordinal,

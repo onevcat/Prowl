@@ -4638,7 +4638,7 @@
         "line": {
           "type": "string"
         },
-        "instruction_path": {
+        "prompt_path": {
           "type": "string"
         },
         "completion": {

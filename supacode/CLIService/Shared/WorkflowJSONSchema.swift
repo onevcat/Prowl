@@ -332,7 +332,8 @@ nonisolated public enum WorkflowJSONSchema {
           "additionalProperties": false,
           "required": [
             "id",
-            "message"
+            "message",
+            "prompt"
           ],
           "properties": {
             "id": {
@@ -344,28 +345,13 @@ nonisolated public enum WorkflowJSONSchema {
             "message": {
               "$ref": "#/$defs/slug"
             },
-            "text": {
-              "$ref": "#/$defs/template"
-            },
-            "instruction": {
+            "prompt": {
               "$ref": "#/$defs/template"
             },
             "expect": {
               "$ref": "#/$defs/expect"
             }
-          },
-          "oneOf": [
-            {
-              "required": [
-                "text"
-              ]
-            },
-            {
-              "required": [
-                "instruction"
-              ]
-            }
-          ]
+          }
         },
         "launchStep": {
           "type": "object",

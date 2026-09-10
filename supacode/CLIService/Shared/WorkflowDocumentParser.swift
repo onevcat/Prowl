@@ -233,22 +233,12 @@ nonisolated public enum WorkflowDocumentParser {
   }
 
   private static func parseMessage(_ step: MappingReader) -> WorkflowStepAction? {
-    step.checkKeys(["id", "title", "message", "text", "instruction", "expect"])
+    step.checkKeys(["id", "title", "message", "prompt", "expect"])
     let role = step.requiredString("message")
-    let text = step.string("text")
-    let instruction = step.string("instruction")
-    let content: WorkflowMessageContent?
-    switch (text, instruction) {
-    case (let text?, nil): content = .text(text)
-    case (nil, let instruction?): content = .instruction(instruction)
-    default:
-      step.collector.error(
-        "message_content", "A message step needs exactly one of 'text' or 'instruction'.", at: step.location)
-      content = nil
-    }
+    let prompt = step.requiredString("prompt")
     let expect = parseExpect(step)
-    guard let role, let content else { return nil }
-    return .message(role: role, content: content, expect: expect)
+    guard let role, let prompt else { return nil }
+    return .message(role: role, prompt: prompt, expect: expect)
   }
 
   private static func parseLaunch(_ step: MappingReader, insideLoop: Bool) -> WorkflowStepAction? {

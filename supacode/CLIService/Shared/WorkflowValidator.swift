@@ -258,8 +258,8 @@ nonisolated private final class Walker {
       checkTemplate(title, at: step.location, consumer: .template)
     }
     switch step.action {
-    case .message(let role, let content, let expect):
-      checkMessage(step, role: role, content: content, expect: expect)
+    case .message(let role, let prompt, let expect):
+      checkMessage(step, role: role, prompt: prompt, expect: expect)
     case .launch(let role, let prompt, let skill, let expect):
       checkLaunch(step, role: role, prompt: prompt, skill: skill, expect: expect)
     case .action(let id, let inputs):
@@ -276,7 +276,7 @@ nonisolated private final class Walker {
   }
 
   private func checkMessage(
-    _ step: WorkflowStepDefinition, role: String, content: WorkflowMessageContent, expect: WorkflowExpectation?
+    _ step: WorkflowStepDefinition, role: String, prompt: String, expect: WorkflowExpectation?
   ) {
     if let definitionRole = requireRole(role, at: step.location), definitionRole.source == .launch,
       !launchedRoles.contains(role)
@@ -285,12 +285,8 @@ nonisolated private final class Walker {
         "message_before_launch", "Step '\(step.id)' messages launch role '\(role)' before its launch step.",
         at: step.location)
     }
-    if case .text(let text) = content, !WorkflowValidator.isSingleLine(text) {
-      collector.error(
-        "text_multiline", "'text' must be one line; use 'instruction' for multi-line content.", at: step.location)
-    }
-    checkTemplate(content.body, at: step.location, consumer: .template)
-    warnIfSpellingCompletion(content.body, at: step.location)
+    checkTemplate(prompt, at: step.location, consumer: .template)
+    warnIfSpellingCompletion(prompt, at: step.location)
     checkExpect(expect, step: step)
   }
 

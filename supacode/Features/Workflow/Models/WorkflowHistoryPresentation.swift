@@ -49,9 +49,12 @@ nonisolated enum WorkflowHistoryStatus {
     switch state {
     case "completed": "checkmark.circle.fill"
     case "active", "running": "play.circle"
-    case "needs_attention", "failed": "exclamationmark.circle.fill"
-    case "skipped", "branch_not_selected": "forward.end.circle"
-    case "cancelled", "interrupted": "stop.circle"
+    case "needs_attention", "failed", "iteration_limit_reached": "exclamationmark.circle.fill"
+    case "skipped": "forward.end.circle"
+    case "branch_not_selected": "arrow.triangle.branch"
+    case "cancelled": "stop.circle"
+    case "interrupted": "pause.circle"
+    case "not_run": "minus.circle"
     default: "circle"
     }
   }
@@ -63,43 +66,38 @@ nonisolated struct WorkflowHistoryStepGroup: Identifiable, Sendable {
   let state: String
   let iteration: Int?
   let attempts: [WorkflowRunRecord.Step]
-  var legacyDetailsUnavailable = false
+  let definition: WorkflowHistoryStepDefinition
+  let invocations: [Int: WorkflowRunRecordInvocation]
   var iterationLabel: String?
 
   var subtitle: String {
-    var parts = [WorkflowHistoryStatus.label(state)]
+    [WorkflowHistoryStatus.label(state), contextLabel].filter { !$0.isEmpty }.joined(separator: " · ")
+  }
+
+  var attemptLabel: String { definition.kind == "while" ? "Check" : "Attempt" }
+
+  var contextLabel: String {
+    var parts: [String] = []
     if let iterationLabel { parts.append(iterationLabel) } else if let iteration { parts.append("Round \(iteration)") }
-    if attempts.count > 1 { parts.append("\(attempts.count) attempts") }
+    if attempts.count > 1 { parts.append("\(attempts.count) \(attemptLabel.lowercased())s") }
     return parts.joined(separator: " · ")
   }
 
   static func groups(_ record: WorkflowRunRecord) -> [Self] {
-    var definitions = record.stepDefinitions ?? []
-    let known = Set(definitions.map(\.id))
-    var added: Set<String> = []
-    for step in record.steps where !known.contains(step.id) && added.insert(step.id).inserted {
-      definitions.append(.init(id: step.id, title: step.title ?? step.id, loop: nil))
-    }
+    let definitions = record.stepDefinitions
     let positions = Dictionary(
       definitions.enumerated().map { ($0.element.id, $0.offset) }, uniquingKeysWith: { first, _ in first })
-    let deliveries = Dictionary(
-      record.deliveries.values.map { ($0.ordinal, $0) }, uniquingKeysWith: { first, _ in first })
+    let invocations = Dictionary(
+      record.invocations.map { ($0.ordinal, $0) }, uniquingKeysWith: { first, _ in first })
     let titles = Dictionary(definitions.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first })
     let byStep = Dictionary(grouping: record.steps, by: \.id)
     var result: [(group: Self, order: [Int])] = []
     for definition in definitions {
       let records = byStep[definition.id] ?? []
-      let byPath = Dictionary(grouping: records) { $0.iterationPath ?? $0.iteration.map { ["legacy:\($0)"] } ?? [] }
+      let byPath = Dictionary(grouping: records) { $0.iterationPath ?? [] }
       let paths = byPath.isEmpty ? [[]] : Array(byPath.keys)
       for path in paths {
-        let attempts = (byPath[path] ?? []).map { step in
-          var step = step
-          if step.delivery == nil, let ordinal = step.ordinal { step.delivery = deliveries[ordinal] }
-          if record.stepDefinitions == nil, records.count == 1, step.state == .completed, step.outputs == nil {
-            step.outputs = record.actions[step.id]
-          }
-          return step
-        }
+        let attempts = byPath[path] ?? []
         let latest = attempts.last
         var state = latest?.state.rawValue ?? (record.run.status.isTerminal ? "not_run" : "pending")
         if latest?.state == .active && record.run.status.isTerminal { state = "interrupted" }
@@ -108,8 +106,8 @@ nonisolated struct WorkflowHistoryStepGroup: Identifiable, Sendable {
         let group = Self(
           id: "\(definition.id):\(path.joined(separator: "/"))",
           title: latest?.title ?? definition.title, state: state, iteration: latest?.iteration, attempts: attempts,
-          legacyDetailsUnavailable: record.stepDefinitions == nil,
-          iterationLabel: path.isEmpty || path.first?.hasPrefix("legacy:") == true
+          definition: definition, invocations: invocations,
+          iterationLabel: path.isEmpty
             ? nil
             : path.map { component in
               let parts = component.split(separator: ":")
@@ -130,62 +128,12 @@ nonisolated struct WorkflowHistoryStepGroup: Identifiable, Sendable {
   }
 }
 
-nonisolated enum WorkflowHistoryOutputPreview {
-  static func json(_ outputs: [String: WorkflowJSONValue]) -> String {
-    let text = outputs.keys.sorted().prefix(8).map { key in
-      "\(bounded(key, limit: 100)): \(preview(outputs[key]!, depth: 0))"
-    }.joined(separator: "\n")
-    return bounded(text, limit: 4096)
-  }
-
-  static func text(_ data: Data, limit: Int = 4096) -> String? {
-    let prefix = data.prefix(limit)
-    if let value = String(bytes: prefix, encoding: .utf8) { return value }
-    guard data.count > limit else { return nil }
-    for count in 1...min(3, prefix.count) {
-      let suffix = Array(prefix.suffix(count))
-      let lead = suffix[0]
-      let length =
-        (0xC2...0xDF).contains(lead) ? 2 : (0xE0...0xEF).contains(lead) ? 3 : (0xF0...0xF4).contains(lead) ? 4 : 0
-      guard count < length, suffix.dropFirst().allSatisfy({ (0x80...0xBF).contains($0) }) else { continue }
-      if count > 1 {
-        let second = suffix[1]
-        if (lead == 0xE0 && second < 0xA0) || (lead == 0xED && second >= 0xA0)
-          || (lead == 0xF0 && second < 0x90) || (lead == 0xF4 && second >= 0x90)
-        {
-          continue
-        }
-      }
-      if let value = String(bytes: prefix.dropLast(count), encoding: .utf8) { return value }
-    }
-    return nil
-  }
-
-  private static func bounded(_ value: String, limit: Int) -> String {
-    let data = Data(value.utf8.prefix(limit + 4))
-    return text(data, limit: limit) ?? ""
-  }
-
-  private static func preview(_ value: WorkflowJSONValue, depth: Int) -> String {
-    switch value {
-    case .string(let value): bounded(value, limit: 300)
-    case .object(let fields):
-      depth >= 2
-        ? "{…}"
-        : "{"
-          + fields.keys.sorted().prefix(6).map {
-            "\(bounded($0, limit: 100)): \(preview(fields[$0]!, depth: depth + 1))"
-          }.joined(separator: ", ") + "}"
-    case .array(let values):
-      depth >= 2 ? "[…]" : "[" + values.prefix(6).map { preview($0, depth: depth + 1) }.joined(separator: ", ") + "]"
-    default: (try? String(bytes: JSONEncoder().encode(value), encoding: .utf8)) ?? "null"
-    }
-  }
-}
-
 nonisolated enum WorkflowHistoryOutputIntent: Equatable, Sendable {
   case openFile(URL)
   case copyFile(URL)
+  case copyText(String)
+  case openArtifact(URL, worktree: URL)
+  case revealArtifact(URL, worktree: URL)
   case reveal(URL)
   case openText(String, String)
   case openJSON([String: WorkflowJSONValue])

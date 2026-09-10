@@ -13,59 +13,50 @@ struct WorkflowStepHistoryDetailView: View {
   @State private var pendingControl: WorkflowAttentionControl?
   @State private var confirmsControl = false
   @State private var groups: [WorkflowHistoryStepGroup] = []
+  @State private var durations: [String: TimeInterval] = [:]
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
-      VStack(alignment: .leading, spacing: 4) {
-        Text(record.run.workflowName).font(.headline)
-        Text(WorkflowHistoryStatus.label(record.run.status.state))
-          .font(.subheadline).foregroundStyle(.secondary)
-        Text(record.run.startedAt.formatted(date: .abbreviated, time: .shortened))
-          .font(.caption).foregroundStyle(.secondary)
-        if let finished = record.run.finishedAt {
-          Text(
-            "Finished \(finished.formatted(date: .omitted, time: .shortened)) · "
-              + "\(Int(max(0, finished.timeIntervalSince(record.run.startedAt))))s"
-          )
-          .font(.caption).foregroundStyle(.secondary)
-        }
-      }
-      ScrollView(.horizontal) {
-        HStack {
-          ForEach(record.bindings.keys.sorted(), id: \.self) { role in
-            let pane = record.bindings[role]?.pane
-            Button(role) {
-              onInteraction()
-              if let pane { onIntent(.focusPane(worktreeID: record.worktree.id, surfaceID: pane.surfaceID)) }
-            }
-            .disabled(pane.map { !livePaneIDs.contains($0.surfaceID) } ?? true)
-            .help(pane.map { "Focus \(role) in \($0.handle)" } ?? "This role has no pane")
-          }
-        }.controlSize(.small)
-      }.scrollIndicators(.never)
+      header
+      if !record.bindings.isEmpty { roles }
       if record.historyIsPartial == true {
         Text("Some control history was omitted after 10,000 records. Recorded outputs remain available.")
           .font(.caption).foregroundStyle(.secondary)
       }
       Divider()
       ScrollView {
-        LazyVStack(alignment: .leading, spacing: 12) {
+        LazyVStack(alignment: .leading, spacing: 2) {
           ForEach(groups) { group in
-            WorkflowHistoryStepRow(group: group, directory: directory, onOutput: onOutput, onInteraction: onInteraction)
+            WorkflowHistoryStepRow(
+              group: group, duration: durations[group.id], directory: directory, worktree: record.worktree.rootURL,
+              livePaneIDs: livePaneIDs, updatedAt: record.run.updatedAt,
+              onFocus: { surfaceID in
+                onInteraction()
+                onIntent(.focusPane(worktreeID: record.worktree.id, surfaceID: surfaceID))
+              },
+              onOutput: onOutput, onInteraction: onInteraction)
           }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
       }
-      if let run = liveRun, run.status.attention != nil {
-        attentionControls(run)
-      }
+      if let run = liveRun, run.status.attention != nil { attentionControls(run) }
       Divider()
       footer
     }
     .task(id: HistoryProjectionKey(record: record)) {
       let snapshot = record
-      let result = await Task.detached(priority: .userInitiated) { WorkflowHistoryStepGroup.groups(snapshot) }.value
-      if !Task.isCancelled { groups = result }
+      let directory = directory
+      let storage = WorkflowHistoryStorage.configured
+      let result = await Task.detached(priority: .userInitiated) {
+        let groups = WorkflowHistoryStepGroup.groups(snapshot)
+        return (
+          groups, WorkflowHistoryTiming.durations(groups, record: snapshot, directory: directory, storage: storage)
+        )
+      }.value
+      if !Task.isCancelled {
+        groups = result.0
+        durations = result.1
+      }
     }
     .padding(16)
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -77,6 +68,48 @@ struct WorkflowStepHistoryDetailView: View {
     } message: { control in
       Text(control.confirmationMessage ?? control.label)
     }
+  }
+
+  private var header: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      HStack(alignment: .firstTextBaseline, spacing: 10) {
+        Text(record.run.workflowName).font(.headline).lineLimit(2)
+        Spacer(minLength: 0)
+        Text(WorkflowHistoryStatus.label(record.run.status.state))
+          .font(.subheadline).foregroundStyle(WorkflowHistoryStatus.tint(record.run.status.state))
+          .fixedSize()
+      }
+      if record.run.status.isTerminal {
+        timingLine(at: record.run.finishedAt ?? record.run.updatedAt)
+      } else {
+        TimelineView(.periodic(from: .now, by: 1)) { timingLine(at: $0.date) }
+      }
+    }
+  }
+
+  private func timingLine(at date: Date) -> some View {
+    let duration = WorkflowHistoryTiming.duration(date.timeIntervalSince(record.run.startedAt))
+    let elapsed = record.run.status.isTerminal ? "Finished in \(duration)" : "Running for \(duration)"
+    return Label("\(WorkflowHistoryTiming.timestamp(record.run.startedAt)) · \(elapsed)", systemImage: "clock")
+      .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+      .lineLimit(1)
+      .help("Started \(WorkflowHistoryTiming.timestamp(record.run.startedAt)) · \(elapsed)")
+  }
+
+  private var roles: some View {
+    ScrollView(.horizontal) {
+      HStack(spacing: 16) {
+        ForEach(record.bindings.keys.sorted(), id: \.self) { role in
+          if let binding = record.bindings[role] {
+            WorkflowHistoryRoleView(role: role, binding: binding, livePaneIDs: livePaneIDs) { surfaceID in
+              onInteraction()
+              onIntent(.focusPane(worktreeID: record.worktree.id, surfaceID: surfaceID))
+            }
+          }
+        }
+      }
+      .font(.caption)
+    }.scrollIndicators(.never)
   }
 
   private func attentionControls(_ run: WorkflowRun) -> some View {
@@ -125,10 +158,12 @@ struct WorkflowStepHistoryDetailView: View {
   private var footer: some View {
     HStack {
       if let directory {
-        Button("Run Folder", systemImage: "folder") { onIntent(.revealRunFolder(directory)) }
-          .help("Reveal this run in Finder")
-        Button("Log", systemImage: "doc.text") { onOutput(.openFile(directory.appending(path: "log.md"))) }
-          .help("Open the recorded workflow log")
+        WorkflowHistoryIconButton(label: "Reveal run in Finder", symbol: "folder") {
+          onIntent(.revealRunFolder(directory))
+        }
+        WorkflowHistoryIconButton(label: "Open workflow log", symbol: "doc.text") {
+          onOutput(.openFile(directory.appending(path: "log.md")))
+        }
         Spacer()
         Menu {
           Button("Keep Run") { onOutput(.keep(directory)) }.help("Protect this run from cleanup")
@@ -148,170 +183,12 @@ struct WorkflowStepHistoryDetailView: View {
         } label: {
           Image(systemName: "ellipsis").accessibilityLabel("More run actions")
         }
+        .menuIndicator(.hidden)
+        .menuStyle(.borderlessButton)
+        .fixedSize()
         .help("More run actions")
       }
     }.controlSize(.small)
-  }
-}
-
-private struct WorkflowHistoryStepRow: View {
-  let group: WorkflowHistoryStepGroup
-  let directory: URL?
-  let onOutput: (WorkflowHistoryOutputIntent) -> Void
-  let onInteraction: () -> Void
-  @State private var expanded: Bool
-
-  init(
-    group: WorkflowHistoryStepGroup, directory: URL?, onOutput: @escaping (WorkflowHistoryOutputIntent) -> Void,
-    onInteraction: @escaping () -> Void
-  ) {
-    self.onInteraction = onInteraction
-    self.group = group
-    self.directory = directory
-    self.onOutput = onOutput
-    _expanded = State(initialValue: group.state == "failed" || group.state == "needs_attention")
-  }
-
-  var body: some View {
-    DisclosureGroup(isExpanded: $expanded) {
-      VStack(alignment: .leading, spacing: 10) {
-        if group.attempts.isEmpty {
-          Text("No execution recorded.").foregroundStyle(.secondary)
-        }
-        ForEach(Array(group.attempts.enumerated()), id: \.offset) { index, attempt in
-          if group.attempts.count > 1 {
-            if index == group.attempts.count - 1 {
-              Text("Attempt \(index + 1) · \(WorkflowHistoryStatus.label(attempt.state.rawValue))")
-                .font(.caption).foregroundStyle(.secondary)
-              attemptContent(attempt)
-            } else {
-              DisclosureGroup("Attempt \(index + 1) · \(WorkflowHistoryStatus.label(attempt.state.rawValue))") {
-                attemptContent(attempt)
-              }
-            }
-          } else {
-            attemptContent(attempt)
-          }
-        }
-      }
-      .font(.callout)
-      .padding(.top, 6)
-    } label: {
-      HStack(alignment: .top, spacing: 8) {
-        Image(systemName: WorkflowHistoryStatus.symbol(group.state))
-          .foregroundStyle(group.state == "failed" || group.state == "needs_attention" ? .orange : .secondary)
-        VStack(alignment: .leading, spacing: 3) {
-          Text(group.title).font(.subheadline)
-          Text(group.subtitle).font(.caption).foregroundStyle(.secondary)
-        }
-        Spacer(minLength: 0)
-      }
-      .contentShape(.rect)
-    }
-    .accessibilityLabel("\(group.title), \(group.subtitle)")
-    .onChange(of: expanded) { _, _ in onInteraction() }
-  }
-
-  @ViewBuilder
-  private func attemptContent(_ attempt: WorkflowRunRecord.Step) -> some View {
-    if let error = attempt.error {
-      Text(attempt.state == .completed ? "Earlier issue" : "Error").font(.caption).foregroundStyle(.secondary)
-      Text(String(error.prefix(1000))).foregroundStyle(.orange).textSelection(.enabled).lineLimit(6)
-      Button("Open Full Error") { onOutput(.openText(error, "error.txt")) }
-        .help("Open the full recorded error in an external application")
-    }
-    if let submissions = attempt.submissions, !submissions.isEmpty, let directory {
-      ForEach(Array(submissions.enumerated()), id: \.offset) { index, submission in
-        if index == submissions.count - 1 {
-          Text("Submission \(index + 1) · \(submission.statusLabel)").font(.caption)
-          WorkflowHistoryDeliveryView(delivery: submission.delivery, directory: directory, onOutput: onOutput)
-        } else {
-          DisclosureGroup("Submission \(index + 1) · \(submission.statusLabel)") {
-            ForEach(submission.issues, id: \.self) { Text($0).foregroundStyle(.orange).lineLimit(3) }
-            WorkflowHistoryDeliveryView(delivery: submission.delivery, directory: directory, onOutput: onOutput)
-          }
-        }
-      }
-    } else if let delivery = attempt.delivery, let directory {
-      WorkflowHistoryDeliveryView(delivery: delivery, directory: directory, onOutput: onOutput)
-    }
-    if let outputs = attempt.outputs, !outputs.isEmpty {
-      Text(WorkflowHistoryOutputPreview.json(outputs)).font(.caption.monospaced())
-        .textSelection(.enabled).lineLimit(8).frame(maxWidth: .infinity, alignment: .leading)
-      HStack {
-        Button("Open Full Output") { onOutput(.openJSON(outputs)) }
-          .help("Open the full JSON output in an external application")
-        Button("Copy Full Output") { onOutput(.copyJSON(outputs)) }
-          .help("Copy the complete JSON output")
-      }.controlSize(.small)
-      if case .string(let path) = outputs["output_path"] {
-        Button("Open Output File", systemImage: "doc") { onOutput(.openFile(URL(filePath: path))) }
-          .help("Open the action's recorded output file")
-      }
-    }
-    if attempt.delivery == nil && attempt.outputs == nil && attempt.error == nil {
-      Text(group.legacyDetailsUnavailable ? "Output details were not recorded." : "No output.").foregroundStyle(
-        .secondary)
-    }
-    if let execution = attempt.actionExecutionID, let directory {
-      HStack {
-        ForEach(["stdout.log", "stderr.log", "execution.json"], id: \.self) { name in
-          Button(name) { onOutput(.openFile(directory.appending(path: "actions/\(attempt.id)/\(execution)/\(name)"))) }
-            .help("Open the recorded action diagnostic; missing files are reported")
-        }
-      }.controlSize(.small)
-    }
-    DisclosureGroup("Execution Details") {
-      Text("Step: \(attempt.id)").textSelection(.enabled)
-      if let ordinal = attempt.ordinal { Text("Invocation: \(ordinal)") }
-      if let iteration = attempt.iteration { Text("Round: \(iteration)") }
-      if let path = attempt.iterationPath, !path.isEmpty {
-        Text("Iteration path: \(path.joined(separator: " / "))").textSelection(.enabled)
-      }
-    }.font(.caption).foregroundStyle(.secondary)
-  }
-}
-
-private struct WorkflowHistoryDeliveryView: View {
-  let delivery: WorkflowDeliveryRecord
-  let directory: URL
-  let onOutput: (WorkflowHistoryOutputIntent) -> Void
-  @State private var preview = "Loading output…"
-  @State private var available = false
-
-  private var url: URL {
-    if delivery.path.hasPrefix("/") { return URL(filePath: delivery.path) }
-    return directory.appending(path: delivery.path)
-  }
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 6) {
-      Text(delivery.name).font(.subheadline)
-      if let verdict = delivery.verdict { Text("Verdict: \(verdict)").font(.caption) }
-      Text(preview).textSelection(.enabled).lineLimit(8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-      HStack {
-        Button("Open Full Output") { onOutput(.openFile(url)) }
-          .help("Open the complete delivery in an external application")
-        Button("Copy Full Output") { onOutput(.copyFile(url)) }.help("Copy the complete delivery")
-        Button("Reveal", systemImage: "folder") { onOutput(.reveal(url)) }.help("Reveal this delivery in Finder")
-      }.controlSize(.small).disabled(!available)
-    }
-    .task(id: url) {
-      guard WorkflowSchema.isSlug(delivery.name), delivery.ordinal > 0 else {
-        preview = "Output reference is invalid."
-        return
-      }
-      let storage = WorkflowHistoryStorage.configured
-      let outputURL = url
-      let result = await Task.detached(priority: .utility) {
-        try? storage.readChunk(outputURL, offset: 0)
-      }.value
-      available = result != nil
-      preview =
-        result.map { WorkflowHistoryOutputPreview.text($0.data) ?? "Output preview is not valid UTF-8." }
-        ?? "Output is no longer available."
-    }
   }
 }
 

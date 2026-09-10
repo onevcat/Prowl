@@ -41,8 +41,7 @@ capability. `agents: []` allows none; `any` and `*` are not wildcard tokens. Lea
 unset unless there is a specific preference to express; profile selection normally belongs
 to the user's saved preferences and the start-sheet picker.
 
-Steps are `message` (type one line or provide scoped CLI access to persisted
-instructions), `launch` (start a launch role with a kickoff prompt),
+Steps are `message` (send a prompt to an idle role), `launch` (start a launch role with a kickoff prompt),
 `set`, nested `if`/`else`, `while`, `break`/`continue`,
 `action` (built-in or local script), `notify`, and `close`. A `message` or
 `launch` step may `expect` an output: the role finishes by running the exact
@@ -145,24 +144,58 @@ Hover to preview; click or interact with its contents to keep it open. The defau
 its identified agent session participated as a role. **This Worktree** and **All
 Runs** include broader history and records whose pane identity is unavailable.
 
-Select a run on the left, then expand its steps on the right. Checkmarks indicate
-completed execution; a delivery verdict such as `issues` does not mean execution
-failed. Branches not selected, skipped steps, and steps not reached before
+The muted checklist button opens Workflow History. The run list shows each name,
+a tinted state icon, and project or pane attribution; completed runs use a green
+checkmark. The detail header puts status beside the title and start time beside
+elapsed time.
+
+Select a run on the left, then click anywhere on a step row to expand it. Hover
+highlights the row. Recorded step duration appears at the right; a dash means no
+duration was saved. Checkmarks indicate completed execution; a delivery verdict
+such as `issues` does not mean execution failed. Branches not selected, skipped steps, and steps not reached before
 termination have separate states. Nested rounds show their complete loop path.
 Rounds and retry attempts retain their own
 recorded outputs and errors. Provisional and corrected submissions keep separate
 body snapshots. Failed action attempts link to their own stdout, stderr, and
-execution record. Older records can lack some details.
+execution record. Step titles come from the execution, not from later YAML edits.
 
-Text and JSON previews have fixed limits. **Open Full Output** opens the complete
-file in its default external application; **Copy Full Output** copies the complete
-content. No full-text expansion changes the panel layout. Missing files remain
-visible as unavailable. **Keep Run** and **Export** are in the run's More menu;
-usage and cleanup remain in Settings.
+Message and launch steps show the target role, recorded profile or agent, and the
+saved prompt. A launch reports **Agent started** only after startup succeeds;
+without `expect`, this does not mean the agent finished its task. Targets are recorded
+per attempt, so a relaunch cannot change an earlier attempt's identity.
+
+Action steps show their action ID and resolved **Input** from that execution's saved
+request, separate from **Output**. Conditions show the selected branch and recorded
+boolean result. Notifications show the text sent to Prowl Notifications; a declared
+step title takes precedence over the default notification label. Pure operations do
+not show an empty Output section.
+
+Prompt and delivery previews show the first 200 characters with inline Markdown
+formatting and the remaining character count. JSON output uses nested, expandable fields, with single-line values and
+middle-truncated paths. Each level shows at most 32 fields, up to five levels deep;
+the complete JSON remains available externally. `output` is the action's returned
+JSON value; `output_path` is the saved `result.json` file containing that value,
+not a second result.
+
+Preview and Copy read files up to 64 MiB. Open and Reveal remain available if a
+preview is unavailable or a file exceeds that reader bound.
+
+Compact icon buttons open full output, copy full content, or reveal files in Finder;
+hover a button for its label. Named absolute path fields also offer file actions.
+Opening is limited to retained workflow storage and the worktree's `.prowl/handoff/`
+artifacts, with link and containment checks. **Diagnostics** holds action stdout,
+stderr, and execution metadata. Missing or unreadable files get a separate message. **Keep Run** and **Export** are
+in the run's More menu; usage and cleanup remain in Settings.
 
 A selected run stays open when it completes, without switching to another run or
 resetting the reading position. Only active runs offer recovery and cancellation.
-Role focus is available only for panes still present in the agent list.
+Roles retain their recorded agent icon after execution. An `@pN` link appears only
+while that terminal pane exists, even if its agent has exited back to the shell.
+Closed panes keep their role and agent icon without an inactive link.
+
+Hovering from History to the bell switches the preview without reopening the old
+panel. A click pins the panel; click the other button to switch a pinned panel.
+Escape or an outside click dismisses it.
 
 Every run, including `workflow test-action`, stores its runtime data in
 `~/.prowl/logs/workflow-runs/<root-name>-<root-hash>/YYYY-MM/<run-id>/`.
@@ -172,7 +205,7 @@ The creation month stays fixed. No project-local runtime files or Git-ignore rul
 are created. Personal and team workflow definitions keep their existing locations.
 
 Each run contains `run.json`, `log.md`, its frozen bundle in `definition/`,
-`instructions/`, `skills/`, `deliveries/`, and `actions/`. Metadata records the original
+`prompts/`, `skills/`, `deliveries/`, and `actions/`. Metadata records the original
 execution root. `prowl workflow status <run-id>` finds saved history even after that
 root is closed, moved, or deleted. A moved folder does not inherit the old history.
 
@@ -193,7 +226,13 @@ Manual cleanup shows candidate runs and estimated reclaimed space, then requires
 confirmation. It uses the same protections and checks eligibility again before
 deleting each complete run. Old project-local data is neither migrated nor deleted.
 
-Agents retrieve assigned instructions and explicit input resources with
+Both `message` and `launch` require `prompt`; the retired `text` and `instruction`
+fields are not accepted. A message waits for an idle agent, then Prowl chooses direct
+single-line delivery or scoped read after rendering. Launch uses a kickoff prompt.
+`expect` controls whether either step waits for an agent delivery. Saved files in
+`prompts/` contain the task body, without generated completion commands.
+
+Agents retrieve assigned prompts and explicit input resources with
 `prowl workflow read`, using the run ID, invocation number, and assigned pane. Prowl owns
 persistence; deliver text or JSON through `prowl workflow deliver -` on stdin. Run
 paths are temporary artifact locations, not durable downstream references.

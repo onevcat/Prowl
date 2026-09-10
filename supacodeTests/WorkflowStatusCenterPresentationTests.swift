@@ -219,7 +219,7 @@ struct WorkflowStatusCenterPresentationTests {
         role: "author",
         kind: .message,
         startedAt: Self.now,
-        instructionPath: nil,
+        promptPath: nil,
         activation: nil,
         endedAt: nil
       )
@@ -233,7 +233,7 @@ struct WorkflowStatusCenterPresentationTests {
       + "and address the findings in round 2."
 
     #expect(run.currentStepTitle == "Round 2: address findings")
-    #expect(run.currentInstruction == expectedInstruction)
+    #expect(run.currentPrompt == expectedInstruction)
     #expect(run.stepItems.count == 4)
     guard case .step(let brief) = run.stepItems[0] else {
       Issue.record("Expected the top-level brief step first")
@@ -282,7 +282,7 @@ struct WorkflowStatusCenterPresentationTests {
     #expect(run.roles.map(\.displayName) == ["Author", "Pi Reviewer"])
     #expect(run.roles.map(\.surfaceID) == [Self.authorPane.surfaceID, nil])
     #expect(run.currentStepTitle == "Finishing workflow")
-    #expect(run.currentInstruction == nil)
+    #expect(run.currentPrompt == nil)
     #expect(run.elapsedText == "1d 1h")
     #expect(run.elapsedText(at: session.run.startedAt.addingTimeInterval(-1)) == "0s")
   }
@@ -388,7 +388,7 @@ struct WorkflowStatusCenterPresentationTests {
       - id: brief
         title: "Write the brief"
         message: author
-        instruction: "Write a brief."
+        prompt: "Write a brief."
         expect: { delivery: brief }
       - id: rounds
         while: 'true'
@@ -397,13 +397,13 @@ struct WorkflowStatusCenterPresentationTests {
           - id: fix
             title: "Round {{ context.step.iteration }}: address findings"
             message: author
-            instruction: >-
+            prompt: >-
               Read {{ deliveries.brief.path }} and address the findings in round {{ context.step.iteration }}.
             expect: { delivery: disposition }
           - id: rereview
             title: "Round {{ context.step.iteration }}: re-review"
             message: author
-            text: "Review again."
+            prompt: "Review again."
             expect: { delivery: findings, verdicts: [clean, issues] }
       - id: finish
         notify: "Done"
@@ -419,7 +419,7 @@ struct WorkflowStatusCenterPresentationTests {
     steps:
       - id: note
         message: author
-        text: "Write an optional note."
+        prompt: "Write an optional note."
         expect: { delivery: note }
       - id: finish
         notify: "Done"
@@ -438,7 +438,7 @@ struct WorkflowStatusCenterPresentationTests {
     steps:
       - id: brief
         message: author
-        text: "Write a brief."
+        prompt: "Write a brief."
     """
 
   private func makeSession(

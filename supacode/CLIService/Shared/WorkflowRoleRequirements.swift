@@ -64,9 +64,9 @@ nonisolated public enum WorkflowRoleRequirements {
         case .launch(let role, let prompt, _, _):
           required.insert(role)
           templates(prompt)
-        case .message(let role, let content, _):
+        case .message(let role, let prompt, _):
           required.insert(role)
-          templates(content.body)
+          templates(prompt)
         case .close(let role): required.insert(role)
         case .notify(let text): templates(text)
         case .action(let id, let inputs):

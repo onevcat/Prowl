@@ -3,61 +3,32 @@ import SwiftUI
 
 struct WorkflowHistoryPopoverButton: View {
   @Bindable var store: StoreOf<WorkflowStepHistoryFeature>
+  @Environment(ToolbarPopoverCoordinator.self) private var popovers
   let onIntent: (WorkflowRunPanelIntent) -> Void
-  @State private var presented = false
-  @State private var pinned = false
-  @State private var hoveringButton = false
-  @State private var hoveringPanel = false
-  @State private var closeTask: Task<Void, Never>?
 
   var body: some View {
     Button {
-      if pinned {
-        presented = false
-      } else {
-        pinned = true
-        presented = true
-      }
+      popovers.toggle(.history)
     } label: {
-      Image(systemName: "clock.arrow.circlepath")
+      Image(systemName: "checklist")
+        .foregroundStyle(.secondary)
     }
     .help("Workflow History. Hover to preview or click to keep open.")
     .accessibilityLabel("Workflow History")
-    .onHover {
-      hoveringButton = $0
-      updateHover()
+    .onHover { popovers.hoverButton(.history, hovering: $0) }
+    .popover(
+      isPresented: Binding(
+        get: { popovers.presented == .history },
+        set: { if !$0 { popovers.dismiss(.history) } }
+      )
+    ) {
+      WorkflowStepHistoryView(store: store, onIntent: onIntent, onInteraction: { popovers.pin(.history) })
+        .onHover { popovers.hoverPopover(.history, hovering: $0) }
     }
-    .popover(isPresented: $presented) {
-      WorkflowStepHistoryView(store: store, onIntent: onIntent, onInteraction: { pinned = true })
-        .onHover {
-          hoveringPanel = $0
-          updateHover()
-        }
-    }
-    .onChange(of: presented) { _, visible in
+    .onChange(of: popovers.presented == .history) { _, visible in
       store.send(.setPresented(visible))
-      if !visible {
-        pinned = false
-        hoveringPanel = false
-      }
     }
-    .onChange(of: store.openRequest) { _, _ in
-      pinned = true
-      presented = true
-    }
-    .onDisappear { closeTask?.cancel() }
-  }
-
-  private func updateHover() {
-    closeTask?.cancel()
-    if hoveringButton || hoveringPanel {
-      presented = true
-      return
-    }
-    guard !pinned else { return }
-    closeTask = Task { @MainActor in
-      try? await ContinuousClock().sleep(for: .milliseconds(180))
-      if !Task.isCancelled && !pinned { presented = false }
-    }
+    .onChange(of: store.openRequest) { _, _ in popovers.showPinned(.history) }
+    .onDisappear { popovers.dismiss(.history) }
   }
 }

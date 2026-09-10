@@ -171,14 +171,14 @@ final class WorkflowRuntimeCoordinator {
             listings[id] = try JSONEncoder().encode(names)
           }
         }
-        let resource = requestResource ?? "instruction"
+        let resource = requestResource ?? "prompt"
         let data: Data
         let total: Int64
         let next: Int64?
-        if resource == "instruction" || listings[resource] != nil {
+        if resource == "prompt" || listings[resource] != nil {
           let full =
             listings[resource]
-            ?? Data((grant.text + (invocation.activation?.completion.instructionTrailer() ?? "")).utf8)
+            ?? Data((grant.text + (invocation.activation?.completion.completionTrailer() ?? "")).utf8)
           guard offset >= 0, offset <= full.count else { throw WorkflowHistoryError.protectedRun }
           let end = min(Int(offset) + WorkflowSizeLimits.contentPage, full.count)
           data = full.subdata(in: Int(offset)..<end)

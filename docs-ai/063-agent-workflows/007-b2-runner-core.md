@@ -63,7 +63,7 @@ All new types are `nonisolated` where the app target's MainActor default would o
   `iterationLimitReached`, `interrupted`).
 - `WorkflowRunMachine.swift` — `WorkflowRunEvent` (`roleIdle`, `injectionSucceeded/Failed`,
   `launched/launchFailed`, `actionCompleted/Failed`, `watchdog(ordinal, verdict)`,
-  `timeout`, `user(action)`), `WorkflowRunEffect` (`awaitRoleIdle`, `materializeInstruction`,
+  `timeout`, `user(action)`), `WorkflowRunEffect` (`awaitRoleIdle`, `materializePrompt`,
   `inject`, `launch`, `runAction`, `notify`, `close`, `abandonActivation`, `completeActivation`,
   `armWatchdog`, `disarmWatchdog`, `persistOutput`, `persist`, `log`, `finished`), `start(...)`,
   `apply(_:)`, `deliver(...) -> Result<WorkflowDeliveryReceipt, WorkflowDeliveryError>`,
@@ -82,7 +82,7 @@ All new types are `nonisolated` where the app target's MainActor default would o
   `OUTPUT_TOO_LARGE`).
 - `WorkflowRunStore.swift` — `<root>/.prowl/workflow-runs/<run-id>/` layout, self-ignoring
   `.gitignore`, `WorkflowRunRecord` (Codable, `version` 1), append-only `log.md`,
-  `instructions/<step>.<ordinal>.md`, `deliveries/<name>.<ordinal>.md` + atomically replaced
+  `prompts/<step>.<ordinal>.md`, `deliveries/<name>.<ordinal>.md` + atomically replaced
   `deliveries/<name>.md`, `skills/<id>/` copied from the bundle, every path from validated slugs and
   the run UUID under `AgentProfileHomeProvisioner.validatePhysicalContainment`, and
   `markInterruptedRuns()` for launch.
@@ -236,7 +236,7 @@ Everything lives in `supacode/Domain/Workflow/` (app target) plus three Shared t
 `inject` → `openMessageActivation` (issue + bind) then `insertCommittedText` + `submitLine`,
 `.injectionSucceeded(dispatchID)` or `.injectionFailed` (cancelling the issuance);
 `openActivation` → issue + bind only (self-initiated first step; the line is in
-`run.selfInitiatedLine`); `materializeInstruction` before the inject that names it;
+`run.selfInitiatedLine`); `materializePrompt` before the inject that names it;
 `launch` → plan the frozen profile with `.prompt`, attach the environment values as child-only
 carriers (like `attachingDispatch`), issue the dispatch when `expectsDelivery`, then `.launched`;
 `runAction` → `WorkflowNativeActionRunner`; `armWatchdog` → one `WorkflowWatchdog` per request,

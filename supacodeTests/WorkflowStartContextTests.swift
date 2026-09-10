@@ -20,7 +20,7 @@ struct WorkflowStartContextTests {
     steps:
       - id: brief
         message: author
-        text: "Write about {{ inputs.focus }}."
+        prompt: "Write about {{ inputs.focus }}."
         expect: { delivery: brief }
       - id: launch
         launch: reviewer

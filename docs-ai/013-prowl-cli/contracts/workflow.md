@@ -36,7 +36,7 @@ Wire request: `command: "workflow"` with `action` (`list` | `run` | `status` | `
 ### `read` assigned content
 
 The socket request uses `action: "read"`, `runID` (UUID), `invocation` (positive
-ordinal), optional `contentResource` (default `instruction`), and `contentOffset`
+ordinal), optional `contentResource` (default `prompt`), and `contentOffset`
 (default 0). The caller is resolved from socket peer ancestry. There is no read token
 and no arbitrary path argument. The pane must own this run and the invocation must
 be its role's last assigned task. Skipped/revoked activations and cancelled runs are
@@ -237,8 +237,8 @@ valid; the app-side `list` always has the bundle.
     "started_at": "2026-08-30T01:00:00.000Z",
     "updated_at": "2026-08-30T01:00:00.000Z",
     "self_initiated": {
-      "line": "[Prowl] Read …/instructions/brief.1.md and follow it — finish with: PROWL_WORKFLOW_TOKEN=… prowl workflow deliver -",
-      "instruction_path": "…/instructions/brief.1.md",
+      "line": "[Prowl] Read …/prompts/brief.1.md and follow it — finish with: PROWL_WORKFLOW_TOKEN=… prowl workflow deliver -",
+      "prompt_path": "…/prompts/brief.1.md",
       "completion": ["PROWL_WORKFLOW_TOKEN=… prowl workflow deliver -"]
     }
   }

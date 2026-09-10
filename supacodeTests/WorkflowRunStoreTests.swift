@@ -73,7 +73,7 @@ struct WorkflowRunStoreTests {
     try store.ensureLayout(runID: runID)
     let runs = store.directory(for: runID).deletingLastPathComponent()
     #expect(!FileManager.default.fileExists(atPath: root.appending(path: ".prowl").path))
-    for name in ["instructions", "deliveries", "skills"] {
+    for name in ["prompts", "deliveries", "skills"] {
       var isDirectory: ObjCBool = false
       let path = runs.appending(path: runID.uuidString).appending(path: name).path(percentEncoded: false)
       #expect(FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) && isDirectory.boolValue)
@@ -254,7 +254,7 @@ struct WorkflowRunStoreTests {
     let store = WorkflowRunStore(rootURL: root)
     let runID = UUID()
     try store.ensureLayout(runID: runID)
-    let instruction = try store.writeInstruction(runID: runID, stepID: "brief", ordinal: 1, text: "Do it.\n")
+    let instruction = try store.writePrompt(runID: runID, stepID: "brief", ordinal: 1, text: "Do it.\n")
     #expect(instruction.lastPathComponent == "brief.1.md")
     #expect(try String(contentsOf: instruction, encoding: .utf8) == "Do it.\n")
     try store.appendLog(runID: runID, line: "started", now: Self.now)
@@ -272,13 +272,13 @@ struct WorkflowRunStoreTests {
     let runID = UUID()
     try store.ensureLayout(runID: runID)
     #expect(throws: WorkflowRunStoreError.unsafePath("../escape")) {
-      try store.writeInstruction(runID: runID, stepID: "../escape", ordinal: 1, text: "x")
+      try store.writePrompt(runID: runID, stepID: "../escape", ordinal: 1, text: "x")
     }
     #expect(throws: WorkflowRunStoreError.unsafePath("Bad Name")) {
       try store.writeDelivery(runID: runID, name: "Bad Name", ordinal: 1, body: "x")
     }
     #expect(throws: WorkflowRunStoreError.unsafePath("brief")) {
-      try store.writeInstruction(runID: runID, stepID: "brief", ordinal: 0, text: "x")
+      try store.writePrompt(runID: runID, stepID: "brief", ordinal: 0, text: "x")
     }
   }
 

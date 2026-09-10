@@ -93,7 +93,7 @@ struct WorkflowStepHistoryTests {
 
   @Test func outputPreviewBoundsLargeStringsAndDeepObjects() {
     let output: [String: WorkflowJSONValue] = ["result": .string(String(repeating: "a", count: 100_000))]
-    #expect(WorkflowHistoryOutputPreview.json(output).count < 400)
+    #expect(WorkflowHistoryOutputField.fields(output).first?.summary.count == 201)
   }
 
   @MainActor @Test func refreshDoesNotResurrectRemovedTerminalRuns() async throws {

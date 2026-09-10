@@ -9,6 +9,9 @@ import sys
 
 
 RULES = (
+    (r"\bWorkflowMessageContent\b", "Use a single prompt string."),
+    (r"\binstruction_path\b", "Use prompt_path."),
+    (r"^\s*(?:-\s*)?instruction\s*:", "Use prompt for agent task content."),
     (r"\bworkflow\s+done\b", "Use workflow deliver."),
     (r"\bWorkflowDone\w*\b", "Use WorkflowDeliver types."),
     (r"builtin:(?:git\.context|worktree\.context|agent\.context)\b", "Use a verb-first action ID."),
@@ -36,6 +39,10 @@ REFERENCES = (
 
 def violations(text: str, *, swift: bool = False) -> list[tuple[int, str]]:
     findings = []
+    try:
+        structured_json = isinstance(json.loads(text), (dict, list))
+    except (ValueError, TypeError):
+        structured_json = False
     if re.search(r"\bworkflow\s+done\b", text):
         findings.append((1, "Use workflow deliver."))
     block = None
@@ -58,12 +65,14 @@ def violations(text: str, *, swift: bool = False) -> list[tuple[int, str]]:
             if line.lstrip().startswith("//"):
                 public_text = line
         for pattern, message in RULES:
+            if pattern == r"\binstruction_path\b" and (custom_data or structured_json):
+                continue
             if pattern.startswith(r"^\s*(?:-\s*)?"):
                 if custom_data:
                     continue
                 candidate = yaml_line
             else:
-                candidate = line if pattern.startswith(r"\bWorkflowDone") else public_text
+                candidate = line if pattern.startswith((r"\bWorkflowDone", r"\bWorkflowMessageContent")) else public_text
             candidate = candidate.replace("\\", "")
             candidate = re.sub(r"""\[\s*['"]([a-zA-Z_][\w-]*)['"]\s*\]""", r".\1", candidate)
             candidate = re.sub(
@@ -92,6 +101,13 @@ def violations(text: str, *, swift: bool = False) -> list[tuple[int, str]]:
                     for item in node:
                         check_declarations(item)
                 elif isinstance(node, dict):
+                    if node.get("command") == "workflow":
+                        check_declarations(node.get("data"))
+                    task = node.get("self_initiated")
+                    if isinstance(task, dict) and "instruction_path" in task:
+                        findings.append((1, "Use prompt_path."))
+                    if "message" in node and set(node) & {"text", "instruction"}:
+                        findings.append((1, "Use prompt for agent task content."))
                     expect = node.get("expect")
                     if isinstance(expect, dict) and set(expect) & {"output", "verdict"}:
                         findings.append((1, "Use delivery and verdicts in expect."))
