@@ -201,8 +201,9 @@ Hosts. This does not introduce a separate persistent device enrollment credentia
 ### Sending commands to a shell pane
 
 The mobile composer can send commands such as `ai glm` to an existing plain shell
-pane, before an Agent starts. Host verifies that the live terminal child is a shell
-and that its process group owns the foreground. It waits for screen/local-edit
+pane, before an Agent starts. Host verifies that the terminal's foreground process
+group leader is a shell, including login shells launched below `/usr/bin/login`,
+and that its process group still owns the foreground. It waits for screen/local-edit
 stability and sends the text plus Return through the existing terminal interface.
 Once an Agent is identified, the Agent submission rules apply again.
 
@@ -212,9 +213,6 @@ and duplicate submission checks remain in effect. A shell without bracketed past
 supports single-line submission only. Host drafts can still mix with remote input;
 commands execute with the shell user's existing permissions. This is not remote
 input for arbitrary foreground programs or a dedicated approval UI.
-
-Implementation checkpoint: shell support is source-only and has not been built or
-run through tests yet, at the user's request during ongoing acceptance.
 
 ### Console command matching and Claude delivery
 

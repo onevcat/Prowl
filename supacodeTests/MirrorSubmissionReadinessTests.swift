@@ -6,6 +6,15 @@ import Testing
 struct MirrorSubmissionReadinessTests {
   private let generation = UUID()
 
+  @Test func loginShellNamesAreRecognizedWithoutAcceptingOtherCommands() {
+    for name in ["zsh", "-zsh", "bash", "-bash", "fish", "sh"] {
+      #expect(MirrorShellSubmission.isShell(name))
+    }
+    for name in ["login", "claude", "node", "ssh", "zsh-helper", "", "--zsh"] {
+      #expect(!MirrorShellSubmission.isShell(name))
+    }
+  }
+
   private func observation(
     generation: UUID? = nil, revision: UInt64 = 1, screen: String = "empty",
     edit: TimeInterval? = nil, refusal: String? = nil

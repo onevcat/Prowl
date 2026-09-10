@@ -19,9 +19,11 @@ extension GhosttyMirrorPaneSource {
     let digest = frame.map { Data(SHA256.hash(data: $0.bytes)) } ?? Data()
     shellSubmissions = shellSubmissions.filter { manager.isSurfaceLive($0.key) }
     if condition.agent == nil, condition.isLive, let terminal = view(id),
-      let pid = terminal.bridge.childPID(), let started = ProcessDetection.processStartDate(pid: pid),
+      // macOS login shells can sit below /usr/bin/login, the direct PTY child.
+      // Inspect the foreground group leader that actually receives terminal input.
+      let pid = terminal.bridge.foregroundProcessGroupID(), let started = ProcessDetection.processStartDate(pid: pid),
       let name = ProcessDetection.processArgv0Name(pid: pid),
-      ["sh", "bash", "zsh", "fish", "dash", "ksh", "tcsh", "csh"].contains(name)
+      MirrorShellSubmission.isShell(name)
     {
       var shell = shellSubmissions[id] ?? MirrorShellSubmission(pid: pid, started: started)
       shell.observe(pid: pid, started: started, digest: digest)
@@ -166,6 +168,11 @@ extension GhosttyMirrorPaneSource {
 /// Shells have no Agent event revision. Output changes release the previous input
 /// claim; a restarted shell gets a new generation so old requests cannot be reused.
 nonisolated struct MirrorShellSubmission {
+  static func isShell(_ name: String) -> Bool {
+    let executable = name.hasPrefix("-") ? String(name.dropFirst()) : name
+    return ["sh", "bash", "zsh", "fish", "dash", "ksh", "tcsh", "csh"].contains(executable)
+  }
+
   var pid: pid_t
   var started: Date
   private(set) var generation = UUID()
