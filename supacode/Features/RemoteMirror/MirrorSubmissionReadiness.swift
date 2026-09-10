@@ -9,13 +9,15 @@ nonisolated struct MirrorSubmissionReadiness {
     let screenDigest: Data
     let lastEditingAt: TimeInterval?
     let refusal: String?
+    var allowsIdleRecovery = false
   }
 
   private var observation: Observation?
   private var stableSince: TimeInterval = 0
   private var revision: UInt64 = 0
   private var ready = false
-  private var delivered: (generation: UUID, runtimeRevision: UInt64)?
+  private var delivered: (generation: UUID, runtimeRevision: UInt64, at: TimeInterval)?
+  private var observedAt: TimeInterval = 0
 
   mutating func observe(_ current: Observation, now: TimeInterval) -> MirrorAgentState {
     guard now.isFinite, current.lastEditingAt?.isFinite != false else {
@@ -24,6 +26,7 @@ nonisolated struct MirrorSubmissionReadiness {
       revision &+= 1
       return state(current, now: 0, canSubmit: false, reason: "Invalid observation time.")
     }
+    observedAt = now
     var previousInput = observation
     // Agent observation revisions also advance for title and session metadata.
     // Those updates must not restart the input's quiet period.
@@ -36,6 +39,8 @@ nonisolated struct MirrorSubmissionReadiness {
     observation = current
     if let delivered,
       current.generation != delivered.generation || current.runtimeRevision > delivered.runtimeRevision
+        || (current.allowsIdleRecovery && current.refusal == nil && now >= delivered.at + 5
+          && now >= stableSince + 2)
     {
       self.delivered = nil
     }
@@ -67,7 +72,7 @@ nonisolated struct MirrorSubmissionReadiness {
     guard ready, expected.canSubmit, expected.revision == revision,
       let current = observation, let generation = current.generation, generation == expected.generation
     else { return false }
-    delivered = (generation, current.runtimeRevision)
+    delivered = (generation, current.runtimeRevision, observedAt)
     ready = false
     revision &+= 1
     return true

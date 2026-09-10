@@ -30,6 +30,24 @@ struct MirrorSubmissionReadinessTests {
     #expect(shell.generation != generation)
   }
 
+  @Test func claudeIdleRecoveryAllowsNewInputButDoesNotReplayTheOldClaim() {
+    var gate = MirrorSubmissionReadiness()
+    var current = observation()
+    current.allowsIdleRecovery = true
+    _ = gate.observe(current, now: 0)
+    let ready = gate.observe(current, now: 2)
+    let accepted = gate.claim(ready)
+    #expect(accepted)
+    #expect(!gate.observe(current, now: 6.9).canSubmit)
+    let recovered = gate.observe(current, now: 7)
+    #expect(recovered.canSubmit)
+    #expect(recovered.revision != ready.revision)
+    let duplicate = gate.claim(ready)
+    #expect(!duplicate)
+    let next = gate.claim(recovered)
+    #expect(next)
+  }
+
   @Test func metadataRevisionsDoNotStarveAnUnchangedIdleComposer() {
     var gate = MirrorSubmissionReadiness()
     _ = gate.observe(observation(revision: 1), now: 0)

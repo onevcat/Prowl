@@ -5,6 +5,31 @@ import Testing
 
 @MainActor
 struct HostControlConsoleTests {
+  @Test func changingExecutableSwitchesToDefaultAndRestoresWithoutRewriting() throws {
+    let suite = "ConsoleExecutable-\(UUID())"
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let profile = AgentProfile(name: "Codex", runtime: .codex)
+    let console = HostControlConsole(manager: manager, profiles: [profile], defaults: defaults)
+    console.selectPreset(.codex)
+    console.command = "codex --yolo --model custom"
+    #expect(console.preset == .codex)
+    console.command = "ai cx"
+    #expect(console.preset == .custom)
+    #expect(console.command == "ai cx")
+    let saved: [String: Any] = [
+      "enabled": true, "profileID": profile.id.uuidString, "runtime": "codex",
+      "bypass": false, "directory": "", "preset": "codex", "command": "ai cx",
+    ]
+    defaults.set(try JSONSerialization.data(withJSONObject: saved), forKey: "remoteMirrorControlConsole")
+    let restored = HostControlConsole(manager: manager, profiles: [profile], defaults: defaults)
+    #expect(restored.preset == .custom)
+    #expect(restored.command == "ai cx")
+    #expect(ConsoleAgentPreset.claude.matching(command: "cfuse --cc") == .custom)
+    #expect(ConsoleAgentPreset.codex.matching(command: "/custom/bin/codex --yolo") == .custom)
+  }
+
   @Test func settingsRestoreWithoutLaunchingAnAgent() throws {
     let suite = "ConsoleSettings-\(UUID())"
     let defaults = try #require(UserDefaults(suiteName: suite))

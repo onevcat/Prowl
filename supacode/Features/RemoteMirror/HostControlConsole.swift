@@ -10,7 +10,12 @@ final class HostControlConsole {
   var enabled = false { didSet { saveConfiguration() } }
   var profile: AgentProfile { didSet { saveConfiguration() } }
   var preset: ConsoleAgentPreset = .codex { didSet { saveConfiguration() } }
-  var command = "codex --yolo" { didSet { saveConfiguration() } }
+  var command = "codex --yolo" {
+    didSet {
+      preset = preset.matching(command: command)
+      saveConfiguration()
+    }
+  }
   var directory = "" { didSet { saveConfiguration() } }
   private(set) var isStarting = false
   private(set) var error: String?
@@ -85,6 +90,7 @@ final class HostControlConsole {
           "Cannot read saved control-console settings. Review the launch command."
       }
     }
+    preset = preset.matching(command: command)
     configurationLoaded = true
     manager.showControlConsole = { [weak self] in self?.show() }
   }
@@ -141,7 +147,7 @@ final class HostControlConsole {
     error = nil
     isStarting = true
     let selectedProfile = profile
-    let selectedPreset = preset
+    let selectedPreset = preset.matching(command: command)
     let selectedCommand = command
     let selectedDirectory = directory.trimmingCharacters(in: .whitespacesAndNewlines)
     launchTask = Task { [weak self] in

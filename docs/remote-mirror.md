@@ -215,3 +215,25 @@ input for arbitrary foreground programs or a dedicated approval UI.
 
 Implementation checkpoint: shell support is source-only and has not been built or
 run through tests yet, at the user's request during ongoing acceptance.
+
+### Console command matching and Claude delivery
+
+Editing a Codex/Claude preset to name a different executable automatically selects
+Default, preserving the complete command. This also corrects saved combinations
+such as Codex + `ai cx`. Explicit executable paths use Default so the profile launch
+resolver cannot replace the requested binary. Changing only normal preset arguments
+keeps the preset.
+
+Claude delivery writes bracketed paste first, waits 200 ms, then sends a native Enter
+key separately. Before Enter, Host rechecks the subscription owner, Agent generation,
+foreground process identity and local editing activity. If these changed after paste,
+the outcome is unknown and requires checking Host; the text is not replayed.
+Codex and shell keep their existing delivery paths.
+
+If Claude supplies no new runtime event but the submission conditions remain satisfied
+and the screen is stable, a five-second cooldown permits a new submission. This does
+not confirm that the previous message was processed or resend it; old request IDs and
+observations remain protected against replay. The iPad status hint shows current Agent
+readiness after an accepted terminal receipt instead of hiding it behind the old receipt.
+These changes, including shell input above, are source-only pending build and runtime
+validation requested for a later acceptance round.

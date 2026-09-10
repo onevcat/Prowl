@@ -26,6 +26,13 @@ nonisolated enum ConsoleAgentPreset: String, Codable, CaseIterable, Identifiable
     }
   }
 
+  func matching(command: String) -> Self {
+    guard self != .custom, let executable = ShellWordSplitter.split(command).first,
+      !executable.isEmpty
+    else { return self }
+    return executable == rawValue ? self : .custom
+  }
+
   static func invocation(command: String, prompt: String) throws -> AgentInvocation {
     let words = ShellWordSplitter.split(command)
     guard let executable = words.first, !executable.isEmpty,

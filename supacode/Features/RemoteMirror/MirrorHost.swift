@@ -367,7 +367,11 @@ final class MirrorHost {
         outcome = .init(status: .rejected, detail: "The pane ownership or Agent state changed. Refresh before sending.")
       } else {
         self.deliveredObservations[key.pane] = state
-        outcome = await self.source.submit(text, to: key.pane, expected: state)
+        outcome = await self.source.submit(text, to: key.pane, expected: state) { [weak self] in
+          guard let self else { return false }
+          return self.hostRunID == key.run && self.peers[owner] != nil
+            && self.subscriptions[owner]?.id == subscription.id
+        }
         if self.hostRunID == key.run, outcome.status == .rejected,
           self.deliveredObservations[key.pane] == state
         {

@@ -47,7 +47,8 @@ extension GhosttyMirrorPaneSource {
       .init(
         generation: shell?.generation ?? manager.agentEvidenceEpoch(surfaceID: id),
         runtimeRevision: shell?.revision ?? condition.revision, screenDigest: digest,
-        lastEditingAt: view(id)?.lastEditingAt, refusal: refusal),
+        lastEditingAt: view(id)?.lastEditingAt, refusal: refusal,
+        allowsIdleRecovery: condition.agent?.agent == .claude),
       now: ProcessInfo.processInfo.systemUptime)
     readiness[id] = gate
     return MirrorAgentState(
@@ -55,7 +56,14 @@ extension GhosttyMirrorPaneSource {
       reason: state.reason, observedAt: Date().timeIntervalSince1970)
   }
 
-  func submit(_ text: String, to id: UUID, expected: MirrorAgentState) -> MirrorSubmitOutcome {
+  func submit(_ text: String, to id: UUID, expected: MirrorAgentState) async -> MirrorSubmitOutcome {
+    await submit(text, to: id, expected: expected, canContinue: { true })
+  }
+
+  func submit(
+    _ text: String, to id: UUID, expected: MirrorAgentState,
+    canContinue: @escaping @MainActor () -> Bool
+  ) async -> MirrorSubmitOutcome {
     guard MirrorSubmissionLedger.validText(text) else {
       return .init(status: .rejected, detail: "The message contains unsupported input.")
     }
@@ -65,17 +73,40 @@ extension GhosttyMirrorPaneSource {
     guard bracketed || !text.contains("\n") else {
       return .init(status: .rejected, detail: "This shell does not support multiline paste. Send one line at a time.")
     }
-    guard current.canSubmit, current.generation == expected.generation, current.revision == expected.revision,
+    guard canContinue(), current.canSubmit, current.generation == expected.generation,
+      current.revision == expected.revision,
       var gate = readiness[id], gate.claim(expected)
     else {
       return .init(status: .rejected, detail: "The Agent or its input changed. Refresh before sending.")
     }
     readiness[id] = gate
-    // One length-delimited write keeps multiline paste and Return ordered. No
-    // suspension occurs between the last observation and this PTY enqueue.
+    // Validate before pasting, and again before Claude's delayed Enter.
     do {
-      let input = bracketed ? "\u{1B}[200~" + text + "\u{1B}[201~\r" : text + "\r"
-      try write(Data(input.utf8), to: id)
+      let isClaude = manager.agentObservationSnapshot(surfaceID: id)?.agent?.agent == .claude
+      if isClaude {
+        guard let foreground = view(id)?.bridge.foregroundProcessGroupID(),
+          let processStarted = ProcessDetection.processStartDate(pid: foreground)
+        else { return .init(status: .rejected, detail: "The Claude process is no longer available.") }
+        // Claude processes bracketed paste asynchronously; Enter in the same
+        // read can be consumed before the composer has committed the paste.
+        try write(Data(("\u{1B}[200~" + text + "\u{1B}[201~").utf8), to: id)
+        let editedAt = view(id)?.lastEditingAt
+        try await Task.sleep(for: .milliseconds(200))
+        guard !Task.isCancelled, canContinue(), manager.isSurfaceLive(id),
+          manager.agentEvidenceEpoch(surfaceID: id) == expected.generation,
+          let terminal = view(id), terminal.lastEditingAt == editedAt,
+          terminal.markedText.length == 0,
+          terminal.bridge.foregroundProcessGroupID() == foreground,
+          ProcessDetection.processStartDate(pid: foreground) == processStarted,
+          terminal.sendCLIKeyToken("enter")
+        else {
+          return .init(
+            status: .unknown, detail: "Text was pasted but Enter was not sent. Check the Host before retrying.")
+        }
+      } else {
+        let input = bracketed ? "\u{1B}[200~" + text + "\u{1B}[201~\r" : text + "\r"
+        try write(Data(input.utf8), to: id)
+      }
       return .init(status: .accepted, detail: "Message queued to the Host terminal.")
     } catch {
       return .init(status: .unknown, detail: "Terminal delivery could not be confirmed. Check the Host output.")

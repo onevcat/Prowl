@@ -170,7 +170,7 @@ struct MirrorTerminalIntegrationTests {
       "LOCAL_DRAFT", replacementRange: NSRange(location: NSNotFound, length: 0))
     #expect(!fixture.source.submissionState(fixture.hostView.id).canSubmit)
     #expect(
-      fixture.source.submit("MUST_NOT_SEND", to: fixture.hostView.id, expected: ready).status
+      await fixture.source.submit("MUST_NOT_SEND", to: fixture.hostView.id, expected: ready).status
         == .rejected)
     try await fixture.wait("Claude local draft") { fixture.hostText.contains("LOCAL_DRAFT") }
     #expect(fixture.hostView.sendCLIKeyToken("ctrl-u"))
@@ -178,12 +178,12 @@ struct MirrorTerminalIntegrationTests {
       fixture.source.submissionState(fixture.hostView.id).canSubmit
     }
     let current = fixture.source.submissionState(fixture.hostView.id)
-    let outcome = fixture.source.submit(
+    let outcome = await fixture.source.submit(
       "Do not use tools or modify files.\nReply with exactly MIRROR_NATIVE_GLM_OK.",
       to: fixture.hostView.id, expected: current)
     try #require(outcome.status == .accepted)
     #expect(
-      fixture.source.submit("MUST_NOT_DUPLICATE", to: fixture.hostView.id, expected: current).status
+      await fixture.source.submit("MUST_NOT_DUPLICATE", to: fixture.hostView.id, expected: current).status
         == .rejected)
     try await fixture.wait("Claude reply to native submission", timeout: .seconds(45)) {
       fixture.hostText.split(separator: "\n").contains {
@@ -227,7 +227,7 @@ struct MirrorTerminalIntegrationTests {
     fixture.hostView.insertText(
       "LOCAL_DRAFT", replacementRange: NSRange(location: NSNotFound, length: 0))
     #expect(!fixture.source.submissionState(fixture.hostView.id).canSubmit)
-    let rejected = fixture.source.submit("MUST_NOT_SEND", to: fixture.hostView.id, expected: ready)
+    let rejected = await fixture.source.submit("MUST_NOT_SEND", to: fixture.hostView.id, expected: ready)
     #expect(rejected.status == .rejected)
     try await fixture.wait("local draft visible") { fixture.hostText.contains("LOCAL_DRAFT") }
     #expect(!fixture.hostText.contains("MUST_NOT_SEND"))
@@ -237,12 +237,12 @@ struct MirrorTerminalIntegrationTests {
     }
     if ProcessInfo.processInfo.environment["PROWL_MIRROR_CODEX_SEND"] == "1" {
       let current = fixture.source.submissionState(fixture.hostView.id)
-      let outcome = fixture.source.submit(
+      let outcome = await fixture.source.submit(
         "Do not use tools or modify files.\nReply with exactly MIRROR_NATIVE_SUBMIT_OK.",
         to: fixture.hostView.id, expected: current)
       try #require(outcome.status == .accepted)
       #expect(
-        fixture.source.submit("MUST_NOT_DUPLICATE", to: fixture.hostView.id, expected: current)
+        await fixture.source.submit("MUST_NOT_DUPLICATE", to: fixture.hostView.id, expected: current)
           .status == .rejected)
       try await fixture.wait("Codex reply to native submission", timeout: .seconds(60)) {
         fixture.hostText.split(separator: "\n").contains {
