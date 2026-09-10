@@ -23,12 +23,7 @@ final class MirrorConnection {
   }
 
   static func parameters(pairingKey: String) throws -> NWParameters {
-    let key = pairingKey.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard key.count == 64,
-      key.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) })
-    else {
-      throw MirrorProtocolError.invalidPairingKey
-    }
+    let key = try MirrorPairingCode.normalized(pairingKey)
     let tls = NWProtocolTLS.Options()
     let secret = Data(key.utf8)
     let identity = Data("prowl-remote-mirror-v1".utf8)
@@ -43,7 +38,11 @@ final class MirrorConnection {
     sec_protocol_options_set_min_tls_protocol_version(tls.securityProtocolOptions, .TLSv12)
     sec_protocol_options_set_max_tls_protocol_version(tls.securityProtocolOptions, .TLSv12)
     // Security's Swift enum omits the PSK suites supported by Network.framework.
-    guard let suite = tls_ciphersuite_t(rawValue: UInt16(TLS_PSK_WITH_AES_128_GCM_SHA256)) else {
+    guard
+      let suite = tls_ciphersuite_t(
+        rawValue: UInt16(key.count == 8 ? TLS_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256 : TLS_PSK_WITH_AES_128_GCM_SHA256)
+      )
+    else {
       throw MirrorProtocolError.invalidMessage
     }
     sec_protocol_options_append_tls_ciphersuite(tls.securityProtocolOptions, suite)
@@ -172,5 +171,31 @@ final class MirrorConnection {
         completion(data)
       }
     }
+  }
+}
+
+nonisolated enum MirrorPairingCode {
+  static let alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+  static func normalized(_ input: String) throws -> String {
+    let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+    if trimmed.count == 64, trimmed.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }) {
+      return trimmed
+    }
+    let code = trimmed.uppercased().filter { $0 != "-" && !$0.isWhitespace }
+    guard code.count == 8, code.allSatisfy({ alphabet.contains($0) }) else {
+      throw MirrorProtocolError.invalidPairingKey
+    }
+    return code
+  }
+
+  static func generate() throws -> String {
+    var bytes = [UInt8](repeating: 0, count: 8)
+    guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else {
+      throw MirrorProtocolError.invalidPairingKey
+    }
+    let symbols = Array(alphabet)
+    let code = String(bytes.map { symbols[Int($0 & 31)] })
+    return String(code.prefix(4)) + "-" + code.suffix(4)
   }
 }

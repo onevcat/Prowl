@@ -69,7 +69,7 @@ nonisolated enum MirrorProtocolError: Error, LocalizedError {
     switch self {
     case .invalidMessage: "Invalid remote mirror message."
     case .messageTooLarge: "Remote mirror message exceeds the size limit."
-    case .invalidPairingKey: "Paste the 64-character pairing key shown on the Host."
+    case .invalidPairingKey: "Enter the 8-character pairing code shown on Host, or paste a legacy 64-character key."
     }
   }
 }

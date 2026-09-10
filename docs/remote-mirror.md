@@ -182,3 +182,18 @@ or screen changes; connection ownership, Agent generation and duplicate checks r
 This intentionally permits input when a local Host draft exists: remote text can
 append to that draft. Conflicting input is not automatically discarded or rolled back.
 Plain shells and Agent installers remain unsupported; start Codex or Claude on Host.
+
+### Short pairing codes
+
+Host generates a new eight-character code on each start, displayed as `K7MP-3X9R`.
+Codes use cryptographic randomness and omit 0/1/I/O; clients ignore case, spaces and
+hyphens. A code remains valid until Host stops. Saved connections retain the code in
+Keychain, so another pane does not require retyping it during that Host run.
+Short codes use TLS 1.2 ECDHE-PSK with ChaCha20-Poly1305; the legacy 64-character
+key path retains its original cipher for connecting to older Hosts. New Host codes
+require updated clients. Host admits at most 12 new connection attempts per rolling
+minute across all clients, and at most 16 concurrent connections. Excess attempts
+are closed; retry after one minute. Existing connected panes are unaffected.
+The iPad form has two visible four-character fields, advances after the first half,
+and accepts a complete pasted code in either field. Use Legacy Key supports older
+Hosts. This does not introduce a separate persistent device enrollment credential.

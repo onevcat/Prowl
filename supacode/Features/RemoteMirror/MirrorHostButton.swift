@@ -78,8 +78,8 @@ private struct MirrorHostSettingsView: View {
         Label("Listening · \(host.subscriberCount) mirror(s)", systemImage: "checkmark.circle")
         Text("Client: enter this Mac’s reachable IP, port \(host.port), and the pairing key below.")
           .font(.callout).foregroundStyle(.secondary)
-        Text(host.pairingKey).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
-        Button(copied ? "Copied" : "Copy Pairing Key") {
+        Text(host.pairingKey).font(.system(.title2, design: .monospaced)).textSelection(.enabled)
+        Button(copied ? "Copied" : "Copy Pairing Code") {
           NSPasteboard.general.clearContents()
           copied = NSPasteboard.general.setString(host.pairingKey, forType: .string)
           copyError = copied ? nil : "Unable to copy the pairing key."

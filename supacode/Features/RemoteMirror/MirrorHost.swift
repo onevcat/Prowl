@@ -25,6 +25,7 @@ final class MirrorHost {
   @ObservationIgnored private var submissionLedger = MirrorSubmissionLedger()
   @ObservationIgnored private var deliveredObservations: [UUID: MirrorAgentState] = [:]
   private(set) var hostRunID: UUID?
+  @ObservationIgnored private var connectionAttempts = MirrorConnectionAttempts()
 
   private struct Subscription {
     let paneID: UUID
@@ -50,12 +51,7 @@ final class MirrorHost {
       guard let portNumber = UInt16(port), portNumber > 0,
         IPv4Address(address) != nil || IPv6Address(address) != nil
       else { throw MirrorProtocolError.invalidMessage }
-      var bytes = [UInt8](repeating: 0, count: 32)
-      guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else {
-        error = "Unable to generate a pairing key."
-        return
-      }
-      pairingKey = bytes.map { String(format: "%02x", $0) }.joined()
+      pairingKey = try MirrorPairingCode.generate()
       let parameters = try MirrorConnection.parameters(pairingKey: pairingKey)
       let bindHost: NWEndpoint.Host
       if let ipv4 = IPv4Address(address) {
@@ -121,10 +117,11 @@ final class MirrorHost {
     isRunning = false
     isStarting = false
     pairingKey = ""
+    connectionAttempts = MirrorConnectionAttempts()
   }
 
   private func accept(_ connection: NWConnection) {
-    guard listener != nil, peers.count < 16 else {
+    guard listener != nil, peers.count < 16, connectionAttempts.accept(now: ProcessInfo.processInfo.systemUptime) else {
       connection.cancel()
       return
     }
@@ -430,5 +427,17 @@ final class MirrorHost {
         peer.close("Host pane is unavailable: \(error.localizedDescription)")
       }
     }
+  }
+}
+
+nonisolated struct MirrorConnectionAttempts {
+  private var attempts: [TimeInterval] = []
+
+  mutating func accept(now: TimeInterval) -> Bool {
+    guard now.isFinite else { return false }
+    attempts.removeAll { now >= $0 + 60 }
+    guard attempts.count < 12 else { return false }
+    attempts.append(now)
+    return true
   }
 }

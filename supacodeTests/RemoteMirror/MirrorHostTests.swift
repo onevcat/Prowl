@@ -154,9 +154,11 @@ struct MirrorHostTests {
     #expect(source.panes().count == 1)
   }
 
-  @Test(.timeLimit(.minutes(1))) func wrongPairingKeyCannotReadMetadata() async throws {
+  @Test(.timeLimit(.minutes(1)), arguments: [false, true]) func wrongPairingKeyCannotReadMetadata(short: Bool)
+    async throws
+  {
     let listener = try NWListener(
-      using: MirrorConnection.parameters(pairingKey: String(repeating: "a", count: 64)))
+      using: MirrorConnection.parameters(pairingKey: short ? "K7MP-3X9R" : String(repeating: "a", count: 64)))
     let accepted = AsyncStream.makeStream(of: Bool.self)
     var server: MirrorConnection?
     listener.newConnectionHandler = { connection in
@@ -178,7 +180,7 @@ struct MirrorHostTests {
     var readiness = accepted.stream.makeAsyncIterator()
     _ = await readiness.next()
     let peer = try Peer(
-      port: try #require(listener.port).rawValue, key: String(repeating: "b", count: 64))
+      port: try #require(listener.port).rawValue, key: short ? "K7MP-3X9T" : String(repeating: "b", count: 64))
     defer { peer.connection.close() }
     var messages = peer.messages.makeAsyncIterator()
     #expect(await messages.next() == nil)
