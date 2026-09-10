@@ -947,7 +947,7 @@ struct WorktreeDetailView: View {
   /// the trailing group that replaces the former branch item.
   struct AgentNotificationsToolbarContent: ToolbarContent {
     @Environment(StoreOf<WorkflowStepHistoryFeature>.self) private var historyStore
-    @Dependency(FeatureFlags.self) private var historyFlags
+    @Dependency(FeatureFlags.self) private var featureFlags
     let onHistoryIntent: (WorkflowRunPanelIntent) -> Void
 
     let agentsCapsule: AgentsCapsuleState?
@@ -996,7 +996,7 @@ struct WorktreeDetailView: View {
             onSelectNotification: onSelectNotification,
             onDismissAll: onDismissAllNotifications
           )
-          if historyFlags.workflowUI && !historyStore.entries.isEmpty {
+          if featureFlags.workflowUI && !historyStore.entries.isEmpty {
             WorkflowHistoryPopoverButton(store: historyStore, onIntent: onHistoryIntent)
           }
           if isUpdateAvailable {
