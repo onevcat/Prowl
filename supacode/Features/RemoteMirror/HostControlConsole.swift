@@ -18,13 +18,12 @@ final class HostControlConsole {
   private(set) var surface: LaunchedSurface?
   let profiles: [AgentProfile]
   var makeServer: (() throws -> CLISocketServer)?
-  var windowContent: (() -> AnyView)?
+  var isSelected = false
   @ObservationIgnored private var configurationLoaded = false
   @ObservationIgnored private let defaults: UserDefaults
   @ObservationIgnored private let manager: WorktreeTerminalManager
   @ObservationIgnored private var server: CLISocketServer?
   @ObservationIgnored private var launchTask: Task<Void, Never>?
-  @ObservationIgnored private var window: NSWindow?
 
   static var defaultDirectory: URL {
     SupacodePaths.appSupportDirectory.appending(
@@ -33,7 +32,7 @@ final class HostControlConsole {
 
   var worktree: Worktree {
     Worktree(
-      id: Self.worktreeID, name: "AI Control Console", detail: "Remote Mirror control session",
+      id: Self.worktreeID, name: "Host Console", detail: "Remote Mirror control session",
       workingDirectory: Self.defaultDirectory, repositoryRootURL: Self.defaultDirectory)
   }
 
@@ -250,31 +249,15 @@ final class HostControlConsole {
 
   func show() {
     guard isAlive else { return }
-    if window == nil {
-      guard let windowContent else {
-        error = "The control-console window is not configured."
-        return
-      }
-      let window = NSWindow(
-        contentRect: NSRect(x: 0, y: 0, width: 960, height: 640),
-        styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered,
-        defer: false)
-      window.title = "Prowl — AI Control Console"
-      window.isReleasedWhenClosed = false
-      window.contentView = NSHostingView(rootView: windowContent())
-      window.center()
-      self.window = window
-    }
-    window?.makeKeyAndOrderFront(nil)
-    NSApp.activate()
+    isSelected = true
+    _ = NSApp.surfaceMainWindow()
   }
 
   func stop() {
     cancelPreparation()
     server?.stop()
     server = nil
-    window?.close()
-    window = nil
+    isSelected = false
   }
 
   static func prompt(guide: URL, cli: URL, socket: String) -> String {

@@ -620,6 +620,10 @@ extension RepositoriesFeature {
         }
       )
 
+    case .selectControlConsole(let worktree):
+      state.controlConsoleWorktree = worktree
+      return .send(.selectWorktree(worktree.id, focusTerminal: true, recordHistory: false))
+
     case .selectWorktree(let worktreeID, let focusTerminal, let recordHistory):
       let selectWtToken = repositoriesLogger.beginInterval("reducer.selectWorktree")
       defer { repositoriesLogger.endInterval(selectWtToken) }

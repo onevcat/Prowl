@@ -286,6 +286,7 @@ struct RepositoriesFeature {
 
   @ObservableState
   struct State: Equatable {
+    var controlConsoleWorktree: Worktree?
     var repositories: IdentifiedArrayOf<Repository> = []
     var repositoryRoots: [URL] = []
     var repositoryOrderIDs: [Repository.ID] = []
@@ -455,6 +456,7 @@ struct RepositoriesFeature {
     case selectRepository(Repository.ID?)
     case openWorkspaceChild(String)
     case selectWorktree(Worktree.ID?, focusTerminal: Bool = false, recordHistory: Bool = true)
+    case selectControlConsole(Worktree)
     case newTerminalTab(Worktree.ID)
     case newTerminalTabCreatedInCanvas(Worktree.ID, TerminalTabID)
     case focusCanvasRepository(Repository.ID)

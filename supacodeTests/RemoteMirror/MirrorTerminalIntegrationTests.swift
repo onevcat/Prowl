@@ -13,7 +13,7 @@ import Testing
 @MainActor
 struct MirrorTerminalIntegrationTests {
   @Test(.timeLimit(.minutes(1)))
-  func controlConsoleWindowRendersAndReopensThroughSurfaceFocus() async throws {
+  func controlConsoleRendersInMainContentAndSelectsThroughSurfaceFocus() async throws {
     let fixture = try Fixture()
     defer { fixture.close() }
     let console = HostControlConsole(
@@ -31,36 +31,37 @@ struct MirrorTerminalIntegrationTests {
     }
     let shortcuts = GhosttyShortcutManager(preview: ())
     let observer = CommandKeyObserver()
-    console.windowContent = { [weak console] in
-      guard let console else { return AnyView(EmptyView()) }
-      return AnyView(
-        ControlConsoleWindowContent(
-          console: console, manager: fixture.manager, shortcuts: shortcuts,
-          commandKeyObserver: observer))
-    }
     defer { console.stop() }
     console.start()
     try await fixture.wait("Custom control terminal") { !console.isStarting }
     try #require(console.error == nil)
     let surface = try #require(console.surface)
     console.show()
-    let window = try #require(NSApp.windows.first { $0.title == "Prowl — AI Control Console" })
+    #expect(console.isSelected)
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 960, height: 640),
+      styleMask: [.titled], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    window.contentView = NSHostingView(
+      rootView:
+        HostConsolePaneView(console: console, manager: fixture.manager)
+        .environment(shortcuts).environment(observer))
+    fixture.windows.append(window)
+    window.makeKeyAndOrderFront(nil)
     window.contentView?.layoutSubtreeIfNeeded()
-    #expect(window.isVisible)
     let view = try #require(
       fixture.manager.stateIfExists(for: HostControlConsole.worktreeID)?.surfaces[surface.surfaceID]
     )
     try await fixture.wait("Custom command receives control instructions") {
       (view.readScreenContentsForCLI() ?? "").contains("Prowl AI control console")
     }
-    window.close()
-    #expect(!window.isVisible)
+    console.isSelected = false
     #expect(console.isAlive)
     #expect(
       fixture.manager.focusSurface(
         worktreeID: HostControlConsole.worktreeID, surfaceID: surface.surfaceID))
     window.contentView?.layoutSubtreeIfNeeded()
-    #expect(window.isVisible)
+    #expect(console.isSelected)
   }
 
   @Test(

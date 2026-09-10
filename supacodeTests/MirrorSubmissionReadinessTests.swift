@@ -15,6 +15,21 @@ struct MirrorSubmissionReadinessTests {
       screenDigest: Data(screen.utf8), lastEditingAt: edit, refusal: refusal)
   }
 
+  @Test func metadataRevisionsDoNotStarveAnUnchangedIdleComposer() {
+    var gate = MirrorSubmissionReadiness()
+    _ = gate.observe(observation(revision: 1), now: 0)
+    for tick in 1..<10 {
+      #expect(!gate.observe(observation(revision: UInt64(tick + 1)), now: Double(tick) / 5).canSubmit)
+    }
+    let ready = gate.observe(observation(revision: 11), now: 2)
+    #expect(ready.canSubmit)
+    #expect(gate.observe(observation(revision: 12), now: 2.2).revision == ready.revision)
+    let accepted = gate.claim(ready)
+    let repeated = gate.claim(ready)
+    #expect(accepted)
+    #expect(!repeated)
+  }
+
   @Test func newEditsAndScreenChangesInvalidateAdvertisedReadiness() {
     var gate = MirrorSubmissionReadiness()
     #expect(!gate.observe(observation(), now: 0).canSubmit)

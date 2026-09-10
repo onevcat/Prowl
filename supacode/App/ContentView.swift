@@ -60,7 +60,18 @@ struct ContentView: View {
     }
     .environment(\.surfaceBackgroundOpacity, terminalManager.surfaceBackgroundOpacity())
     .onChange(of: mirrors.selectedID) { _, selectedID in
-      if selectedID != nil { repositoriesStore.send(.selectWorktree(nil)) }
+      if selectedID != nil {
+        mirrors.controlConsole.isSelected = false
+        repositoriesStore.send(.selectWorktree(nil))
+      }
+    }
+    .onChange(of: mirrors.controlConsole.isSelected) { _, selected in
+      if selected {
+        mirrors.selectedID = nil
+        repositoriesStore.send(.selectControlConsole(mirrors.controlConsole.worktree))
+      } else if repositoriesStore.selectedWorktreeID == HostControlConsole.worktreeID {
+        repositoriesStore.send(.selectWorktree(nil))
+      }
     }
     .task {
       store.send(.scenePhaseChanged(scenePhase))
@@ -225,7 +236,9 @@ struct ContentView: View {
       SidebarView(store: repositoriesStore, terminalManager: terminalManager)
         .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 320)
     } detail: {
-      if let client = mirrors.selected {
+      if mirrors.controlConsole.isSelected {
+        HostConsolePaneView(console: mirrors.controlConsole, manager: terminalManager)
+      } else if let client = mirrors.selected {
         RemoteMirrorPaneView(client: client)
       } else {
         WorktreeDetailView(store: store, terminalManager: terminalManager)

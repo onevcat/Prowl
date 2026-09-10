@@ -249,7 +249,7 @@ struct AppFeature {
         let settings = repositorySettings
         let userSettings = userRepositorySettings
         var effects: [Effect<Action>] = []
-        if !isPlainFolderSelection {
+        if !isPlainFolderSelection, worktreeID != HostControlConsole.worktreeID {
           effects.append(
             .run { _ in
               await repositoryPersistence.saveLastFocusedWorktreeID(lastFocusedWorktreeID)

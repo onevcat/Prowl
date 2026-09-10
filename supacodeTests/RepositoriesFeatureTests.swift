@@ -2672,6 +2672,21 @@ struct RepositoriesFeatureTests {
     await store.send(.newTerminalTab("/tmp/unknown"))
   }
 
+  @Test func selectingControlConsolePublishesItsRealTerminalContext() async {
+    let console = makeWorktree(id: HostControlConsole.worktreeID, name: "Host Console")
+    let store = TestStore(initialState: makeState(repositories: [])) { RepositoriesFeature() }
+    await store.send(.selectControlConsole(console)) { $0.controlConsoleWorktree = console }
+    await store.receive(\.selectWorktree) {
+      $0.selection = .worktree(console.id)
+      $0.sidebarSelectedWorktreeIDs = [console.id]
+      $0.openedWorktreeIDs = [console.id]
+      $0.pendingTerminalFocusWorktreeIDs = [console.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    #expect(store.state.worktree(for: console.id) == console)
+    #expect(store.state.repositories.isEmpty)
+  }
+
   @Test func controlConsoleEntryOpensItsWindowWithoutSelectingAFakeWorktree() async {
     let worktree = makeWorktree(id: HostControlConsole.worktreeID, name: "wt")
     let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])

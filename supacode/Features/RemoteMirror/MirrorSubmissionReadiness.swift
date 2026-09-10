@@ -5,7 +5,7 @@ import Foundation
 nonisolated struct MirrorSubmissionReadiness {
   struct Observation: Equatable, Sendable {
     let generation: UUID?
-    let runtimeRevision: UInt64
+    var runtimeRevision: UInt64
     let screenDigest: Data
     let lastEditingAt: TimeInterval?
     let refusal: String?
@@ -24,12 +24,16 @@ nonisolated struct MirrorSubmissionReadiness {
       revision &+= 1
       return state(current, now: 0, canSubmit: false, reason: "Invalid observation time.")
     }
-    if observation != current || now < stableSince {
-      observation = current
+    var previousInput = observation
+    // Agent observation revisions also advance for title and session metadata.
+    // Those updates must not restart the input's quiet period.
+    previousInput?.runtimeRevision = current.runtimeRevision
+    if previousInput != current || now < stableSince {
       stableSince = now
       ready = false
       revision &+= 1
     }
+    observation = current
     if let delivered,
       current.generation != delivered.generation || current.runtimeRevision > delivered.runtimeRevision
     {

@@ -24,10 +24,12 @@ as one final argument, so a custom CLI must accept a positional initial prompt.
 Default launches without runtime-specific managed hooks; mobile submission still
 requires a supported, verified idle Agent and is not enabled just by selecting Default.
 An empty working directory uses Application Support. Settings are remembered locally.
-The console is a named terminal with an independent **Open AI Control Console** entry;
-clicking its Active Agents row also opens that terminal, including when it is Blocked
-waiting for directory trust or hook approval. These first-run prompts may still appear
-with bypass flags. Its launch failure does not stop sharing. Configuration changes require restarting
+The console appears as **Host Console** in the workspace sidebar and opens in the
+main Prowl content area with ordinary terminal tabs and splits. The Host panel's
+open button and its Active Agents row select the same pane, including when it is
+Blocked waiting for directory trust or hook approval. Those first-run prompts may
+still appear with bypass flags. Switching to a repository or remote mirror keeps
+the console running. Its launch failure does not stop sharing. Configuration changes require restarting
 the console. See [the control-console guide](remote-mirror-control.md).
 The network icon turns green while Host is listening.
 Stopping Host disconnects mirrors without closing any local pane or program.
@@ -170,3 +172,11 @@ and terminal resources without changing the pinned upstream artifact. The defaul
 submodule/artifact does not yet export the required API: this branch is a Draft
 integration, not a self-contained fresh-checkout build. The Ghostty dependency must
 be integrated before merge.
+
+### Mobile submission readiness
+
+An idle Agent must have a stable, empty composer before the mobile Send button is
+enabled. Local edits, screen changes, process replacement, and busy/approval states
+still revoke readiness. Metadata-only Agent revision updates do not restart the
+quiet period. Plain shells and Agent installers are not supported by the mobile
+message composer; start Codex or Claude on Host before sending a message.
