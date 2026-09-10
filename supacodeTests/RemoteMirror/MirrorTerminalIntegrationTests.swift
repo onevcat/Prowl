@@ -13,6 +13,19 @@ import Testing
 @MainActor
 struct MirrorTerminalIntegrationTests {
   @Test(.timeLimit(.minutes(1)))
+  func remoteInputWakesColdAgentDetection() async throws {
+    let fixture = try Fixture()
+    defer { fixture.close() }
+    let id = fixture.hostView.id
+    let state = try #require(fixture.manager.stateIfExists(for: fixture.directory.path))
+    try await fixture.wait("Terminal surface") { fixture.hostView.surface != nil }
+    #expect(state.agentDetectionTasks[id] == nil)
+    try fixture.source.write(Data("\r".utf8), to: id)
+    #expect(state.agentDetectionTasks[id] != nil)
+    #expect(state.agentDetectionSchedules[id] != nil)
+  }
+
+  @Test(.timeLimit(.minutes(1)))
   func controlConsoleRendersInMainContentAndSelectsThroughSurfaceFocus() async throws {
     let fixture = try Fixture()
     defer { fixture.close() }

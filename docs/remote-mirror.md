@@ -206,6 +206,8 @@ group leader is a shell, including login shells launched below `/usr/bin/login`,
 and that its process group still owns the foreground. It waits for screen/local-edit
 stability and sends the text plus Return through the existing terminal interface.
 Once an Agent is identified, the Agent submission rules apply again.
+Remote terminal writes wake the pane's Agent detection, just like local input,
+so a command launched after an idle shell can transition to Agent submission.
 
 Shell process identity supplies the submission generation; changes in terminal output
 supply acknowledgment evidence so another command can be sent. Connection ownership

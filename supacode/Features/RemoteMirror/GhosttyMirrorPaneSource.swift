@@ -80,6 +80,10 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
     guard written else {
       throw MirrorProtocolError.invalidMessage
     }
+    // Binding actions bypass keyboard callbacks. A remote command must wake
+    // detection too, otherwise an Agent launched from an idle shell stays unknown.
+    manager.activeWorktreeStates.first { $0.surfaces[id] != nil }?
+      .wakeAgentDetection(forSurfaceID: id)
   }
 
   func retainedText(_ id: UUID) throws -> String {
