@@ -610,7 +610,9 @@ public struct PaneInput: Codable, Sendable {
   }
 }
 
-public enum WorkflowInputAction: String, Codable, Sendable {
+// MARK: - Workflow
+
+nonisolated public enum WorkflowInputAction: String, Codable, Sendable {
   case read
   case list
   case run

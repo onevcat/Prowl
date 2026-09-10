@@ -1,5 +1,5 @@
 // supacode/Features/Workflow/Views/WorkflowStartOverlayView.swift
-// The workflow start sheet (docs-ai 063 C2): the handoff HUD's centered card pattern hosting
+// The workflow start sheet (docs-ai 063 C2): a centered card hosting
 // source/role/input collection before a run exists. Every choice is sent as a typed action;
 // the reducer owns eligibility (011 decision 1) and the view renders its answers.
 
@@ -101,7 +101,7 @@ private struct WorkflowStartCard: View {
     .padding(16)
     .background {
       // Pull the keyboard away from the terminal once when the sheet appears, so Esc and
-      // Return reach the sheet. Unlike the handoff HUD's capture view this never re-grabs:
+      // Return reach the sheet. This anchor never re-grabs the keyboard:
       // the sheet hosts text fields, and a focused field must keep the keyboard.
       WorkflowStartKeyAnchor(
         onEscape: { store.send(.cancelTapped) },

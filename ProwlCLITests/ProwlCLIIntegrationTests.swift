@@ -68,6 +68,18 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     XCTAssertTrue(message.contains("prowl workflow run prowl.handoff --input next=save"))
   }
 
+  func testRetiredHandoffTextModeAndHelpReturnTheSameStub() throws {
+    let socket = temporarySocketPath(suffix: "handoff-retired-text")
+    for args in [["handoff", "save", "--brief", "-"], ["handoff", "--help"]] {
+      let result = try runProwl(args: args, environment: [ProwlSocket.environmentKey: socket])
+      XCTAssertNotEqual(result.exitCode, 0, "\(args)")
+      XCTAssertTrue(result.stderr.contains(CLIErrorCode.handoffRetired), "\(args): \(result.stderr)")
+      XCTAssertTrue(result.stderr.contains("prowl workflow run prowl.handoff"), "\(args): \(result.stderr)")
+      XCTAssertTrue(result.stdout.isEmpty, "\(args): \(result.stdout)")
+    }
+    XCTAssertFalse(FileManager.default.fileExists(atPath: socket))
+  }
+
   func testNativeHookBridgeIsHiddenSilentAndFailOpenWithoutListener() throws {
     let help = try runProwl(args: ["agents", "--help"])
     XCTAssertEqual(help.exitCode, 0)

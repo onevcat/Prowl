@@ -297,7 +297,7 @@ printf '%s\n' "$result" | jq '.data.observation, .data.screen'
 - `TRANSPORT_FAILED`: the connection broke or the socket path is invalid (`ENOTSOCK`, too-long `PROWL_CLI_SOCKET`).
 - `TARGET_NOT_FOUND` / `TARGET_NOT_UNIQUE`: re-run `prowl list --json` and pass an explicit UUID or a current `pN`.
 - `PROFILE_NOT_FOUND` / `PROFILE_NOT_UNIQUE`: re-run `prowl profiles list --json`; choose an enabled Profile UUID.
-- `NO_ACTIVE_PANE`: focused-pane targeting found nothing — pass `--pane`. `SOURCE_REQUIRED`: a caller-owned command (`agents signal`, selector-free `handoff`) could not map process ancestry to a Prowl pane.
+- `NO_ACTIVE_PANE`: focused-pane targeting found nothing — pass `--pane`. `SOURCE_REQUIRED`: a caller-owned command (`agents signal`, `workflow run` with a `current` role) could not map process ancestry to a Prowl pane.
 - `EMPTY_INPUT`, `INVALID_ARGUMENT`, `UNSUPPORTED_KEY`, `INVALID_REPEAT`: fix the arguments (`prowl <cmd> --help`).
 - `CAPTURE_UNSUPPORTED`: drop `--capture` and use `read --wait-stable` or file redirection.
 - `WAIT_TIMEOUT`: inspect `.error.details`, then re-arm the wait if the task remains active.
@@ -310,16 +310,16 @@ printf '%s\n' "$result" | jq '.data.observation, .data.screen'
 
 ## Handing Off Your Task
 
-The built-in `prowl.handoff` workflow is also available: it requests a briefing and saves
-context before optionally launching a receiver. See the `prowl-workflow` skill for that
-flow. The direct commands below remain available.
+Use the built-in `prowl.handoff` workflow: it requests a briefing from you and saves
+context before optionally launching a receiver. See the `prowl-workflow` skill for the full
+flow. `prowl handoff` (`to`/`save`) is retired: it performs no action and only returns a
+`HANDOFF_RETIRED` error with the replacement commands.
 
-
-Use `prowl workflow run prowl.handoff` for a task handoff; `prowl handoff` is a non-executing `HANDOFF_RETIRED` migration message. Choose a receiver Profile with
-`--role receiver=<Profile>`, or pass `--input next=save` to save without launching a receiver.
-Follow the returned `data.self_initiated.line` and deliver the required briefing through the
-workflow protocol. See `components/handoff.md` and `components/workflows.md` in the docs folder.
+Choose a receiver Profile with `--role receiver=<Profile>`, or pass `--input next=save` to
+save without launching a receiver. Follow the returned `data.self_initiated.line` and deliver
+the required briefing through the workflow protocol. See `components/handoff.md` and
+`components/workflows.md` in the docs folder.
 
 ## Command Set
 
-`list`, `agents`, `agents read`, `agents signal`, `agents dispatch`, `agents dispatch-complete`, `agents dispatch-abandon`, `agents wait`, `profiles list`, `skills list|install|uninstall|path` (local-only), `workflow list|run|status|deliver|cancel` (`workflow validate|schema` local-only), `read`, `send`, `key`, `focus`, `create tab`, `create pane`, `close`, `handoff to`, `handoff save`, and `open` (default). There is no CLI `quit`; close temporary tabs or panes with an explicit `close`. `tab create`, `tab close`, and `pane close` remain deprecated aliases for one release.
+`list`, `agents`, `agents read`, `agents signal`, `agents dispatch`, `agents dispatch-complete`, `agents dispatch-abandon`, `agents wait`, `profiles list`, `skills list|install|uninstall|path` (local-only), `workflow list|run|status|deliver|cancel` (`workflow validate|schema` local-only), `read`, `send`, `key`, `focus`, `create tab`, `create pane`, `close`, and `open` (default). There is no CLI `quit`; close temporary tabs or panes with an explicit `close`. `tab create`, `tab close`, and `pane close` remain deprecated aliases for one release; `handoff` remains for one release as a non-executing `HANDOFF_RETIRED` stub.

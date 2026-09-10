@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| **Status** | PR1 implemented on `feature/hand-off` (awaiting review); PR2 pending |
+| **Status** | Implemented; the staged handoff HUD and the popover's Hand Off row were retired 2026-09-10 (see [063.020](../063-agent-workflows/020-handoff-workflow.md)); the Agents capsule, popover launcher, and workflow rows remain |
 | **Anchor date** | 2026-07-20 |
 | **Primary PRs** | #603 |
 | **Related** | [047 cross-agent-handoff](../047-cross-agent-handoff/000-plan.md), [047.003 plan calibration](../047-cross-agent-handoff/003-plan-calibration.md), [048 agent-runtime-adapters](../048-agent-runtime-adapters/000-plan.md), [031 command-palette-architecture](../031-command-palette-architecture/000-plan.md), [058 unified-toolbar-layout](../058-unified-toolbar-layout/000-plan.md) |

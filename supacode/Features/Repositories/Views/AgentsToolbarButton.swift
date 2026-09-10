@@ -17,9 +17,6 @@ struct AgentsCapsuleState: Equatable {
   /// the assembler with the same two-step token fallback the Active Agents
   /// panel uses, so a wrapper process name never loses the brand icon.
   let iconSource: TabIconSource?
-  /// Plain-language explanation of the hand-off action, shown under its
-  /// title in the popover row; varies with the source session's state.
-  let infoLine: String
 }
 
 /// One launchable agent profile row in the Agents popover (docs-ai 053).
@@ -37,10 +34,10 @@ struct AgentsLauncherItem: Equatable, Identifiable {
 }
 
 /// Leading toolbar entry point for agent-scoped actions.
-/// The capsule identifies the selected pane's agent (the hand-off source);
-/// clicking it opens a popover that hosts the agent actions — hand-off when
-/// an agent is detected, plus the profile launcher and the manage entry
-/// (docs-ai 049/053). The popover is always available: launch rows require a
+/// The capsule identifies the selected pane's agent; clicking it opens a
+/// popover that hosts the agent actions — workflow starts, the profile
+/// launcher, and the manage entry (docs-ai 049/053/063). The popover is always
+/// available: launch rows require a
 /// target worktree but never a detected agent, while profile management remains
 /// available without either. Live status stays with the terminal, the Active
 /// Agents panel, and the central status toast — the capsule deliberately

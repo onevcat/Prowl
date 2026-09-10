@@ -1112,7 +1112,7 @@ struct AppFeature {
 
       case .repositories(.activeAgents(.island(let action))):
         // The child reducer forwards `action` after this pass, so the window is up before the
-        // sidebar path focuses a pane or presents the handoff HUD / workflow sheet.
+        // sidebar path focuses a pane or presents the workflow start sheet.
         if action.surfacesProwl {
           _ = appLifecycleClient.surfaceMainWindow()
         }

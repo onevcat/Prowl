@@ -251,9 +251,7 @@ private struct WorktreeToolbarPreview: View {
         actionTargetWorktreeID: nil,
         agentsCapsule: AgentsCapsuleState(
           displayName: "codex",
-          iconSource: CommandIconMap.iconForFirstToken("codex"),
-          infoLine:
-            "Pass this task to another agent in a new tab. codex will summarize its progress first."
+          iconSource: CommandIconMap.iconForFirstToken("codex")
         ),
         agentsLauncherItems: [],
         statusToast: nil,

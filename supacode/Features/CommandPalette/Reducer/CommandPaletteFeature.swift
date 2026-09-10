@@ -621,8 +621,6 @@ func workflowCommandItems(
   }
 }
 
-/// The single hand-off entry: opens the staged HUD where the receiving
-/// agent is chosen (docs-ai 049).
 private func customCommandSubtitle(for effectiveCommand: EffectiveCustomCommand) -> String {
   "\(effectiveCommand.source.displayTitle) custom command · "
     + customCommandExecutionDescription(for: effectiveCommand.command)

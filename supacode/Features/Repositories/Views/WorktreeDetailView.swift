@@ -400,12 +400,7 @@ struct WorktreeDetailView: View {
         iconLookupToken: paneState.iconLookupToken ?? agent.iconLookupToken,
         agent: agent
       )
-    return AgentsCapsuleState(
-      displayName: displayName,
-      iconSource: iconSource,
-      infoLine: "Pass this task to another agent in a new tab. "
-        + "\(displayName) writes its own briefing first."
-    )
+    return AgentsCapsuleState(displayName: displayName, iconSource: iconSource)
   }
 
   /// Launchable profile rows for the Agents popover: the current worktree's

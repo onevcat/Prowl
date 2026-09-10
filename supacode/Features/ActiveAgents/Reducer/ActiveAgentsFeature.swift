@@ -229,8 +229,8 @@ struct ActiveAgentsFeature {
 }
 
 extension ActiveAgentsFeature.Action {
-  /// Actions that end in Prowl-owned UI: pane focus, the handoff HUD, or the workflow start
-  /// sheet. Raised from the island, these collapse the roster and surface the main window first.
+  /// Actions that end in Prowl-owned UI: pane focus or the workflow start sheet. Raised from
+  /// the island, these collapse the roster and surface the main window first.
   var surfacesProwl: Bool {
     switch self {
     case .entryTapped, .runWorkflowTapped:
