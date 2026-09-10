@@ -23,14 +23,17 @@ struct MirrorPairingCodeTests {
   @Test func connectionAttemptsAreBoundedAndRecoverAfterOneMinute() {
     var limit = MirrorConnectionAttempts()
     for _ in 0..<12 {
-      let accepted = limit.accept(now: 10)
+      let accepted = limit.allows(source: "a", now: 10)
       #expect(accepted)
+      limit.recordFailure(source: "a", now: 10)
     }
-    let blocked = limit.accept(now: 69.9)
+    let blocked = limit.allows(source: "a", now: 69.9)
     #expect(!blocked)
-    let recovered = limit.accept(now: 70)
+    let otherSource = limit.allows(source: "b", now: 69.9)
+    #expect(otherSource)
+    let recovered = limit.allows(source: "a", now: 70)
     #expect(recovered)
-    let invalid = limit.accept(now: .nan)
+    let invalid = limit.allows(source: "a", now: .nan)
     #expect(!invalid)
   }
 }

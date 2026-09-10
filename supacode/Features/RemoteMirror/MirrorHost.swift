@@ -19,6 +19,10 @@ final class MirrorHost {
   @ObservationIgnored private let defaults: UserDefaults
   @ObservationIgnored private var listener: NWListener?
   @ObservationIgnored private var peers: [UUID: MirrorConnection] = [:]
+  @ObservationIgnored private var pendingPeers: [UUID: MirrorConnection] = [:]
+  @ObservationIgnored private var pendingOrder: [UUID] = []
+  private(set) var pendingHandshakeCount = 0
+  static let maximumPendingHandshakes = 8
   @ObservationIgnored private var subscriptions: [UUID: Subscription] = [:]
   @ObservationIgnored private var pollTask: Task<Void, Never>?
   @ObservationIgnored private var versions: [UUID: Int] = [:]
@@ -104,6 +108,11 @@ final class MirrorHost {
     pollTask?.cancel()
     pollTask = nil
     let connections = Array(peers.values)
+    let pending = Array(pendingPeers.values)
+    pendingPeers.removeAll()
+    pendingOrder.removeAll()
+    pendingHandshakeCount = 0
+    for peer in pending { peer.close() }
     for peer in connections {
       end(peer, reason: .hostStopped)
     }
@@ -121,18 +130,46 @@ final class MirrorHost {
   }
 
   private func accept(_ connection: NWConnection) {
-    guard listener != nil, peers.count < 16, connectionAttempts.accept(now: ProcessInfo.processInfo.systemUptime) else {
+    guard listener != nil, case .hostPort(let address, _) = connection.endpoint,
+      connectionAttempts.allows(source: String(describing: address), now: ProcessInfo.processInfo.systemUptime)
+    else {
       connection.cancel()
       return
     }
-    let peer = MirrorConnection(connection)
-    peers[peer.id] = peer
+    let sourceAddress = String(describing: address)
+    // Code security: incomplete handshakes never consume authenticated capacity.
+    // Evict the oldest pending connection so a silent full pool can still admit a valid client.
+    if pendingOrder.count >= Self.maximumPendingHandshakes, let oldest = pendingOrder.first {
+      pendingPeers[oldest]?.close()
+    }
+    let peer = MirrorConnection(connection, handshakeTimeout: .seconds(5))
+    pendingPeers[peer.id] = peer
+    pendingOrder.append(peer.id)
+    pendingHandshakeCount = pendingPeers.count
+    peer.onReady = { [weak self, weak peer] in
+      guard let self, let peer, self.pendingPeers[peer.id] === peer else { return }
+      self.pendingPeers.removeValue(forKey: peer.id)
+      self.pendingOrder.removeAll { $0 == peer.id }
+      self.pendingHandshakeCount = self.pendingPeers.count
+      guard self.listener != nil, self.peers.count < 16 else {
+        peer.close()
+        return
+      }
+      self.peers[peer.id] = peer
+    }
+    peer.onHandshakeFailure = { [weak self, weak peer] in
+      guard let self, let peer, self.pendingPeers[peer.id] === peer else { return }
+      self.connectionAttempts.recordFailure(source: sourceAddress, now: ProcessInfo.processInfo.systemUptime)
+    }
     peer.onMessage = { [weak self, weak peer] message in
-      guard let self, let peer else { return }
+      guard let self, let peer, self.peers[peer.id] === peer else { return }
       self.handle(message, from: peer)
     }
     peer.onClose = { [weak self, weak peer] _ in
       guard let self, let peer else { return }
+      self.pendingPeers.removeValue(forKey: peer.id)
+      self.pendingOrder.removeAll { $0 == peer.id }
+      self.pendingHandshakeCount = self.pendingPeers.count
       self.peers.removeValue(forKey: peer.id)
       self.versions.removeValue(forKey: peer.id)
       self.subscriptions.removeValue(forKey: peer.id)
@@ -435,13 +472,30 @@ final class MirrorHost {
 }
 
 nonisolated struct MirrorConnectionAttempts {
-  private var attempts: [TimeInterval] = []
+  private var failures: [String: [TimeInterval]] = [:]
 
-  mutating func accept(now: TimeInterval) -> Bool {
+  mutating func allows(source: String, now: TimeInterval) -> Bool {
     guard now.isFinite else { return false }
-    attempts.removeAll { now >= $0 + 60 }
-    guard attempts.count < 12 else { return false }
-    attempts.append(now)
-    return true
+    prune(now: now)
+    return (failures[source]?.count ?? 0) < 12
+  }
+
+  mutating func recordFailure(source: String, now: TimeInterval) {
+    guard now.isFinite else { return }
+    prune(now: now)
+    // Bound bookkeeping even when many source addresses fail authentication.
+    if failures[source] == nil, failures.count >= 256,
+      let oldest = failures.min(by: { ($0.value.last ?? 0) < ($1.value.last ?? 0) })?.key
+    {
+      failures.removeValue(forKey: oldest)
+    }
+    if (failures[source]?.count ?? 0) < 12 { failures[source, default: []].append(now) }
+  }
+
+  private mutating func prune(now: TimeInterval) {
+    failures = failures.compactMapValues { times in
+      let recent = times.filter { now < $0 + 60 }
+      return recent.isEmpty ? nil : recent
+    }
   }
 }

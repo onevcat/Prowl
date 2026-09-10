@@ -8,6 +8,7 @@ final class MirrorConnection {
   let connection: NWConnection
   var onMessage: ((MirrorMessage) -> Void)?
   var onReady: (() -> Void)?
+  var onHandshakeFailure: (() -> Void)?
   var onClose: ((String?) -> Void)?
   private var closed = false
   private var finishing = false
@@ -16,10 +17,15 @@ final class MirrorConnection {
   private var deadline: Task<Void, Never>?
   private let clock: any Clock<Duration>
   private var becameReady = false
+  private let handshakeTimeout: Duration
 
-  init(_ connection: NWConnection, clock: any Clock<Duration> = ContinuousClock()) {
+  init(
+    _ connection: NWConnection, clock: any Clock<Duration> = ContinuousClock(),
+    handshakeTimeout: Duration = .seconds(30)
+  ) {
     self.connection = connection
     self.clock = clock
+    self.handshakeTimeout = handshakeTimeout
   }
 
   static func parameters(pairingKey: String) throws -> NWParameters {
@@ -62,6 +68,7 @@ final class MirrorConnection {
           self.becameReady = true
           self.resetDeadline()
           self.onReady?()
+          guard !self.closed else { return }
           self.readHeader()
           let clock = self.clock
           self.heartbeat = Task { [weak self] in
@@ -70,7 +77,9 @@ final class MirrorConnection {
               self?.send(MirrorMessage(kind: .ping))
             }
           }
-        case .failed(let error): self.close(error.localizedDescription)
+        case .failed(let error):
+          if !self.becameReady { self.onHandshakeFailure?() }
+          self.close(error.localizedDescription)
         case .cancelled: self.close(nil)
         case .waiting(let error):
           if self.becameReady { self.close("Connection lost: \(error.localizedDescription)") }
@@ -121,6 +130,7 @@ final class MirrorConnection {
     let callback = onClose
     onMessage = nil
     onReady = nil
+    onHandshakeFailure = nil
     onClose = nil
     callback?(reason)
   }
@@ -128,7 +138,7 @@ final class MirrorConnection {
   private func resetDeadline() {
     deadline?.cancel()
     let clock = clock
-    let timeout: Duration = becameReady ? .seconds(8) : .seconds(30)
+    let timeout: Duration = becameReady ? .seconds(8) : handshakeTimeout
     deadline = Task { [weak self] in
       do { try await clock.sleep(for: timeout) } catch { return }
       self?.close("Remote connection timed out. The other side is no longer responding.")

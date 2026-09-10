@@ -7,6 +7,51 @@ import Testing
 
 @MainActor
 struct MirrorConnectionTests {
+  @Test(.timeLimit(.minutes(1))) func incompleteHandshakeUsesShortDeadlineWithoutCountingFailure() async throws {
+    let listener = try NWListener(using: .tcp)
+    let listening = AsyncStream<Void>.makeStream()
+    let accepted = AsyncStream<Void>.makeStream()
+    var server: NWConnection?
+    listener.newConnectionHandler = { connection in
+      Task { @MainActor in
+        server = connection
+        connection.start(queue: .main)
+        accepted.continuation.yield(())
+      }
+    }
+    listener.stateUpdateHandler = { state in
+      if case .ready = state { listening.continuation.yield(()) }
+    }
+    listener.start(queue: .main)
+    defer {
+      server?.cancel()
+      listener.cancel()
+      listening.continuation.finish()
+      accepted.continuation.finish()
+    }
+    var readyListener = listening.stream.makeAsyncIterator()
+    _ = await readyListener.next()
+    let clock = TestClock()
+    let peer = MirrorConnection(
+      NWConnection(
+        host: "127.0.0.1", port: try #require(listener.port),
+        using: try MirrorConnection.parameters(pairingKey: MirrorPairingCode.generate())),
+      clock: clock, handshakeTimeout: .seconds(5))
+    var closeReason: String?
+    var failedHandshake = false
+    peer.onClose = { closeReason = $0 }
+    peer.onHandshakeFailure = { failedHandshake = true }
+    defer { peer.close() }
+    peer.start()
+    var serverAccepted = accepted.stream.makeAsyncIterator()
+    _ = await serverAccepted.next()
+    await clock.advance(by: .seconds(4))
+    #expect(closeReason == nil)
+    await clock.advance(by: .seconds(1))
+    #expect(closeReason?.contains("timed out") == true)
+    #expect(!failedHandshake)
+  }
+
   @Test(.timeLimit(.minutes(1))) func silentPeerTimesOutDespiteOutgoingHeartbeats() async throws {
     let listener = try NWListener(using: .tcp)
     let listening = AsyncStream<Void>.makeStream()

@@ -8,6 +8,42 @@ import Testing
 @MainActor
 struct MirrorHostTests {
   @Test(.timeLimit(.minutes(1)))
+  func fullSilentHandshakePoolStillAllowsAuthenticatedSubscription() async throws {
+    let source = Source()
+    let suite = "MirrorHandshakeTests-\(UUID())"
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let host = MirrorHost(source: source, defaults: defaults)
+    host.address = "127.0.0.1"
+    host.port = String(try MirrorTestPort.unusedPort())
+    host.start()
+    var silent: [NWConnection] = []
+    defer {
+      for connection in silent { connection.cancel() }
+      host.stop()
+    }
+    for await ready in Observations({ host.isRunning || host.error != nil }) where ready { break }
+    try #require(host.error == nil)
+    for _ in 0..<MirrorHost.maximumPendingHandshakes {
+      let connection = NWConnection(host: "127.0.0.1", port: .init(rawValue: UInt16(host.port)!)!, using: .tcp)
+      silent.append(connection)
+      connection.start(queue: .main)
+    }
+    for await full in Observations({ host.pendingHandshakeCount == MirrorHost.maximumPendingHandshakes }) where full {
+      break
+    }
+    let client = try Peer(port: UInt16(host.port)!, key: host.pairingKey)
+    defer { client.connection.close() }
+    var messages = client.messages.makeAsyncIterator()
+    client.connection.send(MirrorMessage(kind: .subscribe, paneID: source.id))
+    #expect(await messages.next()?.kind == .frame)
+    #expect(host.subscriberCount == 1)
+    #expect(host.pendingHandshakeCount < MirrorHost.maximumPendingHandshakes)
+    host.stop()
+    #expect(host.pendingHandshakeCount == 0)
+  }
+
+  @Test(.timeLimit(.minutes(1)))
   func explicitTakeoverRevokesOldOwnerAndTextReplacesRatherThanAppends() async throws {
     let source = Source()
     let suite = "MirrorTakeoverTests-\(UUID())"

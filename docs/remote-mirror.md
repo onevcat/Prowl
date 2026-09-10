@@ -191,9 +191,14 @@ hyphens. A code remains valid until Host stops. Saved connections retain the cod
 Keychain, so another pane does not require retyping it during that Host run.
 Short codes use TLS 1.2 ECDHE-PSK with ChaCha20-Poly1305; the legacy 64-character
 key path retains its original cipher for connecting to older Hosts. New Host codes
-require updated clients. Host admits at most 12 new connection attempts per rolling
-minute across all clients, and at most 16 concurrent connections. Excess attempts
-are closed; retry after one minute. Existing connected panes are unaffected.
+require updated clients. Host allows 16 authenticated connections and separately
+keeps up to eight pending TLS handshakes, each with a five-second timeout. A new
+handshake replaces the oldest pending handshake when that pool is full; pending
+connections never evict authenticated clients. After 12 TLS handshake failures from
+one source address in a rolling minute, further attempts from that address are
+closed until the failures expire. Silent connections do not consume this failure
+budget. Clients sharing an address also share its cooldown. These bounds limit
+resource use; they do not guarantee availability under sustained network flooding.
 The iPad form has two visible four-character fields, advances after the first half,
 and accepts a complete pasted code in either field. Use Legacy Key supports older
 Hosts. This does not introduce a separate persistent device enrollment credential.
