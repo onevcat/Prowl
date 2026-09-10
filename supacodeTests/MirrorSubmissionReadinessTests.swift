@@ -15,6 +15,21 @@ struct MirrorSubmissionReadinessTests {
       screenDigest: Data(screen.utf8), lastEditingAt: edit, refusal: refusal)
   }
 
+  @Test func shellOutputAdvancesDeliveryEvidenceAndRestartInvalidatesGeneration() {
+    let start = Date(timeIntervalSince1970: 10)
+    var shell = MirrorShellSubmission(pid: 123, started: start)
+    shell.observe(pid: 123, started: start, digest: Data("prompt".utf8))
+    let generation = shell.generation
+    let firstRevision = shell.revision
+    shell.observe(pid: 123, started: start, digest: Data("prompt".utf8))
+    #expect(shell.revision == firstRevision)
+    shell.observe(pid: 123, started: start, digest: Data("command\nprompt".utf8))
+    #expect(shell.revision > firstRevision)
+    #expect(shell.generation == generation)
+    shell.observe(pid: 123, started: start.addingTimeInterval(10), digest: Data("prompt".utf8))
+    #expect(shell.generation != generation)
+  }
+
   @Test func metadataRevisionsDoNotStarveAnUnchangedIdleComposer() {
     var gate = MirrorSubmissionReadiness()
     _ = gate.observe(observation(revision: 1), now: 0)

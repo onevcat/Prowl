@@ -181,7 +181,7 @@ when Prowl already reports idle. The observation must still settle after local e
 or screen changes; connection ownership, Agent generation and duplicate checks remain.
 This intentionally permits input when a local Host draft exists: remote text can
 append to that draft. Conflicting input is not automatically discarded or rolled back.
-Plain shells and Agent installers remain unsupported; start Codex or Claude on Host.
+Plain shell panes also support submission as described below; installers and other foreground programs remain unavailable.
 
 ### Short pairing codes
 
@@ -197,3 +197,21 @@ are closed; retry after one minute. Existing connected panes are unaffected.
 The iPad form has two visible four-character fields, advances after the first half,
 and accepts a complete pasted code in either field. Use Legacy Key supports older
 Hosts. This does not introduce a separate persistent device enrollment credential.
+
+### Sending commands to a shell pane
+
+The mobile composer can send commands such as `ai glm` to an existing plain shell
+pane, before an Agent starts. Host verifies that the live terminal child is a shell
+and that its process group owns the foreground. It waits for screen/local-edit
+stability and sends the text plus Return through the existing terminal interface.
+Once an Agent is identified, the Agent submission rules apply again.
+
+Shell process identity supplies the submission generation; changes in terminal output
+supply acknowledgment evidence so another command can be sent. Connection ownership
+and duplicate submission checks remain in effect. A shell without bracketed paste
+supports single-line submission only. Host drafts can still mix with remote input;
+commands execute with the shell user's existing permissions. This is not remote
+input for arbitrary foreground programs or a dedicated approval UI.
+
+Implementation checkpoint: shell support is source-only and has not been built or
+run through tests yet, at the user's request during ongoing acceptance.

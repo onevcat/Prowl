@@ -1,4 +1,5 @@
 import CryptoKit
+import Darwin
 import Foundation
 import ProwlCLIShared
 
@@ -15,12 +16,37 @@ extension GhosttyMirrorPaneSource {
       revision: observation?.revision ?? 0, isLive: manager.isSurfaceLive(id), signals: signals)
     let frame = try? snapshot(id)
     let parsed = frame.flatMap(MirrorSnapshotEvidence.read)
-    let refusal = submissionRefusal(id, condition: condition, screen: parsed)
+    let digest = frame.map { Data(SHA256.hash(data: $0.bytes)) } ?? Data()
+    shellSubmissions = shellSubmissions.filter { manager.isSurfaceLive($0.key) }
+    if condition.agent == nil, condition.isLive, let terminal = view(id),
+      let pid = terminal.bridge.childPID(), let started = ProcessDetection.processStartDate(pid: pid),
+      let name = ProcessDetection.processArgv0Name(pid: pid),
+      ["sh", "bash", "zsh", "fish", "dash", "ksh", "tcsh", "csh"].contains(name)
+    {
+      var shell = shellSubmissions[id] ?? MirrorShellSubmission(pid: pid, started: started)
+      shell.observe(pid: pid, started: started, digest: digest)
+      shellSubmissions[id] = shell
+    } else {
+      shellSubmissions.removeValue(forKey: id)
+    }
+    let shell = shellSubmissions[id]
+    let refusal: String?
+    if let shell, let terminal = view(id) {
+      if terminal.bridge.foregroundProcessGroupID() != getpgid(shell.pid) {
+        refusal = "Waiting for the foreground command to return to the shell."
+      } else if terminal.markedText.length != 0 {
+        refusal = "The Host is composing text."
+      } else {
+        refusal = parsed == nil ? "Waiting for the shell screen." : nil
+      }
+    } else {
+      refusal = submissionRefusal(id, condition: condition, screen: parsed)
+    }
     var gate = readiness[id] ?? MirrorSubmissionReadiness()
     let state = gate.observe(
       .init(
-        generation: manager.agentEvidenceEpoch(surfaceID: id), runtimeRevision: condition.revision,
-        screenDigest: frame.map { Data(SHA256.hash(data: $0.bytes)) } ?? Data(),
+        generation: shell?.generation ?? manager.agentEvidenceEpoch(surfaceID: id),
+        runtimeRevision: shell?.revision ?? condition.revision, screenDigest: digest,
         lastEditingAt: view(id)?.lastEditingAt, refusal: refusal),
       now: ProcessInfo.processInfo.systemUptime)
     readiness[id] = gate
@@ -34,6 +60,11 @@ extension GhosttyMirrorPaneSource {
       return .init(status: .rejected, detail: "The message contains unsupported input.")
     }
     let current = submissionState(id)
+    let shell = shellSubmissions[id] != nil
+    let bracketed = !shell || (try? snapshot(id)).flatMap(MirrorSnapshotEvidence.read)?.bracketedPaste == true
+    guard bracketed || !text.contains("\n") else {
+      return .init(status: .rejected, detail: "This shell does not support multiline paste. Send one line at a time.")
+    }
     guard current.canSubmit, current.generation == expected.generation, current.revision == expected.revision,
       var gate = readiness[id], gate.claim(expected)
     else {
@@ -43,7 +74,8 @@ extension GhosttyMirrorPaneSource {
     // One length-delimited write keeps multiline paste and Return ordered. No
     // suspension occurs between the last observation and this PTY enqueue.
     do {
-      try write(Data(("\u{1B}[200~" + text + "\u{1B}[201~\r").utf8), to: id)
+      let input = bracketed ? "\u{1B}[200~" + text + "\u{1B}[201~\r" : text + "\r"
+      try write(Data(input.utf8), to: id)
       return .init(status: .accepted, detail: "Message queued to the Host terminal.")
     } catch {
       return .init(status: .unknown, detail: "Terminal delivery could not be confirmed. Check the Host output.")
@@ -97,5 +129,30 @@ extension GhosttyMirrorPaneSource {
       ? CodexScreenProfile.detect(in: snapshot).state
       : ClaudeScreenProfile.detect(in: snapshot).state
     return detectedState == .idle ? nil : "The Agent is working or needs attention."
+  }
+}
+
+/// Shells have no Agent event revision. Output changes release the previous input
+/// claim; a restarted shell gets a new generation so old requests cannot be reused.
+nonisolated struct MirrorShellSubmission {
+  var pid: pid_t
+  var started: Date
+  private(set) var generation = UUID()
+  private(set) var revision: UInt64 = 0
+  private var digest: Data?
+
+  init(pid: pid_t, started: Date) {
+    self.pid = pid
+    self.started = started
+  }
+
+  mutating func observe(pid: pid_t, started: Date, digest: Data) {
+    if self.pid != pid || self.started != started {
+      self = MirrorShellSubmission(pid: pid, started: started)
+    }
+    if self.digest != digest {
+      revision &+= 1
+      self.digest = digest
+    }
   }
 }

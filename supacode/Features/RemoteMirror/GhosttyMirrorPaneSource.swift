@@ -5,6 +5,7 @@ import GhosttyKit
 final class GhosttyMirrorPaneSource: MirrorPaneSource {
   let manager: WorktreeTerminalManager
   var readiness: [UUID: MirrorSubmissionReadiness] = [:]
+  var shellSubmissions: [UUID: MirrorShellSubmission] = [:]
 
   init(manager: WorktreeTerminalManager) {
     self.manager = manager
