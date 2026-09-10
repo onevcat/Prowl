@@ -40,6 +40,7 @@ final class WorktreeTerminalManager {
   private(set) var controlConsoleWorktree: Worktree?
   var controlConsoleSocketPath: String?
   var controlConsoleSurfaceID: UUID?
+  var showControlConsole: (() -> Void)?
 
   func registerControlConsole(_ worktree: Worktree) {
     controlConsoleWorktree = worktree
@@ -1205,7 +1206,9 @@ final class WorktreeTerminalManager {
 
   @discardableResult
   func focusSurface(worktreeID: Worktree.ID, surfaceID: UUID) -> Bool {
-    states[worktreeID]?.focusSurface(id: surfaceID) == true
+    guard states[worktreeID]?.focusSurface(id: surfaceID) == true else { return false }
+    if worktreeID == controlConsoleWorktree?.id { showControlConsole?() }
+    return true
   }
 
   func markNotificationRead(worktreeID: Worktree.ID, notificationID: UUID) {

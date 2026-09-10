@@ -18,6 +18,11 @@ extension RepositoriesFeature {
     case .activeAgents(.entryTapped(let id)), .activeAgents(.handOffTapped(let id)),
       .activeAgents(.runWorkflowTapped(let id, _)):
       guard let entry = state.activeAgents.entries[id: id] else { return .none }
+      if entry.worktreeID == HostControlConsole.worktreeID {
+        return .run { _ in
+          _ = await terminalClient.focusSurface(entry.worktreeID, entry.surfaceID)
+        }
+      }
       if state.isShowingCanvas {
         requestCanvasFocus(.tab(entry.tabID), openedWorktreeID: entry.worktreeID, state: &state)
         return .run { _ in

@@ -292,6 +292,7 @@ struct SupacodeApp: App {
     _memoryWatchdog = State(initialValue: watchdog)
 
     remoteMirror.controlConsole.makeServer = { try cliServer.makeControlConsoleEndpoint() }
+    configureControlConsoleWindow()
 
     runtime.onQuit = Self.quitHandler(for: appStore)
     appDelegate.appStore = appStore
@@ -1385,6 +1386,17 @@ struct SupacodeApp: App {
 
   private static func quitHandler(for appStore: StoreOf<AppFeature>) -> () -> Void {
     { [weak appStore] in appStore?.send(.requestQuit) }
+  }
+
+  private func configureControlConsoleWindow() {
+    remoteMirror.controlConsole.windowContent = {
+      [weak console = remoteMirror.controlConsole, terminalManager, ghosttyShortcuts, commandKeyObserver, store] in
+      guard let console else { return AnyView(EmptyView()) }
+      return AnyView(
+        ControlConsoleWindowContent(
+          console: console, manager: terminalManager, shortcuts: ghosttyShortcuts,
+          commandKeyObserver: commandKeyObserver, keybindings: store.resolvedKeybindings))
+    }
   }
 
   private static func makeRemoteMirrorStore(

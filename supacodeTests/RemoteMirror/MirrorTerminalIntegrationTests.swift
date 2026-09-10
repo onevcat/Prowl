@@ -3,6 +3,7 @@ import ComposableArchitecture
 import Darwin
 import GhosttyKit
 import Observation
+import SwiftUI
 import Synchronization
 import Testing
 
@@ -11,13 +12,65 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct MirrorTerminalIntegrationTests {
+  @Test(.timeLimit(.minutes(1)))
+  func controlConsoleWindowRendersAndReopensThroughSurfaceFocus() async throws {
+    let fixture = try Fixture()
+    defer { fixture.close() }
+    let console = HostControlConsole(
+      manager: fixture.manager, profiles: [], defaults: fixture.defaults)
+    console.selectPreset(.custom)
+    console.command = "/usr/bin/printf '%s'"
+    console.directory = fixture.directory.path
+    console.enabled = true
+    let store = Store(initialState: AppFeature.State()) { AppFeature() }
+    let router = SupacodeApp.makeCLICommandRouter(appStore: store, terminalManager: fixture.manager)
+    console.makeServer = {
+      let server = CLISocketServer(router: router, socketPath: "/tmp/prowl-window-\(UUID()).sock")
+      try server.start()
+      return server
+    }
+    let shortcuts = GhosttyShortcutManager(preview: ())
+    let observer = CommandKeyObserver()
+    console.windowContent = { [weak console] in
+      guard let console else { return AnyView(EmptyView()) }
+      return AnyView(
+        ControlConsoleWindowContent(
+          console: console, manager: fixture.manager, shortcuts: shortcuts,
+          commandKeyObserver: observer))
+    }
+    defer { console.stop() }
+    console.start()
+    try await fixture.wait("Custom control terminal") { !console.isStarting }
+    try #require(console.error == nil)
+    let surface = try #require(console.surface)
+    console.show()
+    let window = try #require(NSApp.windows.first { $0.title == "Prowl — AI Control Console" })
+    window.contentView?.layoutSubtreeIfNeeded()
+    #expect(window.isVisible)
+    let view = try #require(
+      fixture.manager.stateIfExists(for: HostControlConsole.worktreeID)?.surfaces[surface.surfaceID]
+    )
+    try await fixture.wait("Custom command receives control instructions") {
+      (view.readScreenContentsForCLI() ?? "").contains("Prowl AI control console")
+    }
+    window.close()
+    #expect(!window.isVisible)
+    #expect(console.isAlive)
+    #expect(
+      fixture.manager.focusSurface(
+        worktreeID: HostControlConsole.worktreeID, surfaceID: surface.surfaceID))
+    window.contentView?.layoutSubtreeIfNeeded()
+    #expect(window.isVisible)
+  }
+
   @Test(
     .enabled(if: ProcessInfo.processInfo.environment["PROWL_RUN_LIVE_CONTROL_CONSOLE"] == "1"),
     .timeLimit(.minutes(3)))
   func liveControlConsoleReadsItsBundledGuideAndCLI() async throws {
     let fixture = try Fixture()
     defer { fixture.close() }
-    let executable = try #require(ProcessInfo.processInfo.environment["PROWL_MIRROR_CODEX_EXECUTABLE"])
+    let executable = try #require(
+      ProcessInfo.processInfo.environment["PROWL_MIRROR_CODEX_EXECUTABLE"])
     var environment = Fixture.liveAgentEnvironment
     environment["PATH"] =
       URL(fileURLWithPath: executable).deletingLastPathComponent().path
@@ -27,9 +80,11 @@ struct MirrorTerminalIntegrationTests {
       environmentOverrides: environment.keys.sorted().map {
         AgentProfileEnvironmentOverride(name: $0, value: environment[$0]!)
       })
-    let console = HostControlConsole(manager: fixture.manager, profiles: [profile], defaults: fixture.defaults)
+    let console = HostControlConsole(
+      manager: fixture.manager, profiles: [profile], defaults: fixture.defaults)
     console.enabled = true
-    console.directory = try #require(ProcessInfo.processInfo.environment["PROWL_TEST_CONSOLE_DIRECTORY"])
+    console.directory = try #require(
+      ProcessInfo.processInfo.environment["PROWL_TEST_CONSOLE_DIRECTORY"])
     console.profile.executionMode = .unrestricted
     let store = Store(initialState: AppFeature.State()) { AppFeature() }
     let router = SupacodeApp.makeCLICommandRouter(appStore: store, terminalManager: fixture.manager)
@@ -52,7 +107,8 @@ struct MirrorTerminalIntegrationTests {
     try #require(console.error == nil)
     let launched = try #require(console.surface)
     let view = try #require(
-      fixture.manager.stateIfExists(for: HostControlConsole.worktreeID)?.surfaces[launched.surfaceID])
+      fixture.manager.stateIfExists(for: HostControlConsole.worktreeID)?.surfaces[
+        launched.surfaceID])
     fixture.attach(view)
     let text = { view.readScreenContentsForCLI() ?? "" }
     try await fixture.wait("Control console startup", timeout: .seconds(45)) {
@@ -61,7 +117,9 @@ struct MirrorTerminalIntegrationTests {
     if text().contains("Hooks need review") {
       try #require(ProcessInfo.processInfo.environment["PROWL_TEST_TRUST_CODEX_HOOKS"] == "1")
       try #require(view.sendCLIKeyToken("down"))
-      try await fixture.wait("Trust hooks selected") { text().contains("› 2. Trust all and continue") }
+      try await fixture.wait("Trust hooks selected") {
+        text().contains("› 2. Trust all and continue")
+      }
       try #require(view.sendCLIKeyToken("enter"))
     }
     try await fixture.wait("Control console initialization", timeout: .seconds(90)) {

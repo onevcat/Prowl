@@ -467,7 +467,9 @@ final class WorktreeTerminalState {
     setupScript: String? = nil,
     initialInput: String? = nil,
     inheritingFromSurfaceId: UUID? = nil,
-    workingDirectoryOverride: URL? = nil
+    workingDirectoryOverride: URL? = nil,
+    additionalEnvironment: [String: String] = [:],
+    locksTitle: Bool = false
   ) -> TerminalTabID? {
     let context = GHOSTTY_SURFACE_CONTEXT_TAB
     let resolvedInheritanceSurfaceId = inheritingFromSurfaceId ?? currentFocusedSurfaceId()
@@ -493,13 +495,14 @@ final class WorktreeTerminalState {
       TabCreation(
         title: title,
         icon: "terminal",
-        isTitleLocked: false,
+        isTitleLocked: locksTitle,
         initialInput: resolvedInput,
         focusing: focusing,
         selecting: selecting,
         inheritingFromSurfaceId: resolvedInheritanceSurfaceId,
         context: context,
-        workingDirectoryOverride: workingDirectoryOverride
+        workingDirectoryOverride: workingDirectoryOverride,
+        additionalEnvironment: additionalEnvironment
       )
     )
     if shouldConsumeSetupScript, tabId != nil {

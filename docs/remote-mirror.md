@@ -12,10 +12,22 @@ then choose **Start Host**. `0.0.0.0` listens on all IPv4 interfaces; a specific
 IP restricts the listener to that address. Use this Mac's reachable IP on the Client.
 Copy the random pairing key from the panel. Closing the panel keeps the service on.
 **Copy Pairing Key** writes directly to the clipboard without opening system sharing.
-Optionally enable **AI Control Console** before starting Host. Choose an Agent Profile,
-model, approval mode and working directory. An empty directory uses Application Support.
+Optionally enable **AI Control Console** before starting Host; the panel grows to show
+its configuration, scrolling only when the available screen height is insufficient.
+Choose **Codex**, **Claude**, or **Default** and edit the CLI command. Codex fills
+`codex --yolo`; Claude fills `claude --dangerously-skip-permissions`. Remove those
+flags for normal approvals, or append model options directly. Default accepts another
+executable such as `pi`. Commands are executable-plus-arguments, with quoted arguments
+supported; shell expansion, pipelines, and environment assignments are not evaluated
+(choose Default for wrappers such as an explicit `env` executable). Prowl appends its control instructions
+as one final argument, so a custom CLI must accept a positional initial prompt.
+Default launches without runtime-specific managed hooks; mobile submission still
+requires a supported, verified idle Agent and is not enabled just by selecting Default.
+An empty working directory uses Application Support. Settings are remembered locally.
 The console is a named terminal with an independent **Open AI Control Console** entry;
-its launch failure does not stop sharing. Configuration changes require restarting
+clicking its Active Agents row also opens that terminal, including when it is Blocked
+waiting for directory trust or hook approval. These first-run prompts may still appear
+with bypass flags. Its launch failure does not stop sharing. Configuration changes require restarting
 the console. See [the control-console guide](remote-mirror-control.md).
 The network icon turns green while Host is listening.
 Stopping Host disconnects mirrors without closing any local pane or program.

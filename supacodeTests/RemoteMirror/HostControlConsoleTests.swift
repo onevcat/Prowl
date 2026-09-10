@@ -18,13 +18,82 @@ struct HostControlConsoleTests {
     first.directory = "/tmp/custom-console"
     first.profile.model = "test-model"
     first.profile.executionMode = .unrestricted
+    first.command = "codex --yolo --model test-model"
     let restored = HostControlConsole(manager: manager, profiles: [profile], defaults: defaults)
     #expect(restored.enabled)
     #expect(restored.directory == "/tmp/custom-console")
     #expect(restored.profile.model == "test-model")
     #expect(restored.profile.executionMode == .unrestricted)
+    #expect(restored.command == "codex --yolo --model test-model")
     #expect(!restored.isStarting)
     #expect(restored.surface == nil)
+  }
+
+  @Test func oldProfileIDRestoresByRuntimeWithoutAStaleError() throws {
+    let suite = "ConsoleMigration-\(UUID())"
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let old: [String: Any] = [
+      "enabled": true, "profileID": UUID().uuidString, "runtime": "codex",
+      "model": "saved-model", "bypass": true, "directory": "/tmp/console",
+    ]
+    defaults.set(
+      try JSONSerialization.data(withJSONObject: old), forKey: "remoteMirrorControlConsole")
+    let profile = AgentProfile(name: "Codex", runtime: .codex)
+    let console = HostControlConsole(
+      manager: WorktreeTerminalManager(runtime: GhosttyRuntime()), profiles: [profile],
+      defaults: defaults)
+    #expect(console.profile.id == profile.id)
+    #expect(console.command == "codex --yolo --model 'saved-model'")
+    #expect(console.error == nil)
+    #expect(console.configurationNotice == nil)
+    #expect(console.enabled)
+    #expect(console.directory == "/tmp/console")
+    console.selectPreset(.claude)
+    #expect(console.command == "claude --dangerously-skip-permissions")
+    console.selectPreset(.custom)
+    #expect(console.command.isEmpty)
+    console.command = "pi --model test"
+    let restored = HostControlConsole(
+      manager: WorktreeTerminalManager(runtime: GhosttyRuntime()), profiles: [profile],
+      defaults: defaults)
+    #expect(restored.preset == .custom)
+    #expect(restored.command == "pi --model test")
+  }
+
+  @Test func corruptSettingsAreANoticeAndEditingClearsIt() throws {
+    let suite = "ConsoleInvalid-\(UUID())"
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    defaults.set(Data("invalid".utf8), forKey: "remoteMirrorControlConsole")
+    let console = HostControlConsole(
+      manager: WorktreeTerminalManager(runtime: GhosttyRuntime()), profiles: [], defaults: defaults)
+    #expect(console.error == nil)
+    #expect(console.configurationNotice != nil)
+    console.command = "codex --yolo"
+    #expect(console.configurationNotice == nil)
+  }
+
+  @Test func commandUsesLiteralArgumentsAndOnePromptCarrier() throws {
+    let invocation = try ConsoleAgentPreset.invocation(
+      command: "'/tmp/Agent CLI' --model 'model name' '$(touch nope)'", prompt: "Guide\nsecond line"
+    )
+    #expect(invocation.executable == "/tmp/Agent CLI")
+    #expect(
+      invocation.arguments == ["--model", "model name", "$(touch nope)", "Guide\nsecond line"])
+    let profile = AgentProfile(name: "Codex", runtime: .codex, model: "must-not-duplicate")
+    let plan = try ConsoleAgentPreset.codex.plan(
+      profile: profile, invocation: invocation, prompt: "Guide\nsecond line")
+    #expect(plan.invocation == invocation)
+    #expect(!plan.terminalInput.contains("must-not-duplicate"))
+    #expect(plan.terminalInput.contains("'$(touch nope)'"))
+    #expect(plan.terminalInput.contains("\"$PROWL_LAUNCH_PROMPT\""))
+    #expect(!plan.terminalInput.contains("Guide\nsecond line"))
+    for invalid in ["", "   ", "codex\nwhoami", "codex\0"] {
+      #expect(throws: (any Error).self) {
+        try ConsoleAgentPreset.invocation(command: invalid, prompt: "Guide")
+      }
+    }
   }
 
   @Test func controlContextIsDiscoverableWithoutAddingAFakeRepository() {

@@ -9,12 +9,16 @@ final class HostControlConsole {
   static let worktreeID = "prowl:remote-mirror-control"
   var enabled = false { didSet { saveConfiguration() } }
   var profile: AgentProfile { didSet { saveConfiguration() } }
+  var preset: ConsoleAgentPreset = .codex { didSet { saveConfiguration() } }
+  var command = "codex --yolo" { didSet { saveConfiguration() } }
   var directory = "" { didSet { saveConfiguration() } }
   private(set) var isStarting = false
   private(set) var error: String?
+  private(set) var configurationNotice: String?
   private(set) var surface: LaunchedSurface?
   let profiles: [AgentProfile]
   var makeServer: (() throws -> CLISocketServer)?
+  var windowContent: (() -> AnyView)?
   @ObservationIgnored private var configurationLoaded = false
   @ObservationIgnored private let defaults: UserDefaults
   @ObservationIgnored private let manager: WorktreeTerminalManager
@@ -38,25 +42,31 @@ final class HostControlConsole {
     return manager.stateIfExists(for: Self.worktreeID)?.surfaces[surface.surfaceID]?.surface != nil
   }
 
-  init(manager: WorktreeTerminalManager, profiles: [AgentProfile], defaults: UserDefaults = .standard) {
+  init(
+    manager: WorktreeTerminalManager, profiles: [AgentProfile], defaults: UserDefaults = .standard
+  ) {
     self.defaults = defaults
     self.manager = manager
     let supported = profiles.filter {
       $0.isEnabled && ($0.runtime == .codex || $0.runtime == .claude)
     }
     self.profiles =
-      supported.isEmpty
-      ? [.init(name: "Codex", runtime: .codex), .init(name: "Claude Code", runtime: .claude)]
-      : supported
+      supported
+      + [AgentProfileRuntime.codex, .claude].compactMap { runtime in
+        supported.contains(where: { $0.runtime == runtime })
+          ? nil : AgentProfile(name: runtime == .codex ? "Codex" : "Claude", runtime: runtime)
+      }
     self.profile =
       self.profiles.first(where: { AgentProfileAvailability.isRuntimeInstalled($0.runtime) })
       ?? self.profiles[0]
     self.profile.executionMode = .standard
+    self.preset = self.profile.runtime == .claude ? .claude : .codex
+    self.command = self.preset.command
     if let data = defaults.data(forKey: Self.configurationKey) {
       do {
         let saved = try JSONDecoder().decode(Configuration.self, from: data)
         if let selected = self.profiles.first(where: { $0.id == saved.profileID })
-          ?? (supported.isEmpty ? self.profiles.first(where: { $0.runtime == saved.runtime }) : nil)
+          ?? self.profiles.first(where: { $0.runtime == saved.runtime })
         {
           self.profile = selected
           self.profile.model = saved.model
@@ -64,11 +74,20 @@ final class HostControlConsole {
           self.enabled = saved.enabled
           self.directory = saved.directory
         } else {
-          self.error = "The saved control Agent is unavailable. Choose an Agent Profile."
+          self.enabled = saved.enabled
+          self.directory = saved.directory
+          self.configurationNotice =
+            "The previous Agent Profile is unavailable. Review the launch command."
         }
-      } catch { self.error = "Cannot read saved control-console settings: \(error.localizedDescription)" }
+        self.preset = saved.preset ?? (saved.runtime == .claude ? .claude : .codex)
+        self.command = saved.command ?? Self.legacyCommand(saved)
+      } catch {
+        self.configurationNotice =
+          "Cannot read saved control-console settings. Review the launch command."
+      }
     }
     configurationLoaded = true
+    manager.showControlConsole = { [weak self] in self?.show() }
   }
 
   private static let configurationKey = "remoteMirrorControlConsole"
@@ -80,6 +99,8 @@ final class HostControlConsole {
     let model: String?
     let bypass: Bool
     let directory: String
+    var preset: ConsoleAgentPreset?
+    var command: String?
   }
 
   private func saveConfiguration() {
@@ -87,9 +108,33 @@ final class HostControlConsole {
     do {
       let value = Configuration(
         enabled: enabled, profileID: profile.id, runtime: profile.runtime, model: profile.model,
-        bypass: profile.executionMode == .unrestricted, directory: directory)
+        bypass: profile.executionMode == .unrestricted, directory: directory,
+        preset: preset, command: command)
       defaults.set(try JSONEncoder().encode(value), forKey: Self.configurationKey)
+      configurationNotice = nil
     } catch { self.error = "Cannot save control-console settings: \(error.localizedDescription)" }
+  }
+
+  private static func legacyCommand(_ saved: Configuration) -> String {
+    var words = [saved.runtime.rawValue]
+    if saved.bypass {
+      words.append(saved.runtime == .codex ? "--yolo" : "--dangerously-skip-permissions")
+    }
+    if let model = saved.model, !model.isEmpty {
+      words += ["--model", AgentInvocation.shellQuote(model)]
+    }
+    return words.joined(separator: " ")
+  }
+
+  func selectPreset(_ selected: ConsoleAgentPreset) {
+    preset = selected
+    command = selected.command
+    if let runtime = selected.runtime,
+      let selectedProfile = profiles.first(where: { $0.runtime == runtime })
+    {
+      profile = selectedProfile
+    }
+    error = nil
   }
 
   func start() {
@@ -97,6 +142,8 @@ final class HostControlConsole {
     error = nil
     isStarting = true
     let selectedProfile = profile
+    let selectedPreset = preset
+    let selectedCommand = command
     let selectedDirectory = directory.trimmingCharacters(in: .whitespacesAndNewlines)
     launchTask = Task { [weak self] in
       guard let self else { return }
@@ -105,20 +152,7 @@ final class HostControlConsole {
         self.launchTask = nil
       }
       do {
-        let cwd =
-          selectedDirectory.isEmpty
-          ? Self.defaultDirectory : URL(fileURLWithPath: selectedDirectory)
-        if selectedDirectory.isEmpty {
-          try FileManager.default.createDirectory(at: cwd, withIntermediateDirectories: true)
-        } else {
-          var isDirectory: ObjCBool = false
-          guard selectedDirectory.hasPrefix("/"),
-            FileManager.default.fileExists(atPath: cwd.path, isDirectory: &isDirectory),
-            isDirectory.boolValue
-          else { throw ConsoleError("Choose an existing absolute working directory.") }
-        }
-        // The internal CLI context must exist even when the Agent uses a custom directory.
-        try FileManager.default.createDirectory(at: Self.defaultDirectory, withIntermediateDirectories: true)
+        let cwd = try Self.prepareDirectory(selectedDirectory)
         if server == nil {
           guard let makeServer else {
             throw ConsoleError("The control CLI endpoint is unavailable.")
@@ -134,11 +168,15 @@ final class HostControlConsole {
             "The bundled control-console guide is missing. Rebuild Prowl resources.")
         }
         let prompt = Self.prompt(guide: guide, cli: cli, socket: socket)
-        let plan = try AgentProfileLaunchPlanner.plan(
-          for: selectedProfile, intent: .prompt(prompt),
-          homeBaseDirectory: SupacodePaths.agentProfileHomesDirectory)
         manager.registerControlConsole(worktree)
         manager.controlConsoleSocketPath = socket
+        let invocation = try ConsoleAgentPreset.invocation(command: selectedCommand, prompt: prompt)
+        if selectedPreset == .custom {
+          try launchCustom(invocation: invocation, prompt: prompt, directory: cwd)
+          return
+        }
+        let plan = try selectedPreset.plan(
+          profile: selectedProfile, invocation: invocation, prompt: prompt)
         var request = AgentProfileLaunchRequest(
           plan: plan, placement: .tab(background: true),
           workingDirectoryOverride: cwd, title: "AI Control Console")
@@ -164,6 +202,42 @@ final class HostControlConsole {
     }
   }
 
+  private static func prepareDirectory(_ selectedDirectory: String) throws -> URL {
+    let cwd =
+      selectedDirectory.isEmpty
+      ? defaultDirectory : URL(fileURLWithPath: selectedDirectory)
+    if selectedDirectory.isEmpty {
+      try FileManager.default.createDirectory(at: cwd, withIntermediateDirectories: true)
+    } else {
+      var isDirectory: ObjCBool = false
+      guard selectedDirectory.hasPrefix("/"),
+        FileManager.default.fileExists(atPath: cwd.path, isDirectory: &isDirectory),
+        isDirectory.boolValue
+      else { throw ConsoleError("Choose an existing absolute working directory.") }
+    }
+    // The internal CLI context must exist even when the Agent uses a custom directory.
+    try FileManager.default.createDirectory(
+      at: defaultDirectory, withIntermediateDirectories: true)
+    return cwd
+  }
+
+  private func launchCustom(invocation: AgentInvocation, prompt: String, directory: URL) throws {
+    let state = manager.state(for: worktree)
+    let carrier = AgentProfileLaunchPlanner.promptCarrierName
+    guard
+      let tabID = state.createTab(
+        focusing: false, title: "AI Control Console",
+        initialInput: "env -u \(carrier) "
+          + invocation.terminalInput(
+            replacingFinalArgumentWithEnvironmentVariable: carrier),
+        workingDirectoryOverride: directory,
+        additionalEnvironment: [carrier: prompt], locksTitle: true),
+      let surfaceID = state.focusedSurfaceId(in: tabID)
+    else { throw ConsoleError("Cannot create the control terminal.") }
+    surface = LaunchedSurface(tabID: tabID, surfaceID: surfaceID)
+    manager.controlConsoleSurfaceID = surfaceID
+  }
+
   func cancelPreparation() { launchTask?.cancel() }
 
   func restart() {
@@ -177,24 +251,22 @@ final class HostControlConsole {
   func show() {
     guard isAlive else { return }
     if window == nil {
-      let content = WorktreeTerminalTabsView(
-        worktree: worktree, manager: manager, shouldRunSetupScript: false,
-        forceAutoFocus: true,
-        createTab: { [weak self] in
-          guard let self else { return }
-          _ = self.manager.createTabInDirectory(self.worktree, directory: Self.defaultDirectory)
-        })
+      guard let windowContent else {
+        error = "The control-console window is not configured."
+        return
+      }
       let window = NSWindow(
         contentRect: NSRect(x: 0, y: 0, width: 960, height: 640),
         styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered,
         defer: false)
       window.title = "Prowl — AI Control Console"
       window.isReleasedWhenClosed = false
-      window.contentView = NSHostingView(rootView: content)
+      window.contentView = NSHostingView(rootView: windowContent())
       window.center()
       self.window = window
     }
     window?.makeKeyAndOrderFront(nil)
+    NSApp.activate()
   }
 
   func stop() {

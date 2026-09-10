@@ -3,6 +3,7 @@ import SwiftUI
 struct MirrorHostButton: View {
   @Environment(RemoteMirrorStore.self) private var mirrors
   @State private var isPresented = false
+  @State private var contentHeight: CGFloat = 300
 
   var body: some View {
     Button {
@@ -16,8 +17,16 @@ struct MirrorHostButton: View {
     .popover(isPresented: $isPresented) {
       ScrollView {
         MirrorHostSettingsView(host: mirrors.host, console: mirrors.controlConsole)
+          .fixedSize(horizontal: false, vertical: true)
+          .onGeometryChange(for: CGFloat.self) {
+            $0.size.height
+          } action: {
+            contentHeight = $0
+          }
       }
-      .frame(width: 420).frame(maxHeight: 680)
+      .frame(
+        width: 460,
+        height: min(contentHeight, max(300, (NSScreen.main?.visibleFrame.height ?? 840) - 140)))
     }
   }
 }
@@ -46,7 +55,12 @@ private struct MirrorHostSettingsView: View {
       if console.enabled {
         controlConfiguration
       }
-      if let error = console.error { Text(error).foregroundStyle(.red).textSelection(.enabled) }
+      if console.enabled, let error = console.error {
+        Text(error).foregroundStyle(.red).textSelection(.enabled)
+      }
+      if let notice = console.configurationNotice {
+        Text(notice).foregroundStyle(.secondary).textSelection(.enabled)
+      }
       if console.isAlive {
         HStack {
           Button("Open AI Control Console") { console.show() }
@@ -86,7 +100,7 @@ private struct MirrorHostSettingsView: View {
       }
     }
     .padding(24)
-    .frame(width: 420)
+    .frame(width: 460)
     .accessibilityIdentifier("remote-mirror-host-panel")
     .onChange(of: host.pairingKey) { _, _ in
       copied = false
@@ -97,40 +111,23 @@ private struct MirrorHostSettingsView: View {
   private var controlConfiguration: some View {
     VStack(alignment: .leading, spacing: 8) {
       Picker(
-        "Agent Profile",
-        selection: Binding(
-          get: { console.profile.id },
-          set: { id in
-            if let selected = console.profiles.first(where: { $0.id == id }) {
-              console.profile = selected
-            }
-          })
+        "Agent",
+        selection: Binding(get: { console.preset }, set: { console.selectPreset($0) })
       ) {
-        ForEach(console.profiles) { profile in Text(profile.name).tag(profile.id) }
+        ForEach(ConsoleAgentPreset.allCases) { preset in Text(preset.title).tag(preset) }
       }
-      TextField(
-        "Model (Agent default)",
-        text: Binding(
-          get: { console.profile.model ?? "" },
-          set: {
-            console.profile.model = $0.isEmpty ? nil : $0
-          }))
-      Menu("Suggested models") {
-        ForEach(
-          AgentRuntimeAdapterRegistry.profileAdapter(for: console.profile.runtime)?.modelSuggestions
-            ?? [], id: \.self
-        ) { model in
-          Button(model) { console.profile.model = model }
-        }
-      }
-      .help("Suggestions are built into Prowl; availability depends on your Agent account")
-      Toggle(
-        "Bypass approvals",
-        isOn: Binding(
-          get: { console.profile.executionMode == .unrestricted },
-          set: {
-            console.profile.executionMode = $0 ? .unrestricted : .standard
-          }))
+      .accessibilityIdentifier("remote-mirror-console-agent")
+      TextField("CLI command (for example, pi)", text: $console.command, axis: .vertical)
+        .lineLimit(2...4)
+        .font(.body.monospaced())
+        .help(
+          "Executable and arguments; add model options here. Shell expansions and pipelines are not evaluated."
+        )
+        .accessibilityIdentifier("remote-mirror-console-command")
+      Text(
+        "Edit the command to change model or permissions. Prowl appends its control instructions as the final argument."
+      )
+      .font(.caption).foregroundStyle(.secondary)
       TextField("Working directory (optional)", text: $console.directory)
       Text("Default: \(HostControlConsole.defaultDirectory.path)")
         .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
