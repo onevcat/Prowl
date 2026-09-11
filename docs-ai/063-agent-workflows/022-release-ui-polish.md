@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| **Status** | Implemented; automated verification passed, live Debug visual pass pending |
+| **Status** | Implemented; automated verification and scoped live Debug UI checks passed |
 | **Anchor date** | 2026-09-11 |
 | **Related** | [start sheet](011-c2-start-sheet.md), [status center](010-c1-workflow-status-center.md), [history storage](018-history-storage-plan.md), [step history UI](021-step-history-ui.md), [release gate](016-workflow-ui-release-gate.md) |
 
@@ -83,7 +83,29 @@ two-role starter without asking anything.
   without toasts, start plan, start-sheet skip visibility and unreached roles, starter
   templates, settings draft validation and run-target refresh) — 150 tests passed; the
   full `make test` result is recorded in the PR.
-- Not done here: a live Debug visual pass of the redesigned start sheet, the eight-second
-  status item, the Settings summary, and the New Workflow form. Run `make run-app` with
-  `PROWL_WORKFLOW_UI=1` and check Normal, Shelf, and Canvas per
-  [061](../061-native-toolbar-controls/toolbar-controls.md) before release.
+- The September 12 follow-up checked the current Debug app in Normal, Shelf, and Canvas,
+  including a constrained window. Creation, Settings detail, required enum selection,
+  missing-profile guidance, completed status, and history step/output inspection were exercised.
+  Two deterministic built-in-action runs completed. This does not replace live multi-agent
+  inference or script-approval acceptance; those paths were not changed in this follow-up.
+
+
+## September 12: First-use follow-up
+
+- The Agents popover includes **Manage Workflows…** whenever workflow UI is enabled,
+  including when its workflow list is empty. It uses the existing Settings navigation path.
+- The creation form shows the actual date or rock-paper-scissors example and explains that
+  Create opens the YAML editor. An untouched form shows a neutral path placeholder.
+- User-provided names, IDs, and icons are quoted as YAML strings. Punctuation, numeric names,
+  non-English text, quotes, backslashes, and line breaks cannot change the document structure.
+- **Create with Agent…** includes a valid draft, with localized instructions to retain its
+  identity and replace the example steps after asking about the user's task.
+- Required enum inputs show **Choose…** until selected. Workflows without roles do not show
+  an empty Roles section. Missing profiles point to role requirements and profile Settings.
+- The run-options menu has an explicit accessibility label.
+
+Validation: 76 focused app tests passed, including observed failing-to-passing regressions
+for YAML generation, Settings routing, and draft prompts. `make check` and `make build-app`
+passed. A workflow named `UI Review: #2` was created through the form and validated with the
+CLI without losing its name. Temporary bundles and completed test runs were archived outside
+the workflow catalog after verification.

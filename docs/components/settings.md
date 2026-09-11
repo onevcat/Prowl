@@ -74,7 +74,9 @@ role's behavior, **Preferred Agent Profile** for launch roles, **Run Setup**
 (Follow Workflow / Always Review Before Running / Run Directly When Possible),
 validation, and source-file actions. **New Workflow…** asks for a name, id,
 icon, and a single- or multi-agent starter, then opens the YAML in the default
-app; **Create with Agent…** provides an authoring prompt. **Run History** shows
+app; **Create with Agent…** provides an authoring prompt, including a valid
+creation draft when opened from that form. **Manage Workflows…** in the Agents
+capsule opens this Settings page directly. **Run History** shows
 the archive size with **Clear History…**. Rows and open details follow file
 changes live. See [workflows](workflows.md#settings--agents--workflows).
 

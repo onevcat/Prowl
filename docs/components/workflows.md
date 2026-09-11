@@ -77,7 +77,8 @@ identical:
   workflow's YAML icon and starts the workflow. Its trailing `ellipsis.circle`
   menu offers **Run with Options…** (which forces the start sheet) and **Show
   Details in Settings…**. Files that fail validation remain dimmed with their
-  reason and still link to their Settings detail. → [agent-profiles](agent-profiles.md#launching)
+  reason and still link to their Settings detail. **Manage Workflows…** opens
+  Settings → Agents → Workflows, even when no workflows are listed. → [agent-profiles](agent-profiles.md#launching)
 - **Active Agents** → right-click a row → **Run Workflow ▸** — starts it with
   that pane fixed as the `current` role's source. → [active-agents](active-agents.md)
 - **CLI** — `prowl workflow run <id|name> [source] [--role r=…] [--input k=v] [--skip step]`.
@@ -105,12 +106,15 @@ the body is arranged in sections like the Workflow History panel:
     suggestion…** appears when the role's `suggest` matches no enabled profile:
     it creates a normal Agent Profile inline and selects it. A launch role the
     current options never reach (a branch that is not taken) is listed dimmed
-    with **Not used** in place of its picker.
+    with **Not used** in place of its picker. If no profile qualifies, the sheet
+    points to the role's agent requirements and Settings → Agents → Profiles.
+    Correct the requirements or profiles, then reopen the setup.
   - `pick` — a pane picker over detected agents in the worktree, excluding
     panes already in a run and the source pane.
 - **Options** — the declared inputs in the same grid, labeled by their `prompt`
   (hover for the input name and default) with defaults pre-filled; enum inputs
-  are menus, the rest text fields. Required inputs without a default must be
+  are menus, the rest text fields. An enum without a default starts at **Choose…**.
+  Required inputs without a default must be
   filled before Run enables.
 - **Steps** — the run's steps in order with their role, so choices like
   "launch or save" read as "step 3 starts the receiving agent". Steps inside an
@@ -294,7 +298,11 @@ validated, commented `<id>.pwlworkflow/workflow.yaml` into the current page's
 workflow folder — the comments point at this manual and the bundled skill on
 disk — and open it in the default YAML app. **Create with Agent…** (on the index
 and inside the form) provides a copyable prompt that points a coding agent at
-the bundled `prowl-workflow` skill and this manual. The folder button reveals
+the bundled `prowl-workflow` skill and this manual. From a valid creation form,
+the prompt includes the selected starter and its name, ID, and icon, so the agent
+can adapt that draft to your task. The form describes the actual starter example
+and the editor handoff before you create it. Names containing punctuation or
+non-English text are preserved in the YAML file. The folder button reveals
 the current workflow folder, creating it when needed.
 
 The page follows its source folders live, so saving, adding, deleting, or

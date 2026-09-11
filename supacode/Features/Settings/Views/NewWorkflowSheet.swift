@@ -39,7 +39,10 @@ struct NewWorkflowSheet: View {
         get: { store.newWorkflow?.showsAuthoringPrompt == true },
         set: { store.send(.setAuthoringPromptPresented($0)) })
     ) {
-      AskAgentHelpView(strings: workflowAuthoringPromptStrings(directory: store.workflowDirectory)) {
+      AskAgentHelpView(
+        strings: workflowAuthoringPromptStrings(
+          directory: store.workflowDirectory, draft: problem == nil ? store.newWorkflow?.request : nil)
+      ) {
         store.send(.setAuthoringPromptPresented(false))
       }
     }
@@ -61,7 +64,7 @@ struct NewWorkflowSheet: View {
           }
           Text(idCaption)
             .font(.caption)
-            .foregroundStyle(problem == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.orange))
+            .foregroundStyle(showsProblem ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
             .fixedSize(horizontal: false, vertical: true)
         }
       }
@@ -95,8 +98,8 @@ struct NewWorkflowSheet: View {
       Text("Starter")
     } footer: {
       Text(
-        "Both starters are small, valid workflows with comments that explain every field, "
-          + "so you can grow them into your own. Prefer an agent to write it for you? Use Create with Agent.")
+        "Create opens the example in your text editor. Edit its instructions to make it your own, "
+          + "then return here to run it. For help writing a workflow, use Create with Agent.")
     }
   }
 
@@ -122,7 +125,7 @@ struct NewWorkflowSheet: View {
             .font(.callout)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
-          Text(kind.examples)
+          Text(kind.starterDescription)
             .font(.caption)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
@@ -155,10 +158,13 @@ struct NewWorkflowSheet: View {
 
   private var problem: String? { store.newWorkflowProblem }
 
+  private var showsProblem: Bool { problem != nil && store.newWorkflow?.name.isEmpty == false }
+
   private var idCaption: String {
-    if let problem, store.newWorkflow?.name.isEmpty == false { return problem }
+    if showsProblem, let problem { return problem }
     let folder = (store.workflowDirectory.path(percentEncoded: false) as NSString).abbreviatingWithTildeInPath
-    let file = store.newWorkflow?.request.fileName ?? "<id>.pwlworkflow"
+    let id = store.newWorkflow?.id ?? ""
+    let file = id.isEmpty ? "<id>.pwlworkflow" : "\(id).pwlworkflow"
     return "Creates \(folder)/\(file)/workflow.yaml"
   }
 
@@ -196,15 +202,6 @@ extension WorkflowStarterTemplate.Kind {
       "A prompt template. Prowl sends one instruction to the agent in the current pane and collects its answer."
     case .multiAgent:
       "Several agents that hand results to each other. Prowl launches or picks the other agents for each role."
-    }
-  }
-
-  var examples: String {
-    switch self {
-    case .singleAgent:
-      "Examples: summarize the diff, draft a commit message, run the tests and report."
-    case .multiAgent:
-      "Examples: hand off to a fresh agent, cross review, adversarial review."
     }
   }
 

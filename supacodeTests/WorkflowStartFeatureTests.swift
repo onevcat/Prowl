@@ -23,6 +23,24 @@ struct WorkflowStartFeatureTests {
     #expect(!state.canRun)
   }
 
+  @Test func requiredEnumNeedsAnExplicitChoice() throws {
+    let yaml = """
+      schema: prowl.workflow/v1
+      id: choose-style
+      name: Choose Style
+      inputs:
+        style: {type: enum, values: [brief, detailed]}
+      steps:
+        - id: done
+          notify: "Selected {{ inputs.style }}"
+      """
+    var state = WorkflowStartFeature.State(context: try makeContext(yaml: yaml))
+    #expect(state.inputValues["style"] == nil)
+    #expect(!state.canRun)
+    state.inputValues["style"] = "brief"
+    #expect(state.canRun)
+  }
+
   static let review = """
     schema: prowl.workflow/v1
     id: review

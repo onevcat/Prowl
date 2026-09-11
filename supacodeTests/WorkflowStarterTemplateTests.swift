@@ -6,6 +6,20 @@ import Testing
 
 struct WorkflowStarterTemplateTests {
   @Test(arguments: WorkflowStarterTemplate.Kind.allCases)
+  func userTextRoundTripsWithoutChangingYAML(kind: WorkflowStarterTemplate.Kind) throws {
+    let names = ["Review: today's changes", "Review #2", "true", "2026", "日本語", "A \"quote\" \\ path", "First\nSecond"]
+    for name in names {
+      let request = WorkflowStarterTemplate.Request(name: name, id: "123", icon: "true", kind: kind)
+      let parsed = WorkflowDocumentParser.parse(WorkflowStarterTemplate.yaml(request))
+      let definition = try #require(parsed.definition, "\(name): \(parsed.diagnostics)")
+      #expect(parsed.diagnostics.isEmpty)
+      #expect(definition.name == name)
+      #expect(definition.id == "123")
+      #expect(definition.icon == "true")
+    }
+  }
+
+  @Test(arguments: WorkflowStarterTemplate.Kind.allCases)
   func starterValidatesAsAUserWorkflow(kind: WorkflowStarterTemplate.Kind) throws {
     let request = WorkflowStarterTemplate.Request(name: "Daily Check", id: "daily-check", icon: "calendar", kind: kind)
     let yaml = WorkflowStarterTemplate.yaml(request)

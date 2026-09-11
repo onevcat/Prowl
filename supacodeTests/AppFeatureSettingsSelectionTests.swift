@@ -208,6 +208,24 @@ struct AppFeatureSettingsSelectionTests {
     #expect(surfaced.value)
   }
 
+  @Test(.dependencies) func openWorkflowSettingsSelectsWorkflowsBeforeShowingWindow() async {
+    let shown = LockIsolated(false)
+    var state = AppFeature.State(settings: SettingsFeature.State())
+    state.settings.selection = .commandLineTool
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    } withDependencies: {
+      $0.settingsWindowClient.show = { shown.withValue { $0 = true } }
+    }
+    await store.send(.openWorkflowSettings)
+    await store.receive(\.settings.setSelection) {
+      $0.settings.selection = .workflows
+      $0.settings.workflows = .init()
+    }
+    await store.finish()
+    #expect(shown.value)
+  }
+
   @Test(.dependencies) func openAgentProfilesSettingsSelectsProfiles() async {
     let shown = LockIsolated(false)
     var state = AppFeature.State(settings: SettingsFeature.State())

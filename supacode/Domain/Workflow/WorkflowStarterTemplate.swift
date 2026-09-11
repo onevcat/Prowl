@@ -75,7 +75,7 @@ nonisolated enum WorkflowStarterTemplate {
 
   private static func header(_ request: Request, explanation: String) -> String {
     """
-    # \(request.name) — a Prowl Agent Workflow (schema prowl.workflow/v1).
+    # A Prowl Agent Workflow (schema prowl.workflow/v1).
     #
     \(explanation)
     #
@@ -87,14 +87,28 @@ nonisolated enum WorkflowStarterTemplate {
   }
 
   private static func identity(_ request: Request, description: String, iconHint: String) -> String {
-    let icon = request.icon.map { "icon: \($0)" } ?? "# icon: \(iconHint)"
+    let icon = request.icon.map { "icon: \(yamlString($0))" } ?? "# icon: \(iconHint)"
     return """
       schema: prowl.workflow/v1
-      id: \(request.id)
-      name: \(request.name)
+      id: \(yamlString(request.id))
+      name: \(yamlString(request.name))
       description: \(description)
       \(icon)                # optional SF Symbol shown by the entry points
       """
+  }
+
+  /// Quote user text so YAML cannot treat punctuation or scalar-looking names as syntax.
+  private static func yamlString(_ value: String) -> String {
+    let escaped = value.unicodeScalars.map { scalar -> String in
+      switch scalar.value {
+      case 0x22: return "\\\""
+      case 0x5C: return "\\\\"
+      case 0x00...0x1F, 0x7F...0x9F, 0x2028, 0x2029:
+        return String(format: "\\u%04X", scalar.value)
+      default: return String(scalar)
+      }
+    }.joined()
+    return "\"\(escaped)\""
   }
 
   private static func singleAgent(_ request: Request) -> String {

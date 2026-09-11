@@ -80,6 +80,7 @@ struct AppFeature {
     case runCustomCommand(EffectiveCustomCommand.Identifier)
     case launchAgentProfile(AgentProfile.ID)
     case openAgentProfilesSettings
+    case openWorkflowSettings
     case openWorkflowDetails(WorkflowStartCatalogItem, worktreeID: Worktree.ID)
     case canvasFocusedWorktreeChanged(Worktree.ID?)
     case runScriptDraftChanged(String)
@@ -803,6 +804,9 @@ struct AppFeature {
 
       case .launchAgentProfile(let profileID):
         return launchAgentProfile(profileID, state: &state)
+
+      case .openWorkflowSettings:
+        return openSettingsEffect(selecting: .workflows)
 
       case .openAgentProfilesSettings:
         return openSettingsEffect(selecting: .profiles)

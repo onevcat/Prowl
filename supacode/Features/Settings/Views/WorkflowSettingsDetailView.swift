@@ -24,7 +24,9 @@ struct WorkflowSettingsDetailView: View {
             }
           }
           runSection(row)
-          rolesSection(row)
+          if !row.roles.isEmpty {
+            rolesSection(row)
+          }
           runSetupSection(row)
           validationSection(row)
           sourceFileSection(row)
@@ -133,6 +135,7 @@ struct WorkflowSettingsDetailView: View {
           .fixedSize()
           .disabled(!canRun(row))
           .help("Choose another worktree or review options before running")
+          .accessibilityLabel("Workflow run options")
         }
       } else {
         Label("Open a worktree to run this workflow.", systemImage: "rectangle.stack.badge.plus")

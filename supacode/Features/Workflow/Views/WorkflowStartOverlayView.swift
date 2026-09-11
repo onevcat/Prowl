@@ -202,13 +202,15 @@ private struct WorkflowStartCard: View {
 
   private func choicesForm(_ plan: WorkflowStartPlan) -> some View {
     VStack(alignment: .leading, spacing: 12) {
-      sectionHeader("Roles", help: "Who takes part in this run. Hover a role for what it does.")
-      ForEach(plan.roles) { role in
-        roleRow(role)
+      if !plan.roles.isEmpty {
+        sectionHeader("Roles", help: "Who takes part in this run. Hover a role for what it does.")
+        ForEach(plan.roles) { role in
+          roleRow(role)
+        }
       }
       if !store.context.definition.inputs.isEmpty {
         sectionHeader("Options", help: "Choices this workflow asks for before it starts.")
-          .padding(.top, 10)
+          .padding(.top, plan.roles.isEmpty ? 0 : 10)
         ForEach(store.context.definition.inputs, id: \.name) { input in
           inputRow(input)
         }
@@ -237,6 +239,15 @@ private struct WorkflowStartCard: View {
             .help("A step sends this role instructions, so its pane must host a detected agent.")
         }
         if required, let launch {
+          if !store.state.candidates(for: launch).contains(where: { $0.unavailableReason == nil }) {
+            Text(
+              "No profile can run this role. Check its agent requirements and Settings → Agents → Profiles, "
+                + "then reopen this setup."
+            )
+            .font(.footnote)
+            .foregroundStyle(.orange)
+            .fixedSize(horizontal: false, vertical: true)
+          }
           if let note = launch.rejectedNote {
             Text(note)
               .font(.footnote)
@@ -381,6 +392,9 @@ private struct WorkflowStartCard: View {
       Group {
         if !input.values.isEmpty {
           Picker(input.name, selection: inputBinding(name: input.name)) {
+            if input.defaultValue == nil {
+              Text("Choose…").tag("")
+            }
             ForEach(input.values, id: \.self) { value in
               Text(value).tag(value)
             }

@@ -57,6 +57,7 @@ struct AgentsToolbarButton: View {
   let workflowsWorktreeID: Worktree.ID?
   let onLaunchProfile: (AgentProfile.ID) -> Void
   let onManageProfiles: () -> Void
+  let onManageWorkflows: () -> Void
   let onRunWorkflow: (String) -> Void
   let onRunWorkflowWithOptions: (String) -> Void
   let onShowWorkflowDetails: (WorkflowStartCatalogItem) -> Void
@@ -83,6 +84,10 @@ struct AgentsToolbarButton: View {
         onManageProfiles: {
           isPopoverPresented = false
           onManageProfiles()
+        },
+        onManageWorkflows: {
+          isPopoverPresented = false
+          onManageWorkflows()
         },
         onRunWorkflow: { key in
           isPopoverPresented = false
@@ -186,6 +191,7 @@ private struct AgentsPopoverContent: View {
   let workflowsWorktreeID: Worktree.ID?
   let onLaunchProfile: (AgentProfile.ID) -> Void
   let onManageProfiles: () -> Void
+  let onManageWorkflows: () -> Void
   let onRunWorkflow: (String) -> Void
   let onRunWorkflowWithOptions: (String) -> Void
   let onShowWorkflowDetails: (WorkflowStartCatalogItem) -> Void
@@ -232,6 +238,15 @@ private struct AgentsPopoverContent: View {
       }
       if capsule != nil || !launcherItems.isEmpty {
         Divider().padding(.vertical, 4)
+      }
+      if featureFlags.workflowUI {
+        AgentsPopoverRow(
+          title: "Manage Workflows…",
+          subtitle: "Review, create, and edit workflows in Settings",
+          systemImage: "point.3.connected.trianglepath.dotted",
+          action: onManageWorkflows
+        )
+        .help("Open Settings → Agents → Workflows")
       }
       AgentsPopoverRow(
         title: "Manage Agent Profiles…",

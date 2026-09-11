@@ -10,18 +10,40 @@ nonisolated enum WorkflowAuthoringPrompt {
     skillPath: String,
     manualPath: String,
     workflowsDirectory: String,
+    draft: WorkflowStarterTemplate.Request? = nil,
     locale: Locale = AskAgentHelpPrompt.systemPreferredLocale()
   ) -> AskAgentHelpStrings {
-    switch AskAgentHelpPrompt.languageKey(for: locale) {
+    var strings: AskAgentHelpStrings
+    let language = AskAgentHelpPrompt.languageKey(for: locale)
+    switch language {
     case .english:
-      return english(skill: skillPath, manual: manualPath, directory: workflowsDirectory)
+      strings = english(skill: skillPath, manual: manualPath, directory: workflowsDirectory)
     case .simplifiedChinese:
-      return simplifiedChinese(skill: skillPath, manual: manualPath, directory: workflowsDirectory)
+      strings = simplifiedChinese(skill: skillPath, manual: manualPath, directory: workflowsDirectory)
     case .traditionalChinese:
-      return traditionalChinese(skill: skillPath, manual: manualPath, directory: workflowsDirectory)
+      strings = traditionalChinese(skill: skillPath, manual: manualPath, directory: workflowsDirectory)
     case .japanese:
-      return japanese(skill: skillPath, manual: manualPath, directory: workflowsDirectory)
+      strings = japanese(skill: skillPath, manual: manualPath, directory: workflowsDirectory)
     }
+    if let draft {
+      let introduction: String
+      switch language {
+      case .english:
+        introduction =
+          "Use this draft as a starting point. Keep its name, ID, and icon unless I ask to change them. "
+          + "Ask what I want it to do, then replace the example steps."
+      case .simplifiedChinese:
+        introduction = "请以这份草稿为起点，保留名称、ID 和图标，除非我要求修改。先问我想实现什么，再替换示例步骤。"
+      case .traditionalChinese:
+        introduction = "請以這份草稿為起點，保留名稱、ID 和圖示，除非我要求修改。先問我想實現什麼，再替換範例步驟。"
+      case .japanese:
+        introduction =
+          "この下書きを出発点にしてください。変更を頼まない限り、名前、ID、アイコンを保持してください。"
+          + "目的を私に確認してから、サンプルのステップを置き換えてください。"
+      }
+      strings.prompt += "\n\n\(introduction)\n\n```yaml\n\(WorkflowStarterTemplate.yaml(draft))```"
+    }
+    return strings
   }
 
   private static func english(skill: String, manual: String, directory: String) -> AskAgentHelpStrings {

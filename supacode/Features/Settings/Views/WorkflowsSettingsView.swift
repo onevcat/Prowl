@@ -333,12 +333,16 @@ struct WorkflowStatusLabel: View {
   }
 }
 
-func workflowAuthoringPromptStrings(directory: URL) -> AskAgentHelpStrings {
+func workflowAuthoringPromptStrings(
+  directory: URL, draft: WorkflowStarterTemplate.Request? = nil
+) -> AskAgentHelpStrings {
   let documentation = WorkflowStarterTemplate.bundledDocumentation
+  var draft = draft
+  draft?.documentation = documentation
   return WorkflowAuthoringPrompt.strings(
     skillPath: documentation.skillPath,
     manualPath: documentation.manualPath,
-    workflowsDirectory: directory.path(percentEncoded: false))
+    workflowsDirectory: directory.path(percentEncoded: false), draft: draft)
 }
 
 extension WorkflowStarterTemplate {
