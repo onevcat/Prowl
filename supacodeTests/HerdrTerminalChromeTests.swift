@@ -118,7 +118,9 @@ struct HerdrTerminalChromeTests {
           snapshotCalls.withValue { $0 += 1 }
           return .empty
         },
-        subscribeEvents: { _ in HerdrEventSubscription(stream: AsyncStream { $0.finish() }, cancel: {}) },
+        subscribeEvents: { _ in
+          HerdrEventSubscription(stream: AsyncStream { $0.finish() }, cancel: {})
+        },
         focusWorkspace: { _ in },
         focusTab: { _ in },
         focusPane: { _ in },
@@ -169,7 +171,9 @@ struct HerdrTerminalChromeTests {
           snapshotCalls.withValue { $0 += 1 }
           return .empty
         },
-        subscribeEvents: { _ in HerdrEventSubscription(stream: AsyncStream { $0.finish() }, cancel: {}) },
+        subscribeEvents: { _ in
+          HerdrEventSubscription(stream: AsyncStream { $0.finish() }, cancel: {})
+        },
         focusWorkspace: { _ in },
         focusTab: { _ in },
         focusPane: { _ in },
@@ -518,6 +522,71 @@ struct HerdrTerminalChromeTests {
     }
   }
 
+  @Test(.dependencies) func localHerdrNavigationProjectsSelectionBeforeSnapshotRefresh() async {
+    let clock = TestClock()
+    let initialSnapshot = makeNavigationSnapshot(focusedTabID: "t1")
+    let focusedSnapshot = makeNavigationSnapshot(focusedTabID: "t2")
+    var initialState = HerdrTerminalChromeFeature.State()
+    initialState.connection = .connected
+    initialState.snapshot = initialSnapshot
+    initialState.selectedWorkspaceID = "w1"
+    initialState.selectedTabID = "t1"
+    initialState.selectedPaneID = "p1"
+    initialState.subscribedPaneIDs = ["p1", "p2"]
+    let store = TestStore(initialState: initialState) {
+      HerdrTerminalChromeFeature()
+    } withDependencies: {
+      $0.continuousClock = clock
+      $0.herdrTerminalChromeClient = testClient(snapshot: focusedSnapshot)
+    }
+
+    await store.send(.herdrNavigationKeyPressed(.nextTab)) {
+      $0.selectedTabID = "t2"
+      $0.selectedPaneID = "p2"
+      $0.refreshGeneration = 1
+    }
+    await clock.advance(by: .milliseconds(500))
+    await store.receive(.debouncedRefresh) {
+      $0.refreshGeneration = 2
+    }
+    await store.receive(.refreshResponseWithGeneration(2, .success(focusedSnapshot))) {
+      $0.snapshot = focusedSnapshot
+    }
+  }
+
+  @Test(.dependencies) func localHerdrWorkspaceNavigationProjectsSelectionImmediately() async {
+    let clock = TestClock()
+    let initialSnapshot = makeWorkspaceNavigationSnapshot(focusedWorkspaceID: "w1")
+    let focusedSnapshot = makeWorkspaceNavigationSnapshot(focusedWorkspaceID: "w2")
+    var initialState = HerdrTerminalChromeFeature.State()
+    initialState.connection = .connected
+    initialState.snapshot = initialSnapshot
+    initialState.selectedWorkspaceID = "w1"
+    initialState.selectedTabID = "t1"
+    initialState.selectedPaneID = "p1"
+    initialState.subscribedPaneIDs = ["p1", "p2"]
+    let store = TestStore(initialState: initialState) {
+      HerdrTerminalChromeFeature()
+    } withDependencies: {
+      $0.continuousClock = clock
+      $0.herdrTerminalChromeClient = testClient(snapshot: focusedSnapshot)
+    }
+
+    await store.send(.herdrNavigationKeyPressed(.nextWorkspace)) {
+      $0.selectedWorkspaceID = "w2"
+      $0.selectedTabID = "t2"
+      $0.selectedPaneID = "p2"
+      $0.refreshGeneration = 1
+    }
+    await clock.advance(by: .milliseconds(500))
+    await store.receive(.debouncedRefresh) {
+      $0.refreshGeneration = 2
+    }
+    await store.receive(.refreshResponseWithGeneration(2, .success(focusedSnapshot))) {
+      $0.snapshot = focusedSnapshot
+    }
+  }
+
   @Test(.dependencies) func localHerdrNavigationSchedulesSnapshotRefresh() async {
     let clock = TestClock()
     let initialSnapshot = makeSnapshot(focusedPaneID: "p1")
@@ -536,10 +605,10 @@ struct HerdrTerminalChromeTests {
       $0.herdrTerminalChromeClient = testClient(snapshot: focusedSnapshot)
     }
 
-    await store.send(.herdrNavigationKeyPressed) {
+    await store.send(.herdrNavigationKeyPressed(.nextTab)) {
       $0.refreshGeneration = 1
     }
-    await clock.advance(by: .milliseconds(100))
+    await clock.advance(by: .milliseconds(500))
     await store.receive(.debouncedRefresh) {
       $0.refreshGeneration = 2
     }
@@ -670,7 +739,9 @@ struct HerdrTerminalChromeTests {
           snapshotCalls.withValue { $0 += 1 }
           return focusedSnapshot
         },
-        subscribeEvents: { _ in HerdrEventSubscription(stream: AsyncStream { $0.finish() }, cancel: {}) },
+        subscribeEvents: { _ in
+          HerdrEventSubscription(stream: AsyncStream { $0.finish() }, cancel: {})
+        },
         focusWorkspace: { _ in },
         focusTab: { _ in },
         focusPane: { paneID in
@@ -731,7 +802,9 @@ struct HerdrTerminalChromeTests {
       $0.continuousClock = clock
       $0.herdrTerminalChromeClient = HerdrTerminalChromeClient(
         snapshot: { snapshot },
-        subscribeEvents: { _ in HerdrEventSubscription(stream: AsyncStream { $0.finish() }, cancel: {}) },
+        subscribeEvents: { _ in
+          HerdrEventSubscription(stream: AsyncStream { $0.finish() }, cancel: {})
+        },
         focusWorkspace: { _ in },
         focusTab: { _ in },
         focusPane: { _ in
@@ -774,7 +847,9 @@ struct HerdrTerminalChromeTests {
       $0.continuousClock = clock
       $0.herdrTerminalChromeClient = HerdrTerminalChromeClient(
         snapshot: { focusedSnapshot },
-        subscribeEvents: { _ in HerdrEventSubscription(stream: AsyncStream { $0.finish() }, cancel: {}) },
+        subscribeEvents: { _ in
+          HerdrEventSubscription(stream: AsyncStream { $0.finish() }, cancel: {})
+        },
         focusWorkspace: { _ in },
         focusTab: { _ in },
         focusPane: { _ in },
@@ -846,7 +921,9 @@ struct HerdrTerminalChromeTests {
       $0.continuousClock = clock
       $0.herdrTerminalChromeClient = HerdrTerminalChromeClient(
         snapshot: { snapshot },
-        subscribeEvents: { _ in HerdrEventSubscription(stream: AsyncStream { $0.finish() }, cancel: {}) },
+        subscribeEvents: { _ in
+          HerdrEventSubscription(stream: AsyncStream { $0.finish() }, cancel: {})
+        },
         focusWorkspace: { _ in },
         focusTab: { _ in },
         focusPane: { paneID in
@@ -943,7 +1020,9 @@ struct HerdrTerminalChromeTests {
       $0.continuousClock = clock
       $0.herdrTerminalChromeClient = HerdrTerminalChromeClient(
         snapshot: { snapshot },
-        subscribeEvents: { _ in HerdrEventSubscription(stream: AsyncStream { $0.finish() }, cancel: {}) },
+        subscribeEvents: { _ in
+          HerdrEventSubscription(stream: AsyncStream { $0.finish() }, cancel: {})
+        },
         focusWorkspace: { _ in },
         focusTab: { _ in },
         focusPane: { _ in },
@@ -1082,7 +1161,9 @@ struct HerdrTerminalChromeTests {
   ) -> HerdrTerminalChromeClient {
     HerdrTerminalChromeClient(
       snapshot: { snapshot },
-      subscribeEvents: { _ in HerdrEventSubscription(stream: AsyncStream { $0.finish() }, cancel: {}) },
+      subscribeEvents: { _ in
+        HerdrEventSubscription(stream: AsyncStream { $0.finish() }, cancel: {})
+      },
       focusWorkspace: { _ in },
       focusTab: { _ in },
       focusPane: { _ in },
@@ -1092,6 +1173,70 @@ struct HerdrTerminalChromeTests {
       moveTab: { _, _ in },
       closeTab: { _ in try await closeTab() },
       closeWorkspace: { _ in try await closeWorkspace() }
+    )
+  }
+
+  private func makeWorkspaceNavigationSnapshot(focusedWorkspaceID: String) -> HerdrSessionSnapshot {
+    HerdrSessionSnapshot(
+      version: "0.9.0",
+      protocolVersion: 22,
+      focusedWorkspaceID: focusedWorkspaceID,
+      focusedTabID: focusedWorkspaceID == "w1" ? "t1" : "t2",
+      focusedPaneID: focusedWorkspaceID == "w1" ? "p1" : "p2",
+      workspaces: [
+        HerdrWorkspace(
+          workspaceID: "w1",
+          label: "Main",
+          focused: focusedWorkspaceID == "w1",
+          activeTabID: "t1"
+        ),
+        HerdrWorkspace(
+          workspaceID: "w2",
+          label: "Second",
+          focused: focusedWorkspaceID == "w2",
+          activeTabID: "t2"
+        ),
+      ],
+      tabs: [
+        HerdrTab(
+          tabID: "t1", workspaceID: "w1", label: "Shell", focused: focusedWorkspaceID == "w1"),
+        HerdrTab(
+          tabID: "t2", workspaceID: "w2", label: "Logs", focused: focusedWorkspaceID == "w2"),
+      ],
+      panes: [
+        HerdrPane(paneID: "p1", workspaceID: "w1", tabID: "t1"),
+        HerdrPane(paneID: "p2", workspaceID: "w2", tabID: "t2"),
+      ],
+      layouts: [],
+      agents: []
+    )
+  }
+
+  private func makeNavigationSnapshot(focusedTabID: String) -> HerdrSessionSnapshot {
+    HerdrSessionSnapshot(
+      version: "0.9.0",
+      protocolVersion: 22,
+      focusedWorkspaceID: "w1",
+      focusedTabID: focusedTabID,
+      focusedPaneID: focusedTabID == "t1" ? "p1" : "p2",
+      workspaces: [
+        HerdrWorkspace(
+          workspaceID: "w1",
+          label: "Main",
+          focused: true,
+          activeTabID: focusedTabID
+        )
+      ],
+      tabs: [
+        HerdrTab(tabID: "t1", workspaceID: "w1", label: "Shell", focused: focusedTabID == "t1"),
+        HerdrTab(tabID: "t2", workspaceID: "w1", label: "Logs", focused: focusedTabID == "t2"),
+      ],
+      panes: [
+        HerdrPane(paneID: "p1", workspaceID: "w1", tabID: "t1"),
+        HerdrPane(paneID: "p2", workspaceID: "w1", tabID: "t2"),
+      ],
+      layouts: [],
+      agents: []
     )
   }
 

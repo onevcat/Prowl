@@ -576,6 +576,37 @@ struct GhosttySurfaceViewTests {
     )
   }
 
+  @Test func optionCanvasNavigationShortcutMapsToHerdrActions() {
+    #expect(
+      GhosttySurfaceView.herdrNavigationKey(
+        keyCode: UInt16(kVK_ANSI_H),
+        charactersIgnoringModifiers: nil,
+        modifierFlags: [.option]
+      ) == .previousTab
+    )
+    #expect(
+      GhosttySurfaceView.herdrNavigationKey(
+        keyCode: UInt16(kVK_ANSI_J),
+        charactersIgnoringModifiers: nil,
+        modifierFlags: [.option]
+      ) == .nextWorkspace
+    )
+    #expect(
+      GhosttySurfaceView.herdrNavigationKey(
+        keyCode: UInt16(kVK_ANSI_K),
+        charactersIgnoringModifiers: nil,
+        modifierFlags: [.option]
+      ) == .previousWorkspace
+    )
+    #expect(
+      GhosttySurfaceView.herdrNavigationKey(
+        keyCode: UInt16(kVK_ANSI_L),
+        charactersIgnoringModifiers: nil,
+        modifierFlags: [.option]
+      ) == .nextTab
+    )
+  }
+
   @Test func optionCanvasNavigationShortcutRejectsExtraModifiers() {
     #expect(
       !GhosttySurfaceView.isOptionCanvasNavigationShortcut(

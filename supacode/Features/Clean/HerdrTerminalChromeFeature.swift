@@ -96,7 +96,7 @@ internal struct HerdrTerminalChromeFeature {
     case focusPaneTapped(String)
     case focusResponse(FocusResult)
     case focusConfirmationTimedOut(FocusTarget)
-    case herdrNavigationKeyPressed
+    case herdrNavigationKeyPressed(HerdrNavigationKey)
     case newWorkspaceRequested
     case newTabRequested(workspaceID: String, label: String?, sourceTabID: String?)
     case renameTabRequested(tabID: String, label: String)
@@ -144,6 +144,7 @@ internal struct HerdrTerminalChromeFeature {
     "pane_focused",
   ]
   private static let focusConfirmationTimeout = Duration.milliseconds(250)
+  private static let localNavigationRefreshDelay = Duration.milliseconds(500)
 
   internal static func shouldRefreshImmediately(for eventName: String) -> Bool {
     immediateRefreshEvents.contains(eventName.replacing(".", with: "_"))
@@ -233,6 +234,52 @@ internal struct HerdrTerminalChromeFeature {
   {
     snapshot.workspaces.first { $0.id == workspaceID }?.activeTabID
       ?? snapshot.tabs.first { $0.workspaceID == workspaceID && $0.focused }?.id
+  }
+
+  private static func focusedPaneID(in tabID: String, snapshot: HerdrSessionSnapshot) -> String? {
+    snapshot.layouts.first { $0.tabID == tabID }?.focusedPaneID
+      ?? snapshot.layouts.first(where: { $0.tabID == tabID })?.panes.first(where: \.focused)?.paneID
+      ?? snapshot.panes.first { $0.tabID == tabID && $0.focused }?.id
+      ?? snapshot.panes.first { $0.tabID == tabID }?.id
+  }
+
+  private static func applyLocalHerdrNavigation(
+    _ state: inout State,
+    key: HerdrNavigationKey
+  ) {
+    switch key {
+    case .previousTab, .nextTab:
+      guard let workspaceID = state.selectedWorkspaceID ?? state.snapshot.focusedWorkspaceID else {
+        return
+      }
+      let tabs = state.snapshot.tabs.filter { $0.workspaceID == workspaceID }
+      guard !tabs.isEmpty else { return }
+      let currentTabID = state.selectedTabID ?? state.snapshot.focusedTabID
+      guard let currentIndex = tabs.firstIndex(where: { $0.id == currentTabID }) else { return }
+      let offset = key == .previousTab ? -1 : 1
+      let nextIndex = (currentIndex + offset + tabs.count) % tabs.count
+      let tabID = tabs[nextIndex].id
+      state.selectedWorkspaceID = workspaceID
+      state.selectedTabID = tabID
+      state.selectedPaneID = focusedPaneID(in: tabID, snapshot: state.snapshot)
+
+    case .nextWorkspace, .previousWorkspace:
+      let workspaces = state.snapshot.workspaces
+      guard !workspaces.isEmpty else { return }
+      let currentWorkspaceID = state.selectedWorkspaceID ?? state.snapshot.focusedWorkspaceID
+      guard let currentIndex = workspaces.firstIndex(where: { $0.id == currentWorkspaceID }) else {
+        return
+      }
+      let offset = key == .previousWorkspace ? -1 : 1
+      let nextIndex = (currentIndex + offset + workspaces.count) % workspaces.count
+      let workspace = workspaces[nextIndex]
+      state.selectedWorkspaceID = workspace.id
+      let tabID =
+        workspace.activeTabID
+        ?? state.snapshot.tabs.first { $0.workspaceID == workspace.id }?.id
+      state.selectedTabID = tabID
+      state.selectedPaneID = tabID.flatMap { focusedPaneID(in: $0, snapshot: state.snapshot) }
+    }
   }
 
   private static func applyFocusEvent(
@@ -557,9 +604,14 @@ internal struct HerdrTerminalChromeFeature {
         state.focusRollback = nil
         return startRefresh(&state)
 
-      case .herdrNavigationKeyPressed:
+      case .herdrNavigationKeyPressed(let key):
         guard state.connection == .connected else { return .none }
-        return scheduleDebouncedRefresh(&state, invalidatesInFlightRefresh: true)
+        Self.applyLocalHerdrNavigation(&state, key: key)
+        return scheduleDebouncedRefresh(
+          &state,
+          invalidatesInFlightRefresh: true,
+          delay: Self.localNavigationRefreshDelay
+        )
 
       case .newWorkspaceRequested:
         guard state.connection == .connected else { return .none }
@@ -697,14 +749,16 @@ internal struct HerdrTerminalChromeFeature {
 
   private func scheduleDebouncedRefresh(
     _ state: inout State,
-    invalidatesInFlightRefresh: Bool = false
+    invalidatesInFlightRefresh: Bool = false,
+    delay: Duration = .milliseconds(100)
   ) -> Effect<Action> {
     if invalidatesInFlightRefresh {
       state.refreshGeneration &+= 1
     }
-    let delay = Effect<Action>.run { [clock] send in
+    let refreshDelay = delay
+    let effect = Effect<Action>.run { [clock] send in
       do {
-        try await clock.sleep(for: .milliseconds(100))
+        try await clock.sleep(for: refreshDelay)
         guard !Task.isCancelled else { return }
         await send(.debouncedRefresh)
       } catch {
@@ -713,8 +767,8 @@ internal struct HerdrTerminalChromeFeature {
     }
     .cancellable(id: CancelID.refreshDebounce, cancelInFlight: true)
     return invalidatesInFlightRefresh
-      ? .merge(.cancel(id: CancelID.refresh), delay)
-      : delay
+      ? .merge(.cancel(id: CancelID.refresh), effect)
+      : effect
   }
 
   private func lifecycleEffect() -> Effect<Action> {

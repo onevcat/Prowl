@@ -127,7 +127,7 @@ internal final class CleanTerminalHost {
     @Sendable (String) async throws -> HerdrPaneProcessInfo
   internal typealias HerdrCompatibilityFailureHandler = @MainActor (HerdrSocketError) -> Void
   internal typealias HerdrForegroundHandler = @MainActor (Bool) -> Void
-  internal typealias HerdrNavigationHandler = @MainActor () -> Void
+  internal typealias HerdrNavigationHandler = @MainActor (HerdrNavigationKey) -> Void
 
   private static let periodicProbeInterval = Duration.milliseconds(200)
   private static let delayedProbeInterval = Duration.milliseconds(50)
@@ -168,7 +168,7 @@ internal final class CleanTerminalHost {
     },
     onHerdrCompatibilityFailure: @escaping HerdrCompatibilityFailureHandler = { _ in },
     onHerdrForegroundChanged: @escaping HerdrForegroundHandler = { _ in },
-    onHerdrNavigationKey: @escaping HerdrNavigationHandler = {}
+    onHerdrNavigationKey: @escaping HerdrNavigationHandler = { _ in }
   ) {
     self.preferredFontSize = preferredFontSize
     self.inputSourceCoordinator = inputSourceCoordinator
@@ -413,8 +413,8 @@ internal final class CleanTerminalHost {
     surface.onKeyInput = { [weak self] in
       self?.scheduleInputContextProbe()
     }
-    surface.onHerdrNavigationKey = { [weak self] in
-      self?.onHerdrNavigationKey()
+    surface.onHerdrNavigationKey = { [weak self] key in
+      self?.onHerdrNavigationKey(key)
     }
   }
 

@@ -5,6 +5,13 @@ import GhosttyKit
 import QuartzCore
 import SwiftUI
 
+internal enum HerdrNavigationKey: Equatable, Sendable {
+  case previousTab
+  case nextTab
+  case nextWorkspace
+  case previousWorkspace
+}
+
 let surfaceLogger = SupaLogger("Surface")
 
 enum GhosttyEventText {
@@ -184,7 +191,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
   }
   var onFocusChange: ((Bool) -> Void)?
   var onKeyInput: (() -> Void)?
-  var onHerdrNavigationKey: (() -> Void)?
+  var onHerdrNavigationKey: ((HerdrNavigationKey) -> Void)?
   var onCommittedText: ((String) -> Void)?
   var onMirroredKey: ((MirroredTerminalKey) -> Void)?
   var onFontSizeShortcut: (() -> Void)?

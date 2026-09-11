@@ -14,12 +14,12 @@ extension GhosttySurfaceView {
     if CanvasDirectionalNewTerminalChordCoordinator.shared.shouldBlockTerminalInput(event) {
       return
     }
-    let isHerdrNavigationKey = Self.isOptionCanvasNavigationShortcut(
+    let herdrNavigationKey = Self.herdrNavigationKey(
       keyCode: event.keyCode,
       charactersIgnoringModifiers: event.charactersIgnoringModifiers,
       modifierFlags: event.modifierFlags
     )
-    if isHerdrNavigationKey {
+    if herdrNavigationKey != nil {
       let key = event.charactersIgnoringModifiers ?? "?"
       surfaceLogger.diagnostic(
         "herdr-nav keyDown uptime_ms=\(Self.monotonicMilliseconds()) key=\(key) key_code=\(event.keyCode) modifiers=\(event.modifierFlags.rawValue)"
@@ -79,8 +79,8 @@ extension GhosttySurfaceView {
         composing: markedText.length > 0 || markedTextBefore
       )
     }
-    if isHerdrNavigationKey, didSendKey {
-      onHerdrNavigationKey?()
+    if let herdrNavigationKey, didSendKey {
+      onHerdrNavigationKey?(herdrNavigationKey)
     }
   }
 
@@ -297,22 +297,46 @@ extension GhosttySurfaceView {
     return isCanvasActive ? .appMenu : .terminal
   }
 
+  static func herdrNavigationKey(
+    keyCode: UInt16,
+    charactersIgnoringModifiers: String?,
+    modifierFlags: NSEvent.ModifierFlags
+  ) -> HerdrNavigationKey? {
+    let relevantModifiers = modifierFlags.intersection([.command, .shift, .option, .control])
+    guard relevantModifiers == [.option] else { return nil }
+
+    switch Int(keyCode) {
+    case kVK_ANSI_H: return .previousTab
+    case kVK_ANSI_J: return .nextWorkspace
+    case kVK_ANSI_K: return .previousWorkspace
+    case kVK_ANSI_L: return .nextTab
+    default: break
+    }
+
+    guard let charactersIgnoringModifiers else { return nil }
+    let normalizedCharacters =
+      charactersIgnoringModifiers
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+      .lowercased()
+    switch normalizedCharacters {
+    case "h": return .previousTab
+    case "j": return .nextWorkspace
+    case "k": return .previousWorkspace
+    case "l": return .nextTab
+    default: return nil
+    }
+  }
+
   static func isOptionCanvasNavigationShortcut(
     keyCode: UInt16,
     charactersIgnoringModifiers: String?,
     modifierFlags: NSEvent.ModifierFlags
   ) -> Bool {
-    let relevantModifiers = modifierFlags.intersection([.command, .shift, .option, .control])
-    guard relevantModifiers == [.option] else { return false }
-
-    let keyCodeMatches = [kVK_ANSI_H, kVK_ANSI_J, kVK_ANSI_K, kVK_ANSI_L]
-      .contains(Int(keyCode))
-    if keyCodeMatches { return true }
-
-    guard let charactersIgnoringModifiers else { return false }
-    let normalized = charactersIgnoringModifiers.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    guard normalized.count == 1 else { return false }
-    return ["h", "j", "k", "l"].contains(normalized)
+    herdrNavigationKey(
+      keyCode: keyCode,
+      charactersIgnoringModifiers: charactersIgnoringModifiers,
+      modifierFlags: modifierFlags
+    ) != nil
   }
 
   func equivalentKey(for event: NSEvent) -> String? {
