@@ -47,6 +47,42 @@ struct MirrorCommandServiceTests {
     #expect(throws: (any Error).self) { try JSONDecoder().decode(MirrorCommandRequest.self, from: payload) }
   }
 
+  @Test func dispatchUsesPublicEnvelopeAndReceiptDoesNotReplay() async throws {
+    let handler = DispatchHandler()
+    let service = MirrorCommandService(router: CLICommandRouter(agentsDispatchHandler: handler))
+    let pane = UUID()
+    let request = MirrorCommandRequest(requestID: UUID(), request: .init(
+      command: .agentsDispatch(.init(pane: pane.uuidString, prompt: "first\nsecond"))))
+    let first = await service.execute(request)
+    let receipt = await service.receipt(request.requestID, paneID: pane)
+    #expect(first.response == receipt.response)
+    #expect(handler.count == 1)
+    #expect(handler.prompt == "first\nsecond")
+    let otherPane = await service.receipt(request.requestID, paneID: UUID())
+    #expect(try otherPane.response.decode(CommandResponse.self).ok == false)
+  }
+
+  @Test func revokedLeaseCannotRouteDispatch() async throws {
+    let handler = DispatchHandler()
+    let service = MirrorCommandService(router: CLICommandRouter(agentsDispatchHandler: handler))
+    let request = MirrorCommandRequest(requestID: UUID(), request: .init(
+      command: .agentsDispatch(.init(pane: UUID().uuidString, prompt: "hello"))))
+    let result = await service.execute(request, authorize: { false })
+    #expect(try result.response.decode(CommandResponse.self).ok == false)
+    #expect(handler.count == 0)
+  }
+
+  private final class DispatchHandler: CommandHandler {
+    var count = 0
+    var prompt: String?
+    func handle(envelope: CommandEnvelope) async -> CommandResponse {
+      count += 1
+      await Task.yield()
+      if case .agentsDispatch(let input) = envelope.command { prompt = input.prompt }
+      return CommandResponse(ok: true, command: "agents.dispatch", schemaVersion: "prowl.cli.agents.dispatch.v1")
+    }
+  }
+
   private func creation(id: UUID, prompt: String?) -> MirrorCommandRequest {
     .init(
       requestID: id,

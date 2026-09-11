@@ -326,6 +326,27 @@ struct AgentDispatchCommandHandlerTests {
   /// Right after a turn the detector still shows `working` for its hold period although the
   /// runtime already reported `turn-ended`; the precondition waits for the corroboration
   /// instead of refusing, like `--until idle` would keep polling.
+  @Test func cancelledDispatchNeverIssuesOrDelivers() async {
+    let clock = TestClock()
+    let target = resolvedTarget()
+    var issued = false
+    var delivered = false
+    let handler = AgentDispatchCommandHandler(
+      resolveTarget: { _ in .success(target) },
+      conditionSnapshot: { _ in
+        self.snapshot(target, status: .working, signal: self.turnEnded, channels: [self.liveClaudeChannel])
+      },
+      issueDispatch: { _ in issued = true; return .failure(.bindingMissing) },
+      deliverPrompt: { _, _ in delivered = true; return true },
+      clock: clock)
+    let task = Task { await handler.handle(envelope: self.dispatch(pane: target.paneID)) }
+    await clock.advance(by: .milliseconds(200))
+    task.cancel()
+    let response = await task.value
+    #expect(!response.ok)
+    #expect(!issued && !delivered)
+  }
+
   @Test func dispatchWaitsForTheDetectorToCorroborateAFreshTurnEnded() async throws {
     let clock = TestClock()
     let target = resolvedTarget()

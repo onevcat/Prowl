@@ -60,11 +60,10 @@ or stdin EOF exits the helper.
 ## Mobile transition
 
 Plain-text mirroring and bounded retained history remain available. The old
-mirror-private submission parser and ledger have been removed; mobile Send is
-unavailable in this intermediate branch until the command route and iOS client
-are updated together. Do not use an old iOS build to validate the new input path.
-The replacement will use shared Agent evidence and dispatch, including local draft
-protection, rather than an independent mirror-specific idle detector.
+mirror-private submission parser and ledger have been removed. Updated iOS clients
+use the public Agent dispatch route below. Do not use an old iOS build to validate
+this path. Shared terminal delivery protection and Shell Send are still unfinished;
+this intermediate branch is not a release candidate.
 
 ## Development
 
@@ -82,7 +81,7 @@ before treating a fresh checkout as a self-contained build.
 ## Structured iOS launch
 
 Hosts advertise `launch-profile` when the command router is attached. The current
-experimental command bridge exposes only `list`, `profiles`, and Profile-backed
+experimental discovery command bridge exposes only `list`, `profiles`, and Profile-backed
 `create tab` in an existing worktree. It cannot execute a client-supplied shell
 command or change Profile permissions. Commands are allowed only on authenticated
 discovery connections, before subscribing to a pane.
@@ -96,6 +95,25 @@ reexecution. Clients never automatically replay a command after timeout or disco
 If creation is unconfirmed, refresh the pane list before making another request.
 
 This is an incremental bridge on the current experimental transport. The typed
-network protocol, persistent device enrollment, and shared mobile message submission
-remain separate unfinished review items. Creating a pane does not yet restore the
-removed mobile Send implementation.
+network protocol, persistent device enrollment, and shared terminal delivery
+refinements remain separate unfinished review items.
+
+
+### Agent dispatch from iOS
+
+The Host advertises `agents-dispatch` when the public command router is attached.
+A subscribed iOS client sends `agentsDispatch` with its current lease and exact pane
+UUID. Host checks both against its subscription table before calling the public
+`agents dispatch` handler. Discovery connections cannot dispatch; a client cannot
+target a different pane. Takeover, disconnect and Host stop cancel a dispatch that
+is still waiting for idle evidence. The public handler owns the readiness decision.
+
+The reply confirms dispatch, not Agent completion. Busy/blocked/missing-Agent
+refusals preserve the draft. Unknown delivery blocks another send until the user
+checks Host output; reconnect queries the original command receipt without
+replaying text. Receipts are bounded and App-lifetime only, and require a current
+lease for the same pane. This receipt lookup does not complete or abandon Agent
+work. Shell send, shared local-draft/IME protection and Claude paste/Enter evidence
+remain separate review-alignment work; the route tests do not establish those
+terminal behaviors. The previous `submit-text` protocol remains only in the iOS
+legacy fixture path until the final wire cleanup.

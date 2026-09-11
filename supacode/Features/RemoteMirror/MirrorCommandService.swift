@@ -16,12 +16,26 @@ final class MirrorCommandService {
     self.maximumRequests = maximumRequests
   }
 
-  func execute(_ message: MirrorCommandRequest) async -> MirrorCommandResponse {
-    let result = await perform(message)
+  func execute(
+    _ message: MirrorCommandRequest, authorize: @escaping @MainActor () -> Bool = { true }
+  ) async -> MirrorCommandResponse {
+    let result = await perform(message, authorize: authorize)
     return MirrorCommandResponse(requestID: message.requestID, response: result)
   }
 
-  private func perform(_ message: MirrorCommandRequest) async -> MirrorJSON {
+  func cancel(_ requestID: UUID) { executions[requestID]?.task.cancel() }
+
+  func receipt(_ requestID: UUID, paneID: UUID) async -> MirrorCommandResponse {
+    guard let entry = executions[requestID],
+      case .agentsDispatch(let input) = entry.request.command, UUID(uuidString: input.pane) == paneID
+    else { return .init(requestID: requestID, response: Self.encodingFailure) }
+    return .init(requestID: requestID, response: await entry.task.value)
+  }
+
+  private func perform(
+    _ message: MirrorCommandRequest, authorize: @escaping @MainActor () -> Bool
+  ) async -> MirrorJSON {
+    guard authorize() else { return failure("The mirror no longer owns this pane.") }
     // Code security: remote requests expose only catalog reads and ordinary Profile-backed tabs.
     guard message.request.output == "json" else { return failure("Command is not allowed.") }
     if let existing = executions[message.requestID] {
@@ -32,6 +46,10 @@ final class MirrorCommandService {
     }
     switch message.request.command {
     case .list, .profiles: break
+    case .agentsDispatch(let input):
+      guard UUID(uuidString: input.pane) != nil, input.prompt.utf8.count <= MirrorWire.maximumInput else {
+        return failure("Invalid dispatch target or prompt size.")
+      }
     case .create(let input):
       guard input.resource == "tab", input.background,
         !input.launch.profile.isEmpty,
@@ -45,6 +63,7 @@ final class MirrorCommandService {
       let data = try JSONEncoder().encode(message.request)
       let envelope = try JSONDecoder().decode(CommandEnvelope.self, from: data)
       let task = Task { @MainActor [router] in
+        guard authorize(), !Task.isCancelled else { return Self.failure("The mirror no longer owns this pane.") }
         let response = await router.route(envelope)
         do { return try JSONDecoder().decode(MirrorJSON.self, from: JSONEncoder().encode(response)) } catch {
           return Self.encodingFailure

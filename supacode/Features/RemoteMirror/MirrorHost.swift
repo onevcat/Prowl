@@ -171,6 +171,7 @@ final class MirrorHost {
       self.pendingPeers.removeValue(forKey: peer.id)
       self.pendingOrder.removeAll { $0 == peer.id }
       self.pendingHandshakeCount = self.pendingPeers.count
+      self.cancelCommand(peer.id)
       self.peers.removeValue(forKey: peer.id)
       self.commandPeers.removeValue(forKey: peer.id)
       self.versions.removeValue(forKey: peer.id)
@@ -203,12 +204,14 @@ final class MirrorHost {
             kind: .panes, panes: panes, selectedVersion: versions[peer.id],
             capabilities: versions[peer.id] == 2
               ? ["vt-v1", "text-v1", "takeover", "refresh"]
-                + (commandService != nil ? ["launch-profile"] : [])
+                + (commandService != nil ? ["launch-profile", "agents-dispatch"] : [])
                 + (source.supportsBoundedHistory ? ["history"] : [])
               : nil,
             hostRunID: hostRunID))
       case .command:
         try handleCommand(message, peer: peer)
+      case .commandReceipt:
+        try handleReceipt(message, peer: peer)
       case .subscribe:
         try subscribe(message, peer: peer)
       case .acknowledge:
@@ -235,17 +238,47 @@ final class MirrorHost {
 
   private func handleCommand(_ message: MirrorMessage, peer: MirrorConnection) throws {
     guard message.version == 2, versions[peer.id] == 2,
-      let service = commandService, let request = message.commandRequest,
-      subscriptions[peer.id] == nil else { throw MirrorProtocolError.invalidMessage }
+      let service = commandService, let request = message.commandRequest
+    else { throw MirrorProtocolError.invalidMessage }
+    let lease: UUID?
+    // Code security: commands cannot escape the authenticated connection’s current pane lease.
+    if case .agentsDispatch(let input) = request.request.command {
+      guard let active = subscription(for: message, peer: peer),
+        UUID(uuidString: input.pane) == active.paneID else { throw MirrorProtocolError.invalidMessage }
+      lease = active.id
+    } else {
+      guard subscriptions[peer.id] == nil else { throw MirrorProtocolError.invalidMessage }
+      lease = nil
+    }
     if let pending = commandPeers[peer.id] {
       guard pending == request else { throw MirrorProtocolError.invalidMessage }
       return
     }
     commandPeers[peer.id] = request
     Task { @MainActor [weak self, weak peer] in
-      let response = await service.execute(request)
+      let response = await service.execute(request) { [weak self, weak peer] in
+        guard let self, let peer, self.peers[peer.id] === peer else { return false }
+        return lease == nil || self.subscriptions[peer.id]?.id == lease
+      }
       guard let self, let peer, self.peers[peer.id] === peer else { return }
       self.commandPeers.removeValue(forKey: peer.id)
+      peer.send(MirrorMessage(version: 2, kind: .commandResult, commandResponse: response))
+    }
+  }
+
+  private func cancelCommand(_ peerID: UUID) {
+    guard let request = commandPeers[peerID], case .agentsDispatch = request.request.command else { return }
+    commandService?.cancel(request.requestID)
+  }
+
+  private func handleReceipt(_ message: MirrorMessage, peer: MirrorConnection) throws {
+    guard let active = subscription(for: message, peer: peer),
+      let requestID = message.commandReceiptID, let service = commandService else {
+      throw MirrorProtocolError.invalidMessage
+    }
+    Task { @MainActor [weak self, weak peer] in
+      let response = await service.receipt(requestID, paneID: active.paneID)
+      guard let self, let peer, self.subscriptions[peer.id]?.id == active.id else { return }
       peer.send(MirrorMessage(version: 2, kind: .commandResult, commandResponse: response))
     }
   }
@@ -312,6 +345,7 @@ final class MirrorHost {
   }
 
   private func end(_ peer: MirrorConnection, reason: MirrorMessage.EndReason) {
+    cancelCommand(peer.id)
     if versions[peer.id] == 2 {
       peer.send(MirrorMessage(version: 2, kind: .ended, reason: reason), closeAfterSending: true)
     } else {

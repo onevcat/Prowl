@@ -17,6 +17,12 @@ nonisolated struct MirrorCommandRequest: Codable, Equatable, Sendable {
     case list(Empty)
     case profiles(Empty)
     case create(Create)
+    case agentsDispatch(Dispatch)
+  }
+
+  struct Dispatch: Codable, Equatable, Sendable {
+    let pane: String
+    let prompt: String
   }
 
   struct Empty: Codable, Equatable, Sendable {}
