@@ -142,9 +142,7 @@ recorded in the request.
 
 `builtin:collect-worktree-context` takes optional `root`, restricted to the selected worktree, and returns
 `output.path` plus `output.branch`. It writes the Markdown repository summary into this
-invocation's `artifacts/context.md`. It does not write shared handoff files. Workflow
-`handoff.transition` and `handoff.checkpoint` were removed; the separate `prowl handoff` CLI
-remains available for its existing purpose.
+invocation's `artifacts/context.md`. It does not write shared handoff files.
 
 `prowl workflow schema --action` exports the manifest schema. Schema references can use
 local JSON or YAML files in the same bundle. Network references and `$id` overrides are
@@ -164,7 +162,7 @@ not registered. Use verb-first kebab-case names for local actions, such as
 
 `builtin:save-handoff` takes a required `briefing` path to a UTF-8 briefing file within the
 current run directory, normally `{{ deliveries.briefing.path }}`. It validates the briefing
-before updating shared handoff state. It supports the existing handoff storage targets:
+before updating shared handoff state. It supports the workflow handoff storage targets:
 Git worktrees, workspaces, and plain directories. Available source session context is included.
 
 The action returns `output.path` (an independent briefing/context packet),

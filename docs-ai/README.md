@@ -104,9 +104,9 @@ agent-facing manual for that).
 | 044 | [foundation-model-branch-names](044-foundation-model-branch-names/000-plan.md) | 2026-06-27 | On-device FM branch-name suggestions |
 | 045 | [native-agent-session-detection](045-native-agent-session-detection/000-plan.md) | 2026-07-12 | Native agent session identity (successor to 030's heuristics) |
 | 046 | [cli-short-handles](046-cli-short-handles/000-plan.md) | 2026-07-13 | Session-scoped tab and pane handles for CLI targeting |
-| 047 | [cross-agent-handoff](047-cross-agent-handoff/000-plan.md) | 2026-07-17 | Durable artifact-based task handoff across coding agents |
+| 047 | [cross-agent-handoff](047-cross-agent-handoff/000-plan.md) | 2026-07-17 | Durable artifact-based task handoff across coding agents (legacy CLI/HUD retired 2026-09-10; see 063.020) |
 | 048 | [agent-runtime-adapters](048-agent-runtime-adapters/000-plan.md) | 2026-07-18 | Protocol-backed agent session resume and configurable launch invocations |
-| 049 | [agents-toolbar-entry](049-agents-toolbar-entry/000-plan.md) | 2026-07-20 | Agents status capsule + staged handoff HUD toolbar entry |
+| 049 | [agents-toolbar-entry](049-agents-toolbar-entry/000-plan.md) | 2026-07-20 | Agents status capsule toolbar entry (its staged handoff HUD was retired 2026-09-10; see 063.020) |
 | 050 | [sidebar-expand-active-and-worktree-tab-badges](050-sidebar-expand-active-and-worktree-tab-badges/000-plan.md) | 2026-07-25 | Sidebar Expand Active third state + per-worktree tab count badges |
 | 051 | [repository-icon-detection](051-repository-icon-detection/000-plan.md) | 2026-07-25 | High-confidence local repository icon detection on add; deferred, reviewable Foundation Model recommendations |
 | 052 | [sidebar-context-menus](052-sidebar-context-menus/000-plan.md) | 2026-07-27 | Sidebar context menu overhaul: worktree terminal actions, header/workspace path actions, PR click-through |

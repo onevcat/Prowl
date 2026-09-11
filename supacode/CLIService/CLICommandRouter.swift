@@ -25,7 +25,6 @@ final class CLICommandRouter {
   private let closeHandler: any CommandHandler
   private let tabHandler: any CommandHandler
   private let paneHandler: any CommandHandler
-  private let handoffHandler: any CommandHandler
   private let workflowHandler: any CommandHandler
 
   init(
@@ -48,7 +47,6 @@ final class CLICommandRouter {
     closeHandler: any CommandHandler = StubCommandHandler(command: "close"),
     tabHandler: any CommandHandler = StubCommandHandler(command: "tab"),
     paneHandler: any CommandHandler = StubCommandHandler(command: "pane"),
-    handoffHandler: any CommandHandler = StubCommandHandler(command: "handoff"),
     workflowHandler: any CommandHandler = StubCommandHandler(command: "workflow")
   ) {
     self.openHandler = openHandler
@@ -70,7 +68,6 @@ final class CLICommandRouter {
     self.closeHandler = closeHandler
     self.tabHandler = tabHandler
     self.paneHandler = paneHandler
-    self.handoffHandler = handoffHandler
     self.workflowHandler = workflowHandler
   }
 
@@ -101,7 +98,6 @@ final class CLICommandRouter {
     case .close: handler = closeHandler
     case .tab: handler = tabHandler
     case .pane: handler = paneHandler
-    case .handoff: handler = handoffHandler
     case .workflow: handler = workflowHandler
     }
     return await handler.handle(envelope: envelope, context: context)

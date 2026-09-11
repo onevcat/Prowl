@@ -1,6 +1,59 @@
 # 063.020 — Additive Handoff Workflow
 
-Status: Implemented, reviewed, and accepted in Debug; PR #786, 2026-09-08.
+Status: Superseded by workflow-only handoff retirement; original additive implementation was reviewed and accepted in Debug (PR #786, 2026-09-08).
+
+## Legacy retirement plan (2026-09-10)
+
+The owner has approved complete retirement of the hardcoded Handoff feature. `prowl.handoff`
+is now the only Handoff entry point and replaces the legacy CLI protocol, HUD, command-palette
+and agent-row entry points, request correlation, and dedicated receiver-launch path. Remove
+those definitions, handlers, payloads, schemas, error codes, UI/reducer state, tests, user
+docs, and bundled-skill instructions with a non-executing `HANDOFF_RETIRED` CLI migration stub, but no forwarding command.
+
+Keep the shared durable artifact boundary: `HandoffStore`, the save/checkpoint portion of
+`HandoffCoordinator`, session-context capture used by `builtin:save-handoff`, history
+containment for `.prowl/handoff/`, and the native workflow action. Existing artifacts remain
+readable by those retained boundaries. Replace current documentation and skills with the
+workflow run/start instructions; historical records retain their original additive account and
+are explicitly superseded rather than rewritten.
+
+Validation must prove that `prowl workflow` exposes and runs `prowl.handoff`, no executing
+legacy handoff protocol or hardcoded UI action remains, generic profile context injection continues
+to work, and archive/save behavior stays covered. The one-release `prowl handoff` stub must emit
+`HANDOFF_RETIRED` without socket or filesystem side effects. Run the normal app and CLI gates,
+plus a best-effort isolated Debug workflow check.
+
+## Legacy retirement result (2026-09-10)
+
+Implemented the workflow-only boundary. The legacy `prowl handoff` subcommand parser, command
+envelope, socket handler, v2 response schema/payload renderer, and old execution error codes are gone. The hardcoded
+HUD, its injected shell request and registry, Agents-popover and Active Agents handoff entries,
+and Command Palette row are removed. There is no forwarding or compatibility execution path; one release retains a non-executing `HANDOFF_RETIRED` CLI migration stub.
+
+`HandoffStore` remains the durable local archive/context store, but its saved session model is
+now an internal store type rather than a CLI payload. `HandoffCoordinator` retains only the
+validated checkpoint operation used by `builtin:save-handoff`; the workflow runner continues to
+capture source-pane session context for that action. History containment for `.prowl/handoff/`
+and pre-existing artifacts remain unchanged.
+
+Current manuals and bundled skills now direct users to `prowl workflow run prowl.handoff`, its
+save-only input, and the workflow start surfaces. The CLI manual documents the one-release
+non-executing `HANDOFF_RETIRED` migration message. This document's original additive instructions
+below are historical and superseded by this section.
+
+Final retirement validation passed on 2026-09-10: CLI build and smoke, 218 CLI unit tests, and
+104 CLI integration tests (including the retired command against an unavailable socket); `make
+build-app` completed with zero warnings; and `make check` passed formatting, SwiftLint, Python,
+and workflow naming checks. After the final store/coordinator simplification, `make test`
+passed 3155 main tests and two process tests with zero failures. Independent review found no
+required fixes.
+
+An isolated final Debug build used a separate data directory and socket. At 1200- and
+1000-point widths, the Agents popover showed the built-in Handoff under Run a workflow,
+without the dedicated Hand Off action. Selecting it opened the workflow start surface.
+This check used a plain shell, not a detected agent; it did not run an inference-backed
+handoff or repeat Shelf/Canvas acceptance. Local evidence is under
+`build/verification/legacy-handoff-recovery/` and `build/verification/legacy-handoff-retirement/`.
 
 ## Scope and authority
 

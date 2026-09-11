@@ -14,7 +14,7 @@ The authoritative per-command reference is Prowl's manual, `components/cli.md` u
 
 ```bash
 prowl_docs="$(dirname "$(dirname "$(readlink -f "$(command -v prowl)")")")/docs"
-ls "$prowl_docs/components/"   # cli.md, agent-detection.md, handoff.md, …
+ls "$prowl_docs/components/"   # cli.md, agent-detection.md, workflows.md, …
 ```
 
 Other `docs/components/*.md` references below live in that same folder.
@@ -297,7 +297,7 @@ printf '%s\n' "$result" | jq '.data.observation, .data.screen'
 - `TRANSPORT_FAILED`: the connection broke or the socket path is invalid (`ENOTSOCK`, too-long `PROWL_CLI_SOCKET`).
 - `TARGET_NOT_FOUND` / `TARGET_NOT_UNIQUE`: re-run `prowl list --json` and pass an explicit UUID or a current `pN`.
 - `PROFILE_NOT_FOUND` / `PROFILE_NOT_UNIQUE`: re-run `prowl profiles list --json`; choose an enabled Profile UUID.
-- `NO_ACTIVE_PANE`: focused-pane targeting found nothing — pass `--pane`. `SOURCE_REQUIRED`: a caller-owned command (`agents signal`, selector-free `handoff`) could not map process ancestry to a Prowl pane.
+- `NO_ACTIVE_PANE`: focused-pane targeting found nothing — pass `--pane`. `SOURCE_REQUIRED`: a caller-owned command (`agents signal`, `workflow run` with a `current` role) could not map process ancestry to a Prowl pane.
 - `EMPTY_INPUT`, `INVALID_ARGUMENT`, `UNSUPPORTED_KEY`, `INVALID_REPEAT`: fix the arguments (`prowl <cmd> --help`).
 - `CAPTURE_UNSUPPORTED`: drop `--capture` and use `read --wait-stable` or file redirection.
 - `WAIT_TIMEOUT`: inspect `.error.details`, then re-arm the wait if the task remains active.
@@ -310,27 +310,16 @@ printf '%s\n' "$result" | jq '.data.observation, .data.screen'
 
 ## Handing Off Your Task
 
-The built-in `prowl.handoff` workflow is also available: it requests a briefing and saves
-context before optionally launching a receiver. See the `prowl-workflow` skill for that
-flow. The direct commands below remain available.
+Use the built-in `prowl.handoff` workflow: it requests a briefing from you and saves
+context before optionally launching a receiver. See the `prowl-workflow` skill for the full
+flow. `prowl handoff` (`to`/`save`) is retired: it performs no action and only returns a
+`HANDOFF_RETIRED` error with the replacement commands.
 
-
-`prowl handoff to <agent> --brief -` hands your task to another agent. Run it from your own pane (the calling pane is the source — no selector needed) and pipe your briefing on stdin. Prowl finds the calling pane through process ancestry, so any descendant of the pane's shell (an agent, its tool shell) works; under tmux/screen or a detached wrapper that resolution fails with `SOURCE_REQUIRED`, and in exactly those setups `$PROWL_PANE_ID` is not trustworthy either (it names the pane the tmux server started in, which may still exist) — identify your pane by other means (`prowl agents --json`, a unique `pane.cwd`) and pass it with `--pane` explicitly.
-
-```bash
-prowl handoff to codex --brief - <<'EOF'
-# Handoff
-## Objective
-…
-## Current State
-…
-## Next Steps
-…
-EOF
-```
-
-Required sections are `## Objective`, `## Current State`, and `## Next Steps`; optional ones are `## What Has Been Done`, `## Open Questions`, `## Risks / Watch Out`, and `## Suggested Prompt For Next Agent`. The receiver launches in a background tab of the same worktree; your session stays open. `prowl handoff save --brief -` checkpoints the same briefing without launching anyone; `--no-brief` is for an intentional context-only handoff; `--pane` hands off a pane other than your own. Details: `components/handoff.md` in the docs folder.
+Choose a receiver Profile with `--role receiver=<Profile>`, or pass `--input next=save` to
+save without launching a receiver. Follow the returned `data.self_initiated.line` and deliver
+the required briefing through the workflow protocol. See `components/handoff.md` and
+`components/workflows.md` in the docs folder.
 
 ## Command Set
 
-`list`, `agents`, `agents read`, `agents signal`, `agents dispatch`, `agents dispatch-complete`, `agents dispatch-abandon`, `agents wait`, `profiles list`, `skills list|install|uninstall|path` (local-only), `workflow list|run|status|deliver|cancel` (`workflow validate|schema` local-only), `read`, `send`, `key`, `focus`, `create tab`, `create pane`, `close`, `handoff to`, `handoff save`, and `open` (default). There is no CLI `quit`; close temporary tabs or panes with an explicit `close`. `tab create`, `tab close`, and `pane close` remain deprecated aliases for one release.
+`list`, `agents`, `agents read`, `agents signal`, `agents dispatch`, `agents dispatch-complete`, `agents dispatch-abandon`, `agents wait`, `profiles list`, `skills list|install|uninstall|path` (local-only), `workflow list|run|status|deliver|cancel` (`workflow validate|schema` local-only), `read`, `send`, `key`, `focus`, `create tab`, `create pane`, `close`, and `open` (default). There is no CLI `quit`; close temporary tabs or panes with an explicit `close`. `tab create`, `tab close`, and `pane close` remain deprecated aliases for one release; `handoff` remains for one release as a non-executing `HANDOFF_RETIRED` stub.

@@ -95,7 +95,7 @@ for Canvas-specific behavior.
 - **Click a Blocked or Done cell** to bring Prowl forward and focus that agent's exact worktree,
   tab, and pane.
 - **The roster** lists every entry with the same rows, ordering, Workflow badges, and context menu
-  as the [Active Agents panel](active-agents.md), including **Hand Off…** and **Run Workflow**.
+  as the [Active Agents panel](active-agents.md) and its **Run Workflow** menu.
   Each row's subtitle shows both the pane title and the branch, separated by a middle dot,
   regardless of the sidebar's title-or-branch setting; a live Workflow role badge replaces it.
   Clicking a row, or choosing one of those actions, brings Prowl forward first and then behaves

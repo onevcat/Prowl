@@ -130,7 +130,7 @@ struct WorkflowBundleValidatorTests {
 
   @Test func builtinInputTypesAndRemovedActionsAreRejected() {
     #expect(codes("  - id: snapshot\n    action: builtin:collect-worktree-context\n    with: {root: 3}") == ["action_input_type"])
-    #expect(codes("  - id: old\n    action: handoff.checkpoint") == ["unknown_action"])
+    #expect(codes("  - id: old\n    action: removed.action") == ["unknown_action"])
   }
   @Test func aBranchCannotOverwriteAnOuterOutputBinding() {
     let diagnostics = codes("""

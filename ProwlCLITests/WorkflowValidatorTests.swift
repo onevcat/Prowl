@@ -171,7 +171,7 @@ final class WorkflowValidatorTests: XCTestCase {
       WorkflowFixtures.codes(minimal(steps: "  - id: b\n    action: builtin:collect-worktree-context\n    with: { depth: 3 }")),
       ["unknown_action_input"])
     XCTAssertEqual(
-      WorkflowFixtures.codes(minimal(steps: "  - id: b\n    action: handoff.transition\n    with: { from: author }")),
+      WorkflowFixtures.codes(minimal(steps: "  - id: b\n    action: removed.action\n    with: { from: author }")),
       ["unknown_action"])
   }
 

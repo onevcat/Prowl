@@ -29,12 +29,12 @@ nonisolated enum WorkflowHandoffAction {
     try Task.checkCancellation()
     let result = try await HandoffCoordinator(store: store).makeCheckpoint(
       outgoingAgent: context.outgoingAgent, sessionContext: context.sessionContext,
-      note: "workflow=\(context.runID.uuidString)", briefingSource: .inline(briefing), now: context.now)
+      note: "workflow=\(context.runID.uuidString)", briefing: briefing, now: context.now)
     // Build this packet from this save's values, not the shared current/context files:
     // another handoff may already have replaced those while the receiver is starting.
     let appendix = store.buildAppendix(
-      outgoingAgent: context.outgoingAgent, sessionContext: result.save.sessionContext,
-      repos: result.save.repos, changedFiles: result.save.changedFiles, now: context.now)
+      outgoingAgent: context.outgoingAgent, sessionContext: result.sessionContext,
+      repos: result.repos, changedFiles: result.changedFiles, now: context.now)
     let packet = try HandoffStore.reserveFileURL(
       in: store.archiveDirectory, stem: "workflow-\(context.runID.uuidString)", fileExtension: "md")
     try (briefing + "\n" + appendix + "\n").write(to: packet, atomically: true, encoding: .utf8)

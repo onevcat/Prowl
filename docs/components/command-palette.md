@@ -47,12 +47,6 @@ selected worktree has a pull request).
   Line Tool**, Repo Settings.
 - **Custom commands:** enabled local and Global Custom Commands appear here with their
   source. Same-titled commands can coexist; disabled commands do not appear.
-- **Handoff** (every runnable workspace, repository/worktree, or plain folder):
-  a single **Hand Off…** row opens the Hand Off HUD, where you choose the
-  receiving agent (or save progress only); Prowl then asks the live source
-  agent to write its briefing and run the hand-off itself, with fork and
-  context-only fallbacks available while you wait. Same flow as the toolbar
-  Agents capsule. See [handoff](handoff.md).
 - **Agent profiles** (when a terminal worktree is selected): a
   **Launch Agent: <name>** row per enabled profile, the current worktree's
   Recommended profile first — the same launch action as the toolbar Agents

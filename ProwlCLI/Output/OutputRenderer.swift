@@ -16,9 +16,7 @@ enum OutputRenderer {
   }
 
   static func renderError(code: String, message: String, command: String, mode: OutputMode) {
-    // Keep pre-transport error envelopes on the same schema the app serves
-    // for the command (handoff moved to v2 with the inline-briefing redesign).
-    let schemaVersion = command == "handoff" ? "prowl.cli.handoff.v2" : "prowl.cli.\(command).v1"
+    let schemaVersion = "prowl.cli.\(command).v1"
     let response = CommandResponse(
       ok: false,
       command: command,
@@ -189,14 +187,6 @@ enum OutputRenderer {
          let payload = try? data.decode(as: PaneCommandPayload.self)
       {
         print(renderPane(payload))
-        return
-      }
-
-      if response.command == "handoff",
-         let data = response.data,
-         let payload = try? data.decode(as: HandoffCommandPayload.self)
-      {
-        print(renderHandoff(payload))
         return
       }
 
@@ -650,67 +640,6 @@ enum OutputRenderer {
       }
       return lines.joined(separator: "\n")
     }
-  }
-
-  private static func renderHandoff(_ payload: HandoffCommandPayload) -> String {
-    var lines: [String] = []
-
-    switch payload.action {
-    case .save:
-      lines.append("Handoff \("saved".green.bold)  \("changed:".dim) \(payload.changedFileCount) files")
-      lines.append("  \("artifact:".dim) \(payload.artifactPath)")
-      lines.append(contentsOf: renderHandoffBriefing(payload.briefing))
-      lines.append(contentsOf: renderHandoffSession(payload.sessionContext))
-      lines.append(contentsOf: renderHandoffRepos(payload.repos))
-    case .toAgent:
-      let to = payload.toAgent ?? "?"
-      let from = payload.outgoingAgent ?? "agent"
-      lines.append("Handoff \("\(from) → \(to)".cyan.bold)  \("changed:".dim) \(payload.changedFileCount) files")
-      lines.append("  \("artifact:".dim) \(payload.artifactPath)")
-      if let archived = payload.archivedPath {
-        lines.append("  \("archived:".dim) \(archived)")
-      }
-      lines.append(contentsOf: renderHandoffBriefing(payload.briefing))
-      lines.append(contentsOf: renderHandoffSession(payload.sessionContext))
-      if let pane = payload.launchedPane {
-        lines.append("  \("launched:".dim) \(to.green) → \(pane.paneTitle.green)  \(pane.paneID.dim)")
-      } else {
-        lines.append("  \("launched:".dim) \("no (--no-launch); take over manually".dim)")
-      }
-      lines.append(contentsOf: renderHandoffRepos(payload.repos))
-    }
-
-    return lines.joined(separator: "\n")
-  }
-
-  private static func renderHandoffBriefing(_ briefing: String?) -> [String] {
-    guard let briefing else { return [] }
-    let label =
-      switch briefing {
-      case "inline", "fork": briefing.green
-      case "failed": briefing.yellow
-      default: briefing.dim
-      }
-    return ["  \("briefing:".dim) \(label)"]
-  }
-
-  private static func renderHandoffRepos(_ repos: [HandoffRepoPayload]) -> [String] {
-    repos.map { repo in
-      if repo.isGit {
-        return "  \("repo:".dim) \(repo.name)  \(repo.branch ?? "?")"
-          + "  (\(repo.changedFileCount) changed, +\(repo.insertions)/-\(repo.deletions))"
-      }
-      return "  \("repo:".dim) \(repo.name)  \("(not a git repo)".dim)"
-    }
-  }
-
-  private static func renderHandoffSession(_ session: HandoffSessionPayload?) -> [String] {
-    guard let session, let excerptPath = session.excerptPath else { return [] }
-    let sessionID = session.sessionID.map { "  id=\($0)" } ?? ""
-    let transcript = session.transcriptPath.map { "  transcript=\($0)" } ?? ""
-    return [
-      "  \("session:".dim) \(excerptPath)  \(session.confidence.dim)\(sessionID.dim)\(transcript.dim)"
-    ]
   }
 
   private static func renderPane(_ payload: PaneCommandPayload) -> String {
