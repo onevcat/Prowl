@@ -83,6 +83,51 @@ struct MirrorCommandServiceTests {
     }
   }
 
+  @Test func shellSendRequiresIdleTaskWithoutAgentAndUsesPublicSend() async throws {
+    for (agent, state) in [(String?.none, ListCommandTask.Status?.some(.idle)),
+      ("claude", .some(.idle)), (nil, .some(.running)), (nil, nil)] {
+      let handler = ShellHandlers(agent: agent, state: state)
+      let service = MirrorCommandService(router: CLICommandRouter(listHandler: handler, sendHandler: handler))
+      let request = MirrorCommandRequest(requestID: UUID(), request: .init(command: .send(.init(
+        pane: handler.paneID, text: "echo hello"))))
+      let result = await service.execute(request)
+      let permitted = agent == nil && state == .idle
+      #expect(try result.response.decode(CommandResponse.self).ok == permitted)
+      #expect(handler.sends == (permitted ? 1 : 0))
+      _ = await service.receipt(request.requestID, paneID: handler.paneID)
+      #expect(handler.sends == (permitted ? 1 : 0))
+    }
+  }
+
+  private final class ShellHandlers: CommandHandler {
+    let paneID = UUID()
+    let agent: String?
+    let state: ListCommandTask.Status?
+    var sends = 0
+    init(agent: String?, state: ListCommandTask.Status?) { self.agent = agent; self.state = state }
+    func handle(envelope: CommandEnvelope) async -> CommandResponse {
+      await Task.yield()
+      if case .send(let input) = envelope.command {
+        sends += 1
+        #expect(input.selector == .pane(paneID.uuidString))
+        #expect(input.trailingEnter && !input.wait && !input.captureOutput)
+        return CommandResponse(ok: true, command: "send", schemaVersion: "test")
+      }
+      let item = ListCommandItem(
+        worktree: .init(id: "w", name: "main", path: "/Project", rootPath: "/Project", kind: .git),
+        tab: .init(id: "t", title: "Terminal", selected: true),
+        pane: .init(id: paneID.uuidString, title: "Terminal", cwd: "/Project", focused: true, agent: agent),
+        task: .init(status: state))
+      do {
+        return CommandResponse(ok: true, command: "list", schemaVersion: "test",
+          data: try RawJSON(encoding: ListCommandPayload(count: 1, items: [item])))
+      } catch {
+        Issue.record(error)
+        return CommandResponse(ok: false, command: "list", schemaVersion: "test")
+      }
+    }
+  }
+
   private func creation(id: UUID, prompt: String?) -> MirrorCommandRequest {
     .init(
       requestID: id,

@@ -18,6 +18,15 @@ nonisolated struct MirrorCommandRequest: Codable, Equatable, Sendable {
     case profiles(Empty)
     case create(Create)
     case agentsDispatch(Dispatch)
+    case send(MirrorShellInput)
+
+    var targetPaneID: UUID? {
+      switch self {
+      case .agentsDispatch(let input): UUID(uuidString: input.pane)
+      case .send(let input): UUID(uuidString: input.selector.value)
+      default: nil
+      }
+    }
   }
 
   struct Dispatch: Codable, Equatable, Sendable {
@@ -90,5 +99,35 @@ nonisolated enum MirrorJSON: Codable, Equatable, Sendable {
 
   func decode<T: Decodable>(_ type: T.Type) throws -> T {
     try JSONDecoder().decode(type, from: JSONEncoder().encode(self))
+  }
+}
+
+nonisolated struct MirrorShellInput: Codable, Equatable, Sendable {
+  enum PaneSelector: Codable, Equatable, Sendable {
+    case pane(String)
+    var value: String {
+      switch self {
+      case .pane(let value): value
+      }
+    }
+  }
+  let selector: PaneSelector
+  let text: String
+  let trailingEnter: Bool
+  let source: String
+  let wait: Bool
+  let captureOutput: Bool
+  enum CodingKeys: String, CodingKey {
+    case selector, text, source, wait
+    case trailingEnter = "trailing_enter"
+    case captureOutput = "capture_output"
+  }
+  init(pane: UUID, text: String) {
+    selector = .pane(pane.uuidString)
+    self.text = text
+    trailingEnter = true
+    source = "argv"
+    wait = false
+    captureOutput = false
   }
 }

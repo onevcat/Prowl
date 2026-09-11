@@ -15,7 +15,7 @@ final class AgentDispatchCommandHandler: CommandHandler {
   typealias PendingDispatch = @MainActor (TabResolvedTarget) -> AgentDispatchSnapshot?
   typealias ConditionSnapshotProvider = @MainActor (TabResolvedTarget) -> AgentConditionSnapshot
   typealias IssueDispatch = @MainActor (TabResolvedTarget) -> Result<AgentDispatchSnapshot, AgentDispatchStoreError>
-  typealias DeliverPrompt = @MainActor (TabResolvedTarget, String) -> Bool
+  typealias DeliverPrompt = @MainActor (TabResolvedTarget, String) async -> Bool
   typealias InputProtection = @MainActor (TabResolvedTarget) -> String?
   typealias CancelDispatch = @MainActor (String) -> Void
 
@@ -112,7 +112,7 @@ final class AgentDispatchCommandHandler: CommandHandler {
         message: "The dispatch could not be bound to the pane's current agent."
       )
     }
-    guard deliverPrompt(target, AgentDispatchPrompt.renderInjected(userPrompt: input.prompt)) else {
+    guard await deliverPrompt(target, AgentDispatchPrompt.renderInjected(userPrompt: input.prompt)) else {
       cancelDispatch(issued.record.id)
       return failure(code: CLIErrorCode.dispatchFailed, message: "The prompt could not be delivered to the pane.")
     }

@@ -281,7 +281,7 @@ struct SupacodeApp: App {
       workflowCoordinatorBox: workflowRuntime.coordinatorBox,
       workflowReservations: workflowRuntime.reservations
     )
-    mirrors.host.commandService = MirrorCommandService(router: cliRouter)
+    mirrors.host.commandService = Self.makeMirrorCommandService(router: cliRouter, manager: terminalManager)
 
     _cliSocketServer = State(initialValue: cliServer)
 
@@ -846,7 +846,7 @@ struct SupacodeApp: App {
         return resolver.resolve(selector).map { SendResolvedTarget(from: $0) }
       },
       textDelivery: { target, text, trailingEnter in
-        guard let state = terminalManager.stateIfExists(for: target.worktreeID) else { return }
+        guard let state = terminalManager.stateIfExists(for: target.worktreeID) else { return false }
         let delivery = CLISendTextDelivery(
           insertText: { paneID, payload in
             state.insertCommittedText(payload, in: paneID)
@@ -855,7 +855,7 @@ struct SupacodeApp: App {
             state.submitLine(in: paneID)
           }
         )
-        delivery.deliver(to: target, text: text, trailingEnter: trailingEnter)
+        return delivery.deliver(to: target, text: text, trailingEnter: trailingEnter)
       },
       waiterProvider: { worktreeID, surfaceID in
         terminalManager.stateIfExists(for: worktreeID)?
@@ -1030,14 +1030,12 @@ struct SupacodeApp: App {
         }
       },
       deliverPrompt: { target, text in
-        // The same input path as `prowl send`: one committed-text paste, then Enter.
         guard let surfaceID = UUID(uuidString: target.paneID),
-          let state = terminalManager.stateIfExists(for: target.worktreeID),
-          state.insertCommittedText(text, in: surfaceID)
+          let state = terminalManager.stateIfExists(for: target.worktreeID)
         else {
           return false
         }
-        return state.submitLine(in: surfaceID)
+        return await state.deliverAgentDispatch(text, surfaceID: surfaceID)
       },
       cancelDispatch: { dispatchID in
         terminalManager.cancelAgentDispatchIssuance(dispatchID: dispatchID)
@@ -1397,6 +1395,17 @@ struct SupacodeApp: App {
     manager: WorktreeTerminalManager, runtime: GhosttyRuntime
   ) -> RemoteMirrorStore {
     return RemoteMirrorStore(manager: manager, runtime: runtime)
+  }
+
+  private static func makeMirrorCommandService(
+    router: CLICommandRouter, manager: WorktreeTerminalManager
+  ) -> MirrorCommandService {
+    MirrorCommandService(router: router, protectInput: { paneID in
+      guard let state = manager.activeWorktreeStates.first(where: { $0.surfaces[paneID] != nil }) else {
+        return "The target terminal is no longer available."
+      }
+      return state.dispatchInputProtection(surfaceID: paneID)
+    })
   }
 
   private static func makeCLISocketServer(

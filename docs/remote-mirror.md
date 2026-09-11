@@ -62,7 +62,7 @@ or stdin EOF exits the helper.
 Plain-text mirroring and bounded retained history remain available. The old
 mirror-private submission parser and ledger have been removed. Updated iOS clients
 use the public Agent dispatch route below. Do not use an old iOS build to validate
-this path. Shared terminal delivery protection and Shell Send are still unfinished;
+this path. Codex draft recognition and the remaining protocol review items are still unfinished;
 this intermediate branch is not a release candidate.
 
 ## Development
@@ -113,9 +113,8 @@ refusals preserve the draft. Unknown delivery blocks another send until the user
 checks Host output; reconnect queries the original command receipt without
 replaying text. Receipts are bounded and App-lifetime only, and require a current
 lease for the same pane. This receipt lookup does not complete or abandon Agent
-work. Shell send, shared local-draft/IME protection and Claude paste/Enter evidence
-remain separate review-alignment work; the route tests do not establish those
-terminal behaviors. The previous `submit-text` protocol remains only in the iOS
+work. Shared input protection and Claude/Shell routing are described below;
+route tests alone do not establish real terminal delivery behavior. The previous `submit-text` protocol remains only in the iOS
 legacy fixture path until the final wire cleanup.
 
 
@@ -128,7 +127,32 @@ its shared screen profile: multiline drafts and image/paste markers refuse dispa
 A missing composer is not considered empty. These checks apply to CLI dispatch as
 well as mirror dispatch and run before text insertion can clear marked text.
 
-This does not yet verify Codex placeholder-versus-draft styling, nor implement the
-Claude paste acknowledgement/Enter sequence or Shell Send. The screen check is
+This does not verify Codex placeholder-versus-draft styling. The screen check is
 based on rendered text and is not a terminal-native draft API. Real terminal
 acceptance remains required; component tests do not establish those pending paths.
+
+
+### Claude submit and Shell routing checkpoint
+
+Public Agent dispatch now separates Claude paste from Enter. Starting from an empty
+recognized composer, it polls for the exact normalized inserted text or Claude's
+collapsed pasted-text marker for at most two seconds. The edit revision captured
+immediately after insertion must remain unchanged, marked text must stay absent,
+and the same surface must still host Claude. Cancellation, lost evidence or a local
+edit prevents Enter. Delivery failure is unconfirmed on iOS, so it does not clear
+the draft or automatically replay input. This acknowledgement is rendered-text
+evidence, not a guarantee from Claude's internal API.
+
+With `shell-send`, iOS fetches public `list` before every submission. A detected
+Agent routes to `agents dispatch`; otherwise an explicitly idle task routes to
+public `send`. Host rechecks `list`, the active lease and shared input protection
+before shell insertion. Unknown/running task states refuse Shell Send. The current
+list task status is worktree-scoped, so this can conservatively refuse a shell when
+another task in that worktree is running. Remote Send requires Enter, no wait/capture,
+a fixed pane selector, bounded text and no control characters except newline/tab.
+Public Send now propagates failed insertion/Enter instead of reporting success.
+
+Codex placeholder-versus-draft recognition remains unfinished: plain capture cannot
+reliably distinguish a dim prompt suggestion from identically worded user text.
+No Ghostty change is included in this checkpoint. Legacy wire/fixtures and device
+pairing remain separate pending work; this is not full acceptance sign-off.

@@ -10,6 +10,26 @@ enum SplitCreationError: Error, Equatable, Sendable {
 }
 
 extension WorktreeTerminalState {
+  func deliverAgentDispatch(_ text: String, surfaceID: UUID) async -> Bool {
+    guard dispatchInputProtection(surfaceID: surfaceID) == nil,
+      let surface = surfaces[surfaceID] else { return false }
+    if surfaceAgentStates[surfaceID]?.detectedAgent == .claude {
+      let delivery = ClaudePromptDelivery(
+        observe: { [weak self, weak surface] in
+          guard let self, let surface, self.surfaces[surfaceID] === surface,
+            self.surfaceAgentStates[surfaceID]?.detectedAgent == .claude,
+            let text = surface.readActiveContentsForCLI() else { return nil }
+          return .init(composer: ClaudeScreenProfile.composerContents(in: AgentScreenSnapshot(text: text)),
+            editingRevision: surface.lastEditingAt, hasMarkedText: surface.hasMarkedText())
+        },
+        insert: { [weak self] in self?.insertCommittedText($0, in: surfaceID) == true },
+        submit: { [weak self] in self?.submitLine(in: surfaceID) == true })
+      return await delivery.deliver(text)
+    }
+    guard !Task.isCancelled, insertCommittedText(text, in: surfaceID) else { return false }
+    return submitLine(in: surfaceID)
+  }
+
   func dispatchInputProtection(surfaceID: UUID) -> String? {
     guard let surface = surfaces[surfaceID] else { return "The target terminal is no longer available." }
     if let refusal = AgentDispatchInputProtection.refusal(

@@ -38,7 +38,7 @@ struct CLISendCommandHandlerTests {
   ) -> SendCommandHandler {
     SendCommandHandler(
       resolveProvider: { _ in resolveResult },
-      textDelivery: textDelivery ?? { _, _, _ in },
+      textDelivery: { target, text, enter in textDelivery?(target, text, enter); return true },
       waiterProvider: { _, _ in
         guard let waiterResult else { return nil }
         return AsyncStream { continuation in
@@ -238,6 +238,7 @@ struct CLISendCommandHandlerTests {
       textDelivery: { _, _, _ in
         continuation?.yield((exitCode: 0, durationMs: 1))
         continuation?.finish()
+        return true
       },
       waiterProvider: { _, _ in
         AsyncStream { streamContinuation in
@@ -289,6 +290,19 @@ struct CLISendCommandHandlerTests {
 
     #expect(insertedPaneID == Self.testPaneID)
     #expect(submittedPaneID == Self.testPaneID)
+  }
+
+  @Test func failedInsertionNeverSubmitsAndHandlerReportsFailure() async {
+    var submitted = false
+    let delivery = CLISendTextDelivery(
+      insertText: { _, _ in false }, submitLine: { _ in submitted = true; return true })
+    #expect(!delivery.deliver(to: Self.makeTarget(), text: "hello", trailingEnter: true))
+    #expect(!submitted)
+    let handler = SendCommandHandler(resolveProvider: { _ in .success(Self.makeTarget()) },
+      textDelivery: { _, _, _ in false }, waiterProvider: { _, _ in nil })
+    let result = await handler.handle(envelope: Self.makeEnvelope())
+    #expect(!result.ok)
+    #expect(result.error?.code == CLIErrorCode.sendFailed)
   }
 
   // MARK: - Capture Tests

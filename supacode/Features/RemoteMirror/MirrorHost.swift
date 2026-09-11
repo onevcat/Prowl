@@ -204,7 +204,7 @@ final class MirrorHost {
             kind: .panes, panes: panes, selectedVersion: versions[peer.id],
             capabilities: versions[peer.id] == 2
               ? ["vt-v1", "text-v1", "takeover", "refresh"]
-                + (commandService != nil ? ["launch-profile", "agents-dispatch"] : [])
+                + (commandService != nil ? ["launch-profile", "agents-dispatch", "shell-send"] : [])
                 + (source.supportsBoundedHistory ? ["history"] : [])
               : nil,
             hostRunID: hostRunID))
@@ -242,13 +242,16 @@ final class MirrorHost {
     else { throw MirrorProtocolError.invalidMessage }
     let lease: UUID?
     // Code security: commands cannot escape the authenticated connection’s current pane lease.
-    if case .agentsDispatch(let input) = request.request.command {
+    if let paneID = request.request.command.targetPaneID {
       guard let active = subscription(for: message, peer: peer),
-        UUID(uuidString: input.pane) == active.paneID else { throw MirrorProtocolError.invalidMessage }
+        paneID == active.paneID else { throw MirrorProtocolError.invalidMessage }
       lease = active.id
     } else {
-      guard subscriptions[peer.id] == nil else { throw MirrorProtocolError.invalidMessage }
-      lease = nil
+      if subscriptions[peer.id] != nil {
+        guard case .list = request.request.command,
+          let active = subscription(for: message, peer: peer) else { throw MirrorProtocolError.invalidMessage }
+        lease = active.id
+      } else { lease = nil }
     }
     if let pending = commandPeers[peer.id] {
       guard pending == request else { throw MirrorProtocolError.invalidMessage }
@@ -267,7 +270,7 @@ final class MirrorHost {
   }
 
   private func cancelCommand(_ peerID: UUID) {
-    guard let request = commandPeers[peerID], case .agentsDispatch = request.request.command else { return }
+    guard let request = commandPeers[peerID], request.request.command.targetPaneID != nil else { return }
     commandService?.cancel(request.requestID)
   }
 
