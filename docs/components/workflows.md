@@ -89,11 +89,13 @@ The sheet explains the workflow and collects what the run needs before it exists
 Its header shows the workflow's icon, name, description, and the target worktree;
 the body is arranged in sections like the Workflow History panel:
 
-- **Roles** — one row per role, titled from its YAML name with a tag for the kind
-  of pane that serves it: **This pane** (`current`), **New agent** (`launch`), or
-  **Existing agent** (`pick`). The caption names the steps that address the role
-  (`Step 1 · Prepare handoff briefing`) and, for a launch role, where its pane
-  opens. The control on the right is the choice for that role:
+- **Roles** — one label/control row per role, laid out like a Settings form:
+  the role's name on the left with a small icon for the kind of pane that serves
+  it (terminal = the pane you start from, plus = an agent Prowl launches, person
+  = an existing agent), the choice on the right. Hovering the name shows the
+  details: the kind of pane, the steps that address the role
+  (`Step 1 · Prepare handoff briefing`), and where a launched pane opens. The
+  control is the choice for that role:
   - `current` — a pane picker pre-selected from the worktree's focused pane
     (fixed when started from an Active Agents row); a bare shell qualifies only
     while no step messages that role.
@@ -103,16 +105,17 @@ the body is arranged in sections like the Workflow History panel:
     suggestion…** appears when the role's `suggest` matches no enabled profile:
     it creates a normal Agent Profile inline and selects it. A launch role the
     current options never reach (a branch that is not taken) is listed dimmed
-    as **Not started with the current options** and takes no profile.
+    with **Not used** in place of its picker.
   - `pick` — a pane picker over detected agents in the worktree, excluding
     panes already in a run and the source pane.
-- **Options** — the declared inputs, labeled by their `prompt` (the input name
-  and `required` appear as a caption) with defaults pre-filled; enum inputs are
-  menus, the rest text fields. Required inputs without a default must be filled
-  before Run enables.
+- **Options** — the declared inputs in the same grid, labeled by their `prompt`
+  (hover for the input name and default) with defaults pre-filled; enum inputs
+  are menus, the rest text fields. Required inputs without a default must be
+  filled before Run enables.
 - **Steps** — the run's steps in order with their role, so choices like
   "launch or save" read as "step 3 starts the receiving agent". Steps inside an
-  `if` are marked *if a condition holds*; steps inside a `while` *may repeat*.
+  `if` carry a branch icon, steps inside a `while` a repeat icon; hover a step
+  for what it does.
 - **Optional Steps** — a **Skip <step>** toggle for each step whose output
   nothing later depends on. A skip that would end the run early is refused by
   admission and therefore not offered.

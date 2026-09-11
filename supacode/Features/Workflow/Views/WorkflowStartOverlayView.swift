@@ -53,7 +53,7 @@ private struct WorkflowStartCard: View {
       header
       Divider()
       ScrollView {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 22) {
           if let failure = store.context.cliServiceFailure {
             socketBanner(failure)
           } else if !store.cliInstalled {
@@ -62,10 +62,7 @@ private struct WorkflowStartCard: View {
           if store.requiresBundleApproval {
             bundleApprovalBanner
           }
-          rolesSection(plan)
-          if !store.context.definition.inputs.isEmpty {
-            optionsSection
-          }
+          choicesGrid(plan)
           if !plan.steps.isEmpty {
             stepsSection(plan)
           }
@@ -177,100 +174,102 @@ private struct WorkflowStartCard: View {
 
   // MARK: - Sections
 
-  private func sectionHeader(_ title: String, hint: String) -> some View {
-    HStack(alignment: .firstTextBaseline) {
-      Text(title)
-        .font(.subheadline.weight(.semibold))
-      Spacer(minLength: 8)
-      Text(hint)
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .lineLimit(1)
-    }
+  /// The control column's width: wide enough for a pane title, narrow enough that the label
+  /// column keeps its place. Long titles truncate in the middle instead of pushing the layout.
+  private static let controlWidth: CGFloat = 320
+
+  private func sectionHeader(_ title: String, help: String) -> some View {
+    Text(title)
+      .font(.subheadline.weight(.semibold))
+      .foregroundStyle(.secondary)
+      .help(help)
   }
 
-  private func groupBox<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-    VStack(alignment: .leading, spacing: 0, content: content)
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
-  }
-
-  private func rolesSection(_ plan: WorkflowStartPlan) -> some View {
-    VStack(alignment: .leading, spacing: 8) {
-      sectionHeader("Roles", hint: "Who takes part, and which pane or agent serves each role")
-      groupBox {
-        ForEach(Array(plan.roles.enumerated()), id: \.element.id) { index, role in
-          if index > 0 { Divider().padding(.leading, 12) }
-          roleRow(role)
+  /// Roles and options share one label/control grid so their label columns align, the way a
+  /// native Settings form reads: the name on the left, the choice on the right.
+  private func choicesGrid(_ plan: WorkflowStartPlan) -> some View {
+    Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 14, verticalSpacing: 12) {
+      GridRow {
+        sectionHeader("Roles", help: "Who takes part in this run. Hover a role for what it does.")
+          .gridCellColumns(2)
+          .gridColumnAlignment(.leading)
+      }
+      ForEach(plan.roles) { role in
+        roleRow(role)
+      }
+      if !store.context.definition.inputs.isEmpty {
+        GridRow {
+          sectionHeader("Options", help: "Choices this workflow asks for before it starts.")
+            .gridCellColumns(2)
+            .padding(.top, 8)
+        }
+        ForEach(store.context.definition.inputs, id: \.name) { input in
+          inputRow(input)
         }
       }
     }
   }
 
-  @ViewBuilder
   private func roleRow(_ role: WorkflowStartPlan.Role) -> some View {
     let required = store.state.isRoleRequired(role.name)
-    VStack(alignment: .leading, spacing: 6) {
-      HStack(alignment: .firstTextBaseline, spacing: 8) {
-        VStack(alignment: .leading, spacing: 3) {
-          HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text(role.title)
-              .font(.body.weight(.medium))
-            Text(role.kindLabel)
-              .font(.caption)
-              .foregroundStyle(.secondary)
-              .padding(.horizontal, 6)
-              .padding(.vertical, 1)
-              .background(.quaternary, in: Capsule())
-              .help(role.kindDescription)
-          }
-          if let caption = roleCaption(role, required: required) {
-            Text(caption)
-              .font(.caption)
-              .foregroundStyle(.secondary)
-              .lineLimit(2)
-          }
-        }
-        Spacer(minLength: 12)
+    let launch = store.context.launchRoles.first { $0.name == role.name }
+    return GridRow {
+      Label(role.title, systemImage: roleSymbol(role))
+        .labelStyle(.titleAndIcon)
+        .foregroundStyle(required ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+        .lineLimit(1)
+        .gridColumnAlignment(.trailing)
+        .help(roleHelp(role, required: required))
+        .accessibilityLabel("\(role.title), \(role.kindLabel)")
+
+      VStack(alignment: .leading, spacing: 6) {
         roleControl(role, required: required)
-      }
-      if role.source == .current, store.selectedSourceIsBareShell, store.sourceRequiresAgent {
-        Text("A step sends instructions to this role, so the pane must host a detected agent.")
-          .font(.footnote)
-          .foregroundStyle(.orange)
-      }
-      if role.source == .launch, let launch = store.context.launchRoles.first(where: { $0.name == role.name }) {
-        if let note = launch.rejectedNote {
-          Text(note)
+        if role.source == .current, store.selectedSourceIsBareShell, store.sourceRequiresAgent {
+          Text("Choose a pane with a running agent.")
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.orange)
+            .help("A step sends this role instructions, so its pane must host a detected agent.")
         }
-        if required, store.state.canCreateSuggestion(for: role.name), store.creatingSuggestionForRole != role.name {
-          Button("Create profile from suggestion…") {
-            store.send(.createSuggestionTapped(role: role.name))
+        if required, let launch {
+          if let note = launch.rejectedNote {
+            Text(note)
+              .font(.footnote)
+              .foregroundStyle(.secondary)
           }
-          .buttonStyle(.link)
-          .font(.callout)
-          .help("Create a profile from this workflow's suggested agent configuration.")
-        }
-        if store.creatingSuggestionForRole == role.name {
-          suggestionConfirmBlock(launch)
+          if store.state.canCreateSuggestion(for: role.name), store.creatingSuggestionForRole != role.name {
+            Button("Create profile from suggestion…") {
+              store.send(.createSuggestionTapped(role: role.name))
+            }
+            .buttonStyle(.link)
+            .font(.callout)
+            .help("Create a profile from this workflow's suggested agent configuration.")
+          }
+          if store.creatingSuggestionForRole == role.name {
+            suggestionConfirmBlock(launch)
+          }
         }
       }
+      .gridColumnAlignment(.leading)
+      .frame(maxWidth: .infinity, alignment: .leading)
     }
-    .padding(.horizontal, 12)
-    .padding(.vertical, 10)
-    .opacity(required ? 1 : 0.6)
   }
 
-  private func roleCaption(_ role: WorkflowStartPlan.Role, required: Bool) -> String? {
-    var parts: [String] = []
-    if !required {
-      parts.append("Not started with the current options")
+  private func roleSymbol(_ role: WorkflowStartPlan.Role) -> String {
+    switch role.source {
+    case .current: "terminal"
+    case .launch: "plus.app"
+    case .pick: "person.crop.square"
     }
-    if let steps = role.stepsCaption { parts.append(steps) }
-    if required, let placement = role.placementNote { parts.append(placement) }
-    return parts.isEmpty ? nil : parts.joined(separator: " · ")
+  }
+
+  /// Everything the row used to spell out, on hover: the kind of pane, the steps that address
+  /// the role, where a launched pane opens, and why an unreached role takes no choice.
+  private func roleHelp(_ role: WorkflowStartPlan.Role, required: Bool) -> String {
+    var lines = ["\(role.kindLabel) — \(role.kindDescription)"]
+    if let steps = role.stepsCaption { lines.append(steps) }
+    if required, let placement = role.placementNote { lines.append(placement) }
+    if !required { lines.append("Not started with the current options.") }
+    return lines.joined(separator: "\n")
   }
 
   @ViewBuilder
@@ -282,8 +281,10 @@ private struct WorkflowStartCard: View {
           let fixed = source.candidates.first(where: { $0.surfaceID == source.preselectedSurfaceID })
         {
           Text(paneLabel(fixed))
-            .foregroundStyle(.secondary)
-            .help("This workflow was started from the Active Agents row, so its pane is the source.")
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .frame(maxWidth: Self.controlWidth, alignment: .leading)
+            .help("Started from this pane's Active Agents row, so it is the source.")
         } else {
           Picker(selection: sourceBinding) {
             ForEach(source.candidates) { candidate in
@@ -293,8 +294,8 @@ private struct WorkflowStartCard: View {
             Text(role.title)
           }
           .labelsHidden()
-          .fixedSize()
-          .help("The pane this workflow runs from — the CLI's [source] argument.")
+          .frame(width: Self.controlWidth)
+          .help("The pane this run starts from.")
         }
       }
     case .launch:
@@ -316,8 +317,12 @@ private struct WorkflowStartCard: View {
           Text(role.title)
         }
         .labelsHidden()
-        .fixedSize()
-        .help("The Agent Profile Prowl launches for the \(role.name) role.")
+        .frame(width: Self.controlWidth)
+        .help("The Agent Profile Prowl starts for this role.")
+      } else {
+        Text("Not used")
+          .foregroundStyle(.tertiary)
+          .help("The current options never reach this role, so no agent is started for it.")
       }
     case .pick:
       if let pick = store.context.pickRoles.first(where: { $0.name == role.name }) {
@@ -330,8 +335,8 @@ private struct WorkflowStartCard: View {
           Text(role.title)
         }
         .labelsHidden()
-        .fixedSize()
-        .help("An agent already running in this worktree takes the \(role.name) role.")
+        .frame(width: Self.controlWidth)
+        .help("An agent already running in this worktree takes this role.")
       }
     }
   }
@@ -359,94 +364,84 @@ private struct WorkflowStartCard: View {
       }
     }
     .padding(10)
+    .frame(width: Self.controlWidth)
     .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
   }
 
-  private var optionsSection: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      sectionHeader("Options", hint: "Choices this workflow asks for")
-      groupBox {
-        ForEach(Array(store.context.definition.inputs.enumerated()), id: \.element.name) { index, input in
-          if index > 0 { Divider().padding(.leading, 12) }
-          inputRow(input)
+  private func inputRow(_ input: WorkflowInputDefinition) -> some View {
+    GridRow {
+      Text(input.prompt ?? WorkflowStartPlan.title(for: input.name))
+        .lineLimit(2)
+        .multilineTextAlignment(.trailing)
+        .gridColumnAlignment(.trailing)
+        .help(inputHelp(input))
+
+      Group {
+        if !input.values.isEmpty {
+          Picker(input.name, selection: inputBinding(name: input.name)) {
+            ForEach(input.values, id: \.self) { value in
+              Text(value).tag(value)
+            }
+          }
+          .labelsHidden()
+        } else {
+          TextField(
+            input.name, text: inputBinding(name: input.name),
+            prompt: Text(input.defaultValue == nil ? "Required" : ""))
         }
       }
+      .frame(width: Self.controlWidth)
+      .gridColumnAlignment(.leading)
+      .help(inputHelp(input))
     }
   }
 
-  private func inputRow(_ input: WorkflowInputDefinition) -> some View {
-    HStack(alignment: .firstTextBaseline, spacing: 12) {
-      VStack(alignment: .leading, spacing: 2) {
-        Text(input.prompt ?? WorkflowStartPlan.title(for: input.name))
-          .fixedSize(horizontal: false, vertical: true)
-        if input.prompt != nil || input.defaultValue == nil {
-          Text(input.defaultValue == nil ? "\(input.name) · required" : input.name)
-            .font(.caption.monospaced())
-            .foregroundStyle(.secondary)
-        }
-      }
-      Spacer(minLength: 12)
-      if !input.values.isEmpty {
-        Picker(input.name, selection: inputBinding(name: input.name)) {
-          ForEach(input.values, id: \.self) { value in
-            Text(value).tag(value)
-          }
-        }
-        .labelsHidden()
-        .fixedSize()
-        .help(input.prompt ?? "The \(input.name) input.")
-      } else {
-        TextField(input.name, text: inputBinding(name: input.name), prompt: Text(input.type == .integer ? "0" : "…"))
-          .textFieldStyle(.roundedBorder)
-          .frame(width: 200)
-          .help(input.prompt ?? "The \(input.name) input.")
-      }
-    }
-    .padding(.horizontal, 12)
-    .padding(.vertical, 10)
+  private func inputHelp(_ input: WorkflowInputDefinition) -> String {
+    var text = "Input “\(input.name)”"
+    if let value = input.defaultValue { text += " · default \(value.stringValue)" } else { text += " · required" }
+    if let prompt = input.prompt { text += "\n\(prompt)" }
+    return text
   }
 
   private func stepsSection(_ plan: WorkflowStartPlan) -> some View {
     VStack(alignment: .leading, spacing: 8) {
-      sectionHeader("Steps", hint: "What the run does, in order")
-      VStack(alignment: .leading, spacing: 4) {
+      sectionHeader("Steps", help: "What the run does, in order. Hover a step for details.")
+      VStack(alignment: .leading, spacing: 6) {
         ForEach(plan.steps) { step in
           stepRow(step)
         }
       }
-      .padding(.horizontal, 4)
     }
   }
 
   private func stepRow(_ step: WorkflowStartPlan.Step) -> some View {
     HStack(alignment: .firstTextBaseline, spacing: 8) {
       Text(step.number, format: .number)
-        .font(.caption.monospacedDigit())
+        .font(.callout.monospacedDigit())
         .foregroundStyle(.secondary)
         .frame(width: 18, alignment: .trailing)
       Image(systemName: stepSymbol(step))
-        .font(.caption)
+        .font(.callout)
         .foregroundStyle(.secondary)
-        .frame(width: 14)
+        .frame(width: 16)
         .accessibilityHidden(true)
       Text(step.title)
         .lineLimit(1)
         .truncationMode(.tail)
-      if let note = stepNote(step) {
-        Text(note)
+      if step.context != .always {
+        Image(systemName: step.context == .conditional ? "arrow.triangle.branch" : "repeat")
           .font(.caption)
-          .foregroundStyle(.secondary)
-          .lineLimit(1)
+          .foregroundStyle(.tertiary)
+          .accessibilityLabel(step.context == .conditional ? "Conditional" : "Repeats")
       }
       Spacer(minLength: 8)
       if let role = step.roleTitle {
         Text(role)
-          .font(.caption)
+          .font(.callout)
           .foregroundStyle(.secondary)
       }
     }
-    .font(.callout)
-    .opacity(step.context == .always ? 1 : 0.7)
+    .opacity(step.context == .always ? 1 : 0.75)
     .help(stepHelp(step))
   }
 
@@ -458,14 +453,6 @@ private struct WorkflowStartCard: View {
     case "notify": "bell"
     case "close": "xmark.circle"
     default: "circle"
-    }
-  }
-
-  private func stepNote(_ step: WorkflowStartPlan.Step) -> String? {
-    switch step.context {
-    case .always: nil
-    case .conditional: "if a condition holds"
-    case .repeated: "may repeat"
     }
   }
 
@@ -488,25 +475,10 @@ private struct WorkflowStartCard: View {
 
   private var skipSection: some View {
     VStack(alignment: .leading, spacing: 8) {
-      sectionHeader("Optional Steps", hint: "Start the run without these")
-      groupBox {
-        ForEach(Array(store.visibleSkipOptions.enumerated()), id: \.element.stepID) { index, option in
-          if index > 0 { Divider().padding(.leading, 12) }
-          VStack(alignment: .leading, spacing: 2) {
-            Toggle(
-              "Skip \(option.title ?? option.stepID)",
-              isOn: skipBinding(stepID: option.stepID)
-            )
-            .help("Start the run without this step.")
-            if let text = consequenceText(store.state.skipConsequence(for: option.stepID)) {
-              Text(text)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-            }
-          }
-          .padding(.horizontal, 12)
-          .padding(.vertical, 8)
-        }
+      sectionHeader("Optional Steps", help: "Steps the run can start without.")
+      ForEach(store.visibleSkipOptions, id: \.stepID) { option in
+        Toggle("Skip \(option.title ?? option.stepID)", isOn: skipBinding(stepID: option.stepID))
+          .help(consequenceText(store.state.skipConsequence(for: option.stepID)) ?? "Start the run without this step.")
       }
     }
   }
