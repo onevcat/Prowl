@@ -62,7 +62,7 @@ private struct WorkflowStartCard: View {
           if store.requiresBundleApproval {
             bundleApprovalBanner
           }
-          choicesGrid(plan)
+          choicesForm(plan)
           if !plan.steps.isEmpty {
             stepsSection(plan)
           }
@@ -174,8 +174,9 @@ private struct WorkflowStartCard: View {
 
   // MARK: - Sections
 
-  /// The control column's width: wide enough for a pane title, narrow enough that the label
-  /// column keeps its place. Long titles truncate in the middle instead of pushing the layout.
+  /// The label column is fixed and trailing-aligned, the control column fixed and filled, so
+  /// every row of roles and options shares the same two edges whatever its content.
+  private static let labelWidth: CGFloat = 150
   private static let controlWidth: CGFloat = 320
 
   private func sectionHeader(_ title: String, help: String) -> some View {
@@ -185,24 +186,29 @@ private struct WorkflowStartCard: View {
       .help(help)
   }
 
-  /// Roles and options share one label/control grid so their label columns align, the way a
-  /// native Settings form reads: the name on the left, the choice on the right.
-  private func choicesGrid(_ plan: WorkflowStartPlan) -> some View {
-    Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 14, verticalSpacing: 12) {
-      GridRow {
-        sectionHeader("Roles", help: "Who takes part in this run. Hover a role for what it does.")
-          .gridCellColumns(2)
-          .gridColumnAlignment(.leading)
-      }
+  /// One label/control row, the way a native Settings form reads: the name on the right edge
+  /// of the label column, the choice on the left edge of the control column.
+  private func formRow<Label: View, Control: View>(
+    @ViewBuilder label: () -> Label, @ViewBuilder control: () -> Control
+  ) -> some View {
+    HStack(alignment: .firstTextBaseline, spacing: 14) {
+      label()
+        .frame(width: Self.labelWidth, alignment: .trailing)
+      control()
+        .frame(width: Self.controlWidth, alignment: .leading)
+      Spacer(minLength: 0)
+    }
+  }
+
+  private func choicesForm(_ plan: WorkflowStartPlan) -> some View {
+    VStack(alignment: .leading, spacing: 12) {
+      sectionHeader("Roles", help: "Who takes part in this run. Hover a role for what it does.")
       ForEach(plan.roles) { role in
         roleRow(role)
       }
       if !store.context.definition.inputs.isEmpty {
-        GridRow {
-          sectionHeader("Options", help: "Choices this workflow asks for before it starts.")
-            .gridCellColumns(2)
-            .padding(.top, 8)
-        }
+        sectionHeader("Options", help: "Choices this workflow asks for before it starts.")
+          .padding(.top, 10)
         ForEach(store.context.definition.inputs, id: \.name) { input in
           inputRow(input)
         }
@@ -213,15 +219,15 @@ private struct WorkflowStartCard: View {
   private func roleRow(_ role: WorkflowStartPlan.Role) -> some View {
     let required = store.state.isRoleRequired(role.name)
     let launch = store.context.launchRoles.first { $0.name == role.name }
-    return GridRow {
+    return formRow {
       Label(role.title, systemImage: roleSymbol(role))
         .labelStyle(.titleAndIcon)
         .foregroundStyle(required ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
         .lineLimit(1)
-        .gridColumnAlignment(.trailing)
+        .truncationMode(.tail)
         .help(roleHelp(role, required: required))
         .accessibilityLabel("\(role.title), \(role.kindLabel)")
-
+    } control: {
       VStack(alignment: .leading, spacing: 6) {
         roleControl(role, required: required)
         if role.source == .current, store.selectedSourceIsBareShell, store.sourceRequiresAgent {
@@ -249,8 +255,6 @@ private struct WorkflowStartCard: View {
           }
         }
       }
-      .gridColumnAlignment(.leading)
-      .frame(maxWidth: .infinity, alignment: .leading)
     }
   }
 
@@ -283,7 +287,6 @@ private struct WorkflowStartCard: View {
           Text(paneLabel(fixed))
             .lineLimit(1)
             .truncationMode(.middle)
-            .frame(maxWidth: Self.controlWidth, alignment: .leading)
             .help("Started from this pane's Active Agents row, so it is the source.")
         } else {
           Picker(selection: sourceBinding) {
@@ -294,7 +297,7 @@ private struct WorkflowStartCard: View {
             Text(role.title)
           }
           .labelsHidden()
-          .frame(width: Self.controlWidth)
+          .frame(maxWidth: .infinity)
           .help("The pane this run starts from.")
         }
       }
@@ -317,7 +320,7 @@ private struct WorkflowStartCard: View {
           Text(role.title)
         }
         .labelsHidden()
-        .frame(width: Self.controlWidth)
+        .frame(maxWidth: .infinity)
         .help("The Agent Profile Prowl starts for this role.")
       } else {
         Text("Not used")
@@ -335,7 +338,7 @@ private struct WorkflowStartCard: View {
           Text(role.title)
         }
         .labelsHidden()
-        .frame(width: Self.controlWidth)
+        .frame(maxWidth: .infinity)
         .help("An agent already running in this worktree takes this role.")
       }
     }
@@ -364,18 +367,17 @@ private struct WorkflowStartCard: View {
       }
     }
     .padding(10)
-    .frame(width: Self.controlWidth)
+    .frame(maxWidth: .infinity)
     .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
   }
 
   private func inputRow(_ input: WorkflowInputDefinition) -> some View {
-    GridRow {
+    formRow {
       Text(input.prompt ?? WorkflowStartPlan.title(for: input.name))
         .lineLimit(2)
         .multilineTextAlignment(.trailing)
-        .gridColumnAlignment(.trailing)
         .help(inputHelp(input))
-
+    } control: {
       Group {
         if !input.values.isEmpty {
           Picker(input.name, selection: inputBinding(name: input.name)) {
@@ -390,8 +392,7 @@ private struct WorkflowStartCard: View {
             prompt: Text(input.defaultValue == nil ? "Required" : ""))
         }
       }
-      .frame(width: Self.controlWidth)
-      .gridColumnAlignment(.leading)
+      .frame(maxWidth: .infinity)
       .help(inputHelp(input))
     }
   }
