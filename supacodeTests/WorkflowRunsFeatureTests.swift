@@ -234,7 +234,8 @@ struct WorkflowRunsFeatureTests {
     _ fixture: Fixture, queue: WorkflowEffectQueueClient,
     storage: SettingsTestStorage = SettingsTestStorage(),
     actionExecutor: (any WorkflowActionExecuting)? = nil,
-    handoffSessionContext: HandoffStore.SessionContext? = nil
+    handoffSessionContext: HandoffStore.SessionContext? = nil,
+    clock: any Clock<Duration> = ImmediateClock()
   ) -> TestStoreOf<WorkflowRunsFeature> {
     let store = TestStore(initialState: WorkflowRunsFeature.State()) {
       WorkflowRunsFeature()
@@ -251,6 +252,7 @@ struct WorkflowRunsFeatureTests {
       $0.date.now = Self.now
       $0.uuid = .incrementing
       $0.settingsFileStorage = storage.storage
+      $0.continuousClock = clock
     }
     store.exhaustivity = .off(showSkippedAssertions: false)
     return store
@@ -1163,6 +1165,11 @@ struct WorkflowRunsFeatureTests {
     _ = expectedMachine.apply(.user(.cancel))
     await store.send(.userAction(runID: runID, .cancel)) {
       $0.sessions[runID]?.run = expectedMachine.run
+      $0.recentlyFinishedRunIDs = [runID]
+    }
+    // The immediate test clock releases the status item's hold right away.
+    await store.receive(.finishedNoticeExpired(runID)) {
+      $0.recentlyFinishedRunIDs = []
     }
     await store.finish(timeout: Self.timeout)
   }
@@ -1313,5 +1320,30 @@ struct WorkflowEffectQueueTests {
     #expect(queue2.isStale(runID, sequence: 1))
     #expect(queue2.isStale(runID, sequence: 2))
     #expect(!queue2.isStale(runID, sequence: 3))
+  }
+}
+
+extension WorkflowRunsFeatureTests {
+  @Test(.dependencies) func aFinishedRunIsHeldForTheStatusItemThenReleased() async throws {
+    let fixture = try Fixture()
+    defer { fixture.cleanUp() }
+    let clock = TestClock()
+    let store = makeStore(fixture, queue: RecordingQueue().client, clock: clock)
+    let (session, effects) = try fixture.session()
+    let runID = session.run.id
+    await store.send(.started(session, effects: effects))
+    #expect(store.state.recentlyFinishedRunIDs.isEmpty)
+
+    await store.send(.userAction(runID: runID, .cancel)) {
+      $0.sessions[runID]?.run.status = .cancelled
+      $0.recentlyFinishedRunIDs = [runID]
+    }
+    await clock.advance(by: WorkflowRunsFeature.finishedNoticeDuration - .seconds(1))
+    #expect(store.state.recentlyFinishedRunIDs == [runID])
+    await clock.advance(by: .seconds(1))
+    await store.receive(.finishedNoticeExpired(runID)) {
+      $0.recentlyFinishedRunIDs = []
+    }
+    await store.finish(timeout: Self.timeout)
   }
 }

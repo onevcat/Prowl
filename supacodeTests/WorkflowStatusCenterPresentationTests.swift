@@ -488,3 +488,41 @@ extension UUID {
     self.init(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, value))
   }
 }
+
+extension WorkflowStatusCenterPresentationTests {
+  @Test func aRunThatJustEndedStaysListedAfterTheActiveOnesWithItsOutcome() throws {
+    let active = try makeSession(id: UUID(1), worktreeID: "selected", updatedAt: Self.now)
+    var completed = try makeSession(
+      id: UUID(2), worktreeID: "selected", startedAt: Self.now.addingTimeInterval(-30), updatedAt: Self.now)
+    completed.run.status = .completed
+    var cancelled = try makeSession(id: UUID(3), worktreeID: "selected", updatedAt: Self.now)
+    cancelled.run.status = .cancelled
+    var elsewhere = try makeSession(id: UUID(4), worktreeID: "other", updatedAt: Self.now)
+    elsewhere.run.status = .completed
+    var state = WorkflowRunsFeature.State()
+    state.sessions = [
+      active.run.id: active, completed.run.id: completed, cancelled.run.id: cancelled, elsewhere.run.id: elsewhere,
+    ]
+    // Only runs the reducer still holds count; `cancelled` expired already.
+    state.recentlyFinishedRunIDs = [completed.run.id, elsewhere.run.id]
+
+    let presentation = WorkflowStatusCenterPresentation(state: state, selectedWorktreeID: "selected", now: Self.now)
+    #expect(presentation.runs.map(\.id) == [active.run.id, completed.run.id])
+    #expect(presentation.primary?.id == active.run.id)
+    #expect(presentation.activeRunCount == 1)
+    #expect(presentation.runs.last?.status == .finished(.completed))
+    #expect(presentation.runs.last?.summaryText == "Status Center Test completed")
+    #expect(presentation.primary?.summaryText == "Write the brief")
+
+    let onlyFinished = WorkflowStatusCenterPresentation(
+      state: {
+        var state = state
+        state.sessions[active.run.id] = nil
+        return state
+      }(), selectedWorktreeID: "selected", now: Self.now)
+    #expect(onlyFinished.primary?.id == completed.run.id)
+    #expect(onlyFinished.activeRunCount == 0)
+    #expect(!onlyFinished.hasAttention)
+    #expect(ToolbarStatusSelection(toast: nil, workflow: onlyFinished, pullRequest: nil).isWorkflow)
+  }
+}

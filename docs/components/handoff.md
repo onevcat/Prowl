@@ -45,7 +45,7 @@ repository and source-session context beneath the runnable root:
 
 The receiver uses its immutable run-specific packet in `archive/`; later workflow runs can
 update `current.md` without changing that packet. Prowl creates a local `.gitignore` for this
-state. Keep secrets out of the briefing, and use Workflow Execution History to inspect the
+state. Keep secrets out of the briefing, and use the toolbar's Workflow History to inspect the
 recorded run.
 
 ## Retired CLI migration

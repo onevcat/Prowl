@@ -6,8 +6,10 @@ import UniformTypeIdentifiers
 
 struct WorkflowHistoryOperations: DependencyKey, Sendable {
   var preview: @Sendable () async throws -> WorkflowHistoryPreview
-  var keep: @Sendable (URL, Bool) async throws -> Void
-  var cleanup: @Sendable ([UUID]) async throws -> WorkflowHistoryCleanup
+  /// Removes one finished run on explicit request (Workflow History › Delete Run).
+  var delete: @Sendable (URL) async throws -> Void
+  /// Removes every finished run that is not in use (Settings › Clear History).
+  var clear: @Sendable () async throws -> WorkflowHistoryCleanup
   var export: @MainActor @Sendable (URL) async throws -> URL?
 
   static var liveValue: Self {
@@ -20,18 +22,20 @@ struct WorkflowHistoryOperations: DependencyKey, Sendable {
           try WorkflowHistory(storage: storage).preview(now: timestamp)
         }.value
       },
-      keep: { directory, pinned in
+      delete: { directory in
         let storage = WorkflowHistoryStorage.configured
+        @Dependency(\.date.now) var now
+        let timestamp = now
         try await Task.detached(priority: .utility) {
-          try WorkflowHistory(storage: storage).keep(directory, pinned: pinned)
+          try WorkflowHistory(storage: storage).delete(directory, now: timestamp)
         }.value
       },
-      cleanup: { ids in
+      clear: {
         let storage = WorkflowHistoryStorage.configured
         @Dependency(\.date.now) var now
         let timestamp = now
         return try await Task.detached(priority: .utility) {
-          try WorkflowHistory(storage: storage).cleanup(candidates: ids, now: timestamp)
+          try WorkflowHistory(storage: storage).clear(now: timestamp)
         }.value
       },
       export: { directory in
@@ -49,40 +53,39 @@ struct WorkflowHistoryOperations: DependencyKey, Sendable {
 
   static let testValue = Self(
     preview: { WorkflowHistoryPreview(entries: [], now: Date(timeIntervalSince1970: 0)) },
-    keep: { _, _ in }, cleanup: { _ in WorkflowHistoryCleanup() }, export: { _ in nil })
+    delete: { _ in }, clear: { WorkflowHistoryCleanup() }, export: { _ in nil })
 }
 
+/// The Settings › Workflows history summary: how much the archive holds and a way to clear it.
+/// Retention itself is automatic (`WorkflowHistoryPreview.retention`) and not a user setting.
 @Reducer
 struct WorkflowHistoryFeature {
   @ObservableState
   struct State: Equatable {
     var preview = WorkflowHistoryPreview(entries: [], now: Date(timeIntervalSince1970: 0))
-    var confirmation: WorkflowHistoryPreview?
+    var hasLoaded = false
     var isBusy = false
-    var query = ""
     var error: String?
     var result: String?
+    @Presents var alert: AlertState<Alert>?
 
-    var entries: [WorkflowHistoryEntry] {
-      preview.entries.filter {
-        query.isEmpty || $0.name.localizedCaseInsensitiveContains(query)
-          || $0.root.localizedCaseInsensitiveContains(query) || $0.id.uuidString.localizedCaseInsensitiveContains(query)
-      }.sorted { ($0.finishedAt ?? .distantFuture) > ($1.finishedAt ?? .distantFuture) }
-    }
+    var runCount: Int { preview.entries.count }
+    var totalBytes: Int64 { preview.totalBytes }
+    /// Finished runs an explicit Clear may remove; live runs stay.
+    var removableCount: Int { preview.entries.filter(\.removable).count }
   }
 
   enum Action: Equatable {
     case refresh
     case loaded(WorkflowHistoryPreview)
     case failed(String)
-    case setQuery(String)
-    case keep(URL, Bool)
-    case export(URL)
-    case exported(URL?)
-    case previewCleanup
-    case dismissCleanup
-    case confirmCleanup
-    case cleaned(WorkflowHistoryCleanup)
+    case clearTapped
+    case cleared(WorkflowHistoryCleanup)
+    case alert(PresentationAction<Alert>)
+  }
+
+  enum Alert: Equatable {
+    case confirmClear
   }
 
   @Dependency(WorkflowHistoryOperations.self) var operations
@@ -102,58 +105,44 @@ struct WorkflowHistoryFeature {
       case .loaded(let preview):
         state.error = nil
         state.isBusy = false
+        state.hasLoaded = true
         state.preview = preview
         return .none
       case .failed(let message):
         state.isBusy = false
         state.error = message
         return .none
-      case .setQuery(let query):
-        state.query = query
-        return .none
-      case .keep(let directory, let pinned):
-        guard !state.isBusy else { return .none }
-        state.isBusy = true
-        return .run { send in
-          do {
-            try await operations.keep(directory, pinned)
-            await send(.loaded(try await operations.preview()))
-          } catch { await send(.failed(String(describing: error))) }
+      case .clearTapped:
+        guard !state.isBusy, state.removableCount > 0 else { return .none }
+        let count = state.removableCount
+        state.alert = AlertState {
+          TextState("Clear Workflow History?")
+        } actions: {
+          ButtonState(role: .cancel) { TextState("Cancel") }
+          ButtonState(role: .destructive, action: .confirmClear) { TextState("Clear History") }
+        } message: {
+          TextState(
+            "\(count) finished run\(count == 1 ? "" : "s") and their prompts, deliveries, and action outputs "
+              + "will be deleted. Runs that are still active are kept. This cannot be undone.")
         }
-      case .export(let directory):
+        return .none
+      case .alert(.presented(.confirmClear)):
         guard !state.isBusy else { return .none }
         state.isBusy = true
+        state.error = nil
+        state.result = nil
         return .run { send in
-          do { await send(.exported(try await operations.export(directory))) } catch {
+          do { await send(.cleared(try await operations.clear())) } catch {
             await send(.failed(String(describing: error)))
           }
         }
-      case .exported(let destination):
-        state.error = nil
-        state.isBusy = false
-        state.result = destination.map { "Exported to \($0.path). This ZIP is independent of history cleanup." }
+      case .alert:
         return .none
-      case .previewCleanup:
-        guard !state.isBusy else { return .none }
-        state.confirmation = state.preview
-        return .none
-      case .dismissCleanup:
-        state.confirmation = nil
-        return .none
-      case .confirmCleanup:
-        guard !state.isBusy, let preview = state.confirmation else { return .none }
-        state.confirmation = nil
+      case .cleared(let cleanup):
         state.isBusy = true
-        state.error = nil
-        return .run { send in
-          do { await send(.cleaned(try await operations.cleanup(preview.candidates.map(\.id)))) } catch {
-            await send(.failed(String(describing: error)))
-          }
-        }
-      case .cleaned(let result):
-        state.isBusy = true
-        state.result = "Removed \(result.removed.count) run(s). Runs whose eligibility changed were preserved."
-        state.error = result.failures.isEmpty ? nil : result.failures.joined(separator: "\n")
+        let count = cleanup.removed.count
+        state.result = "Removed \(count) run\(count == 1 ? "" : "s")."
+        state.error = cleanup.failures.isEmpty ? nil : cleanup.failures.joined(separator: "\n")
         return .run { send in
           do { await send(.loaded(try await operations.preview())) } catch {
             await send(.failed(String(describing: error)))
@@ -161,5 +150,6 @@ struct WorkflowHistoryFeature {
         }
       }
     }
+    .ifLet(\.$alert, action: \.alert)
   }
 }

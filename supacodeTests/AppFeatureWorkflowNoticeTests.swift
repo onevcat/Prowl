@@ -7,7 +7,7 @@ import Testing
 
 @MainActor
 struct AppFeatureWorkflowNoticeTests {
-  @Test func completedRunNotifiesAndShowsToastInTheSelectedWorktree() async {
+  @Test func completedRunNotifiesWithoutAToastInTheSelectedWorktree() async {
     let worktree = makeWorktree(id: "selected")
     var repositories = RepositoriesFeature.State(
       repositories: [makeRepository(worktrees: [worktree])]
@@ -28,13 +28,13 @@ struct AppFeatureWorkflowNoticeTests {
     store.exhaustivity = .off
 
     await store.send(.workflowRuns(.delegate(.notice(notice))))
-    await store.receive(\.repositories.showToast)
     await store.finish()
 
     #expect(delivered.value.map(\.0) == [worktree.id])
     #expect(delivered.value.first?.1.title == "Review completed")
     #expect(delivered.value.first?.1.targetSurfaceID == notice.targetSurfaceID)
-    #expect(store.state.repositories.statusToast == .success("Review completed"))
+    // The toolbar status item holds the finished run itself; a toast would only cover it.
+    #expect(store.state.repositories.statusToast == nil)
   }
 
   @Test func backgroundAttentionNotifiesWithoutTakingOverTheSelectedToolbar() async {
@@ -65,7 +65,7 @@ struct AppFeatureWorkflowNoticeTests {
     #expect(store.state.repositories.statusToast == nil)
   }
 
-  @Test func explicitCompletionNotificationStillShowsToastWithoutPostingAgain() async {
+  @Test func explicitCompletionNotificationDoesNotPostAgain() async {
     let worktree = makeWorktree(id: "selected")
     var repositories = RepositoriesFeature.State(
       repositories: [makeRepository(worktrees: [worktree])]
@@ -96,15 +96,14 @@ struct AppFeatureWorkflowNoticeTests {
     store.exhaustivity = .off
 
     await store.send(.workflowRuns(.delegate(.notice(notice))))
-    await store.receive(\.repositories.showToast)
     await store.finish()
 
     #expect(delivered.value.isEmpty)
-    #expect(store.state.repositories.statusToast == .success("Review completed"))
+    #expect(store.state.repositories.statusToast == nil)
   }
 
   @Test(arguments: [WorkflowRunNotice.Kind.skipped, .iterationLimitReached])
-  func selectedNonSuccessTerminalOutcomeShowsAWarning(kind: WorkflowRunNotice.Kind) async {
+  func selectedNonSuccessTerminalOutcomeNotifiesWithoutAToast(kind: WorkflowRunNotice.Kind) async {
     let worktree = makeWorktree(id: "selected")
     var repositories = RepositoriesFeature.State(
       repositories: [makeRepository(worktrees: [worktree])]
@@ -112,20 +111,21 @@ struct AppFeatureWorkflowNoticeTests {
     repositories.snapshotPersistencePhase = .active
     repositories.selection = .worktree(worktree.id)
     let notice = makeNotice(kind: kind, worktree: worktree)
+    let delivered = LockIsolated<[String]>([])
     let store = TestStore(
       initialState: AppFeature.State(repositories: repositories)
     ) {
       AppFeature()
     } withDependencies: {
-      $0.workflowRuntimeClient.notify = { _, _ in }
+      $0.workflowRuntimeClient.notify = { _, notification in delivered.withValue { $0.append(notification.title) } }
     }
     store.exhaustivity = .off
 
     await store.send(.workflowRuns(.delegate(.notice(notice))))
-    await store.receive(\.repositories.showToast)
     await store.finish()
 
-    #expect(store.state.repositories.statusToast == .warning(notice.title))
+    #expect(delivered.value == [notice.title])
+    #expect(store.state.repositories.statusToast == nil)
   }
 
   @Test func aMissingExplicitWorkflowTargetNeverFallsBackToTheSelectedWorktree() async {

@@ -1167,18 +1167,8 @@ struct AppFeature {
             }
           )
         }
-        if state.repositories.selectedWorktreeID == notice.worktreeID {
-          switch notice.kind {
-          case .completed:
-            effects.append(
-              .send(.repositories(.showToast(.success("\(notice.workflowName) completed"))))
-            )
-          case .skipped, .iterationLimitReached:
-            effects.append(.send(.repositories(.showToast(.warning(notice.title)))))
-          case .needsAttention:
-            break
-          }
-        }
+        // The toolbar status item keeps the finished run visible with its outcome
+        // (`WorkflowRunsFeature.finishedNoticeDuration`), so no toast competes with it.
         return .merge(effects)
 
       case .workflowRuns:

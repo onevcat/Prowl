@@ -4,7 +4,6 @@ import SwiftUI
 /// Settings → Agents → Workflows. The root is intentionally a compact index; every control
 /// whose effect is scoped to one workflow lives on the pushed detail page.
 struct WorkflowsSettingsView: View {
-  @State private var showsHistory = false
   @State private var historyStore = Store(initialState: WorkflowHistoryFeature.State()) { WorkflowHistoryFeature() }
   @Bindable var store: StoreOf<WorkflowsSettingsFeature>
 
@@ -12,18 +11,12 @@ struct WorkflowsSettingsView: View {
     NavigationStack(path: $store.scope(state: \.path, action: \.path)) {
       Form {
         WorkflowSettingsSections(store: store, showsIntroduction: true)
-        Section("Execution History") {
-          Button("Workflow History…", systemImage: "clock") { showsHistory = true }
-            .help("Review personal run history, storage usage, Keep Run, export, and cleanup")
-          Text("Execution records are stored in your home directory, outside project folders.")
-            .foregroundStyle(.secondary)
-        }
+        WorkflowHistorySummarySection(store: historyStore)
       }
       .formStyle(.grouped)
       .navigationTitle("Workflows")
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
       .task { store.send(.task) }
-      .sheet(isPresented: $showsHistory) { WorkflowHistoryView(store: historyStore) }
       .alert($store.scope(state: \.alert, action: \.alert))
       .sheet(isPresented: $store.isAuthoringPromptPresented.sending(\.setAuthoringPromptPresented)) {
         AskAgentHelpView(
@@ -32,10 +25,62 @@ struct WorkflowsSettingsView: View {
           store.send(.setAuthoringPromptPresented(false))
         }
       }
+      .sheet(
+        isPresented: Binding(get: { store.newWorkflow != nil }, set: { if !$0 { store.send(.dismissNewWorkflow) } })
+      ) {
+        NewWorkflowSheet(store: store)
+      }
     } destination: { detailStore in
       WorkflowSettingsDetailView(store: detailStore)
     }
     .onDisappear { store.send(.teardown) }
+  }
+}
+
+/// Settings › Workflows › Run History: what the archive holds and a way to clear it. Inspecting
+/// individual runs is the toolbar's Workflow History popover; retention is automatic.
+private struct WorkflowHistorySummarySection: View {
+  @Bindable var store: StoreOf<WorkflowHistoryFeature>
+
+  var body: some View {
+    Section {
+      HStack(alignment: .firstTextBaseline) {
+        Text(summary)
+        Spacer()
+        if store.isBusy {
+          ProgressView().controlSize(.small)
+        }
+        Button("Clear History…", role: .destructive) { store.send(.clearTapped) }
+          .disabled(store.isBusy || store.removableCount == 0)
+          .help("Delete every finished run from Workflow History")
+      }
+      if let error = store.error {
+        Label(error, systemImage: "exclamationmark.triangle.fill")
+          .foregroundStyle(.orange)
+          .font(.callout)
+          .textSelection(.enabled)
+      } else if let result = store.result {
+        Text(result)
+          .font(.callout)
+          .foregroundStyle(.secondary)
+      }
+    } header: {
+      Text("Run History")
+    } footer: {
+      Text(
+        "Runs are listed in the toolbar's Workflow History. Records are stored in your home directory, "
+          + "outside project folders, and finished runs expire automatically.")
+    }
+    .task { store.send(.refresh) }
+    .alert($store.scope(state: \.alert, action: \.alert))
+  }
+
+  private var summary: String {
+    guard store.hasLoaded else { return "Loading run history…" }
+    let count = store.runCount
+    let size = ByteCountFormatter.string(fromByteCount: store.totalBytes, countStyle: .file)
+    if count == 0 { return "No workflow runs recorded." }
+    return "\(count) run\(count == 1 ? "" : "s") · \(size) on disk"
   }
 }
 
@@ -121,12 +166,12 @@ struct WorkflowSettingsSections: View {
       } label: {
         Label("New Workflow…", systemImage: "plus")
       }
-      .help("Create a starter YAML file and open it in your default editor")
+      .help("Name a workflow, pick a starter, and open it in your default editor")
 
-      Button("Ask an Agent…") {
+      Button("Create with Agent…") {
         store.send(.askAgentTapped)
       }
-      .help("Copy a prompt that asks your coding agent to write a workflow")
+      .help("Copy a prompt that asks your coding agent to write a workflow for you")
 
       Spacer()
 
@@ -289,19 +334,23 @@ struct WorkflowStatusLabel: View {
 }
 
 func workflowAuthoringPromptStrings(directory: URL) -> AskAgentHelpStrings {
-  let resources = SupacodePaths.bundledDocsURL?.deletingLastPathComponent()
-  let skill =
-    resources?.appending(path: "skills/prowl-workflow/SKILL.md", directoryHint: .notDirectory)
-    .path(percentEncoded: false)
-    ?? "/Applications/Prowl.app/Contents/Resources/skills/prowl-workflow/SKILL.md"
-  let manual =
-    SupacodePaths.bundledDocsURL?.appending(
-      path: "components/workflows.md", directoryHint: .notDirectory
-    )
-    .path(percentEncoded: false)
-    ?? "/Applications/Prowl.app/Contents/Resources/docs/components/workflows.md"
+  let documentation = WorkflowStarterTemplate.bundledDocumentation
   return WorkflowAuthoringPrompt.strings(
-    skillPath: skill,
-    manualPath: manual,
+    skillPath: documentation.skillPath,
+    manualPath: documentation.manualPath,
     workflowsDirectory: directory.path(percentEncoded: false))
+}
+
+extension WorkflowStarterTemplate {
+  /// The manual and skill inside this app bundle, falling back to the standard install path.
+  nonisolated static var bundledDocumentation: Documentation {
+    let resources = SupacodePaths.bundledDocsURL?.deletingLastPathComponent()
+    return Documentation(
+      manualPath: SupacodePaths.bundledDocsURL?
+        .appending(path: "components/workflows.md", directoryHint: .notDirectory)
+        .path(percentEncoded: false) ?? Documentation.standard.manualPath,
+      skillPath: resources?
+        .appending(path: "skills/prowl-workflow/SKILL.md", directoryHint: .notDirectory)
+        .path(percentEncoded: false) ?? Documentation.standard.skillPath)
+  }
 }

@@ -19,8 +19,9 @@ nonisolated struct WorkflowSettingsRunTarget: Equatable, Sendable, Identifiable 
   let rootPath: String
   let isPreferred: Bool
 
+  /// `Prowl · main`: the repository first so a bare branch name is never mistaken for a target.
   var displayName: String {
-    repositoryName == name ? name : "\(name) — \(repositoryName)"
+    repositoryName == name ? name : "\(repositoryName) · \(name)"
   }
 
   static func visible(
@@ -38,8 +39,8 @@ nonisolated struct WorkflowSettingsRunTarget: Equatable, Sendable, Identifiable 
 
 struct WorkflowSettingsClient: Sendable {
   var scan: @MainActor @Sendable (_ scope: WorkflowSettingsScope) throws -> WorkflowSettingsScan
-  /// Writes `WorkflowStarterTemplate` into the selected workflow directory and returns the new file.
-  var createWorkflow: @Sendable (_ directory: URL) throws -> URL
+  /// Writes a `WorkflowStarterTemplate` bundle into the selected workflow directory and returns it.
+  var createWorkflow: @Sendable (_ directory: URL, _ request: WorkflowStarterTemplate.Request) throws -> URL
   /// Moves the selected source file to Trash, leaving it recoverable in Finder.
   var trashWorkflow: @Sendable (URL) throws -> Void = { _ in
     throw WorkflowSettingsError(message: "Workflow deletion is not available.")
@@ -55,7 +56,7 @@ struct WorkflowSettingsClient: Sendable {
 extension WorkflowSettingsClient: DependencyKey {
   static let liveValue = WorkflowSettingsClient(
     scan: { _ in throw WorkflowSettingsError(message: "Workflow settings are not available.") },
-    createWorkflow: { _ in
+    createWorkflow: { _, _ in
       throw WorkflowSettingsError(message: "Workflow settings are not available.")
     },
     runTargets: { _ in [] },
@@ -69,7 +70,7 @@ extension WorkflowSettingsClient: DependencyKey {
         userDirectory: URL(
           filePath: "/tmp/prowl-test/.prowl/workflows", directoryHint: .isDirectory))
     },
-    createWorkflow: { _ in
+    createWorkflow: { _, _ in
       throw WorkflowSettingsError(message: "No test workflow directory configured.")
     },
     runTargets: { _ in [] },

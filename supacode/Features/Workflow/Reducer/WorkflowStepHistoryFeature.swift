@@ -58,6 +58,9 @@ struct WorkflowStepHistoryFeature {
     case detailLoaded(UUID, WorkflowRunRecord)
     case setPresented(Bool)
     case output(WorkflowHistoryOutputIntent)
+    /// Delete Run in the detail's More menu, after the user confirmed.
+    case deleteRun(UUID)
+    case runDeleted(UUID)
   }
 
   @Dependency(WorkflowHistoryStorageKey.self) var storage
@@ -157,6 +160,27 @@ struct WorkflowStepHistoryFeature {
             await send(.failed("Could not complete the output action: \(error)"))
           }
         }
+      case .deleteRun(let id):
+        guard let directory = state.directories[id], state.liveRuns[id]?.status.isTerminal != false else {
+          return .none
+        }
+        state.error = nil
+        return .run { [operations] send in
+          do {
+            try await operations.delete(directory)
+            await send(.runDeleted(id))
+          } catch { await send(.failed("Could not delete the run: \(error)")) }
+        }
+      case .runDeleted(let id):
+        state.entries.removeAll { $0.id == id }
+        state.directories.removeValue(forKey: id)
+        state.liveRuns.removeValue(forKey: id)
+        state.removedIDs.insert(id)
+        if state.selectedID == id {
+          state.selectedID = nil
+          state.detail = nil
+        }
+        return .merge(.cancel(id: CancelID.detail), selectDefault(&state))
       }
     }
   }

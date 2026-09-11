@@ -1,84 +1,192 @@
 // supacode/Domain/Workflow/WorkflowStarterTemplate.swift
-// The file Settings › Workflows › "New Workflow…" writes (docs-ai 063 D1): a small, valid
-// two-role workflow whose comments point at the validator and the bundled skill. The id is
-// the file's stem so several starters never shadow each other.
+// The bundle Settings › Workflows › "New Workflow…" writes (docs-ai 063 D1, 022): a small,
+// valid workflow of the kind the user picked, with the name, id, and icon they entered. The
+// comments explain the file to someone who edits it by hand and point at the bundled manual
+// and skill; the id is the folder's stem so several starters never shadow each other.
 
 import Foundation
 import ProwlCLIShared
 
 nonisolated enum WorkflowStarterTemplate {
-  static let fileStem = "new-workflow"
-
-  static func yaml(id: String) -> String {
-    """
-    # A Prowl Agent Workflow (schema prowl.workflow/v1).
-    # Check it with `prowl workflow validate <this bundle>`; a validated file is runnable from
-    # the Command Palette ("Run Workflow: …"), the toolbar Agents menu, or `prowl workflow run`.
-    # The bundled prowl-workflow skill (`prowl skills install prowl-workflow`) teaches an agent
-    # to write and run these; `prowl workflow schema` prints the full reference.
-    schema: prowl.workflow/v1
-    id: \(id)                      # lowercase slug, unique across your workflows
-    name: New Workflow
-    description: Ask a second agent to review what this pane is working on.
-    # icon: magnifyingglass.circle  # optional SF Symbol shown by the entry points
-
-    inputs:
-      focus:
-        type: string
-        default: ""
-        prompt: What should the reviewer focus on?
-
-    roles:
-      author:
-        source: current            # the pane the run is started from
-      reviewer:
-        source: launch             # a new agent Prowl launches from an Agent Profile
-        bind: ask                  # ask (choose the profile at start) | auto (use the remembered one)
-        placement: split
-        direction: right
-
-    steps:
-      - id: brief
-        title: Author writing the brief
-        message: author
-        prompt: |
-          Write a short brief for a reviewer: what changed, what you are unsure about, and how
-          to verify it. Focus: {{ inputs.focus }}
-          Deliver the brief with the generated completion command.
-        expect: { delivery: brief }
-
-      - id: review
-        title: Reviewer checking the work
-        launch: reviewer
-        prompt: |
-          Read {{ deliveries.brief.path }} and review the work it describes in this worktree.
-          Report under "## Findings" and end with "## Verdict".
-        expect: { delivery: findings, sections: ["## Findings", "## Verdict"], verdicts: [clean, issues] }
-
-      - id: done
-        notify: "Review finished: {{ deliveries.findings.verdict }}"
-
-    """
+  /// The two shapes the New Workflow form offers.
+  enum Kind: String, Equatable, Sendable, CaseIterable {
+    /// One instruction to the agent in the current pane — a prompt template.
+    case singleAgent
+    /// Several agents that hand results to each other, like a handoff or a cross review.
+    case multiAgent
   }
 
-  /// `new-workflow.pwlworkflow`, then `new-workflow-2.pwlworkflow`, … — the first name no file uses.
-  static func uniqueFileURL(in directory: URL, fileManager: FileManager = .default) -> URL {
-    var attempt = 1
-    while true {
-      let stem = attempt == 1 ? fileStem : "\(fileStem)-\(attempt)"
-      let url = directory.appending(path: "\(stem).pwlworkflow", directoryHint: .isDirectory)
-      if !fileManager.fileExists(atPath: url.path(percentEncoded: false)) { return url }
-      attempt += 1
+  /// Where the bundled documentation lives on this machine, for the template's comments.
+  struct Documentation: Equatable, Sendable {
+    var manualPath: String
+    var skillPath: String
+
+    static let standard = Documentation(
+      manualPath: "/Applications/Prowl.app/Contents/Resources/docs/components/workflows.md",
+      skillPath: "/Applications/Prowl.app/Contents/Resources/skills/prowl-workflow/SKILL.md")
+  }
+
+  struct Request: Equatable, Sendable {
+    var name: String
+    var id: String
+    /// An SF Symbol name; nil leaves the icon line commented out.
+    var icon: String?
+    var kind: Kind
+    var documentation: Documentation = .standard
+
+    var fileName: String { "\(id).pwlworkflow" }
+  }
+
+  static func yaml(_ request: Request) -> String {
+    switch request.kind {
+    case .singleAgent: singleAgent(request)
+    case .multiAgent: multiAgent(request)
     }
   }
 
-  /// Creates the directory when needed and writes a starter whose id is the file's stem.
-  static func write(in directory: URL, fileManager: FileManager = .default) throws -> URL {
+  /// A workflow id the schema accepts, derived from a display name: lowercase words joined by
+  /// dashes. Empty when the name has no usable character.
+  static func suggestedID(for name: String) -> String {
+    let lowered = name.lowercased()
+    var slug = ""
+    var pendingDash = false
+    for scalar in lowered.unicodeScalars {
+      if scalar.properties.isAlphabetic && scalar.isASCII || ("0"..."9").contains(scalar) {
+        if pendingDash, !slug.isEmpty { slug.append("-") }
+        pendingDash = false
+        slug.unicodeScalars.append(scalar)
+      } else {
+        pendingDash = true
+      }
+    }
+    return String(slug.prefix(64))
+  }
+
+  /// Writes the starter as `<id>.pwlworkflow/workflow.yaml`, creating the directory when needed.
+  /// Fails when a bundle with that name already exists: the form checks first, and the file
+  /// system decides last.
+  static func write(_ request: Request, in directory: URL, fileManager: FileManager = .default) throws -> URL {
     try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-    let url = uniqueFileURL(in: directory, fileManager: fileManager)
+    let url = directory.appending(path: request.fileName, directoryHint: .isDirectory)
     try fileManager.createDirectory(at: url, withIntermediateDirectories: false)
-    try Data(yaml(id: url.deletingPathExtension().lastPathComponent).utf8)
-      .write(to: url.appending(path: "workflow.yaml"), options: .atomic)
+    try Data(yaml(request).utf8).write(to: url.appending(path: "workflow.yaml"), options: .atomic)
     return url
+  }
+
+  private static func header(_ request: Request, explanation: String) -> String {
+    """
+    # \(request.name) — a Prowl Agent Workflow (schema prowl.workflow/v1).
+    #
+    \(explanation)
+    #
+    # Manual: \(request.documentation.manualPath)
+    # Skill:  \(request.documentation.skillPath)
+    #         (teaches a coding agent to write, validate, and run workflows)
+    # Check:  prowl workflow validate <this folder>
+    """
+  }
+
+  private static func identity(_ request: Request, description: String, iconHint: String) -> String {
+    let icon = request.icon.map { "icon: \($0)" } ?? "# icon: \(iconHint)"
+    return """
+      schema: prowl.workflow/v1
+      id: \(request.id)
+      name: \(request.name)
+      description: \(description)
+      \(icon)                # optional SF Symbol shown by the entry points
+      """
+  }
+
+  private static func singleAgent(_ request: Request) -> String {
+    """
+    \(header(
+      request,
+      explanation: """
+        # A single-agent workflow is a prompt template: Prowl sends the instructions below to the
+        # agent in the pane you start from, then waits for its answer.
+        """))
+    \(identity(request, description: "Ask the current agent for today's date.", iconHint: "calendar"))
+
+    # Inputs become choices on the start sheet; read them as {{ inputs.<name> }} in prompts.
+    inputs:
+      style:
+        type: enum
+        values: [long, short]
+        default: long
+        prompt: Date style
+
+    roles:
+      agent:
+        source: current          # the pane the workflow is started from
+
+    steps:
+      - id: ask
+        title: Ask for today's date
+        message: agent
+        prompt: |
+          What is today's date? Answer with the date only, in {{ inputs.style }} form
+          (long: "Friday, 11 September 2026"; short: "2026-09-11").
+          Deliver the answer with the generated completion command.
+        expect:
+          delivery: date         # saved as deliveries/date.md; open it from Workflow History
+          format: text
+
+      - id: done
+        notify: "Today's date is saved in {{ deliveries.date.path }}"
+
+    """
+  }
+
+  private static func multiAgent(_ request: Request) -> String {
+    """
+    \(header(
+      request,
+      explanation: """
+        # A multi-agent workflow coordinates several agents. This one plays rock-paper-scissors:
+        # the agent in the current pane picks a move, then Prowl launches a second agent, tells it
+        # the move, and asks for the one that beats it. Handoffs and cross reviews follow the same
+        # shape — one role delivers a result, the next role reads it.
+        """))
+    \(identity(
+      request,
+      description: "The current agent picks a move; a second agent answers with the winning one.",
+      iconHint: "hand.raised"))
+
+    roles:
+      player:
+        source: current          # the pane the workflow is started from
+      challenger:
+        source: launch           # a new agent Prowl launches from an Agent Profile
+        bind: ask                # ask: choose the profile on the start sheet | auto: reuse the remembered one
+        placement: split         # split | tab
+        direction: right         # right | left | up | down (split only)
+
+    steps:
+      - id: pick
+        title: Player picks a move
+        message: player
+        prompt: |
+          We are playing rock-paper-scissors. Pick one move: rock, paper, or scissors.
+          Deliver your choice as the verdict of the generated completion command,
+          with one line explaining why you picked it.
+        expect:
+          delivery: move
+          verdicts: [rock, paper, scissors]   # the delivered verdict is the move
+
+      - id: counter
+        title: Challenger answers with the winning move
+        launch: challenger
+        prompt: |
+          Another agent played {{ deliveries.move.verdict }} in rock-paper-scissors.
+          Reply with the move that beats it and explain why in one line.
+          Deliver your move as the verdict of the generated completion command.
+        expect:
+          delivery: counter
+          verdicts: [rock, paper, scissors]
+
+      - id: done
+        notify: "{{ deliveries.move.verdict }} vs {{ deliveries.counter.verdict }} — the challenger wins"
+
+    """
   }
 }

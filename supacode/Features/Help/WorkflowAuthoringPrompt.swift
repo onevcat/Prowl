@@ -1,7 +1,7 @@
 import Foundation
 import ProwlCLIShared
 
-/// The copyable prompt behind Settings › Agents › Workflows › "Ask an Agent…" (docs-ai 063
+/// The copyable prompt behind Settings › Agents › Workflows › "Create with Agent…" (docs-ai 063
 /// D1): it points a coding agent at the bundled `prowl-workflow` skill and the workflows
 /// manual, and asks it to author, validate, and place a workflow bundle. Localized like
 /// `AskAgentHelpPrompt`; pure so it is unit-testable.

@@ -9,9 +9,11 @@ struct WorkflowStepHistoryDetailView: View {
   let liveRun: WorkflowRun?
   let onIntent: (WorkflowRunPanelIntent) -> Void
   let onOutput: (WorkflowHistoryOutputIntent) -> Void
+  var onDelete: () -> Void = {}
   var onInteraction: () -> Void = {}
   @State private var pendingControl: WorkflowAttentionControl?
   @State private var confirmsControl = false
+  @State private var confirmsDelete = false
   @State private var groups: [WorkflowHistoryStepGroup] = []
   @State private var durations: [String: TimeInterval] = [:]
 
@@ -67,6 +69,13 @@ struct WorkflowStepHistoryDetailView: View {
       }
     } message: { control in
       Text(control.confirmationMessage ?? control.label)
+    }
+    .confirmationDialog("Delete This Run?", isPresented: $confirmsDelete) {
+      Button("Delete Run", role: .destructive) { onDelete() }
+    } message: {
+      Text(
+        "The record, prompts, deliveries, and action outputs of “\(record.run.workflowName)” are removed "
+          + "from Workflow History. This cannot be undone.")
     }
   }
 
@@ -166,7 +175,6 @@ struct WorkflowStepHistoryDetailView: View {
         }
         Spacer()
         Menu {
-          Button("Keep Run") { onOutput(.keep(directory)) }.help("Protect this run from cleanup")
           Button("Export…") { onOutput(.export(directory)) }
             .disabled(!record.run.status.isTerminal).help("Export this finished run as a ZIP")
           if let run = liveRun, !run.status.isTerminal {
@@ -180,6 +188,13 @@ struct WorkflowStepHistoryDetailView: View {
               confirmsControl = true
             }
           }
+          Divider()
+          Button("Delete Run…", role: .destructive) {
+            onInteraction()
+            confirmsDelete = true
+          }
+          .disabled(!record.run.status.isTerminal)
+          .help("Remove this finished run from Workflow History")
         } label: {
           Image(systemName: "ellipsis").accessibilityLabel("More run actions")
         }

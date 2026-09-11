@@ -4,6 +4,7 @@ import SwiftUI
 
 struct WorkflowSettingsDetailView: View {
   @Bindable var store: StoreOf<WorkflowSettingsDetailFeature>
+  @Environment(\.controlActiveState) private var controlActiveState
 
   var body: some View {
     Group {
@@ -40,6 +41,11 @@ struct WorkflowSettingsDetailView: View {
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    .task { store.send(.appeared) }
+    .onChange(of: controlActiveState) { _, state in
+      // Coming back from the main window: the selected worktree may have changed.
+      if state == .key { store.send(.appeared) }
+    }
     .alert($store.scope(state: \.alert, action: \.alert))
     .sheet(
       isPresented: Binding(get: { store.bundleReview != nil }, set: { if !$0 { store.send(.dismissBundleReview) } })
@@ -100,7 +106,7 @@ struct WorkflowSettingsDetailView: View {
           Button {
             store.send(.runTapped(worktreeID: target.id, forceSheet: false))
           } label: {
-            Label("Run in \(target.name)", systemImage: "play.fill")
+            Label("Run in \(target.displayName)", systemImage: "play.fill")
           }
           .buttonStyle(.borderedProminent)
           .disabled(!canRun(row))
