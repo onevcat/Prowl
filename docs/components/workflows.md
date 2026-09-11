@@ -56,7 +56,7 @@ Three sources, later ones winning for the same `id`:
 
 | Source | Location | Notes |
 |---|---|---|
-| Built-in | `Prowl.app/Contents/Resources/workflows/` | ids `prowl.*` are reserved for it. Includes Repository Context and Handoff (`prowl.handoff`). |
+| Built-in | `Prowl.app/Contents/Resources/workflows/` | ids `prowl.*` are reserved for it. Ships Handoff (`prowl.handoff`). |
 | Your workflows | `~/.prowl/workflows/*.pwlworkflow` | personal; not tied to a repository |
 | Repository | `<repo root>/.prowl/workflows/*.pwlworkflow` | travels with the repo; seen only from that repository's worktrees |
 

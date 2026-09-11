@@ -66,7 +66,7 @@ before a socket request. Reading never completes a task or delivers an output.
 
 | Scope | Directory | Notes |
 | --- | --- | --- |
-| `bundle` | `Prowl.app/Contents/Resources/workflows/` | ids `prowl.*` are reserved for this source; includes Repository Context |
+| `bundle` | `Prowl.app/Contents/Resources/workflows/` | ids `prowl.*` are reserved for this source; ships Handoff (`prowl.handoff`) |
 | `user` | `~/.prowl/workflows/` | |
 | `repo` | `<worktree root>/.prowl/workflows/` | resolved per worktree |
 
