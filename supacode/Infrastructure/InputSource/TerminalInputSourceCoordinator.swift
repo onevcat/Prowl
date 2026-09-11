@@ -2,14 +2,14 @@ import Foundation
 
 internal enum InputSourceTargetID: Hashable, Sendable {
   case surface(UUID)
-  case herdrPane(String)
+  case herdrPane(HerdrPaneTarget)
 
   fileprivate var logValue: String {
     switch self {
     case .surface(let id):
       return "surface:\(id.uuidString.prefix(8))"
-    case .herdrPane(let id):
-      return "herdr:\(id)"
+    case .herdrPane(let target):
+      return "herdr:\(target.endpointKey.storageKey):\(target.paneID)"
     }
   }
 }

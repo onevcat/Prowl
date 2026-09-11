@@ -257,12 +257,20 @@ internal struct HerdrSidebarView: View {
   internal var body: some View {
     VStack(spacing: 0) {
       spacesSectionHeader
-      spacesSection
+      if store.authorityMode == .aggregate {
+        aggregateSpacesSection
+      } else {
+        spacesSection
+      }
 
       Divider()
 
       agentsSectionHeader
-      agentsSection
+      if store.authorityMode == .aggregate {
+        aggregateAgentsSection
+      } else {
+        agentsSection
+      }
     }
     .frame(maxHeight: .infinity)
     .overlay(alignment: .trailing) {
@@ -281,6 +289,51 @@ internal struct HerdrSidebarView: View {
         }
       )
     }
+  }
+
+  private var aggregateSpacesSection: some View {
+    ScrollView {
+      LazyVStack(alignment: .leading, spacing: 4) {
+        ForEach(store.aggregateState?.endpoints ?? []) { endpoint in
+          machineHeader(endpoint)
+          if let snapshot = endpoint.snapshot {
+            ForEach(snapshot.legacyProjection.workspaces) { workspace in
+              workspaceRow(workspace, endpoint: endpoint)
+            }
+          } else {
+            unavailableRow(endpoint)
+          }
+        }
+      }
+      .padding(.horizontal, 8)
+      .padding(.vertical, 6)
+    }
+    .scrollIndicators(.never)
+    .frame(maxHeight: .infinity)
+  }
+
+  private var aggregateAgentsSection: some View {
+    ScrollView {
+      LazyVStack(alignment: .leading, spacing: 4) {
+        ForEach(store.aggregateState?.endpoints ?? []) { endpoint in
+          machineHeader(endpoint)
+          if let snapshot = endpoint.snapshot {
+            ForEach(
+              HerdrSidebarProjection.sortedAgents(
+                snapshot.legacyProjection.agents, mode: agentSortMode)
+            ) { agent in
+              agentRow(agent, endpoint: endpoint)
+            }
+          } else {
+            unavailableRow(endpoint)
+          }
+        }
+      }
+      .padding(.horizontal, 8)
+      .padding(.vertical, 6)
+    }
+    .scrollIndicators(.never)
+    .frame(maxHeight: .infinity)
   }
 
   private var spacesSection: some View {
@@ -339,7 +392,7 @@ internal struct HerdrSidebarView: View {
     )
     newWorkspace.image = NSImage(systemSymbolName: "plus", accessibilityDescription: "New")
     newWorkspace.target = HerdrSpacesMenuActionTarget.shared
-    newWorkspace.isEnabled = store.pendingMutation == nil
+    newWorkspace.isEnabled = store.connection == .connected && store.pendingMutation == nil
     HerdrSpacesMenuActionTarget.shared.onNewWorkspace = { store.send(.newWorkspaceRequested) }
     menu.addItem(newWorkspace)
 
@@ -403,10 +456,76 @@ internal struct HerdrSidebarView: View {
     HerdrSidebarProjection.sortedAgents(store.snapshot.agents, mode: agentSortMode)
   }
 
-  private func workspaceRow(_ workspace: HerdrWorkspace) -> some View {
-    let selected = store.selectedWorkspaceID == workspace.id
+  private func machineHeader(_ endpoint: HerdrEndpointProjection) -> some View {
+    HStack(spacing: 6) {
+      Image(systemName: endpoint.endpointKey == .local ? "desktopcomputer" : "network")
+        .frame(width: 14)
+        .accessibilityHidden(true)
+      Text(endpoint.label)
+        .font(.caption.weight(.semibold))
+        .lineLimit(1)
+      Spacer(minLength: 0)
+      if store.aggregateState?.pendingActivation?.targetEndpointKey == endpoint.endpointKey {
+        ProgressView()
+          .controlSize(.mini)
+      } else {
+        Text(endpointStatusLabel(endpoint))
+          .font(.caption2)
+          .foregroundStyle(endpoint.status == .online ? Color.secondary : Color.red)
+      }
+    }
+    .padding(.horizontal, 8)
+    .frame(height: 26)
+    .accessibilityElement(children: .combine)
+  }
+
+  private func unavailableRow(_ endpoint: HerdrEndpointProjection) -> some View {
+    Text(endpoint.attention?.diagnostic ?? endpointStatusLabel(endpoint))
+      .font(.caption)
+      .foregroundStyle(.secondary)
+      .lineLimit(2)
+      .padding(.horizontal, 28)
+      .frame(minHeight: 30, alignment: .leading)
+  }
+
+  private func endpointStatusLabel(_ endpoint: HerdrEndpointProjection) -> String {
+    if endpoint.freshness == .stale { return "stale" }
+    return endpoint.status.rawValue.replacing("_", with: " ")
+  }
+
+  private func endpointCanReceiveFocus(_ endpoint: HerdrEndpointProjection) -> Bool {
+    guard store.connection == .connected,
+      endpoint.availability == .enabled,
+      endpoint.status == .online,
+      endpoint.freshness == .current
+    else { return false }
+    return endpoint.endpointKey == store.committedActiveEndpointKey
+      ? endpoint.activation.canFocus
+      : endpoint.activation.canActivate
+  }
+
+  private func workspaceRow(
+    _ workspace: HerdrWorkspace,
+    endpoint: HerdrEndpointProjection? = nil
+  ) -> some View {
+    let endpointIsCommitted =
+      endpoint.map { store.committedActiveEndpointKey == $0.endpointKey } ?? true
+    let selected = endpointIsCommitted && store.selectedWorkspaceID == workspace.id
+    let isPending =
+      endpoint.map { projection in
+        store.aggregateState?.pendingActivation?.targetEndpointKey == projection.endpointKey
+          && store.aggregateState?.requestedSelection?.selection?.workspaceID == workspace.id
+      } ?? false
     return Button {
-      store.send(.focusWorkspaceTapped(workspace.id))
+      if let endpoint {
+        store.send(
+          .focusWorkspaceTarget(
+            HerdrWorkspaceTarget(endpointKey: endpoint.endpointKey, workspaceID: workspace.id)
+          )
+        )
+      } else {
+        store.send(.focusWorkspaceTapped(workspace.id))
+      }
     } label: {
       HStack(spacing: 8) {
         statusIcon(workspace.agentStatus)
@@ -428,6 +547,10 @@ internal struct HerdrSidebarView: View {
           }
         }
         Spacer(minLength: 0)
+        if isPending {
+          ProgressView()
+            .controlSize(.mini)
+        }
       }
       .padding(.horizontal, 8)
       .frame(height: 38)
@@ -438,23 +561,36 @@ internal struct HerdrSidebarView: View {
       .contentShape(.rect)
     }
     .buttonStyle(.plain)
+    .disabled(endpoint.map { !endpointCanReceiveFocus($0) } ?? false)
     .help("Focus workspace \(workspace.label)")
     .accessibilityLabel("Focus workspace \(workspace.label)")
   }
 
-  private func agentRow(_ agent: HerdrAgent) -> some View {
+  private func agentRow(
+    _ agent: HerdrAgent,
+    endpoint: HerdrEndpointProjection? = nil
+  ) -> some View {
     let agentName = agentTitle(agent)
+    let projection = endpoint?.snapshot?.legacyProjection ?? store.snapshot
     let context = HerdrSidebarProjection.contextLabel(
       for: agent,
-      workspaceLabel: agent.workspaceID.flatMap { workspaceLabel(for: $0) },
-      tabLabel: agent.tabID.flatMap { tabLabel(for: $0) }
+      workspaceLabel: agent.workspaceID.flatMap { workspaceLabel(for: $0, in: projection) },
+      tabLabel: agent.tabID.flatMap { tabLabel(for: $0, in: projection) }
     )
     let title = context.isEmpty ? agentName : context
     let agentKind = HerdrSidebarProjection.agentKind(for: agent)
-    let selected = agent.paneID.map { store.selectedPaneID == $0 } ?? false
+    let endpointIsCommitted =
+      endpoint.map { store.committedActiveEndpointKey == $0.endpointKey } ?? true
+    let selected = endpointIsCommitted && (agent.paneID.map { store.selectedPaneID == $0 } ?? false)
     return Button {
       guard let paneID = agent.paneID else { return }
-      store.send(.focusPaneTapped(paneID))
+      if let endpoint {
+        store.send(
+          .focusPaneTarget(HerdrPaneTarget(endpointKey: endpoint.endpointKey, paneID: paneID))
+        )
+      } else {
+        store.send(.focusPaneTapped(paneID))
+      }
     } label: {
       HStack(spacing: 8) {
         statusIcon(agent.agentStatus)
@@ -500,7 +636,9 @@ internal struct HerdrSidebarView: View {
     .buttonStyle(.plain)
     .help("Focus pane \(title)")
     .accessibilityLabel("Focus agent \(title)")
-    .disabled(agent.paneID == nil)
+    .disabled(
+      agent.paneID == nil || (endpoint.map { !endpointCanReceiveFocus($0) } ?? false)
+    )
   }
 
   @ViewBuilder
@@ -552,15 +690,16 @@ internal struct HerdrSidebarView: View {
       .first { !$0.isEmpty } ?? "agent"
   }
 
-  private func workspaceLabel(for id: String) -> String? {
-    store.snapshot.workspaces.first { $0.id == id }?.label
+  private func workspaceLabel(for id: String, in snapshot: HerdrSessionSnapshot? = nil) -> String? {
+    (snapshot ?? store.snapshot).workspaces.first { $0.id == id }?.label
   }
 
-  private func tabLabel(for id: String) -> String? {
-    store.snapshot.tabs.first { $0.id == id }?.label
+  private func tabLabel(for id: String, in snapshot: HerdrSessionSnapshot? = nil) -> String? {
+    (snapshot ?? store.snapshot).tabs.first { $0.id == id }?.label
   }
 
   private var branchRequests: [HerdrBranchRequest] {
+    guard store.authorityMode != .aggregate else { return [] }
     let panesByWorkspaceID = Dictionary(grouping: store.snapshot.panes, by: \.workspaceID)
     var requests: [HerdrBranchRequest] = []
     for workspace in store.snapshot.workspaces {

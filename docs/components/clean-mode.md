@@ -45,18 +45,21 @@ window-padding-balance = false
 
 ## Herdr
 
-在 shell 中手动输入 `herdr` 即可进入 Herdr。Prowl 精确识别前台 `herdr` process 后，才连接 default session 的
-只读 Unix socket：
+在 shell 中手动输入 `herdr` 即可进入 Herdr。Prowl 精确识别前台 `herdr` process 后，会先等待当前 Clean terminal surface 专属的 client-local native chrome contract。支持该 contract 的 Herdr client 是 machine catalog、Local/SSH endpoint、terminal presentation、focus 和 input 的唯一 authority；Prowl 只显示其聚合 projection 并转发 endpoint-qualified intent，不直接连接远端 Herdr server。
+
+contract 在 surface 创建时通过一次性 Unix socket、client instance ID、surface proof 和 peer PID 绑定；首个合法 claim 会关闭 listener，后续进程不能接管同一 surface。Local projection ready 后即可显示首屏，不等待 saved SSH machine 完成连接。250ms 内没有 client claim 时，本次 surface 生命周期固定使用兼容模式，通过 default session 的只读 Unix socket连接 Local。client 已 claim 但 1 秒内没有提交完整 `aggregate_sync_commit` 时，本次 surface 固定进入 incompatible，不回退兼容模式：
 
 ```text
 $XDG_CONFIG_HOME/herdr/herdr.sock
 或 ~/.config/herdr/herdr.sock
 ```
 
-Prowl 的输入法 adapter 只读取 focused pane，并订阅已确认的 focus/lifecycle event。Herdr client 仍由 Ghostty terminal
-显示；native sidebar 只读取 `session.snapshot`，并通过 Herdr JSON API 执行 focus：
+aggregate mode 下，sidebar 和 tab bar 使用 Herdr client 提交的状态：
 
-- workspace、tab、Agent pane 和普通 shell pane 都会按 Herdr server 的层级显示。
+- Local 和所有 saved SSH machine 按 Herdr catalog 顺序分组显示；每台 machine 独立展示 connecting、reconnecting、Attention、disabled 和 stale 状态。
+- Spaces 和 Agents 都保留 machine 来源。点击 online remote workspace 或 Agent 会请求 Herdr client执行完整 endpoint activation；pending 状态不会提前改变 tab bar、terminal、process decoration 或输入法 target。
+- tab bar 只显示 Herdr 已提交的 active endpoint。activation、rollback 或 contract 断连期间无法证明 presentation owner 时，native chrome 显式显示 unavailable，不会回退或混用 Local authority。
+- workspace、tab、Agent pane 和普通 shell pane 都会按各 endpoint 的 Herdr server 层级显示。
 - spaces row 的第二行显示 workspace branch；branch 信息在后台缓存解析，不阻塞 sidebar 渲染。
 - spaces 右上角的 ellipsis 是可点击的 native menu button，菜单提供 new 和 menu 项。
 - 普通 pane 使用 `agent == nil` 判定，不把 shell 当作 Agent；Agent pane 显示 agent 名称和状态。
@@ -82,14 +85,13 @@ Prowl 的输入法 adapter 只读取 focused pane，并订阅已确认的 focus/
   事件中更新，Prowl 的装饰变化不触发 Herdr rename。
 - tabbar 右侧的 `+` 会直接创建未命名 tab，不弹出命名输入框；重命名和恢复自动名称都通过 tab context menu 或 Rename sheet 操作。
 - agents header 的 `grouped`/`priority` 控件对应 Herdr 自带的 workspace 顺序和 attention 优先级排序。
-- 点击 workspace、tab 或 pane row 会调用对应的 `workspace.focus`、`tab.focus` 或 `pane.focus`，选中状态以服务器
-  focus event 为准；点击时先立即显示目标 selection，event 超时或目标不存在时才回退到完整 snapshot。
+- 点击 workspace、tab 或 pane row 会向当前 Herdr client发送带 endpoint connection generation、server boot ID 和 snapshot revision 的 focus/activate intent。相同 endpoint 内的 selection 由后续 projection 确认；跨 endpoint selection 只有 presentation fence 完成后才成为 committed selection。
 - pane 退出事件会立即从 native chrome 的本地投影中移除对应 pane；若该 pane 是 tab/workspace 的最后一个 pane，也会同步移除空 tab/workspace。随后到达的旧 snapshot 不会恢复已关闭的 tab。
 - Herdr protocol 21-22 的 workspace、worktree、tab、pane 创建、关闭、移动、重命名、聚焦、metadata 和 layout 更新都会触发一次完整 snapshot 刷新；rename/focus burst 使用 100ms debounce，结构变更沿用 immediate refresh。
-- socket 尚未 ready、断开或 Herdr 退出时，sidebar 隐藏并把 terminal 恢复为全宽；不会影响 Ghostty 输入、渲染或输入法同步。
-- Sidebar 不接管 Herdr terminal stream，不实现 binary client protocol，也不持久化 Herdr workspace/tab/pane。
+- client-local contract 断开、sequence gap 或 payload 不兼容时，aggregate native chrome 显式进入 unavailable/incompatible 状态并停止 remote action；不会在同一 surface 生命周期降级到 Local legacy socket。仅启动 claim 确认不存在时才进入兼容模式。
+- Sidebar 不接管 Herdr terminal stream，不实现 binary client protocol，也不持久化 Herdr machine、workspace、tab 或 pane。
 
-输入法 adapter 的既有行为如下：
+aggregate mode 的输入法与 process decoration 都以 `EndpointKey + pane ID` 为 identity，并只跟随 committed active endpoint。process info请求由 Prowl 发给当前 Herdr client，再由 Herdr 通过对应 endpoint command lane 执行；结果必须匹配 connection generation、server boot ID 和 snapshot revision 后才进入 cache。兼容模式沿用 default Local socket adapter：
 
 - focused pane 存在 agent 时，按该 `pane_id` 恢复已记忆的输入法。
 - 首次进入尚未记忆输入法的 agent pane 时，使用最近一次从 command/shell pane 切换前记录的非 ABC 输入法；如果没有 fallback，则保持当前输入法。
@@ -105,14 +107,12 @@ Prowl 的输入法 adapter 只读取 focused pane，并订阅已确认的 focus/
   Option 组合输入 macOS 特殊字符。
 - 退出或 detach Herdr 后，自动恢复外层 terminal 的前台进程判断。
 
-Prowl 只支持 Herdr JSON API protocol 21-22；protocol 19、20 及未来 protocol 23 在 protocol check 前拒绝并隐藏 native chrome。Herdr protocol 22 只变更二进制 client/server wire，Prowl 使用的 JSON snapshot contract 保持不变。Herdr JSON API 的每条 Unix socket connection 只处理一条 request。Prowl
-在 adapter 启动或重连时使用独立短连接完成 protocol check，随后为 terminal chrome 按三步建立生命周期：先用短连接取得 discovery
+Prowl 兼容模式支持 Herdr JSON API protocol 21-22；protocol 19、20 及未来 protocol 23 在 protocol check 前拒绝并隐藏 legacy native chrome。Herdr protocol 22 只变更二进制 client/server wire，兼容模式使用的 JSON snapshot contract 保持不变。Herdr JSON API 的每条 Unix socket connection 只处理一条 request。Prowl
+在 adapter 启动或重连时使用独立短连接完成 protocol check，随后为 legacy terminal chrome 按三步建立生命周期：先用短连接取得 discovery
 `session.snapshot` 以获得当前 pane IDs，再用单一 multiplexed `events.subscribe` 长连接订阅 global 与这些 pane-specific events 并等待 ack，最后重新取得 authoritative
 `session.snapshot` 作为首个对外状态；两次 snapshot 之间到达的事件由同一 stream/consumer 保留。authoritative snapshot 发现 pane-set 变化时，取消旧订阅并重建整轮生命周期。
 
-socket 不存在、断开、响应异常或 protocol 不兼容时，Prowl 保持当前输入法并静默重试或停止集成，不显示产品
-overlay。首期只支持 bare `herdr` 的 default local session，不支持 named session、remote Herdr 或自定义
-`HERDR_SOCKET_PATH`。
+compatibility socket 不存在、断开、响应异常或 protocol 不兼容时，Prowl 保持当前输入法并静默重试或停止 legacy 集成，不显示产品 overlay。compatibility mode 只支持 bare `herdr` 的 default local session；named session 和 saved SSH machine 需要 client-local native chrome contract。
 
 ## 与 Standard runtime 的边界
 

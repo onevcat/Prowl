@@ -113,41 +113,44 @@ struct TerminalInputSourceCoordinatorTests {
 
     coordinator.applyFocusedContext(
       .chatAgent,
-      targetID: .herdrPane("w1:p1"),
+      targetID: .herdrPane(HerdrPaneTarget(endpointKey: .local, paneID: "w1:p1")),
       reason: .processContextChanged
     )
 
     #expect(selector.currentID == MockInputSourceID.chinese)
-    #expect(selector.selectedIDs == [
-      KeyboardInputSourceSelector.abcInputSourceID,
-      MockInputSourceID.chinese,
-    ])
+    #expect(
+      selector.selectedIDs == [
+        KeyboardInputSourceSelector.abcInputSourceID,
+        MockInputSourceID.chinese,
+      ])
   }
 
   @Test func herdrPanesRememberIndependentChatInputSources() {
     let selector = MockKeyboardInputSourceSelector()
     let coordinator = TerminalInputSourceCoordinator(selector: selector)
+    let paneOne = HerdrPaneTarget(endpointKey: .local, paneID: "w1:p1")
+    let paneTwo = HerdrPaneTarget(endpointKey: .local, paneID: "w1:p2")
 
     coordinator.applyFocusedContext(
       .chatAgent,
-      targetID: .herdrPane("w1:p1"),
+      targetID: .herdrPane(paneOne),
       reason: .focusChanged
     )
     selector.currentID = "com.example.inputmethod.PaneOne"
     coordinator.applyFocusedContext(
       .commandLike,
-      targetID: .herdrPane("w1:p2"),
+      targetID: .herdrPane(paneTwo),
       reason: .focusChanged
     )
     coordinator.applyFocusedContext(
       .chatAgent,
-      targetID: .herdrPane("w1:p2"),
+      targetID: .herdrPane(paneTwo),
       reason: .focusChanged
     )
     selector.currentID = "com.example.inputmethod.PaneTwo"
     coordinator.applyFocusedContext(
       .chatAgent,
-      targetID: .herdrPane("w1:p1"),
+      targetID: .herdrPane(paneOne),
       reason: .focusChanged
     )
 

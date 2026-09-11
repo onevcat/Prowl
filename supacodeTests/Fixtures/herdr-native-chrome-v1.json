@@ -1,0 +1,162 @@
+{
+  "contract_version": 1,
+  "client_instance_id": "client-a",
+  "message_kind": "aggregate_sync_commit",
+  "event_sequence": 4,
+  "projection_revision": 2,
+  "request_id": null,
+  "activation_epoch": null,
+  "payload": {
+    "sync_committed": true,
+    "state": {
+      "catalog_revision": 1,
+      "endpoints": [
+        {
+          "endpoint_key": {"kind": "local"},
+          "label": "Local",
+          "availability": "enabled",
+          "status": "online",
+          "freshness": "current",
+          "connection_identity": {
+            "kind": "concrete",
+            "connection_generation": 1,
+            "server_boot_id": "boot-local"
+          },
+          "snapshot": {
+            "boot_id": "boot-local",
+            "revision": 8,
+            "focused_workspace_id": "ws-local",
+            "focused_tab_id": "tab-duplicate",
+            "focused_pane_id": "pane-duplicate",
+            "workspaces": [{
+              "workspace_id": "ws-local",
+              "active_tab_id": "tab-duplicate",
+              "number": 1,
+              "label": "Prowl",
+              "custom_label": false,
+              "branch": "herdr-native-sidebar",
+              "worktree": null,
+              "focused": true,
+              "agent_status": "Working"
+            }],
+            "tabs": [{
+              "tab_id": "tab-duplicate",
+              "workspace_id": "ws-local",
+              "number": 1,
+              "label": "Prowl",
+              "custom_label": false,
+              "zoomed": false,
+              "focused": true,
+              "agent_status": "Working"
+            }],
+            "panes": [{
+              "pane_id": "pane-duplicate",
+              "workspace_id": "ws-local",
+              "tab_id": "tab-duplicate",
+              "label": null,
+              "cwd": "/Users/yam/Developer/Prowl",
+              "foreground_cwd": "/Users/yam/Developer/Prowl",
+              "focused": true,
+              "input_context": {"kind": "chat_agent", "agent": "codex", "shell": null}
+            }],
+            "agents": [{
+              "pane_id": "pane-duplicate",
+              "workspace_id": "ws-local",
+              "tab_id": "tab-duplicate",
+              "name": "codex",
+              "display_agent": "Codex",
+              "agent": "codex",
+              "title": null,
+              "terminal_title": null,
+              "terminal_title_stripped": null,
+              "agent_status": "Working",
+              "focused": true
+            }]
+          },
+          "focus": {"workspace_id": "ws-local", "tab_id": "tab-duplicate", "pane_id": "pane-duplicate"},
+          "activation": {
+            "can_activate": true,
+            "can_focus": true,
+            "optional_methods": ["pane.process_info", "tab.rename"],
+            "missing_required_capability": null
+          },
+          "attention": null
+        },
+        {
+          "endpoint_key": {"kind": "ssh", "profile_id": "0123456789abcdef0123456789abcdef"},
+          "label": "Build",
+          "availability": "enabled",
+          "status": "reconnecting",
+          "freshness": "stale",
+          "connection_identity": {
+            "kind": "concrete",
+            "connection_generation": 7,
+            "server_boot_id": "boot-remote"
+          },
+          "snapshot": {
+            "boot_id": "boot-remote",
+            "revision": 3,
+            "focused_workspace_id": "ws-remote",
+            "focused_tab_id": "tab-duplicate",
+            "focused_pane_id": "pane-duplicate",
+            "workspaces": [{
+              "workspace_id": "ws-remote",
+              "active_tab_id": "tab-duplicate",
+              "number": 1,
+              "label": "Build",
+              "custom_label": false,
+              "branch": "main",
+              "worktree": null,
+              "focused": true,
+              "agent_status": "Idle"
+            }],
+            "tabs": [{
+              "tab_id": "tab-duplicate",
+              "workspace_id": "ws-remote",
+              "number": 1,
+              "label": "Build",
+              "custom_label": false,
+              "zoomed": false,
+              "focused": true,
+              "agent_status": "Idle"
+            }],
+            "panes": [{
+              "pane_id": "pane-duplicate",
+              "workspace_id": "ws-remote",
+              "tab_id": "tab-duplicate",
+              "label": null,
+              "cwd": "/srv/build",
+              "foreground_cwd": "/srv/build",
+              "focused": true,
+              "input_context": {"kind": "command_like", "agent": null, "shell": "zsh"}
+            }],
+            "agents": []
+          },
+          "focus": {"workspace_id": "ws-remote", "tab_id": "tab-duplicate", "pane_id": "pane-duplicate"},
+          "activation": {
+            "can_activate": false,
+            "can_focus": false,
+            "optional_methods": [],
+            "missing_required_capability": null
+          },
+          "attention": null
+        }
+      ],
+      "per_endpoint_focus": [
+        {"endpoint_key": {"kind": "local"}, "focus": {"workspace_id": "ws-local", "tab_id": "tab-duplicate", "pane_id": "pane-duplicate"}},
+        {"endpoint_key": {"kind": "ssh", "profile_id": "0123456789abcdef0123456789abcdef"}, "focus": {"workspace_id": "ws-remote", "tab_id": "tab-duplicate", "pane_id": "pane-duplicate"}}
+      ],
+      "committed_presentation": {
+        "kind": "active",
+        "endpoint_key": {"kind": "local"},
+        "selection": {"workspace_id": "ws-local", "tab_id": "tab-duplicate", "pane_id": "pane-duplicate"}
+      },
+      "requested_selection": null,
+      "pending_activation": null,
+      "capabilities": {
+        "required": ["activation_transaction", "aggregate_sync", "endpoint_fencing", "ime_context", "process_info"],
+        "optional": ["tab.rename"]
+      }
+    }
+  }
+}

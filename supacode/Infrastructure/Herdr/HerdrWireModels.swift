@@ -167,7 +167,7 @@ nonisolated internal struct HerdrPaneProcessInfoParams: Encodable, Sendable {
   }
 }
 
-nonisolated internal struct HerdrPaneProcess: Decodable, Equatable, Sendable {
+nonisolated internal struct HerdrPaneProcess: Codable, Equatable, Sendable {
   internal let pid: UInt32
   internal let name: String
   internal let argv0: String?
@@ -192,7 +192,7 @@ nonisolated internal struct HerdrPaneProcess: Decodable, Equatable, Sendable {
   }
 }
 
-nonisolated internal struct HerdrPaneProcessInfo: Decodable, Equatable, Sendable {
+nonisolated internal struct HerdrPaneProcessInfo: Codable, Equatable, Sendable {
   internal let paneID: String
   internal let shellPID: UInt32?
   internal let foregroundProcessGroupID: UInt32?

@@ -24,7 +24,9 @@ internal struct CleanRootView: View {
               state: \.herdrTerminalChrome,
               action: \.herdrTerminalChrome
             ),
-            processInfoByPaneID: terminalHost.processInfoByPaneID
+            processInfoByPaneTarget: store.herdrTerminalChrome.authorityMode == .aggregate
+              ? store.herdrTerminalChrome.aggregateProcessInfoByPaneTarget
+              : terminalHost.processInfoByPaneTarget
           )
         }
 
@@ -55,7 +57,16 @@ internal struct CleanRootView: View {
     .task(id: herdrProcessPaneKey) {
       terminalHost.updateHerdrProcessPanes(
         store.herdrTerminalChrome.snapshot.panes,
+        authorityMode: store.herdrTerminalChrome.authorityMode,
+        endpointKey: store.herdrTerminalChrome.committedActiveEndpointKey ?? .local,
         focusedPaneID: herdrProcessFocusedPaneID
+      )
+    }
+    .task(id: herdrAuthorityContextKey) {
+      terminalHost.updateHerdrAuthority(
+        mode: store.herdrTerminalChrome.authorityMode,
+        endpointKey: store.herdrTerminalChrome.committedActiveEndpointKey,
+        focusedPane: focusedNativePane
       )
     }
     .alert($store.scope(state: \.alert, action: \.alert))
@@ -63,7 +74,10 @@ internal struct CleanRootView: View {
 
   private var herdrProcessPaneKey: String {
     let snapshot = store.herdrTerminalChrome.snapshot
-    return snapshot.panes
+    let authority = store.herdrTerminalChrome.authorityMode
+    let endpoint = store.herdrTerminalChrome.committedActiveEndpointKey?.storageKey ?? "none"
+    return "\(authority)|\(endpoint)|"
+      + snapshot.panes
       .map { "\($0.id):\($0.tabID):\($0.focused)" }
       .joined(separator: "|") + "|focused:\(herdrProcessFocusedPaneID ?? "")"
   }
@@ -73,5 +87,23 @@ internal struct CleanRootView: View {
       selectedPaneID: store.herdrTerminalChrome.selectedPaneID,
       snapshotFocusedPaneID: store.herdrTerminalChrome.snapshot.focusedPaneID
     )
+  }
+
+  private var focusedNativePane: HerdrClientShellPane? {
+    guard let endpoint = store.herdrTerminalChrome.aggregateState?.committedEndpoint else {
+      return nil
+    }
+    let paneID =
+      store.herdrTerminalChrome.aggregateState?.committedActiveSelection?.paneID
+      ?? endpoint.snapshot?.focusedPaneID
+    return endpoint.snapshot?.panes.first { $0.paneID == paneID }
+  }
+
+  private var herdrAuthorityContextKey: String {
+    let state = store.herdrTerminalChrome
+    let endpoint = state.committedActiveEndpointKey?.storageKey ?? "none"
+    let pane = focusedNativePane
+    return
+      "\(state.authorityMode)-\(endpoint)-\(pane?.paneID ?? "none")-\(pane?.inputContext.kind ?? "none")"
   }
 }

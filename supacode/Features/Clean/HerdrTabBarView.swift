@@ -438,7 +438,7 @@ internal enum HerdrTabBarProjection {
 
 internal struct HerdrTabBarView: View {
   @Bindable internal var store: StoreOf<HerdrTerminalChromeFeature>
-  internal var processInfoByPaneID: [String: HerdrPaneProcessInfo] = [:]
+  internal var processInfoByPaneTarget: [HerdrPaneTarget: HerdrPaneProcessInfo] = [:]
 
   @Environment(\.colorScheme) private var colorScheme
   @State private var editor: Editor?
@@ -504,7 +504,9 @@ internal struct HerdrTabBarView: View {
       .contentShape(.rect)
       .help("New tab")
       .accessibilityLabel("New tab")
-      .disabled(workspaceID == nil || store.pendingMutation != nil)
+      .disabled(
+        workspaceID == nil || store.connection != .connected || store.pendingMutation != nil
+      )
     }
     .padding(.leading, HerdrTabBarLayout.barLeadingPadding)
     .padding(.trailing, 8)
@@ -519,7 +521,17 @@ internal struct HerdrTabBarView: View {
             items: items
           )
         else { return }
-        store.send(.focusTabTapped(targetID))
+        focusTab(targetID)
+      }
+    }
+    .overlay {
+      if store.connection == .unavailable || store.connection == .incompatible {
+        Text(
+          store.connection == .incompatible ? "Herdr contract incompatible" : "Herdr unavailable"
+        )
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .allowsHitTesting(false)
       }
     }
     .sheet(item: $editor) { editor in
@@ -558,9 +570,26 @@ internal struct HerdrTabBarView: View {
     HerdrTabBarProjection.items(
       in: store.snapshot,
       workspaceID: workspaceID,
-      processInfoByPaneID: processInfoByPaneID,
+      processInfoByPaneID: activeProcessInfoByPaneID,
       focusedPaneID: store.selectedPaneID ?? store.snapshot.focusedPaneID
     )
+  }
+
+  private var activeProcessInfoByPaneID: [String: HerdrPaneProcessInfo] {
+    let endpointKey = store.committedActiveEndpointKey ?? .local
+    return Dictionary(
+      uniqueKeysWithValues: processInfoByPaneTarget.compactMap { target, info in
+        target.endpointKey == endpointKey ? (target.paneID, info) : nil
+      }
+    )
+  }
+
+  private func focusTab(_ tabID: String) {
+    if store.authorityMode == .aggregate, let endpointKey = store.committedActiveEndpointKey {
+      store.send(.focusTabTarget(HerdrTabTarget(endpointKey: endpointKey, tabID: tabID)))
+    } else {
+      store.send(.focusTabTapped(tabID))
+    }
   }
 
   private func scrollToSelected(_ proxy: ScrollViewProxy, selectedID: String?) {
@@ -586,7 +615,7 @@ internal struct HerdrTabBarView: View {
     let isHovered = hoveredTabID == item.id
     return ZStack(alignment: .trailing) {
       Button {
-        store.send(.focusTabTapped(item.id))
+        focusTab(item.id)
       } label: {
         HStack(spacing: 3) {
           if let agentKind = item.agentKind {
@@ -618,6 +647,7 @@ internal struct HerdrTabBarView: View {
         .contentShape(.rect)
       }
       .buttonStyle(.plain)
+      .disabled(store.connection != .connected)
       if isHovered {
         Button {
           store.send(
@@ -634,7 +664,7 @@ internal struct HerdrTabBarView: View {
         .padding(.trailing, HerdrTabBarLayout.tabTrailingPadding)
         .help("Close tab")
         .accessibilityLabel("Close tab \(item.displayLabel)")
-        .disabled(store.pendingMutation != nil)
+        .disabled(store.connection != .connected || store.pendingMutation != nil)
       }
     }
     .buttonStyle(.plain)
@@ -643,31 +673,13 @@ internal struct HerdrTabBarView: View {
     .help("Open tab \(item.displayLabel)")
     .accessibilityLabel(item.displayLabel)
     .contextMenu {
-      Button("New tab") {
-        editor = .new(workspaceID: item.workspaceID, sourceTabID: item.id)
-      }
-      Button("Rename Directory Name…") {
-        editor = .rename(
-          tabID: item.id,
-          label: item.label,
-          canReset: item.customName != nil
-        )
-      }
-      if item.customName != nil {
-        Button("Use Automatic Directory Name") {
-          store.send(.resetTabNameRequested(item.id))
-        }
-        .disabled(store.pendingMutation != nil)
-      }
-      Divider()
-      Button("Close", role: .destructive) {
-        store.send(.closeTabRequested(tabID: item.id, workspaceID: item.workspaceID))
-      }
-      .disabled(store.pendingMutation != nil)
+      tabContextMenu(for: item)
     }
     .draggable(item.id)
     .dropDestination(for: String.self) { sourceIDs, _ in
-      guard let sourceID = sourceIDs.first,
+      guard store.connection == .connected,
+        store.pendingMutation == nil,
+        let sourceID = sourceIDs.first,
         let insertIndex = HerdrTabBarProjection.insertIndex(
           sourceID: sourceID,
           targetID: item.id,
@@ -677,6 +689,33 @@ internal struct HerdrTabBarView: View {
       store.send(.moveTabRequested(tabID: sourceID, insertIndex: insertIndex))
       return true
     }
+  }
+
+  @ViewBuilder
+  private func tabContextMenu(for item: HerdrTabBarItem) -> some View {
+    Button("New tab") {
+      editor = .new(workspaceID: item.workspaceID, sourceTabID: item.id)
+    }
+    .disabled(store.connection != .connected || store.pendingMutation != nil)
+    Button("Rename Directory Name…") {
+      editor = .rename(
+        tabID: item.id,
+        label: item.label,
+        canReset: item.customName != nil
+      )
+    }
+    .disabled(store.connection != .connected || store.pendingMutation != nil)
+    if item.customName != nil {
+      Button("Use Automatic Directory Name") {
+        store.send(.resetTabNameRequested(item.id))
+      }
+      .disabled(store.connection != .connected || store.pendingMutation != nil)
+    }
+    Divider()
+    Button("Close", role: .destructive) {
+      store.send(.closeTabRequested(tabID: item.id, workspaceID: item.workspaceID))
+    }
+    .disabled(store.connection != .connected || store.pendingMutation != nil)
   }
 
   @ViewBuilder

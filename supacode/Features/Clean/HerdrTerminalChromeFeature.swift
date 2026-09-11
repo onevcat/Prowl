@@ -11,10 +11,33 @@ internal struct HerdrTerminalChromeFeature {
       case hidden
       case connecting
       case connected
+      case unavailable
+      case incompatible
       case failed
     }
 
+    internal enum AuthorityMode: Equatable {
+      case bootstrap
+      case probing
+      case aggregate
+      case incompatible
+      case legacy
+    }
+
+    internal var authorityMode: AuthorityMode = .bootstrap
+    internal var isForeground = false
     internal var connection: Connection = .hidden
+    internal var aggregateState: HerdrAggregateState?
+    internal var aggregateSyncCommitted = false
+    internal var nativeClientInstanceID: String?
+    internal var nativeEventSequence: UInt64?
+    internal var nativeProjectionRevision: UInt64?
+    internal var endpointWatermarks = HerdrEndpointWatermarks()
+    internal var isResyncPending = false
+    internal var nativeRequestSequence: UInt64 = 0
+    internal var activationEpoch: UInt64 = 0
+    internal var aggregateProcessInfoByPaneTarget: [HerdrPaneTarget: HerdrPaneProcessInfo] = [:]
+    internal var pendingNativeMutationRequestID: String?
     internal var snapshot = HerdrSessionSnapshot.empty
     internal var selectedWorkspaceID: String?
     internal var selectedTabID: String?
@@ -31,7 +54,24 @@ internal struct HerdrTerminalChromeFeature {
     internal var mutationGeneration: UInt64 = 0
 
     internal var isVisible: Bool {
-      connection == .connected
+      guard isForeground else { return false }
+      switch authorityMode {
+      case .aggregate, .incompatible: return connection != .hidden
+      case .legacy: return connection == .connected
+      case .bootstrap, .probing: return false
+      }
+    }
+
+    internal var committedActiveEndpointKey: HerdrEndpointKey? {
+      authorityMode == .legacy ? .local : aggregateState?.committedActiveEndpointKey
+    }
+
+    internal var acceptsLegacyAuthority: Bool {
+      authorityMode == .bootstrap || authorityMode == .legacy
+    }
+
+    internal var endpointProjections: [HerdrEndpointProjection] {
+      aggregateState?.endpoints ?? []
     }
   }
 
@@ -82,6 +122,8 @@ internal struct HerdrTerminalChromeFeature {
   }
 
   internal enum Action: Equatable {
+    case nativeEvent(HerdrNativeClientEvent)
+    case nativeHandshakeTimedOut(clientInstanceID: String)
     case foregroundChanged(Bool)
     case subscriptionPrepared(Set<String>)
     case snapshotResponse(Result<HerdrSessionSnapshot, HerdrTerminalChromeFailure>)
@@ -91,6 +133,9 @@ internal struct HerdrTerminalChromeFeature {
       UInt64,
       Result<HerdrSessionSnapshot, HerdrTerminalChromeFailure>
     )
+    case focusWorkspaceTarget(HerdrWorkspaceTarget)
+    case focusTabTarget(HerdrTabTarget)
+    case focusPaneTarget(HerdrPaneTarget)
     case focusWorkspaceTapped(String)
     case focusTabTapped(String)
     case focusPaneTapped(String)
@@ -106,17 +151,21 @@ internal struct HerdrTerminalChromeFeature {
     case closeConfirmationCancelled
     case mutationErrorDismissed
     case mutationResponse(UInt64, MutationResult)
+    case nativeProcessInfoPoll
     case delegate(DelegateAction)
     case stop
   }
 
   nonisolated private enum CancelID: Hashable, Sendable {
+    case nativeLifecycle
+    case nativeHandshake
     case lifecycle
     case refreshDebounce
     case refresh
     case focus
     case focusConfirmation
     case mutation
+    case processInfoPoll
   }
 
   private static let immediateRefreshEvents: Set<String> = [
@@ -143,6 +192,8 @@ internal struct HerdrTerminalChromeFeature {
     "pane_focused",
   ]
   private static let focusConfirmationTimeout = Duration.milliseconds(250)
+  private static let nativeClaimHandshakeTimeout = Duration.seconds(1)
+  private static let nativeMutationTimeout = Duration.seconds(5)
 
   internal static func shouldRefreshImmediately(for eventName: String) -> Bool {
     immediateRefreshEvents.contains(eventName.replacing(".", with: "_"))
@@ -167,7 +218,9 @@ internal struct HerdrTerminalChromeFeature {
     let workspaceIDs = Set(tabs.map(\.workspaceID))
     let workspaces = snapshot.workspaces.filter { workspaceIDs.contains($0.id) }
     let layouts = snapshot.layouts.compactMap { layout -> HerdrLayout? in
-      guard tabIDs.contains(layout.tabID), workspaceIDs.contains(layout.workspaceID) else { return nil }
+      guard tabIDs.contains(layout.tabID), workspaceIDs.contains(layout.workspaceID) else {
+        return nil
+      }
       return HerdrLayout(
         workspaceID: layout.workspaceID,
         tabID: layout.tabID,
@@ -339,8 +392,58 @@ internal struct HerdrTerminalChromeFeature {
   internal var body: some Reducer<State, Action> {
     Reduce { state, action in
       switch action {
-      case .foregroundChanged(false), .stop:
+      case .foregroundChanged(false):
+        state.isForeground = false
         state.connection = .hidden
+        state.pendingFocus = nil
+        state.focusRollback = nil
+        state.pendingMutation = nil
+        state.pendingNativeMutationRequestID = nil
+        state.closeConfirmation = nil
+        state.mutationError = nil
+        state.refreshGeneration &+= 1
+        state.mutationGeneration &+= 1
+        if state.authorityMode == .aggregate {
+          return .merge(
+            .cancel(id: CancelID.focus),
+            .cancel(id: CancelID.focusConfirmation),
+            .cancel(id: CancelID.mutation),
+            .cancel(id: CancelID.processInfoPoll)
+          )
+        }
+        state.snapshot = .empty
+        state.selectedWorkspaceID = nil
+        state.selectedTabID = nil
+        state.selectedPaneID = nil
+        state.subscribedPaneIDs = []
+        state.pendingPaneExitIDs = []
+        state.subscriptionAwaitingSnapshot = false
+        return .merge(
+          .cancel(id: CancelID.nativeLifecycle),
+          .cancel(id: CancelID.lifecycle),
+          .cancel(id: CancelID.refreshDebounce),
+          .cancel(id: CancelID.refresh),
+          .cancel(id: CancelID.focus),
+          .cancel(id: CancelID.focusConfirmation),
+          .cancel(id: CancelID.mutation),
+          .cancel(id: CancelID.processInfoPoll)
+        )
+
+      case .stop:
+        state.isForeground = false
+        state.authorityMode = .bootstrap
+        state.connection = .hidden
+        state.aggregateState = nil
+        state.aggregateSyncCommitted = false
+        state.nativeClientInstanceID = nil
+        state.nativeEventSequence = nil
+        state.nativeProjectionRevision = nil
+        state.endpointWatermarks = HerdrEndpointWatermarks()
+        state.isResyncPending = false
+        state.nativeRequestSequence = 0
+        state.activationEpoch = 0
+        state.aggregateProcessInfoByPaneTarget = [:]
+        state.pendingNativeMutationRequestID = nil
         state.snapshot = .empty
         state.selectedWorkspaceID = nil
         state.selectedTabID = nil
@@ -356,6 +459,8 @@ internal struct HerdrTerminalChromeFeature {
         state.refreshGeneration &+= 1
         state.mutationGeneration &+= 1
         return .merge(
+          .cancel(id: CancelID.nativeLifecycle),
+          .cancel(id: CancelID.nativeHandshake),
           .cancel(id: CancelID.lifecycle),
           .cancel(id: CancelID.refreshDebounce),
           .cancel(id: CancelID.refresh),
@@ -365,6 +470,22 @@ internal struct HerdrTerminalChromeFeature {
         )
 
       case .foregroundChanged(true):
+        state.isForeground = true
+        if state.authorityMode == .aggregate {
+          if state.aggregateSyncCommitted,
+            let endpoint = state.aggregateState?.committedEndpoint,
+            endpoint.status == .online,
+            endpoint.freshness == .current
+          {
+            state.connection = .connected
+            if let snapshot = endpoint.snapshot {
+              return nativeProcessInfoEffect(&state, endpoint: endpoint, snapshot: snapshot)
+            }
+          } else {
+            state.connection = .unavailable
+          }
+          return .none
+        }
         state.connection = .connecting
         state.snapshot = .empty
         state.selectedWorkspaceID = nil
@@ -380,19 +501,108 @@ internal struct HerdrTerminalChromeFeature {
         state.subscriptionAwaitingSnapshot = false
         state.refreshGeneration &+= 1
         state.mutationGeneration &+= 1
+        switch state.authorityMode {
+        case .bootstrap:
+          state.authorityMode = .probing
+          return nativeLifecycleEffect()
+            .cancellable(id: CancelID.nativeLifecycle, cancelInFlight: true)
+        case .probing:
+          return nativeLifecycleEffect()
+            .cancellable(id: CancelID.nativeLifecycle, cancelInFlight: true)
+        case .aggregate:
+          return .none
+        case .legacy:
+          return lifecycleEffect()
+            .cancellable(id: CancelID.lifecycle, cancelInFlight: true)
+        case .incompatible:
+          state.connection = .incompatible
+          return .none
+        }
+
+      case .nativeEvent(.noContractClaim):
+        guard state.authorityMode == .probing else { return .none }
+        state.authorityMode = .legacy
+        state.connection = .connecting
+        return lifecycleEffect()
+          .cancellable(id: CancelID.lifecycle, cancelInFlight: true)
+
+      case .nativeEvent(.aggregateStarted(let clientInstanceID)):
+        guard state.authorityMode != .legacy, state.authorityMode != .incompatible else {
+          return .none
+        }
+        state.authorityMode = .aggregate
+        state.nativeClientInstanceID = clientInstanceID
+        state.connection = .connecting
+        state.aggregateSyncCommitted = false
+        state.isResyncPending = false
         return .merge(
           .cancel(id: CancelID.lifecycle),
-          .cancel(id: CancelID.refreshDebounce),
-          .cancel(id: CancelID.refresh),
-          .cancel(id: CancelID.focus),
-          .cancel(id: CancelID.focusConfirmation),
-          .cancel(id: CancelID.mutation),
-          lifecycleEffect()
-            .cancellable(id: CancelID.lifecycle, cancelInFlight: true)
+          nativeHandshakeTimeoutEffect(clientInstanceID: clientInstanceID)
         )
 
+      case .nativeHandshakeTimedOut(let clientInstanceID):
+        guard state.authorityMode == .aggregate,
+          !state.aggregateSyncCommitted,
+          state.nativeClientInstanceID == clientInstanceID
+        else { return .none }
+        return .send(
+          .nativeEvent(.incompatible("Aggregate sync did not commit within one second."))
+        )
+
+      case .nativeEvent(.incompatible(let message)),
+        .nativeEvent(.stream(.incompatible(let message))):
+        guard state.authorityMode != .legacy else { return .none }
+        state.authorityMode = .incompatible
+        state.connection = .incompatible
+        state.aggregateSyncCommitted = false
+        state.aggregateProcessInfoByPaneTarget = [:]
+        state.pendingNativeMutationRequestID = nil
+        state.snapshot = .empty
+        state.selectedWorkspaceID = nil
+        state.selectedTabID = nil
+        state.selectedPaneID = nil
+        herdrTerminalChromeLogger.warning("Native chrome contract incompatible: \(message)")
+        return .merge(
+          .cancel(id: CancelID.nativeHandshake),
+          .cancel(id: CancelID.lifecycle),
+          .cancel(id: CancelID.focus),
+          .cancel(id: CancelID.mutation),
+          .cancel(id: CancelID.processInfoPoll)
+        )
+
+      case .nativeEvent(.stream(.disconnected)):
+        guard state.authorityMode == .aggregate else { return .none }
+        state.connection = state.isForeground ? .unavailable : .hidden
+        state.aggregateSyncCommitted = false
+        state.aggregateProcessInfoByPaneTarget = [:]
+        state.pendingNativeMutationRequestID = nil
+        state.snapshot = .empty
+        state.selectedWorkspaceID = nil
+        state.selectedTabID = nil
+        state.selectedPaneID = nil
+        state.pendingFocus = nil
+        state.pendingMutation = nil
+        return .merge(
+          .cancel(id: CancelID.focus),
+          .cancel(id: CancelID.mutation)
+        )
+
+      case .nativeEvent(.stream(.frame(let frame))):
+        guard state.authorityMode == .aggregate else { return .none }
+        let frameEffect = applyNativeFrame(&state, frame: frame)
+        guard state.aggregateSyncCommitted else { return frameEffect }
+        return .merge(.cancel(id: CancelID.nativeHandshake), frameEffect)
+
+      case .nativeProcessInfoPoll:
+        guard state.authorityMode == .aggregate,
+          state.aggregateSyncCommitted,
+          let endpoint = state.aggregateState?.committedEndpoint,
+          let snapshot = endpoint.snapshot
+        else { return .none }
+        return nativeProcessInfoEffect(&state, endpoint: endpoint, snapshot: snapshot)
+
       case .snapshotResponse(.success(let snapshot)):
-        guard state.connection != .hidden else { return .none }
+        guard state.acceptsLegacyAuthority, state.connection != .hidden else { return .none }
         let wasAwaitingSnapshot = state.subscriptionAwaitingSnapshot
         let shouldRestartLifecycle = replaceSnapshot(&state, with: snapshot) && wasAwaitingSnapshot
         state.subscriptionAwaitingSnapshot = false
@@ -400,23 +610,25 @@ internal struct HerdrTerminalChromeFeature {
         return shouldRestartLifecycle ? restartLifecycleEffect() : .none
 
       case .subscriptionPrepared(let paneIDs):
-        guard state.connection != .hidden else { return .none }
+        guard state.acceptsLegacyAuthority, state.connection != .hidden else { return .none }
         state.subscribedPaneIDs = paneIDs
         state.subscriptionAwaitingSnapshot = true
         return .none
 
       case .snapshotResponse(.failure(let failure)):
-        guard state.connection != .hidden else { return .none }
+        guard state.acceptsLegacyAuthority, state.connection != .hidden else { return .none }
         return handleFailure(&state, failure: failure)
 
       case .eventStream(.subscribed):
+        guard state.acceptsLegacyAuthority else { return .none }
         return .none
 
       case .eventStream(.event(let event)):
-        guard state.connection == .connected else { return .none }
+        guard state.acceptsLegacyAuthority, state.connection == .connected else { return .none }
         let eventName = event.event
+        let uptime = Self.monotonicMilliseconds()
         herdrTerminalChromeLogger.diagnostic(
-          "event-received uptime_ms=\(Self.monotonicMilliseconds()) name=\(eventName) generation=\(state.refreshGeneration)"
+          "event-received uptime_ms=\(uptime) name=\(eventName) generation=\(state.refreshGeneration)"
         )
         if eventName.replacing(".", with: "_") == "pane_exited" {
           applyPaneExit(&state, event: event)
@@ -455,6 +667,7 @@ internal struct HerdrTerminalChromeFeature {
         return scheduleDebouncedRefresh(&state)
 
       case .eventStream(.disconnected(let error)):
+        guard state.acceptsLegacyAuthority else { return .none }
         let failure = HerdrTerminalChromeFailure.map(error)
         if failure.isIncompatibleProtocol {
           return handleFailure(&state, failure: failure)
@@ -479,19 +692,23 @@ internal struct HerdrTerminalChromeFeature {
         )
 
       case .debouncedRefresh:
-        guard state.connection == .connected else { return .none }
+        guard state.acceptsLegacyAuthority, state.connection == .connected else { return .none }
         return startRefresh(&state)
 
       case .refreshResponseWithGeneration(let generation, let result):
-        guard generation == state.refreshGeneration else { return .none }
+        guard state.acceptsLegacyAuthority, generation == state.refreshGeneration else {
+          return .none
+        }
         switch result {
         case .success(let snapshot):
           guard state.connection != .hidden else { return .none }
           let shouldRestartLifecycle = replaceSnapshot(&state, with: snapshot)
           let focusedWorkspace = snapshot.focusedWorkspaceID ?? "?"
           let focusedTab = snapshot.focusedTabID ?? "?"
+          let uptime = Self.monotonicMilliseconds()
           herdrTerminalChromeLogger.diagnostic(
-            "snapshot-applied uptime_ms=\(Self.monotonicMilliseconds()) generation=\(generation) focused_workspace=\(focusedWorkspace) focused_tab=\(focusedTab)"
+            "snapshot-applied uptime_ms=\(uptime) generation=\(generation) "
+              + "focused_workspace=\(focusedWorkspace) focused_tab=\(focusedTab)"
           )
           state.connection = .connected
           return shouldRestartLifecycle ? restartLifecycleEffect() : .none
@@ -516,8 +733,41 @@ internal struct HerdrTerminalChromeFeature {
           )
         }
 
+      case .focusWorkspaceTarget(let target):
+        guard state.authorityMode == .aggregate, state.connection == .connected else {
+          return .none
+        }
+        return startNativeFocus(
+          &state,
+          endpointKey: target.endpointKey,
+          resourceKind: "workspace",
+          resourceID: target.workspaceID
+        )
+
+      case .focusTabTarget(let target):
+        guard state.authorityMode == .aggregate, state.connection == .connected else {
+          return .none
+        }
+        return startNativeFocus(
+          &state,
+          endpointKey: target.endpointKey,
+          resourceKind: "tab",
+          resourceID: target.tabID
+        )
+
+      case .focusPaneTarget(let target):
+        guard state.authorityMode == .aggregate, state.connection == .connected else {
+          return .none
+        }
+        return startNativeFocus(
+          &state,
+          endpointKey: target.endpointKey,
+          resourceKind: "pane",
+          resourceID: target.paneID
+        )
+
       case .focusWorkspaceTapped(let workspaceID):
-        guard state.connection == .connected else { return .none }
+        guard state.acceptsLegacyAuthority, state.connection == .connected else { return .none }
         let target = FocusTarget.workspace(workspaceID)
         Self.beginFocus(&state, target: target)
         return .merge(
@@ -526,7 +776,7 @@ internal struct HerdrTerminalChromeFeature {
         )
 
       case .focusTabTapped(let tabID):
-        guard state.connection == .connected else { return .none }
+        guard state.acceptsLegacyAuthority, state.connection == .connected else { return .none }
         let target = FocusTarget.tab(tabID)
         Self.beginFocus(&state, target: target)
         return .merge(
@@ -535,7 +785,7 @@ internal struct HerdrTerminalChromeFeature {
         )
 
       case .focusPaneTapped(let paneID):
-        guard state.connection == .connected else { return .none }
+        guard state.acceptsLegacyAuthority, state.connection == .connected else { return .none }
         let target = FocusTarget.pane(paneID)
         Self.beginFocus(&state, target: target)
         return .merge(
@@ -622,31 +872,35 @@ internal struct HerdrTerminalChromeFeature {
         guard generation == state.mutationGeneration else { return .none }
         let pendingMutation = state.pendingMutation
         state.pendingMutation = nil
+        state.pendingNativeMutationRequestID = nil
+        let followUp: Effect<Action>
         switch result {
         case .success:
           state.mutationError = nil
-          if case .some(.renameTab) = pendingMutation {
+          if state.authorityMode == .aggregate {
+            followUp = .none
+          } else if case .some(.renameTab) = pendingMutation {
             state.refreshGeneration &+= 1
-            return .merge(
+            followUp = .merge(
               .cancel(id: CancelID.refresh),
               scheduleDebouncedRefresh(&state)
             )
+          } else {
+            followUp = startRefresh(&state)
           }
-          return startRefresh(&state)
         case .failure(let failure):
           if case .closeTab(_, let workspaceID, true) = pendingMutation,
             failure.isConfirmationRequired
           {
             state.closeConfirmation = CloseConfirmation(workspaceID: workspaceID)
             state.mutationError = nil
-            return .none
+            followUp = .none
+          } else {
+            state.mutationError = failure
+            followUp = failure.isNotFound ? startRefresh(&state) : .none
           }
-          state.mutationError = failure
-          if failure.isNotFound {
-            return startRefresh(&state)
-          }
-          return .none
         }
+        return .merge(.cancel(id: CancelID.mutation), followUp)
 
       case .delegate:
         return .none
@@ -654,10 +908,427 @@ internal struct HerdrTerminalChromeFeature {
     }
   }
 
+  private func nativeHandshakeTimeoutEffect(clientInstanceID: String) -> Effect<Action> {
+    .run { send in
+      try await clock.sleep(for: Self.nativeClaimHandshakeTimeout)
+      await send(.nativeHandshakeTimedOut(clientInstanceID: clientInstanceID))
+    }
+    .cancellable(id: CancelID.nativeHandshake, cancelInFlight: true)
+  }
+
+  private func nativeLifecycleEffect() -> Effect<Action> {
+    let client = client
+    return .run { send in
+      for await event in client.nativeEvents() {
+        guard !Task.isCancelled else { return }
+        await send(.nativeEvent(event))
+      }
+    }
+  }
+
+  internal func applyNativeFrame(
+    _ state: inout State,
+    frame: HerdrNativeAggregateFrame
+  ) -> Effect<Action> {
+    let explicitlyCommitsSync =
+      frame.messageKind == "aggregate_sync_commit" && frame.syncCommitted
+    if state.isResyncPending {
+      guard explicitlyCommitsSync else { return .none }
+      state.nativeEventSequence = nil
+      state.nativeProjectionRevision = nil
+    } else if let sequence = state.nativeEventSequence, frame.sequence != sequence &+ 1 {
+      state.aggregateSyncCommitted = false
+      state.isResyncPending = true
+      state.connection = state.isForeground ? .unavailable : .hidden
+      state.snapshot = .empty
+      state.selectedWorkspaceID = nil
+      state.selectedTabID = nil
+      state.selectedPaneID = nil
+      return nativeResyncEffect(&state)
+    }
+    if let revision = state.nativeProjectionRevision,
+      frame.projectionRevision < revision
+    {
+      return .none
+    }
+
+    let acceptedEndpoints = acceptedNativeEndpoints(
+      &state,
+      candidates: frame.state.endpoints
+    )
+
+    let acceptedKeys = Set(acceptedEndpoints.map(\.endpointKey))
+    let aggregate = HerdrAggregateState(
+      catalogRevision: frame.state.catalogRevision,
+      endpoints: acceptedEndpoints,
+      perEndpointFocus: frame.state.perEndpointFocus.filter { acceptedKeys.contains($0.key) },
+      committedPresentation: frame.state.committedPresentation,
+      requestedSelection: frame.state.requestedSelection,
+      pendingActivation: frame.state.pendingActivation,
+      capabilities: frame.state.capabilities
+    )
+    state.aggregateState = aggregate
+    state.nativeEventSequence = frame.sequence
+    state.nativeProjectionRevision = frame.projectionRevision
+    if let activationEpoch = frame.activationEpoch {
+      state.activationEpoch = max(state.activationEpoch, activationEpoch)
+    }
+    state.aggregateSyncCommitted = state.aggregateSyncCommitted || explicitlyCommitsSync
+    state.isResyncPending = false
+    let resultEffect: Effect<Action>
+    if state.aggregateSyncCommitted {
+      synchronizeNativeProcessInfo(
+        &state,
+        frame: frame,
+        acceptedEndpoints: acceptedEndpoints
+      )
+      resultEffect = nativeMutationResultEffect(state, frame: frame)
+    } else {
+      state.aggregateProcessInfoByPaneTarget = [:]
+      resultEffect = .none
+    }
+
+    guard state.aggregateSyncCommitted,
+      let endpoint = aggregate.committedEndpoint,
+      endpoint.status == .online,
+      endpoint.freshness == .current,
+      let snapshot = endpoint.snapshot
+    else {
+      state.connection = state.isForeground ? .unavailable : .hidden
+      state.snapshot = .empty
+      state.selectedWorkspaceID = nil
+      state.selectedTabID = nil
+      state.selectedPaneID = nil
+      return resultEffect
+    }
+    state.connection = state.isForeground ? .connected : .hidden
+    state.snapshot = snapshot.legacyProjection
+    let selection = aggregate.committedActiveSelection
+    state.selectedWorkspaceID = selection?.workspaceID ?? snapshot.focusedWorkspaceID
+    state.selectedTabID = selection?.tabID ?? snapshot.focusedTabID
+    state.selectedPaneID = selection?.paneID ?? snapshot.focusedPaneID
+    state.pendingFocus = nil
+    state.focusRollback = nil
+    let processInfoEffect =
+      frame.messageKind == "process_info_result"
+      ? scheduleNativeProcessInfoPoll()
+      : nativeProcessInfoEffect(&state, endpoint: endpoint, snapshot: snapshot)
+    return .merge(resultEffect, processInfoEffect)
+  }
+
+  private func acceptedNativeEndpoints(
+    _ state: inout State,
+    candidates: [HerdrEndpointProjection]
+  ) -> [HerdrEndpointProjection] {
+    let previousByKey = Dictionary(
+      uniqueKeysWithValues: (state.aggregateState?.endpoints ?? []).map { ($0.endpointKey, $0) }
+    )
+    var accepted: [HerdrEndpointProjection] = []
+    for endpoint in candidates {
+      switch endpoint.connectionIdentity {
+      case .absent:
+        accepted.append(endpoint)
+      case .concrete(let identity):
+        guard let snapshot = endpoint.snapshot,
+          snapshot.bootID == identity.serverBootID
+        else {
+          if let previous = previousByKey[endpoint.endpointKey] {
+            accepted.append(previous)
+          }
+          continue
+        }
+        let fence = HerdrEndpointFence(
+          endpointKey: endpoint.endpointKey,
+          identity: identity,
+          snapshotRevision: snapshot.revision
+        )
+        switch state.endpointWatermarks.accept(fence) {
+        case .accepted, .replacedConnection:
+          accepted.append(endpoint)
+        case .stale:
+          if let previous = previousByKey[endpoint.endpointKey],
+            previous.connectionIdentity == endpoint.connectionIdentity,
+            previous.snapshot?.revision == endpoint.snapshot?.revision
+          {
+            accepted.append(endpoint)
+          } else if let previous = previousByKey[endpoint.endpointKey] {
+            accepted.append(previous)
+          }
+        case .retiredConnection:
+          if let previous = previousByKey[endpoint.endpointKey] {
+            accepted.append(previous)
+          }
+        }
+      }
+    }
+    return accepted
+  }
+
+  private func synchronizeNativeProcessInfo(
+    _ state: inout State,
+    frame: HerdrNativeAggregateFrame,
+    acceptedEndpoints: [HerdrEndpointProjection]
+  ) {
+    if frame.messageKind == "process_info_result",
+      let target = frame.processInfoTarget,
+      let resultFence = frame.processInfoFence,
+      let processInfo = frame.processInfo,
+      let endpoint = acceptedEndpoints.first(where: { $0.endpointKey == target.endpointKey }),
+      case .concrete(let identity) = endpoint.connectionIdentity,
+      let endpointSnapshot = endpoint.snapshot,
+      resultFence
+        == HerdrEndpointFence(
+          endpointKey: target.endpointKey,
+          identity: identity,
+          snapshotRevision: endpointSnapshot.revision
+        )
+    {
+      state.aggregateProcessInfoByPaneTarget[target] = processInfo
+    }
+    let validPaneTargets = Set(
+      acceptedEndpoints.flatMap { endpoint in
+        (endpoint.snapshot?.panes ?? []).map {
+          HerdrPaneTarget(endpointKey: endpoint.endpointKey, paneID: $0.paneID)
+        }
+      }
+    )
+    state.aggregateProcessInfoByPaneTarget = state.aggregateProcessInfoByPaneTarget.filter {
+      validPaneTargets.contains($0.key)
+    }
+  }
+
+  private func nativeMutationResultEffect(
+    _ state: State,
+    frame: HerdrNativeAggregateFrame
+  ) -> Effect<Action> {
+    guard frame.messageKind == "mutation_result",
+      frame.requestID == state.pendingNativeMutationRequestID,
+      let result = frame.mutationResult
+    else { return .none }
+    let response: MutationResult =
+      result.succeeded
+      ? .success
+      : .failure(.invalidResponse(result.message ?? "Herdr rejected the mutation."))
+    return .send(.mutationResponse(state.mutationGeneration, response))
+  }
+
+  private func nativeProcessInfoEffect(
+    _ state: inout State,
+    endpoint: HerdrEndpointProjection,
+    snapshot: HerdrClientShellSnapshot
+  ) -> Effect<Action> {
+    guard case .concrete(let identity) = endpoint.connectionIdentity else { return .none }
+    let fence = HerdrEndpointFence(
+      endpointKey: endpoint.endpointKey,
+      identity: identity,
+      snapshotRevision: snapshot.revision
+    )
+    let paneIDs = Dictionary(grouping: snapshot.panes, by: \.tabID).values.compactMap { panes in
+      (panes.first(where: \.focused) ?? panes.first)?.paneID
+    }
+    let client = client
+    let effects = paneIDs.map { paneID in
+      state.nativeRequestSequence &+= 1
+      let request = HerdrNativeActionRequest(
+        requestID: "prowl-native-process-\(state.nativeRequestSequence)",
+        activationEpoch: nil,
+        payload: HerdrNativeActionPayload(
+          action: "process_info",
+          endpointKey: endpoint.endpointKey,
+          endpointFence: fence,
+          resourceKind: "pane",
+          resourceID: paneID,
+          method: nil,
+          params: nil
+        )
+      )
+      return Effect<Action>.run { _ in try await client.sendNativeAction(request) }
+    }
+    return .merge(.merge(effects), scheduleNativeProcessInfoPoll())
+  }
+
+  private func scheduleNativeProcessInfoPoll() -> Effect<Action> {
+    .run { send in
+      try await clock.sleep(for: .seconds(1))
+      await send(.nativeProcessInfoPoll)
+    }
+    .cancellable(id: CancelID.processInfoPoll, cancelInFlight: true)
+  }
+
+  private func nativeResyncEffect(_ state: inout State) -> Effect<Action> {
+    state.nativeRequestSequence &+= 1
+    let request = HerdrNativeActionRequest(
+      requestID: "prowl-native-resync-\(state.nativeRequestSequence)",
+      activationEpoch: nil,
+      payload: HerdrNativeActionPayload(
+        action: "resync",
+        endpointKey: nil,
+        endpointFence: nil,
+        resourceKind: nil,
+        resourceID: nil,
+        method: nil,
+        params: nil
+      )
+    )
+    let client = client
+    return .run { _ in try await client.sendNativeAction(request) }
+  }
+
+  private func startNativeFocus(
+    _ state: inout State,
+    endpointKey: HerdrEndpointKey,
+    resourceKind: String,
+    resourceID: String
+  ) -> Effect<Action> {
+    guard !resourceID.isEmpty,
+      state.aggregateSyncCommitted,
+      let endpoint = state.aggregateState?.endpoints.first(where: { $0.endpointKey == endpointKey }
+      ),
+      endpoint.availability == .enabled,
+      endpoint.status == .online,
+      endpoint.freshness == .current,
+      let fence = nativeFence(for: endpoint)
+    else { return .none }
+
+    let isActivation = endpointKey != state.committedActiveEndpointKey
+    guard isActivation ? endpoint.activation.canActivate : endpoint.activation.canFocus else {
+      return .none
+    }
+    state.nativeRequestSequence &+= 1
+    if isActivation { state.activationEpoch &+= 1 }
+    let request = HerdrNativeActionRequest(
+      requestID: "prowl-native-focus-\(state.nativeRequestSequence)",
+      activationEpoch: isActivation ? state.activationEpoch : nil,
+      payload: HerdrNativeActionPayload(
+        action: isActivation ? "activate" : "focus",
+        endpointKey: endpointKey,
+        endpointFence: fence,
+        resourceKind: resourceKind,
+        resourceID: resourceID,
+        method: nil,
+        params: nil
+      )
+    )
+    let client = client
+    return .run { send in
+      do {
+        try await client.sendNativeAction(request)
+        await send(.focusResponse(.success))
+      } catch {
+        await send(
+          .focusResponse(.failure(.invalidResponse(String(describing: error))))
+        )
+      }
+    }
+    .cancellable(id: CancelID.focus, cancelInFlight: true)
+  }
+
+  private func startNativeMutation(
+    _ state: inout State,
+    _ mutation: Mutation
+  ) -> Effect<Action> {
+    guard state.aggregateSyncCommitted,
+      let endpoint = state.aggregateState?.committedEndpoint,
+      endpoint.status == .online,
+      endpoint.freshness == .current,
+      let fence = nativeFence(for: endpoint)
+    else { return .none }
+
+    let method: String
+    let params: [String: HerdrJSONValue]
+    switch mutation {
+    case .createWorkspace:
+      method = "workspace.create"
+      params = ["focus": .bool(true)]
+    case .createTab(let workspaceID, let label, let sourceTabID):
+      method = "tab.create"
+      params = [
+        "workspace_id": .string(workspaceID),
+        "focus": .bool(true),
+        "label": label.map(HerdrJSONValue.string) ?? .null,
+        "source_tab_id": sourceTabID.map(HerdrJSONValue.string) ?? .null,
+      ]
+    case .renameTab(let tabID, let label):
+      method = "tab.rename"
+      params = ["tab_id": .string(tabID), "label": label.map(HerdrJSONValue.string) ?? .null]
+    case .moveTab(let tabID, let insertIndex):
+      method = "tab.move"
+      params = ["tab_id": .string(tabID), "insert_index": .int(insertIndex)]
+    case .closeTab(let tabID, _, _):
+      method = "tab.close"
+      params = ["tab_id": .string(tabID)]
+    case .closeWorkspace(let workspaceID):
+      method = "workspace.close"
+      params = ["workspace_id": .string(workspaceID), "close_group": .bool(true)]
+    }
+    guard endpoint.activation.optionalMethods.contains(method) else { return .none }
+
+    state.pendingMutation = mutation
+    state.mutationError = nil
+    state.mutationGeneration &+= 1
+    state.nativeRequestSequence &+= 1
+    let generation = state.mutationGeneration
+    let requestID = "prowl-native-mutation-\(state.nativeRequestSequence)"
+    state.pendingNativeMutationRequestID = requestID
+    let request = HerdrNativeActionRequest(
+      requestID: requestID,
+      activationEpoch: nil,
+      payload: HerdrNativeActionPayload(
+        action: "mutate",
+        endpointKey: endpoint.endpointKey,
+        endpointFence: fence,
+        resourceKind: nil,
+        resourceID: nil,
+        method: method,
+        params: params
+      )
+    )
+    let client = client
+    let clock = clock
+    return .run { send in
+      do {
+        try await client.sendNativeAction(request)
+        try await clock.sleep(for: Self.nativeMutationTimeout)
+        guard !Task.isCancelled else { return }
+        await send(
+          .mutationResponse(
+            generation,
+            .failure(.invalidResponse("Herdr mutation response timed out."))
+          )
+        )
+      } catch is CancellationError {
+        return
+      } catch {
+        await send(
+          .mutationResponse(
+            generation,
+            .failure(.invalidResponse(String(describing: error)))
+          )
+        )
+      }
+    }
+    .cancellable(id: CancelID.mutation, cancelInFlight: true)
+  }
+
+  private func nativeFence(for endpoint: HerdrEndpointProjection) -> HerdrEndpointFence? {
+    guard case .concrete(let identity) = endpoint.connectionIdentity,
+      let snapshot = endpoint.snapshot,
+      snapshot.bootID == identity.serverBootID
+    else { return nil }
+    return HerdrEndpointFence(
+      endpointKey: endpoint.endpointKey,
+      identity: identity,
+      snapshotRevision: snapshot.revision
+    )
+  }
+
   private func startMutation(
     _ state: inout State,
     _ mutation: Mutation
   ) -> Effect<Action> {
+    if state.authorityMode == .aggregate {
+      return startNativeMutation(&state, mutation)
+    }
     state.pendingMutation = mutation
     state.mutationError = nil
     state.mutationGeneration &+= 1
@@ -729,7 +1400,8 @@ internal struct HerdrTerminalChromeFeature {
       while !Task.isCancelled {
         do {
           let discoverySnapshot = try await client.snapshot()
-          let subscription = try await client.subscribeEvents(Set(discoverySnapshot.panes.map(\.id)))
+          let subscription = try await client.subscribeEvents(
+            Set(discoverySnapshot.panes.map(\.id)))
           defer { subscription.cancel() }
           guard !Task.isCancelled else { return }
           await send(.subscriptionPrepared(Set(discoverySnapshot.panes.map(\.id))))
@@ -775,14 +1447,21 @@ internal struct HerdrTerminalChromeFeature {
       do {
         let snapshot = try await client.snapshot()
         guard !Task.isCancelled else { return }
+        let currentUptime = ProcessInfo.processInfo.systemUptime
+        let elapsedMilliseconds = Int((currentUptime - startedAt) * 1_000)
         herdrTerminalChromeLogger.diagnostic(
-          "snapshot-effect-end uptime_ms=\(Int(ProcessInfo.processInfo.systemUptime * 1_000)) elapsed_ms=\(Int((ProcessInfo.processInfo.systemUptime - startedAt) * 1_000)) generation=\(generation)"
+          "snapshot-effect-end uptime_ms=\(Int(currentUptime * 1_000)) "
+            + "elapsed_ms=\(elapsedMilliseconds) generation=\(generation)"
         )
         await send(.refreshResponseWithGeneration(generation, .success(snapshot)))
       } catch {
         guard !Task.isCancelled else { return }
+        let currentUptime = ProcessInfo.processInfo.systemUptime
+        let elapsedMilliseconds = Int((currentUptime - startedAt) * 1_000)
         herdrTerminalChromeLogger.diagnostic(
-          "snapshot-effect-failure uptime_ms=\(Int(ProcessInfo.processInfo.systemUptime * 1_000)) elapsed_ms=\(Int((ProcessInfo.processInfo.systemUptime - startedAt) * 1_000)) generation=\(generation) error=\(String(describing: error))"
+          "snapshot-effect-failure uptime_ms=\(Int(currentUptime * 1_000)) "
+            + "elapsed_ms=\(elapsedMilliseconds) generation=\(generation) "
+            + "error=\(String(describing: error))"
         )
         await send(
           .refreshResponseWithGeneration(

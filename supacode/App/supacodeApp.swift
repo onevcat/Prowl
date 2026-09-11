@@ -262,6 +262,7 @@ struct SupacodeApp: App {
     ghostty: GhosttyRuntime,
     initialSettings: GlobalSettings
   ) -> CleanRuntime {
+    let nativeChromeCoordinator = HerdrNativeChromeCoordinator()
     let store = Store(
       initialState: CleanAppFeature.State(
         settings: SettingsFeature.State(settings: initialSettings)
@@ -269,10 +270,13 @@ struct SupacodeApp: App {
     ) {
       CleanAppFeature()
         .logActions()
+    } withDependencies: { values in
+      values.herdrTerminalChromeClient = .live(coordinator: nativeChromeCoordinator)
     }
     let terminalHost = CleanTerminalHost(
       runtime: ghostty,
       preferredFontSize: initialSettings.terminalFontSize,
+      nativeChromeCoordinator: nativeChromeCoordinator,
       onHerdrCompatibilityFailure: { [weak store] error in
         store?.send(.herdrCompatibilityFailure(error))
       },

@@ -16,15 +16,21 @@ struct CleanWindowAndSurfaceTests {
       paneID: "p1",
       foregroundProcesses: [HerdrPaneProcess(pid: 10, name: "zsh")]
     )
-    let current = ["p1": lazygit]
+    let localPane = HerdrPaneTarget(endpointKey: .local, paneID: "p1")
+    let remotePane = HerdrPaneTarget(
+      endpointKey: .ssh(profileID: "0123456789abcdef0123456789abcdef"),
+      paneID: "p1"
+    )
+    let current = [localPane: lazygit]
 
     #expect(
-      HerdrProcessInfoCache.updated(current, with: [("p1", lazygit)]) == nil
+      HerdrProcessInfoCache.updated(current, with: [(localPane, lazygit)]) == nil
     )
     let updated = try #require(
-      HerdrProcessInfoCache.updated(current, with: [("p1", shell)])
+      HerdrProcessInfoCache.updated(current, with: [(remotePane, shell)])
     )
-    #expect(updated["p1"] == shell)
+    #expect(updated[localPane] == lazygit)
+    #expect(updated[remotePane] == shell)
   }
 
   @Test func processPaneTrackingKeepsRepresentativesUntilFocusIsKnown() {
@@ -98,7 +104,7 @@ struct CleanWindowAndSurfaceTests {
     #expect(configuration.context == GHOSTTY_SURFACE_CONTEXT_WINDOW)
   }
 
-  @Test func terminalHostCreatesItsPlainHomeSurfaceOnlyOnce() {
+  @Test func terminalHostCreatesItsPlainHomeSurfaceOnlyOnce() throws {
     let runtime = GhosttyRuntime()
     let createdSurface = GhosttySurfaceView(
       runtime: runtime,
@@ -119,13 +125,18 @@ struct CleanWindowAndSurfaceTests {
     host.start()
     host.start()
 
+    #expect(configurations.count == 1)
+    let configuration = try #require(configurations.first)
+    #expect(configuration.workingDirectory == FileManager.default.homeDirectoryForCurrentUser)
+    #expect(configuration.initialInput == nil)
+    #expect(configuration.command == nil)
+    #expect(configuration.fontSize == 15)
+    #expect(configuration.context == GHOSTTY_SURFACE_CONTEXT_WINDOW)
+    #expect(configuration.environment["PROWL_HERDR_NATIVE_CHROME"] == "1")
+    #expect(configuration.environment["PROWL_HERDR_NATIVE_CHROME_SOCKET"]?.isEmpty == false)
+    #expect(configuration.environment["PROWL_HERDR_NATIVE_CHROME_SURFACE_PROOF"]?.isEmpty == false)
     #expect(
-      configurations == [
-        .default(
-          homeDirectory: FileManager.default.homeDirectoryForCurrentUser,
-          preferredFontSize: 15
-        )
-      ]
+      configuration.environment["PROWL_HERDR_NATIVE_CHROME_CLIENT_INSTANCE_ID"]?.isEmpty == false
     )
     #expect(host.surface === createdSurface)
     host.suspend()
