@@ -22,14 +22,9 @@ final class RemoteMirrorStore {
 
   func makeClient(address: String, port: UInt16, pairingKey: String) -> MirrorClient {
     let client = MirrorClient(
-      address: address, port: port, pairingKey: pairingKey, replica: MirrorReplica(runtime: runtime)
+      configuration: .init(address: address, port: port, pairingKey: pairingKey),
+      replica: MirrorReplica(runtime: runtime)
     )
-    client.onVerifiedConnection = { [weak self] in
-      do {
-        try MirrorSavedConnection(address: address, port: port, pairingKey: pairingKey).save()
-        self?.credentialError = nil
-      } catch { self?.credentialError = error.localizedDescription }
-    }
     return client
   }
 

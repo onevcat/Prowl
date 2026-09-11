@@ -24,12 +24,12 @@ final class MirrorClient: Identifiable {
   private(set) var isLoadingHistory = false
   var showsHistory = false
   let replica: MirrorReplica
-  @ObservationIgnored private let pairingKey: String
-  @ObservationIgnored private var peer: MirrorConnection?
+  @ObservationIgnored private var configuration: MirrorSavedConnection
+  @ObservationIgnored private let makeConnection: (MirrorSavedConnection) -> MirrorRemoteConnection
+  @ObservationIgnored private var peer: MirrorRemoteConnection?
   @ObservationIgnored private var historyID: UUID?
   @ObservationIgnored private var historyPageGate = MirrorHistoryPageGate()
   @ObservationIgnored private var subscriptionID: UUID?
-  @ObservationIgnored private var version = 1
   @ObservationIgnored private var resumeIntent: MirrorMessage.Intent = .ifFree
 
   var statusLabel: String {
@@ -48,31 +48,34 @@ final class MirrorClient: Identifiable {
     connect()
   }
 
-  init(address: String, port: UInt16, pairingKey: String, replica: MirrorReplica) {
-    self.address = address
-    self.port = port
-    self.pairingKey = pairingKey
+  init(
+    configuration: MirrorSavedConnection, replica: MirrorReplica,
+    makeConnection: @escaping (MirrorSavedConnection) -> MirrorRemoteConnection = {
+      MirrorRemoteConnection(configuration: $0)
+    }
+  ) {
+    self.address = configuration.address
+    self.port = configuration.port
+    self.configuration = configuration
     self.replica = replica
+    self.makeConnection = makeConnection
   }
 
   func connect() {
     guard peer == nil else { return }
     error = nil
     endReason = nil
-    version = 1
     subscriptionID = nil
     isSubscribed = false
     isConnecting = true
     do {
-      let peer = MirrorConnection(
-        NWConnection(
-          host: .init(address), port: .init(rawValue: port)!,
-          using: try MirrorConnection.parameters(pairingKey: pairingKey)))
+      let peer = makeConnection(configuration)
       self.peer = peer
       peer.onReady = { [weak self, weak peer] in
         guard let self, let peer, self.peer === peer else { return }
+        if let verified = peer.verifiedConfiguration { self.configuration = verified }
         self.isConnected = true
-        peer.send(MirrorMessage(kind: .list, supportedVersions: [2, 1]))
+        peer.send(.list)
       }
       peer.onMessage = { [weak self, weak peer] message in
         guard let self, let peer, self.peer === peer else { return }
@@ -95,7 +98,7 @@ final class MirrorClient: Identifiable {
     }
   }
 
-  func refreshPanes() { peer?.send(MirrorMessage(kind: .list, supportedVersions: [2, 1])) }
+  func refreshPanes() { peer?.send(.list) }
 
   func subscribe(_ pane: MirrorPaneDescriptor) {
     guard selectedPane == nil, isConnected else { return }
@@ -110,16 +113,14 @@ final class MirrorClient: Identifiable {
       replica.onMessage = { [weak self] message in
         guard let self, self.isSubscribed,
           message.kind == .input || message.kind == .acknowledge,
-          self.version == 1 || message.subscriptionID == self.subscriptionID
+          message.subscriptionID == self.subscriptionID
         else { return }
         self.peer?.send(message)
       }
       replica.onFailure = { [weak self] reason in self?.peer?.close(reason) }
       try replica.start()
       peer?.send(
-        MirrorMessage(
-          version: version, kind: .subscribe, paneID: pane.id,
-          representation: version == 2 ? .terminal : nil, intent: version == 2 ? resumeIntent : nil)
+        .subscribe(.init(paneID: pane.id, representation: .terminal, intent: resumeIntent))
       )
     } catch { peer?.close(error.localizedDescription) }
   }
@@ -139,7 +140,7 @@ final class MirrorClient: Identifiable {
   }
 
   func loadHistory(refresh: Bool = false) {
-    guard isSubscribed, supportsHistory, !isLoadingHistory else { return }
+    guard isSubscribed, supportsHistory, !isLoadingHistory, let subscriptionID else { return }
     guard refresh || historyID == nil || historyOffset > 0 else { return }
     if refresh {
       historyID = nil
@@ -149,17 +150,17 @@ final class MirrorClient: Identifiable {
     isLoadingHistory = true
     showsHistory = true
     peer?.send(
-      MirrorMessage(
-        version: version, kind: .history, historyID: historyID,
-        offset: historyID == nil ? nil : historyOffset, subscriptionID: subscriptionID))
+      .history(
+        .init(
+          historyID: historyID, offset: historyID == nil ? nil : historyOffset,
+          subscriptionID: subscriptionID)))
   }
 
   private func receive(_ message: MirrorMessage) {
     switch message.kind {
     case .panes: receivePanes(message)
-    case .state: break
     case .subscribed:
-      guard version == 2, message.version == 2, message.paneID == selectedPane?.id,
+      guard message.paneID == selectedPane?.id,
         let id = message.subscriptionID
       else {
         peer?.close("Invalid subscription.")
@@ -174,7 +175,7 @@ final class MirrorClient: Identifiable {
       receiveEnd(message)
     case .frame:
       guard selectedPane != nil,
-        version == 1 || (subscriptionID != nil && message.subscriptionID == subscriptionID)
+        subscriptionID != nil && message.subscriptionID == subscriptionID
       else {
         peer?.close("Unexpected Host frame.")
         return
@@ -183,11 +184,11 @@ final class MirrorClient: Identifiable {
       replica.display(message)
     case .historyPage:
       if historyID == nil { historyPageGate = MirrorHistoryPageGate() }
-      guard isLoadingHistory, version == 1 || message.subscriptionID == subscriptionID,
+      guard isLoadingHistory, message.subscriptionID == subscriptionID,
         let id = message.historyID, let offset = message.offset,
         let lines = message.lines, lines.count <= MirrorHistory.pageSize, offset >= 0,
         historyID == nil || historyID == id,
-        historyPageGate.accept(message, requiresTimestamp: version == 2)
+        historyPageGate.accept(message)
       else {
         peer?.close("Invalid history page.")
         return
@@ -227,9 +228,8 @@ final class MirrorClient: Identifiable {
 
   private func receivePanes(_ message: MirrorMessage) {
     panes = message.panes ?? []
-    version = message.selectedVersion == 2 ? 2 : 1
-    supportsHistory = version == 1 || message.capabilities?.contains("history") == true
-    supportsTakeover = version == 2 && message.capabilities?.contains("takeover") == true
+    supportsHistory = message.capabilities?.contains("history") == true
+    supportsTakeover = message.capabilities?.contains("takeover") == true
     isConnecting = false
     onVerifiedConnection?()
     if selectedPane != nil, !isSubscribed {

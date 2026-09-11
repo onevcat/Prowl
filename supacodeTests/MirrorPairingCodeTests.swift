@@ -4,11 +4,11 @@ import Testing
 @testable import supacode
 
 struct MirrorPairingCodeTests {
-  @Test func shortCodeNormalizesAndLegacyKeyRemainsCompatible() throws {
+  @Test func shortCodeNormalizesAndLegacyKeyIsRejected() throws {
     #expect(try MirrorPairingCode.normalized(" k7mp-3x9r \n") == "K7MP3X9R")
     #expect(try MirrorPairingCode.normalized("K7MP 3X9R") == "K7MP3X9R")
     let legacy = String(repeating: "a", count: 64)
-    #expect(try MirrorPairingCode.normalized(legacy) == legacy)
+    #expect(throws: MirrorProtocolError.self) { try MirrorPairingCode.normalized(legacy) }
     for invalid in ["", "ABCD", "ABCD-23456", "ABCD-01OI", "ABCD-23é4"] {
       #expect(throws: MirrorProtocolError.self) { try MirrorPairingCode.normalized(invalid) }
     }

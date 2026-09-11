@@ -15,15 +15,25 @@ struct MirrorProtocolTests {
     #expect(gate.offer("unchanged") == nil)
   }
 
-  @Test func discoveryNegotiatesWithoutBreakingLegacyMessages() throws {
-    let request = MirrorMessage(kind: .list, supportedVersions: [2, 1])
-    let decoded = try MirrorWire.decode(MirrorWire.encode(request).dropFirst(4))
-    #expect(decoded.version == 1)
-    #expect(decoded.supportedVersions == [2, 1])
-    let legacy = try MirrorWire.decode(Data(#"{"version":1,"kind":"list"}"#.utf8))
-    #expect(legacy.supportedVersions == nil)
-    let text = MirrorMessage(version: 2, kind: .textFrame, text: "思考\n", subscriptionID: UUID())
-    #expect(try MirrorWire.decode(MirrorWire.encode(text).dropFirst(4)).text == "思考\n")
+  @Test func binaryTextFrameHasStableVectorAndRejectsLegacyJSON() throws {
+    let id = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+    let message = MirrorMessage.textFrame(.init(sequence: 1, text: "A", subscriptionID: id))
+    let wire = try MirrorWire.encode(message)
+    var expected: [UInt8] = [0, 0, 0, 35, 2]
+    expected += Array(repeating: 0, count: 15)
+    expected += [1]
+    expected += Array(repeating: 0, count: 7)
+    expected += [1]
+    expected += Array(repeating: 0, count: 9)
+    expected += [65]
+    #expect(Array(wire) == expected)
+    #expect(try MirrorWire.decode(wire.dropFirst(4)).text == "A")
+    #expect(throws: (any Error).self) {
+      try MirrorWire.decode(Data(#"{"version":1,"kind":"list"}"#.utf8))
+    }
+    #expect(throws: (any Error).self) {
+      try MirrorWire.decode(Data([0]) + Data(#"{"subscribed":{}}"#.utf8))
+    }
   }
 
   @Test func textGatePreservesEmptyReplacementAndRejectsStaleAcknowledgements() throws {
@@ -38,16 +48,17 @@ struct MirrorProtocolTests {
     #expect(gate.offer("conclusion") == 3)
   }
 
-  @Test func paneLabelsPreserveMetadataAndDecodeOlderHosts() throws {
+  @Test func paneLabelsPreserveOptionalMetadata() throws {
     let pane = MirrorPaneDescriptor(
       id: UUID(), title: "VKChannel · Codex", directory: "/projects/VKChannel", busy: true,
       projectName: "VKChannel", subtitle: "Codex · master · Pane 2")
-    let wire = try MirrorWire.encode(MirrorMessage(kind: .panes, panes: [pane]))
+    let wire = try MirrorWire.encode(
+      .panes(.init(panes: [pane], capabilities: [], hostRunID: UUID())))
     #expect(try MirrorWire.decode(wire.dropFirst(4)).panes == [pane])
-    let legacy = Data(
+    let minimal = Data(
       "{\"id\":\"\(pane.id)\",\"title\":\"master\",\"directory\":\"/projects/VKChannel\",\"busy\":false}"
         .utf8)
-    let decoded = try JSONDecoder().decode(MirrorPaneDescriptor.self, from: legacy)
+    let decoded = try JSONDecoder().decode(MirrorPaneDescriptor.self, from: minimal)
     #expect(decoded.projectName == nil)
     #expect(decoded.subtitle == nil)
     #expect(decoded.title == "master")
@@ -55,7 +66,8 @@ struct MirrorProtocolTests {
 
   @Test func frameRoundTripKeepsControlBytesAndUnicode() throws {
     let frame = MirrorFrame(columns: 81, rows: 25, bytes: Data("\u{1b}[2J思考中\r结论\u{1b}[H".utf8))
-    let wire = try MirrorWire.encode(MirrorMessage(kind: .frame, frame: frame, sequence: 1))
+    let wire = try MirrorWire.encode(
+      .frame(.init(frame: frame, sequence: 1, subscriptionID: UUID())))
     #expect(try MirrorWire.length(wire.prefix(4)) == wire.count - 4)
     #expect(try MirrorWire.decode(wire.dropFirst(4)).frame == frame)
   }

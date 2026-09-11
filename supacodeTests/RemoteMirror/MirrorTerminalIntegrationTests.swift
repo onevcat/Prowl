@@ -25,6 +25,20 @@ struct MirrorTerminalIntegrationTests {
     #expect(state.agentDetectionSchedules[id] != nil)
   }
 
+  @Test(.timeLimit(.minutes(1))) func codexHintStylingSurvivesRealGhosttyCapture() async throws {
+    let fixture = try Fixture()
+    defer { fixture.close() }
+    try await fixture.wait("Host program ready") { fixture.hostText.contains("READY") }
+    try fixture.send("hint")
+    try await fixture.wait("Dim hint rendered") { fixture.hostText.contains("Ask Codex to do anything") }
+    let dim = try #require(fixture.hostView.readStyledSnapshotForCLI())
+    #expect(CodexScreenProfile.composerHasNoDraft(styledSnapshot: dim))
+    try fixture.send("draft")
+    try await fixture.wait("Draft rendered") { fixture.hostText.contains("DRAFT") }
+    let draft = try #require(fixture.hostView.readStyledSnapshotForCLI())
+    #expect(!CodexScreenProfile.composerHasNoDraft(styledSnapshot: draft))
+  }
+
   @Test(.timeLimit(.minutes(2))) func boundedCapturePreservesRealSurface() async throws {
     let fixture = try Fixture()
     defer { fixture.close() }
@@ -231,6 +245,7 @@ struct MirrorTerminalIntegrationTests {
     let hostView: GhosttySurfaceView
     let source: GhosttyMirrorPaneSource
     let host: MirrorHost
+    let credential: MirrorDeviceCredential
     let suite: String
     let defaults: UserDefaults
     let previousRuntime: GhosttyRuntime?
@@ -276,7 +291,13 @@ struct MirrorTerminalIntegrationTests {
       source = GhosttyMirrorPaneSource(manager: manager)
       suite = "MirrorTerminalIntegration-\(UUID())"
       defaults = try #require(UserDefaults(suiteName: suite))
-      host = MirrorHost(source: source, defaults: defaults, enabled: true)
+      let device = MirrorPairedDevice(
+        id: UUID(), name: "Terminal test", key: try MirrorAuthentication.randomKey(), pairedAt: Date())
+      let identity = MirrorHostIdentity(id: UUID(), devices: [device])
+      credential = .init(hostID: identity.id, deviceID: device.id, key: device.key)
+      host = MirrorHost(
+        source: source, defaults: defaults, enabled: true,
+        loadIdentity: { identity }, saveIdentity: { _ in })
       host.address = "127.0.0.1"
       host.port = String(try MirrorTestPort.unusedPort())
       attach(hostView)
@@ -311,8 +332,9 @@ struct MirrorTerminalIntegrationTests {
 
     func makeClient() -> MirrorClient {
       let client = MirrorClient(
-        address: "127.0.0.1", port: UInt16(host.port)!, pairingKey: host.pairingKey,
-        replica: MirrorReplica(runtime: runtime))
+        configuration: .init(address: "127.0.0.1", port: UInt16(host.port)!, pairingKey: "", credential: credential),
+        replica: MirrorReplica(runtime: runtime),
+        makeConnection: { MirrorRemoteConnection(configuration: $0, restore: { _ in nil }, persist: { _ in }) })
       clients.append(client)
       return client
     }
@@ -411,6 +433,8 @@ struct MirrorTerminalIntegrationTests {
       while :; do
         IFS= read -r action || continue
         case "$action" in
+          hint) printf '\033[2J\033[HHINT\r\n› \033[2mAsk Codex to do anything\033[0m\r\n  gpt-5.6 · ~/work';;
+          draft) printf '\033[2J\033[HDRAFT\r\n› Ask Codex to do anything\r\n  gpt-5.6 · ~/work';;
           think) printf '\033[2J\033[H\033[31mTHINKING:思考中\033[0m\033[4;7H';;
           finish) printf '\033[2J\033[H\033[32mFINAL:结论\033[0m\033[2;3H';;
           history) for ((n=1; n<=450; n++)); do printf 'HISTORY:%03d\n' "$n"; done;;

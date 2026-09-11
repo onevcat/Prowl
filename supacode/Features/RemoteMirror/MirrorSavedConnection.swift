@@ -4,7 +4,8 @@ import Security
 nonisolated struct MirrorSavedConnection: Codable, Equatable {
   let address: String
   let port: UInt16
-  let pairingKey: String
+  var pairingKey: String
+  var credential: MirrorDeviceCredential?
 
   private static func query(account: String) -> [String: Any] {
     [
@@ -24,11 +25,15 @@ nonisolated struct MirrorSavedConnection: Codable, Equatable {
     if status == errSecItemNotFound { return nil }
     guard status == errSecSuccess else { throw KeychainError(status: status) }
     guard let data = result as? Data else { throw MirrorProtocolError.invalidMessage }
-    return try JSONDecoder().decode(Self.self, from: data)
+    let saved = try JSONDecoder().decode(Self.self, from: data)
+    return saved.credential == nil ? nil : saved
   }
 
   func save(account: String = "last-verified-host") throws {
-    let data = try JSONEncoder().encode(self)
+    guard credential != nil else { return }
+    var saved = self
+    saved.pairingKey = ""
+    let data = try JSONEncoder().encode(saved)
     let update = [kSecValueData as String: data]
     var status = SecItemUpdate(Self.query(account: account) as CFDictionary, update as CFDictionary)
     if status == errSecItemNotFound {
@@ -42,7 +47,9 @@ nonisolated struct MirrorSavedConnection: Codable, Equatable {
 
   static func remove(account: String = "last-verified-host") throws {
     let status = SecItemDelete(query(account: account) as CFDictionary)
-    guard status == errSecSuccess || status == errSecItemNotFound else { throw KeychainError(status: status) }
+    guard status == errSecSuccess || status == errSecItemNotFound else {
+      throw KeychainError(status: status)
+    }
   }
 
   private struct KeychainError: LocalizedError {

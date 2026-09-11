@@ -57,16 +57,36 @@ private struct MirrorHostSettingsView: View {
       .disabled(host.isRunning || host.isStarting)
       if host.isRunning {
         Label("Listening · \(host.subscriberCount) mirror(s)", systemImage: "checkmark.circle")
-        Text("Client: enter this Mac’s reachable IP, port \(host.port), and the pairing key below.")
-          .font(.callout).foregroundStyle(.secondary)
-        Text(host.pairingKey).font(.system(.title2, design: .monospaced)).textSelection(.enabled)
-        Button(copied ? "Copied" : "Copy Pairing Code") {
-          NSPasteboard.general.clearContents()
-          copied = NSPasteboard.general.setString(host.pairingKey, forType: .string)
-          copyError = copied ? nil : "Unable to copy the pairing key."
+        Text(
+          "Paired devices reconnect without a code. To pair a new device, open a 60-second window."
+        )
+        .font(.callout).foregroundStyle(.secondary)
+        Button("Add a Device") { host.addDevice() }
+          .help("Create a single-use pairing code valid for 60 seconds")
+          .disabled(host.isStarting)
+        if let expires = host.pairingExpiresAt {
+          Text(host.pairingKey).font(.system(.title2, design: .monospaced)).textSelection(.enabled)
+          Text(expires, style: .timer).font(.caption)
+          Button(copied ? "Copied" : "Copy Pairing Code") {
+            NSPasteboard.general.clearContents()
+            copied = NSPasteboard.general.setString(host.pairingKey, forType: .string)
+            copyError = copied ? nil : "Unable to copy the pairing code."
+          }
+          .help("Copy the single-use code for the device you are pairing")
+          .accessibilityIdentifier("remote-mirror-copy-key")
         }
-        .help("Anyone with this key and network access can view shared panes and launch your Host Agent Profiles.")
-        .accessibilityIdentifier("remote-mirror-copy-key")
+        ForEach(host.devices) { device in
+          HStack {
+            VStack(alignment: .leading) {
+              Text(device.name).lineLimit(1)
+              Text(host.isOnline(device.id) ? "Online" : "Offline").font(.caption).foregroundStyle(
+                .secondary)
+            }
+            Spacer()
+            Button("Revoke", role: .destructive) { host.revoke(device.id) }
+              .help("Disconnect this device and require it to pair again")
+          }
+        }
         if let copyError { Text(copyError).foregroundStyle(.red) }
       }
       if let error = host.error { Text(error).foregroundStyle(.red).textSelection(.enabled) }

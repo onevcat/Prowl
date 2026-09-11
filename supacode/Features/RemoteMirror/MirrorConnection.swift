@@ -29,16 +29,21 @@ final class MirrorConnection {
   }
 
   static func parameters(pairingKey: String) throws -> NWParameters {
-    let key = try MirrorPairingCode.normalized(pairingKey)
+    let code = try MirrorPairingCode.normalized(pairingKey)
+    return try parameters(keys: [("pair", Data(code.utf8))])
+  }
+
+  static func parameters(keys: [(String, Data)]) throws -> NWParameters {
     let tls = NWProtocolTLS.Options()
-    let secret = Data(key.utf8)
-    let identity = Data("prowl-remote-mirror-v1".utf8)
-    secret.withUnsafeBytes { keyBytes in
-      identity.withUnsafeBytes { identityBytes in
-        sec_protocol_options_add_pre_shared_key(
-          tls.securityProtocolOptions,
-          DispatchData(bytes: keyBytes) as __DispatchData,
-          DispatchData(bytes: identityBytes) as __DispatchData)
+    for (name, secret) in keys {
+      let identity = Data(name.utf8)
+      secret.withUnsafeBytes { keyBytes in
+        identity.withUnsafeBytes { identityBytes in
+          sec_protocol_options_add_pre_shared_key(
+            tls.securityProtocolOptions,
+            DispatchData(bytes: keyBytes) as __DispatchData,
+            DispatchData(bytes: identityBytes) as __DispatchData)
+        }
       }
     }
     sec_protocol_options_set_min_tls_protocol_version(tls.securityProtocolOptions, .TLSv12)
@@ -46,7 +51,7 @@ final class MirrorConnection {
     // Security's Swift enum omits the PSK suites supported by Network.framework.
     guard
       let suite = tls_ciphersuite_t(
-        rawValue: UInt16(key.count == 8 ? TLS_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256 : TLS_PSK_WITH_AES_128_GCM_SHA256)
+        rawValue: UInt16(TLS_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256)
       )
     else {
       throw MirrorProtocolError.invalidMessage
@@ -56,6 +61,7 @@ final class MirrorConnection {
     tcp.enableKeepalive = true
     tcp.keepaliveIdle = 15
     let parameters = NWParameters(tls: tls, tcp: tcp)
+    parameters.allowLocalEndpointReuse = true
     return parameters
   }
 
@@ -74,7 +80,7 @@ final class MirrorConnection {
           self.heartbeat = Task { [weak self] in
             while !Task.isCancelled {
               do { try await clock.sleep(for: .seconds(2)) } catch { return }
-              self?.send(MirrorMessage(kind: .ping))
+              self?.send(.ping)
             }
           }
         case .failed(let error):
@@ -156,7 +162,7 @@ final class MirrorConnection {
             let message = try MirrorWire.decode(payload)
             self.resetDeadline()
             if message.kind == .ping {
-              self.send(MirrorMessage(kind: .pong))
+              self.send(.pong)
             } else if message.kind != .pong {
               self.onMessage?(message)
             }
@@ -189,9 +195,6 @@ nonisolated enum MirrorPairingCode {
 
   static func normalized(_ input: String) throws -> String {
     let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
-    if trimmed.count == 64, trimmed.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }) {
-      return trimmed
-    }
     let code = trimmed.uppercased().filter { $0 != "-" && !$0.isWhitespace }
     guard code.count == 8, code.allSatisfy({ alphabet.contains($0) }) else {
       throw MirrorProtocolError.invalidPairingKey

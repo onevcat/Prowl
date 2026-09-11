@@ -49,12 +49,14 @@ struct AddRemoteMirrorView: View {
         .frame(height: min(280, CGFloat(max(1, client.panes.count)) * 76))
         Button("Refresh Panes") { client.refreshPanes() }
       } else {
-        Text("Start Host on the other Mac, then enter its address and pairing key.")
-          .foregroundStyle(.secondary)
+        Text(
+          "Enter the Host address. For a new device, click Add a Device on Host and enter its temporary code."
+        )
+        .foregroundStyle(.secondary)
         Form {
           TextField("Host IP", text: $address).accessibilityIdentifier("remote-mirror-address")
           TextField("Port", text: $port)
-          SecureField("Pairing Key", text: $pairingKey)
+          SecureField("Pairing Code (new devices)", text: $pairingKey)
         }
         .disabled(client?.isConnecting == true)
         if let message = client?.error ?? error {

@@ -59,7 +59,9 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
   }
 
   func write(_ bytes: Data, to id: UUID) throws {
-    guard let view = view(id), let terminal = view.surface else { throw MirrorProtocolError.invalidMessage }
+    guard let view = view(id), let terminal = view.surface else {
+      throw MirrorProtocolError.invalidMessage
+    }
     view.recordEditingActivity()
     // The text action accepts a length-delimited byte buffer. Its escape parser
     // UTF-8-encodes \xNN, so preserve bytes (even split UTF-8) and escape only '\'.
@@ -82,17 +84,19 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
       .wakeAgentDetection(forSurfaceID: id)
   }
 
-  func retainedText(_ id: UUID) throws -> String {
-    guard let text = view(id)?.readScreenContentsForCLI() else {
-      throw MirrorProtocolError.invalidMessage
-    }
-    return text
-  }
-
   var supportsBoundedHistory: Bool { true }
 
   func boundedRetainedText(_ id: UUID) throws -> MirrorRetainedText {
     try boundedText(id, active: false, maximumBytes: MirrorHistory.maximumBytes)
+  }
+
+  func textSnapshot(_ id: UUID) throws -> MirrorTextSnapshot {
+    guard let terminal = view(id)?.surface else { throw MirrorProtocolError.invalidMessage }
+    let size = ghostty_surface_size(terminal)
+    let value = try boundedText(id, active: true, maximumBytes: MirrorWire.maximumPayload / 8)
+    return .init(
+      text: value.text, columns: UInt32(size.columns), rows: UInt32(size.rows),
+      truncated: value.truncated)
   }
 
   func activeText(_ id: UUID) throws -> String {
@@ -103,12 +107,16 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
     guard let terminal = view(id)?.surface else { throw MirrorProtocolError.invalidMessage }
     var result = ghostty_text_s()
     var truncated = false
-    guard ghostty_surface_read_text_bounded(terminal, active, 10_000, UInt(maximumBytes), &result, &truncated) else {
+    guard
+      ghostty_surface_read_text_bounded(
+        terminal, active, 10_000, UInt(maximumBytes), &result, &truncated)
+    else {
       throw MirrorProtocolError.messageTooLarge
     }
     defer { ghostty_surface_free_text(terminal, &result) }
     guard let bytes = result.text, result.text_len <= maximumBytes,
-      let text = String(bytes: UnsafeRawBufferPointer(start: bytes, count: Int(result.text_len)), encoding: .utf8)
+      let text = String(
+        bytes: UnsafeRawBufferPointer(start: bytes, count: Int(result.text_len)), encoding: .utf8)
     else { throw MirrorProtocolError.invalidMessage }
     return MirrorRetainedText(text: text, truncated: truncated)
   }

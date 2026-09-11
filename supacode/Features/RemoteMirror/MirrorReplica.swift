@@ -120,13 +120,13 @@ final class MirrorReplica {
           self.display(pending)
         }
       } else {
-        guard let displayed = self.displayedMessage else { return }
+        guard let displayed = self.displayedMessage, let lease = displayed.subscriptionID else {
+          return
+        }
         switch packet.kind {
         case .input:
           self.onMessage?(
-            MirrorMessage(
-              version: displayed.version, kind: .input,
-              bytes: packet.payload, subscriptionID: displayed.subscriptionID))
+            .input(.init(bytes: packet.payload, subscriptionID: lease)))
         case .acknowledge:
           guard let sequence = try? MirrorRelayPacket.sequence(packet.payload),
             sequence == displayed.sequence
@@ -135,9 +135,7 @@ final class MirrorReplica {
             return
           }
           self.onMessage?(
-            MirrorMessage(
-              version: displayed.version, kind: .acknowledge,
-              sequence: sequence, subscriptionID: displayed.subscriptionID))
+            .acknowledge(.init(sequence: sequence, subscriptionID: lease)))
         default: candidate.close("Invalid display relay message.")
         }
       }

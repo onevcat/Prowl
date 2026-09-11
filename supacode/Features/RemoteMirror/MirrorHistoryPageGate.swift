@@ -8,7 +8,7 @@ nonisolated struct MirrorHistoryPageGate {
   private var bytes = 0
   private var capturedAt: TimeInterval?
 
-  mutating func accept(_ message: MirrorMessage, requiresTimestamp: Bool) -> Bool {
+  mutating func accept(_ message: MirrorMessage) -> Bool {
     guard let pageID = message.historyID, let pageOffset = message.offset,
       let pageTotal = message.total, let lines = message.lines,
       pageTotal >= 0, pageTotal <= MirrorHistory.maximumBytes + 1,
@@ -17,7 +17,7 @@ nonisolated struct MirrorHistoryPageGate {
       id == nil || (pageID == id && pageTotal == total && offset > 0),
       !lines.isEmpty || (id == nil && pageTotal == 0)
     else { return false }
-    if requiresTimestamp {
+    do {
       guard let timestamp = message.capturedAt, timestamp.isFinite,
         id == nil || timestamp == capturedAt
       else { return false }
