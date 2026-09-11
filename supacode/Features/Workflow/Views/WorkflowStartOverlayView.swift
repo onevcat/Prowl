@@ -174,8 +174,9 @@ private struct WorkflowStartCard: View {
 
   // MARK: - Sections
 
-  /// The label column is fixed and trailing-aligned, the control column fixed and filled, so
-  /// every row of roles and options shares the same two edges whatever its content.
+  /// Both columns are leading-aligned: names on the left edge of a fixed label column,
+  /// controls sized to their content on the left edge of the control column, whose width
+  /// caps a long pane title so it truncates instead of moving the layout.
   private static let labelWidth: CGFloat = 150
   private static let controlWidth: CGFloat = 320
 
@@ -186,16 +187,15 @@ private struct WorkflowStartCard: View {
       .help(help)
   }
 
-  /// One label/control row, the way a native Settings form reads: the name on the right edge
-  /// of the label column, the choice on the left edge of the control column.
+  /// One label/control row: the name in the label column, the choice in the control column.
   private func formRow<Label: View, Control: View>(
     @ViewBuilder label: () -> Label, @ViewBuilder control: () -> Control
   ) -> some View {
     HStack(alignment: .firstTextBaseline, spacing: 14) {
       label()
-        .frame(width: Self.labelWidth, alignment: .trailing)
+        .frame(width: Self.labelWidth, alignment: .leading)
       control()
-        .frame(width: Self.controlWidth, alignment: .leading)
+        .frame(maxWidth: Self.controlWidth, alignment: .leading)
       Spacer(minLength: 0)
     }
   }
@@ -297,7 +297,7 @@ private struct WorkflowStartCard: View {
             Text(role.title)
           }
           .labelsHidden()
-          .frame(maxWidth: .infinity)
+          .frame(maxWidth: Self.controlWidth, alignment: .leading)
           .help("The pane this run starts from.")
         }
       }
@@ -320,7 +320,7 @@ private struct WorkflowStartCard: View {
           Text(role.title)
         }
         .labelsHidden()
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: Self.controlWidth, alignment: .leading)
         .help("The Agent Profile Prowl starts for this role.")
       } else {
         Text("Not used")
@@ -338,7 +338,7 @@ private struct WorkflowStartCard: View {
           Text(role.title)
         }
         .labelsHidden()
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: Self.controlWidth, alignment: .leading)
         .help("An agent already running in this worktree takes this role.")
       }
     }
@@ -367,7 +367,7 @@ private struct WorkflowStartCard: View {
       }
     }
     .padding(10)
-    .frame(maxWidth: .infinity)
+    .frame(width: Self.controlWidth)
     .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
   }
 
@@ -392,7 +392,7 @@ private struct WorkflowStartCard: View {
             prompt: Text(input.defaultValue == nil ? "Required" : ""))
         }
       }
-      .frame(maxWidth: .infinity)
+      .frame(maxWidth: Self.controlWidth, alignment: .leading)
       .help(inputHelp(input))
     }
   }
@@ -508,11 +508,14 @@ private struct WorkflowStartCard: View {
 
   // MARK: - Labels
 
+  /// "claude in p12" for an agent pane; a bare shell is named by the worktree, not by the
+  /// shell's host-and-path title.
   private func paneLabel(_ candidate: WorkflowStartPaneCandidate) -> String {
-    let name = candidate.agentDisplayName ?? candidate.paneTitle
     let handle = candidate.handle.map { " in \($0)" } ?? ""
-    let shell = candidate.agentToken == nil ? " (no agent)" : ""
-    return "\(name)\(handle)\(shell)"
+    guard let agent = candidate.agentDisplayName, candidate.agentToken != nil else {
+      return "\(store.context.worktreeName)\(handle) (no agent)"
+    }
+    return "\(agent)\(handle)"
   }
 
   private func suggestionSummary(_ suggestion: WorkflowProfileSuggestion) -> String {
