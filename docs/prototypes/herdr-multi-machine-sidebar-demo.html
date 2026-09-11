@@ -1,0 +1,1106 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Prowl Clean Mode - Herdr Multi-machine Sidebar</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #242424;
+      --muted: #8b8b8f;
+      --soft: #b8b8bd;
+      --line: #e5e5e7;
+      --panel: #fbfbfc;
+      --surface: #ffffff;
+      --blue: #dce9ff;
+      --blue-strong: #c7dcff;
+      --blue-ink: #235db7;
+      --green: #31c85d;
+      --orange: #d88518;
+      --red: #c85858;
+      --purple: #6658e8;
+      --shadow: 0 18px 48px rgba(21, 28, 42, 0.14);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: #f2f3f5;
+      font-size: 14px;
+    }
+
+    button {
+      font: inherit;
+      color: inherit;
+      border: 0;
+      cursor: pointer;
+    }
+
+    .shell {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 28px 32px 56px;
+    }
+
+    .masthead {
+      display: flex;
+      justify-content: space-between;
+      align-items: end;
+      gap: 24px;
+      margin-bottom: 22px;
+    }
+
+    .eyebrow {
+      margin: 0 0 7px;
+      color: var(--blue-ink);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 25px;
+      line-height: 1.1;
+      letter-spacing: 0;
+      font-weight: 720;
+    }
+
+    .intro {
+      max-width: 690px;
+      margin: 9px 0 0;
+      color: #65656a;
+      line-height: 1.55;
+    }
+
+    .view-switch {
+      display: inline-flex;
+      gap: 2px;
+      padding: 3px;
+      border: 1px solid #d9dadd;
+      border-radius: 8px;
+      background: #e9eaed;
+      white-space: nowrap;
+    }
+
+    .view-switch button {
+      padding: 8px 12px;
+      border-radius: 6px;
+      background: transparent;
+      color: #6e6f74;
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .view-switch button.active {
+      background: var(--surface);
+      color: var(--ink);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, .08);
+    }
+
+    .stage {
+      display: grid;
+      grid-template-columns: minmax(280px, 420px) minmax(430px, 1fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .stage-panel {
+      min-width: 0;
+      border: 1px solid #dbdce0;
+      border-radius: 10px;
+      background: var(--surface);
+      overflow: hidden;
+      box-shadow: 0 8px 26px rgba(20, 27, 39, .06);
+    }
+
+    .stage-heading {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 47px;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--line);
+      background: #f8f8fa;
+    }
+
+    .stage-heading h2 {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .stage-heading .tag {
+      padding: 3px 7px;
+      border-radius: 5px;
+      color: #707178;
+      background: #e9eaed;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+
+    .stage-body { padding: 14px; }
+
+    .current-shot {
+      position: relative;
+      min-height: 670px;
+      padding: 16px 16px 0;
+      border: 1px solid #dedfe2;
+      border-radius: 8px;
+      background: linear-gradient(#fff, #fbfbfc);
+      overflow: hidden;
+    }
+
+    .current-shot::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: linear-gradient(135deg, rgba(255,255,255,.3), transparent 42%);
+    }
+
+    .sidebar-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 28px;
+      padding: 0 7px;
+      color: #77777c;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: .01em;
+    }
+
+    .ellipsis { color: #7b7b80; font-size: 20px; line-height: 1; }
+
+    .current-list { margin-top: 19px; }
+
+    .current-space,
+    .current-agent {
+      display: grid;
+      grid-template-columns: 18px minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+      min-height: 61px;
+      padding: 7px 9px;
+      border-radius: 8px;
+    }
+
+    .current-space.selected,
+    .current-agent.selected { background: var(--blue); }
+
+    .bullet {
+      width: 8px;
+      height: 8px;
+      margin-left: 2px;
+      border-radius: 50%;
+      background: #898a8e;
+    }
+
+    .bullet.live {
+      width: 18px;
+      height: 18px;
+      margin-left: -3px;
+      border: 3px solid var(--green);
+      background: transparent;
+    }
+
+    .current-primary {
+      min-width: 0;
+      overflow: hidden;
+      color: #2c2c2e;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 18px;
+      font-weight: 640;
+      line-height: 1.2;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .current-secondary {
+      min-width: 0;
+      margin-top: 3px;
+      overflow: hidden;
+      color: #b0b0b4;
+      font-size: 14px;
+      line-height: 1.15;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .current-divider {
+      position: absolute;
+      right: 0;
+      bottom: 175px;
+      left: 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .current-agents {
+      position: absolute;
+      right: 16px;
+      bottom: 23px;
+      left: 16px;
+    }
+
+    .current-agents .sidebar-title { padding-left: 7px; }
+    .current-agent {
+      grid-template-columns: 18px 18px minmax(0, 1fr);
+      gap: 8px;
+      min-height: 59px;
+    }
+
+    .current-agent-status {
+      width: 13px;
+      height: 13px;
+      border: 2px solid var(--green);
+      border-radius: 50%;
+      background: transparent;
+    }
+
+    .agent-mark {
+      display: grid;
+      place-items: center;
+      width: 16px;
+      color: var(--purple);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 15px;
+      font-weight: 800;
+    }
+
+    .shot-note {
+      margin: 12px 1px 0;
+      color: #797a80;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .target-wrap {
+      position: relative;
+      min-height: 670px;
+      padding: 16px;
+      border-radius: 8px;
+      background: #f8f9fc;
+    }
+
+    .target-layout {
+      display: grid;
+      grid-template-columns: minmax(270px, 390px) minmax(0, 1fr);
+      gap: 17px;
+      align-items: stretch;
+      min-height: 600px;
+    }
+
+    .target-sidebar {
+      position: relative;
+      min-height: 600px;
+      border: 1px solid #d9dce5;
+      border-radius: 9px;
+      background: #fff;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .target-sidebar .sidebar-title {
+      height: 47px;
+      padding: 0 17px;
+      border-bottom: 1px solid #f0f0f2;
+      font-size: 17px;
+    }
+
+    .target-sidebar .sidebar-title .new-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      color: var(--blue-ink);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+
+    .target-sidebar .sidebar-title .new-label::before {
+      content: "+";
+      display: inline-grid;
+      place-items: center;
+      width: 15px;
+      height: 15px;
+      border: 1px solid #a9c4f2;
+      border-radius: 50%;
+      font-size: 13px;
+      line-height: 1;
+    }
+
+    .target-section { padding: 9px 9px 0; }
+
+    .section-caption {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 28px;
+      padding: 0 8px;
+      color: #7a7b81;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .section-caption .caption-change {
+      color: var(--blue-ink);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+
+    .machine {
+      margin: 2px 0 5px;
+      border-radius: 8px;
+      background: #fbfbfc;
+      transition: background .18s ease;
+    }
+
+    .machine.active { background: #f2f6ff; }
+    .machine.stale { background: #fafafa; }
+
+    .machine-head {
+      display: grid;
+      grid-template-columns: 17px minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      min-height: 34px;
+      padding: 5px 9px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .machine-head:hover { border-color: #c8d7f2; }
+
+    .machine-chevron { color: #97989d; font-size: 12px; }
+
+    .machine-name {
+      overflow: hidden;
+      color: #36373b;
+      font-size: 12px;
+      font-weight: 720;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .machine-kind {
+      margin-left: 5px;
+      color: #a1a2a7;
+      font-size: 10px;
+      font-weight: 550;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      color: #6f7077;
+      font-size: 10px;
+      font-weight: 650;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+    }
+
+    .status-dot.stale { background: #b8b8bc; }
+    .status-dot.attention { background: var(--orange); }
+
+    .machine-action {
+      padding: 3px 6px;
+      border: 1px solid #ead4b4;
+      border-radius: 5px;
+      background: #fffaf0;
+      color: #9b6215;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .workspace-row {
+      display: grid;
+      grid-template-columns: 16px minmax(0, 1fr) auto;
+      gap: 7px;
+      align-items: center;
+      min-height: 48px;
+      margin: 2px 5px 2px 22px;
+      padding: 5px 8px;
+      border-radius: 7px;
+      cursor: pointer;
+    }
+
+    .workspace-row:hover { background: #f2f5fb; }
+    .workspace-row.selected { background: var(--blue-strong); }
+    .workspace-row.stale { opacity: .58; }
+
+    .workspace-marker {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #8f9095;
+    }
+
+    .workspace-row.selected .workspace-marker { background: var(--blue-ink); }
+
+    .workspace-name {
+      overflow: hidden;
+      color: #2f3033;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 14px;
+      font-weight: 650;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .workspace-branch {
+      overflow: hidden;
+      margin-top: 2px;
+      color: #a7a8ad;
+      font-size: 11px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .target-divider {
+      margin: 11px 0 4px;
+      border-top: 1px solid var(--line);
+    }
+
+    .target-agents { padding: 9px 9px 13px; }
+
+    .target-agent {
+      display: grid;
+      grid-template-columns: 17px 17px minmax(0, 1fr) auto;
+      gap: 7px;
+      align-items: center;
+      min-height: 48px;
+      margin: 2px 0;
+      padding: 5px 8px;
+      border-radius: 7px;
+      cursor: pointer;
+    }
+
+    .target-agent:hover { background: #f2f5fb; }
+    .target-agent.selected { background: var(--blue-strong); }
+    .target-agent.stale { opacity: .53; }
+
+    .target-agent > .status-dot.idle {
+      border: 2px solid var(--green);
+      background: transparent;
+    }
+
+    .agent-glyph {
+      display: grid;
+      place-items: center;
+      width: 15px;
+      height: 15px;
+      color: var(--purple);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .target-agent-context {
+      overflow: hidden;
+      color: #323338;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 13px;
+      font-weight: 650;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .agent-subtitle {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      overflow: hidden;
+      margin-top: 2px;
+      color: #9b9ca2;
+      font-size: 11px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .machine-token {
+      max-width: 86px;
+      overflow: hidden;
+      padding: 2px 6px;
+      border: 1px solid hsl(var(--badge-hue, 215) 42% 86%);
+      border-radius: 999px;
+      background: hsl(var(--badge-hue, 215) 45% 96%);
+      color: hsl(var(--badge-hue, 215) 34% 38%);
+      font-size: 8px;
+      font-weight: 500;
+      line-height: 1.25;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .agent-state {
+      color: #b0781e;
+      font-size: 10px;
+      font-weight: 650;
+    }
+
+    .target-terminal {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-width: 0;
+      min-height: 600px;
+      padding: 24px;
+      border: 1px solid #d9dce5;
+      border-radius: 9px;
+      background: #21242b;
+      color: #d7dbe5;
+      box-shadow: var(--shadow);
+    }
+
+    .terminal-topline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #3a3f4b;
+      color: #aab2c2;
+      font-size: 11px;
+    }
+
+    .terminal-owner {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: #f1f4fa;
+      font-weight: 700;
+    }
+
+    .terminal-owner .owner-dot { background: var(--green); }
+
+    .terminal-copy {
+      flex: 1;
+      padding: 28px 0;
+      color: #bec6d3;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 13px;
+      line-height: 1.8;
+    }
+
+    .terminal-copy .prompt { color: #7ee2a0; }
+    .terminal-copy .dim { color: #747d8e; }
+    .terminal-copy .remote { color: #8eb7ff; }
+
+    .terminal-note {
+      padding-top: 16px;
+      border-top: 1px solid #3a3f4b;
+      color: #8d96a7;
+      font-size: 11px;
+      line-height: 1.5;
+    }
+
+    .callout {
+      position: absolute;
+      z-index: 3;
+      display: grid;
+      grid-template-columns: 23px minmax(0, 1fr);
+      gap: 8px;
+      align-items: start;
+      width: 204px;
+      padding: 9px 10px 9px 8px;
+      border: 1px solid #b8cdef;
+      border-radius: 7px;
+      background: rgba(247, 250, 255, .97);
+      color: #294d88;
+      box-shadow: 0 8px 22px rgba(29, 73, 145, .14);
+      font-size: 11px;
+      line-height: 1.35;
+      pointer-events: none;
+    }
+
+    .callout::after {
+      content: "";
+      position: absolute;
+      top: 20px;
+      right: -37px;
+      width: 37px;
+      border-top: 1px solid #9db8ec;
+    }
+
+    .callout .number {
+      display: grid;
+      place-items: center;
+      width: 21px;
+      height: 21px;
+      border-radius: 50%;
+      background: var(--blue-ink);
+      color: white;
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .callout.c1 { top: 76px; right: 5px; }
+    .callout.c2 { top: 158px; right: 5px; }
+    .callout.c3 { top: 300px; right: 5px; }
+    .callout.c4 { bottom: 112px; right: 5px; }
+
+    .target-wrap .callout { right: 5px; }
+    .target-wrap .callout.c1 { top: 52px; }
+    .target-wrap .callout.c2 { top: 112px; }
+    .target-wrap .callout.c3 { top: 264px; }
+    .target-wrap .callout.c4 { top: 420px; }
+
+    .annotation-panel {
+      margin-top: 18px;
+      padding: 20px;
+      border-top: 1px solid #dadce1;
+      background: #fff;
+    }
+
+    .annotation-panel h2 {
+      margin: 0 0 15px;
+      font-size: 16px;
+      line-height: 1.2;
+    }
+
+    .change-grid {
+      display: grid;
+      grid-template-columns: 96px minmax(150px, 1fr) minmax(180px, 1.15fr) minmax(190px, 1.35fr);
+      border: 1px solid #e1e2e5;
+      border-radius: 7px;
+      overflow: hidden;
+      font-size: 12px;
+    }
+
+    .change-grid > div {
+      min-width: 0;
+      padding: 10px 11px;
+      border-right: 1px solid #e7e7e9;
+      border-bottom: 1px solid #e7e7e9;
+      line-height: 1.45;
+    }
+
+    .change-grid > div:nth-child(4n) { border-right: 0; }
+    .change-grid > div:nth-last-child(-n + 4) { border-bottom: 0; }
+    .change-grid .head { background: #f6f7f9; color: #707177; font-size: 10px; font-weight: 750; text-transform: uppercase; letter-spacing: .04em; }
+    .change-grid .new { color: #235db7; font-weight: 650; }
+    .change-grid .remove { color: #a65b5b; font-weight: 650; }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 17px;
+      margin-top: 14px;
+      color: #6e7076;
+      font-size: 11px;
+    }
+
+    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .legend .swatch { width: 9px; height: 9px; border-radius: 50%; background: var(--blue-ink); }
+    .legend .swatch.gray { background: #9fa1a7; }
+    .legend .swatch.orange { background: var(--orange); }
+    .legend .swatch.blue { width: 14px; height: 10px; border-radius: 3px; background: var(--blue-strong); }
+
+    .interaction-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 12px;
+      color: #6d6e74;
+      font-size: 12px;
+    }
+
+    .interaction-bar button {
+      padding: 6px 9px;
+      border: 1px solid #d5d8df;
+      border-radius: 6px;
+      background: #fff;
+      font-size: 11px;
+      font-weight: 650;
+    }
+
+    .interaction-bar button:hover,
+    .interaction-bar button.active { border-color: #9bb9ea; background: #eef4ff; color: #245ba7; }
+
+    .state-note {
+      min-height: 22px;
+      margin-left: auto;
+      color: #72747a;
+      font-size: 11px;
+    }
+
+    @media (max-width: 1060px) {
+      .stage { grid-template-columns: 1fr; }
+      .target-wrap { min-height: 0; }
+      .target-layout { grid-template-columns: minmax(270px, 390px) minmax(270px, 1fr); }
+      .callout { display: none; }
+    }
+
+    @media (max-width: 720px) {
+      .shell { padding: 20px 14px 40px; }
+      .masthead { display: block; }
+      .view-switch { margin-top: 16px; }
+      .target-layout { grid-template-columns: 1fr; }
+      .target-terminal { min-height: 260px; }
+      .change-grid { grid-template-columns: 1fr; }
+      .change-grid > div { border-right: 0; }
+      .change-grid > div:nth-last-child(-n + 4) { border-bottom: 1px solid #e7e7e9; }
+      .change-grid > div:last-child { border-bottom: 0; }
+      .change-grid .head { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="masthead">
+      <div>
+        <p class="eyebrow">Prowl Clean Mode · Herdr 0.9</p>
+        <h1>Multi-machine sidebar 预期形态</h1>
+        <p class="intro">保留现有 sidebar 的密度、选中态和 Spaces / Agents 分区。新增 machine 层只负责表达来源和连接状态；terminal surface 仍由当前 Herdr client 负责。</p>
+      </div>
+      <nav class="view-switch" aria-label="切换对比视图">
+        <button class="active" data-view="compare">对比</button>
+        <button data-view="target">只看目标</button>
+      </nav>
+    </header>
+
+    <section class="stage" id="compare-view">
+      <article class="stage-panel current-panel">
+        <div class="stage-heading">
+          <h2>现状</h2>
+          <span class="tag">single endpoint</span>
+        </div>
+        <div class="stage-body">
+          <div class="current-shot">
+            <div class="sidebar-title"><span>spaces</span><span class="ellipsis">•••</span></div>
+            <div class="current-list">
+              <div class="current-space">
+                <span class="bullet"></span>
+                <div><div class="current-primary">TikTok_foldable</div><div class="current-secondary">develop</div></div>
+              </div>
+              <div class="current-space">
+                <span class="bullet"></span>
+                <div><div class="current-primary">TikTok2</div><div class="current-secondary">feature/solidize_superfan_remove_su...</div></div>
+              </div>
+              <div class="current-space">
+                <span class="bullet"></span>
+                <div><div class="current-primary">TikTok3</div><div class="current-secondary">codex/diagnose-fans-club-gecko-entr...</div></div>
+              </div>
+              <div class="current-space selected">
+                <span class="bullet live"></span>
+                <div><div class="current-primary">prowl-herdr</div><div class="current-secondary">herdr-native-sidebar</div></div>
+              </div>
+              <div class="current-space">
+                <span class="bullet"></span>
+                <div><div class="current-primary">multica</div><div class="current-secondary">main</div></div>
+              </div>
+            </div>
+            <div class="current-divider"></div>
+            <div class="current-agents">
+              <div class="sidebar-title"><span>agents</span><span class="current-secondary" style="margin:0;font-weight:650">grouped</span></div>
+              <div class="current-agent selected">
+                <span class="current-agent-status"></span>
+                <span class="agent-mark">π</span>
+                <div><div class="current-primary" style="font-size:16px">Prowl · prowl-herdr</div><div class="current-secondary">pi</div></div>
+              </div>
+              <div class="current-agent">
+                <span class="current-agent-status"></span>
+                <span class="agent-mark">π</span>
+                <div><div class="current-primary" style="font-size:16px">Prowl · prowl-herdr</div><div class="current-secondary">spec-reviewer</div></div>
+              </div>
+            </div>
+
+            <div class="callout c1"><span class="number">1</span><span>Flat workspace list。每行只有 workspace identity，没有 machine 来源。</span></div>
+            <div class="callout c2"><span class="number">2</span><span>现有选中态只绑定本地 workspace / pane。</span></div>
+            <div class="callout c3"><span class="number">3</span><span>Agents 也没有 endpoint-qualified target，同名 pane 无法区分。</span></div>
+            <div class="callout c4"><span class="number">4</span><span>没有 connecting、stale、Attention 或 disabled machine 状态。</span></div>
+          </div>
+          <p class="shot-note">左侧按你提供的 CleanShot 复刻当前信息结构；现有 header、ellipsis、行高和蓝色选中背景保留。</p>
+        </div>
+      </article>
+
+      <article class="stage-panel target-panel">
+        <div class="stage-heading">
+          <h2>目标</h2>
+          <span class="tag">client-local aggregate</span>
+        </div>
+        <div class="stage-body">
+          <div class="interaction-bar">
+            <span>状态演示：</span>
+            <button class="state-button active" data-state="online">Online</button>
+            <button class="state-button" data-state="stale">Remote stale</button>
+            <button class="state-button" data-state="attention">Attention</button>
+            <span class="state-note" id="state-note">当前 endpoint：Local · terminal owner 由 Herdr client 提交</span>
+          </div>
+          <div class="target-wrap" id="target-wrap">
+            <div class="target-layout">
+              <div class="target-sidebar" id="target-sidebar">
+                <div class="sidebar-title">
+                  <span>spaces</span>
+                  <span class="new-label">machine groups</span>
+                  <span class="ellipsis">•••</span>
+                </div>
+
+                <section class="target-section">
+                  <div class="section-caption"><span>spaces</span><span class="caption-change">新增 machine 层</span></div>
+
+                  <div class="machine active" data-machine="local">
+                    <div class="machine-head" data-action="machine" data-machine="local">
+                      <span class="machine-chevron">▾</span>
+                      <span class="machine-name">Local <span class="machine-kind">local server</span></span>
+                      <span class="status"><i class="status-dot"></i>online</span>
+                    </div>
+                    <div class="workspace-row selected" data-action="workspace" data-machine="local">
+                      <span class="workspace-marker"></span>
+                      <div><div class="workspace-name">prowl-herdr</div><div class="workspace-branch">herdr-native-sidebar</div></div>
+                      <span class="status"><i class="status-dot"></i></span>
+                    </div>
+                    <div class="workspace-row" data-action="workspace" data-machine="local">
+                      <span class="workspace-marker"></span>
+                      <div><div class="workspace-name">multica</div><div class="workspace-branch">main</div></div>
+                      <span></span>
+                    </div>
+                  </div>
+
+                  <div class="machine" data-machine="build">
+                    <div class="machine-head" data-action="machine" data-machine="build">
+                      <span class="machine-chevron">▾</span>
+                      <span class="machine-name">Build machine <span class="machine-kind">saved SSH profile</span></span>
+                      <span class="status"><i class="status-dot"></i>online</span>
+                    </div>
+                    <div class="workspace-row" data-action="workspace" data-machine="build">
+                      <span class="workspace-marker"></span>
+                      <div><div class="workspace-name">prowl-herdr</div><div class="workspace-branch">herdr-native-sidebar</div></div>
+                      <span></span>
+                    </div>
+                    <div class="workspace-row" data-action="workspace" data-machine="build">
+                      <span class="workspace-marker"></span>
+                      <div><div class="workspace-name">herdr-server</div><div class="workspace-branch">main</div></div>
+                      <span></span>
+                    </div>
+                  </div>
+
+                  <div class="machine" data-machine="gpu">
+                    <div class="machine-head" data-action="machine" data-machine="gpu">
+                      <span class="machine-chevron">▾</span>
+                      <span class="machine-name">GPU machine <span class="machine-kind">saved SSH profile</span></span>
+                      <span class="status"><i class="status-dot"></i>online</span>
+                    </div>
+                    <div class="workspace-row" data-action="workspace" data-machine="gpu">
+                      <span class="workspace-marker"></span>
+                      <div><div class="workspace-name">herdr</div><div class="workspace-branch">custom</div></div>
+                      <span></span>
+                    </div>
+                  </div>
+                </section>
+
+                <div class="target-divider"></div>
+
+                <section class="target-agents">
+                  <div class="section-caption"><span>agents</span><span class="caption-change">machine token</span><span class="current-secondary" style="margin:0;font-weight:650">grouped</span></div>
+                  <div class="target-agent selected" data-action="agent" data-machine="local">
+                    <span class="status-dot idle"></span>
+                    <span class="agent-glyph">π</span>
+                    <div><div class="target-agent-context">Prowl · prowl-herdr</div><div class="agent-subtitle"><span class="machine-token">Local</span><span>pi</span></div></div>
+                    <span></span>
+                  </div>
+                  <div class="target-agent" data-action="agent" data-machine="build">
+                    <span class="status-dot" style="background:#e6ad32"></span>
+                    <span class="agent-glyph">C</span>
+                    <div><div class="target-agent-context">Prowl · prowl-herdr</div><div class="agent-subtitle"><span class="machine-token">Build</span><span>claude</span></div></div>
+                    <span class="agent-state">working</span>
+                  </div>
+                  <div class="target-agent" data-action="agent" data-machine="gpu">
+                    <span class="status-dot" style="background:#e6ad32"></span>
+                    <span class="agent-glyph">π</span>
+                    <div><div class="target-agent-context">Prowl · prowl-herdr</div><div class="agent-subtitle"><span class="machine-token">GPU</span><span>pi</span></div></div>
+                    <span class="agent-state">working</span>
+                  </div>
+                </section>
+              </div>
+
+              <div class="target-terminal" id="target-terminal">
+                <div class="terminal-topline">
+                  <span class="terminal-owner"><i class="status-dot owner-dot"></i><span id="terminal-owner">Local</span></span>
+                  <span id="terminal-mode">committed terminal owner</span>
+                </div>
+                <div class="terminal-copy">
+                  <div><span class="prompt">$</span> herdr</div>
+                  <div class="dim">client-local chrome connected</div>
+                  <div class="dim">spaces: Local · Build machine · GPU machine</div>
+                  <br>
+                  <div><span class="remote">&gt;</span> focused workspace: <span id="terminal-workspace">prowl-herdr</span></div>
+                  <div class="dim">endpoint target is qualified; terminal surface remains owned by Herdr client</div>
+                </div>
+                <div class="terminal-note" id="terminal-note">点击远端 workspace / agent 时，这块 terminal 不由 Prowl 自己渲染；Herdr client 完成 activation commit 后才切换 owner。</div>
+              </div>
+            </div>
+
+            <div class="callout c1"><span class="number">1</span><span>新增 machine group。Local 保留为第一组，saved SSH profile 按 catalog 顺序追加。</span></div>
+            <div class="callout c2"><span class="number">2</span><span>原来的 flat workspace row 移到 machine 下；点击目标携带 EndpointKey + WorkspaceID。</span></div>
+            <div class="callout c3"><span class="number">3</span><span>Agents 保留 status marker、provider icon、context title、agent identity；这里只新增 machine token。</span></div>
+            <div class="callout c4"><span class="number">4</span><span>连接状态放在 machine header：stale dim、Attention 橙色、disabled 保留组但不显示 children。</span></div>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section class="annotation-panel">
+      <h2>替换关系</h2>
+      <div class="change-grid">
+        <div class="head">区域</div><div class="head">现有</div><div class="head">目标替换</div><div class="head">新增语义</div>
+        <div>Spaces</div>
+        <div class="remove">`snapshot.workspaces` 平铺</div>
+        <div class="new">`machine → workspaces` 分组</div>
+        <div>Local + 每个 saved machine；workspace target 变成 `EndpointKey + WorkspaceID`。</div>
+        <div>Agents</div>
+        <div class="remove">status marker + provider icon + context title + agent identity</div>
+        <div class="new">保留原有四层语义，只增加 machine token</div>
+        <div>`Prowl · prowl-herdr` 是 context；`pi` / `claude` 是 agent/provider identity，不是同一类字段。</div>
+        <div>Selection</div>
+        <div class="remove">`selectedWorkspaceID` / `selectedPaneID` 全局唯一</div>
+        <div class="new">per-endpoint focus + committed owner</div>
+        <div>requested selection、pending activation、committed active endpoint 分开。</div>
+        <div>Status</div>
+        <div class="remove">只有单 socket connected / failed</div>
+        <div class="new">machine header 状态与 stale cache</div>
+        <div>connecting、online、reconnecting、attention、disabled；stale 不可操作。</div>
+        <div>Terminal</div>
+        <div class="remove">Prowl sidebar 直连本地 server</div>
+        <div class="new">Prowl 绑定当前 Herdr client-local contract</div>
+        <div>Herdr client 仍是唯一 terminal/surface authority，Prowl 只做 native chrome。</div>
+      </div>
+      <div class="legend">
+        <span><i class="swatch"></i>蓝色编号：新增或替换点</span>
+        <span><i class="swatch blue"></i>蓝底：当前 committed selection</span>
+        <span><i class="swatch gray"></i>灰色：stale cache，只读展示</span>
+        <span><i class="swatch orange"></i>橙色：Attention，需要外部 setup</span>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const viewButtons = document.querySelectorAll('[data-view]');
+    const compareView = document.getElementById('compare-view');
+    const targetPanel = document.querySelector('.target-panel');
+    const stateNote = document.getElementById('state-note');
+    const terminalOwner = document.getElementById('terminal-owner');
+    const terminalWorkspace = document.getElementById('terminal-workspace');
+    const terminalMode = document.getElementById('terminal-mode');
+    const terminalNote = document.getElementById('terminal-note');
+    const targetWrap = document.getElementById('target-wrap');
+
+    const badgeHues = [210, 154, 32, 188, 272, 342];
+    document.querySelectorAll('.machine-token').forEach(badge => {
+      const hash = Array.from(badge.textContent.trim()).reduce(
+        (value, character) => ((value * 31) + character.codePointAt(0)) >>> 0,
+        0
+      );
+      badge.style.setProperty('--badge-hue', badgeHues[hash % badgeHues.length]);
+    });
+
+    viewButtons.forEach(button => {
+      button.addEventListener('click', () => {
+        viewButtons.forEach(item => item.classList.toggle('active', item === button));
+        compareView.style.display = button.dataset.view === 'target' ? 'block' : 'grid';
+        document.querySelector('.current-panel').style.display = button.dataset.view === 'target' ? 'none' : 'block';
+      });
+    });
+
+    function setState(state) {
+      const build = document.querySelector('[data-machine="build"]');
+      const gpu = document.querySelector('[data-machine="gpu"]');
+      const machines = [build, gpu];
+      machines.forEach(machine => {
+        machine.classList.remove('stale');
+        const dot = machine.querySelector('.status-dot');
+        const status = machine.querySelector('.status');
+        const action = machine.querySelector('.machine-action');
+        if (action) action.remove();
+        dot.className = 'status-dot';
+        status.lastChild.textContent = 'online';
+        machine.querySelectorAll('.workspace-row, .target-agent').forEach(row => row.classList.remove('stale'));
+      });
+      targetWrap.classList.remove('attention-state');
+
+      if (state === 'stale') {
+        build.classList.add('stale');
+        build.querySelector('.status-dot').classList.add('stale');
+        build.querySelector('.status').lastChild.textContent = 'reconnecting';
+        build.querySelectorAll('.workspace-row, .target-agent').forEach(row => row.classList.add('stale'));
+        stateNote.textContent = 'Build machine：cached rows 保留，但不可操作；Local 仍是 terminal owner';
+        terminalMode.textContent = 'remote stale · input disabled';
+        terminalNote.textContent = 'stale snapshot 只用于展示。重连不会抢走当前 selection，fresh surface coherence 后才恢复操作。';
+      } else if (state === 'attention') {
+        build.classList.add('stale');
+        const dot = build.querySelector('.status-dot');
+        dot.classList.add('attention');
+        build.querySelector('.status').lastChild.textContent = 'attention';
+        const head = build.querySelector('.machine-head');
+        const action = document.createElement('button');
+        action.className = 'machine-action';
+        action.textContent = 'setup';
+        head.appendChild(action);
+        stateNote.textContent = 'Build machine：需要交互式 SSH / setup 处理，Prowl 不自动执行';
+        terminalMode.textContent = 'attention · source unchanged';
+        terminalNote.textContent = 'Attention 提供 standalone setup 指引；处理完成并重启 Herdr client 后再恢复连接。';
+      } else {
+        stateNote.textContent = '当前 endpoint：Local · terminal owner 由 Herdr client 提交';
+        terminalMode.textContent = 'committed terminal owner';
+        terminalNote.textContent = '点击远端 workspace / agent 时，这块 terminal 不由 Prowl 自己渲染；Herdr client 完成 activation commit 后才切换 owner。';
+      }
+    }
+
+    document.querySelectorAll('.state-button').forEach(button => {
+      button.addEventListener('click', () => {
+        document.querySelectorAll('.state-button').forEach(item => item.classList.toggle('active', item === button));
+        setState(button.dataset.state);
+      });
+    });
+
+    document.querySelectorAll('[data-action="workspace"], [data-action="agent"]').forEach(row => {
+      row.addEventListener('click', () => {
+        if (row.classList.contains('stale')) return;
+        document.querySelectorAll('.workspace-row, .target-agent').forEach(item => item.classList.remove('selected'));
+        row.classList.add('selected');
+        const machine = row.dataset.machine === 'build' ? 'Build machine' : row.dataset.machine === 'gpu' ? 'GPU machine' : 'Local';
+        const isAgent = row.dataset.action === 'agent';
+        const label = isAgent ? row.querySelector('.target-agent-context').textContent : row.querySelector('.workspace-name').textContent;
+        stateNote.textContent = `requested：${machine} · ${label} · 等待 Herdr activation commit`;
+        terminalMode.textContent = 'pending activation';
+        terminalNote.textContent = '这是 requested selection。只有 Herdr client 完成 source release、target focus、surface coherence 后才会成为 committed owner。';
+        setTimeout(() => {
+          terminalOwner.textContent = machine;
+          terminalWorkspace.textContent = label;
+          terminalMode.textContent = 'committed terminal owner';
+          stateNote.textContent = `当前 endpoint：${machine} · terminal owner 由 Herdr client 提交`;
+        }, 650);
+      });
+    });
+
+    document.querySelectorAll('[data-action="machine"]').forEach(row => {
+      row.addEventListener('click', () => {
+        const machine = row.closest('.machine');
+        machine.classList.toggle('active');
+        const chevron = row.querySelector('.machine-chevron');
+        chevron.textContent = machine.classList.contains('active') ? '▾' : '▸';
+        machine.querySelectorAll('.workspace-row').forEach(item => item.style.display = machine.classList.contains('active') ? 'grid' : 'none');
+      });
+    });
+  </script>
+</body>
+</html>
