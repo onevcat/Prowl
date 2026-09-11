@@ -117,3 +117,18 @@ work. Shell send, shared local-draft/IME protection and Claude paste/Enter evide
 remain separate review-alignment work; the route tests do not establish those
 terminal behaviors. The previous `submit-text` protocol remains only in the iOS
 legacy fixture path until the final wire cleanup.
+
+
+### Shared input protection checkpoint
+
+Public Agent dispatch checks Host IME composition and editing activity before and
+after its idle wait. Marked text always refuses delivery; editing within two seconds
+also refuses it. Claude additionally requires a recognized empty composer, using
+its shared screen profile: multiline drafts and image/paste markers refuse dispatch.
+A missing composer is not considered empty. These checks apply to CLI dispatch as
+well as mirror dispatch and run before text insertion can clear marked text.
+
+This does not yet verify Codex placeholder-versus-draft styling, nor implement the
+Claude paste acknowledgement/Enter sequence or Shell Send. The screen check is
+based on rendered text and is not a terminal-native draft API. Real terminal
+acceptance remains required; component tests do not establish those pending paths.

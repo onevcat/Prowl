@@ -16,6 +16,7 @@ final class AgentDispatchCommandHandler: CommandHandler {
   typealias ConditionSnapshotProvider = @MainActor (TabResolvedTarget) -> AgentConditionSnapshot
   typealias IssueDispatch = @MainActor (TabResolvedTarget) -> Result<AgentDispatchSnapshot, AgentDispatchStoreError>
   typealias DeliverPrompt = @MainActor (TabResolvedTarget, String) -> Bool
+  typealias InputProtection = @MainActor (TabResolvedTarget) -> String?
   typealias CancelDispatch = @MainActor (String) -> Void
 
   /// How long the precondition lets the evidence settle before refusing: a runtime
@@ -31,6 +32,7 @@ final class AgentDispatchCommandHandler: CommandHandler {
     case settling(String)
   }
 
+  private let inputProtection: InputProtection
   private let resolveTarget: ResolveTarget
   private let pendingDispatch: PendingDispatch
   private let conditionSnapshot: ConditionSnapshotProvider
@@ -43,6 +45,7 @@ final class AgentDispatchCommandHandler: CommandHandler {
 
   init(
     resolveTarget: @escaping ResolveTarget,
+    inputProtection: @escaping InputProtection = { _ in nil },
     pendingDispatch: @escaping PendingDispatch = { _ in nil },
     conditionSnapshot: @escaping ConditionSnapshotProvider = { _ in
       AgentConditionSnapshot(agent: nil, signal: nil, revision: 0, isLive: false, signals: .empty)
@@ -53,6 +56,7 @@ final class AgentDispatchCommandHandler: CommandHandler {
     clock: any Clock<Duration> = ContinuousClock(),
     now: @escaping @MainActor () -> Date = Date.init
   ) {
+    self.inputProtection = inputProtection
     self.resolveTarget = resolveTarget
     self.pendingDispatch = pendingDispatch
     self.conditionSnapshot = conditionSnapshot
@@ -83,7 +87,7 @@ final class AgentDispatchCommandHandler: CommandHandler {
     if let pending = pendingDispatch(target) {
       return pendingFailure(pending, target: target)
     }
-    if let refusal = await awaitIdleAgent(target: target) {
+    if let refusal = await prepareDelivery(target: target) {
       return refusal
     }
 
@@ -125,6 +129,18 @@ final class AgentDispatchCommandHandler: CommandHandler {
     } catch {
       return failure(code: CLIErrorCode.dispatchFailed, message: "Failed to encode the dispatch record.")
     }
+  }
+
+  private func prepareDelivery(target: TabResolvedTarget) async -> CommandResponse? {
+    // Code security: do not clear local IME input or append into an actively edited composer.
+    if let reason = inputProtection(target) {
+      return failure(code: CLIErrorCode.dispatchTargetBusy, message: reason)
+    }
+    if let refusal = await awaitIdleAgent(target: target) { return refusal }
+    if let reason = inputProtection(target) {
+      return failure(code: CLIErrorCode.dispatchTargetBusy, message: reason)
+    }
+    return nil
   }
 
   /// Nil when the pane hosts an idle agent; otherwise the structured refusal.
