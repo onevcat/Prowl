@@ -127,6 +127,7 @@ internal final class CleanTerminalHost {
     @Sendable (String) async throws -> HerdrPaneProcessInfo
   internal typealias HerdrCompatibilityFailureHandler = @MainActor (HerdrSocketError) -> Void
   internal typealias HerdrForegroundHandler = @MainActor (Bool) -> Void
+  internal typealias HerdrNavigationHandler = @MainActor () -> Void
 
   private static let periodicProbeInterval = Duration.milliseconds(200)
   private static let delayedProbeInterval = Duration.milliseconds(50)
@@ -141,6 +142,7 @@ internal final class CleanTerminalHost {
   private let foregroundJobProbe: CleanForegroundJobProbe
   private let herdrProcessInfoProvider: HerdrProcessInfoProvider
   private let onHerdrForegroundChanged: HerdrForegroundHandler
+  private let onHerdrNavigationKey: HerdrNavigationHandler
   private let logger = SupaLogger("CleanTerminal")
   private var periodicProbeTask: Task<Void, Never>?
   private var delayedProbeTask: Task<Void, Never>?
@@ -165,7 +167,8 @@ internal final class CleanTerminalHost {
       try await HerdrSocketClient().paneProcessInfo(paneID: paneID)
     },
     onHerdrCompatibilityFailure: @escaping HerdrCompatibilityFailureHandler = { _ in },
-    onHerdrForegroundChanged: @escaping HerdrForegroundHandler = { _ in }
+    onHerdrForegroundChanged: @escaping HerdrForegroundHandler = { _ in },
+    onHerdrNavigationKey: @escaping HerdrNavigationHandler = {}
   ) {
     self.preferredFontSize = preferredFontSize
     self.inputSourceCoordinator = inputSourceCoordinator
@@ -184,6 +187,7 @@ internal final class CleanTerminalHost {
     self.foregroundJobProbe = foregroundJobProbe
     self.herdrProcessInfoProvider = herdrProcessInfoProvider
     self.onHerdrForegroundChanged = onHerdrForegroundChanged
+    self.onHerdrNavigationKey = onHerdrNavigationKey
     herdrAdapter = HerdrInputContextAdapter(
       onCompatibilityFailure: onHerdrCompatibilityFailure,
       onPaneContext: { [weak self] pane in
@@ -408,6 +412,9 @@ internal final class CleanTerminalHost {
     }
     surface.onKeyInput = { [weak self] in
       self?.scheduleInputContextProbe()
+    }
+    surface.onHerdrNavigationKey = { [weak self] in
+      self?.onHerdrNavigationKey()
     }
   }
 

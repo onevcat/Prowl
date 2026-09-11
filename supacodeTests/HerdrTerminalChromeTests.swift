@@ -518,6 +518,37 @@ struct HerdrTerminalChromeTests {
     }
   }
 
+  @Test(.dependencies) func localHerdrNavigationSchedulesSnapshotRefresh() async {
+    let clock = TestClock()
+    let initialSnapshot = makeSnapshot(focusedPaneID: "p1")
+    let focusedSnapshot = makeSnapshot(focusedPaneID: "p2")
+    var initialState = HerdrTerminalChromeFeature.State()
+    initialState.connection = .connected
+    initialState.snapshot = initialSnapshot
+    initialState.selectedWorkspaceID = "w1"
+    initialState.selectedTabID = "t1"
+    initialState.selectedPaneID = "p1"
+    initialState.subscribedPaneIDs = ["p1", "p2"]
+    let store = TestStore(initialState: initialState) {
+      HerdrTerminalChromeFeature()
+    } withDependencies: {
+      $0.continuousClock = clock
+      $0.herdrTerminalChromeClient = testClient(snapshot: focusedSnapshot)
+    }
+
+    await store.send(.herdrNavigationKeyPressed) {
+      $0.refreshGeneration = 1
+    }
+    await clock.advance(by: .milliseconds(100))
+    await store.receive(.debouncedRefresh) {
+      $0.refreshGeneration = 2
+    }
+    await store.receive(.refreshResponseWithGeneration(2, .success(focusedSnapshot))) {
+      $0.snapshot = focusedSnapshot
+      $0.selectedPaneID = "p2"
+    }
+  }
+
   @Test(.dependencies) func focusEventInvalidatesInFlightSnapshotRefresh() async {
     let clock = TestClock()
     let initialSnapshot = makeSnapshot(focusedPaneID: "p1")

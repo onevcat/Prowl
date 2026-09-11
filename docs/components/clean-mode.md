@@ -100,7 +100,7 @@ Prowl 的输入法 adapter 只读取 focused pane，并订阅已确认的 focus/
   launcher 或 Dock 返回同一 Herdr pane 不需要等待下一次 socket 查询或 polling。
 - 检测到不兼容的 Herdr protocol 时，Clean 会在窗口中弹出错误提示，并暂停输入法同步；离开 Herdr 后重新进入会再次检测。
 - 如果 focus event 丢失或 Herdr 版本没有提供该事件，则通过 `pane.current` 每 100ms 轮询更新 focused pane。
-- `Option+H/J/K/L` 不作为 Prowl Canvas 导航处理，按键会继续传给 terminal，供 Herdr 自己切换 tab/workspace。
+- `Option+H/J/K/L` 不作为 Prowl Canvas 导航处理，按键会继续传给 terminal，供 Herdr 自己切换 tab/workspace；由于 Herdr 0.9 的这类 client-local navigation 不广播全局 focus event，Prowl 在按键成功发送后以 100ms debounce 拉取一次 session snapshot，同步 native sidebar 和 tab bar 的选择状态。
 - Clean runtime 强制启用 `macos-option-as-alt = true`，确保 Option 组合编码为 terminal Alt；代价是 Clean 中不能用
   Option 组合输入 macOS 特殊字符。
 - 退出或 detach Herdr 后，自动恢复外层 terminal 的前台进程判断。

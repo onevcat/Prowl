@@ -56,19 +56,21 @@ extension GhosttySurfaceView {
       return
     }
     syncPreedit(clearIfNeeded: markedTextBefore)
+    var didSendKey = false
     if let list = keyTextAccumulator, !list.isEmpty {
       for text in list {
-        _ = sendKey(
-          action: action,
-          event: event,
-          translationEvent: translationEvent,
-          translationMods: translationMods,
-          text: text,
-          composing: false
-        )
+        didSendKey =
+          sendKey(
+            action: action,
+            event: event,
+            translationEvent: translationEvent,
+            translationMods: translationMods,
+            text: text,
+            composing: false
+          ) || didSendKey
       }
     } else {
-      _ = sendKey(
+      didSendKey = sendKey(
         action: action,
         event: event,
         translationEvent: translationEvent,
@@ -76,6 +78,9 @@ extension GhosttySurfaceView {
         text: ghosttyCharacters(translationEvent),
         composing: markedText.length > 0 || markedTextBefore
       )
+    }
+    if isHerdrNavigationKey, didSendKey {
+      onHerdrNavigationKey?()
     }
   }
 

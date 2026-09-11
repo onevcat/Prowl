@@ -278,6 +278,9 @@ struct SupacodeApp: App {
       },
       onHerdrForegroundChanged: { [weak store] isForeground in
         store?.send(.herdrForegroundChanged(isForeground))
+      },
+      onHerdrNavigationKey: { [weak store] in
+        store?.send(.herdrTerminalChrome(.herdrNavigationKeyPressed))
       }
     )
     return CleanRuntime(terminalHost: terminalHost, store: store)

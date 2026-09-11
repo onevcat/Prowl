@@ -96,6 +96,7 @@ internal struct HerdrTerminalChromeFeature {
     case focusPaneTapped(String)
     case focusResponse(FocusResult)
     case focusConfirmationTimedOut(FocusTarget)
+    case herdrNavigationKeyPressed
     case newWorkspaceRequested
     case newTabRequested(workspaceID: String, label: String?, sourceTabID: String?)
     case renameTabRequested(tabID: String, label: String)
@@ -555,6 +556,10 @@ internal struct HerdrTerminalChromeFeature {
         state.pendingFocus = nil
         state.focusRollback = nil
         return startRefresh(&state)
+
+      case .herdrNavigationKeyPressed:
+        guard state.connection == .connected else { return .none }
+        return scheduleDebouncedRefresh(&state, invalidatesInFlightRefresh: true)
 
       case .newWorkspaceRequested:
         guard state.connection == .connected else { return .none }

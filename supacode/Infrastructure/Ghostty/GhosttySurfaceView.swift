@@ -184,6 +184,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
   }
   var onFocusChange: ((Bool) -> Void)?
   var onKeyInput: (() -> Void)?
+  var onHerdrNavigationKey: (() -> Void)?
   var onCommittedText: ((String) -> Void)?
   var onMirroredKey: ((MirroredTerminalKey) -> Void)?
   var onFontSizeShortcut: (() -> Void)?
