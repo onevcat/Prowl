@@ -14,17 +14,6 @@ extension GhosttySurfaceView {
     if CanvasDirectionalNewTerminalChordCoordinator.shared.shouldBlockTerminalInput(event) {
       return
     }
-    let herdrNavigationKey = Self.herdrNavigationKey(
-      keyCode: event.keyCode,
-      charactersIgnoringModifiers: event.charactersIgnoringModifiers,
-      modifierFlags: event.modifierFlags
-    )
-    if herdrNavigationKey != nil {
-      let key = event.charactersIgnoringModifiers ?? "?"
-      surfaceLogger.diagnostic(
-        "herdr-nav keyDown uptime_ms=\(Self.monotonicMilliseconds()) key=\(key) key_code=\(event.keyCode) modifiers=\(event.modifierFlags.rawValue)"
-      )
-    }
     if shouldPreferMenuHandling(for: event),
       let menu = NSApp.mainMenu,
       menu.performKeyEquivalent(with: event)
@@ -56,21 +45,19 @@ extension GhosttySurfaceView {
       return
     }
     syncPreedit(clearIfNeeded: markedTextBefore)
-    var didSendKey = false
     if let list = keyTextAccumulator, !list.isEmpty {
       for text in list {
-        didSendKey =
-          sendKey(
-            action: action,
-            event: event,
-            translationEvent: translationEvent,
-            translationMods: translationMods,
-            text: text,
-            composing: false
-          ) || didSendKey
+        sendKey(
+          action: action,
+          event: event,
+          translationEvent: translationEvent,
+          translationMods: translationMods,
+          text: text,
+          composing: false
+        )
       }
     } else {
-      didSendKey = sendKey(
+      sendKey(
         action: action,
         event: event,
         translationEvent: translationEvent,
@@ -78,9 +65,6 @@ extension GhosttySurfaceView {
         text: ghosttyCharacters(translationEvent),
         composing: markedText.length > 0 || markedTextBefore
       )
-    }
-    if let herdrNavigationKey, didSendKey {
-      onHerdrNavigationKey?(herdrNavigationKey)
     }
   }
 
@@ -297,46 +281,30 @@ extension GhosttySurfaceView {
     return isCanvasActive ? .appMenu : .terminal
   }
 
-  static func herdrNavigationKey(
-    keyCode: UInt16,
-    charactersIgnoringModifiers: String?,
-    modifierFlags: NSEvent.ModifierFlags
-  ) -> HerdrNavigationKey? {
-    let relevantModifiers = modifierFlags.intersection([.command, .shift, .option, .control])
-    guard relevantModifiers == [.option] else { return nil }
-
-    switch Int(keyCode) {
-    case kVK_ANSI_H: return .previousTab
-    case kVK_ANSI_J: return .nextWorkspace
-    case kVK_ANSI_K: return .previousWorkspace
-    case kVK_ANSI_L: return .nextTab
-    default: break
-    }
-
-    guard let charactersIgnoringModifiers else { return nil }
-    let normalizedCharacters =
-      charactersIgnoringModifiers
-      .trimmingCharacters(in: .whitespacesAndNewlines)
-      .lowercased()
-    switch normalizedCharacters {
-    case "h": return .previousTab
-    case "j": return .nextWorkspace
-    case "k": return .previousWorkspace
-    case "l": return .nextTab
-    default: return nil
-    }
-  }
-
   static func isOptionCanvasNavigationShortcut(
     keyCode: UInt16,
     charactersIgnoringModifiers: String?,
     modifierFlags: NSEvent.ModifierFlags
   ) -> Bool {
-    herdrNavigationKey(
-      keyCode: keyCode,
-      charactersIgnoringModifiers: charactersIgnoringModifiers,
-      modifierFlags: modifierFlags
-    ) != nil
+    let relevantModifiers = modifierFlags.intersection([.command, .shift, .option, .control])
+    guard relevantModifiers == [.option] else { return false }
+
+    switch Int(keyCode) {
+    case kVK_ANSI_H, kVK_ANSI_J, kVK_ANSI_K, kVK_ANSI_L:
+      return true
+    default:
+      break
+    }
+
+    guard let charactersIgnoringModifiers else { return false }
+    let normalizedCharacters =
+      charactersIgnoringModifiers
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+      .lowercased()
+    switch normalizedCharacters {
+    case "h", "j", "k", "l": return true
+    default: return false
+    }
   }
 
   func equivalentKey(for event: NSEvent) -> String? {
