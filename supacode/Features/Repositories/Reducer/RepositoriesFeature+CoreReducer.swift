@@ -18,11 +18,6 @@ extension RepositoriesFeature {
     case .activeAgents(.entryTapped(let id)), .activeAgents(.handOffTapped(let id)),
       .activeAgents(.runWorkflowTapped(let id, _)):
       guard let entry = state.activeAgents.entries[id: id] else { return .none }
-      if entry.worktreeID == HostControlConsole.worktreeID {
-        return .run { _ in
-          _ = await terminalClient.focusSurface(entry.worktreeID, entry.surfaceID)
-        }
-      }
       if state.isShowingCanvas {
         requestCanvasFocus(.tab(entry.tabID), openedWorktreeID: entry.worktreeID, state: &state)
         return .run { _ in
@@ -619,10 +614,6 @@ extension RepositoriesFeature {
             ))
         }
       )
-
-    case .selectControlConsole(let worktree):
-      state.controlConsoleWorktree = worktree
-      return .send(.selectWorktree(worktree.id, focusTerminal: true, recordHistory: false))
 
     case .selectWorktree(let worktreeID, let focusTerminal, let recordHistory):
       let selectWtToken = repositoriesLogger.beginInterval("reducer.selectWorktree")

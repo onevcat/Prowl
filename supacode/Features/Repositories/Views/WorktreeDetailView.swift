@@ -5,6 +5,7 @@ import Sharing
 import SwiftUI
 
 struct WorktreeDetailView: View {
+  @Dependency(FeatureFlags.self) private var featureFlags
   private struct ToolbarSharedStateInput {
     let repositories: RepositoriesFeature.State
     let workflowRuns: WorkflowRunsFeature.State
@@ -99,22 +100,8 @@ struct WorktreeDetailView: View {
     )
     .toolbar(removing: .title)
     .toolbar {
-      if repositories.isShowingCanvas {
-        canvasToolbarContent(state: sharedToolbarState)
-      } else if hasActiveTerminalTarget {
-        worktreeToolbarContent(
-          toolbarState: WorktreeToolbarState(
-            shared: sharedToolbarState,
-            openActionSelection: state.openActionSelection,
-            openActionIsAutomatic: state.openActionIsAutomatic,
-            showExtras: commandKeyObserver.isPressed,
-            showDefaultEditorInToolbar: settingsFile.global.showDefaultEditorInToolbar
-          ),
-          actionTargetWorktree: actionTargetWorktree
-        )
-      } else {
-        ToolbarItem(placement: .navigation) { MirrorHostButton() }
-      }
+      detailToolbarContent(state: state, shared: sharedToolbarState,
+        actionTargetWorktree: actionTargetWorktree, hasActiveTerminalTarget: hasActiveTerminalTarget)
     }
     .environment(historyStore)
     .environment(toolbarPopovers)
@@ -140,6 +127,31 @@ struct WorktreeDetailView: View {
         ? terminalManager.canvasFocusedWorktreeID : nil
     )
     return applyFocusedActions(content: content, actions: actions, token: actionToken)
+  }
+
+  @ToolbarContentBuilder
+  private func detailToolbarContent(
+    state: AppFeature.State, shared: ToolbarSharedState,
+    actionTargetWorktree: Worktree?, hasActiveTerminalTarget: Bool
+  ) -> some ToolbarContent {
+      if state.repositories.isShowingCanvas {
+        canvasToolbarContent(state: shared)
+      } else if hasActiveTerminalTarget {
+        worktreeToolbarContent(
+          toolbarState: WorktreeToolbarState(
+            shared: shared,
+            openActionSelection: state.openActionSelection,
+            openActionIsAutomatic: state.openActionIsAutomatic,
+            showExtras: commandKeyObserver.isPressed,
+            showDefaultEditorInToolbar: settingsFile.global.showDefaultEditorInToolbar
+          ),
+          actionTargetWorktree: actionTargetWorktree
+        )
+      } else {
+        if featureFlags.remoteMirror {
+          ToolbarItem(placement: .navigation) { MirrorHostButton() }
+        }
+      }
   }
 
   @ToolbarContentBuilder
@@ -1001,7 +1013,7 @@ struct WorktreeDetailView: View {
           if featureFlags.workflowUI && !historyStore.entries.isEmpty {
             WorkflowHistoryPopoverButton(store: historyStore, onIntent: onHistoryIntent)
           }
-          MirrorHostButton()
+          if featureFlags.remoteMirror { MirrorHostButton() }
           if isUpdateAvailable {
             ToolbarUpdateButton(
               availableVersion: availableUpdateVersion,

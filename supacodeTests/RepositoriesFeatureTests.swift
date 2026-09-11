@@ -2672,62 +2672,6 @@ struct RepositoriesFeatureTests {
     await store.send(.newTerminalTab("/tmp/unknown"))
   }
 
-  @Test func selectingControlConsolePublishesItsRealTerminalContext() async {
-    let console = makeWorktree(id: HostControlConsole.worktreeID, name: "Host Console")
-    let store = TestStore(initialState: makeState(repositories: [])) { RepositoriesFeature() }
-    await store.send(.selectControlConsole(console)) { $0.controlConsoleWorktree = console }
-    await store.receive(\.selectWorktree) {
-      $0.selection = .worktree(console.id)
-      $0.sidebarSelectedWorktreeIDs = [console.id]
-      $0.openedWorktreeIDs = [console.id]
-      $0.pendingTerminalFocusWorktreeIDs = [console.id]
-    }
-    await store.receive(\.delegate.selectedWorktreeChanged)
-    #expect(store.state.worktree(for: console.id) == console)
-    #expect(store.state.repositories.isEmpty)
-  }
-
-  @Test func controlConsoleEntryOpensItsWindowWithoutSelectingAFakeWorktree() async {
-    let worktree = makeWorktree(id: HostControlConsole.worktreeID, name: "wt")
-    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
-    var state = makeState(repositories: [repository])
-    let surfaceID = UUID()
-    let entry = ActiveAgentEntry(
-      id: surfaceID,
-      worktreeID: worktree.id,
-      worktreeName: worktree.name,
-      workingDirectory: nil,
-      tabID: TerminalTabID(rawValue: UUID()),
-      paneTitle: "agent",
-      surfaceID: surfaceID,
-      paneIndex: 0,
-      iconLookupToken: DetectedAgent.codex.iconLookupToken,
-      agent: .codex,
-      rawState: .working,
-      displayState: .working,
-      lastChangedAt: Date(timeIntervalSince1970: 0)
-    )
-    state.activeAgents.entries = [entry]
-
-    let focusedSurface = LockIsolated<(Worktree.ID, UUID)?>(nil)
-    let store = TestStore(initialState: state) {
-      RepositoriesFeature()
-    } withDependencies: {
-      $0.terminalClient.focusSurface = { worktreeID, surface in
-        focusedSurface.setValue((worktreeID, surface))
-        return true
-      }
-    }
-
-    await store.send(.activeAgents(.entryTapped(entry.id))) {
-      $0.activeAgents.focusedSurfaceID = surfaceID
-    }
-    await store.finish()
-    #expect(store.state.selection == state.selection)
-    #expect(focusedSurface.value?.0 == worktree.id)
-    #expect(focusedSurface.value?.1 == surfaceID)
-  }
-
   @Test func activeAgentEntryTappedFocusesSurfaceBeforeSelectingWorktree() async {
     let worktree = makeWorktree(id: "/tmp/repo/wt", name: "wt")
     let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])

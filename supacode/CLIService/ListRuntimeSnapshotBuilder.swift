@@ -22,10 +22,8 @@ enum ListRuntimeSnapshotBuilder {
       activeSnapshots[state.worktreeID] = state.makeCLIListSnapshot()
     }
 
-    let orderedContexts = orderedWorktreeContexts(
-      from: repositoriesState, controlConsole: terminalManager.controlConsoleWorktree)
-    let focusedWorktreeID =
-      terminalManager.selectedWorktreeID ?? terminalManager.canvasFocusedWorktreeID
+    let orderedContexts = orderedWorktreeContexts(from: repositoriesState)
+    let focusedWorktreeID = terminalManager.selectedWorktreeID ?? terminalManager.canvasFocusedWorktreeID
 
     let worktrees: [ListRuntimeSnapshot.Worktree] = orderedContexts.compactMap { context in
       guard let terminalSnapshot = activeSnapshots[context.id] else {
@@ -75,9 +73,7 @@ enum ListRuntimeSnapshotBuilder {
     return ListRuntimeSnapshot(worktrees: worktrees, focusedWorktreeID: focusedWorktreeID)
   }
 
-  static func orderedWorktreeContexts(
-    from repositoriesState: RepositoriesFeature.State, controlConsole: Worktree? = nil
-  ) -> [WorktreeContext] {
+  static func orderedWorktreeContexts(from repositoriesState: RepositoriesFeature.State) -> [WorktreeContext] {
     var contexts: [WorktreeContext] = []
     let repositoriesByID = Dictionary(
       repositoriesState.repositories.map { ($0.id, $0) },
@@ -118,13 +114,6 @@ enum ListRuntimeSnapshotBuilder {
       }
     }
 
-    if let controlConsole, !contexts.contains(where: { $0.id == controlConsole.id }) {
-      contexts.append(
-        WorktreeContext(
-          id: controlConsole.id, name: controlConsole.name,
-          path: controlConsole.workingDirectory.path,
-          rootPath: controlConsole.repositoryRootURL.path, kind: .plain))
-    }
     return contexts
   }
 

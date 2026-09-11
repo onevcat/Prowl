@@ -100,7 +100,6 @@ struct SidebarListView: View {
               expandableRepositoryIDs: expandableRepositoryIDs
             )
           }
-          HostConsoleSidebarRow()
           ForEach(Array(repositoryItems.enumerated()), id: \.element.id) { index, item in
             repositoryItemView(
               item,

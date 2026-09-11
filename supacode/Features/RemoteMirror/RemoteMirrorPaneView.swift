@@ -1,10 +1,13 @@
+import ComposableArchitecture
 import SwiftUI
 
 struct RemoteMirrorSidebar: View {
   @Environment(RemoteMirrorStore.self) private var mirrors
 
+  @Dependency(FeatureFlags.self) private var featureFlags
+
   var body: some View {
-    if !mirrors.clients.isEmpty {
+    if featureFlags.remoteMirror && !mirrors.clients.isEmpty {
       VStack(alignment: .leading, spacing: 6) {
         Text("Remote Mirrors").font(.caption.bold()).foregroundStyle(.secondary)
         ForEach(mirrors.clients) { client in
@@ -43,6 +46,7 @@ struct RemoteMirrorSidebar: View {
 }
 
 struct RemoteMirrorPaneView: View {
+  @State private var toolbarPopovers = ToolbarPopoverCoordinator()
   @Environment(RemoteMirrorStore.self) private var mirrors
   @Bindable var client: MirrorClient
 
@@ -99,6 +103,7 @@ struct RemoteMirrorPaneView: View {
       }
     }
     .toolbar { ToolbarItem(placement: .navigation) { MirrorHostButton() } }
+    .environment(toolbarPopovers)
     .accessibilityIdentifier("remote-mirror-pane")
   }
 

@@ -196,7 +196,6 @@ struct SupacodeApp: App {
   }
 
   @MainActor init() {
-    MirrorRelay.runIfRequested()
     NSWindow.allowsAutomaticWindowTabbing = false
     UserDefaults.standard.set(200, forKey: "NSInitialToolTipDelay")
     @Shared(.settingsFile) var settingsFile
@@ -290,8 +289,6 @@ struct SupacodeApp: App {
       watchdog.start()
     #endif
     _memoryWatchdog = State(initialValue: watchdog)
-
-    remoteMirror.controlConsole.makeServer = { try cliServer.makeControlConsoleEndpoint() }
 
     runtime.onQuit = Self.quitHandler(for: appStore)
     appDelegate.appStore = appStore
@@ -970,7 +967,8 @@ struct SupacodeApp: App {
         changedSignal: signalEvidence.latest,
         revision: observed?.revision ?? 0,
         isLive: terminalManager.isSurfaceLive(surfaceID),
-        signals: terminalManager.agentSignalsPayload(surfaceID: surfaceID)
+        signals: terminalManager.agentSignalsPayload(surfaceID: surfaceID),
+        screenDetection: terminalManager.agentScreenDetection(surfaceID: surfaceID)
       )
     }
     let agentWaitHandler = AgentWaitCommandHandler(
@@ -1390,8 +1388,7 @@ struct SupacodeApp: App {
   private static func makeRemoteMirrorStore(
     manager: WorktreeTerminalManager, runtime: GhosttyRuntime
   ) -> RemoteMirrorStore {
-    @Shared(.userGlobalSettings) var settings
-    return RemoteMirrorStore(manager: manager, runtime: runtime, profiles: settings.agentProfiles)
+    return RemoteMirrorStore(manager: manager, runtime: runtime)
   }
 
   private static func makeCLISocketServer(
@@ -1568,7 +1565,6 @@ struct SupacodeApp: App {
     repositories: [Repository],
     terminalManager: WorktreeTerminalManager? = nil
   ) -> Worktree? {
-    if let control = terminalManager?.controlConsoleWorktree, control.id == id { return control }
     for repository in repositories {
       if let worktree = repository.worktrees[id: id] {
         return worktree

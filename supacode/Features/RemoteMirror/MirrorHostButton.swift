@@ -1,37 +1,46 @@
+import ComposableArchitecture
 import SwiftUI
 
 struct MirrorHostButton: View {
   @Environment(RemoteMirrorStore.self) private var mirrors
-  @State private var isPresented = false
+  @Environment(ToolbarPopoverCoordinator.self) private var popovers
+  @Dependency(FeatureFlags.self) private var featureFlags
   @State private var panelHeight: CGFloat = 700
 
   var body: some View {
-    Button {
-      if !isPresented {
-        panelHeight = min(760, max(300, (NSScreen.main?.visibleFrame.height ?? 840) - 140))
+    if featureFlags.remoteMirror {
+      Button {
+        if popovers.presented != .mirror {
+          panelHeight = min(760, max(300, (NSScreen.main?.visibleFrame.height ?? 840) - 140))
+        }
+        popovers.toggle(.mirror)
+      } label: {
+        Label(mirrors.host.isRunning ? "Host Running" : "Start Host", systemImage: "network")
+          .foregroundStyle(mirrors.host.isRunning ? Color.green : Color.primary)
       }
-      isPresented.toggle()
-    } label: {
-      Label(mirrors.host.isRunning ? "Host Running" : "Start Host", systemImage: "network")
-        .foregroundStyle(mirrors.host.isRunning ? Color.green : Color.primary)
-    }
-    .help("Configure Remote Mirror Host")
-    .accessibilityIdentifier("remote-mirror-host-button")
-    .popover(isPresented: $isPresented) {
-      ScrollView {
-        MirrorHostSettingsView(host: mirrors.host, console: mirrors.controlConsole)
-          .fixedSize(horizontal: false, vertical: true)
+      .help("Configure Remote Mirror Host")
+      .accessibilityIdentifier("remote-mirror-host-button")
+      .popover(
+        isPresented: Binding(
+          get: { popovers.presented == .mirror },
+          set: { if !$0 { popovers.dismiss(.mirror) } }
+        )
+      ) {
+        ScrollView {
+          MirrorHostSettingsView(host: mirrors.host)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        // Keep the native popover size stable while Host state change.
+        // Content-driven resizing can reenter AppKit's animated layout on macOS 26.
+        .frame(width: 460, height: panelHeight)
       }
-      // Keep the native popover size stable while Host and console state change.
-      // Content-driven resizing can reenter AppKit's animated layout on macOS 26.
-      .frame(width: 460, height: panelHeight)
+      .onDisappear { popovers.dismiss(.mirror) }
     }
   }
 }
 
 private struct MirrorHostSettingsView: View {
   @Bindable var host: MirrorHost
-  @Bindable var console: HostControlConsole
   @State private var copyError: String?
   @State private var copied = false
 
@@ -46,32 +55,6 @@ private struct MirrorHostSettingsView: View {
         TextField("Port", text: $host.port)
       }
       .disabled(host.isRunning || host.isStarting)
-      Divider()
-      Toggle("Start AI Control Console", isOn: $console.enabled)
-        .help("Optionally launch an Agent that can manage Prowl panes using the bundled CLI")
-        .accessibilityIdentifier("remote-mirror-enable-console")
-      if console.enabled {
-        controlConfiguration
-      }
-      if console.enabled, let error = console.error {
-        Text(error).foregroundStyle(.red).textSelection(.enabled)
-      }
-      if let notice = console.configurationNotice {
-        Text(notice).foregroundStyle(.secondary).textSelection(.enabled)
-      }
-      if console.isAlive {
-        HStack {
-          Button("Open AI Control Console") { console.show() }
-            .help("Inspect the control Agent terminal and its errors")
-          Button("Restart Console") { console.restart() }
-            .disabled(console.isStarting || !console.enabled)
-            .help("Restart only the AI control session with the configuration shown above")
-        }
-      } else if host.isRunning, console.enabled {
-        Button(console.isStarting ? "Starting Agent…" : "Start AI Console") { console.start() }
-          .disabled(console.isStarting)
-          .help("Start the optional control Agent; sharing stays available if startup fails")
-      }
       if host.isRunning {
         Label("Listening · \(host.subscriberCount) mirror(s)", systemImage: "checkmark.circle")
         Text("Client: enter this Mac’s reachable IP, port \(host.port), and the pairing key below.")
@@ -106,34 +89,4 @@ private struct MirrorHostSettingsView: View {
     }
   }
 
-  private var controlConfiguration: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      Picker(
-        "Agent",
-        selection: Binding(get: { console.preset }, set: { console.selectPreset($0) })
-      ) {
-        ForEach(ConsoleAgentPreset.allCases) { preset in Text(preset.title).tag(preset) }
-      }
-      .accessibilityIdentifier("remote-mirror-console-agent")
-      TextField("CLI command (for example, pi)", text: $console.command, axis: .vertical)
-        .lineLimit(2...4)
-        .font(.body.monospaced())
-        .help(
-          "Executable and arguments; add model options here. Shell expansions and pipelines are not evaluated."
-        )
-        .accessibilityIdentifier("remote-mirror-console-command")
-      Text(
-        "Edit the command to change model or permissions. Prowl appends its control instructions as the final argument."
-      )
-      .font(.caption).foregroundStyle(.secondary)
-      TextField("Working directory (optional)", text: $console.directory)
-      Text("Default: \(HostControlConsole.defaultDirectory.path)")
-        .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-      if console.isAlive {
-        Text("Configuration changes apply when you restart the console.").font(.caption)
-          .foregroundStyle(.secondary)
-      }
-    }
-    .disabled(host.isStarting || console.isStarting)
-  }
 }

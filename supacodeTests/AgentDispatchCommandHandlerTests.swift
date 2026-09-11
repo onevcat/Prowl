@@ -7,6 +7,31 @@ import Testing
 
 @MainActor
 struct AgentDispatchCommandHandlerTests {
+  @Test func fallbackIdleIsNotEvidenceForDispatchOrWait() {
+    let agent = agentEntry(surfaceID: UUID(), status: .idle)
+    let snapshot = AgentConditionSnapshot(
+      agent: agent, signal: nil, revision: 1, isLive: true, signals: .empty,
+      screenDetection: .init(state: .idle, reason: .noRuleMatched))
+    #expect(AgentConditionEvidence.normalizedState(snapshot) == "unknown")
+    guard case .busy = AgentConditionEvidence.idleVerdict(for: snapshot) else {
+      Issue.record("An unrecognized composer must not permit dispatch")
+      return
+    }
+    #expect(!AgentConditionEvidence.detectorReports(.idle, normalizedState: "unknown"))
+  }
+
+  @Test func unmatchedScreenDoesNotEraseBlockedOrAbsentState() {
+    let blocked = AgentConditionSnapshot(
+      agent: agentEntry(surfaceID: UUID(), status: .blocked), signal: nil,
+      revision: 1, isLive: true, signals: .empty,
+      screenDetection: .init(state: .idle, reason: .noRuleMatched))
+    #expect(AgentConditionEvidence.normalizedState(blocked) == "blocked")
+    let absent = AgentConditionSnapshot(
+      agent: nil, signal: nil, revision: 1, isLive: true, signals: .empty,
+      screenDetection: .init(state: .idle, reason: .noRuleMatched))
+    #expect(AgentConditionEvidence.normalizedState(absent) == "absent")
+  }
+
   @Test func completionRequiresCallerContextAndReturnsImmutableReceipt() async throws {
     let caller = CallerPane(worktreeID: "w1", surfaceID: UUID())
     let target = makeTarget(paneID: caller.surfaceID.uuidString)

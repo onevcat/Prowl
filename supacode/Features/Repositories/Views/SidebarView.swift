@@ -40,9 +40,6 @@ struct SidebarView: View {
     .onChange(of: state.selection) { _, _ in
       if state.selection != nil {
         mirrors.selectedID = nil
-        if state.selectedWorktreeID != HostControlConsole.worktreeID {
-          mirrors.controlConsole.isSelected = false
-        }
       }
       syncSidebarSelections(state: state, visibleWorktreeIDs: visibleWorktreeIDs)
     }

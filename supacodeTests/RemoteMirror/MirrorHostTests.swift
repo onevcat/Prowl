@@ -7,13 +7,22 @@ import Testing
 
 @MainActor
 struct MirrorHostTests {
+  @Test func disabledHostNeverStartsOrGeneratesCredentials() {
+    let host = MirrorHost(source: Source(), enabled: false)
+    host.start()
+    #expect(!host.isStarting)
+    #expect(!host.isRunning)
+    #expect(host.pairingKey.isEmpty)
+    #expect(host.hostRunID == nil)
+  }
+
   @Test(.timeLimit(.minutes(1)))
   func fullSilentHandshakePoolStillAllowsAuthenticatedSubscription() async throws {
     let source = Source()
     let suite = "MirrorHandshakeTests-\(UUID())"
     let defaults = try #require(UserDefaults(suiteName: suite))
     defer { defaults.removePersistentDomain(forName: suite) }
-    let host = MirrorHost(source: source, defaults: defaults)
+    let host = MirrorHost(source: source, defaults: defaults, enabled: true)
     host.address = "127.0.0.1"
     host.port = String(try MirrorTestPort.unusedPort())
     host.start()
@@ -49,7 +58,7 @@ struct MirrorHostTests {
     let suite = "MirrorTakeoverTests-\(UUID())"
     let defaults = try #require(UserDefaults(suiteName: suite))
     defer { defaults.removePersistentDomain(forName: suite) }
-    let host = MirrorHost(source: source, defaults: defaults)
+    let host = MirrorHost(source: source, defaults: defaults, enabled: true)
     host.address = "127.0.0.1"
     host.port = String(try MirrorTestPort.unusedPort())
     host.start()
@@ -111,7 +120,7 @@ struct MirrorHostTests {
     let suite = "MirrorFailedTakeoverTests-\(UUID())"
     let defaults = try #require(UserDefaults(suiteName: suite))
     defer { defaults.removePersistentDomain(forName: suite) }
-    let host = MirrorHost(source: source, defaults: defaults)
+    let host = MirrorHost(source: source, defaults: defaults, enabled: true)
     host.address = "127.0.0.1"
     host.port = String(try MirrorTestPort.unusedPort())
     host.start()
@@ -148,7 +157,7 @@ struct MirrorHostTests {
     let suite = "MirrorHostTests-\(UUID())"
     let defaults = try #require(UserDefaults(suiteName: suite))
     defer { defaults.removePersistentDomain(forName: suite) }
-    let host = MirrorHost(source: source, defaults: defaults)
+    let host = MirrorHost(source: source, defaults: defaults, enabled: true)
     host.address = "127.0.0.1"
     host.port = String(try MirrorTestPort.unusedPort())
     host.start()

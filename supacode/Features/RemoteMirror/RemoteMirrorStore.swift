@@ -1,3 +1,4 @@
+import ComposableArchitecture
 import Foundation
 import Observation
 
@@ -5,18 +6,16 @@ import Observation
 @Observable
 final class RemoteMirrorStore {
   let host: MirrorHost
-  let controlConsole: HostControlConsole
   private(set) var clients: [MirrorClient] = []
   var selectedID: UUID?
   private(set) var credentialError: String?
   @ObservationIgnored private let runtime: GhosttyRuntime
 
-  init(manager: WorktreeTerminalManager, runtime: GhosttyRuntime, profiles: [AgentProfile] = []) {
-    host = MirrorHost(source: GhosttyMirrorPaneSource(manager: manager))
-    controlConsole = HostControlConsole(manager: manager, profiles: profiles)
+  init(manager: WorktreeTerminalManager, runtime: GhosttyRuntime) {
+    @Dependency(FeatureFlags.self) var flags
+    host = MirrorHost(
+      source: GhosttyMirrorPaneSource(manager: manager), enabled: flags.remoteMirror)
     self.runtime = runtime
-    host.onStarted = { [weak controlConsole] in controlConsole?.start() }
-    host.onStopped = { [weak controlConsole] in controlConsole?.cancelPreparation() }
   }
 
   var selected: MirrorClient? { clients.first { $0.id == selectedID } }
@@ -55,7 +54,6 @@ final class RemoteMirrorStore {
 
   func stop() {
     host.stop()
-    controlConsole.stop()
     for client in clients { client.close() }
   }
 }

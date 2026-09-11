@@ -4,7 +4,7 @@ import Observation
 /// One owner for adjacent hover popovers. Callbacks from a replaced panel cannot reopen it.
 @MainActor @Observable
 final class ToolbarPopoverCoordinator {
-  enum Destination { case notifications, history }
+  enum Destination { case notifications, history, mirror }
 
   private(set) var presented: Destination?
   private var pinned: Destination?

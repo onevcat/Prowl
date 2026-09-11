@@ -154,11 +154,13 @@ sync-cli-version: # Sync app MARKETING_VERSION into ProwlCLIShared/ProwlVersion.
 
 build-cli: sync-cli-version # Build Swift CLI binary (SPM)
 	swift build --product prowl
+	swift build --product prowl-mirror-relay
 
 build-cli-release: sync-cli-version # Build universal CLI binary in release mode
 	swift build -c release --arch arm64 --arch x86_64 --product prowl
+	swift build -c release --arch arm64 --arch x86_64 --product prowl-mirror-relay
 
-embed-cli-debug: $(CLI_DEBUG_RESOURCE_PATH) # Build debug CLI and copy into Resources for dev builds
+embed-cli-debug: embed-mirror-relay-debug $(CLI_DEBUG_RESOURCE_PATH) # Build debug CLI and copy into Resources for dev builds
 
 $(CLI_DEBUG_RESOURCE_PATH): $(CLI_SOURCE_INPUTS)
 	$(MAKE) build-cli
@@ -174,7 +176,7 @@ $(CLI_DEBUG_RESOURCE_PATH): $(CLI_SOURCE_INPUTS)
 	chmod +x "$$dst/prowl"; \
 	echo "embedded CLI binary at $$dst/prowl"
 
-embed-cli: build-cli-release # Build release CLI and copy into Resources for distribution
+embed-cli: embed-mirror-relay-release build-cli-release # Build release CLI and copy into Resources for distribution
 	@set -euo pipefail; \
 	bin="$$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)/prowl"; \
 	dst="$(CURRENT_MAKEFILE_DIR)/Resources/prowl-cli"; \
@@ -585,3 +587,15 @@ bump-version: # Bump app version (usage: make bump-version [VERSION=YYYY.M.DD] [
 	git commit -m "bump v$$version"; \
 	git tag -s "v$$version" -m "v$$version"; \
 	echo "version bumped to $$version (build $$build), tagged v$$version"
+
+.PHONY: embed-mirror-relay-debug embed-mirror-relay-release
+embed-mirror-relay-debug:
+	swift build --product prowl-mirror-relay
+	@mkdir -p Resources/prowl-mirror-relay
+	cp "$$(swift build --show-bin-path)/prowl-mirror-relay" Resources/prowl-mirror-relay/prowl-mirror-relay
+
+embed-mirror-relay-release:
+	swift build -c release --arch arm64 --arch x86_64 --product prowl-mirror-relay
+	@mkdir -p Resources/prowl-mirror-relay
+	cp "$$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)/prowl-mirror-relay" Resources/prowl-mirror-relay/prowl-mirror-relay
+	strip -S -x Resources/prowl-mirror-relay/prowl-mirror-relay

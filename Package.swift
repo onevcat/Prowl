@@ -5,9 +5,10 @@ import PackageDescription
 let package = Package(
   name: "ProwlCLI",
   platforms: [
-    .macOS(.v13),
+    .macOS(.v13)
   ],
   products: [
+    .executable(name: "prowl-mirror-relay", targets: ["prowl-mirror-relay"]),
     .library(
       name: "ProwlCLIShared",
       targets: ["ProwlCLIShared"]
@@ -24,6 +25,11 @@ let package = Package(
     .package(url: "https://github.com/jpsim/Yams.git", exact: "6.2.2"),
   ],
   targets: [
+    .target(name: "MirrorRelayProtocol", path: "supacode/Features/RemoteMirror/RelayWire"),
+    .executableTarget(
+      name: "prowl-mirror-relay", dependencies: ["MirrorRelayProtocol"], path: "MirrorRelay"),
+    .testTarget(
+      name: "MirrorRelayTests", dependencies: ["MirrorRelayProtocol", "prowl-mirror-relay"], path: "MirrorRelayTests"),
     .target(
       name: "ProwlCLIShared",
       dependencies: [

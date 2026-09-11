@@ -1,4 +1,5 @@
 import AppKit
+import ComposableArchitecture
 import SwiftUI
 
 struct AddToProwlView: View {
@@ -12,8 +13,10 @@ struct AddToProwlView: View {
   @State private var showCloneForm = false
   @State private var showRemoteForm = false
 
+  @Dependency(FeatureFlags.self) private var featureFlags
+
   var body: some View {
-    if showRemoteForm {
+    if featureFlags.remoteMirror && showRemoteForm {
       AddRemoteMirrorView(dismiss: dismiss, back: { showRemoteForm = false })
     } else if showCloneForm {
       CloneRepositoryView(dismiss: dismiss) { clonedURL in
@@ -50,25 +53,27 @@ struct AddToProwlView: View {
         .padding(.horizontal, 2)
 
       workspaceRow
-      Button {
-        showRemoteForm = true
-      } label: {
-        HStack(spacing: 16) {
-          Image(systemName: "network").font(.title).accessibilityHidden(true)
-          VStack(alignment: .leading) {
-            Text("Remote Mirror Pane").font(.headline)
-            Text("Connect to a pane on another Prowl").foregroundStyle(.secondary)
+      if featureFlags.remoteMirror {
+        Button {
+          showRemoteForm = true
+        } label: {
+          HStack(spacing: 16) {
+            Image(systemName: "network").font(.title).accessibilityHidden(true)
+            VStack(alignment: .leading) {
+              Text("Remote Mirror Pane").font(.headline)
+              Text("Connect to a pane on another Prowl").foregroundStyle(.secondary)
+            }
+            Spacer()
+            Image(systemName: "chevron.right").accessibilityHidden(true)
           }
-          Spacer()
-          Image(systemName: "chevron.right").accessibilityHidden(true)
+          .padding(20)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .background(.quaternary, in: RoundedRectangle(cornerRadius: 16))
         }
-        .padding(20)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 16))
+        .buttonStyle(.plain)
+        .padding(.top, 12)
+        .accessibilityIdentifier("add-remote-mirror-button")
       }
-      .buttonStyle(.plain)
-      .padding(.top, 12)
-      .accessibilityIdentifier("add-remote-mirror-button")
 
       HStack {
         Spacer()

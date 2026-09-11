@@ -57,9 +57,7 @@ final class TargetResolver {
   }
 
   /// Resolves an explicit pane-or-tab lifecycle target without allowing worktree fallback.
-  func resolveLifecycleTarget(_ selector: TargetSelector) -> Result<
-    LifecycleResolvedTarget, TargetResolverError
-  > {
+  func resolveLifecycleTarget(_ selector: TargetSelector) -> Result<LifecycleResolvedTarget, TargetResolverError> {
     let snapshot = snapshotProvider()
     switch selector {
     case .pane(let value):
@@ -82,16 +80,13 @@ final class TargetResolver {
         }
       }
       guard UUID(uuidString: value) != nil else {
-        return .failure(
-          .notFound("Lifecycle target '\(value)' must be a pane/tab UUID or prefixed handle."))
+        return .failure(.notFound("Lifecycle target '\(value)' must be a pane/tab UUID or prefixed handle."))
       }
       if case .success(let target) = resolvePane(value, snapshot) {
-        return .success(
-          LifecycleResolvedTarget(resource: .pane, target: TabResolvedTarget(from: target)))
+        return .success(LifecycleResolvedTarget(resource: .pane, target: TabResolvedTarget(from: target)))
       }
       if case .success(let target) = resolveTab(value, snapshot) {
-        return .success(
-          LifecycleResolvedTarget(resource: .tab, target: TabResolvedTarget(from: target)))
+        return .success(LifecycleResolvedTarget(resource: .tab, target: TabResolvedTarget(from: target)))
       }
       return .failure(.notFound("Pane or tab '\(value)' not found."))
     case .none, .worktree:
@@ -101,9 +96,7 @@ final class TargetResolver {
 
   // MARK: - .none: focused worktree → selected tab → focused pane
 
-  private func resolveNone(_ snapshot: TargetResolutionSnapshot) -> Result<
-    ResolvedTarget, TargetResolverError
-  > {
+  private func resolveNone(_ snapshot: TargetResolutionSnapshot) -> Result<ResolvedTarget, TargetResolverError> {
     guard let focusedWorktreeID = snapshot.focusedWorktreeID else {
       return .failure(.notFound("No focused worktree."))
     }
@@ -116,8 +109,7 @@ final class TargetResolver {
     guard let pane = tab.focusedPane else {
       return .failure(.notFound("No focused pane in selected tab."))
     }
-    return .success(
-      makeTarget(worktree: worktree, tab: tab, pane: pane, focusedWorktreeID: focusedWorktreeID))
+    return .success(makeTarget(worktree: worktree, tab: tab, pane: pane, focusedWorktreeID: focusedWorktreeID))
   }
 
   // MARK: - .worktree: match by id, name, or path
@@ -142,9 +134,7 @@ final class TargetResolver {
     guard let pane = tab.focusedPane ?? tab.panes.first else {
       return .failure(.notFound("No panes in worktree '\(value)'."))
     }
-    return .success(
-      makeTarget(
-        worktree: worktree, tab: tab, pane: pane, focusedWorktreeID: snapshot.focusedWorktreeID))
+    return .success(makeTarget(worktree: worktree, tab: tab, pane: pane, focusedWorktreeID: snapshot.focusedWorktreeID))
   }
 
   // MARK: - .tab: find by UUID or short handle
@@ -370,10 +360,8 @@ enum TargetResolutionSnapshotBuilder {
       activeSnapshots[state.worktreeID] = state
     }
 
-    let orderedContexts = ListRuntimeSnapshotBuilder.orderedWorktreeContexts(
-      from: repositoriesState, controlConsole: terminalManager.controlConsoleWorktree)
-    let focusedWorktreeID =
-      terminalManager.selectedWorktreeID ?? terminalManager.canvasFocusedWorktreeID
+    let orderedContexts = ListRuntimeSnapshotBuilder.orderedWorktreeContexts(from: repositoriesState)
+    let focusedWorktreeID = terminalManager.selectedWorktreeID ?? terminalManager.canvasFocusedWorktreeID
 
     let worktrees: [TargetResolutionSnapshot.Worktree] = orderedContexts.compactMap { context in
       guard let state = activeSnapshots[context.id] else { return nil }

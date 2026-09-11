@@ -4,8 +4,6 @@ import GhosttyKit
 @MainActor
 final class GhosttyMirrorPaneSource: MirrorPaneSource {
   let manager: WorktreeTerminalManager
-  var readiness: [UUID: MirrorSubmissionReadiness] = [:]
-  var shellSubmissions: [UUID: MirrorShellSubmission] = [:]
 
   init(manager: WorktreeTerminalManager) {
     self.manager = manager
@@ -36,10 +34,8 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
           return MirrorPaneDescriptor(
             id: view.id, title: title.joined(separator: " · "),
             directory: state.worktree.workingDirectory.path, busy: false,
-            projectName: state.worktreeID == HostControlConsole.worktreeID
-              ? "AI Control Console" : project,
-            subtitle: location.joined(separator: " · "),
-            role: view.id == manager.controlConsoleSurfaceID ? "controlConsole" : nil)
+            projectName: project,
+            subtitle: location.joined(separator: " · "))
         }
       }
     }.sorted { $0.title < $1.title }

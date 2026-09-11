@@ -37,15 +37,6 @@ final class WorktreeTerminalManager {
   private static let eventBufferCap = 2048
   private static let pendingEventCap = 1024
   var selectedWorktreeID: Worktree.ID?
-  private(set) var controlConsoleWorktree: Worktree?
-  var controlConsoleSocketPath: String?
-  var controlConsoleSurfaceID: UUID?
-  var showControlConsole: (() -> Void)?
-
-  func registerControlConsole(_ worktree: Worktree) {
-    controlConsoleWorktree = worktree
-    _ = state(for: worktree)
-  }
   /// The worktree+tab focused in Canvas, updated by CanvasView on card tap.
   /// Used by toggleCanvas to know which worktree to return to.
   var canvasFocusedWorktreeID: Worktree.ID?
@@ -132,16 +123,7 @@ final class WorktreeTerminalManager {
       case .failure(let error): return .failure(error)
       }
       latestContext = context
-      var resources = hookResourcesProvider()
-      if worktree.id == controlConsoleWorktree?.id, let socket = controlConsoleSocketPath,
-        let original = resources
-      {
-        resources = AgentHookResources(
-          bundledCLIPath: original.bundledCLIPath, socketPath: socket,
-          copilotPluginPath: original.copilotPluginPath, piExtensionPath: original.piExtensionPath,
-          ompExtensionPath: original.ompExtensionPath,
-          opencodePluginPath: original.opencodePluginPath)
-      }
+      let resources = hookResourcesProvider()
       let codexShellEnvironment: CodexShellLaunchEnvironment?
       if context.request.plan.runtime == .codex, resources != nil {
         codexShellEnvironment = await codexShellEnvironmentResolver(
@@ -262,8 +244,7 @@ final class WorktreeTerminalManager {
         placement: context.request.placement,
         workingDirectoryOverride: context.request.workingDirectoryOverride,
         inheritanceAnchor: context.request.inheritanceAnchor,
-        title: context.request.title,
-        locksTitle: context.request.locksTitle
+        title: context.request.title
       ),
       inheritedCWD: context.inheritedCWD,
       anchorSurfaceID: context.anchorSurfaceID,
@@ -658,10 +639,6 @@ final class WorktreeTerminalManager {
   }
 
   func agentEvidenceEpochForTesting(surfaceID: UUID) -> UUID? {
-    agentEvidenceEpoch(surfaceID: surfaceID)
-  }
-
-  func agentEvidenceEpoch(surfaceID: UUID) -> UUID? {
     agentObservationStore.currentEvidenceEpoch(surfaceID: surfaceID)
   }
 
@@ -798,6 +775,11 @@ final class WorktreeTerminalManager {
 
   func cancelAgentDispatchIssuance(dispatchID: String) {
     agentDispatchStore.cancelIssuance(dispatchID: dispatchID)
+  }
+
+  func agentScreenDetection(surfaceID: UUID) -> AgentScreenDetection? {
+    activeWorktreeStates.lazy.compactMap { $0.lastAgentScreenScanBySurface[surfaceID]?.detection }
+      .first
   }
 
   func agentDispatchSnapshot(dispatchID: String) -> AgentDispatchSnapshot? {
@@ -1065,7 +1047,6 @@ final class WorktreeTerminalManager {
   }
 
   func prune(keeping worktreeIDs: Set<Worktree.ID>) {
-    let worktreeIDs = worktreeIDs.union(controlConsoleWorktree.map { [$0.id] } ?? [])
     var removed: [WorktreeTerminalState] = []
     var removedIDs: Set<Worktree.ID> = []
     for (id, state) in states where !worktreeIDs.contains(id) {
@@ -1206,9 +1187,7 @@ final class WorktreeTerminalManager {
 
   @discardableResult
   func focusSurface(worktreeID: Worktree.ID, surfaceID: UUID) -> Bool {
-    guard states[worktreeID]?.focusSurface(id: surfaceID) == true else { return false }
-    if worktreeID == controlConsoleWorktree?.id { showControlConsole?() }
-    return true
+    states[worktreeID]?.focusSurface(id: surfaceID) == true
   }
 
   func markNotificationRead(worktreeID: Worktree.ID, notificationID: UUID) {
@@ -1343,8 +1322,7 @@ final class WorktreeTerminalManager {
   }
 
   private func makeLayoutSnapshotPayload() -> TerminalLayoutSnapshotPayload? {
-    let activeStates = activeWorktreeStates.filter { $0.worktreeID != controlConsoleWorktree?.id }
-      .sorted { $0.worktreeID < $1.worktreeID }
+    let activeStates = activeWorktreeStates.sorted { $0.worktreeID < $1.worktreeID }
     terminalLogger.info(
       "[LayoutRestore] makePayload: activeWorktreeStates=\(activeStates.count)"
         + " totalStates=\(states.count)"

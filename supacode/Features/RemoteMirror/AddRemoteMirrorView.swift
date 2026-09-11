@@ -30,10 +30,6 @@ struct AddRemoteMirrorView: View {
               } label: {
                 HStack {
                   VStack(alignment: .leading) {
-                    if pane.role == "controlConsole" {
-                      Label("AI Control Console", systemImage: "sparkles").font(.caption)
-                        .foregroundStyle(.secondary)
-                    }
                     Text(pane.projectName ?? pane.title).font(.headline).lineLimit(1)
                     Text(pane.subtitle ?? pane.directory).font(.caption).foregroundStyle(.secondary)
                       .lineLimit(1)

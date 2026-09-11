@@ -315,7 +315,6 @@ extension RepositoriesFeature.State {
 
   func worktree(for id: Worktree.ID?) -> Worktree? {
     guard let id else { return nil }
-    if let controlConsoleWorktree, controlConsoleWorktree.id == id { return controlConsoleWorktree }
     for repository in repositories {
       if let worktree = repository.worktrees[id: id] {
         return worktree

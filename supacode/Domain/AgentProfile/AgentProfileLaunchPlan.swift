@@ -105,8 +105,7 @@ nonisolated struct AgentProfileLaunchPlan: Equatable, Sendable {
       ? nil : AgentProfileLaunchPlanner.promptCarrierName
     var replacements = argumentCarriers
     if let promptCarrier, !invocation.arguments.isEmpty {
-      replacements[invocation.arguments.index(before: invocation.arguments.endIndex)] =
-        promptCarrier
+      replacements[invocation.arguments.index(before: invocation.arguments.endIndex)] = promptCarrier
     }
     let invocationInput = invocation.terminalInput(
       replacingArgumentsWithEnvironmentVariables: replacements
@@ -123,8 +122,7 @@ nonisolated struct AgentProfileLaunchPlan: Equatable, Sendable {
       surfaceEnvironment[AgentProfileLaunchPlanner.hookForwardCarrierName] == nil
         ? nil : AgentProfileLaunchPlanner.hookForwardCarrierName,
     ].compactMap { $0 }
-    let carrierNames = Set(knownCarriers + Array(argumentCarriers.values) + environmentCarriers)
-      .sorted()
+    let carrierNames = Set(knownCarriers + Array(argumentCarriers.values) + environmentCarriers).sorted()
     for carrier in carrierNames.reversed() {
       environmentTokens.insert(contentsOf: ["-u", carrier], at: 0)
     }
@@ -207,16 +205,12 @@ nonisolated struct AgentProfileLaunchPlan: Equatable, Sendable {
   /// S2's dispatch protocol) and attaches the `PROWL_WORKFLOW_*` values as child-only carriers,
   /// exactly like `attachingDispatch` carries `PROWL_DISPATCH_ID`. Nothing here reaches the
   /// typed command or the pane's shell by name.
-  func attachingWorkflow(prompt: String, environment values: [String: String]) throws
-    -> AgentProfileLaunchPlan
-  {
-    guard !invocation.arguments.isEmpty,
-      surfaceEnvironment[AgentProfileLaunchPlanner.promptCarrierName] != nil
+  func attachingWorkflow(prompt: String, environment values: [String: String]) throws -> AgentProfileLaunchPlan {
+    guard !invocation.arguments.isEmpty, surfaceEnvironment[AgentProfileLaunchPlanner.promptCarrierName] != nil
     else {
       throw AgentProfileLaunchPlanError.dispatchRequiresPrompt
     }
-    guard !prompt.contains("\0"),
-      !values.contains(where: { $0.key.contains("\0") || $0.value.contains("\0") })
+    guard !prompt.contains("\0"), !values.contains(where: { $0.key.contains("\0") || $0.value.contains("\0") })
     else {
       throw AgentProfileLaunchPlanError.promptContainsNUL
     }
@@ -304,22 +298,19 @@ nonisolated struct AgentProfileLaunchRequest: Equatable, Sendable {
   let workingDirectoryOverride: URL?
   let inheritanceAnchor: UUID?
   let title: String?
-  var locksTitle: Bool = false
 
   init(
     plan: AgentProfileLaunchPlan,
     placement: Placement,
     workingDirectoryOverride: URL? = nil,
     inheritanceAnchor: UUID? = nil,
-    title: String? = nil,
-    locksTitle: Bool = false
+    title: String? = nil
   ) {
     self.plan = plan
     self.placement = placement
     self.workingDirectoryOverride = workingDirectoryOverride
     self.inheritanceAnchor = inheritanceAnchor
     self.title = title
-    self.locksTitle = locksTitle
   }
 }
 
@@ -384,8 +375,7 @@ nonisolated enum AgentProfileEnvironmentPolicy {
   static var reservedNames: Set<String> {
     Set(
       AgentProfileRuntime.allCases.compactMap {
-        AgentRuntimeAdapterRegistry.profileAdapter(for: $0)?.accountIsolation?
-          .reservedEnvironmentVariables
+        AgentRuntimeAdapterRegistry.profileAdapter(for: $0)?.accountIsolation?.reservedEnvironmentVariables
       }
       .flatMap { $0 }
     )

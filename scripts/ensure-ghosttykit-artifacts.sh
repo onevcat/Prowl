@@ -22,7 +22,7 @@ if [[ -n "${PROWL_GHOSTTY_SOURCE_DIR:-}" ]]; then
   source_dir="$(cd "$PROWL_GHOSTTY_SOURCE_DIR" && pwd)"
   framework="$source_dir/macos/GhosttyKit.xcframework"
   header="$framework/macos-arm64/Headers/ghostty.h"
-  if [[ ! -f "$header" ]] || ! grep -q 'ghostty_surface_read_snapshot' "$header"; then
+  if [[ ! -f "$header" ]] || ! grep -q 'ghostty_surface_read_snapshot' "$header" || ! grep -q 'ghostty_surface_read_text_bounded' "$header"; then
     echo "error: Build the mirror bridge XCFramework in $source_dir first." >&2
     exit 1
   fi
