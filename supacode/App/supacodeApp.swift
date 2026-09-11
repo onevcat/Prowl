@@ -219,8 +219,8 @@ struct SupacodeApp: App {
     )
     terminalManager.startAgentHookRuntimeMaintenance()
     _terminalManager = State(initialValue: terminalManager)
-    _remoteMirror = State(
-      initialValue: Self.makeRemoteMirrorStore(manager: terminalManager, runtime: runtime))
+    let mirrors = Self.makeRemoteMirrorStore(manager: terminalManager, runtime: runtime)
+    _remoteMirror = State(initialValue: mirrors)
     let worktreeInfoWatcher = WorktreeInfoWatcherManager()
     _worktreeInfoWatcher = State(initialValue: worktreeInfoWatcher)
     let storeBox = SupacodeAppStoreBox()
@@ -274,13 +274,14 @@ struct SupacodeApp: App {
     _store = State(initialValue: appStore)
     storeBox.store = appStore
 
-    let cliServer = Self.makeCLISocketServer(
+    let (cliServer, cliRouter) = Self.makeCLISocketServer(
       appStore: appStore,
       terminalManager: terminalManager,
       handoffRequestRegistry: handoffRequestRegistry,
       workflowCoordinatorBox: workflowRuntime.coordinatorBox,
       workflowReservations: workflowRuntime.reservations
     )
+    mirrors.host.commandService = MirrorCommandService(router: cliRouter)
 
     _cliSocketServer = State(initialValue: cliServer)
 
@@ -1397,7 +1398,7 @@ struct SupacodeApp: App {
     handoffRequestRegistry: HandoffRequestRegistry,
     workflowCoordinatorBox: WorkflowCoordinatorBox,
     workflowReservations: WorkflowPaneReservations
-  ) -> CLISocketServer {
+  ) -> (server: CLISocketServer, router: CLICommandRouter) {
 
     let cliRouter = makeCLICommandRouter(
       appStore: appStore,
@@ -1417,7 +1418,7 @@ struct SupacodeApp: App {
     } catch {
       logger.warning("Failed to start CLI socket server: \(String(describing: error))")
     }
-    return cliServer
+    return (cliServer, cliRouter)
   }
 
   // MARK: - Open handler factory

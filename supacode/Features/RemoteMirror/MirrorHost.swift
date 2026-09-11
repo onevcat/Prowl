@@ -13,6 +13,8 @@ final class MirrorHost {
   private(set) var subscriberCount = 0
   var address: String
   var port: String
+  @ObservationIgnored var commandService: MirrorCommandService?
+  @ObservationIgnored private var commandPeers: [UUID: MirrorCommandRequest] = [:]
   var onStarted: (() -> Void)?
   var onStopped: (() -> Void)?
   @ObservationIgnored private let enabled: Bool
@@ -117,6 +119,7 @@ final class MirrorHost {
       end(peer, reason: .hostStopped)
     }
     peers.removeAll()
+    commandPeers.removeAll()
     subscriptions.removeAll()
     versions.removeAll()
     hostRunID = nil
@@ -169,6 +172,7 @@ final class MirrorHost {
       self.pendingOrder.removeAll { $0 == peer.id }
       self.pendingHandshakeCount = self.pendingPeers.count
       self.peers.removeValue(forKey: peer.id)
+      self.commandPeers.removeValue(forKey: peer.id)
       self.versions.removeValue(forKey: peer.id)
       self.subscriptions.removeValue(forKey: peer.id)
       self.subscriberCount = self.subscriptions.count
@@ -199,9 +203,12 @@ final class MirrorHost {
             kind: .panes, panes: panes, selectedVersion: versions[peer.id],
             capabilities: versions[peer.id] == 2
               ? ["vt-v1", "text-v1", "takeover", "refresh"]
+                + (commandService != nil ? ["launch-profile"] : [])
                 + (source.supportsBoundedHistory ? ["history"] : [])
               : nil,
             hostRunID: hostRunID))
+      case .command:
+        try handleCommand(message, peer: peer)
       case .subscribe:
         try subscribe(message, peer: peer)
       case .acknowledge:
@@ -224,6 +231,23 @@ final class MirrorHost {
       default: throw MirrorProtocolError.invalidMessage
       }
     } catch { peer.close(error.localizedDescription) }
+  }
+
+  private func handleCommand(_ message: MirrorMessage, peer: MirrorConnection) throws {
+    guard message.version == 2, versions[peer.id] == 2,
+      let service = commandService, let request = message.commandRequest,
+      subscriptions[peer.id] == nil else { throw MirrorProtocolError.invalidMessage }
+    if let pending = commandPeers[peer.id] {
+      guard pending == request else { throw MirrorProtocolError.invalidMessage }
+      return
+    }
+    commandPeers[peer.id] = request
+    Task { @MainActor [weak self, weak peer] in
+      let response = await service.execute(request)
+      guard let self, let peer, self.peers[peer.id] === peer else { return }
+      self.commandPeers.removeValue(forKey: peer.id)
+      peer.send(MirrorMessage(version: 2, kind: .commandResult, commandResponse: response))
+    }
   }
 
   private func subscription(for message: MirrorMessage, peer: MirrorConnection) -> Subscription? {

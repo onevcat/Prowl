@@ -23,8 +23,10 @@ already-created terminal; sidebar projects alone do not create terminal sessions
 The current transport still uses a short TLS ECDHE-PSK code for a Host run.
 Persistent device enrollment and the new command protocol are being implemented;
 this is not yet the reviewed pairing design. Do not rely on compatibility between
-experimental builds. The former AI Control Console has been removed. Agent launch
-will use ordinary worktrees and Profiles through Prowl's shared command router.
+experimental builds. The former AI Control Console has been removed. iOS can choose **New Agent Pane**,
+select a worktree and an available Host Profile, and optionally supply an initial
+message. The Host creates an ordinary background tab through its existing CLI
+command router. The Profile determines the model, permissions and launch settings.
 
 Closing a mirror unsubscribes without stopping the Host program. Stopping Host
 closes remote connections without closing local panes. Quitting Prowl stops the
@@ -76,3 +78,24 @@ artifact is published and pinned, use a locally built sibling Ghostty via
 `PROWL_GHOSTTY_SOURCE_DIR=../ghostty make build-app`. The old pinned artifact does
 not export the required APIs. This temporary dependency gap must be resolved
 before treating a fresh checkout as a self-contained build.
+
+## Structured iOS launch
+
+Hosts advertise `launch-profile` when the command router is attached. The current
+experimental command bridge exposes only `list`, `profiles`, and Profile-backed
+`create tab` in an existing worktree. It cannot execute a client-supplied shell
+command or change Profile permissions. Commands are allowed only on authenticated
+discovery connections, before subscribing to a pane.
+
+Each command has a UUID request ID and an inline CLI JSON envelope; the response
+carries that ID and the original CLI result shape. Duplicate IDs return the original
+operation's result, including across connections. Reusing an ID with different
+parameters is rejected. The App retains up to 1024 request receipts for its lifetime;
+when full it refuses new commands rather than evicting a creation receipt and risking
+reexecution. Clients never automatically replay a command after timeout or disconnect.
+If creation is unconfirmed, refresh the pane list before making another request.
+
+This is an incremental bridge on the current experimental transport. The typed
+network protocol, persistent device enrollment, and shared mobile message submission
+remain separate unfinished review items. Creating a pane does not yet restore the
+removed mobile Send implementation.

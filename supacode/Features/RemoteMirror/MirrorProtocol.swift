@@ -21,6 +21,7 @@ nonisolated struct MirrorMessage: Codable, Sendable {
     case list, panes, subscribe, frame, acknowledge, input, history, historyPage, failure, ping,
       pong
     case subscribed, textFrame, ended, refresh, state, submit, submitResult, submissionStatus
+    case command, commandResult
   }
   enum Representation: String, Codable, Sendable {
     case terminal = "vt-v1"
@@ -60,6 +61,8 @@ nonisolated struct MirrorMessage: Codable, Sendable {
   var agentGeneration: UUID?
   var observationRevision: UInt64?
   var result: MirrorSubmitOutcome?
+  var commandRequest: MirrorCommandRequest?
+  var commandResponse: MirrorCommandResponse?
 
 }
 

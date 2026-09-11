@@ -47,7 +47,7 @@ private struct MirrorHostSettingsView: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
       Text("Remote Mirror Host").font(.title2.bold())
-      Text("Share existing panes with another Prowl. Local input stays available.")
+      Text("Share panes and let clients launch your Agent Profiles. Local input stays available.")
         .foregroundStyle(.secondary)
       Form {
         TextField("Listen IP", text: $host.address)
@@ -65,7 +65,7 @@ private struct MirrorHostSettingsView: View {
           copied = NSPasteboard.general.setString(host.pairingKey, forType: .string)
           copyError = copied ? nil : "Unable to copy the pairing key."
         }
-        .help("Anyone with this key and network access can view and control shared panes.")
+        .help("Anyone with this key and network access can view shared panes and launch your Host Agent Profiles.")
         .accessibilityIdentifier("remote-mirror-copy-key")
         if let copyError { Text(copyError).foregroundStyle(.red) }
       }
