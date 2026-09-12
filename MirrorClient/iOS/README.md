@@ -25,8 +25,10 @@ available Host Agent Profile. Host creates a normal background tab through its
 public CLI. Models and permissions come from that Profile. There is no separate
 AI Control Console. An uncertain creation is not repeated automatically.
 
-**Send** first reads public Host `list`. Detected Agents use `agents dispatch`; an
-explicitly idle Shell uses `send`. Host validates the pane lease, readiness, drafts
+**Send** first reads public Host `list`. Detected Agents use `agents dispatch`.
+The current Host does not permit structured Shell submission because it cannot
+confirm that the Shell input line is empty. The client preserves the draft and
+explains the refusal. Host validates the pane lease, readiness, drafts
 and IME/editing activity. Claude paste/Enter and Codex hint styling are checked in
 the shared Host path. Dispatch success is not Agent completion. Unknown delivery
 preserves the draft and queries the original request receipt after reconnect;

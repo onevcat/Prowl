@@ -1,10 +1,50 @@
 import Foundation
+import Observation
 import Testing
 
 @testable import ProwlMirror_iOS
 
 @MainActor
 struct MirrorCommandTransportTests {
+  @Test(.timeLimit(.minutes(1))) func hostWithoutShellCapabilityNeverReceivesShellInput() async {
+    let channel = Channel()
+    let session = makeSession(channel)
+    session.connect()
+    session.select(channel.pane)
+    session.draft = "echo hello"
+    channel.reply = { request in
+      if case .list = request.request.command {
+        let listing: MirrorJSON = .object([
+          "ok": .bool(true),
+          "data": .object(["items": .array([
+            .object([
+              "pane": .object(["id": .string(channel.pane.id.uuidString), "agent": .null]),
+              "task": .object(["status": .string("idle")]),
+            ])
+          ])]),
+        ])
+        channel.onMessage?(.commandResult(.init(commandResponse: .init(
+          requestID: request.requestID, response: listing))))
+      } else {
+        channel.respond(request.requestID, success: false)
+      }
+    }
+    session.submitDraft()
+    let changes = AsyncStream.makeStream(of: Void.self)
+    defer { changes.continuation.finish() }
+    changes.continuation.yield(())
+    for await _ in changes.stream {
+      let finished = withObservationTracking {
+        session.submission?.outcome.status == .rejected
+      } onChange: { changes.continuation.yield(()) }
+      if finished { break }
+    }
+    #expect(channel.commands.count == 1)
+    #expect(channel.commands.allSatisfy { $0.request.command.targetPaneID == nil })
+    #expect(session.draft == "echo hello")
+    #expect(session.canSubmit)
+  }
+
   @Test func repliesAreCorrelatedAndCommandsAreNotReplayedAfterDisconnect() async throws {
     let channel = Channel()
     let session = makeSession(channel)
@@ -77,6 +117,7 @@ struct MirrorCommandTransportTests {
 
   @Test(.timeLimit(.minutes(1))) func shellSendUsesFreshListingAndAcceptsPublicSendReceipt() async {
     let channel = Channel()
+    channel.supportsShellSend = true
     let session = makeSession(channel)
     session.connect()
     session.select(channel.pane)
@@ -128,6 +169,7 @@ struct MirrorCommandTransportTests {
     var onMessage: ((MirrorMessage) -> Void)?
     var onClose: ((String?) -> Void)?
     var supportsLaunch = true
+    var supportsShellSend = false
     var reply: ((MirrorCommandRequest) -> Void)?
     var commands: [MirrorCommandRequest] = []
     let inputs = AsyncStream.makeStream(of: MirrorCommandRequest.self)
@@ -159,7 +201,8 @@ struct MirrorCommandTransportTests {
             .init(
               panes: [pane],
               capabilities: ["text-v1", "agents-dispatch"]
-                + (supportsLaunch ? ["launch-profile"] : []), hostRunID: UUID())))
+                + (supportsLaunch ? ["launch-profile"] : [])
+                + (supportsShellSend ? ["shell-send"] : []), hostRunID: UUID())))
       } else if message.kind == .subscribe {
         let lease = UUID()
         onMessage?(.subscribed(.init(paneID: pane.id, subscriptionID: lease, hostRunID: run)))

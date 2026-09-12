@@ -215,6 +215,16 @@ private struct AddConnectionView: View {
       .navigationTitle("Remote Mirror Pane")
       .toolbar { Button("Cancel") { dismiss() } }
       .onAppear {
+        #if DEBUG
+          if CommandLine.arguments.contains("--mirror-ui-connection-fixture") {
+            if session == nil {
+              let fixture = MirrorUIFixture.connectionSession()
+              session = fixture
+              fixture.connect()
+            }
+            return
+          }
+        #endif
         do {
           if let saved = try MirrorSavedConnection.load() {
             address = saved.address
@@ -223,8 +233,8 @@ private struct AddConnectionView: View {
           }
         } catch { self.error = error.localizedDescription }
       }
-      .onDisappear { if !added { session?.disconnect() } }
     }
+    .onDisappear { if !added { session?.disconnect() } }
   }
 
   private func connect() {

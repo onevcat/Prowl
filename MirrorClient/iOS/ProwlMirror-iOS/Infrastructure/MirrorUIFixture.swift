@@ -4,6 +4,13 @@
   /// Explicit UI-test launch only. Network and Host behavior are tested separately.
   @MainActor
   enum MirrorUIFixture {
+    static func connectionSession() -> MirrorSession {
+      let channel = Channel(name: "Launch fixture", longOutput: false)
+      return MirrorSession(
+        configuration: .init(address: "127.0.0.1", port: 7880, pairingKey: ""),
+        makeTransport: { _ in channel })
+    }
+
     static func launchCommand(_ command: MirrorCommandRequest.Command) async throws -> MirrorJSON {
       let payload: String
       switch command {
@@ -70,6 +77,16 @@
           frame()
         case .command:
           guard let request = message.commandRequest else { return }
+          if CommandLine.arguments.contains("--mirror-ui-connection-fixture") {
+            Task {
+              do {
+                let response = try await MirrorUIFixture.launchCommand(request.request.command)
+                onMessage?(.commandResult(.init(commandResponse: .init(
+                  requestID: request.requestID, response: response))))
+              } catch { onClose?(error.localizedDescription) }
+            }
+            return
+          }
           let payload: MirrorJSON
           switch request.request.command {
           case .list:

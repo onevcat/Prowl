@@ -35,6 +35,7 @@ final class MirrorSession: Identifiable {
   private(set) var error: String?
   private(set) var supportsHistory = false
   private(set) var supportsLaunch = false
+  @ObservationIgnored private var supportsShellSend = false
   @ObservationIgnored private var pendingCommand: PendingCommand?
   @ObservationIgnored private var commandTimeout: Task<Void, Never>?
   @ObservationIgnored private let clock: any Clock<Duration>
@@ -44,12 +45,13 @@ final class MirrorSession: Identifiable {
     let continuation: CheckedContinuation<MirrorJSON, any Error>
   }
   private enum CommandFailure: LocalizedError {
-    case unavailable, disconnected, timedOut
+    case unavailable, disconnected, timedOut, shellUnavailable
     var errorDescription: String? {
       switch self {
       case .unavailable: "Host command service is unavailable or another command is pending."
       case .disconnected: "Connection lost before Host confirmed the command."
       case .timedOut: "Host did not confirm the command in time."
+      case .shellUnavailable: "This Host does not support shell submission. Choose an Agent pane."
       }
     }
   }
@@ -125,11 +127,16 @@ final class MirrorSession: Identifiable {
     error = nil
     status = .connecting
     supportsLaunch = false
+    supportsShellSend = false
     generation = UUID()
     let attempt = generation
     do {
       let channel = try makeTransport(configuration)
       transport = channel
+      channel.onEnrolled = { [weak self] enrolled in
+        guard let self, self.generation == attempt else { return }
+        self.configuration = enrolled
+      }
       channel.onReady = { [weak self] in
         guard let self, self.generation == attempt else { return }
         if let verified = self.transport?.verifiedConfiguration { self.configuration = verified }
@@ -163,7 +170,7 @@ final class MirrorSession: Identifiable {
   func select(_ pane: MirrorPaneDescriptor) {
     guard status == .choosingPane else { return }
     self.pane = pane
-    intent = .takeover
+    intent = pane.busy ? .takeover : .ifFree
     subscribe()
   }
 
@@ -287,6 +294,7 @@ final class MirrorSession: Identifiable {
       guard status == .live, subscriptionID == lease, submission?.id == request.id else { return }
       let input = try MirrorInputRoute.command(
         listing: listing, paneID: request.paneID, text: request.text)
+      if case .send = input, !supportsShellSend { throw CommandFailure.shellUnavailable }
       send(
         .command(
           .init(
@@ -411,6 +419,7 @@ final class MirrorSession: Identifiable {
         return
       }
       supportsLaunch = message.capabilities?.contains("launch-profile") == true
+      supportsShellSend = message.capabilities?.contains("shell-send") == true
       supportsRefresh = message.capabilities?.contains("refresh") == true
       supportsHistory = message.capabilities?.contains("history") == true
       if supportsSubmission { querySubmission() }

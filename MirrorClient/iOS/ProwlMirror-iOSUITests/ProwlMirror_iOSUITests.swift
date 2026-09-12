@@ -3,6 +3,49 @@ import XCTest
 
 final class ProwlMirror_iOSUITests: XCTestCase {
   @MainActor
+  func testClearingBothPairingHalvesAllowsCredentialReconnect() {
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-fixture"]
+    app.launch()
+    XCTAssertTrue(app.buttons["Edit Connection"].waitForExistence(timeout: 10))
+    app.buttons["Edit Connection"].tap()
+    let first = app.textFields["pairing-code-first"]
+    let second = app.textFields["pairing-code-second"]
+    XCTAssertTrue(first.waitForExistence(timeout: 5))
+    first.tap()
+    first.typeText("ABCD")
+    second.typeText("2345")
+    second.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 4))
+    first.tap()
+    first.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 4))
+    app.buttons["Reconnect"].tap()
+    XCTAssertTrue(app.buttons["History"].waitForExistence(timeout: 5))
+    XCTAssertFalse(app.buttons["Reconnect"].exists)
+  }
+
+  @MainActor
+  func testLaunchNavigationKeepsTheConnectionUntilSheetDismissal() {
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-connection-fixture"]
+    app.launch()
+    let add = app.buttons["Add Remote Pane"].firstMatch
+    XCTAssertTrue(add.waitForExistence(timeout: 10))
+    add.tap()
+    let launch = app.buttons["new-agent-pane"]
+    XCTAssertTrue(launch.waitForExistence(timeout: 5))
+    launch.tap()
+    let create = app.buttons["create-and-mirror"]
+    XCTAssertTrue(create.waitForExistence(timeout: 5))
+    expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: create)
+    waitForExpectations(timeout: 5)
+    app.navigationBars["New Agent Pane"].buttons.element(boundBy: 0).tap()
+    XCTAssertTrue(launch.waitForExistence(timeout: 5))
+    app.buttons["Cancel"].tap()
+    XCTAssertFalse(launch.exists)
+    XCTAssertTrue(add.waitForExistence(timeout: 5))
+  }
+
+  @MainActor
   func testStructuredAgentLaunchForm() {
     let app = XCUIApplication()
     app.launchArguments = ["--mirror-ui-launch-fixture"]

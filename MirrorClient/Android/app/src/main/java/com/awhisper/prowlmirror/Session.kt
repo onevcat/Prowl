@@ -360,6 +360,9 @@ class Session(
                 val listing = command(Commands.list())
                 if (lease != activeLease || submission != item) return@launch
                 val input = Commands.input(listing, item.pane, item.text)
+                check(!input.has("send") || "shell-send" in state.value.capabilities) {
+                    "Host cannot verify an empty command line for remote shell Send. Use an Agent Profile or control the shell on Host"
+                }
                 send(Commands.request(item.id, input, activeLease))
                 delay(30_000)
                 if (submission == item && state.value.delivery == Delivery.PENDING)

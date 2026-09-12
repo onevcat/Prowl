@@ -45,7 +45,7 @@ struct MirrorPairingCodeField: View {
           focused = 1
         } else {
           if index == 0 { first = text } else { second = text }
-          key = first + "-" + second
+          key = first.isEmpty && second.isEmpty ? "" : first + "-" + second
           // Only advance during initial entry; editing a saved code must keep its cursor.
           if index == 0, previous.count < 4, text.count == 4, second.isEmpty {
             focused = 1

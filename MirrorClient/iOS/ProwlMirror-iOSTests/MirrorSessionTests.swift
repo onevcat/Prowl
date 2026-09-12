@@ -5,6 +5,58 @@ import Testing
 
 @MainActor
 struct MirrorSessionTests {
+  @Test func selectingAFreePaneDoesNotTakeOverANewerOwner() {
+    let transport = FakeTransport()
+    let session = makeSession(transport)
+    let pane = MirrorPaneDescriptor(id: UUID(), title: "Fixture", directory: "/", busy: false)
+    session.connect()
+    transport.onMessage?(.panes(.init(panes: [pane], capabilities: ["text-v1"], hostRunID: UUID())))
+    session.select(pane)
+    #expect(transport.sent.last?.intent == .ifFree)
+    transport.onMessage?(.failure(.init(error: "PANE_BUSY", subscriptionID: nil)))
+    #expect(session.status == .takenOver)
+    session.retry(takeover: true)
+    transport.onMessage?(.panes(.init(panes: [pane], capabilities: ["text-v1"], hostRunID: UUID())))
+    #expect(transport.sent.last?.intent == .takeover)
+  }
+
+  @Test func selectingABusyPaneUsesTheDisplayedTakeOverAction() {
+    let transport = FakeTransport()
+    let session = makeSession(transport)
+    let pane = MirrorPaneDescriptor(id: UUID(), title: "Fixture", directory: "/", busy: true)
+    session.connect()
+    transport.onMessage?(.panes(.init(panes: [pane], capabilities: ["text-v1"], hostRunID: UUID())))
+    session.select(pane)
+    #expect(transport.sent.last?.intent == .takeover)
+  }
+
+  @Test func retryAfterEnrollmentUsesCredentialBeforeRuntimeReady() {
+    let initial = MirrorSavedConnection(address: "127.0.0.1", port: 7880, pairingKey: "ABCD-2345")
+    let enrolled = MirrorSavedConnection(
+      address: initial.address, port: initial.port, pairingKey: "",
+      credential: .init(hostID: UUID(), deviceID: UUID(), key: Data(repeating: 7, count: 32)))
+    let first = FakeTransport()
+    first.reportsReady = false
+    let second = FakeTransport()
+    var configurations: [MirrorSavedConnection] = []
+    let session = MirrorSession(configuration: initial) { configuration in
+      configurations.append(configuration)
+      return configurations.count == 1 ? first : second
+    }
+    session.connect()
+    first.onEnrolled?(enrolled)
+    #expect(first.sent.isEmpty)
+    #expect(session.status == .connecting)
+    first.onClose?("Runtime connection failed")
+    session.retry()
+    #expect(configurations == [initial, enrolled])
+    #expect(session.configuration == enrolled)
+    let stale = first.onEnrolled
+    session.disconnect()
+    stale?(initial)
+    #expect(session.configuration == enrolled)
+  }
+
   @Test func historyPagesStayFrozenAndDoNotReplaceLiveOutput() {
     let transport = FakeTransport()
     let session = makeSession(transport)
@@ -104,7 +156,7 @@ struct MirrorSessionTests {
     session.connect()
     transport.onMessage?(listing)
     session.select(pane)
-    #expect(transport.sent.last?.intent == .takeover)
+    #expect(transport.sent.last?.intent == .ifFree)
     transport.onClose?("Network lost")
     session.retry()
     session.retry()
@@ -166,14 +218,16 @@ struct MirrorSessionTests {
   }
 
   private final class FakeTransport: MirrorTransport {
+    var onEnrolled: ((MirrorSavedConnection) -> Void)?
     var onReady: (() -> Void)?
     var onMessage: ((MirrorMessage) -> Void)?
     var onClose: ((String?) -> Void)?
     var sent: [MirrorMessage] = []
     var starts = 0
+    var reportsReady = true
     func start() {
       starts += 1
-      onReady?()
+      if reportsReady { onReady?() }
     }
     func send(_ message: MirrorMessage, closeAfterSending: Bool) { sent.append(message) }
     func close(_ reason: String?) { onClose?(reason) }

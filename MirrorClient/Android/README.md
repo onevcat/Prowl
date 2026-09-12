@@ -26,7 +26,8 @@ is no private AI console or dependency on personal shell wrappers.
   expanding code/table freezes the detail and supports copying the original text.
 - Multiline input sends only on Send or two physical Returns within 350 ms.
   IME composition disables Send. Host checks Agent readiness through public dispatch;
-  an explicitly idle Shell uses public send.
+  shell Send requires an explicit Host capability. Current Hosts refuse it because
+  they cannot verify an empty command line; the draft remains available.
 - An unconfirmed delivery preserves the draft and blocks accidental resending.
   Check receipt only queries the original request; it never repeats input.
 - Mirror, Retry and foreground reconnection use `ifFree`; Take Over is explicit.

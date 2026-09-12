@@ -80,7 +80,7 @@ class SessionTest {
             )
         }
 
-        fun listing() {
+        fun listing(agent: String? = "codex") {
             val id = peer.sent.last().payload().record("commandRequest").string("requestID")
             answer(
                 id,
@@ -91,7 +91,7 @@ class SessionTest {
                             "items" to
                                 listOf(
                                     obj(
-                                        "pane" to obj("id" to pane.id, "agent" to "codex"),
+                                        "pane" to obj("id" to pane.id, "agent" to agent),
                                         "task" to obj("status" to "idle"),
                                     )
                                 )
@@ -187,6 +187,40 @@ class SessionTest {
         assertEquals("acknowledge", f.peer.sent.last().kind)
         f.peer.receive(Packet.Text(uuid(), 3, 80, 24, false, "wrong"))
         assertEquals(Status.disconnected, f.session.state.value.status)
+        f.session.close()
+    }
+
+    @Test
+    fun shellWithoutCapabilityPreservesDraftAndSendsNoMutation() = runTest {
+        val f = Fixture(backgroundScope)
+        f.live()
+        f.session.setDraft("echo preserved")
+        f.session.submit()
+        runCurrent()
+        f.listing(agent = null)
+        runCurrent()
+        assertEquals(Delivery.REJECTED, f.session.state.value.delivery)
+        assertEquals("echo preserved", f.session.state.value.draft)
+        assertTrue(f.session.state.value.hint.contains("empty command line"))
+        assertEquals(1, f.peer.sent.count { it.kind == "command" })
+        val request = f.peer.sent.last().payload().record("commandRequest")
+        assertTrue(request.record("request").record("command").has("list"))
+        f.session.close()
+    }
+
+    @Test
+    fun agentDispatchDoesNotRequireShellCapability() = runTest {
+        val f = Fixture(backgroundScope)
+        f.live()
+        f.session.setDraft("Review")
+        f.session.submit()
+        runCurrent()
+        f.listing()
+        runCurrent()
+        assertEquals(Delivery.PENDING, f.session.state.value.delivery)
+        val request = f.peer.sent.last().payload().record("commandRequest")
+        assertTrue(request.record("request").record("command").has("agentsDispatch"))
+        assertEquals(2, f.peer.sent.count { it.kind == "command" })
         f.session.close()
     }
 

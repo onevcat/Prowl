@@ -4,6 +4,7 @@ import UIKit
 
 @MainActor
 protocol MirrorTransport: AnyObject {
+  var onEnrolled: ((MirrorSavedConnection) -> Void)? { get set }
   var onReady: (() -> Void)? { get set }
   var onMessage: ((MirrorMessage) -> Void)? { get set }
   var onClose: ((String?) -> Void)? { get set }
@@ -14,6 +15,10 @@ protocol MirrorTransport: AnyObject {
 }
 
 extension MirrorTransport {
+  var onEnrolled: ((MirrorSavedConnection) -> Void)? {
+    get { nil }
+    set {}
+  }
   var verifiedConfiguration: MirrorSavedConnection? { nil }
   func send(_ message: MirrorMessage) { send(message, closeAfterSending: false) }
   func close() { close(nil) }
@@ -23,6 +28,7 @@ extension MirrorConnection: MirrorTransport {}
 /// Authentication completes before discovery callbacks are exposed to the UI.
 @MainActor
 final class MirrorRemoteConnection: MirrorTransport {
+  var onEnrolled: ((MirrorSavedConnection) -> Void)?
   var onReady: (() -> Void)?
   var onMessage: ((MirrorMessage) -> Void)?
   var onClose: ((String?) -> Void)?
@@ -143,6 +149,7 @@ final class MirrorRemoteConnection: MirrorTransport {
         configuration.pairingKey = ""
         // Save before reconnect: a successful pairing response must never depend on UI lifetime.
         try persist(configuration)
+        onEnrolled?(configuration)
         connection?.onClose = nil
         connection?.close()
         connection = nil
