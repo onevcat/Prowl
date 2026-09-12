@@ -1,5 +1,26 @@
 # Changelog
 
+## [2026.9.12](https://github.com/onevcat/Prowl/releases/tag/v2026.9.12)
+
+Agent Workflows are here: turn repeatable tasks into reusable flows that coordinate your agents, run scripts, and keep every step and result in one place.
+
+### New
+
+- **Build your own agent workflows.** Combine prompts, agent launches, script actions, conditions, and loops in a reusable workflow. Assign Agent Profiles to roles so different agents can take care of different steps. Open **Manage Workflows** from the Agents menu, start with a single-agent or multi-agent template, or use **Create with Agent** to help write one for your task.
+- **Start and follow a run from Prowl.** Launch workflows from the Agents menu, Command Palette, or Settings. The start sheet shows the participating agents, options, and steps before you run; toolbar controls let you follow progress and resolve steps that need attention. Local script actions require review and approval before execution.
+- **Hand off a task without losing context.** The built-in **Handoff** workflow asks the current agent to write a briefing, saves it with repository and session context, and can launch a receiving agent in a new tab to continue. Choose save-only to keep the packet for later. Handoff now uses the workflow interface; existing `prowl handoff` commands show migration instructions.
+- **Inspect every step in Workflow History.** Open the history button beside the toolbar bell to revisit prompts, agent deliveries, script outputs, errors, and repeated steps. Filter by pane or worktree, open result files, and export a finished run as a ZIP. Local history is kept for three days; export runs you want to retain.
+
+### Improved
+
+- Codex status tracking now uses available session lifecycle evidence to keep panes **Working** through quiet periods while turns or child tasks remain active. Approval and question prompts still take precedence as **Blocked**.
+- Smaller release downloads, with the same signed and notarized app.
+
+### Fixed
+
+- Completion reminders remain unread until you view the pane in the active, visible window, including Canvas panes that have been panned offscreen.
+- Fixed active Claude Code sessions appearing Idle when the composer has a session title, and active Codex sessions appearing Idle with animated backgrounds.
+
 ## [2026.9.6](https://github.com/onevcat/Prowl/releases/tag/v2026.9.6)
 
 Meet **Agent Island**: all your agents' status at your Mac's notch, with a new way to navigate built for speed and muscle memory. See who is working, waiting for you, finished, or idle at a glance, then jump straight to any agent—even from another app.
