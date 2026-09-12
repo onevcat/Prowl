@@ -101,6 +101,11 @@ Each subscriber is independently bounded. If it falls behind, state churn is rec
 a new snapshot; signal or lifecycle overflow is explicit and S2's waiter re-subscribes before
 surfacing an error. Critical events are never silently discarded.
 
+The planned log/screen extension separates signal production from final state decisions:
+providers supply evidence and one state machine owns precedence and transitions. See
+[017 — Unified state decision](017-agent-state-decision.md) for the agreed architecture
+and the unresolved foreground-identity and history-baseline gates.
+
 ### `prowl agents wait`
 
 ```
@@ -357,3 +362,7 @@ opencode; partial for qodercli/qwen/amp; docs/bundle for the rest). Key conclusi
 - Updated 2026-09-05 (T1 closure): Full eight-runtime verification and explicit scoped publication passed; the baseline and matrix were advanced while preserving interactive history. Release guidance now uses `verify` then `publish`. See [064.016](016-t1-contract-test-plan.md). Merge this closure, then proceed to D2; GUI E2E is outside #726 T1.
 
 - Updated 2026-09-05 (release order): T1 #769 merged. R2b now proceeds to 063-D3 handoff/checkpoint and first built-in E2E, with 063-D2 adversarial review deferred to R3. T1 remains prerequisite to both; S4 scheduling/dependencies are unchanged.
+
+- Updated 2026-09-12: Agreed independent log/screen providers and one state decision component;
+  recorded local identity findings and open implementation gates in
+  [017-agent-state-decision.md](017-agent-state-decision.md). Implementation remains planned.
