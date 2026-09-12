@@ -3,6 +3,15 @@ import Testing
 @testable import supacode
 
 struct ClaudeScreenProfileTests {
+  @Test func composerContentsPreservesDraftsAndAttachments() {
+    for draft in ["", "hello", "hello\n  second line", "[Image #1]", "[Pasted text #1 +20 lines]"] {
+      let screen = AgentScreenSnapshot(text: "──────── Title ─\n❯ " + draft + "\n────────\nstatus")
+      #expect(ClaudeScreenProfile.composerContents(in: screen) == draft)
+    }
+    #expect(ClaudeScreenProfile.composerContents(in: AgentScreenSnapshot(text: "❯ old transcript")) == nil)
+    #expect(ClaudeScreenProfile.composerContents(in: AgentScreenSnapshot(text: "────\n❯ draft")) == nil)
+  }
+
   @Test func ruleIDsAreUniqueAndRuntimePrefixed() {
     let ruleIDs = ClaudeScreenProfile.RuleID.all
 

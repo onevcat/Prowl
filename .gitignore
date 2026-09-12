@@ -88,3 +88,5 @@ build/
 Config/Secrets.env
 .build-benchmark/
 scripts/__pycache__/
+
+Resources/prowl-mirror-relay/

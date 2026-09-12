@@ -154,11 +154,13 @@ sync-cli-version: # Sync app MARKETING_VERSION into ProwlCLIShared/ProwlVersion.
 
 build-cli: sync-cli-version # Build Swift CLI binary (SPM)
 	swift build --product prowl
+	swift build --product prowl-mirror-relay
 
 build-cli-release: sync-cli-version # Build universal CLI binary in release mode
 	swift build -c release --arch arm64 --arch x86_64 --product prowl
+	swift build -c release --arch arm64 --arch x86_64 --product prowl-mirror-relay
 
-embed-cli-debug: $(CLI_DEBUG_RESOURCE_PATH) # Build debug CLI and copy into Resources for dev builds
+embed-cli-debug: embed-mirror-relay-debug $(CLI_DEBUG_RESOURCE_PATH) # Build debug CLI and copy into Resources for dev builds
 
 $(CLI_DEBUG_RESOURCE_PATH): $(CLI_SOURCE_INPUTS)
 	$(MAKE) build-cli
@@ -174,7 +176,7 @@ $(CLI_DEBUG_RESOURCE_PATH): $(CLI_SOURCE_INPUTS)
 	chmod +x "$$dst/prowl"; \
 	echo "embedded CLI binary at $$dst/prowl"
 
-embed-cli: build-cli-release # Build release CLI and copy into Resources for distribution
+embed-cli: embed-mirror-relay-release build-cli-release # Build release CLI and copy into Resources for distribution
 	@set -euo pipefail; \
 	bin="$$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)/prowl"; \
 	dst="$(CURRENT_MAKEFILE_DIR)/Resources/prowl-cli"; \
@@ -356,6 +358,7 @@ test: ensure-ghostty embed-cli-debug embed-docs embed-skills test-app
 test-scripts: # Run tests for the repository's Python scripts
 	@python3 -m unittest discover -s "$(CURRENT_MAKEFILE_DIR)/scripts" -p 'test_*.py'
 
+# Real TLS deadlines run separately from the bulk suite's main-actor work.
 test-app: ensure-ghostty # Run app/unit tests via xcodebuild
 	@set -euo pipefail; \
 	result_root="$(CURRENT_MAKEFILE_DIR)/build/test-results"; \
@@ -397,7 +400,14 @@ test-app: ensure-ghostty # Run app/unit tests via xcodebuild
 		skip_args+=("-skip-testing:$$test_id"); \
 		only_args+=("-only-testing:$$test_id"); \
 	done; \
+	mirror_suites=(MirrorHostTests MirrorDevicePairingTests MirrorConnectionTests MirrorTerminalIntegrationTests); \
+	mirror_args=(); \
+	for suite in "$${mirror_suites[@]}"; do \
+		skip_args+=("-skip-testing:supacodeTests/$$suite"); \
+		mirror_args+=("-only-testing:supacodeTests/$$suite"); \
+	done; \
 	run_xcode_tests "$$result_root/supacode-tests.xcresult" test "" "$${skip_args[@]}"; \
+	run_xcode_tests "$$result_root/supacode-mirror-tests.xcresult" test-without-building "" "$${mirror_args[@]}"; \
 	run_xcode_tests "$$result_root/supacode-shell-cancellation-tests.xcresult" test-without-building 2 "$${only_args[@]}"
 
 test-cli-smoke: build-cli # Smoke test CLI executable
@@ -585,3 +595,15 @@ bump-version: # Bump app version (usage: make bump-version [VERSION=YYYY.M.DD] [
 	git commit -m "bump v$$version"; \
 	git tag -s "v$$version" -m "v$$version"; \
 	echo "version bumped to $$version (build $$build), tagged v$$version"
+
+.PHONY: embed-mirror-relay-debug embed-mirror-relay-release
+embed-mirror-relay-debug:
+	swift build --product prowl-mirror-relay
+	@mkdir -p Resources/prowl-mirror-relay
+	cp "$$(swift build --show-bin-path)/prowl-mirror-relay" Resources/prowl-mirror-relay/prowl-mirror-relay
+
+embed-mirror-relay-release:
+	swift build -c release --arch arm64 --arch x86_64 --product prowl-mirror-relay
+	@mkdir -p Resources/prowl-mirror-relay
+	cp "$$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)/prowl-mirror-relay" Resources/prowl-mirror-relay/prowl-mirror-relay
+	strip -S -x Resources/prowl-mirror-relay/prowl-mirror-relay

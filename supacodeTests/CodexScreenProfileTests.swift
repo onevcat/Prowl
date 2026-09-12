@@ -3,6 +3,48 @@ import Testing
 @testable import supacode
 
 struct CodexScreenProfileTests {
+  @Test func liveComposerRejectsDraftsImagesAndMissingFooter() {
+    for draft in ["my unsent request", "[Image #1]", "[Pasted Content 12 chars]", "hello\nworld"] {
+      #expect(
+        !CodexScreenProfile.composerIsEmpty(
+          in: .init(text: "› " + draft + "\n\n  gpt-5.6 · ~/work")))
+    }
+    #expect(!CodexScreenProfile.composerIsEmpty(in: .init(text: "› Ask Codex to do anything")))
+    #expect(
+      CodexScreenProfile.composerIsEmpty(
+        in: .init(text: "› Ask Codex to do anything\n\n  gpt-5.6 · ~/work")))
+  }
+
+  @Test func dimHintIsNotConfusedWithIdenticallyWordedDraft() {
+    let footer = "\n  gpt-5.6 · ~/work"
+    #expect(
+      CodexScreenProfile.composerHasNoDraft(
+        styledSnapshot: "› \u{1B}[2mAsk Codex to do anything\u{1B}[0m" + footer))
+    #expect(
+      !CodexScreenProfile.composerHasNoDraft(styledSnapshot: "› Ask Codex to do anything" + footer))
+    #expect(
+      !CodexScreenProfile.composerHasNoDraft(
+        styledSnapshot: "› \u{1B}[38;2;2;0;22mAsk Codex to do anything" + footer))
+    #expect(
+      !CodexScreenProfile.composerHasNoDraft(styledSnapshot: "› \u{1B}[2m[Image #1]" + footer))
+    #expect(CodexScreenProfile.composerHasNoDraft(styledSnapshot: "› " + footer))
+  }
+
+  @Test func formatterPaletteIsNotComposerText() {
+    let palette = "\u{1B}]4;0;rgb:1d/1f/21\u{1B}\\\u{1B}]10;rgb:ff/ff/ff\u{7}"
+    let hint = "› \u{1B}[2mAsk Codex to do anything\u{1B}[0m\n  gpt-5.6 · ~/work"
+    #expect(CodexScreenProfile.composerHasNoDraft(styledSnapshot: palette + hint))
+    #expect(!CodexScreenProfile.composerHasNoDraft(styledSnapshot: "\u{1B}]unterminated" + hint))
+  }
+
+  @Test func workingFooterTakesPriorityOverEmptyComposer() {
+    let result = CodexScreenProfile.detect(
+      in: .init(
+        text:
+          "• Working (2s • esc to interrupt)\n› Ask Codex to do anything\n  gpt-5.6 · ~/work"))
+    #expect(result.state == .working)
+  }
+
   @Test func starfieldComposerKeepsLiveWorkingFooter() {
     for marker in ["•", "◦"] {
       for activity in ["Working", "Waiting for background terminal"] {
@@ -60,8 +102,9 @@ struct CodexScreenProfileTests {
       ),
       "codex/0.146.1/blocked/hook-review.txt": .matched(CodexScreenProfile.RuleID.hookReview),
       "codex/0.146.1/blocked/sign-in-selection.txt": .matched(CodexScreenProfile.RuleID.signIn),
-      "codex/0.146.1/idle/composer.txt": .noRuleMatched,
-      "codex/0.146.1/idle/quoted-directory-trust.txt": .noRuleMatched,
+      "codex/0.146.1/idle/composer.txt": .matched(CodexScreenProfile.RuleID.emptyComposer),
+      "codex/0.146.1/idle/quoted-directory-trust.txt": .matched(
+        CodexScreenProfile.RuleID.emptyComposer),
       "codex/0.146.1/working/foreground-footer.txt": .matched(
         CodexScreenProfile.RuleID.workingFooter
       ),
@@ -151,7 +194,8 @@ struct CodexScreenProfileTests {
       .first { $0.relativePath == "codex/0.146.1/blocked/command-permission.txt" }
     let text = try #require(fixture).text
 
-    let blocker = CodexScreenProfile.blockerText(in: DetectedAgent.codex.detectionSnapshot(from: text))
+    let blocker = CodexScreenProfile.blockerText(
+      in: DetectedAgent.codex.detectionSnapshot(from: text))
 
     #expect(blocker?.contains("Would you like to run the following command?") == true)
     #expect(blocker?.contains("Environment: local") == true)

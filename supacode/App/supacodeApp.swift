@@ -45,6 +45,7 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
   }
   var terminalManager: WorktreeTerminalManager?
   var cliSocketServer: CLISocketServer?
+  var remoteMirror: RemoteMirrorStore?
   var agentIslandWindowController: AgentIslandWindowController?
 
   func applicationDidFinishLaunching(_ notification: Notification) {
@@ -74,13 +75,15 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
   }
 
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-    WindowLifecycleDiagnostics.logWithWindows("applicationShouldHandleReopen hasVisibleWindows=\(flag)")
+    WindowLifecycleDiagnostics.logWithWindows(
+      "applicationShouldHandleReopen hasVisibleWindows=\(flag)")
     if flag, MainWindowSurface.hasVisibleMainWindow(in: sender.windows) {
       WindowLifecycleDiagnostics.noteMainWindowAppeared()
       return true
     }
     let surfaced = sender.surfaceMainWindow()
-    WindowLifecycleDiagnostics.log("applicationShouldHandleReopen surfaced=\(surfaced) -> handled=\(!surfaced)")
+    WindowLifecycleDiagnostics.log(
+      "applicationShouldHandleReopen surfaced=\(surfaced) -> handled=\(!surfaced)")
     return !surfaced
   }
 
@@ -89,6 +92,7 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
     defer {
       agentIslandWindowController?.stop()
       cliSocketServer?.stop()
+      remoteMirror?.stop()
     }
     guard appStore?.state.settings.restoreTerminalLayoutOnLaunch == true else { return }
     guard appStore?.state.suppressLayoutSaveUntilRelaunch != true else { return }
@@ -108,6 +112,7 @@ struct SupacodeApp: App {
   @State private var ghostty: GhosttyRuntime
   @State private var ghosttyShortcuts: GhosttyShortcutManager
   @State private var terminalManager: WorktreeTerminalManager
+  @State private var remoteMirror: RemoteMirrorStore
   @State private var worktreeInfoWatcher: WorktreeInfoWatcherManager
   @State private var pullRequestRefreshCoordinator: PullRequestRefreshCoordinator
   @State private var commandKeyObserver: CommandKeyObserver
@@ -139,10 +144,14 @@ struct SupacodeApp: App {
   private static func bootstrapTelemetry(initialSettings: GlobalSettings) {
     #if !DEBUG
       let infoDictionary = Bundle.main.infoDictionary ?? [:]
-      let releaseName = (infoDictionary["CFBundleShortVersionString"] as? String).map { "prowl@\($0)" }
+      let releaseName = (infoDictionary["CFBundleShortVersionString"] as? String).map {
+        "prowl@\($0)"
+      }
       let environment = "production"
 
-      if initialSettings.crashReportsEnabled, let dsn = infoPlistSecret(infoDictionary, key: "ProwlSentryDSN") {
+      if initialSettings.crashReportsEnabled,
+        let dsn = infoPlistSecret(infoDictionary, key: "ProwlSentryDSN")
+      {
         SentrySDK.start { options in
           options.dsn = dsn
           options.environment = environment
@@ -175,6 +184,17 @@ struct SupacodeApp: App {
     #endif
   }
 
+  private static func initializeGhostty(resolvedKeybindings: ResolvedKeybindingMap) {
+    let ghosttyArgv = GhosttyCLI.argv(resolvedKeybindings: resolvedKeybindings)
+    ghosttyArgv.withUnsafeBufferPointer { buffer in
+      let argc = UInt(max(0, buffer.count - 1))
+      let argv = UnsafeMutablePointer(mutating: buffer.baseAddress)
+      if ghostty_init(argc, argv) != GHOSTTY_SUCCESS {
+        preconditionFailure("ghostty_init failed")
+      }
+    }
+  }
+
   @MainActor init() {
     NSWindow.allowsAutomaticWindowTabbing = false
     UserDefaults.standard.set(200, forKey: "NSInitialToolTipDelay")
@@ -188,14 +208,7 @@ struct SupacodeApp: App {
     if let resourceURL = Bundle.main.resourceURL?.appendingPathComponent("ghostty") {
       setenv("GHOSTTY_RESOURCES_DIR", resourceURL.path, 1)
     }
-    let ghosttyArgv = GhosttyCLI.argv(resolvedKeybindings: initialResolvedKeybindings)
-    ghosttyArgv.withUnsafeBufferPointer { buffer in
-      let argc = UInt(max(0, buffer.count - 1))
-      let argv = UnsafeMutablePointer(mutating: buffer.baseAddress)
-      if ghostty_init(argc, argv) != GHOSTTY_SUCCESS {
-        preconditionFailure("ghostty_init failed")
-      }
-    }
+    Self.initializeGhostty(resolvedKeybindings: initialResolvedKeybindings)
     let runtime = GhosttyRuntime(initialColorScheme: initialSettings.appearanceMode.colorScheme)
     _ghostty = State(initialValue: runtime)
     let shortcuts = GhosttyShortcutManager(runtime: runtime)
@@ -206,6 +219,8 @@ struct SupacodeApp: App {
     )
     terminalManager.startAgentHookRuntimeMaintenance()
     _terminalManager = State(initialValue: terminalManager)
+    let mirrors = Self.makeRemoteMirrorStore(manager: terminalManager, runtime: runtime)
+    _remoteMirror = State(initialValue: mirrors)
     let worktreeInfoWatcher = WorktreeInfoWatcherManager()
     _worktreeInfoWatcher = State(initialValue: worktreeInfoWatcher)
     let storeBox = SupacodeAppStoreBox()
@@ -215,7 +230,8 @@ struct SupacodeApp: App {
     _pullRequestRefreshCoordinator = State(initialValue: coordinator)
     let keyObserver = CommandKeyObserver()
     _commandKeyObserver = State(initialValue: keyObserver)
-    var initialAppState = AppFeature.State(settings: SettingsFeature.State(settings: initialSettings))
+    var initialAppState = AppFeature.State(
+      settings: SettingsFeature.State(settings: initialSettings))
     if let cliOpenPath = Self.cliLaunchOpenPath() {
       initialAppState.launchRestoreMode = .cliOpenPath(cliOpenPath)
     }
@@ -248,12 +264,13 @@ struct SupacodeApp: App {
     _store = State(initialValue: appStore)
     storeBox.store = appStore
 
-    let cliServer = Self.makeCLISocketServer(
+    let (cliServer, cliRouter) = Self.makeCLISocketServer(
       appStore: appStore,
       terminalManager: terminalManager,
       workflowCoordinatorBox: workflowRuntime.coordinatorBox,
       workflowReservations: workflowRuntime.reservations
     )
+    mirrors.host.commandService = MirrorCommandService(router: cliRouter)
 
     _cliSocketServer = State(initialValue: cliServer)
 
@@ -263,13 +280,13 @@ struct SupacodeApp: App {
     #endif
     _memoryWatchdog = State(initialValue: watchdog)
 
-    runtime.onQuit = { [weak appStore] in
-      appStore?.send(.requestQuit)
-    }
+    runtime.onQuit = Self.quitHandler(for: appStore)
     appDelegate.appStore = appStore
     appDelegate.terminalManager = terminalManager
+    appDelegate.remoteMirror = remoteMirror
     appDelegate.cliSocketServer = cliServer
-    appDelegate.agentIslandWindowController = .init(store: appStore, terminalManager: terminalManager)
+    appDelegate.agentIslandWindowController = .init(
+      store: appStore, terminalManager: terminalManager)
     #if DEBUG
       DebugWindowManager.shared.configure(store: appStore)
     #endif
@@ -479,7 +496,8 @@ struct SupacodeApp: App {
       sessionID: nativeSession?.id,
       paneID: paneID.uuidString,
       paneTitle: title.isEmpty ? nil : title,
-      source: nativeSession?.source.rawValue ?? (screenText == nil ? "terminal-unavailable" : "terminal-scrollback"),
+      source: nativeSession?.source.rawValue
+        ?? (screenText == nil ? "terminal-unavailable" : "terminal-scrollback"),
       confidence: nativeSession?.confidence.rawValue ?? "fallback",
       transcriptPath: nativeSession?.transcriptPath?.path(percentEncoded: false),
       excerptText: screenText
@@ -554,7 +572,8 @@ struct SupacodeApp: App {
       return .failure(.agentNotFound("Pane '\(pane)' does not host an active agent."))
     }
     guard detectedAgent == .codex || detectedAgent == .claude else {
-      return .failure(.unsupportedAgent("Agent '\(detectedAgent.rawValue)' is not supported by agents read."))
+      return .failure(
+        .unsupportedAgent("Agent '\(detectedAgent.rawValue)' is not supported by agents read."))
     }
     guard let activeText = surface.readActiveContentsForCLI() else {
       return .failure(.activeScreenUnreadable)
@@ -584,7 +603,8 @@ struct SupacodeApp: App {
       identified: identified,
       workingDirectory: state.activeAgentWorkingDirectory(surfaceID: resolved.paneID),
       activeText: activeText,
-      configRoot: state.launchProfilesBySurface[resolved.paneID]?.configRoot(forDetected: detectedAgent)
+      configRoot: state.launchProfilesBySurface[resolved.paneID]?.configRoot(
+        forDetected: detectedAgent)
     )
     let transcriptSession = freshResolution.session.flatMap { session -> AgentSession? in
       guard session.confidence == .exact || session.confidence == .high,
@@ -623,7 +643,8 @@ struct SupacodeApp: App {
         rootPath: target.worktreeRootPath,
         kind: target.worktreeKind.rawValue
       ),
-      tab: ReadTargetTab(id: target.tabID.uuidString, title: target.tabTitle, selected: target.tabSelected),
+      tab: ReadTargetTab(
+        id: target.tabID.uuidString, title: target.tabTitle, selected: target.tabSelected),
       pane: ReadTargetPane(
         id: target.paneID.uuidString,
         title: target.paneTitle,
@@ -735,7 +756,8 @@ struct SupacodeApp: App {
         }
       },
       intercept: { surfaceID in
-        Self.workflowDeliveryRefusal(surfaceID: surfaceID, appStore: appStore, terminalManager: terminalManager)
+        Self.workflowDeliveryRefusal(
+          surfaceID: surfaceID, appStore: appStore, terminalManager: terminalManager)
       }
     )
     let dispatchAbandonHandler = AgentDispatchAbandonCommandHandler(
@@ -775,7 +797,7 @@ struct SupacodeApp: App {
         return resolver.resolve(selector).map { SendResolvedTarget(from: $0) }
       },
       textDelivery: { target, text, trailingEnter in
-        guard let state = terminalManager.stateIfExists(for: target.worktreeID) else { return }
+        guard let state = terminalManager.stateIfExists(for: target.worktreeID) else { return false }
         let delivery = CLISendTextDelivery(
           insertText: { paneID, payload in
             state.insertCommittedText(payload, in: paneID)
@@ -784,7 +806,7 @@ struct SupacodeApp: App {
             state.submitLine(in: paneID)
           }
         )
-        delivery.deliver(to: target, text: text, trailingEnter: trailingEnter)
+        return delivery.deliver(to: target, text: text, trailingEnter: trailingEnter)
       },
       waiterProvider: { worktreeID, surfaceID in
         terminalManager.stateIfExists(for: worktreeID)?
@@ -881,7 +903,8 @@ struct SupacodeApp: App {
       }
       return resolver.resolveLifecycleTarget(selector)
     }
-    let agentConditionSnapshot: @MainActor (TabResolvedTarget) -> AgentConditionSnapshot = { target in
+    let agentConditionSnapshot: @MainActor (TabResolvedTarget) -> AgentConditionSnapshot = {
+      target in
       guard let surfaceID = UUID(uuidString: target.paneID) else {
         return .init(agent: nil, signal: nil, revision: 0, isLive: false, signals: .empty)
       }
@@ -896,7 +919,8 @@ struct SupacodeApp: App {
         changedSignal: signalEvidence.latest,
         revision: observed?.revision ?? 0,
         isLive: terminalManager.isSurfaceLive(surfaceID),
-        signals: terminalManager.agentSignalsPayload(surfaceID: surfaceID)
+        signals: terminalManager.agentSignalsPayload(surfaceID: surfaceID),
+        screenDetection: terminalManager.agentScreenDetection(surfaceID: surfaceID)
       )
     }
     let agentWaitHandler = AgentWaitCommandHandler(
@@ -934,8 +958,18 @@ struct SupacodeApp: App {
       resolveTarget: { pane in
         resolveTabTarget(.pane(pane))
       },
+      inputProtection: { target in
+        guard let surfaceID = UUID(uuidString: target.paneID),
+          let state = terminalManager.stateIfExists(for: target.worktreeID)
+        else {
+          return "The target terminal is no longer available."
+        }
+        return state.dispatchInputProtection(surfaceID: surfaceID)
+      },
       pendingDispatch: { target in
-        UUID(uuidString: target.paneID).flatMap { terminalManager.pendingAgentDispatchSnapshot(surfaceID: $0) }
+        UUID(uuidString: target.paneID).flatMap {
+          terminalManager.pendingAgentDispatchSnapshot(surfaceID: $0)
+        }
       },
       conditionSnapshot: agentConditionSnapshot,
       issueDispatch: { target in
@@ -948,14 +982,12 @@ struct SupacodeApp: App {
         }
       },
       deliverPrompt: { target, text in
-        // The same input path as `prowl send`: one committed-text paste, then Enter.
         guard let surfaceID = UUID(uuidString: target.paneID),
-          let state = terminalManager.stateIfExists(for: target.worktreeID),
-          state.insertCommittedText(text, in: surfaceID)
+          let state = terminalManager.stateIfExists(for: target.worktreeID)
         else {
           return false
         }
-        return state.submitLine(in: surfaceID)
+        return await state.deliverAgentDispatch(text, surfaceID: surfaceID)
       },
       cancelDispatch: { dispatchID in
         terminalManager.cancelAgentDispatchIssuance(dispatchID: dispatchID)
@@ -963,7 +995,10 @@ struct SupacodeApp: App {
     )
     let createTab: TabCommandHandler.CreateTabProvider = { target, path in
       let repositories = Array(appStore.state.repositories.repositories)
-      guard let worktree = resolveCLITerminalWorktree(id: target.worktreeID, repositories: repositories) else {
+      guard
+        let worktree = resolveCLITerminalWorktree(
+          id: target.worktreeID, repositories: repositories, terminalManager: terminalManager)
+      else {
         return nil
       }
       selectCLIWorktreeContext(
@@ -1044,7 +1079,8 @@ struct SupacodeApp: App {
       issueDispatch: {
         do {
           let snapshot = try terminalManager.issueAgentDispatch()
-          guard case .pending(let record) = snapshot.payload(using: Self.dispatchDateFormatter()) else {
+          guard case .pending(let record) = snapshot.payload(using: Self.dispatchDateFormatter())
+          else {
             return .failure(.capacityExceeded)
           }
           return .success(record)
@@ -1093,7 +1129,9 @@ struct SupacodeApp: App {
     )
     workflowCoordinatorBox.coordinator = workflowCoordinator
     let workflowHandler = WorkflowCommandHandler(
-      snapshotProvider: { Self.makeWorkflowRuntimeSnapshot(appStore: appStore, terminalManager: terminalManager) },
+      snapshotProvider: {
+        Self.makeWorkflowRuntimeSnapshot(appStore: appStore, terminalManager: terminalManager)
+      },
       runtime: workflowCoordinator
     )
     return CLICommandRouter(
@@ -1127,7 +1165,9 @@ struct SupacodeApp: App {
   ) -> WorkflowRuntimeSnapshot {
     @Shared(.userGlobalSettings) var settings
     @Shared(.agentRuntimeAvailabilityProbeResults) var probeResults
-    let bundledSkills = Bundle.main.resourceURL.flatMap { try? ProwlSkills.bundled(resourcesURL: $0) }
+    let bundledSkills = Bundle.main.resourceURL.flatMap {
+      try? ProwlSkills.bundled(resourcesURL: $0)
+    }
     let installedAgents =
       probeResults.isEmpty
       ? nil
@@ -1139,7 +1179,8 @@ struct SupacodeApp: App {
       ),
       paneByShellPID: terminalManager.paneByShellPID(),
       bundleWorkflowsURL: SupacodePaths.bundledWorkflowsURL,
-      userWorkflowsURL: WorkflowSources.userDirectory(home: FileManager.default.homeDirectoryForCurrentUser),
+      userWorkflowsURL: WorkflowSources.userDirectory(
+        home: FileManager.default.homeDirectoryForCurrentUser),
       disabledWorkflowIDs: Set(settings.disabledWorkflowIDs),
       bundledSkillIDs: bundledSkills.map { Set($0.map(\.id)) },
       knownAgents: Set(DetectedAgent.allCases.map(\.rawValue)),
@@ -1156,12 +1197,22 @@ struct SupacodeApp: App {
 
   }
 
+  private static func quitHandler(for appStore: StoreOf<AppFeature>) -> () -> Void {
+    { [weak appStore] in appStore?.send(.requestQuit) }
+  }
+
+  private static func makeRemoteMirrorStore(
+    manager: WorktreeTerminalManager, runtime: GhosttyRuntime
+  ) -> RemoteMirrorStore {
+    return RemoteMirrorStore(manager: manager, runtime: runtime)
+  }
+
   private static func makeCLISocketServer(
     appStore: StoreOf<AppFeature>,
     terminalManager: WorktreeTerminalManager,
     workflowCoordinatorBox: WorkflowCoordinatorBox,
     workflowReservations: WorkflowPaneReservations
-  ) -> CLISocketServer {
+  ) -> (server: CLISocketServer, router: CLICommandRouter) {
 
     let cliRouter = makeCLICommandRouter(
       appStore: appStore,
@@ -1180,7 +1231,7 @@ struct SupacodeApp: App {
     } catch {
       logger.warning("Failed to start CLI socket server: \(String(describing: error))")
     }
-    return cliServer
+    return (cliServer, cliRouter)
   }
 
   // MARK: - Open handler factory
@@ -1205,7 +1256,10 @@ struct SupacodeApp: App {
       },
       createTabAtPath: { worktreeID, path in
         let repositories = Array(appStore.state.repositories.repositories)
-        guard let worktree = resolveCLITerminalWorktree(id: worktreeID, repositories: repositories) else {
+        guard
+          let worktree = resolveCLITerminalWorktree(
+            id: worktreeID, repositories: repositories, terminalManager: terminalManager)
+        else {
           return
         }
         terminalManager.handleCommand(
@@ -1213,7 +1267,8 @@ struct SupacodeApp: App {
         )
       },
       resolveTarget: { selector in
-        switch makeTargetResolver(appStore: appStore, terminalManager: terminalManager).resolve(selector) {
+        let resolver = makeTargetResolver(appStore: appStore, terminalManager: terminalManager)
+        switch resolver.resolve(selector) {
         case .success(let target):
           return OpenResolvedTarget(
             worktreeID: target.worktreeID,
@@ -1321,7 +1376,8 @@ struct SupacodeApp: App {
 
   static func resolveCLITerminalWorktree(
     id: Worktree.ID,
-    repositories: [Repository]
+    repositories: [Repository],
+    terminalManager: WorktreeTerminalManager? = nil
   ) -> Worktree? {
     for repository in repositories {
       if let worktree = repository.worktrees[id: id] {
@@ -1352,7 +1408,7 @@ struct SupacodeApp: App {
     guard
       let worktree = resolveCLITerminalWorktree(
         id: request.target.worktreeID,
-        repositories: repositories
+        repositories: repositories, terminalManager: terminalManager
       )
     else {
       return .failure(.createFailed("The resolved worktree is no longer available."))
@@ -1419,7 +1475,7 @@ struct SupacodeApp: App {
     guard
       let worktree = resolveCLITerminalWorktree(
         id: request.target.worktreeID,
-        repositories: repositories
+        repositories: repositories, terminalManager: terminalManager
       ),
       var preparation = request.preparedLaunch
     else {
@@ -1554,6 +1610,7 @@ struct SupacodeApp: App {
         preferredColorScheme: store.settings.appearanceMode.colorScheme
       ) {
         ContentView(store: store, terminalManager: terminalManager)
+          .environment(remoteMirror)
           .environment(ghosttyShortcuts)
           .environment(commandKeyObserver)
           .environment(\.resolvedKeybindings, store.resolvedKeybindings)

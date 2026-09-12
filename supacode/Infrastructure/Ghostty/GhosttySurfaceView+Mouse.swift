@@ -101,6 +101,10 @@ extension GhosttySurfaceView {
   }
 
   override func scrollWheel(with event: NSEvent) {
+    if mirrorGrid != nil {
+      enclosingScrollView?.scrollWheel(with: event)
+      return
+    }
     guard let surface else { return }
     var scrollX = event.scrollingDeltaX
     var scrollY = event.scrollingDeltaY

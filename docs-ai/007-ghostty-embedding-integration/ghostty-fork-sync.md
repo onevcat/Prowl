@@ -10,13 +10,15 @@ Prowl embeds GhosttyKit from `ThirdParty/ghostty`. The submodule points to the `
 - Fork remote: `git@github.com:onevcat/ghostty.git`
 - Per-version patched branches: `release/v<UPSTREAM_TAG>-patched`
 - Current patched branch: `release/v1.3.1-patched`
+- Current pinned tip: `5afdc9cf7315ef78533f245b97ef142dc50da67a`, published on
+  `fix/prowl-display-snapshot-state` ahead of that branch.
 
 Each patched branch starts at the matching upstream tag and only adds onevcat patches. Do not rewrite an existing patched branch after publishing it.
 
 ## Current Patches
 
-Listed in topological order on `release/v1.3.1-patched`. When upgrading to a new
-upstream tag, cherry-pick all of them.
+Listed in topological order through the current pinned tip. When upgrading to a
+new upstream tag, carry all patches, including the follow-up after the release branch.
 
 1. `76dce319f55db097b2b7ae3cad2f6267475936f0` — `embedded: expose surface child PID`
    - Adds `ghostty_surface_pid(ghostty_surface_t)` to the embedded C API.
@@ -43,7 +45,15 @@ upstream tag, cherry-pick all of them.
      recreates the link. `pkg/macos/video/display_link.zig` reports `CreationFailed` instead of
      `OutOfMemory`. Background: `docs-ai/063-agent-workflows/009-display-sleep-surface-spike.md`.
    - Drop this patch when upgrading to an upstream tag that contains `a177ba90af`.
-   - This is the commit the submodule currently points at.
+6. `a00717e450f93d691037af00731e205b6501799e` — `Merge pull request #2 from Awhisper/feat/mobile-mirror-bridge`
+   - Includes `02b3c6704` (active-screen VT snapshot) and `df5b32481` (bounded terminal text capture), contributed by Awhisper.
+   - Adds `ghostty_surface_read_snapshot` and `ghostty_surface_read_text_bounded` for remote mirror display and bounded history.
+   - Both exports are read-only and use `ghostty_surface_free_text` to release returned buffers.
+7. `5afdc9cf7315ef78533f245b97ef142dc50da67a` — preserve mirror keyboard and styled blank-row state
+   - Exports modifyOtherKeys and Kitty keyboard state in active-screen VT snapshots so replica input uses the Host's negotiated encoding.
+   - Preserves background-only styled cells in VT output; plain-text and HTML trimming remain unchanged.
+   - Keep this patch until the upstream snapshot/formatter paths preserve the same state. Recheck both actual key bytes and effective cell colors when dropping it.
+   - This is the commit the submodule currently points at. Matching artifacts use release tag `xcframework-5afdc9cf7315ef78533f245b97ef142dc50da67a-prowl-v1`.
 
 ## Upgrade To A New Ghostty Tag
 
@@ -55,9 +65,10 @@ git fetch onevcat
 
 PREV=v1.3.1
 NEXT=v1.3.2
+PATCH_TIP=5afdc9cf7315ef78533f245b97ef142dc50da67a
 
 git checkout -b "release/${NEXT}-patched" "${NEXT}"
-git cherry-pick "${PREV}..onevcat/release/${PREV}-patched"
+git cherry-pick $(git rev-list --reverse --no-merges "${PREV}..${PATCH_TIP}")
 git push -u onevcat "release/${NEXT}-patched"
 
 cd ../..

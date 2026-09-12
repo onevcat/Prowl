@@ -7,6 +7,64 @@ import Testing
 
 @MainActor
 struct AgentDispatchCommandHandlerTests {
+  @Test func fallbackIdleIsNotEvidenceForDispatchOrWait() {
+    let agent = agentEntry(surfaceID: UUID(), status: .idle)
+    let snapshot = AgentConditionSnapshot(
+      agent: agent, signal: nil, revision: 1, isLive: true, signals: .empty,
+      screenDetection: .init(state: .idle, reason: .noRuleMatched))
+    #expect(AgentConditionEvidence.normalizedState(snapshot) == "unknown")
+    guard case .busy = AgentConditionEvidence.idleVerdict(for: snapshot) else {
+      Issue.record("An unrecognized composer must not permit dispatch")
+      return
+    }
+    #expect(!AgentConditionEvidence.detectorReports(.idle, normalizedState: "unknown"))
+  }
+
+  @Test func freshLogCompletionSurvivesUnmatchedScreenButExpiredCompletionDoesNot() {
+    let screen = AgentScreenDetection(state: .idle, reason: .noRuleMatched)
+    var machine = AgentStateMachine()
+    _ = machine.receive(.inventory(["session"]), now: 0)
+    _ = machine.receive(.screen(screen), now: 0)
+    _ = machine.receive(.turnStarted(session: "session", turn: "turn"), now: 1)
+    let completed = machine.receive(.turnEnded(session: "session", turn: "turn"), now: 2)
+    #expect(completed.reason == .logTurnEnded)
+    #expect(completed.state == .idle)
+    #expect(!completed.hasOutstandingWork)
+    var agent = agentEntry(surfaceID: UUID(), status: .idle)
+    agent.stateDecision = completed
+    let current = AgentConditionSnapshot(
+      agent: agent, signal: nil, revision: 1, isLive: true, signals: .empty, screenDetection: screen)
+    #expect(AgentConditionEvidence.normalizedState(current) == "idle")
+    // Log-backed detector evidence still follows the existing stabilization policy.
+    #expect(AgentConditionEvidence.idleVerdict(for: current) == .settling("idle"))
+    let corroborated = AgentConditionSnapshot(
+      agent: agent, signal: turnEnded, revision: 1, isLive: true, signals: .empty, screenDetection: screen)
+    #expect(AgentConditionEvidence.idleVerdict(for: corroborated) == .idle)
+
+    let expired = machine.receive(.tick, now: 2 + machine.activityWindow + 1)
+    #expect(expired.reason == .fallback(.retainedCompletion))
+    agent.stateDecision = expired
+    let stale = AgentConditionSnapshot(
+      agent: agent, signal: nil, revision: 2, isLive: true, signals: .empty, screenDetection: screen)
+    #expect(AgentConditionEvidence.normalizedState(stale) == "unknown")
+    #expect(AgentConditionEvidence.idleVerdict(for: stale) == .busy("unknown"))
+    let staleSignal = AgentConditionSnapshot(
+      agent: agent, signal: turnEnded, revision: 2, isLive: true, signals: .empty, screenDetection: screen)
+    #expect(AgentConditionEvidence.idleVerdict(for: staleSignal) == .settling("unknown"))
+  }
+
+  @Test func unmatchedScreenDoesNotEraseBlockedOrAbsentState() {
+    let blocked = AgentConditionSnapshot(
+      agent: agentEntry(surfaceID: UUID(), status: .blocked), signal: nil,
+      revision: 1, isLive: true, signals: .empty,
+      screenDetection: .init(state: .idle, reason: .noRuleMatched))
+    #expect(AgentConditionEvidence.normalizedState(blocked) == "blocked")
+    let absent = AgentConditionSnapshot(
+      agent: nil, signal: nil, revision: 1, isLive: true, signals: .empty,
+      screenDetection: .init(state: .idle, reason: .noRuleMatched))
+    #expect(AgentConditionEvidence.normalizedState(absent) == "absent")
+  }
+
   @Test func completionRequiresCallerContextAndReturnsImmutableReceipt() async throws {
     let caller = CallerPane(worktreeID: "w1", surfaceID: UUID())
     let target = makeTarget(paneID: caller.surfaceID.uuidString)
@@ -301,6 +359,56 @@ struct AgentDispatchCommandHandlerTests {
   /// Right after a turn the detector still shows `working` for its hold period although the
   /// runtime already reported `turn-ended`; the precondition waits for the corroboration
   /// instead of refusing, like `--until idle` would keep polling.
+  @Test func inputProtectionIsRecheckedAfterIdleEvidence() async {
+    let target = resolvedTarget()
+    var checks = 0
+    var issued = false
+    let handler = AgentDispatchCommandHandler(
+      resolveTarget: { _ in .success(target) },
+      inputProtection: { _ in
+        checks += 1
+        return checks == 2 ? "Host started editing" : nil
+      },
+      conditionSnapshot: { _ in
+        self.snapshot(target, status: .done, signal: self.turnEnded, channels: [self.liveClaudeChannel])
+      },
+      issueDispatch: { _ in
+        issued = true
+        return .failure(.bindingMissing)
+      })
+    let response = await handler.handle(envelope: dispatch(pane: target.paneID))
+    #expect(response.error?.code == CLIErrorCode.dispatchTargetBusy)
+    #expect(checks == 2)
+    #expect(!issued)
+  }
+
+  @Test func cancelledDispatchNeverIssuesOrDelivers() async {
+    let clock = TestClock()
+    let target = resolvedTarget()
+    var issued = false
+    var delivered = false
+    let handler = AgentDispatchCommandHandler(
+      resolveTarget: { _ in .success(target) },
+      conditionSnapshot: { _ in
+        self.snapshot(target, status: .working, signal: self.turnEnded, channels: [self.liveClaudeChannel])
+      },
+      issueDispatch: { _ in
+        issued = true
+        return .failure(.bindingMissing)
+      },
+      deliverPrompt: { _, _ in
+        delivered = true
+        return true
+      },
+      clock: clock)
+    let task = Task { await handler.handle(envelope: self.dispatch(pane: target.paneID)) }
+    await clock.advance(by: .milliseconds(200))
+    task.cancel()
+    let response = await task.value
+    #expect(!response.ok)
+    #expect(!issued && !delivered)
+  }
+
   @Test func dispatchWaitsForTheDetectorToCorroborateAFreshTurnEnded() async throws {
     let clock = TestClock()
     let target = resolvedTarget()

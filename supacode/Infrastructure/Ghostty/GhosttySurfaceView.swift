@@ -270,6 +270,9 @@ final class GhosttySurfaceView: NSView, Identifiable {
 
   override var acceptsFirstResponder: Bool { true }
 
+  var mirrorGrid: (columns: UInt32, rows: UInt32)?
+  private var commandCString: UnsafeMutablePointer<CChar>?
+
   init(
     runtime: GhosttyRuntime,
     workingDirectory: URL?,
@@ -277,6 +280,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
     fontSize: Float32? = nil,
     context: ghostty_surface_context_e,
     environment: [String: String] = [:],
+    command: String? = nil,
     skipsSurfaceCreationForTesting: Bool = false,
     failsSurfaceCreationForTesting: Bool = false,
     defersSurfaceCreation: Bool = false
@@ -288,6 +292,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
     self.fontSize = fontSize ?? 0
     self.appliesFontSizeAdjustmentMarker = fontSize != nil
     self.context = context
+    commandCString = command.flatMap { strdup($0) }
     self.skipsSurfaceCreationForTesting = skipsSurfaceCreationForTesting
     self.failsSurfaceCreationForTesting = failsSurfaceCreationForTesting
     if let workingDirectory {
@@ -365,6 +370,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
     if let workingDirectoryCString {
       free(workingDirectoryCString)
     }
+    if let commandCString { free(commandCString) }
     if let initialInputCString {
       free(initialInputCString)
     }
@@ -617,6 +623,18 @@ final class GhosttySurfaceView: NSView, Identifiable {
   func updateSurfaceSize() {
     resumeDeferredOcclusionIfNeeded()
     guard let surface else { return }
+    if let grid = mirrorGrid {
+      let size = ghostty_surface_size(surface)
+      if size.cell_width_px > 0, size.cell_height_px > 0 {
+        // set_size includes padding and fractional-cell space; preserve that inset
+        // when changing the grid instead of shrinking the replica by a row/column.
+        let extraWidth = size.width_px - min(size.width_px, UInt32(size.columns) * size.cell_width_px)
+        let extraHeight = size.height_px - min(size.height_px, UInt32(size.rows) * size.cell_height_px)
+        ghostty_surface_set_size(
+          surface, grid.columns * size.cell_width_px + extraWidth, grid.rows * size.cell_height_px + extraHeight)
+      }
+      return
+    }
     // When pinnedSize is set (canvas mode), convertToBacking() includes the
     // .scaleEffect() layer transform, producing scale-dependent backing sizes.
     // Use the pinned size with the window's raw backing scale factor instead.
@@ -704,6 +722,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
     config.font_size = fontSize
     config.working_directory = workingDirectoryCString.map { UnsafePointer($0) }
     config.initial_input = initialInputCString.map { UnsafePointer($0) }
+    config.command = commandCString.map { UnsafePointer($0) }
     config.context = context
     if let envVarEntries, envVarCount > 0 {
       config.env_vars = envVarEntries

@@ -11,6 +11,7 @@ struct AgentConditionSnapshot: Sendable {
   let revision: UInt64
   let isLive: Bool
   let signals: AgentSignalsPayload
+  let screenDetection: AgentScreenDetection?
 
   init(
     agent: ActiveAgentEntry?,
@@ -18,7 +19,8 @@ struct AgentConditionSnapshot: Sendable {
     changedSignal: AgentSignal? = nil,
     revision: UInt64,
     isLive: Bool,
-    signals: AgentSignalsPayload
+    signals: AgentSignalsPayload,
+    screenDetection: AgentScreenDetection? = nil
   ) {
     self.agent = agent
     self.signal = signal
@@ -26,6 +28,7 @@ struct AgentConditionSnapshot: Sendable {
     self.revision = revision
     self.isLive = isLive
     self.signals = signals
+    self.screenDetection = screenDetection
   }
 }
 
@@ -125,7 +128,17 @@ enum AgentConditionEvidence {
 
   static func normalizedState(_ snapshot: AgentConditionSnapshot) -> String {
     guard snapshot.isLive else { return "gone" }
-    return snapshot.agent.map { status(for: $0, fallback: .idle).rawValue } ?? "absent"
+    guard let agent = snapshot.agent else { return "absent" }
+    let state = status(for: agent, fallback: .idle).rawValue
+    // A screen fallback is not idle evidence. Current log authority remains independent
+    // of whether the screen classifier recognizes the retained frame.
+    if snapshot.screenDetection?.reason == .noRuleMatched,
+      agent.stateDecision?.reason != .logTurnEnded,
+      detectorReports(.idle, normalizedState: state)
+    {
+      return "unknown"
+    }
+    return state
   }
 
   static func status(for agent: ActiveAgentEntry?, fallback: AgentsCommandStatus) -> AgentsCommandStatus {

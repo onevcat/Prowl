@@ -147,7 +147,8 @@ extension SupacodeApp {
       changedSignal: evidence.latest,
       revision: observed?.revision ?? 0,
       isLive: terminalManager.isSurfaceLive(surfaceID),
-      signals: terminalManager.agentSignalsPayload(surfaceID: surfaceID)
+      signals: terminalManager.agentSignalsPayload(surfaceID: surfaceID),
+      screenDetection: terminalManager.agentScreenDetection(surfaceID: surfaceID)
     )
   }
 

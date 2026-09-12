@@ -58,6 +58,11 @@ nonisolated enum SupacodePaths {
     Bundle.main.resourceURL.map(WorkflowSources.bundleDirectory(resourcesURL:))
   }
 
+  static var bundledMirrorRelayURL: URL? {
+    Bundle.main.resourceURL?.appending(
+      path: "prowl-mirror-relay/prowl-mirror-relay", directoryHint: .notDirectory)
+  }
+
   static var bundledCLIURL: URL? {
     Bundle.main.resourceURL?.appending(
       path: "prowl-cli/prowl",

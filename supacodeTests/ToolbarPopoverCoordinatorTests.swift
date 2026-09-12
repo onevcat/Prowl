@@ -5,6 +5,16 @@ import Testing
 
 @MainActor
 struct ToolbarPopoverCoordinatorTests {
+  @Test func mirrorReplacesPinnedHistoryWithoutLateDismissal() {
+    let coordinator = ToolbarPopoverCoordinator()
+    coordinator.showPinned(.history)
+    coordinator.toggle(.mirror)
+    coordinator.dismiss(.history)
+    #expect(coordinator.presented == .mirror)
+    coordinator.toggle(.mirror)
+    #expect(coordinator.presented == nil)
+  }
+
   @Test func historyToBellIgnoresOldPopoverCallbacksAndTimeout() async {
     let clock = TestClock()
     let popovers = ToolbarPopoverCoordinator(clock: clock)

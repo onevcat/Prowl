@@ -46,6 +46,19 @@ enum ClaudeScreenProfile {
     return AgentScreenDetection(state: .idle, reason: .noRuleMatched)
   }
 
+  /// A recognized composer, including wrapped draft rows. Nil means its boundaries
+  /// cannot be established and must not be interpreted as an empty input.
+  nonisolated static func composerContents(in snapshot: AgentScreenSnapshot) -> String? {
+    let lines = snapshot.lines
+    guard let prompt = lines.lastIndex(where: { $0.trimmingCharacters(in: .whitespaces).hasPrefix("❯") }),
+      prompt > 0, isBoxBorderLine(lines[prompt - 1]),
+      let end = lines.indices.dropFirst(prompt + 1).first(where: { isBoxBorderLine(lines[$0]) })
+    else { return nil }
+    let first = lines[prompt].trimmingCharacters(in: .whitespaces).dropFirst()
+    return ([String(first)] + Array(lines[(prompt + 1)..<end]))
+      .joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
   /// Raw current interaction text for an actionable blocked screen. Keep the
   /// rendered choices and keyboard hints intact rather than inventing option fields.
   nonisolated static func blockerText(in snapshot: AgentScreenSnapshot) -> String? {

@@ -150,7 +150,9 @@ final class AgentsCommandHandler: CommandHandler {
     return AgentsCommandPayload(count: agents.count, agents: agents)
   }
 
-  private func makeTerminalContexts(from snapshot: ListRuntimeSnapshot) -> [UUID: TerminalAgentContext] {
+  private func makeTerminalContexts(from snapshot: ListRuntimeSnapshot) -> [UUID:
+    TerminalAgentContext]
+  {
     var contexts: [UUID: TerminalAgentContext] = [:]
     for worktree in snapshot.worktrees {
       for tab in worktree.tabs {
@@ -159,7 +161,8 @@ final class AgentsCommandHandler: CommandHandler {
             worktree: worktree,
             tab: tab,
             pane: pane,
-            focused: worktree.id == snapshot.focusedWorktreeID && tab.selected && tab.focusedPaneID == pane.id
+            focused: worktree.id == snapshot.focusedWorktreeID && tab.selected
+              && tab.focusedPaneID == pane.id
           )
         }
       }

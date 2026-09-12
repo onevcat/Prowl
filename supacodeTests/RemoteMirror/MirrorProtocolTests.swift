@@ -1,0 +1,128 @@
+import Foundation
+import Testing
+
+@testable import supacode
+
+struct MirrorProtocolTests {
+  @Test func refreshPreservesBackpressureAndSequence() throws {
+    var gate = MirrorTextFrameGate()
+    #expect(gate.offer("unchanged") == 1)
+    gate.requestRefresh()
+    #expect(gate.offer("unchanged") == nil)
+    try gate.acknowledge(1)
+    #expect(gate.offer("unchanged") == 2)
+    try gate.acknowledge(2)
+    #expect(gate.offer("unchanged") == nil)
+  }
+
+  @Test func binaryTextFrameHasStableVectorAndRejectsLegacyJSON() throws {
+    let id = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+    let message = MirrorMessage.textFrame(.init(sequence: 1, text: "A", subscriptionID: id))
+    let wire = try MirrorWire.encode(message)
+    var expected: [UInt8] = [0, 0, 0, 35, 2]
+    expected += Array(repeating: 0, count: 15)
+    expected += [1]
+    expected += Array(repeating: 0, count: 7)
+    expected += [1]
+    expected += Array(repeating: 0, count: 9)
+    expected += [65]
+    #expect(Array(wire) == expected)
+    #expect(try MirrorWire.decode(wire.dropFirst(4)).text == "A")
+    #expect(throws: (any Error).self) {
+      try MirrorWire.decode(Data(#"{"version":1,"kind":"list"}"#.utf8))
+    }
+    #expect(throws: (any Error).self) {
+      try MirrorWire.decode(Data([0]) + Data(#"{"subscribed":{}}"#.utf8))
+    }
+  }
+
+  @Test func textGatePreservesEmptyReplacementAndRejectsStaleAcknowledgements() throws {
+    var gate = MirrorTextFrameGate()
+    #expect(gate.offer("thinking") == 1)
+    #expect(gate.offer("") == nil)
+    #expect(throws: MirrorProtocolError.self) { try gate.acknowledge(99) }
+    try gate.acknowledge(1)
+    #expect(gate.offer("") == 2)
+    try gate.acknowledge(2)
+    #expect(gate.offer("") == nil)
+    #expect(gate.offer("conclusion") == 3)
+  }
+
+  @Test func paneLabelsPreserveOptionalMetadata() throws {
+    let pane = MirrorPaneDescriptor(
+      id: UUID(), title: "VKChannel · Codex", directory: "/projects/VKChannel", busy: true,
+      projectName: "VKChannel", subtitle: "Codex · master · Pane 2")
+    let wire = try MirrorWire.encode(
+      .panes(.init(panes: [pane], capabilities: [], hostRunID: UUID())))
+    #expect(try MirrorWire.decode(wire.dropFirst(4)).panes == [pane])
+    let minimal = Data(
+      "{\"id\":\"\(pane.id)\",\"title\":\"master\",\"directory\":\"/projects/VKChannel\",\"busy\":false}"
+        .utf8)
+    let decoded = try JSONDecoder().decode(MirrorPaneDescriptor.self, from: minimal)
+    #expect(decoded.projectName == nil)
+    #expect(decoded.subtitle == nil)
+    #expect(decoded.title == "master")
+  }
+
+  @Test func frameRoundTripKeepsControlBytesAndUnicode() throws {
+    let frame = MirrorFrame(columns: 81, rows: 25, bytes: Data("\u{1b}[2J思考中\r结论\u{1b}[H".utf8))
+    let wire = try MirrorWire.encode(
+      .frame(.init(frame: frame, sequence: 1, subscriptionID: UUID())))
+    #expect(try MirrorWire.length(wire.prefix(4)) == wire.count - 4)
+    #expect(try MirrorWire.decode(wire.dropFirst(4)).frame == frame)
+  }
+
+  @Test func invalidLengthsAndVersionsAreRejectedBeforeDispatch() {
+    #expect(throws: MirrorProtocolError.self) { try MirrorWire.length(Data([0, 0, 0])) }
+    #expect(throws: MirrorProtocolError.self) { try MirrorWire.length(Data([0, 0, 0, 0])) }
+    #expect(throws: MirrorProtocolError.self) { try MirrorWire.length(Data([255, 255, 255, 255])) }
+    #expect(throws: MirrorProtocolError.self) {
+      try MirrorWire.decode(Data(#"{"version":3,"kind":"list"}"#.utf8))
+    }
+  }
+
+  @Test func slowConsumerHasOneOutstandingFrameAndReceivesLatestState() throws {
+    var gate = MirrorFrameGate()
+    let first = MirrorFrame(columns: 80, rows: 24, bytes: Data("thinking".utf8))
+    let cleared = MirrorFrame(columns: 80, rows: 24, bytes: Data())
+    #expect(gate.offer(first) == 1)
+    #expect(gate.offer(cleared) == nil)
+    #expect(throws: MirrorProtocolError.self) { try gate.acknowledge(2) }
+    try gate.acknowledge(1)
+    #expect(gate.offer(first) == nil)
+    #expect(gate.offer(cleared) == 2)
+    try gate.acknowledge(2)
+    let resized = MirrorFrame(columns: 100, rows: 24, bytes: Data())
+    #expect(gate.offer(resized) == 3)
+  }
+
+  @Test func historyPagesAreStableAndBounded() throws {
+    let history = MirrorHistory(text: (0..<451).map(String.init).joined(separator: "\n"))
+    let latest = try history.page(before: history.lines.count)
+    #expect(latest.start == 251)
+    #expect(latest.lines.first == "251")
+    #expect(latest.lines.last == "450")
+    let older = try history.page(before: latest.start)
+    #expect(older.start == 51)
+    #expect(older.lines.last == "250")
+    #expect(try history.page(before: 0).lines.isEmpty)
+    #expect(throws: MirrorProtocolError.self) { try history.page(before: -1) }
+    #expect(throws: MirrorProtocolError.self) { try history.page(before: 452) }
+    #expect(MirrorHistory(text: "changed").id != history.id)
+  }
+
+  @Test @MainActor func malformedPairingKeysFailBeforeOpeningASocket() {
+    for key in ["", "1234", String(repeating: "g", count: 64)] {
+      #expect(throws: MirrorProtocolError.self) { try MirrorConnection.parameters(pairingKey: key) }
+    }
+  }
+
+  @Test func historyByteLimitDiscardsOnlyAnIncompleteLeadingScalar() {
+    let tail = String(repeating: "a", count: MirrorHistory.maximumBytes - 1)
+    let history = MirrorHistory(text: "思" + tail)
+    #expect(history.lines == [tail])
+    let aligned = String(repeating: "a", count: MirrorHistory.maximumBytes - 3)
+    #expect(MirrorHistory(text: "思" + aligned).lines == ["思" + aligned])
+    #expect(MirrorHistory(text: "").lines == [""])
+  }
+}

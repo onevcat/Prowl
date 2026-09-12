@@ -115,6 +115,11 @@ Reasons never include screen text. Screen fallback IDs are:
 - `screen.afterTurn`: new Working screen evidence appeared after completion.
 - `screen.retainedCompletion`: an unchanged completed frame is still suppressed.
 
+For idle waits and dispatch readiness, a current `log.turnEnded` decision keeps
+the existing idle evidence and stabilization rules even when the screen reports
+`fallback.noRuleMatched`. Without current log authority, that unmatched screen
+provides no idle evidence. Dispatch still checks the input area before delivery.
+
 Use `status` to decide whether intervention is needed. A blocked `screen_reason`
 with Idle status can be a stale prompt fenced by completion; do not send Enter
 based on the screen reason alone.
