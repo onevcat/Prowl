@@ -135,7 +135,9 @@ enum AgentConditionEvidence {
     if snapshot.screenDetection?.reason == .noRuleMatched,
       agent.stateDecision?.reason != .logTurnEnded,
       detectorReports(.idle, normalizedState: state)
-    { return "unknown" }
+    {
+      return "unknown"
+    }
     return state
   }
 

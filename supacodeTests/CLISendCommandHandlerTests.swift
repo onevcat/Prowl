@@ -38,7 +38,10 @@ struct CLISendCommandHandlerTests {
   ) -> SendCommandHandler {
     SendCommandHandler(
       resolveProvider: { _ in resolveResult },
-      textDelivery: { target, text, enter in textDelivery?(target, text, enter); return true },
+      textDelivery: { target, text, enter in
+        textDelivery?(target, text, enter)
+        return true
+      },
       waiterProvider: { _, _ in
         guard let waiterResult else { return nil }
         return AsyncStream { continuation in
@@ -295,10 +298,15 @@ struct CLISendCommandHandlerTests {
   @Test func failedInsertionNeverSubmitsAndHandlerReportsFailure() async {
     var submitted = false
     let delivery = CLISendTextDelivery(
-      insertText: { _, _ in false }, submitLine: { _ in submitted = true; return true })
+      insertText: { _, _ in false },
+      submitLine: { _ in
+        submitted = true
+        return true
+      })
     #expect(!delivery.deliver(to: Self.makeTarget(), text: "hello", trailingEnter: true))
     #expect(!submitted)
-    let handler = SendCommandHandler(resolveProvider: { _ in .success(Self.makeTarget()) },
+    let handler = SendCommandHandler(
+      resolveProvider: { _ in .success(Self.makeTarget()) },
       textDelivery: { _, _, _ in false }, waiterProvider: { _, _ in nil })
     let result = await handler.handle(envelope: Self.makeEnvelope())
     #expect(!result.ok)

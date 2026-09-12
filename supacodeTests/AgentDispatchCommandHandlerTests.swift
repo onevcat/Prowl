@@ -365,11 +365,17 @@ struct AgentDispatchCommandHandlerTests {
     var issued = false
     let handler = AgentDispatchCommandHandler(
       resolveTarget: { _ in .success(target) },
-      inputProtection: { _ in checks += 1; return checks == 2 ? "Host started editing" : nil },
+      inputProtection: { _ in
+        checks += 1
+        return checks == 2 ? "Host started editing" : nil
+      },
       conditionSnapshot: { _ in
         self.snapshot(target, status: .done, signal: self.turnEnded, channels: [self.liveClaudeChannel])
       },
-      issueDispatch: { _ in issued = true; return .failure(.bindingMissing) })
+      issueDispatch: { _ in
+        issued = true
+        return .failure(.bindingMissing)
+      })
     let response = await handler.handle(envelope: dispatch(pane: target.paneID))
     #expect(response.error?.code == CLIErrorCode.dispatchTargetBusy)
     #expect(checks == 2)
@@ -386,8 +392,14 @@ struct AgentDispatchCommandHandlerTests {
       conditionSnapshot: { _ in
         self.snapshot(target, status: .working, signal: self.turnEnded, channels: [self.liveClaudeChannel])
       },
-      issueDispatch: { _ in issued = true; return .failure(.bindingMissing) },
-      deliverPrompt: { _, _ in delivered = true; return true },
+      issueDispatch: { _ in
+        issued = true
+        return .failure(.bindingMissing)
+      },
+      deliverPrompt: { _, _ in
+        delivered = true
+        return true
+      },
       clock: clock)
     let task = Task { await handler.handle(envelope: self.dispatch(pane: target.paneID)) }
     await clock.advance(by: .milliseconds(200))

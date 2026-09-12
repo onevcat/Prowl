@@ -100,7 +100,8 @@ struct WorktreeDetailView: View {
     )
     .toolbar(removing: .title)
     .toolbar {
-      detailToolbarContent(state: state, shared: sharedToolbarState,
+      detailToolbarContent(
+        state: state, shared: sharedToolbarState,
         actionTargetWorktree: actionTargetWorktree, hasActiveTerminalTarget: hasActiveTerminalTarget)
     }
     .environment(historyStore)
@@ -134,24 +135,24 @@ struct WorktreeDetailView: View {
     state: AppFeature.State, shared: ToolbarSharedState,
     actionTargetWorktree: Worktree?, hasActiveTerminalTarget: Bool
   ) -> some ToolbarContent {
-      if state.repositories.isShowingCanvas {
-        canvasToolbarContent(state: shared)
-      } else if hasActiveTerminalTarget {
-        worktreeToolbarContent(
-          toolbarState: WorktreeToolbarState(
-            shared: shared,
-            openActionSelection: state.openActionSelection,
-            openActionIsAutomatic: state.openActionIsAutomatic,
-            showExtras: commandKeyObserver.isPressed,
-            showDefaultEditorInToolbar: settingsFile.global.showDefaultEditorInToolbar
-          ),
-          actionTargetWorktree: actionTargetWorktree
-        )
-      } else {
-        if featureFlags.remoteMirror {
-          ToolbarItem(placement: .navigation) { MirrorHostButton() }
-        }
+    if state.repositories.isShowingCanvas {
+      canvasToolbarContent(state: shared)
+    } else if hasActiveTerminalTarget {
+      worktreeToolbarContent(
+        toolbarState: WorktreeToolbarState(
+          shared: shared,
+          openActionSelection: state.openActionSelection,
+          openActionIsAutomatic: state.openActionIsAutomatic,
+          showExtras: commandKeyObserver.isPressed,
+          showDefaultEditorInToolbar: settingsFile.global.showDefaultEditorInToolbar
+        ),
+        actionTargetWorktree: actionTargetWorktree
+      )
+    } else {
+      if featureFlags.remoteMirror {
+        ToolbarItem(placement: .navigation) { MirrorHostButton() }
       }
+    }
   }
 
   @ToolbarContentBuilder

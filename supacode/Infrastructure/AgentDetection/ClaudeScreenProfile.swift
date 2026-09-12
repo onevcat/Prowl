@@ -52,7 +52,8 @@ enum ClaudeScreenProfile {
     let lines = snapshot.lines
     guard let prompt = lines.lastIndex(where: { $0.trimmingCharacters(in: .whitespaces).hasPrefix("❯") }),
       prompt > 0, isBoxBorderLine(lines[prompt - 1]),
-      let end = lines.indices.dropFirst(prompt + 1).first(where: { isBoxBorderLine(lines[$0]) }) else { return nil }
+      let end = lines.indices.dropFirst(prompt + 1).first(where: { isBoxBorderLine(lines[$0]) })
+    else { return nil }
     let first = lines[prompt].trimmingCharacters(in: .whitespaces).dropFirst()
     return ([String(first)] + Array(lines[(prompt + 1)..<end]))
       .joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)

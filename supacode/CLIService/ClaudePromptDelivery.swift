@@ -16,12 +16,14 @@ struct ClaudePromptDelivery {
 
   func deliver(_ text: String) async -> Bool {
     guard !Task.isCancelled, let before = observe(), before.composer == "", !before.hasMarkedText,
-      insert(text), let pasted = observe() else { return false }
+      insert(text), let pasted = observe()
+    else { return false }
     // Code security: the insertion updates editing activity itself; any later edit invalidates this paste.
     for _ in 0..<20 {
       do { try await clock.sleep(for: .milliseconds(100)) } catch { return false }
       guard !Task.isCancelled, let current = observe(), !current.hasMarkedText,
-        current.editingRevision == pasted.editingRevision else { return false }
+        current.editingRevision == pasted.editingRevision
+      else { return false }
       if let composer = current.composer, Self.confirmsPaste(composer, text: text) {
         return submit()
       }

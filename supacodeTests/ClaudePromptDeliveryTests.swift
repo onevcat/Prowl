@@ -1,5 +1,6 @@
 import Clocks
 import Testing
+
 @testable import supacode
 
 @MainActor
@@ -10,8 +11,14 @@ struct ClaudePromptDeliveryTests {
     var entered = 0
     let delivery = ClaudePromptDelivery(
       observe: { observation },
-      insert: { _ in observation = .init(composer: "", editingRevision: 1, hasMarkedText: false); return true },
-      submit: { entered += 1; return true }, clock: clock)
+      insert: { _ in
+        observation = .init(composer: "", editingRevision: 1, hasMarkedText: false)
+        return true
+      },
+      submit: {
+        entered += 1
+        return true
+      }, clock: clock)
     let task = Task { await delivery.deliver("first\nsecond") }
     await clock.advance(by: .milliseconds(100))
     #expect(entered == 0)
@@ -27,8 +34,14 @@ struct ClaudePromptDeliveryTests {
     var entered = false
     let delivery = ClaudePromptDelivery(
       observe: { observation },
-      insert: { _ in observation = .init(composer: "hello", editingRevision: 1, hasMarkedText: false); return true },
-      submit: { entered = true; return true }, clock: clock)
+      insert: { _ in
+        observation = .init(composer: "hello", editingRevision: 1, hasMarkedText: false)
+        return true
+      },
+      submit: {
+        entered = true
+        return true
+      }, clock: clock)
     let task = Task { await delivery.deliver("hello") }
     await clock.advance(by: .milliseconds(50))
     observation = .init(composer: "hello local", editingRevision: 2, hasMarkedText: false)
@@ -49,7 +62,10 @@ struct ClaudePromptDeliveryTests {
         observation = .init(composer: "hello", editingRevision: 1, hasMarkedText: false)
         return true
       },
-      submit: { entered = true; return true }, clock: clock)
+      submit: {
+        entered = true
+        return true
+      }, clock: clock)
     let task = Task { await delivery.deliver("hello") }
     await clock.advance(by: .milliseconds(50))
     #expect(inserted)
@@ -63,7 +79,11 @@ struct ClaudePromptDeliveryTests {
     var entered = false
     let delivery = ClaudePromptDelivery(
       observe: { .init(composer: "", editingRevision: nil, hasMarkedText: false) },
-      insert: { _ in true }, submit: { entered = true; return true }, clock: clock)
+      insert: { _ in true },
+      submit: {
+        entered = true
+        return true
+      }, clock: clock)
     let task = Task { await delivery.deliver("hello") }
     await clock.advance(by: .seconds(3))
     #expect(await task.value == false)
@@ -74,7 +94,10 @@ struct ClaudePromptDeliveryTests {
     var inserted = false
     let delivery = ClaudePromptDelivery(
       observe: { .init(composer: "[Image #1]", editingRevision: nil, hasMarkedText: false) },
-      insert: { _ in inserted = true; return true }, submit: { true })
+      insert: { _ in
+        inserted = true
+        return true
+      }, submit: { true })
     #expect(await delivery.deliver("hello") == false)
     #expect(!inserted)
     #expect(ClaudePromptDelivery.confirmsPaste("[Pasted text #1 +20 lines]", text: "first\nsecond"))

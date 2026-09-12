@@ -960,7 +960,8 @@ struct SupacodeApp: App {
       },
       inputProtection: { target in
         guard let surfaceID = UUID(uuidString: target.paneID),
-          let state = terminalManager.stateIfExists(for: target.worktreeID) else {
+          let state = terminalManager.stateIfExists(for: target.worktreeID)
+        else {
           return "The target terminal is no longer available."
         }
         return state.dispatchInputProtection(surfaceID: surfaceID)

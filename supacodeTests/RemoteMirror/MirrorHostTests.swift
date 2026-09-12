@@ -358,8 +358,10 @@ struct MirrorHostTests {
     peer.connection.send(.subscribe(.init(paneID: source.id, representation: .text, intent: .ifFree)))
     let lease = try #require(await messages.next()?.subscriptionID)
     #expect(await messages.next()?.kind == .textFrame)
-    let request = MirrorCommandRequest(requestID: UUID(), request: .init(
-      command: .agentsDispatch(.init(pane: source.id.uuidString, prompt: "Review"))))
+    let request = MirrorCommandRequest(
+      requestID: UUID(),
+      request: .init(
+        command: .agentsDispatch(.init(pane: source.id.uuidString, prompt: "Review"))))
     peer.connection.send(.command(.init(subscriptionID: lease, commandRequest: request)))
     var observationsIterator = observed.stream.makeAsyncIterator()
     _ = await observationsIterator.next()

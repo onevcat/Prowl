@@ -120,4 +120,3 @@ Native clients live in [MirrorClient/iOS](../MirrorClient/iOS/) (iPhone and iPad
 and [MirrorClient/Android](../MirrorClient/Android/) (phones and tablets). Each
 project retains its own build and test entry points; neither is built by the Mac
 App target or release pipeline. See [client setup](../MirrorClient/README.md).
-
