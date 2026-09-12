@@ -152,7 +152,13 @@ class Session(
         if (transport != null) return
         retryJob?.cancel()
         val attempt = ++generation
-        state.update { it.copy(status = Status.connecting, error = null) }
+        state.update {
+            it.copy(
+                host = if (code.isNotBlank()) it.host.copy(credential = null) else it.host,
+                status = Status.connecting,
+                error = null,
+            )
+        }
         transport =
             factory.connect(
                 state.value.host,
@@ -173,6 +179,9 @@ class Session(
                     }
                 },
                 { reason -> if (attempt == generation) failed(reason) },
+                { saved ->
+                    if (attempt == generation) state.update { it.copy(host = saved) }
+                },
             )
     }
 
@@ -290,7 +299,7 @@ class Session(
         send(control("list"))
     }
 
-    fun choose(pane: Pane, takeover: Boolean = true) {
+    fun choose(pane: Pane, takeover: Boolean = false) {
         submission = null
         historyGate.reset()
         state.update {

@@ -30,7 +30,7 @@ class MirrorModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private val factory = TransportFactory { host, code, scope, receive, ready, closed ->
+    private val factory = TransportFactory { host, code, scope, receive, ready, closed, enrolled ->
         RemoteConnection(
             host,
             code,
@@ -43,6 +43,10 @@ class MirrorModel(application: Application) : AndroidViewModel(application) {
                 ready(verified)
             },
             closed,
+            onEnrolled = { saved ->
+                reloadHosts()
+                enrolled(saved)
+            },
         )
     }
 

@@ -14,7 +14,9 @@ import org.bouncycastle.tls.crypto.impl.bc.BcTlsCrypto
 
 data class Credential(val hostID: String, val deviceID: String, val key: String)
 
-data class Host(val address: String, val port: Int = 5988, val credential: Credential? = null) {
+const val DEFAULT_HOST_PORT = 7880
+
+data class Host(val address: String, val port: Int = DEFAULT_HOST_PORT, val credential: Credential? = null) {
     val endpoint: String
         get() = "$address:$port"
 }
@@ -61,6 +63,7 @@ fun interface TransportFactory {
         receive: (Packet) -> Unit,
         ready: (Host) -> Unit,
         closed: (String) -> Unit,
+        enrolled: (Host) -> Unit,
     ): Transport
 }
 
@@ -73,6 +76,7 @@ class RemoteConnection(
     private val receive: (Packet) -> Unit,
     private val ready: (Host) -> Unit,
     private val closed: (String) -> Unit,
+    private val onEnrolled: (Host) -> Unit = {},
 ) : Transport {
     @Volatile private var stopped = false
     @Volatile private var socket: Socket? = null
@@ -176,6 +180,7 @@ class RemoteConnection(
                 }
                 host = host.copy(credential = enrolled)
                 persist(host)
+                withContext(Dispatchers.Main) { onEnrolled(host) }
                 next.close()
                 continue
             }

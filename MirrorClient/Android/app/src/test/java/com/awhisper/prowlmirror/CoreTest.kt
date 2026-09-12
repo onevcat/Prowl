@@ -7,6 +7,12 @@ import org.junit.Test
 
 class CoreTest {
     @Test
+    fun defaultPortMatchesHostAndPreservesCustomPort() {
+        assertEquals(7880, Host("host").port)
+        assertEquals(9000, Host("host", 9000).port)
+    }
+
+    @Test
     fun fixedTextVectorAndReplacement() {
         val raw =
             byteArrayOf(2) +

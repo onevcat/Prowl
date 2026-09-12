@@ -126,7 +126,7 @@ class LaunchModel(
                             tree.string("root_path").substringAfterLast('/'),
                             tree.string("name"),
                         )
-                    choose(descriptor, true)
+                    choose(descriptor, false)
                     state.update { it.copy(created = descriptor.id) }
                 }
             } catch (e: Exception) {

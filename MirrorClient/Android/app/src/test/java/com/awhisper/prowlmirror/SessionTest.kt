@@ -34,7 +34,7 @@ class SessionTest {
             Session(
                 host,
                 scope,
-                TransportFactory { _, _, _, receive, ready, close ->
+                TransportFactory { _, _, _, receive, ready, close, _ ->
                     Peer(receive, ready, close).also { peers += it }
                 },
             )
@@ -99,6 +99,82 @@ class SessionTest {
                 ),
             )
         }
+    }
+
+    @Test
+    fun savedEnrollmentIsUsedByRetryBeforeRuntimeReady() = runTest {
+        val attempted = mutableListOf<Pair<Host, String>>()
+        val enrollments = mutableListOf<(Host) -> Unit>()
+        val failures = mutableListOf<(String) -> Unit>()
+        val session = Session(
+            Host("host"), backgroundScope,
+            TransportFactory { host, code, _, _, _, closed, enrolled ->
+                attempted += host to code
+                enrollments += enrolled
+                failures += closed
+                object : Transport {
+                    override fun send(message: Packet.Control) {}
+                    override fun close() {}
+                }
+            },
+        )
+        session.connect("ABCD2345")
+        val saved = Host("host", credential = Credential(uuid(), uuid(), "saved"))
+        enrollments.single()(saved)
+        assertEquals(Status.connecting, session.state.value.status)
+        assertEquals(saved, session.state.value.host)
+        failures.single()("Runtime reconnect failed")
+        session.retry()
+        assertEquals(saved, attempted.last().first)
+        assertEquals("", attempted.last().second)
+        enrollments.first()(Host("stale"))
+        assertEquals(saved, session.state.value.host)
+        session.close()
+    }
+
+    @Test
+    fun freshPairingCodeDoesNotReuseOldCredential() = runTest {
+        val old = Host("host", credential = Credential(uuid(), uuid(), "old"))
+        var attempted: Host? = null
+        val session = Session(
+            old, backgroundScope,
+            TransportFactory { host, _, _, _, _, _, _ ->
+                attempted = host
+                object : Transport {
+                    override fun send(message: Packet.Control) {}
+                    override fun close() {}
+                }
+            },
+        )
+        session.connect("ABCD2345")
+        assertNull(attempted?.credential)
+        assertNull(session.state.value.host.credential)
+        session.close()
+    }
+
+    @Test
+    fun ordinarySelectionDoesNotTakeOverAStaleFreePane() = runTest {
+        val f = Fixture(backgroundScope)
+        f.session.connect()
+        f.ready()
+        f.session.choose(f.pane)
+        assertEquals("ifFree", f.peer.sent.last().payload().string("intent"))
+        f.peer.receive(control("failure", obj("error" to "PANE_BUSY: occupied")))
+        assertEquals(Status.takenOver, f.session.state.value.status)
+        f.session.takeOver()
+        f.ready()
+        assertEquals("takeover", f.peer.sent.last().payload().string("intent"))
+        f.session.close()
+    }
+
+    @Test
+    fun explicitBusySelectionRequestsTakeover() = runTest {
+        val f = Fixture(backgroundScope)
+        f.session.connect()
+        f.ready()
+        f.session.choose(f.pane.copy(busy = true), takeover = true)
+        assertEquals("takeover", f.peer.sent.last().payload().string("intent"))
+        f.session.close()
     }
 
     @Test

@@ -12,9 +12,10 @@ The original Gradle project name and application ID are preserved.
 
 Use the matching Prowl `feat/mobile-mirror` Host with `PROWL_REMOTE_MIRROR=1`.
 On Mac: Start Host → Add a Device. On Android: Add Remote Pane → enter IP/port
-and the two halves of the single-use, 60-second code. After enrollment, credentials
+and the two halves of the single-use, 60-second code. The default port is 7880. After enrollment, credentials
 are encrypted using Android Keystore and the short code is discarded. Pick a saved
-Host and leave code blank on subsequent connections.
+Host and leave code blank on subsequent connections. If the first runtime connection fails
+after enrollment, Retry uses the saved device credential without another code.
 
 Select an open pane, or New Agent Pane → workspace → available Host Agent Profile
 → optional initial message. Models and permissions come from that Profile. There
@@ -28,7 +29,8 @@ is no private AI console or dependency on personal shell wrappers.
   an explicitly idle Shell uses public send.
 - An unconfirmed delivery preserves the draft and blocks accidental resending.
   Check receipt only queries the original request; it never repeats input.
-- Retry and foreground reconnection use `ifFree`; Take Over is explicit.
+- Mirror, Retry and foreground reconnection use `ifFree`; Take Over is explicit.
+  If another client claims a free pane before Mirror completes, Android reports it busy.
 - History is a bounded frozen snapshot with earlier-page loading. Returning to Live
   keeps receiving current output. Closing a mirror never stops the Host program.
 - Saving credentials does not persist terminal output or drafts across process death.

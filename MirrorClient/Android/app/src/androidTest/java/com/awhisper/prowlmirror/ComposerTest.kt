@@ -35,7 +35,7 @@ class ComposerTest {
             Session(
                 host,
                 scope,
-                TransportFactory { _, _, _, r, a, _ ->
+                TransportFactory { _, _, _, r, a, _, _ ->
                     receive = r
                     ready = a
                     object : Transport {

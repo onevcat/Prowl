@@ -235,7 +235,7 @@ private fun Detail(session: Session?, menu: () -> Unit, add: () -> Unit, compact
                             headlineContent = { Text(pane.label) },
                             supportingContent = { Text(pane.subtitle ?: pane.directory) },
                             trailingContent = {
-                                TextButton(onClick = { session.choose(pane) }) {
+                                TextButton(onClick = { session.choose(pane, takeover = pane.busy) }) {
                                     Text(if (pane.busy) "Take over" else "Mirror")
                                 }
                             },
@@ -276,7 +276,7 @@ private fun HostDialog(
 ) {
     var chosen by remember { mutableStateOf(initial ?: saved.lastOrNull()) }
     var address by remember { mutableStateOf(chosen?.address ?: "") }
-    var port by remember { mutableStateOf((chosen?.port ?: 5988).toString()) }
+    var port by remember { mutableStateOf((chosen?.port ?: DEFAULT_HOST_PORT).toString()) }
     var first by remember { mutableStateOf("") }
     var second by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
