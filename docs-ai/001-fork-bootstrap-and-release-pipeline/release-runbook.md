@@ -81,17 +81,18 @@ make build-app
 
 ### Workflow UI release scope
 
-For the next public release, ship the merged Agent Island and runtime detection improvements;
-action bundles, handoff migration, and adversarial review remain deferred. Follow the
-[workflow release scope](../063-agent-workflows/release-plan.md).
+The next public release includes the default-on Workflow UI, action bundles, run history,
+and workflow-only Handoff. The hidden-UI scope applied to v2026.9.6 and is historical.
+Follow the current [workflow release scope](../063-agent-workflows/release-plan.md).
 
-- Launch the candidate without `PROWL_WORKFLOW_UI`: no workflow sections, launch rows,
-  status controls, role labels, or workflow skill row should appear in the UI.
-- A fresh process with `PROWL_WORKFLOW_UI=1` restores the development UI. This variable is
-  runtime-only; do not set it in distribution defaults or turn it into a build flag.
-- Confirm the CLI still lists/validates/runs workflows and exposes the bundled workflow skill.
-  Keep workflows out of this release's advertised UI features; do not require completion of
-  deferred action/D3/D2 work to release the hidden-UI candidate.
+- Launch the candidate without `PROWL_WORKFLOW_UI`: workflow launch, status, history,
+  Settings, and the bundled workflow skill are available. A fresh process with
+  `PROWL_WORKFLOW_UI=0` hides the UI; CLI workflow and skill commands remain available.
+- D3 Handoff acceptance is recorded in [020](../063-agent-workflows/020-handoff-workflow.md).
+  Distinguish its live workflow tests from later retirement UI checks and the receiver-focus
+  amendment's stated evidence limit. D2 adversarial review remains deferred to R3.
+- Advertise workflows and Handoff in this release. Do not present the deferred built-in
+  adversarial review as available.
 - Keep normal signing/notarization, version checks, and runtime contract verification below.
   Surface these results in maintainer approval before publishing.
 
@@ -116,8 +117,8 @@ Use the owner's existing DeepSeek V4 Flash configuration for compatible runtimes
   required check needs resolution or an explicit owner-approved release-scope exception,
   recorded in the release plan. It must not be silently treated as success.
 - Add targeted Debug workflow E2E for workflow behavior changes and important release
-  acceptance. D3 handoff and D2 review require their own E2E when they ship; they are not
-  acceptance gates for the intervening release with workflow UI hidden.
+  acceptance. D3 handoff and D2 review require their own E2E when they ship; T1 does not
+  replace those checks. D3 is in this release; D2 remains deferred to R3.
 
 The `/release` skill surfaces this reminder. Direct invocation of `scripts/release.sh` does
 not currently enforce T1; maintainers running the script must complete this check first.
