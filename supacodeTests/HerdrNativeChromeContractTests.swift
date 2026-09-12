@@ -992,9 +992,6 @@ struct HerdrNativeChromeContractTests {
     initialState.aggregateState = envelope.payload.state
     initialState.aggregateSyncCommitted = true
     initialState.nativeConnectionEpoch = 1
-    initialState.pendingMutation = .renameTab(tabID: "tab-duplicate", label: "pending")
-    initialState.pendingNativeMutationRequestID = "prowl-native-mutation-1"
-    initialState.mutationGeneration = 1
     let store = TestStore(initialState: initialState) {
       HerdrTerminalChromeFeature()
     } withDependencies: {
@@ -1019,6 +1016,18 @@ struct HerdrNativeChromeContractTests {
     }
     store.exhaustivity = .off(showSkippedAssertions: false)
 
+    await store.send(.renameTabRequested(tabID: "tab-duplicate", label: "Newest")) {
+      $0.pendingMutation = .renameTab(tabID: "tab-duplicate", label: "Newest")
+      $0.mutationGeneration = 1
+      $0.nativeRequestSequence = 1
+      $0.pendingNativeMutationRequestID = "prowl-native-mutation-1"
+    }
+    let mutationRequest = try #require(sentRequests.value.first)
+    #expect(sentRequests.value.count == 1)
+    #expect(mutationRequest.requestID == "prowl-native-mutation-1")
+    #expect(mutationRequest.payload.action == "mutate")
+    #expect(mutationRequest.payload.method == "tab.rename")
+
     await store.send(.nativeEvent(.stream(.reconnected(epoch: 2)))) {
       $0.connection = .connecting
       $0.aggregateSyncCommitted = false
@@ -1029,7 +1038,7 @@ struct HerdrNativeChromeContractTests {
     }
     await clock.advance(by: .seconds(5))
 
-    #expect(sentRequests.value.map(\.payload.action) == ["resync"])
+    #expect(sentRequests.value.map(\.payload.action) == ["mutate", "resync"])
     #expect(store.state.pendingMutation == nil)
     #expect(store.state.pendingNativeMutationRequestID == nil)
     #expect(store.state.mutationError == nil)
