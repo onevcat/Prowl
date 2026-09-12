@@ -512,6 +512,7 @@ extension WorktreeTerminalState {
     }
     view.onKeyInput = { [weak self, weak view] in
       guard let self, let view else { return }
+      self.agentDetectionCoordinators[view.id]?.interacted()
       self.recordKeyInput(forSurfaceID: view.id)
       self.wakeAgentDetection(for: view, tabId: tabId)
       self.markNotificationsRead(forSurfaceID: view.id)

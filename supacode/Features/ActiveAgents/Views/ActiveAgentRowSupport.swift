@@ -47,10 +47,6 @@ struct ActiveAgentRowContextMenu: View {
   @Dependency(WorkflowStartClient.self) private var workflowStartClient
 
   var body: some View {
-    Button("Hand Off…") {
-      send(.handOffTapped(entry.id))
-    }
-    .help("Save this agent's progress and hand the task off to another agent")
 
     if featureFlags.workflowUI {
       runWorkflowMenu

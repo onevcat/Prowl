@@ -45,6 +45,46 @@ struct CodexScreenProfileTests {
     #expect(result.state == .working)
   }
 
+  @Test func starfieldComposerKeepsLiveWorkingFooter() {
+    for marker in ["•", "◦"] {
+      for activity in ["Working", "Waiting for background terminal"] {
+        let detection = DetectedAgent.codex.detectScreen(
+          in: """
+            › hello
+            \(marker) \(activity) (1s • esc to interrupt)
+                ⠈                 ⠐       ⢀    ⠄ ⠄⠈   ⠠
+            ›⠁Ask Codex to do anything⡀    ⠈    ⠁ ⠁
+                    ⠠          ⢀      ⠠  ⠂  ⡀
+              gpt-6-astra medium · Context 5% used
+            """
+        )
+        #expect(detection.state == .working)
+        #expect(
+          detection.reason
+            == .matched(
+              activity == "Working"
+                ? CodexScreenProfile.RuleID.workingFooter : CodexScreenProfile.RuleID.backgroundTerminalFooter
+            )
+        )
+      }
+    }
+  }
+
+  @Test func starfieldDoesNotMakeIdleOrHistoricalOutputWorking() {
+    for output in ["", "• Working (1s • esc to interrupt)\n• Done\n  Result one\n  Result two"] {
+      let detection = DetectedAgent.codex.detectScreen(
+        in: """
+          \(output)
+              ⠈                 ⠐       ⢀    ⠄ ⠄⠈   ⠠
+          ›⠁Ask Codex to do anything⡀    ⠈    ⠁ ⠁
+                  ⠠          ⢀      ⠠  ⠂  ⡀
+            gpt-6-astra medium · Context 5% used
+          """
+      )
+      #expect(detection.state == .idle)
+    }
+  }
+
   @Test func ruleIDsAreUniqueAndRuntimePrefixed() {
     let ruleIDs = CodexScreenProfile.RuleID.all
 

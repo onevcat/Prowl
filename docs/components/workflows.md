@@ -12,7 +12,7 @@
 > see [`cli.md`](cli.md#prowl-workflow); to write or debug a workflow, an agent
 > should load the bundled `prowl-workflow` skill.
 
-**Keywords:** workflow, workflows, agent workflow, orchestration, multi-agent, adversarial review, roles, steps, typed state, while, if, action bundle, verdict, yaml, prowl.workflow/v1, start sheet, run workflow, bindings, don't ask again, workflow status, run panel, needs attention, nudge, skip step, cancel run, workflow-runs, settings workflows, new workflow, ask an agent
+**Keywords:** workflow, workflows, agent workflow, orchestration, multi-agent, adversarial review, roles, steps, typed state, while, if, action bundle, verdict, yaml, prowl.workflow/v1, start sheet, run workflow, bindings, don't ask again, workflow status, run panel, needs attention, nudge, skip step, cancel run, workflow-runs, settings workflows, new workflow, create with agent, run history, clear history, delete run
 
 **Related:** [cli](cli.md) · [agent-profiles](agent-profiles.md) · [command-palette](command-palette.md) · [active-agents](active-agents.md) · [settings](settings.md) · [notifications](notifications.md)
 
@@ -56,7 +56,7 @@ Three sources, later ones winning for the same `id`:
 
 | Source | Location | Notes |
 |---|---|---|
-| Built-in | `Prowl.app/Contents/Resources/workflows/` | ids `prowl.*` are reserved for it. Includes Repository Context and Handoff (`prowl.handoff`). |
+| Built-in | `Prowl.app/Contents/Resources/workflows/` | ids `prowl.*` are reserved for it. Ships Handoff (`prowl.handoff`). |
 | Your workflows | `~/.prowl/workflows/*.pwlworkflow` | personal; not tied to a repository |
 | Repository | `<repo root>/.prowl/workflows/*.pwlworkflow` | travels with the repo; seen only from that repository's worktrees |
 
@@ -77,7 +77,8 @@ identical:
   workflow's YAML icon and starts the workflow. Its trailing `ellipsis.circle`
   menu offers **Run with Options…** (which forces the start sheet) and **Show
   Details in Settings…**. Files that fail validation remain dimmed with their
-  reason and still link to their Settings detail. → [agent-profiles](agent-profiles.md#launching)
+  reason and still link to their Settings detail. **Manage Workflows…** opens
+  Settings → Agents → Workflows, even when no workflows are listed. → [agent-profiles](agent-profiles.md#launching)
 - **Active Agents** → right-click a row → **Run Workflow ▸** — starts it with
   that pane fixed as the `current` role's source. → [active-agents](active-agents.md)
 - **CLI** — `prowl workflow run <id|name> [source] [--role r=…] [--input k=v] [--skip step]`.
@@ -85,25 +86,46 @@ identical:
 
 ### The start sheet
 
-The sheet collects what the run needs before it exists:
+The sheet explains the workflow and collects what the run needs before it exists.
+Its header shows the workflow's icon, name, description, and the target worktree;
+the body is arranged in sections like the Workflow History panel:
 
-- **You** — the pane that serves the `current` role. Pre-selected from the
-  worktree's focused pane (fixed when started from an Active Agents row); a bare
-  shell qualifies only while no step messages that role.
-- **One profile picker per `launch` role** — pre-selected by binding resolution,
-  filtered to profiles that qualify (`agents` allow-list, prompt support);
-  profiles that do not qualify are dimmed with the reason. **Create profile from
-  suggestion…** appears when the role's `suggest` matches no enabled profile: it
-  creates a normal Agent Profile inline and selects it.
-- **One pane picker per `pick` role** — detected agents in the worktree,
-  excluding panes already in a run and the source pane.
-- **Inputs** — declared inputs with their defaults pre-filled; required inputs
-  without a default must be filled before Run enables.
-- **Skip <step>** — for steps whose output nothing later depends on; the sheet
-  says whether skipping ends the run early.
-- **Don't ask again for this workflow** — writes **Run Directly When Possible**
-  (the same choice shown under Settings → Workflows → Run Setup), so the next
-  start skips the sheet when nothing is undecided.
+- **Roles** — one label/control row per role, laid out like a Settings form:
+  the role's name on the left with a small icon for the kind of pane that serves
+  it (terminal = the pane you start from, plus = an agent Prowl launches, person
+  = an existing agent), the choice on the right. Hovering the name shows the
+  details: the kind of pane, the steps that address the role
+  (`Step 1 · Prepare handoff briefing`), and where a launched pane opens. The
+  control is the choice for that role:
+  - `current` — a pane picker pre-selected from the worktree's focused pane
+    (fixed when started from an Active Agents row); a bare shell qualifies only
+    while no step messages that role.
+  - `launch` — a profile picker pre-selected by binding resolution, filtered to
+    profiles that qualify (`agents` allow-list, prompt support); profiles that
+    do not qualify are dimmed with the reason. **Create profile from
+    suggestion…** appears when the role's `suggest` matches no enabled profile:
+    it creates a normal Agent Profile inline and selects it. A launch role the
+    current options never reach (a branch that is not taken) is listed dimmed
+    with **Not used** in place of its picker. If no profile qualifies, the sheet
+    points to the role's agent requirements and Settings → Agents → Profiles.
+    Correct the requirements or profiles, then reopen the setup.
+  - `pick` — a pane picker over detected agents in the worktree, excluding
+    panes already in a run and the source pane.
+- **Options** — the declared inputs in the same grid, labeled by their `prompt`
+  (hover for the input name and default) with defaults pre-filled; enum inputs
+  are menus, the rest text fields. An enum without a default starts at **Choose…**.
+  Required inputs without a default must be
+  filled before Run enables.
+- **Steps** — the run's steps in order with their role, so choices like
+  "launch or save" read as "step 3 starts the receiving agent". Steps inside an
+  `if` carry a branch icon, steps inside a `while` a repeat icon; hover a step
+  for what it does.
+- **Optional Steps** — a **Skip <step>** toggle for each step whose output
+  nothing later depends on. A skip that would end the run early is refused by
+  admission and therefore not offered.
+- **Don't ask again** (footer) — writes **Run Directly When Possible** (the same
+  choice shown under Settings → Workflows → Run Setup), so the next start skips
+  the sheet when nothing is undecided.
 - A banner blocks Run when the `prowl` CLI is not usable or when Prowl is not
   listening on its socket (participants could not deliver). Inline action per
   state: **Install** when missing, **Repair** for a dangling link, **Reinstall**
@@ -120,7 +142,10 @@ the feedback.
 - The toolbar's center **status item** shows the selected worktree's active run:
   the current step, an orange attention glyph when the run waits for you, and a
   count when several runs share the worktree. Hover previews the run panel;
-  click pins it.
+  click pins it. When a run ends, the item stays for about eight seconds with
+  the outcome — a green checkmark and **<workflow> completed**, or the reason it
+  stopped — and hovering it opens that run in Workflow History. No separate toast
+  is shown; the notification pipeline still delivers the completion notice.
 - The **run panel** opens the same step details as Workflow History. Expand a step
   to inspect its output, error, and attempts. Role buttons focus available panes;
   the footer provides the run folder, log, and **Cancel Run**.
@@ -184,8 +209,11 @@ Compact icon buttons open full output, copy full content, or reveal files in Fin
 hover a button for its label. Named absolute path fields also offer file actions.
 Opening is limited to retained workflow storage and the worktree's `.prowl/handoff/`
 artifacts, with link and containment checks. **Diagnostics** holds action stdout,
-stderr, and execution metadata. Missing or unreadable files get a separate message. **Keep Run** and **Export** are
-in the run's More menu; usage and cleanup remain in Settings.
+stderr, and execution metadata. Missing or unreadable files get a separate message. The run's More menu offers
+**Export…** (a complete ZIP of a finished run) and **Delete Run…**, which asks for
+confirmation and removes that finished run's record, prompts, deliveries, and
+action outputs; active runs cannot be deleted. Storage totals and **Clear
+History…** remain in Settings.
 
 A selected run stays open when it completes, without switching to another run or
 resetting the reading position. Only active runs offer recovery and cancellation.
@@ -209,22 +237,20 @@ Each run contains `run.json`, `log.md`, its frozen bundle in `definition/`,
 execution root. `prowl workflow status <run-id>` finds saved history even after that
 root is closed, moved, or deleted. A moved folder does not inherit the old history.
 
-Open **Settings → Agents → Workflows → Execution History** for usage, search,
-**Keep Run**, **Export**, and **Preview Cleanup**. Export creates a complete ZIP of
-a terminal run; choose a location outside workflow history for durable results.
-Outputs and action artifacts inside history expire with their run.
+**Settings → Agents → Workflows → Run History** shows how many runs the archive
+holds and their size on disk, with **Clear History…**: after confirmation it
+deletes every finished run that is not in use, ignoring the retention window.
+Active runs are kept. Export (from a run's More menu in Workflow History) creates
+a complete ZIP of a finished run; choose a location outside workflow history for
+durable results. Outputs and action artifacts inside history expire with their run.
 
-Automatic cleanup retains unpinned terminal runs for 30 days after completion.
-The global budget is **5 GiB, soft**: older eligible runs are removed first when
-history exceeds it. Runs finished in the last 24 hours, kept runs, live runs
-(including Needs Attention), occupied runs, and ambiguous or unsafe records are
-protected. These protections can keep usage above 5 GiB; the history view reports
-why space cannot be reclaimed. The policy is fixed. Startup and completion trigger
-background cleanup with a shared five-minute rate limit.
-
-Manual cleanup shows candidate runs and estimated reclaimed space, then requires
-confirmation. It uses the same protections and checks eligibility again before
-deleting each complete run. Old project-local data is neither migrated nor deleted.
+Automatic cleanup removes finished runs three days after completion; there is no
+per-run protection and no user-facing retention setting. The global budget is
+**5 GiB, soft**: older eligible runs are removed first when history exceeds it.
+Runs finished in the last 24 hours, live runs (including Needs Attention),
+occupied runs, and ambiguous or unsafe records are protected from automatic
+cleanup. Startup and completion trigger background cleanup with a shared
+five-minute rate limit. Old project-local data is neither migrated nor deleted.
 
 Both `message` and `launch` require `prompt`; the retired `text` and `instruction`
 fields are not accepted. A message waits for an idle agent, then Prowl chooses direct
@@ -254,7 +280,7 @@ The detail page owns these controls and explanations:
 | Section | Effect |
 |---|---|
 | **Workflow** | identity, effective status, and **Enabled**. Disabled workflows disappear from launch surfaces and `prowl workflow run` refuses them with `WORKFLOW_DISABLED`. Repository settings are keyed by canonical repository root plus workflow id, so the same id in two repositories remains independent. |
-| **Run** | **Run in <worktree>** names the actual target. Its menu lists other legal worktrees and **Run with Options…**. Repository workflows only list worktrees from that repository. Every choice uses the same admission path as the other GUI and CLI entry points; if that explicit worktree closes first, Prowl refuses the run instead of falling back to another target. |
+| **Run** | **Run in <repository · worktree>** names the actual target and follows the main window's selection whenever the detail appears or the Settings window becomes key. Its menu lists other legal worktrees and **Run with Options…**. Repository workflows only list worktrees from that repository. Every choice uses the same admission path as the other GUI and CLI entry points; if that explicit worktree closes first, Prowl refuses the run instead of falling back to another target. |
 | **Roles** | every `current`, `pick`, and `launch` role with a plain-language behavior summary. Only a `launch` role has a **Preferred Agent Profile** menu; **Choose Automatically** forgets the preference and lets Prowl resolve a qualifying profile at start. Unqualified profiles remain visible with the reason but cannot be selected. **Manage Agent Profiles…** appears once per page. |
 | **Run Setup** | **Follow Workflow**, **Always Review Before Running**, or **Run Directly When Possible**. The last choice starts immediately only when profiles, required role choices, inputs, and validation are already resolved; otherwise the review sheet still opens. |
 | **Validation** | every diagnostic as message, source location, and stable code. Saving the YAML revalidates automatically; there is no separate Validate button. |
@@ -263,11 +289,21 @@ The detail page owns these controls and explanations:
 Starting from Settings keeps the review panel in the Settings window. Cancelling
 returns to the same detail without bringing the main window or terminal forward.
 
-**New Workflow…** writes a validated starter (`new-workflow.pwlworkflow/workflow.yaml`, then
-`new-workflow-2.pwlworkflow/workflow.yaml`, …) into the current page's workflow folder and opens it
-in the default YAML app. **Ask an Agent…** provides a copyable prompt that
-points at the bundled `prowl-workflow` skill and this manual. The folder button
-reveals the current workflow folder, creating it when needed.
+**New Workflow…** opens a form: a name, an id (suggested from the name as a
+lowercase slug, editable, refused when invalid, reserved, or already used here),
+an optional SF Symbol icon, and one of two starters. **Single agent** is a prompt
+template that asks the current agent for today's date; **Multi-agent** plays
+rock-paper-scissors between the current agent and a launched one. Both write a
+validated, commented `<id>.pwlworkflow/workflow.yaml` into the current page's
+workflow folder — the comments point at this manual and the bundled skill on
+disk — and open it in the default YAML app. **Create with Agent…** (on the index
+and inside the form) provides a copyable prompt that points a coding agent at
+the bundled `prowl-workflow` skill and this manual. From a valid creation form,
+the prompt includes the selected starter and its name, ID, and icon, so the agent
+can adapt that draft to your task. The form describes the actual starter example
+and the editor handoff before you create it. Names containing punctuation or
+non-English text are preserved in the YAML file. The folder button reveals
+the current workflow folder, creating it when needed.
 
 The page follows its source folders live, so saving, adding, deleting, or
 renaming YAML updates the index and an open detail automatically. If an open
@@ -306,7 +342,7 @@ helpers, and assets beside them. Steps reference `local:<id>` or a registered `b
 Action inputs and results are typed JSON; validated results appear at
 `actions.<step>.output` and `actions.<step>.output_path`. The built-in repository context
 writes per-invocation artifacts. `builtin:save-handoff` saves a briefing and generated context
-under `.prowl/handoff/`. The existing `prowl handoff` CLI remains available. These actions are also distinct from shell-command Custom Actions.
+under `.prowl/handoff/`. These actions are also distinct from shell-command Custom Actions.
 
 Scripts have your local user permissions. In Settings > Agents > Workflows, open the bundle's
 script review, inspect the source location, interpreter, entrypoint, and changed files, then
@@ -396,7 +432,7 @@ When an agent starts the workflow itself, it must follow `self_initiated.line` i
 and deliver its briefing with the supplied token. The run saves nothing until that delivery
 passes its required sections. The receiver reads an independent packet under
 `.prowl/handoff/archive/workflow-<run UUID>.md`; later handoffs do not change that packet.
-`current.md` and `context.md` retain the latest handoff for the existing HUD and CLI.
+`current.md` and `context.md` retain the latest handoff state for workflow inspection.
 
 A completed workflow means the packet was saved and the selected receiver was launched.
 It does not certify that the receiver finished the task. A failed launch keeps the packet;

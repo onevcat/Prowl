@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| **Status** | Implemented |
+| **Status** | Implemented; superseded 2026-09-10 — the `prowl handoff` CLI, HUD, and dedicated UI entry points were retired in favor of the `prowl.handoff` workflow (see [063.020](../063-agent-workflows/020-handoff-workflow.md)); `HandoffStore` and the `.prowl/handoff/` artifact contract remain |
 | **Anchor date** | 2026-07-17 |
 | **Primary PRs** | #554 |
 | **Related** | [042-project-workspaces](../042-project-workspaces/000-plan.md), [013-prowl-cli](../013-prowl-cli/000-plan.md), [045-native-agent-session-detection](../045-native-agent-session-detection/000-plan.md), `docs/components/cli.md` |

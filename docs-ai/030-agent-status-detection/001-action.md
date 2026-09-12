@@ -86,3 +86,10 @@
   kept for API symmetry with `observedNoAgent`).
 - `idleAgentDetectionInterval` is a slight misnomer post-#441 — it is the *warm* cadence;
   truly idle (cold) panes are not polled.
+
+## Migration note (2026-09-12)
+
+The historical `stabilizeAgentState` entry point described above has been replaced
+by `AgentStateMachine` and `AgentDetectionCoordinator`. Unknown-frame retention
+and process-presence holds are tested through those production components. See
+[the provider implementation](../064-agent-completion-signals/022-provider-implementation.md).

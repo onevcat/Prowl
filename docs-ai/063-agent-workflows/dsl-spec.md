@@ -404,7 +404,7 @@ Repository run records never authorize killing a process. Previous unfinished ru
 
 ## Built-in and unsupported features
 
-The shipped sample is Repository Context (`prowl.repository-context`). Agent review workflows
+The shipped sample is Handoff (`prowl.handoff`). Agent review workflows
 are authored from roles, deliveries, typed state, and control flow. There is no global script
 registry, remote action download, parallel DSL branch, automatic retry, rollback, or resume.
 Headless roles and additional action backends are outside this contract.

@@ -23,6 +23,24 @@ struct WorkflowStartFeatureTests {
     #expect(!state.canRun)
   }
 
+  @Test func requiredEnumNeedsAnExplicitChoice() throws {
+    let yaml = """
+      schema: prowl.workflow/v1
+      id: choose-style
+      name: Choose Style
+      inputs:
+        style: {type: enum, values: [brief, detailed]}
+      steps:
+        - id: done
+          notify: "Selected {{ inputs.style }}"
+      """
+    var state = WorkflowStartFeature.State(context: try makeContext(yaml: yaml))
+    #expect(state.inputValues["style"] == nil)
+    #expect(!state.canRun)
+    state.inputValues["style"] = "brief"
+    #expect(state.canRun)
+  }
+
   static let review = """
     schema: prowl.workflow/v1
     id: review
@@ -466,5 +484,30 @@ struct WorkflowStartFeatureTests {
     let piContext = try makeContext(
       suggestion: WorkflowProfileSuggestion(agent: "pi"), includeCandidates: false)
     #expect(WorkflowStartFeature.State(context: piContext).canCreateSuggestion(for: "reviewer"))
+  }
+}
+
+extension WorkflowStartFeatureTests {
+  @Test func theSheetOnlyOffersSkipsThatKeepTheRunAlive() throws {
+    var state = WorkflowStartFeature.State(context: try makeContext())
+    // `brief` feeds `launch`, so skipping it would end the run: the sheet hides the choice.
+    #expect(state.context.skipOptions.map(\.stepID) == ["brief"])
+    #expect(state.visibleSkipOptions.isEmpty)
+
+    state = WorkflowStartFeature.State(context: try makeContext(yaml: Self.skippableNote))
+    #expect(state.visibleSkipOptions.map(\.stepID) == ["note"])
+  }
+
+  @Test func unreachedLaunchRolesAreListedButNotRequired() throws {
+    let root = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+    let yaml = try String(
+      contentsOf: root.appending(path: "Resources/workflows/handoff.pwlworkflow/workflow.yaml"), encoding: .utf8)
+    var state = WorkflowStartFeature.State(context: try makeContext(yaml: yaml, includeCandidates: false))
+    #expect(state.isRoleRequired("author"))
+    #expect(state.isRoleRequired("receiver"))
+    state.inputValues["next"] = "save"
+    #expect(state.isRoleRequired("author"))
+    #expect(!state.isRoleRequired("receiver"))
+    #expect(state.plan.roles.map(\.name) == ["author", "receiver"])
   }
 }

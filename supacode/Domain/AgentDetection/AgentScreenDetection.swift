@@ -1,4 +1,4 @@
-struct AgentScreenRuleID: Equatable, Hashable, Sendable {
+nonisolated struct AgentScreenRuleID: Equatable, Hashable, Sendable {
   let rawValue: String
 
   nonisolated init(_ rawValue: String) {
@@ -7,7 +7,7 @@ struct AgentScreenRuleID: Equatable, Hashable, Sendable {
   }
 }
 
-enum AgentScreenDetectionReason: Equatable, Sendable {
+nonisolated enum AgentScreenDetectionReason: Equatable, Sendable {
   case matched(AgentScreenRuleID)
   case noRuleMatched
   case legacyDetector
@@ -24,7 +24,7 @@ enum AgentScreenDetectionReason: Equatable, Sendable {
   }
 }
 
-struct AgentScreenDetection: Equatable, Sendable {
+nonisolated struct AgentScreenDetection: Equatable, Sendable {
   let state: AgentRawState
   let reason: AgentScreenDetectionReason
 }

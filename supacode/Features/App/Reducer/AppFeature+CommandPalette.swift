@@ -50,9 +50,6 @@ extension AppFeature {
     if let effect = reduceCommandPaletteWorktreeActionDelegate(delegate, state: &state) {
       return effect
     }
-    if let effect = reduceCommandPaletteHandoffDelegate(delegate, state: &state) {
-      return effect
-    }
     if let effect = reduceCommandPaletteWorkflowDelegate(delegate, state: &state) {
       return effect
     }
@@ -333,16 +330,6 @@ extension AppFeature {
     default:
       return nil
     }
-  }
-
-  func reduceCommandPaletteHandoffDelegate(
-    _ delegate: CommandPaletteFeature.Delegate,
-    state: inout State
-  ) -> Effect<Action>? {
-    guard case .handOff = delegate else { return nil }
-    // One execution path: the palette row opens the same staged HUD as the
-    // toolbar capsule (docs-ai 049).
-    return openHandoffHud(state: &state)
   }
 
   func reduceCommandPaletteWorkflowDelegate(

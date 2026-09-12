@@ -6,13 +6,13 @@ struct WorkflowHistoryRetentionTests {
   private let now = Date(timeIntervalSince1970: 1_800_000_000)
 
   @Test func expiryBudgetAndProtectionUseFinishTime() {
-    let old = entry(days: 31)
+    let old = entry(days: 4)
     let eligible = entry(days: 2)
     let recent = entry(days: 0.5)
-    let pinned = entry(days: 40, protection: "Keep Run")
+    let occupied = entry(days: 40, protection: "In use")
     let active = entry(days: 50, protection: "Active")
     let corrupt = entry(days: 60, protection: "Unreadable")
-    let entries = [recent, pinned, eligible, active, corrupt, old]
+    let entries = [recent, occupied, eligible, active, corrupt, old]
     let expiry = WorkflowHistoryPreview(entries: entries, now: now, budget: 1000)
     #expect(expiry.candidates.map(\.id) == [old.id])
     let budget = WorkflowHistoryPreview(entries: entries, now: now, budget: 1)
@@ -22,25 +22,69 @@ struct WorkflowHistoryRetentionTests {
     #expect(budget.protectedEntries.count == 4)
   }
 
-  @Test func cleanupRechecksPinAndOccupancyAndKeepsWholeRun() throws {
+  @Test func cleanupRechecksOccupancyAndKeepsWholeRun() throws {
     let base = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: base) }
     let history = WorkflowHistory(storage: .init(baseURL: base))
-    let a = try write(history, days: 31)
+    let a = try write(history, days: 4)
     let b = try write(history, days: 40)
     let preview = try history.preview(now: now)
     #expect(preview.candidates.count == 2)
-    try history.keep(a, pinned: true)
-    let occupied = try history.storage.occupy(b)
+    let occupiedA = try history.storage.occupy(a)
+    let occupiedB = try history.storage.occupy(b)
     let result = try history.cleanup(candidates: preview.candidates.map(\.id), now: now)
     #expect(result.removed.isEmpty)
     #expect(FileManager.default.fileExists(atPath: a.path))
     #expect(FileManager.default.fileExists(atPath: b.path))
-    occupied.close()
+    occupiedA.close()
+    occupiedB.close()
     let second = try history.cleanup(candidates: preview.candidates.map(\.id), now: now)
-    #expect(second.removed == [UUID(uuidString: b.lastPathComponent)!])
+    #expect(Set(second.removed) == [UUID(uuidString: a.lastPathComponent)!, UUID(uuidString: b.lastPathComponent)!])
+    #expect(!FileManager.default.fileExists(atPath: a.path))
     #expect(!FileManager.default.fileExists(atPath: b.path))
   }
+
+  @Test func explicitDeleteIgnoresTheGraceButNotLiveOrOccupiedRuns() throws {
+    let base = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: base) }
+    let history = WorkflowHistory(storage: .init(baseURL: base))
+    let fresh = try write(history, days: 0.1)
+    let live = try write(history, days: 0.1, state: "running")
+    let busy = try write(history, days: 5)
+    let entries = try history.preview(now: now).entries
+    #expect(entries.first { $0.id == Self.id(fresh) }?.removable == true)
+    #expect(entries.first { $0.id == Self.id(live) }?.removable == false)
+    #expect(entries.first { $0.id == Self.id(busy) }?.removable == true)
+
+    try history.delete(fresh, now: now)
+    #expect(!FileManager.default.fileExists(atPath: fresh.path))
+
+    #expect(throws: WorkflowHistoryError.self) { try history.delete(live, now: now) }
+    #expect(FileManager.default.fileExists(atPath: live.path))
+
+    let occupied = try history.storage.occupy(busy)
+    #expect(throws: WorkflowHistoryError.self) { try history.delete(busy, now: now) }
+    occupied.close()
+    #expect(FileManager.default.fileExists(atPath: busy.path))
+  }
+
+  @Test func clearRemovesEveryFinishedRunAndKeepsLiveOnes() throws {
+    let base = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: base) }
+    let history = WorkflowHistory(storage: .init(baseURL: base))
+    let fresh = try write(history, days: 0.1)
+    let old = try write(history, days: 40)
+    let live = try write(history, days: 0.1, state: "needs_attention")
+    let result = try history.clear(now: now)
+    #expect(Set(result.removed) == [UUID(uuidString: fresh.lastPathComponent)!, UUID(uuidString: old.lastPathComponent)!])
+    #expect(result.failures.isEmpty)
+    #expect(!FileManager.default.fileExists(atPath: fresh.path))
+    #expect(!FileManager.default.fileExists(atPath: old.path))
+    #expect(FileManager.default.fileExists(atPath: live.path))
+    #expect(try history.preview(now: now).entries.map(\.id) == [Self.id(live)])
+  }
+
+  private static func id(_ directory: URL) -> UUID { UUID(uuidString: directory.lastPathComponent)! }
 
   @Test func corruptAndUnknownStatesAreProtected() throws {
     let base = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
@@ -152,7 +196,8 @@ struct WorkflowHistoryRetentionTests {
   private func entry(days: Double, protection: String? = nil) -> WorkflowHistoryEntry {
     WorkflowHistoryEntry(
       id: UUID(), directory: URL(filePath: "/test"), name: "Run", root: "/project", state: "completed",
-      finishedAt: now.addingTimeInterval(-days * 86400), bytes: 10, pinned: false, protection: protection)
+      finishedAt: now.addingTimeInterval(-days * 86400), bytes: 10, protection: protection,
+      removable: protection == nil)
   }
 
   private func write(_ history: WorkflowHistory, days: Double, state: String = "completed") throws -> URL {

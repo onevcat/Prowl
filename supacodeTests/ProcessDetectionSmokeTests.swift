@@ -22,4 +22,10 @@ struct ProcessDetectionSmokeTests {
 
     #expect(pids.contains(getpid()))
   }
+
+  @Test func missingProcessDoesNotReturnACompleteInventory() {
+    var complete = true
+    #expect(ProcessDetection.openFilePaths(pid: -1, complete: &complete).isEmpty)
+    #expect(!complete)
+  }
 }

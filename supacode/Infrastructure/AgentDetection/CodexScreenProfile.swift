@@ -322,8 +322,15 @@ private struct CodexScreenRegions: Sendable {
       .joined(separator: "\n")
       .trimmingCharacters(in: .newlines)
     // Background-terminal waits add a `└ command` detail row below the live
-    // footer, before the composer and status line.
-    self.workingFooter = agentDetectionRecentLines(snapshot.text, limit: 4)
+    // footer, before the composer and status line. The composer's starfield
+    // fills otherwise blank rows with braille; those rows must not consume
+    // the live-footer window. Keep every row that contains actual text.
+    let contentLines = snapshot.lines.filter { line in
+      !line.unicodeScalars.allSatisfy { scalar in
+        CharacterSet.whitespaces.contains(scalar) || (0x2800...0x28FF).contains(scalar.value)
+      }
+    }
+    self.workingFooter = contentLines.suffix(4).joined(separator: "\n")
   }
 
   nonisolated private static func makeSelectedChoice(from lines: [String]) -> SelectedChoice? {

@@ -14,27 +14,43 @@ struct WorkflowStatusCenterPresentation: Equatable {
       runs = []
       return
     }
-    runs = state.activeSessions
-      .map(\.run)
-      .filter { $0.context.worktree.id == selectedWorktreeID }
-      .sorted {
-        if $0.startedAt != $1.startedAt { return $0.startedAt > $1.startedAt }
-        if $0.updatedAt != $1.updatedAt { return $0.updatedAt > $1.updatedAt }
-        return $0.id.uuidString > $1.id.uuidString
-      }
-      .map { WorkflowRunPresentation(run: $0, now: now) }
+    func ordered(_ sessions: [WorkflowRunSession]) -> [WorkflowRunPresentation] {
+      sessions
+        .map(\.run)
+        .filter { $0.context.worktree.id == selectedWorktreeID }
+        .sorted {
+          if $0.startedAt != $1.startedAt { return $0.startedAt > $1.startedAt }
+          if $0.updatedAt != $1.updatedAt { return $0.updatedAt > $1.updatedAt }
+          return $0.id.uuidString > $1.id.uuidString
+        }
+        .map { WorkflowRunPresentation(run: $0, now: now) }
+    }
+    // Active runs first; a run that just ended stays listed for `finishedNoticeDuration` so
+    // the toolbar can show its outcome instead of vanishing the moment it completes.
+    runs = ordered(state.activeSessions) + ordered(state.recentlyFinishedSessions)
   }
 
+  /// The run the compact status item names: the most recent active run, else the run that just ended.
   var primary: WorkflowRunPresentation? { runs.first }
   var attentionRun: WorkflowRunPresentation? { runs.first { $0.status.isAttention } }
-  var activeRunCount: Int { runs.count }
+  var activeRunCount: Int { runs.filter { !$0.status.isFinished }.count }
   var hasAttention: Bool { attentionRun != nil }
+}
+
+/// How a run ended, for the status item's closing line.
+nonisolated enum WorkflowFinishedOutcome: Equatable, Sendable {
+  case completed
+  case cancelled
+  case skipped
+  case iterationLimitReached
+  case interrupted
 }
 
 nonisolated struct WorkflowRunPresentation: Equatable, Sendable, Identifiable {
   enum Status: Equatable, Sendable {
     case running
     case needsAttention(String)
+    case finished(WorkflowFinishedOutcome)
   }
 
   let id: UUID
@@ -61,7 +77,16 @@ nonisolated struct WorkflowRunPresentation: Equatable, Sendable, Identifiable {
     worktreeName = run.context.worktree.name
     startedAt = run.startedAt
     elapsedText = Self.elapsedText(from: run.startedAt, to: now)
-    status = run.status.attention.map { .needsAttention($0.message) } ?? .running
+    status =
+      switch run.status {
+      case .running: .running
+      case .needsAttention(let attention): .needsAttention(attention.message)
+      case .completed: .finished(.completed)
+      case .cancelled: .finished(.cancelled)
+      case .skipped: .finished(.skipped)
+      case .iterationLimitReached: .finished(.iterationLimitReached)
+      case .interrupted: .finished(.interrupted)
+      }
     let context = Self.templateContext(for: run, iteration: run.currentIteration)
     currentStepTitle = Self.title(for: run.currentStep, context: context) ?? "Finishing workflow"
     currentPrompt = Self.prompt(for: run.currentStep, context: context)
@@ -94,6 +119,22 @@ nonisolated struct WorkflowRunPresentation: Equatable, Sendable, Identifiable {
 
   func elapsedText(at now: Date) -> String {
     Self.elapsedText(from: startedAt, to: now)
+  }
+
+  /// The compact status item's text: the current step while the run lives, its outcome once it ended.
+  var summaryText: String {
+    switch status {
+    case .running, .needsAttention:
+      return currentStepTitle
+    case .finished(let outcome):
+      switch outcome {
+      case .completed: return "\(workflowName) completed"
+      case .cancelled: return "\(workflowName) cancelled"
+      case .skipped: return "\(workflowName) ended after a skipped step"
+      case .iterationLimitReached: return "\(workflowName) reached its iteration limit"
+      case .interrupted: return "\(workflowName) was interrupted"
+      }
+    }
   }
 
   private static func elapsedText(from start: Date, to end: Date) -> String {
@@ -237,6 +278,11 @@ nonisolated struct WorkflowRunPresentation: Equatable, Sendable, Identifiable {
 nonisolated extension WorkflowRunPresentation.Status {
   var isAttention: Bool {
     if case .needsAttention = self { return true }
+    return false
+  }
+
+  var isFinished: Bool {
+    if case .finished = self { return true }
     return false
   }
 }

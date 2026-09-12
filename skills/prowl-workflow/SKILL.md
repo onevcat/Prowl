@@ -64,7 +64,6 @@ require a source pane with a detected agent. Use `--input next=save` instead to
 save without a receiver. Follow the returned `self_initiated.line` and deliver the briefing
 with its exact command; do not wait for Prowl to message you again. The receiver reads the
 saved packet and continues the task. A completed run confirms save/launch, not task completion.
-The existing `prowl handoff` CLI and HUD remain available.
 
 ## Running a workflow
 

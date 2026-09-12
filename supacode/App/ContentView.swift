@@ -180,11 +180,6 @@ struct ContentView: View {
       )
     }
     .overlay {
-      if let handoffHudStore = store.scope(state: \.handoffHud, action: \.handoffHud.presented) {
-        HandoffHudOverlayView(store: handoffHudStore)
-      }
-    }
-    .overlay {
       if featureFlags.workflowUI, !store.workflowStartFromSettings,
         let workflowStartStore = store.scope(state: \.workflowStart, action: \.workflowStart.presented)
       {

@@ -32,7 +32,6 @@ struct AppFeature {
     var suppressLayoutSaveUntilRelaunch = false
     var launchedAt: Date?
     var leftSidebarVisibility: NavigationSplitViewVisibility = .all
-    @Presents var handoffHud: HandoffHudFeature.State?
     @Presents var workflowStart: WorkflowStartFeature.State?
     var workflowStartFromSettings = false
     /// Workflows visible to the action-target worktree, refreshed when the palette opens.
@@ -81,6 +80,7 @@ struct AppFeature {
     case runCustomCommand(EffectiveCustomCommand.Identifier)
     case launchAgentProfile(AgentProfile.ID)
     case openAgentProfilesSettings
+    case openWorkflowSettings
     case openWorkflowDetails(WorkflowStartCatalogItem, worktreeID: Worktree.ID)
     case canvasFocusedWorktreeChanged(Worktree.ID?)
     case runScriptDraftChanged(String)
@@ -98,17 +98,12 @@ struct AppFeature {
     case systemNotificationTapped(worktreeID: Worktree.ID, surfaceID: UUID)
     case alert(PresentationAction<Alert>)
     case terminalEvent(TerminalClient.Event)
-    case openHandoffHud
-    case handoffHud(PresentationAction<HandoffHudFeature.Action>)
     /// Open the workflow start sheet — or start at once when nothing is undecided (063 C2).
     /// `worktreeID` pins an entry's worktree (Active Agents menu); nil uses the action target.
     /// `forceSheet` is the "Run with Options…" escape hatch.
     case openWorkflowStart(
       workflowKey: String, worktreeID: Worktree.ID?, sourceSurfaceID: UUID?, forceSheet: Bool)
     case workflowStart(PresentationAction<WorkflowStartFeature.Action>)
-    /// A CLI handoff completed (announced by the socket-service handler); the
-    /// HUD uses it to observe the request it injected into the source pane.
-    case handoffCliCompleted(HandoffCLICompletion)
   }
 
   enum Alert: Equatable {
@@ -810,6 +805,9 @@ struct AppFeature {
       case .launchAgentProfile(let profileID):
         return launchAgentProfile(profileID, state: &state)
 
+      case .openWorkflowSettings:
+        return openSettingsEffect(selecting: .workflows)
+
       case .openAgentProfilesSettings:
         return openSettingsEffect(selecting: .profiles)
 
@@ -1116,12 +1114,9 @@ struct AppFeature {
       case .alert:
         return .none
 
-      case .repositories(.activeAgents(.handOffTapped(let entryID))):
-        return openHandoffHud(state: &state, entryID: entryID)
-
       case .repositories(.activeAgents(.island(let action))):
         // The child reducer forwards `action` after this pass, so the window is up before the
-        // sidebar path focuses a pane or presents the handoff HUD / workflow sheet.
+        // sidebar path focuses a pane or presents the workflow start sheet.
         if action.surfacesProwl {
           _ = appLifecycleClient.surfaceMainWindow()
         }
@@ -1176,25 +1171,12 @@ struct AppFeature {
             }
           )
         }
-        if state.repositories.selectedWorktreeID == notice.worktreeID {
-          switch notice.kind {
-          case .completed:
-            effects.append(
-              .send(.repositories(.showToast(.success("\(notice.workflowName) completed"))))
-            )
-          case .skipped, .iterationLimitReached:
-            effects.append(.send(.repositories(.showToast(.warning(notice.title)))))
-          case .needsAttention:
-            break
-          }
-        }
+        // The toolbar status item keeps the finished run visible with its outcome
+        // (`WorkflowRunsFeature.finishedNoticeDuration`), so no toast competes with it.
         return .merge(effects)
 
       case .workflowRuns:
         return .none
-
-      case .openHandoffHud:
-        return openHandoffHud(state: &state)
 
       case .openWorkflowStart(let workflowKey, let worktreeID, let sourceSurfaceID, let forceSheet):
         return openWorkflowStart(
@@ -1220,30 +1202,11 @@ struct AppFeature {
       case .workflowStart:
         return .none
 
-      case .handoffHud(.presented(.delegate(.dismiss))), .handoffHud(.dismiss):
-        let worktree = state.handoffHud?.worktree
-        state.handoffHud = nil
-        guard let worktree else { return .none }
-        // Hand keyboard focus back to the terminal the HUD captured it from.
-        return .run { _ in
-          await terminalClient.send(.focusSelectedTab(worktree))
-        }
-
-      case .handoffHud:
-        return .none
-
-      case .handoffCliCompleted(let completion):
-        guard state.handoffHud != nil else { return .none }
-        return .send(.handoffHud(.presented(.cliCompleted(completion))))
-
       case .terminalEvent(let event):
         return reduceTerminalEvent(event, state: &state)
       }
     }
     core
-      .ifLet(\.$handoffHud, action: \.handoffHud) {
-        HandoffHudFeature()
-      }
       .ifLet(\.$workflowStart, action: \.workflowStart) {
         WorkflowStartFeature()
       }

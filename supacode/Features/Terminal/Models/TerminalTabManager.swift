@@ -45,8 +45,8 @@ final class TerminalTabManager {
   }
 
   /// Creates a tab next to the current selection. With `select: false` the
-  /// selection is left untouched (background creation, e.g. a headless handoff
-  /// launch) unless nothing was selected yet.
+  /// selection is left untouched (background creation) unless nothing was
+  /// selected yet.
   func createTab(
     title: String,
     icon: String?,

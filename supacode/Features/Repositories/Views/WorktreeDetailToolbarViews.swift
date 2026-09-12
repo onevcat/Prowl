@@ -251,9 +251,7 @@ private struct WorktreeToolbarPreview: View {
         actionTargetWorktreeID: nil,
         agentsCapsule: AgentsCapsuleState(
           displayName: "codex",
-          iconSource: CommandIconMap.iconForFirstToken("codex"),
-          infoLine:
-            "Pass this task to another agent in a new tab. codex will summarize its progress first."
+          iconSource: CommandIconMap.iconForFirstToken("codex")
         ),
         agentsLauncherItems: [],
         statusToast: nil,
@@ -315,9 +313,9 @@ private struct WorktreeToolbarPreview: View {
         onStopRunScript: {},
         onRunCustomCommand: { _ in },
         onActivateUpdateButton: {},
-        onHandOff: {},
         onLaunchProfile: { _ in },
         onManageProfiles: {},
+        onManageWorkflows: {},
         onRunWorkflow: { _ in },
         onRunWorkflowWithOptions: { _ in },
         onShowWorkflowDetails: { _ in },
@@ -355,9 +353,9 @@ private struct CanvasToolbarPreview: View {
             notificationGroups: [],
             unseenNotificationWorktreeCount: 0,
             workflowsWorktreeID: nil,
-            onHandOff: {},
             onLaunchProfile: { _ in },
             onManageProfiles: {},
+            onManageWorkflows: {},
             onRunWorkflow: { _ in },
             onRunWorkflowWithOptions: { _ in },
             onShowWorkflowDetails: { _ in },

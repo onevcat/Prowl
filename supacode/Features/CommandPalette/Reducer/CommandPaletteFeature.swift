@@ -73,7 +73,6 @@ struct CommandPaletteFeature {
     case renameBranch
     case openRepositorySettings(Repository.ID)
     case runCustomCommand(EffectiveCustomCommand.Identifier)
-    case handOff
     case launchAgentProfile(AgentProfile.ID)
     case runWorkflow(String)
     #if DEBUG
@@ -268,7 +267,6 @@ struct CommandPaletteFeature {
       )
     }
     items.append(contentsOf: customCommandItems(customCommands))
-    items.append(contentsOf: handoffCommandItems(repositories))
     items.append(
       contentsOf: workflowCommandItems(
         workflowItems, repositories: repositories, actionTargetWorktreeID: worktreeActionTargetID))
@@ -621,23 +619,6 @@ func workflowCommandItems(
       keywords: ["workflow", "run", item.name, item.workflowID]
     )
   }
-}
-
-/// The single hand-off entry: opens the staged HUD where the receiving
-/// agent is chosen (docs-ai 049).
-private func handoffCommandItems(_ repositories: RepositoriesFeature.State) -> [CommandPaletteItem] {
-  guard repositories.selectedTerminalWorktree != nil else { return [] }
-  return [
-    CommandPaletteItem(
-      id: CommandPaletteItemID.handOff,
-      title: "Hand Off…",
-      subtitle: "Choose an agent to take over this task",
-      kind: .handOff,
-      category: .terminal,
-      defaultSuggestion: false,
-      keywords: ["handoff", "hand off", "switch agent", "takeover", "agents"]
-    )
-  ]
 }
 
 private func customCommandSubtitle(for effectiveCommand: EffectiveCustomCommand) -> String {

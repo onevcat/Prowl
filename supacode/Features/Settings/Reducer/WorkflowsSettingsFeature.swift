@@ -25,6 +25,8 @@ struct WorkflowsSettingsFeature {
     var runTargets: [WorkflowSettingsRunTarget] = []
     var path = StackState<WorkflowSettingsDetailFeature.State>()
     var isAuthoringPromptPresented = false
+    /// The New Workflow form while it is open.
+    var newWorkflow: NewWorkflowDraft?
     @Presents var alert: AlertState<Alert>?
 
     init(
@@ -54,6 +56,27 @@ struct WorkflowsSettingsFeature {
     }
 
     var hasNoWorkflows: Bool { displayedRows.isEmpty }
+
+    /// Why the form's Create button is disabled, or nil when the draft can be written.
+    var newWorkflowProblem: String? {
+      guard let draft = newWorkflow else { return nil }
+      if draft.name.trimmingCharacters(in: .whitespaces).isEmpty { return "Enter a name." }
+      if draft.id.isEmpty { return "Enter an ID." }
+      guard WorkflowSchema.isWorkflowID(draft.id) else {
+        return "IDs use lowercase letters, digits, dots, dashes, and underscores, and start with a letter or digit."
+      }
+      if draft.id.hasPrefix(WorkflowSchema.reservedIDPrefix) {
+        return "IDs starting with “\(WorkflowSchema.reservedIDPrefix)” are reserved for built-in workflows."
+      }
+      let fileName = draft.request.fileName
+      if displayedRows.contains(where: { $0.workflowID == draft.id || $0.fileName == fileName })
+        || FileManager.default.fileExists(
+          atPath: workflowDirectory.appending(path: fileName).path(percentEncoded: false))
+      {
+        return "A workflow with this ID already exists here."
+      }
+      return nil
+    }
 
     var allRows: [WorkflowSettingsRow] { displayedRows }
 
@@ -113,6 +136,12 @@ struct WorkflowsSettingsFeature {
     case revealTapped(rowID: String)
     case revealUserFolderTapped
     case newWorkflowTapped
+    case newWorkflowNameChanged(String)
+    case newWorkflowIDChanged(String)
+    case newWorkflowIconChanged(String)
+    case newWorkflowKindChanged(WorkflowStarterTemplate.Kind)
+    case createWorkflowTapped
+    case dismissNewWorkflow
     case askAgentTapped
     case setAuthoringPromptPresented(Bool)
     case installCLITapped
@@ -205,8 +234,38 @@ struct WorkflowsSettingsFeature {
         }
 
       case .newWorkflowTapped:
+        state.newWorkflow = NewWorkflowDraft()
+        return .none
+
+      case .newWorkflowNameChanged(let name):
+        guard var draft = state.newWorkflow else { return .none }
+        draft.name = name
+        if !draft.idEdited { draft.id = WorkflowStarterTemplate.suggestedID(for: name) }
+        state.newWorkflow = draft
+        return .none
+
+      case .newWorkflowIDChanged(let id):
+        guard var draft = state.newWorkflow else { return .none }
+        draft.id = id.trimmingCharacters(in: .whitespaces)
+        // An emptied field goes back to following the name.
+        draft.idEdited = !draft.id.isEmpty
+        if !draft.idEdited { draft.id = WorkflowStarterTemplate.suggestedID(for: draft.name) }
+        state.newWorkflow = draft
+        return .none
+
+      case .newWorkflowIconChanged(let icon):
+        state.newWorkflow?.icon = icon.trimmingCharacters(in: .whitespaces)
+        return .none
+
+      case .newWorkflowKindChanged(let kind):
+        state.newWorkflow?.kind = kind
+        return .none
+
+      case .createWorkflowTapped:
+        guard let draft = state.newWorkflow, state.newWorkflowProblem == nil else { return .none }
         do {
-          let url = try client.createWorkflow(state.workflowDirectory)
+          let url = try client.createWorkflow(state.workflowDirectory, draft.request)
+          state.newWorkflow = nil
           reload(&state)
           openURLClient.open(url.appending(path: "workflow.yaml"))
           return .merge(
@@ -221,12 +280,25 @@ struct WorkflowsSettingsFeature {
           return .send(.delegate(.notice(.failed(message: error.localizedDescription))))
         }
 
+      case .dismissNewWorkflow:
+        state.newWorkflow = nil
+        return .none
+
       case .askAgentTapped:
-        state.isAuthoringPromptPresented = true
+        // From the form the prompt opens on top of it; from the index it stands alone.
+        if state.newWorkflow != nil {
+          state.newWorkflow?.showsAuthoringPrompt = true
+        } else {
+          state.isAuthoringPromptPresented = true
+        }
         return .none
 
       case .setAuthoringPromptPresented(let isPresented):
-        state.isAuthoringPromptPresented = isPresented
+        if state.newWorkflow != nil {
+          state.newWorkflow?.showsAuthoringPrompt = isPresented
+        } else {
+          state.isAuthoringPromptPresented = isPresented
+        }
         return .none
 
       case .installCLITapped:
@@ -256,6 +328,11 @@ struct WorkflowsSettingsFeature {
 
       case .manageProfilesTapped:
         return .send(.delegate(.openProfiles))
+
+      case .path(.element(id: _, action: .appeared)):
+        state.runTargets = client.runTargets(state.settingsScope)
+        synchronizePath(&state)
+        return .none
 
       case .path(.element(id: _, action: .delegate(.setEnabled(let rowID, let enabled)))):
         return .send(.setEnabled(settingsKey: rowID, isEnabled: enabled))
@@ -354,6 +431,26 @@ struct WorkflowsSettingsFeature {
     } message: {
       TextState(message)
     }
+  }
+}
+
+/// What the New Workflow form collects before a starter bundle is written.
+struct NewWorkflowDraft: Equatable {
+  var name = ""
+  var id = ""
+  var icon = ""
+  var kind: WorkflowStarterTemplate.Kind = .singleAgent
+  /// Once the user typed an ID it stops following the name.
+  var idEdited = false
+  /// "Create with Agent…" inside the form: the prompt sheet opens over it.
+  var showsAuthoringPrompt = false
+
+  var request: WorkflowStarterTemplate.Request {
+    WorkflowStarterTemplate.Request(
+      name: name.trimmingCharacters(in: .whitespaces),
+      id: id,
+      icon: icon.isEmpty ? nil : icon,
+      kind: kind)
   }
 }
 

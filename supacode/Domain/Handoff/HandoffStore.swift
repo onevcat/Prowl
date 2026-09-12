@@ -2,19 +2,6 @@ import Darwin
 import Foundation
 import ProwlCLIShared
 
-/// How the transition's briefing was (or wasn't) obtained. `current.md` exists
-/// iff a validated briefing produced it, so this value is the whole story of
-/// the semantic side of a handoff.
-nonisolated enum HandoffBriefing: String, Equatable, Sendable {
-  /// Agent-authored brief supplied inline with the command (`--brief`).
-  case inline
-  /// Intentionally context-only (`--no-brief`).
-  case none
-
-  /// A validated briefing was written for this outcome.
-  var wroteBriefing: Bool { self == .inline }
-}
-
 /// On-disk store for the cross-agent handoff artifact that lives under a
 /// runnable target's `.prowl/handoff/` directory.
 ///
@@ -93,7 +80,7 @@ nonisolated struct HandoffStore: Sendable {
   struct SaveResult: Sendable {
     let artifactPath: String
     let outgoingAgent: String?
-    let sessionContext: HandoffSessionPayload?
+    let sessionContext: SavedSessionContext?
     let repos: [RepoSummary]
     let changedFiles: [String]
     var totalChangedFiles: Int { repos.reduce(0) { $0 + $1.changedFileCount } }
@@ -130,6 +117,17 @@ nonisolated struct HandoffStore: Sendable {
     }
   }
 
+  struct SavedSessionContext: Sendable, Equatable {
+    let agent: String?
+    let sessionID: String?
+    let paneID: String
+    let paneTitle: String?
+    let source: String
+    let confidence: String
+    let excerptPath: String?
+    let transcriptPath: String?
+  }
+
   // MARK: - Layout
 
   /// Create the `.prowl/handoff/` tree and its self-ignoring `.gitignore`.
@@ -153,7 +151,6 @@ nonisolated struct HandoffStore: Sendable {
     outgoingAgent: String?,
     sessionContext: SessionContext? = nil,
     note: String?,
-    briefing: HandoffBriefing? = nil,
     now: Date
   ) throws -> SaveResult {
     try ensureLayout()
@@ -172,10 +169,7 @@ nonisolated struct HandoffStore: Sendable {
     try appendix.write(to: contextURL, atomically: true, encoding: .utf8)
 
     let total = repos.reduce(0) { $0 + $1.changedFileCount }
-    var logLine = "save  agent=\(outgoingAgent ?? "unknown")  repos=\(repos.count)  changed=\(total)"
-    if let briefing {
-      logLine += "  briefing=\(briefing.rawValue)"
-    }
+    let logLine = "save  agent=\(outgoingAgent ?? "unknown")  repos=\(repos.count)  changed=\(total)"
     try appendLog(logLine + Self.noteSuffix(note), now: now)
 
     return SaveResult(
@@ -200,25 +194,11 @@ nonisolated struct HandoffStore: Sendable {
     return text + "\n"
   }
 
-  /// Write a validated briefing to `current.md`. With `archivingPrevious` the
-  /// existing artifact is snapshotted into `archive/` first, so a rewrite can
-  /// never destroy the only copy of the previous briefing. Transitions pass
-  /// `false` because they already archived the outgoing state as a combined
-  /// snapshot.
-  func writeBriefing(_ artifact: String, archivingPrevious: Bool, now: Date) throws {
+  /// Write a validated briefing to `current.md`, archiving any previous briefing first.
+  func writeBriefing(_ artifact: String, now: Date) throws {
     try ensureLayout()
-    if archivingPrevious {
-      try snapshotCurrentBeforeRewrite(now: now)
-    }
+    try snapshotCurrentBeforeRewrite(now: now)
     try artifact.write(to: currentURL, atomically: true, encoding: .utf8)
-  }
-
-  /// Remove `current.md` after the caller archived it: with no fresh briefing
-  /// the receiver must read `context.md` and the `archive/` chain — a previous
-  /// round's briefing must never impersonate the handoff contract.
-  func removeCurrentArtifact() throws {
-    guard hasCurrentArtifact else { return }
-    try FileManager.default.removeItem(at: currentURL)
   }
 
   /// Copy the existing `current.md` into `archive/<ts>-replaced-current.md`
@@ -238,34 +218,6 @@ nonisolated struct HandoffStore: Sendable {
     }
     try existing.write(to: destination, atomically: true, encoding: .utf8)
     didWrite = true
-  }
-
-  // MARK: - Archive
-
-  /// Copy the current artifact into `archive/` under a `<ts>-<from>-to-<to>.md`
-  /// name, leaving `current.md` in place for the receiving agent. Returns the
-  /// archived path relative to the handoff directory, or nil when there is
-  /// nothing to archive.
-  @discardableResult
-  func archiveCurrent(from: String, toAgent: String, now: Date) throws -> String? {
-    let fileManager = FileManager.default
-    guard fileManager.fileExists(atPath: currentURL.path(percentEncoded: false)) else { return nil }
-    try fileManager.createDirectory(at: archiveDirectory, withIntermediateDirectories: true)
-
-    let stem = "\(Self.fileStamp(now))-\(Self.slug(from))-to-\(Self.slug(toAgent))"
-    let destination = try Self.reserveFileURL(in: archiveDirectory, stem: stem, fileExtension: "md")
-    var didWrite = false
-    defer {
-      if !didWrite {
-        try? fileManager.removeItem(at: destination)
-      }
-    }
-    let prose = try String(contentsOf: currentURL, encoding: .utf8)
-    let context = (try? String(contentsOf: contextURL, encoding: .utf8)) ?? ""
-    let snapshot = context.isEmpty ? prose : "\(prose.trimmingCharacters(in: .whitespacesAndNewlines))\n\n\(context)\n"
-    try snapshot.write(to: destination, atomically: true, encoding: .utf8)
-    didWrite = true
-    return "handoff/archive/\(destination.lastPathComponent)"
   }
 
   // MARK: - Log
@@ -355,7 +307,7 @@ nonisolated struct HandoffStore: Sendable {
 
   // MARK: - Session context
 
-  private func writeSessionContext(_ context: SessionContext?, now: Date) throws -> HandoffSessionPayload? {
+  private func writeSessionContext(_ context: SessionContext?, now: Date) throws -> SavedSessionContext? {
     guard let context else { return nil }
 
     let stem = "\(Self.fileStamp(now))-\(Self.slug(context.paneID))"
@@ -367,7 +319,7 @@ nonisolated struct HandoffStore: Sendable {
       }
     }
     let relativePath = "handoff/sessions/\(destination.lastPathComponent)"
-    let payload = HandoffSessionPayload(
+    let payload = SavedSessionContext(
       agent: context.agent,
       sessionID: context.sessionID,
       paneID: context.paneID,
@@ -386,7 +338,7 @@ nonisolated struct HandoffStore: Sendable {
 
   private static func renderSessionContext(
     _ context: SessionContext,
-    payload: HandoffSessionPayload,
+    payload: SavedSessionContext,
     now: Date
   ) -> String {
     let text = trimmedSessionExcerpt(context.excerptText)
@@ -427,7 +379,7 @@ nonisolated struct HandoffStore: Sendable {
 
   func buildAppendix(
     outgoingAgent: String?,
-    sessionContext: HandoffSessionPayload?,
+    sessionContext: SavedSessionContext?,
     repos: [RepoSummary],
     changedFiles: [String],
     now: Date

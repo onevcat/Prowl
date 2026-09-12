@@ -8,6 +8,35 @@ import Testing
 @MainActor
 struct CLIAgentsCommandHandlerTests {
 
+  @Test func decisionReasonIsNotGatedByAgentType() async throws {
+    let fixture = makePayloadFixture()
+    var state = fixture.snapshot.repositoriesState
+    for index in state.activeAgents.entries.indices {
+      state.activeAgents.entries[index].stateDecision = AgentStateDecision(state: .working, reason: .logOpenWork)
+    }
+    let snapshot = AgentsRuntimeSnapshot(
+      repositoriesState: state, listSnapshot: fixture.snapshot.listSnapshot,
+      screenDetectionsBySurfaceID: fixture.snapshot.screenDetectionsBySurfaceID)
+    let handler = AgentsCommandHandler { snapshot }
+    let response = await handler.handle(envelope: CommandEnvelope(output: .json, command: .agents(AgentsInput())))
+    let payload = try #require(try response.data?.decode(as: AgentsCommandPayload.self))
+    #expect(payload.agents.map(\.detectionReason) == ["log.openWork", "log.openWork"])
+  }
+
+  @Test func liveDecisionOverridesDeduplicatedReducerReason() async throws {
+    let fixture = makePayloadFixture()
+    var state = fixture.snapshot.repositoriesState
+    state.activeAgents.entries[0].stateDecision = AgentStateDecision(state: .working, reason: .logOpenWork)
+    let snapshot = AgentsRuntimeSnapshot(
+      repositoriesState: state, listSnapshot: fixture.snapshot.listSnapshot,
+      screenDetectionsBySurfaceID: fixture.snapshot.screenDetectionsBySurfaceID,
+      decisionsBySurfaceID: [fixture.tabPaneID: AgentStateDecision(state: .working, reason: .fallback(.afterTurn))])
+    let handler = AgentsCommandHandler { snapshot }
+    let response = await handler.handle(envelope: CommandEnvelope(output: .json, command: .agents(AgentsInput())))
+    let payload = try #require(try response.data?.decode(as: AgentsCommandPayload.self))
+    #expect(payload.agents.first?.detectionReason == "screen.afterTurn")
+  }
+
   @Test func buildsAgentsPayloadFromActiveEntriesAndTerminalSnapshot() async throws {
     let fixture = makePayloadFixture()
     let handler = AgentsCommandHandler {
@@ -35,6 +64,7 @@ struct CLIAgentsCommandHandlerTests {
     // raw state instead of that UI-deduplicated value.
     #expect(agent.rawState == "working")
     #expect(agent.detectionReason == "omp.askPrompt")
+    #expect(agent.screenReason == "omp.askPrompt")
     #expect(agent.lastChangedAt == "2026-09-21T14:00:00Z")
     #expect(agent.project.name == "Prowl")
     #expect(agent.project.branch == "feature/agents")

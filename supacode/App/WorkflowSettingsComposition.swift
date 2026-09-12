@@ -68,9 +68,11 @@ extension SupacodeApp {
             message: "Could not read a workflow folder: \(error.localizedDescription)")
         }
       },
-      createWorkflow: { directory in
+      createWorkflow: { directory, request in
         do {
-          return try WorkflowStarterTemplate.write(in: directory)
+          var request = request
+          request.documentation = WorkflowStarterTemplate.bundledDocumentation
+          return try WorkflowStarterTemplate.write(request, in: directory)
         } catch {
           throw WorkflowSettingsError(
             message: "Could not create the workflow file: \(error.localizedDescription)")

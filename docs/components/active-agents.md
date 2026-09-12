@@ -58,10 +58,6 @@ A row whose pane is bound to an active workflow run replaces its subtitle with
   **Done** row downgrades to **Idle** once viewed in the active, visible Prowl window.
   Internal focus changes while the window is inactive do not clear the completion.
 - **Right-click a row** for the context menu:
-  - **Hand Off…** — opens the Hand Off HUD for that agent's pane
-    (selecting and focusing it first), regardless of which pane currently has
-    focus. Same flow as the toolbar Agents capsule; see
-    [handoff](handoff.md).
   - **Run Workflow ▸** — one entry per runnable workflow visible to the
     agent's worktree; starts it with this pane fixed as the `current` role's
     source (opening the start sheet when something needs a decision). Shown

@@ -9,7 +9,6 @@ enum WorkflowHistoryOutput {
     operations: WorkflowHistoryOperations
   ) async throws {
     switch intent {
-    case .keep(let directory): try await operations.keep(directory, true)
     case .export(let directory): _ = try await operations.export(directory)
     case .openFile(let url):
       try storage.validate(url)

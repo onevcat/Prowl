@@ -17,9 +17,6 @@ struct AgentsCapsuleState: Equatable {
   /// the assembler with the same two-step token fallback the Active Agents
   /// panel uses, so a wrapper process name never loses the brand icon.
   let iconSource: TabIconSource?
-  /// Plain-language explanation of the hand-off action, shown under its
-  /// title in the popover row; varies with the source session's state.
-  let infoLine: String
 }
 
 /// One launchable agent profile row in the Agents popover (docs-ai 053).
@@ -37,10 +34,10 @@ struct AgentsLauncherItem: Equatable, Identifiable {
 }
 
 /// Leading toolbar entry point for agent-scoped actions.
-/// The capsule identifies the selected pane's agent (the hand-off source);
-/// clicking it opens a popover that hosts the agent actions — hand-off when
-/// an agent is detected, plus the profile launcher and the manage entry
-/// (docs-ai 049/053). The popover is always available: launch rows require a
+/// The capsule identifies the selected pane's agent; clicking it opens a
+/// popover that hosts the agent actions — workflow starts, the profile
+/// launcher, and the manage entry (docs-ai 049/053/063). The popover is always
+/// available: launch rows require a
 /// target worktree but never a detected agent, while profile management remains
 /// available without either. Live status stays with the terminal, the Active
 /// Agents panel, and the central status toast — the capsule deliberately
@@ -58,9 +55,9 @@ struct AgentsToolbarButton: View {
   let launcherItems: [AgentsLauncherItem]
   /// The worktree whose workflows the popover lists; nil hides the section.
   let workflowsWorktreeID: Worktree.ID?
-  let onHandOff: () -> Void
   let onLaunchProfile: (AgentProfile.ID) -> Void
   let onManageProfiles: () -> Void
+  let onManageWorkflows: () -> Void
   let onRunWorkflow: (String) -> Void
   let onRunWorkflowWithOptions: (String) -> Void
   let onShowWorkflowDetails: (WorkflowStartCatalogItem) -> Void
@@ -80,10 +77,6 @@ struct AgentsToolbarButton: View {
         capsule: capsule,
         launcherItems: launcherItems,
         workflowsWorktreeID: workflowsWorktreeID,
-        onHandOff: {
-          isPopoverPresented = false
-          onHandOff()
-        },
         onLaunchProfile: { id in
           isPopoverPresented = false
           onLaunchProfile(id)
@@ -91,6 +84,10 @@ struct AgentsToolbarButton: View {
         onManageProfiles: {
           isPopoverPresented = false
           onManageProfiles()
+        },
+        onManageWorkflows: {
+          isPopoverPresented = false
+          onManageWorkflows()
         },
         onRunWorkflow: { key in
           isPopoverPresented = false
@@ -183,8 +180,8 @@ struct AgentsQuickLaunchButton: View {
   }
 }
 
-/// The agent-actions popover. Hand-off leads when an agent is detected; the
-/// launcher rows follow under one "New agent in this worktree" section header
+/// The agent-actions popover presents workflow and profile launches under one
+/// "New agent in this worktree" section header
 /// (recommended profile first) so the shared purpose is stated once instead
 /// of repeated per row, and the manage entry closes the list.
 private struct AgentsPopoverContent: View {
@@ -192,9 +189,9 @@ private struct AgentsPopoverContent: View {
   let capsule: AgentsCapsuleState?
   let launcherItems: [AgentsLauncherItem]
   let workflowsWorktreeID: Worktree.ID?
-  let onHandOff: () -> Void
   let onLaunchProfile: (AgentProfile.ID) -> Void
   let onManageProfiles: () -> Void
+  let onManageWorkflows: () -> Void
   let onRunWorkflow: (String) -> Void
   let onRunWorkflowWithOptions: (String) -> Void
   let onShowWorkflowDetails: (WorkflowStartCatalogItem) -> Void
@@ -203,17 +200,6 @@ private struct AgentsPopoverContent: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
-      if let capsule {
-        AgentsPopoverRow(
-          title: "Hand Off…",
-          subtitle: capsule.infoLine,
-          systemImage: "arrow.left.arrow.right",
-          action: onHandOff
-        )
-        if !launcherItems.isEmpty || !workflowItems.isEmpty {
-          Divider().padding(.vertical, 4)
-        }
-      }
       if !workflowItems.isEmpty {
         Text("Run a workflow")
           .font(.caption)
@@ -252,6 +238,15 @@ private struct AgentsPopoverContent: View {
       }
       if capsule != nil || !launcherItems.isEmpty {
         Divider().padding(.vertical, 4)
+      }
+      if featureFlags.workflowUI {
+        AgentsPopoverRow(
+          title: "Manage Workflows…",
+          subtitle: "Review, create, and edit workflows in Settings",
+          systemImage: "point.3.connected.trianglepath.dotted",
+          action: onManageWorkflows
+        )
+        .help("Open Settings → Agents → Workflows")
       }
       AgentsPopoverRow(
         title: "Manage Agent Profiles…",

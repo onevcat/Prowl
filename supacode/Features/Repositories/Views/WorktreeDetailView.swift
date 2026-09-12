@@ -185,9 +185,9 @@ struct WorktreeDetailView: View {
         store.send(.runCustomCommand(index))
       },
       onActivateUpdateButton: { store.send(.updates(.activateUpdateButton)) },
-      onHandOff: { store.send(.openHandoffHud) },
       onLaunchProfile: { store.send(.launchAgentProfile($0)) },
       onManageProfiles: { store.send(.openAgentProfilesSettings) },
+      onManageWorkflows: { store.send(.openWorkflowSettings) },
       onRunWorkflow: { key in
         store.send(
           .openWorkflowStart(
@@ -270,9 +270,9 @@ struct WorktreeDetailView: View {
       notificationGroups: state.notificationGroups,
       unseenNotificationWorktreeCount: state.unseenNotificationWorktreeCount,
       workflowsWorktreeID: state.actionTargetWorktreeID,
-      onHandOff: { store.send(.openHandoffHud) },
       onLaunchProfile: { store.send(.launchAgentProfile($0)) },
       onManageProfiles: { store.send(.openAgentProfilesSettings) },
+      onManageWorkflows: { store.send(.openWorkflowSettings) },
       onRunWorkflow: { key in
         store.send(
           .openWorkflowStart(
@@ -416,12 +416,7 @@ struct WorktreeDetailView: View {
         iconLookupToken: paneState.iconLookupToken ?? agent.iconLookupToken,
         agent: agent
       )
-    return AgentsCapsuleState(
-      displayName: displayName,
-      iconSource: iconSource,
-      infoLine: "Pass this task to another agent in a new tab. "
-        + "\(displayName) writes its own briefing first."
-    )
+    return AgentsCapsuleState(displayName: displayName, iconSource: iconSource)
   }
 
   /// Launchable profile rows for the Agents popover: the current worktree's
@@ -969,9 +964,9 @@ struct WorktreeDetailView: View {
     let notificationGroups: [ToolbarNotificationRepositoryGroup]
     let unseenNotificationWorktreeCount: Int
     let workflowsWorktreeID: Worktree.ID?
-    let onHandOff: () -> Void
     let onLaunchProfile: (AgentProfile.ID) -> Void
     let onManageProfiles: () -> Void
+    let onManageWorkflows: () -> Void
     let onRunWorkflow: (String) -> Void
     let onRunWorkflowWithOptions: (String) -> Void
     let onShowWorkflowDetails: (WorkflowStartCatalogItem) -> Void
@@ -988,9 +983,9 @@ struct WorktreeDetailView: View {
           capsule: agentsCapsule,
           launcherItems: agentsLauncherItems,
           workflowsWorktreeID: workflowsWorktreeID,
-          onHandOff: onHandOff,
           onLaunchProfile: onLaunchProfile,
           onManageProfiles: onManageProfiles,
+          onManageWorkflows: onManageWorkflows,
           onRunWorkflow: onRunWorkflow,
           onRunWorkflowWithOptions: onRunWorkflowWithOptions,
           onShowWorkflowDetails: onShowWorkflowDetails
@@ -1040,9 +1035,9 @@ struct WorktreeDetailView: View {
     let onStopRunScript: () -> Void
     let onRunCustomCommand: (EffectiveCustomCommand.Identifier) -> Void
     let onActivateUpdateButton: () -> Void
-    let onHandOff: () -> Void
     let onLaunchProfile: (AgentProfile.ID) -> Void
     let onManageProfiles: () -> Void
+    let onManageWorkflows: () -> Void
     let onRunWorkflow: (String) -> Void
     let onRunWorkflowWithOptions: (String) -> Void
     let onShowWorkflowDetails: (WorkflowStartCatalogItem) -> Void
@@ -1057,9 +1052,9 @@ struct WorktreeDetailView: View {
         notificationGroups: toolbarState.shared.notificationGroups,
         unseenNotificationWorktreeCount: toolbarState.shared.unseenNotificationWorktreeCount,
         workflowsWorktreeID: toolbarState.shared.actionTargetWorktreeID,
-        onHandOff: onHandOff,
         onLaunchProfile: onLaunchProfile,
         onManageProfiles: onManageProfiles,
+        onManageWorkflows: onManageWorkflows,
         onRunWorkflow: onRunWorkflow,
         onRunWorkflowWithOptions: onRunWorkflowWithOptions,
         onShowWorkflowDetails: onShowWorkflowDetails,

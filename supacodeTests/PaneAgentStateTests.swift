@@ -18,61 +18,6 @@ struct PaneAgentStateTests {
     #expect(state.displayState == .idle)
   }
 
-  @Test(arguments: DetectedAgent.allCases)
-  func rawIdleEndsWorkingImmediately(agent: DetectedAgent) {
-    let working = stabilizeAgentState(
-      agent: agent,
-      previous: .idle,
-      raw: .working
-    )
-    #expect(working == .working)
-
-    let idle = stabilizeAgentState(
-      agent: agent,
-      previous: .working,
-      raw: .idle
-    )
-    #expect(idle == .idle)
-  }
-
-  @Test func blockedObservationIsImmediate() {
-    let blocked = stabilizeAgentState(
-      agent: .claude,
-      previous: .working,
-      raw: .blocked
-    )
-
-    #expect(blocked == .blocked)
-  }
-
-  @Test func unknownObservationKeepsPreviousState() {
-    let held = stabilizeAgentState(
-      agent: .claude,
-      previous: .working,
-      raw: .unknown
-    )
-
-    #expect(held == .working)
-
-    let idle = stabilizeAgentState(
-      agent: .claude,
-      previous: .idle,
-      raw: .unknown
-    )
-
-    #expect(idle == .idle)
-  }
-
-  @Test func unknownObservationWithoutHistoryStaysUnknown() {
-    let unknown = stabilizeAgentState(
-      agent: .claude,
-      previous: .unknown,
-      raw: .unknown
-    )
-
-    #expect(unknown == .unknown)
-  }
-
   @Test func presenceRequiresSixMissesBeforeRelease() {
     var presence = AgentDetectionPresence(currentAgent: .codex)
 

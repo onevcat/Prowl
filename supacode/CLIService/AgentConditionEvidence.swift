@@ -104,6 +104,7 @@ enum AgentConditionEvidence {
     for snapshot: AgentConditionSnapshot, baseline explicitBaseline: Baseline? = nil
   ) -> IdleVerdict {
     let state = normalizedState(snapshot)
+    if snapshot.agent?.stateDecision?.hasOutstandingWork == true { return .busy(state) }
     // Without a baseline every signal the snapshot holds predates this call (the re-dispatch
     // case); a wait that keeps polling passes the baseline it armed with, so a later exact
     // `turn-ended` counts even while the screen still shows `working`.
@@ -169,6 +170,7 @@ enum AgentConditionEvidence {
     baseline: Baseline,
     minimumConfidence: AgentWaitMinimumConfidence
   ) -> AgentSignal? {
+    if condition == .idle, snapshot.agent?.stateDecision?.hasOutstandingWork == true { return nil }
     let signal = condition == .changed ? snapshot.changedSignal : snapshot.signal
     guard let signal, accepts(signal.confidence, minimum: minimumConfidence) else { return nil }
     let isPreArmLevel = condition != .changed && signal == baseline.terminalSignal

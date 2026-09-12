@@ -9,13 +9,32 @@ nonisolated public struct WorkflowHistoryEntry: Equatable, Identifiable, Sendabl
   public let state: String
   public let finishedAt: Date?
   public let bytes: Int64
-  public let pinned: Bool
+  /// Why automatic cleanup leaves this run alone; nil when it is a plain expired candidate.
   public let protection: String?
+  /// An explicit Delete or Clear may remove it: finished, readable, unambiguous, and not in use.
+  /// The 24-hour diagnostic window only protects a run from *automatic* cleanup.
+  public let removable: Bool
+
+  public init(
+    id: UUID, directory: URL, name: String, root: String, state: String, finishedAt: Date?, bytes: Int64,
+    protection: String?, removable: Bool
+  ) {
+    self.id = id
+    self.directory = directory
+    self.name = name
+    self.root = root
+    self.state = state
+    self.finishedAt = finishedAt
+    self.bytes = bytes
+    self.protection = protection
+    self.removable = removable
+  }
 }
 
 nonisolated public struct WorkflowHistoryPreview: Equatable, Sendable {
   public static let budget: Int64 = 5 * 1024 * 1024 * 1024
-  public static let retention: TimeInterval = 30 * 86400
+  /// Finished runs expire after three days; the app cleans them up in the background.
+  public static let retention: TimeInterval = 3 * 86400
   public static let grace: TimeInterval = 86400
   public let issues: [String]
   public let entries: [WorkflowHistoryEntry]
@@ -31,7 +50,7 @@ nonisolated public struct WorkflowHistoryPreview: Equatable, Sendable {
     self.entries = entries
     totalBytes = entries.reduce(0) { $0 + $1.bytes }
     let eligible = entries.filter {
-      $0.protection == nil && !$0.pinned && $0.finishedAt.map { now.timeIntervalSince($0) >= Self.grace } == true
+      $0.protection == nil && $0.finishedAt.map { now.timeIntervalSince($0) >= Self.grace } == true
     }.sorted {
       if $0.finishedAt != $1.finishedAt { return $0.finishedAt! < $1.finishedAt! }
       return $0.id.uuidString < $1.id.uuidString
@@ -78,18 +97,41 @@ nonisolated public struct WorkflowHistory: Sendable {
       guard counts[directory.lastPathComponent.lowercased(), default: 0] > 1 else { return entry }
       return WorkflowHistoryEntry(
         id: entry.id, directory: entry.directory, name: entry.name, root: entry.root, state: entry.state,
-        finishedAt: entry.finishedAt, bytes: entry.bytes, pinned: entry.pinned, protection: "Ambiguous run UUID")
+        finishedAt: entry.finishedAt, bytes: entry.bytes, protection: "Ambiguous run UUID", removable: false)
     }
     return WorkflowHistoryPreview(entries: entries, now: now, issues: issues)
   }
 
-  public func keep(_ directory: URL, pinned: Bool) throws {
+  /// Removes one finished run on the user's explicit request. Unlike automatic cleanup it ignores
+  /// the retention window and the diagnostic grace, but never touches a live, occupied,
+  /// ambiguous, or unreadable run.
+  public func delete(_ directory: URL, now: Date) throws {
     let lock = try storage.coordinate()
     defer { lock.close() }
-    _ = try header(directory)
-    let url = directory.appending(path: "keep.json")
-    try storage.validate(url, allowMissing: true)
-    try JSONEncoder().encode(pinned).write(to: url, options: .atomic)
+    let occupancy = try storage.occupy(directory)
+    defer { occupancy.close() }
+    let entry = inspect(directory, now: now, checkOccupancy: false)
+    guard entry.removable else { throw WorkflowHistoryError.protectedRun }
+    try remove(directory)
+  }
+
+  /// Removes every finished run that is not in use (Settings › Clear History).
+  public func clear(now: Date) throws -> WorkflowHistoryCleanup {
+    let lock = try storage.coordinate()
+    defer { lock.close() }
+    var result = WorkflowHistoryCleanup()
+    for entry in try previewLocked(now: now).entries where entry.removable {
+      do {
+        let occupancy = try storage.occupy(entry.directory)
+        defer { occupancy.close() }
+        guard inspect(entry.directory, now: now, checkOccupancy: false).removable else { continue }
+        try remove(entry.directory)
+        result.removed.append(entry.id)
+      } catch {
+        result.failures.append("\(entry.id.uuidString): \(error)")
+      }
+    }
+    return result
   }
 
   public func cleanup(candidates: [UUID], now: Date) throws -> WorkflowHistoryCleanup {
@@ -104,18 +146,10 @@ nonisolated public struct WorkflowHistory: Sendable {
         let occupancy = try storage.occupy(directory)
         defer { occupancy.close() }
         let entry = inspect(directory, now: now, checkOccupancy: false)
-        guard entry.protection == nil, !entry.pinned,
+        guard entry.protection == nil,
           let finish = entry.finishedAt, now.timeIntervalSince(finish) >= WorkflowHistoryPreview.grace
         else { continue }
-        _ = try storage.files(in: directory)
-        // Keep failed units in their original place so the next inspection reports them.
-        do { try FileManager.default.removeItem(at: directory) } catch {
-          let marker = directory.appending(path: ".cleanup-failed")
-          if (try? storage.validate(marker, allowMissing: true)) != nil {
-            try? Data("Incomplete cleanup; inspect this run manually.".utf8).write(to: marker, options: .atomic)
-          }
-          throw error
-        }
+        try remove(directory)
         result.removed.append(id)
       } catch {
         result.failures.append("\(id.uuidString): \(error)")
@@ -173,6 +207,19 @@ nonisolated public struct WorkflowHistory: Sendable {
     return try cleanup(candidates: preview.candidates.map(\.id), now: now)
   }
 
+  /// Caller holds coordination and occupancy. A failed removal leaves a marker so the next
+  /// inspection reports the unit instead of offering it again.
+  private func remove(_ directory: URL) throws {
+    _ = try storage.files(in: directory)
+    do { try FileManager.default.removeItem(at: directory) } catch {
+      let marker = directory.appending(path: ".cleanup-failed")
+      if (try? storage.validate(marker, allowMissing: true)) != nil {
+        try? Data("Incomplete cleanup; inspect this run manually.".utf8).write(to: marker, options: .atomic)
+      }
+      throw error
+    }
+  }
+
   private func inspect(_ directory: URL, now: Date, checkOccupancy: Bool = true) -> WorkflowHistoryEntry {
     let id = UUID(uuidString: directory.lastPathComponent)!
     var name = id.uuidString
@@ -180,8 +227,8 @@ nonisolated public struct WorkflowHistory: Sendable {
     var state = "unknown"
     var finished: Date?
     var bytes: Int64 = 0
-    var pinned = false
     var protection: String?
+    var removable = false
     do {
       let files = try storage.files(in: directory)
       for file in files {
@@ -196,30 +243,28 @@ nonisolated public struct WorkflowHistory: Sendable {
       root = record.root
       state = record.state
       finished = record.finishedAt
-      let keepURL = directory.appending(path: "keep.json")
-      if FileManager.default.fileExists(atPath: keepURL.path) {
-        pinned = try JSONDecoder().decode(Bool.self, from: storage.read(keepURL))
-      }
       if !record.terminal {
         protection = "Active or unknown state"
       } else if let finish = finished, finish >= record.startedAt {
+        removable = true
         if now.timeIntervalSince(finish) < WorkflowHistoryPreview.grace { protection = "24-hour diagnostic window" }
       } else {
         protection = "Missing or invalid finish time"
       }
-      if pinned { protection = "Keep Run" }
       if checkOccupancy {
         let lock = try storage.occupy(directory)
         lock.close()
       }
     } catch WorkflowHistoryError.occupied {
       protection = "In use by a Prowl process"
+      removable = false
     } catch {
       protection = "Unreadable or unsafe record; size may be incomplete"
+      removable = false
     }
     return WorkflowHistoryEntry(
       id: id, directory: directory, name: name, root: root, state: state, finishedAt: finished,
-      bytes: bytes, pinned: pinned, protection: protection)
+      bytes: bytes, protection: protection, removable: removable)
   }
 
   private func header(_ directory: URL) throws -> WorkflowHistoryMetadata {

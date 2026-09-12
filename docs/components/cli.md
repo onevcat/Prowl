@@ -4,7 +4,7 @@
 > an agent) can list panes, read their screens, run commands and capture output,
 > send keystrokes, focus, and open/close tabs and panes programmatically.
 
-**Keywords:** prowl cli, command line, prowl list, prowl agents, prowl agents read, prowl agents signal, prowl agents dispatch, prowl agents wait, prowl profiles list, prowl skills, skills install, agent skills, prowl workflow, workflow status center, workflow run panel, workflow attention, prowl read, prowl send, prowl key, prowl focus, prowl create, prowl close, prowl open, prowl handoff, pane id, agent, profile, automation, json, capture, socket
+**Keywords:** prowl cli, command line, prowl list, prowl agents, prowl agents read, prowl agents signal, prowl agents dispatch, prowl agents wait, prowl profiles list, prowl skills, skills install, agent skills, prowl workflow, workflow status center, workflow run panel, workflow attention, prowl read, prowl send, prowl key, prowl focus, prowl create, prowl close, prowl open, pane id, agent, profile, automation, json, capture, socket
 
 **Related:** [terminal](terminal.md) · [concepts](../concepts.md) · [active-agents](active-agents.md) · [agent-detection](agent-detection.md) · the bundled **`prowl-cli`** (`skills/prowl-cli/SKILL.md`) and **`prowl-workflow`** (`skills/prowl-workflow/SKILL.md`) skills
 
@@ -111,7 +111,7 @@ step that depends on knowing yourself inside the success branch. When it is unse
 matches nothing, stop rather than guess: `pane.cwd` only narrows the candidates — several panes
 usually share one cwd — and may stand in for you only when the match is unique; never
 assume the *focused* pane is you. Prowl itself never trusts the variable for
-attribution; commands that need the calling pane (`handoff`, `agents signal`) resolve it
+attribution; commands that need the calling pane (`agents signal`) resolve it
 from the caller's process ancestry.
 
 ## Commands
@@ -132,7 +132,7 @@ Each item contains:
 (`claude`, `codex`, `gemini`, `cursor-agent`, …) or `null` when none is detected.
 It comes from the same agent detection described in
 [agent-detection](agent-detection.md) and is useful for coordinating who is who
-(e.g. before a [handoff](#prowl-handoff)).
+(for example before an agent workflow run).
 
 These are JSON fields, so `tab.id` and `pane.id` remain UUIDs. Plain `prowl list`
 instead shows `tN` for each tab and `pN` for each pane; pass either handle back
@@ -171,10 +171,12 @@ Each agent contains:
   `pi`; Oh My Pi uses `omp`, with `oh-my-pi` preserved as a display alias.
 - `status`, `raw_state`: detected agent state. `status` is one of `blocked`,
   `working`, `done`, `idle`; `raw_state` is the lower-level detector state.
-- `detection_reason`: optional stable screen-classifier explanation. A profile rule
-  emits its rule ID, an ordinary profile miss emits `fallback.noRuleMatched`, and an
-  unmigrated classifier emits `legacy.detector`. The field is omitted when no current
-  screen result is available and never includes screen text.
+- `detection_reason`: optional explanation of the final state decision, shared with
+  `agents read`. Log evidence reports `log.openWork` or `log.turnEnded`; fallback
+  decisions report `screen.*`. Screen-only decisions report the profile rule ID,
+  `fallback.noRuleMatched`, or `legacy.detector`.
+- `screen_reason`: optional rule ID for the current screen classification, including
+  when log evidence controls the final state. Both reason fields omit screen text.
 - `last_changed_at`: ISO-8601 timestamp for the most recent state change.
 - `project`: display-oriented `name`, `branch`, `path` resolved from the
   agent's working directory.
@@ -205,7 +207,7 @@ Immediate, read-only semantic snapshot for a currently active **Codex** or
 it never guesses from focus, accepts no worktree/tab selector, and has no wait or
 timeout mode.
 
-Default text output always reports current `Status`, classifier `Reason`, last
+Default text output always reports current `Status`, decision `Reason`, last
 state-change time, and a result state. A blocked snapshot includes the raw current
 interaction under `## Blocker`, preserving the question, numbered choices, selected
 row, and Enter/Esc hints. It is the right command for deciding what another agent is
@@ -331,6 +333,9 @@ dispatch per pane: while a record is pending, a second `dispatch` fails with
 first. Because a receipt can precede Codex's own `turn-ended` by a second or two, wait for
 `--until idle` between rounds before dispatching again.
 
+For Codex, observed open main or child work in the selected log keeps this
+precondition busy even if a parent `turn-ended` signal has arrived.
+
 The coordinator waits by exact id:
 
 ```bash
@@ -363,9 +368,11 @@ prowl agents wait "$pane" --until idle --include-screen 40 --json
 ```
 
 Conditions are `idle`, `blocked`, `changed`, and `exit`. Results include their evidence
-`source` and `confidence`; `observation.status` and `raw_state` always describe what the
-screen detector saw at that moment, so a `turn-ended` signal can satisfy `idle` while `status`
-still reads `working`. Condition waits observe state, not edges: a signal that already existed
+`source` and `confidence`; `observation.status` describes the combined detected state,
+while `raw_state` retains the screen observation. A `turn-ended` signal can satisfy
+`idle` while a stale screen still reads `working`, but cannot override observed open
+main or child work in the selected Codex log. Log attribution remains heuristic.
+Condition waits observe state, not edges: a signal that already existed
 when the wait was armed satisfies `idle` or `blocked` only if the detector agrees (idle/done,
 or blocked), while a signal arriving after arming counts on its own. To wait for the *next*
 turn edge rather than the current state, use `--until changed`, which needs a post-baseline
@@ -618,8 +625,7 @@ as a workflow run. Poll the returned run ID with `workflow status` and inspect i
 a briefing, saves a durable packet, and launches the selected Profile in a new tab with focus.
 Use `--input next=save` to save only; no receiver binding or installed receiver Profile is
 required. Launch roles proven unused by start inputs or skipped steps are not bound. Roles
-in runtime-dependent branches remain required. The existing `prowl handoff` commands remain
-available.
+in runtime-dependent branches remain required.
 
 For self-initiated runs, follow `data.self_initiated.line` and its exact delivery command.
 The workflow expression `actions.save.output.path` names the saved packet. For CLI inspection,
@@ -808,83 +814,17 @@ Supports `~` and `file://`. Reports `resolution` (no-argument / exact-root /
 inside-root / new-root), `app_launched`, `brought_to_front`, `created_tab`, and a
 `target`.
 
-### `prowl handoff`
-Hand a task off between agents: archive the outgoing state under the target's
-`.prowl/handoff/`, install a fresh agent-authored briefing, and launch the
-receiver in a background tab. Centred on [workspaces](workspaces.md), but works
-for any runnable target. Two subcommands:
+### `prowl handoff` (retired)
+
+For one release, `prowl handoff …` accepts legacy arguments only to return `HANDOFF_RETIRED`.
+It never contacts Prowl or writes artifacts. Use one of these replacements instead:
 
 ```bash
-prowl handoff to <agent> [target] [--brief -|--no-brief] [--note "…"] [--no-launch]
-prowl handoff save       [target] [--brief -|--no-brief] [--note "…"]
+prowl workflow run prowl.handoff --role receiver=<Profile>
+prowl workflow run prowl.handoff --input next=save
 ```
 
-**Source resolution.** An explicit selector (`--pane p3`, `--tab t2`,
-`--worktree <name>`, or the positional target) wins; otherwise the source is
-**the calling pane** — Prowl maps the `prowl` process's ancestry to the pane
-whose shell spawned it, so an agent running the command hands off *itself*
-regardless of UI focus. Outside any Prowl pane — or when the ancestry does not
-reach the pane's shell, as under tmux/screen or a detached wrapper — a call with no
-selector errors with `SOURCE_REQUIRED`; in those same setups `$PROWL_PANE_ID` is not a
-trustworthy stand-in (it names the pane the server started in), so determine the pane
-by other means and pass it with `--pane` explicitly. The focused pane is never guessed.
-
-**Briefing.** `--brief -` reads an inline agent-authored briefing from stdin
-(heredoc). Every handoff must provide it or use `--no-brief` as the explicit
-context-only escape; otherwise the command errors (`BRIEF_REQUIRED`) with a
-copy-pasteable example and zero side effects. A briefing must
-contain at least `## Objective`, `## Current State`, and `## Next Steps`; an
-invalid inline brief errors (`INVALID_BRIEF`) with **zero side effects**. Prowl
-never resumes the source session or starts a hidden model turn, including when
-the caller targets another pane.
-
-- **`to <agent>`** — archives the current artifact to
-  `.prowl/handoff/archive/<ts>-<from>-to-<to>.md` **first**, installs the
-  fresh briefing as `current.md` (or removes a stale one when the transition
-  is context-only), regenerates `context.md` from live git state, and launches
-  the receiver in a **background tab** — no worktree switch, no focus steal; a
-  notification announces the completed handoff unless you are already watching
-  that worktree. The kickoff prompt adapts to whether a briefing exists. An
-  observed unrestricted source execution policy carries over between the
-  verified Claude Code and Codex adapters for the destination launch only;
-  model identifiers remain with their original agent family. Interactive
-  launch is verified for `claude` and `codex`; `--no-launch` still archives +
-  saves and accepts the full detected-agent list: `pi`, `omp`, `claude`, `codex`,
-  `gemini`, `cursor-agent`, `cline`, `opencode`, `copilot`, `kimi`, `droid`,
-  `amp`, `qodercli`, `qwen`, `grok`.
-- **`save`** — a deferred-handoff checkpoint: installs a fresh briefing
-  (archiving the replaced one) and regenerates `context.md`, with no
-  destination and no launch. A context-only `save --no-brief` refreshes
-  generated state without touching the last valid briefing.
-
-```bash
-prowl handoff to codex --brief - <<'EOF'      # self-handoff with inline briefing
-# Handoff
-## Objective
-…
-## Current State
-…
-## Next Steps
-…
-EOF
-prowl handoff save --brief - --note "eod checkpoint" <<'EOF' … EOF
-prowl handoff to claude --pane p7 --no-brief --json  # third pane, generated context only
-```
-
-The outgoing agent is whatever Prowl detects in the source pane (see
-`pane.agent` in [`list`](#prowl-list)). Response payload
-(`prowl.cli.handoff.v2`) includes `action`, `artifact_path`, `outgoing_agent`,
-`to_agent`, `repos`, `changed_file_count`, `archived_path`, `session_context`,
-`briefing` (`inline` / `none`), `has_briefing`, and
-`launched_pane`. `session_context` includes the generated excerpt path plus
-native `session_id` / `transcript_path` only when the source pane has
-unambiguous native-session evidence (the same identity exposed by
-`prowl agents`); ambiguous sessions are never forked. `current.md` exists iff
-a validated briefing produced it — there is no template and nothing to
-maintain between handoffs. Full feature guide: [handoff](handoff.md).
-
-The generated `.prowl/handoff/` directory contains its own `.gitignore`, so its
-artifacts and terminal excerpts do not appear in `git status`.
+Follow the returned self-initiated delivery instruction to submit the briefing.
 
 ## Transport & app launch
 
@@ -921,7 +861,7 @@ artifacts and terminal excerpts do not appear in `git status`.
 | `DISPATCH_TARGET_BUSY` | `agents dispatch` refused: the pane's agent is working or blocked (`.error.details.observation`, `.signals`). Wait for `--until idle`, then retry. |
 | `DISPATCH_ALREADY_TERMINAL` | `dispatch-abandon` targeted a record that already completed, was abandoned, or is gone. |
 | `DISPATCH_FAILED` / `DISPATCH_ABANDONED` / `DISPATCH_NEEDS_INPUT` / `DISPATCH_INCOMPLETE` | `agents wait --dispatch` structured outcomes; `.error.details` retains the record, target, and evidence (see **Dispatch completion and waiting**). |
-| `SOURCE_REQUIRED` | A caller-owned command such as `agents signal`, selector-free `handoff`, `workflow run` of a workflow with a `current` role, `workflow status` without a run id, or `workflow deliver` without `--run --step` could not map the socket peer ancestry to a Prowl pane. Run it inside the source pane without tmux/detached wrappers, or use an explicit selector where that command permits one. |
+| `SOURCE_REQUIRED` | A caller-owned command such as `agents signal`, `workflow run` of a workflow with a `current` role, `workflow status` without a run id, or `workflow deliver` without `--run --step` could not map the socket peer ancestry to a Prowl pane. Run it inside the source pane without tmux/detached wrappers, or use an explicit selector where that command permits one. |
 | `AGENT_GONE` | The meaning is mode-specific: a signal caller disappeared, a dispatch worker became terminal, or a generic condition target closed. Inspect `.error.details.mode`; dispatch details retain a record, while condition details retain the requested condition and exact surface observation. |
 | `BLOCKER_UNREADABLE` | A blocked screen was detected but Prowl could not safely extract its current interaction text. Re-run `agents read` or inspect with `read`. |
 | `SESSION_UNRESOLVED` / `RESULT_NOT_FOUND` / `RESULT_INCOMPLETE` / `RESULT_TOO_LARGE` | `agents read --result-only` could not provide one trustworthy complete result. Drop `--result-only` to retain the live snapshot and inspect `.data.result`. |
@@ -949,7 +889,7 @@ artifacts and terminal excerpts do not appear in `git status`.
 | `PATH_NOT_FOUND` / `PATH_NOT_DIRECTORY` / `PATH_NOT_ALLOWED` | Fix the `open`/`create tab` path, or the `skills --scope project` start point (`--path` and the current directory must lie inside a Git repository). |
 | `LAUNCH_FAILED` | App launch or socket wait failed; the message includes the last socket diagnostic when available. |
 | `TRANSPORT_FAILED` | Socket transport failed for a reason other than app availability or permission, such as `ENOTSOCK` or an invalid `PROWL_CLI_SOCKET` path. |
-| `*_FAILED` (`LIST_FAILED`, `AGENTS_FAILED`, `PROFILES_FAILED`, `SKILLS_FAILED`, `FOCUS_FAILED`, `SEND_FAILED`, `READ_FAILED`, `CREATE_FAILED`, `CLOSE_FAILED`, `TAB_FAILED`, `PANE_FAILED`, `OPEN_FAILED`, `HANDOFF_FAILED`, `WORKFLOW_FAILED`) | The action itself failed. |
+| `*_FAILED` (`LIST_FAILED`, `AGENTS_FAILED`, `PROFILES_FAILED`, `SKILLS_FAILED`, `FOCUS_FAILED`, `SEND_FAILED`, `READ_FAILED`, `CREATE_FAILED`, `CLOSE_FAILED`, `TAB_FAILED`, `PANE_FAILED`, `OPEN_FAILED`, `WORKFLOW_FAILED`) | The action itself failed. |
 
 ## Safety & self-targeting
 

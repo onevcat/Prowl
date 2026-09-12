@@ -1053,6 +1053,9 @@
         "detection_reason": {
           "type": "string"
         },
+        "screen_reason": {
+          "type": "string"
+        },
         "last_changed_at": {
           "type": "string",
           "minLength": 1
@@ -1687,6 +1690,9 @@
             "detection_reason": {
               "type": "string"
             },
+            "screen_reason": {
+              "type": "string"
+            },
             "last_changed_at": {
               "type": "string",
               "minLength": 1
@@ -2033,252 +2039,6 @@
         "samples": {
           "type": "integer",
           "minimum": 1
-        }
-      }
-    },
-    "handoffRepo": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "name",
-        "branch",
-        "is_git",
-        "changed_file_count",
-        "insertions",
-        "deletions"
-      ],
-      "properties": {
-        "name": {
-          "type": "string",
-          "minLength": 1
-        },
-        "branch": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "is_git": {
-          "type": "boolean"
-        },
-        "changed_file_count": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "insertions": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "deletions": {
-          "type": "integer",
-          "minimum": 0
-        }
-      }
-    },
-    "handoffSession": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "agent",
-        "pane_id",
-        "pane_title",
-        "source",
-        "confidence",
-        "excerpt_path",
-        "transcript_path"
-      ],
-      "properties": {
-        "agent": {
-          "anyOf": [
-            {
-              "type": "string",
-              "minLength": 1
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "session_id": {
-          "anyOf": [
-            {
-              "type": "string",
-              "minLength": 1
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "pane_id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "pane_title": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "source": {
-          "type": "string",
-          "minLength": 1
-        },
-        "confidence": {
-          "type": "string",
-          "minLength": 1
-        },
-        "excerpt_path": {
-          "anyOf": [
-            {
-              "type": "string",
-              "minLength": 1
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "transcript_path": {
-          "anyOf": [
-            {
-              "type": "string",
-              "minLength": 1
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      }
-    },
-    "handoffPane": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "worktree_id",
-        "worktree_name",
-        "tab_id",
-        "pane_id",
-        "pane_title"
-      ],
-      "properties": {
-        "worktree_id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "worktree_name": {
-          "type": "string",
-          "minLength": 1
-        },
-        "tab_id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "pane_id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "pane_title": {
-          "type": "string"
-        }
-      }
-    },
-    "handoffData": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "action",
-        "artifact_path",
-        "repos",
-        "changed_file_count",
-        "has_briefing"
-      ],
-      "properties": {
-        "action": {
-          "enum": [
-            "save",
-            "to"
-          ]
-        },
-        "artifact_path": {
-          "type": "string",
-          "minLength": 1
-        },
-        "outgoing_agent": {
-          "anyOf": [
-            {
-              "type": "string",
-              "minLength": 1
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "to_agent": {
-          "anyOf": [
-            {
-              "type": "string",
-              "minLength": 1
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "repos": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/handoffRepo"
-          }
-        },
-        "changed_file_count": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "archived_path": {
-          "anyOf": [
-            {
-              "type": "string",
-              "minLength": 1
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "session_context": {
-          "$ref": "#/$defs/handoffSession"
-        },
-        "briefing": {
-          "anyOf": [
-            {
-              "enum": [
-                "inline",
-                "fork",
-                "none",
-                "failed"
-              ]
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "has_briefing": {
-          "type": "boolean"
-        },
-        "launched_pane": {
-          "$ref": "#/$defs/handoffPane"
         }
       }
     },
@@ -3714,58 +3474,6 @@
         }
       ]
     },
-    "handoffResponse": {
-      "oneOf": [
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "ok",
-            "command",
-            "schema_version",
-            "data"
-          ],
-          "properties": {
-            "ok": {
-              "const": true
-            },
-            "command": {
-              "const": "handoff"
-            },
-            "schema_version": {
-              "const": "prowl.cli.handoff.v2"
-            },
-            "data": {
-              "$ref": "#/$defs/handoffData"
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "ok",
-            "command",
-            "schema_version",
-            "error"
-          ],
-          "properties": {
-            "ok": {
-              "const": false
-            },
-            "command": {
-              "const": "handoff"
-            },
-            "schema_version": {
-              "const": "prowl.cli.handoff.v2"
-            },
-            "error": {
-              "$ref": "#/$defs/error"
-            }
-          }
-        }
-      ]
-    },
     "workflowResponse": {
       "oneOf": [
         {
@@ -4874,6 +4582,30 @@
         "invocation": {
           "type": "integer",
           "minimum": 1
+        }
+      }
+    },
+    "handoffResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "command",
+        "schema_version",
+        "error"
+      ],
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "command": {
+          "const": "handoff"
+        },
+        "schema_version": {
+          "const": "prowl.cli.handoff.v1"
+        },
+        "error": {
+          "$ref": "#/$defs/error"
         }
       }
     }
