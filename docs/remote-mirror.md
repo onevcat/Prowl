@@ -97,3 +97,10 @@ The Ghostty bridge is merged in `onevcat/ghostty` PR #2. A matching official
 XCFramework still needs publishing/pinning. Local tests use the sibling framework;
 this does not establish a self-contained fresh-checkout build. Real Agent and
 cross-device acceptance remain separate from component/socket test evidence.
+
+## Mobile client projects
+
+Native clients live in [MirrorClient/iOS](../MirrorClient/iOS/) (iPhone and iPad)
+and [MirrorClient/Android](../MirrorClient/Android/) (phones and tablets). Each
+project retains its own build and test entry points; neither is built by the Mac
+App target or release pipeline. See [client setup](../MirrorClient/README.md).
