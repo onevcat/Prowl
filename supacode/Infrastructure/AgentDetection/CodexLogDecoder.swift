@@ -61,9 +61,9 @@ nonisolated struct CodexLogDecoder: Sendable {
     else { throw Failure.invalidRecord }
     switch kind {
     case "started":
-      return [.childStarted(root: root, child: child, work: "pending:" + id)]
+      return [.childScheduled(root: root, child: child, work: "pending:" + id)]
     case "interacted":
-      return followups.remove(id) == nil ? [] : [.childStarted(root: root, child: child, work: "pending:" + id)]
+      return followups.remove(id) == nil ? [] : [.childScheduled(root: root, child: child, work: "pending:" + id)]
     case "completed":
       guard id.hasPrefix("subagent-completed-") else { throw Failure.invalidRecord }
       return [.childEnded(root: root, child: child, work: String(id.dropFirst("subagent-completed-".count)))]

@@ -60,6 +60,15 @@ struct AgentStateMachineTests {
     #expect(machine.receive(.unavailable, now: 3).state == .idle)
     #expect(machine.receive(.inventory(["a"]), now: 4).logSessionID == nil)
   }
+
+  @Test func incompleteInventorySuspendsAuthorityWithoutLosingOpenWork() {
+    var machine = AgentStateMachine()
+    _ = machine.receive(screen(.idle), now: 0)
+    _ = machine.receive(.inventory(["a"]), now: 0)
+    _ = machine.receive(.turnStarted(session: "a", turn: "1"), now: 1)
+    #expect(machine.receive(.suspended, now: 2).state == .idle)
+    #expect(machine.receive(.inventory(["a"]), now: 3).state == .working)
+  }
   @Test func completionFencesRetainedBlockerButNotNewInteraction() {
     var machine = AgentStateMachine()
     _ = machine.receive(.inventory(["a"]), now: 0)
@@ -77,6 +86,16 @@ struct AgentStateMachineTests {
     _ = machine.receive(.childStarted(root: "a", child: "c", work: "new"), now: 2)
     #expect(machine.receive(.childEnded(root: "a", child: "c", work: "old"), now: 3).hasOutstandingWork)
     #expect(!machine.receive(.childEnded(root: "a", child: "c", work: "new"), now: 4).hasOutstandingWork)
+  }
+
+  @Test func lateSchedulingNoticeCannotReplaceAnObservedChildTurn() {
+    var machine = AgentStateMachine()
+    _ = machine.receive(.inventory(["a"]), now: 0)
+    _ = machine.receive(.turnStarted(session: "a", turn: "main"), now: 1)
+    _ = machine.receive(.childStarted(root: "a", child: "c", work: "actual"), now: 2)
+    _ = machine.receive(.childScheduled(root: "a", child: "c", work: "pending"), now: 3)
+    _ = machine.receive(.turnEnded(session: "a", turn: "main"), now: 4)
+    #expect(machine.receive(.childEnded(root: "a", child: "c", work: "actual"), now: 5).state == .idle)
   }
 
   @Test func changedBlockerWithSameRuleIsFreshEvidence() {

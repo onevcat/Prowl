@@ -49,6 +49,38 @@ struct CodexLogProviderTests {
     #expect(await provider.sample(paths: [path]).count == 2)
   }
 
+  @Test func freshChildWithoutForkHistoryDoesNotRequireSettingsEvent() async throws {
+    let directory = try fixture()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let main = directory.appending(path: "main.jsonl")
+    let child = directory.appending(path: "child.jsonl")
+    try (header("a") + start("a1")).write(to: main, atomically: false, encoding: .utf8)
+    let metadata = try #require(header("c", parent: "a").split(separator: "\n").first)
+    try (metadata + "\n" + start("c1")).write(to: child, atomically: false, encoding: .utf8)
+    let provider = CodexLogProvider(startedAt: .distantPast)
+    #expect(await provider.sample(paths: [main, child]).count == 3)
+  }
+
+  @Test func forkMetadataKeepsCopiedTurnsBehindTheOwnBoundary() async throws {
+    let directory = try fixture()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let main = directory.appending(path: "main.jsonl")
+    let child = directory.appending(path: "child.jsonl")
+    try (header("a") + start("a1")).write(to: main, atomically: false, encoding: .utf8)
+    let lines = header("c", parent: "a").split(separator: "\n")
+    let metadata = String(lines[0]).replacing(#""id":"c""#, with: #""id":"c","forked_from_id":"a""#)
+    let content = metadata + "\n" + start("copied") + lines[1] + "\n" + start("own")
+    try content.write(to: child, atomically: false, encoding: .utf8)
+    let provider = CodexLogProvider(startedAt: .distantPast)
+    let events = await provider.sample(paths: [main, child])
+    #expect(events.count == 3)
+    if case .childStarted(_, _, let work) = events.last {
+      #expect(work == "own")
+    } else {
+      Issue.record("Expected only the child's own live turn")
+    }
+  }
+
   @Test func partialLinesAndRepeatedSamplesDoNotDuplicateTurns() async throws {
     let root = try fixture()
     defer { try? FileManager.default.removeItem(at: root) }
@@ -94,6 +126,23 @@ struct CodexLogProviderTests {
     }
     let orphan = await provider.sample(paths: [child])
     if case .unavailable = orphan.first {} else { Issue.record("Unknown lineage must fall back") }
+  }
+
+  @Test func partialNewHeaderDoesNotDiscardExistingCursors() async throws {
+    let directory = try fixture()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let main = directory.appending(path: "main.jsonl")
+    let child = directory.appending(path: "child.jsonl")
+    try (header("a") + start("a1")).write(to: main, atomically: false, encoding: .utf8)
+    let provider = CodexLogProvider(startedAt: .distantPast)
+    _ = await provider.sample(paths: [main])
+    let childText = header("c", parent: "a") + start("c1")
+    try String(childText.prefix(20)).write(to: child, atomically: false, encoding: .utf8)
+    _ = await provider.sample(paths: [main, child])
+    try append(String(childText.dropFirst(20)), to: child)
+    try append(start("a2"), to: main)
+    let events = await provider.sample(paths: [main, child])
+    #expect(events.count == 3)
   }
 
   @Test func truncationAndMalformedAppendInvalidateWithoutResurrectingHistory() async throws {

@@ -7,8 +7,10 @@ nonisolated enum AgentDetectionEvent: Sendable {
   case turnStarted(session: String, turn: String)
   case turnEnded(session: String, turn: String)
   case childStarted(root: String, child: String, work: String)
+  case childScheduled(root: String, child: String, work: String)
   case childEnded(root: String, child: String, work: String?)
   case unavailable
+  case suspended
   case interaction
   case tick
 }
@@ -43,10 +45,7 @@ nonisolated struct AgentStateMachine: Sendable {
   mutating func receive(_ event: AgentDetectionEvent, now: TimeInterval) -> AgentStateDecision {
     switch event {
     case .screen(let detection, let contentID):
-      screen = detection
-      screenContentID = contentID
-      if detection.state != .unknown { stableScreen = detection.state }
-      if suppressedScreen != detection || suppressedContentID != contentID { suppressedScreen = nil }
+      observeScreen(detection, contentID: contentID)
     case .inventory(let sessions):
       available = true
       roots = roots.filter { sessions.contains($0.key) }
@@ -63,6 +62,8 @@ nonisolated struct AgentStateMachine: Sendable {
         roots[session]?.lastActivity = now
         suppressCompletedScreen(session: session)
       }
+    case .childScheduled(let root, let child, let work):
+      scheduleChild(root: root, child: child, work: work)
     case .childStarted(let root, let child, let work):
       roots[root]?.children[child] = work
     case .childEnded(let root, let child, let work):
@@ -70,6 +71,9 @@ nonisolated struct AgentStateMachine: Sendable {
         roots[root]?.children.removeValue(forKey: child)
         suppressCompletedScreen(session: root)
       }
+    case .suspended:
+      available = false
+      suppressedScreen = nil
     case .unavailable:
       available = false
       roots.removeAll()
@@ -81,6 +85,17 @@ nonisolated struct AgentStateMachine: Sendable {
     }
     decision = resolve(now: now)
     return decision
+  }
+
+  private mutating func observeScreen(_ detection: AgentScreenDetection, contentID: Int?) {
+    screen = detection
+    screenContentID = contentID
+    if detection.state != .unknown { stableScreen = detection.state }
+    if suppressedScreen != detection || suppressedContentID != contentID { suppressedScreen = nil }
+  }
+
+  private mutating func scheduleChild(root: String, child: String, work: String) {
+    if roots[root]?.children[child] == nil { roots[root]?.children[child] = work }
   }
 
   private mutating func suppressCompletedScreen(session: String) {

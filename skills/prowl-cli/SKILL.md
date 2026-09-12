@@ -259,6 +259,11 @@ printf '%s\n' "$result" | jq '.data.observation, .data.screen'
 
   `--until idle|blocked` observe the current state: a signal that already existed when the wait was armed counts only if the screen detector agrees, a signal arriving afterwards counts on its own, and an already-idle agent with such a signal returns immediately. Detection-only evidence (no hook or cooperative signal, the usual case for a manually launched agent) resolves only after the state has stayed unchanged for two seconds. The same stabilized fallback applies to a Profile agent whose `verified_live` channel holds no terminal signal yet — a freshly launched, unprompted Profile has only reported `session-start` — so `--until idle` before the first prompt resolves with `confidence: heuristic`; once the channel holds a `turn-ended` or `needs-input`, that runtime evidence decides and the screen never overrides it. Give those waits a `--timeout` of at least a few seconds. To wait for the *next* turn edge (for example after `send`ing a new prompt), use `--until changed`; with a `verified_live` hook channel it returns at the next runtime signal, not at a screen change.
 
+  For Codex, observed open main or child work in the selected log prevents an Idle
+  result even after a parent `turn-ended` signal. The same rule protects dispatch
+  admission and workflow readiness. Log attribution remains heuristic and never
+  substitutes for a task-completion receipt.
+
   Exact/high evidence can establish the requested observable condition. If
   `jq -e '.data.observation.confidence == "heuristic"'` matches, inspect the included stable
   screen and, when needed, `prowl agents read "$pane" --json`. A finished answer with an empty

@@ -331,6 +331,9 @@ dispatch per pane: while a record is pending, a second `dispatch` fails with
 first. Because a receipt can precede Codex's own `turn-ended` by a second or two, wait for
 `--until idle` between rounds before dispatching again.
 
+For Codex, observed open main or child work in the selected log keeps this
+precondition busy even if a parent `turn-ended` signal has arrived.
+
 The coordinator waits by exact id:
 
 ```bash
@@ -363,9 +366,11 @@ prowl agents wait "$pane" --until idle --include-screen 40 --json
 ```
 
 Conditions are `idle`, `blocked`, `changed`, and `exit`. Results include their evidence
-`source` and `confidence`; `observation.status` and `raw_state` always describe what the
-screen detector saw at that moment, so a `turn-ended` signal can satisfy `idle` while `status`
-still reads `working`. Condition waits observe state, not edges: a signal that already existed
+`source` and `confidence`; `observation.status` describes the combined detected state,
+while `raw_state` retains the screen observation. A `turn-ended` signal can satisfy
+`idle` while a stale screen still reads `working`, but cannot override observed open
+main or child work in the selected Codex log. Log attribution remains heuristic.
+Condition waits observe state, not edges: a signal that already existed
 when the wait was armed satisfies `idle` or `blocked` only if the detector agrees (idle/done,
 or blocked), while a signal arriving after arming counts on its own. To wait for the *next*
 turn edge rather than the current state, use `--until changed`, which needs a post-baseline

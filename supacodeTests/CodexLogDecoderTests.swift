@@ -44,4 +44,19 @@ struct CodexLogDecoderTests {
       Issue.record("Expected scoped child completion")
     }
   }
+
+  @Test func onlyFollowupInteractionStartsNewChildWork() throws {
+    var decoder = CodexLogDecoder(sessionID: "main", isLive: true)
+    let interaction = record(
+      #"{"type":"item_completed","item":{"type":"SubAgentActivity","kind":"interacted","#
+        + #""agent_thread_id":"child","id":"call1"}}"#)
+    let callPrefix = #"{"type":"response_item","payload":{"type":"function_call","namespace":"collaboration","#
+    _ = try decoder.consume(
+      Data((callPrefix + #""name":"send_message","call_id":"call1"}}"#).utf8), root: "main")
+    #expect(try decoder.consume(interaction, root: "main").isEmpty)
+    _ = try decoder.consume(
+      Data((callPrefix + #""name":"followup_task","call_id":"call1"}}"#).utf8), root: "main")
+    #expect(try decoder.consume(interaction, root: "main").count == 1)
+    #expect(try decoder.consume(interaction, root: "main").isEmpty)
+  }
 }

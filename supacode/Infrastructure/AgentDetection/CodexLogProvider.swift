@@ -17,7 +17,7 @@ actor CodexLogProvider {
     var decoder: CodexLogDecoder
   }
 
-  private enum Failure: Error { case incomplete }
+  private enum Failure: Error { case incomplete, notReady }
   private let startedAt: Date
   private var cursors: [URL: Cursor] = [:]
   private var needsBaseline = false
@@ -33,11 +33,7 @@ actor CodexLogProvider {
     var complete = false
     let paths = ProcessDetection.openFilePaths(pid: process.pid, complete: &complete)
       .compactMap { parse($0)?.transcriptPath }
-    guard complete else {
-      cursors.removeAll()
-      needsBaseline = true
-      return [.unavailable]
-    }
+    guard complete else { return [.suspended] }
     let events = sample(paths: paths)
     guard ProcessDetection.processStartDate(pid: process.pid) == process.startedAt else { return [.unavailable] }
     return events
@@ -46,6 +42,8 @@ actor CodexLogProvider {
   func sample(paths: [URL]) -> [AgentDetectionEvent] {
     do {
       return try read(paths: Array(Set(paths)))
+    } catch Failure.notReady {
+      return [.suspended]
     } catch {
       cursors.removeAll()
       needsBaseline = true
@@ -61,7 +59,9 @@ actor CodexLogProvider {
       let handle = try FileHandle(forReadingFrom: path)
       defer { try? handle.close() }
       let header = try handle.read(upToCount: 1_024 * 1_024) ?? Data()
-      guard let end = header.firstIndex(of: 10) else { throw Failure.incomplete }
+      guard let end = header.firstIndex(of: 10) else {
+        throw header.count < 1_024 * 1_024 ? Failure.notReady : Failure.incomplete
+      }
       let metadata = try metadata(from: header.prefix(upTo: end))
       let attributes = try FileManager.default.attributesOfItem(atPath: path.path)
       guard let inode = attributes[.systemFileNumber] as? UInt64,
@@ -137,8 +137,8 @@ actor CodexLogProvider {
     } else if payload["source"] as? String != "cli" {
       throw Failure.incomplete
     }
-    // Fresh CLI sessions can omit settings events. Forks and children can copy
-    // another session's history and still need their own live boundary.
-    return Metadata(id: id, parent: parent, hasInheritedHistory: parent != nil || payload["forked_from_id"] is String)
+    // Fresh mains and children can omit settings events. Lineage alone does not
+    // imply copied history; only forks need their own live boundary.
+    return Metadata(id: id, parent: parent, hasInheritedHistory: payload["forked_from_id"] is String)
   }
 }
