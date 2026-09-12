@@ -43,6 +43,10 @@ upstream tag, cherry-pick all of them.
      recreates the link. `pkg/macos/video/display_link.zig` reports `CreationFailed` instead of
      `OutOfMemory`. Background: `docs-ai/063-agent-workflows/009-display-sleep-surface-spike.md`.
    - Drop this patch when upgrading to an upstream tag that contains `a177ba90af`.
+6. `a00717e450f93d691037af00731e205b6501799e` — `Merge pull request #2 from Awhisper/feat/mobile-mirror-bridge`
+   - Includes `02b3c6704` (active-screen VT snapshot) and `df5b32481` (bounded terminal text capture), contributed by Awhisper.
+   - Adds `ghostty_surface_read_snapshot` and `ghostty_surface_read_text_bounded` for remote mirror display and bounded history.
+   - Both exports are read-only and use `ghostty_surface_free_text` to release returned buffers.
    - This is the commit the submodule currently points at.
 
 ## Upgrade To A New Ghostty Tag

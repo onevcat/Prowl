@@ -93,10 +93,10 @@ protects input forwarding. The helper exits on socket/stdin EOF and never launch
 a remote program. `make embed-cli-debug` builds/embeds both CLI and helper;
 `scripts/test-remote-mirror.sh` runs the App-target mirror tests.
 
-The Ghostty bridge is merged in `onevcat/ghostty` PR #2. A matching official
-XCFramework still needs publishing/pinning. Local tests use the sibling framework;
-this does not establish a self-contained fresh-checkout build. Real Agent and
-cross-device acceptance remain separate from component/socket test evidence.
+The Ghostty bridge from `onevcat/ghostty` PR #2 is pinned at `a00717e450f9`.
+The default build downloads the matching XCFramework and resources, verified against
+`scripts/ghosttykit-checksums.txt`. No sibling Ghostty checkout is required.
+Real Agent and cross-device acceptance remain separate from component/socket test evidence.
 
 ## Mobile client projects
 
