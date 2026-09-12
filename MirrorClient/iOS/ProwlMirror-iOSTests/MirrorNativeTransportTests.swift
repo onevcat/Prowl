@@ -15,24 +15,13 @@ struct MirrorNativeTransportTests {
       if case .ready = state, let port = listener.port { ready.continuation.yield(port) }
       if case .failed = state { ready.continuation.finish() }
     }
-    var server: MirrorConnection?
+    let accepted = AsyncStream.makeStream(of: NWConnection.self)
     let lease = UUID()
-    listener.newConnectionHandler = { connection in
-      Task { @MainActor in
-        let peer = MirrorConnection(connection)
-        server = peer
-        peer.onMessage = { message in
-          if message.kind == .list {
-            peer.send(.textFrame(.init(sequence: 1, text: "思考中\nSwift", subscriptionID: lease)))
-          }
-        }
-        peer.start()
-      }
-    }
+    listener.newConnectionHandler = { accepted.continuation.yield($0) }
     listener.start(queue: .main)
     defer {
       listener.cancel()
-      server?.close()
+      accepted.continuation.finish()
       ready.continuation.finish()
     }
     var ports = ready.stream.makeAsyncIterator()
@@ -50,6 +39,15 @@ struct MirrorNativeTransportTests {
       peer.close()
       received.continuation.finish()
     }
+    var connections = accepted.stream.makeAsyncIterator()
+    let server = MirrorConnection(try #require(await connections.next()))
+    defer { server.close() }
+    server.onMessage = { message in
+      if message.kind == .list {
+        server.send(.textFrame(.init(sequence: 1, text: "思考中\nSwift", subscriptionID: lease)))
+      }
+    }
+    server.start()
     var messages = received.stream.makeAsyncIterator()
     let frame = try #require(await messages.next())
     #expect(frame.text == "思考中\nSwift")
