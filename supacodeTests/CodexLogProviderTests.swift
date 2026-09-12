@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Testing
 
 @testable import supacode
@@ -27,6 +28,56 @@ struct CodexLogProviderTests {
     defer { try? handle.close() }
     try handle.seekToEnd()
     try handle.write(contentsOf: Data(text.utf8))
+  }
+
+  @Test func incompleteInventoryDiagnosticsAreThrottledAndReportRecovery() async {
+    let messages = Mutex<[String]>([])
+    let clock = Mutex<TimeInterval>(0)
+    let provider = CodexLogProvider(
+      time: { clock.withLock { $0 } }, diagnostic: { message in messages.withLock { $0.append(message) } })
+    for _ in 0..<3 { _ = await provider.sample(paths: [], inventoryComplete: false) }
+    #expect(messages.withLock { $0.count } == 1)
+    clock.withLock { $0 = 30 }
+    _ = await provider.sample(paths: [], inventoryComplete: false)
+    #expect(messages.withLock { $0.count } == 2)
+    _ = await provider.sample(paths: [])
+    #expect(messages.withLock { $0.last?.contains("recovered") } == true)
+    _ = await provider.sample(paths: [])
+    #expect(messages.withLock { $0.count } == 3)
+  }
+
+  @Test func resumedMainSourcesRemainEligible() async throws {
+    let directory = try fixture()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    for source in ["cli", "exec", "vscode", "mcp"] {
+      let path = directory.appending(path: source + ".jsonl")
+      let content = header("a").replacing(#""cli""#, with: "\"" + source + "\"") + start("1")
+      try content.write(to: path, atomically: false, encoding: .utf8)
+      let provider = CodexLogProvider(startedAt: .distantPast)
+      let events = await provider.sample(paths: [path])
+      if case .turnStarted("a", "1") = events.last {} else { Issue.record("Unsupported main source: \(source)") }
+    }
+  }
+
+  @Test func unknownLineageSuspendsWithoutLosingPendingCompletion() async throws {
+    let directory = try fixture()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    for source in ["null", #""unknown""#, #"{"subagent":"review"}"#] {
+      let main = directory.appending(path: "main.jsonl")
+      let unknown = directory.appending(path: "unknown.jsonl")
+      try (header("a") + start("1")).write(to: main, atomically: false, encoding: .utf8)
+      try header("u").replacing(#""cli""#, with: source).write(to: unknown, atomically: false, encoding: .utf8)
+      let provider = CodexLogProvider(startedAt: .distantPast)
+      _ = await provider.sample(paths: [main])
+      for _ in 0..<2 {
+        let events = await provider.sample(paths: [main, unknown])
+        if case .suspended = events.first {} else { Issue.record("Unknown lineage must suspend") }
+      }
+      #expect(await provider.metadataReadCount == 2)
+      try append(#"{"type":"event_msg","payload":{"type":"task_complete","turn_id":"1"}}"# + "\n", to: main)
+      let events = await provider.sample(paths: [main])
+      if case .turnEnded("a", "1") = events.last {} else { Issue.record("Completion was lost during suspension") }
+    }
   }
 
   @Test func newlyPersistedFileCanHaveAnOlderSessionTimestamp() async throws {
@@ -125,7 +176,7 @@ struct CodexLogProviderTests {
       Issue.record("Expected complete root inventory")
     }
     let orphan = await provider.sample(paths: [child])
-    if case .unavailable = orphan.first {} else { Issue.record("Unknown lineage must fall back") }
+    if case .suspended = orphan.first {} else { Issue.record("Unknown lineage must fall back") }
   }
 
   @Test func partialNewHeaderDoesNotDiscardExistingCursors() async throws {
