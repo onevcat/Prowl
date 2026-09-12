@@ -576,7 +576,9 @@ internal struct HerdrTabBarView: View {
   }
 
   private var activeProcessInfoByPaneID: [String: HerdrPaneProcessInfo] {
-    let endpointKey = store.committedActiveEndpointKey ?? .local
+    guard store.acceptsLegacyAuthority || store.authorityMode == .aggregate,
+      let endpointKey = store.committedActiveEndpointKey
+    else { return [:] }
     return Dictionary(
       uniqueKeysWithValues: processInfoByPaneTarget.compactMap { target, info in
         target.endpointKey == endpointKey ? (target.paneID, info) : nil

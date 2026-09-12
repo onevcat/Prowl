@@ -173,7 +173,7 @@ nonisolated internal struct HerdrEndpointWatermarks: Equatable, Sendable {
       values[fence.endpointKey] = watermark
       return .accepted
     }
-    guard fence.identity.generation > watermark.currentIdentity.generation,
+    guard fence.identity.generation >= watermark.currentIdentity.generation,
       !watermark.retiredIdentities.contains(fence.identity)
     else {
       return .retiredConnection
@@ -882,14 +882,53 @@ nonisolated internal struct HerdrNativeChromeEnvelope<Payload: Codable & Sendabl
   }
 }
 
+nonisolated internal struct HerdrNativeProcessStartIdentity: Codable, Equatable, Sendable {
+  internal let seconds: UInt64
+  internal let microseconds: UInt64
+}
+
 nonisolated internal struct HerdrNativeContractReady: Codable, Equatable, Sendable {
   internal let surfaceProof: String
+  internal let challenge: String
   internal let processID: Int32
+  internal let userID: UInt32
+  internal let processGroupID: UInt32
+  internal let foregroundProcessGroupID: UInt32
+  internal let processStartIdentity: HerdrNativeProcessStartIdentity
+  internal let ownerProcessID: Int32
   internal let capabilities: HerdrNativeChromeCapabilities
+
+  internal init(
+    surfaceProof: String,
+    processID: Int32,
+    capabilities: HerdrNativeChromeCapabilities,
+    challenge: String = "",
+    userID: UInt32 = 0,
+    processGroupID: UInt32 = 0,
+    foregroundProcessGroupID: UInt32 = 0,
+    processStartIdentity: HerdrNativeProcessStartIdentity = .init(seconds: 0, microseconds: 0),
+    ownerProcessID: Int32 = 0
+  ) {
+    self.surfaceProof = surfaceProof
+    self.challenge = challenge
+    self.processID = processID
+    self.userID = userID
+    self.processGroupID = processGroupID
+    self.foregroundProcessGroupID = foregroundProcessGroupID
+    self.processStartIdentity = processStartIdentity
+    self.ownerProcessID = ownerProcessID
+    self.capabilities = capabilities
+  }
 
   private enum CodingKeys: String, CodingKey {
     case surfaceProof = "surface_proof"
+    case challenge
     case processID = "process_id"
+    case userID = "user_id"
+    case processGroupID = "process_group_id"
+    case foregroundProcessGroupID = "foreground_process_group_id"
+    case processStartIdentity = "process_start_identity"
+    case ownerProcessID = "owner_process_id"
     case capabilities
   }
 }
@@ -996,6 +1035,7 @@ nonisolated internal enum HerdrNativeClaimResult: Sendable {
 nonisolated internal enum HerdrNativeStreamState: Equatable, Sendable {
   case frame(HerdrNativeAggregateFrame)
   case disconnected
+  case reconnected(epoch: UInt64)
   case incompatible(String)
 }
 

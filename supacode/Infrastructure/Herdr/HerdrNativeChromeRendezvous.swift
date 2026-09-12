@@ -6,6 +6,8 @@ private nonisolated let herdrNativeChromeLogger = SupaLogger("HerdrNativeChrome"
 nonisolated internal struct HerdrNativeChromeBinding: Equatable, Sendable {
   internal let clientInstanceID: String
   internal let surfaceProof: String
+  internal let challenge: String
+  internal let ownerProcessID: Int32
   internal let socketPath: String
 
   internal var environment: [String: String] {
@@ -14,6 +16,8 @@ nonisolated internal struct HerdrNativeChromeBinding: Equatable, Sendable {
       "PROWL_HERDR_NATIVE_CHROME_SOCKET": socketPath,
       "PROWL_HERDR_NATIVE_CHROME_CLIENT_INSTANCE_ID": clientInstanceID,
       "PROWL_HERDR_NATIVE_CHROME_SURFACE_PROOF": surfaceProof,
+      "PROWL_HERDR_NATIVE_CHROME_CHALLENGE": challenge,
+      "PROWL_HERDR_NATIVE_CHROME_OWNER_PROCESS_ID": String(ownerProcessID),
     ]
   }
 }
@@ -58,6 +62,21 @@ nonisolated internal final class HerdrNativeChromeCoordinator: @unchecked Sendab
 }
 
 nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendable {
+  private struct ProcessIdentity: Equatable {
+    let pid: pid_t
+    let parentPID: pid_t
+    let userID: uid_t
+    let processGroupID: pid_t
+    let foregroundProcessGroupID: pid_t
+    let startSeconds: UInt64
+    let startMicroseconds: UInt64
+  }
+
+  private struct PeerCredentials {
+    let pid: pid_t
+    let userID: uid_t
+  }
+
   internal static let contractVersion: UInt32 = 1
   internal static let maximumFrameSize = 2 * 1024 * 1024
   internal static let claimWindow = Duration.milliseconds(250)
@@ -77,16 +96,22 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
     case noContract
   }
 
+  private let ownerIdentity: ProcessIdentity
   private let condition = NSCondition()
   private let writeLock = NSLock()
   private var listenerDescriptor: Int32 = -1
   private var connectionDescriptor: Int32 = -1
   private var claimState: ClaimState?
+  private var connectionEpoch: UInt64 = 0
   private var stopped = false
   private var streamContinuation: AsyncStream<HerdrNativeStreamState>.Continuation?
   private let stream: AsyncStream<HerdrNativeStreamState>
 
   internal init(temporaryDirectory: URL = FileManager.default.temporaryDirectory) throws {
+    guard let ownerIdentity = Self.processIdentity(pid: getpid()) else {
+      throw HerdrNativeChromeTransportError.invalidClaim("Prowl process identity is unavailable.")
+    }
+    self.ownerIdentity = ownerIdentity
     let identifier = UUID().uuidString.lowercased()
     let socketPath =
       temporaryDirectory
@@ -95,6 +120,8 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
     binding = HerdrNativeChromeBinding(
       clientInstanceID: UUID().uuidString.lowercased(),
       surfaceProof: UUID().uuidString.lowercased(),
+      challenge: UUID().uuidString.lowercased(),
+      ownerProcessID: ownerIdentity.pid,
       socketPath: socketPath
     )
 
@@ -170,13 +197,6 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
       if !condition.wait(until: deadline) { break }
     }
     if let claimState { return claimState }
-    claimState = .noContract
-    let listener = listenerDescriptor
-    listenerDescriptor = -1
-    if listener >= 0 {
-      _ = Darwin.shutdown(listener, SHUT_RDWR)
-      Darwin.close(listener)
-    }
     return .noContract
   }
 
@@ -199,7 +219,13 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
         if errno == EINTR { continue }
         return
       }
-      handleConnection(descriptor)
+      DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        guard let self else {
+          Darwin.close(descriptor)
+          return
+        }
+        handleConnection(descriptor)
+      }
     }
   }
 
@@ -208,7 +234,11 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
       try Self.setNoSigPipe(on: descriptor)
       try Self.setTimeout(timeval(tv_sec: 0, tv_usec: 250_000), on: descriptor)
       let claimData = try Self.readFrame(from: descriptor)
-      let claim = try validateClaim(claimData, peerPID: Self.peerPID(descriptor))
+      let claim = try validateClaim(
+        claimData,
+        peerCredentials: Self.peerCredentials(descriptor),
+        peerIdentity: Self.processIdentity(pid: Self.peerPID(descriptor))
+      )
       try Self.setTimeout(timeval(tv_sec: 0, tv_usec: 0), on: descriptor)
 
       condition.lock()
@@ -217,48 +247,41 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
         Darwin.close(descriptor)
         return
       }
-      let listener = listenerDescriptor
-      listenerDescriptor = -1
       if connectionDescriptor >= 0 {
         _ = Darwin.shutdown(connectionDescriptor, SHUT_RDWR)
         Darwin.close(connectionDescriptor)
       }
       connectionDescriptor = descriptor
+      connectionEpoch &+= 1
+      let isReconnect: Bool
+      switch claimState {
+      case .some(.aggregate):
+        isReconnect = true
+      default:
+        isReconnect = false
+      }
       claimState = .aggregate
+      let epoch = connectionEpoch
       condition.broadcast()
       condition.unlock()
 
-      if listener >= 0 {
-        _ = Darwin.shutdown(listener, SHUT_RDWR)
-        Darwin.close(listener)
-      }
       herdrNativeChromeLogger.debug(
-        "native contract bound client=\(claim.clientInstanceID) peer_pid=\(claim.payload.processID)"
+        "native contract bound client=\(claim.clientInstanceID) peer_pid=\(claim.payload.processID) epoch=\(epoch)"
       )
+      if isReconnect {
+        streamContinuation?.yield(.reconnected(epoch: epoch))
+      }
       readAggregateFrames(from: descriptor)
     } catch {
       Darwin.close(descriptor)
-      condition.lock()
-      var listener: Int32 = -1
-      if claimState == nil {
-        claimState = .incompatible(String(describing: error))
-        listener = listenerDescriptor
-        listenerDescriptor = -1
-        condition.broadcast()
-      } else if case .aggregate? = claimState {
-        streamContinuation?.yield(.incompatible(String(describing: error)))
-      }
-      condition.unlock()
-      if listener >= 0 {
-        _ = Darwin.shutdown(listener, SHUT_RDWR)
-        Darwin.close(listener)
-      }
+      herdrNativeChromeLogger.debug("rejected native contract connection: \(error)")
     }
   }
 
   private func validateClaim(
     _ data: Data,
-    peerPID: Int32?
+    peerCredentials: PeerCredentials?,
+    peerIdentity: ProcessIdentity?
   ) throws -> HerdrNativeChromeEnvelope<HerdrNativeContractReady> {
     let decoder = JSONDecoder()
     try Self.validateCoreEnvelopeKeys(in: data)
@@ -280,12 +303,27 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
       )
     }
     guard claim.clientInstanceID == binding.clientInstanceID,
-      claim.payload.surfaceProof == binding.surfaceProof
+      claim.payload.surfaceProof == binding.surfaceProof,
+      claim.payload.challenge == binding.challenge,
+      claim.payload.ownerProcessID == ownerIdentity.pid
     else {
-      throw HerdrNativeChromeTransportError.invalidClaim("Client/surface binding proof failed.")
+      throw HerdrNativeChromeTransportError.invalidClaim("Client/surface challenge binding failed.")
     }
-    guard peerPID == claim.payload.processID else {
-      throw HerdrNativeChromeTransportError.invalidClaim("Peer process proof failed.")
+    guard let peerCredentials, let peerIdentity,
+      peerCredentials.pid == claim.payload.processID,
+      peerCredentials.userID == uid_t(claim.payload.userID),
+      peerIdentity.pid == claim.payload.processID,
+      peerIdentity.userID == uid_t(claim.payload.userID),
+      peerIdentity.processGroupID == pid_t(claim.payload.processGroupID),
+      peerIdentity.foregroundProcessGroupID == pid_t(claim.payload.foregroundProcessGroupID),
+      peerIdentity.startSeconds == claim.payload.processStartIdentity.seconds,
+      peerIdentity.startMicroseconds == claim.payload.processStartIdentity.microseconds,
+      peerIdentity.foregroundProcessGroupID == 0
+        || peerIdentity.foregroundProcessGroupID == peerIdentity.processGroupID,
+      Self.isDescendant(peerIdentity, of: ownerIdentity)
+    else {
+      throw HerdrNativeChromeTransportError.invalidClaim(
+        "Native surface process identity proof failed.")
     }
     guard Self.requiredCapabilities.isSubset(of: claim.payload.capabilities.required) else {
       throw HerdrNativeChromeTransportError.invalidClaim(
@@ -343,24 +381,58 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
         )
       }
     } catch {
-      condition.lock()
-      if connectionDescriptor == descriptor {
-        connectionDescriptor = -1
-      }
-      condition.unlock()
-      Darwin.close(descriptor)
-      let contractIncompatible: Bool
+      let reconnectable: Bool
       switch error {
       case HerdrNativeChromeTransportError.connectionClosed,
         HerdrNativeChromeTransportError.socket:
-        contractIncompatible = false
+        reconnectable = true
       default:
-        contractIncompatible = true
+        reconnectable = false
       }
-      streamContinuation?.yield(
-        contractIncompatible ? .incompatible(String(describing: error)) : .disconnected
-      )
-      streamContinuation?.finish()
+      if !reconnectable {
+        condition.lock()
+        let isCurrentConnection = connectionDescriptor == descriptor
+        if isCurrentConnection {
+          connectionDescriptor = -1
+          claimState = .incompatible(String(describing: error))
+        }
+        condition.unlock()
+        Darwin.close(descriptor)
+        if isCurrentConnection {
+          streamContinuation?.yield(.incompatible(String(describing: error)))
+          streamContinuation?.finish()
+        }
+        return
+      }
+
+      let epoch: UInt64?
+      condition.lock()
+      if connectionDescriptor == descriptor {
+        connectionDescriptor = -1
+        epoch = connectionEpoch
+      } else {
+        epoch = nil
+      }
+      condition.unlock()
+      Darwin.close(descriptor)
+      guard let epoch else { return }
+      let deadline = Date().addingTimeInterval(1)
+      condition.lock()
+      while !stopped, connectionDescriptor < 0, connectionEpoch == epoch {
+        if !condition.wait(until: deadline) { break }
+      }
+      let reconnected = connectionDescriptor >= 0 && connectionEpoch != epoch
+      let shouldFinish = !stopped && !reconnected && connectionDescriptor < 0
+      if shouldFinish {
+        claimState = .incompatible(
+          "Native chrome connection closed without a proof-protected reconnect.")
+      }
+      condition.unlock()
+      if shouldFinish {
+        streamContinuation?.yield(
+          .incompatible("Native chrome connection closed without a proof-protected reconnect."))
+        streamContinuation?.finish()
+      }
     }
   }
 
@@ -431,13 +503,57 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
     }
   }
 
-  private static func peerPID(_ descriptor: Int32) -> Int32? {
+  private static func peerCredentials(_ descriptor: Int32) -> PeerCredentials? {
+    var credentials = xucred()
+    var length = socklen_t(MemoryLayout<xucred>.size)
+    guard getsockopt(descriptor, SOL_LOCAL, LOCAL_PEERCRED, &credentials, &length) == 0 else {
+      return nil
+    }
+    return PeerCredentials(
+      pid: peerPID(descriptor) ?? -1,
+      userID: credentials.cr_uid
+    )
+  }
+
+  private static func peerPID(_ descriptor: Int32) -> pid_t? {
     var value: pid_t = 0
     var length = socklen_t(MemoryLayout<pid_t>.size)
     guard getsockopt(descriptor, SOL_LOCAL, LOCAL_PEERPID, &value, &length) == 0 else {
       return nil
     }
     return value
+  }
+
+  private static func processIdentity(pid: pid_t?) -> ProcessIdentity? {
+    guard let pid, pid > 0 else { return nil }
+    var info = proc_bsdinfo()
+    let result = withUnsafeMutablePointer(to: &info) { pointer in
+      proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, pointer, Int32(MemoryLayout<proc_bsdinfo>.size))
+    }
+    guard result == Int32(MemoryLayout<proc_bsdinfo>.size) else { return nil }
+    return ProcessIdentity(
+      pid: pid_t(info.pbi_pid),
+      parentPID: pid_t(info.pbi_ppid),
+      userID: info.pbi_uid,
+      processGroupID: pid_t(info.pbi_pgid),
+      foregroundProcessGroupID: pid_t(info.e_tpgid),
+      startSeconds: info.pbi_start_tvsec,
+      startMicroseconds: info.pbi_start_tvusec
+    )
+  }
+
+  private static func isDescendant(_ process: ProcessIdentity, of owner: ProcessIdentity) -> Bool {
+    var current = process
+    var visited: Set<pid_t> = []
+    for _ in 0..<64 {
+      guard visited.insert(current.pid).inserted else { return false }
+      if current == owner { return true }
+      guard current.parentPID > 1, let parent = processIdentity(pid: current.parentPID) else {
+        return false
+      }
+      current = parent
+    }
+    return false
   }
 
   private static func setNoSigPipe(on descriptor: Int32) throws {

@@ -474,42 +474,74 @@ struct HerdrNativeChromeContractTests {
     }
   }
 
-  @Test func acceptedClaimRetiresTheOneShotListener() async throws {
+  @Test func acceptedClaimKeepsListenerForProofProtectedReconnect() async throws {
     let rendezvous = try HerdrNativeChromeRendezvous()
     defer { rendezvous.stop() }
     let descriptor = try connectUnixSocket(at: rendezvous.binding.socketPath)
     defer { Darwin.close(descriptor) }
-    let claim = HerdrNativeChromeEnvelope(
-      contractVersion: HerdrNativeChromeRendezvous.contractVersion,
-      clientInstanceID: rendezvous.binding.clientInstanceID,
-      messageKind: "contract_ready",
-      eventSequence: nil,
-      projectionRevision: nil,
-      requestID: nil,
-      activationEpoch: nil,
-      payload: HerdrNativeContractReady(
-        surfaceProof: rendezvous.binding.surfaceProof,
-        processID: getpid(),
-        capabilities: HerdrNativeChromeCapabilities(
-          required: HerdrNativeChromeRendezvous.requiredCapabilities,
-          optional: []
-        )
-      )
-    )
+    let claim = nativeClaim(for: rendezvous)
     try writeFrame(JSONEncoder().encode(claim), to: descriptor)
 
     let result = await rendezvous.probe()
 
-    guard case .aggregate = result else {
+    guard case .aggregate(let session) = result else {
       Issue.record("Expected aggregate contract claim")
       return
     }
-    #expect(throws: Error.self) {
-      let unexpected = try connectUnixSocket(at: rendezvous.binding.socketPath)
-      Darwin.close(unexpected)
+    #expect(FileManager.default.fileExists(atPath: rendezvous.binding.socketPath))
+
+    _ = Darwin.shutdown(descriptor, SHUT_RDWR)
+    Darwin.close(descriptor)
+    let reconnectDescriptor = try connectUnixSocket(at: rendezvous.binding.socketPath)
+    defer { Darwin.close(reconnectDescriptor) }
+    try writeFrame(JSONEncoder().encode(claim), to: reconnectDescriptor)
+
+    var iterator = session.stream.makeAsyncIterator()
+    var reconnectedEpoch: UInt64?
+    while let state = await iterator.next() {
+      if case .reconnected(let epoch) = state {
+        reconnectedEpoch = epoch
+        break
+      }
     }
+    guard let epoch = reconnectedEpoch else {
+      Issue.record("Expected proof-protected reconnect")
+      return
+    }
+    #expect(epoch == 2)
   }
 
+  @Test func invalidChallengeAndStartIdentityCannotCaptureListener() async throws {
+    let rendezvous = try HerdrNativeChromeRendezvous()
+    defer { rendezvous.stop() }
+    let actualStart = currentProcessStartIdentity()
+    let invalidClaims = [
+      nativeClaim(for: rendezvous, challenge: "wrong-challenge"),
+      nativeClaim(
+        for: rendezvous,
+        startIdentity: HerdrNativeProcessStartIdentity(
+          seconds: actualStart.seconds,
+          microseconds: actualStart.microseconds &+ 1
+        )
+      ),
+    ]
+    for invalidClaim in invalidClaims {
+      let descriptor = try connectUnixSocket(at: rendezvous.binding.socketPath)
+      try writeFrame(JSONEncoder().encode(invalidClaim), to: descriptor)
+      Darwin.close(descriptor)
+    }
+
+    let validDescriptor = try connectUnixSocket(at: rendezvous.binding.socketPath)
+    defer { Darwin.close(validDescriptor) }
+    try writeFrame(JSONEncoder().encode(nativeClaim(for: rendezvous)), to: validDescriptor)
+
+    let result = await rendezvous.probe()
+
+    guard case .aggregate = result else {
+      Issue.record("Expected valid claim after rejecting invalid identities")
+      return
+    }
+  }
   @Test func coordinatorReplacementRetiresThePreviousSurfaceSocket() throws {
     let coordinator = HerdrNativeChromeCoordinator()
     let first = try coordinator.prepareSurface()
@@ -523,6 +555,66 @@ struct HerdrNativeChromeContractTests {
     #expect(!FileManager.default.fileExists(atPath: second.socketPath))
   }
 
+  private func nativeClaim(
+    for rendezvous: HerdrNativeChromeRendezvous,
+    challenge: String? = nil,
+    startIdentity: HerdrNativeProcessStartIdentity? = nil
+  ) -> HerdrNativeChromeEnvelope<HerdrNativeContractReady> {
+    HerdrNativeChromeEnvelope(
+      contractVersion: HerdrNativeChromeRendezvous.contractVersion,
+      clientInstanceID: rendezvous.binding.clientInstanceID,
+      messageKind: "contract_ready",
+      eventSequence: nil,
+      projectionRevision: nil,
+      requestID: nil,
+      activationEpoch: nil,
+      payload: HerdrNativeContractReady(
+        surfaceProof: rendezvous.binding.surfaceProof,
+        processID: getpid(),
+        capabilities: HerdrNativeChromeCapabilities(
+          required: HerdrNativeChromeRendezvous.requiredCapabilities,
+          optional: []
+        ),
+        challenge: challenge ?? rendezvous.binding.challenge,
+        userID: geteuid(),
+        processGroupID: UInt32(getpgid(0)),
+        foregroundProcessGroupID: currentProcessForegroundGroupID(),
+        processStartIdentity: startIdentity ?? currentProcessStartIdentity(),
+        ownerProcessID: getpid()
+      )
+    )
+  }
+  private func currentProcessStartIdentity() -> HerdrNativeProcessStartIdentity {
+    var info = proc_bsdinfo()
+    let result = withUnsafeMutablePointer(to: &info) { pointer in
+      proc_pidinfo(
+        getpid(),
+        PROC_PIDTBSDINFO,
+        0,
+        pointer,
+        Int32(MemoryLayout<proc_bsdinfo>.size)
+      )
+    }
+    precondition(result == Int32(MemoryLayout<proc_bsdinfo>.size))
+    return HerdrNativeProcessStartIdentity(
+      seconds: info.pbi_start_tvsec,
+      microseconds: info.pbi_start_tvusec
+    )
+  }
+  private func currentProcessForegroundGroupID() -> UInt32 {
+    var info = proc_bsdinfo()
+    let result = withUnsafeMutablePointer(to: &info) { pointer in
+      proc_pidinfo(
+        getpid(),
+        PROC_PIDTBSDINFO,
+        0,
+        pointer,
+        Int32(MemoryLayout<proc_bsdinfo>.size)
+      )
+    }
+    precondition(result == Int32(MemoryLayout<proc_bsdinfo>.size))
+    return info.e_tpgid
+  }
   private func connectUnixSocket(at path: String) throws -> Int32 {
     let descriptor = socket(AF_UNIX, SOCK_STREAM, 0)
     guard descriptor >= 0 else { throw posixError() }
@@ -568,7 +660,7 @@ struct HerdrNativeChromeContractTests {
     NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
   }
 
-  @Test func endpointWatermarkAdvancesOnlyForANewerConnectionGeneration() {
+  @Test func endpointWatermarkAdvancesOnlyForANewerRevisionOrIdentity() {
     var watermarks = HerdrEndpointWatermarks()
     let key = HerdrEndpointKey.local
     let first = HerdrEndpointFence(
@@ -603,7 +695,7 @@ struct HerdrNativeChromeContractTests {
           identity: HerdrConnectionIdentity(generation: 7, serverBootID: "wrong-boot"),
           snapshotRevision: 12
         )
-      ) == .retiredConnection
+      ) == .replacedConnection
     )
     #expect(
       watermarks.accept(
@@ -615,5 +707,188 @@ struct HerdrNativeChromeContractTests {
       ) == .replacedConnection
     )
     #expect(watermarks.accept(first) == .retiredConnection)
+  }
+
+  @Test func duplicateAndLowerNativeSequencesAreIgnoredWithoutResync() throws {
+    let envelope = try goldenEnvelope()
+    var reducerState = HerdrTerminalChromeFeature.State()
+    reducerState.authorityMode = .aggregate
+    reducerState.isForeground = true
+    reducerState.connection = .connected
+    reducerState.aggregateState = envelope.payload.state
+    reducerState.aggregateSyncCommitted = true
+    reducerState.nativeEventSequence = 5
+    reducerState.nativeProjectionRevision = 5
+    reducerState.snapshot = try #require(envelope.payload.state.committedEndpoint?.snapshot)
+      .legacyProjection
+    let originalSnapshot = reducerState.snapshot
+
+    for sequence in [UInt64(5), 4] {
+      let frame = HerdrNativeAggregateFrame(
+        messageKind: "aggregate_state",
+        sequence: sequence,
+        projectionRevision: 6,
+        activationEpoch: nil,
+        requestID: nil,
+        mutationResult: nil,
+        processInfoTarget: nil,
+        processInfoFence: nil,
+        processInfo: nil,
+        state: envelope.payload.state,
+        syncCommitted: true
+      )
+
+      _ = HerdrTerminalChromeFeature().applyNativeFrame(&reducerState, frame: frame)
+
+      #expect(!reducerState.isResyncPending)
+      #expect(reducerState.aggregateSyncCommitted)
+      #expect(reducerState.connection == .connected)
+      #expect(reducerState.nativeEventSequence == 5)
+      #expect(reducerState.snapshot == originalSnapshot)
+    }
+  }
+
+  @Test func sameGenerationNewBootReplacesIdentityAndRetiresOldBoot() {
+    var watermarks = HerdrEndpointWatermarks()
+    let old = HerdrEndpointFence(
+      endpointKey: .local,
+      identity: HerdrConnectionIdentity(generation: 7, serverBootID: "boot-a"),
+      snapshotRevision: 11
+    )
+    let restarted = HerdrEndpointFence(
+      endpointKey: .local,
+      identity: HerdrConnectionIdentity(generation: 7, serverBootID: "boot-b"),
+      snapshotRevision: 1
+    )
+
+    #expect(watermarks.accept(old) == .accepted)
+    #expect(watermarks.accept(restarted) == .replacedConnection)
+    #expect(watermarks.accept(old) == .retiredConnection)
+  }
+
+  @Test func endpointReplacementClearsOldProcessDecorationAndPendingMutation() throws {
+    let envelope = try goldenEnvelope()
+    let previous = try #require(envelope.payload.state.endpoints.first)
+    let oldSnapshot = try #require(previous.snapshot)
+    let oldIdentity = try #require(previous.connectionIdentity.concreteValue)
+    let target = HerdrPaneTarget(endpointKey: previous.endpointKey, paneID: "pane-duplicate")
+    let processInfo = HerdrPaneProcessInfo(
+      paneID: target.paneID,
+      foregroundProcesses: [HerdrPaneProcess(pid: 42, name: "old-process")]
+    )
+    let newSnapshot = HerdrClientShellSnapshot(
+      bootID: "local-restarted",
+      revision: 1,
+      focusedWorkspaceID: oldSnapshot.focusedWorkspaceID,
+      focusedTabID: oldSnapshot.focusedTabID,
+      focusedPaneID: oldSnapshot.focusedPaneID,
+      workspaces: oldSnapshot.workspaces,
+      tabs: oldSnapshot.tabs,
+      panes: oldSnapshot.panes,
+      agents: oldSnapshot.agents
+    )
+    let replacement = HerdrEndpointProjection(
+      endpointKey: previous.endpointKey,
+      label: previous.label,
+      availability: previous.availability,
+      status: previous.status,
+      freshness: previous.freshness,
+      connectionIdentity: .concrete(
+        HerdrConnectionIdentity(
+          generation: oldIdentity.generation,
+          serverBootID: newSnapshot.bootID
+        )
+      ),
+      snapshot: newSnapshot,
+      focus: previous.focus,
+      activation: previous.activation,
+      attention: previous.attention
+    )
+    let aggregate = HerdrAggregateState(
+      catalogRevision: envelope.payload.state.catalogRevision,
+      endpoints: [replacement] + envelope.payload.state.endpoints.dropFirst(),
+      perEndpointFocus: envelope.payload.state.perEndpointFocus,
+      committedPresentation: envelope.payload.state.committedPresentation,
+      requestedSelection: nil,
+      pendingActivation: nil,
+      capabilities: envelope.payload.state.capabilities
+    )
+    let frame = HerdrNativeAggregateFrame(
+      messageKind: "aggregate_state",
+      sequence: 2,
+      projectionRevision: 2,
+      activationEpoch: nil,
+      requestID: nil,
+      mutationResult: nil,
+      processInfoTarget: nil,
+      processInfoFence: nil,
+      processInfo: nil,
+      state: aggregate,
+      syncCommitted: true
+    )
+    var reducerState = HerdrTerminalChromeFeature.State()
+    reducerState.authorityMode = .aggregate
+    reducerState.isForeground = true
+    reducerState.connection = .connected
+    reducerState.aggregateState = envelope.payload.state
+    reducerState.aggregateSyncCommitted = true
+    reducerState.nativeEventSequence = 1
+    reducerState.nativeProjectionRevision = 1
+    reducerState.aggregateProcessInfoByPaneTarget[target] = processInfo
+    reducerState.pendingMutation = .renameTab(tabID: "tab-duplicate", label: "pending")
+    reducerState.pendingNativeMutationRequestID = "prowl-native-mutation-1"
+    _ = reducerState.endpointWatermarks.accept(
+      HerdrEndpointFence(
+        endpointKey: previous.endpointKey,
+        identity: oldIdentity,
+        snapshotRevision: oldSnapshot.revision
+      )
+    )
+
+    _ = HerdrTerminalChromeFeature().applyNativeFrame(&reducerState, frame: frame)
+
+    #expect(reducerState.aggregateState?.endpoints.first?.snapshot?.bootID == "local-restarted")
+    #expect(reducerState.aggregateProcessInfoByPaneTarget[target] == nil)
+    #expect(reducerState.pendingMutation == nil)
+    #expect(reducerState.pendingNativeMutationRequestID == nil)
+  }
+
+  @Test func claimTimeoutDoesNotGrantLegacyAuthority() async {
+    var initialState = HerdrTerminalChromeFeature.State()
+    initialState.isForeground = true
+    initialState.authorityMode = .probing
+    initialState.connection = .connecting
+    let store = TestStore(initialState: initialState) {
+      HerdrTerminalChromeFeature()
+    }
+
+    await store.send(.nativeEvent(.noContractClaim)) {
+      $0.isForeground = true
+      $0.authorityMode = .probing
+      $0.connection = .unavailable
+    }
+  }
+
+  @Test func onlyLegacyModeAcceptsLegacyAuthority() {
+    var state = HerdrTerminalChromeFeature.State()
+    for mode in [
+      HerdrTerminalChromeFeature.State.AuthorityMode.bootstrap,
+      .probing,
+      .aggregate,
+      .incompatible,
+    ] {
+      state.authorityMode = mode
+      #expect(!state.acceptsLegacyAuthority)
+    }
+    state.authorityMode = .legacy
+    #expect(state.acceptsLegacyAuthority)
+    #expect(state.committedActiveEndpointKey == .local)
+  }
+}
+
+extension HerdrConnectionIdentityState {
+  fileprivate var concreteValue: HerdrConnectionIdentity? {
+    guard case .concrete(let value) = self else { return nil }
+    return value
   }
 }

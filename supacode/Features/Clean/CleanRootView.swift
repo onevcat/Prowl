@@ -26,7 +26,9 @@ internal struct CleanRootView: View {
             ),
             processInfoByPaneTarget: store.herdrTerminalChrome.authorityMode == .aggregate
               ? store.herdrTerminalChrome.aggregateProcessInfoByPaneTarget
-              : terminalHost.processInfoByPaneTarget
+              : store.herdrTerminalChrome.acceptsLegacyAuthority
+                ? terminalHost.processInfoByPaneTarget
+                : [:]
           )
         }
 
@@ -58,7 +60,7 @@ internal struct CleanRootView: View {
       terminalHost.updateHerdrProcessPanes(
         store.herdrTerminalChrome.snapshot.panes,
         authorityMode: store.herdrTerminalChrome.authorityMode,
-        endpointKey: store.herdrTerminalChrome.committedActiveEndpointKey ?? .local,
+        endpointKey: store.herdrTerminalChrome.committedActiveEndpointKey,
         focusedPaneID: herdrProcessFocusedPaneID
       )
     }

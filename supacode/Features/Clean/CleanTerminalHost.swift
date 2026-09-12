@@ -265,7 +265,7 @@ internal final class CleanTerminalHost {
     if !wasWindowActive, isHerdrForeground {
       if herdrAuthorityMode == .aggregate {
         applyAggregateInputContext()
-      } else {
+      } else if herdrAuthorityMode == .legacy {
         herdrAdapter?.reapplyLastPaneContext()
       }
     }
@@ -285,15 +285,17 @@ internal final class CleanTerminalHost {
     herdrAuthorityMode = mode
     aggregateEndpointKey = endpointKey
     aggregateFocusedPane = focusedPane
-    guard mode == .aggregate else {
-      if isHerdrForeground { herdrAdapter?.start() }
+    guard mode == .legacy else {
+      herdrAdapter?.stop()
+      herdrProcessInfoTask?.cancel()
+      herdrProcessInfoTask = nil
+      processInfoByPaneTarget = [:]
+      if mode == .aggregate {
+        applyAggregateInputContext()
+      }
       return
     }
-    herdrAdapter?.stop()
-    herdrProcessInfoTask?.cancel()
-    herdrProcessInfoTask = nil
-    processInfoByPaneTarget = [:]
-    applyAggregateInputContext()
+    if isHerdrForeground { herdrAdapter?.start() }
   }
 
   private func applyAggregateInputContext() {
@@ -314,10 +316,13 @@ internal final class CleanTerminalHost {
   internal func updateHerdrProcessPanes(
     _ panes: [HerdrPane],
     authorityMode: HerdrTerminalChromeFeature.State.AuthorityMode = .legacy,
-    endpointKey: HerdrEndpointKey = .local,
+    endpointKey: HerdrEndpointKey? = nil,
     focusedPaneID: String? = nil
   ) {
-    guard authorityMode != .aggregate, herdrAuthorityMode != .aggregate else {
+    guard authorityMode == .legacy,
+      herdrAuthorityMode == .legacy,
+      let endpointKey
+    else {
       herdrProcessInfoTask?.cancel()
       herdrProcessInfoTask = nil
       processInfoByPaneTarget = [:]
@@ -513,7 +518,7 @@ internal final class CleanTerminalHost {
   }
 
   private func applyHerdrPaneContext(_ pane: HerdrPaneInfo) {
-    guard isWindowActive, isHerdrForeground else { return }
+    guard isWindowActive, isHerdrForeground, herdrAuthorityMode == .legacy else { return }
     inputSourceCoordinator.applyFocusedContext(
       pane.inputContext,
       targetID: .herdrPane(HerdrPaneTarget(endpointKey: .local, paneID: pane.paneID)),
@@ -527,10 +532,10 @@ internal final class CleanTerminalHost {
     guard isHerdrForeground != isForeground else { return }
     isHerdrForeground = isForeground
     if isForeground {
-      if herdrAuthorityMode != .aggregate {
+      if herdrAuthorityMode == .legacy {
         herdrAdapter?.start()
       }
-      if !herdrProcessPaneTargets.isEmpty, herdrAuthorityMode != .aggregate {
+      if !herdrProcessPaneTargets.isEmpty, herdrAuthorityMode == .legacy {
         startHerdrProcessInfoPolling()
       }
     } else {

@@ -32,6 +32,7 @@ internal struct HerdrTerminalChromeFeature {
     internal var nativeClientInstanceID: String?
     internal var nativeEventSequence: UInt64?
     internal var nativeProjectionRevision: UInt64?
+    internal var nativeConnectionEpoch: UInt64 = 0
     internal var endpointWatermarks = HerdrEndpointWatermarks()
     internal var isResyncPending = false
     internal var nativeRequestSequence: UInt64 = 0
@@ -67,7 +68,7 @@ internal struct HerdrTerminalChromeFeature {
     }
 
     internal var acceptsLegacyAuthority: Bool {
-      authorityMode == .bootstrap || authorityMode == .legacy
+      authorityMode == .legacy
     }
 
     internal var endpointProjections: [HerdrEndpointProjection] {
@@ -438,6 +439,7 @@ internal struct HerdrTerminalChromeFeature {
         state.nativeClientInstanceID = nil
         state.nativeEventSequence = nil
         state.nativeProjectionRevision = nil
+        state.nativeConnectionEpoch = 0
         state.endpointWatermarks = HerdrEndpointWatermarks()
         state.isResyncPending = false
         state.nativeRequestSequence = 0
@@ -521,10 +523,8 @@ internal struct HerdrTerminalChromeFeature {
 
       case .nativeEvent(.noContractClaim):
         guard state.authorityMode == .probing else { return .none }
-        state.authorityMode = .legacy
-        state.connection = .connecting
-        return lifecycleEffect()
-          .cancellable(id: CancelID.lifecycle, cancelInFlight: true)
+        state.connection = state.isForeground ? .unavailable : .hidden
+        return .none
 
       case .nativeEvent(.aggregateStarted(let clientInstanceID)):
         guard state.authorityMode != .legacy, state.authorityMode != .incompatible else {
@@ -533,7 +533,6 @@ internal struct HerdrTerminalChromeFeature {
         state.authorityMode = .aggregate
         state.nativeClientInstanceID = clientInstanceID
         state.connection = .connecting
-        state.aggregateSyncCommitted = false
         state.isResyncPending = false
         return .merge(
           .cancel(id: CancelID.lifecycle),
@@ -568,6 +567,25 @@ internal struct HerdrTerminalChromeFeature {
           .cancel(id: CancelID.focus),
           .cancel(id: CancelID.mutation),
           .cancel(id: CancelID.processInfoPoll)
+        )
+
+      case .nativeEvent(.stream(.reconnected(let epoch))):
+        guard state.authorityMode == .aggregate else { return .none }
+        state.connection = .connecting
+        state.aggregateSyncCommitted = false
+        state.isResyncPending = false
+        state.nativeEventSequence = nil
+        state.nativeProjectionRevision = nil
+        state.aggregateProcessInfoByPaneTarget = [:]
+        state.pendingNativeMutationRequestID = nil
+        state.pendingMutation = nil
+        state.pendingFocus = nil
+        state.focusRollback = nil
+        state.snapshot = .empty
+        state.nativeConnectionEpoch = epoch
+        return .merge(
+          nativeResyncEffect(&state),
+          nativeHandshakeTimeoutEffect(clientInstanceID: state.nativeClientInstanceID ?? "")
         )
 
       case .nativeEvent(.stream(.disconnected)):
@@ -936,15 +954,18 @@ internal struct HerdrTerminalChromeFeature {
       guard explicitlyCommitsSync else { return .none }
       state.nativeEventSequence = nil
       state.nativeProjectionRevision = nil
-    } else if let sequence = state.nativeEventSequence, frame.sequence != sequence &+ 1 {
-      state.aggregateSyncCommitted = false
-      state.isResyncPending = true
-      state.connection = state.isForeground ? .unavailable : .hidden
-      state.snapshot = .empty
-      state.selectedWorkspaceID = nil
-      state.selectedTabID = nil
-      state.selectedPaneID = nil
-      return nativeResyncEffect(&state)
+    } else if let sequence = state.nativeEventSequence {
+      guard frame.sequence > sequence else { return .none }
+      guard frame.sequence == sequence + 1 else {
+        state.aggregateSyncCommitted = false
+        state.isResyncPending = true
+        state.connection = state.isForeground ? .unavailable : .hidden
+        state.snapshot = .empty
+        state.selectedWorkspaceID = nil
+        state.selectedTabID = nil
+        state.selectedPaneID = nil
+        return nativeResyncEffect(&state)
+      }
     }
     if let revision = state.nativeProjectionRevision,
       frame.projectionRevision < revision
@@ -952,10 +973,19 @@ internal struct HerdrTerminalChromeFeature {
       return .none
     }
 
-    let acceptedEndpoints = acceptedNativeEndpoints(
+    let (acceptedEndpoints, replacedEndpointKeys) = acceptedNativeEndpoints(
       &state,
       candidates: frame.state.endpoints
     )
+    if !replacedEndpointKeys.isEmpty {
+      state.aggregateProcessInfoByPaneTarget = state.aggregateProcessInfoByPaneTarget.filter {
+        !replacedEndpointKeys.contains($0.key.endpointKey)
+      }
+      state.pendingNativeMutationRequestID = nil
+      state.pendingMutation = nil
+      state.pendingFocus = nil
+      state.focusRollback = nil
+    }
 
     let acceptedKeys = Set(acceptedEndpoints.map(\.endpointKey))
     let aggregate = HerdrAggregateState(
@@ -1019,11 +1049,12 @@ internal struct HerdrTerminalChromeFeature {
   private func acceptedNativeEndpoints(
     _ state: inout State,
     candidates: [HerdrEndpointProjection]
-  ) -> [HerdrEndpointProjection] {
+  ) -> ([HerdrEndpointProjection], Set<HerdrEndpointKey>) {
     let previousByKey = Dictionary(
       uniqueKeysWithValues: (state.aggregateState?.endpoints ?? []).map { ($0.endpointKey, $0) }
     )
     var accepted: [HerdrEndpointProjection] = []
+    var replacedEndpointKeys: Set<HerdrEndpointKey> = []
     for endpoint in candidates {
       switch endpoint.connectionIdentity {
       case .absent:
@@ -1043,7 +1074,10 @@ internal struct HerdrTerminalChromeFeature {
           snapshotRevision: snapshot.revision
         )
         switch state.endpointWatermarks.accept(fence) {
-        case .accepted, .replacedConnection:
+        case .accepted:
+          accepted.append(endpoint)
+        case .replacedConnection:
+          replacedEndpointKeys.insert(endpoint.endpointKey)
           accepted.append(endpoint)
         case .stale:
           if let previous = previousByKey[endpoint.endpointKey],
@@ -1061,7 +1095,7 @@ internal struct HerdrTerminalChromeFeature {
         }
       }
     }
-    return accepted
+    return (accepted, replacedEndpointKeys)
   }
 
   private func synchronizeNativeProcessInfo(
