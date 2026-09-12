@@ -136,6 +136,7 @@ extension WorktreeTerminalState {
     guard
       let decision = await coordinator.observe(
         agent: agent, process: process, screen: detection,
+        screenContentID: detection.state == .blocked ? activeText.hashValue : nil,
         configRoot: launchProfilesBySurface[surfaceID]?.configRoot(forDetected: agent)
       ), surfaces[surfaceID] != nil, let latest = surfaceAgentStates[surfaceID]
     else { return false }

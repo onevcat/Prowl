@@ -37,6 +37,17 @@ struct AgentDetectionCoordinatorTests {
     #expect(await pending.value == nil)
   }
 
+  @Test func screenOnlyProbeGapRetainsStableScreenState() async {
+    let coordinator = AgentDetectionCoordinator()
+    _ = await coordinator.observe(
+      agent: .claude, process: generation,
+      screen: AgentScreenDetection(state: .working, reason: .noRuleMatched), configRoot: nil)
+    let decision = await coordinator.observe(
+      agent: .claude, process: nil,
+      screen: AgentScreenDetection(state: .unknown, reason: .noRuleMatched), configRoot: nil)
+    #expect(decision?.state == .working)
+  }
+
   @Test func processReplacementDiscardsOldOpenWork() async {
     var calls = 0
     let coordinator = AgentDetectionCoordinator(sample: { _, _ in

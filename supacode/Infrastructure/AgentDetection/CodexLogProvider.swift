@@ -30,7 +30,14 @@ actor CodexLogProvider {
   func sample(process: AgentProcessGeneration, configRoot: URL?) -> [AgentDetectionEvent] {
     guard ProcessDetection.processStartDate(pid: process.pid) == process.startedAt else { return [.unavailable] }
     let parse = AgentSessionResolver.pathParser(profile: .profile(for: .codex), configRoot: configRoot)
-    let paths = ProcessDetection.openFilePaths(pid: process.pid).compactMap { parse($0)?.transcriptPath }
+    var complete = false
+    let paths = ProcessDetection.openFilePaths(pid: process.pid, complete: &complete)
+      .compactMap { parse($0)?.transcriptPath }
+    guard complete else {
+      cursors.removeAll()
+      needsBaseline = true
+      return [.unavailable]
+    }
     let events = sample(paths: paths)
     guard ProcessDetection.processStartDate(pid: process.pid) == process.startedAt else { return [.unavailable] }
     return events

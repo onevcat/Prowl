@@ -79,6 +79,17 @@ struct AgentStateMachineTests {
     #expect(!machine.receive(.childEnded(root: "a", child: "c", work: "new"), now: 4).hasOutstandingWork)
   }
 
+  @Test func changedBlockerWithSameRuleIsFreshEvidence() {
+    var machine = AgentStateMachine()
+    let blocker = AgentScreenDetection(state: .blocked, reason: .noRuleMatched)
+    _ = machine.receive(.inventory(["a"]), now: 0)
+    _ = machine.receive(.turnStarted(session: "a", turn: "1"), now: 1)
+    _ = machine.receive(.screen(blocker, contentID: 1), now: 2)
+    _ = machine.receive(.turnEnded(session: "a", turn: "1"), now: 3)
+    #expect(machine.receive(.screen(blocker, contentID: 1), now: 4).state == .idle)
+    #expect(machine.receive(.screen(blocker, contentID: 2), now: 5).state == .blocked)
+  }
+
   @Test func childCompletionDoesNotRefreshMainActivityWindow() {
     var machine = AgentStateMachine()
     _ = machine.receive(.inventory(["a", "b"]), now: 0)

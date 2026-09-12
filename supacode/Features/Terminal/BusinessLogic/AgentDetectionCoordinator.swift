@@ -36,9 +36,10 @@ final class AgentDetectionCoordinator {
     agent: DetectedAgent,
     process: AgentProcessGeneration?,
     screen: AgentScreenDetection,
+    screenContentID: Int? = nil,
     configRoot: URL?
   ) async -> AgentStateDecision? {
-    if self.agent != agent || self.process != process {
+    if self.agent != agent || (agent == .codex && self.process != process) {
       invalidate()
       self.agent = agent
       self.process = process
@@ -49,7 +50,7 @@ final class AgentDetectionCoordinator {
     let inputRevision = interactionRevision
     // Screen capture precedes the file read. A completion can fence this frame;
     // the next poll observes whether the UI has actually changed.
-    machine.receive(.screen(screen), now: now)
+    machine.receive(.screen(screen, contentID: screenContentID), now: now)
     if let logProvider, let process {
       let events: [AgentDetectionEvent]
       if let sampleOverride {

@@ -2,7 +2,7 @@ import Foundation
 
 /// Internal detection facts, separate from public hook and workflow signals.
 nonisolated enum AgentDetectionEvent: Sendable {
-  case screen(AgentScreenDetection)
+  case screen(AgentScreenDetection, contentID: Int? = nil)
   case inventory(Set<String>)
   case turnStarted(session: String, turn: String)
   case turnEnded(session: String, turn: String)
@@ -35,15 +35,18 @@ nonisolated struct AgentStateMachine: Sendable {
   private var screen = AgentScreenDetection(state: .unknown, reason: .noRuleMatched)
   private var stableScreen: AgentRawState = .unknown
   private var suppressedScreen: AgentScreenDetection?
+  private var screenContentID: Int?
+  private var suppressedContentID: Int?
   private(set) var decision = AgentStateDecision(state: .unknown, reason: "screen.unknown")
 
   @discardableResult
   mutating func receive(_ event: AgentDetectionEvent, now: TimeInterval) -> AgentStateDecision {
     switch event {
-    case .screen(let detection):
+    case .screen(let detection, let contentID):
       screen = detection
+      screenContentID = contentID
       if detection.state != .unknown { stableScreen = detection.state }
-      if suppressedScreen != detection { suppressedScreen = nil }
+      if suppressedScreen != detection || suppressedContentID != contentID { suppressedScreen = nil }
     case .inventory(let sessions):
       available = true
       roots = roots.filter { sessions.contains($0.key) }
@@ -83,6 +86,7 @@ nonisolated struct AgentStateMachine: Sendable {
   private mutating func suppressCompletedScreen(session: String) {
     if decision.logSessionID == session, roots[session]?.busy == false {
       suppressedScreen = screen
+      suppressedContentID = screenContentID
     }
   }
 

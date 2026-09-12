@@ -199,6 +199,14 @@ nonisolated enum ProcessDetection {
   }
 
   static func openFilePaths(pid: pid_t) -> [String] {
+    var complete = false
+    return openFilePaths(pid: pid, complete: &complete)
+  }
+
+  /// State attribution must reject an incomplete inventory. Existing session
+  /// lookup callers can still use the best-effort wrapper above.
+  static func openFilePaths(pid: pid_t, complete: inout Bool) -> [String] {
+    complete = false
     guard pid > 0 else { return [] }
     var capacity = 256
     var descriptors: [proc_fdinfo] = []
@@ -213,6 +221,7 @@ nonisolated enum ProcessDetection {
       if count < capacity { break }
       capacity *= 2
     }
+    complete = count < descriptors.count
 
     return descriptors.prefix(count).compactMap { descriptor -> String? in
       guard descriptor.proc_fdtype == PROX_FDTYPE_VNODE else { return nil }
@@ -221,7 +230,10 @@ nonisolated enum ProcessDetection {
       let result = withUnsafeMutablePointer(to: &info) { pointer in
         proc_pidfdinfo(pid, descriptor.proc_fd, PROC_PIDFDVNODEPATHINFO, pointer, Int32(size))
       }
-      guard result > 0 else { return nil }
+      guard result == Int32(size) else {
+        complete = false
+        return nil
+      }
       // Only writable descriptors identify a session an agent OWNS. Agents
       // transiently open other sessions read-only (resume pickers, history
       // browsing); every legitimate signal (Codex rollout, Amp thread log,
@@ -230,8 +242,13 @@ nonisolated enum ProcessDetection {
       return withUnsafeBytes(of: info.pvip.vip_path) { rawBuffer -> String? in
         let bytes = rawBuffer.bindMemory(to: UInt8.self)
         let end = bytes.firstIndex(of: 0) ?? bytes.endIndex
-        guard end > bytes.startIndex else { return nil }
-        return String(bytes: bytes[..<end], encoding: .utf8)
+        guard end > bytes.startIndex, end < bytes.endIndex,
+          let path = String(bytes: bytes[..<end], encoding: .utf8)
+        else {
+          complete = false
+          return nil
+        }
+        return path
       }
     }
   }
