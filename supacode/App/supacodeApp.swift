@@ -605,7 +605,8 @@ struct SupacodeApp: App {
         agent: detectedAgent,
         status: status,
         rawState: detection.state.rawValue,
-        detectionReason: detection.reason.identifier,
+        detectionReason: agentState.decision?.reason.identifier ?? detection.reason.identifier,
+        screenReason: detection.reason.identifier,
         lastChangedAt: formatter.string(from: agentState.lastChangedAt),
         blockerText: blockerText,
         transcriptSession: transcriptSession

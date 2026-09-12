@@ -40,6 +40,7 @@ public struct AgentReadAgent: Codable, Equatable, Sendable {
   public let status: AgentsCommandStatus
   public let rawState: String
   public let detectionReason: String?
+  public let screenReason: String?
   public let lastChangedAt: String
   public let session: AgentReadSession?
 
@@ -48,6 +49,7 @@ public struct AgentReadAgent: Codable, Equatable, Sendable {
     case status
     case rawState = "raw_state"
     case detectionReason = "detection_reason"
+    case screenReason = "screen_reason"
     case lastChangedAt = "last_changed_at"
     case session
   }
@@ -57,6 +59,7 @@ public struct AgentReadAgent: Codable, Equatable, Sendable {
     status: AgentsCommandStatus,
     rawState: String,
     detectionReason: String?,
+    screenReason: String? = nil,
     lastChangedAt: String,
     session: AgentReadSession?
   ) {
@@ -64,6 +67,7 @@ public struct AgentReadAgent: Codable, Equatable, Sendable {
     self.status = status
     self.rawState = rawState
     self.detectionReason = detectionReason
+    self.screenReason = screenReason
     self.lastChangedAt = lastChangedAt
     self.session = session
   }

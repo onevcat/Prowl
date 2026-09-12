@@ -15,9 +15,34 @@ nonisolated enum AgentDetectionEvent: Sendable {
   case tick
 }
 
+nonisolated enum AgentScreenFallback: String, Sendable {
+  case logUnavailable = "screen.logUnavailable"
+  case ambiguousLogs = "screen.ambiguousLogs"
+  case noLiveTurn = "screen.noLiveTurn"
+  case retainedCompletion = "screen.retainedCompletion"
+  case afterTurn = "screen.afterTurn"
+}
+
+nonisolated enum AgentStateDecisionReason: Equatable, Sendable {
+  case screen(AgentScreenDetectionReason)
+  case fallback(AgentScreenFallback)
+  case logOpenWork
+  case logTurnEnded
+
+  var identifier: String {
+    switch self {
+    case .screen(let reason): reason.identifier
+    case .fallback(let reason): reason.rawValue
+    case .logOpenWork: "log.openWork"
+    case .logTurnEnded: "log.turnEnded"
+    }
+  }
+}
+
 nonisolated struct AgentStateDecision: Equatable, Sendable {
   var state: AgentRawState
-  var reason: String
+  var reason: AgentStateDecisionReason
+  var screenReason: AgentScreenDetectionReason?
   var logSessionID: String?
   var hasOutstandingWork = false
 }
@@ -34,12 +59,14 @@ nonisolated struct AgentStateMachine: Sendable {
 
   private var roots: [String: Root] = [:]
   private var available = false
+  private var hasLogProvider = false
   private var screen = AgentScreenDetection(state: .unknown, reason: .noRuleMatched)
   private var stableScreen: AgentRawState = .unknown
   private var suppressedScreen: AgentScreenDetection?
   private var screenContentID: Int?
   private var suppressedContentID: Int?
-  private(set) var decision = AgentStateDecision(state: .unknown, reason: "screen.unknown")
+  private var suppressedSessionID: String?
+  private(set) var decision = AgentStateDecision(state: .unknown, reason: .screen(.noRuleMatched))
 
   @discardableResult
   mutating func receive(_ event: AgentDetectionEvent, now: TimeInterval) -> AgentStateDecision {
@@ -47,6 +74,7 @@ nonisolated struct AgentStateMachine: Sendable {
     case .screen(let detection, let contentID):
       observeScreen(detection, contentID: contentID)
     case .inventory(let sessions):
+      hasLogProvider = true
       available = true
       roots = roots.filter { sessions.contains($0.key) }
       for session in sessions where roots[session] == nil { roots[session] = Root() }
@@ -72,9 +100,10 @@ nonisolated struct AgentStateMachine: Sendable {
         suppressCompletedScreen(session: root)
       }
     case .suspended:
+      hasLogProvider = true
       available = false
-      suppressedScreen = nil
     case .unavailable:
+      hasLogProvider = true
       available = false
       roots.removeAll()
       suppressedScreen = nil
@@ -84,6 +113,7 @@ nonisolated struct AgentStateMachine: Sendable {
       break
     }
     decision = resolve(now: now)
+    decision.screenReason = screen.reason
     return decision
   }
 
@@ -100,6 +130,7 @@ nonisolated struct AgentStateMachine: Sendable {
 
   private mutating func suppressCompletedScreen(session: String) {
     if decision.logSessionID == session, roots[session]?.busy == false {
+      suppressedSessionID = session
       suppressedScreen = screen
       suppressedContentID = screenContentID
     }
@@ -110,22 +141,31 @@ nonisolated struct AgentStateMachine: Sendable {
       root.busy || root.lastActivity.map { now - $0 < activityWindow } == true
     }
     guard available, eligible.count == 1, let (id, root) = eligible.first else {
-      let reason =
-        !available ? "screen.logUnavailable" : eligible.count > 1 ? "screen.ambiguousLogs" : "screen.noLiveTurn"
-      return AgentStateDecision(state: stableScreen, reason: reason)
-    }
-    if screen.state == .blocked, suppressedScreen != screen {
+      // Expiry removes log authority, but does not make an unchanged completed
+      // frame new evidence. Keep this fence scoped to the sole known root.
+      if available, eligible.isEmpty, roots.count == 1,
+        let id = roots.keys.first, suppressedSessionID == id, suppressedScreen == screen
+      {
+        return AgentStateDecision(state: .idle, reason: .fallback(.retainedCompletion))
+      }
+      let fallback: AgentScreenFallback =
+        !available ? .logUnavailable : eligible.count > 1 ? .ambiguousLogs : .noLiveTurn
       return AgentStateDecision(
-        state: .blocked, reason: screen.reason.identifier, logSessionID: id,
+        state: stableScreen, reason: hasLogProvider ? .fallback(fallback) : .screen(screen.reason))
+    }
+    let suppressed = suppressedSessionID == id && suppressedScreen == screen
+    if screen.state == .blocked, !suppressed {
+      return AgentStateDecision(
+        state: .blocked, reason: .screen(screen.reason), logSessionID: id,
         hasOutstandingWork: root.busy)
     }
     if root.busy {
-      return AgentStateDecision(state: .working, reason: "log.openWork", logSessionID: id, hasOutstandingWork: true)
+      return AgentStateDecision(state: .working, reason: .logOpenWork, logSessionID: id, hasOutstandingWork: true)
     }
     // A turn end beats its retained frame, but cannot suppress a subsequent UI interaction.
-    if suppressedScreen == nil, screen.state == .working {
-      return AgentStateDecision(state: .working, reason: "screen.afterTurn", logSessionID: id)
+    if !suppressed, screen.state == .working {
+      return AgentStateDecision(state: .working, reason: .fallback(.afterTurn), logSessionID: id)
     }
-    return AgentStateDecision(state: .idle, reason: "log.turnEnded", logSessionID: id)
+    return AgentStateDecision(state: .idle, reason: .logTurnEnded, logSessionID: id)
   }
 }

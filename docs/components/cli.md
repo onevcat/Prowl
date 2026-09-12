@@ -171,10 +171,12 @@ Each agent contains:
   `pi`; Oh My Pi uses `omp`, with `oh-my-pi` preserved as a display alias.
 - `status`, `raw_state`: detected agent state. `status` is one of `blocked`,
   `working`, `done`, `idle`; `raw_state` is the lower-level detector state.
-- `detection_reason`: optional stable screen-classifier explanation. A profile rule
-  emits its rule ID, an ordinary profile miss emits `fallback.noRuleMatched`, and an
-  unmigrated classifier emits `legacy.detector`. The field is omitted when no current
-  screen result is available and never includes screen text.
+- `detection_reason`: optional explanation of the final state decision, shared with
+  `agents read`. Log evidence reports `log.openWork` or `log.turnEnded`; fallback
+  decisions report `screen.*`. Screen-only decisions report the profile rule ID,
+  `fallback.noRuleMatched`, or `legacy.detector`.
+- `screen_reason`: optional rule ID for the current screen classification, including
+  when log evidence controls the final state. Both reason fields omit screen text.
 - `last_changed_at`: ISO-8601 timestamp for the most recent state change.
 - `project`: display-oriented `name`, `branch`, `path` resolved from the
   agent's working directory.

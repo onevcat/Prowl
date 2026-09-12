@@ -158,20 +158,3 @@ struct AgentDetectionPresence: Equatable, Sendable {
     return currentAgent
   }
 }
-
-func stabilizeAgentState(
-  agent: DetectedAgent?,
-  previous: AgentRawState,
-  raw: AgentRawState
-) -> AgentRawState {
-  guard agent != nil else { return raw }
-
-  switch raw {
-  case .unknown:
-    // A viewer overlay (transcript, history search) is covering the live
-    // status area, so this frame carries no signal: keep the last trusted state.
-    return previous
-  case .working, .blocked, .idle:
-    return raw
-  }
-}

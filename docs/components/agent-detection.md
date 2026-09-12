@@ -101,17 +101,19 @@ returns the exact active-screen buffer used by stage 2. It is explicitly request
 because it can differ from the visible viewport when a pane is scrolled; the default
 `prowl read` behavior is unchanged.
 
-`prowl agents --json` may also include `detection_reason`, a stable classifier rule or
-fallback identifier. Codex can report `log.openWork`, `log.turnEnded`, or a
-`screen.*` fallback reason; `raw_state` remains the latest screen classification.
-When a current blocker wins, its screen-rule ID is reported. Screen-only Codex rules report runtime-owned IDs for trust,
-hook, sign-in, confirmation, foreground-working, and background-terminal matches. Claude
-does the same for viewer,
-blocker, spinner, elapsed-status, background-work, and current-composer regions; current
-history-search chrome such as `⌕ Filter history…` reports `claude.viewer` and preserves
-the last trusted state. An ordinary migrated-profile miss reports
-`fallback.noRuleMatched`. Reasons never include screen text, and the text-mode command and
-app UI remain unchanged.
+`prowl agents --json` and `prowl agents read --json` use `detection_reason` for
+the final state decision and `screen_reason` for the screen rule. Codex can report
+`log.openWork`, `log.turnEnded`, or a `screen.*` fallback reason; `raw_state` remains
+the latest screen classification. A current blocker reports its screen-rule ID.
+Screen-only runtimes keep their existing rule identifiers. An ordinary profile miss
+reports `fallback.noRuleMatched`; unmigrated classifiers report `legacy.detector`.
+Reasons never include screen text, and the text-mode command and app UI are unchanged.
+
+Log acquisition warnings use the `AgentDetection` logging category in Debug and
+Release. They identify the PID, cursor count, and failure category (`incompleteInventory`,
+`partialHeader`, `unknownLineage`, or `continuityLost`). Warnings are limited to one
+per provider every 30 seconds; a successful read reports recovery once after a
+reported failure. These logs contain no transcript or screen content.
 
 Detection tolerates several consecutive process-probe misses before declaring an
 agent gone. Screen-only state is deterministic: a recognized Working, Blocked, or

@@ -20,6 +20,21 @@ struct AgentDetectionCoordinatorTests {
     }
   }
 
+  @Test(arguments: DetectedAgent.allCases)
+  func screenFallbackRetainsUnknownAndAcceptsDefiniteTransitions(agent: DetectedAgent) async {
+    let coordinator = AgentDetectionCoordinator(sample: { _, _ in [.unavailable] })
+    for raw in [AgentRawState.unknown, .working, .blocked, .idle] {
+      let definite = await coordinator.observe(
+        agent: agent, process: generation,
+        screen: AgentScreenDetection(state: raw, reason: .noRuleMatched), configRoot: nil)
+      #expect(definite?.state == raw)
+      let held = await coordinator.observe(
+        agent: agent, process: nil,
+        screen: AgentScreenDetection(state: .unknown, reason: .noRuleMatched), configRoot: nil)
+      #expect(held?.state == raw)
+    }
+  }
+
   @Test func invalidationRejectsSuspendedProviderResult() async {
     var continuation: CheckedContinuation<[AgentDetectionEvent], Never>?
     let entered = AsyncStream<Void>.makeStream()
@@ -60,4 +75,54 @@ struct AgentDetectionCoordinatorTests {
     #expect(
       await coordinator.observe(agent: .codex, process: replacement, screen: idle, configRoot: nil)?.state == .idle)
   }
+  @Test func overlappingObservationsApplyConsumedCompletionExactlyOnce() async {
+    var calls = 0
+    var resume: CheckedContinuation<[AgentDetectionEvent], Never>?
+    let entered = AsyncStream<Void>.makeStream()
+    let coordinator = AgentDetectionCoordinator(sample: { _, _ in
+      calls += 1
+      if calls == 1 { return [.inventory(["a"]), .turnStarted(session: "a", turn: "1")] }
+      if calls == 2 {
+        return await withCheckedContinuation {
+          resume = $0
+          entered.continuation.yield(())
+        }
+      }
+      return [.inventory(["a"])]
+    })
+    _ = await coordinator.observe(agent: .codex, process: generation, screen: idle, configRoot: nil)
+    let first = Task { await coordinator.observe(agent: .codex, process: generation, screen: idle, configRoot: nil) }
+    var iterator = entered.stream.makeAsyncIterator()
+    _ = await iterator.next()
+    let second = Task {
+      entered.continuation.yield(())
+      return await coordinator.observe(agent: .codex, process: generation, screen: idle, configRoot: nil)
+    }
+    _ = await iterator.next()
+    resume?.resume(returning: [.turnEnded(session: "a", turn: "1")])
+    #expect(await first.value?.state == .idle)
+    #expect(await second.value?.state == .idle)
+    let final = await coordinator.observe(agent: .codex, process: generation, screen: idle, configRoot: nil)
+    #expect(final?.hasOutstandingWork == false)
+  }
+
+  @Test func codexProbeGapRetainsTurnAndConsumesItsCompletion() async {
+    var calls = 0
+    let coordinator = AgentDetectionCoordinator(sample: { _, _ in
+      calls += 1
+      if calls == 1 { return [.inventory(["a"]), .turnStarted(session: "a", turn: "1")] }
+      if calls == 3 { return [.inventory(["a"]), .turnEnded(session: "a", turn: "1")] }
+      return [.inventory(["a"])]
+    })
+    _ = await coordinator.observe(agent: .codex, process: generation, screen: idle, configRoot: nil)
+    let gap = await coordinator.observe(
+      agent: .codex, process: nil,
+      screen: AgentScreenDetection(state: .unknown, reason: .noRuleMatched), configRoot: nil)
+    #expect(gap?.state == .working)
+    #expect(gap?.hasOutstandingWork == true)
+    let recovered = await coordinator.observe(agent: .codex, process: generation, screen: idle, configRoot: nil)
+    #expect(recovered?.reason.identifier == "log.turnEnded")
+    #expect(recovered?.hasOutstandingWork == false)
+  }
+
 }

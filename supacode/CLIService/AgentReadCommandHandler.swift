@@ -7,6 +7,7 @@ nonisolated struct AgentReadRuntimeSnapshot: Sendable {
   let status: AgentsCommandStatus
   let rawState: String
   let detectionReason: String?
+  var screenReason: String?
   let lastChangedAt: String
   let blockerText: String?
   /// Only an exact/high, transcript-backed fresh resolution belongs here.
@@ -70,6 +71,7 @@ final class AgentReadCommandHandler: CommandHandler {
         status: snapshot.status,
         rawState: snapshot.rawState,
         detectionReason: snapshot.detectionReason,
+        screenReason: snapshot.screenReason,
         lastChangedAt: snapshot.lastChangedAt,
         session: snapshot.transcriptSession.map {
           AgentReadSession(id: $0.id, confidence: $0.confidence.rawValue, source: $0.source.rawValue)

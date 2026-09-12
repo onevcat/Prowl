@@ -9,6 +9,8 @@ final class AgentDetectionCoordinator {
   private var agent: DetectedAgent?
   private var logProvider: CodexLogProvider?
   private var revision: UInt64 = 0
+  private var observationInFlight = false
+  private var observationWaiters: [CheckedContinuation<Void, Never>] = []
   typealias Sample = (AgentProcessGeneration, URL?) async -> [AgentDetectionEvent]
   private let sampleOverride: Sample?
   private let time: () -> TimeInterval
@@ -27,6 +29,22 @@ final class AgentDetectionCoordinator {
     machine = AgentStateMachine()
   }
 
+  private func acquireObservation() async {
+    if observationInFlight {
+      await withCheckedContinuation { observationWaiters.append($0) }
+    } else {
+      observationInFlight = true
+    }
+  }
+
+  private func releaseObservation() {
+    if observationWaiters.isEmpty {
+      observationInFlight = false
+    } else {
+      observationWaiters.removeFirst().resume()
+    }
+  }
+
   func interacted() {
     interactionRevision &+= 1
     machine.receive(.interaction, now: now)
@@ -39,19 +57,22 @@ final class AgentDetectionCoordinator {
     screenContentID: Int? = nil,
     configRoot: URL?
   ) async -> AgentStateDecision? {
-    if self.agent != agent || (agent == .codex && self.process != process) {
+    let queuedRevision = revision
+    await acquireObservation()
+    defer { releaseObservation() }
+    guard queuedRevision == revision, !Task.isCancelled else { return nil }
+    if self.agent != agent || (agent == .codex && process != nil && self.process != process) {
       invalidate()
       self.agent = agent
       self.process = process
       if agent == .codex, process != nil { logProvider = CodexLogProvider() }
     }
-    revision &+= 1
     let expectedRevision = revision
     let inputRevision = interactionRevision
     // Screen capture precedes the file read. A completion can fence this frame;
     // the next poll observes whether the UI has actually changed.
     machine.receive(.screen(screen, contentID: screenContentID), now: now)
-    if let logProvider, let process {
+    if let logProvider, let process = self.process {
       let events: [AgentDetectionEvent]
       if let sampleOverride {
         events = await sampleOverride(process, configRoot)

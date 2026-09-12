@@ -7,6 +7,12 @@ struct AgentStateMachineTests {
     .screen(AgentScreenDetection(state: state, reason: .noRuleMatched))
   }
 
+  @Test func screenOnlyDecisionPreservesRuleIdentifier() {
+    var machine = AgentStateMachine()
+    let detection = AgentScreenDetection(state: .working, reason: .matched(AgentScreenRuleID("pi.working")))
+    #expect(machine.receive(.screen(detection), now: 0).reason.identifier == "pi.working")
+  }
+
   @Test func screenOnlyPreservesUnknownForEveryAgent() {
     for _ in DetectedAgent.allCases {
       var machine = AgentStateMachine()
@@ -118,6 +124,40 @@ struct AgentStateMachineTests {
     _ = machine.receive(.turnStarted(session: "b", turn: "2"), now: 10)
     #expect(machine.receive(.tick, now: 1000).logSessionID == nil)
     #expect(machine.receive(.childEnded(root: "a", child: "c", work: "1"), now: 1001).logSessionID == "b")
+  }
+
+  @Test func suspensionRecoveryRetainsCompletedFrameFence() {
+    for state in [AgentRawState.working, .blocked] {
+      var machine = AgentStateMachine()
+      _ = machine.receive(.inventory(["a"]), now: 0)
+      _ = machine.receive(.turnStarted(session: "a", turn: "1"), now: 0)
+      _ = machine.receive(screen(state), now: 0)
+      _ = machine.receive(.turnEnded(session: "a", turn: "1"), now: 1)
+      #expect(machine.receive(.suspended, now: 2).state == state)
+      #expect(machine.receive(.inventory(["a"]), now: 3).state == .idle)
+    }
+  }
+
+  @Test func activityExpiryDoesNotReviveCompletedFrame() {
+    for state in [AgentRawState.working, .blocked] {
+      var machine = AgentStateMachine()
+      _ = machine.receive(.inventory(["a"]), now: 0)
+      _ = machine.receive(.turnStarted(session: "a", turn: "1"), now: 0)
+      _ = machine.receive(screen(state), now: 0)
+      _ = machine.receive(.turnEnded(session: "a", turn: "1"), now: 1)
+      #expect(machine.receive(.tick, now: 121).state == .idle)
+      #expect(machine.decision.logSessionID == nil)
+      #expect(machine.receive(.interaction, now: 122).state == state)
+    }
+  }
+
+  @Test func completionFenceDoesNotHideAnotherRootsBlocker() {
+    var machine = AgentStateMachine()
+    _ = machine.receive(.inventory(["a", "b"]), now: 0)
+    _ = machine.receive(.turnStarted(session: "a", turn: "1"), now: 0)
+    _ = machine.receive(screen(.blocked), now: 0)
+    _ = machine.receive(.turnEnded(session: "a", turn: "1"), now: 1)
+    #expect(machine.receive(.childStarted(root: "b", child: "c", work: "1"), now: 122).state == .blocked)
   }
 
 }

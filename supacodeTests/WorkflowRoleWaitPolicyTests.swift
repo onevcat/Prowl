@@ -45,7 +45,7 @@ struct WorkflowRoleWaitPolicyTests {
 
   @Test func parentCompletionCannotReleaseOutstandingChildWork() {
     let busy = AgentStateDecision(
-      state: .working, reason: "log.openWork", logSessionID: "root", hasOutstandingWork: true)
+      state: .working, reason: .logOpenWork, logSessionID: "root", hasOutstandingWork: true)
     let initial = snapshot(.working, decision: busy)
     let ended = snapshot(.working, signal: signal(.turnEnded, at: 1), revision: 2, decision: busy)
     let baseline = AgentConditionEvidence.Baseline(snapshot: initial)
