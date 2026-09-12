@@ -10,21 +10,16 @@ struct MirrorConnectionTests {
   @Test(.timeLimit(.minutes(1))) func incompleteHandshakeUsesShortDeadlineWithoutCountingFailure() async throws {
     let listener = try NWListener(using: .tcp)
     let listening = AsyncStream<Void>.makeStream()
-    let accepted = AsyncStream<Void>.makeStream()
-    var server: NWConnection?
+    let accepted = AsyncStream<NWConnection>.makeStream()
     listener.newConnectionHandler = { connection in
-      Task { @MainActor in
-        server = connection
-        connection.start(queue: .main)
-        accepted.continuation.yield(())
-      }
+      connection.start(queue: .main)
+      accepted.continuation.yield(connection)
     }
     listener.stateUpdateHandler = { state in
       if case .ready = state { listening.continuation.yield(()) }
     }
     listener.start(queue: .main)
     defer {
-      server?.cancel()
       listener.cancel()
       listening.continuation.finish()
       accepted.continuation.finish()
@@ -44,7 +39,8 @@ struct MirrorConnectionTests {
     defer { peer.close() }
     peer.start()
     var serverAccepted = accepted.stream.makeAsyncIterator()
-    _ = await serverAccepted.next()
+    let server = try #require(await serverAccepted.next())
+    defer { server.cancel() }
     await clock.advance(by: .seconds(4))
     #expect(closeReason == nil)
     await clock.advance(by: .seconds(1))
@@ -55,21 +51,19 @@ struct MirrorConnectionTests {
   @Test(.timeLimit(.minutes(1))) func silentPeerTimesOutDespiteOutgoingHeartbeats() async throws {
     let listener = try NWListener(using: .tcp)
     let listening = AsyncStream<Void>.makeStream()
-    var server: NWConnection?
+    let accepted = AsyncStream<NWConnection>.makeStream()
     listener.newConnectionHandler = { connection in
-      Task { @MainActor in
-        server = connection
-        connection.start(queue: .main)
-      }
+      connection.start(queue: .main)
+      accepted.continuation.yield(connection)
     }
     listener.stateUpdateHandler = { state in
       if case .ready = state { listening.continuation.yield(()) }
     }
     listener.start(queue: .main)
     defer {
-      server?.cancel()
       listener.cancel()
       listening.continuation.finish()
+      accepted.continuation.finish()
     }
     var readyListener = listening.stream.makeAsyncIterator()
     _ = await readyListener.next()
@@ -92,6 +86,9 @@ struct MirrorConnectionTests {
     peer.start()
     var readyPeer = ready.stream.makeAsyncIterator()
     _ = await readyPeer.next()
+    var serverAccepted = accepted.stream.makeAsyncIterator()
+    let server = try #require(await serverAccepted.next())
+    defer { server.cancel() }
     await clock.advance(by: .seconds(7))
     #expect(closeCount == 0)
     await clock.advance(by: .seconds(1))
