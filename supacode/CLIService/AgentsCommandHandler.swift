@@ -103,7 +103,8 @@ final class AgentsCommandHandler: CommandHandler {
         name: entry.displayName,
         status: AgentsCommandStatus(rawValue: entry.displayState.rawValue) ?? .idle,
         rawState: (screenDetection?.state ?? entry.rawState).rawValue,
-        detectionReason: screenDetection?.reason.identifier,
+        detectionReason: entry.agent == .codex
+          ? entry.stateDecision?.reason ?? screenDetection?.reason.identifier : screenDetection?.reason.identifier,
         lastChangedAt: dateFormatter.string(from: entry.lastChangedAt),
         project: AgentsCommandProject(
           name: display.repositoryName,

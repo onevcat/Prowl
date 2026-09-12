@@ -14,6 +14,7 @@ struct PaneAgentState: Equatable, Sendable {
   var sessionMissStreak: Int = 0
   var iconLookupToken: String?
   var fallbackState: AgentRawState
+  var decision: AgentStateDecision?
   var state: AgentRawState
   var seen: Bool
   var lastChangedAt: Date

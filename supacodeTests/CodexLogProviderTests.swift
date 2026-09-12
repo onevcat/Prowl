@@ -39,6 +39,16 @@ struct CodexLogProviderTests {
     #expect(events.count == 2)
   }
 
+  @Test func freshMainTurnDoesNotRequireSettingsEvent() async throws {
+    let root = try fixture()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let path = root.appending(path: "a.jsonl")
+    let metadata = header("a").split(separator: "\n").first!
+    try (metadata + "\n" + start("first")).write(to: path, atomically: false, encoding: .utf8)
+    let provider = CodexLogProvider(startedAt: .distantPast)
+    #expect(await provider.sample(paths: [path]).count == 2)
+  }
+
   @Test func partialLinesAndRepeatedSamplesDoNotDuplicateTurns() async throws {
     let root = try fixture()
     defer { try? FileManager.default.removeItem(at: root) }

@@ -91,12 +91,14 @@ nonisolated struct AgentStateMachine: Sendable {
       root.busy || root.lastActivity.map { now - $0 < activityWindow } == true
     }
     guard available, eligible.count == 1, let (id, root) = eligible.first else {
-      let reason = !available ? "screen.logUnavailable" : eligible.count > 1 ? "screen.ambiguousLogs" : "screen.noLiveTurn"
+      let reason =
+        !available ? "screen.logUnavailable" : eligible.count > 1 ? "screen.ambiguousLogs" : "screen.noLiveTurn"
       return AgentStateDecision(state: stableScreen, reason: reason)
     }
     if screen.state == .blocked, suppressedScreen != screen {
-      return AgentStateDecision(state: .blocked, reason: screen.reason.identifier, logSessionID: id,
-                                hasOutstandingWork: root.busy)
+      return AgentStateDecision(
+        state: .blocked, reason: screen.reason.identifier, logSessionID: id,
+        hasOutstandingWork: root.busy)
     }
     if root.busy {
       return AgentStateDecision(state: .working, reason: "log.openWork", logSessionID: id, hasOutstandingWork: true)

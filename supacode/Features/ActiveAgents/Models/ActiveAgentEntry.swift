@@ -26,6 +26,7 @@ struct ActiveAgentEntry: Identifiable, Equatable, Sendable {
   let iconLookupToken: String
   let agent: DetectedAgent
   var session: AgentSession?
+  var stateDecision: AgentStateDecision?
   /// Un-stabilized per-poll detection result. Surfaced only by `prowl agents`
   /// (`raw_state`); no SwiftUI view renders it (they show `displayState`). A
   /// `var` so `equalsIgnoringRawState` can normalize it for emission dedup.

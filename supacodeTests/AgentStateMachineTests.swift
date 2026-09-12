@@ -60,4 +60,34 @@ struct AgentStateMachineTests {
     #expect(machine.receive(.unavailable, now: 3).state == .idle)
     #expect(machine.receive(.inventory(["a"]), now: 4).logSessionID == nil)
   }
+  @Test func completionFencesRetainedBlockerButNotNewInteraction() {
+    var machine = AgentStateMachine()
+    _ = machine.receive(.inventory(["a"]), now: 0)
+    _ = machine.receive(.turnStarted(session: "a", turn: "1"), now: 1)
+    _ = machine.receive(screen(.blocked), now: 2)
+    #expect(machine.receive(.turnEnded(session: "a", turn: "1"), now: 3).state == .idle)
+    #expect(machine.receive(screen(.blocked), now: 4).state == .idle)
+    #expect(machine.receive(.interaction, now: 5).state == .blocked)
+  }
+
+  @Test func staleChildEndCannotCloseReusedChild() {
+    var machine = AgentStateMachine()
+    _ = machine.receive(.inventory(["a"]), now: 0)
+    _ = machine.receive(.childStarted(root: "a", child: "c", work: "old"), now: 1)
+    _ = machine.receive(.childStarted(root: "a", child: "c", work: "new"), now: 2)
+    #expect(machine.receive(.childEnded(root: "a", child: "c", work: "old"), now: 3).hasOutstandingWork)
+    #expect(!machine.receive(.childEnded(root: "a", child: "c", work: "new"), now: 4).hasOutstandingWork)
+  }
+
+  @Test func childCompletionDoesNotRefreshMainActivityWindow() {
+    var machine = AgentStateMachine()
+    _ = machine.receive(.inventory(["a", "b"]), now: 0)
+    _ = machine.receive(.turnStarted(session: "a", turn: "1"), now: 0)
+    _ = machine.receive(.turnEnded(session: "a", turn: "1"), now: 1)
+    _ = machine.receive(.childStarted(root: "a", child: "c", work: "1"), now: 2)
+    _ = machine.receive(.turnStarted(session: "b", turn: "2"), now: 10)
+    #expect(machine.receive(.tick, now: 1000).logSessionID == nil)
+    #expect(machine.receive(.childEnded(root: "a", child: "c", work: "1"), now: 1001).logSessionID == "b")
+  }
+
 }

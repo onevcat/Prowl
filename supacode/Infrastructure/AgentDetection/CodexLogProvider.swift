@@ -6,6 +6,7 @@ actor CodexLogProvider {
   private struct Metadata {
     let id: String
     let parent: String?
+    let hasInheritedHistory: Bool
   }
 
   private struct Cursor {
@@ -63,7 +64,7 @@ actor CodexLogProvider {
       let baseline = needsBaseline || createdAt < startedAt
       next[path] = Cursor(
         metadata: metadata, inode: inode, offset: baseline ? size : UInt64(end + 1),
-        decoder: CodexLogDecoder(sessionID: metadata.id, isLive: baseline))
+        decoder: CodexLogDecoder(sessionID: metadata.id, isLive: baseline || !metadata.hasInheritedHistory))
     }
     let parents = Dictionary(
       next.values.map { ($0.metadata.id, $0.metadata.parent) }, uniquingKeysWith: { first, _ in first })
@@ -129,6 +130,8 @@ actor CodexLogProvider {
     } else if payload["source"] as? String != "cli" {
       throw Failure.incomplete
     }
-    return Metadata(id: id, parent: parent)
+    // Fresh CLI sessions can omit settings events. Forks and children can copy
+    // another session's history and still need their own live boundary.
+    return Metadata(id: id, parent: parent, hasInheritedHistory: parent != nil || payload["forked_from_id"] is String)
   }
 }
