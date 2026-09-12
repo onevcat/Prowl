@@ -86,9 +86,16 @@ struct WorkflowRunsFeature {
     /// a clock. A pane a later run took over is not an earlier run's to close, even after the
     /// later run ended and kept it.
     var paneOwners: [UUID: UUID] = [:]
+    /// Runs that ended within the last `finishedNoticeDuration`: the toolbar status item keeps
+    /// showing them with their outcome so the end of a run is readable, then lets go.
+    var recentlyFinishedRunIDs: Set<UUID> = []
 
     var activeSessions: [WorkflowRunSession] {
       sessions.values.filter { !$0.run.status.isTerminal }
+    }
+
+    var recentlyFinishedSessions: [WorkflowRunSession] {
+      recentlyFinishedRunIDs.compactMap { sessions[$0] }.filter { $0.run.status.isTerminal }
     }
 
     /// The active run a pane belongs to, if any.
@@ -107,8 +114,13 @@ struct WorkflowRunsFeature {
     case deliver(WorkflowDeliveryRequest)
     case userAction(runID: UUID, WorkflowUserAction)
     case markInterruptedRuns(worktreeRoots: [String])
+    /// The status item's hold on a finished run ran out.
+    case finishedNoticeExpired(UUID)
     case delegate(Delegate)
   }
+
+  /// How long the toolbar status item keeps a finished run on screen.
+  static let finishedNoticeDuration: Duration = .seconds(8)
 
   @CasePathable
   enum Delegate: Equatable {
@@ -125,6 +137,7 @@ struct WorkflowRunsFeature {
   @Dependency(WorkflowActionExecutorKey.self) var actionExecutor
   @Dependency(\.date.now) var now
   @Dependency(\.uuid) var uuid
+  @Dependency(\.continuousClock) var clock
 
   nonisolated private static let logger = SupaLogger("WorkflowRuns")
 
@@ -182,7 +195,8 @@ struct WorkflowRunsFeature {
           resolvePendingStarts(&state, runID: runID, session: session),
           perform(effects, runID: runID, session: session),
           staleEventCleanup(event, session: session),
-          statusNotice(from: previous.status, to: session.run, effects: effects)
+          statusNotice(from: previous.status, to: session.run, effects: effects),
+          holdFinishedNotice(&state, runID: runID, previous: previous.status, current: session.run.status)
         )
 
       case .deliver(let request):
@@ -234,7 +248,8 @@ struct WorkflowRunsFeature {
           resolvePendingDeliveries(&state, runID: runID, session: session),
           resolvePendingStarts(&state, runID: runID, session: session),
           perform(effects, runID: runID, session: session),
-          statusNotice(from: previous.status, to: session.run, effects: effects)
+          statusNotice(from: previous.status, to: session.run, effects: effects),
+          holdFinishedNotice(&state, runID: runID, previous: previous.status, current: session.run.status)
         )
 
       case .markInterruptedRuns(let roots):
@@ -258,10 +273,27 @@ struct WorkflowRunsFeature {
           }.value
         }
 
+      case .finishedNoticeExpired(let runID):
+        state.recentlyFinishedRunIDs.remove(runID)
+        return .none
+
       case .delegate:
         return .none
       }
     }
+  }
+
+  /// A run that just ended stays in the status item for `finishedNoticeDuration`.
+  private func holdFinishedNotice(
+    _ state: inout State, runID: UUID, previous: WorkflowRunStatus, current: WorkflowRunStatus
+  ) -> Effect<Action> {
+    guard !previous.isTerminal, current.isTerminal else { return .none }
+    state.recentlyFinishedRunIDs.insert(runID)
+    return .run { send in
+      try await clock.sleep(for: Self.finishedNoticeDuration)
+      await send(.finishedNoticeExpired(runID))
+    }
+    .cancellable(id: CancelID.finishedNotice(runID), cancelInFlight: true)
   }
 
   private func statusNotice(
@@ -480,6 +512,7 @@ struct WorkflowRunsFeature {
     case roleWait(UUID, Int)
     case watchdog(UUID, Int)
     case observers(UUID)
+    case finishedNotice(UUID)
   }
 
   /// The run's ordered effect executor (one per run). It ends when `.finished` closes the queue.

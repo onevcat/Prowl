@@ -91,6 +91,26 @@ struct WorkflowStartFeature {
       return context.launchRoles.filter { names.contains($0.name) }
     }
 
+    /// The sheet's explanation of roles and steps, from the definition alone.
+    var plan: WorkflowStartPlan { WorkflowStartPlan(definition: context.definition) }
+
+    /// A `launch` role that the current inputs and skips never reach is listed but takes no
+    /// profile; `current` and `pick` roles are always bound.
+    func isRoleRequired(_ name: String) -> Bool {
+      guard context.definition.role(named: name)?.source == .launch else { return true }
+      return requiredLaunchRoles.contains { $0.name == name }
+    }
+
+    /// Only steps the user may actually skip at start: a skip that would end the run (§9) is
+    /// refused by admission, so the sheet does not offer it.
+    var visibleSkipOptions: [(stepID: String, title: String?)] {
+      context.skipOptions.filter { option in
+        if skippedSteps.contains(option.stepID) { return true }
+        if case .endsRun = skipConsequence(for: option.stepID) { return false }
+        return skipConsequence(for: option.stepID) != nil
+      }
+    }
+
     var canRun: Bool {
       guard !requiresBundleApproval, !isSubmitting, cliInstalled, context.cliServiceFailure == nil,
         context.item.isRunnable

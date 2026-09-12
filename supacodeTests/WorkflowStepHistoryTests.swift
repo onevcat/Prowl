@@ -121,3 +121,82 @@ struct WorkflowStepHistoryTests {
   }
 
 }
+
+extension WorkflowStepHistoryTests {
+  @MainActor @Test func deletingTheSelectedRunClearsItAndSelectsTheNextEntry() async throws {
+    let definition = WorkflowDefinition(id: "test", name: "Test", steps: [.init(id: "end", action: .notify("done"))])
+    func run(_ id: UUID) throws -> WorkflowRun {
+      try WorkflowRunMachine.start(
+        .init(
+          definition: definition, runID: id,
+          context: .init(
+            scope: .user, definitionPath: nil,
+            worktree: .init(id: "wt", name: "test", branch: "main", path: "/tmp/history-tests")), bindings: [:]),
+        now: { Date(timeIntervalSince1970: 1) }
+      ).machine.run
+    }
+    let deleted = try run(UUID(1))
+    let remaining = try run(UUID(2))
+    var initial = WorkflowStepHistoryFeature.State()
+    initial.isPresented = true
+    initial.selectedScope = .all
+    initial.selectedID = deleted.id
+    initial.detail = WorkflowRunRecord(run: deleted)
+    initial.liveRuns = [deleted.id: deleted, remaining.id: remaining]
+    initial.entries = [deleted, remaining].map { WorkflowHistoryIndex(record: WorkflowRunRecord(run: $0)) }
+    initial.directories = [deleted.id: deleted.runDirectory, remaining.id: remaining.runDirectory]
+    let removed = LockIsolated<[URL]>([])
+    let store = TestStore(initialState: initial) {
+      WorkflowStepHistoryFeature()
+    } withDependencies: {
+      $0[WorkflowHistoryOperations.self].delete = { directory in removed.withValue { $0.append(directory) } }
+    }
+    await store.send(.deleteRun(deleted.id))
+    await store.receive(.runDeleted(deleted.id)) {
+      $0.entries.removeAll { $0.id == deleted.id }
+      $0.directories[deleted.id] = nil
+      $0.liveRuns[deleted.id] = nil
+      $0.removedIDs = [deleted.id]
+      $0.selectedID = nil
+      $0.detail = nil
+    }
+    await store.receive(.select(remaining.id)) {
+      $0.selectedID = remaining.id
+      $0.detail = WorkflowRunRecord(run: remaining)
+    }
+    #expect(removed.value == [deleted.runDirectory])
+
+    // A refresh that still lists the deleted run on disk must not resurrect it.
+    await store.send(.liveRuns([deleted, remaining]))
+    #expect(!store.state.entries.contains { $0.id == deleted.id })
+  }
+
+  @MainActor @Test func aRunThatIsStillActiveCannotBeDeleted() async throws {
+    let definition = WorkflowDefinition(
+      id: "test", name: "Test",
+      roles: [.init(name: "author", source: .current)],
+      steps: [.init(id: "ask", action: .message(role: "author", prompt: "Hi", expect: .init()))])
+    let active = try WorkflowRunMachine.start(
+      .init(
+        definition: definition, runID: UUID(3),
+        context: .init(
+          scope: .user, definitionPath: nil,
+          worktree: .init(id: "wt", name: "test", branch: "main", path: "/tmp/history-tests")),
+        bindings: [
+          "author": .current(
+            WorkflowPaneIdentity(surfaceID: UUID(4), tabID: nil, handle: "p1", displayName: "codex", agent: "codex"))
+        ]),
+      now: { Date(timeIntervalSince1970: 1) }
+    ).machine.run
+    #expect(!active.status.isTerminal)
+    var initial = WorkflowStepHistoryFeature.State()
+    initial.liveRuns = [active.id: active]
+    initial.directories = [active.id: active.runDirectory]
+    let store = TestStore(initialState: initial) {
+      WorkflowStepHistoryFeature()
+    } withDependencies: {
+      $0[WorkflowHistoryOperations.self].delete = { _ in Issue.record("must not delete a live run") }
+    }
+    await store.send(.deleteRun(active.id))
+  }
+}

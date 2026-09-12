@@ -22,6 +22,16 @@ struct WorkflowAuthoringPromptTests {
     #expect(!strings.explanation.isEmpty)
   }
 
+  @Test(arguments: ["en", "zh-Hans", "zh-Hant", "ja"])
+  func draftIsIncludedAsAnEditableStartingPoint(identifier: String) {
+    let draft = WorkflowStarterTemplate.Request(
+      name: "Review #2", id: "review-2", icon: "magnifyingglass", kind: .singleAgent)
+    let strings = WorkflowAuthoringPrompt.strings(
+      skillPath: skill, manualPath: manual, workflowsDirectory: directory,
+      draft: draft, locale: Locale(identifier: identifier))
+    #expect(strings.prompt.contains(WorkflowStarterTemplate.yaml(draft)))
+  }
+
   @Test func unsupportedLocalesFallBackToEnglish() {
     let french = WorkflowAuthoringPrompt.strings(
       skillPath: skill, manualPath: manual, workflowsDirectory: directory, locale: Locale(identifier: "fr"))

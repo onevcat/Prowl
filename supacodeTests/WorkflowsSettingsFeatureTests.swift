@@ -40,6 +40,7 @@ struct WorkflowsSettingsFeatureTests {
     let revealed = LockIsolated<[URL]>([])
     let opened = LockIsolated<[URL]>([])
     let watchContinuations = LockIsolated<[AsyncStream<Void>.Continuation]>([])
+    let runTargets = LockIsolated<[WorkflowSettingsRunTarget]>([])
     var scanError: WorkflowSettingsError?
 
     init() throws {
@@ -84,8 +85,8 @@ struct WorkflowsSettingsFeatureTests {
     var client: WorkflowSettingsClient {
       WorkflowSettingsClient(
         scan: { _ in try self.scan() },
-        createWorkflow: { directory in try WorkflowStarterTemplate.write(in: directory) },
-        runTargets: { _ in [] },
+        createWorkflow: { directory, request in try WorkflowStarterTemplate.write(request, in: directory) },
+        runTargets: { _ in self.runTargets.value },
         reveal: { url in self.revealed.withValue { $0.append(url) } },
         watch: { _ in
           let (stream, continuation) = AsyncStream<Void>.makeStream()
@@ -345,9 +346,20 @@ struct WorkflowsSettingsFeatureTests {
       $0.catalog = try fixture.expectedCatalog()
     }
 
+    await store.send(.newWorkflowTapped) { $0.newWorkflow = NewWorkflowDraft() }
+    #expect(store.state.newWorkflowProblem == "Enter a name.")
+    await store.send(.newWorkflowNameChanged("Daily Check")) {
+      $0.newWorkflow?.name = "Daily Check"
+      $0.newWorkflow?.id = "daily-check"
+    }
+    await store.send(.newWorkflowKindChanged(.multiAgent)) { $0.newWorkflow?.kind = .multiAgent }
+    await store.send(.newWorkflowIconChanged(" calendar ")) { $0.newWorkflow?.icon = "calendar" }
+    #expect(store.state.newWorkflowProblem == nil)
+
     let expectedURL = fixture.userDirectory.appending(
-      path: "new-workflow.pwlworkflow", directoryHint: .isDirectory)
-    await store.send(.newWorkflowTapped) {
+      path: "daily-check.pwlworkflow", directoryHint: .isDirectory)
+    await store.send(.createWorkflowTapped) {
+      $0.newWorkflow = nil
       $0.scan = try fixture.scan()
       $0.catalog = try fixture.expectedCatalog()
     }
@@ -355,10 +367,34 @@ struct WorkflowsSettingsFeatureTests {
       .delegate(.notice(.workflowCreated(path: expectedURL.path(percentEncoded: false)))))
 
     let row = try #require(store.state.catalog.user.first)
-    #expect(row.workflowID == "new-workflow")
+    #expect(row.workflowID == "daily-check")
+    #expect(row.name == "Daily Check")
+    #expect(row.icon == "calendar")
+    #expect(row.roles.map(\.source) == [.current, .launch])
     #expect(row.isValid)
     #expect(fixture.opened.value == [expectedURL.appending(path: "workflow.yaml")])
     #expect(fixture.revealed.value.isEmpty)
+
+    // The same id again is refused by the form before anything touches the disk.
+    await store.send(.newWorkflowTapped) { $0.newWorkflow = NewWorkflowDraft() }
+    await store.send(.newWorkflowNameChanged("Daily Check")) {
+      $0.newWorkflow?.name = "Daily Check"
+      $0.newWorkflow?.id = "daily-check"
+    }
+    #expect(store.state.newWorkflowProblem == "A workflow with this ID already exists here.")
+    await store.send(.createWorkflowTapped)
+    await store.send(.newWorkflowIDChanged("prowl.daily")) {
+      $0.newWorkflow?.id = "prowl.daily"
+      $0.newWorkflow?.idEdited = true
+    }
+    #expect(store.state.newWorkflowProblem?.contains("reserved") == true)
+    await store.send(.newWorkflowIDChanged("Daily Check")) { $0.newWorkflow?.id = "Daily Check" }
+    #expect(store.state.newWorkflowProblem?.contains("lowercase") == true)
+    await store.send(.newWorkflowIDChanged("")) {
+      $0.newWorkflow?.id = "daily-check"
+      $0.newWorkflow?.idEdited = false
+    }
+    await store.send(.dismissNewWorkflow) { $0.newWorkflow = nil }
 
     fixture.finishWatchers()
     await store.finish()
@@ -501,5 +537,39 @@ struct WorkflowsSettingsFeatureTests {
     await store.send(.setAuthoringPromptPresented(false)) {
       $0.isAuthoringPromptPresented = false
     }
+  }
+}
+
+extension WorkflowsSettingsFeatureTests {
+  @Test(.dependencies) func anAppearingDetailRefreshesTheRunTargets() async throws {
+    let fixture = try Fixture()
+    defer { fixture.cleanUp() }
+    try fixture.write(Self.review, to: "review.pwlworkflow")
+    let store = makeStore(fixture, storage: SettingsTestStorage())
+    await store.send(.task) {
+      $0.cliInstallStatus = .installed(path: "/usr/local/bin/prowl")
+      $0.cliUsable = true
+      $0.cliServiceStatus = .listening(path: "/tmp/cli.sock")
+      $0.scan = try fixture.scan()
+      $0.catalog = try fixture.expectedCatalog()
+    }
+    let row = try #require(store.state.catalog.user.first)
+    await store.send(.showDetails(rowID: row.id)) {
+      $0.path.append(WorkflowSettingsDetailFeature.State(row: row, runTargets: []))
+    }
+    let detailID = try #require(store.state.path.ids.first)
+
+    // The main window selected another worktree while Settings stayed open.
+    let target = WorkflowSettingsRunTarget(
+      id: "wt-b", name: "feature", repositoryName: "Prowl", rootPath: "/tmp/prowl", isPreferred: true)
+    fixture.runTargets.withValue { $0 = [target] }
+    await store.send(.path(.element(id: detailID, action: .appeared))) {
+      $0.runTargets = [target]
+      $0.path[id: detailID]?.runTargets = [target]
+    }
+    #expect(store.state.path[id: detailID]?.preferredRunTarget?.displayName == "Prowl · feature")
+
+    fixture.finishWatchers()
+    await store.finish()
   }
 }

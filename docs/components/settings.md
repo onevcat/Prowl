@@ -38,7 +38,7 @@ and opens that section's root.
 | **Agents → Display** | Active Agents panel auto-show, terminal titles, Shelf status markers, and Agent Island enablement, Monitor, global shortcut, silent opacity, and floating-position reset. → [active-agents](active-agents.md), [agent-island](agent-island.md) |
 | **Agents → Profiles** | Named launch presets for supported agent runtimes (model, effort, execution mode, tab/split placement, extra arguments, opt-in dedicated home for a separate account) with a live launch preview. List order is the recommendation fallback. → [agent-profiles](agent-profiles.md) |
 | **Agents → CLI & Skills** | Install/status for the bundled `prowl` CLI, the local socket path it uses to reach the app and whether this app is **listening** on it, and the **Agent Skills** section that links the bundled skills into your agents' skill folders. → [cli](cli.md) |
-| **Agents → Workflows** | Compact Built-in and personal workflow lists. Select a row for Enabled, explicit Run target, role profile preferences, Run Setup, validation, and source-file actions; **New Workflow…**, **Ask an Agent…**, and the CLI dependency banner remain on the index. → [workflows](workflows.md) |
+| **Agents → Workflows** | Compact Built-in and personal workflow lists. Select a row for Enabled, explicit Run target, role profile preferences, Run Setup, validation, and source-file actions; **New Workflow…**, **Create with Agent…**, the **Run History** summary with **Clear History…**, and the CLI dependency banner remain on the index. → [workflows](workflows.md) |
 | **Repositories / Repo Settings** | Per-repository: setup/archive/run scripts, **Custom Commands**, Global-command visibility, **Default Agent Profile**, a direct **Workflows** list, default base ref & directory, copy-files overrides, open-with app, custom title, icon & color, PR merge strategy, line-diff & PR-state fetching. Reached from the sidebar context menu → "Repo Settings". → [custom-actions](custom-actions.md), [repositories-and-worktrees](repositories-and-worktrees.md), [workflows](workflows.md) |
 
 ## Where settings live on disk
@@ -72,9 +72,13 @@ workflows appear in the matching Repository Settings immediately after
 **Agents**. Select any compact row for **Enabled**, **Run in <worktree>**, every
 role's behavior, **Preferred Agent Profile** for launch roles, **Run Setup**
 (Follow Workflow / Always Review Before Running / Run Directly When Possible),
-validation, and source-file actions. **New Workflow…** opens a starter YAML in
-the default app, while **Ask an Agent…** provides an authoring prompt. Rows and
-open details follow file changes live. See [workflows](workflows.md#settings--agents--workflows).
+validation, and source-file actions. **New Workflow…** asks for a name, id,
+icon, and a single- or multi-agent starter, then opens the YAML in the default
+app; **Create with Agent…** provides an authoring prompt, including a valid
+creation draft when opened from that form. **Manage Workflows…** in the Agents
+capsule opens this Settings page directly. **Run History** shows
+the archive size with **Clear History…**. Rows and open details follow file
+changes live. See [workflows](workflows.md#settings--agents--workflows).
 
 ## Agent Skills
 

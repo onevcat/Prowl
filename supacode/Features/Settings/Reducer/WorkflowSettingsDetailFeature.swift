@@ -24,6 +24,9 @@ struct WorkflowSettingsDetailFeature {
   }
 
   enum Action: Equatable {
+    /// The page appeared or its window became key: the parent refreshes the run targets so
+    /// the Run button follows the worktree selected in the main window meanwhile.
+    case appeared
     case enabledChanged(Bool)
     case runSetupChanged(WorkflowBindModeOverride.Mode?)
     case preferredProfileChanged(WorkflowBindingMemoryKey, UUID?)
@@ -61,6 +64,9 @@ struct WorkflowSettingsDetailFeature {
   var body: some Reducer<State, Action> {
     Reduce { state, action in
       switch action {
+      case .appeared:
+        return .none
+
       case .enabledChanged(let enabled):
         guard let settingsKey = state.row?.settingsKey else { return .none }
         return .send(.delegate(.setEnabled(settingsKey: settingsKey, enabled: enabled)))

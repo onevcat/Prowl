@@ -173,6 +173,7 @@ struct WorktreeDetailView: View {
       onActivateUpdateButton: { store.send(.updates(.activateUpdateButton)) },
       onLaunchProfile: { store.send(.launchAgentProfile($0)) },
       onManageProfiles: { store.send(.openAgentProfilesSettings) },
+      onManageWorkflows: { store.send(.openWorkflowSettings) },
       onRunWorkflow: { key in
         store.send(
           .openWorkflowStart(
@@ -257,6 +258,7 @@ struct WorktreeDetailView: View {
       workflowsWorktreeID: state.actionTargetWorktreeID,
       onLaunchProfile: { store.send(.launchAgentProfile($0)) },
       onManageProfiles: { store.send(.openAgentProfilesSettings) },
+      onManageWorkflows: { store.send(.openWorkflowSettings) },
       onRunWorkflow: { key in
         store.send(
           .openWorkflowStart(
@@ -950,6 +952,7 @@ struct WorktreeDetailView: View {
     let workflowsWorktreeID: Worktree.ID?
     let onLaunchProfile: (AgentProfile.ID) -> Void
     let onManageProfiles: () -> Void
+    let onManageWorkflows: () -> Void
     let onRunWorkflow: (String) -> Void
     let onRunWorkflowWithOptions: (String) -> Void
     let onShowWorkflowDetails: (WorkflowStartCatalogItem) -> Void
@@ -968,6 +971,7 @@ struct WorktreeDetailView: View {
           workflowsWorktreeID: workflowsWorktreeID,
           onLaunchProfile: onLaunchProfile,
           onManageProfiles: onManageProfiles,
+          onManageWorkflows: onManageWorkflows,
           onRunWorkflow: onRunWorkflow,
           onRunWorkflowWithOptions: onRunWorkflowWithOptions,
           onShowWorkflowDetails: onShowWorkflowDetails
@@ -1018,6 +1022,7 @@ struct WorktreeDetailView: View {
     let onActivateUpdateButton: () -> Void
     let onLaunchProfile: (AgentProfile.ID) -> Void
     let onManageProfiles: () -> Void
+    let onManageWorkflows: () -> Void
     let onRunWorkflow: (String) -> Void
     let onRunWorkflowWithOptions: (String) -> Void
     let onShowWorkflowDetails: (WorkflowStartCatalogItem) -> Void
@@ -1034,6 +1039,7 @@ struct WorktreeDetailView: View {
         workflowsWorktreeID: toolbarState.shared.actionTargetWorktreeID,
         onLaunchProfile: onLaunchProfile,
         onManageProfiles: onManageProfiles,
+        onManageWorkflows: onManageWorkflows,
         onRunWorkflow: onRunWorkflow,
         onRunWorkflowWithOptions: onRunWorkflowWithOptions,
         onShowWorkflowDetails: onShowWorkflowDetails,

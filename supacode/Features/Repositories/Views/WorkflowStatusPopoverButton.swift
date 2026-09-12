@@ -20,8 +20,8 @@ struct WorkflowStatusPopoverButton: View {
     } label: {
       if let run = presentation.primary {
         HStack(spacing: 6) {
-          statusIcon()
-          Text(run.currentStepTitle)
+          statusIcon(run)
+          Text(run.summaryText)
             .lineLimit(1)
           if presentation.activeRunCount > 1 {
             Text(presentation.activeRunCount, format: .number)
@@ -81,11 +81,26 @@ struct WorkflowStatusPopoverButton: View {
   }
 
   @ViewBuilder
-  private func statusIcon() -> some View {
+  private func statusIcon(_ run: WorkflowRunPresentation) -> some View {
     if presentation.hasAttention {
       Image(systemName: "exclamationmark.triangle.fill")
         .foregroundStyle(.orange)
         .accessibilityHidden(true)
+    } else if case .finished(let outcome) = run.status {
+      switch outcome {
+      case .completed:
+        Image(systemName: "checkmark.circle.fill")
+          .foregroundStyle(.green)
+          .accessibilityHidden(true)
+      case .cancelled, .interrupted:
+        Image(systemName: "xmark.circle.fill")
+          .foregroundStyle(.secondary)
+          .accessibilityHidden(true)
+      case .skipped, .iterationLimitReached:
+        Image(systemName: "exclamationmark.triangle.fill")
+          .foregroundStyle(.orange)
+          .accessibilityHidden(true)
+      }
     } else {
       ProgressView()
         .controlSize(.small)
@@ -95,9 +110,10 @@ struct WorkflowStatusPopoverButton: View {
 
   private var accessibilityLabel: String {
     guard let run = presentation.attentionRun ?? presentation.primary else { return "Workflow status" }
-    let prefix = presentation.hasAttention ? "Workflow needs attention" : "Workflow running"
     let count = presentation.activeRunCount > 1 ? ", \(presentation.activeRunCount) active runs" : ""
-    return "\(prefix): \(run.currentStepTitle)\(count)"
+    if presentation.hasAttention { return "Workflow needs attention: \(run.currentStepTitle)\(count)" }
+    if run.status.isFinished { return "Workflow finished: \(run.summaryText)\(count)" }
+    return "Workflow running: \(run.currentStepTitle)\(count)"
   }
 
   private func togglePresentation() {

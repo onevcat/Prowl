@@ -138,6 +138,5 @@ nonisolated enum WorkflowHistoryOutputIntent: Equatable, Sendable {
   case openText(String, String)
   case openJSON([String: WorkflowJSONValue])
   case copyJSON([String: WorkflowJSONValue])
-  case keep(URL)
   case export(URL)
 }

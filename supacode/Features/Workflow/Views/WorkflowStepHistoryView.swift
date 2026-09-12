@@ -37,7 +37,12 @@ struct WorkflowStepHistoryView: View {
             onOutput: {
               onInteraction()
               store.send(.output($0))
-            }, onInteraction: onInteraction
+            },
+            onDelete: {
+              onInteraction()
+              store.send(.deleteRun(detail.run.id))
+            },
+            onInteraction: onInteraction
           )
           .id(detail.run.id)
         } else {

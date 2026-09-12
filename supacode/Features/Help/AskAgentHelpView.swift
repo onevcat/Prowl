@@ -19,7 +19,7 @@ struct AskAgentHelpView: View {
       strings: AskAgentHelpPrompt.strings(docsDirectoryPath: docsDirectoryPath, locale: locale), onDone: onDone)
   }
 
-  /// The same sheet over any prompt (Settings › Workflows › "Ask an Agent…").
+  /// The same sheet over any prompt (Settings › Workflows › "Create with Agent…").
   init(strings: AskAgentHelpStrings, onDone: @escaping () -> Void) {
     self.strings = strings
     self.onDone = onDone
