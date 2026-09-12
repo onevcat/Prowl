@@ -1157,7 +1157,7 @@ struct HerdrNativeChromeContractTests {
       return try JSONEncoder().encode(
         HerdrNativeChromeEnvelope(
           contractVersion: base.contractVersion,
-          clientInstanceID: base.clientInstanceID,
+          clientInstanceID: rendezvous.binding.clientInstanceID,
           messageKind: "aggregate_state",
           eventSequence: sequence,
           projectionRevision: sequence,
