@@ -1,0 +1,928 @@
+{
+  "runs": {
+    "first": {
+      "pid": 91663,
+      "spawn_wall": 1789173993.788936,
+      "controls": [
+        {
+          "elapsed": 19.63190304208547,
+          "action": "send",
+          "text": "Reply with exactly PROBE_OK. Do not use tools."
+        },
+        {
+          "elapsed": 24.96753275010269,
+          "action": "send",
+          "text": "\r"
+        },
+        {
+          "elapsed": 56.085126000107266,
+          "action": "send",
+          "text": "Reply with exactly PROBE_OK. Do not use tools."
+        },
+        {
+          "elapsed": 56.38313787500374,
+          "action": "send",
+          "text": "\r"
+        },
+        {
+          "elapsed": 58.4809555420652,
+          "action": "send",
+          "text": "Reply with exactly PROBE_OK. Do not use tools."
+        },
+        {
+          "elapsed": 58.77988741709851,
+          "action": "send",
+          "text": "\r"
+        },
+        {
+          "elapsed": 61.002979583106935,
+          "action": "send",
+          "text": "Run sleep 30 using the shell, then reply PROBE_DONE."
+        },
+        {
+          "elapsed": 61.30024462507572,
+          "action": "send",
+          "text": "\r"
+        },
+        {
+          "elapsed": 78.85158054204658,
+          "action": "send",
+          "text": "\u001b"
+        },
+        {
+          "elapsed": 90.7381569170393,
+          "action": "send",
+          "text": "Use exec_command to run /usr/bin/true with sandbox_permissions=\"require_escalated\" and justification=\"Approval timing probe\". Request approval and wait for my decision. Do not substitute an unprivileged execution."
+        },
+        {
+          "elapsed": 91.0335631670896,
+          "action": "send",
+          "text": "\r"
+        },
+        {
+          "elapsed": 120.41255425009876,
+          "action": "mark",
+          "case": "approval_visible",
+          "no_new_record_for_s": 25.711142778396606
+        },
+        {
+          "elapsed": 131.47390091710258,
+          "action": "send",
+          "text": "\u001b"
+        },
+        {
+          "elapsed": 152.8269262081012,
+          "action": "send",
+          "text": "/new"
+        },
+        {
+          "elapsed": 153.1262360420078,
+          "action": "send",
+          "text": "\r"
+        },
+        {
+          "elapsed": 154.63479987508617,
+          "action": "send",
+          "text": "Reply with exactly NEW_OK. Do not use tools."
+        },
+        {
+          "elapsed": 154.94470125006046,
+          "action": "send",
+          "text": "\r"
+        },
+        {
+          "elapsed": 194.9723697080044,
+          "action": "send",
+          "text": "Run sleep 30 using the shell, then reply CRASH_PROBE_DONE."
+        },
+        {
+          "elapsed": 195.331721458002,
+          "action": "send",
+          "text": "\r"
+        },
+        {
+          "elapsed": 206.01190650009084,
+          "action": "kill"
+        }
+      ],
+      "open_rollouts": [
+        {
+          "elapsed": 0.02244054200127721,
+          "files": []
+        },
+        {
+          "elapsed": 25.381513875094242,
+          "files": [
+            {
+              "file": "rollout-2026-09-12T09-46-34-01a09314-930a-7611-84f1-a28ce3f71844.jsonl",
+              "mode": "u"
+            }
+          ]
+        },
+        {
+          "elapsed": 155.80786062509287,
+          "files": [
+            {
+              "file": "rollout-2026-09-12T09-46-34-01a09314-930a-7611-84f1-a28ce3f71844.jsonl",
+              "mode": "u"
+            },
+            {
+              "file": "rollout-2026-09-12T09-49-06-01a09316-e76d-7393-8c03-d2a22959423e.jsonl",
+              "mode": "u"
+            }
+          ]
+        }
+      ],
+      "event_counts": {
+        "task_started": 7,
+        "item_completed": 15,
+        "token_count": 8,
+        "task_complete": 4,
+        "thread_settings_applied": 5,
+        "turn_aborted": 2
+      },
+      "lifecycle": [
+        {
+          "elapsed": 25.04382970801089,
+          "event": "task_started",
+          "turn_id": "01a09314-f2c1-7952-8774-9b89787d47e4",
+          "timestamp": "2026-09-12T00:46:58.763Z",
+          "visibility_lag_ms": 65.45376777648926,
+          "file": "rollout-2026-09-12T09-46-34-01a09314-930a-7611-84f1-a28ce3f71844.jsonl",
+          "enter_to_visible_ms": 76.2932300567627
+        },
+        {
+          "elapsed": 27.498928958084434,
+          "event": "task_complete",
+          "turn_id": "01a09314-f2c1-7952-8774-9b89787d47e4",
+          "timestamp": "2026-09-12T00:47:01.264Z",
+          "visibility_lag_ms": 19.541025161743164,
+          "file": "rollout-2026-09-12T09-46-34-01a09314-930a-7611-84f1-a28ce3f71844.jsonl"
+        },
+        {
+          "elapsed": 56.40870170807466,
+          "event": "task_started",
+          "turn_id": "01a09315-6d76-75b1-b4cf-b5d218c22192",
+          "timestamp": "2026-09-12T00:47:30.171Z",
+          "visibility_lag_ms": 20.550012588500977,
+          "file": "rollout-2026-09-12T09-46-34-01a09314-930a-7611-84f1-a28ce3f71844.jsonl",
+          "enter_to_visible_ms": 25.562763214111328
+        },
+        {
+          "elapsed": 58.37950320809614,
+          "event": "task_complete",
+          "turn_id": "01a09315-6d76-75b1-b4cf-b5d218c22192",
+          "timestamp": "2026-09-12T00:47:32.138Z",
+          "visibility_lag_ms": 24.321794509887695,
+          "file": "rollout-2026-09-12T09-46-34-01a09314-930a-7611-84f1-a28ce3f71844.jsonl"
+        },
+        {
+          "elapsed": 58.805954042007215,
+          "event": "task_started",
+          "turn_id": "01a09315-76d5-7cd3-8688-7f3e1e11a01d",
+          "timestamp": "2026-09-12T00:47:32.578Z",
+          "visibility_lag_ms": 10.570049285888672,
+          "file": "rollout-2026-09-12T09-46-34-01a09314-930a-7611-84f1-a28ce3f71844.jsonl",
+          "enter_to_visible_ms": 26.06487274169922
+        },
+        {
+          "elapsed": 60.90478300000541,
+          "event": "task_complete",
+          "turn_id": "01a09315-76d5-7cd3-8688-7f3e1e11a01d",
+          "timestamp": "2026-09-12T00:47:34.666Z",
+          "visibility_lag_ms": 21.26932144165039,
+          "file": "rollout-2026-09-12T09-46-34-01a09314-930a-7611-84f1-a28ce3f71844.jsonl"
+        },
+        {
+          "elapsed": 61.32157083309721,
+          "event": "task_started",
+          "turn_id": "01a09315-80ac-7113-aee6-8f4a14b39b80",
+          "timestamp": "2026-09-12T00:47:35.092Z",
+          "visibility_lag_ms": 12.156963348388672,
+          "file": "rollout-2026-09-12T09-46-34-01a09314-930a-7611-84f1-a28ce3f71844.jsonl",
+          "enter_to_visible_ms": 21.324872970581055
+        },
+        {
+          "elapsed": 78.8766386670759,
+          "event": "turn_aborted",
+          "turn_id": "01a09315-80ac-7113-aee6-8f4a14b39b80",
+          "timestamp": "2026-09-12T00:47:52.637Z",
+          "visibility_lag_ms": 21.138906478881836,
+          "file": "rollout-2026-09-12T09-46-34-01a09314-930a-7611-84f1-a28ce3f71844.jsonl"
+        },
+        {
+          "elapsed": 91.06061829207465,
+          "event": "task_started",
+          "turn_id": "01a09315-f4d2-7373-bf01-f436b9c008e7",
+          "timestamp": "2026-09-12T00:48:04.830Z",
+          "visibility_lag_ms": 11.039257049560547,
+          "file": "rollout-2026-09-12T09-46-34-01a09314-930a-7611-84f1-a28ce3f71844.jsonl",
+          "enter_to_visible_ms": 27.0540714263916
+        },
+        {
+          "elapsed": 131.4952173330821,
+          "event": "turn_aborted",
+          "turn_id": "01a09315-f4d2-7373-bf01-f436b9c008e7",
+          "timestamp": "2026-09-12T00:48:45.261Z",
+          "visibility_lag_ms": 12.542009353637695,
+          "file": "rollout-2026-09-12T09-46-34-01a09314-930a-7611-84f1-a28ce3f71844.jsonl"
+        },
+        {
+          "elapsed": 154.97066500002984,
+          "event": "task_started",
+          "turn_id": "01a09316-ee72-77f3-9ee5-208436cfb59d",
+          "timestamp": "2026-09-12T00:49:08.725Z",
+          "visibility_lag_ms": 22.536039352416992,
+          "file": "rollout-2026-09-12T09-49-06-01a09316-e76d-7393-8c03-d2a22959423e.jsonl",
+          "enter_to_visible_ms": 25.96306800842285
+        },
+        {
+          "elapsed": 157.73099520802498,
+          "event": "task_complete",
+          "turn_id": "01a09316-ee72-77f3-9ee5-208436cfb59d",
+          "timestamp": "2026-09-12T00:49:11.497Z",
+          "visibility_lag_ms": 10.516881942749023,
+          "file": "rollout-2026-09-12T09-49-06-01a09316-e76d-7393-8c03-d2a22959423e.jsonl"
+        },
+        {
+          "elapsed": 195.35784104210325,
+          "event": "task_started",
+          "turn_id": "01a09317-8c34-74b0-8443-99eea459bb04",
+          "timestamp": "2026-09-12T00:49:49.112Z",
+          "visibility_lag_ms": 20.374059677124023,
+          "file": "rollout-2026-09-12T09-49-06-01a09316-e76d-7393-8c03-d2a22959423e.jsonl",
+          "enter_to_visible_ms": 26.117801666259766
+        }
+      ],
+      "exit": [
+        {
+          "elapsed": 206.03590458305553,
+          "status": 9
+        }
+      ]
+    },
+    "second": {
+      "pid": 93822,
+      "spawn_wall": 1789174113.0569038,
+      "controls": [
+        {
+          "elapsed": 12.221348499995656,
+          "action": "send",
+          "text": "Reply with exactly SECOND_OK. Do not use tools."
+        },
+        {
+          "elapsed": 12.487369082984515,
+          "action": "send",
+          "text": "\r"
+        },
+        {
+          "elapsed": 45.3371624579886,
+          "action": "send",
+          "text": "/plan"
+        },
+        {
+          "elapsed": 45.64723420795053,
+          "action": "send",
+          "text": "\r"
+        },
+        {
+          "elapsed": 46.64994883304462,
+          "action": "send",
+          "text": "Use request_user_input to ask whether I prefer red or blue. Wait for my answer. Do not use other tools."
+        },
+        {
+          "elapsed": 46.95712875004392,
+          "action": "send",
+          "text": "\r"
+        },
+        {
+          "elapsed": 75.6982951250393,
+          "action": "mark",
+          "case": "question_visible"
+        },
+        {
+          "elapsed": 86.73762716597412,
+          "action": "send",
+          "text": "\u001b"
+        },
+        {
+          "elapsed": 109.46828829101287,
+          "action": "send",
+          "text": "/new"
+        },
+        {
+          "elapsed": 109.78811191604473,
+          "action": "send",
+          "text": "\r"
+        },
+        {
+          "elapsed": 110.97569774999283,
+          "action": "send",
+          "text": "Reply with exactly CLEAN_NEW_OK. Do not use tools."
+        },
+        {
+          "elapsed": 111.2933489580173,
+          "action": "send",
+          "text": "\r"
+        },
+        {
+          "elapsed": 239.61706183303613,
+          "action": "send",
+          "text": "\u0004"
+        }
+      ],
+      "open_rollouts": [
+        {
+          "elapsed": 0.013135000015608966,
+          "files": []
+        },
+        {
+          "elapsed": 13.207460124976933,
+          "files": [
+            {
+              "file": "rollout-2026-09-12T09-48-33-01a09316-63c8-79a0-a1a7-934e98844f85.jsonl",
+              "mode": "u"
+            }
+          ]
+        },
+        {
+          "elapsed": 111.45471145794727,
+          "files": [
+            {
+              "file": "rollout-2026-09-12T09-48-33-01a09316-63c8-79a0-a1a7-934e98844f85.jsonl",
+              "mode": "u"
+            },
+            {
+              "file": "rollout-2026-09-12T09-50-22-01a09318-0ffb-7072-8088-c306c7716cfc.jsonl",
+              "mode": "u"
+            }
+          ]
+        },
+        {
+          "elapsed": 170.07946354104206,
+          "files": [
+            {
+              "file": "rollout-2026-09-12T09-50-22-01a09318-0ffb-7072-8088-c306c7716cfc.jsonl",
+              "mode": "u"
+            }
+          ]
+        }
+      ],
+      "event_counts": {
+        "task_started": 3,
+        "item_completed": 5,
+        "token_count": 3,
+        "task_complete": 2,
+        "thread_settings_applied": 2,
+        "turn_aborted": 1
+      },
+      "lifecycle": [
+        {
+          "elapsed": 12.584226415958256,
+          "event": "task_started",
+          "turn_id": "01a09316-93e7-7af2-aa8e-302fef3dfdde",
+          "timestamp": "2026-09-12T00:48:45.557Z",
+          "visibility_lag_ms": 81.1300277709961,
+          "file": "rollout-2026-09-12T09-48-33-01a09316-63c8-79a0-a1a7-934e98844f85.jsonl",
+          "enter_to_visible_ms": 96.85206413269043
+        },
+        {
+          "elapsed": 15.737619415973313,
+          "event": "task_complete",
+          "turn_id": "01a09316-93e7-7af2-aa8e-302fef3dfdde",
+          "timestamp": "2026-09-12T00:48:48.787Z",
+          "visibility_lag_ms": 3.948211669921875,
+          "file": "rollout-2026-09-12T09-48-33-01a09316-63c8-79a0-a1a7-934e98844f85.jsonl"
+        },
+        {
+          "elapsed": 46.98138395801652,
+          "event": "task_started",
+          "turn_id": "01a09317-1a8a-7543-bce9-462afffd67d0",
+          "timestamp": "2026-09-12T00:49:20.013Z",
+          "visibility_lag_ms": 20.272016525268555,
+          "file": "rollout-2026-09-12T09-48-33-01a09316-63c8-79a0-a1a7-934e98844f85.jsonl",
+          "enter_to_visible_ms": 24.25408363342285
+        },
+        {
+          "elapsed": 86.76206133305095,
+          "event": "turn_aborted",
+          "turn_id": "01a09317-1a8a-7543-bce9-462afffd67d0",
+          "timestamp": "2026-09-12T00:49:59.792Z",
+          "visibility_lag_ms": 19.591808319091797,
+          "file": "rollout-2026-09-12T09-48-33-01a09316-63c8-79a0-a1a7-934e98844f85.jsonl"
+        },
+        {
+          "elapsed": 111.31934920803178,
+          "event": "task_started",
+          "turn_id": "01a09318-15d6-7480-ac09-f5f3df05f402",
+          "timestamp": "2026-09-12T00:50:24.347Z",
+          "visibility_lag_ms": 20.33209800720215,
+          "file": "rollout-2026-09-12T09-50-22-01a09318-0ffb-7072-8088-c306c7716cfc.jsonl",
+          "enter_to_visible_ms": 25.999069213867188
+        },
+        {
+          "elapsed": 115.43923725001514,
+          "event": "task_complete",
+          "turn_id": "01a09318-15d6-7480-ac09-f5f3df05f402",
+          "timestamp": "2026-09-12T00:50:28.479Z",
+          "visibility_lag_ms": 7.881879806518555,
+          "file": "rollout-2026-09-12T09-50-22-01a09318-0ffb-7072-8088-c306c7716cfc.jsonl"
+        }
+      ],
+      "exit": [
+        {
+          "elapsed": 239.7621231660014,
+          "status": 0
+        }
+      ]
+    },
+    "resumed": {
+      "pid": 95913,
+      "spawn_wall": 1789174209.696857,
+      "controls": [
+        {
+          "elapsed": 12.530130582978018,
+          "action": "send",
+          "text": "Reply with exactly RESUMED_OK. Do not use tools."
+        },
+        {
+          "elapsed": 12.825821582926437,
+          "action": "send",
+          "text": "\r"
+        },
+        {
+          "elapsed": 107.25671300000977,
+          "action": "send",
+          "text": "Reply with exactly VNODE_OK. Do not use tools."
+        },
+        {
+          "elapsed": 107.5227690829197,
+          "action": "send",
+          "text": "\r"
+        },
+        {
+          "elapsed": 112.83265412494075,
+          "action": "send",
+          "text": "Reply with exactly VNODE_OK. Do not use tools."
+        },
+        {
+          "elapsed": 113.150218707975,
+          "action": "send",
+          "text": "\r"
+        },
+        {
+          "elapsed": 142.96492104197387,
+          "action": "send",
+          "text": "\u0004"
+        }
+      ],
+      "open_rollouts": [
+        {
+          "elapsed": 0.017255416954867542,
+          "files": []
+        },
+        {
+          "elapsed": 1.0597996669821441,
+          "files": [
+            {
+              "file": "rollout-2026-09-12T09-49-06-01a09316-e76d-7393-8c03-d2a22959423e.jsonl",
+              "mode": "u"
+            }
+          ]
+        }
+      ],
+      "event_counts": {
+        "thread_settings_applied": 3,
+        "task_started": 3,
+        "item_completed": 6,
+        "token_count": 3,
+        "task_complete": 3
+      },
+      "lifecycle": [
+        {
+          "elapsed": 12.848923749988899,
+          "event": "task_started",
+          "turn_id": "01a09318-0eb8-70a1-864f-691f4ea2f316",
+          "timestamp": "2026-09-12T00:50:22.533Z",
+          "visibility_lag_ms": 9.521007537841797,
+          "file": "rollout-2026-09-12T09-49-06-01a09316-e76d-7393-8c03-d2a22959423e.jsonl",
+          "enter_to_visible_ms": 23.100852966308594
+        },
+        {
+          "elapsed": 16.30445408297237,
+          "event": "task_complete",
+          "turn_id": "01a09318-0eb8-70a1-864f-691f4ea2f316",
+          "timestamp": "2026-09-12T00:50:25.988Z",
+          "visibility_lag_ms": 9.89389419555664,
+          "file": "rollout-2026-09-12T09-49-06-01a09316-e76d-7393-8c03-d2a22959423e.jsonl"
+        },
+        {
+          "elapsed": 107.5484433749225,
+          "event": "task_started",
+          "turn_id": "01a09319-809c-7e21-9057-d3910846a25f",
+          "timestamp": "2026-09-12T00:51:57.217Z",
+          "visibility_lag_ms": 19.423961639404297,
+          "file": "rollout-2026-09-12T09-49-06-01a09316-e76d-7393-8c03-d2a22959423e.jsonl",
+          "enter_to_visible_ms": 25.67291259765625
+        },
+        {
+          "elapsed": 109.9794922079891,
+          "event": "task_complete",
+          "turn_id": "01a09319-809c-7e21-9057-d3910846a25f",
+          "timestamp": "2026-09-12T00:51:59.647Z",
+          "visibility_lag_ms": 20.342111587524414,
+          "file": "rollout-2026-09-12T09-49-06-01a09316-e76d-7393-8c03-d2a22959423e.jsonl"
+        },
+        {
+          "elapsed": 113.17547162494157,
+          "event": "task_started",
+          "turn_id": "01a09319-9697-7a01-a47d-a0f02d8ba9c1",
+          "timestamp": "2026-09-12T00:52:02.850Z",
+          "visibility_lag_ms": 13.007164001464844,
+          "file": "rollout-2026-09-12T09-49-06-01a09316-e76d-7393-8c03-d2a22959423e.jsonl",
+          "enter_to_visible_ms": 25.252103805541992
+        },
+        {
+          "elapsed": 115.96523404191248,
+          "event": "task_complete",
+          "turn_id": "01a09319-9697-7a01-a47d-a0f02d8ba9c1",
+          "timestamp": "2026-09-12T00:52:05.628Z",
+          "visibility_lag_ms": 24.815082550048828,
+          "file": "rollout-2026-09-12T09-49-06-01a09316-e76d-7393-8c03-d2a22959423e.jsonl"
+        }
+      ],
+      "exit": [
+        {
+          "elapsed": 143.11580862500705,
+          "status": 0
+        }
+      ]
+    }
+  },
+  "polling_visibility_ms": {
+    "task_started": {
+      "n": 13,
+      "minimum": 9.521007537841797,
+      "median": 20.272016525268555,
+      "maximum": 81.1300277709961
+    },
+    "task_complete": {
+      "n": 9,
+      "minimum": 3.948211669921875,
+      "median": 19.541025161743164,
+      "maximum": 24.815082550048828
+    },
+    "turn_aborted": {
+      "n": 3,
+      "minimum": 12.542009353637695,
+      "median": 19.591808319091797,
+      "maximum": 21.138906478881836
+    }
+  },
+  "vnode": [
+    {
+      "kind": "ready",
+      "wall": 1789174315.7305758
+    },
+    {
+      "kind": "vnode",
+      "wall": 1789174317.216115,
+      "bytes": 2050,
+      "flags": [
+        6
+      ]
+    },
+    {
+      "kind": "record",
+      "wall": 1789174317.216115,
+      "record_type": "event_msg",
+      "event": "thread_settings_applied",
+      "turn_id": null,
+      "timestamp": "2026-09-12T00:51:57.216Z",
+      "visibility_lag_ms": 0.11491775512695312
+    },
+    {
+      "kind": "vnode",
+      "wall": 1789174317.217815,
+      "bytes": 246,
+      "flags": [
+        6
+      ]
+    },
+    {
+      "kind": "record",
+      "wall": 1789174317.217815,
+      "record_type": "event_msg",
+      "event": "task_started",
+      "turn_id": "01a09319-809c-7e21-9057-d3910846a25f",
+      "timestamp": "2026-09-12T00:51:57.217Z",
+      "visibility_lag_ms": 0.8149147033691406
+    },
+    {
+      "kind": "vnode",
+      "wall": 1789174317.22388,
+      "bytes": 2276,
+      "flags": [
+        6
+      ]
+    },
+    {
+      "kind": "record",
+      "wall": 1789174317.22388,
+      "record_type": "turn_context",
+      "event": null,
+      "turn_id": "01a09319-809c-7e21-9057-d3910846a25f",
+      "timestamp": "2026-09-12T00:51:57.223Z",
+      "visibility_lag_ms": 0.8800029754638672
+    },
+    {
+      "kind": "vnode",
+      "wall": 1789174317.236862,
+      "bytes": 421,
+      "flags": [
+        6
+      ]
+    },
+    {
+      "kind": "record",
+      "wall": 1789174317.236862,
+      "record_type": "response_item",
+      "event": "message",
+      "turn_id": null,
+      "timestamp": "2026-09-12T00:51:57.236Z",
+      "visibility_lag_ms": 0.8618831634521484
+    },
+    {
+      "kind": "vnode",
+      "wall": 1789174317.237417,
+      "bytes": 499,
+      "flags": [
+        6
+      ]
+    },
+    {
+      "kind": "record",
+      "wall": 1789174317.237417,
+      "record_type": "event_msg",
+      "event": "item_completed",
+      "turn_id": "01a09319-809c-7e21-9057-d3910846a25f",
+      "timestamp": "2026-09-12T00:51:57.237Z",
+      "visibility_lag_ms": 0.4169940948486328
+    },
+    {
+      "kind": "vnode",
+      "wall": 1789174319.577238,
+      "bytes": 433,
+      "flags": [
+        6
+      ]
+    },
+    {
+      "kind": "record",
+      "wall": 1789174319.577238,
+      "record_type": "event_msg",
+      "event": "item_completed",
+      "turn_id": "01a09319-809c-7e21-9057-d3910846a25f",
+      "timestamp": "2026-09-12T00:51:59.577Z",
+      "visibility_lag_ms": 0.23818016052246094
+    },
+    {
+      "kind": "vnode",
+      "wall": 1789174319.579691,
+      "bytes": 424,
+      "flags": [
+        6
+      ]
+    },
+    {
+      "kind": "record",
+      "wall": 1789174319.579691,
+      "record_type": "response_item",
+      "event": "message",
+      "turn_id": null,
+      "timestamp": "2026-09-12T00:51:59.579Z",
+      "visibility_lag_ms": 0.6909370422363281
+    },
+    {
+      "kind": "vnode",
+      "wall": 1789174319.642944,
+      "bytes": 863,
+      "flags": [
+        6
+      ]
+    },
+    {
+      "kind": "record",
+      "wall": 1789174319.642944,
+      "record_type": "token_usage_record",
+      "event": null,
+      "turn_id": "01a09319-809c-7e21-9057-d3910846a25f",
+      "timestamp": "2026-09-12T00:51:59.642Z",
+      "visibility_lag_ms": 0.9441375732421875
+    },
+    {
+      "kind": "vnode",
+      "wall": 1789174319.643669,
+      "bytes": 793,
+      "flags": [
+        6
+      ]
+    },
+    {
+      "kind": "record",
+      "wall": 1789174319.643669,
+      "record_type": "event_msg",
+      "event": "token_count",
+      "turn_id": null,
+      "timestamp": "2026-09-12T00:51:59.643Z",
+      "visibility_lag_ms": 0.6690025329589844
+    },
+    {
+      "kind": "vnode",
+      "wall": 1789174319.6475031,
+      "bytes": 288,
+      "flags": [
+        6
+      ]
+    },
+    {
+      "kind": "record",
+      "wall": 1789174319.6475031,
+      "record_type": "event_msg",
+      "event": "task_complete",
+      "turn_id": "01a09319-809c-7e21-9057-d3910846a25f",
+      "timestamp": "2026-09-12T00:51:59.647Z",
+      "visibility_lag_ms": 0.5030632019042969
+    },
+    {
+      "kind": "vnode",
+      "wall": 1789174322.846915,
+      "bytes": 2050,
+      "flags": [
+        6
+      ]
+    },
+    {
+      "kind": "record",
+      "wall": 1789174322.846915,
+      "record_type": "event_msg",
+      "event": "thread_settings_applied",
+      "turn_id": null,
+      "timestamp": "2026-09-12T00:52:02.846Z",
+      "visibility_lag_ms": 0.9150505065917969
+    },
+    {
+      "kind": "vnode",
+      "wall": 1789174322.850231,
+      "bytes": 246,
+      "flags": [
+        6
+      ]
+    },
+    {
+      "kind": "record",
+      "wall": 1789174322.850231,
+      "record_type": "event_msg",
+      "event": "task_started",
+      "turn_id": "01a09319-9697-7a01-a47d-a0f02d8ba9c1",
+      "timestamp": "2026-09-12T00:52:02.850Z",
+      "visibility_lag_ms": 0.23102760314941406
+    },
+    {
+      "kind": "vnode",
+      "wall": 1789174322.8592231,
+      "bytes": 2276,
+      "flags": [
+        6
+      ]
+    },
+    {
+      "kind": "record",
+      "wall": 1789174322.8592231,
+      "record_type": "turn_context",
+      "event": null,
+      "turn_id": "01a09319-9697-7a01-a47d-a0f02d8ba9c1",
+      "timestamp": "2026-09-12T00:52:02.859Z",
+      "visibility_lag_ms": 0.2231597900390625
+    },
+    {
+      "kind": "vnode",
+      "wall": 1789174322.8691452,
+      "bytes": 421,
+      "flags": [
+        6
+      ]
+    },
+    {
+      "kind": "record",
+      "wall": 1789174322.8691452,
+      "record_type": "response_item",
+      "event": "message",
+      "turn_id": null,
+      "timestamp": "2026-09-12T00:52:02.869Z",
+      "visibility_lag_ms": 0.14519691467285156
+    },
+    {
+      "kind": "vnode",
+      "wall": 1789174322.869649,
+      "bytes": 499,
+      "flags": [
+        6
+      ]
+    },
+    {
+      "kind": "record",
+      "wall": 1789174322.869649,
+      "record_type": "event_msg",
+      "event": "item_completed",
+      "turn_id": "01a09319-9697-7a01-a47d-a0f02d8ba9c1",
+      "timestamp": "2026-09-12T00:52:02.869Z",
+      "visibility_lag_ms": 0.6489753723144531
+    },
+    {
+      "kind": "vnode",
+      "wall": 1789174325.558617,
+      "bytes": 433,
+      "flags": [
+        6
+      ]
+    },
+    {
+      "kind": "record",
+      "wall": 1789174325.558617,
+      "record_type": "event_msg",
+      "event": "item_completed",
+      "turn_id": "01a09319-9697-7a01-a47d-a0f02d8ba9c1",
+      "timestamp": "2026-09-12T00:52:05.558Z",
+      "visibility_lag_ms": 0.6170272827148438
+    },
+    {
+      "kind": "vnode",
+      "wall": 1789174325.561111,
+      "bytes": 424,
+      "flags": [
+        6
+      ]
+    },
+    {
+      "kind": "record",
+      "wall": 1789174325.561111,
+      "record_type": "response_item",
+      "event": "message",
+      "turn_id": null,
+      "timestamp": "2026-09-12T00:52:05.561Z",
+      "visibility_lag_ms": 0.11086463928222656
+    },
+    {
+      "kind": "vnode",
+      "wall": 1789174325.626375,
+      "bytes": 863,
+      "flags": [
+        6
+      ]
+    },
+    {
+      "kind": "record",
+      "wall": 1789174325.626375,
+      "record_type": "token_usage_record",
+      "event": null,
+      "turn_id": "01a09319-9697-7a01-a47d-a0f02d8ba9c1",
+      "timestamp": "2026-09-12T00:52:05.626Z",
+      "visibility_lag_ms": 0.3750324249267578
+    },
+    {
+      "kind": "vnode",
+      "wall": 1789174325.626928,
+      "bytes": 793,
+      "flags": [
+        6
+      ]
+    },
+    {
+      "kind": "record",
+      "wall": 1789174325.626928,
+      "record_type": "event_msg",
+      "event": "token_count",
+      "turn_id": null,
+      "timestamp": "2026-09-12T00:52:05.626Z",
+      "visibility_lag_ms": 0.9281635284423828
+    },
+    {
+      "kind": "vnode",
+      "wall": 1789174325.628673,
+      "bytes": 288,
+      "flags": [
+        6
+      ]
+    },
+    {
+      "kind": "record",
+      "wall": 1789174325.628673,
+      "record_type": "event_msg",
+      "event": "task_complete",
+      "turn_id": "01a09319-9697-7a01-a47d-a0f02d8ba9c1",
+      "timestamp": "2026-09-12T00:52:05.628Z",
+      "visibility_lag_ms": 0.6730556488037109
+    }
+  ]
+}
