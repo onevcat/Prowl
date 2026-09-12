@@ -107,8 +107,12 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
   private var stopped = false
   private var streamContinuation: AsyncStream<HerdrNativeStreamState>.Continuation?
   private let stream: AsyncStream<HerdrNativeStreamState>
+  private let readBarrier: (@Sendable (UInt64) -> Void)?
 
-  internal init(temporaryDirectory: URL = FileManager.default.temporaryDirectory) throws {
+  internal init(
+    temporaryDirectory: URL = FileManager.default.temporaryDirectory,
+    readBarrier: (@Sendable (UInt64) -> Void)? = nil
+  ) throws {
     guard let ownerIdentity = Self.processIdentity(pid: getpid()) else {
       throw HerdrNativeChromeTransportError.invalidClaim("Prowl process identity is unavailable.")
     }
@@ -131,6 +135,7 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
       continuation = $0
     }
     streamContinuation = continuation
+    self.readBarrier = readBarrier
 
     listenerDescriptor = try Self.makeListener(at: socketPath)
     startAccepting()
@@ -186,7 +191,6 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
     }
     if connection >= 0 {
       _ = Darwin.shutdown(connection, SHUT_RDWR)
-      Darwin.close(connection)
     }
     writeLock.unlock()
     streamContinuation?.finish()
@@ -301,7 +305,6 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
       }
       if connectionDescriptor >= 0 {
         _ = Darwin.shutdown(connectionDescriptor, SHUT_RDWR)
-        Darwin.close(connectionDescriptor)
       }
       connectionDescriptor = descriptor
       connectionEpoch &+= 1
@@ -324,7 +327,7 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
       if isReconnect {
         streamContinuation?.yield(.reconnected(epoch: epoch))
       }
-      readAggregateFrames(from: descriptor)
+      readAggregateFrames(from: descriptor, epoch: epoch)
     } catch {
       let message = String(describing: error)
       let listener: Int32
@@ -406,10 +409,14 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
     return claim
   }
 
-  private func readAggregateFrames(from descriptor: Int32) {
+  private func readAggregateFrames(from descriptor: Int32, epoch: UInt64) {
+    defer { Darwin.close(descriptor) }
     do {
       while true {
+        guard isCurrentConnection(descriptor: descriptor, epoch: epoch) else { return }
         let data = try Self.readFrame(from: descriptor)
+        readBarrier?(epoch)
+        guard isCurrentConnection(descriptor: descriptor, epoch: epoch) else { return }
         try Self.validateCoreEnvelopeKeys(in: data)
         let envelope = try JSONDecoder().decode(
           HerdrNativeChromeEnvelope<HerdrNativeAggregatePayload>.self,
@@ -430,8 +437,11 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
           throw HerdrNativeChromeTransportError.invalidClaim(
             "Aggregate frame core envelope is invalid.")
         }
-        streamContinuation?.yield(
-          .frame(aggregateFrame(from: envelope, sequence: sequence, projectionRevision: projectionRevision)))
+        guard publishFrameIfCurrent(
+          aggregateFrame(from: envelope, sequence: sequence, projectionRevision: projectionRevision),
+          descriptor: descriptor,
+          epoch: epoch
+        ) else { return }
       }
     } catch {
       let reconnectable: Bool
@@ -445,13 +455,12 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
       if !reconnectable {
         writeLock.lock()
         condition.lock()
-        let isCurrentConnection = connectionDescriptor == descriptor
+        let isCurrentConnection = connectionDescriptor == descriptor && connectionEpoch == epoch
         if isCurrentConnection {
           connectionDescriptor = -1
           claimState = .incompatible(String(describing: error))
         }
         condition.unlock()
-        Darwin.close(descriptor)
         writeLock.unlock()
         if isCurrentConnection {
           closeListenerAndSocketFile()
@@ -461,25 +470,24 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
         return
       }
 
-      let epoch: UInt64?
+      let currentEpoch: UInt64?
       writeLock.lock()
       condition.lock()
-      if connectionDescriptor == descriptor {
+      if connectionDescriptor == descriptor && connectionEpoch == epoch {
         connectionDescriptor = -1
-        epoch = connectionEpoch
+        currentEpoch = epoch
       } else {
-        epoch = nil
+        currentEpoch = nil
       }
       condition.unlock()
-      Darwin.close(descriptor)
       writeLock.unlock()
-      guard let epoch else { return }
+      guard let currentEpoch else { return }
       let deadline = Date().addingTimeInterval(1)
       condition.lock()
-      while !stopped, connectionDescriptor < 0, connectionEpoch == epoch {
+      while !stopped, connectionDescriptor < 0, connectionEpoch == currentEpoch {
         if !condition.wait(until: deadline) { break }
       }
-      let reconnected = connectionDescriptor >= 0 && connectionEpoch != epoch
+      let reconnected = connectionDescriptor >= 0 && connectionEpoch != currentEpoch
       let shouldFinish = !stopped && !reconnected && connectionDescriptor < 0
       if shouldFinish {
         claimState = .incompatible(
@@ -493,6 +501,24 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
         streamContinuation?.finish()
       }
     }
+  }
+
+  private func isCurrentConnection(descriptor: Int32, epoch: UInt64) -> Bool {
+    condition.lock()
+    defer { condition.unlock() }
+    return !stopped && connectionDescriptor == descriptor && connectionEpoch == epoch
+  }
+
+  private func publishFrameIfCurrent(
+    _ frame: HerdrNativeAggregateFrame,
+    descriptor: Int32,
+    epoch: UInt64
+  ) -> Bool {
+    writeLock.lock()
+    defer { writeLock.unlock() }
+    guard isCurrentConnection(descriptor: descriptor, epoch: epoch) else { return false }
+    streamContinuation?.yield(.frame(frame))
+    return true
   }
 
   private func aggregateFrame(

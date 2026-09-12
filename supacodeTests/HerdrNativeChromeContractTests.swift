@@ -1054,70 +1054,87 @@ struct HerdrNativeChromeContractTests {
     #expect(store.state.pendingMutation == nil)
   }
 
-  @Test func connectionReplacementWaitsForInFlightFrameWrite() async throws {
-    let rendezvous = try HerdrNativeChromeRendezvous()
+  @Test func staleReaderCannotPublishAfterConnectionReplacement() async throws {
+    final class ReadBarrier: @unchecked Sendable {
+      let entered = DispatchSemaphore(value: 0)
+      let release = DispatchSemaphore(value: 0)
+    }
+
+    let barrier = ReadBarrier()
+    let rendezvous = try HerdrNativeChromeRendezvous(
+      readBarrier: { epoch in
+        if epoch == 1 {
+          barrier.entered.signal()
+          barrier.release.wait()
+        }
+      }
+    )
     defer { rendezvous.stop() }
+
     let descriptor = try connectUnixSocket(at: rendezvous.binding.socketPath)
+    defer { Darwin.close(descriptor) }
     let claim = nativeClaim(for: rendezvous)
     try writeFrame(JSONEncoder().encode(claim), to: descriptor)
 
     let result = await rendezvous.probe()
     guard case .aggregate(let session) = result else {
       Issue.record("Expected aggregate contract claim")
-      Darwin.close(descriptor)
       return
     }
 
-    var receiveBuffer: Int32 = 1_024
-    #expect(
-      Darwin.setsockopt(
-        descriptor,
-        SOL_SOCKET,
-        SO_RCVBUF,
-        &receiveBuffer,
-        socklen_t(MemoryLayout<Int32>.size)
-      ) == 0
-    )
-    let sendTask = Task {
-      try? await session.send(Data(repeating: 0x41, count: HerdrNativeChromeRendezvous.maximumFrameSize))
+    func aggregateFrame(sequence: UInt64) throws -> Data {
+      let base = try goldenEnvelope()
+      return try JSONEncoder().encode(
+        HerdrNativeChromeEnvelope(
+          contractVersion: base.contractVersion,
+          clientInstanceID: base.clientInstanceID,
+          messageKind: "aggregate_state",
+          eventSequence: sequence,
+          projectionRevision: sequence,
+          requestID: nil,
+          activationEpoch: nil,
+          payload: base.payload
+        )
+      )
     }
-    for _ in 0..<100 { await Task.yield() }
 
+    try writeFrame(aggregateFrame(sequence: 1), to: descriptor)
+    let entered = await withCheckedContinuation { continuation in
+      DispatchQueue.global().async {
+        continuation.resume(returning: barrier.entered.wait(timeout: .now() + 2))
+      }
+    }
+    #expect(entered == .success)
+
+    var iterator = session.stream.makeAsyncIterator()
     let reconnectDescriptor = try connectUnixSocket(at: rendezvous.binding.socketPath)
     defer { Darwin.close(reconnectDescriptor) }
     try writeFrame(JSONEncoder().encode(claim), to: reconnectDescriptor)
 
-    let observedBeforeOldClose = await withTaskGroup(of: Bool?.self) { group in
-      group.addTask {
-        var iterator = session.stream.makeAsyncIterator()
-        while let state = await iterator.next() {
-          if case .reconnected = state { return true }
-        }
-        return false
-      }
-      group.addTask {
-        try? await Task.sleep(for: .milliseconds(100))
-        return nil
-      }
-      let result = await group.next() ?? nil
-      group.cancelAll()
-      return result
-    }
-    #expect(observedBeforeOldClose != true)
-
-    _ = Darwin.shutdown(descriptor, SHUT_RDWR)
-    Darwin.close(descriptor)
-    _ = await sendTask.value
-
-    var iterator = session.stream.makeAsyncIterator()
-    var reconnected = false
+    var observedReconnect = false
     while let state = await iterator.next() {
       if case .reconnected = state {
-        reconnected = true
+        observedReconnect = true
         break
       }
     }
-    #expect(reconnected)
+    #expect(observedReconnect)
+
+    barrier.release.signal()
+    _ = Darwin.shutdown(descriptor, SHUT_RDWR)
+
+    try writeFrame(aggregateFrame(sequence: 2), to: reconnectDescriptor)
+    var observedNewFrame = false
+    while let state = await iterator.next() {
+      if case .frame(let frame) = state {
+        #expect(frame.sequence != 1)
+        if frame.sequence == 2 {
+          observedNewFrame = true
+          break
+        }
+      }
+    }
+    #expect(observedNewFrame)
   }
 
   @Test(.dependencies) func verifiedNoContractClaimStartsLegacyLifecycle() async {
