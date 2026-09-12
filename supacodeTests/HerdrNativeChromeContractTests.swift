@@ -34,6 +34,27 @@ struct HerdrNativeChromeContractTests {
     #expect(remote.snapshot?.focusedPaneID == "pane-duplicate")
   }
 
+  @Test func decodesRealSSHProfileAggregateOffMainActor() async throws {
+    let fixtureURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .appending(path: "Fixtures/herdr-native-chrome-v1.json")
+    let data = try Data(contentsOf: fixtureURL)
+
+    let endpointKeys = try await Task.detached {
+      let envelope = try JSONDecoder().decode(
+        HerdrNativeChromeEnvelope<HerdrNativeAggregatePayload>.self,
+        from: data
+      )
+      return envelope.payload.state.endpoints.map(\.endpointKey)
+    }.value
+
+    #expect(
+      endpointKeys == [
+        .local,
+        .ssh(profileID: "0123456789abcdef0123456789abcdef"),
+      ])
+  }
+
   @Test func malformedEndpointProjectionDoesNotEraseHealthyMachines() throws {
     let fixtureURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()

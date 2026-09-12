@@ -12,7 +12,7 @@ nonisolated internal enum HerdrEndpointKey: Hashable, Sendable {
   }
 }
 
-extension HerdrEndpointKey: Codable {
+nonisolated extension HerdrEndpointKey: Codable {
   private enum CodingKeys: String, CodingKey {
     case kind
     case profileID = "profile_id"
@@ -101,7 +101,7 @@ nonisolated internal enum HerdrConnectionIdentityState: Equatable, Sendable {
   case concrete(HerdrConnectionIdentity)
 }
 
-extension HerdrConnectionIdentityState: Codable {
+nonisolated extension HerdrConnectionIdentityState: Codable {
   private enum CodingKeys: String, CodingKey {
     case kind
     case connectionGeneration = "connection_generation"
@@ -592,7 +592,7 @@ nonisolated internal enum HerdrCommittedPresentation: Equatable, Sendable {
   case active(endpointKey: HerdrEndpointKey, selection: HerdrSelection?)
 }
 
-extension HerdrCommittedPresentation: Codable {
+nonisolated extension HerdrCommittedPresentation: Codable {
   private enum CodingKeys: String, CodingKey {
     case kind
     case reason
