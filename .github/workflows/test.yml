@@ -71,6 +71,14 @@ jobs:
             python3 scripts/summarize-xcode-build.py build/test-results/*.build.json
           } >> "$GITHUB_STEP_SUMMARY"
           exit "$failed"
+      - name: Collect mirror diagnostics
+        if: failure()
+        shell: bash
+        run: |
+          mkdir -p build/ci-logs
+          /usr/bin/log show --last 30m --style compact --info --debug \
+            --predicate 'category == "MirrorPairing" OR process == "mDNSResponder"' \
+            > build/ci-logs/mirror-system.log 2>&1 || true
       - name: Save build input times
         run: |
           python3 scripts/ci-source-mtimes.py save

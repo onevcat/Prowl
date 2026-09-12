@@ -124,7 +124,15 @@ final class MirrorRemoteConnection: MirrorTransport {
           )
         } else {
           let code = try MirrorPairingCode.normalized(configuration.pairingKey)
+          #if DEBUG
+            let lookupStarted = ProcessInfo.processInfo.systemUptime
+            SupaLogger("MirrorPairing").notice("Device name lookup started")
+          #endif
           let name = String(ProcessInfo.processInfo.hostName.prefix(80))
+          #if DEBUG
+            let elapsed = ProcessInfo.processInfo.systemUptime - lookupStarted
+            SupaLogger("MirrorPairing").notice("Device name lookup completed after \(elapsed) seconds")
+          #endif
           connection?.send(
             .pair(
               .init(

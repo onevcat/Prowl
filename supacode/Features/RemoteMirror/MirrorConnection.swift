@@ -128,6 +128,9 @@ final class MirrorConnection {
 
   func close(_ reason: String? = nil) {
     guard !closed else { return }
+    #if DEBUG
+      SupaLogger("MirrorPairing").notice("Connection \(id) closed: \(reason ?? "no reason")")
+    #endif
     closed = true
     deadline?.cancel()
     heartbeat?.cancel()
