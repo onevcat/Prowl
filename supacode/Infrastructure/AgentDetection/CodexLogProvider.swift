@@ -19,7 +19,7 @@ actor CodexLogProvider {
   }
 
   private enum Failure: Error { case incomplete, notReady, unknownLineage }
-  private var lastDiagnosticAt: TimeInterval?
+  private var lastDiagnosticAt: [String: TimeInterval] = [:]
   private var reportedFailure = false
   private var processID: pid_t?
   private(set) var metadataReadCount = 0
@@ -68,25 +68,29 @@ actor CodexLogProvider {
       report("unknownLineage")
       return [.suspended]
     } catch {
-      report("continuityLost")
       cursors.removeAll()
+      let detail =
+        error is CodexLogDecoder.Failure
+        ? "invalidRecord" : error is Failure ? "incomplete" : "ioOrJSON(code=\((error as NSError).code))"
+      report("continuityLost", detail: detail)
       needsBaseline = true
       return [.unavailable]
     }
   }
 
-  private func report(_ failure: String?) {
+  private func report(_ failure: String?, detail: String? = nil) {
     let now = time()
-    if failure != nil {
-      guard lastDiagnosticAt.map({ now - $0 >= 30 }) ?? true else { return }
-      lastDiagnosticAt = now
+    if let failure {
       reportedFailure = true
+      guard lastDiagnosticAt[failure].map({ now - $0 >= 30 }) ?? true else { return }
+      lastDiagnosticAt[failure] = now
     } else {
       guard reportedFailure else { return }
       reportedFailure = false
     }
     let pid = processID.map(String.init) ?? "unbound"
-    diagnostic("Log provider pid=\(pid) status=\(failure ?? "recovered") cursors=\(cursors.count)")
+    diagnostic(
+      "Log provider pid=\(pid) status=\(failure ?? "recovered") cursors=\(cursors.count) detail=\(detail ?? "none")")
   }
 
   private func read(paths: [URL]) throws -> [AgentDetectionEvent] {

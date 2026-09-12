@@ -104,6 +104,7 @@ extension WorktreeTerminalState {
 
     let now = Date()
     var previous = surfaceAgentStates[surfaceID] ?? PaneAgentState(lastChangedAt: now)
+    let capturedAt = ProcessInfo.processInfo.systemUptime
     let activeText = view.bridge.readActiveText() ?? ""
     // Reuse the previous scan while the screen and detected agent are unchanged.
     // A live-but-idle agent is polled every 300 ms and `detectState` re-splits,
@@ -137,6 +138,7 @@ extension WorktreeTerminalState {
       let decision = await coordinator.observe(
         agent: agent, process: process, screen: detection,
         screenContentID: detection.state == .blocked ? activeText.hashValue : nil,
+        capturedAt: capturedAt,
         configRoot: launchProfilesBySurface[surfaceID]?.configRoot(forDetected: agent)
       ), surfaces[surfaceID] != nil, let latest = surfaceAgentStates[surfaceID]
     else { return false }

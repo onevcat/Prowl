@@ -107,13 +107,23 @@ the final state decision and `screen_reason` for the screen rule. Codex can repo
 the latest screen classification. A current blocker reports its screen-rule ID.
 Screen-only runtimes keep their existing rule identifiers. An ordinary profile miss
 reports `fallback.noRuleMatched`; unmigrated classifiers report `legacy.detector`.
-Reasons never include screen text, and the text-mode command and app UI are unchanged.
+Reasons never include screen text. Screen fallback IDs are:
 
-Log acquisition warnings use the `AgentDetection` logging category in Debug and
-Release. They identify the PID, cursor count, and failure category (`incompleteInventory`,
-`partialHeader`, `unknownLineage`, or `continuityLost`). Warnings are limited to one
-per provider every 30 seconds; a successful read reports recovery once after a
-reported failure. These logs contain no transcript or screen content.
+- `screen.logUnavailable`: log authority is unavailable or suspended.
+- `screen.ambiguousLogs`: more than one log root is recently active or has open work.
+- `screen.noLiveTurn`: no root has current log authority.
+- `screen.afterTurn`: new Working screen evidence appeared after completion.
+- `screen.retainedCompletion`: an unchanged completed frame is still suppressed.
+
+Use `status` to decide whether intervention is needed. A blocked `screen_reason`
+with Idle status can be a stale prompt fenced by completion; do not send Enter
+based on the screen reason alone.
+
+Log acquisition warnings use the `AgentDetection` category. `SupaLogger` writes
+them to stdout in Debug and the unified log in Release. They identify the PID, cursor count, and failure category (`incompleteInventory`,
+`partialHeader`, `unknownLineage`, or `continuityLost`). Warnings are limited to one per failure category per provider every 30 seconds;
+a successful read reports recovery once after any failure, including a throttled one.
+Continuity-loss warnings report the post-reset cursor count and a bounded error kind/code. These logs contain no transcript or screen content.
 
 Detection tolerates several consecutive process-probe misses before declaring an
 agent gone. Screen-only state is deterministic: a recognized Working, Blocked, or

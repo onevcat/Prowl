@@ -26,7 +26,9 @@ result is separate evidence and may be unavailable without invalidating the live
 snapshot. This prevents an unresolvable transcript from hiding a useful blocker.
 
 - `status` is Prowl's stabilized `working`, `blocked`, `done`, or `idle` display state.
-- `raw_state` and `detection_reason` are from the fresh active-screen classifier.
+- `raw_state` and `screen_reason` come from the fresh active-screen classifier.
+- `detection_reason` explains the final state decision. Log evidence can override a
+  retained screen frame; only `status: blocked` indicates a current blocker.
 - `blocker.text`, when present, is the current typed-profile interaction region. It
   preserves the question, visible options, current selection marker, and keyboard hints;
   it is not a reconstructed or generic terminal viewport.
@@ -52,6 +54,7 @@ snapshot. This prevents an unresolvable transcript from hiding a useful blocker.
       "status": "blocked",
       "raw_state": "blocked",
       "detection_reason": "claude.blockedPrompt",
+      "screen_reason": "claude.blockedPrompt",
       "last_changed_at": "2026-08-11T12:00:00Z"
     },
     "blocker": {

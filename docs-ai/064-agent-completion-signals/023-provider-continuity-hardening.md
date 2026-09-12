@@ -1,5 +1,8 @@
 # 064.023 — Provider Continuity and Decision Diagnostics
 
+Follow-up: [024](024-observation-order-and-emission.md) corrects residual capture-order,
+suspended-fallback, emission, and diagnostic gaps in this implementation.
+
 ## Context
 
 Review of #800 found that provider cursors could advance before the coordinator

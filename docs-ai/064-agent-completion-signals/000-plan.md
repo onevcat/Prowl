@@ -384,3 +384,5 @@ opencode; partial for qodercli/qwen/amp; docs/bundle for the rest). Key conclusi
 - Updated 2026-09-12: Implemented shared state decisions and the first optional log provider — see [022 implementation](022-provider-implementation.md).
 
 - Updated 2026-09-12: Hardened observation ordering, recovery, completion fences, and decision diagnostics — see [023 continuity](023-provider-continuity-hardening.md).
+
+- Updated 2026-09-12: Corrected capture ordering, diagnostic emission, suspended completion, and CLI contracts — see [024 follow-up](024-observation-order-and-emission.md).

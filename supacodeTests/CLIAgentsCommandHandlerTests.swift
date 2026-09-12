@@ -23,6 +23,20 @@ struct CLIAgentsCommandHandlerTests {
     #expect(payload.agents.map(\.detectionReason) == ["log.openWork", "log.openWork"])
   }
 
+  @Test func liveDecisionOverridesDeduplicatedReducerReason() async throws {
+    let fixture = makePayloadFixture()
+    var state = fixture.snapshot.repositoriesState
+    state.activeAgents.entries[0].stateDecision = AgentStateDecision(state: .working, reason: .logOpenWork)
+    let snapshot = AgentsRuntimeSnapshot(
+      repositoriesState: state, listSnapshot: fixture.snapshot.listSnapshot,
+      screenDetectionsBySurfaceID: fixture.snapshot.screenDetectionsBySurfaceID,
+      decisionsBySurfaceID: [fixture.tabPaneID: AgentStateDecision(state: .working, reason: .fallback(.afterTurn))])
+    let handler = AgentsCommandHandler { snapshot }
+    let response = await handler.handle(envelope: CommandEnvelope(output: .json, command: .agents(AgentsInput())))
+    let payload = try #require(try response.data?.decode(as: AgentsCommandPayload.self))
+    #expect(payload.agents.first?.detectionReason == "screen.afterTurn")
+  }
+
   @Test func buildsAgentsPayloadFromActiveEntriesAndTerminalSnapshot() async throws {
     let fixture = makePayloadFixture()
     let handler = AgentsCommandHandler {

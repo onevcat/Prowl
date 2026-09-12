@@ -664,13 +664,15 @@ struct SupacodeApp: App {
       )
     }
     let agentsHandler = AgentsCommandHandler {
+      var decisionsBySurfaceID: [UUID: AgentStateDecision] = [:]
       var screenDetectionsBySurfaceID: [UUID: AgentScreenDetection] = [:]
       var signalsBySurfaceID: [UUID: AgentSignalsPayload] = [:]
       for terminalState in terminalManager.activeWorktreeStates {
         for (surfaceID, scan) in terminalState.lastAgentScreenScanBySurface {
           screenDetectionsBySurfaceID[surfaceID] = scan.detection
         }
-        for surfaceID in terminalState.surfaceAgentStates.keys {
+        for (surfaceID, state) in terminalState.surfaceAgentStates {
+          decisionsBySurfaceID[surfaceID] = state.decision
           signalsBySurfaceID[surfaceID] = terminalManager.agentSignalsPayload(
             surfaceID: surfaceID,
             includeDiagnosticLast: false
@@ -684,7 +686,8 @@ struct SupacodeApp: App {
           terminalManager: terminalManager
         ),
         screenDetectionsBySurfaceID: screenDetectionsBySurfaceID,
-        signalsBySurfaceID: signalsBySurfaceID
+        signalsBySurfaceID: signalsBySurfaceID,
+        decisionsBySurfaceID: decisionsBySurfaceID
       )
     }
     let resolveAgentSignalCaller: AgentSignalCommandHandler.ResolveCaller =

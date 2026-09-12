@@ -133,7 +133,7 @@ struct AgentStateMachineTests {
       _ = machine.receive(.turnStarted(session: "a", turn: "1"), now: 0)
       _ = machine.receive(screen(state), now: 0)
       _ = machine.receive(.turnEnded(session: "a", turn: "1"), now: 1)
-      #expect(machine.receive(.suspended, now: 2).state == state)
+      #expect(machine.receive(.suspended, now: 2).state == .idle)
       #expect(machine.receive(.inventory(["a"]), now: 3).state == .idle)
     }
   }

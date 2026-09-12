@@ -143,8 +143,9 @@ nonisolated struct AgentStateMachine: Sendable {
     guard available, eligible.count == 1, let (id, root) = eligible.first else {
       // Expiry removes log authority, but does not make an unchanged completed
       // frame new evidence. Keep this fence scoped to the sole known root.
-      if available, eligible.isEmpty, roots.count == 1,
-        let id = roots.keys.first, suppressedSessionID == id, suppressedScreen == screen
+      if roots.count == 1,
+        let id = roots.keys.first, roots[id]?.busy == false,
+        suppressedSessionID == id, suppressedScreen == screen
       {
         return AgentStateDecision(state: .idle, reason: .fallback(.retainedCompletion))
       }

@@ -125,4 +125,61 @@ struct AgentDetectionCoordinatorTests {
     #expect(recovered?.hasOutstandingWork == false)
   }
 
+  @Test func olderCapturedFrameCannotClearCompletionFence() async {
+    var calls = 0
+    let coordinator = AgentDetectionCoordinator(sample: { _, _ in
+      calls += 1
+      if calls == 1 { return [.inventory(["a"]), .turnStarted(session: "a", turn: "1")] }
+      if calls == 2 { return [.turnEnded(session: "a", turn: "1")] }
+      return [.inventory(["a"])]
+    })
+    let working = AgentScreenDetection(state: .working, reason: .noRuleMatched)
+    _ = await coordinator.observe(agent: .codex, process: generation, screen: working, capturedAt: 1, configRoot: nil)
+    #expect(
+      await coordinator.observe(
+        agent: .codex, process: generation, screen: working,
+        capturedAt: 3, configRoot: nil)?.state == .idle)
+    _ = await coordinator.observe(
+      agent: .codex, process: generation,
+      screen: AgentScreenDetection(state: .blocked, reason: .noRuleMatched), capturedAt: 2, configRoot: nil)
+    #expect(
+      await coordinator.observe(
+        agent: .codex, process: generation, screen: working,
+        capturedAt: 4, configRoot: nil)?.state == .idle)
+  }
+
+  @Test func queuedReplacementDoesNotInvalidateFollowingObservation() async {
+    let entered = AsyncStream<Void>.makeStream()
+    var resume: CheckedContinuation<[AgentDetectionEvent], Never>?
+    var calls = 0
+    let coordinator = AgentDetectionCoordinator(sample: { _, _ in
+      calls += 1
+      if calls == 1 {
+        return await withCheckedContinuation {
+          resume = $0
+          entered.continuation.yield(())
+        }
+      }
+      return [.inventory(["b"])]
+    })
+    let first = Task { await coordinator.observe(agent: .codex, process: generation, screen: idle, configRoot: nil) }
+    var iterator = entered.stream.makeAsyncIterator()
+    _ = await iterator.next()
+    let replacement = AgentProcessGeneration(pid: 43, startedAt: generation.startedAt)
+    let second = Task {
+      entered.continuation.yield(())
+      return await coordinator.observe(agent: .codex, process: replacement, screen: idle, configRoot: nil)
+    }
+    _ = await iterator.next()
+    let third = Task {
+      entered.continuation.yield(())
+      return await coordinator.observe(agent: .codex, process: replacement, screen: idle, configRoot: nil)
+    }
+    _ = await iterator.next()
+    resume?.resume(returning: [.inventory(["a"])])
+    _ = await first.value
+    #expect(await second.value != nil)
+    #expect(await third.value != nil)
+  }
+
 }

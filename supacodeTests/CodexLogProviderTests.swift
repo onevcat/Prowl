@@ -46,6 +46,26 @@ struct CodexLogProviderTests {
     #expect(messages.withLock { $0.count } == 3)
   }
 
+  @Test func continuityLossAfterRecoveryIsNotHiddenByThrottle() async throws {
+    let directory = try fixture()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let path = directory.appending(path: "a.jsonl")
+    try header("a").write(to: path, atomically: false, encoding: .utf8)
+    let messages = Mutex<[String]>([])
+    let provider = CodexLogProvider(
+      startedAt: .distantPast, time: { 0 },
+      diagnostic: { message in messages.withLock { $0.append(message) } })
+    _ = await provider.sample(paths: [], inventoryComplete: false)
+    _ = await provider.sample(paths: [path])
+    try append("{}\n", to: path)
+    _ = await provider.sample(paths: [path])
+    _ = await provider.sample(paths: [])
+    let lines = messages.withLock { $0 }
+    #expect(lines.count == 4)
+    #expect(
+      lines.contains { $0.contains("continuityLost") && $0.contains("cursors=0") && $0.contains("invalidRecord") })
+  }
+
   @Test func resumedMainSourcesRemainEligible() async throws {
     let directory = try fixture()
     defer { try? FileManager.default.removeItem(at: directory) }

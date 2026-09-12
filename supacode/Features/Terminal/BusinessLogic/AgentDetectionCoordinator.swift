@@ -9,6 +9,7 @@ final class AgentDetectionCoordinator {
   private var agent: DetectedAgent?
   private var logProvider: CodexLogProvider?
   private var revision: UInt64 = 0
+  private var lastCapturedAt: TimeInterval?
   private var observationInFlight = false
   private var observationWaiters: [CheckedContinuation<Void, Never>] = []
   typealias Sample = (AgentProcessGeneration, URL?) async -> [AgentDetectionEvent]
@@ -24,6 +25,11 @@ final class AgentDetectionCoordinator {
 
   func invalidate() {
     revision &+= 1
+    lastCapturedAt = nil
+    reset()
+  }
+
+  private func reset() {
     logProvider = nil
     process = nil
     machine = AgentStateMachine()
@@ -55,14 +61,18 @@ final class AgentDetectionCoordinator {
     process: AgentProcessGeneration?,
     screen: AgentScreenDetection,
     screenContentID: Int? = nil,
+    capturedAt: TimeInterval? = nil,
     configRoot: URL?
   ) async -> AgentStateDecision? {
+    let captureTime = capturedAt ?? now
     let queuedRevision = revision
     await acquireObservation()
     defer { releaseObservation() }
     guard queuedRevision == revision, !Task.isCancelled else { return nil }
+    guard lastCapturedAt.map({ captureTime >= $0 }) ?? true else { return machine.decision }
+    lastCapturedAt = captureTime
     if self.agent != agent || (agent == .codex && process != nil && self.process != process) {
-      invalidate()
+      reset()
       self.agent = agent
       self.process = process
       if agent == .codex, process != nil { logProvider = CodexLogProvider() }

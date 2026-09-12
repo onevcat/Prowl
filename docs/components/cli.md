@@ -207,7 +207,7 @@ Immediate, read-only semantic snapshot for a currently active **Codex** or
 it never guesses from focus, accepts no worktree/tab selector, and has no wait or
 timeout mode.
 
-Default text output always reports current `Status`, classifier `Reason`, last
+Default text output always reports current `Status`, decision `Reason`, last
 state-change time, and a result state. A blocked snapshot includes the raw current
 interaction under `## Blocker`, preserving the question, numbered choices, selected
 row, and Enter/Esc hints. It is the right command for deciding what another agent is
