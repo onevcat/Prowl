@@ -102,6 +102,7 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
   private var listenerDescriptor: Int32 = -1
   private var connectionDescriptor: Int32 = -1
   private var claimState: ClaimState?
+  private var pendingInitialClaims = 0
   private var connectionEpoch: UInt64 = 0
   private var stopped = false
   private var streamContinuation: AsyncStream<HerdrNativeStreamState>.Continuation?
@@ -192,11 +193,34 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
   private func waitForClaim() -> ClaimState {
     let deadline = Date().addingTimeInterval(0.25)
     condition.lock()
-    defer { condition.unlock() }
     while claimState == nil, !stopped {
-      if !condition.wait(until: deadline) { break }
+      if condition.wait(until: deadline) {
+        continue
+      }
+      guard pendingInitialClaims > 0 else { break }
+      while claimState == nil, pendingInitialClaims > 0, !stopped {
+        condition.wait()
+      }
     }
-    if let claimState { return claimState }
+    if let claimState {
+      condition.unlock()
+      return claimState
+    }
+    guard !stopped else {
+      condition.unlock()
+      return .noContract
+    }
+    claimState = .noContract
+    let listener = listenerDescriptor
+    listenerDescriptor = -1
+    condition.broadcast()
+    condition.unlock()
+
+    if listener >= 0 {
+      _ = Darwin.shutdown(listener, SHUT_RDWR)
+      Darwin.close(listener)
+    }
+    try? FileManager.default.removeItem(atPath: binding.socketPath)
     return .noContract
   }
 
@@ -219,17 +243,28 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
         if errno == EINTR { continue }
         return
       }
+      condition.lock()
+      let accepting = !stopped && listenerDescriptor == listener
+      let isInitialClaim = accepting && claimState == nil
+      if isInitialClaim {
+        pendingInitialClaims += 1
+      }
+      condition.unlock()
+      guard accepting else {
+        Darwin.close(descriptor)
+        continue
+      }
       DispatchQueue.global(qos: .userInitiated).async { [weak self] in
         guard let self else {
           Darwin.close(descriptor)
           return
         }
-        handleConnection(descriptor)
+        handleConnection(descriptor, isInitialClaim: isInitialClaim)
       }
     }
   }
 
-  private func handleConnection(_ descriptor: Int32) {
+  private func handleConnection(_ descriptor: Int32, isInitialClaim: Bool) {
     do {
       try Self.setNoSigPipe(on: descriptor)
       try Self.setTimeout(timeval(tv_sec: 0, tv_usec: 250_000), on: descriptor)
@@ -242,6 +277,9 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
       try Self.setTimeout(timeval(tv_sec: 0, tv_usec: 0), on: descriptor)
 
       condition.lock()
+      if isInitialClaim {
+        pendingInitialClaims -= 1
+      }
       if stopped || claimState.map({ if case .noContract = $0 { true } else { false } }) == true {
         condition.unlock()
         Darwin.close(descriptor)
@@ -273,7 +311,28 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
       }
       readAggregateFrames(from: descriptor)
     } catch {
+      let message = String(describing: error)
+      let listener: Int32
+      condition.lock()
+      if isInitialClaim {
+        pendingInitialClaims -= 1
+      }
+      let shouldRecordInitialFailure = isInitialClaim && !stopped && claimState == nil
+      if shouldRecordInitialFailure {
+        claimState = .incompatible(message)
+        listener = listenerDescriptor
+        listenerDescriptor = -1
+        condition.broadcast()
+      } else {
+        listener = -1
+      }
+      condition.unlock()
       Darwin.close(descriptor)
+      if listener >= 0 {
+        _ = Darwin.shutdown(listener, SHUT_RDWR)
+        Darwin.close(listener)
+        try? FileManager.default.removeItem(atPath: binding.socketPath)
+      }
       herdrNativeChromeLogger.debug("rejected native contract connection: \(error)")
     }
   }

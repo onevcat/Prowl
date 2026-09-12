@@ -523,8 +523,11 @@ internal struct HerdrTerminalChromeFeature {
 
       case .nativeEvent(.noContractClaim):
         guard state.authorityMode == .probing else { return .none }
-        state.connection = state.isForeground ? .unavailable : .hidden
-        return .none
+        state.authorityMode = .legacy
+        state.connection = state.isForeground ? .connecting : .hidden
+        guard state.isForeground else { return .none }
+        return lifecycleEffect()
+          .cancellable(id: CancelID.lifecycle, cancelInFlight: true)
 
       case .nativeEvent(.aggregateStarted(let clientInstanceID)):
         guard state.authorityMode != .legacy, state.authorityMode != .incompatible else {
@@ -583,7 +586,9 @@ internal struct HerdrTerminalChromeFeature {
         state.focusRollback = nil
         state.snapshot = .empty
         state.nativeConnectionEpoch = epoch
+        state.mutationGeneration &+= 1
         return .merge(
+          .cancel(id: CancelID.mutation),
           nativeResyncEffect(&state),
           nativeHandshakeTimeoutEffect(clientInstanceID: state.nativeClientInstanceID ?? "")
         )

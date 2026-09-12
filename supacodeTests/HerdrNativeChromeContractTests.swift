@@ -1,5 +1,6 @@
 import ComposableArchitecture
 import Darwin
+import DependenciesTestSupport
 import Foundation
 import Testing
 
@@ -462,86 +463,6 @@ struct HerdrNativeChromeContractTests {
     }
   }
 
-  @Test func unclaimedSurfaceLocksToNoContractAfterClaimWindow() async throws {
-    let rendezvous = try HerdrNativeChromeRendezvous()
-    defer { rendezvous.stop() }
-
-    let result = await rendezvous.probe()
-
-    guard case .noContractClaim = result else {
-      Issue.record("Expected no_contract_claim after the startup window")
-      return
-    }
-  }
-
-  @Test func acceptedClaimKeepsListenerForProofProtectedReconnect() async throws {
-    let rendezvous = try HerdrNativeChromeRendezvous()
-    defer { rendezvous.stop() }
-    let descriptor = try connectUnixSocket(at: rendezvous.binding.socketPath)
-    defer { Darwin.close(descriptor) }
-    let claim = nativeClaim(for: rendezvous)
-    try writeFrame(JSONEncoder().encode(claim), to: descriptor)
-
-    let result = await rendezvous.probe()
-
-    guard case .aggregate(let session) = result else {
-      Issue.record("Expected aggregate contract claim")
-      return
-    }
-    #expect(FileManager.default.fileExists(atPath: rendezvous.binding.socketPath))
-
-    _ = Darwin.shutdown(descriptor, SHUT_RDWR)
-    Darwin.close(descriptor)
-    let reconnectDescriptor = try connectUnixSocket(at: rendezvous.binding.socketPath)
-    defer { Darwin.close(reconnectDescriptor) }
-    try writeFrame(JSONEncoder().encode(claim), to: reconnectDescriptor)
-
-    var iterator = session.stream.makeAsyncIterator()
-    var reconnectedEpoch: UInt64?
-    while let state = await iterator.next() {
-      if case .reconnected(let epoch) = state {
-        reconnectedEpoch = epoch
-        break
-      }
-    }
-    guard let epoch = reconnectedEpoch else {
-      Issue.record("Expected proof-protected reconnect")
-      return
-    }
-    #expect(epoch == 2)
-  }
-
-  @Test func invalidChallengeAndStartIdentityCannotCaptureListener() async throws {
-    let rendezvous = try HerdrNativeChromeRendezvous()
-    defer { rendezvous.stop() }
-    let actualStart = currentProcessStartIdentity()
-    let invalidClaims = [
-      nativeClaim(for: rendezvous, challenge: "wrong-challenge"),
-      nativeClaim(
-        for: rendezvous,
-        startIdentity: HerdrNativeProcessStartIdentity(
-          seconds: actualStart.seconds,
-          microseconds: actualStart.microseconds &+ 1
-        )
-      ),
-    ]
-    for invalidClaim in invalidClaims {
-      let descriptor = try connectUnixSocket(at: rendezvous.binding.socketPath)
-      try writeFrame(JSONEncoder().encode(invalidClaim), to: descriptor)
-      Darwin.close(descriptor)
-    }
-
-    let validDescriptor = try connectUnixSocket(at: rendezvous.binding.socketPath)
-    defer { Darwin.close(validDescriptor) }
-    try writeFrame(JSONEncoder().encode(nativeClaim(for: rendezvous)), to: validDescriptor)
-
-    let result = await rendezvous.probe()
-
-    guard case .aggregate = result else {
-      Issue.record("Expected valid claim after rejecting invalid identities")
-      return
-    }
-  }
   @Test func coordinatorReplacementRetiresThePreviousSurfaceSocket() throws {
     let coordinator = HerdrNativeChromeCoordinator()
     let first = try coordinator.prepareSurface()
@@ -853,20 +774,210 @@ struct HerdrNativeChromeContractTests {
     #expect(reducerState.pendingNativeMutationRequestID == nil)
   }
 
-  @Test func claimTimeoutDoesNotGrantLegacyAuthority() async {
+  @Test(.dependencies) func verifiedNoContractClaimStartsLegacyLifecycle() async {
+    let clock = TestClock()
     var initialState = HerdrTerminalChromeFeature.State()
     initialState.isForeground = true
     initialState.authorityMode = .probing
     initialState.connection = .connecting
     let store = TestStore(initialState: initialState) {
       HerdrTerminalChromeFeature()
+    } withDependencies: {
+      $0.continuousClock = clock
+      $0.herdrTerminalChromeClient = HerdrTerminalChromeClient(
+        snapshot: { .empty },
+        subscribeEvents: { _ in
+          HerdrEventSubscription(stream: AsyncStream { _ in }, cancel: {})
+        },
+        focusWorkspace: { _ in },
+        focusTab: { _ in },
+        focusPane: { _ in },
+        createWorkspace: {},
+        createTab: { _, _, _ in },
+        renameTab: { _, _ in },
+        moveTab: { _, _ in },
+        closeTab: { _ in },
+        closeWorkspace: { _ in }
+      )
     }
 
     await store.send(.nativeEvent(.noContractClaim)) {
       $0.isForeground = true
-      $0.authorityMode = .probing
-      $0.connection = .unavailable
+      $0.authorityMode = .legacy
+      $0.connection = .connecting
     }
+    await store.receive(.subscriptionPrepared([])) {
+      $0.subscriptionAwaitingSnapshot = true
+    }
+    await store.receive(.snapshotResponse(.success(.empty))) {
+      $0.subscriptionAwaitingSnapshot = false
+      $0.connection = .connected
+    }
+    await store.send(.foregroundChanged(false)) {
+      $0.isForeground = false
+      $0.connection = .hidden
+      $0.authorityMode = .legacy
+      $0.refreshGeneration = 1
+      $0.mutationGeneration = 1
+    }
+    await store.finish()
+  }
+
+  @Test func malformedClaimLocksRendezvousAsIncompatible() async throws {
+    let rendezvous = try HerdrNativeChromeRendezvous()
+    defer { rendezvous.stop() }
+    let descriptor = try connectUnixSocket(at: rendezvous.binding.socketPath)
+    try writeFrame(Data("{}".utf8), to: descriptor)
+    Darwin.close(descriptor)
+
+    guard case .incompatible = await rendezvous.probe() else {
+      Issue.record("Expected malformed claim to make the rendezvous incompatible")
+      return
+    }
+    #expect(throws: Error.self) {
+      let lateDescriptor = try connectUnixSocket(at: rendezvous.binding.socketPath)
+      Darwin.close(lateDescriptor)
+    }
+  }
+
+  @Test func invalidChallengeLocksRendezvousAsIncompatible() async throws {
+    let rendezvous = try HerdrNativeChromeRendezvous()
+    defer { rendezvous.stop() }
+    let descriptor = try connectUnixSocket(at: rendezvous.binding.socketPath)
+    let claim = nativeClaim(for: rendezvous, challenge: "wrong-challenge")
+    try writeFrame(JSONEncoder().encode(claim), to: descriptor)
+    Darwin.close(descriptor)
+
+    guard case .incompatible = await rendezvous.probe() else {
+      Issue.record("Expected invalid challenge proof to make the rendezvous incompatible")
+      return
+    }
+  }
+
+  @Test func invalidStartIdentityLocksRendezvousAsIncompatible() async throws {
+    let rendezvous = try HerdrNativeChromeRendezvous()
+    defer { rendezvous.stop() }
+    let descriptor = try connectUnixSocket(at: rendezvous.binding.socketPath)
+    let actualStart = currentProcessStartIdentity()
+    let claim = nativeClaim(
+      for: rendezvous,
+      startIdentity: HerdrNativeProcessStartIdentity(
+        seconds: actualStart.seconds,
+        microseconds: actualStart.microseconds &+ 1
+      )
+    )
+    try writeFrame(JSONEncoder().encode(claim), to: descriptor)
+    Darwin.close(descriptor)
+
+    guard case .incompatible = await rendezvous.probe() else {
+      Issue.record("Expected invalid process identity proof to make the rendezvous incompatible")
+      return
+    }
+  }
+
+  @Test func noContractClaimClosesListenerBeforeLateValidClaim() async throws {
+    let rendezvous = try HerdrNativeChromeRendezvous()
+    defer { rendezvous.stop() }
+
+    guard case .noContractClaim = await rendezvous.probe() else {
+      Issue.record("Expected no_contract_claim after the startup window")
+      return
+    }
+    #expect(throws: Error.self) {
+      let lateDescriptor = try connectUnixSocket(at: rendezvous.binding.socketPath)
+      Darwin.close(lateDescriptor)
+    }
+  }
+
+  @Test func acceptedClaimKeepsListenerForProofProtectedReconnect() async throws {
+    let rendezvous = try HerdrNativeChromeRendezvous()
+    defer { rendezvous.stop() }
+    let descriptor = try connectUnixSocket(at: rendezvous.binding.socketPath)
+    let claim = nativeClaim(for: rendezvous)
+    try writeFrame(JSONEncoder().encode(claim), to: descriptor)
+
+    let result = await rendezvous.probe()
+
+    guard case .aggregate(let session) = result else {
+      Issue.record("Expected aggregate contract claim")
+      Darwin.close(descriptor)
+      return
+    }
+    #expect(FileManager.default.fileExists(atPath: rendezvous.binding.socketPath))
+
+    _ = Darwin.shutdown(descriptor, SHUT_RDWR)
+    Darwin.close(descriptor)
+    let reconnectDescriptor = try connectUnixSocket(at: rendezvous.binding.socketPath)
+    defer { Darwin.close(reconnectDescriptor) }
+    try writeFrame(JSONEncoder().encode(claim), to: reconnectDescriptor)
+
+    var iterator = session.stream.makeAsyncIterator()
+    var reconnectedEpoch: UInt64?
+    while let state = await iterator.next() {
+      if case .reconnected(let epoch) = state {
+        reconnectedEpoch = epoch
+        break
+      }
+    }
+    guard let epoch = reconnectedEpoch else {
+      Issue.record("Expected proof-protected reconnect")
+      return
+    }
+    #expect(epoch == 2)
+  }
+
+  @Test(.dependencies) func reconnectDuringNativeMutationDropsOldTimeout() async throws {
+    let clock = TestClock()
+    let sentRequests = LockIsolated<[HerdrNativeActionRequest]>([])
+    let envelope = try goldenEnvelope()
+    var initialState = HerdrTerminalChromeFeature.State()
+    initialState.authorityMode = .aggregate
+    initialState.isForeground = true
+    initialState.connection = .connected
+    initialState.aggregateState = envelope.payload.state
+    initialState.aggregateSyncCommitted = true
+    initialState.nativeConnectionEpoch = 1
+    initialState.pendingMutation = .renameTab(tabID: "tab-duplicate", label: "pending")
+    initialState.pendingNativeMutationRequestID = "prowl-native-mutation-1"
+    initialState.mutationGeneration = 1
+    let store = TestStore(initialState: initialState) {
+      HerdrTerminalChromeFeature()
+    } withDependencies: {
+      $0.continuousClock = clock
+      $0.herdrTerminalChromeClient = HerdrTerminalChromeClient(
+        sendNativeAction: { request in
+          sentRequests.withValue { $0.append(request) }
+        },
+        snapshot: { .empty },
+        subscribeEvents: { _ in
+          HerdrEventSubscription(stream: AsyncStream { $0.finish() }, cancel: {})
+        },
+        focusWorkspace: { _ in },
+        focusTab: { _ in },
+        focusPane: { _ in },
+        createTab: { _, _, _ in },
+        renameTab: { _, _ in },
+        moveTab: { _, _ in },
+        closeTab: { _ in },
+        closeWorkspace: { _ in }
+      )
+    }
+    store.exhaustivity = .off(showSkippedAssertions: false)
+
+    await store.send(.nativeEvent(.stream(.reconnected(epoch: 2)))) {
+      $0.connection = .connecting
+      $0.aggregateSyncCommitted = false
+      $0.nativeConnectionEpoch = 2
+      $0.pendingMutation = nil
+      $0.pendingNativeMutationRequestID = nil
+      $0.mutationGeneration = 2
+    }
+    await clock.advance(by: .seconds(5))
+
+    #expect(sentRequests.value.map(\.payload.action) == ["resync"])
+    #expect(store.state.pendingMutation == nil)
+    #expect(store.state.pendingNativeMutationRequestID == nil)
+    #expect(store.state.mutationError == nil)
   }
 
   @Test func onlyLegacyModeAcceptsLegacyAuthority() {
