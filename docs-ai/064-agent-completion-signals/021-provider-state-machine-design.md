@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| **Status** | Architecture proposal; implementation not started |
+| **Status** | Implemented; see [022 results and deviations](022-provider-implementation.md) |
 | **Date** | 2026-09-12 |
 | **Related** | [017 initial design](017-agent-state-decision.md), [018 child lifecycle](018-foreground-and-subagent-findings.md), [020 selection research](020-selection-channel-research.md) |
 
@@ -280,4 +280,6 @@ architecture change. This document authorizes no implementation by itself.
 
 Design validation: existing extraction targets and document links were checked;
 `git diff --check` and `make build-app` passed, with zero build errors or warnings.
-The proposed state-machine and provider tests have not been implemented or run.
+Implementation and acceptance results are recorded in [022](022-provider-implementation.md).
+The sections above preserve the design proposal; 022 records the smaller polling
+implementation and the actual validation boundaries.

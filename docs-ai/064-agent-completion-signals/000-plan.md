@@ -380,3 +380,5 @@ opencode; partial for qodercli/qwen/amp; docs/bundle for the rest). Key conclusi
 - Updated 2026-09-12: Ended selection research and accepted main-turn activity-window
   attribution with screen fallback; designed all-agent provider migration and pure
   state-machine testing in [021-provider-state-machine-design.md](021-provider-state-machine-design.md).
+
+- Updated 2026-09-12: Implemented shared state decisions and the first optional log provider — see [022 implementation](022-provider-implementation.md).
