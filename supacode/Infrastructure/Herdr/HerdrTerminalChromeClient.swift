@@ -159,13 +159,16 @@ extension HerdrTerminalChromeClient: DependencyKey {
               continuation.finish()
             case .aggregate(let session):
               sessionBox.set(session)
+              defer {
+                session.cancel()
+                sessionBox.set(nil)
+                continuation.finish()
+              }
               continuation.yield(.aggregateStarted(clientInstanceID: session.clientInstanceID))
               for await state in session.stream {
                 guard !Task.isCancelled else { break }
                 continuation.yield(.stream(state))
               }
-              sessionBox.set(nil)
-              continuation.finish()
             }
           }
           continuation.onTermination = { _ in task.cancel() }

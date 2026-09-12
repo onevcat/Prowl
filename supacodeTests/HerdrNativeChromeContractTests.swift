@@ -254,6 +254,38 @@ struct HerdrNativeChromeContractTests {
     }
   }
 
+  @Test(.dependencies) func aggregateHandshakeTimeoutCancelsNativeLifecycle() async {
+    let clock = TestClock()
+    let terminated = LockIsolated(false)
+    let (events, continuation) = AsyncStream.makeStream(of: HerdrNativeClientEvent.self)
+    continuation.onTermination = { _ in terminated.setValue(true) }
+    let store = TestStore(initialState: HerdrTerminalChromeFeature.State()) {
+      HerdrTerminalChromeFeature()
+    } withDependencies: {
+      $0.continuousClock = clock
+      var client = HerdrTerminalChromeClient.testValue
+      client.nativeEvents = { events }
+      $0.herdrTerminalChromeClient = client
+    }
+    store.exhaustivity = .off(showSkippedAssertions: false)
+
+    await store.send(.foregroundChanged(true))
+    continuation.yield(.aggregateStarted(clientInstanceID: "client"))
+    await store.receive(.nativeEvent(.aggregateStarted(clientInstanceID: "client")))
+    await clock.advance(by: .seconds(1))
+    await store.receive(.nativeHandshakeTimedOut(clientInstanceID: "client"))
+    await store.receive(
+      .nativeEvent(.incompatible("Aggregate sync did not commit within one second."))
+    )
+    for _ in 0..<100 where !terminated.value {
+      await Task.yield()
+    }
+
+    #expect(terminated.value)
+    await store.send(.stop)
+    await store.finish()
+  }
+
   @Test func aggregateSuspendKeepsModeProjectionAndBindingLifecycle() async throws {
     let envelope = try goldenEnvelope()
     var initialState = HerdrTerminalChromeFeature.State()
@@ -694,22 +726,34 @@ struct HerdrNativeChromeContractTests {
     challenge: String? = nil,
     startIdentity: HerdrNativeProcessStartIdentity? = nil
   ) -> HerdrNativeChromeEnvelope<HerdrNativeContractReady> {
+    nativeClaim(
+      for: rendezvous.binding,
+      challenge: challenge,
+      startIdentity: startIdentity
+    )
+  }
+
+  private func nativeClaim(
+    for binding: HerdrNativeChromeBinding,
+    challenge: String? = nil,
+    startIdentity: HerdrNativeProcessStartIdentity? = nil
+  ) -> HerdrNativeChromeEnvelope<HerdrNativeContractReady> {
     HerdrNativeChromeEnvelope(
       contractVersion: HerdrNativeChromeRendezvous.contractVersion,
-      clientInstanceID: rendezvous.binding.clientInstanceID,
+      clientInstanceID: binding.clientInstanceID,
       messageKind: "contract_ready",
       eventSequence: nil,
       projectionRevision: nil,
       requestID: nil,
       activationEpoch: nil,
       payload: HerdrNativeContractReady(
-        surfaceProof: rendezvous.binding.surfaceProof,
+        surfaceProof: binding.surfaceProof,
         processID: getpid(),
         capabilities: HerdrNativeChromeCapabilities(
           required: HerdrNativeChromeRendezvous.requiredCapabilities,
           optional: []
         ),
-        challenge: challenge ?? rendezvous.binding.challenge,
+        challenge: challenge ?? binding.challenge,
         userID: geteuid(),
         processGroupID: UInt32(getpgid(0)),
         foregroundProcessGroupID: currentProcessForegroundGroupID(),
@@ -1415,6 +1459,36 @@ struct HerdrNativeChromeContractTests {
       return
     }
     #expect(epoch == 2)
+  }
+
+  @Test func nativeEventTerminationCancelsSessionAndClosesListener() async throws {
+    let coordinator = HerdrNativeChromeCoordinator()
+    let binding = try coordinator.prepareSurface()
+    let client = HerdrTerminalChromeClient.live(coordinator: coordinator)
+    let (startedStream, startedContinuation) = AsyncStream.makeStream(of: Void.self)
+    let consumer = Task {
+      for await event in client.nativeEvents() {
+        if case .aggregateStarted = event {
+          startedContinuation.yield()
+        }
+      }
+    }
+    let descriptor = try connectUnixSocket(at: binding.socketPath)
+    defer { Darwin.close(descriptor) }
+    try writeFrame(JSONEncoder().encode(nativeClaim(for: binding)), to: descriptor)
+
+    var startedIterator = startedStream.makeAsyncIterator()
+    _ = await startedIterator.next()
+    #expect(FileManager.default.fileExists(atPath: binding.socketPath))
+
+    consumer.cancel()
+    await consumer.value
+    for _ in 0..<100 where FileManager.default.fileExists(atPath: binding.socketPath) {
+      await Task.yield()
+    }
+
+    #expect(!FileManager.default.fileExists(atPath: binding.socketPath))
+    #expect(socketPeerClosed(descriptor))
   }
 
   @Test(.dependencies) func reconnectDuringNativeMutationDropsOldTimeout() async throws {

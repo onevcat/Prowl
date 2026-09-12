@@ -550,8 +550,11 @@ internal struct HerdrTerminalChromeFeature {
           !state.aggregateSyncCommitted,
           state.nativeClientInstanceID == clientInstanceID
         else { return .none }
-        return .send(
-          .nativeEvent(.incompatible("Aggregate sync did not commit within one second."))
+        return .merge(
+          .cancel(id: CancelID.nativeLifecycle),
+          .send(
+            .nativeEvent(.incompatible("Aggregate sync did not commit within one second."))
+          )
         )
 
       case .nativeEvent(.incompatible(let message)),
@@ -570,6 +573,7 @@ internal struct HerdrTerminalChromeFeature {
         state.selectedPaneID = nil
         herdrTerminalChromeLogger.warning("Native chrome contract incompatible: \(message)")
         return .merge(
+          .cancel(id: CancelID.nativeLifecycle),
           .cancel(id: CancelID.nativeHandshake),
           .cancel(id: CancelID.lifecycle),
           .cancel(id: CancelID.focus),
