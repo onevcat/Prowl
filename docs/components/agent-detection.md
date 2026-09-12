@@ -49,6 +49,8 @@ at a `~/.grok/` install (so Cursor's own `agent` entrypoint stays Cursor).
    selection row such as `❯ 1. Yes`; a bare input prompt cuts off the preceding transcript.
    Codex uses exact bottom-of-screen `•`/`◦ Working (... esc to interrupt)` and
    `•`/`◦ Waiting for background terminal (... esc to interrupt)` footer fallbacks.
+   Braille-only starfield rows around the composer do not count toward that footer window;
+   animation alone does not indicate **Working**.
    Its confirmation detector requires a numbered selected row such as `› 1. Yes`
    paired with a live bottom footer or an explicit Yes/No choice structure. It also recognizes
    the current directory-trust, hook-review, and initial sign-in menus as **Blocked** from
