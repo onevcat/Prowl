@@ -79,6 +79,13 @@ without prior shell execution, retaining both descriptors for at least 128 secon
 The internal reason for retaining A was not established. Descriptor ownership now
 means "this process owns A and B," not "A or B is currently in the foreground."
 Selecting the latest mtime is not an accepted replacement for foreground evidence.
+Creation order or a newly observed writable file can nominate B for the measured
+forward-only `/new` transition; this is a useful candidate rule to validate, not
+evidence that timestamps are useless. Creation time and modification time have
+different meanings. A universal "newest-created wins" rule would fail when the
+user returns to an older saved chat. The official CLI documentation describes
+in-TUI `/resume` for this purpose; its descriptor and write behavior remains untested
+in this spike. See [CLI chat switching](https://learn.chatgpt.com/docs/developer-commands?surface=cli#resume-a-saved-chat-with-resume).
 
 Explicit resume after a forced exit was different: a new PID opened the selected
 existing rollout. Binding was straightforward in that sample. The difficulty was
