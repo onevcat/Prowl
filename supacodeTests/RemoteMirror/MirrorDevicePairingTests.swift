@@ -24,9 +24,11 @@ struct MirrorDevicePairingTests {
     #expect(host.pairingKey.isEmpty)
     host.addDevice()
     try await listening(host)
-    let first = Client(port: UInt16(host.port)!, code: host.pairingKey)
+    let first = Client(port: UInt16(host.port)!, code: host.pairingKey) {
+      #expect(host.isRunning && !host.isStarting)
+    }
     defer { first.peer.close() }
-    try await first.start()
+    try await first.start(stage: "first pairing")
     #expect(host.devices.count == 1)
     #expect(host.pairingKey.isEmpty)
     #expect(first.saved?.pairingKey.isEmpty == true)
@@ -37,9 +39,11 @@ struct MirrorDevicePairingTests {
     #expect(await firstMessages.next()?.text == "current")
     host.addDevice()
     try await listening(host)
-    let second = Client(port: UInt16(host.port)!, code: host.pairingKey)
+    let second = Client(port: UInt16(host.port)!, code: host.pairingKey) {
+      #expect(host.isRunning && !host.isStarting)
+    }
     defer { second.peer.close() }
-    try await second.start()
+    try await second.start(stage: "second pairing")
     #expect(host.devices.count == 2)
     #expect(host.subscriberCount == 1)
     #expect(!first.closed)
@@ -51,11 +55,11 @@ struct MirrorDevicePairingTests {
     #expect(host.pairingKey.isEmpty)
     let resumed = Client(port: UInt16(host.port)!, credential: firstCredential)
     defer { resumed.peer.close() }
-    try await resumed.start()
+    try await resumed.start(stage: "first device after Host restart")
     let secondCredential = try #require(second.saved?.credential)
     let other = Client(port: UInt16(host.port)!, credential: secondCredential)
     defer { other.peer.close() }
-    try await other.start()
+    try await other.start(stage: "second device after Host restart")
     host.revoke(firstCredential.deviceID)
     for await closed in Observations({ resumed.closed }) where closed { break }
     #expect(!other.closed)
@@ -155,13 +159,20 @@ struct MirrorDevicePairingTests {
     var reason: String?
     @ObservationIgnored var peer: MirrorRemoteConnection!
     let messages: AsyncStream<MirrorMessage>
-    init(port: UInt16, code: String = "", credential: MirrorDeviceCredential? = nil) {
+    init(
+      port: UInt16, code: String = "", credential: MirrorDeviceCredential? = nil,
+      onPersist: @escaping () -> Void = {}
+    ) {
       let events = AsyncStream.makeStream(of: MirrorMessage.self)
       messages = events.stream
       peer = MirrorRemoteConnection(
         configuration: .init(
           address: "127.0.0.1", port: port, pairingKey: code, credential: credential),
-        restore: { _ in nil }, persist: { [weak self] in self?.saved = $0 })
+        restore: { _ in nil },
+        persist: { [weak self] in
+          self?.saved = $0
+          onPersist()
+        })
       peer.onReady = { [weak self] in self?.ready = true }
       peer.onMessage = { events.continuation.yield($0) }
       peer.onClose = { [weak self] reason in
@@ -170,10 +181,12 @@ struct MirrorDevicePairingTests {
         events.continuation.finish()
       }
     }
-    func start() async throws {
+    func start(stage: String) async throws {
       peer.start()
       for await done in Observations({ self.ready || self.closed }) where done { break }
-      try #require(ready, "Authentication failed: \(reason ?? "unknown")")
+      try #require(
+        ready,
+        "Authentication failed during \(stage) (credential saved: \(saved?.credential != nil)): \(reason ?? "unknown")")
     }
   }
 }

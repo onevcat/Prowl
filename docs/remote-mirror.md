@@ -32,6 +32,7 @@ with plaintext storage.
 
 The pairing window changes the listener's TLS keys. Prowl waits for the old
 listener's cancellation before rebinding its port; established connections survive.
+Pairing success is sent only after the replacement listener can accept the new device credential.
 Stopping Host closes remote connections but leaves Host programs running. Closing a
 mirror only unsubscribes. Quitting Prowl does not promise that its programs survive.
 

@@ -38,6 +38,7 @@ final class MirrorHost {
   @ObservationIgnored private var identity: MirrorHostIdentity?
   @ObservationIgnored private var pairingTask: Task<Void, Never>?
   @ObservationIgnored private var challenges: [UUID: Data] = [:]
+  @ObservationIgnored private var pendingPairings: [UUID: MirrorDeviceCredential] = [:]
   @ObservationIgnored private var devicePeers: [UUID: UUID] = [:]
   @ObservationIgnored private var authenticationDeadlines: [UUID: Task<Void, Never>] = [:]
   @ObservationIgnored private let clock: any Clock<Duration>
@@ -195,6 +196,7 @@ final class MirrorHost {
           self.isStarting = false
           self.defaults.set(self.address, forKey: "remoteMirrorHostAddress")
           self.defaults.set(self.port, forKey: "remoteMirrorHostPort")
+          self.completePairings()
           self.onStarted?()
         case .failed(let error):
           self.stop()
@@ -223,6 +225,7 @@ final class MirrorHost {
     for task in authenticationDeadlines.values { task.cancel() }
     authenticationDeadlines.removeAll()
     challenges.removeAll()
+    pendingPairings.removeAll()
     devicePeers.removeAll()
     onlineDeviceIDs.removeAll()
     hostRunID = nil
@@ -309,6 +312,7 @@ final class MirrorHost {
       self.pendingHandshakeCount = self.pendingPeers.count
       self.authenticationDeadlines.removeValue(forKey: peer.id)?.cancel()
       self.challenges.removeValue(forKey: peer.id)
+      self.pendingPairings.removeValue(forKey: peer.id)
       self.devicePeers.removeValue(forKey: peer.id)
       self.onlineDeviceIDs = Set(self.devicePeers.values)
       self.cancelCommand(peer.id)
@@ -372,10 +376,8 @@ final class MirrorHost {
         self.identity = identity
         devices = identity.devices
         // Consume before any other peer can pair; a lost response requires a new pairing window.
+        pendingPairings[peer.id] = .init(hostID: identity.id, deviceID: device.id, key: device.key)
         expirePairing()
-        peer.send(
-          .paired(.init(hostID: identity.id, deviceID: device.id, key: device.key)),
-          closeAfterSending: true)
       default: throw MirrorProtocolError.invalidMessage
       }
     } catch {
@@ -384,6 +386,19 @@ final class MirrorHost {
           source: String(describing: address), now: ProcessInfo.processInfo.systemUptime)
       }
       peer.close("Device authentication failed or pairing expired.")
+    }
+  }
+
+  private func completePairings() {
+    let pending = pendingPairings
+    pendingPairings.removeAll()
+    for (peerID, credential) in pending {
+      guard devices.contains(where: { $0.id == credential.deviceID }) else {
+        peers[peerID]?.close("Device access was revoked.")
+        continue
+      }
+      // The client reconnects immediately with this key, so the replacement listener must be ready.
+      peers[peerID]?.send(.paired(credential), closeAfterSending: true)
     }
   }
 
