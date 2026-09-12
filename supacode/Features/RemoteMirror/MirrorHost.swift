@@ -15,6 +15,7 @@ final class MirrorHost {
   var port: String
   @ObservationIgnored var commandService: MirrorCommandService?
   @ObservationIgnored private var commandPeers: [UUID: MirrorCommandRequest] = [:]
+  @ObservationIgnored private var commandDevices: [UUID: UUID] = [:]
   var onStarted: (() -> Void)?
   var onStopped: (() -> Void)?
   @ObservationIgnored private let enabled: Bool
@@ -77,6 +78,9 @@ final class MirrorHost {
       try saveIdentity(next)
       identity = next
       devices = next.devices
+      for (peerID, owner) in commandDevices where owner == deviceID {
+        cancelCommand(peerID, includingCreate: true)
+      }
       for (peerID, owner) in devicePeers where owner == deviceID {
         peers[peerID]?.close("Device access was revoked.")
       }
@@ -238,11 +242,13 @@ final class MirrorHost {
     pendingOrder.removeAll()
     pendingHandshakeCount = 0
     for peer in pending { peer.close() }
+    for peerID in commandPeers.keys { cancelCommand(peerID, includingCreate: true) }
     for peer in connections {
       end(peer, reason: .hostStopped)
     }
     peers.removeAll()
     commandPeers.removeAll()
+    commandDevices.removeAll()
     subscriptions.removeAll()
     hostRunID = nil
     subscriberCount = 0
@@ -317,7 +323,8 @@ final class MirrorHost {
       self.onlineDeviceIDs = Set(self.devicePeers.values)
       self.cancelCommand(peer.id)
       self.peers.removeValue(forKey: peer.id)
-      self.commandPeers.removeValue(forKey: peer.id)
+      // Accepted create requests can outlive a lost connection. Keep their device
+      // ownership until completion so explicit revoke or stop can still cancel them.
       self.subscriptions.removeValue(forKey: peer.id)
       self.subscriberCount = self.subscriptions.count
       if self.subscriptions.isEmpty {
@@ -474,19 +481,25 @@ final class MirrorHost {
       return
     }
     commandPeers[peer.id] = request
+    commandDevices[peer.id] = devicePeers[peer.id]
+    let peerID = peer.id
     Task { @MainActor [weak self, weak peer] in
       let response = await service.execute(request) { [weak self, weak peer] in
         guard let self, let peer, self.peers[peer.id] === peer else { return false }
         return lease == nil || self.subscriptions[peer.id]?.id == lease
       }
-      guard let self, let peer, self.peers[peer.id] === peer else { return }
-      self.commandPeers.removeValue(forKey: peer.id)
+      guard let self else { return }
+      self.commandPeers.removeValue(forKey: peerID)
+      self.commandDevices.removeValue(forKey: peerID)
+      guard let peer, self.peers[peerID] === peer else { return }
       peer.send(.commandResult(.init(commandResponse: response)))
     }
   }
 
-  private func cancelCommand(_ peerID: UUID) {
-    guard let request = commandPeers[peerID], request.request.command.targetPaneID != nil else {
+  private func cancelCommand(_ peerID: UUID, includingCreate: Bool = false) {
+    guard let request = commandPeers[peerID],
+      includingCreate || request.request.command.targetPaneID != nil
+    else {
       return
     }
     commandService?.cancel(request.requestID)

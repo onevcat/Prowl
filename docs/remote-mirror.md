@@ -81,7 +81,10 @@ correlated by UUID. Unknown delivery preserves the draft and is not automaticall
 replayed; reconnection queries the original request receipt on the same Host run.
 Host retains up to 1024 requests per App lifetime, and rejects further requests
 when full. A reused ID with different parameters is rejected. Takeover/disconnect
-cancels a dispatch still waiting for readiness. Existing terminal programs continue.
+cancels a dispatch still waiting for readiness. Explicit device revocation or Host stop
+also cancels pending Profile preparation, including requests whose connection was
+already lost. A plain disconnect alone does not cancel accepted Profile creation;
+check Host before retrying an uncertain result. Existing terminal programs continue.
 
 ## Protocol and development
 

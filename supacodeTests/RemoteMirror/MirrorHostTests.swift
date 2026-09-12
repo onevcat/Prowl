@@ -1,6 +1,7 @@
 import Foundation
 import Network
 import Observation
+import ProwlCLIShared
 import Testing
 
 @testable import supacode
@@ -210,6 +211,94 @@ struct MirrorHostTests {
     #expect(host.subscriberCount == 0)
     #expect(!host.isRunning)
     #expect(source.panes().count == 1)
+  }
+
+  @Test(
+    .timeLimit(.minutes(1)),
+    arguments: ["revoke", "stop", "disconnect-revoke", "disconnect-stop", "disconnect"])
+  func authorityRemovalCancelsPreparedProfile(mode: String) async throws {
+    let suite = "MirrorCreateCancellation-\(UUID())"
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let host = MirrorHost(
+      source: Source(), defaults: defaults, enabled: true, loadIdentity: { Self.identity },
+      saveIdentity: { _ in })
+    let profile = AgentProfile(name: "Reviewer", runtime: .codex)
+    let target = TabResolvedTarget(
+      worktreeID: "worktree-1", worktreeName: "Fixture", worktreePath: "/tmp/fixture",
+      worktreeRootPath: "/tmp/fixture", worktreeKind: "git", tabID: "tab-1", tabTitle: "Fixture",
+      tabSelected: true, paneID: UUID().uuidString, paneTitle: "Fixture", paneCWD: "/tmp/fixture",
+      paneFocused: true)
+    let started = AsyncStream.makeStream(of: Void.self)
+    var preparation: CheckedContinuation<Void, Never>?
+    var preparations = 0
+    var issues = 0
+    var launches = 0
+    var cleanups = 0
+    let handler = LifecycleCommandHandler(
+      resolveCreateTarget: { _ in .success(target) },
+      resolveCloseTarget: { _ in .success(.init(resource: .pane, target: target)) },
+      createTab: { _, _ in nil }, createPane: { _, _ in nil }, profiles: { [profile] },
+      prepareAgentProfile: { request in
+        preparations += 1
+        await withCheckedContinuation { continuation in
+          preparation = continuation
+          started.continuation.yield(())
+        }
+        // Preparation can complete successfully even after its caller was cancelled.
+        return .success(request)
+      },
+      launchAgentProfile: { _ in
+        launches += 1
+        return .success(target)
+      },
+      cancelProfilePreparation: { _ in cleanups += 1 },
+      issueDispatch: {
+        issues += 1
+        return .success(
+          DispatchPendingRecord(id: "test-dispatch", createdAt: "2026-09-13T00:00:00Z"))
+      },
+      bindDispatch: { _, _ in .success(()) },
+      closeTab: { _, _ in true }, closePane: { _, _ in true })
+    let service = MirrorCommandService(router: CLICommandRouter(createHandler: handler))
+    host.commandService = service
+    host.address = "127.0.0.1"
+    host.port = String(try MirrorTestPort.unusedPort())
+    host.start()
+    defer { host.stop() }
+    for await ready in Observations({ host.isRunning || host.error != nil }) where ready { break }
+    try #require(host.error == nil)
+    let peer = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
+    defer { peer.connection.close() }
+    let request = MirrorCommandRequest(
+      requestID: UUID(),
+      request: .init(
+        command: .create(
+          .init(worktreeID: target.worktreeID, profileID: profile.id.uuidString, prompt: "Review")))
+    )
+    peer.connection.send(.command(.init(commandRequest: request)))
+    var preparationEvents = started.stream.makeAsyncIterator()
+    _ = await preparationEvents.next()
+    if mode.hasPrefix("disconnect") {
+      peer.connection.close()
+      for await offline in Observations({ host.onlineDeviceIDs.isEmpty }) where offline { break }
+    }
+    if mode.hasSuffix("revoke") { host.revoke(Self.identity.devices[0].id) }
+    if mode.hasSuffix("stop") { host.stop() }
+    try #require(preparation != nil)
+    preparation?.resume()
+    preparation = nil
+    // Await the original retained execution. A duplicate must never restart preparation.
+    let response = await service.execute(request)
+    let cancelled = mode != "disconnect"
+    #expect(try response.response.decode(CommandResponse.self).ok == !cancelled)
+    #expect(preparations == 1)
+    #expect(issues == (cancelled ? 0 : 1))
+    #expect(launches == (cancelled ? 0 : 1))
+    #expect(cleanups == (cancelled ? 1 : 0))
+    _ = await service.execute(request)
+    #expect(preparations == 1)
+    #expect(launches == (cancelled ? 0 : 1))
   }
 
   @MainActor private final class Source: MirrorPaneSource {
