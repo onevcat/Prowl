@@ -371,3 +371,6 @@ opencode; partial for qodercli/qwen/amp; docs/bundle for the rest). Key conclusi
   defeating mtime selection; recorded direct-child lifecycle events and the requirement
   to retain Working after parent completion while children run in
   [018-foreground-and-subagent-findings.md](018-foreground-and-subagent-findings.md).
+- Updated 2026-09-12: Defined selected main-session identity as the log attachment
+  gate and audited current self-report and resolver limits in
+  [019-foreground-identity-contract.md](019-foreground-identity-contract.md).
