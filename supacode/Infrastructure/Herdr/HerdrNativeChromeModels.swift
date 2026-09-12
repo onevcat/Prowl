@@ -936,6 +936,27 @@ nonisolated internal struct HerdrNativeContractReady: Codable, Equatable, Sendab
 nonisolated internal struct HerdrNativeMutationResult: Codable, Equatable, Sendable {
   internal let succeeded: Bool
   internal let message: String?
+  internal let endpointKey: HerdrEndpointKey?
+  internal let endpointFence: HerdrEndpointFence?
+
+  internal init(
+    succeeded: Bool,
+    message: String?,
+    endpointKey: HerdrEndpointKey? = nil,
+    endpointFence: HerdrEndpointFence? = nil
+  ) {
+    self.succeeded = succeeded
+    self.message = message
+    self.endpointKey = endpointKey
+    self.endpointFence = endpointFence
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case succeeded
+    case message
+    case endpointKey = "endpoint_key"
+    case endpointFence = "endpoint_fence"
+  }
 }
 
 nonisolated internal struct HerdrNativeAggregatePayload: Codable, Equatable, Sendable {

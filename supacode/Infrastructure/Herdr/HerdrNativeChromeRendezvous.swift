@@ -425,28 +425,7 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
             "Aggregate frame core envelope is invalid.")
         }
         streamContinuation?.yield(
-          .frame(
-            HerdrNativeAggregateFrame(
-              messageKind: envelope.messageKind,
-              sequence: sequence,
-              projectionRevision: projectionRevision,
-              activationEpoch: envelope.activationEpoch,
-              requestID: envelope.requestID,
-              mutationResult: envelope.payload.succeeded.map {
-                HerdrNativeMutationResult(succeeded: $0, message: envelope.payload.message)
-              },
-              processInfoTarget: envelope.payload.endpointKey.flatMap { endpointKey in
-                envelope.payload.processInfo.map {
-                  HerdrPaneTarget(endpointKey: endpointKey, paneID: $0.paneID)
-                }
-              },
-              processInfoFence: envelope.payload.endpointFence,
-              processInfo: envelope.payload.processInfo,
-              state: envelope.payload.state,
-              syncCommitted: envelope.payload.syncCommitted
-            )
-          )
-        )
+          .frame(aggregateFrame(from: envelope, sequence: sequence, projectionRevision: projectionRevision)))
       }
     } catch {
       let reconnectable: Bool
@@ -467,6 +446,7 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
         condition.unlock()
         Darwin.close(descriptor)
         if isCurrentConnection {
+          closeListenerAndSocketFile()
           streamContinuation?.yield(.incompatible(String(describing: error)))
           streamContinuation?.finish()
         }
@@ -497,11 +477,57 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
       }
       condition.unlock()
       if shouldFinish {
+        closeListenerAndSocketFile()
         streamContinuation?.yield(
           .incompatible("Native chrome connection closed without a proof-protected reconnect."))
         streamContinuation?.finish()
       }
     }
+  }
+
+  private func aggregateFrame(
+    from envelope: HerdrNativeChromeEnvelope<HerdrNativeAggregatePayload>,
+    sequence: UInt64,
+    projectionRevision: UInt64
+  ) -> HerdrNativeAggregateFrame {
+    HerdrNativeAggregateFrame(
+      messageKind: envelope.messageKind,
+      sequence: sequence,
+      projectionRevision: projectionRevision,
+      activationEpoch: envelope.activationEpoch,
+      requestID: envelope.requestID,
+      mutationResult: envelope.payload.succeeded.map {
+        HerdrNativeMutationResult(
+          succeeded: $0,
+          message: envelope.payload.message,
+          endpointKey: envelope.payload.endpointKey,
+          endpointFence: envelope.payload.endpointFence
+        )
+      },
+      processInfoTarget: envelope.payload.endpointKey.flatMap { endpointKey in
+        envelope.payload.processInfo.map {
+          HerdrPaneTarget(endpointKey: endpointKey, paneID: $0.paneID)
+        }
+      },
+      processInfoFence: envelope.payload.endpointFence,
+      processInfo: envelope.payload.processInfo,
+      state: envelope.payload.state,
+      syncCommitted: envelope.payload.syncCommitted
+    )
+  }
+
+  private func closeListenerAndSocketFile() {
+    condition.lock()
+    let listener = listenerDescriptor
+    listenerDescriptor = -1
+    condition.broadcast()
+    condition.unlock()
+
+    if listener >= 0 {
+      _ = Darwin.shutdown(listener, SHUT_RDWR)
+      Darwin.close(listener)
+    }
+    try? FileManager.default.removeItem(atPath: binding.socketPath)
   }
 
   private func writeFrame(_ data: Data) throws {

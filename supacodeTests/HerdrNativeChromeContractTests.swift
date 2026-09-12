@@ -229,6 +229,7 @@ struct HerdrNativeChromeContractTests {
     ) {
       $0.authorityMode = .incompatible
       $0.connection = .incompatible
+      $0.mutationGeneration = 1
     }
   }
 
@@ -265,6 +266,10 @@ struct HerdrNativeChromeContractTests {
     reducerState.isForeground = true
     reducerState.nativeEventSequence = 2
     reducerState.nativeProjectionRevision = 2
+    reducerState.pendingNativeMutationRequestID = "prowl-native-mutation-1"
+    reducerState.pendingMutation = .renameTab(tabID: "tab-duplicate", label: "pending")
+    reducerState.mutationError = .invalidResponse("old")
+    reducerState.mutationGeneration = 7
     let frame = HerdrNativeAggregateFrame(
       messageKind: "aggregate_state",
       sequence: 4,
@@ -286,6 +291,86 @@ struct HerdrNativeChromeContractTests {
     #expect(reducerState.isResyncPending)
     #expect(!reducerState.aggregateSyncCommitted)
     #expect(reducerState.snapshot == .empty)
+    #expect(reducerState.pendingNativeMutationRequestID == nil)
+    #expect(reducerState.pendingMutation == nil)
+    #expect(reducerState.mutationError == nil)
+    #expect(reducerState.mutationGeneration == 8)
+  }
+
+  @Test(.dependencies) func sequenceGapCancelsOldNativeMutationTimeout() async throws {
+    let clock = TestClock()
+    let sentRequests = LockIsolated<[HerdrNativeActionRequest]>([])
+    let envelope = try goldenEnvelope()
+    var initialState = HerdrTerminalChromeFeature.State()
+    initialState.authorityMode = .aggregate
+    initialState.isForeground = true
+    initialState.connection = .connected
+    initialState.aggregateState = envelope.payload.state
+    initialState.aggregateSyncCommitted = true
+    initialState.nativeEventSequence = 1
+    initialState.nativeProjectionRevision = 1
+    let store = TestStore(initialState: initialState) {
+      HerdrTerminalChromeFeature()
+    } withDependencies: {
+      $0.continuousClock = clock
+      var client = HerdrTerminalChromeClient.testValue
+      client.sendNativeAction = { request in sentRequests.withValue { $0.append(request) } }
+      $0.herdrTerminalChromeClient = client
+    }
+    store.exhaustivity = .off(showSkippedAssertions: false)
+
+    await store.send(.renameTabRequested(tabID: "tab-duplicate", label: "pending"))
+    let gapFrame = HerdrNativeAggregateFrame(
+      messageKind: "aggregate_state",
+      sequence: 3,
+      projectionRevision: 2,
+      activationEpoch: nil,
+      requestID: nil,
+      mutationResult: nil,
+      processInfoTarget: nil,
+      processInfoFence: nil,
+      processInfo: nil,
+      state: envelope.payload.state,
+      syncCommitted: true
+    )
+    await store.send(.nativeEvent(.stream(.frame(gapFrame))))
+    await clock.advance(by: .seconds(5))
+    await store.send(.mutationResponse(1, .success))
+
+    #expect(sentRequests.value.map(\.payload.action) == ["mutate", "resync"])
+    #expect(store.state.pendingMutation == nil)
+    #expect(store.state.pendingNativeMutationRequestID == nil)
+    #expect(store.state.mutationError == nil)
+    #expect(store.state.mutationGeneration == 2)
+  }
+
+  @Test func incompatibleNativeEventInvalidatesPendingMutation() async {
+    var initialState = HerdrTerminalChromeFeature.State()
+    initialState.authorityMode = .aggregate
+    initialState.isForeground = true
+    initialState.connection = .connected
+    initialState.pendingNativeMutationRequestID = "prowl-native-mutation-1"
+    initialState.mutationError = .invalidResponse("old")
+    initialState.closeConfirmation = .init(workspaceID: "workspace")
+    initialState.mutationGeneration = 4
+    let store = TestStore(initialState: initialState) {
+      HerdrTerminalChromeFeature()
+    }
+
+    await store.send(.nativeEvent(.incompatible("terminal"))) {
+      $0.authorityMode = .incompatible
+      $0.connection = .incompatible
+      $0.pendingNativeMutationRequestID = nil
+      $0.pendingMutation = nil
+      $0.mutationError = nil
+      $0.closeConfirmation = nil
+      $0.mutationGeneration = 5
+    }
+    await store.send(.mutationResponse(4, .success))
+    #expect(store.state.authorityMode == .incompatible)
+    #expect(store.state.pendingMutation == nil)
+    #expect(store.state.pendingNativeMutationRequestID == nil)
+    #expect(store.state.mutationGeneration == 5)
   }
 
   private func goldenEnvelope() throws -> HerdrNativeChromeEnvelope<HerdrNativeAggregatePayload> {
@@ -403,6 +488,102 @@ struct HerdrNativeChromeContractTests {
     #expect(store.state.pendingMutation != nil)
   }
 
+  @Test func mutationResultWithoutMatchingEndpointFenceCannotCompletePendingRequest() async throws {
+    let envelope = try goldenEnvelope()
+    var initialState = HerdrTerminalChromeFeature.State()
+    initialState.authorityMode = .aggregate
+    initialState.isForeground = true
+    initialState.connection = .connected
+    initialState.aggregateState = envelope.payload.state
+    initialState.aggregateSyncCommitted = true
+    initialState.pendingMutation = .renameTab(tabID: "tab-duplicate", label: "pending")
+    initialState.pendingNativeMutationRequestID = "prowl-native-mutation-1"
+    initialState.pendingNativeMutationFence = HerdrEndpointFence(
+      endpointKey: .local,
+      identity: HerdrConnectionIdentity(generation: 1, serverBootID: "boot-local"),
+      snapshotRevision: 8
+    )
+    initialState.mutationGeneration = 1
+    let clock = TestClock()
+    let store = TestStore(initialState: initialState) {
+      HerdrTerminalChromeFeature()
+    } withDependencies: {
+      $0.continuousClock = clock
+    }
+    store.exhaustivity = .off(showSkippedAssertions: false)
+    let fences = [
+      HerdrEndpointFence(
+        endpointKey: .local,
+        identity: HerdrConnectionIdentity(generation: 2, serverBootID: "boot-local"),
+        snapshotRevision: 8
+      ),
+      HerdrEndpointFence(
+        endpointKey: .local,
+        identity: HerdrConnectionIdentity(generation: 1, serverBootID: "boot-old"),
+        snapshotRevision: 8
+      ),
+      HerdrEndpointFence(
+        endpointKey: .local,
+        identity: HerdrConnectionIdentity(generation: 1, serverBootID: "boot-local"),
+        snapshotRevision: 7
+      ),
+      HerdrEndpointFence(
+        endpointKey: .ssh(profileID: "0123456789abcdef0123456789abcdef"),
+        identity: HerdrConnectionIdentity(generation: 1, serverBootID: "boot-remote"),
+        snapshotRevision: 8
+      ),
+    ]
+    for (index, fence) in fences.enumerated() {
+      let frame = HerdrNativeAggregateFrame(
+        messageKind: "mutation_result",
+        sequence: UInt64(index + 1),
+        projectionRevision: UInt64(index + 1),
+        activationEpoch: nil,
+        requestID: "prowl-native-mutation-1",
+        mutationResult: HerdrNativeMutationResult(
+          succeeded: true,
+          message: nil,
+          endpointKey: fence.endpointKey,
+          endpointFence: fence
+        ),
+        processInfoTarget: nil,
+        processInfoFence: nil,
+        processInfo: nil,
+        state: envelope.payload.state,
+        syncCommitted: true
+      )
+      await store.send(.nativeEvent(.stream(.frame(frame))))
+    }
+
+    #expect(store.state.pendingMutation != nil)
+    #expect(store.state.pendingNativeMutationRequestID == "prowl-native-mutation-1")
+
+    let matchingFence = try #require(initialState.pendingNativeMutationFence)
+    let matchingFrame = HerdrNativeAggregateFrame(
+      messageKind: "mutation_result",
+      sequence: 5,
+      projectionRevision: 5,
+      activationEpoch: nil,
+      requestID: "prowl-native-mutation-1",
+      mutationResult: HerdrNativeMutationResult(
+        succeeded: true,
+        message: nil,
+        endpointKey: matchingFence.endpointKey,
+        endpointFence: matchingFence
+      ),
+      processInfoTarget: nil,
+      processInfoFence: nil,
+      processInfo: nil,
+      state: envelope.payload.state,
+      syncCommitted: true
+    )
+    await store.send(.nativeEvent(.stream(.frame(matchingFrame))))
+    await store.receive(.mutationResponse(1, .success)) {
+      $0.pendingMutation = nil
+      $0.pendingNativeMutationRequestID = nil
+      $0.pendingNativeMutationFence = nil
+    }
+  }
   @Test func nativeMutationTimesOutAndClearsPendingState() async throws {
     let clock = TestClock()
     let envelope = try goldenEnvelope()
@@ -429,6 +610,11 @@ struct HerdrNativeChromeContractTests {
       $0.mutationGeneration = 1
       $0.nativeRequestSequence = 1
       $0.pendingNativeMutationRequestID = "prowl-native-mutation-1"
+      $0.pendingNativeMutationFence = HerdrEndpointFence(
+        endpointKey: .local,
+        identity: HerdrConnectionIdentity(generation: 1, serverBootID: "boot-local"),
+        snapshotRevision: 8
+      )
     }
     await clock.advance(by: .seconds(5))
     await store.receive(
@@ -439,6 +625,7 @@ struct HerdrNativeChromeContractTests {
     ) {
       $0.pendingMutation = nil
       $0.pendingNativeMutationRequestID = nil
+      $0.pendingNativeMutationFence = nil
       $0.mutationError = .invalidResponse("Herdr mutation response timed out.")
     }
 
@@ -944,6 +1131,70 @@ struct HerdrNativeChromeContractTests {
     }
   }
 
+  @Test func postHandshakeInvalidFrameClosesListenerAndSocketFile() async throws {
+    let rendezvous = try HerdrNativeChromeRendezvous()
+    defer { rendezvous.stop() }
+    let descriptor = try connectUnixSocket(at: rendezvous.binding.socketPath)
+    let claim = nativeClaim(for: rendezvous)
+    try writeFrame(JSONEncoder().encode(claim), to: descriptor)
+
+    let result = await rendezvous.probe()
+    guard case .aggregate(let session) = result else {
+      Issue.record("Expected aggregate contract claim")
+      Darwin.close(descriptor)
+      return
+    }
+    try writeFrame(Data("not-json".utf8), to: descriptor)
+    Darwin.close(descriptor)
+
+    var iterator = session.stream.makeAsyncIterator()
+    var becameIncompatible = false
+    while let state = await iterator.next() {
+      if case .incompatible = state {
+        becameIncompatible = true
+        break
+      }
+    }
+    #expect(becameIncompatible)
+    #expect(!FileManager.default.fileExists(atPath: rendezvous.binding.socketPath))
+    #expect(throws: Error.self) {
+      let lateDescriptor = try connectUnixSocket(at: rendezvous.binding.socketPath)
+      Darwin.close(lateDescriptor)
+    }
+  }
+
+  @Test func reconnectTimeoutClosesListenerAndSocketFile() async throws {
+    let rendezvous = try HerdrNativeChromeRendezvous()
+    defer { rendezvous.stop() }
+    let descriptor = try connectUnixSocket(at: rendezvous.binding.socketPath)
+    let claim = nativeClaim(for: rendezvous)
+    try writeFrame(JSONEncoder().encode(claim), to: descriptor)
+
+    let result = await rendezvous.probe()
+    guard case .aggregate(let session) = result else {
+      Issue.record("Expected aggregate contract claim")
+      Darwin.close(descriptor)
+      return
+    }
+    _ = Darwin.shutdown(descriptor, SHUT_RDWR)
+    Darwin.close(descriptor)
+
+    var iterator = session.stream.makeAsyncIterator()
+    var becameIncompatible = false
+    while let state = await iterator.next() {
+      if case .incompatible = state {
+        becameIncompatible = true
+        break
+      }
+    }
+    #expect(becameIncompatible)
+    #expect(!FileManager.default.fileExists(atPath: rendezvous.binding.socketPath))
+    #expect(throws: Error.self) {
+      let lateDescriptor = try connectUnixSocket(at: rendezvous.binding.socketPath)
+      Darwin.close(lateDescriptor)
+    }
+  }
+
   @Test func acceptedClaimKeepsListenerForProofProtectedReconnect() async throws {
     let rendezvous = try HerdrNativeChromeRendezvous()
     defer { rendezvous.stop() }
@@ -1021,6 +1272,11 @@ struct HerdrNativeChromeContractTests {
       $0.mutationGeneration = 1
       $0.nativeRequestSequence = 1
       $0.pendingNativeMutationRequestID = "prowl-native-mutation-1"
+      $0.pendingNativeMutationFence = HerdrEndpointFence(
+        endpointKey: .local,
+        identity: HerdrConnectionIdentity(generation: 1, serverBootID: "boot-local"),
+        snapshotRevision: 8
+      )
     }
     let mutationRequest = try #require(sentRequests.value.first)
     #expect(sentRequests.value.count == 1)

@@ -39,6 +39,7 @@ internal struct HerdrTerminalChromeFeature {
     internal var activationEpoch: UInt64 = 0
     internal var aggregateProcessInfoByPaneTarget: [HerdrPaneTarget: HerdrPaneProcessInfo] = [:]
     internal var pendingNativeMutationRequestID: String?
+    internal var pendingNativeMutationFence: HerdrEndpointFence?
     internal var snapshot = HerdrSessionSnapshot.empty
     internal var selectedWorkspaceID: String?
     internal var selectedTabID: String?
@@ -400,6 +401,7 @@ internal struct HerdrTerminalChromeFeature {
         state.focusRollback = nil
         state.pendingMutation = nil
         state.pendingNativeMutationRequestID = nil
+        state.pendingNativeMutationFence = nil
         state.closeConfirmation = nil
         state.mutationError = nil
         state.refreshGeneration &+= 1
@@ -446,6 +448,7 @@ internal struct HerdrTerminalChromeFeature {
         state.activationEpoch = 0
         state.aggregateProcessInfoByPaneTarget = [:]
         state.pendingNativeMutationRequestID = nil
+        state.pendingNativeMutationFence = nil
         state.snapshot = .empty
         state.selectedWorkspaceID = nil
         state.selectedTabID = nil
@@ -558,7 +561,9 @@ internal struct HerdrTerminalChromeFeature {
         state.connection = .incompatible
         state.aggregateSyncCommitted = false
         state.aggregateProcessInfoByPaneTarget = [:]
-        state.pendingNativeMutationRequestID = nil
+        invalidatePendingMutation(&state, incrementGeneration: true)
+        state.closeConfirmation = nil
+        state.mutationError = nil
         state.snapshot = .empty
         state.selectedWorkspaceID = nil
         state.selectedTabID = nil
@@ -581,6 +586,7 @@ internal struct HerdrTerminalChromeFeature {
         state.nativeProjectionRevision = nil
         state.aggregateProcessInfoByPaneTarget = [:]
         state.pendingNativeMutationRequestID = nil
+        state.pendingNativeMutationFence = nil
         state.pendingMutation = nil
         state.pendingFocus = nil
         state.focusRollback = nil
@@ -599,6 +605,7 @@ internal struct HerdrTerminalChromeFeature {
         state.aggregateSyncCommitted = false
         state.aggregateProcessInfoByPaneTarget = [:]
         state.pendingNativeMutationRequestID = nil
+        state.pendingNativeMutationFence = nil
         state.snapshot = .empty
         state.selectedWorkspaceID = nil
         state.selectedTabID = nil
@@ -896,6 +903,7 @@ internal struct HerdrTerminalChromeFeature {
         let pendingMutation = state.pendingMutation
         state.pendingMutation = nil
         state.pendingNativeMutationRequestID = nil
+        state.pendingNativeMutationFence = nil
         let followUp: Effect<Action>
         switch result {
         case .success:
@@ -949,6 +957,15 @@ internal struct HerdrTerminalChromeFeature {
     }
   }
 
+  private func invalidatePendingMutation(_ state: inout State, incrementGeneration: Bool) {
+    state.pendingNativeMutationRequestID = nil
+    state.pendingNativeMutationFence = nil
+    state.pendingMutation = nil
+    if incrementGeneration {
+      state.mutationGeneration &+= 1
+    }
+  }
+
   internal func applyNativeFrame(
     _ state: inout State,
     frame: HerdrNativeAggregateFrame
@@ -969,7 +986,13 @@ internal struct HerdrTerminalChromeFeature {
         state.selectedWorkspaceID = nil
         state.selectedTabID = nil
         state.selectedPaneID = nil
-        return nativeResyncEffect(&state)
+        invalidatePendingMutation(&state, incrementGeneration: true)
+        state.closeConfirmation = nil
+        state.mutationError = nil
+        return .merge(
+          .cancel(id: CancelID.mutation),
+          nativeResyncEffect(&state)
+        )
       }
     }
     if let revision = state.nativeProjectionRevision,
@@ -987,6 +1010,7 @@ internal struct HerdrTerminalChromeFeature {
         !replacedEndpointKeys.contains($0.key.endpointKey)
       }
       state.pendingNativeMutationRequestID = nil
+      state.pendingNativeMutationFence = nil
       state.pendingMutation = nil
       state.pendingFocus = nil
       state.focusRollback = nil
@@ -1142,7 +1166,10 @@ internal struct HerdrTerminalChromeFeature {
   ) -> Effect<Action> {
     guard frame.messageKind == "mutation_result",
       frame.requestID == state.pendingNativeMutationRequestID,
-      let result = frame.mutationResult
+      let pendingFence = state.pendingNativeMutationFence,
+      let result = frame.mutationResult,
+      result.endpointKey == pendingFence.endpointKey,
+      result.endpointFence == pendingFence
     else { return .none }
     let response: MutationResult =
       result.succeeded
@@ -1303,6 +1330,7 @@ internal struct HerdrTerminalChromeFeature {
     guard endpoint.activation.optionalMethods.contains(method) else { return .none }
 
     state.pendingMutation = mutation
+    state.pendingNativeMutationFence = fence
     state.mutationError = nil
     state.mutationGeneration &+= 1
     state.nativeRequestSequence &+= 1
@@ -1369,6 +1397,8 @@ internal struct HerdrTerminalChromeFeature {
       return startNativeMutation(&state, mutation)
     }
     state.pendingMutation = mutation
+    state.pendingNativeMutationRequestID = nil
+    state.pendingNativeMutationFence = nil
     state.mutationError = nil
     state.mutationGeneration &+= 1
     let generation = state.mutationGeneration
