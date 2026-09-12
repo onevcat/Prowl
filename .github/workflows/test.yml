@@ -72,7 +72,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           exit "$failed"
       - name: Collect mirror diagnostics
-        if: failure()
+        if: always()
         shell: bash
         run: |
           mkdir -p build/ci-logs

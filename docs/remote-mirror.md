@@ -23,8 +23,11 @@ connection editor can retain a device credential while updating the Host address
 the client checks the Host identity after connecting. A new Host or revoked device
 requires a fresh pairing window. Old experiment keys are not migrated.
 
-The Host panel lists paired devices, their online state, and **Revoke**. Revocation
-removes the persisted secret and disconnects all connections for that device;
+The Host panel lists paired devices, their online state, and **Revoke**.
+Device labels use the Mac local host name or the iOS system device name; pairing
+does not resolve a DNS name to obtain this label.
+
+Revocation removes the persisted secret and disconnects all connections for that device;
 other devices remain connected. Device records are limited to 64. If enrollment
 succeeds on Host but its response or the client's save is lost, open a new window
 and remove the unused device record. Keychain failures are reported, not replaced

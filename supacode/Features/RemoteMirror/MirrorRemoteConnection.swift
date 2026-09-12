@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import SystemConfiguration
 
 @MainActor
 protocol MirrorTransport: AnyObject {
@@ -128,7 +129,8 @@ final class MirrorRemoteConnection: MirrorTransport {
             let lookupStarted = ProcessInfo.processInfo.systemUptime
             SupaLogger("MirrorPairing").notice("Device name lookup started")
           #endif
-          let name = String(ProcessInfo.processInfo.hostName.prefix(80))
+          // Read local configuration; hostname resolution can block the authentication deadline.
+          let name = String(((SCDynamicStoreCopyLocalHostName(nil) as String?) ?? "Mac").prefix(80))
           #if DEBUG
             let elapsed = ProcessInfo.processInfo.systemUptime - lookupStarted
             SupaLogger("MirrorPairing").notice("Device name lookup completed after \(elapsed) seconds")

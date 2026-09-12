@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import UIKit
 
 @MainActor
 protocol MirrorTransport: AnyObject {
@@ -124,7 +125,8 @@ final class MirrorRemoteConnection: MirrorTransport {
           )
         } else {
           let code = try MirrorPairingCode.normalized(configuration.pairingKey)
-          let name = String(ProcessInfo.processInfo.hostName.prefix(80))
+          // Device labels must not depend on DNS during authentication.
+          let name = String(UIDevice.current.name.prefix(80))
           connection?.send(
             .pair(
               .init(
