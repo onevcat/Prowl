@@ -999,6 +999,12 @@ nonisolated internal struct HerdrNativeActionPayload: Codable, Equatable, Sendab
   }
 }
 
+nonisolated internal enum HerdrTabRenameMethod {
+  internal static func method(for label: String?) -> String {
+    label == nil ? "tab.rename.v2" : "tab.rename"
+  }
+}
+
 nonisolated internal enum HerdrJSONValue: Codable, Equatable, Sendable {
   case string(String)
   case int(Int)

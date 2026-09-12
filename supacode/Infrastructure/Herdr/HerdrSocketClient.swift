@@ -195,7 +195,7 @@ nonisolated internal struct HerdrSocketClient: Sendable {
   internal func renameTab(tabID: String, label: String?) async throws {
     try await performRequest(
       id: "prowl-herdr-tab-rename",
-      method: "tab.rename",
+      method: HerdrTabRenameMethod.method(for: label),
       params: HerdrTabRenameParams(tabID: tabID, label: label)
     )
   }

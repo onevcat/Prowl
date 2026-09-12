@@ -664,6 +664,11 @@ struct HerdrNativeChromeContractTests {
     }
   }
 
+  @Test func tabRenameKeepsV1ShapeAndUsesV2ToClear() {
+    #expect(HerdrTabRenameMethod.method(for: "Build") == "tab.rename")
+    #expect(HerdrTabRenameMethod.method(for: nil) == "tab.rename.v2")
+  }
+
   @Test func rejectsInvalidSSHProfileIdentity() {
     let data = Data(#"{"kind":"ssh","profile_id":"Build Host"}"#.utf8)
     #expect(throws: DecodingError.self) {

@@ -1316,7 +1316,7 @@ internal struct HerdrTerminalChromeFeature {
         "source_tab_id": sourceTabID.map(HerdrJSONValue.string) ?? .null,
       ]
     case .renameTab(let tabID, let label):
-      method = "tab.rename"
+      method = HerdrTabRenameMethod.method(for: label)
       params = ["tab_id": .string(tabID), "label": label.map(HerdrJSONValue.string) ?? .null]
     case .moveTab(let tabID, let insertIndex):
       method = "tab.move"
