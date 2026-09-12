@@ -437,11 +437,13 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
           throw HerdrNativeChromeTransportError.invalidClaim(
             "Aggregate frame core envelope is invalid.")
         }
-        guard publishFrameIfCurrent(
-          aggregateFrame(from: envelope, sequence: sequence, projectionRevision: projectionRevision),
-          descriptor: descriptor,
-          epoch: epoch
-        ) else { return }
+        guard
+          publishFrameIfCurrent(
+            aggregateFrame(from: envelope, sequence: sequence, projectionRevision: projectionRevision),
+            descriptor: descriptor,
+            epoch: epoch
+          )
+        else { return }
       }
     } catch {
       let reconnectable: Bool
@@ -673,17 +675,50 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
   }
 
   private static func isDescendant(_ process: ProcessIdentity, of owner: ProcessIdentity) -> Bool {
-    var current = process
+    guard processIdentity(pid: process.pid) == process else { return false }
+    guard isDescendantProcess(process.pid, of: owner.pid, parentProcessID: readParentProcessID) else {
+      return false
+    }
+    return processIdentity(pid: owner.pid) == owner
+  }
+
+  internal static func isDescendantProcess(
+    _ processID: pid_t,
+    of ownerProcessID: pid_t,
+    parentProcessID: (pid_t) -> pid_t?
+  ) -> Bool {
+    var currentPID = processID
     var visited: Set<pid_t> = []
     for _ in 0..<64 {
-      guard visited.insert(current.pid).inserted else { return false }
-      if current == owner { return true }
-      guard current.parentPID > 1, let parent = processIdentity(pid: current.parentPID) else {
+      guard visited.insert(currentPID).inserted else { return false }
+      if currentPID == ownerProcessID { return true }
+      guard let parentPID = parentProcessID(currentPID), parentPID > 1 else {
         return false
       }
-      current = parent
+      currentPID = parentPID
     }
     return false
+  }
+
+  internal static func parentProcessID(_ pid: pid_t) -> pid_t? {
+    readParentProcessID(pid)
+  }
+
+  private static func readParentProcessID(_ pid: pid_t) -> pid_t? {
+    var info = proc_bsdshortinfo()
+    let result = withUnsafeMutablePointer(to: &info) { pointer in
+      proc_pidinfo(
+        pid,
+        PROC_PIDT_SHORTBSDINFO,
+        0,
+        pointer,
+        Int32(MemoryLayout<proc_bsdshortinfo>.size)
+      )
+    }
+    guard result == Int32(MemoryLayout<proc_bsdshortinfo>.size), info.pbsi_pid == pid else {
+      return nil
+    }
+    return pid_t(info.pbsi_ppid)
   }
 
   private static func setNoSigPipe(on descriptor: Int32) throws {

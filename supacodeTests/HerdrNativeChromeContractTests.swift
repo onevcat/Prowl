@@ -721,6 +721,26 @@ struct HerdrNativeChromeContractTests {
     #expect(!FileManager.default.fileExists(atPath: second.socketPath))
   }
 
+  @Test func ancestryTraversalCrossesAnIdentityRestrictedIntermediary() {
+    let parentByPID: [pid_t: pid_t] = [
+      40: 30,
+      30: 20,
+      20: 10,
+    ]
+    #expect(
+      HerdrNativeChromeRendezvous.isDescendantProcess(
+        40,
+        of: 10,
+        parentProcessID: { parentByPID[$0] }
+      )
+    )
+  }
+
+  @Test func shortBSDInfoReadsRootOwnedProcessParentID() {
+    #expect(geteuid() != 0)
+    #expect(HerdrNativeChromeRendezvous.parentProcessID(1) != nil)
+  }
+
   private func nativeClaim(
     for rendezvous: HerdrNativeChromeRendezvous,
     challenge: String? = nil,
