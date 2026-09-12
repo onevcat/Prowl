@@ -358,6 +358,7 @@ test: ensure-ghostty embed-cli-debug embed-docs embed-skills test-app
 test-scripts: # Run tests for the repository's Python scripts
 	@python3 -m unittest discover -s "$(CURRENT_MAKEFILE_DIR)/scripts" -p 'test_*.py'
 
+# Real TLS deadlines run separately from the bulk suite's main-actor work.
 test-app: ensure-ghostty # Run app/unit tests via xcodebuild
 	@set -euo pipefail; \
 	result_root="$(CURRENT_MAKEFILE_DIR)/build/test-results"; \
@@ -399,7 +400,14 @@ test-app: ensure-ghostty # Run app/unit tests via xcodebuild
 		skip_args+=("-skip-testing:$$test_id"); \
 		only_args+=("-only-testing:$$test_id"); \
 	done; \
+	mirror_suites=(MirrorHostTests MirrorDevicePairingTests MirrorConnectionTests MirrorTerminalIntegrationTests); \
+	mirror_args=(); \
+	for suite in "$${mirror_suites[@]}"; do \
+		skip_args+=("-skip-testing:supacodeTests/$$suite"); \
+		mirror_args+=("-only-testing:supacodeTests/$$suite"); \
+	done; \
 	run_xcode_tests "$$result_root/supacode-tests.xcresult" test "" "$${skip_args[@]}"; \
+	run_xcode_tests "$$result_root/supacode-mirror-tests.xcresult" test-without-building "" "$${mirror_args[@]}"; \
 	run_xcode_tests "$$result_root/supacode-shell-cancellation-tests.xcresult" test-without-building 2 "$${only_args[@]}"
 
 test-cli-smoke: build-cli # Smoke test CLI executable
