@@ -32,7 +32,7 @@ Process/session lifecycle -/             ^
                             Existing trusted signals
 ```
 
-- The log provider supplies scoped turn boundaries, identity confidence, and channel
+- The log provider supplies scoped turn boundaries, child activity, identity confidence, and channel
   availability. It does not infer Blocked from a tool invocation or from silence.
 - The screen provider supplies observed UI state and freshness, including approval
   and input prompts. It also supplies fallback Working/Idle evidence when log
@@ -48,7 +48,8 @@ Process/session lifecycle -/             ^
 | --- | --- |
 | Fresh, trusted start for the current turn | In progress; Working unless current blocked UI applies |
 | Current approval/input UI during that turn | Blocked, even though the turn is still open |
-| Matching completion or cancellation | Close that turn and permit Idle; reject UI known to be retained from it |
+| Matching completion or cancellation | Close that turn; permit Idle only when no verified child work remains; reject UI known to be retained from it |
+| Verified child work after parent completion | Keep Working unless current blocked UI applies; parent completion does not end child work |
 | Missing/unreadable log or unresolved foreground identity | Fall back to screen evidence without claiming log confidence |
 | No new log bytes for a while | Not a failure or completion signal; silence alone must not expire an open turn |
 | Process exit/replacement or session invalidation | Revoke affected evidence; do not manufacture successful completion |
@@ -84,15 +85,18 @@ forward-only `/new` transition; this is a useful candidate rule to validate, not
 evidence that timestamps are useless. Creation time and modification time have
 different meanings. A universal "newest-created wins" rule would fail when the
 user returns to an older saved chat. The official CLI documentation describes
-in-TUI `/resume` for this purpose; its descriptor and write behavior remains untested
-in this spike. See [CLI chat switching](https://learn.chatgpt.com/docs/developer-commands?surface=cli#resume-a-saved-chat-with-resume).
+in-TUI `/resume` for this purpose. The follow-up [018](018-foreground-and-subagent-findings.md)
+verified that returning to A can leave both files and writable paths unchanged,
+and that old background work can make a non-foreground log newest by mtime.
+See [CLI chat switching](https://learn.chatgpt.com/docs/developer-commands?surface=cli#resume-a-saved-chat-with-resume).
 
 Explicit resume after a forced exit was different: a new PID opened the selected
 existing rollout. Binding was straightforward in that sample. The difficulty was
 history: the old crashed turn had a start with no completion/abort, and that record
 remained after resume. The UI showed an interruption notice, then a new prompt
 created a new turn. A log replay must distinguish historical open work from a new
-event in the current process epoch. In-TUI resume switching was not tested.
+event in the current process epoch. In-TUI switching was subsequently tested in
+[018](018-foreground-and-subagent-findings.md).
 
 The spike measured 13 starts, 9 completions, 3 cancellations, and one unmatched
 crash turn. Enter-to-readable-start was 21–97 ms. Vnode notifications also exposed
@@ -119,4 +123,5 @@ duplicate wakes, replacement, and truncation. A native Prowl interaction pass mu
 verify the integrated result; the local PTY spike does not establish GUI acceptance.
 
 No watcher or state machine implementation is authorized by this documentation
-request alone. The next discussion is foreground identity and transition semantics.
+request alone. Follow-up findings and the user's requirement to retain Working
+during child work are recorded in [018](018-foreground-and-subagent-findings.md).

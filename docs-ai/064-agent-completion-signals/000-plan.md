@@ -366,3 +366,8 @@ opencode; partial for qodercli/qwen/amp; docs/bundle for the rest). Key conclusi
 - Updated 2026-09-12: Agreed independent log/screen providers and one state decision component;
   recorded local identity findings and open implementation gates in
   [017-agent-state-decision.md](017-agent-state-decision.md). Implementation remains planned.
+
+- Updated 2026-09-12: Verified same-PID resume without log changes and background writes
+  defeating mtime selection; recorded direct-child lifecycle events and the requirement
+  to retain Working after parent completion while children run in
+  [018-foreground-and-subagent-findings.md](018-foreground-and-subagent-findings.md).
