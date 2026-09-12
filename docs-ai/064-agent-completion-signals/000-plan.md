@@ -374,3 +374,6 @@ opencode; partial for qodercli/qwen/amp; docs/bundle for the rest). Key conclusi
 - Updated 2026-09-12: Defined selected main-session identity as the log attachment
   gate and audited current self-report and resolver limits in
   [019-foreground-identity-contract.md](019-foreground-identity-contract.md).
+- Updated 2026-09-12: Completed public-source and real-TUI selection research;
+  verified configured title/footer identity and specified screen fallback gates in
+  [020-selection-channel-research.md](020-selection-channel-research.md).
