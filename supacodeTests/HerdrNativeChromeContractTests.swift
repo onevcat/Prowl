@@ -560,10 +560,21 @@ struct HerdrNativeChromeContractTests {
   }
 
   private func writeFrame(_ data: Data, to descriptor: Int32) throws {
+    try writeFrameHeader(for: data, to: descriptor)
+    try writeFrameBody(data, to: descriptor)
+  }
+
+  private func writeFrameHeader(for data: Data, to descriptor: Int32) throws {
     var length = UInt32(data.count).bigEndian
-    var frame = Data(bytes: &length, count: MemoryLayout<UInt32>.size)
-    frame.append(data)
-    try frame.withUnsafeBytes { bytes in
+    try writeBytes(Data(bytes: &length, count: MemoryLayout<UInt32>.size), to: descriptor)
+  }
+
+  private func writeFrameBody(_ data: Data, to descriptor: Int32) throws {
+    try writeBytes(data, to: descriptor)
+  }
+
+  private func writeBytes(_ data: Data, to descriptor: Int32) throws {
+    try data.withUnsafeBytes { bytes in
       var offset = 0
       while offset < bytes.count {
         let written = Darwin.write(
@@ -575,6 +586,12 @@ struct HerdrNativeChromeContractTests {
         offset += written
       }
     }
+  }
+
+  private func socketPeerClosed(_ descriptor: Int32) -> Bool {
+    var byte: UInt8 = 0
+    let result = Darwin.recv(descriptor, &byte, 1, MSG_PEEK | MSG_DONTWAIT)
+    return result == 0
   }
 
   private func posixError() -> NSError {
@@ -838,6 +855,44 @@ struct HerdrNativeChromeContractTests {
       let lateDescriptor = try connectUnixSocket(at: rendezvous.binding.socketPath)
       Darwin.close(lateDescriptor)
     }
+  }
+
+  @Test func incompatibleInitialClaimCannotBeOverwrittenByDelayedValidClaim() async throws {
+    let rendezvous = try HerdrNativeChromeRendezvous()
+    defer { rendezvous.stop() }
+
+    let validDescriptor = try connectUnixSocket(at: rendezvous.binding.socketPath)
+    defer { Darwin.close(validDescriptor) }
+    let invalidDescriptor = try connectUnixSocket(at: rendezvous.binding.socketPath)
+    defer { Darwin.close(invalidDescriptor) }
+    let validClaimData = try JSONEncoder().encode(nativeClaim(for: rendezvous))
+
+    // Keep B's accepted handler in readFrame while A reaches the terminal failure state.
+    try writeFrameHeader(for: validClaimData, to: validDescriptor)
+    for _ in 0..<100 { await Task.yield() }
+    try writeFrame(Data("{}".utf8), to: invalidDescriptor)
+
+    guard case .incompatible = await rendezvous.probe() else {
+      Issue.record("Expected invalid claim A to make the rendezvous incompatible")
+      return
+    }
+
+    try writeFrameBody(validClaimData, to: validDescriptor)
+    for _ in 0..<100 {
+      await Task.yield()
+      let result = await rendezvous.probe()
+      switch result {
+      case .aggregate:
+        Issue.record("A delayed valid claim B overwrote the incompatible terminal state")
+        return
+      case .incompatible:
+        if socketPeerClosed(validDescriptor) { return }
+      case .noContractClaim:
+        Issue.record("Expected incompatible terminal state after invalid claim A")
+        return
+      }
+    }
+    Issue.record("Timed out waiting for the delayed valid claim to be rejected")
   }
 
   @Test func invalidChallengeLocksRendezvousAsIncompatible() async throws {

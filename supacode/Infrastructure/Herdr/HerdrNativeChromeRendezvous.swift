@@ -280,7 +280,16 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
       if isInitialClaim {
         pendingInitialClaims -= 1
       }
-      if stopped || claimState.map({ if case .noContract = $0 { true } else { false } }) == true {
+      if stopped
+        || claimState.map({
+          switch $0 {
+          case .incompatible, .noContract:
+            return true
+          case .aggregate:
+            return false
+          }
+        }) == true
+      {
         condition.unlock()
         Darwin.close(descriptor)
         return
