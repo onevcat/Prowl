@@ -342,6 +342,67 @@ struct HerdrTabBarViewTests {
     #expect(item?.displayLabel == "warlock-ios-simulator-replay ↳ Warlock")
   }
 
+  @Test func nativeAggregateProjectionPreservesLinkedWorktreeTitle() throws {
+    let snapshot = try JSONDecoder().decode(
+      HerdrClientShellSnapshot.self,
+      from: Data(
+        #"""
+        {
+          "boot_id": "boot",
+          "revision": 1,
+          "focused_workspace_id": "w1",
+          "focused_tab_id": "w1:t1",
+          "focused_pane_id": "w1:p1",
+          "workspaces": [{
+            "workspace_id": "w1",
+            "active_tab_id": "w1:t1",
+            "number": 1,
+            "label": "repo",
+            "custom_label": false,
+            "branch": "feature",
+            "worktree": {
+              "key": "repo-key",
+              "label": "Repo",
+              "repo_root": "/repo",
+              "checkout_path": "/repo/feature",
+              "is_linked_worktree": true
+            },
+            "focused": true,
+            "agent_status": "Idle"
+          }],
+          "tabs": [{
+            "tab_id": "w1:t1",
+            "workspace_id": "w1",
+            "number": 1,
+            "label": "feature",
+            "custom_label": false,
+            "zoomed": false,
+            "focused": true,
+            "agent_status": "Idle"
+          }],
+          "panes": [{
+            "pane_id": "w1:p1",
+            "workspace_id": "w1",
+            "tab_id": "w1:t1",
+            "cwd": "/repo/feature",
+            "foreground_cwd": "/repo/feature",
+            "focused": true,
+            "input_context": {"kind": "command_like", "agent": null, "shell": "zsh"}
+          }],
+          "agents": []
+        }
+        """#.utf8
+      )
+    )
+
+    let item = HerdrTabBarProjection.items(
+      in: snapshot.legacyProjection,
+      workspaceID: "w1"
+    ).first
+
+    #expect(item?.displayLabel == "feature ↳ Repo")
+  }
+
   @Test func suppressesShellAndStarshipOnlyForegroundJobs() {
     let processInfo = HerdrPaneProcessInfo(
       paneID: "w1:p1",

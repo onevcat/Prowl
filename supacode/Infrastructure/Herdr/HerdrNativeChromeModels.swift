@@ -324,11 +324,15 @@ nonisolated internal struct HerdrAttention: Codable, Equatable, Sendable {
 nonisolated internal struct HerdrClientShellWorktree: Codable, Equatable, Sendable {
   internal let key: String
   internal let label: String
+  internal let repoRoot: String?
+  internal let checkoutPath: String?
   internal let isLinkedWorktree: Bool
 
   private enum CodingKeys: String, CodingKey {
     case key
     case label
+    case repoRoot = "repo_root"
+    case checkoutPath = "checkout_path"
     case isLinkedWorktree = "is_linked_worktree"
   }
 }
@@ -479,8 +483,8 @@ nonisolated internal struct HerdrClientShellSnapshot: Codable, Equatable, Sendab
         worktree: workspace.worktree.map {
           HerdrWorkspaceWorktree(
             repoName: $0.label,
-            repoRoot: "",
-            checkoutPath: "",
+            repoRoot: $0.repoRoot ?? "",
+            checkoutPath: $0.checkoutPath ?? "",
             isLinkedWorktree: $0.isLinkedWorktree,
             repoKey: $0.key
           )
