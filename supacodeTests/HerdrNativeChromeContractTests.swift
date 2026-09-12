@@ -891,7 +891,7 @@ struct HerdrNativeChromeContractTests {
     #expect(watermarks.accept(old) == .retiredConnection)
   }
 
-  @Test func endpointReplacementClearsOldProcessDecorationAndPendingMutation() throws {
+  @Test func endpointReplacementClearsOldProcessDecorationAndPendingMutation() async throws {
     let envelope = try goldenEnvelope()
     let previous = try #require(envelope.payload.state.endpoints.first)
     let oldSnapshot = try #require(previous.snapshot)
@@ -970,12 +970,154 @@ struct HerdrNativeChromeContractTests {
       )
     )
 
+    reducerState.mutationGeneration = 4
     _ = HerdrTerminalChromeFeature().applyNativeFrame(&reducerState, frame: frame)
 
     #expect(reducerState.aggregateState?.endpoints.first?.snapshot?.bootID == "local-restarted")
     #expect(reducerState.aggregateProcessInfoByPaneTarget[target] == nil)
     #expect(reducerState.pendingMutation == nil)
     #expect(reducerState.pendingNativeMutationRequestID == nil)
+    #expect(reducerState.pendingNativeMutationFence == nil)
+    #expect(reducerState.mutationGeneration == 5)
+
+    let store = TestStore(initialState: reducerState) {
+      HerdrTerminalChromeFeature()
+    }
+    store.exhaustivity = .off(showSkippedAssertions: false)
+    await store.send(
+      .mutationResponse(4, .failure(.invalidResponse("stale timeout")))
+    )
+    #expect(store.state.mutationError == nil)
+  }
+
+  @Test func nativeDisconnectInvalidatesLateMutationResponse() async {
+    var initialState = HerdrTerminalChromeFeature.State()
+    initialState.authorityMode = .aggregate
+    initialState.isForeground = true
+    initialState.connection = .connected
+    initialState.pendingMutation = .renameTab(tabID: "tab-duplicate", label: "pending")
+    initialState.pendingNativeMutationRequestID = "prowl-native-mutation-1"
+    initialState.pendingNativeMutationFence = HerdrEndpointFence(
+      endpointKey: .local,
+      identity: HerdrConnectionIdentity(generation: 1, serverBootID: "boot-local"),
+      snapshotRevision: 8
+    )
+    initialState.mutationGeneration = 4
+    let store = TestStore(initialState: initialState) {
+      HerdrTerminalChromeFeature()
+    }
+    store.exhaustivity = .off(showSkippedAssertions: false)
+
+    await store.send(.nativeEvent(.stream(.disconnected)))
+    await store.send(
+      .mutationResponse(4, .failure(.invalidResponse("stale timeout")))
+    )
+
+    #expect(store.state.pendingMutation == nil)
+    #expect(store.state.pendingNativeMutationRequestID == nil)
+    #expect(store.state.mutationError == nil)
+    #expect(store.state.mutationGeneration == 5)
+  }
+
+  @Test(.dependencies) func nativeDisconnectCancelsLateMutationTimeout() async throws {
+    let clock = TestClock()
+    let envelope = try goldenEnvelope()
+    var initialState = HerdrTerminalChromeFeature.State()
+    initialState.authorityMode = .aggregate
+    initialState.isForeground = true
+    initialState.connection = .connected
+    initialState.aggregateState = envelope.payload.state
+    initialState.aggregateSyncCommitted = true
+    initialState.pendingMutation = .renameTab(tabID: "tab-duplicate", label: "pending")
+    initialState.pendingNativeMutationRequestID = "prowl-native-mutation-1"
+    initialState.pendingNativeMutationFence = HerdrEndpointFence(
+      endpointKey: .local,
+      identity: HerdrConnectionIdentity(generation: 1, serverBootID: "boot-local"),
+      snapshotRevision: 8
+    )
+    let requests = LockIsolated<[HerdrNativeActionRequest]>([])
+    let store = TestStore(initialState: initialState) {
+      HerdrTerminalChromeFeature()
+    } withDependencies: {
+      $0.continuousClock = clock
+      var client = HerdrTerminalChromeClient.testValue
+      client.sendNativeAction = { request in requests.withValue { $0.append(request) } }
+      $0.herdrTerminalChromeClient = client
+    }
+    store.exhaustivity = .off(showSkippedAssertions: false)
+
+    await store.send(.nativeEvent(.stream(.disconnected)))
+    await clock.advance(by: .seconds(5))
+
+    #expect(requests.value.isEmpty)
+    #expect(store.state.mutationError == nil)
+    #expect(store.state.pendingMutation == nil)
+  }
+
+  @Test func connectionReplacementWaitsForInFlightFrameWrite() async throws {
+    let rendezvous = try HerdrNativeChromeRendezvous()
+    defer { rendezvous.stop() }
+    let descriptor = try connectUnixSocket(at: rendezvous.binding.socketPath)
+    let claim = nativeClaim(for: rendezvous)
+    try writeFrame(JSONEncoder().encode(claim), to: descriptor)
+
+    let result = await rendezvous.probe()
+    guard case .aggregate(let session) = result else {
+      Issue.record("Expected aggregate contract claim")
+      Darwin.close(descriptor)
+      return
+    }
+
+    var receiveBuffer: Int32 = 1_024
+    #expect(
+      Darwin.setsockopt(
+        descriptor,
+        SOL_SOCKET,
+        SO_RCVBUF,
+        &receiveBuffer,
+        socklen_t(MemoryLayout<Int32>.size)
+      ) == 0
+    )
+    let sendTask = Task {
+      try? await session.send(Data(repeating: 0x41, count: HerdrNativeChromeRendezvous.maximumFrameSize))
+    }
+    for _ in 0..<100 { await Task.yield() }
+
+    let reconnectDescriptor = try connectUnixSocket(at: rendezvous.binding.socketPath)
+    defer { Darwin.close(reconnectDescriptor) }
+    try writeFrame(JSONEncoder().encode(claim), to: reconnectDescriptor)
+
+    let observedBeforeOldClose = await withTaskGroup(of: Bool?.self) { group in
+      group.addTask {
+        var iterator = session.stream.makeAsyncIterator()
+        while let state = await iterator.next() {
+          if case .reconnected = state { return true }
+        }
+        return false
+      }
+      group.addTask {
+        try? await Task.sleep(for: .milliseconds(100))
+        return nil
+      }
+      let result = await group.next() ?? nil
+      group.cancelAll()
+      return result
+    }
+    #expect(observedBeforeOldClose != true)
+
+    _ = Darwin.shutdown(descriptor, SHUT_RDWR)
+    Darwin.close(descriptor)
+    _ = await sendTask.value
+
+    var iterator = session.stream.makeAsyncIterator()
+    var reconnected = false
+    while let state = await iterator.next() {
+      if case .reconnected = state {
+        reconnected = true
+        break
+      }
+    }
+    #expect(reconnected)
   }
 
   @Test(.dependencies) func verifiedNoContractClaimStartsLegacyLifecycle() async {

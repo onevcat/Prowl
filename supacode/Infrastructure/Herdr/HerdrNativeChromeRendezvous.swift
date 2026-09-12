@@ -165,9 +165,11 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
   }
 
   internal func stop() {
+    writeLock.lock()
     condition.lock()
     guard !stopped else {
       condition.unlock()
+      writeLock.unlock()
       return
     }
     stopped = true
@@ -186,6 +188,7 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
       _ = Darwin.shutdown(connection, SHUT_RDWR)
       Darwin.close(connection)
     }
+    writeLock.unlock()
     streamContinuation?.finish()
     try? FileManager.default.removeItem(atPath: binding.socketPath)
   }
@@ -276,6 +279,7 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
       )
       try Self.setTimeout(timeval(tv_sec: 0, tv_usec: 0), on: descriptor)
 
+      writeLock.lock()
       condition.lock()
       if isInitialClaim {
         pendingInitialClaims -= 1
@@ -291,6 +295,7 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
         }) == true
       {
         condition.unlock()
+        writeLock.unlock()
         Darwin.close(descriptor)
         return
       }
@@ -311,6 +316,7 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
       let epoch = connectionEpoch
       condition.broadcast()
       condition.unlock()
+      writeLock.unlock()
 
       herdrNativeChromeLogger.debug(
         "native contract bound client=\(claim.clientInstanceID) peer_pid=\(claim.payload.processID) epoch=\(epoch)"
@@ -437,6 +443,7 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
         reconnectable = false
       }
       if !reconnectable {
+        writeLock.lock()
         condition.lock()
         let isCurrentConnection = connectionDescriptor == descriptor
         if isCurrentConnection {
@@ -445,6 +452,7 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
         }
         condition.unlock()
         Darwin.close(descriptor)
+        writeLock.unlock()
         if isCurrentConnection {
           closeListenerAndSocketFile()
           streamContinuation?.yield(.incompatible(String(describing: error)))
@@ -454,6 +462,7 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
       }
 
       let epoch: UInt64?
+      writeLock.lock()
       condition.lock()
       if connectionDescriptor == descriptor {
         connectionDescriptor = -1
@@ -463,6 +472,7 @@ nonisolated internal final class HerdrNativeChromeRendezvous: @unchecked Sendabl
       }
       condition.unlock()
       Darwin.close(descriptor)
+      writeLock.unlock()
       guard let epoch else { return }
       let deadline = Date().addingTimeInterval(1)
       condition.lock()

@@ -585,14 +585,11 @@ internal struct HerdrTerminalChromeFeature {
         state.nativeEventSequence = nil
         state.nativeProjectionRevision = nil
         state.aggregateProcessInfoByPaneTarget = [:]
-        state.pendingNativeMutationRequestID = nil
-        state.pendingNativeMutationFence = nil
-        state.pendingMutation = nil
+        invalidatePendingMutation(&state, incrementGeneration: true)
         state.pendingFocus = nil
         state.focusRollback = nil
         state.snapshot = .empty
         state.nativeConnectionEpoch = epoch
-        state.mutationGeneration &+= 1
         return .merge(
           .cancel(id: CancelID.mutation),
           nativeResyncEffect(&state),
@@ -604,14 +601,12 @@ internal struct HerdrTerminalChromeFeature {
         state.connection = state.isForeground ? .unavailable : .hidden
         state.aggregateSyncCommitted = false
         state.aggregateProcessInfoByPaneTarget = [:]
-        state.pendingNativeMutationRequestID = nil
-        state.pendingNativeMutationFence = nil
+        invalidatePendingMutation(&state, incrementGeneration: true)
         state.snapshot = .empty
         state.selectedWorkspaceID = nil
         state.selectedTabID = nil
         state.selectedPaneID = nil
         state.pendingFocus = nil
-        state.pendingMutation = nil
         return .merge(
           .cancel(id: CancelID.focus),
           .cancel(id: CancelID.mutation)
@@ -899,8 +894,12 @@ internal struct HerdrTerminalChromeFeature {
         return .none
 
       case .mutationResponse(let generation, let result):
-        guard generation == state.mutationGeneration else { return .none }
-        let pendingMutation = state.pendingMutation
+        guard generation == state.mutationGeneration,
+          let pendingMutation = state.pendingMutation,
+          state.authorityMode != .aggregate
+            || (state.pendingNativeMutationRequestID != nil
+              && state.pendingNativeMutationFence != nil)
+        else { return .none }
         state.pendingMutation = nil
         state.pendingNativeMutationRequestID = nil
         state.pendingNativeMutationFence = nil
@@ -910,7 +909,7 @@ internal struct HerdrTerminalChromeFeature {
           state.mutationError = nil
           if state.authorityMode == .aggregate {
             followUp = .none
-          } else if case .some(.renameTab) = pendingMutation {
+          } else if case .renameTab = pendingMutation {
             state.refreshGeneration &+= 1
             followUp = .merge(
               .cancel(id: CancelID.refresh),
@@ -1005,13 +1004,12 @@ internal struct HerdrTerminalChromeFeature {
       &state,
       candidates: frame.state.endpoints
     )
-    if !replacedEndpointKeys.isEmpty {
+    let replacedMutation = !replacedEndpointKeys.isEmpty
+    if replacedMutation {
       state.aggregateProcessInfoByPaneTarget = state.aggregateProcessInfoByPaneTarget.filter {
         !replacedEndpointKeys.contains($0.key.endpointKey)
       }
-      state.pendingNativeMutationRequestID = nil
-      state.pendingNativeMutationFence = nil
-      state.pendingMutation = nil
+      invalidatePendingMutation(&state, incrementGeneration: true)
       state.pendingFocus = nil
       state.focusRollback = nil
     }
@@ -1041,10 +1039,13 @@ internal struct HerdrTerminalChromeFeature {
         frame: frame,
         acceptedEndpoints: acceptedEndpoints
       )
-      resultEffect = nativeMutationResultEffect(state, frame: frame)
+      resultEffect = .merge(
+        replacedMutation ? .cancel(id: CancelID.mutation) : .none,
+        nativeMutationResultEffect(state, frame: frame)
+      )
     } else {
       state.aggregateProcessInfoByPaneTarget = [:]
-      resultEffect = .none
+      resultEffect = replacedMutation ? .cancel(id: CancelID.mutation) : .none
     }
 
     guard state.aggregateSyncCommitted,
