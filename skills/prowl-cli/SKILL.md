@@ -227,7 +227,7 @@ Every `--json` response is `{ "ok", "command", "schema_version", "data": {...} }
 Key fields by command:
 
 - `list` → `.data.items[]` with `.worktree.{id,name,path,root_path,kind}`, `.tab.{id,title,selected}`, `.pane.{id,title,cwd,focused,agent}`, `.task.status` (`running`|`idle`|null).
-- `agents` → `.data.agents[]` with `.status`, `.raw_state`, `.detection_reason`, `.type`, `.name`, `.pane.{id,focused,cwd}`, `.tab`, `.worktree`, `.project.{name,branch,path}`.
+- `agents` → `.data.agents[]` with `.status`, `.raw_state`, `.detection_reason`, `.screen_reason`, `.type`, `.name`, `.pane.{id,focused,cwd}`, `.tab`, `.worktree`, `.project.{name,branch,path}`.
 - `agents read` → `.data.agent`, `.data.blocker.text`, `.data.result.{state,text}` — `pending`, `unavailable`, `missing`, `incomplete`, `too_large` carry no partial text; `pending` is returned whenever the agent is working or blocked, even if an earlier turn completed.
 - `agents signal` → `.data.pane.{id,worktree_id}`, `.data.signal.{event,source,confidence,binding,at,session_id,detail,claimed_origin}`, optional `.data.warnings[]` (`code=signal_unbound`); optional fields are omitted.
 - `agents dispatch` → `.data.target` and the new pending `.data.dispatch.{id,state,created_at}`; refusals carry `.error.details.{target,record,observation,signals}`.
@@ -237,6 +237,10 @@ Key fields by command:
 - `send` → `.data.input`, `.data.wait.{exit_code,duration_ms}` when waiting, `.data.capture.{text,line_count,truncated}` with `--capture`.
 - `create tab` / `open` → `.data.target.{pane,tab,worktree}`; `create pane` → `.data.anchor`, `.data.direction`, `.data.target`; Profile launches also include `.data.launch.{profile_id,profile_name,agent}`, prompted launches require `.data.dispatch.{id,state,created_at}`, and a safe managed-signal fallback may add `.data.warnings[]` with `code=managed_hook_degraded`.
 - `profiles list` → `.data.profiles[]` with `.id`, `.name`, `.enabled`, `.runtime`, `.availability.{status,reason}`.
+
+`detection_reason` explains the final status; `screen_reason` explains the screen classifier.
+Log decisions can suppress a retained prompt. Only treat `status: blocked` as a current
+blocker; do not send Enter solely because `screen_reason` names a confirmation rule.
 
 Terminal text is `.data.text` (read) and `.data.capture.text` (send) — never `.content`, `.output`, or `.stdout`.
 
@@ -258,6 +262,11 @@ printf '%s\n' "$result" | jq '.data.observation, .data.screen'
 ```
 
   `--until idle|blocked` observe the current state: a signal that already existed when the wait was armed counts only if the screen detector agrees, a signal arriving afterwards counts on its own, and an already-idle agent with such a signal returns immediately. Detection-only evidence (no hook or cooperative signal, the usual case for a manually launched agent) resolves only after the state has stayed unchanged for two seconds. The same stabilized fallback applies to a Profile agent whose `verified_live` channel holds no terminal signal yet — a freshly launched, unprompted Profile has only reported `session-start` — so `--until idle` before the first prompt resolves with `confidence: heuristic`; once the channel holds a `turn-ended` or `needs-input`, that runtime evidence decides and the screen never overrides it. Give those waits a `--timeout` of at least a few seconds. To wait for the *next* turn edge (for example after `send`ing a new prompt), use `--until changed`; with a `verified_live` hook channel it returns at the next runtime signal, not at a screen change.
+
+  For Codex, observed open main or child work in the selected log prevents an Idle
+  result even after a parent `turn-ended` signal. The same rule protects dispatch
+  admission and workflow readiness. Log attribution remains heuristic and never
+  substitutes for a task-completion receipt.
 
   Exact/high evidence can establish the requested observable condition. If
   `jq -e '.data.observation.confidence == "heuristic"'` matches, inspect the included stable

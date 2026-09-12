@@ -24,6 +24,8 @@ struct AgentReadCommandHandlerTests {
     #expect(response.ok)
     let payload = try #require(try response.data?.decode(as: AgentReadCommandPayload.self))
     #expect(payload.agent.status == .blocked)
+    #expect(payload.agent.detectionReason == "claude.blockedPrompt")
+    #expect(payload.agent.screenReason == "claude.blockedPrompt")
     #expect(payload.blocker?.text.contains("1. Yes") == true)
     #expect(payload.result.state == .pending)
     #expect(payload.result.error == nil)
@@ -184,6 +186,7 @@ struct AgentReadCommandHandlerTests {
       status: status,
       rawState: status == .done ? "idle" : status.rawValue,
       detectionReason: "claude.blockedPrompt",
+      screenReason: "claude.blockedPrompt",
       lastChangedAt: "2026-08-11T12:00:00Z",
       blockerText: blockerText,
       transcriptSession: session

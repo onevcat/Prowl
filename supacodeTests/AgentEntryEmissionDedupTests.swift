@@ -110,6 +110,29 @@ struct AgentEntryEmissionDedupTests {
     #expect(base.equalsIgnoringRawState(Self.entry(rawState: .idle)))
   }
 
+  @Test func diagnosticReasonsDoNotEmitButWorkEvidenceDoes() {
+    var base = Self.entry()
+    base.stateDecision = AgentStateDecision(
+      state: .working, reason: .logOpenWork,
+      screenReason: .noRuleMatched, logSessionID: "a", hasOutstandingWork: true)
+    var changed = base
+    changed.stateDecision?.reason = .fallback(.afterTurn)
+    changed.stateDecision?.screenReason = nil
+    #expect(base != changed)
+    #expect(base.equalsIgnoringRawState(changed))
+    #expect(base.equalsIgnoringRawStateAndPaneTitle(changed))
+    changed.stateDecision?.hasOutstandingWork = false
+    #expect(!base.equalsIgnoringRawState(changed))
+    changed = base
+    changed.stateDecision?.logSessionID = "b"
+    #expect(!base.equalsIgnoringRawState(changed))
+    changed = base
+    changed.stateDecision?.state = .blocked
+    #expect(!base.equalsIgnoringRawState(changed))
+    changed.stateDecision = nil
+    #expect(!base.equalsIgnoringRawState(changed))
+  }
+
   private static let baseID = UUID(uuidString: "00000000-0000-0000-0000-0000000000A1")!
   private static let otherID = UUID(uuidString: "00000000-0000-0000-0000-0000000000A2")!
   /// Fixed rather than freshly generated, so two entries under comparison differ

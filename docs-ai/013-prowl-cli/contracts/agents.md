@@ -8,7 +8,7 @@ prowl agents [--json]
 
 The command is global discovery and accepts no target selector. It returns
 `count` and an `agents` array. Each entry has its canonical pane `id`, detected
-agent `type`/`name`, `status`, `raw_state`, optional `detection_reason`,
+agent `type`/`name`, `status`, `raw_state`, optional `detection_reason` and `screen_reason`,
 `last_changed_at`, project/worktree/tab/pane metadata, and optional session
 attribution. Each detected row also contains `signals`, whose `channels` describe current
 process/session-epoch evidence by normalized source, confidence, observed event kinds, and

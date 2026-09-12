@@ -171,10 +171,12 @@ Each agent contains:
   `pi`; Oh My Pi uses `omp`, with `oh-my-pi` preserved as a display alias.
 - `status`, `raw_state`: detected agent state. `status` is one of `blocked`,
   `working`, `done`, `idle`; `raw_state` is the lower-level detector state.
-- `detection_reason`: optional stable screen-classifier explanation. A profile rule
-  emits its rule ID, an ordinary profile miss emits `fallback.noRuleMatched`, and an
-  unmigrated classifier emits `legacy.detector`. The field is omitted when no current
-  screen result is available and never includes screen text.
+- `detection_reason`: optional explanation of the final state decision, shared with
+  `agents read`. Log evidence reports `log.openWork` or `log.turnEnded`; fallback
+  decisions report `screen.*`. Screen-only decisions report the profile rule ID,
+  `fallback.noRuleMatched`, or `legacy.detector`.
+- `screen_reason`: optional rule ID for the current screen classification, including
+  when log evidence controls the final state. Both reason fields omit screen text.
 - `last_changed_at`: ISO-8601 timestamp for the most recent state change.
 - `project`: display-oriented `name`, `branch`, `path` resolved from the
   agent's working directory.
@@ -205,7 +207,7 @@ Immediate, read-only semantic snapshot for a currently active **Codex** or
 it never guesses from focus, accepts no worktree/tab selector, and has no wait or
 timeout mode.
 
-Default text output always reports current `Status`, classifier `Reason`, last
+Default text output always reports current `Status`, decision `Reason`, last
 state-change time, and a result state. A blocked snapshot includes the raw current
 interaction under `## Blocker`, preserving the question, numbered choices, selected
 row, and Enter/Esc hints. It is the right command for deciding what another agent is
@@ -331,6 +333,9 @@ dispatch per pane: while a record is pending, a second `dispatch` fails with
 first. Because a receipt can precede Codex's own `turn-ended` by a second or two, wait for
 `--until idle` between rounds before dispatching again.
 
+For Codex, observed open main or child work in the selected log keeps this
+precondition busy even if a parent `turn-ended` signal has arrived.
+
 The coordinator waits by exact id:
 
 ```bash
@@ -363,9 +368,11 @@ prowl agents wait "$pane" --until idle --include-screen 40 --json
 ```
 
 Conditions are `idle`, `blocked`, `changed`, and `exit`. Results include their evidence
-`source` and `confidence`; `observation.status` and `raw_state` always describe what the
-screen detector saw at that moment, so a `turn-ended` signal can satisfy `idle` while `status`
-still reads `working`. Condition waits observe state, not edges: a signal that already existed
+`source` and `confidence`; `observation.status` describes the combined detected state,
+while `raw_state` retains the screen observation. A `turn-ended` signal can satisfy
+`idle` while a stale screen still reads `working`, but cannot override observed open
+main or child work in the selected Codex log. Log attribution remains heuristic.
+Condition waits observe state, not edges: a signal that already existed
 when the wait was armed satisfies `idle` or `blocked` only if the detector agrees (idle/done,
 or blocked), while a signal arriving after arming counts on its own. To wait for the *next*
 turn edge rather than the current state, use `--until changed`, which needs a post-baseline

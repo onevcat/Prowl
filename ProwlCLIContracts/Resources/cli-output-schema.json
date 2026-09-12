@@ -1053,6 +1053,9 @@
         "detection_reason": {
           "type": "string"
         },
+        "screen_reason": {
+          "type": "string"
+        },
         "last_changed_at": {
           "type": "string",
           "minLength": 1
@@ -1685,6 +1688,9 @@
               "minLength": 1
             },
             "detection_reason": {
+              "type": "string"
+            },
+            "screen_reason": {
               "type": "string"
             },
             "last_changed_at": {

@@ -144,6 +144,7 @@ final class WorktreeTerminalState {
   }
 
   var surfaceAgentStates: [UUID: PaneAgentState] = [:]
+  @ObservationIgnored var agentDetectionCoordinators: [UUID: AgentDetectionCoordinator] = [:]
   /// Launch identity recorded at surface creation for Prowl-launched agent
   /// profiles (docs-ai 053). Never rewritten: recommendation or designation
   /// edits must not relabel a live pane. Detected-but-not-launched agents

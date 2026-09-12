@@ -21,13 +21,13 @@ struct WorkflowRoleWaitPolicyTests {
 
   private func snapshot(
     _ status: AgentDisplayState?, signal: AgentSignal? = nil, revision: UInt64 = 1, live: Bool = true,
-    channelCoversTurnEnded: Bool = true
+    channelCoversTurnEnded: Bool = true, decision: AgentStateDecision? = nil
   ) -> AgentConditionSnapshot {
     let agent = status.map { status in
       ActiveAgentEntry(
         id: surfaceID, worktreeID: "w1", worktreeName: "App", workingDirectory: URL(fileURLWithPath: "/App"),
         tabID: TerminalTabID(rawValue: UUID()), paneTitle: "Agent", surfaceID: surfaceID, paneIndex: 0,
-        iconLookupToken: "claude", agent: .claude,
+        iconLookupToken: "claude", agent: .claude, stateDecision: decision,
         rawState: status == .working ? .working : status == .blocked ? .blocked : .idle,
         displayState: status, lastChangedAt: Self.start)
     }
@@ -41,6 +41,18 @@ struct WorkflowRoleWaitPolicyTests {
     return AgentConditionSnapshot(
       agent: agent, signal: signal, revision: revision, isLive: live,
       signals: AgentSignalsPayload(channels: channels, last: nil, lastBinding: nil))
+  }
+
+  @Test func parentCompletionCannotReleaseOutstandingChildWork() {
+    let busy = AgentStateDecision(
+      state: .working, reason: .logOpenWork, logSessionID: "root", hasOutstandingWork: true)
+    let initial = snapshot(.working, decision: busy)
+    let ended = snapshot(.working, signal: signal(.turnEnded, at: 1), revision: 2, decision: busy)
+    let baseline = AgentConditionEvidence.Baseline(snapshot: initial)
+    #expect(AgentConditionEvidence.idleVerdict(for: ended, baseline: baseline) == .busy("working"))
+    var policy = WorkflowRoleWaitPolicy()
+    #expect(policy.observe(initial, pendingDispatchID: nil, elapsedMilliseconds: 0) == nil)
+    #expect(policy.observe(ended, pendingDispatchID: nil, elapsedMilliseconds: 10_000) == nil)
   }
 
   @Test func aFreshExactTurnEndedEndsTheWaitEvenWhileTheScreenStillShowsWorking() {

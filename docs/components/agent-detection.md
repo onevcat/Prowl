@@ -29,7 +29,7 @@ Ask-prompt heuristics, plus its own session layout and icon. Grok Build also
 ships an `agent` symlink; Prowl only treats that name as Grok when the path points
 at a `~/.grok/` install (so Cursor's own `agent` entrypoint stays Cursor).
 
-## How detection works (two stages)
+## How detection works
 
 1. **Process probe.** Prowl reads the pane's foreground process group and matches
    process names / argv against known agent executables, scoring argv[0] highest,
@@ -82,23 +82,51 @@ at a `~/.grok/` install (so Cursor's own `agent` entrypoint stays Cursor).
    still awaits collection keeps its row with the elapsed frozen, so the rows
    cannot distinguish running work from finished work on a single frame.
 
+3. **State decision.** Every agent uses one state machine. Codex also supplies
+   incremental JSONL lifecycle evidence from process-owned session logs, without
+   installing hooks. Other agents keep their screen-only behavior. An observed open
+   parent turn or child task stays **Working** through quiet periods; current
+   approval/question UI takes precedence as **Blocked**. Completion closes only
+   its matching work. Initial historical records do not start new work.
+
+   Multiple main sessions fall back to screen heuristics unless only one has open
+   work or main-turn activity within the last two minutes. Known subagents are
+   grouped with their parent. Child notifications and file mtimes do not refresh
+   main activity. Missing/unreadable logs or unknown lineage also fall back to the
+   screen. Attribution is heuristic: switching to an old quiet chat before entering
+   a new prompt can temporarily retain the previous log candidate.
+
 For diagnostics and sanitized regression captures, `prowl read --source detection`
 returns the exact active-screen buffer used by stage 2. It is explicitly requested
 because it can differ from the visible viewport when a pane is scrolled; the default
 `prowl read` behavior is unchanged.
 
-`prowl agents --json` may also include `detection_reason`, a stable classifier rule or
-fallback identifier for the latest screen scan. Codex reports runtime-owned IDs for trust,
-hook, sign-in, confirmation, foreground-working, and background-terminal matches. Claude
-does the same for viewer,
-blocker, spinner, elapsed-status, background-work, and current-composer regions; current
-history-search chrome such as `⌕ Filter history…` reports `claude.viewer` and preserves
-the last trusted state. An ordinary migrated-profile miss reports
-`fallback.noRuleMatched`. Reasons never include screen text, and the text-mode command and
-app UI remain unchanged.
+`prowl agents --json` and `prowl agents read --json` use `detection_reason` for
+the final state decision and `screen_reason` for the screen rule. Codex can report
+`log.openWork`, `log.turnEnded`, or a `screen.*` fallback reason; `raw_state` remains
+the latest screen classification. A current blocker reports its screen-rule ID.
+Screen-only runtimes keep their existing rule identifiers. An ordinary profile miss
+reports `fallback.noRuleMatched`; unmigrated classifiers report `legacy.detector`.
+Reasons never include screen text. Screen fallback IDs are:
+
+- `screen.logUnavailable`: log authority is unavailable or suspended.
+- `screen.ambiguousLogs`: more than one log root is recently active or has open work.
+- `screen.noLiveTurn`: no root has current log authority.
+- `screen.afterTurn`: new Working screen evidence appeared after completion.
+- `screen.retainedCompletion`: an unchanged completed frame is still suppressed.
+
+Use `status` to decide whether intervention is needed. A blocked `screen_reason`
+with Idle status can be a stale prompt fenced by completion; do not send Enter
+based on the screen reason alone.
+
+Log acquisition warnings use the `AgentDetection` category. `SupaLogger` writes
+them to stdout in Debug and the unified log in Release. They identify the PID, cursor count, and failure category (`incompleteInventory`,
+`partialHeader`, `unknownLineage`, or `continuityLost`). Warnings are limited to one per failure category per provider every 30 seconds;
+a successful read reports recovery once after any failure, including a throttled one.
+Continuity-loss warnings report the post-reset cursor count and a bounded error kind/code. These logs contain no transcript or screen content.
 
 Detection tolerates several consecutive process-probe misses before declaring an
-agent gone. Screen state itself is deterministic: a recognized Working, Blocked, or
+agent gone. Screen-only state is deterministic: a recognized Working, Blocked, or
 Idle frame takes effect on the next active scan, without a time-based Working hold or
 generic screen-motion inference. Viewer overlays (Claude's transcript / history-search
 views) are an explicit exception: their chrome covers the live status area, so those

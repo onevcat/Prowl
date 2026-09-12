@@ -53,3 +53,10 @@ state in `supacode/Domain/AgentDetection/PaneAgentState.swift`.
 `AgentDetectionSchedule.warmWindow = 30`, `activeAgentDetectionInterval = 300 ms`, and
 `idleAgentDetectionInterval = 2 s`. Covered by `PaneAgentStateTests` and
 `AgentDetectionScheduleTests`.
+
+## Migration note (2026-09-12)
+
+The historical `stabilizeAgentState` entry point described above has been replaced
+by `AgentStateMachine` and `AgentDetectionCoordinator`. Unknown-frame retention
+and process-presence holds are tested through those production components. See
+[the provider implementation](../064-agent-completion-signals/022-provider-implementation.md).
