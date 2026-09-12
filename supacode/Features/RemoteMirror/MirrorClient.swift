@@ -8,6 +8,7 @@ final class MirrorClient: Identifiable {
   let id = UUID()
   let address: String
   let port: UInt16
+  private(set) var enrolledConfiguration: MirrorSavedConnection?
   private(set) var panes: [MirrorPaneDescriptor] = []
   private(set) var selectedPane: MirrorPaneDescriptor?
   private(set) var isConnected = false
@@ -71,6 +72,11 @@ final class MirrorClient: Identifiable {
     do {
       let peer = makeConnection(configuration)
       self.peer = peer
+      peer.onEnrolled = { [weak self, weak peer] enrolled in
+        guard let self, let peer, self.peer === peer else { return }
+        self.configuration = enrolled
+        self.enrolledConfiguration = enrolled
+      }
       peer.onReady = { [weak self, weak peer] in
         guard let self, let peer, self.peer === peer else { return }
         if let verified = peer.verifiedConfiguration { self.configuration = verified }
@@ -103,7 +109,7 @@ final class MirrorClient: Identifiable {
   func subscribe(_ pane: MirrorPaneDescriptor) {
     guard selectedPane == nil, isConnected else { return }
     selectedPane = pane
-    resumeIntent = .takeover
+    resumeIntent = pane.busy ? .takeover : .ifFree
     beginSubscription()
   }
 

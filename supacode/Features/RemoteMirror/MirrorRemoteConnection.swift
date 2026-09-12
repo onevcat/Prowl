@@ -23,6 +23,7 @@ extension MirrorConnection: MirrorTransport {}
 /// Authentication completes before discovery callbacks are exposed to the UI.
 @MainActor
 final class MirrorRemoteConnection: MirrorTransport {
+  var onEnrolled: ((MirrorSavedConnection) -> Void)?
   var onReady: (() -> Void)?
   var onMessage: ((MirrorMessage) -> Void)?
   var onClose: ((String?) -> Void)?
@@ -133,7 +134,8 @@ final class MirrorRemoteConnection: MirrorTransport {
           let name = String(((SCDynamicStoreCopyLocalHostName(nil) as String?) ?? "Mac").prefix(80))
           #if DEBUG
             let elapsed = ProcessInfo.processInfo.systemUptime - lookupStarted
-            SupaLogger("MirrorPairing").notice("Device name lookup completed after \(elapsed) seconds")
+            SupaLogger("MirrorPairing").notice(
+              "Device name lookup completed after \(elapsed) seconds")
           #endif
           connection?.send(
             .pair(
@@ -151,6 +153,7 @@ final class MirrorRemoteConnection: MirrorTransport {
         configuration.pairingKey = ""
         // Save before reconnect: a successful pairing response must never depend on UI lifetime.
         try persist(configuration)
+        onEnrolled?(configuration)
         connection?.onClose = nil
         connection?.close()
         connection = nil

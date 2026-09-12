@@ -3,6 +3,8 @@
 Two Prowl apps can view and control the same Host terminal. The Host keyboard stays
 available. Each pane has one remote owner. Explicit **Take Over** replaces that
 owner; **Retry** and foreground recovery only reconnect when the pane is free.
+Ordinary **Mirror** on a pane listed as free does not take over a client that acquired
+it after the list was read; use the explicit **Take Over** action.
 
 ## Enable and pair
 
@@ -15,7 +17,8 @@ the Mac's reachable address instead.
 code into **Add to Prowl → Remote Mirror Pane** on Mac or iOS. Successful enrollment
 consumes the code. The client saves its device credential in Keychain, then opens a
 new authenticated connection. A pairing-only connection cannot list or operate
-panes. No extra long-lived code is required.
+panes. No extra long-lived code is required. A saved enrollment remains available
+for Retry if the first runtime connection fails.
 
 For a previously paired address, leave the code blank. Saved credentials survive
 Host stop/start and App restart. They do not discover a changed IP address. The iOS
@@ -63,11 +66,13 @@ public CLI router. There is no special AI Control Console, bundled private contr
 skill, or separate agent-launch implementation. Profile settings determine model
 and permissions.
 
-Every Send first reads public `list`. A detected Agent uses public `agents dispatch`;
-an explicitly idle Shell uses public `send`. Host rechecks the exact subscribed
-pane and lease, plus input protection, before delivery. Unknown/running Shell state
-refuses Send. Task state is currently worktree-scoped, so a different running task
-in the same worktree can conservatively prevent Shell Send.
+Every Send first reads public `list`. A detected Agent uses public `agents dispatch`.
+Host rechecks the exact subscribed pane and lease, plus input protection, before delivery.
+Mobile shell panes are read-only: Host cannot yet verify an empty shell command line,
+so structured shell Send is refused and its capability is not advertised. An idle task
+can still contain an older local draft. Use an Agent Profile for mobile prompts, or
+control the shell on Host. Local CLI `send` and Mac mirror keyboard input retain their
+existing direct-input behavior.
 
 Shared Agent dispatch rejects IME composition and recent Host editing. Claude must
 have a recognized empty composer. It inserts text, waits up to two seconds for the
@@ -79,9 +84,12 @@ draft. Unknown layouts, wrapped drafts and attachments refuse delivery.
 A successful dispatch receipt confirms delivery, not Agent completion. Replies are
 correlated by UUID. Unknown delivery preserves the draft and is not automatically
 replayed; reconnection queries the original request receipt on the same Host run.
-Host retains up to 1024 requests per App lifetime, and rejects further requests
-when full. A reused ID with different parameters is rejected. Takeover/disconnect
-cancels a dispatch still waiting for readiness. Explicit device revocation or Host stop
+If delivery stops after paste but before Enter, text may remain in the Host composer;
+check it before retrying.
+
+Host retains up to 1024 mutation receipts per App lifetime, and rejects further mutations
+when full. Catalog reads do not consume this budget. A retained mutation ID reused with
+different parameters is rejected. Takeover/disconnect cancels a dispatch still waiting for readiness. Explicit device revocation or Host stop
 also cancels pending Profile preparation, including requests whose connection was
 already lost. A plain disconnect alone does not cancel accepted Profile creation;
 check Host before retrying an uncertain result. Existing terminal programs continue.
@@ -100,7 +108,8 @@ protects input forwarding. The helper exits on socket/stdin EOF and never launch
 a remote program. `make embed-cli-debug` builds/embeds both CLI and helper;
 `scripts/test-remote-mirror.sh` runs the App-target mirror tests.
 
-The Ghostty bridge from `onevcat/ghostty` PR #2 is pinned at `a00717e450f9`.
+The Ghostty bridge from `onevcat/ghostty` PR #2, with keyboard-mode and styled-blank-cell
+export fixes, is pinned at `5afdc9cf7315`.
 The default build downloads the matching XCFramework and resources, verified against
 `scripts/ghosttykit-checksums.txt`. No sibling Ghostty checkout is required.
 Real Agent and cross-device acceptance remain separate from component/socket test evidence.
@@ -111,3 +120,4 @@ Native clients live in [MirrorClient/iOS](../MirrorClient/iOS/) (iPhone and iPad
 and [MirrorClient/Android](../MirrorClient/Android/) (phones and tablets). Each
 project retains its own build and test entry points; neither is built by the Mac
 App target or release pipeline. See [client setup](../MirrorClient/README.md).
+

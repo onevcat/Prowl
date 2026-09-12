@@ -12,6 +12,123 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct MirrorTerminalIntegrationTests {
+  @Test(.timeLimit(.minutes(1))) func viewportRebindsWhenSelectedMirrorChanges() async throws {
+    let first = try Fixture()
+    defer { first.close() }
+    let second = try Fixture()
+    defer { second.close() }
+    let hosting = NSHostingView(
+      rootView: MirrorTerminalViewport(
+        surface: first.hostView, displaySize: CGSize(width: 800, height: 600)))
+    let window = try #require(first.windows.first)
+    window.contentView = hosting
+    func viewport(_ view: NSView) -> MirrorTerminalScrollView? {
+      if let found = view as? MirrorTerminalScrollView { return found }
+      return view.subviews.lazy.compactMap { viewport($0) }.first
+    }
+    try await first.wait("Initial represented terminal") {
+      guard let scrollView = viewport(hosting) else { return false }
+      return first.hostView.enclosingScrollView === scrollView
+    }
+    hosting.rootView = MirrorTerminalViewport(
+      surface: second.hostView, displaySize: CGSize(width: 720, height: 480))
+    try await first.wait("Selected represented terminal") {
+      guard let scrollView = viewport(hosting) else { return false }
+      return second.hostView.enclosingScrollView === scrollView
+    }
+    #expect(first.hostView.superview == nil)
+  }
+
+  @Test(.timeLimit(.minutes(1))) func retryReplacesFailedDisplayRelay() async throws {
+    let fixture = try Fixture()
+    defer { fixture.close() }
+    try await fixture.wait("Host program ready") { fixture.hostText.contains("READY") }
+    fixture.host.start()
+    try await fixture.wait("Host listener") { fixture.host.isRunning }
+    let client = try await fixture.connect()
+    try await fixture.waitForMirror(client, containing: "READY")
+    let oldView = try #require(client.replica.view)
+    oldView.closeSurface()
+    try await fixture.wait("Display failure disconnect") { !client.isConnected }
+    client.retry()
+    try await fixture.wait("Replacement display") {
+      client.replica.view != nil && client.replica.view !== oldView
+    }
+    fixture.attach(try #require(client.replica.view))
+    try fixture.send("relay-recovered")
+    try await fixture.waitForMirror(client, containing: "INPUT:relay-recovered")
+  }
+
+  @Test(.timeLimit(.minutes(1)))
+  func staleFreeSelectionDoesNotTakeOverAnotherMirror() async throws {
+    let fixture = try Fixture()
+    defer { fixture.close() }
+    try await fixture.wait("Host program ready") { fixture.hostText.contains("READY") }
+    fixture.host.start()
+    try await fixture.wait("Host listener") { fixture.host.isRunning }
+    let stale = fixture.makeClient()
+    stale.connect()
+    try await fixture.wait("Free discovery") { !stale.panes.isEmpty }
+    let descriptor = try #require(stale.panes.first)
+    #expect(!descriptor.busy)
+    let owner = try await fixture.connect()
+    try await fixture.waitForMirror(owner, containing: "READY")
+    stale.subscribe(descriptor)
+    try await fixture.wait("Stale selection outcome") {
+      stale.endReason != nil || stale.isSubscribed
+    }
+    #expect(stale.endReason == .takenOver)
+    #expect(!stale.isSubscribed)
+    #expect(owner.isSubscribed)
+  }
+
+  @Test(.timeLimit(.minutes(1))) func retryUsesEnrollmentSavedBeforeAuthentication() async throws {
+    let fixture = try Fixture()
+    defer { fixture.close() }
+    fixture.host.start()
+    try await fixture.wait("Host listener") { fixture.host.isRunning }
+    fixture.host.addDevice()
+    try await fixture.wait("Pairing listener") {
+      fixture.host.isRunning && !fixture.host.isStarting
+    }
+    var interrupted = false
+    var attempts: [MirrorSavedConnection] = []
+    var connections: [MirrorRemoteConnection] = []
+    let client = MirrorClient(
+      configuration: .init(
+        address: "127.0.0.1", port: UInt16(fixture.host.port)!,
+        pairingKey: fixture.host.pairingKey), replica: MirrorReplica(runtime: fixture.runtime),
+      makeConnection: { configuration in
+        attempts.append(configuration)
+        let connection = MirrorRemoteConnection(
+          configuration: configuration, restore: { _ in nil },
+          persist: { _ in
+            if !interrupted {
+              interrupted = true
+              fixture.host.stop()
+            }
+          })
+        connections.append(connection)
+        return connection
+      })
+    fixture.clients.append(client)
+    client.connect()
+    try await fixture.wait("Enrollment persisted") { interrupted }
+    connections.first?.close("Interrupted runtime authentication")
+    #expect(!client.isConnecting)
+    fixture.host.start()
+    try await fixture.wait("Host restarted") { fixture.host.isRunning }
+    client.connect()
+    #expect(attempts.count == 2)
+    #expect(attempts.last?.credential != nil)
+    #expect(attempts.last?.pairingKey.isEmpty == true)
+    guard attempts.last?.credential != nil else { return }
+    try await fixture.wait("Retry discovery or failure") {
+      !client.panes.isEmpty || !client.isConnecting
+    }
+    #expect(!client.panes.isEmpty)
+  }
+
   @Test(.timeLimit(.minutes(1)))
   func remoteInputWakesColdAgentDetection() async throws {
     let fixture = try Fixture()
@@ -30,7 +147,9 @@ struct MirrorTerminalIntegrationTests {
     defer { fixture.close() }
     try await fixture.wait("Host program ready") { fixture.hostText.contains("READY") }
     try fixture.send("hint")
-    try await fixture.wait("Dim hint rendered") { fixture.hostText.contains("Ask Codex to do anything") }
+    try await fixture.wait("Dim hint rendered") {
+      fixture.hostText.contains("Ask Codex to do anything")
+    }
     let dim = try #require(fixture.hostView.readStyledSnapshotForCLI())
     #expect(CodexScreenProfile.composerHasNoDraft(styledSnapshot: dim))
     try fixture.send("draft")
@@ -167,6 +286,14 @@ struct MirrorTerminalIntegrationTests {
     viewport.layoutSubtreeIfNeeded()
     #expect(replica.frame.height > viewport.contentSize.height)
     #expect(viewport.contentView.bounds.minY == 0)
+    // AppKit ignores synthetic wheel events for a hidden scroll view.
+    window.orderFront(nil)
+    defer { window.orderOut(nil) }
+    try await fixture.wait("Visible mirror viewport") { window.isVisible }
+    try #require(replica.enclosingScrollView === viewport)
+    try #require(replica.window === window)
+    try #require(replica.mirrorGrid != nil)
+    try #require(replica.frame.height > viewport.contentSize.height)
     let event = try #require(
       CGEvent(
         scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 2, wheel1: 80, wheel2: 0, wheel3: 0
@@ -292,12 +419,13 @@ struct MirrorTerminalIntegrationTests {
       suite = "MirrorTerminalIntegration-\(UUID())"
       defaults = try #require(UserDefaults(suiteName: suite))
       let device = MirrorPairedDevice(
-        id: UUID(), name: "Terminal test", key: try MirrorAuthentication.randomKey(), pairedAt: Date())
-      let identity = MirrorHostIdentity(id: UUID(), devices: [device])
+        id: UUID(), name: "Terminal test", key: try MirrorAuthentication.randomKey(),
+        pairedAt: Date())
+      var identity = MirrorHostIdentity(id: UUID(), devices: [device])
       credential = .init(hostID: identity.id, deviceID: device.id, key: device.key)
       host = MirrorHost(
         source: source, defaults: defaults, enabled: true,
-        loadIdentity: { identity }, saveIdentity: { _ in })
+        loadIdentity: { identity }, saveIdentity: { identity = $0 })
       host.address = "127.0.0.1"
       host.port = String(try MirrorTestPort.unusedPort())
       attach(hostView)
@@ -332,9 +460,12 @@ struct MirrorTerminalIntegrationTests {
 
     func makeClient() -> MirrorClient {
       let client = MirrorClient(
-        configuration: .init(address: "127.0.0.1", port: UInt16(host.port)!, pairingKey: "", credential: credential),
+        configuration: .init(
+          address: "127.0.0.1", port: UInt16(host.port)!, pairingKey: "", credential: credential),
         replica: MirrorReplica(runtime: runtime),
-        makeConnection: { MirrorRemoteConnection(configuration: $0, restore: { _ in nil }, persist: { _ in }) })
+        makeConnection: {
+          MirrorRemoteConnection(configuration: $0, restore: { _ in nil }, persist: { _ in })
+        })
       clients.append(client)
       return client
     }

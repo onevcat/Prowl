@@ -87,6 +87,10 @@ struct AddRemoteMirrorView: View {
         pairingKey = saved.pairingKey
       }
     }
+    .onChange(of: client?.enrolledConfiguration) { _, enrolled in
+      guard let enrolled, enrolled.address == address, String(enrolled.port) == port else { return }
+      pairingKey = ""
+    }
     .onDisappear { if !added { client?.close() } }
     .accessibilityIdentifier("add-remote-mirror-panel")
   }

@@ -13,8 +13,11 @@ struct MirrorDevicePairingTests {
   {
     let vault = Vault()
     let source = Source()
+    let suite = "MirrorDevicePairingTests-\(UUID())"
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
     let host = MirrorHost(
-      source: source, enabled: true,
+      source: source, defaults: defaults, enabled: true,
       loadIdentity: { vault.identity }, saveIdentity: { vault.identity = $0 })
     host.address = "127.0.0.1"
     host.port = String(try MirrorTestPort.unusedPort())
@@ -74,8 +77,11 @@ struct MirrorDevicePairingTests {
     let clock = TestClock()
     let vault = Vault()
     let source = Source()
+    let suite = "MirrorDevicePairingTests-\(UUID())"
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
     let host = MirrorHost(
-      source: source, enabled: true, clock: clock,
+      source: source, defaults: defaults, enabled: true, clock: clock,
       loadIdentity: { vault.identity }, saveIdentity: { vault.identity = $0 })
     host.address = "127.0.0.1"
     host.port = String(try MirrorTestPort.unusedPort())
@@ -117,19 +123,24 @@ struct MirrorDevicePairingTests {
       key: key, host: host, nonce: nonce, purpose: "device", identity: "A")
     #expect(
       MirrorAuthentication.verify(
-        proof, key: key, challenge: .init(hostID: host, nonce: nonce), purpose: "device", identity: "A"))
+        proof, key: key, challenge: .init(hostID: host, nonce: nonce), purpose: "device",
+        identity: "A"))
     #expect(
       !MirrorAuthentication.verify(
-        proof, key: key, challenge: .init(hostID: host, nonce: nonce), purpose: "device", identity: "B"))
+        proof, key: key, challenge: .init(hostID: host, nonce: nonce), purpose: "device",
+        identity: "B"))
     #expect(
       !MirrorAuthentication.verify(
-        proof, key: key, challenge: .init(hostID: UUID(), nonce: nonce), purpose: "device", identity: "A"))
+        proof, key: key, challenge: .init(hostID: UUID(), nonce: nonce), purpose: "device",
+        identity: "A"))
     #expect(
       !MirrorAuthentication.verify(
-        proof, key: key, challenge: .init(hostID: host, nonce: nonce), purpose: "pair", identity: "A"))
+        proof, key: key, challenge: .init(hostID: host, nonce: nonce), purpose: "pair",
+        identity: "A"))
     #expect(
       !MirrorAuthentication.verify(
-        proof, key: key, challenge: .init(hostID: host, nonce: Data(repeating: 0, count: 32)), purpose: "device",
+        proof, key: key, challenge: .init(hostID: host, nonce: Data(repeating: 0, count: 32)),
+        purpose: "device",
         identity: "A"))
   }
 
@@ -186,7 +197,8 @@ struct MirrorDevicePairingTests {
       for await done in Observations({ self.ready || self.closed }) where done { break }
       try #require(
         ready,
-        "Authentication failed during \(stage) (credential saved: \(saved?.credential != nil)): \(reason ?? "unknown")")
+        "Authentication failed during \(stage) (credential saved: \(saved?.credential != nil)): \(reason ?? "unknown")"
+      )
     }
   }
 }

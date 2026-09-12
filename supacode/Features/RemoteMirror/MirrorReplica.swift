@@ -19,10 +19,12 @@ final class MirrorReplica {
   @ObservationIgnored private var pending: MirrorMessage?
   @ObservationIgnored private var displayedMessage: MirrorMessage?
   @ObservationIgnored private var stopped = false
+  @ObservationIgnored private var needsRestart = false
 
   init(runtime: GhosttyRuntime) { self.runtime = runtime }
 
   func start() throws {
+    if needsRestart { stop() }
     guard listener == nil, peer == nil, view == nil else { return }
     stopped = false
     let parameters = NWParameters.tcp
@@ -31,13 +33,13 @@ final class MirrorReplica {
     self.listener = listener
     listener.stateUpdateHandler = { [weak self, weak listener] state in
       Task { @MainActor in
-        guard let self, !self.stopped else { return }
+        guard let self, !self.stopped, self.listener === listener else { return }
         switch state {
         case .ready:
           guard let port = listener?.port, let executable = SupacodePaths.bundledMirrorRelayURL,
             FileManager.default.isExecutableFile(atPath: executable.path)
           else {
-            self.onFailure?("Cannot start display replica.")
+            self.fail("Cannot start display replica.")
             return
           }
           let command =
@@ -45,7 +47,7 @@ final class MirrorReplica {
           self.view = GhosttySurfaceView(
             runtime: self.runtime, workingDirectory: nil,
             context: GHOSTTY_SURFACE_CONTEXT_WINDOW, command: command)
-        case .failed(let error): self.onFailure?(error.localizedDescription)
+        case .failed(let error): self.fail(error.localizedDescription)
         default: break
         }
       }
@@ -84,6 +86,7 @@ final class MirrorReplica {
 
   func stop() {
     stopped = true
+    needsRestart = false
     listener?.cancel()
     listener = nil
     peer?.close()
@@ -96,6 +99,11 @@ final class MirrorReplica {
     displayedMessage = nil
   }
 
+  private func fail(_ reason: String) {
+    needsRestart = true
+    onFailure?(reason)
+  }
+
   private func accept(_ connection: NWConnection) {
     guard !stopped, candidate == nil, peer == nil else {
       connection.cancel()
@@ -104,7 +112,9 @@ final class MirrorReplica {
     let candidate = MirrorRelayConnection(connection)
     self.candidate = candidate
     candidate.onPacket = { [weak self, weak candidate] packet in
-      guard let self, let candidate else { return }
+      guard let self, let candidate,
+        self.peer === candidate || self.candidate === candidate
+      else { return }
       if self.peer == nil {
         // Code security: only the helper holding this replica token can forward input.
         guard packet.kind == .authenticate, packet.payload == Data(self.token.utf8) else {
@@ -140,9 +150,11 @@ final class MirrorReplica {
         }
       }
     }
-    candidate.onClose = { [weak self] error in
-      guard let self, !self.stopped else { return }
-      self.onFailure?(error ?? "Display replica disconnected.")
+    candidate.onClose = { [weak self, weak candidate] error in
+      guard let self, let candidate, !self.stopped,
+        self.peer === candidate || self.candidate === candidate
+      else { return }
+      self.fail(error ?? "Display replica disconnected.")
     }
     candidate.start()
   }

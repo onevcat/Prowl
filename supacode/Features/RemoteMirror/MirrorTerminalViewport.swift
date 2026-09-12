@@ -10,12 +10,13 @@ struct MirrorTerminalViewport: NSViewRepresentable {
   }
 
   func updateNSView(_ view: MirrorTerminalScrollView, context: Context) {
-    view.displaySize = displaySize
+    view.update(surface: surface, displaySize: displaySize)
   }
 }
 
 final class MirrorTerminalScrollView: NSScrollView {
-  private let surface: GhosttySurfaceView
+  private var surface: GhosttySurfaceView
+  private let document = NSView()
   var displaySize: CGSize {
     didSet { if displaySize != oldValue { needsLayout = true } }
   }
@@ -31,7 +32,22 @@ final class MirrorTerminalScrollView: NSScrollView {
     autohidesScrollers = true
     scrollerStyle = .overlay
     drawsBackground = false
-    documentView = surface
+    // A plain document lets AppKit scroll the viewport. The terminal view
+    // handles wheel events itself and forwards them to this scroll view.
+    documentView = document
+    document.addSubview(surface)
+  }
+
+  func update(surface: GhosttySurfaceView, displaySize: CGSize) {
+    if self.surface !== surface {
+      self.surface.removeFromSuperview()
+      self.surface = surface
+      document.addSubview(surface)
+      hasLaidOut = false
+      previousVisibleHeight = 0
+      needsLayout = true
+    }
+    self.displaySize = displaySize
   }
 
   required init?(coder: NSCoder) {
@@ -44,6 +60,7 @@ final class MirrorTerminalScrollView: NSScrollView {
     let wasAtBottom = !hasLaidOut || contentView.bounds.minY <= 1
     let oldTop = contentView.bounds.minY + previousVisibleHeight
     super.layout()
+    document.setFrameSize(displaySize)
     surface.setFrameSize(displaySize)
     surface.updateSurfaceSize()
     let maxY = max(0, displaySize.height - contentSize.height)

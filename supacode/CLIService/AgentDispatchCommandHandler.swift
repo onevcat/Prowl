@@ -114,7 +114,10 @@ final class AgentDispatchCommandHandler: CommandHandler {
     }
     guard await deliverPrompt(target, AgentDispatchPrompt.renderInjected(userPrompt: input.prompt)) else {
       cancelDispatch(issued.record.id)
-      return failure(code: CLIErrorCode.dispatchFailed, message: "The prompt could not be delivered to the pane.")
+      return failure(
+        code: CLIErrorCode.dispatchFailed,
+        message: "The prompt could not be submitted. Text may remain in the target pane. Check it before retrying."
+      )
     }
     guard case .pending(let record) = issued.payload(using: formatter) else {
       return failure(code: CLIErrorCode.dispatchFailed, message: "The dispatch record is not pending.")

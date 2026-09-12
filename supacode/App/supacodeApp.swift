@@ -270,7 +270,7 @@ struct SupacodeApp: App {
       workflowCoordinatorBox: workflowRuntime.coordinatorBox,
       workflowReservations: workflowRuntime.reservations
     )
-    mirrors.host.commandService = Self.makeMirrorCommandService(router: cliRouter, manager: terminalManager)
+    mirrors.host.commandService = MirrorCommandService(router: cliRouter)
 
     _cliSocketServer = State(initialValue: cliServer)
 
@@ -1204,17 +1204,6 @@ struct SupacodeApp: App {
     manager: WorktreeTerminalManager, runtime: GhosttyRuntime
   ) -> RemoteMirrorStore {
     return RemoteMirrorStore(manager: manager, runtime: runtime)
-  }
-
-  private static func makeMirrorCommandService(
-    router: CLICommandRouter, manager: WorktreeTerminalManager
-  ) -> MirrorCommandService {
-    MirrorCommandService(router: router, protectInput: { paneID in
-      guard let state = manager.activeWorktreeStates.first(where: { $0.surfaces[paneID] != nil }) else {
-        return "The target terminal is no longer available."
-      }
-      return state.dispatchInputProtection(surfaceID: paneID)
-    })
   }
 
   private static func makeCLISocketServer(
