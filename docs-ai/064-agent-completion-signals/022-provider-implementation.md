@@ -107,3 +107,10 @@ Across the 21.7 seconds between parent completion and the last child completion,
 all 60 sampled interior observations were Working, including raw screen Idle.
 All 91 samples after the completion settling margin were Idle/Done. The local
 `codex-both-children-verified.json` records these assertions and session identities.
+
+## Continuity follow-up
+
+[023 continuity hardening](023-provider-continuity-hardening.md) corrects concurrent
+observation delivery, extends presence retention to the log provider, and scopes
+completion suppression across suspension and expiry. It also documents supported
+original launch sources and the shared CLI reason fields.

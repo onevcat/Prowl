@@ -382,3 +382,5 @@ opencode; partial for qodercli/qwen/amp; docs/bundle for the rest). Key conclusi
   state-machine testing in [021-provider-state-machine-design.md](021-provider-state-machine-design.md).
 
 - Updated 2026-09-12: Implemented shared state decisions and the first optional log provider — see [022 implementation](022-provider-implementation.md).
+
+- Updated 2026-09-12: Hardened observation ordering, recovery, completion fences, and decision diagnostics — see [023 continuity](023-provider-continuity-hardening.md).
