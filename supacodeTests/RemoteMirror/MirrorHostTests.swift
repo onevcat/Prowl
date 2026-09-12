@@ -1,3 +1,4 @@
+import Clocks
 import Foundation
 import Network
 import Observation
@@ -299,6 +300,92 @@ struct MirrorHostTests {
     _ = await service.execute(request)
     #expect(preparations == 1)
     #expect(launches == (cancelled ? 0 : 1))
+  }
+
+  @Test(.timeLimit(.minutes(1)), arguments: ["takeover", "disconnect", "revoke", "stop"])
+  func authorityLossCancelsDispatchWaitingForReadiness(mode: String) async throws {
+    let source = Source()
+    let suite = "MirrorDispatchCancellation-\(UUID())"
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let host = MirrorHost(
+      source: source, defaults: defaults, enabled: true, loadIdentity: { Self.identity }, saveIdentity: { _ in })
+    let target = TabResolvedTarget(
+      worktreeID: "worktree-1", worktreeName: "Fixture", worktreePath: "/tmp/fixture",
+      worktreeRootPath: "/tmp/fixture", worktreeKind: "git", tabID: "tab-1", tabTitle: "Fixture",
+      tabSelected: true, paneID: source.id.uuidString, paneTitle: "Fixture", paneCWD: "/tmp/fixture", paneFocused: true)
+    let agent = ActiveAgentEntry(
+      id: source.id, worktreeID: target.worktreeID, worktreeName: "Fixture",
+      workingDirectory: URL(fileURLWithPath: "/tmp/fixture"), tabID: TerminalTabID(rawValue: UUID()),
+      paneTitle: "Fixture", surfaceID: source.id, paneIndex: 0, iconLookupToken: "claude", agent: .claude,
+      rawState: .working, displayState: .working, lastChangedAt: Date())
+    let ended = AgentSignal(
+      kind: .turnEnded, source: .hook(runtime: .claude, event: "Stop"), confidence: .exact,
+      timestamp: Date(), sessionID: nil, detail: nil, claimedOrigin: nil)
+    let observed = AsyncStream.makeStream(of: Void.self)
+    let clock = TestClock()
+    var observations = 0
+    var issues = 0
+    var deliveries = 0
+    let handler = AgentDispatchCommandHandler(
+      resolveTarget: { _ in .success(target) },
+      conditionSnapshot: { _ in
+        observations += 1
+        observed.continuation.yield(())
+        // An old completion without current idle corroboration must wait.
+        return AgentConditionSnapshot(
+          agent: agent, signal: ended, revision: 1, isLive: true, signals: .empty)
+      },
+      issueDispatch: { _ in
+        issues += 1
+        return .failure(.bindingMissing)
+      },
+      deliverPrompt: { _, _ in
+        deliveries += 1
+        return true
+      }, clock: clock)
+    let service = MirrorCommandService(router: CLICommandRouter(agentsDispatchHandler: handler))
+    host.commandService = service
+    host.address = "127.0.0.1"
+    host.port = String(try MirrorTestPort.unusedPort())
+    host.start()
+    defer { host.stop() }
+    for await ready in Observations({ host.isRunning || host.error != nil }) where ready { break }
+    try #require(host.error == nil)
+    let peer = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
+    defer { peer.connection.close() }
+    var messages = peer.messages.makeAsyncIterator()
+    peer.connection.send(.subscribe(.init(paneID: source.id, representation: .text, intent: .ifFree)))
+    let lease = try #require(await messages.next()?.subscriptionID)
+    #expect(await messages.next()?.kind == .textFrame)
+    let request = MirrorCommandRequest(requestID: UUID(), request: .init(
+      command: .agentsDispatch(.init(pane: source.id.uuidString, prompt: "Review"))))
+    peer.connection.send(.command(.init(subscriptionID: lease, commandRequest: request)))
+    var observationsIterator = observed.stream.makeAsyncIterator()
+    _ = await observationsIterator.next()
+    var replacement: Peer?
+    defer { replacement?.connection.close() }
+    switch mode {
+    case "takeover":
+      let next = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
+      replacement = next
+      var nextMessages = next.messages.makeAsyncIterator()
+      next.connection.send(.subscribe(.init(paneID: source.id, representation: .text, intent: .takeover)))
+      #expect(await nextMessages.next()?.kind == .subscribed)
+    case "disconnect":
+      peer.connection.close()
+      for await offline in Observations({ host.onlineDeviceIDs.isEmpty }) where offline { break }
+    case "revoke": host.revoke(Self.identity.devices[0].id)
+    default: host.stop()
+    }
+    let response = await service.execute(request)
+    #expect(try response.response.decode(CommandResponse.self).ok == false)
+    #expect(issues == 0)
+    #expect(deliveries == 0)
+    let previousObservations = observations
+    _ = await service.execute(request)
+    #expect(observations == previousObservations)
+    #expect(issues == 0 && deliveries == 0)
   }
 
   @MainActor private final class Source: MirrorPaneSource {

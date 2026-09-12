@@ -130,8 +130,10 @@ enum AgentConditionEvidence {
     guard snapshot.isLive else { return "gone" }
     guard let agent = snapshot.agent else { return "absent" }
     let state = status(for: agent, fallback: .idle).rawValue
-    // A fallback is absence of evidence, not proof that an Agent can receive a prompt.
+    // A screen fallback is not idle evidence. Current log authority remains independent
+    // of whether the screen classifier recognizes the retained frame.
     if snapshot.screenDetection?.reason == .noRuleMatched,
+      agent.stateDecision?.reason != .logTurnEnded,
       detectorReports(.idle, normalizedState: state)
     { return "unknown" }
     return state

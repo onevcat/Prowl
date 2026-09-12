@@ -20,6 +20,39 @@ struct AgentDispatchCommandHandlerTests {
     #expect(!AgentConditionEvidence.detectorReports(.idle, normalizedState: "unknown"))
   }
 
+  @Test func freshLogCompletionSurvivesUnmatchedScreenButExpiredCompletionDoesNot() {
+    let screen = AgentScreenDetection(state: .idle, reason: .noRuleMatched)
+    var machine = AgentStateMachine()
+    _ = machine.receive(.inventory(["session"]), now: 0)
+    _ = machine.receive(.screen(screen), now: 0)
+    _ = machine.receive(.turnStarted(session: "session", turn: "turn"), now: 1)
+    let completed = machine.receive(.turnEnded(session: "session", turn: "turn"), now: 2)
+    #expect(completed.reason == .logTurnEnded)
+    #expect(completed.state == .idle)
+    #expect(!completed.hasOutstandingWork)
+    var agent = agentEntry(surfaceID: UUID(), status: .idle)
+    agent.stateDecision = completed
+    let current = AgentConditionSnapshot(
+      agent: agent, signal: nil, revision: 1, isLive: true, signals: .empty, screenDetection: screen)
+    #expect(AgentConditionEvidence.normalizedState(current) == "idle")
+    // Log-backed detector evidence still follows the existing stabilization policy.
+    #expect(AgentConditionEvidence.idleVerdict(for: current) == .settling("idle"))
+    let corroborated = AgentConditionSnapshot(
+      agent: agent, signal: turnEnded, revision: 1, isLive: true, signals: .empty, screenDetection: screen)
+    #expect(AgentConditionEvidence.idleVerdict(for: corroborated) == .idle)
+
+    let expired = machine.receive(.tick, now: 2 + machine.activityWindow + 1)
+    #expect(expired.reason == .fallback(.retainedCompletion))
+    agent.stateDecision = expired
+    let stale = AgentConditionSnapshot(
+      agent: agent, signal: nil, revision: 2, isLive: true, signals: .empty, screenDetection: screen)
+    #expect(AgentConditionEvidence.normalizedState(stale) == "unknown")
+    #expect(AgentConditionEvidence.idleVerdict(for: stale) == .busy("unknown"))
+    let staleSignal = AgentConditionSnapshot(
+      agent: agent, signal: turnEnded, revision: 2, isLive: true, signals: .empty, screenDetection: screen)
+    #expect(AgentConditionEvidence.idleVerdict(for: staleSignal) == .settling("unknown"))
+  }
+
   @Test func unmatchedScreenDoesNotEraseBlockedOrAbsentState() {
     let blocked = AgentConditionSnapshot(
       agent: agentEntry(surfaceID: UUID(), status: .blocked), signal: nil,
