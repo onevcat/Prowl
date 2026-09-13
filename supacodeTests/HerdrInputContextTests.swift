@@ -148,7 +148,7 @@ struct HerdrInputContextTests {
     )
 
     #expect(
-      throws: HerdrSocketError.unsupportedProtocol(supported: 21...22, actual: 20)
+      throws: HerdrSocketError.unsupportedProtocol(supported: 21...23, actual: 20)
     ) {
       try HerdrProtocolCompatibility.validate(response)
     }
@@ -166,7 +166,7 @@ struct HerdrInputContextTests {
     try HerdrProtocolCompatibility.validate(response)
   }
 
-  @Test func rejectsUnsupportedFutureHerdrProtocol() throws {
+  @Test func acceptsSupportedHerdrProtocol23() throws {
     let response = try JSONDecoder().decode(
       HerdrResponseEnvelope.self,
       from: Data(
@@ -174,8 +174,19 @@ struct HerdrInputContextTests {
       )
     )
 
+    try HerdrProtocolCompatibility.validate(response)
+  }
+
+  @Test func rejectsUnsupportedFutureHerdrProtocol() throws {
+    let response = try JSONDecoder().decode(
+      HerdrResponseEnvelope.self,
+      from: Data(
+        #"{"id":"clean-protocol","result":{"type":"pong","version":"0.9.0","protocol":24}}"#.utf8
+      )
+    )
+
     #expect(
-      throws: HerdrSocketError.unsupportedProtocol(supported: 21...22, actual: 23)
+      throws: HerdrSocketError.unsupportedProtocol(supported: 21...23, actual: 24)
     ) {
       try HerdrProtocolCompatibility.validate(response)
     }
@@ -254,9 +265,11 @@ struct HerdrInputContextTests {
           expectedMethod: "events.subscribe",
           response: #"{"id":"prowl-clean-events","result":{"type":"subscription_started"}}"#,
           expectedSubscriptionTypes: [
-            "workspace.created", "workspace.updated", "workspace.metadata_updated", "workspace.renamed",
+            "workspace.created", "workspace.updated", "workspace.metadata_updated",
+            "workspace.renamed",
             "workspace.moved",
-            "workspace.closed", "workspace.focused", "workspace.reordered", "worktree.created", "worktree.opened",
+            "workspace.closed", "workspace.focused", "workspace.reordered", "worktree.created",
+            "worktree.opened",
             "worktree.removed", "tab.created",
             "tab.renamed", "tab.moved", "tab.closed", "tab.focused", "pane.created",
             "pane.updated", "pane.agent_detected", "pane.moved", "pane.focused", "pane.closed",
@@ -351,7 +364,7 @@ struct HerdrInputContextTests {
     #expect(server.failureDescription == nil)
   }
 
-  @Test func terminalChromeSnapshotRejectsUnsupportedFutureProtocolFromBusinessResponse() async throws {
+  @Test func terminalChromeSnapshotAcceptsCurrentHerdrProtocol23() async throws {
     let server = try HerdrSingleRequestTestServer(
       exchanges: [
         .init(
@@ -364,11 +377,8 @@ struct HerdrInputContextTests {
     server.start()
     defer { server.stop() }
 
-    await #expect(
-      throws: HerdrSocketError.unsupportedProtocol(supported: 21...22, actual: 23)
-    ) {
-      try await HerdrSocketClient(socketPath: server.socketPath).sessionSnapshot()
-    }
+    let snapshot = try await HerdrSocketClient(socketPath: server.socketPath).sessionSnapshot()
+    #expect(snapshot.protocolVersion == 23)
     #expect(server.failureDescription == nil)
   }
 

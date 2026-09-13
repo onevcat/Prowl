@@ -77,7 +77,7 @@ struct CleanAppFeatureTests {
     }
 
     await store.send(
-      .herdrCompatibilityFailure(.unsupportedProtocol(supported: 21...22, actual: 23))
+      .herdrCompatibilityFailure(.unsupportedProtocol(supported: 21...23, actual: 24))
     ) {
       $0.alert = AlertState {
         TextState("Herdr protocol incompatible")
@@ -87,7 +87,7 @@ struct CleanAppFeatureTests {
         }
       } message: {
         TextState(
-          "Prowl Clean requires Herdr protocol 21-22, but detected protocol 23. "
+          "Prowl Clean requires Herdr protocol 21-23, but detected protocol 24. "
             + "Input-source synchronization is paused. Update Herdr or Prowl."
         )
       }
@@ -112,7 +112,8 @@ struct CleanAppFeatureTests {
     }
   }
 
-  @Test(.dependencies) func launchModeChangePersistsForNextLaunchWithoutChangingTmuxSetting() async {
+  @Test(.dependencies)
+  func launchModeChangePersistsForNextLaunchWithoutChangingTmuxSetting() async {
     let storage = SettingsTestStorage()
     var settings = GlobalSettings.default
     settings.defaultViewMode = .clean

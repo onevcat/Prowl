@@ -87,7 +87,7 @@ aggregate mode 下，sidebar 和 tab bar 使用 Herdr client 提交的状态：
 - agents header 的 `grouped`/`priority` 控件对应 Herdr 自带的 workspace 顺序和 attention 优先级排序。
 - 点击 workspace、tab 或 pane row 会向当前 Herdr client发送带 endpoint connection generation、server boot ID 和 snapshot revision 的 focus/activate intent。相同 endpoint 内的 selection 由后续 projection 确认；跨 endpoint selection 只有 presentation fence 完成后才成为 committed selection。
 - pane 退出事件会立即从 native chrome 的本地投影中移除对应 pane；若该 pane 是 tab/workspace 的最后一个 pane，也会同步移除空 tab/workspace。随后到达的旧 snapshot 不会恢复已关闭的 tab。
-- Herdr protocol 21-22 的 workspace、worktree、tab、pane 创建、关闭、移动、重命名、聚焦、metadata 和 layout 更新都会触发一次完整 snapshot 刷新；rename/focus burst 使用 100ms debounce，结构变更沿用 immediate refresh。
+- Herdr protocol 21-23 的 workspace、worktree、tab、pane 创建、关闭、移动、重命名、聚焦、metadata 和 layout 更新都会触发一次完整 snapshot 刷新；rename/focus burst 使用 100ms debounce，结构变更沿用 immediate refresh。
 - client-local contract 断开、sequence gap 或 payload 不兼容时，aggregate native chrome 显式进入 unavailable/incompatible 状态并停止 remote action；不会在同一 surface 生命周期降级到 Local legacy socket。仅启动 claim 确认不存在时才进入兼容模式。
 - Sidebar 不接管 Herdr terminal stream，不实现 binary client protocol，也不持久化 Herdr machine、workspace、tab 或 pane。
 
@@ -107,7 +107,7 @@ aggregate mode 的输入法与 process decoration 都以 `EndpointKey + pane ID`
   Option 组合输入 macOS 特殊字符。
 - 退出或 detach Herdr 后，自动恢复外层 terminal 的前台进程判断。
 
-Prowl 兼容模式支持 Herdr JSON API protocol 21-22；protocol 19、20 及未来 protocol 23 在 protocol check 前拒绝并隐藏 legacy native chrome。Herdr protocol 22 只变更二进制 client/server wire，兼容模式使用的 JSON snapshot contract 保持不变。Herdr JSON API 的每条 Unix socket connection 只处理一条 request。Prowl
+Prowl 兼容模式支持 Herdr JSON API protocol 21-23；protocol 19、20 及未来 protocol 24 在 protocol check 前拒绝并隐藏 legacy native chrome。Herdr protocol 23 只变更二进制 client/server wire，兼容模式使用的 JSON snapshot contract 保持不变。Herdr JSON API 的每条 Unix socket connection 只处理一条 request。Prowl
 在 adapter 启动或重连时使用独立短连接完成 protocol check，随后为 legacy terminal chrome 按三步建立生命周期：先用短连接取得 discovery
 `session.snapshot` 以获得当前 pane IDs，再用单一 multiplexed `events.subscribe` 长连接订阅 global 与这些 pane-specific events 并等待 ack，最后重新取得 authoritative
 `session.snapshot` 作为首个对外状态；两次 snapshot 之间到达的事件由同一 stream/consumer 保留。authoritative snapshot 发现 pane-set 变化时，取消旧订阅并重建整轮生命周期。
