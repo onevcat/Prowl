@@ -342,6 +342,84 @@ struct HerdrTabBarViewTests {
     #expect(item?.displayLabel == "warlock-ios-simulator-replay ↳ Warlock")
   }
 
+  @Test func authoritativeTabWithoutWorktreeDoesNotUseWorkspaceWorktree() {
+    let worktree = HerdrWorkspaceWorktree(
+      repoName: "Repo",
+      repoRoot: "/repo",
+      checkoutPath: "/repo/feature",
+      isLinkedWorktree: true
+    )
+    let snapshot = HerdrSessionSnapshot(
+      version: "0.9.0",
+      protocolVersion: 24,
+      focusedWorkspaceID: "w1",
+      focusedTabID: "w1:t1",
+      focusedPaneID: "w1:p1",
+      workspaces: [HerdrWorkspace(workspaceID: "w1", worktree: worktree)],
+      tabs: [
+        HerdrTab(
+          tabID: "w1:t1",
+          workspaceID: "w1",
+          label: "main",
+          hasWorktreeProvenance: true
+        )
+      ],
+      panes: [HerdrPane(paneID: "w1:p1", workspaceID: "w1", tabID: "w1:t1", focused: true)],
+      layouts: [],
+      agents: []
+    )
+
+    let item = HerdrTabBarProjection.items(in: snapshot, workspaceID: "w1").first
+
+    #expect(item?.displayLabel == "main")
+  }
+
+  @Test func linkedWorktreeTitleSupportsWindowsCheckoutPaths() {
+    let worktree = HerdrWorkspaceWorktree(
+      repoName: "Repo",
+      repoRoot: #"C:\repo"#,
+      checkoutPath: #"C:\repo\feature"#,
+      isLinkedWorktree: true
+    )
+    let snapshot = HerdrSessionSnapshot(
+      version: "0.9.0",
+      protocolVersion: 24,
+      focusedWorkspaceID: "w1",
+      focusedTabID: "w1:t1",
+      focusedPaneID: "w1:p1",
+      workspaces: [],
+      tabs: [
+        HerdrTab(
+          tabID: "w1:t1",
+          workspaceID: "w1",
+          label: "feature",
+          worktree: worktree,
+          hasWorktreeProvenance: true
+        )
+      ],
+      panes: [HerdrPane(paneID: "w1:p1", workspaceID: "w1", tabID: "w1:t1", focused: true)],
+      layouts: [],
+      agents: []
+    )
+
+    let item = HerdrTabBarProjection.items(in: snapshot, workspaceID: "w1").first
+
+    #expect(item?.displayLabel == "feature ↳ Repo")
+  }
+
+  @Test func nativeNullTabWorktreeIsAuthoritative() throws {
+    let tab = try JSONDecoder().decode(
+      HerdrClientShellTab.self,
+      from: Data(
+        #"{"tab_id":"w1:t1","workspace_id":"w1","number":1,"label":"main","custom_label":false,"zoomed":false,"focused":true,"worktree":null,"agent_status":"Idle"}"#
+          .utf8
+      )
+    )
+
+    #expect(tab.worktree == nil)
+    #expect(tab.hasWorktreeProvenance)
+  }
+
   @Test func nativeAggregateProjectionPreservesLinkedWorktreeTitle() throws {
     let snapshot = try JSONDecoder().decode(
       HerdrClientShellSnapshot.self,
@@ -378,6 +456,68 @@ struct HerdrTabBarViewTests {
             "custom_label": false,
             "zoomed": false,
             "focused": true,
+            "agent_status": "Idle"
+          }],
+          "panes": [{
+            "pane_id": "w1:p1",
+            "workspace_id": "w1",
+            "tab_id": "w1:t1",
+            "cwd": "/repo/feature",
+            "foreground_cwd": "/repo/feature",
+            "focused": true,
+            "input_context": {"kind": "command_like", "agent": null, "shell": "zsh"}
+          }],
+          "agents": []
+        }
+        """#.utf8
+      )
+    )
+
+    let item = HerdrTabBarProjection.items(
+      in: snapshot.legacyProjection,
+      workspaceID: "w1"
+    ).first
+
+    #expect(item?.displayLabel == "feature ↳ Repo")
+  }
+
+  @Test func nativeAggregateProjectionUsesTabLinkedWorktreeWithoutWorkspaceProvenance() throws {
+    let snapshot = try JSONDecoder().decode(
+      HerdrClientShellSnapshot.self,
+      from: Data(
+        #"""
+        {
+          "boot_id": "boot",
+          "revision": 1,
+          "focused_workspace_id": "w1",
+          "focused_tab_id": "w1:t1",
+          "focused_pane_id": "w1:p1",
+          "workspaces": [{
+            "workspace_id": "w1",
+            "active_tab_id": "w1:t1",
+            "number": 1,
+            "label": "repo",
+            "custom_label": false,
+            "branch": null,
+            "worktree": null,
+            "focused": true,
+            "agent_status": "Idle"
+          }],
+          "tabs": [{
+            "tab_id": "w1:t1",
+            "workspace_id": "w1",
+            "number": 1,
+            "label": "feature",
+            "custom_label": false,
+            "zoomed": false,
+            "focused": true,
+            "worktree": {
+              "key": "repo-key",
+              "label": "Repo",
+              "repo_root": "/repo",
+              "checkout_path": "/repo/feature",
+              "is_linked_worktree": true
+            },
             "agent_status": "Idle"
           }],
           "panes": [{

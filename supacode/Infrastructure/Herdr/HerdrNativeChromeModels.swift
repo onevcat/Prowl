@@ -369,6 +369,8 @@ nonisolated internal struct HerdrClientShellTab: Codable, Equatable, Sendable {
   internal let customLabel: Bool
   internal let zoomed: Bool
   internal let focused: Bool
+  internal let worktree: HerdrClientShellWorktree?
+  internal let hasWorktreeProvenance: Bool
   internal let agentStatus: String
 
   private enum CodingKeys: String, CodingKey {
@@ -379,7 +381,37 @@ nonisolated internal struct HerdrClientShellTab: Codable, Equatable, Sendable {
     case customLabel = "custom_label"
     case zoomed
     case focused
+    case worktree
     case agentStatus = "agent_status"
+  }
+
+  internal init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    tabID = try container.decode(String.self, forKey: .tabID)
+    workspaceID = try container.decode(String.self, forKey: .workspaceID)
+    number = try container.decode(Int.self, forKey: .number)
+    label = try container.decode(String.self, forKey: .label)
+    customLabel = try container.decode(Bool.self, forKey: .customLabel)
+    zoomed = try container.decode(Bool.self, forKey: .zoomed)
+    focused = try container.decode(Bool.self, forKey: .focused)
+    worktree = try container.decodeIfPresent(HerdrClientShellWorktree.self, forKey: .worktree)
+    hasWorktreeProvenance = container.contains(.worktree)
+    agentStatus = try container.decode(String.self, forKey: .agentStatus)
+  }
+
+  internal func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(tabID, forKey: .tabID)
+    try container.encode(workspaceID, forKey: .workspaceID)
+    try container.encode(number, forKey: .number)
+    try container.encode(label, forKey: .label)
+    try container.encode(customLabel, forKey: .customLabel)
+    try container.encode(zoomed, forKey: .zoomed)
+    try container.encode(focused, forKey: .focused)
+    if hasWorktreeProvenance {
+      try container.encode(worktree, forKey: .worktree)
+    }
+    try container.encode(agentStatus, forKey: .agentStatus)
   }
 }
 
@@ -499,7 +531,17 @@ nonisolated internal struct HerdrClientShellSnapshot: Codable, Equatable, Sendab
         label: tab.label,
         customName: tab.customLabel ? tab.label : nil,
         focused: tab.focused,
-        agentStatus: tab.agentStatus
+        agentStatus: tab.agentStatus,
+        worktree: tab.worktree.map {
+          HerdrWorkspaceWorktree(
+            repoName: $0.label,
+            repoRoot: $0.repoRoot ?? "",
+            checkoutPath: $0.checkoutPath ?? "",
+            isLinkedWorktree: $0.isLinkedWorktree,
+            repoKey: $0.key
+          )
+        },
+        hasWorktreeProvenance: tab.hasWorktreeProvenance
       )
     }
     let projectedPanes = panes.map { pane in

@@ -84,8 +84,8 @@ nonisolated internal struct HerdrResponseEnvelope: Decodable, Sendable {
 }
 
 nonisolated internal enum HerdrProtocolCompatibility {
-  // Protocol 23 changes the binary client/server wire; the JSON API remains compatible.
-  internal static let supportedVersions: ClosedRange<UInt32> = 21...23
+  // Protocol 24 changes the binary client/server wire; the JSON API remains compatible.
+  internal static let supportedVersions: ClosedRange<UInt32> = 21...24
 
   internal static func validate(_ response: HerdrResponseEnvelope) throws {
     guard response.result?.type == "pong" else {
@@ -426,6 +426,8 @@ nonisolated internal struct HerdrTab: Decodable, Equatable, Sendable, Identifiab
   internal let focused: Bool
   internal let paneCount: Int?
   internal let agentStatus: String?
+  internal let worktree: HerdrWorkspaceWorktree?
+  internal let hasWorktreeProvenance: Bool
 
   internal var id: String { tabID }
 
@@ -437,7 +439,9 @@ nonisolated internal struct HerdrTab: Decodable, Equatable, Sendable, Identifiab
     customName: String? = nil,
     focused: Bool = false,
     paneCount: Int? = nil,
-    agentStatus: String? = nil
+    agentStatus: String? = nil,
+    worktree: HerdrWorkspaceWorktree? = nil,
+    hasWorktreeProvenance: Bool = false
   ) {
     self.tabID = tabID
     self.workspaceID = workspaceID
@@ -447,6 +451,8 @@ nonisolated internal struct HerdrTab: Decodable, Equatable, Sendable, Identifiab
     self.focused = focused
     self.paneCount = paneCount
     self.agentStatus = agentStatus
+    self.worktree = worktree
+    self.hasWorktreeProvenance = hasWorktreeProvenance
   }
 
   private enum CodingKeys: String, CodingKey {
@@ -458,6 +464,7 @@ nonisolated internal struct HerdrTab: Decodable, Equatable, Sendable, Identifiab
     case focused
     case paneCount = "pane_count"
     case agentStatus = "agent_status"
+    case worktree
   }
 
   internal init(from decoder: Decoder) throws {
@@ -470,6 +477,8 @@ nonisolated internal struct HerdrTab: Decodable, Equatable, Sendable, Identifiab
     focused = try container.decodeIfPresent(Bool.self, forKey: .focused) ?? false
     paneCount = try container.decodeIfPresent(Int.self, forKey: .paneCount)
     agentStatus = try container.decodeIfPresent(String.self, forKey: .agentStatus)
+    worktree = try container.decodeIfPresent(HerdrWorkspaceWorktree.self, forKey: .worktree)
+    hasWorktreeProvenance = container.contains(.worktree)
   }
 }
 

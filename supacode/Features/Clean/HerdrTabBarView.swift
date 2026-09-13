@@ -330,6 +330,23 @@ internal enum HerdrTabBarProjection {
         result[entry.key] = title
       }
     }
+    let linkedWorktreesByTabID = snapshot.tabs.reduce(
+      into: [String: HerdrLinkedWorktreeTitle]()
+    ) { result, tab in
+      if let title = linkedWorktreeTitle(for: tab.worktree) {
+        result[tab.id] = title
+      }
+    }
+    let tabsWithAuthoritativeWorktreeProvenance = Set(
+      snapshot.tabs.lazy.filter(\.hasWorktreeProvenance).map(\.id)
+    )
+    func linkedWorktree(for tabID: String, workspaceID: String) -> HerdrLinkedWorktreeTitle? {
+      if let worktree = linkedWorktreesByTabID[tabID] {
+        return worktree
+      }
+      guard !tabsWithAuthoritativeWorktreeProvenance.contains(tabID) else { return nil }
+      return linkedWorktreesByWorkspaceID[workspaceID]
+    }
     var processTitlesByTabID: [String: HerdrProcessTitle] = [:]
     for (tabID, panes) in panesByTabID {
       let orderedPanes = panes.sorted {
@@ -338,7 +355,10 @@ internal enum HerdrTabBarProjection {
         return $0.focused && !$1.focused
       }
       guard let representativePane = orderedPanes.first else { continue }
-      let linkedWorktree = linkedWorktreesByWorkspaceID[representativePane.workspaceID]
+      let linkedWorktree = linkedWorktree(
+        for: tabID,
+        workspaceID: representativePane.workspaceID
+      )
       let processTitle =
         orderedPanes
         .compactMap { pane -> HerdrProcessTitle? in
@@ -365,7 +385,7 @@ internal enum HerdrTabBarProjection {
         customName: tab.customName,
         agentKind: agentKindsByTabID[tab.id],
         processTitle: processTitlesByTabID[tab.id],
-        linkedWorktree: linkedWorktreesByWorkspaceID[tab.workspaceID]
+        linkedWorktree: linkedWorktree(for: tab.id, workspaceID: tab.workspaceID)
       )
     }
   }
@@ -380,7 +400,8 @@ internal enum HerdrTabBarProjection {
 
   private static func directoryName(for path: String?) -> String? {
     guard let path, !path.isEmpty else { return nil }
-    let normalizedPath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    let portablePath = path.replacing("\\", with: "/")
+    let normalizedPath = portablePath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
     guard !normalizedPath.isEmpty else { return "/" }
     return URL(fileURLWithPath: "/\(normalizedPath)").lastPathComponent
   }

@@ -148,7 +148,7 @@ struct HerdrInputContextTests {
     )
 
     #expect(
-      throws: HerdrSocketError.unsupportedProtocol(supported: 21...23, actual: 20)
+      throws: HerdrSocketError.unsupportedProtocol(supported: 21...24, actual: 20)
     ) {
       try HerdrProtocolCompatibility.validate(response)
     }
@@ -177,7 +177,7 @@ struct HerdrInputContextTests {
     try HerdrProtocolCompatibility.validate(response)
   }
 
-  @Test func rejectsUnsupportedFutureHerdrProtocol() throws {
+  @Test func acceptsSupportedHerdrProtocol24() throws {
     let response = try JSONDecoder().decode(
       HerdrResponseEnvelope.self,
       from: Data(
@@ -185,8 +185,19 @@ struct HerdrInputContextTests {
       )
     )
 
+    try HerdrProtocolCompatibility.validate(response)
+  }
+
+  @Test func rejectsUnsupportedFutureHerdrProtocol() throws {
+    let response = try JSONDecoder().decode(
+      HerdrResponseEnvelope.self,
+      from: Data(
+        #"{"id":"clean-protocol","result":{"type":"pong","version":"0.9.0","protocol":25}}"#.utf8
+      )
+    )
+
     #expect(
-      throws: HerdrSocketError.unsupportedProtocol(supported: 21...23, actual: 24)
+      throws: HerdrSocketError.unsupportedProtocol(supported: 21...24, actual: 25)
     ) {
       try HerdrProtocolCompatibility.validate(response)
     }
