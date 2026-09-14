@@ -75,6 +75,10 @@ snapshot. This prevents an unresolvable transcript from hiding a useful blocker.
 present only when the transcript result used an eligible session; it contains `id`,
 `confidence` (`exact` or `high`), and `source`, never a local transcript path.
 
+A native state decision can be available without eligible transcript identity.
+`native.idle` therefore does not imply `result.state == "complete"`; cancellation
+and API failure can also leave the runtime idle. State reasons follow [agents](agents.md).
+
 ### `result`
 
 | `state` | `text` | Meaning |

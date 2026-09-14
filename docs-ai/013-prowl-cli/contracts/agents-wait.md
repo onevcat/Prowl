@@ -106,6 +106,12 @@ window. A completion arriving inside the window wins; otherwise waits report
 `DISPATCH_INCOMPLETE` or retained `AGENT_GONE`. Detector removal alone is diagnostic. Multiple
 waiters are non-destructive. App restart resets all receipts.
 
+Observed outstanding work from either the selected log root or the process-scoped
+native provider prevents Idle admission to condition waits, dispatch, and workflow
+readiness. A native Idle on an unmatched screen can supply heuristic evidence;
+it still requires the existing stabilization and cannot satisfy exact confidence
+or a task receipt by itself.
+
 ## Generic condition wait
 
 ```bash

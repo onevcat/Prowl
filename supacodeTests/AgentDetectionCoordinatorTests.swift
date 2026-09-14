@@ -8,8 +8,8 @@ struct AgentDetectionCoordinatorTests {
   private let generation = AgentProcessGeneration(pid: 42, startedAt: Date(timeIntervalSince1970: 1))
   private let idle = AgentScreenDetection(state: .idle, reason: .noRuleMatched)
 
-  @Test func nonCodexAgentsNeverAcquireLogs() async {
-    for agent in DetectedAgent.allCases where agent != .codex {
+  @Test func screenOnlyAgentsNeverAcquireProviders() async {
+    for agent in DetectedAgent.allCases where agent != .codex && agent != .claude {
       let coordinator = AgentDetectionCoordinator(sample: { _, _ in
         Issue.record("Screen-only agent attempted log acquisition")
         return [.unavailable]
@@ -18,6 +18,19 @@ struct AgentDetectionCoordinatorTests {
       #expect(decision?.state == .idle)
       #expect(decision?.logSessionID == nil)
     }
+  }
+
+  @Test func nativeProviderRebindsAndRejectsOlderCapture() async {
+    var sampled: [AgentProcessGeneration] = []
+    let coordinator = AgentDetectionCoordinator(sample: { process, _ in
+      sampled.append(process)
+      return [.native(AgentNativeSnapshot(sessionID: "a", state: .working, statusUpdatedAt: 1))]
+    })
+    _ = await coordinator.observe(agent: .claude, process: generation, screen: idle, capturedAt: 2, configRoot: nil)
+    let replacement = AgentProcessGeneration(pid: 43, startedAt: Date(timeIntervalSince1970: 3))
+    _ = await coordinator.observe(agent: .claude, process: replacement, screen: idle, capturedAt: 3, configRoot: nil)
+    _ = await coordinator.observe(agent: .claude, process: generation, screen: idle, capturedAt: 1, configRoot: nil)
+    #expect(sampled == [generation, replacement])
   }
 
   @Test(arguments: DetectedAgent.allCases)

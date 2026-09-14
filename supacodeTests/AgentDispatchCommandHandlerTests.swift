@@ -7,6 +7,24 @@ import Testing
 
 @MainActor
 struct AgentDispatchCommandHandlerTests {
+  @Test func nativeIdleSupportsHeuristicReadinessAndBusyVetoesOldCompletion() {
+    var agent = agentEntry(surfaceID: UUID(), status: .idle)
+    agent.stateDecision = AgentStateDecision(state: .idle, reason: .native(.idle), logSessionID: "session")
+    let current = AgentConditionSnapshot(
+      agent: agent, signal: nil, revision: 1, isLive: true, signals: .empty,
+      screenDetection: .init(state: .unknown, reason: .noRuleMatched))
+    #expect(AgentConditionEvidence.normalizedState(current) == "idle")
+    #expect(AgentConditionEvidence.idleVerdict(for: current) == .settling("idle"))
+    agent.stateDecision = AgentStateDecision(
+      state: .working, reason: .native(.working), logSessionID: "session", hasOutstandingWork: true)
+    let busy = AgentConditionSnapshot(
+      agent: agent, signal: turnEnded, revision: 2, isLive: true, signals: .empty)
+    guard case .busy = AgentConditionEvidence.idleVerdict(for: busy) else {
+      Issue.record("Native outstanding work released readiness")
+      return
+    }
+  }
+
   @Test func fallbackIdleIsNotEvidenceForDispatchOrWait() {
     let agent = agentEntry(surfaceID: UUID(), status: .idle)
     let snapshot = AgentConditionSnapshot(

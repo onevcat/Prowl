@@ -16,6 +16,11 @@ last-seen time. Optional `last` and `last_binding` preserve the latest eligible 
 stale or unbound evidence never becomes current coverage. Evidence-only shell panes do not
 create roster rows. Text output additionally shows a current-process `pN` handle.
 
+`detection_reason` can report `native.working`, `native.blocked`, or `native.idle`
+for process-scoped native evidence. `raw_state` and `screen_reason` still describe
+the screen. Provider selection does not change public session attribution or signal
+confidence; see [agent detection](../../../docs/components/agent-detection.md).
+
 Use `prowl agents read <pN|pane-uuid>` for a semantic agent snapshot. A process inside
 a Prowl pane can report cooperative runtime events with `prowl agents signal`; these
 commands have separate [read](agents-read.md) and [signal](agents-signal.md) contracts.

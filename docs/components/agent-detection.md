@@ -84,7 +84,8 @@ at a `~/.grok/` install (so Cursor's own `agent` entrypoint stays Cursor).
 
 3. **State decision.** Every agent uses one state machine. Codex also supplies
    incremental JSONL lifecycle evidence from process-owned session logs, without
-   installing hooks. Other agents keep their screen-only behavior. An observed open
+   installing hooks. Claude supplies process-scoped native state without hooks.
+   Other agents keep their screen-only behavior. For Codex, an observed open
    parent turn or child task stays **Working** through quiet periods; current
    approval/question UI takes precedence as **Blocked**. Completion closes only
    its matching work. Initial historical records do not start new work.
@@ -96,6 +97,16 @@ at a `~/.grok/` install (so Cursor's own `agent` entrypoint stays Cursor).
    screen. Attribution is heuristic: switching to an old quiet chat before entering
    a new prompt can temporarily retain the previous log candidate.
 
+   Claude reads the detected PID's native registry under its configured root
+   (`~/.claude/sessions` by default). `busy` and `shell` mean **Working**, including
+   assigned child and background shell work; `waiting` means **Blocked**, and `idle`
+   means **Idle**. Process generation is checked before and after each read.
+   `/new` and resume use the registry's current session. Two processes sharing a
+   transcript retain independent states. Missing, partial, stale, or unsupported
+   records fall back to the screen. Background daemon/remote sessions are not
+   supported by this adapter. A manually relocated config root must be supplied
+   through a Prowl launch profile; shell-only overrides can fall back to screen.
+
 For diagnostics and sanitized regression captures, `prowl read --source detection`
 returns the exact active-screen buffer used by stage 2. It is explicitly requested
 because it can differ from the visible viewport when a pane is scrolled; the default
@@ -105,7 +116,8 @@ because it can differ from the visible viewport when a pane is scrolled; the def
 the final state decision and `screen_reason` for the screen rule. Codex can report
 `log.openWork`, `log.turnEnded`, or a `screen.*` fallback reason; `raw_state` remains
 the latest screen classification. A current blocker reports its screen-rule ID.
-Screen-only runtimes keep their existing rule identifiers. An ordinary profile miss
+Claude reports `native.working`, `native.blocked`, or `native.idle`; a fresh screen
+blocker can retain its screen-rule ID. Screen-only runtimes keep their existing rule identifiers. An ordinary profile miss
 reports `fallback.noRuleMatched`; unmigrated classifiers report `legacy.detector`.
 Reasons never include screen text. Screen fallback IDs are:
 
@@ -115,7 +127,7 @@ Reasons never include screen text. Screen fallback IDs are:
 - `screen.afterTurn`: new Working screen evidence appeared after completion.
 - `screen.retainedCompletion`: an unchanged completed frame is still suppressed.
 
-For idle waits and dispatch readiness, a current `log.turnEnded` decision keeps
+For idle waits and dispatch readiness, a current `log.turnEnded` or `native.idle` decision keeps
 the existing idle evidence and stabilization rules even when the screen reports
 `fallback.noRuleMatched`. Without current log authority, that unmatched screen
 provides no idle evidence. Dispatch still checks the input area before delivery.
@@ -123,6 +135,9 @@ provides no idle evidence. Dispatch still checks the input area before delivery.
 Use `status` to decide whether intervention is needed. A blocked `screen_reason`
 with Idle status can be a stale prompt fenced by completion; do not send Enter
 based on the screen reason alone.
+
+Native acquisition warnings report a bounded failure category and recovery, without
+registry content. They use the same per-category 30-second throttle.
 
 Log acquisition warnings use the `AgentDetection` category. `SupaLogger` writes
 them to stdout in Debug and the unified log in Release. They identify the PID, cursor count, and failure category (`incompleteInventory`,

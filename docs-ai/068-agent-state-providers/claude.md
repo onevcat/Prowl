@@ -1,9 +1,38 @@
-# Claude state provider — spike and proposed plan
+# Claude state provider — implementation and spike
 
-Status: researched, not implemented. Prowl remains screen-only for Claude at
-`e54b1e19`. The native-status-plus-JSONL design below awaits review.
+Status: native aggregate provider implemented after the 2026-09-15 contract extension;
+required acceptance is complete; see [001 action log](001-action.md) and
+[002 implementation and acceptance](002-native-runtime-implementation.md).
+The 2026-09-14 findings and original proposal below remain the research baseline.
+The implementation uses native snapshots; JSONL corroborates the contract without
+adding a duplicate production work ledger.
 
-## Recommendation and evidence scope
+## Implemented adapter
+
+`supacode/Infrastructure/AgentDetection/ClaudeRuntimeProvider.swift` reads at most
+64 KiB from the detected PID's registry on the existing poll clock. The pure
+`ClaudeRuntimeDecoder` validates PID, UTC process start, session UUID, absolute cwd,
+interactive Darwin kind, timestamps, and supported status. Exact OS generation is
+checked before and after acquisition. Older snapshots suspend authority.
+
+`busy` and `shell` map to Working, `waiting` to Blocked, and `idle` to Idle. Native
+state includes observed assigned children and background shell work, including work
+retained across `/new`. It remains private, process-scoped heuristic evidence; a
+native Idle is neither successful task delivery nor a public completion signal.
+
+Missing/partial reads suspend authority; unsupported records revoke it. Recovery
+uses the next complete snapshot without waiting for new transcript bytes. The
+coordinator rebinds on process generation or configured root changes and preserves
+capture ordering. An unchanged completed frame stays suppressed during suspension;
+a changed blocker or interaction can become fresh screen evidence.
+
+The supported root is the existing Prowl launch profile's config root, or `~/.claude`
+by default. Shell-only root overrides without that profile, daemon/remote kinds,
+and unsupported schemas use screen fallback. Older versions are not separately
+supported. No version switch, hook installation, messaging socket, transcript scan,
+or additional timer is introduced.
+
+## Original recommendation and evidence scope
 
 Reuse [shared arbitration](architecture.md), with a process-scoped native status
 snapshot and optional selected-session JSONL facts. Do not copy Codex's JSONL-only
