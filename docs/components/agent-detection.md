@@ -47,6 +47,12 @@ at a `~/.grok/` install (so Cursor's own `agent` entrypoint stays Cursor).
    push the live row out of view and a status row quoted inside a `⏺` block cannot
    read as live. Confirmation text is consulted only around a current numbered
    selection row such as `❯ 1. Yes`; a bare input prompt cuts off the preceding transcript.
+   Claude's internal scroll view keeps the composer visible while hiding live status.
+   When `Jump to bottom (click) ↓` or a counted `new message(s) (click) ↓` control appears
+   in the last non-blank row above that composer, Prowl treats the screen as a viewer
+   and retains the last known state. The control can overlay text in the middle of a row.
+   Return to the bottom to refresh
+   screen-based status; completion while browsing history is not visible to this detector.
    Codex uses exact bottom-of-screen `•`/`◦ Working (... esc to interrupt)` and
    `•`/`◦ Waiting for background terminal (... esc to interrupt)` footer fallbacks.
    Braille-only starfield rows around the composer do not count toward that footer window;

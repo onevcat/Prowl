@@ -12,6 +12,56 @@ struct ClaudeScreenProfileTests {
     #expect(ClaudeScreenProfile.composerContents(in: AgentScreenSnapshot(text: "────\n❯ draft")) == nil)
   }
 
+  @Test func scrolledTranscriptRetainsTheLastLiveState() {
+    let composer = "────────────────────\n❯ \n────────────────────\nstatus"
+    let history = "⏺ Old response\n  10       Jump to bottom (click) ↓ \n\n" + composer
+    let detection = ClaudeScreenProfile.detect(in: AgentScreenSnapshot(text: history))
+    #expect(detection.state == .unknown)
+    #expect(detection.reason == .matched(ClaudeScreenProfile.RuleID.viewer))
+
+    for live in ["✽ Thinking… (14s · still thinking)\n\n", ""] {
+      var machine = AgentStateMachine()
+      let initial = ClaudeScreenProfile.detect(in: AgentScreenSnapshot(text: live + composer))
+      _ = machine.receive(.screen(initial), now: 0)
+      #expect(machine.receive(.screen(detection), now: 1).state == initial.state)
+      #expect(machine.receive(.screen(detection), now: 300).state == initial.state)
+      let idle = ClaudeScreenProfile.detect(in: AgentScreenSnapshot(text: composer))
+      #expect(machine.receive(.screen(idle), now: 301).state == .idle)
+    }
+  }
+
+  @Test func scrollOverlayCanCoverTheMiddleOfTranscriptText() {
+    for label in ["Jump to bottom", "1 new message", "2 new messages"] {
+      let text = """
+        ⏺ Earlier output
+          Left transcript text \(label) (click) ↓ right transcript text
+
+        ────────────────────
+        ❯
+        ────────────────────
+        status
+        """
+      let detection = ClaudeScreenProfile.detect(in: AgentScreenSnapshot(text: text))
+      #expect(detection.state == .unknown)
+      #expect(detection.reason == .matched(ClaudeScreenProfile.RuleID.viewer))
+    }
+  }
+
+  @Test func jumpToBottomTextOutsideTheScrollOverlayIsNotAViewer() {
+    for label in ["Jump to bottom", "1 new message", "2 new messages"] {
+      for text in [
+        "⏺ \(label) (click) ↓\n  More response text\n\n────────────────────\n❯ \n────────────────────",
+        "────────────────────\n❯ \(label) (click) ↓\n────────────────────",
+        "────────────────────\n❯ \n────────────────────\n\(label) (click) ↓",
+        "⏺ \(label) (click) ↓",
+      ] {
+        let detection = ClaudeScreenProfile.detect(in: AgentScreenSnapshot(text: text))
+        #expect(detection.state == .idle)
+        #expect(detection.reason != .matched(ClaudeScreenProfile.RuleID.viewer))
+      }
+    }
+  }
+
   @Test func ruleIDsAreUniqueAndRuntimePrefixed() {
     let ruleIDs = ClaudeScreenProfile.RuleID.all
 
@@ -52,6 +102,7 @@ struct ClaudeScreenProfileTests {
       "claude/2.1.226/working/676-wrapped-background-agent-wait.txt": .matched(
         ClaudeScreenProfile.RuleID.backgroundWork
       ),
+      "claude/2.1.270/unknown/scrolled-transcript.txt": .matched(ClaudeScreenProfile.RuleID.viewer),
       "claude/2.1.266/idle/titled-composer.txt": .matched(ClaudeScreenProfile.RuleID.idleComposer),
       "claude/2.1.266/working/titled-border-spinner.txt": .matched(
         ClaudeScreenProfile.RuleID.spinner

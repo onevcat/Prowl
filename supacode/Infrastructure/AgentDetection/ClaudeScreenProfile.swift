@@ -70,6 +70,7 @@ enum ClaudeScreenProfile {
   }
 
   nonisolated private static func hasViewerChrome(_ regions: ClaudeScreenRegions) -> Bool {
+    if regions.hasScrollOverlay { return true }
     if regions.bottomChromeLines.contains(where: { line in
       line.contains("⌕ Search…") || line.lowercased().contains("ctrl+r to toggle")
     }) {
@@ -219,6 +220,7 @@ private struct ClaudeScreenRegions: Sendable {
   let bottomChromeLines: [String]
   let bottomViewerLines: [String]
   let hasIdleComposer: Bool
+  let hasScrollOverlay: Bool
 
   nonisolated init(snapshot: AgentScreenSnapshot) {
     let lines = snapshot.lines
@@ -254,6 +256,16 @@ private struct ClaudeScreenRegions: Sendable {
     self.bottomChromeLines = Array(nonEmptyLines.suffix(3))
     self.bottomViewerLines = Array(nonEmptyLines.suffix(5))
     self.hasIdleComposer = Self.hasIdleComposer(screenLines: lines, promptIndex: promptIndex)
+    // Claude scrolls its transcript inside the active screen and keeps the composer
+    // fixed. The jump control can cover the middle of a transcript row and show
+    // an unread-message count. Text on either side is not part of the control.
+    self.hasScrollOverlay =
+      ClaudeScreenProfile.composerContents(in: snapshot) != nil
+      && Self.contentAbovePrompt(screenLines: lines, promptIndex: promptIndex)
+        .split(separator: "\n")
+        .last(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty })?
+        .trimmingCharacters(in: .whitespaces)
+        .range(of: #"(Jump to bottom|[1-9][0-9]* new messages?) \(click\) ↓"#, options: .regularExpression) != nil
   }
 
   nonisolated private static func liveStatusBlock(_ rows: [String]) -> ArraySlice<String> {
