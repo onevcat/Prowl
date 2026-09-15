@@ -86,7 +86,7 @@ struct MirrorHostTests {
     var secondMessages = second.messages.makeAsyncIterator()
     first.connection.send(
       .subscribe(.init(paneID: source.id, representation: .terminal, intent: .ifFree)))
-    let firstLease = try #require(await firstMessages.next()?.subscriptionID)
+    _ = try #require(await firstMessages.next()?.subscriptionID)
     #expect(await firstMessages.next()?.kind == .frame)
     second.connection.send(.list)
     let list = try #require(await secondMessages.next())

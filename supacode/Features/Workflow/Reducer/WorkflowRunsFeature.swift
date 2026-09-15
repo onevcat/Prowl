@@ -135,6 +135,7 @@ struct WorkflowRunsFeature {
   @Dependency(WorkflowEffectQueueClient.self) var queue
   @Dependency(WorkflowCLIResponderClient.self) var responder
   @Dependency(WorkflowActionExecutorKey.self) var actionExecutor
+  @Dependency(\.date) var date
   @Dependency(\.date.now) var now
   @Dependency(\.uuid) var uuid
   @Dependency(\.continuousClock) var clock
@@ -256,19 +257,22 @@ struct WorkflowRunsFeature {
         guard state.scannedWorktreeRoots.isEmpty else { return .none }
         state.scannedWorktreeRoots.formUnion(roots.isEmpty ? ["global"] : roots)
         let storage = historyStorage
-        let clock = _now
+        // Resolve the generator here: a detached task has no task-local
+        // dependency overrides, so reading the wrapper inside it would fall
+        // back to the live date (and fail under test).
+        let date = date
         return .run { _ in
           await Task.detached(priority: .utility) {
             do {
               _ = try WorkflowActionProcessRegistry(directory: storage.baseURL.appending(path: ".processes"))
                 .recoverAbandonedProcesses()
               let store = WorkflowRunStore(rootURL: storage.baseURL, storage: storage)
-              let result = try store.markInterruptedRuns(now: { clock.wrappedValue }, allRoots: true)
+              let result = try store.markInterruptedRuns(now: { date() }, allRoots: true)
               if !result.interrupted.isEmpty || !result.unreadable.isEmpty {
                 Self.logger.info(
                   "Workflow history: \(result.interrupted.count) interrupted, \(result.unreadable.count) unreadable.")
               }
-              _ = try WorkflowHistory(storage: storage).maintenance(now: clock.wrappedValue)
+              _ = try WorkflowHistory(storage: storage).maintenance(now: date())
             } catch { Self.logger.warning("Workflow history maintenance failed: \(error)") }
           }.value
         }

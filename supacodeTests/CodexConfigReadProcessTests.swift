@@ -146,7 +146,11 @@ import Testing
       temporaryBaseDirectory: parser,
       timeout: 30
     )
-    let task = Task {
+    // Detached so the query does not compete with this test's poll loop for
+    // the main actor: a yield-only loop is not guaranteed to let a sibling
+    // main-actor task run, which left the scratch home unobserved until the
+    // 30 s process timeout on macOS 27.
+    let task = Task.detached {
       try await process.query(
         CodexConfigQuery(
           kind: .profile(profile),
@@ -156,8 +160,10 @@ import Testing
         )
       )
     }
-    for _ in 0..<10_000
-    where ((try? FileManager.default.contentsOfDirectory(atPath: parser.path)) ?? []).isEmpty {
+    let spawnDeadline = ContinuousClock.now.advanced(by: .seconds(10))
+    while ((try? FileManager.default.contentsOfDirectory(atPath: parser.path)) ?? []).isEmpty,
+      ContinuousClock.now < spawnDeadline
+    {
       await Task.yield()
     }
     #expect(((try? FileManager.default.contentsOfDirectory(atPath: parser.path)) ?? []).count == 1)

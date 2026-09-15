@@ -12,7 +12,7 @@ struct AppearanceSettingsView: View {
       Form {
         Section("Appearance") {
           HStack {
-            let appearanceMode = $store.appearanceMode
+            let appearanceMode: Binding<AppearanceMode> = $store.appearanceMode
             ForEach(AppearanceMode.allCases) { mode in
               AppearanceOptionCardView(
                 mode: mode,

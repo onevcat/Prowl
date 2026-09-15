@@ -300,7 +300,7 @@ struct SupacodeApp: App {
   ) -> OutgoingChangesClient {
     .live(
       pullRequestInfo: { targetID in
-        storeBox.store?.withState { $0.repositories.pullRequest(for: targetID) } ?? nil
+        storeBox.store?.repositories.pullRequest(for: targetID) ?? nil
       }
     )
   }

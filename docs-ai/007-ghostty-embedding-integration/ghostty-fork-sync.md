@@ -137,5 +137,14 @@ that requires zig 0.16. A freshly installed Xcode 26.x may also lack the Metal t
 `Ghostty.metallib` needs; `xcodebuild -downloadComponent MetalToolchain` fixes
 `cannot execute tool 'metal'`.
 
-Build Prowl itself with the current Xcode (26.6 at the time of writing); no `DEVELOPER_DIR` is
-needed for `make build-app`.
+Build Prowl itself with the current Xcode (27.0 at the time of writing, verified on macOS 27.0);
+no `DEVELOPER_DIR` is needed for `make build-app`. The Xcode 26.3 recipe above still links
+GhosttyKit correctly on macOS 27.
+
+The app target links `GameController` explicitly (`OTHER_LDFLAGS`). `libghostty.a` bundles
+Dear ImGui's macOS backend (`imgui_impl_osx.o`), which references `GCController` but is never
+called by Prowl. Nothing pulls that archive member in until a dependency adds `-ObjC` to the
+link line: swift-navigation 2.9+ (a transitive dependency of TCA 1.26+) does exactly that for
+its `UIKitNavigation` target, and `-ObjC` loads every archive member that defines an
+Objective-C class. Without the explicit framework the link fails with
+`Undefined symbols: _OBJC_CLASS_$_GCController`. Keep the flag when bumping TCA or Ghostty.

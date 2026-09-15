@@ -52,7 +52,7 @@ struct WorkflowStepHistoryTests {
     #expect(store.state.detail?.run.status.state == "completed")
   }
 
-  @MainActor @Test func refreshKeepsRunsCompletedAfterTheScanStarted() throws {
+  @MainActor @Test func refreshKeepsRunsCompletedAfterTheScanStarted() async throws {
     let definition = WorkflowDefinition(id: "fast", name: "Fast", steps: [.init(id: "end", action: .notify("done"))])
     let started = try WorkflowRunMachine.start(
       .init(
@@ -62,16 +62,20 @@ struct WorkflowStepHistoryTests {
           worktree: .init(id: "wt", name: "test", branch: "main", path: "/tmp/history-tests")), bindings: [:]),
       now: { Date(timeIntervalSince1970: 1) })
     let run = started.machine.run
-    var state = WorkflowStepHistoryFeature.State()
-    let reducer = WorkflowStepHistoryFeature()
-    _ = reducer.reduce(into: &state, action: .refresh)
-    _ = reducer.reduce(into: &state, action: .liveRuns([run]))
-    _ = reducer.reduce(into: &state, action: .loaded([], [:]))
-    #expect(state.entries.contains { $0.id == run.id })
-    #expect(!state.removedIDs.contains(run.id))
+    // A scan is in flight and took its snapshot before the run existed, which
+    // is what `.refresh` records; the empty disk result must not remove it.
+    var initial = WorkflowStepHistoryFeature.State()
+    initial.isLoading = true
+    initial.scanTerminalIDs = []
+    let store = TestStore(initialState: initial) { WorkflowStepHistoryFeature() }
+    store.exhaustivity = .off
+    await store.send(.liveRuns([run]))
+    await store.send(.loaded([], [:]))
+    #expect(store.state.entries.contains { $0.id == run.id })
+    #expect(!store.state.removedIDs.contains(run.id))
   }
 
-  @MainActor @Test func lateDiskDetailsDoNotReplaceLiveCompletion() throws {
+  @MainActor @Test func lateDiskDetailsDoNotReplaceLiveCompletion() async throws {
     let definition = WorkflowDefinition(id: "fast", name: "Fast", steps: [.init(id: "end", action: .notify("done"))])
     let started = try WorkflowRunMachine.start(
       .init(
@@ -83,12 +87,13 @@ struct WorkflowStepHistoryTests {
     let run = started.machine.run
     var stale = run
     stale.status = .running
-    var state = WorkflowStepHistoryFeature.State()
-    state.selectedID = run.id
-    state.liveRuns = [run.id: run]
-    state.detail = WorkflowRunRecord(run: run)
-    _ = WorkflowStepHistoryFeature().reduce(into: &state, action: .detailLoaded(run.id, WorkflowRunRecord(run: stale)))
-    #expect(state.detail?.run.status.state == "completed")
+    var initial = WorkflowStepHistoryFeature.State()
+    initial.selectedID = run.id
+    initial.liveRuns = [run.id: run]
+    initial.detail = WorkflowRunRecord(run: run)
+    let store = TestStore(initialState: initial) { WorkflowStepHistoryFeature() }
+    await store.send(.detailLoaded(run.id, WorkflowRunRecord(run: stale)))
+    #expect(store.state.detail?.run.status.state == "completed")
   }
 
   @Test func outputPreviewBoundsLargeStringsAndDeepObjects() {

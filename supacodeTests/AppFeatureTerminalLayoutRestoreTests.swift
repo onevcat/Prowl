@@ -8,6 +8,9 @@ import Testing
 
 @testable import supacode
 
+// `repositoriesChanged` kicks off workflow history maintenance, which reads the
+// date dependency, so every test here needs a test date.
+@Suite(.dependency(\.date.now, Date(timeIntervalSince1970: 1_700_000_000)))
 @MainActor
 struct AppFeatureTerminalLayoutRestoreTests {
   @Test(.dependencies) func repositoriesChangedRestoresLayoutOnceWhenEnabled() async {

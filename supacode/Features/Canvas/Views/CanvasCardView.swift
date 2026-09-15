@@ -101,7 +101,13 @@ struct CanvasCardView: View {
     .compositingGroup()
     .contentShape(.rect)
     .accessibilityAddTraits(.isButton)
-    .onTapGesture { onTap() }
+    .onTapGesture {
+      // Since macOS 27 this ancestor tap fires even when the terminal
+      // NSView consumed the click, so an interactive terminal must not also
+      // route the click to the card selection callbacks.
+      guard !terminalHitTestingEnabled else { return }
+      onTap()
+    }
     .offset(
       x: dragTranslation.width / canvasScale,
       y: dragTranslation.height / canvasScale
@@ -274,12 +280,14 @@ struct CanvasCardView: View {
     // withAnimation (expand/restore, resize commit, arrange), so the terminal
     // refit stays in lock-step with the card's offset/scale. Without a wrapping
     // animation (live resize drag) the size tracks the gesture 1:1.
-    .allowsHitTesting(
-      CanvasInteractionPolicy.terminalHitTestingEnabled(
-        isFocused: isFocused,
-        linkActivationRequested: linkActivationRequested,
-        showsSelectionShield: showsSelectionShield
-      )
+    .allowsHitTesting(terminalHitTestingEnabled)
+  }
+
+  private var terminalHitTestingEnabled: Bool {
+    CanvasInteractionPolicy.terminalHitTestingEnabled(
+      isFocused: isFocused,
+      linkActivationRequested: linkActivationRequested,
+      showsSelectionShield: showsSelectionShield
     )
   }
 
