@@ -199,10 +199,12 @@ func shouldConfirmInstallAndRelaunchImmediately(for stage: SPUUserUpdateStage) -
 @MainActor
 private func confirmInstallAndRelaunchChoice() -> SPUUserUpdateChoice {
   let alert = NSAlert()
-  alert.messageText = "Install Update and Relaunch?"
-  alert.informativeText = "Prowl will quit and relaunch to finish installing the update."
-  alert.addButton(withTitle: "Install and Relaunch")
-  alert.addButton(withTitle: "Later")
+  alert.messageText = String(localized: "Install Update and Relaunch?")
+  alert.informativeText = String(
+    localized: "Prowl will quit and relaunch to finish installing the update."
+  )
+  alert.addButton(withTitle: String(localized: "Install and Relaunch"))
+  alert.addButton(withTitle: String(localized: "Later"))
   return installAndRelaunchChoice(didConfirm: alert.runModal() == .alertFirstButtonReturn)
 }
 

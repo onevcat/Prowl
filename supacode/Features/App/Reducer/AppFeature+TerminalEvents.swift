@@ -63,7 +63,7 @@ extension AppFeature {
   ) -> Effect<Action>? {
     switch event {
     case .customCommandSucceeded(_, let name, let durationMs):
-      let message = "\(name) succeeded in \(formatCustomCommandDuration(durationMs))"
+      let message = String(localized: "\(name) succeeded in \(formatCustomCommandDuration(durationMs))")
       return .send(.repositories(.showToast(.success(message))))
 
     case .runScriptStatusChanged(let worktreeID, let isRunning):
@@ -167,12 +167,16 @@ extension AppFeature {
     case .agentProfileLaunchWarning(_, let profileName, let message):
       return .send(
         .repositories(
-          .showToast(.warning("“\(profileName)” launched without managed signals. \(message)"))
+          .showToast(
+            .warning(String(localized: "“\(profileName)” launched without managed signals. \(message)"))
+          )
         )
       )
 
     case .agentProfileLaunchFailed(_, let profileName):
-      return .send(.repositories(.showToast(.warning("Couldn't launch “\(profileName)”"))))
+      return .send(
+        .repositories(.showToast(.warning(String(localized: "Couldn't launch “\(profileName)”"))))
+      )
 
     default:
       return nil

@@ -1,3 +1,5 @@
+import Foundation
+
 /// Fallback color used by Shelf spine surfaces when a repository has no
 /// pinned color, or for every spine when repository colors are ignored.
 ///
@@ -15,9 +17,9 @@ enum ShelfSpineTintFallback: String, CaseIterable, Identifiable, Codable, Sendab
   var title: String {
     switch self {
     case .neutral:
-      return "Neutral"
+      return String(localized: "Neutral")
     case .systemTint:
-      return "System Tint"
+      return String(localized: "System Tint")
     }
   }
 }

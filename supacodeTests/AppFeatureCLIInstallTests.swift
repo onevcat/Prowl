@@ -24,11 +24,11 @@ struct SettingsFeatureCLIInstallTests {
     await store.send(.installCLIButtonTapped())
     await store.receive(\.cliInstallCompleted.success) {
       $0.alert = AlertState {
-        TextState("Command Line Tool Installed")
+        TextState(String(localized: "Command Line Tool Installed"))
       } actions: {
-        ButtonState(action: .dismiss) { TextState("OK") }
+        ButtonState(action: .dismiss) { TextState(String(localized: "OK")) }
       } message: {
-        TextState("The prowl command is now available at /usr/local/bin/prowl.")
+        TextState(String(localized: "The prowl command is now available at /usr/local/bin/prowl."))
       }
       $0.cliInstallStatus = .installed(path: "/usr/local/bin/prowl")
     }
@@ -52,9 +52,9 @@ struct SettingsFeatureCLIInstallTests {
     await store.send(.installCLIButtonTapped())
     await store.receive(\.cliInstallCompleted.failure) {
       $0.alert = AlertState {
-        TextState("Command Line Tool Error")
+        TextState(String(localized: "Command Line Tool Error"))
       } actions: {
-        ButtonState(action: .dismiss) { TextState("OK") }
+        ButtonState(action: .dismiss) { TextState(String(localized: "OK")) }
       } message: {
         TextState("Permission denied")
       }
@@ -78,11 +78,11 @@ struct SettingsFeatureCLIInstallTests {
     await store.send(.uninstallCLIButtonTapped)
     await store.receive(\.cliInstallCompleted.success) {
       $0.alert = AlertState {
-        TextState("Command Line Tool Uninstalled")
+        TextState(String(localized: "Command Line Tool Uninstalled"))
       } actions: {
-        ButtonState(action: .dismiss) { TextState("OK") }
+        ButtonState(action: .dismiss) { TextState(String(localized: "OK")) }
       } message: {
-        TextState("The prowl command line tool has been removed.")
+        TextState(String(localized: "The prowl command line tool has been removed."))
       }
     }
     await store.receive(\.delegate.cliInstallCompleted)
@@ -113,7 +113,7 @@ struct SettingsFeatureCLIInstallTests {
     }
     await store.receive(\.settings.delegate.cliInstallCompleted)
     await store.receive(\.repositories.showToast) {
-      $0.repositories.statusToast = .success("prowl installed at /usr/local/bin/prowl")
+      $0.repositories.statusToast = .success(String(localized: "prowl installed at /usr/local/bin/prowl"))
     }
 
     #expect(installed.value == true)

@@ -1,12 +1,14 @@
 import ComposableArchitecture
+import Foundation
 import SwiftUI
 
 /// Settings → Agents → Workflows. The root is intentionally a compact index; every control
 /// whose effect is scoped to one workflow lives on the pushed detail page.
 struct WorkflowsSettingsView: View {
+  let appLocale: Locale
+  @State private var showsHistory = false
   @State private var historyStore = Store(initialState: WorkflowHistoryFeature.State()) { WorkflowHistoryFeature() }
   @Bindable var store: StoreOf<WorkflowsSettingsFeature>
-
   var body: some View {
     NavigationStack(path: $store.scope(state: \.path, action: \.path)) {
       Form {
@@ -20,7 +22,11 @@ struct WorkflowsSettingsView: View {
       .alert($store.scope(state: \.alert, action: \.alert))
       .sheet(isPresented: $store.isAuthoringPromptPresented.sending(\.setAuthoringPromptPresented)) {
         AskAgentHelpView(
-          strings: workflowAuthoringPromptStrings(directory: store.workflowDirectory)
+          strings: workflowAuthoringPromptStrings(
+            directory: store.workflowDirectory,
+            appLocale: appLocale,
+            systemLocale: AskAgentHelpPrompt.systemPreferredLocale()
+          )
         ) {
           store.send(.setAuthoringPromptPresented(false))
         }
@@ -28,7 +34,7 @@ struct WorkflowsSettingsView: View {
       .sheet(
         isPresented: Binding(get: { store.newWorkflow != nil }, set: { if !$0 { store.send(.dismissNewWorkflow) } })
       ) {
-        NewWorkflowSheet(store: store)
+        NewWorkflowSheet(appLocale: appLocale, store: store)
       }
     } destination: { detailStore in
       WorkflowSettingsDetailView(store: detailStore)
@@ -334,7 +340,10 @@ struct WorkflowStatusLabel: View {
 }
 
 func workflowAuthoringPromptStrings(
-  directory: URL, draft: WorkflowStarterTemplate.Request? = nil
+  directory: URL,
+  draft: WorkflowStarterTemplate.Request? = nil,
+  appLocale: Locale,
+  systemLocale: Locale
 ) -> AskAgentHelpStrings {
   let documentation = WorkflowStarterTemplate.bundledDocumentation
   var draft = draft
@@ -342,7 +351,11 @@ func workflowAuthoringPromptStrings(
   return WorkflowAuthoringPrompt.strings(
     skillPath: documentation.skillPath,
     manualPath: documentation.manualPath,
-    workflowsDirectory: directory.path(percentEncoded: false), draft: draft)
+    workflowsDirectory: directory.path(percentEncoded: false),
+    draft: draft,
+    appLocale: appLocale,
+    systemLocale: systemLocale
+  )
 }
 
 extension WorkflowStarterTemplate {

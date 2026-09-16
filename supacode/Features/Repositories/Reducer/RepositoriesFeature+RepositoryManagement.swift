@@ -106,7 +106,7 @@ extension RepositoriesFeature {
       let openFailureMessages = invalidRoots.map { "\($0) is not a Git repository." } + openFailures
       if !openFailureMessages.isEmpty {
         state.alert = messageAlert(
-          title: "Some folders couldn't be opened",
+          title: String(localized: "Some folders couldn't be opened"),
           message: openFailureMessages.joined(separator: "\n")
         )
       }
@@ -414,7 +414,7 @@ extension RepositoriesFeature {
     selectionWasRemoved: Bool
   ) -> AlertState<Alert> {
     AlertState {
-      TextState("Some worktrees couldn't be removed")
+      TextState(String(localized: "Some worktrees couldn't be removed"))
     } actions: {
       ButtonState(
         role: .destructive,
@@ -424,7 +424,7 @@ extension RepositoriesFeature {
           selectionWasRemoved: selectionWasRemoved
         )
       ) {
-        TextState("Delete Folder Anyway")
+        TextState(String(localized: "Delete Folder Anyway"))
       }
       ButtonState(
         role: .cancel,
@@ -433,13 +433,17 @@ extension RepositoriesFeature {
           selectionWasRemoved: selectionWasRemoved
         )
       ) {
-        TextState("Keep Folder")
+        TextState(String(localized: "Keep Folder"))
       }
     } message: {
       TextState(
-        "Couldn't unregister worktrees for \(failedRepositoryNames.joined(separator: ", ")). "
-          + "Deleting the workspace folder now would leave those worktrees registered in their "
-          + "source repositories. Delete it anyway?"
+        String(
+          localized: """
+            Couldn't unregister worktrees for \(failedRepositoryNames.joined(separator: ", ")). \
+            Deleting the workspace folder now would leave those worktrees registered in their source \
+            repositories. Delete it anyway?
+            """
+        )
       )
     }
   }

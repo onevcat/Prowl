@@ -1,3 +1,5 @@
+import Foundation
+
 /// How Prowl tints its window chrome — the nav-panel band behind the
 /// floating sidebar and the toolbar band behind the titlebar — across
 /// every view mode (Normal, Shelf, Canvas).
@@ -24,11 +26,11 @@ enum WindowTintMode: String, CaseIterable, Identifiable, Codable, Sendable {
   var title: String {
     switch self {
     case .none:
-      return "None"
+      return String(localized: "None")
     case .repositoryColor:
-      return "Repository Color"
+      return String(localized: "Repository Color")
     case .custom:
-      return "Custom Color"
+      return String(localized: "Custom Color")
     }
   }
 }

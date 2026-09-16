@@ -434,8 +434,8 @@ struct RepositoryAppearancePickerView: View {
     panel.canChooseDirectories = false
     panel.canChooseFiles = true
     panel.allowsMultipleSelection = false
-    panel.prompt = "Choose"
-    panel.message = "Choose an image to use as this repository's icon."
+    panel.prompt = String(localized: "Choose")
+    panel.message = String(localized: "Choose an image to use as this repository's icon.")
 
     panel.begin { response in
       guard response == .OK, let url = panel.url else { return }

@@ -46,11 +46,16 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
   case zed
   case zedPreview
 
-  var id: String { title }
+  var id: String {
+    switch self {
+    case .finder: "Open Finder"
+    default: title
+    }
+  }
 
   var title: String {
     switch self {
-    case .finder: "Open Finder"
+    case .finder: String(localized: "Open Finder")
     case .editor: "$EDITOR"
     case .alacritty: "Alacritty"
     case .androidStudio: "Android Studio"
@@ -371,8 +376,8 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
       else {
         onError(
           OpenActionError(
-            title: "\(title) not found",
-            message: "Install \(title) to open this worktree."
+            title: String(localized: "\(title) not found"),
+            message: String(localized: "Install \(title) to open this worktree.")
           )
         )
         return
@@ -388,7 +393,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
         Task { @MainActor in
           onError(
             OpenActionError(
-              title: "Unable to open in \(actionTitle)",
+              title: String(localized: "Unable to open in \(actionTitle)"),
               message: error.localizedDescription
             )
           )
@@ -404,8 +409,8 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
       else {
         onError(
           OpenActionError(
-            title: "\(title) not found",
-            message: "Install \(title) to open this worktree."
+            title: String(localized: "\(title) not found"),
+            message: String(localized: "Install \(title) to open this worktree.")
           )
         )
         return
@@ -420,7 +425,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
         Task { @MainActor in
           onError(
             OpenActionError(
-              title: "Unable to open in \(actionTitle)",
+              title: String(localized: "Unable to open in \(actionTitle)"),
               message: error.localizedDescription
             )
           )

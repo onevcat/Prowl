@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 /// A color a user can pin to a repository to make it identifiable in the
@@ -36,17 +37,17 @@ nonisolated enum RepositoryColorChoice: Codable, Sendable, Hashable {
   /// User-facing label for the color picker.
   var displayName: String {
     switch self {
-    case .red: "Red"
-    case .orange: "Orange"
-    case .yellow: "Yellow"
-    case .green: "Green"
-    case .mint: "Mint"
-    case .cyan: "Cyan"
-    case .blue: "Blue"
-    case .purple: "Purple"
-    case .pink: "Pink"
-    case .gray: "Gray"
-    case .custom: "Custom"
+    case .red: String(localized: "Red")
+    case .orange: String(localized: "Orange")
+    case .yellow: String(localized: "Yellow")
+    case .green: String(localized: "Green")
+    case .mint: String(localized: "Mint")
+    case .cyan: String(localized: "Cyan")
+    case .blue: String(localized: "Blue")
+    case .purple: String(localized: "Purple")
+    case .pink: String(localized: "Pink")
+    case .gray: String(localized: "Gray")
+    case .custom: String(localized: "Custom")
     }
   }
 

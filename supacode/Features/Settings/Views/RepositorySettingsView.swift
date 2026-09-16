@@ -1,20 +1,21 @@
 import AppKit
 import ComposableArchitecture
+import Foundation
 import Sharing
 import SwiftUI
 
 struct RepositorySettingsView: View {
+  let appLocale: Locale
   @Dependency(FeatureFlags.self) private var featureFlags
   @Bindable var store: StoreOf<RepositorySettingsFeature>
   @State private var isBranchPickerPresented = false
   @State private var branchSearchText = ""
   @State private var githubIdentityViewModel = RepositoryGithubIdentityViewModel()
   @Shared(.userGlobalSettings) private var globalSettings
-
   var body: some View {
     let baseRefOptions =
       store.branchOptions.isEmpty ? [store.defaultWorktreeBaseRef] : store.branchOptions
-    let settings = $store.settings
+    let settings: Binding<RepositorySettings> = $store.settings
     let worktreeBaseDirectoryPath = Binding(
       get: { settings.worktreeBaseDirectoryPath.wrappedValue ?? "" },
       set: { settings.worktreeBaseDirectoryPath.wrappedValue = $0 },
@@ -403,7 +404,11 @@ struct RepositorySettingsView: View {
           \.setAuthoringPromptPresented)
       ) {
         AskAgentHelpView(
-          strings: workflowAuthoringPromptStrings(directory: workflowsStore.workflowDirectory)
+          strings: workflowAuthoringPromptStrings(
+            directory: workflowsStore.workflowDirectory,
+            appLocale: appLocale,
+            systemLocale: AskAgentHelpPrompt.systemPreferredLocale()
+          )
         ) {
           workflowsStore.send(.setAuthoringPromptPresented(false))
         }

@@ -80,7 +80,7 @@ struct AppFeatureAgentProfileTests {
       .terminalEvent(.agentProfileLaunchFailed(worktreeID: worktree.id, profileName: "Broken"))
     )
     await store.receive(\.repositories.showToast)
-    #expect(store.state.repositories.statusToast == .warning("Couldn't launch “Broken”"))
+    #expect(store.state.repositories.statusToast == .warning(String(localized: "Couldn't launch “Broken”")))
     #expect(repoSettings.wrappedValue.lastLaunchedAgentProfileID == nil)
   }
 

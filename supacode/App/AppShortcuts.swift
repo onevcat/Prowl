@@ -172,6 +172,10 @@ enum AppShortcuts {
     let title: String
     let scope: Scope
     let shortcut: AppShortcut?
+
+    var localizedTitle: String {
+      String(localized: String.LocalizationValue(title), table: "Localizable")
+    }
   }
 
   struct CustomCommandOverrideConflict: Equatable {
@@ -899,10 +903,11 @@ enum AppShortcuts {
     commandID: String,
     in resolvedKeybindings: ResolvedKeybindingMap
   ) -> String {
+    let localizedTitle = String(localized: String.LocalizationValue(title))
     if let shortcut = display(for: commandID, in: resolvedKeybindings) {
-      return "\(title) (\(shortcut))"
+      return "\(localizedTitle) (\(shortcut))"
     }
-    return title
+    return localizedTitle
   }
 
   static func worktreeSelectionDisplay(at index: Int, in resolvedKeybindings: ResolvedKeybindingMap) -> String? {

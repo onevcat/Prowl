@@ -454,7 +454,7 @@ private struct CommandPaletteList: View {
   @ViewBuilder
   private func renderSectioned(_ sections: CommandPaletteSuggestions) -> some View {
     if !sections.recent.isEmpty {
-      CommandPaletteSectionHeader(title: "Recent")
+      CommandPaletteSectionHeader(title: String(localized: "Recent"))
       ForEach(sections.recent) { row in
         if let index = rows.firstIndex(where: { $0.id == row.id }) {
           rowView(for: row, index: index)
@@ -462,7 +462,7 @@ private struct CommandPaletteList: View {
       }
     }
     if !sections.suggested.isEmpty {
-      CommandPaletteSectionHeader(title: "Suggested")
+      CommandPaletteSectionHeader(title: String(localized: "Suggested"))
         .padding(.top, sections.recent.isEmpty ? 0 : 6)
       ForEach(sections.suggested) { row in
         if let index = rows.firstIndex(where: { $0.id == row.id }) {

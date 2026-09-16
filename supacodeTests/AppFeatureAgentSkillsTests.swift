@@ -22,17 +22,17 @@ struct AppFeatureAgentSkillsTests {
       .settings(.agentSkills(.delegate(.linkChanged(.installed(skill: "prowl-cli", target: "Claude Code")))))
     )
     await store.receive(\.repositories.showToast) {
-      $0.repositories.statusToast = .success("prowl-cli skill linked for Claude Code")
+      $0.repositories.statusToast = .success(String(localized: "prowl-cli skill linked for Claude Code"))
     }
 
     await store.send(.settings(.agentSkills(.delegate(.linkChanged(.removed(skill: "prowl-cli", target: "Codex"))))))
     await store.receive(\.repositories.showToast) {
-      $0.repositories.statusToast = .success("prowl-cli skill link removed for Codex")
+      $0.repositories.statusToast = .success(String(localized: "prowl-cli skill link removed for Codex"))
     }
 
     await store.send(.settings(.agentSkills(.delegate(.linkChanged(.failed(message: "boom"))))))
     await store.receive(\.repositories.showToast) {
-      $0.repositories.statusToast = .warning("Skill link failed: boom")
+      $0.repositories.statusToast = .warning(String(localized: "Skill link failed: boom"))
     }
   }
 

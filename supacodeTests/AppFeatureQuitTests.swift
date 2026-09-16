@@ -24,16 +24,16 @@ struct AppFeatureQuitTests {
 
     await store.send(.requestQuit) {
       $0.alert = AlertState {
-        TextState("Quit Prowl?")
+        TextState(String(localized: "Quit Prowl?"))
       } actions: {
         ButtonState(action: .confirmQuit) {
-          TextState("Quit")
+          TextState(String(localized: "Quit"))
         }
         ButtonState(role: .cancel, action: .dismiss) {
-          TextState("Cancel")
+          TextState(String(localized: "Cancel"))
         }
       } message: {
-        TextState("This will close all terminal sessions.")
+        TextState(String(localized: "This will close all terminal sessions."))
       }
     }
 

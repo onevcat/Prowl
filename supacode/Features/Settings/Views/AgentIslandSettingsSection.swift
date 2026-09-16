@@ -134,7 +134,7 @@ struct AgentIslandSettingsSection: View {
   }
 
   private var displaySelection: Binding<AgentIslandDisplaySelection> {
-    let preference = $store.agentIslandDisplayPreference
+    let preference: Binding<AgentIslandDisplayPreference> = $store.agentIslandDisplayPreference
     return Binding(
       get: { AgentIslandDisplaySelection(preference.wrappedValue) },
       set: { selection in

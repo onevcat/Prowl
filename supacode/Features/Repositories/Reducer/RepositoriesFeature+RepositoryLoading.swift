@@ -344,7 +344,7 @@ extension RepositoriesFeature {
       TextState(title)
     } actions: {
       ButtonState(role: .cancel) {
-        TextState("OK")
+        TextState(String(localized: "OK"))
       }
     } message: {
       TextState(message)
@@ -359,18 +359,18 @@ extension RepositoriesFeature {
       return nil
     }
     return AlertState {
-      TextState("Remove repository?")
+      TextState(String(localized: "Remove repository?"))
     } actions: {
       ButtonState(role: .destructive, action: .confirmRemoveRepository(repository.id)) {
-        TextState("Remove repository")
+        TextState(String(localized: "Remove repository"))
       }
       ButtonState(role: .cancel) {
-        TextState("Cancel")
+        TextState(String(localized: "Cancel"))
       }
     } message: {
       TextState(
-        "This removes the repository from Prowl. "
-          + "Worktrees and the main repository folder stay on disk."
+        String(
+          localized: "This removes the repository from Prowl. Worktrees and the main repository folder stay on disk.")
       )
     }
   }

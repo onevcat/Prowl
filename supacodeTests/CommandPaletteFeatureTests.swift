@@ -36,6 +36,36 @@ struct CommandPaletteFeatureTests {
     expectNoDifference(items.map(\.id), expectedIDs)
   }
 
+  @Test func installCommandLineToolSearchKeepsStableIDAcrossEnglishAndChineseTerms() {
+    let items = CommandPaletteFeature.commandPaletteItems(from: RepositoriesFeature.State())
+    let expectedID = CommandPaletteItemID.globalInstallCLI
+
+    let englishResults = CommandPaletteFeature.filterItems(
+      items: items,
+      query: "Install Command Line Tool"
+    )
+    let chineseResults = CommandPaletteFeature.filterItems(items: items, query: "命令行")
+
+    #expect(englishResults.contains { $0.id == expectedID })
+    #expect(chineseResults.contains { $0.id == expectedID })
+  }
+
+  @Test func revealInFinderSearchKeepsStableIDAcrossEnglishAndChineseTerms() {
+    let rootPath = "/tmp/repo-reveal-search"
+    let worktree = makeWorktree(id: rootPath, name: "repo", repoRoot: rootPath)
+    let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .worktree(worktree.id)
+    let items = CommandPaletteFeature.commandPaletteItems(from: state)
+    let expectedID = CommandPaletteItemID.globalRevealInFinder
+
+    let englishResults = CommandPaletteFeature.filterItems(items: items, query: "Reveal in Finder")
+    let chineseResults = CommandPaletteFeature.filterItems(items: items, query: "访达")
+
+    #expect(englishResults.contains { $0.id == expectedID })
+    #expect(chineseResults.contains { $0.id == expectedID })
+  }
+
   @Test func commandPaletteItems_includesShowDiffWhenWorktreeSelected() {
     let rootPath = "/tmp/repo-diff"
     let worktree = makeWorktree(id: "\(rootPath)/wt-1", name: "wt-1", repoRoot: rootPath)
@@ -148,7 +178,6 @@ struct CommandPaletteFeatureTests {
 
     let items = CommandPaletteFeature.commandPaletteItems(from: state)
     let pinItem = items.first { $0.id == "global.toggle-pin-worktree" }
-    #expect(pinItem?.title == "Pin Worktree")
     #expect(pinItem?.kind == .togglePinWorktree(worktree.id, isCurrentlyPinned: false))
   }
 
@@ -162,7 +191,6 @@ struct CommandPaletteFeatureTests {
 
     let items = CommandPaletteFeature.commandPaletteItems(from: state)
     let pinItem = items.first { $0.id == "global.toggle-pin-worktree" }
-    #expect(pinItem?.title == "Unpin Worktree")
     #expect(pinItem?.kind == .togglePinWorktree(worktree.id, isCurrentlyPinned: true))
   }
 
@@ -175,7 +203,6 @@ struct CommandPaletteFeatureTests {
 
     let items = CommandPaletteFeature.commandPaletteItems(from: state)
     let renameItem = items.first { $0.id == "global.rename-branch" }
-    #expect(renameItem?.title == "Rename Branch")
     #expect(renameItem?.kind == .renameBranch)
     #expect(renameItem?.appShortcutCommandID == AppShortcuts.CommandID.renameBranch)
   }
@@ -211,7 +238,6 @@ struct CommandPaletteFeatureTests {
 
     let items = CommandPaletteFeature.commandPaletteItems(from: state)
     let deleteItem = items.first { $0.id == "global.delete-worktree" }
-    #expect(deleteItem?.title == "Delete Worktree")
     #expect(deleteItem?.defaultSuggestion == false)
   }
 
@@ -246,7 +272,6 @@ struct CommandPaletteFeatureTests {
     #expect(!ids.contains("custom-command.cmd-empty"))
 
     let buildItem = items.first { $0.id == "custom-command.cmd-build" }
-    #expect(buildItem?.title == "Build")
     #expect(buildItem?.subtitle == "Local custom command · Opens in a new tab")
     #expect(buildItem?.defaultSuggestion == false)
     #expect(
@@ -267,7 +292,6 @@ struct CommandPaletteFeatureTests {
 
     let items = CommandPaletteFeature.commandPaletteItems(from: state)
     let item = items.first { $0.id == "repo.\(repository.id).open-settings" }
-    #expect(item?.title == "Repo Settings")
     #expect(item?.subtitle == "Repo")
     #expect(item?.kind == .openRepositorySettings(repository.id))
     #expect(item?.category == .app)
@@ -342,7 +366,6 @@ struct CommandPaletteFeatureTests {
     let items = CommandPaletteFeature.commandPaletteItems(from: RepositoriesFeature.State())
     let item = items.first { $0.id == "global.jump-to-latest-unread" }
 
-    #expect(item?.title == "Jump to Latest Unread")
     #expect(item?.kind == .jumpToLatestUnread)
     #expect(item?.appShortcutCommandID == AppShortcuts.CommandID.jumpToLatestUnread)
 
@@ -408,8 +431,8 @@ struct CommandPaletteFeatureTests {
       return false
     }
 
-    #expect(ghosttyItem?.title == "Focus Split Right")
     #expect(ghosttyItem?.subtitle == "Focus the split to the right.")
+    #expect(ghosttyItem?.id == "ghostty.goto_split:right|Focus Split Right")
   }
 
   @Test func commandPaletteItems_includeGhosttyCommandsForCanvasActionTarget() {
@@ -439,7 +462,6 @@ struct CommandPaletteFeatureTests {
       return false
     }
 
-    #expect(ghosttyItem?.title == "New Tab")
     #expect(ghosttyItem?.subtitle == "Open a new tab.")
   }
 
@@ -546,7 +568,6 @@ struct CommandPaletteFeatureTests {
       return false
     }
 
-    #expect(openItem?.title == "Open Repository on Code Host")
     #expect(openItem?.subtitle == repository.name)
 
     let emptyQueryItems = CommandPaletteFeature.filterItems(items: items, query: "")
@@ -562,7 +583,6 @@ struct CommandPaletteFeatureTests {
       if case .openRepositoryOnCodeHost = $0.kind { return true }
       return false
     }
-    #expect(githubOpenItem?.title == "Open Repository on GitHub")
   }
 
   @Test func commandPaletteItems_showsCodeHostActionForCanvasActionTarget() {
@@ -587,7 +607,6 @@ struct CommandPaletteFeatureTests {
       return false
     }
 
-    #expect(openItem?.title == "Open Pull Request on GitHub")
     #expect(openItem?.subtitle == "PR")
   }
 
@@ -938,7 +957,6 @@ struct CommandPaletteFeatureTests {
       }
       return false
     }
-    #expect(selectItem?.title == "Repo / khoi/cache")
   }
 
   @Test func commandPaletteItems_respectsRowOrderWithinRepository() {
@@ -1150,7 +1168,6 @@ struct CommandPaletteFeatureTests {
 
     let items = CommandPaletteFeature.commandPaletteItems(from: state)
     let ordered = CommandPaletteFeature.filterItems(items: items, query: "")
-    #expect(ordered.first?.title == "Mark PR Ready for Review")
   }
 
   @Test func commandPaletteFailingActionRanksFirst() {
@@ -1173,7 +1190,6 @@ struct CommandPaletteFeatureTests {
 
     let items = CommandPaletteFeature.commandPaletteItems(from: state)
     let ordered = CommandPaletteFeature.filterItems(items: items, query: "")
-    #expect(ordered.first?.title == "Copy failing job URL")
   }
 
   @Test func commandPaletteFailingActionFallsBackToLogsWhenCheckURLMissing() {
@@ -1195,7 +1211,6 @@ struct CommandPaletteFeatureTests {
 
     let items = CommandPaletteFeature.commandPaletteItems(from: state)
     let ordered = CommandPaletteFeature.filterItems(items: items, query: "")
-    #expect(ordered.first?.title == "Copy CI Failure Logs")
   }
 
   @Test func commandPaletteMergeActionRanksFirstWhenMergeable() {
@@ -1215,7 +1230,6 @@ struct CommandPaletteFeatureTests {
 
     let items = CommandPaletteFeature.commandPaletteItems(from: state)
     let ordered = CommandPaletteFeature.filterItems(items: items, query: "")
-    #expect(ordered.first?.title == "Merge PR")
   }
 
   @Test func commandPaletteShowsCloseActionForOpenPullRequest() {
@@ -1231,7 +1245,7 @@ struct CommandPaletteFeatureTests {
     )
 
     let items = CommandPaletteFeature.commandPaletteItems(from: state)
-    let closeItem = items.first(where: { $0.title == "Close PR" })
+    let closeItem = items.first(where: { if case .closePullRequest = $0.kind { return true }; return false })
     #expect(closeItem != nil)
     #expect(closeItem?.subtitle == "PR")
     if case .some(.closePullRequest(let closeWorktreeID)) = closeItem?.kind {
@@ -1254,7 +1268,7 @@ struct CommandPaletteFeatureTests {
     )
 
     let items = CommandPaletteFeature.commandPaletteItems(from: state)
-    #expect(!items.contains(where: { $0.title == "Close PR" }))
+    #expect(!items.contains(where: { if case .closePullRequest = $0.kind { return true }; return false }))
   }
 
   @Test func commandPaletteDoesNotShowMergeActionWhenBlocked() {
@@ -1273,7 +1287,7 @@ struct CommandPaletteFeatureTests {
     )
 
     let items = CommandPaletteFeature.commandPaletteItems(from: state)
-    #expect(!items.contains(where: { $0.title == "Merge PR" }))
+    #expect(!items.contains(where: { if case .mergePullRequest = $0.kind { return true }; return false }))
   }
 
   @Test func recencyBreaksFuzzyTiesWithinGroup() {

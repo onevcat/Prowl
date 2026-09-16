@@ -25,6 +25,7 @@
 		D661760B2F250A60000FC27C /* CasePaths in Frameworks */ = {isa = PBXBuildFile; productRef = D661760A2F250A60000FC27C /* CasePaths */; };
 		D6A1CB312F1F4ABF004FDABD /* GhosttyKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = D6A1CB2F2F1F4A48004FDABD /* GhosttyKit.xcframework */; };
 		D6A1CB362F1F4ACB004FDABD /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D6A1CB342F1F4AC2004FDABD /* Carbon.framework */; };
+		D6AC27012700000100000001 /* GameController.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D6AC27022700000100000001 /* GameController.framework */; };
 		D6CLI0012F99000100000001 /* prowl-cli in Resources */ = {isa = PBXBuildFile; fileRef = D6CLI0022F99000100000001 /* prowl-cli */; };
 		D6DOC0012F99000300000001 /* docs in Resources */ = {isa = PBXBuildFile; fileRef = D6DOC0022F99000300000001 /* docs */; };
 		D6SKL0012F99000500000001 /* skills in Resources */ = {isa = PBXBuildFile; fileRef = D6SKL0022F99000500000001 /* skills */; };
@@ -64,6 +65,7 @@
 		D69CE04A2F1F378200584C57 /* Prowl.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Prowl.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D6A1CB2F2F1F4A48004FDABD /* GhosttyKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = GhosttyKit.xcframework; sourceTree = "<group>"; };
 		D6A1CB342F1F4AC2004FDABD /* Carbon.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Carbon.framework; path = System/Library/Frameworks/Carbon.framework; sourceTree = SDKROOT; };
+		D6AC27022700000100000001 /* GameController.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = GameController.framework; path = System/Library/Frameworks/GameController.framework; sourceTree = SDKROOT; };
 		D6CLI0022F99000100000001 /* prowl-cli */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "prowl-cli"; path = "Resources/prowl-cli"; sourceTree = "<group>"; };
 		D6DOC0022F99000300000001 /* docs */ = {isa = PBXFileReference; lastKnownFileType = folder; name = docs; path = "Resources/docs"; sourceTree = "<group>"; };
 		D6SKL0022F99000500000001 /* skills */ = {isa = PBXFileReference; lastKnownFileType = folder; name = skills; path = "Resources/skills"; sourceTree = "<group>"; };
@@ -118,6 +120,7 @@
 				D6D054282F2E3EBF00D70ED5 /* PostHog in Frameworks */,
 				D661760B2F250A60000FC27C /* CasePaths in Frameworks */,
 				D6A1CB362F1F4ACB004FDABD /* Carbon.framework in Frameworks */,
+				D6AC27012700000100000001 /* GameController.framework in Frameworks */,
 				DFE570C142184CC387C1BC78 /* Sparkle in Frameworks */,
 				32513D1E25BB4F418CABB2A8 /* Sentry in Frameworks */,
 			);
@@ -167,6 +170,7 @@
 			isa = PBXGroup;
 			children = (
 				D6A1CB342F1F4AC2004FDABD /* Carbon.framework */,
+				D6AC27022700000100000001 /* GameController.framework */,
 				D6A1CB2F2F1F4A48004FDABD /* GhosttyKit.xcframework */,
 			);
 			path = Frameworks;
@@ -260,6 +264,7 @@
 			knownRegions = (
 				en,
 				Base,
+				"zh-Hans",
 			);
 			mainGroup = D69CE0412F1F378200584C57;
 			minimizedProjectReferenceProxies = 1;

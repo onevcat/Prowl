@@ -1,10 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// A small, self-contained help sheet that hands the user a ready-to-paste
-/// prompt for their AI agent. The prompt points the agent at the documentation
-/// bundled inside the app (`Contents/Resources/docs`). Localized to the device
-/// language; purely presentational (no store).
+/// prompt for their AI agent. Chrome uses the app language captured at launch;
+/// the copied prompt uses the independently captured system language.
 struct AskAgentHelpView: View {
   private let strings: AskAgentHelpStrings
   private let onDone: () -> Void
@@ -12,11 +10,18 @@ struct AskAgentHelpView: View {
 
   init(
     docsDirectoryPath: String = AskAgentHelpView.resolvedDocsDirectoryPath,
-    locale: Locale = AskAgentHelpPrompt.systemPreferredLocale(),
+    appLocale: Locale,
+    systemLocale: Locale,
     onDone: @escaping () -> Void
   ) {
     self.init(
-      strings: AskAgentHelpPrompt.strings(docsDirectoryPath: docsDirectoryPath, locale: locale), onDone: onDone)
+      strings: AskAgentHelpPrompt.strings(
+        docsDirectoryPath: docsDirectoryPath,
+        appLocale: appLocale,
+        systemLocale: systemLocale
+      ),
+      onDone: onDone
+    )
   }
 
   /// The same sheet over any prompt (Settings › Workflows › "Create with Agent…").

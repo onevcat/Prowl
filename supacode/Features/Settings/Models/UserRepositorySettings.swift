@@ -182,8 +182,8 @@ nonisolated enum CustomCommandSource: String, Codable, CaseIterable, Equatable, 
 
   var displayTitle: String {
     switch self {
-    case .repository: "Local"
-    case .global: "Global"
+    case .repository: String(localized: "Local")
+    case .global: String(localized: "Global")
     }
   }
 
@@ -192,7 +192,7 @@ nonisolated enum CustomCommandSource: String, Codable, CaseIterable, Equatable, 
   var tooltipNote: String? {
     switch self {
     case .repository: nil
-    case .global: "Defined as a global command"
+    case .global: String(localized: "Defined as a global command")
     }
   }
 }
@@ -246,11 +246,11 @@ nonisolated enum UserCustomCommandExecution: String, Codable, CaseIterable, Iden
   var title: String {
     switch self {
     case .shellScript:
-      return "New Tab"
+      return String(localized: "New Tab")
     case .terminalInput:
-      return "In Place"
+      return String(localized: "In Place")
     case .split:
-      return "New Split"
+      return String(localized: "New Split")
     }
   }
 
@@ -274,10 +274,10 @@ nonisolated enum UserCustomSplitDirection: String, Codable, CaseIterable, Identi
 
   var title: String {
     switch self {
-    case .right: return "Right"
-    case .left: return "Left"
-    case .down: return "Down"
-    case .top: return "Up"
+    case .right: return String(localized: "Right")
+    case .left: return String(localized: "Left")
+    case .down: return String(localized: "Down")
+    case .top: return String(localized: "Up")
     }
   }
 }

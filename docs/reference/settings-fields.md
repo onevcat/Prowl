@@ -25,6 +25,7 @@ JSON is pretty-printed with sorted keys. Legacy `~/.supacode` is migrated to
 | Field | Type | Default | Effect |
 |-------|------|---------|--------|
 | `appearanceMode` | enum (`system`/`light`/`dark`) | `dark` | App appearance. |
+| `appLanguage` | enum (`system`/`zh-Hans`/`en`) | `system` | Application UI language. Changes are saved immediately and take effect on the next launch; `system` follows the macOS per-app language, then system language. Unknown stored values fall back to `system`. |
 | `defaultEditorID` | String | `auto` | Default app to open worktrees (overridable per repo); `auto` prefers an app matching the detected project type. |
 | `confirmBeforeQuit` | Bool | `true` | Confirm before quitting Prowl. |
 | `updatesAutomaticallyCheckForUpdates` | Bool | `true` | Background update checks. |

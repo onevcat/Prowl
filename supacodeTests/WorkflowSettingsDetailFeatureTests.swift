@@ -87,7 +87,7 @@ struct WorkflowSettingsDetailFeatureTests {
     await store.send(.deleteTapped)
     await store.send(.alert(.presented(.confirmDeletion(row.url))))
     #expect(store.state.row == row)
-    #expect(store.state.alert?.title == TextState("Could Not Delete Workflow"))
+    #expect(store.state.alert?.title == TextState(String(localized: "Could Not Delete Workflow")))
   }
 
   @Test func builtInAndUnavailableWorkflowsCannotBeDeleted() async throws {

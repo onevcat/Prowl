@@ -463,7 +463,7 @@ struct WorkspaceCreationPromptView: View {
     panel.canChooseDirectories = true
     panel.canCreateDirectories = true
     panel.allowsMultipleSelection = false
-    panel.prompt = "Choose"
+    panel.prompt = String(localized: "Choose")
     panel.directoryURL = URL(filePath: store.rootPath).deletingLastPathComponent()
     panel.begin { response in
       guard response == .OK, let url = panel.url else {
@@ -503,12 +503,15 @@ struct WorkspaceCreationPromptView: View {
     panel.canChooseDirectories = true
     panel.canCreateDirectories = false
     panel.allowsMultipleSelection = false
-    panel.prompt = "Choose"
+    panel.prompt = String(localized: "Choose")
     if let currentPath, !currentPath.isEmpty {
       panel.directoryURL = URL(filePath: currentPath).deletingLastPathComponent()
     }
-    panel.message =
-      kind == .bareRepository ? "Choose a bare repository folder" : "Choose a repository folder"
+    panel.message = String(
+      localized: kind == .bareRepository
+        ? "Choose a bare repository folder"
+        : "Choose a repository folder"
+    )
     return panel
   }
 

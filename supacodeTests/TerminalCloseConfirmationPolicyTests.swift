@@ -165,7 +165,7 @@ struct TerminalCloseConfirmationPolicyTests {
 
     #expect(
       message
-        == "This will close 1 pane in “feature/foo” with active agent work or an unseen agent result."
+        == "This will close 1 pane in \"feature/foo\" with active agent work or an unseen agent result."
     )
   }
 
@@ -192,7 +192,7 @@ struct TerminalCloseConfirmationPolicyTests {
 
     #expect(
       message
-        == "This will close 2 panes in “wt” with active agent work, unseen agent results, or long-running commands."
+        == "This will close 2 panes in \"wt\" with active agent work, unseen agent results, or long-running commands."
     )
   }
 }

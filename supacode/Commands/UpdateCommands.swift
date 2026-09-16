@@ -20,9 +20,10 @@ struct UpdateCommands: Commands {
   }
 
   private func helpText(title: String, commandID: String) -> String {
+    let localizedTitle = String(localized: String.LocalizationValue(title))
     if let shortcut = resolvedKeybindings.display(for: commandID) {
-      return "\(title) (\(shortcut))"
+      return "\(localizedTitle) (\(shortcut))"
     }
-    return title
+    return localizedTitle
   }
 }

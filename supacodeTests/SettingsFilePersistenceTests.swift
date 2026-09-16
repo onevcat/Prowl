@@ -413,6 +413,77 @@ struct SettingsFilePersistenceTests {
     #expect(settings.global.systemNotificationsEnabled == true)
     #expect(settings.global.updatesAutomaticallyDownloadUpdates == true)
   }
+
+  @Test func encodesAppLanguageKeyAlways() throws {
+    let encoded = try JSONEncoder().encode(GlobalSettings.default)
+    let globalDict = try #require(try JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+
+    #expect(globalDict["appLanguage"] as? String == "system")
+  }
+
+  @Test func legacySettingsWithoutAppLanguageDefaultToSystem() throws {
+    let encoded = try JSONEncoder().encode(GlobalSettings.default)
+    var globalDict = try #require(try JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+    globalDict.removeValue(forKey: "appLanguage")
+
+    let legacyData = try JSONSerialization.data(withJSONObject: globalDict)
+    let decoded = try JSONDecoder().decode(GlobalSettings.self, from: legacyData)
+
+    #expect(decoded.appLanguage == .system)
+  }
+
+  @Test(.dependencies) func unrecognizedAppLanguageFallsBackToSystemWithoutResettingSiblings() throws {
+    // A hand-edited or downgraded file carrying a language code this build
+    // doesn't know yet. The `try?` must isolate the fallback to this field.
+    var global = GlobalSettings.default
+    global.appearanceMode = .light
+    global.commandFinishedNotificationThreshold = 42
+
+    let encoded = try JSONEncoder().encode(global)
+    var globalDict = try #require(try JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+    globalDict["appLanguage"] = "futureLanguageFromNewerBuild"
+    let data = try JSONSerialization.data(withJSONObject: ["global": globalDict, "repositories": [:]])
+    let storage = MutableTestStorage(initialData: data)
+
+    let settings: SettingsFile = withDependencies {
+      $0.settingsFileStorage = storage.storage
+    } operation: {
+      @Shared(.settingsFile) var settings: SettingsFile
+      return settings
+    }
+
+    #expect(settings.global.appLanguage == .system)
+    #expect(settings.global.appearanceMode == .light)
+    #expect(settings.global.commandFinishedNotificationThreshold == 42)
+  }
+
+  @Test(.dependencies) func savingAppLanguageDoesNotResetOtherSettings() throws {
+    let storage = SettingsTestStorage()
+
+    withDependencies {
+      $0.settingsFileStorage = storage.storage
+    } operation: {
+      @Shared(.settingsFile) var settings: SettingsFile
+      $settings.withLock {
+        $0.global.appLanguage = .zhHans
+        $0.global.appearanceMode = .light
+        $0.repositoryRoots = ["/tmp/repo-a"]
+      }
+    }
+
+    let reloaded: SettingsFile = withDependencies {
+      $0.settingsFileStorage = storage.storage
+    } operation: {
+      @Shared(.settingsFile) var settings: SettingsFile
+      return settings
+    }
+
+    #expect(reloaded.global.appLanguage == .zhHans)
+    #expect(reloaded.global.appearanceMode == .light)
+    #expect(reloaded.repositoryRoots == ["/tmp/repo-a"])
+    #expect(reloaded.global.notificationSound == .supacodeClassic)
+    #expect(reloaded.global.keybindingUserOverrides == .empty)
+  }
 }
 
 nonisolated private final class MutableTestStorage: @unchecked Sendable {

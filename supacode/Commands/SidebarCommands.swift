@@ -115,10 +115,11 @@ struct SidebarCommands: Commands {
   }
 
   private func helpText(title: String, commandID: String) -> String {
+    let localizedTitle = String(localized: String.LocalizationValue(title))
     if let shortcut = store.resolvedKeybindings.display(for: commandID) {
-      return "\(title) (\(shortcut))"
+      return "\(localizedTitle) (\(shortcut))"
     }
-    return title
+    return localizedTitle
   }
 }
 

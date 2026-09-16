@@ -425,9 +425,9 @@ struct WorkflowsSettingsFeature {
 
   private static func errorAlert(_ message: String) -> AlertState<Alert> {
     AlertState {
-      TextState("Workflows Error")
+      TextState(String(localized: "Workflows Error"))
     } actions: {
-      ButtonState(action: .dismiss) { TextState("OK") }
+      ButtonState(action: .dismiss) { TextState(String(localized: "OK")) }
     } message: {
       TextState(message)
     }

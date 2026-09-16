@@ -187,7 +187,7 @@ struct AppFeatureSettingsChangedTests {
 
     await store.send(.settings(.delegate(.terminalLayoutSnapshotCleared(success: true))))
     await store.receive(\.repositories.showToast) {
-      $0.repositories.statusToast = .success("Saved terminal layout cleared")
+      $0.repositories.statusToast = .success(String(localized: "Saved terminal layout cleared"))
     }
   }
 

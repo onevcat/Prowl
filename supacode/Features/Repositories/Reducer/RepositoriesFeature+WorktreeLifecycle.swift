@@ -34,13 +34,13 @@ extension RepositoriesFeature {
         return .send(.worktreeLifecycle(.archiveWorktreeConfirmed(worktree.id, repository.id)))
       }
       state.alert = AlertState {
-        TextState("Archive worktree?")
+        TextState(String(localized: "Archive worktree?"))
       } actions: {
         ButtonState(role: .destructive, action: .confirmArchiveWorktree(worktree.id, repository.id)) {
-          TextState("Archive (⌘↩)")
+          TextState(String(localized: "Archive (⌘↩)"))
         }
         ButtonState(role: .cancel) {
-          TextState("Cancel")
+          TextState(String(localized: "Cancel"))
         }
       } message: {
         TextState(archiveWorktreeAlertMessage(for: worktree.name))
@@ -77,13 +77,13 @@ extension RepositoriesFeature {
       }
       let count = validTargets.count
       state.alert = AlertState {
-        TextState("Archive \(count) worktrees?")
+        TextState(String(localized: "Archive \(count) worktrees?"))
       } actions: {
         ButtonState(role: .destructive, action: .confirmArchiveWorktrees(validTargets)) {
-          TextState("Archive \(count) (⌘↩)")
+          TextState(String(localized: "Archive \(count) (⌘↩)"))
         }
         ButtonState(role: .cancel) {
-          TextState("Cancel")
+          TextState(String(localized: "Cancel"))
         }
       } message: {
         TextState(archiveWorktreesAlertMessage())
@@ -181,7 +181,7 @@ extension RepositoriesFeature {
       }
       state.archivingWorktreeIDs.remove(worktreeID)
       state.archiveScriptProgressByWorktreeID.removeValue(forKey: worktreeID)
-      state.alert = messageAlert(title: "Archive script failed", message: message)
+      state.alert = messageAlert(title: String(localized: "Archive script failed"), message: message)
       return .none
 
     case .archiveWorktreeApply(let worktreeID, let repositoryID):
@@ -285,8 +285,8 @@ extension RepositoriesFeature {
       }
       if state.isMainWorktree(worktree) {
         state.alert = messageAlert(
-          title: "Delete not allowed",
-          message: "Deleting the main worktree is not allowed."
+          title: String(localized: "Delete not allowed"),
+          message: String(localized: "Deleting the main worktree is not allowed.")
         )
         return .none
       }
@@ -515,7 +515,7 @@ extension RepositoriesFeature {
 
     case .deleteWorktreeFailed(let message, let worktreeID):
       state.deletingWorktreeIDs.remove(worktreeID)
-      state.alert = messageAlert(title: "Unable to delete worktree", message: message)
+      state.alert = messageAlert(title: String(localized: "Unable to delete worktree"), message: message)
       return .none
 
     case .forceDeleteBranchConfirmed(let request):
@@ -531,7 +531,7 @@ extension RepositoriesFeature {
       }
 
     case .forceDeleteBranchFailed(let message):
-      state.alert = messageAlert(title: "Unable to delete branch", message: message)
+      state.alert = messageAlert(title: String(localized: "Unable to delete branch"), message: message)
       return .none
     }
   }
@@ -548,12 +548,12 @@ extension RepositoriesFeature {
 
 private func archiveWorktreeAlertMessage(for name: String) -> String {
   let shortcut = AppShortcuts.archivedWorktrees.display
-  return "Find \(name) later in Menu Bar > Worktrees > Archived Worktrees (\(shortcut))."
+  return String(localized: "Find \(name) later in Menu Bar > Worktrees > Archived Worktrees (\(shortcut)).")
 }
 
 private func archiveWorktreesAlertMessage() -> String {
   let shortcut = AppShortcuts.archivedWorktrees.display
-  return "Find them later in Menu Bar > Worktrees > Archived Worktrees (\(shortcut))."
+  return String(localized: "Find them later in Menu Bar > Worktrees > Archived Worktrees (\(shortcut)).")
 }
 
 private func makeDeleteWorktreeConfirmation(
@@ -569,16 +569,16 @@ private func makeDeleteWorktreeConfirmation(
   {
     return DeleteWorktreeConfirmation(
       id: id,
-      title: "Delete worktree?",
-      message: "Delete \(worktree.name)? The worktree directory will be removed.",
+      title: String(localized: "Delete worktree?"),
+      message: String(localized: "Delete \(worktree.name)? The worktree directory will be removed."),
       targets: targets,
       deleteBranch: defaultDeleteBranch
     )
   }
   return DeleteWorktreeConfirmation(
     id: id,
-    title: "Delete \(count) worktrees?",
-    message: "Delete \(count) worktrees? Their worktree directories will be removed.",
+    title: String(localized: "Delete \(count) worktrees?"),
+    message: String(localized: "Delete \(count) worktrees? Their worktree directories will be removed."),
     targets: targets,
     deleteBranch: defaultDeleteBranch
   )
@@ -586,21 +586,23 @@ private func makeDeleteWorktreeConfirmation(
 
 private func forceDeleteBranchAlert(_ request: ForceDeleteBranchRequest) -> AlertState<RepositoriesFeature.Alert> {
   AlertState {
-    TextState("Force delete branch?")
+    TextState(String(localized: "Force delete branch?"))
   } actions: {
     ButtonState(role: .destructive, action: .confirmForceDeleteBranch(request)) {
-      TextState("Force Delete")
+      TextState(String(localized: "Force Delete"))
     }
     ButtonState(role: .cancel) {
-      TextState("Keep Branch")
+      TextState(String(localized: "Keep Branch"))
     }
   } message: {
     TextState(
-      """
-      The worktree was deleted, but \(request.branchName) could not be deleted safely.
+      String(
+        localized: """
+          The worktree was deleted, but \(request.branchName) could not be deleted safely.
 
-      \(request.errorMessage)
-      """
+          \(request.errorMessage)
+          """
+      )
     )
   }
 }

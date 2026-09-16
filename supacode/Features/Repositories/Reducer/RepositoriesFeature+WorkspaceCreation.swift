@@ -67,7 +67,7 @@ extension RepositoriesFeature {
       }
       return .merge(
         .cancel(id: CancelID.workspaceCreation),
-        .send(.showToast(.warning("Workspace creation canceled")))
+        .send(.showToast(.warning(String(localized: "Workspace creation canceled"))))
       )
 
     case .refreshBaseRefs(let repositoryID):
@@ -116,7 +116,7 @@ extension RepositoriesFeature {
       analyticsClient.capture("workspace_created", [String: Any]?.none)
       state.workspaceCreationPrompt = nil
       return .merge(
-        .send(.showToast(.success("Workspace created"))),
+        .send(.showToast(.success(String(localized: "Workspace created")))),
         .send(.repositoryManagement(.openRepositories([rootURL])))
       )
 
@@ -125,7 +125,7 @@ extension RepositoriesFeature {
         state.workspaceCreationPrompt?.isCreating = false
         state.workspaceCreationPrompt?.validationMessage = message
       } else {
-        state.alert = messageAlert(title: "Unable to create workspace", message: message)
+        state.alert = messageAlert(title: String(localized: "Unable to create workspace"), message: message)
       }
       return .none
     }

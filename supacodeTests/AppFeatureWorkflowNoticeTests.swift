@@ -155,9 +155,9 @@ struct AppFeatureWorkflowNoticeTests {
         forceSheet: false))
     await store.receive(
       \.repositories.showToast,
-      .warning("The selected worktree is no longer available.")
+      .warning(String(localized: "The selected worktree is no longer available."))
     ) {
-      $0.repositories.statusToast = .warning("The selected worktree is no longer available.")
+      $0.repositories.statusToast = .warning(String(localized: "The selected worktree is no longer available."))
     }
     #expect(contextRequests.value == 0)
   }
