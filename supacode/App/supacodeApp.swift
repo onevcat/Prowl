@@ -270,7 +270,12 @@ struct SupacodeApp: App {
       workflowCoordinatorBox: workflowRuntime.coordinatorBox,
       workflowReservations: workflowRuntime.reservations
     )
-    mirrors.host.commandService = MirrorCommandService(router: cliRouter)
+    mirrors.host.commandService = MirrorCommandService(router: cliRouter) {
+      ListRuntimeSnapshotBuilder.orderedWorktreeContexts(from: appStore.state.repositories).map {
+        ListCommandWorktree(
+          id: $0.id, name: $0.name, path: $0.path, rootPath: $0.rootPath, kind: $0.kind)
+      }
+    }
 
     _cliSocketServer = State(initialValue: cliServer)
 
@@ -993,7 +998,8 @@ struct SupacodeApp: App {
         terminalManager.cancelAgentDispatchIssuance(dispatchID: dispatchID)
       }
     )
-    let createTab: TabCommandHandler.CreateTabProvider = { target, path in
+    let createTabWithFocus: @MainActor (TabResolvedTarget, String?, Bool) -> TabResolvedTarget? = {
+      target, path, focus in
       let repositories = Array(appStore.state.repositories.repositories)
       guard
         let worktree = resolveCLITerminalWorktree(
@@ -1001,14 +1007,19 @@ struct SupacodeApp: App {
       else {
         return nil
       }
-      selectCLIWorktreeContext(
-        worktreeID: target.worktreeID,
-        appStore: appStore,
-        terminalManager: terminalManager
-      )
+      if focus {
+        selectCLIWorktreeContext(
+          worktreeID: target.worktreeID,
+          appStore: appStore,
+          terminalManager: terminalManager
+        )
+      }
       let state = terminalManager.state(for: worktree)
       let directory = path.map { URL(fileURLWithPath: $0, isDirectory: true) }
-      guard let tabID = state.createTab(workingDirectoryOverride: directory) else {
+      guard
+        let tabID = state.createTab(
+          focusing: focus, selecting: focus, workingDirectoryOverride: directory)
+      else {
         return nil
       }
       let resolver = makeTargetResolver(appStore: appStore, terminalManager: terminalManager)
@@ -1019,6 +1030,7 @@ struct SupacodeApp: App {
         return nil
       }
     }
+    let createTab: TabCommandHandler.CreateTabProvider = { createTabWithFocus($0, $1, true) }
     let createPane: LifecycleCommandHandler.CreatePaneProvider = { anchor, direction in
       createCLIPane(
         anchor: anchor,
@@ -1054,6 +1066,13 @@ struct SupacodeApp: App {
       resolveCloseTarget: resolveLifecycleTarget,
       createTab: createTab,
       createPane: createPane,
+      createBackgroundTab: { createTabWithFocus($0, $1, false) },
+      resolveTabCreationTarget: { selector in
+        guard case .worktree(let value) = selector else { return resolveTabTarget(selector) }
+        let contexts = ListRuntimeSnapshotBuilder.orderedWorktreeContexts(
+          from: appStore.state.repositories)
+        return resolveCLITabCreationTarget(value, worktrees: contexts)
+      },
       profiles: {
         @Shared(.userGlobalSettings) var settings
         return settings.agentProfiles
@@ -1372,6 +1391,25 @@ struct SupacodeApp: App {
       resolution: .newRoot, worktreeID: nil, worktreeName: nil,
       worktreePath: nil, rootPath: nil, worktreeKind: nil, resolvedPath: normalized
     )
+  }
+
+  static func resolveCLITabCreationTarget(
+    _ value: String, worktrees: [ListRuntimeSnapshotBuilder.WorktreeContext]
+  ) -> Result<TabResolvedTarget, TargetResolverError> {
+    let matches = worktrees.filter { $0.id == value || $0.name == value || $0.path == value }
+    guard let worktree = matches.first else {
+      return .failure(.notFound("Worktree '\(value)' not found."))
+    }
+    guard matches.count == 1 else {
+      return .failure(.notUnique("Worktree '\(value)' matches \(matches.count) worktrees."))
+    }
+    // A new tab needs only its worktree. The creation result supplies the real tab and pane IDs.
+    return .success(
+      TabResolvedTarget(
+        worktreeID: worktree.id, worktreeName: worktree.name, worktreePath: worktree.path,
+        worktreeRootPath: worktree.rootPath, worktreeKind: worktree.kind.rawValue,
+        tabID: "", tabTitle: "", tabSelected: false,
+        paneID: "", paneTitle: "", paneCWD: nil, paneFocused: false))
   }
 
   static func resolveCLITerminalWorktree(

@@ -743,9 +743,9 @@ either positionally or with `--worktree`; `--path` must remain inside it.
 pane="$(prowl create tab "$wt" --json | jq -r '.data.target.pane.id')"
 ```
 
-Without `--profile`, the new tab always takes focus (`--background` is Profile-only), so
-keystrokes a person is typing at that moment land in the new shell; while someone is working
-in the app, prefer a Profile launch with `--background`.
+Without `--background`, the new tab takes focus, so keystrokes a person is typing
+at that moment land in the new shell. Use `--background` to preserve the current
+selection and focus for both Shell and Agent Profile tabs.
 
 Add `--profile <name|uuid>` to launch an enabled Agent Profile instead of a shell. An
 optional kickoff prompt uses the sole stdin spelling `--prompt -`:
@@ -767,8 +767,8 @@ shell retains the reserved carrier. NUL bytes remain invalid, and UTF-8 prompt i
 256 KiB is rejected before creating a surface. For larger requirement sets, keep the content
 in a repository file and use the kickoff prompt to tell the Profile which file to read.
 
-`--background` is Profile-only and creates the tab without changing the selected
-worktree, tab, or pane.
+`--background` creates the tab without changing the selected worktree, tab, or
+pane. Background split-pane creation still requires a Profile.
 
 Claude Code, Codex, GitHub Copilot, Droid, Qoder, Pi, Oh My Pi, and OpenCode Profile launches
 complete managed-signal preflight before a dispatch slot or surface is created. Safe preparation

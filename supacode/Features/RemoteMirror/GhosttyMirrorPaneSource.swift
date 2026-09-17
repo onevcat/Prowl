@@ -12,7 +12,7 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
   func panes() -> [MirrorPaneDescriptor] {
     manager.activeWorktreeStates.flatMap { state in
       let project = state.worktree.repositoryRootURL.lastPathComponent
-      return state.tabManager.tabs.enumerated().flatMap { tabIndex, tab in
+      return state.tabManager.tabs.flatMap { tab in
         let leaves = state.trees[tab.id]?.leaves() ?? []
         return leaves.enumerated().compactMap { paneIndex, view -> MirrorPaneDescriptor? in
           guard view.surface != nil else { return nil }
@@ -21,11 +21,6 @@ final class GhosttyMirrorPaneSource: MirrorPaneSource {
           let terminal = name.isEmpty || name == "Terminal" ? (agent ?? "Shell") : name
           var location = [terminal, state.worktree.name]
           var title = [project, terminal, state.worktree.name]
-          if state.tabManager.tabs.count > 1 {
-            let label = "Tab \(tabIndex + 1)"
-            location.append(label)
-            title.append(label)
-          }
           if leaves.count > 1 {
             let label = "Pane \(paneIndex + 1)"
             location.append(label)

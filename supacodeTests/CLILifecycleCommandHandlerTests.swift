@@ -7,6 +7,37 @@ import Testing
 
 @MainActor
 struct CLILifecycleCommandHandlerTests {
+  @Test func backgroundShellUsesBackgroundCreationProvider() async throws {
+    let base = makeTarget(tabID: "base-tab", paneID: "base-pane")
+    let created = makeTarget(tabID: "created-tab", paneID: "created-pane")
+    var foregroundCalls = 0
+    var backgroundCalls = 0
+    let handler = LifecycleCommandHandler(
+      resolveCreateTarget: { _ in .success(base) },
+      resolveCloseTarget: { _ in .success(.init(resource: .pane, target: base)) },
+      createTab: { _, _ in
+        foregroundCalls += 1
+        return nil
+      },
+      createPane: { _, _ in nil },
+      createBackgroundTab: { _, path in
+        #expect(path == "/Projects/App")
+        backgroundCalls += 1
+        return created
+      },
+      closeTab: { _, _ in false }, closePane: { _, _ in false })
+    let result = await handler.handle(
+      envelope: .init(
+        output: .json,
+        command: .create(
+          .init(
+            resource: .tab, selector: .worktree("App"), path: "/Projects/App", background: true))))
+    #expect(result.ok)
+    #expect(backgroundCalls == 1)
+    #expect(foregroundCalls == 0)
+    #expect(try result.data?.decode(as: LifecycleCommandPayload.self).target.tab.id == "created-tab")
+  }
+
   @Test func createPaneDirectionsMapToTerminalDirections() {
     #expect(CreatePaneDirection.right.terminalSplitDirection == .right)
     #expect(CreatePaneDirection.left.terminalSplitDirection == .left)

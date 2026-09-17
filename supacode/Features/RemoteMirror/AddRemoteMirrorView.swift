@@ -12,6 +12,9 @@ struct AddRemoteMirrorView: View {
   @State private var added = false
   @State private var restored = false
   @State private var requiresNewCode = false
+  @State private var showsNewPane = false
+  @State private var launchModel: MirrorLaunchModel?
+  @State private var launchTask: Task<Void, Never>?
   @FocusState private var codeFocused: Bool
 
   private var isConnecting: Bool { client?.isConnecting == true }
@@ -28,13 +31,64 @@ struct AddRemoteMirrorView: View {
     VStack(alignment: .leading, spacing: 16) {
       Text("Connect to Host").font(.title2.bold())
       if let client, client.isConnected {
-        panePicker(client)
+        if showsNewPane, let launchModel {
+          MirrorNewPaneView(model: launchModel)
+        } else {
+          panePicker(client)
+        }
       } else {
         form
       }
       HStack {
+        if let client, client.isConnected {
+          if showsNewPane {
+            Button("Back") {
+              showsNewPane = false
+              client.refreshPanes()
+            }
+            .disabled(launchModel?.isCreating == true)
+            .help("Return to the Host pane list")
+            Button("Refresh", systemImage: "arrow.clockwise") {
+              launchTask = Task { await launchModel?.load() }
+            }
+            .labelStyle(.iconOnly)
+            .disabled(
+              launchModel?.isLoading == true || launchModel?.isCreating == true
+                || launchModel?.creationUncertain == true
+            )
+            .help("Reload worktrees and Agent Profiles from Host")
+          } else {
+            Button("Refresh Panes") { client.refreshPanes() }
+              .help("Reload the list of panes on this Host")
+            if client.supportsProfileLaunch || client.supportsShellLaunch {
+              Button("New Pane…", systemImage: "plus") {
+                if launchModel == nil {
+                  launchModel = MirrorLaunchModel(
+                    supportsShell: client.supportsShellLaunch, supportsProfiles: client.supportsProfileLaunch,
+                    execute: client.command)
+                }
+                showsNewPane = true
+              }
+              .help("Create a Shell or Agent Profile pane in a Host worktree")
+            }
+          }
+        }
         Spacer()
         Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+          .disabled(launchModel?.isCreating == true)
+        if showsNewPane, let launchModel, let client, client.isConnected {
+          Button(launchModel.isCreating ? "Creating…" : "Create and Mirror") {
+            launchTask = Task {
+              if let pane = await launchModel.create() {
+                add(client, pane: pane)
+              }
+            }
+          }
+          .disabled(!launchModel.canCreate)
+          .keyboardShortcut(.defaultAction)
+          .buttonStyle(.borderedProminent)
+          .help("Create a background tab on Host and open its mirror")
+        }
         if client?.isConnected != true {
           Button(isConnecting ? "Connecting…" : "Connect") { connect() }
             .disabled(isConnecting)
@@ -68,7 +122,11 @@ struct AddRemoteMirrorView: View {
       requiresNewCode = true
       codeFocused = true
     }
-    .onDisappear { if !added { client?.close() } }
+    .interactiveDismissDisabled(launchModel?.isCreating == true)
+    .onDisappear {
+      launchTask?.cancel()
+      if !added { client?.close() }
+    }
     .accessibilityIdentifier("add-remote-mirror-panel")
   }
 
@@ -127,9 +185,7 @@ struct AddRemoteMirrorView: View {
         VStack(spacing: 8) {
           ForEach(client.panes) { pane in
             Button {
-              added = true
-              mirrors.add(client, pane: pane)
-              dismiss()
+              add(client, pane: pane)
             } label: {
               HStack {
                 VStack(alignment: .leading) {
@@ -141,6 +197,7 @@ struct AddRemoteMirrorView: View {
                 Text(pane.busy ? (client.supportsTakeover ? "Take Over" : "In use") : "Mirror")
               }
               .padding(10).frame(maxWidth: .infinity, alignment: .leading)
+              .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
@@ -150,8 +207,6 @@ struct AddRemoteMirrorView: View {
         }
       }
       .frame(height: min(280, CGFloat(max(1, client.panes.count)) * 76))
-      Button("Refresh Panes") { client.refreshPanes() }
-        .help("Reload the list of panes on this Host")
     }
   }
 
@@ -160,10 +215,19 @@ struct AddRemoteMirrorView: View {
       ?? MirrorKnownHost.endpointID(address: client.address, port: client.port)
   }
 
+  private func add(_ client: MirrorClient, pane: MirrorPaneDescriptor) {
+    added = true
+    mirrors.add(client, pane: pane)
+    dismiss()
+  }
+
   private func connect() {
     do {
       let endpoint = try MirrorEndpointInput.endpoint(address: address, port: port)
       let code = try MirrorEndpointInput.pairingCode(pairingCode, required: needsPairingCode)
+      launchTask?.cancel()
+      launchModel = nil
+      showsNewPane = false
       client?.close()
       let connection = mirrors.makeClient(address: endpoint.address, port: endpoint.port, pairingKey: code)
       client = connection

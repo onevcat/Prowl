@@ -39,8 +39,8 @@ struct MirrorLaunchModelTests {
     #expect(pane.projectName == "Project")
     #expect(requests.count == 1)
     #expect(requests[0].background && requests[0].resource == "tab")
-    #expect(requests[0].launch.prompt == "first\nsecond")
-    #expect(requests[0].launch.profile == "available-profile")
+    #expect(requests[0].launch?.prompt == "first\nsecond")
+    #expect(requests[0].launch?.profile == "available-profile")
   }
 
   @Test func lostCreationResponseIsNeverAutomaticallyReplayed() async {

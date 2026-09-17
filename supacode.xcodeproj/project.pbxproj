@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A82000000000000000000001 /* MirrorLaunchModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A82000000000000000000002 /* MirrorLaunchModel.swift */; };
 		A79300000000000000000001 /* prowl-mirror-relay in Copy Files */ = {isa = PBXBuildFile; fileRef = A79300000000000000000002; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		A906AC710000000000000003 /* OrderedCollections in Frameworks */ = {isa = PBXBuildFile; productRef = A906AC710000000000000004 /* OrderedCollections */; };
 		A906AC710000000000000001 /* workflows in Resources */ = {isa = PBXBuildFile; fileRef = A906AC710000000000000002 /* workflows */; };
@@ -56,6 +57,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A82000000000000000000002 /* MirrorLaunchModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MirrorClient/Shared/MirrorLaunchModel.swift"; sourceTree = SOURCE_ROOT; };
 		A79300000000000000000002 /* prowl-mirror-relay */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; path = "Resources/prowl-mirror-relay/prowl-mirror-relay"; sourceTree = SOURCE_ROOT; };
 		A906AC710000000000000002 /* workflows */ = {isa = PBXFileReference; lastKnownFileType = folder; name = workflows; path = Resources/workflows; sourceTree = "<group>"; };
 		D64162AD2F23CAF100260CA3 /* ghostty */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ghostty; path = Resources/ghostty; sourceTree = "<group>"; };
@@ -139,6 +141,7 @@
 		D69CE0412F1F378200584C57 = {
 			isa = PBXGroup;
 			children = (
+				A82000000000000000000002 /* MirrorLaunchModel.swift */,
 				D6DOC0022F99000300000001 /* docs */,
 				A906AC710000000000000002 /* workflows */,
 				D6SKL0022F99000500000001 /* skills */,
@@ -356,6 +359,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A82000000000000000000001 /* MirrorLaunchModel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
