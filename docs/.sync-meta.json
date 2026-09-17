@@ -1,6 +1,6 @@
 {
   "_comment": "Metadata for the docs/ manual. The last_synced_commit is the commit at which docs/ was last verified against the implementation; the sync-docs skill (.claude/skills/sync-docs/SKILL.md) diffs HEAD against it and updates this file. Committed to git on purpose so the baseline persists across sessions and machines. A dotfile + .json so a future docs website does not render it as a page.",
-  "last_synced_commit": "5a3be0ecd088459db330600ea2feda3201f20e0b",
-  "last_synced_date": "2026-09-17",
-  "note": "Verified changes across 80 implementation files since the prior baseline. The merged PRs already documented undo close, Review Loop, native runtime state detection, and the flag-gated experimental Remote Mirror (docs/remote-mirror.md, not indexed in README while hidden). No manual content changes were needed."
+  "last_synced_commit": "5f868b12e9c2a697e8245245cab16f0a9fe498ac",
+  "last_synced_date": "2026-09-18",
+  "note": "Verified changes across 15 implementation files since the prior baseline. The merged PRs already documented background Shell tab creation (`create tab --background` without a Profile), Codex starfield idle detection, and the flag-gated Remote Mirror host disconnect and client pane launch. No manual content changes were needed."
 }
