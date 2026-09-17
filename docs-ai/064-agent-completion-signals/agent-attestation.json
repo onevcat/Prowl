@@ -6,7 +6,7 @@
       "attested_version": "2.1.274",
       "binary": "claude",
       "name": "Claude Code",
-      "record": "attestations/13f83b7d88f90d732b447141799d77eaf70fe9b300c0855c631aa2aa9c34332f.json",
+      "record": "attestations/5713c27d2bce7d744229f67bd08e39d3b3c2a98ad056dfda94f715e04b49a67c.json",
       "runtime": "claude",
       "version_command": [
         "claude",
@@ -18,7 +18,7 @@
       "attested_version": "0.154.0",
       "binary": "codex",
       "name": "Codex",
-      "record": "attestations/13f83b7d88f90d732b447141799d77eaf70fe9b300c0855c631aa2aa9c34332f.json",
+      "record": "attestations/5713c27d2bce7d744229f67bd08e39d3b3c2a98ad056dfda94f715e04b49a67c.json",
       "runtime": "codex",
       "version_command": [
         "codex",
@@ -30,7 +30,7 @@
       "attested_version": "1.0.83",
       "binary": "copilot",
       "name": "GitHub Copilot CLI",
-      "record": "attestations/13f83b7d88f90d732b447141799d77eaf70fe9b300c0855c631aa2aa9c34332f.json",
+      "record": "attestations/5713c27d2bce7d744229f67bd08e39d3b3c2a98ad056dfda94f715e04b49a67c.json",
       "runtime": "copilot",
       "version_command": [
         "copilot",
@@ -42,7 +42,7 @@
       "attested_version": "0.210.0",
       "binary": "droid",
       "name": "Factory Droid",
-      "record": "attestations/13f83b7d88f90d732b447141799d77eaf70fe9b300c0855c631aa2aa9c34332f.json",
+      "record": "attestations/5713c27d2bce7d744229f67bd08e39d3b3c2a98ad056dfda94f715e04b49a67c.json",
       "runtime": "droid",
       "version_command": [
         "droid",
@@ -54,7 +54,7 @@
       "attested_version": "1.1.31",
       "binary": "qodercli",
       "name": "Qoder CLI",
-      "record": "attestations/13f83b7d88f90d732b447141799d77eaf70fe9b300c0855c631aa2aa9c34332f.json",
+      "record": "attestations/5713c27d2bce7d744229f67bd08e39d3b3c2a98ad056dfda94f715e04b49a67c.json",
       "runtime": "qodercli",
       "version_command": [
         "qodercli",
@@ -66,7 +66,7 @@
       "attested_version": "0.85.1",
       "binary": "pi",
       "name": "Pi",
-      "record": "attestations/13f83b7d88f90d732b447141799d77eaf70fe9b300c0855c631aa2aa9c34332f.json",
+      "record": "attestations/5713c27d2bce7d744229f67bd08e39d3b3c2a98ad056dfda94f715e04b49a67c.json",
       "runtime": "pi",
       "version_command": [
         "pi",
@@ -78,7 +78,7 @@
       "attested_version": "18.2.0",
       "binary": "omp",
       "name": "Oh My Pi",
-      "record": "attestations/13f83b7d88f90d732b447141799d77eaf70fe9b300c0855c631aa2aa9c34332f.json",
+      "record": "attestations/5713c27d2bce7d744229f67bd08e39d3b3c2a98ad056dfda94f715e04b49a67c.json",
       "runtime": "omp",
       "version_command": [
         "omp",
@@ -90,7 +90,7 @@
       "attested_version": "1.18.31",
       "binary": "opencode",
       "name": "OpenCode",
-      "record": "attestations/13f83b7d88f90d732b447141799d77eaf70fe9b300c0855c631aa2aa9c34332f.json",
+      "record": "attestations/5713c27d2bce7d744229f67bd08e39d3b3c2a98ad056dfda94f715e04b49a67c.json",
       "runtime": "opencode",
       "version_command": [
         "opencode",
