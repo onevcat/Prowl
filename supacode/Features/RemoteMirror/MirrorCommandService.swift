@@ -10,12 +10,15 @@ final class MirrorCommandService {
   private let router: CLICommandRouter
   private var executions: [UUID: Execution] = [:]
   private let maximumRequests: Int
+  private let worktrees: (() -> [ListCommandWorktree])?
 
   init(
-    router: CLICommandRouter, maximumRequests: Int = 1024
+    router: CLICommandRouter, maximumRequests: Int = 1024,
+    worktrees: (() -> [ListCommandWorktree])? = nil
   ) {
     self.router = router
     self.maximumRequests = maximumRequests
+    self.worktrees = worktrees
   }
 
   func execute(
@@ -38,7 +41,7 @@ final class MirrorCommandService {
     _ message: MirrorCommandRequest, authorize: @escaping @MainActor () -> Bool
   ) async -> MirrorJSON {
     guard authorize() else { return failure("The mirror no longer owns this pane.") }
-    // Code security: remote requests expose only catalog reads and ordinary Profile-backed tabs.
+    // Code security: remote requests expose only catalog reads and ordinary Shell or Profile-backed tabs.
     guard message.request.output == "json" else { return failure("Command is not allowed.") }
     if let existing = executions[message.requestID] {
       guard existing.request == message.request else {
@@ -60,13 +63,21 @@ final class MirrorCommandService {
     do {
       let data = try JSONEncoder().encode(message.request)
       let envelope = try JSONDecoder().decode(CommandEnvelope.self, from: data)
-      let task = Task { @MainActor [router] in
+      let task = Task { @MainActor [router, worktrees] in
         guard authorize(), !Task.isCancelled else {
           return Self.failure("The mirror no longer owns this pane.")
         }
         let response = await router.route(envelope)
         do {
-          return try JSONDecoder().decode(MirrorJSON.self, from: JSONEncoder().encode(response))
+          let json = try JSONDecoder().decode(MirrorJSON.self, from: JSONEncoder().encode(response))
+          if case .list = message.request.command, response.ok, let worktrees,
+            case .object(var envelope) = json, case .object(var data) = envelope["data"]
+          {
+            data["worktrees"] = try JSONDecoder().decode(MirrorJSON.self, from: JSONEncoder().encode(worktrees()))
+            envelope["data"] = .object(data)
+            return .object(envelope)
+          }
+          return json
         } catch {
           return Self.encodingFailure
         }
@@ -95,8 +106,8 @@ final class MirrorCommandService {
       )
     case .create(let input):
       guard input.resource == "tab", input.background,
-        !input.launch.profile.isEmpty,
-        (input.launch.prompt?.utf8.count ?? 0) <= MirrorWire.maximumInput
+        input.launch == nil || input.launch?.profile.isEmpty == false,
+        (input.launch?.prompt?.utf8.count ?? 0) <= MirrorWire.maximumInput
       else { return failure("Choose a valid Host Profile and a prompt within the size limit.") }
     }
     return nil

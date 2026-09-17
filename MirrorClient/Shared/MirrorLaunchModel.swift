@@ -6,7 +6,10 @@ nonisolated struct MirrorLaunchWorktree: Decodable, Identifiable, Equatable {
   let name: String
   let path: String
   let rootPath: String
-  enum CodingKeys: String, CodingKey { case id, name, path; case rootPath = "root_path" }
+  enum CodingKeys: String, CodingKey {
+    case id, name, path
+    case rootPath = "root_path"
+  }
   var label: String { "\(URL(fileURLWithPath: rootPath).lastPathComponent) · \(name)" }
 }
 
@@ -16,13 +19,20 @@ nonisolated struct MirrorLaunchProfile: Decodable, Identifiable, Equatable {
   let enabled: Bool
   let runtime: String
   let availability: Availability
-  struct Availability: Decodable, Equatable { let status: String; let reason: String? }
+  struct Availability: Decodable, Equatable {
+    let status: String
+    let reason: String?
+  }
   var isAvailable: Bool { enabled && availability.status == "available" }
 }
 
 @MainActor
 @Observable
 final class MirrorLaunchModel {
+  enum Kind: Hashable { case shell, agent }
+  let supportsShell: Bool
+  let supportsProfiles: Bool
+  var kind: Kind
   var worktreeID: String?
   var profileID: String?
   var prompt = ""
@@ -34,29 +44,43 @@ final class MirrorLaunchModel {
   private(set) var creationUncertain = false
   private let execute: (MirrorCommandRequest.Command) async throws -> MirrorJSON
 
-  init(execute: @escaping (MirrorCommandRequest.Command) async throws -> MirrorJSON) {
+  init(
+    supportsShell: Bool = false, supportsProfiles: Bool = true,
+    execute: @escaping (MirrorCommandRequest.Command) async throws -> MirrorJSON
+  ) {
+    self.supportsShell = supportsShell
+    self.supportsProfiles = supportsProfiles
+    kind = supportsShell ? .shell : .agent
     self.execute = execute
   }
 
   var canCreate: Bool {
     !isLoading && !isCreating && !creationUncertain
       && worktrees.contains { $0.id == worktreeID }
-      && profiles.contains { $0.id == profileID && $0.isAvailable }
-      && prompt.utf8.count <= MirrorWire.maximumInput
+      && (kind == .shell
+        ? supportsShell
+        : supportsProfiles && profiles.contains { $0.id == profileID && $0.isAvailable }
+          && prompt.utf8.count <= MirrorWire.maximumInput)
   }
 
   func load() async {
-    guard !isLoading, !isCreating else { return }
+    guard !isLoading, !isCreating, !creationUncertain else { return }
     isLoading = true
     error = nil
     defer { isLoading = false }
+    worktrees = []
+    profiles = []
     do {
       let listing: Listing = try await response(.list(.init()))
-      let catalog: Catalog = try await response(.profiles(.init()))
       var seen: Set<String> = []
-      worktrees = listing.items.map(\.worktree).filter { seen.insert($0.id).inserted }
-      profiles = catalog.profiles
+      worktrees = (listing.worktrees ?? listing.items.map(\.worktree)).filter {
+        seen.insert($0.id).inserted
+      }
       if !worktrees.contains(where: { $0.id == worktreeID }) { worktreeID = worktrees.first?.id }
+      if supportsProfiles {
+        let catalog: Catalog = try await response(.profiles(.init()))
+        profiles = catalog.profiles
+      }
       if !profiles.contains(where: { $0.id == profileID && $0.isAvailable }) {
         profileID = profiles.first(where: \.isAvailable)?.id
       }
@@ -64,15 +88,24 @@ final class MirrorLaunchModel {
   }
 
   func create() async -> MirrorPaneDescriptor? {
-    guard canCreate, let worktreeID, let profileID else { return nil }
+    guard canCreate, let worktreeID else { return nil }
     isCreating = true
     error = nil
     defer { isCreating = false }
     do {
-      let created: Created = try await response(.create(.init(
-        worktreeID: worktreeID, profileID: profileID,
-        prompt: prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : prompt)))
-      guard let id = UUID(uuidString: created.target.pane.id) else { throw LaunchError.invalidResponse }
+      let request: MirrorCommandRequest.Create
+      if kind == .shell {
+        request = .init(worktreeID: worktreeID)
+      } else {
+        guard let profileID else { return nil }
+        request = .init(
+          worktreeID: worktreeID, profileID: profileID,
+          prompt: prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : prompt)
+      }
+      let created: Created = try await response(.create(request))
+      guard let id = UUID(uuidString: created.target.pane.id) else {
+        throw LaunchError.invalidResponse
+      }
       let worktree = created.target.worktree
       return MirrorPaneDescriptor(
         id: id, title: created.target.pane.title, directory: worktree.path, busy: false,
@@ -80,8 +113,10 @@ final class MirrorLaunchModel {
         subtitle: "\(created.target.pane.title) · \(worktree.name)")
     } catch {
       // A transport failure may follow a successful creation. Never automatically create again.
-      creationUncertain = !(error is Rejected) || (error as? Rejected)?.code == "REMOTE_COMMAND_UNCONFIRMED"
-      self.error = creationUncertain
+      creationUncertain =
+        !(error is Rejected) || (error as? Rejected)?.code == "REMOTE_COMMAND_UNCONFIRMED"
+      self.error =
+        creationUncertain
         ? "Creation is unconfirmed. Refresh the Host pane list before creating another pane."
         : error.localizedDescription
       return nil
@@ -114,11 +149,15 @@ final class MirrorLaunchModel {
   private struct Listing: Decodable {
     struct Item: Decodable { let worktree: MirrorLaunchWorktree }
     let items: [Item]
+    let worktrees: [MirrorLaunchWorktree]?
   }
   private struct Catalog: Decodable { let profiles: [MirrorLaunchProfile] }
   private struct Created: Decodable {
     struct Target: Decodable {
-      struct Pane: Decodable { let id: String; let title: String }
+      struct Pane: Decodable {
+        let id: String
+        let title: String
+      }
       let worktree: MirrorLaunchWorktree
       let pane: Pane
     }

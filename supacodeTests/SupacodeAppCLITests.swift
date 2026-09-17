@@ -82,6 +82,20 @@ struct SupacodeAppCLITests {
     #expect(signal.source == .cooperativeCLI)
   }
 
+  @Test func tabCreationRejectsMissingAndAmbiguousWorktreesBeforeCreatingTerminals() {
+    let contexts = ["/Project/first", "/Project/second"].map {
+      ListRuntimeSnapshotBuilder.WorktreeContext(id: $0, name: "main", path: $0, rootPath: $0, kind: .plain)
+    }
+    guard case .failure(.notFound) = SupacodeApp.resolveCLITabCreationTarget("missing", worktrees: contexts),
+      case .failure(.notUnique) = SupacodeApp.resolveCLITabCreationTarget("main", worktrees: contexts),
+      case .success(let target) = SupacodeApp.resolveCLITabCreationTarget("/Project/first", worktrees: contexts)
+    else {
+      Issue.record("Creation must resolve exactly one known worktree")
+      return
+    }
+    #expect(target.worktreeID == "/Project/first")
+  }
+
   @Test func resolveCLITerminalWorktreeBuildsSyntheticRunnableFolderWorktree() {
     let repository = Repository(
       id: "/Users/test/PlainFolder",

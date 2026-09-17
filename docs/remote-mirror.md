@@ -56,7 +56,11 @@ requires a fresh pairing window. Old experiment keys are not migrated.
 
 The Host section lists paired devices with **Connected** and the active mirror
 count, **Last seen** for a device that is offline, or **Paired · never connected**,
-plus mirrored pane names and **Revoke**, which asks for confirmation. A device
+plus mirrored pane names and **Revoke**, which asks for confirmation. Each active
+mirror has a green dot and a red disconnect button. **Disconnect** asks for
+confirmation, then disconnects only that mirror. The terminal keeps running,
+other mirrors remain connected, and the device stays paired and can reconnect.
+If that connection has already ended or been replaced, confirmation does nothing. A device
 browsing panes can be connected with zero mirrors.
 Device labels use the Mac local host name or the iOS system device name; pairing
 does not resolve a DNS name to obtain this label.
@@ -78,8 +82,21 @@ mirror only unsubscribes. Quitting Prowl does not promise that its programs surv
 
 ## Panes, display and history
 
-Select an already-created pane; a sidebar project that has never opened a terminal
-is not yet a pane. **Refresh Panes** refreshes this list. The Host terminal owns the
+The Client sidebar lets you select a mirror by clicking anywhere in its row.
+The native window toolbar places the pane title and subtitle after the Remote
+Mirror button. The center shows connection status and the Host address; hover for
+the full pane name, directory, and Host endpoint. On the right, the display-size
+toggle switches between **Fit to Window** and **Original Size** with one click;
+its icon shows the current mode. **History** opens retained text, and the red
+disconnect icon closes that mirror without stopping the Host program.
+**Retry** or **Take Over** stays visible when needed, and **Live Terminal** returns
+from history to the live view.
+
+Choose an existing pane or use **New Pane…** on Mac. Existing panes use their
+terminal and worktree names without generated Tab N labels. The whole pane row
+is clickable; **Refresh Panes** and **Cancel** share the bottom action row.
+A project that has never opened a terminal is not yet a pane, but its worktree is
+available in **New Pane…** on a current Host. The Host terminal owns the
 grid. Mac clients default to **Fit to Window**, shrinking the complete terminal to
 fit without changing the Host PTY. **Original Size** restores readable native-size
 glyphs with local scrolling. It starts at the top; subsequent window resizes preserve
@@ -95,6 +112,20 @@ also part of the change check. No subscriptions means no terminal sampling.
 2 MiB UTF-8 budget. Refresh starts a new snapshot. Graphics, link targets and cursor
 shape are not guaranteed by the formatter. Disconnected output remains visible,
 with input disabled and a reason/retry action.
+
+## Create from Mac
+
+After connecting, **New Pane…** lists Host worktrees, including worktrees with no
+open terminal. Choose **Shell** or **Agent Profile**; a Profile may include an
+optional initial prompt. **Create and Mirror** creates one background tab through
+the public CLI router and opens its mirror. The Host selection and focus stay put.
+The display uses Host Profile availability; unavailable Profiles cannot launch.
+An older Host that only advertises Profile creation does not offer Shell.
+
+**Back** returns to existing panes. If creation cannot be confirmed, the form keeps
+its values and blocks another creation; inspect the pane list before starting a
+new connection to try again. No creation is replayed automatically after a timeout,
+cancellation, or disconnect. Closing a mirror still leaves the Host program running.
 
 ## Create and send from iOS
 

@@ -19,6 +19,8 @@ final class MirrorClient: Identifiable {
   private(set) var verifiedHostID: UUID?
   private(set) var endReason: MirrorMessage.EndReason?
   private(set) var supportsTakeover = false
+  private(set) var supportsProfileLaunch = false
+  private(set) var supportsShellLaunch = false
   private(set) var supportsHistory = true
   private(set) var historyTruncated = false
   private(set) var isSubscribed = false
@@ -34,6 +36,7 @@ final class MirrorClient: Identifiable {
   @ObservationIgnored private var historyID: UUID?
   @ObservationIgnored private var historyPageGate = MirrorHistoryPageGate()
   @ObservationIgnored private var subscriptionID: UUID?
+  @ObservationIgnored private lazy var commands = MirrorCommandChannel { [weak self] in self?.peer?.send($0) }
   @ObservationIgnored private var resumeIntent: MirrorMessage.Intent = .ifFree
 
   var statusLabel: String {
@@ -95,6 +98,7 @@ final class MirrorClient: Identifiable {
     }
     peer.onClose = { [weak self, weak peer] reason in
       guard let self, let peer, self.peer === peer else { return }
+      self.commands.disconnect()
       self.peer = nil
       self.isConnected = false
       self.isConnecting = false
@@ -105,6 +109,13 @@ final class MirrorClient: Identifiable {
       self.error = self.error ?? reason ?? "Connection lost. Remote status is unknown."
     }
     peer.start()
+  }
+
+  func command(_ command: MirrorCommandRequest.Command) async throws -> MirrorJSON {
+    guard isConnected, !isConnecting, selectedPane == nil, peer != nil else {
+      throw MirrorCommandChannel.Failure.unavailable
+    }
+    return try await commands.execute(command)
   }
 
   func refreshPanes() { peer?.send(.list) }
@@ -135,6 +146,7 @@ final class MirrorClient: Identifiable {
   }
 
   func close() {
+    commands.disconnect()
     peer?.onClose = nil
     peer?.close()
     peer = nil
@@ -168,6 +180,12 @@ final class MirrorClient: Identifiable {
   private func receive(_ message: MirrorMessage) {
     switch message.kind {
     case .panes: receivePanes(message)
+    case .commandResult:
+      guard let response = message.commandResponse else {
+        peer?.close("Invalid command response.")
+        return
+      }
+      commands.receive(response)
     case .subscribed:
       guard message.paneID == selectedPane?.id,
         let id = message.subscriptionID
@@ -237,6 +255,8 @@ final class MirrorClient: Identifiable {
 
   private func receivePanes(_ message: MirrorMessage) {
     panes = message.panes ?? []
+    supportsProfileLaunch = message.capabilities?.contains("launch-profile") == true
+    supportsShellLaunch = message.capabilities?.contains("launch-shell") == true
     supportsHistory = message.capabilities?.contains("history") == true
     supportsTakeover = message.capabilities?.contains("takeover") == true
     isConnecting = false

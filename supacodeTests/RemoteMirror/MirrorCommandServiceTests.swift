@@ -6,6 +6,29 @@ import Testing
 
 @MainActor
 struct MirrorCommandServiceTests {
+  @Test func shellCreationUsesPublicBackgroundTabAndDoesNotReplay() async throws {
+    let handler = Handler()
+    handler.expectedProfile = nil
+    let service = MirrorCommandService(router: CLICommandRouter(createHandler: handler))
+    let request = MirrorCommandRequest(
+      requestID: UUID(), request: .init(command: .create(.init(worktreeID: "worktree-1"))))
+    #expect(try await service.execute(request).response.decode(CommandResponse.self).ok)
+    #expect(try await service.execute(request).response.decode(CommandResponse.self).ok)
+    #expect(handler.count == 1)
+    #expect(handler.receivedPrompt == nil)
+  }
+
+  @Test func catalogIncludesWorktreesWithoutOpenPanes() async throws {
+    let handler = ShellHandlers(agent: nil, state: .idle)
+    let dormant = ListCommandWorktree(
+      id: "dormant", name: "feature", path: "/Project/feature", rootPath: "/Project", kind: .git)
+    let service = MirrorCommandService(router: CLICommandRouter(listHandler: handler), worktrees: { [dormant] })
+    let request = MirrorCommandRequest(requestID: UUID(), request: .init(command: .list(.init())))
+    let result = try await service.execute(request).response.decode(CommandResponse.self)
+    struct Catalog: Decodable { let worktrees: [ListCommandWorktree] }
+    #expect(try result.data?.decode(as: Catalog.self).worktrees == [dormant])
+  }
+
   @Test func concurrentDuplicateCreationUsesOneRouterInvocation() async throws {
     let handler = Handler()
     let service = MirrorCommandService(router: CLICommandRouter(createHandler: handler))
@@ -200,13 +223,14 @@ struct MirrorCommandServiceTests {
   private final class Handler: CommandHandler {
     var count = 0
     var receivedPrompt: String?
+    var expectedProfile: String? = "profile-1"
     func handle(envelope: CommandEnvelope) async -> CommandResponse {
       count += 1
       await Task.yield()
       if case .create(let create) = envelope.command {
         #expect(create.resource == .tab && create.background)
         #expect(create.selector == .worktree("worktree-1"))
-        #expect(create.launch?.profile == "profile-1")
+        #expect(create.launch?.profile == expectedProfile)
         receivedPrompt = create.launch?.prompt
       } else {
         Issue.record("Unexpected command")
