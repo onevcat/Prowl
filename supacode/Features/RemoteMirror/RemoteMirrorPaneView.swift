@@ -69,15 +69,15 @@ struct RemoteMirrorPaneView: View {
         if client.showsHistory { history }
       }
     }
-    .navigationTitle(client.selectedPane?.projectName ?? "Remote Mirror")
-    .toolbar(removing: .title)
+    .navigationTitle(client.selectedPane?.projectName ?? client.selectedPane?.title ?? "Remote Mirror")
+    .navigationSubtitle(client.selectedPane?.subtitle ?? "")
     .toolbar {
       ToolbarItem(placement: .navigation) { MirrorHostButton() }
-      ToolbarItem(placement: .principal) { connectionSummary }
-        .sharedBackgroundVisibility(.hidden)
+      ToolbarItem(placement: .principal) { connectionStatus.padding(.horizontal) }
       ToolbarItemGroup(placement: .primaryAction) {
         recoveryActions
-        mirrorOptions
+        displaySizeMenu
+        historyButton
         Button("Disconnect Mirror", systemImage: "personalhotspot.slash") { mirrors.remove(client) }
           .help("Disconnect this mirror; the Host program continues running")
           .accessibilityIdentifier("remote-mirror-disconnect")
@@ -87,28 +87,23 @@ struct RemoteMirrorPaneView: View {
     .accessibilityIdentifier("remote-mirror-pane")
   }
 
-  private var connectionSummary: some View {
-    HStack(spacing: 8) {
-      Image(
-        systemName: client.isConnecting
-          ? "arrow.trianglehead.2.clockwise"
-          : client.isSubscribed ? "checkmark.circle.fill" : "exclamationmark.circle"
-      )
-      .foregroundStyle(client.isSubscribed ? Color.green : Color.secondary)
-      .accessibilityLabel(client.statusLabel)
-      .help(client.statusLabel)
-      VStack(alignment: .leading, spacing: 1) {
-        Text(client.selectedPane?.projectName ?? client.selectedPane?.title ?? "Remote Mirror")
-          .font(.headline)
-        Text(client.statusLabel + " · " + (client.selectedPane?.subtitle ?? endpoint))
-          .font(.caption)
-          .foregroundStyle(.secondary)
+  private var connectionStatus: some View {
+    HStack(spacing: 6) {
+      if client.isConnecting {
+        ProgressView().controlSize(.small)
+      } else {
+        Image(systemName: client.isSubscribed ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+          .foregroundStyle(client.isSubscribed ? Color.green : Color.orange)
+          .accessibilityHidden(true)
       }
-      .lineLimit(1)
-      .truncationMode(.middle)
+      Text(client.statusLabel + " · " + client.address)
+        .font(.footnote)
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+        .truncationMode(.middle)
     }
-    .frame(minWidth: 160, idealWidth: 220, maxWidth: 280, alignment: .leading)
     .help(client.selectedPane.map { $0.title + "\n" + $0.directory + "\n" + endpoint } ?? endpoint)
+    .accessibilityIdentifier("remote-mirror-connection-status")
   }
 
   @ViewBuilder
@@ -121,32 +116,36 @@ struct RemoteMirrorPaneView: View {
       .help("Reconnect to this pane; Retry never takes control from another device")
       .accessibilityIdentifier("remote-mirror-retry")
     }
+  }
+
+  @ViewBuilder
+  private var historyButton: some View {
     if client.showsHistory {
       Button("Live Terminal", systemImage: "terminal") { client.showsHistory = false }
         .help("Return to the live terminal")
+    } else {
+      Button("History", systemImage: "clock.arrow.circlepath") { client.loadHistory(refresh: true) }
+        .disabled(!client.isSubscribed || !client.supportsHistory)
+        .help("Read a snapshot of retained terminal text")
+        .accessibilityIdentifier("remote-mirror-history")
     }
   }
 
-  private var mirrorOptions: some View {
+  private var displaySizeMenu: some View {
     Menu {
-      Text(endpoint)
-      Divider()
       Picker("Display Size", selection: $fitsWindow) {
         Text("Fit to Window").tag(true)
         Text("Original Size").tag(false)
       }
       .pickerStyle(.inline)
-      .disabled(client.showsHistory)
       .accessibilityIdentifier("remote-mirror-display-size")
-      Divider()
-      Button("History", systemImage: "clock.arrow.circlepath") { client.loadHistory(refresh: true) }
-        .disabled(!client.isSubscribed || !client.supportsHistory || client.showsHistory)
     } label: {
-      Label("Mirror Options", systemImage: "ellipsis.circle")
+      Label("Display Size", systemImage: "arrow.up.left.and.arrow.down.right")
     }
+    .disabled(client.showsHistory)
     .menuIndicator(.hidden)
-    .help("Mirror options: display size and retained history")
-    .accessibilityIdentifier("remote-mirror-options")
+    .help("Fit the full terminal or scroll at original size; Host dimensions stay unchanged")
+    .accessibilityIdentifier("remote-mirror-display-size-menu")
   }
 
   private var endpoint: String { "\(client.address):\(String(client.port))" }

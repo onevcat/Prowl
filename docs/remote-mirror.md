@@ -83,9 +83,11 @@ mirror only unsubscribes. Quitting Prowl does not promise that its programs surv
 ## Panes, display and history
 
 The Client sidebar lets you select a mirror by clicking anywhere in its row.
-The native window toolbar shows connection status beside the pane identity. Its
-**Mirror Options** (ellipsis) menu contains **Display Size** and **History**;
-the disconnect icon closes that mirror without stopping the Host program.
+The native window toolbar places the pane title and subtitle after the Remote
+Mirror button. The center shows connection status and the Host address; hover for
+the full pane name, directory, and Host endpoint. On the right, **Display Size**
+opens a menu, **History** opens retained text, and the disconnect icon closes that
+mirror without stopping the Host program.
 **Retry** or **Take Over** stays visible when needed, and **Live Terminal** returns
 from history to the live view.
 
