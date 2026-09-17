@@ -60,7 +60,16 @@ enum CodexScreenProfile {
   /// Only the live bottom composer, followed by Codex's status line, is evidence.
   /// Historical prompts and arbitrary footer text must not authorize delivery.
   nonisolated static func composerIsEmpty(in snapshot: AgentScreenSnapshot) -> Bool {
-    let lines = snapshot.lines.map { $0.trimmingCharacters(in: .whitespaces) }
+    // Astra paints braille stars into blank composer cells, including after the prompt marker.
+    // Keep their cell positions so removing the background cannot join separate draft words.
+    let lines = snapshot.lines.map { line in
+      String(
+        String.UnicodeScalarView(
+          line.unicodeScalars.map { scalar in
+            (0x2800...0x28FF).contains(scalar.value) ? Unicode.Scalar(" ") : scalar
+          })
+      ).trimmingCharacters(in: .whitespaces)
+    }
     guard let prompt = lines.lastIndex(where: isCodexPromptLine) else { return false }
     let suffix = lines.dropFirst(prompt + 1).filter { !$0.isEmpty }
     guard suffix.count == 1, let footer = suffix.first,
@@ -71,7 +80,9 @@ enum CodexScreenProfile {
     else { return false }
     let contents = String(lines[prompt].dropFirst()).trimmingCharacters(in: .whitespaces)
     // Codex renders these hints in an empty composer; wrapped drafts are rejected above.
-    return contents.isEmpty
+    // A braille-only draft is indistinguishable from stars without styled evidence.
+    let originalContents = snapshot.lines[prompt].trimmingCharacters(in: .whitespaces).dropFirst()
+    return (contents.isEmpty && originalContents.allSatisfy(\.isWhitespace))
       || [
         "Ask Codex to do anything", "Run /review on my current changes",
         "Find and fix a bug in @filename", "Explain this codebase",

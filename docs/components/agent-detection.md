@@ -57,6 +57,9 @@ at a `~/.grok/` install (so Cursor's own `agent` entrypoint stays Cursor).
    `•`/`◦ Waiting for background terminal (... esc to interrupt)` footer fallbacks.
    Braille-only starfield rows around the composer do not count toward that footer window;
    animation alone does not indicate **Working**.
+   An empty Codex composer hint and status line remain **Idle** evidence with Astra's
+   starfield background, so a workflow can send its first task before any turn has completed.
+   Draft text and attachments do not qualify as an empty composer.
    Its confirmation detector requires a numbered selected row such as `› 1. Yes`
    paired with a live bottom footer or an explicit Yes/No choice structure. It also recognizes
    the current directory-trust, hook-review, and initial sign-in menus as **Blocked** from

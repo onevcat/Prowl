@@ -21,7 +21,8 @@ struct WorkflowRoleWaitPolicyTests {
 
   private func snapshot(
     _ status: AgentDisplayState?, signal: AgentSignal? = nil, revision: UInt64 = 1, live: Bool = true,
-    channelCoversTurnEnded: Bool = true, decision: AgentStateDecision? = nil
+    channelCoversTurnEnded: Bool = true, decision: AgentStateDecision? = nil,
+    screenDetection: AgentScreenDetection? = nil
   ) -> AgentConditionSnapshot {
     let agent = status.map { status in
       ActiveAgentEntry(
@@ -40,7 +41,22 @@ struct WorkflowRoleWaitPolicyTests {
       ] : []
     return AgentConditionSnapshot(
       agent: agent, signal: signal, revision: revision, isLive: live,
-      signals: AgentSignalsPayload(channels: channels, last: nil, lastBinding: nil))
+      signals: AgentSignalsPayload(channels: channels, last: nil, lastBinding: nil),
+      screenDetection: screenDetection)
+  }
+
+  @Test func unpromptedStarfieldComposerReleasesWorkflowAfterStabilizing() {
+    let detection = DetectedAgent.codex.detectScreen(
+      in: """
+          ⠈    ⠐
+        ›⠁Ask Codex to do anything⡀
+          ⠠    ⢀
+          gpt-6-astra medium · Context 0% used
+        """)
+    let idle = snapshot(.idle, channelCoversTurnEnded: false, screenDetection: detection)
+    var policy = WorkflowRoleWaitPolicy()
+    #expect(policy.observe(idle, pendingDispatchID: nil, elapsedMilliseconds: 0) == nil)
+    #expect(policy.observe(idle, pendingDispatchID: nil, elapsedMilliseconds: 2_000) == .idle)
   }
 
   @Test(arguments: [AgentStateDecisionReason.logOpenWork, .native(.working)])

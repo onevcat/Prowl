@@ -82,7 +82,28 @@ struct CodexScreenProfileTests {
           """
       )
       #expect(detection.state == .idle)
+      #expect(detection.reason == .matched(CodexScreenProfile.RuleID.emptyComposer))
     }
+  }
+
+  @Test func starfieldComposerRejectsDraftsAndAttachments() {
+    for draft in ["my unsent request", "[Image #1]", "[Pasted Content 12 chars]", "hello\nworld", "⠁⠂"] {
+      let snapshot = AgentScreenSnapshot(
+        text: "⠈  ⠐\n›⠁\(draft)⡀\n  ⠠ ⢀\n  gpt-6-astra medium · Context 0% used")
+      #expect(!CodexScreenProfile.composerIsEmpty(in: snapshot))
+    }
+  }
+
+  @Test func capturedAstraStartupComposerIsRecognized() {
+    let detection = DetectedAgent.codex.detectScreen(
+      in: """
+                                 ⢀              ⠁               ⡀ ⠂ ⠄
+        › Ask Codex to do anything   ⠈
+                ⠐                 ⠄                    ⢀      ⠄
+          gpt-6-astra medium · Context 0% used · weekly 00% left · ~/Sync/githu…
+        """)
+    #expect(detection.state == .idle)
+    #expect(detection.reason == .matched(CodexScreenProfile.RuleID.emptyComposer))
   }
 
   @Test func ruleIDsAreUniqueAndRuntimePrefixed() {
