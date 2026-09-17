@@ -76,11 +76,16 @@ struct RemoteMirrorPaneView: View {
       ToolbarItem(placement: .principal) { connectionStatus.padding(.horizontal) }
       ToolbarItemGroup(placement: .primaryAction) {
         recoveryActions
-        displaySizeMenu
+        displaySizeToggle
         historyButton
-        Button("Disconnect Mirror", systemImage: "personalhotspot.slash") { mirrors.remove(client) }
-          .help("Disconnect this mirror; the Host program continues running")
-          .accessibilityIdentifier("remote-mirror-disconnect")
+        Button {
+          mirrors.remove(client)
+        } label: {
+          Label("Disconnect Mirror", systemImage: "personalhotspot.slash")
+            .foregroundStyle(.red)
+        }
+        .help("Disconnect this mirror; the Host program continues running")
+        .accessibilityIdentifier("remote-mirror-disconnect")
       }
     }
     .environment(toolbarPopovers)
@@ -131,21 +136,20 @@ struct RemoteMirrorPaneView: View {
     }
   }
 
-  private var displaySizeMenu: some View {
-    Menu {
-      Picker("Display Size", selection: $fitsWindow) {
-        Text("Fit to Window").tag(true)
-        Text("Original Size").tag(false)
-      }
-      .pickerStyle(.inline)
-      .accessibilityIdentifier("remote-mirror-display-size")
-    } label: {
-      Label("Display Size", systemImage: "arrow.up.left.and.arrow.down.right")
+  private var displaySizeToggle: some View {
+    Toggle(isOn: $fitsWindow) {
+      Label(
+        fitsWindow ? "Fit to Window" : "Original Size",
+        systemImage: fitsWindow ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
     }
+    .toggleStyle(.button)
     .disabled(client.showsHistory)
-    .menuIndicator(.hidden)
-    .help("Fit the full terminal or scroll at original size; Host dimensions stay unchanged")
-    .accessibilityIdentifier("remote-mirror-display-size-menu")
+    .help(
+      fitsWindow
+        ? "Fit to Window — click to show Original Size; Host dimensions stay unchanged"
+        : "Original Size — click to fit the full terminal to this window; Host dimensions stay unchanged"
+    )
+    .accessibilityIdentifier("remote-mirror-display-size")
   }
 
   private var endpoint: String { "\(client.address):\(String(client.port))" }
