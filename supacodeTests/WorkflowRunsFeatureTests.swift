@@ -17,6 +17,13 @@ struct WorkflowTypedLineRecord {
   let instructionExisted: Bool
 }
 
+// Runs and restart recovery must share storage within a test, never across tests.
+@Suite(
+  .dependencies {
+    $0[WorkflowHistoryStorageKey.self] = WorkflowHistoryStorage(
+      baseURL: FileManager.default.temporaryDirectory.appending(path: "workflow-history-\(UUID().uuidString)"))
+  }
+)
 @MainActor
 struct WorkflowRunsFeatureTests {
   nonisolated private static let now = Date(timeIntervalSince1970: 1_760_000_000)
@@ -1247,12 +1254,7 @@ struct WorkflowRunsFeatureTests {
 
   // MARK: - Restart scan
 
-  @Test(
-    .dependencies {
-      $0[WorkflowHistoryStorageKey.self] = WorkflowHistoryStorage(
-        baseURL: FileManager.default.temporaryDirectory.appending(path: "workflow-recovery-\(UUID().uuidString)"))
-    })
-  func recoveryRunsOnceGlobally() async throws {
+  @Test(.dependencies) func recoveryRunsOnceGlobally() async throws {
     let fixture = try Fixture()
     defer { fixture.cleanUp() }
     let (session, _) = try fixture.session()
