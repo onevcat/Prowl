@@ -59,6 +59,30 @@ final class MirrorHost {
     return source.panes().filter { ids.contains($0.id) }
   }
 
+  func subscriptionID(for paneID: UUID, deviceID: UUID) -> UUID? {
+    subscriptions.first { peerID, subscription in
+      devicePeers[peerID] == deviceID && subscription.paneID == paneID
+    }?.value.id
+  }
+
+  func disconnect(subscriptionID: UUID) {
+    // Bind confirmation to the original lease, not a replacement on the same pane.
+    guard let (peerID, _) = subscriptions.first(where: { $0.value.id == subscriptionID }),
+      let peer = peers[peerID]
+    else { return }
+    subscriptions.removeValue(forKey: peerID)
+    subscriberCount = subscriptions.count
+    if subscriptions.isEmpty {
+      pollTask?.cancel()
+      pollTask = nil
+    }
+    cancelCommand(peerID)
+    peer.onMessage = nil
+    peer.send(
+      .failure(.init(error: "This mirror was disconnected by Host.", subscriptionID: subscriptionID)),
+      closeAfterSending: true)
+  }
+
   private func updateDeviceActivity() {
     var next: [UUID: Set<UUID>] = [:]
     for (peerID, subscription) in subscriptions {

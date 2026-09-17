@@ -56,7 +56,11 @@ requires a fresh pairing window. Old experiment keys are not migrated.
 
 The Host section lists paired devices with **Connected** and the active mirror
 count, **Last seen** for a device that is offline, or **Paired · never connected**,
-plus mirrored pane names and **Revoke**, which asks for confirmation. A device
+plus mirrored pane names and **Revoke**, which asks for confirmation. Each active
+mirror has a green dot and a red disconnect button. **Disconnect** asks for
+confirmation, then disconnects only that mirror. The terminal keeps running,
+other mirrors remain connected, and the device stays paired and can reconnect.
+If that connection has already ended or been replaced, confirmation does nothing. A device
 browsing panes can be connected with zero mirrors.
 Device labels use the Mac local host name or the iOS system device name; pairing
 does not resolve a DNS name to obtain this label.
