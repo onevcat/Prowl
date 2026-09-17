@@ -82,6 +82,13 @@ mirror only unsubscribes. Quitting Prowl does not promise that its programs surv
 
 ## Panes, display and history
 
+The Client sidebar lets you select a mirror by clicking anywhere in its row.
+The native window toolbar shows connection status beside the pane identity. Its
+**Mirror Options** (ellipsis) menu contains **Display Size** and **History**;
+the disconnect icon closes that mirror without stopping the Host program.
+**Retry** or **Take Over** stays visible when needed, and **Live Terminal** returns
+from history to the live view.
+
 Select an already-created pane; a sidebar project that has never opened a terminal
 is not yet a pane. **Refresh Panes** refreshes this list. The Host terminal owns the
 grid. Mac clients default to **Fit to Window**, shrinking the complete terminal to

@@ -250,44 +250,47 @@ private struct MirrorSettingsView: View {
         }
       }
       ForEach(host.devices) { device in
-        HStack(alignment: .top) {
-          VStack(alignment: .leading, spacing: 4) {
-            Text(device.name).lineLimit(1)
-            let panes = host.mirroredPanes(for: device.id)
-            Text(deviceStatus(device, mirrorCount: panes.count)).font(.caption).foregroundStyle(.secondary)
-            ForEach(panes) { pane in
-              HStack(spacing: 6) {
-                Circle().fill(.green).frame(width: 6, height: 6)
-                  .accessibilityHidden(true)
-                Text(pane.title).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                  .help(pane.title + "\n" + pane.directory)
-                  .accessibilityLabel("Mirroring \(pane.title)")
-                Spacer(minLength: 4)
-                Button {
-                  guard let subscriptionID = host.subscriptionID(for: pane.id, deviceID: device.id) else { return }
-                  interact()
-                  mirrorToDisconnect = DisconnectTarget(
-                    subscriptionID: subscriptionID, paneTitle: pane.title, deviceName: device.name)
-                } label: {
-                  Image(systemName: "personalhotspot.slash")
-                    .symbolRenderingMode(.monochrome)
-                    .foregroundStyle(.red)
-                    .frame(width: 20, height: 20)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.borderless)
-                .help("Disconnect this mirror; keep the device paired and the terminal running")
-                .accessibilityLabel("Disconnect mirror of \(pane.title) from \(device.name)")
-                .accessibilityIdentifier("disconnect-mirror-\(pane.id)")
+        VStack(alignment: .leading, spacing: 4) {
+          let panes = host.mirroredPanes(for: device.id)
+          HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 4) {
+              Text(device.name).lineLimit(1)
+              Text(deviceStatus(device, mirrorCount: panes.count)).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("Revoke", role: .destructive) {
+              interact()
+              deviceToRevoke = device
+            }
+            .help("Disconnect this device and require it to pair again")
+          }
+          ForEach(panes) { pane in
+            HStack(spacing: 6) {
+              Circle().fill(.green).frame(width: 6, height: 6)
+                .accessibilityHidden(true)
+              Text(pane.title).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                .help(pane.title + "\n" + pane.directory)
+                .accessibilityLabel("Mirroring \(pane.title)")
+              Spacer(minLength: 4)
+              Button {
+                guard let subscriptionID = host.subscriptionID(for: pane.id, deviceID: device.id) else { return }
+                interact()
+                mirrorToDisconnect = DisconnectTarget(
+                  subscriptionID: subscriptionID, paneTitle: pane.title, deviceName: device.name)
+              } label: {
+                Image(systemName: "personalhotspot.slash")
+                  .font(.caption)
+                  .symbolRenderingMode(.monochrome)
+                  .foregroundStyle(.red)
+                  .frame(width: 18, height: 18)
+                  .contentShape(Rectangle())
               }
+              .buttonStyle(.borderless)
+              .help("Disconnect this mirror; keep the device paired and the terminal running")
+              .accessibilityLabel("Disconnect mirror of \(pane.title) from \(device.name)")
+              .accessibilityIdentifier("disconnect-mirror-\(pane.id)")
             }
           }
-          Spacer()
-          Button("Revoke", role: .destructive) {
-            interact()
-            deviceToRevoke = device
-          }
-          .help("Disconnect this device and require it to pair again")
         }
       }
       if let error = host.error { Text(error).foregroundStyle(.red).textSelection(.enabled) }
