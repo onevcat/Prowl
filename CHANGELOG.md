@@ -1,5 +1,15 @@
 # Changelog
 
+## [2026.9.18](https://github.com/onevcat/Prowl/releases/tag/v2026.9.18)
+
+### Improved
+
+- `prowl create tab --background` now works for plain Shell tabs as well as Agent Profile launches, so scripts and agents can open a tab without changing your selection or taking focus. Background split panes still require a Profile.
+
+### Fixed
+
+- Fixed workflows waiting indefinitely to deliver their first task to a fresh Codex session that shows an animated starfield background.
+
 ## [2026.9.17](https://github.com/onevcat/Prowl/releases/tag/v2026.9.17)
 
 ### New
