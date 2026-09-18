@@ -478,6 +478,10 @@ struct MirrorTerminalIntegrationTests {
 
   @MainActor
   private final class Fixture {
+    // Match the app lifetime: queued Ghostty wakeups carry unretained runtime pointers.
+    // Surfaces and connections remain scoped to each fixture.
+    private static let testRuntime = GhosttyRuntime()
+
     let directory: URL
     let runtime: GhosttyRuntime
     let manager: WorktreeTerminalManager
@@ -513,7 +517,8 @@ struct MirrorTerminalIntegrationTests {
         command = "/bin/bash '\(script.path.replacing("'", with: "'\\''"))'"
       }
       previousRuntime = GhosttyRuntime.shared
-      runtime = GhosttyRuntime()
+      runtime = Self.testRuntime
+      GhosttyRuntime.shared = runtime
       manager = WorktreeTerminalManager(runtime: runtime)
       let state = manager.state(
         for: Worktree(
