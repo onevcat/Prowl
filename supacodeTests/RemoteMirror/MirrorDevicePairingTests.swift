@@ -22,9 +22,8 @@ struct MirrorDevicePairingTests {
       loadIdentity: { vault.identity }, saveIdentity: { vault.identity = $0 })
     host.address = "127.0.0.1"
     host.port = String(try MirrorTestPort.unusedPort())
-    host.start()
     defer { host.stop() }
-    try await listening(host)
+    try await MirrorTestPort.startHost(host)
     #expect(host.pairingKey.isEmpty)
     host.addDevice()
     try await listening(host)
@@ -101,9 +100,8 @@ struct MirrorDevicePairingTests {
       loadIdentity: { vault.identity }, saveIdentity: { vault.identity = $0 })
     host.address = "127.0.0.1"
     host.port = String(try MirrorTestPort.unusedPort())
-    host.start()
     defer { host.stop() }
-    try await listening(host)
+    try await MirrorTestPort.startHost(host)
     host.addDevice()
     try await listening(host)
     let peer = MirrorConnection(
@@ -141,9 +139,8 @@ struct MirrorDevicePairingTests {
       loadIdentity: { vault.identity }, saveIdentity: { vault.identity = $0 })
     host.address = "127.0.0.1"
     host.port = String(try MirrorTestPort.unusedPort())
-    host.start()
     defer { host.stop() }
-    try await listening(host)
+    try await MirrorTestPort.startHost(host)
     host.addDevice()
     try await listening(host)
     #expect(!host.pairingKey.isEmpty)
