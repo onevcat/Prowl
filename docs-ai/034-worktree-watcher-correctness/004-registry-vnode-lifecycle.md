@@ -39,3 +39,18 @@ The registry-directory test also failed before the directory source identity che
 After the fixes, the monitor and watcher-manager suites passed all 31 cases across
 five repetitions (155 test runs). The tests retain the original four target-selection
 cases and add six live-monitor cases.
+
+## CI scheduling
+
+Full-suite CI exposed a different failure: the first registry test timed out while
+thousands of other tests shared the main actor. Suite-level serialization does not
+isolate it from other suites. The real socket disconnect monitor also missed its
+short deadline in one run.
+
+`make test-app` now runs the registry suite and the two socket disconnect monitor
+tests in a separate `test-without-building` invocation, outside the bulk suite,
+as it already does for real TLS and shell cancellation tests. Event deadlines and
+production code remain unchanged. Script tests verify that these cases run exactly
+once outside the bulk suite and that their failures propagate to the make target.
+The complete `make test-app` run passed after this change, including all 12 tests
+in the new event-monitor group, the bulk suite, Mirror tests, and shell cancellation.
