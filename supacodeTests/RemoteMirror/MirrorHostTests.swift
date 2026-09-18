@@ -18,6 +18,25 @@ struct MirrorHostTests {
     #expect(host.hostRunID == nil)
   }
 
+  @Test func initialHostStartDoesNotRetryIdentityFailure() async {
+    enum Failure: Error { case unavailable }
+    var attempts = 0
+    let host = MirrorHost(
+      source: Source(), enabled: true,
+      loadIdentity: {
+        attempts += 1
+        throw Failure.unavailable
+      }, saveIdentity: { _ in })
+    host.address = "127.0.0.1"
+    host.port = "7880"
+    defer { host.stop() }
+    await #expect(throws: (any Error).self) { try await MirrorTestPort.startHost(host) }
+    #expect(attempts == 1)
+    #expect(host.port == "7880")
+    #expect(!host.isRunning)
+    #expect(host.error != nil)
+  }
+
   @Test(.timeLimit(.minutes(1)))
   func hostDisconnectPreservesOtherMirrorsAndRejectsStaleConfirmation() async throws {
     let source = Source()
@@ -30,10 +49,8 @@ struct MirrorHostTests {
       saveIdentity: { _ in })
     host.address = "127.0.0.1"
     host.port = String(try MirrorTestPort.unusedPort())
-    host.start()
     defer { host.stop() }
-    for await ready in Observations({ host.isRunning || host.error != nil }) where ready { break }
-    try #require(host.error == nil)
+    try await MirrorTestPort.startHost(host)
     let first = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
     let other = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
     defer {
@@ -86,14 +103,12 @@ struct MirrorHostTests {
       saveIdentity: { _ in })
     host.address = "127.0.0.1"
     host.port = String(try MirrorTestPort.unusedPort())
-    host.start()
     var silent: [NWConnection] = []
     defer {
       for connection in silent { connection.cancel() }
       host.stop()
     }
-    for await ready in Observations({ host.isRunning || host.error != nil }) where ready { break }
-    try #require(host.error == nil)
+    try await MirrorTestPort.startHost(host)
     for _ in 0..<MirrorHost.maximumPendingHandshakes {
       let connection = NWConnection(
         host: "127.0.0.1", port: .init(rawValue: UInt16(host.port)!)!, using: .tcp)
@@ -129,10 +144,8 @@ struct MirrorHostTests {
       saveIdentity: { _ in })
     host.address = "127.0.0.1"
     host.port = String(try MirrorTestPort.unusedPort())
-    host.start()
     defer { host.stop() }
-    for await ready in Observations({ host.isRunning || host.error != nil }) where ready { break }
-    try #require(host.error == nil)
+    try await MirrorTestPort.startHost(host)
     let first = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
     let second = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
     defer {
@@ -190,9 +203,8 @@ struct MirrorHostTests {
       saveIdentity: { _ in })
     host.address = "127.0.0.1"
     host.port = String(try MirrorTestPort.unusedPort())
-    host.start()
     defer { host.stop() }
-    for await ready in Observations({ host.isRunning || host.error != nil }) where ready { break }
+    try await MirrorTestPort.startHost(host)
     let first = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
     let second = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
     defer {
@@ -229,12 +241,8 @@ struct MirrorHostTests {
       saveIdentity: { _ in })
     host.address = "127.0.0.1"
     host.port = String(try MirrorTestPort.unusedPort())
-    host.start()
     defer { host.stop() }
-    for await ready in Observations({ host.isRunning || host.error != nil }) where ready {
-      break
-    }
-    try #require(host.error == nil)
+    try await MirrorTestPort.startHost(host)
     #expect(source.reads == 0)
     let first = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
     let second = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
@@ -322,10 +330,8 @@ struct MirrorHostTests {
     host.commandService = service
     host.address = "127.0.0.1"
     host.port = String(try MirrorTestPort.unusedPort())
-    host.start()
     defer { host.stop() }
-    for await ready in Observations({ host.isRunning || host.error != nil }) where ready { break }
-    try #require(host.error == nil)
+    try await MirrorTestPort.startHost(host)
     let peer = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
     defer { peer.connection.close() }
     let request = MirrorCommandRequest(
@@ -405,10 +411,8 @@ struct MirrorHostTests {
     host.commandService = service
     host.address = "127.0.0.1"
     host.port = String(try MirrorTestPort.unusedPort())
-    host.start()
     defer { host.stop() }
-    for await ready in Observations({ host.isRunning || host.error != nil }) where ready { break }
-    try #require(host.error == nil)
+    try await MirrorTestPort.startHost(host)
     let peer = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
     defer { peer.connection.close() }
     var messages = peer.messages.makeAsyncIterator()

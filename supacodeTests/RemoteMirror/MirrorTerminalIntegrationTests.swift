@@ -561,20 +561,7 @@ struct MirrorTerminalIntegrationTests {
     }
 
     func startHost() async throws {
-      for attempt in 1...3 {
-        host.start()
-        try await wait("Host listener") { host.isRunning || host.error != nil }
-        if host.isRunning { return }
-        let occupied = MirrorConnectionFailure.addressInUse.listenerMessage(address: host.address, port: host.port)
-        guard attempt < 3, host.error == occupied else {
-          throw Failure(
-            reason:
-              "Host startup failed at \(host.address):\(host.port): \(host.error ?? "unknown")")
-        }
-        // Port probing releases its socket before Network.framework binds. Retry
-        // only that initial allocation race; reconnects must retain their port.
-        host.port = String(try MirrorTestPort.unusedPort())
-      }
+      try await MirrorTestPort.startHost(host)
     }
 
     func attach(_ view: GhosttySurfaceView) {
