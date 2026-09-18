@@ -52,8 +52,8 @@ struct EmptyStateView: View {
 
   private func promptText(shortcutDisplay: String?) -> String {
     if let shortcutDisplay {
-      return "Press \(shortcutDisplay) or click Add to add one."
+      return String(localized: "Press \(shortcutDisplay) or click Add to add one.")
     }
-    return "Click Add to add one."
+    return String(localized: "Click Add to add one.")
   }
 }

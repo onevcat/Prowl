@@ -99,13 +99,15 @@ extension WorktreeTerminalState {
       return
     }
 
-    let title = (exitCode == nil || exitCode == 0) ? "Command finished" : "Command failed"
+    let title =
+      (exitCode == nil || exitCode == 0)
+      ? String(localized: "Command finished") : String(localized: "Command failed")
     let formattedDuration = Self.formatDuration(durationSeconds)
     let body: String
     if let code = exitCode, code != 0 {
-      body = "Failed (exit code \(code)) after \(formattedDuration)"
+      body = String(localized: "Failed (exit code \(code)) after \(formattedDuration)")
     } else {
-      body = "Completed in \(formattedDuration)"
+      body = String(localized: "Completed in \(formattedDuration)")
     }
     appendNotification(title: title, body: body, surfaceId: surfaceId)
   }

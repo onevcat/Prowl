@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 enum AppearanceMode: String, CaseIterable, Identifiable, Codable, Sendable {
@@ -12,11 +13,11 @@ enum AppearanceMode: String, CaseIterable, Identifiable, Codable, Sendable {
   var title: String {
     switch self {
     case .system:
-      return "System"
+      return String(localized: "System")
     case .light:
-      return "Light"
+      return String(localized: "Light")
     case .dark:
-      return "Dark"
+      return String(localized: "Dark")
     }
   }
 

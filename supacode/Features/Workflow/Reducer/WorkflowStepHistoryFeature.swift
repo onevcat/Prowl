@@ -113,7 +113,7 @@ struct WorkflowStepHistoryFeature {
         state.directories = directories.merging(state.liveRuns.mapValues(\.runDirectory)) { _, live in live }
         if let id = state.selectedID, !diskIDs.contains(id), !liveIDs.contains(id) {
           state.detail = nil
-          state.error = "This run is no longer available."
+          state.error = String(localized: "This run is no longer available.")
         }
         return selectDefault(&state)
       case .failed(let message):
@@ -143,7 +143,9 @@ struct WorkflowStepHistoryFeature {
               return try WorkflowRunRecord.makeDecoder().decode(WorkflowRunRecord.self, from: data)
             }.value
             await send(.detailLoaded(id, record))
-          } catch { await send(.failed("Run details are unavailable: \(error)")) }
+          } catch {
+            await send(.failed(String(localized: "Run details are unavailable: \(String(describing: error))")))
+          }
         }.cancellable(id: CancelID.detail, cancelInFlight: true)
       case .detailLoaded(let id, let detail):
         if state.selectedID == id, state.liveRuns[id] == nil { state.detail = detail }
@@ -157,7 +159,8 @@ struct WorkflowStepHistoryFeature {
       case .output(let intent):
         return .run { [storage, operations] send in
           do { try await WorkflowHistoryOutput.open(intent, storage: storage, operations: operations) } catch {
-            await send(.failed("Could not complete the output action: \(error)"))
+            await send(
+              .failed(String(localized: "Could not complete the output action: \(String(describing: error))")))
           }
         }
       case .deleteRun(let id):
@@ -169,7 +172,9 @@ struct WorkflowStepHistoryFeature {
           do {
             try await operations.delete(directory)
             await send(.runDeleted(id))
-          } catch { await send(.failed("Could not delete the run: \(error)")) }
+          } catch {
+            await send(.failed(String(localized: "Could not delete the run: \(String(describing: error))")))
+          }
         }
       case .runDeleted(let id):
         state.entries.removeAll { $0.id == id }
@@ -218,7 +223,7 @@ struct WorkflowStepHistoryFeature {
           sourcePaneID: nil, participants: [:], sessions: [:])
       } else {
         index = WorkflowHistoryIndex(
-          id: id, name: "Unavailable Run", worktreeID: "", root: "", state: "unknown",
+          id: id, name: String(localized: "Unavailable Run"), worktreeID: "", root: "", state: "unknown",
           startedAt: .distantPast, finishedAt: nil, sourcePaneID: nil, participants: [:], sessions: [:])
       }
       if let index {

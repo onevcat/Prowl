@@ -775,15 +775,15 @@ extension RepositoriesFeature {
       let trimmed = branchName.trimmingCharacters(in: .whitespacesAndNewlines)
       guard !trimmed.isEmpty else {
         state.alert = messageAlert(
-          title: "Branch name required",
-          message: "Enter a branch name to rename."
+          title: String(localized: "Branch name required"),
+          message: String(localized: "Enter a branch name to rename.")
         )
         return .none
       }
       guard !trimmed.contains(where: \.isWhitespace) else {
         state.alert = messageAlert(
-          title: "Branch name invalid",
-          message: "Branch names can't contain spaces."
+          title: String(localized: "Branch name invalid"),
+          message: String(localized: "Branch names can't contain spaces.")
         )
         return .none
       }
@@ -798,7 +798,7 @@ extension RepositoriesFeature {
         } catch {
           await send(
             .presentAlert(
-              title: "Unable to rename branch",
+              title: String(localized: "Unable to rename branch"),
               message: error.localizedDescription
             )
           )

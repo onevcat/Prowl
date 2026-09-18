@@ -87,26 +87,27 @@ nonisolated struct WorkflowSettingsRow: Equatable, Sendable, Identifiable {
     var behaviorDescription: String {
       switch source {
       case .current:
-        return "Uses the pane that starts this workflow."
+        return String(localized: "Uses the pane that starts this workflow.")
       case .pick:
-        return "Choose an existing agent when starting."
+        return String(localized: "Choose an existing agent when starting.")
       case .launch:
-        guard let launch else { return "Prowl launches a new agent." }
+        guard let launch else { return String(localized: "Prowl launches a new agent.") }
         switch launch.placement {
         case .tab:
           return launch.background
-            ? "Prowl launches a new agent in a background tab."
-            : "Prowl launches a new agent in a new tab."
+            ? String(localized: "Prowl launches a new agent in a background tab.")
+            : String(localized: "Prowl launches a new agent in a new tab.")
         case .split:
           let side =
             switch launch.direction {
-            case .right: "right"
-            case .left: "left"
-            case .top: "top"
-            case .down: "bottom"
+            case .right: String(localized: "right", comment: "The side of a split: 'a split on the right'.")
+            case .left: String(localized: "left", comment: "The side of a split: 'a split on the left'.")
+            case .top: String(localized: "top", comment: "The side of a split: 'a split on the top'.")
+            case .down: String(localized: "bottom", comment: "The side of a split: 'a split on the bottom'.")
             }
-          let focus = launch.background ? " without changing focus" : ""
-          return "Prowl launches a new agent in a split on the \(side)\(focus)."
+          return launch.background
+            ? String(localized: "Prowl launches a new agent in a split on the \(side) without changing focus.")
+            : String(localized: "Prowl launches a new agent in a split on the \(side).")
         }
       }
     }
@@ -297,7 +298,7 @@ nonisolated struct WorkflowSettingsCatalog: Equatable, Sendable {
       guard siblings.contains(where: { $0.file.scope == .user && $0.file.id == id }) else {
         return nil
       }
-      return "Overrides your personal workflow in this repository."
+      return String(localized: "Overrides your personal workflow in this repository.")
     }
 
     /// Discovery marks the loser; the note names the winner: an earlier file in the same
@@ -309,14 +310,14 @@ nonisolated struct WorkflowSettingsCatalog: Equatable, Sendable {
       if entry.shadowed,
         let winner = siblings.first(where: { $0.file.id == id && $0.file.isValid && !$0.shadowed })
       {
-        return "Overridden by \(winner.file.url.lastPathComponent)"
+        return String(localized: "Overridden by \(winner.file.url.lastPathComponent)")
       }
       guard entry.file.scope != .repo else { return nil }
       let overriding = scan.repositories.filter { repository in
         repository.entries.contains { $0.file.url == entry.file.url && $0.shadowed }
       }
       guard !overriding.isEmpty else { return nil }
-      return "Overridden in \(overriding.map(\.name).joined(separator: ", "))"
+      return String(localized: "Overridden in \(overriding.map(\.name).joined(separator: ", "))")
     }
   }
 }
@@ -326,14 +327,15 @@ extension WorkflowBindingRejection {
   nonisolated func userFacingText(requirements: WorkflowLaunchRequirements) -> String {
     switch self {
     case .missing:
-      return "The profile no longer exists."
+      return String(localized: "The profile no longer exists.")
     case .disabled:
-      return "Disabled in Settings."
+      return String(localized: "Disabled in Settings.")
     case .agentNotAllowed:
       let allowed = (requirements.agents ?? []).joined(separator: ", ")
-      return "This role needs \(allowed.isEmpty ? "another agent" : allowed)."
+      if allowed.isEmpty { return String(localized: "This role needs another agent.") }
+      return String(localized: "This role needs \(allowed).")
     case .promptUnsupported:
-      return "This profile's runtime cannot take a launch prompt."
+      return String(localized: "This profile's runtime cannot take a launch prompt.")
     }
   }
 }

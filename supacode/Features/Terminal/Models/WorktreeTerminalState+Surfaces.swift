@@ -112,11 +112,11 @@ extension WorktreeTerminalState {
   ) -> Bool {
     let confirmed = TerminalCloseConfirmationGate.run {
       let alert = NSAlert()
-      alert.messageText = target.messageText
+      alert.messageText = localizedMessageText(for: target)
       alert.informativeText = closeConfirmationMessage(for: decision)
       alert.alertStyle = .warning
-      alert.addButton(withTitle: target.confirmButtonTitle)
-      alert.addButton(withTitle: "Cancel")
+      alert.addButton(withTitle: localizedConfirmButtonTitle(for: target))
+      alert.addButton(withTitle: String(localized: "Cancel"))
       return alert.runModal() == .alertFirstButtonReturn
     }
     return confirmed ?? false
@@ -124,6 +124,36 @@ extension WorktreeTerminalState {
 
   func closeConfirmationMessage(for decision: TerminalCloseConfirmationDecision) -> String {
     TerminalCloseConfirmationPolicy.informativeMessage(for: decision, worktreeName: worktree.name)
+  }
+
+  private func localizedMessageText(for target: TerminalCloseConfirmationTarget) -> String {
+    switch target {
+    case .pane:
+      return String(localized: "Close Terminal Pane?")
+    case .tab:
+      return String(localized: "Close Terminal Tab?")
+    case .tabs(let count):
+      if count == 1 {
+        return String(localized: "Close Terminal Tab?")
+      } else {
+        return String(localized: "Close Terminal Tabs?")
+      }
+    }
+  }
+
+  private func localizedConfirmButtonTitle(for target: TerminalCloseConfirmationTarget) -> String {
+    switch target {
+    case .pane:
+      return String(localized: "Close Pane")
+    case .tab:
+      return String(localized: "Close Tab")
+    case .tabs(let count):
+      if count == 1 {
+        return String(localized: "Close Tab")
+      } else {
+        return String(localized: "Close Tabs")
+      }
+    }
   }
 
   func splitTree(
@@ -634,16 +664,16 @@ extension WorktreeTerminalState {
     guard let tabIndex = tabManager.tabs.firstIndex(where: { $0.id == tabId }) else { return }
 
     let alert = NSAlert()
-    alert.messageText = "Change Tab Title"
-    alert.informativeText = "Leave blank to restore the default."
+    alert.messageText = String(localized: "Change Tab Title")
+    alert.informativeText = String(localized: "Leave blank to restore the default.")
     alert.alertStyle = .informational
 
     let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 250, height: 24))
     textField.stringValue = tabManager.tabs[tabIndex].displayTitle
     alert.accessoryView = textField
 
-    alert.addButton(withTitle: "OK")
-    alert.addButton(withTitle: "Cancel")
+    alert.addButton(withTitle: String(localized: "OK"))
+    alert.addButton(withTitle: String(localized: "Cancel"))
     alert.window.initialFirstResponder = textField
 
     alert.beginSheetModal(for: window) { [weak self] response in

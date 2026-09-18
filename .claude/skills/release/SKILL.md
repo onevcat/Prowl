@@ -35,6 +35,12 @@ Build, sign, notarize, and publish a Prowl release.
    - If sync-docs reports "needs human decision" items, resolve or defer them before continuing.
    - Most releases change little or no implementation, so this step is usually a no-op doc-wise
      (just a baseline bump). Keep it cheap — see the `sync-docs` skill's cost notes.
+   - Run the `sync-l10n` skill. Translations are not required in everyday work, so this is
+     where they catch up: it translates new UI copy, removes catalog entries that no code uses,
+     and triages new unlocalized literals. Commit the result as its own commit, also **before**
+     the bump and tag: e.g. `git commit -m "Sync localization for <VERSION>"`. When it reports
+     "needs human decision" items, resolve or defer them before you continue. For an urgent
+     hotfix the debt budget step can be skipped; the translate and prune steps cannot.
 4. Determine the version:
    - If `$ARGUMENTS` is provided, use it as the version (e.g., `2026.3.18`)
    - Otherwise, default to today's date format and confirm with the user before proceeding

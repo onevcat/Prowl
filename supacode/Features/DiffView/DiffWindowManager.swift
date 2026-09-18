@@ -126,12 +126,12 @@ final class DiffWindowManager {
   private func windowTitle() -> String {
     switch state.mode {
     case .uncommitted:
-      return "Changes — \(state.branchName)"
+      return String(localized: "Changes — \(state.branchName)")
     case .outgoing:
       guard let base = state.outgoingBase else {
-        return "Outgoing Changes — \(state.branchName)"
+        return String(localized: "Outgoing Changes — \(state.branchName)")
       }
-      return "Outgoing Changes — \(state.branchName) vs \(base.displayName)"
+      return String(localized: "Outgoing Changes — \(state.branchName) vs \(base.displayName)")
     }
   }
 

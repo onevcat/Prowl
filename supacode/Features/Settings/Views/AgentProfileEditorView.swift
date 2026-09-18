@@ -58,16 +58,16 @@ struct AgentProfileEditorView: View {
     Section("Details") {
       if runtimeAdapter?.supportsModelSelection == true {
         suggestedTextRow(
-          title: "Model",
-          prompt: "Runtime default",
+          title: String(localized: "Model"),
+          prompt: String(localized: "Runtime default"),
           text: $store.profile.model,
           suggestions: modelSuggestions
         )
       }
       if runtimeAdapter?.supportsReasoningEffort == true {
         suggestedTextRow(
-          title: "Reasoning Effort",
-          prompt: "Runtime default",
+          title: String(localized: "Reasoning Effort"),
+          prompt: String(localized: "Runtime default"),
           text: $store.profile.reasoningEffort,
           suggestions: effortSuggestions
         )
@@ -87,8 +87,10 @@ struct AgentProfileEditorView: View {
       case .unrestricted:
         Text(
           store.profile.executionMode == .unrestricted
-            ? "Requests the runtime's least-restricted mode. "
-              + "It may execute commands and modify files without prompting."
+            ? """
+            Requests the runtime's least-restricted mode. \
+            It may execute commands and modify files without prompting.
+            """
             : "Extra arguments request the runtime's least-restricted mode."
         )
         .font(.caption)
@@ -115,7 +117,7 @@ struct AgentProfileEditorView: View {
   private var advancedSection: some View {
     Section("Advanced") {
       optionalTextRow(
-        title: "Extra Arguments",
+        title: String(localized: "Extra Arguments"),
         prompt: "--flag value",
         text: Binding(
           get: { store.profile.extraArguments.isEmpty ? nil : store.profile.extraArguments },
@@ -135,15 +137,18 @@ struct AgentProfileEditorView: View {
       }
       if runtimeAdapter?.supportsAccountIsolation == true, store.profile.bindsDedicatedHome {
         Text(
-          "This profile gets its own runtime home: separate login and usage, "
-            + "but also separate skills, global instructions, and session history. "
-            + "The first launch signs in through the agent itself."
+          """
+          This profile gets its own runtime home: separate login and usage, \
+          but also separate skills, global instructions, and session history. \
+          The first launch signs in through the agent itself.
+          """
         )
         .font(.caption)
         .foregroundStyle(.secondary)
         LabeledContent(
           "Profile Home",
-          value: store.homeInitialized ? "Initialized" : "Not initialized yet"
+          value: store.homeInitialized
+            ? String(localized: "Initialized") : String(localized: "Not initialized yet")
         )
         Button("Reveal Profile Files") {
           store.send(.revealProfileFiles)
@@ -226,19 +231,21 @@ struct AgentProfileEditorView: View {
   private func issueDescription(_ issue: AgentProfileEnvironmentPolicy.RowIssue) -> String {
     switch issue {
     case .invalidName:
-      "Not a valid environment variable name — this row is ignored at launch."
+      String(localized: "Not a valid environment variable name — this row is ignored at launch.")
     case .reservedName:
-      "Reserved by Prowl — this row is ignored at launch."
+      String(localized: "Reserved by Prowl — this row is ignored at launch.")
     case .invalidValue:
-      "The value contains an unsupported character — this row is ignored at launch."
+      String(localized: "The value contains an unsupported character — this row is ignored at launch.")
     }
   }
 
   private var launchPreviewSection: some View {
     Section("Launch Preview") {
       Text(
-        "Prowl types this command into the new pane. "
-          + "Override values travel in hidden PROWL_ENV variables, never in the command text."
+        """
+        Prowl types this command into the new pane. \
+        Override values travel in hidden PROWL_ENV variables, never in the command text.
+        """
       )
       .font(.caption)
       .foregroundStyle(.secondary)
@@ -368,7 +375,7 @@ struct AgentProfileEditorView: View {
       for: store.profile,
       homeBaseDirectory: SupacodePaths.agentProfileHomesDirectory
     )
-    return plan?.previewText ?? "Unavailable"
+    return plan?.previewText ?? String(localized: "Unavailable")
   }
 
   private var effortSuggestions: [String] {

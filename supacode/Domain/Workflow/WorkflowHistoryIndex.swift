@@ -23,12 +23,12 @@ nonisolated struct WorkflowHistoryIndex: Codable, Equatable, Sendable, Identifia
   }
 
   func relationship(paneID: UUID?, session: String?) -> String? {
-    if let paneID, sourcePaneID == paneID { return "Started here" }
+    if let paneID, sourcePaneID == paneID { return String(localized: "Started here") }
     let roles = Set(participants.keys).union(sessions.keys).filter { role in
       (paneID.map { participants[role]?.contains($0) == true } ?? false)
         || (session.map { sessions[role]?.contains($0) == true } ?? false)
     }.sorted()
-    return roles.isEmpty ? nil : "Role: " + roles.joined(separator: ", ")
+    return roles.isEmpty ? nil : String(localized: "Role: \(roles.joined(separator: ", "))")
   }
 
   init(record: WorkflowRunRecord) {

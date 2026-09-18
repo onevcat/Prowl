@@ -197,16 +197,16 @@ private struct GithubAuthAccountStatusDisplay {
     case "success":
       return nil
     case "timeout":
-      title = "Timed out"
-      help = "gh could not verify this account in time."
+      title = String(localized: "Timed out")
+      help = String(localized: "gh could not verify this account in time.")
       style = .orange
     case "error":
-      title = "Needs attention"
-      help = "gh could not verify this account."
+      title = String(localized: "Needs attention")
+      help = String(localized: "gh could not verify this account.")
       style = .red
     default:
-      title = "Check failed"
-      help = "gh reported an authentication issue."
+      title = String(localized: "Check failed")
+      help = String(localized: "gh reported an authentication issue.")
       style = .orange
     }
   }

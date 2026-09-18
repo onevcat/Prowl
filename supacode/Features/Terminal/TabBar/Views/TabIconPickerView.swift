@@ -4,9 +4,9 @@ import SwiftUI
 struct TabIconPickerView: View {
   let initialIcon: String?
   let defaultIcon: TabIconSource
-  let title: String
-  let subtitle: String
-  let resetHelp: String
+  let title: LocalizedStringResource
+  let subtitle: LocalizedStringResource
+  let resetHelp: LocalizedStringResource
   let presets: [String]
   /// Optional host-provided section rendered between the header and
   /// the symbol field — the repository picker injects its
@@ -24,9 +24,10 @@ struct TabIconPickerView: View {
   init(
     initialIcon: String?,
     defaultIcon: TabIconSource,
-    title: String = "Tab Icon",
-    subtitle: String = "Pick a preset or enter any SF Symbol name available in your system.",
-    resetHelp: String = "Restore the default icon for this tab",
+    title: LocalizedStringResource = "Tab Icon",
+    subtitle: LocalizedStringResource =
+      "Pick a preset or enter any SF Symbol name available in your system.",
+    resetHelp: LocalizedStringResource = "Restore the default icon for this tab",
     presets: [String] = TabIconPickerView.symbolPresets,
     suggestionsSection: ((Binding<String>) -> AnyView)? = nil,
     onApply: @escaping (String?) -> Void,
@@ -109,7 +110,7 @@ struct TabIconPickerView: View {
         Button("Reset to Default") {
           onApply(nil)
         }
-        .help(resetHelp)
+        .help(Text(resetHelp))
         Spacer()
         Button("Cancel", role: .cancel) {
           onCancel()
@@ -151,7 +152,9 @@ struct TabIconPickerView: View {
   }
 
   private func openSFSymbolsReference() {
-    if let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.SFSymbols") {
+    if let appURL = NSWorkspace.shared.urlForApplication(
+      withBundleIdentifier: "com.apple.SFSymbols")
+    {
       let configuration = NSWorkspace.OpenConfiguration()
       NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { _, _ in }
       return

@@ -1,4 +1,5 @@
 import ComposableArchitecture
+import Foundation
 import SwiftUI
 
 struct SettingsView: View {
@@ -18,6 +19,7 @@ struct SettingsView: View {
     let repositories = store.repositories.repositories
     let customTitles = store.repositories.repositoryCustomTitles
     let selection = settingsStore.selection ?? .general
+    let appLocale = Locale(identifier: settingsStore.effectiveLanguageAtLaunch.rawValue)
 
     NavigationSplitView(columnVisibility: $columnVisibility) {
       List(selection: $settingsStore.selection.sending(\.setSelection)) {
@@ -146,7 +148,7 @@ struct SettingsView: View {
         SettingsDetailView {
           if featureFlags.workflowUI {
             if let workflowsStore = settingsStore.scope(state: \.workflows, action: \.workflows) {
-              WorkflowsSettingsView(store: workflowsStore)
+              WorkflowsSettingsView(appLocale: appLocale, store: workflowsStore)
             } else {
               ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -165,7 +167,7 @@ struct SettingsView: View {
               state: \.repositorySettings,
               action: \.repositorySettings
             ) {
-              RepositorySettingsView(store: repositorySettingsStore)
+              RepositorySettingsView(appLocale: appLocale, store: repositorySettingsStore)
                 .id(repository.id)
                 .navigationTitle(customTitles[repository.id] ?? repository.name)
             } else {

@@ -65,7 +65,7 @@ struct ToolbarNotificationsPopoverView: View {
                   .buttonStyle(.plain)
                   .help(
                     notification.content.isEmpty
-                      ? "Select worktree and focus terminal"
+                      ? String(localized: "Select worktree and focus terminal")
                       : notification.content
                   )
                 }

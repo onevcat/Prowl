@@ -20,10 +20,10 @@ extension WorktreePlacementOverride {
       return nil
     }
     guard !trimmed.contains("/"), !trimmed.contains("\\") else {
-      return "Worktree name can't contain slashes."
+      return String(localized: "Worktree name can't contain slashes.")
     }
     guard trimmed != ".", trimmed != "..", trimmed.lowercased() != ".git" else {
-      return "Worktree name is invalid."
+      return String(localized: "Worktree name is invalid.")
     }
     return nil
   }

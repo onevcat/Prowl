@@ -172,6 +172,10 @@ enum AppShortcuts {
     let title: String
     let scope: Scope
     let shortcut: AppShortcut?
+
+    var localizedTitle: String {
+      String(localized: String.LocalizationValue(title), table: "Localizable")
+    }
   }
 
   struct CustomCommandOverrideConflict: Equatable {
@@ -895,14 +899,15 @@ enum AppShortcuts {
   }
 
   static func helpText(
-    title: String,
+    title: LocalizedStringResource,
     commandID: String,
     in resolvedKeybindings: ResolvedKeybindingMap
   ) -> String {
+    let localizedTitle = String(localized: title)
     if let shortcut = display(for: commandID, in: resolvedKeybindings) {
-      return "\(title) (\(shortcut))"
+      return "\(localizedTitle) (\(shortcut))"
     }
-    return title
+    return localizedTitle
   }
 
   static func worktreeSelectionDisplay(at index: Int, in resolvedKeybindings: ResolvedKeybindingMap) -> String? {
@@ -1059,5 +1064,13 @@ extension UserCustomShortcut {
     let normalized = key.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     guard normalized.count == 1 else { return nil }
     return normalized
+  }
+}
+
+extension LocalizedStringResource {
+  /// A key that is only known at run time. The compiler cannot extract such a key, so its
+  /// catalog entry must have the extraction state "manual".
+  init(runtimeKey: String) {
+    self.init(String.LocalizationValue(runtimeKey))
   }
 }

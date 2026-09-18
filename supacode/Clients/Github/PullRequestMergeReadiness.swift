@@ -58,19 +58,23 @@ nonisolated struct PullRequestMergeReadiness: Equatable, Hashable {
   var label: String {
     switch blockingReason {
     case .none:
-      return "Mergeable"
+      return String(localized: "Mergeable")
     case .mergeConflicts:
-      return "Merge conflicts"
+      return String(localized: "Merge conflicts")
     case .changesRequested:
-      return "Changes requested"
+      return String(localized: "Changes requested")
     case .checksFailed(let count):
-      let checksLabel = count == 1 ? "check" : "checks"
-      return "\(count) \(checksLabel) failed"
+      if count == 1 {
+        return String(localized: "\(count) check failed")
+      }
+      return String(localized: "\(count) checks failed")
     case .checksPending(let count):
-      let checksLabel = count == 1 ? "check" : "checks"
-      return "\(count) \(checksLabel) running"
+      if count == 1 {
+        return String(localized: "\(count) check running")
+      }
+      return String(localized: "\(count) checks running")
     case .blocked:
-      return "Blocked"
+      return String(localized: "Blocked")
     }
   }
 }

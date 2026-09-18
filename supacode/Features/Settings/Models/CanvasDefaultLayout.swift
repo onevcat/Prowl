@@ -1,3 +1,5 @@
+import Foundation
+
 /// How cards are first laid out when Canvas is opened for a fresh set of cards.
 /// `uniform` opens every card at one comfortable size, packed to fit (the
 /// historical behavior); `tile` resizes cards to tile and fill the viewport
@@ -13,9 +15,9 @@ enum CanvasDefaultLayout: String, CaseIterable, Identifiable, Codable, Sendable 
   var title: String {
     switch self {
     case .uniform:
-      return "Uniform"
+      return String(localized: "Uniform")
     case .tile:
-      return "Tile"
+      return String(localized: "Tile")
     }
   }
 
@@ -24,9 +26,9 @@ enum CanvasDefaultLayout: String, CaseIterable, Identifiable, Codable, Sendable 
   var settingsDescription: String {
     switch self {
     case .uniform:
-      return "Cards open at the same size."
+      return String(localized: "Cards open at the same size.")
     case .tile:
-      return "Cards resize to fill the screen, smaller as you add more."
+      return String(localized: "Cards resize to fill the screen, smaller as you add more.")
     }
   }
 }

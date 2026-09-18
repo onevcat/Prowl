@@ -319,9 +319,9 @@ nonisolated enum MirrorProtocolError: Error, LocalizedError {
   case invalidMessage, messageTooLarge, invalidPairingKey
   var errorDescription: String? {
     switch self {
-    case .invalidMessage: "Invalid remote mirror message."
-    case .messageTooLarge: "Remote mirror message exceeds the size limit."
-    case .invalidPairingKey: "Enter the current 8-character pairing code shown on Host."
+    case .invalidMessage: String(localized: "Invalid remote mirror message.")
+    case .messageTooLarge: String(localized: "Remote mirror message exceeds the size limit.")
+    case .invalidPairingKey: String(localized: "Enter the current 8-character pairing code shown on Host.")
     }
   }
 }

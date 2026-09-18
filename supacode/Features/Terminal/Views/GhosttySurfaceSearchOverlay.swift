@@ -51,32 +51,32 @@ struct GhosttySurfaceSearchOverlay: View {
             navigateSearch(.previous)
           } label: {
             SearchButtonLabel(
-              title: "Previous",
+              title: String(localized: "Previous"),
               shortcut: resolvedKeybindings.display(for: AppShortcuts.CommandID.findPrevious),
               systemImage: "chevron.up"
             )
           }
           .buttonStyle(GhosttySearchButtonStyle())
-          .help(searchButtonHelp("Find Previous", commandID: AppShortcuts.CommandID.findPrevious))
+          .help(searchButtonHelp(String(localized: "Find Previous"), commandID: AppShortcuts.CommandID.findPrevious))
 
           Button {
             navigateSearch(.next)
           } label: {
             SearchButtonLabel(
-              title: "Next",
+              title: String(localized: "Next"),
               shortcut: resolvedKeybindings.display(for: AppShortcuts.CommandID.findNext),
               systemImage: "chevron.down"
             )
           }
           .buttonStyle(GhosttySearchButtonStyle())
-          .help(searchButtonHelp("Find Next", commandID: AppShortcuts.CommandID.findNext))
+          .help(searchButtonHelp(String(localized: "Find Next"), commandID: AppShortcuts.CommandID.findNext))
 
           Button {
             closeSearch()
             surfaceView.requestFocus()
           } label: {
             SearchButtonLabel(
-              title: "Close",
+              title: String(localized: "Close"),
               shortcut: nil,
               systemImage: "xmark"
             )
@@ -298,7 +298,7 @@ private struct GhosttySearchField: NSViewRepresentable {
     field.isBordered = false
     field.drawsBackground = false
     field.focusRingType = .none
-    field.placeholderString = "Search"
+    field.placeholderString = String(localized: "Search")
     field.usesSingleLineMode = true
     field.lineBreakMode = .byTruncatingTail
     field.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .regular)

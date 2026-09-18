@@ -1154,7 +1154,7 @@ struct WorktreeDetailView: View {
     private func openActionHelpText(for action: OpenWorktreeAction, isDefault: Bool) -> String {
       guard isDefault else { return action.title }
       return AppShortcuts.helpText(
-        title: action.title,
+        title: LocalizedStringResource(runtimeKey: action.title),
         commandID: AppShortcuts.CommandID.openWorktree,
         in: resolvedKeybindings
       )

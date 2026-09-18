@@ -127,7 +127,7 @@ struct AgentIslandRosterContent: View {
           keyboardLegend(keys: ["← H", "→ L"], action: "Page")
         }
         if !store.entries.isEmpty {
-          keyboardLegend(keys: ["↩", "Space"], action: "Open")
+          keyboardLegend(keys: ["↩", String(localized: "Space")], action: "Open")
         }
         Spacer(minLength: 0)
         Button {
@@ -146,7 +146,7 @@ struct AgentIslandRosterContent: View {
     .padding(.vertical, 4)
   }
 
-  private func keyboardLegend(keys: [String], action: String) -> some View {
+  private func keyboardLegend(keys: [String], action: LocalizedStringKey) -> some View {
     HStack(spacing: 4) {
       HStack(spacing: 2) {
         ForEach(keys, id: \.self) { key in

@@ -20,11 +20,11 @@ nonisolated enum ExternalDiffTool: String, CaseIterable, Identifiable, Codable, 
 
   var title: String {
     switch self {
-    case .builtIn: "Built-in"
+    case .builtIn: String(localized: "Built-in")
     case .hunk: "Hunk"
     case .fileMerge: "FileMerge"
     case .kaleidoscope: "Kaleidoscope"
-    case .custom: "Custom Command"
+    case .custom: String(localized: "Custom Command")
     }
   }
 

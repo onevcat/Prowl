@@ -10,23 +10,23 @@ struct PullRequestCheckStatusStyle {
     case .success:
       self.symbol = "checkmark.circle.fill"
       self.color = .green
-      self.label = "Success"
+      self.label = String(localized: "Success")
     case .failure:
       self.symbol = "xmark.circle.fill"
       self.color = .red
-      self.label = "Failed"
+      self.label = String(localized: "Failed")
     case .inProgress:
       self.symbol = "arrow.triangle.2.circlepath.circle.fill"
       self.color = .yellow
-      self.label = "In progress"
+      self.label = String(localized: "In progress")
     case .expected:
       self.symbol = "clock.circle.fill"
       self.color = .yellow
-      self.label = "Expected"
+      self.label = String(localized: "Expected")
     case .skipped:
       self.symbol = "minus.circle.fill"
       self.color = .gray
-      self.label = "Skipped"
+      self.label = String(localized: "Skipped")
     }
   }
 }

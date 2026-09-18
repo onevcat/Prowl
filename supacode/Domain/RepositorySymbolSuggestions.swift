@@ -15,11 +15,11 @@ nonisolated struct RepositorySymbolSuggestions: Equatable, Sendable {
     var disclosureLabel: String {
       switch self {
       case .readme:
-        "Based on README"
+        String(localized: "Based on README")
       case .manifestDescription:
-        "Based on the package description"
+        String(localized: "Based on the package description")
       case .repositoryName:
-        "Based on the repository name"
+        String(localized: "Based on the repository name")
       }
     }
   }

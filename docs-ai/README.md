@@ -46,6 +46,7 @@ Living documents hosted here:
 - `064-agent-completion-signals/research-agent-completion-signals.md` — per-runtime completion-signal matrix
 - `064-agent-completion-signals/agent-contracts-runbook.md` — runtime contract inventory, low-cost model routes, implemented inventory/preflight and eight-runtime headless checks, plus remaining interactive acceptance
 - [068 agent state providers](068-agent-state-providers/000-plan.md) — shared architecture and one living contract/plan per runtime
+- `070-app-localization/glossary.md` — Simplified Chinese glossary for the String Catalog
 
 Some entries also host verbatim historical attachments migrated from doc-onevcat (e.g.
 `023-shelf-mode/jank-investigation.md`, `017-.../batch-2026-07-06-post-v0.10.5.md`,
@@ -128,3 +129,4 @@ agent-facing manual for that).
 | 067 | [remote-mirror](067-remote-mirror/000-plan.md) | 2026-09-09 | App-owned Host and native remote terminal mirrors; [macOS UX and viewport](067-remote-mirror/006-macos-ux.md), [Mac pane creation](067-remote-mirror/008-client-pane-launch.md) |
 | 068 | [agent-state-providers](068-agent-state-providers/000-plan.md) | 2026-09-14 | Shared [architecture](068-agent-state-providers/architecture.md), released [Codex provider](068-agent-state-providers/codex.md), and [Claude native adapter](068-agent-state-providers/claude.md); [staged acceptance](068-agent-state-providers/002-native-runtime-implementation.md), [acceptance complete](068-agent-state-providers/001-action.md); fullscreen case excluded by owner |
 | 069 | [undo-close-terminal](069-undo-close-terminal/000-plan.md) | 2026-09-16 | Undo a pane or tab close with ⌘Z within Ghostty’s `undo-timeout`: closed surfaces stay alive off-tree and restore into their original tab and split position |
+| 070 | [app-localization](070-app-localization/000-plan.md) | 2026-09-18 | Simplified Chinese UI from a String Catalog; translations sync at release time through the `sync-l10n` skill (nothing blocks everyday work); compiler-based coverage audit plus a baseline for unlocalized copy; living [glossary](070-app-localization/glossary.md); language choice stored only in the per-app `AppleLanguages` default |

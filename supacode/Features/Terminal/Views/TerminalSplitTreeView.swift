@@ -463,7 +463,7 @@ struct TerminalSplitTreeAXContainer: NSViewRepresentable {
 final class TerminalSplitAXContainerView: NSView {
   private var hostingView: NSHostingView<TerminalSplitTreeView>?
   private var panes: [GhosttySurfaceView] = []
-  private var panesLabel: String = "Terminal split: 0 panes"
+  private var panesLabel = String(localized: "Terminal split: 0 panes")
   private var lastPaneIDs: [UUID] = []
 
   func update(rootView: TerminalSplitTreeView, panes: [GhosttySurfaceView]) {
@@ -484,7 +484,11 @@ final class TerminalSplitAXContainerView: NSView {
 
     let newPaneIDs = panes.map(\.id)
     self.panes = panes
-    panesLabel = "Terminal split: \(panes.count) pane" + (panes.count == 1 ? "" : "s")
+    if panes.count == 1 {
+      panesLabel = String(localized: "Terminal split: \(panes.count) pane")
+    } else {
+      panesLabel = String(localized: "Terminal split: \(panes.count) panes")
+    }
 
     for (index, pane) in panes.enumerated() {
       pane.setAccessibilityPaneIndex(index: index + 1, total: panes.count)

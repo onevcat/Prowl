@@ -3,7 +3,7 @@ import SwiftUI
 struct AppLoadingView: View {
   @State private var messageIndex = 0
 
-  private static let messages = [
+  private static let messages: [LocalizedStringResource] = [
     "Preparing your worktree",
     "Getting your agents ready",
     "Syncing git state",

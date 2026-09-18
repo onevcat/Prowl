@@ -31,7 +31,7 @@ final class MirrorRelayConnection {
     do {
       let bytes = try packet.encoded()
       guard queuedBytes + bytes.count <= 2 * MirrorRelayPacket.maximumPayload else {
-        close("Display relay is too slow.")
+        close(String(localized: "Display relay is too slow."))
         return
       }
       queuedBytes += bytes.count
@@ -83,7 +83,7 @@ final class MirrorRelayConnection {
       Task { @MainActor in
         guard let self, !self.closed else { return }
         guard let data, data.count == count, error == nil else {
-          self.close(error?.localizedDescription ?? "Display relay disconnected.")
+          self.close(error?.localizedDescription ?? String(localized: "Display relay disconnected."))
           return
         }
         completion(data)

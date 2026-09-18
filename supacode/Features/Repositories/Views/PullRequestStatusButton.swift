@@ -39,7 +39,7 @@ struct PullRequestStatusButton: View {
   }
 
   private var openPullRequestLabel: String {
-    let base = "Open on \(codeHost.displayName)"
+    let base = String(localized: "Open on \(codeHost.displayName)")
     let shortcut = AppShortcuts.resolvedShortcut(
       for: AppShortcuts.CommandID.openPullRequest,
       in: resolvedKeybindings

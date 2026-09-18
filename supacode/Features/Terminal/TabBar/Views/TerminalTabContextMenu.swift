@@ -69,7 +69,7 @@ struct TerminalTabContextMenu: ViewModifier {
     }
   }
 
-  private var closeToTrailingLabel: String {
+  private var closeToTrailingLabel: LocalizedStringKey {
     switch variant {
     case .shelf: "Close Tabs Below"
     case .tabBar, .canvas: "Close Tabs to the Right"

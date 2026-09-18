@@ -8,6 +8,17 @@ struct SettingsFeature {
   @ObservableState
   struct State: Equatable {
     var appearanceMode: AppearanceMode
+    /// The language choice. It mirrors the per-app `AppleLanguages` default, which
+    /// System Settings can also change, so `refreshAppLanguage` reads it again.
+    var appLanguage: AppLanguage
+    /// Immutable snapshot of the language this launch runs in, captured before any
+    /// localized UI is built. The pending-change hint compares the next launch with it.
+    var effectiveLanguageAtLaunch: ResolvedAppLanguage
+    /// The system languages without the per-app override. Used only to predict the
+    /// language of the next launch when the choice is "Follow System".
+    var systemPreferredLanguages: [String] = []
+    /// Localizations the app ships, in fallback order.
+    var supportedAppLanguages: [String] = ResolvedAppLanguage.allCases.map(\.rawValue)
     var defaultEditorID: String
     var confirmBeforeQuit: Bool
     var updatesAutomaticallyCheckForUpdates: Bool
@@ -77,9 +88,18 @@ struct SettingsFeature {
     var workflows: WorkflowsSettingsFeature.State?
     @Presents var alert: AlertState<Alert>?
 
-    init(settings: GlobalSettings = .default) {
+    init(
+      settings: GlobalSettings = .default,
+      appLanguage: AppLanguage = .system,
+      effectiveLanguageAtLaunch: ResolvedAppLanguage = .english,
+      systemPreferredLanguages: [String] = []
+    ) {
       let normalizedDefaultEditorID = OpenWorktreeAction.normalizedDefaultEditorID(settings.defaultEditorID)
       appearanceMode = settings.appearanceMode
+      self.appLanguage = appLanguage
+      self.effectiveLanguageAtLaunch = effectiveLanguageAtLaunch
+      self.systemPreferredLanguages = systemPreferredLanguages
+
       defaultEditorID = normalizedDefaultEditorID
       confirmBeforeQuit = settings.confirmBeforeQuit
       updatesAutomaticallyCheckForUpdates = settings.updatesAutomaticallyCheckForUpdates
@@ -129,6 +149,18 @@ struct SettingsFeature {
       externalDiffToolID = settings.externalDiffToolID
       externalDiffCustomCommand = settings.externalDiffCustomCommand
       detectRepositoryIconsAutomatically = settings.detectRepositoryIconsAutomatically
+    }
+
+    /// True only when the language the *next normal launch* (no command-line
+    /// override) would resolve to differs from this launch's snapshot — so
+    /// system → the same explicit language the system already resolved to
+    /// never produces a false "takes effect after restart" hint.
+    var languageChangePending: Bool {
+      AppLanguageResolver.resolve(
+        preference: appLanguage,
+        platformLanguages: systemPreferredLanguages,
+        supportedLanguages: supportedAppLanguages
+      ) != effectiveLanguageAtLaunch
     }
 
     var globalSettings: GlobalSettings {
@@ -192,6 +224,9 @@ struct SettingsFeature {
   enum Action: BindableAction {
     case task
     case settingsLoaded(GlobalSettings)
+    case setAppLanguage(AppLanguage)
+    case refreshAppLanguage
+
     case setSelection(SettingsSection?)
     case setSystemNotificationsEnabled(Bool)
     case setCommandFinishedNotificationThreshold(String)
@@ -249,6 +284,7 @@ struct SettingsFeature {
   @Dependency(TerminalLayoutPersistenceClient.self) private var terminalLayoutPersistence
   @Dependency(CLIInstallClient.self) private var cliInstallClient
   @Dependency(CLIServiceStatusClient.self) private var cliServiceStatusClient
+  @Dependency(AppLanguageClient.self) private var appLanguageClient
 
   var body: some Reducer<State, Action> {
     BindingReducer()
@@ -326,6 +362,22 @@ struct SettingsFeature {
         state.detectRepositoryIconsAutomatically = normalizedSettings.detectRepositoryIconsAutomatically
         state.syncGlobalDefaults(from: normalizedSettings)
         return .send(.delegate(.settingsChanged(normalizedSettings)))
+
+      case .setAppLanguage(let language):
+        guard language != state.appLanguage else { return .none }
+        state.appLanguage = language
+        let analyticsEnabled = state.analyticsEnabled
+        return .run { [analyticsClient, appLanguageClient] _ in
+          appLanguageClient.set(language)
+          if analyticsEnabled {
+            analyticsClient.capture("settings_changed", nil)
+          }
+        }
+
+      case .refreshAppLanguage:
+        state.appLanguage = appLanguageClient.current()
+        state.systemPreferredLanguages = appLanguageClient.systemLanguages()
+        return .none
 
       case .binding(\.notificationSound):
         let sound = state.notificationSound
@@ -465,19 +517,19 @@ struct SettingsFeature {
         if state.cliInstallShowAlert {
           if path.isEmpty {
             state.alert = AlertState {
-              TextState("Command Line Tool Uninstalled")
+              TextState(String(localized: "Command Line Tool Uninstalled"))
             } actions: {
-              ButtonState(action: .dismiss) { TextState("OK") }
+              ButtonState(action: .dismiss) { TextState(String(localized: "OK")) }
             } message: {
-              TextState("The prowl command line tool has been removed.")
+              TextState(String(localized: "The prowl command line tool has been removed."))
             }
           } else {
             state.alert = AlertState {
-              TextState("Command Line Tool Installed")
+              TextState(String(localized: "Command Line Tool Installed"))
             } actions: {
-              ButtonState(action: .dismiss) { TextState("OK") }
+              ButtonState(action: .dismiss) { TextState(String(localized: "OK")) }
             } message: {
-              TextState("The prowl command is now available at \(path).")
+              TextState(String(localized: "The prowl command is now available at \(path)."))
             }
           }
         }
@@ -488,9 +540,9 @@ struct SettingsFeature {
       case .cliInstallCompleted(.failure(let error)):
         if state.cliInstallShowAlert {
           state.alert = AlertState {
-            TextState("Command Line Tool Error")
+            TextState(String(localized: "Command Line Tool Error"))
           } actions: {
-            ButtonState(action: .dismiss) { TextState("OK") }
+            ButtonState(action: .dismiss) { TextState(String(localized: "OK")) }
           } message: {
             TextState(error.message)
           }
@@ -517,17 +569,19 @@ struct SettingsFeature {
 
       case .showNotificationPermissionAlert:
         state.alert = AlertState {
-          TextState("Prowl cannot send system notifications")
+          TextState(String(localized: "Prowl cannot send system notifications"))
         } actions: {
           ButtonState(action: .openSystemNotificationSettings) {
-            TextState("Open System Settings")
+            TextState(String(localized: "Open System Settings"))
           }
           ButtonState(role: .cancel, action: .dismiss) {
-            TextState("Cancel")
+            TextState(String(localized: "Cancel"))
           }
         } message: {
           TextState(
-            "Notification permission is turned off. Open System Settings to allow Prowl to send notifications."
+            String(
+              localized:
+                "Notification permission is turned off. Open System Settings to allow Prowl to send notifications.")
           )
         }
         return .none

@@ -5,6 +5,14 @@ nonisolated enum WorkflowHistoryScope: String, CaseIterable, Equatable, Sendable
   case pane = "This Pane"
   case worktree = "This Worktree"
   case all = "All Runs"
+
+  var title: String {
+    switch self {
+    case .pane: String(localized: "This Pane")
+    case .worktree: String(localized: "This Worktree")
+    case .all: String(localized: "All Runs")
+    }
+  }
 }
 
 nonisolated struct WorkflowHistoryContext: Equatable, Sendable {
@@ -30,18 +38,18 @@ nonisolated enum WorkflowHistorySessionIdentity {
 nonisolated enum WorkflowHistoryStatus {
   static func label(_ state: String) -> String {
     switch state {
-    case "completed": "Completed"
-    case "active", "running": "Running"
-    case "needs_attention": "Needs Attention"
-    case "failed": "Failed"
-    case "skipped": "Skipped"
-    case "branch_not_selected": "Branch not selected"
-    case "pending": "Not started"
-    case "not_run": "Not run"
-    case "cancelled": "Cancelled"
-    case "interrupted": "Interrupted"
-    case "iteration_limit_reached": "Iteration limit reached"
-    default: "Unavailable"
+    case "completed": String(localized: "Completed")
+    case "active", "running": String(localized: "Running")
+    case "needs_attention": String(localized: "Needs Attention")
+    case "failed": String(localized: "Failed")
+    case "skipped": String(localized: "Skipped")
+    case "branch_not_selected": String(localized: "Branch not selected")
+    case "pending": String(localized: "Not started")
+    case "not_run": String(localized: "Not run")
+    case "cancelled": String(localized: "Cancelled")
+    case "interrupted": String(localized: "Interrupted")
+    case "iteration_limit_reached": String(localized: "Iteration limit reached")
+    default: String(localized: "Unavailable")
     }
   }
 
@@ -74,12 +82,22 @@ nonisolated struct WorkflowHistoryStepGroup: Identifiable, Sendable {
     [WorkflowHistoryStatus.label(state), contextLabel].filter { !$0.isEmpty }.joined(separator: " · ")
   }
 
-  var attemptLabel: String { definition.kind == "while" ? "Check" : "Attempt" }
+  var attemptLabel: String {
+    definition.kind == "while" ? String(localized: "Check") : String(localized: "Attempt")
+  }
 
   var contextLabel: String {
     var parts: [String] = []
-    if let iterationLabel { parts.append(iterationLabel) } else if let iteration { parts.append("Round \(iteration)") }
-    if attempts.count > 1 { parts.append("\(attempts.count) \(attemptLabel.lowercased())s") }
+    if let iterationLabel {
+      parts.append(iterationLabel)
+    } else if let iteration {
+      parts.append(String(localized: "Round \(iteration)"))
+    }
+    if attempts.count > 1 {
+      parts.append(
+        definition.kind == "while"
+          ? String(localized: "\(attempts.count) checks") : String(localized: "\(attempts.count) attempts"))
+    }
     return parts.joined(separator: " · ")
   }
 
@@ -109,10 +127,16 @@ nonisolated struct WorkflowHistoryStepGroup: Identifiable, Sendable {
           definition: definition, invocations: invocations,
           iterationLabel: path.isEmpty
             ? nil
-            : path.map { component in
+            : path.map { component -> String in
               let parts = component.split(separator: ":")
               let loop = parts.first.map(String.init) ?? ""
-              return "\(titles[loop] ?? loop) · Round \(parts.last ?? "?")"
+              let round: String
+              if let number = parts.last.flatMap({ Int($0) }) {
+                round = String(localized: "Round \(number)")
+              } else {
+                round = String(localized: "Round \(String(parts.last ?? "?"))")
+              }
+              return "\(titles[loop] ?? loop) · \(round)"
             }.joined(separator: " / "))
         var order: [Int] = []
         for component in path {

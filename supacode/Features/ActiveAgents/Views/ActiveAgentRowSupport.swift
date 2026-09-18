@@ -34,7 +34,7 @@ enum ActiveAgentRowPresentation {
 
   static func paneTitle(for entry: ActiveAgentEntry) -> String {
     let trimmed = entry.paneTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-    return trimmed.isEmpty ? "Untitled tab" : trimmed
+    return trimmed.isEmpty ? String(localized: "Untitled tab") : trimmed
   }
 }
 
@@ -97,7 +97,7 @@ struct ActiveAgentRowContextMenu: View {
           Button(item.name) {
             send(.runWorkflowTapped(entry.id, workflowKey: item.key))
           }
-          .help(item.workflowDescription ?? "Run \(item.name) from this agent's pane")
+          .help(item.workflowDescription ?? String(localized: "Run \(item.name) from this agent's pane"))
         }
       }
     }

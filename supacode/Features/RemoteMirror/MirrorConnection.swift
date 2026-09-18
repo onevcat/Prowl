@@ -94,7 +94,7 @@ final class MirrorConnection {
         case .cancelled: self.close(nil)
         case .waiting(let error):
           if self.becameReady {
-            self.close("Connection lost: \(error.localizedDescription)")
+            self.close(String(localized: "Connection lost: \(error.localizedDescription)"))
           } else {
             // A refused port or rejected TLS key reports as waiting; there is nothing to wait for.
             self.onHandshakeFailure?()
@@ -114,7 +114,7 @@ final class MirrorConnection {
     do {
       let bytes = try MirrorWire.encode(message)
       guard queuedBytes + bytes.count <= 2 * MirrorWire.maximumPayload else {
-        close("Remote receiver is too slow.")
+        close(String(localized: "Remote receiver is too slow."))
         return
       }
       queuedBytes += bytes.count
@@ -164,7 +164,9 @@ final class MirrorConnection {
       do { try await clock.sleep(for: timeout) } catch { return }
       guard let self else { return }
       if !self.becameReady { self.failure = .timedOut }
-      self.close("Remote connection timed out. The other side is no longer responding.")
+      self.close(
+        String(localized: "Remote connection timed out. The other side is no longer responding.")
+      )
     }
   }
 
@@ -203,9 +205,9 @@ final class MirrorConnection {
       Task { @MainActor in
         guard let self, !self.closed else { return }
         guard let data, data.count == count, error == nil else {
-          self.close(
-            error?.localizedDescription
-              ?? (done ? "Host disconnected." : "Incomplete remote message."))
+          let fallback =
+            done ? String(localized: "Host disconnected.") : String(localized: "Incomplete remote message.")
+          self.close(error?.localizedDescription ?? fallback)
           return
         }
         completion(data)

@@ -107,7 +107,7 @@ struct CloneRepositoryView: View {
 
   private func performClone() {
     guard let request = Self.cloneRequest(urlString: urlString, locationPath: locationPath) else {
-      errorMessage = "Enter a valid clone URL and destination."
+      errorMessage = String(localized: "Enter a valid clone URL and destination.")
       return
     }
 
@@ -152,7 +152,7 @@ struct CloneRepositoryView: View {
       guard FileManager.default.createFile(atPath: errorLogURL.path(percentEncoded: false), contents: nil),
         let errorHandle = try? FileHandle(forWritingTo: errorLogURL)
       else {
-        continuation.resume(returning: "Unable to prepare clone log")
+        continuation.resume(returning: String(localized: "Unable to prepare clone log"))
         return
       }
 
@@ -170,7 +170,7 @@ struct CloneRepositoryView: View {
           let data = (try? Data(contentsOf: errorLogURL)) ?? Data()
           let msg =
             String(data: data, encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? "Clone failed"
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? String(localized: "Clone failed")
           continuation.resume(returning: msg)
         }
       }

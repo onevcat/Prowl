@@ -16,8 +16,10 @@ struct GlobalCustomCommandsView: View {
         VStack(alignment: .leading, spacing: 4) {
           Text("Global Custom Commands")
           Text(
-            "Global terminal actions available in every repository. "
-              + "Enabled commands appear in the top-right of the window toolbar."
+            """
+            Global terminal actions available in every repository. \
+            Enabled commands appear in the top-right of the window toolbar.
+            """
           )
           .foregroundStyle(.secondary)
         }

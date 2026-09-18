@@ -31,7 +31,7 @@ struct NotificationPopoverView: View {
           }
           .buttonStyle(.plain)
           .font(.caption)
-          .help(notification.content.isEmpty ? "Focus pane" : notification.content)
+          .help(notification.content.isEmpty ? String(localized: "Focus pane") : notification.content)
         }
       }
       .padding()

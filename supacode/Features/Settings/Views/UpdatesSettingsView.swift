@@ -16,8 +16,10 @@ struct UpdatesSettingsView: View {
         Text("Automatic Updates")
       } footer: {
         Text(
-          "When a new version is available, a small badge appears next to the notifications bell. "
-            + "Click it to review, install, and choose future background downloads."
+          """
+          When a new version is available, a small badge appears next to the notifications bell. \
+          Click it to review, install, and choose future background downloads.
+          """
         )
         .font(.callout)
         .foregroundStyle(.secondary)

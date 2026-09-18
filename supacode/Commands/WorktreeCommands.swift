@@ -26,7 +26,9 @@ struct WorktreeCommands: Commands {
       || (repositories.isShowingCanvas && !store.selectedCustomCommands.isEmpty)
     let orderedRows = visibleHotkeyWorktreeRows ?? repositories.orderedWorktreeRows()
     let codeHostWorktreeID = selectedCodeHostWorktreeID
-    let codeHostLabel = "Open on \(repositories.codeHost(forWorktreeID: codeHostWorktreeID).displayName)"
+    let codeHost = repositories.codeHost(forWorktreeID: codeHostWorktreeID)
+    let codeHostLabel: LocalizedStringResource =
+      if codeHost == .unknown { "Open on Code Host" } else { "Open on \(codeHost.displayName)" }
     let deleteShortcut = KeyboardShortcut(.delete, modifiers: [.command, .shift]).display
     let customCommands = store.selectedCustomCommands
     CommandMenu("Worktrees") {
@@ -113,7 +115,11 @@ struct WorktreeCommands: Commands {
         }
       }
       .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.openPullRequest)))
-      .help(helpText(title: codeHostLabel, commandID: AppShortcuts.CommandID.openPullRequest))
+      .help(
+        helpText(
+          title: codeHostLabel,
+          commandID: AppShortcuts.CommandID.openPullRequest)
+      )
       .disabled(codeHostWorktreeID == nil)
       Button("New Worktree", systemImage: "plus") {
         store.send(.repositories(.worktreeCreation(.createRandomWorktree)))
@@ -184,11 +190,12 @@ struct WorktreeCommands: Commands {
     store.resolvedKeybindings.display(for: commandID)
   }
 
-  private func helpText(title: String, commandID: String) -> String {
+  private func helpText(title: LocalizedStringResource, commandID: String) -> String {
+    let localizedTitle = String(localized: title)
     if let shortcut = shortcutDisplay(for: commandID) {
-      return "\(title) (\(shortcut))"
+      return "\(localizedTitle) (\(shortcut))"
     }
-    return title
+    return localizedTitle
   }
 
   private func customCommandShortcut(for command: EffectiveCustomCommand) -> KeyboardShortcut? {

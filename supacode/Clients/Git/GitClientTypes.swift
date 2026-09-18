@@ -62,13 +62,15 @@ enum GitClientError: LocalizedError {
     switch self {
     case .commandFailed(let command, let message):
       if message.isEmpty {
-        return "Git command failed: \(command)"
+        return String(localized: "Git command failed: \(command)")
       }
-      return "Git command failed: \(command)\n\(message)"
+      return String(localized: "Git command failed: \(command)\n\(message)")
     case .worktreeNotRegistered(let path):
-      return "Git no longer recognizes this worktree: \(path)"
+      return String(localized: "Git no longer recognizes this worktree: \(path)")
     case .worktreeRecoveryFailed(let path, let removalError, let recoveryError):
-      return "\(removalError)\nUnable to restore the worktree directory at \(path): \(recoveryError)"
+      return String(
+        localized: "\(removalError)\nUnable to restore the worktree directory at \(path): \(recoveryError)"
+      )
     }
   }
 }
@@ -131,11 +133,11 @@ nonisolated enum GitBranchRefKind: String, Codable, Equatable, Hashable, Sendabl
   var title: String {
     switch self {
     case .local:
-      return "Local Branches"
+      return String(localized: "Local Branches")
     case .remoteTracking:
-      return "Remote Branches"
+      return String(localized: "Remote Branches")
     case .fetchedRemote:
-      return "Fetched Remote Branches"
+      return String(localized: "Fetched Remote Branches")
     }
   }
 }
@@ -161,9 +163,9 @@ nonisolated enum OutgoingBaseSource: Equatable, Sendable {
 
   var label: String {
     switch self {
-    case .pullRequest: "pull request base"
-    case .repositorySetting: "worktree base setting"
-    case .automatic: "default branch"
+    case .pullRequest: String(localized: "pull request base")
+    case .repositorySetting: String(localized: "worktree base setting")
+    case .automatic: String(localized: "default branch")
     }
   }
 }
@@ -194,23 +196,43 @@ nonisolated enum OutgoingBaseResolutionError: Error, Equatable, Sendable, Locali
   var errorDescription: String? {
     switch self {
     case .incompletePullRequest:
-      "The cached pull request has no base branch yet. Refresh pull request status and try again."
+      String(
+        localized: "The cached pull request has no base branch yet. Refresh pull request status and try again."
+      )
     case .invalidPullRequestURL(let url):
-      "Prowl could not parse the pull request URL (\(url))."
+      String(localized: "Prowl could not parse the pull request URL (\(url)).")
     case .noMatchingRemote(let host, let repositoryPath):
-      "No local remote matches the pull request repository \(host)/\(repositoryPath). "
-        + "Add that remote and fetch it, then try again."
+      String(
+        localized: """
+          No local remote matches the pull request repository \(host)/\(repositoryPath). \
+          Add that remote and fetch it, then try again.
+          """
+      )
     case .multipleMatchingRemotes(let names):
-      "Multiple remotes point at the pull request repository: \(names.joined(separator: ", ")). "
-        + "Remove or rename one so Prowl can pick the base remote."
+      String(
+        localized: """
+          Multiple remotes point at the pull request repository: \(names.joined(separator: ", ")). \
+          Remove or rename one so Prowl can pick the base remote.
+          """
+      )
     case .unresolvedPullRequestBase(let remote, let branch):
-      "The pull request base \(remote)/\(branch) is not available locally. "
-        + "Run `git fetch \(remote)` and try again."
+      String(
+        localized: """
+          The pull request base \(remote)/\(branch) is not available locally. \
+          Run `git fetch \(remote)` and try again.
+          """
+      )
     case .unresolvedRepositorySettingBase(let ref):
-      "The configured worktree base \(ref) does not exist locally. "
-        + "Fetch it, or update the base branch in the repository's settings."
+      String(
+        localized: """
+          The configured worktree base \(ref) does not exist locally. \
+          Fetch it, or update the base branch in the repository's settings.
+          """
+      )
     case .noResolvableBase:
-      "No pull request, configured base branch, or default remote branch was found to compare against."
+      String(
+        localized: "No pull request, configured base branch, or default remote branch was found to compare against."
+      )
     }
   }
 }

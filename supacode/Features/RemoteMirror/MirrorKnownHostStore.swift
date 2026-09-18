@@ -73,7 +73,9 @@ final class MirrorKnownHostStore {
       notice = nil
     } catch {
       SupaLogger("RemoteMirror").warning("Saved Host import failed: \(error)")
-      notice = "Previously paired Hosts could not be read. Use Connect to a New Host to continue."
+      notice = String(
+        localized: "Previously paired Hosts could not be read. Use Connect to a New Host to continue."
+      )
     }
   }
 
@@ -109,7 +111,7 @@ final class MirrorKnownHostStore {
       notice = nil
     } catch {
       SupaLogger("RemoteMirror").warning("Forgetting a Host failed: \(error)")
-      notice = "Could not remove the saved access for \(host.displayName). Try again."
+      notice = String(localized: "Could not remove the saved access for \(host.displayName). Try again.")
     }
   }
 

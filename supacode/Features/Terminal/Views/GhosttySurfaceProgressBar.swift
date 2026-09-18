@@ -16,20 +16,20 @@ struct GhosttySurfaceProgressBar: View {
       progressValue.map(Self.bucketedPercent) ?? (progressState == GHOSTTY_PROGRESS_STATE_PAUSE ? 100 : nil)
     let accessibilityLabel: String =
       switch progressState {
-      case GHOSTTY_PROGRESS_STATE_ERROR: "Terminal progress - Error"
-      case GHOSTTY_PROGRESS_STATE_PAUSE: "Terminal progress - Paused"
-      case GHOSTTY_PROGRESS_STATE_INDETERMINATE: "Terminal progress - In progress"
-      default: "Terminal progress"
+      case GHOSTTY_PROGRESS_STATE_ERROR: String(localized: "Terminal progress - Error")
+      case GHOSTTY_PROGRESS_STATE_PAUSE: String(localized: "Terminal progress - Paused")
+      case GHOSTTY_PROGRESS_STATE_INDETERMINATE: String(localized: "Terminal progress - In progress")
+      default: String(localized: "Terminal progress")
       }
     let accessibilityValue: String =
       if let progress {
-        "\(progress) percent complete"
+        String(localized: "\(progress) percent complete")
       } else {
         switch progressState {
-        case GHOSTTY_PROGRESS_STATE_ERROR: "Operation failed"
-        case GHOSTTY_PROGRESS_STATE_PAUSE: "Operation paused at completion"
-        case GHOSTTY_PROGRESS_STATE_INDETERMINATE: "Operation in progress"
-        default: "Indeterminate progress"
+        case GHOSTTY_PROGRESS_STATE_ERROR: String(localized: "Operation failed")
+        case GHOSTTY_PROGRESS_STATE_PAUSE: String(localized: "Operation paused at completion")
+        case GHOSTTY_PROGRESS_STATE_INDETERMINATE: String(localized: "Operation in progress")
+        default: String(localized: "Indeterminate progress")
         }
       }
 

@@ -59,8 +59,10 @@ struct RepositorySectionView: View {
           iconTint: appearance.color?.color ?? .accentColor,
           repositoryRootURL: repository.rootURL,
           nameTooltip: repository.capabilities.supportsWorktrees
-            ? (isExpanded ? "Collapse" : "Expand")
-            : (repository.isWorkspace ? "Open terminal in workspace" : "Open terminal in folder")
+            ? (isExpanded ? String(localized: "Collapse") : String(localized: "Expand"))
+            : (repository.isWorkspace
+              ? String(localized: "Open terminal in workspace")
+              : String(localized: "Open terminal in folder"))
         )
         // Expanded git repos move the count into the worktree rows, so the
         // header stays quiet. Workspaces keep the header badge even when

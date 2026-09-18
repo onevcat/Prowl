@@ -271,45 +271,55 @@ extension GhosttySurfaceView {
 
     let menu = NSMenu()
     if ghostty_surface_has_selection(surface) {
-      menu.addItem(NSMenuItem(title: "Copy", action: #selector(copy(_:)), keyEquivalent: ""))
+      menu.addItem(
+        NSMenuItem(
+          title: String(localized: "Copy"),
+          action: #selector(copy(_:)),
+          keyEquivalent: ""
+        ))
     }
-    menu.addItem(NSMenuItem(title: "Paste", action: #selector(paste(_:)), keyEquivalent: ""))
+    menu.addItem(
+      NSMenuItem(
+        title: String(localized: "Paste"),
+        action: #selector(paste(_:)),
+        keyEquivalent: ""
+      ))
     menu.addItem(.separator())
     menu.addItem(
       menuItem(
-        title: "Split Right",
+        title: String(localized: "Split Right"),
         action: #selector(splitRight(_:)),
         symbol: "rectangle.righthalf.inset.filled"
       ))
     menu.addItem(
       menuItem(
-        title: "Split Left",
+        title: String(localized: "Split Left"),
         action: #selector(splitLeft(_:)),
         symbol: "rectangle.leadinghalf.inset.filled"
       ))
     menu.addItem(
       menuItem(
-        title: "Split Down",
+        title: String(localized: "Split Down"),
         action: #selector(splitDown(_:)),
         symbol: "rectangle.bottomhalf.inset.filled"
       ))
     menu.addItem(
       menuItem(
-        title: "Split Up",
+        title: String(localized: "Split Up"),
         action: #selector(splitUp(_:)),
         symbol: "rectangle.tophalf.inset.filled"
       ))
     menu.addItem(.separator())
     menu.addItem(
       menuItem(
-        title: "Reset Terminal",
+        title: String(localized: "Reset Terminal"),
         action: #selector(resetTerminal(_:)),
         symbol: "arrow.trianglehead.2.clockwise"
       ))
     menu.addItem(.separator())
     menu.addItem(
       menuItem(
-        title: "Change Title...",
+        title: String(localized: "Change Title..."),
         action: #selector(changeTitle(_:)),
         symbol: "pencil.line"
       ))

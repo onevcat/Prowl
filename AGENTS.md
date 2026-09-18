@@ -11,7 +11,8 @@ make install-release             # Build Release, sign locally, install to /Appl
 make format-changed              # Run swift-format on changed Swift files only
 make format                      # Run full-tree swift-format cleanup
 make lint                        # Run swiftlint only
-make check                       # Run changed-file format, swift-format lint, and swiftlint
+make check                       # Run changed-file format, swift-format lint, swiftlint, and the string catalog check
+make audit-localization          # Release check of the string catalog and unlocalized UI copy (see the sync-l10n skill)
 make test                        # Run all tests
 make benchmark-build             # Benchmark CI-like clean/warm-CAS build and test time
 make bench                       # Run performance benchmarks with -O; append absolute medians to ~/Library/Logs/Prowl/measurements/bench/
@@ -119,6 +120,7 @@ Reducer ← .terminalEvent(Event) ← AsyncStream<Event>
 - Do not use NSNotification to communicate between reducers.
 - Prefer `@Shared` directly in reducers for app storage and shared settings; do not introduce new dependency clients solely to wrap `@Shared`.
 - Use `SupaLogger` for all logging. Never use `print()` or `os.Logger` directly. `SupaLogger` prints in DEBUG and uses `os.Logger` in release.
+- UI copy is localized (`docs-ai/070-app-localization/000-plan.md`). Write it so the compiler can extract it: a literal passed straight to SwiftUI (`Text("…")`, `.help("…")`), `String(localized: "…")` when you need a `String`, and a `LocalizedStringKey` or `LocalizedStringResource` parameter for a helper that takes copy. Write long copy as one multi-line literal, not a `+` chain. Do not translate during feature work: the `sync-l10n` skill adds translations and removes unused entries at release time. Tests run in English (pinned in the scheme), so assert on literal English copy.
 
 ### Formatting & Linting
 

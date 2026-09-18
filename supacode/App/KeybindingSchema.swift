@@ -389,7 +389,7 @@ extension KeybindingSchemaDocument {
       commands: AppShortcuts.bindings.map { binding in
         KeybindingCommandSchema(
           id: binding.id,
-          title: binding.title,
+          title: binding.localizedTitle,
           scope: .init(binding.scope),
           platform: .macOS,
           allowUserOverride: binding.scope != .systemFixedAppAction,

@@ -31,8 +31,10 @@ struct RemoveWorkspaceConfirmationView: View {
         )
       )
       .help(
-        "Unregister worktrees created for this workspace from their source repositories, "
-          + "then delete the workspace folder."
+        """
+        Unregister worktrees created for this workspace from their source repositories, \
+        then delete the workspace folder.
+        """
       )
 
       if !confirmation.branchOptions.isEmpty {

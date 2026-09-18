@@ -42,7 +42,7 @@ extension SkillInstallClient: DependencyKey {
     SkillInstallClient(
       bundledSkills: {
         guard let resourcesURL else {
-          throw SkillInstallError(message: "Could not locate the app's bundled resources.")
+          throw SkillInstallError(message: String(localized: "Could not locate the app's bundled resources."))
         }
         do {
           return try ProwlSkills.bundled(resourcesURL: resourcesURL)
@@ -81,12 +81,16 @@ extension SkillInstallClient: DependencyKey {
 private nonisolated func skillInstallErrorMessage(_ error: SymlinkInstallError) -> String {
   switch error {
   case .conflict(let path):
-    "A real file or directory occupies \(path). "
-      + "Prowl only manages symlinks and never deletes it; remove it manually first."
+    String(
+      localized: """
+        A real file or directory occupies \(path). \
+        Prowl only manages symlinks and never deletes it; remove it manually first.
+        """
+    )
   case .notInstalled(let path):
-    "No skill link found at \(path)."
+    String(localized: "No skill link found at \(path).")
   case .sourceNotFound(let path):
-    "Bundled skill not found at \(path)."
+    String(localized: "Bundled skill not found at \(path).")
   }
 }
 

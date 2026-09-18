@@ -18,12 +18,13 @@ nonisolated enum MirrorEndpointInput {
 
     var message: String {
       switch self {
-      case .emptyAddress: "Enter the Host address."
-      case .addressContainsPort: "Enter the port in its own field."
-      case .invalidAddress: "Enter an IP address or a host name without spaces."
-      case .invalidPort: "Enter a port between 1 and 65535."
-      case .missingPairingCode: "Enter the pairing code shown on Host."
-      case .invalidPairingCode: "Pairing codes have eight letters or digits, shown as XXXX-XXXX."
+      case .emptyAddress: String(localized: "Enter the Host address.")
+      case .addressContainsPort: String(localized: "Enter the port in its own field.")
+      case .invalidAddress: String(localized: "Enter an IP address or a host name without spaces.")
+      case .invalidPort: String(localized: "Enter a port between 1 and 65535.")
+      case .missingPairingCode: String(localized: "Enter the pairing code shown on Host.")
+      case .invalidPairingCode:
+        String(localized: "Pairing codes have eight letters or digits, shown as XXXX-XXXX.")
       }
     }
   }

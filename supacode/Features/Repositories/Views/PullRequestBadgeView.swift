@@ -26,13 +26,25 @@ enum PullRequestBadgeStyle {
     let state = state?.uppercased()
     switch state {
     case "MERGED":
-      return url == nil ? "Pull request merged" : "Open merged pull request on GitHub"
+      if url == nil {
+        return String(localized: "Pull request merged")
+      }
+      return String(localized: "Open merged pull request on GitHub")
     case "OPEN":
-      return url == nil ? "Pull request open" : "Open pull request on GitHub"
+      if url == nil {
+        return String(localized: "Pull request open")
+      }
+      return String(localized: "Open pull request on GitHub")
     case "CLOSED":
-      return url == nil ? "Pull request closed" : "Open closed pull request on GitHub"
+      if url == nil {
+        return String(localized: "Pull request closed")
+      }
+      return String(localized: "Open closed pull request on GitHub")
     default:
-      return url == nil ? "Pull request" : "Open pull request on GitHub"
+      if url == nil {
+        return String(localized: "Pull request")
+      }
+      return String(localized: "Open pull request on GitHub")
     }
   }
 }

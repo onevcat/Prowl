@@ -5,17 +5,21 @@ struct WorkflowHistoryJSONView: View {
   let values: [String: WorkflowJSONValue]
   let worktree: URL
   let onOutput: (WorkflowHistoryOutputIntent) -> Void
-  var title = "Output"
+  var title = String(localized: "Output")
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
       HStack {
         Text(title).font(.caption).foregroundStyle(.secondary)
         Spacer()
-        WorkflowHistoryIconButton(label: "Open full JSON \(title.lowercased())", symbol: "arrow.up.forward.square") {
+        WorkflowHistoryIconButton(
+          label: String(localized: "Open full JSON \(title.lowercased())"), symbol: "arrow.up.forward.square"
+        ) {
           onOutput(.openJSON(values))
         }
-        WorkflowHistoryIconButton(label: "Copy full JSON \(title.lowercased())", symbol: "doc.on.doc") {
+        WorkflowHistoryIconButton(
+          label: String(localized: "Copy full JSON \(title.lowercased())"), symbol: "doc.on.doc"
+        ) {
           onOutput(.copyJSON(values))
         }
       }
@@ -49,22 +53,30 @@ private struct WorkflowHistoryOutputFieldView: View {
             }.contentShape(.rect)
           }
           .buttonStyle(.plain)
-          .help("\(expanded ? "Collapse" : "Expand") \(field.key)")
+          .help(
+            expanded ? String(localized: "Collapse \(field.key)") : String(localized: "Expand \(field.key)")
+          )
           .accessibilityValue(expanded ? "Expanded" : "Collapsed")
         } else {
           Color.clear.frame(width: 10, height: 1)
           valueRow
         }
         if let url = field.fileURL {
-          WorkflowHistoryIconButton(label: "Open \(url.lastPathComponent)", symbol: "arrow.up.forward.square") {
+          WorkflowHistoryIconButton(
+            label: String(localized: "Open \(url.lastPathComponent)"), symbol: "arrow.up.forward.square"
+          ) {
             onOutput(.openArtifact(url, worktree: worktree))
           }
-          WorkflowHistoryIconButton(label: "Reveal \(url.lastPathComponent) in Finder", symbol: "folder") {
+          WorkflowHistoryIconButton(
+            label: String(localized: "Reveal \(url.lastPathComponent) in Finder"), symbol: "folder"
+          ) {
             onOutput(.revealArtifact(url, worktree: worktree))
           }
         }
         if case .string(let value) = field.value {
-          WorkflowHistoryIconButton(label: "Copy \(field.key)", symbol: "doc.on.doc") { onOutput(.copyText(value)) }
+          WorkflowHistoryIconButton(label: String(localized: "Copy \(field.key)"), symbol: "doc.on.doc") {
+            onOutput(.copyText(value))
+          }
         }
       }
       if expanded, let children = field.children {
@@ -87,7 +99,8 @@ private struct WorkflowHistoryOutputFieldView: View {
         .frame(width: 100, alignment: .leading)
         .help(
           field.key == "output_path"
-            ? "The saved JSON result file; output contains its fields" : String(field.key.prefix(300)))
+            ? String(localized: "The saved JSON result file; output contains its fields")
+            : String(field.key.prefix(300)))
       Text(field.fileURL?.path ?? field.summary)
         .textSelection(.enabled)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -108,7 +121,7 @@ struct WorkflowHistoryDeliveryView: View {
     if WorkflowSchema.isSlug(delivery.name), delivery.ordinal > 0 {
       let url = delivery.path.hasPrefix("/") ? URL(filePath: delivery.path) : directory.appending(path: delivery.path)
       WorkflowHistoryTextFileView(
-        label: delivery.name, contentName: "output", url: url, onOutput: onOutput,
+        label: delivery.name, contentName: String(localized: "output"), url: url, onOutput: onOutput,
         verdict: delivery.verdict, revision: revision)
     } else {
       Text("Output reference is invalid.").foregroundStyle(.secondary)
@@ -133,21 +146,23 @@ struct WorkflowHistoryTextFileView: View {
         if let verdict { Text(verdict).font(.caption.weight(.medium)).lineLimit(1) }
         Spacer(minLength: 8)
         HStack(spacing: 8) {
-          WorkflowHistoryIconButton(label: "Open full \(contentName)", symbol: "arrow.up.forward.square") {
+          WorkflowHistoryIconButton(
+            label: String(localized: "Open full \(contentName)"), symbol: "arrow.up.forward.square"
+          ) {
             onOutput(.openFile(url))
           }
-          WorkflowHistoryIconButton(label: "Copy full \(contentName)", symbol: "doc.on.doc") {
+          WorkflowHistoryIconButton(label: String(localized: "Copy full \(contentName)"), symbol: "doc.on.doc") {
             onOutput(.copyFile(url))
           }
-          WorkflowHistoryIconButton(label: "Reveal \(contentName) in Finder", symbol: "folder") {
+          WorkflowHistoryIconButton(label: String(localized: "Reveal \(contentName) in Finder"), symbol: "folder") {
             onOutput(.reveal(url))
           }
         }
       }
       if let preview {
-        WorkflowHistoryMarkdownPreview(preview: preview, emptyText: "Empty \(contentName)")
+        WorkflowHistoryMarkdownPreview(preview: preview, emptyText: String(localized: "Empty \(contentName)"))
       } else {
-        Text(error ?? "Loading \(contentName)…").foregroundStyle(.secondary)
+        Text(error ?? String(localized: "Loading \(contentName)…")).foregroundStyle(.secondary)
       }
     }
     .task(id: WorkflowHistoryFileLoadKey(url: url, revision: revision)) {
@@ -160,7 +175,7 @@ struct WorkflowHistoryTextFileView: View {
       }.value
       guard !Task.isCancelled else { return }
       preview = result
-      if result == nil { error = "Preview unavailable. Open the file to view its contents." }
+      if result == nil { error = String(localized: "Preview unavailable. Open the file to view its contents.") }
     }
   }
 }

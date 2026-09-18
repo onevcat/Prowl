@@ -12,9 +12,13 @@ nonisolated struct WorkflowBundleReview: Equatable, Sendable {
   var filePaths: [String] { Set(snapshot.files.keys).union(changes.map(\.path)).sorted() }
 
   var preview: String {
-    guard let data = snapshot.files[selectedFile] else { return "This file was removed from the bundle." }
-    guard data.count <= 131_072 else { return "This file is too large to preview. Open the bundle to inspect it." }
-    return String(data: data, encoding: .utf8) ?? "Binary file. Open the bundle to inspect it."
+    guard let data = snapshot.files[selectedFile] else {
+      return String(localized: "This file was removed from the bundle.")
+    }
+    guard data.count <= 131_072 else {
+      return String(localized: "This file is too large to preview. Open the bundle to inspect it.")
+    }
+    return String(data: data, encoding: .utf8) ?? String(localized: "Binary file. Open the bundle to inspect it.")
   }
 
   static func load(url: URL, scope: WorkflowScope) throws -> Self {

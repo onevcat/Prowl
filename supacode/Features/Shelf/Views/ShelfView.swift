@@ -195,8 +195,8 @@ struct ShelfView: View {
 
   private func closeMenuTitle(for book: ShelfBook) -> String {
     switch book.kind {
-    case .worktree: "Close Worktree"
-    case .plainFolder: "Close Folder"
+    case .worktree: String(localized: "Close Worktree")
+    case .plainFolder: String(localized: "Close Folder")
     }
   }
 

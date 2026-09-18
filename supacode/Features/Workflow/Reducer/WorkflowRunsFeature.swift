@@ -810,7 +810,7 @@ struct WorkflowRunsFeature {
       runtime.notify(
         session.worktree,
         WorkflowRuntimeNotification(
-          title: "Workflow · \(session.run.definition.name)",
+          title: String(localized: "Workflow · \(session.run.definition.name)"),
           body: text,
           targetSurfaceID: WorkflowRunNotice.targetSurfaceID(for: session.run),
           workflowRunID: session.run.id

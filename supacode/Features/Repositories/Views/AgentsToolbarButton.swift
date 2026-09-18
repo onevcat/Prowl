@@ -144,15 +144,15 @@ struct AgentsToolbarButton: View {
   private var helpText: String {
     guard let capsule else {
       return launcherItems.isEmpty
-        ? "Manage agent profiles"
-        : "Launch an agent profile in this worktree"
+        ? String(localized: "Manage agent profiles")
+        : String(localized: "Launch an agent profile in this worktree")
     }
-    return "Agent actions for \(capsule.displayName)"
+    return String(localized: "Agent actions for \(capsule.displayName)")
   }
 
   private var accessibilityText: String {
-    guard let capsule else { return "Agents" }
-    return "Agents: \(capsule.displayName)"
+    guard let capsule else { return String(localized: "Agents") }
+    return String(localized: "Agents: \(capsule.displayName)")
   }
 }
 
@@ -241,16 +241,16 @@ private struct AgentsPopoverContent: View {
       }
       if featureFlags.workflowUI {
         AgentsPopoverRow(
-          title: "Manage Workflows…",
-          subtitle: "Review, create, and edit workflows in Settings",
+          title: String(localized: "Manage Workflows…"),
+          subtitle: String(localized: "Review, create, and edit workflows in Settings"),
           systemImage: "point.3.connected.trianglepath.dotted",
           action: onManageWorkflows
         )
         .help("Open Settings → Agents → Workflows")
       }
       AgentsPopoverRow(
-        title: "Manage Agent Profiles…",
-        subtitle: "Add presets, models, and accounts in Settings",
+        title: String(localized: "Manage Agent Profiles…"),
+        subtitle: String(localized: "Add presets, models, and accounts in Settings"),
         systemImage: "slider.horizontal.3",
         action: onManageProfiles
       )
@@ -366,7 +366,7 @@ private struct AgentsWorkflowRow: View {
       }
       .buttonStyle(.plain)
       .disabled(!item.isRunnable)
-      .help(item.validationFailure ?? "Run \(item.name)")
+      .help(item.validationFailure ?? String(localized: "Run \(item.name)"))
       Menu {
         if item.isRunnable {
           Button("Run with Options…", action: onRunWithOptions)

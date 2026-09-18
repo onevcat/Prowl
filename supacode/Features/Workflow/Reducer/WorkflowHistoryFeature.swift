@@ -116,14 +116,29 @@ struct WorkflowHistoryFeature {
         guard !state.isBusy, state.removableCount > 0 else { return .none }
         let count = state.removableCount
         state.alert = AlertState {
-          TextState("Clear Workflow History?")
+          TextState(String(localized: "Clear Workflow History?"))
         } actions: {
-          ButtonState(role: .cancel) { TextState("Cancel") }
-          ButtonState(role: .destructive, action: .confirmClear) { TextState("Clear History") }
+          ButtonState(role: .cancel) { TextState(String(localized: "Cancel")) }
+          ButtonState(role: .destructive, action: .confirmClear) { TextState(String(localized: "Clear History")) }
         } message: {
-          TextState(
-            "\(count) finished run\(count == 1 ? "" : "s") and their prompts, deliveries, and action outputs "
-              + "will be deleted. Runs that are still active are kept. This cannot be undone.")
+          let message =
+            if count == 1 {
+              String(
+                localized:
+                  "1 finished run will be deleted. Runs that are still active are kept. This cannot be undone.",
+                comment: "Clear workflow history confirmation: singular (1 run)"
+              )
+            } else {
+              String(
+                format: String(
+                  localized:
+                    "%lld finished runs will be deleted. Runs that are still active are kept. This cannot be undone.",
+                  comment: "Clear workflow history confirmation: plural (N runs)"
+                ),
+                count
+              )
+            }
+          return TextState(message)
         }
         return .none
       case .alert(.presented(.confirmClear)):
@@ -141,7 +156,15 @@ struct WorkflowHistoryFeature {
       case .cleared(let cleanup):
         state.isBusy = true
         let count = cleanup.removed.count
-        state.result = "Removed \(count) run\(count == 1 ? "" : "s")."
+        state.result =
+          if count == 1 {
+            String(localized: "Removed 1 run.", comment: "Workflow history clear result: singular")
+          } else {
+            String(
+              format: String(localized: "Removed %lld runs.", comment: "Workflow history clear result: plural"),
+              count
+            )
+          }
         state.error = cleanup.failures.isEmpty ? nil : cleanup.failures.joined(separator: "\n")
         return .run { send in
           do { await send(.loaded(try await operations.preview())) } catch {

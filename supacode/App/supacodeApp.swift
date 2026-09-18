@@ -64,6 +64,7 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
   }
 
   func applicationDidBecomeActive(_ notification: Notification) {
+    appStore?.send(.settings(.refreshAppLanguage))
     let app = NSApplication.shared
     let hasVisibleMainWindow = MainWindowSurface.hasVisibleMainWindow(in: app.windows)
     WindowLifecycleDiagnostics.logWithWindows(
@@ -200,6 +201,8 @@ struct SupacodeApp: App {
     UserDefaults.standard.set(200, forKey: "NSInitialToolTipDelay")
     @Shared(.settingsFile) var settingsFile
     let initialSettings = settingsFile.global
+    let appLanguageClient = AppLanguageClient.liveValue
+
     let initialResolvedKeybindings = KeybindingResolver.resolve(
       schema: .appResolverSchema(),
       userOverrides: initialSettings.keybindingUserOverrides
@@ -231,7 +234,13 @@ struct SupacodeApp: App {
     let keyObserver = CommandKeyObserver()
     _commandKeyObserver = State(initialValue: keyObserver)
     var initialAppState = AppFeature.State(
-      settings: SettingsFeature.State(settings: initialSettings))
+      settings: SettingsFeature.State(
+        settings: initialSettings,
+        appLanguage: appLanguageClient.current(),
+        effectiveLanguageAtLaunch: ResolvedAppLanguage.effective(),
+        systemPreferredLanguages: appLanguageClient.systemLanguages()
+      )
+    )
     if let cliOpenPath = Self.cliLaunchOpenPath() {
       initialAppState.launchRestoreMode = .cliOpenPath(cliOpenPath)
     }
@@ -1659,7 +1668,10 @@ struct SupacodeApp: App {
               set: { askAgentHelp.isPresented = $0 }
             )
           ) {
-            AskAgentHelpView { askAgentHelp.dismiss() }
+            AskAgentHelpView(
+              appLocale: Locale(identifier: store.settings.effectiveLanguageAtLaunch.rawValue),
+              systemLocale: AskAgentHelpPrompt.systemPreferredLocale()
+            ) { askAgentHelp.dismiss() }
           }
       }
       .registersMainWindowOpener()
@@ -1774,10 +1786,11 @@ struct SupacodeApp: App {
     )
   }
 
-  private func helpText(title: String, commandID: String) -> String {
+  private func helpText(title: LocalizedStringResource, commandID: String) -> String {
+    let localizedTitle = String(localized: title)
     if let shortcut = store.resolvedKeybindings.display(for: commandID) {
-      return "\(title) (\(shortcut))"
+      return "\(localizedTitle) (\(shortcut))"
     }
-    return title
+    return localizedTitle
   }
 }

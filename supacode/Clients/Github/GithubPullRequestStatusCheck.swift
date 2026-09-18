@@ -129,19 +129,19 @@ nonisolated struct PullRequestCheckBreakdown: Equatable {
   var summaryText: String {
     var parts: [String] = []
     if failed > 0 {
-      parts.append("\(failed) failed")
+      parts.append(String(localized: "\(failed) failed"))
     }
     if inProgress > 0 {
-      parts.append("\(inProgress) in progress")
+      parts.append(String(localized: "\(inProgress) in progress"))
     }
     if skipped > 0 {
-      parts.append("\(skipped) skipped")
+      parts.append(String(localized: "\(skipped) skipped"))
     }
     if expected > 0 {
-      parts.append("\(expected) expected")
+      parts.append(String(localized: "\(expected) expected"))
     }
     if total > 0 {
-      parts.append("\(passed) successful")
+      parts.append(String(localized: "\(passed) successful"))
     }
     if parts.isEmpty {
       return ""

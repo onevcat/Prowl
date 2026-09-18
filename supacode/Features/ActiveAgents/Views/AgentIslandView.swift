@@ -437,7 +437,7 @@ struct AgentIslandView: View {
         setDisplayPreference(.automatic)
       } label: {
         displayMenuLabel(
-          "Automatic", isSelected: appStore.settings.agentIslandDisplayPreference == .automatic)
+          String(localized: "Automatic"), isSelected: appStore.settings.agentIslandDisplayPreference == .automatic)
       }
       Divider()
       ForEach(displayCatalog.screens) { screen in

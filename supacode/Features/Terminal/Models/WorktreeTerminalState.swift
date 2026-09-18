@@ -23,22 +23,22 @@ enum TerminalCloseConfirmationTarget {
   var messageText: String {
     switch self {
     case .pane:
-      return "Close Terminal Pane?"
+      return String(localized: "Close Terminal Pane?")
     case .tab:
-      return "Close Terminal Tab?"
+      return String(localized: "Close Terminal Tab?")
     case .tabs(let count):
-      return count == 1 ? "Close Terminal Tab?" : "Close Terminal Tabs?"
+      return count == 1 ? String(localized: "Close Terminal Tab?") : String(localized: "Close Terminal Tabs?")
     }
   }
 
   var confirmButtonTitle: String {
     switch self {
     case .pane:
-      return "Close Pane"
+      return String(localized: "Close Pane")
     case .tab:
-      return "Close Tab"
+      return String(localized: "Close Tab")
     case .tabs(let count):
-      return count == 1 ? "Close Tab" : "Close Tabs"
+      return count == 1 ? String(localized: "Close Tab") : String(localized: "Close Tabs")
     }
   }
 }
@@ -807,7 +807,7 @@ final class WorktreeTerminalState {
     }
     let tabId = createTab(
       TabCreation(
-        title: "RUN SCRIPT",
+        title: String(localized: "RUN SCRIPT"),
         icon: "play.fill",
         isTitleLocked: true,
         initialInput: input,

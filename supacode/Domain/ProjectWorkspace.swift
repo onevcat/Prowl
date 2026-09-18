@@ -263,34 +263,34 @@ nonisolated enum ProjectWorkspaceCreationError: LocalizedError, Equatable, Senda
   var errorDescription: String? {
     switch self {
     case .missingTitle:
-      return "Workspace title required."
+      return String(localized: "Workspace title required.")
     case .missingPath:
-      return "Workspace folder required."
+      return String(localized: "Workspace folder required.")
     case .notEnoughRepositories:
-      return "Select at least two repositories."
+      return String(localized: "Select at least two repositories.")
     case .missingRepositoryName:
-      return "Repository name required."
+      return String(localized: "Repository name required.")
     case .missingRepositorySource(let name):
-      return "Source required for \(name)."
+      return String(localized: "Source required for \(name).")
     case .missingBranchName(let name):
-      return "Branch name required for \(name)."
+      return String(localized: "Branch name required for \(name).")
     case .missingExistingRef(let name):
-      return "Choose an existing branch for \(name)."
+      return String(localized: "Choose an existing branch for \(name).")
     case .linkCheckoutUnsupported(let name):
-      return "Link is not available for \(name)."
+      return String(localized: "Link is not available for \(name).")
     case .destinationIsFile(let path):
-      return "\(path) is a file. Choose a folder path instead."
+      return String(localized: "\(path) is a file. Choose a folder path instead.")
     case .workspaceAlreadyExists(let path):
-      return "\(path) already contains a Prowl workspace."
+      return String(localized: "\(path) already contains a Prowl workspace.")
     case .repositoryDoesNotExist(let path):
-      return "\(path) does not exist."
+      return String(localized: "\(path) does not exist.")
     case .linkAlreadyExists(let path):
-      return "\(path) already exists."
+      return String(localized: "\(path) already exists.")
     case .gitCommandFailed(let command, let message):
       if message.isEmpty {
-        return "Git command failed: \(command)"
+        return String(localized: "Git command failed: \(command)")
       }
-      return "Git command failed: \(command)\n\(message)"
+      return String(localized: "Git command failed: \(command)\n\(message)")
     }
   }
 }

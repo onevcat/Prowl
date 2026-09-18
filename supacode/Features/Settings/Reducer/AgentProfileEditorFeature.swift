@@ -168,42 +168,48 @@ struct AgentProfileEditorFeature {
 
   static func unrestrictedAlert() -> AlertState<Alert> {
     AlertState {
-      TextState("Allow Unrestricted Execution?")
+      TextState(String(localized: "Allow Unrestricted Execution?"))
     } actions: {
       ButtonState(role: .destructive, action: .confirmUnrestricted) {
-        TextState("Allow Unrestricted")
+        TextState(String(localized: "Allow Unrestricted"))
       }
       ButtonState(role: .cancel) {
-        TextState("Cancel")
+        TextState(String(localized: "Cancel"))
       }
     } message: {
       TextState(
-        "The agent will use the runtime's least-restricted mode. It may execute commands and modify files "
-          + "without prompting; managed or user-defined runtime policies can still apply."
+        String(
+          localized: """
+            The agent will use the runtime's least-restricted mode. It may execute commands and modify files \
+            without prompting; managed or user-defined runtime policies can still apply.
+            """
+        )
       )
     }
   }
 
   static func removalAlert(profile: AgentProfile, hasProfileHome: Bool) -> AlertState<Alert> {
     AlertState {
-      TextState("Remove “\(profile.name)”?")
+      TextState(String(localized: "Remove “\(profile.name)”?"))
     } actions: {
       ButtonState(role: .destructive, action: .removeKeepingFiles) {
-        TextState("Remove Profile")
+        TextState(String(localized: "Remove Profile"))
       }
       if hasProfileHome {
         ButtonState(role: .destructive, action: .removeTrashingFiles) {
-          TextState("Remove and Trash Files")
+          TextState(String(localized: "Remove and Trash Files"))
         }
       }
       ButtonState(role: .cancel) {
-        TextState("Cancel")
+        TextState(String(localized: "Cancel"))
       }
     } message: {
       TextState(
         hasProfileHome
-          ? "“Remove Profile” keeps the profile folder on disk; “Remove and Trash Files” moves it to the Trash."
-          : "This removes the profile from Prowl. No files will be deleted."
+          ? String(
+            localized:
+              "“Remove Profile” keeps the profile folder on disk; “Remove and Trash Files” moves it to the Trash.")
+          : String(localized: "This removes the profile from Prowl. No files will be deleted.")
       )
     }
   }

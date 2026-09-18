@@ -21,7 +21,7 @@ nonisolated enum CLIServiceStatus: Equatable, Sendable {
   var unreachableDescription: String? {
     switch self {
     case .listening: nil
-    case .stopped: "Prowl is not listening for the prowl command right now."
+    case .stopped: String(localized: "Prowl is not listening for the prowl command right now.")
     case .failed: failureDescription
     }
   }
@@ -31,25 +31,28 @@ nonisolated enum CLIServiceStatus: Equatable, Sendable {
     guard case .failed(let error, _) = self else { return nil }
     switch error {
     case .socketAlreadyOwned:
-      return
-        "Another Prowl instance is already listening on this socket. Quit it, or give this "
-        + "instance its own path with PROWL_CLI_SOCKET."
+      return String(
+        localized: """
+          Another Prowl instance is already listening on this socket. Quit it, or give this \
+          instance its own path with PROWL_CLI_SOCKET.
+          """
+      )
     case .socketPathTooLong:
-      return "The socket path is too long for macOS. Set PROWL_CLI_SOCKET to a shorter path."
+      return String(localized: "The socket path is too long for macOS. Set PROWL_CLI_SOCKET to a shorter path.")
     case .socketDirectoryUnavailable:
-      return "Prowl could not create the socket's folder."
+      return String(localized: "Prowl could not create the socket's folder.")
     case .lockFailed:
-      return "Prowl could not lock the socket for this instance. Check the folder's permissions."
+      return String(localized: "Prowl could not lock the socket for this instance. Check the folder's permissions.")
     case .permissionFailed:
-      return "Prowl could not restrict the socket to your user. Check the folder's permissions."
+      return String(localized: "Prowl could not restrict the socket to your user. Check the folder's permissions.")
     case .socketCreationFailed, .closeOnExecFailed:
-      return "Prowl could not create the socket."
+      return String(localized: "Prowl could not create the socket.")
     case .bindFailed:
-      return "Prowl could not bind the socket. Remove a stale file at this path and relaunch."
+      return String(localized: "Prowl could not bind the socket. Remove a stale file at this path and relaunch.")
     case .listenFailed:
-      return "Prowl could not start listening on the socket."
+      return String(localized: "Prowl could not start listening on the socket.")
     case .readFailed, .writeFailed:
-      return "The socket stopped responding."
+      return String(localized: "The socket stopped responding.")
     }
   }
 }

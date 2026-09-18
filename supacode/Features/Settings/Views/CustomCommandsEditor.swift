@@ -225,8 +225,11 @@ struct CustomCommandsEditor: View {
       }
     } message: { conflict in
       Text(
-        "“\(conflict.newCommandTitle)” and “\(conflict.existingCommandTitle)” both use \(conflict.shortcutDisplay)."
-          + "\n\nChoose Replace to keep the new shortcut and clear the conflicting command."
+        """
+        “\(conflict.newCommandTitle)” and “\(conflict.existingCommandTitle)” both use \(conflict.shortcutDisplay).
+
+        Choose Replace to keep the new shortcut and clear the conflicting command.
+        """
       )
     }
   }
@@ -359,7 +362,7 @@ struct CustomCommandsEditor: View {
   @ViewBuilder
   private func customCommandShortcutCell(_ command: UserCustomCommand) -> some View {
     let resolvedBinding = resolvedCustomCommandBindings.keybinding(for: customCommandBindingID(for: command.id))
-    let shortcutDisplay = resolvedBinding?.display ?? "Unassigned"
+    let shortcutDisplay = resolvedBinding?.display ?? String(localized: "Unassigned")
     let isRecording = recordingCustomCommandID == command.id
 
     InlineEditableCellButton(
@@ -369,7 +372,7 @@ struct CustomCommandsEditor: View {
       selectCustomCommand(command.id)
       toggleRecording(for: command.id)
     } label: {
-      Text(isRecording ? "Recording…" : shortcutDisplay)
+      Text(isRecording ? String(localized: "Recording…") : shortcutDisplay)
         .font(.body.monospaced())
         .foregroundStyle(isRecording ? Color.orange : (resolvedBinding == nil ? .secondary : .primary))
         .lineLimit(1)
@@ -408,9 +411,9 @@ struct CustomCommandsEditor: View {
       customCommandHeaderCell("", width: customCommandsDragColumnWidth, alignment: .center)
       customCommandHeaderCell("", width: customCommandsEnabledColumnWidth, alignment: .center)
       customCommandHeaderCell("", width: customCommandsIconColumnWidth, alignment: .center)
-      customCommandHeaderCell("Name", width: customCommandsNameColumnWidth)
-      customCommandHeaderCell("Command")
-      customCommandHeaderCell("Shortcut", width: customCommandsShortcutColumnWidth)
+      customCommandHeaderCell(String(localized: "Name"), width: customCommandsNameColumnWidth)
+      customCommandHeaderCell(String(localized: "Command"))
+      customCommandHeaderCell(String(localized: "Shortcut"), width: customCommandsShortcutColumnWidth)
     }
     .padding(.horizontal, 14)
     .padding(.vertical, 8)
@@ -523,7 +526,7 @@ struct CustomCommandsEditor: View {
         let binding = resolvedCustomCommandBindings.keybinding(
           for: customCommandBindingID(for: command.id, source: .global)
         )
-        Text(binding?.display ?? "Unassigned")
+        Text(binding?.display ?? String(localized: "Unassigned"))
           .font(.body.monospaced())
           .foregroundStyle(binding == nil ? .secondary : .primary)
           .lineLimit(1)
@@ -608,11 +611,11 @@ struct CustomCommandsEditor: View {
   private func inlineCommandTitle(for execution: UserCustomCommandExecution) -> String {
     switch execution {
     case .shellScript:
-      return "New Tab"
+      return String(localized: "New Tab")
     case .terminalInput:
-      return "In Place"
+      return String(localized: "In Place")
     case .split:
-      return "New Split"
+      return String(localized: "New Split")
     }
   }
 
@@ -623,7 +626,7 @@ struct CustomCommandsEditor: View {
       .first
       .map(String.init)?
       .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    return firstLine.isEmpty ? "Click to set command script" : firstLine
+    return firstLine.isEmpty ? String(localized: "Click to set command script") : firstLine
   }
 
   private func iconEditorPopover(
@@ -726,9 +729,13 @@ struct CustomCommandsEditor: View {
   private var commandEditorDescription: String {
     switch source {
     case .repository:
-      return "Choose where this command runs and edit the script used by this repository custom command."
+      return String(
+        localized: "Choose where this command runs and edit the script used by this repository custom command."
+      )
     case .global:
-      return "Choose where this command runs and edit the script used by this global custom command."
+      return String(
+        localized: "Choose where this command runs and edit the script used by this global custom command."
+      )
     }
   }
 
@@ -854,11 +861,11 @@ struct CustomCommandsEditor: View {
   private func scriptDescription(for execution: UserCustomCommandExecution) -> String {
     switch execution {
     case .shellScript:
-      return "Runs in a new terminal tab."
+      return String(localized: "Runs in a new terminal tab.")
     case .terminalInput:
-      return "Sends input to the currently focused terminal."
+      return String(localized: "Sends input to the currently focused terminal.")
     case .split:
-      return "Runs in a new split of the focused terminal."
+      return String(localized: "Runs in a new split of the focused terminal.")
     }
   }
 
@@ -1104,7 +1111,9 @@ struct CustomCommandsEditor: View {
         charactersIgnoringModifiers: event.charactersIgnoringModifiers
       )
     else {
-      invalidMessageByCommandID[commandID] = "Unsupported key. Use letters, numbers, or punctuation."
+      invalidMessageByCommandID[commandID] = String(
+        localized: "Unsupported key. Use letters, numbers, or punctuation."
+      )
       return
     }
 
@@ -1116,14 +1125,15 @@ struct CustomCommandsEditor: View {
     )
 
     guard !modifiers.isEmpty else {
-      invalidMessageByCommandID[commandID] = "Shortcut must include at least one modifier key."
+      invalidMessageByCommandID[commandID] = String(localized: "Shortcut must include at least one modifier key.")
       return
     }
 
     let binding = Keybinding(key: keyToken, modifiers: modifiers)
     guard let shortcut = binding.userCustomShortcut else {
-      invalidMessageByCommandID[commandID] =
-        "Custom command shortcuts support letters, numbers, and punctuation only."
+      invalidMessageByCommandID[commandID] = String(
+        localized: "Custom command shortcuts support letters, numbers, and punctuation only."
+      )
       return
     }
 
@@ -1145,7 +1155,7 @@ struct CustomCommandsEditor: View {
     }
 
     let newTitle =
-      commands.first(where: { $0.id == commandID })?.resolvedTitle ?? "Command"
+      commands.first(where: { $0.id == commandID })?.resolvedTitle ?? String(localized: "Command")
 
     pendingShortcutConflict = CustomCommandShortcutConflict(
       newCommandID: commandID,

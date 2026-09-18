@@ -217,8 +217,10 @@ struct WorkflowSettingsDetailView: View {
         Text(preferredProfileName(role))
       }
       .help(
-        "Preferred profile for this launch role. Choose Automatically lets Prowl resolve "
-          + "a qualifying profile when the workflow starts."
+        """
+        Preferred profile for this launch role. Choose Automatically lets Prowl resolve \
+        a qualifying profile when the workflow starts.
+        """
       )
     }
   }
@@ -236,8 +238,10 @@ struct WorkflowSettingsDetailView: View {
         Text("Run Directly When Possible").tag(Optional(WorkflowBindModeOverride.Mode.auto))
       }
       .help(
-        "Controls whether Prowl presents the start sheet after resolving profiles, required role choices, "
-          + "and validation results."
+        """
+        Controls whether Prowl presents the start sheet after resolving profiles, required role choices, \
+        and validation results.
+        """
       )
 
       Text(runSetupDescription(row))
@@ -340,38 +344,38 @@ struct WorkflowSettingsDetailView: View {
   }
 
   private func unavailableRunReason(_ row: WorkflowSettingsRow) -> String? {
-    if !row.isValid { return "Fix the validation errors before running." }
-    if row.shadowNote != nil { return "Another file with this ID takes precedence." }
-    if !row.isEnabled { return "Enable this workflow before running." }
+    if !row.isValid { return String(localized: "Fix the validation errors before running.") }
+    if row.shadowNote != nil { return String(localized: "Another file with this ID takes precedence.") }
+    if !row.isEnabled { return String(localized: "Enable this workflow before running.") }
     return nil
   }
 
   private func runHelp(_ row: WorkflowSettingsRow, target: WorkflowSettingsRunTarget) -> String {
-    unavailableRunReason(row) ?? "Run this workflow in \(target.displayName)"
+    unavailableRunReason(row) ?? String(localized: "Run this workflow in \(target.displayName)")
   }
 
   private func sourceLabel(_ source: WorkflowRoleSource) -> String {
     switch source {
-    case .current: "Current Pane"
-    case .pick: "Choose Existing"
-    case .launch: "Launch New"
+    case .current: String(localized: "Current Pane")
+    case .pick: String(localized: "Choose Existing")
+    case .launch: String(localized: "Launch New")
     }
   }
 
   private func sourceHelp(_ source: WorkflowRoleSource) -> String {
     switch source {
     case .current:
-      "Uses the pane that starts the workflow and its detected agent."
+      String(localized: "Uses the pane that starts the workflow and its detected agent.")
     case .pick:
-      "Selects an existing agent pane when the workflow starts."
+      String(localized: "Selects an existing agent pane when the workflow starts.")
     case .launch:
-      "Creates a new agent pane using the role's requirements and preferred profile."
+      String(localized: "Creates a new agent pane using the role's requirements and preferred profile.")
     }
   }
 
   private func preferredProfileName(_ role: WorkflowSettingsRow.LaunchRole) -> String {
-    guard let id = role.rememberedProfileID else { return "Choose Automatically" }
-    return role.candidates.first { $0.profileID == id }?.name ?? "Deleted Profile"
+    guard let id = role.rememberedProfileID else { return String(localized: "Choose Automatically") }
+    return role.candidates.first { $0.profileID == id }?.name ?? String(localized: "Deleted Profile")
   }
 
   private func runSetupDescription(_ row: WorkflowSettingsRow) -> String {
@@ -379,18 +383,22 @@ struct WorkflowSettingsDetailView: View {
     case nil:
       switch row.declaredBind {
       case .ask:
-        return "Uses the workflow file's setting, which reviews choices before running."
+        return String(localized: "Uses the workflow file's setting, which reviews choices before running.")
       case .auto:
-        return
-          "Uses the workflow file's setting, which runs directly when all required choices can be resolved."
+        return String(
+          localized:
+            "Uses the workflow file's setting, which runs directly when all required choices can be resolved."
+        )
       case nil:
-        return "Uses the behavior declared in the workflow file."
+        return String(localized: "Uses the behavior declared in the workflow file.")
       }
     case .ask:
-      return "Always opens the review sheet before this workflow runs."
+      return String(localized: "Always opens the review sheet before this workflow runs.")
     case .auto:
-      return
-        "Starts directly when every required choice is available; otherwise Prowl opens the review sheet."
+      return String(
+        localized:
+          "Starts directly when every required choice is available; otherwise Prowl opens the review sheet."
+      )
     }
   }
 

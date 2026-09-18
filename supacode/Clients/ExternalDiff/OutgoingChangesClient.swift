@@ -59,7 +59,7 @@ extension OutgoingChangesClient {
         } catch {
           onError(
             OpenActionError(
-              title: "Unable to show outgoing changes",
+              title: String(localized: "Unable to show outgoing changes"),
               message: error.localizedDescription
             )
           )

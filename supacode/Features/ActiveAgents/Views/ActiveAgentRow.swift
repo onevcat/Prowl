@@ -116,16 +116,17 @@ struct BaguaWorkingIndicator: View {
 }
 
 extension AgentDisplayState {
+  // "Done" and "Blocked" have other meanings elsewhere in the app, so the states use their own keys.
   var label: String {
     switch self {
     case .working:
-      return "Working"
+      return String(localized: "agentState.working", defaultValue: "Working")
     case .blocked:
-      return "Blocked"
+      return String(localized: "agentState.blocked", defaultValue: "Blocked")
     case .done:
-      return "Done"
+      return String(localized: "agentState.done", defaultValue: "Done")
     case .idle:
-      return "Idle"
+      return String(localized: "agentState.idle", defaultValue: "Idle")
     }
   }
 

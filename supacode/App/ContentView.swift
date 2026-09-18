@@ -82,8 +82,8 @@ struct ContentView: View {
         store.send(
           .repositories(
             .presentAlert(
-              title: "Unable to open folders",
-              message: "Prowl could not read the selected folders."
+              title: String(localized: "Unable to open folders"),
+              message: String(localized: "Prowl could not read the selected folders.")
             )
           )
         )

@@ -80,7 +80,7 @@ struct RepositorySymbolSuggestionsSection: View {
         }
         .buttonStyle(.plain)
         .help(symbol)
-        .accessibilityLabel(symbol == suggestions.primary ? "\(symbol), best match" : symbol)
+        .accessibilityLabel(symbol == suggestions.primary ? String(localized: "\(symbol), best match") : symbol)
         .accessibilityHint("Fills the symbol name field with this suggestion.")
       }
       Spacer(minLength: 0)
@@ -99,11 +99,11 @@ struct RepositorySymbolSuggestionsSection: View {
     // Retrieval-only fallbacks must never masquerade as model output.
     suggestions.usedAI
       ? suggestions.source.disclosureLabel
-      : "Keyword suggestions · \(suggestions.source.disclosureLabel)"
+      : String(localized: "Keyword suggestions · \(suggestions.source.disclosureLabel)")
   }
 
   @ViewBuilder
-  private func suggestButton(title: String, help: String) -> some View {
+  private func suggestButton(title: LocalizedStringKey, help: LocalizedStringKey) -> some View {
     Button(title) {
       onSuggest()
     }

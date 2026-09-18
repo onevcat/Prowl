@@ -50,7 +50,7 @@ struct WorkspaceRepositoriesGridView: View {
     }
   }
 
-  private func header(_ title: String) -> some View {
+  private func header(_ title: LocalizedStringKey) -> some View {
     Text(title)
       .font(.caption.weight(.semibold))
       .foregroundStyle(.tertiary)
@@ -59,13 +59,13 @@ struct WorkspaceRepositoriesGridView: View {
   private func sourceKindTitle(_ kind: ProjectWorkspaceRepositorySourceKind) -> String {
     switch kind {
     case .existingPath:
-      return "Opened"
+      return String(localized: "Opened")
     case .localRepository:
-      return "Local"
+      return String(localized: "Local")
     case .remote:
-      return "Remote"
+      return String(localized: "Remote")
     case .bareRepository:
-      return "Bare"
+      return String(localized: "Bare")
     }
   }
 
@@ -74,11 +74,14 @@ struct WorkspaceRepositoriesGridView: View {
   private func materializationTitle(_ entry: ProjectWorkspaceRepositoryEntry) -> String {
     switch entry.sourceKind {
     case .remote:
-      return "Clone"
+      return String(localized: "Clone")
     case .bareRepository:
-      return "Worktree"
+      return String(localized: "Worktree")
     case .existingPath, .localRepository:
-      return entry.branchName == nil && entry.baseRef == nil ? "Link" : "Worktree"
+      if entry.branchName == nil && entry.baseRef == nil {
+        return String(localized: "Link")
+      }
+      return String(localized: "Worktree")
     }
   }
 }

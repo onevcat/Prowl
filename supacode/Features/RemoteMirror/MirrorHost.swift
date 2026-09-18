@@ -184,7 +184,7 @@ final class MirrorHost {
     guard let portNumber = UInt16(port), portNumber > 0,
       IPv4Address(address) != nil || IPv6Address(address) != nil
     else {
-      self.error = "Enter a listen address of this Mac and a port between 1 and 65535."
+      self.error = String(localized: "Enter a listen address of this Mac and a port between 1 and 65535.")
       return
     }
     do {
@@ -197,7 +197,7 @@ final class MirrorHost {
       try rebuildListener()
     } catch {
       SupaLogger("RemoteMirror").warning("Host start failed: \(error)")
-      self.error = "Cannot start Host: \(error.localizedDescription)"
+      self.error = String(localized: "Cannot start Host: \(error.localizedDescription)")
       isStarting = false
     }
   }

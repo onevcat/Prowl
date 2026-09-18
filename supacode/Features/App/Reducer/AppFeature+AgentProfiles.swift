@@ -26,7 +26,9 @@ extension AppFeature {
       )
     } catch {
       appLogger.warning("Agent profile launch planning failed: \(error)")
-      return .send(.repositories(.showToast(.warning("Couldn't launch “\(profile.name)”"))))
+      return .send(
+        .repositories(.showToast(.warning(String(localized: "Couldn't launch “\(profile.name)”"))))
+      )
     }
 
     return .run { _ in

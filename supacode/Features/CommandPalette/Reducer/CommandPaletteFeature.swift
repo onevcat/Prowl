@@ -269,7 +269,11 @@ struct CommandPaletteFeature {
     items.append(contentsOf: customCommandItems(customCommands))
     items.append(
       contentsOf: workflowCommandItems(
-        workflowItems, repositories: repositories, actionTargetWorktreeID: worktreeActionTargetID))
+        workflowItems,
+        repositories: repositories,
+        actionTargetWorktreeID: worktreeActionTargetID
+      )
+    )
     items.append(
       contentsOf: agentProfileLaunchItems(
         repositories,
@@ -280,11 +284,12 @@ struct CommandPaletteFeature {
       items.append(
         CommandPaletteItem(
           id: CommandPaletteItemID.changeFocusedTabIcon(terminalWorktree.id),
-          title: "Change Tab Icon...",
+          title: String(localized: "Change Tab Icon..."),
           subtitle: terminalWorktree.name,
           kind: .changeFocusedTabIcon(terminalWorktree.id),
           category: .worktree,
-          defaultSuggestion: false
+          defaultSuggestion: false,
+          keywords: ["Change Tab Icon", "tab", "icon", "更改标签页图标", "标签页", "图标"]
         )
       )
       items.append(contentsOf: ghosttyCommandItems(ghosttyCommands))
@@ -295,12 +300,12 @@ struct CommandPaletteFeature {
       items.append(
         CommandPaletteItem(
           id: CommandPaletteItemID.openRepositorySettings(repository.id),
-          title: "Repo Settings",
+          title: String(localized: "Repo Settings"),
           subtitle: repository.name,
           kind: .openRepositorySettings(repository.id),
           category: .app,
           defaultSuggestion: true,
-          keywords: ["repo", "settings", "configure", "preferences"]
+          keywords: ["Repo Settings", "repo", "settings", "configure", "preferences", "仓库", "设置", "偏好设置"]
         )
       )
     }
@@ -313,21 +318,7 @@ struct CommandPaletteFeature {
     #if DEBUG
       items.append(contentsOf: debugToastItems())
     #endif
-    for row in repositories.orderedWorktreeRows() {
-      guard !row.isPending, !row.isDeleting else { continue }
-      let repositoryName = repositories.repositoryName(for: row.repositoryID) ?? "Repository"
-      let title = "\(repositoryName) / \(row.name)"
-      items.append(
-        CommandPaletteItem(
-          id: CommandPaletteItemID.worktreeSelect(row.id),
-          title: title,
-          subtitle: nil,
-          kind: .worktreeSelect(row.id),
-          category: .navigation,
-          defaultSuggestion: false
-        )
-      )
-    }
+    items.append(contentsOf: selectableWorktreeItems(from: repositories))
     return items
   }
 
@@ -349,6 +340,23 @@ struct CommandPaletteFeature {
   }
 }
 
+private func selectableWorktreeItems(
+  from repositories: RepositoriesFeature.State
+) -> [CommandPaletteItem] {
+  repositories.orderedWorktreeRows().compactMap { row in
+    guard !row.isPending, !row.isDeleting else { return nil }
+    let repositoryName = repositories.repositoryName(for: row.repositoryID) ?? String(localized: "Repository")
+    return CommandPaletteItem(
+      id: CommandPaletteItemID.worktreeSelect(row.id),
+      title: "\(repositoryName) / \(row.name)",
+      subtitle: nil,
+      kind: .worktreeSelect(row.id),
+      category: .navigation,
+      defaultSuggestion: false
+    )
+  }
+}
+
 private func globalCommandItems(
   showsNewWorktreeAction: Bool,
   isShowingArchivedWorktrees: Bool
@@ -359,30 +367,30 @@ private func globalCommandItems(
       title: "Check for Updates",
       category: .app,
       kind: .checkForUpdates,
-      keywords: ["update", "version"]
+      keywords: ["update", "version", "更新", "版本"]
     ),
     .appShortcut(
       id: CommandPaletteItemID.globalOpenSettings,
       title: "Open Settings",
       category: .app,
       kind: .openSettings,
-      keywords: ["preferences", "config"]
+      keywords: ["preferences", "config", "设置", "偏好设置", "配置"]
     ),
     .appShortcut(
       id: CommandPaletteItemID.globalOpenRepository,
       title: "Open Repository",
       category: .app,
       kind: .openRepository,
-      keywords: ["repo", "add repo"]
+      keywords: ["repo", "add repo", "仓库", "添加仓库"]
     ),
     CommandPaletteItem(
       id: CommandPaletteItemID.globalNewWorkspace,
-      title: "New Workspace",
+      title: String(localized: "New Workspace"),
       subtitle: nil,
       kind: .newWorkspace,
       category: .app,
       defaultSuggestion: true,
-      keywords: ["workspace", "multi repo", "many repos"]
+      keywords: ["New Workspace", "workspace", "multi repo", "many repos", "工作区", "多仓库"]
     ),
   ]
   if showsNewWorktreeAction {
@@ -392,7 +400,7 @@ private func globalCommandItems(
         title: "New Worktree",
         category: .worktree,
         kind: .newWorktree,
-        keywords: ["worktree", "branch"]
+        keywords: ["worktree", "branch", "工作树", "分支"]
       )
     )
   }
@@ -402,7 +410,7 @@ private func globalCommandItems(
       title: "Refresh Worktrees",
       category: .worktree,
       kind: .refreshWorktrees,
-      keywords: ["reload", "rescan"]
+      keywords: ["reload", "rescan", "刷新", "重新扫描", "工作树"]
     )
   )
   items.append(
@@ -411,16 +419,20 @@ private func globalCommandItems(
       title: "Jump to Latest Unread",
       category: .navigation,
       kind: .jumpToLatestUnread,
-      keywords: ["unread", "bell", "notification"]
+      keywords: ["unread", "bell", "notification", "未读", "通知"]
     )
   )
   items.append(
-    .appShortcut(
+    CommandPaletteItem(
       id: CommandPaletteItemID.globalViewArchivedWorktrees,
-      title: isShowingArchivedWorktrees ? "Exit Archived Worktrees" : "View Archived Worktrees",
-      category: .worktree,
+      title: isShowingArchivedWorktrees
+        ? String(localized: "Exit Archived Worktrees")
+        : String(localized: "View Archived Worktrees"),
+      subtitle: nil,
       kind: .viewArchivedWorktrees,
-      keywords: ["archive", "history"]
+      category: .worktree,
+      defaultSuggestion: true,
+      keywords: ["View Archived Worktrees", "Exit Archived Worktrees", "archive", "history", "归档", "历史", "工作树"]
     )
   )
   items.append(
@@ -429,7 +441,7 @@ private func globalCommandItems(
       title: "Install Command Line Tool",
       category: .app,
       kind: .installCLI,
-      keywords: ["cli", "command line", "terminal", "prowl"]
+      keywords: ["cli", "command line", "terminal", "prowl", "命令行", "终端", "Prowl"]
     )
   )
   items.append(contentsOf: viewToggleCommandItems())
@@ -452,7 +464,7 @@ private func worktreeActionCommandItems(
         title: "Stop Script",
         category: .worktree,
         kind: .stopRunScript,
-        keywords: ["stop", "kill", "cancel", "script"]
+        keywords: ["stop", "kill", "cancel", "script", "停止", "取消", "脚本"]
       )
     )
   } else {
@@ -462,7 +474,7 @@ private func worktreeActionCommandItems(
         title: "Run Script",
         category: .worktree,
         kind: .runScript,
-        keywords: ["run", "script", "execute"]
+        keywords: ["run", "script", "execute", "运行", "执行", "脚本"]
       )
     )
   }
@@ -475,14 +487,14 @@ private func worktreeActionCommandItems(
       title: "Rename Branch",
       category: .worktree,
       kind: .renameBranch,
-      keywords: ["rename", "branch", "name"]
+      keywords: ["rename", "branch", "name", "重命名", "分支", "名称"]
     )
   )
   // Pin / Unpin / Delete only apply to non-main worktrees.
   guard !row.isMainWorktree else { return items }
   let pinTitle = row.isPinned ? "Unpin Worktree" : "Pin Worktree"
   let pinKeywords =
-    row.isPinned ? ["unpin", "favorite"] : ["pin", "favorite", "top"]
+    row.isPinned ? ["unpin", "favorite", "取消固定", "收藏"] : ["pin", "favorite", "top", "固定", "收藏"]
   items.append(
     .appShortcut(
       id: CommandPaletteItemID.globalTogglePinWorktree,
@@ -496,12 +508,12 @@ private func worktreeActionCommandItems(
     items.append(
       CommandPaletteItem(
         id: CommandPaletteItemID.globalDeleteWorktree,
-        title: "Delete Worktree",
+        title: String(localized: "Delete Worktree"),
         subtitle: row.name,
         kind: .deleteWorktree(worktreeID, repositoryID),
         category: .worktree,
         defaultSuggestion: false,
-        keywords: ["delete", "remove", "destroy"]
+        keywords: ["Delete Worktree", "delete", "remove", "destroy", "删除", "移除"]
       )
     )
   }
@@ -540,7 +552,7 @@ private func customCommandItems(_ commands: [EffectiveCustomCommand]) -> [Comman
       ),
       category: .worktree,
       defaultSuggestion: false,
-      keywords: ["custom", "command", "script"]
+      keywords: ["custom", "command", "script", "自定义", "命令", "脚本"]
     )
   }
 }
@@ -576,19 +588,23 @@ func agentProfileLaunchItems(
   }
   return ordered.map { profile in
     let runtimeName = AgentRuntimeAdapterRegistry.displayName(for: profile.runtime)
-    let placement = profile.id == recommendedID ? "Recommended · " : ""
+    let placement = profile.id == recommendedID ? String(localized: "Recommended · ") : ""
     // Same soft availability judgment as the Agents popover — surfaced in the
     // subtitle, never blocking activation (docs-ai 053/005).
     let warning = launchWarning(profile)
-    let detail = warning.map { "\($0) · \(worktree.name)" } ?? "New \(runtimeName) in \(worktree.name)"
+    let detail =
+      warning.map { "\($0) · \(worktree.name)" }
+      ?? String(
+        localized: "New \(runtimeName) in \(worktree.name)"
+      )
     return CommandPaletteItem(
       id: CommandPaletteItemID.launchAgentProfile(profile.id),
-      title: "Launch Agent: \(profile.name)",
+      title: String(localized: "Launch Agent: \(profile.name)"),
       subtitle: "\(placement)\(detail)",
       kind: .launchAgentProfile(profile.id),
       category: .terminal,
       defaultSuggestion: false,
-      keywords: ["launch", "agent", "profile", "start", profile.name],
+      keywords: ["Launch Agent", "launch", "agent", "profile", "start", "启动", "Agent", "配置档案", profile.name],
       agentProfileIconSource: profile.iconSource
     )
   }
@@ -609,31 +625,37 @@ func workflowCommandItems(
     )
   else { return [] }
   return workflows.filter(\.isRunnable).map { item in
-    CommandPaletteItem(
+    let subtitle =
+      item.workflowDescription
+      ?? String(
+        localized: "Start this workflow in \(worktree.name)"
+      )
+    return CommandPaletteItem(
       id: CommandPaletteItemID.runWorkflow(item.key),
-      title: "Run Workflow: \(item.name)",
-      subtitle: item.workflowDescription ?? "Start this workflow in \(worktree.name)",
+      title: String(localized: "Run Workflow: \(item.name)"),
+      subtitle: subtitle,
       kind: .runWorkflow(item.key),
       category: .terminal,
       defaultSuggestion: false,
-      keywords: ["workflow", "run", item.name, item.workflowID]
+      keywords: ["Run Workflow", "workflow", "run", "工作流", "运行", item.name, item.workflowID]
     )
   }
 }
 
 private func customCommandSubtitle(for effectiveCommand: EffectiveCustomCommand) -> String {
-  "\(effectiveCommand.source.displayTitle) custom command · "
-    + customCommandExecutionDescription(for: effectiveCommand.command)
+  let sourceTitle = effectiveCommand.source.displayTitle
+  let executionDescription = customCommandExecutionDescription(for: effectiveCommand.command)
+  return String(localized: "\(sourceTitle) custom command · \(executionDescription)")
 }
 
 private func customCommandExecutionDescription(for command: UserCustomCommand) -> String {
   switch command.execution {
   case .shellScript:
-    return "Opens in a new tab"
+    return String(localized: "Opens in a new tab")
   case .terminalInput:
-    return "Runs in the focused terminal"
+    return String(localized: "Runs in the focused terminal")
   case .split:
-    return "Opens in a new split (\(command.splitDirection.title.lowercased()))"
+    return String(localized: "Opens in a new split (\(command.splitDirection.title.lowercased()))")
   }
 }
 
@@ -644,21 +666,21 @@ private func worktreeNavigationCommandItems() -> [CommandPaletteItem] {
       title: "Reveal in Finder",
       category: .navigation,
       kind: .revealInFinder,
-      keywords: ["finder", "open", "show"]
+      keywords: ["finder", "open", "show", "访达", "打开", "显示"]
     ),
     .appShortcut(
       id: CommandPaletteItemID.globalCopyPath,
       title: "Copy Path",
       category: .navigation,
       kind: .copyPath,
-      keywords: ["copy", "path", "clipboard"]
+      keywords: ["copy", "path", "clipboard", "复制", "路径", "剪贴板"]
     ),
     .appShortcut(
       id: CommandPaletteItemID.globalRevealInSidebar,
       title: "Reveal in Sidebar",
       category: .navigation,
       kind: .revealInSidebar,
-      keywords: ["reveal", "locate", "find worktree"]
+      keywords: ["reveal", "locate", "find worktree", "显示", "定位", "工作树"]
     ),
   ]
 }
@@ -670,14 +692,14 @@ private func selectedWorktreeViewCommandItems() -> [CommandPaletteItem] {
       title: "Show Diff",
       category: .view,
       kind: .showDiff,
-      keywords: ["diff", "changes", "git"]
+      keywords: ["diff", "changes", "git", "差异", "更改"]
     ),
     .appShortcut(
       id: CommandPaletteItemID.globalOutgoingChanges,
       title: "Show Outgoing Changes",
       category: .view,
       kind: .outgoingChanges,
-      keywords: ["diff", "changes", "outgoing", "pull request", "git"]
+      keywords: ["diff", "changes", "outgoing", "pull request", "git", "差异", "更改", "传出", "拉取请求"]
     ),
   ]
 }
@@ -689,28 +711,28 @@ private func viewToggleCommandItems() -> [CommandPaletteItem] {
       title: "Toggle Sidebar",
       category: .view,
       kind: .toggleLeftSidebar,
-      keywords: ["sidebar", "hide", "left panel"]
+      keywords: ["sidebar", "hide", "left panel", "侧边栏", "隐藏", "左侧面板"]
     ),
     .appShortcut(
       id: CommandPaletteItemID.globalToggleActiveAgentsPanel,
       title: "Toggle Active Agents Panel",
       category: .view,
       kind: .toggleActiveAgentsPanel,
-      keywords: ["agents", "panel"]
+      keywords: ["agents", "panel", "Agent", "面板"]
     ),
     .appShortcut(
       id: CommandPaletteItemID.globalToggleCanvas,
       title: "Toggle Canvas",
       category: .view,
       kind: .toggleCanvas,
-      keywords: ["canvas", "overview", "grid"]
+      keywords: ["canvas", "overview", "grid", "画布", "概览", "网格"]
     ),
     .appShortcut(
       id: CommandPaletteItemID.globalToggleShelf,
       title: "Toggle Shelf",
       category: .view,
       kind: .toggleShelf,
-      keywords: ["shelf", "books"]
+      keywords: ["shelf", "books", "书架", "书籍"]
     ),
   ]
 }
@@ -722,35 +744,35 @@ private func canvasCommandItems() -> [CommandPaletteItem] {
       title: "Expand / Restore Canvas Card",
       category: .view,
       kind: .expandCanvasCard,
-      keywords: ["canvas", "expand", "restore", "focus", "fullscreen", "card"]
+      keywords: ["canvas", "expand", "restore", "focus", "fullscreen", "card", "画布", "展开", "恢复", "聚焦", "全屏", "卡片"]
     ),
     .appShortcut(
       id: CommandPaletteItemID.globalArrangeCanvasCards,
       title: "Arrange Canvas Cards",
       category: .view,
       kind: .arrangeCanvasCards,
-      keywords: ["canvas", "arrange", "layout", "pack", "fit"]
+      keywords: ["canvas", "arrange", "layout", "pack", "fit", "画布", "排列", "布局"]
     ),
     .appShortcut(
       id: CommandPaletteItemID.globalOrganizeCanvasCards,
       title: "Organize Canvas Cards",
       category: .view,
       kind: .organizeCanvasCards,
-      keywords: ["canvas", "organize", "grid", "tidy", "uniform"]
+      keywords: ["canvas", "organize", "grid", "tidy", "uniform", "画布", "整理", "网格"]
     ),
     .appShortcut(
       id: CommandPaletteItemID.globalTileCanvasCards,
       title: "Tile Canvas Cards",
       category: .view,
       kind: .tileCanvasCards,
-      keywords: ["canvas", "tile", "fill", "layout", "window", "split"]
+      keywords: ["canvas", "tile", "fill", "layout", "window", "split", "画布", "平铺", "布局", "窗口", "分屏"]
     ),
     .appShortcut(
       id: CommandPaletteItemID.globalSelectAllCanvasCards,
       title: "Select All Canvas Cards",
       category: .view,
       kind: .selectAllCanvasCards,
-      keywords: ["canvas", "select all", "broadcast"]
+      keywords: ["canvas", "select all", "broadcast", "画布", "全选", "广播"]
     ),
   ]
 }
@@ -789,11 +811,12 @@ private func selectedCodeHostItems(
   return [
     CommandPaletteItem(
       id: CommandPaletteItemID.pullRequestOpen(repositoryID),
-      title: "Open Repository on \(codeHost.displayName)",
+      title: String(localized: "Open Repository on \(codeHost.displayName)"),
       subtitle: repository.name,
       kind: .openRepositoryOnCodeHost(worktreeID),
       category: .pullRequest,
       defaultSuggestion: false,
+      keywords: ["Open Repository", "repository", "code host", "仓库", "代码托管"],
       priorityTier: 2
     )
   ]
@@ -813,11 +836,12 @@ private func pullRequestItems(
   var items: [CommandPaletteItem] = [
     CommandPaletteItem(
       id: CommandPaletteItemID.pullRequestOpen(repositoryID),
-      title: "Open Pull Request on \(codeHost.displayName)",
+      title: String(localized: "Open Pull Request on \(codeHost.displayName)"),
       subtitle: pullRequest.title,
       kind: .openPullRequest(worktreeID),
       category: .pullRequest,
       defaultSuggestion: true,
+      keywords: ["Open Pull Request", "pull request", "拉取请求"],
       priorityTier: 2
     )
   ]
@@ -868,11 +892,12 @@ private func makeReadyPullRequestItem(
   guard isOpen && pullRequest.isDraft else { return nil }
   return CommandPaletteItem(
     id: CommandPaletteItemID.pullRequestReady(repositoryID),
-    title: "Mark PR Ready for Review",
+    title: String(localized: "Mark PR Ready for Review"),
     subtitle: pullRequest.title,
     kind: .markPullRequestReady(worktreeID),
     category: .pullRequest,
     defaultSuggestion: true,
+    keywords: ["Mark PR Ready for Review", "pull request", "review", "标记 PR 准备审核", "拉取请求", "审核"],
     priorityTier: 0
   )
 }
@@ -894,11 +919,12 @@ private func makeFailingPullRequestItems(
     failingItems.append(
       CommandPaletteItem(
         id: CommandPaletteItemID.pullRequestCopyFailingJobURL(repositoryID),
-        title: "Copy failing job URL",
+        title: String(localized: "Copy failing job URL"),
         subtitle: pullRequest.title,
         kind: .copyFailingJobURL(worktreeID),
         category: .pullRequest,
         defaultSuggestion: true,
+        keywords: ["Copy failing job URL", "failing", "job", "URL", "复制失败任务 URL", "失败", "任务"],
         priorityTier: leadingTier
       )
     )
@@ -906,22 +932,24 @@ private func makeFailingPullRequestItems(
   failingItems.append(
     CommandPaletteItem(
       id: CommandPaletteItemID.pullRequestCopyCiLogs(repositoryID),
-      title: "Copy CI Failure Logs",
+      title: String(localized: "Copy CI Failure Logs"),
       subtitle: pullRequest.title,
       kind: .copyCiFailureLogs(worktreeID),
       category: .pullRequest,
       defaultSuggestion: true,
+      keywords: ["Copy CI Failure Logs", "CI", "failure", "logs", "复制 CI 失败日志", "失败", "日志"],
       priorityTier: hasFailingCheckWithDetails ? followupTier : leadingTier
     )
   )
   failingItems.append(
     CommandPaletteItem(
       id: CommandPaletteItemID.pullRequestRerunFailedJobs(repositoryID),
-      title: "Re-run Failed Jobs",
+      title: String(localized: "Re-run Failed Jobs"),
       subtitle: pullRequest.title,
       kind: .rerunFailedJobs(worktreeID),
       category: .pullRequest,
       defaultSuggestion: true,
+      keywords: ["Re-run Failed Jobs", "rerun", "failed", "jobs", "重新运行失败任务", "重新运行", "失败", "任务"],
       priorityTier: followupTier
     )
   )
@@ -929,11 +957,12 @@ private func makeFailingPullRequestItems(
     failingItems.append(
       CommandPaletteItem(
         id: CommandPaletteItemID.pullRequestOpenFailingCheck(repositoryID),
-        title: "Open Failing Check Details",
+        title: String(localized: "Open Failing Check Details"),
         subtitle: pullRequest.title,
         kind: .openFailingCheckDetails(worktreeID),
         category: .pullRequest,
         defaultSuggestion: true,
+        keywords: ["Open Failing Check Details", "failing", "check", "details", "打开失败检查详情", "失败", "检查", "详情"],
         priorityTier: followupTier
       )
     )
@@ -951,15 +980,16 @@ private func makeMergePullRequestItem(
   let successfulChecks = breakdown.passed
   let successfulChecksLabel =
     successfulChecks == 1
-    ? "1 successful check"
-    : "\(successfulChecks) successful checks"
+    ? String(localized: "1 successful check")
+    : String(localized: "\(successfulChecks) successful checks")
   return CommandPaletteItem(
     id: CommandPaletteItemID.pullRequestMerge(repositoryID),
-    title: "Merge PR",
-    subtitle: "Merge Ready - \(successfulChecksLabel)",
+    title: String(localized: "Merge PR"),
+    subtitle: String(localized: "Merge Ready - \(successfulChecksLabel)"),
     kind: .mergePullRequest(worktreeID),
     category: .pullRequest,
     defaultSuggestion: true,
+    keywords: ["Merge PR", "merge", "pull request", "合并 PR", "合并", "拉取请求"],
     priorityTier: 0
   )
 }
@@ -973,11 +1003,12 @@ private func makeClosePullRequestItem(
   guard isOpen else { return nil }
   return CommandPaletteItem(
     id: CommandPaletteItemID.pullRequestClose(repositoryID),
-    title: "Close PR",
+    title: String(localized: "Close PR"),
     subtitle: pullRequestTitle,
     kind: .closePullRequest(worktreeID),
     category: .pullRequest,
     defaultSuggestion: true,
+    keywords: ["Close PR", "close", "pull request", "关闭 PR", "关闭", "拉取请求"],
     priorityTier: 1
   )
 }
@@ -987,32 +1018,32 @@ private func makeClosePullRequestItem(
     [
       CommandPaletteItem(
         id: "debug.toast.inProgress",
-        title: "[Debug] Toast: In Progress",
-        subtitle: "Simulates an in-progress toast",
-        kind: .debugTestToast(.inProgress("Merging pull request…")),
+        title: String(localized: "[Debug] Toast: In Progress"),
+        subtitle: String(localized: "Simulates an in-progress toast"),
+        kind: .debugTestToast(.inProgress(String(localized: "Merging pull request…"))),
         category: .debug,
         defaultSuggestion: true
       ),
       CommandPaletteItem(
         id: "debug.toast.success",
-        title: "[Debug] Toast: Success",
-        subtitle: "Simulates a success toast",
-        kind: .debugTestToast(.success("Pull request merged")),
+        title: String(localized: "[Debug] Toast: Success"),
+        subtitle: String(localized: "Simulates a success toast"),
+        kind: .debugTestToast(.success(String(localized: "Pull request merged"))),
         category: .debug,
         defaultSuggestion: true
       ),
       CommandPaletteItem(
         id: "debug.update.simulate-found",
-        title: "[Debug] Simulate Update Found",
-        subtitle: "Shows the toolbar update badge without querying Sparkle",
+        title: String(localized: "[Debug] Simulate Update Found"),
+        subtitle: String(localized: "Shows the toolbar update badge without querying Sparkle"),
         kind: .debugSimulateUpdateFound,
         category: .debug,
         defaultSuggestion: true
       ),
       CommandPaletteItem(
         id: "debug.dock.notification-dot",
-        title: "[Debug] Light Dock Notification Dot",
-        subtitle: "Forces the Dock notification badge on for visual testing",
+        title: String(localized: "[Debug] Light Dock Notification Dot"),
+        subtitle: String(localized: "Forces the Dock notification badge on for visual testing"),
         kind: .debugLightDockNotificationDot,
         category: .debug,
         defaultSuggestion: true

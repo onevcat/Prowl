@@ -36,9 +36,11 @@ struct TerminalCloseConfirmationPolicyTests {
     candidate.hasMarkedText = true
     let decision = TerminalCloseConfirmationPolicy.decision(for: [candidate])
     #expect(decision.reasons == [.recentInput])
-    #expect(
-      TerminalCloseConfirmationPolicy.informativeMessage(for: decision, worktreeName: "wt")
-        .contains("may lose unsubmitted input"))
+    let message = TerminalCloseConfirmationPolicy.informativeMessage(
+      for: decision,
+      worktreeName: "wt"
+    )
+    #expect(message == "This will close 1 pane in “wt” with recent input. Closing may lose unsubmitted input.")
   }
 
   @Test func editingKeyClassificationExcludesNavigationAndShortcuts() {

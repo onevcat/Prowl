@@ -85,11 +85,11 @@ nonisolated enum MirrorCredentialVault {
 
     var errorDescription: String? {
       switch operation {
-      case .readIdentity: "Could not read this Mac’s Host identity. Try again."
-      case .saveIdentity: "Could not save this Mac’s Host identity. Try again."
-      case .readHost: "Could not read saved Host access. Try connecting again."
-      case .saveHost: "Could not save access to this Host. Try connecting again."
-      case .removeHost: "Could not remove saved Host access. Try again."
+      case .readIdentity: String(localized: "Could not read this Mac’s Host identity. Try again.")
+      case .saveIdentity: String(localized: "Could not save this Mac’s Host identity. Try again.")
+      case .readHost: String(localized: "Could not read saved Host access. Try connecting again.")
+      case .saveHost: String(localized: "Could not save access to this Host. Try connecting again.")
+      case .removeHost: String(localized: "Could not remove saved Host access. Try again.")
       }
     }
   }

@@ -14,7 +14,7 @@ struct WorkflowStepHistoryView: View {
         if store.isLoading { ProgressView().controlSize(.small) }
         Picker("History Scope", selection: $store.selectedScope.sending(\.setScope)) {
           ForEach(WorkflowHistoryScope.allCases, id: \.self) { scope in
-            Text(scope.rawValue).tag(scope)
+            Text(scope.title).tag(scope)
           }
         }
         .labelsHidden()

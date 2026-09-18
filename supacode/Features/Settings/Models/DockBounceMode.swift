@@ -1,3 +1,5 @@
+import Foundation
+
 /// Controls whether and how the Prowl dock icon bounces when an in-app
 /// notification is received.
 ///
@@ -17,11 +19,11 @@ enum DockBounceMode: String, CaseIterable, Identifiable, Codable, Sendable {
   var title: String {
     switch self {
     case .off:
-      return "Off"
+      return String(localized: "Off")
     case .once:
-      return "Once"
+      return String(localized: "Once")
     case .continuous:
-      return "Continuously"
+      return String(localized: "Continuously")
     }
   }
 }

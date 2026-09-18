@@ -60,20 +60,27 @@ struct WorkflowsSettingsFeature {
     /// Why the form's Create button is disabled, or nil when the draft can be written.
     var newWorkflowProblem: String? {
       guard let draft = newWorkflow else { return nil }
-      if draft.name.trimmingCharacters(in: .whitespaces).isEmpty { return "Enter a name." }
-      if draft.id.isEmpty { return "Enter an ID." }
+      if draft.name.trimmingCharacters(in: .whitespaces).isEmpty {
+        return String(localized: "Enter a name.")
+      }
+      if draft.id.isEmpty { return String(localized: "Enter an ID.") }
       guard WorkflowSchema.isWorkflowID(draft.id) else {
-        return "IDs use lowercase letters, digits, dots, dashes, and underscores, and start with a letter or digit."
+        return String(
+          localized:
+            "IDs use lowercase letters, digits, dots, dashes, and underscores, and start with a letter or digit."
+        )
       }
       if draft.id.hasPrefix(WorkflowSchema.reservedIDPrefix) {
-        return "IDs starting with “\(WorkflowSchema.reservedIDPrefix)” are reserved for built-in workflows."
+        return String(
+          localized: "IDs starting with “\(WorkflowSchema.reservedIDPrefix)” are reserved for built-in workflows."
+        )
       }
       let fileName = draft.request.fileName
       if displayedRows.contains(where: { $0.workflowID == draft.id || $0.fileName == fileName })
         || FileManager.default.fileExists(
           atPath: workflowDirectory.appending(path: fileName).path(percentEncoded: false))
       {
-        return "A workflow with this ID already exists here."
+        return String(localized: "A workflow with this ID already exists here.")
       }
       return nil
     }
@@ -425,9 +432,9 @@ struct WorkflowsSettingsFeature {
 
   private static func errorAlert(_ message: String) -> AlertState<Alert> {
     AlertState {
-      TextState("Workflows Error")
+      TextState(String(localized: "Workflows Error"))
     } actions: {
-      ButtonState(action: .dismiss) { TextState("OK") }
+      ButtonState(action: .dismiss) { TextState(String(localized: "OK")) }
     } message: {
       TextState(message)
     }

@@ -29,6 +29,7 @@ jobs:
           submodules: recursive
       - uses: ./.github/actions/setup-macos
       - run: make lint
+      - run: make check-localization
       - name: Stage debug app resources
         run: make embed-cli-debug embed-docs embed-skills
       - name: Build app and run tests in parallel

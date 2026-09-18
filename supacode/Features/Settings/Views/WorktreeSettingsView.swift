@@ -55,8 +55,10 @@ struct WorktreeSettingsView: View {
             )
             .help("Delete the local branch when automatic cleanup removes a Prowl-created worktree.")
             Text(
-              "Applies when merged or expired worktrees are cleaned up automatically, and only to branches "
-                + "created by Prowl. The manual delete dialog remembers your last choice instead."
+              """
+              Applies when merged or expired worktrees are cleaned up automatically, and only to branches \
+              created by Prowl. The manual delete dialog remembers your last choice instead.
+              """
             )
             .foregroundStyle(.secondary)
           }

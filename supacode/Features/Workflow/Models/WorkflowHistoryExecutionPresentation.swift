@@ -15,8 +15,8 @@ nonisolated enum WorkflowHistoryExecution {
 
   static func agentStatus(_ invocation: WorkflowRunRecordInvocation) -> String? {
     if invocation.kind == .launch {
-      guard invocation.target?.pane != nil else { return "Agent has not started." }
-      return "Agent started."
+      guard invocation.target?.pane != nil else { return String(localized: "Agent has not started.") }
+      return String(localized: "Agent started.")
     }
     return nil
   }
