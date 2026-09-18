@@ -17,17 +17,19 @@ struct DiffWindowContentView: View {
   private var emptyState: (title: String, description: String) {
     switch state.mode {
     case .uncommitted:
-      ("No Changes", "Working directory is clean")
+      (String(localized: "No Changes"), String(localized: "Working directory is clean"))
     case .outgoing:
-      ("No Outgoing Changes", outgoingEmptyDescription)
+      (String(localized: "No Outgoing Changes"), outgoingEmptyDescription)
     }
   }
 
   private var outgoingEmptyDescription: String {
     guard let base = state.outgoingBase else {
-      return "This branch has no committed changes relative to its base"
+      return String(localized: "This branch has no committed changes relative to its base")
     }
-    return "This branch has no committed changes relative to \(base.displayName) (\(base.source.label))"
+    return String(
+      localized: "This branch has no committed changes relative to \(base.displayName) (\(base.source.label))"
+    )
   }
 
   private var modeSelection: Binding<DiffMode> {

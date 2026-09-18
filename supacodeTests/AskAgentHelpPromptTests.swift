@@ -26,10 +26,94 @@ struct AskAgentHelpPromptTests {
     #expect(AskAgentHelpPrompt.languageKey(for: Locale(identifier: "zh-Hans-US")) == .simplifiedChinese)
   }
 
+  @Test func managedAppAndGlobalSystemLanguagesRemainIndependent() {
+    let combinations = [
+      (
+        managedAppLanguage: "zh-Hans", preferredLanguages: ["zh-Hans", "en"],
+        globalLanguages: ["zh-Hans", "en"], appSentinel: "介绍 Prowl",
+        promptSentinel: "Prowl 自带的文档"
+      ),
+      (
+        managedAppLanguage: "zh-Hans", preferredLanguages: ["zh-Hans", "en"],
+        globalLanguages: ["en", "zh-Hans"], appSentinel: "介绍 Prowl",
+        promptSentinel: "bundled documentation"
+      ),
+      (
+        managedAppLanguage: "en", preferredLanguages: ["en", "zh-Hans"],
+        globalLanguages: ["zh-Hans", "en"], appSentinel: "about Prowl",
+        promptSentinel: "Prowl 自带的文档"
+      ),
+      (
+        managedAppLanguage: "en", preferredLanguages: ["en", "zh-Hans"],
+        globalLanguages: ["en", "zh-Hans"], appSentinel: "about Prowl",
+        promptSentinel: "bundled documentation"
+      ),
+    ]
+
+    for combination in combinations {
+      let systemLocale = AskAgentHelpPrompt.systemPreferredLocale(
+        preferredLanguages: combination.preferredLanguages,
+        argumentLanguages: nil,
+        appLanguages: [combination.managedAppLanguage],
+        globalLanguages: combination.globalLanguages
+      )
+      let strings = AskAgentHelpPrompt.strings(
+        docsDirectoryPath: "/tmp/docs",
+        appLocale: Locale(identifier: combination.managedAppLanguage),
+        systemLocale: systemLocale
+      )
+
+      #expect(strings.title.contains(combination.appSentinel))
+      #expect(strings.prompt.contains(combination.promptSentinel))
+    }
+  }
+
+  @Test func argumentLanguageOverrideRecoversIndependentGlobalPreference() {
+    let locale = AskAgentHelpPrompt.systemPreferredLocale(
+      preferredLanguages: ["zh-Hans", "en"],
+      argumentLanguages: ["zh-Hans"],
+      appLanguages: nil,
+      globalLanguages: ["en", "zh-Hans"]
+    )
+
+    #expect(AskAgentHelpPrompt.languageKey(for: locale) == .english)
+  }
+
+  @Test func processPreferenceIsUsedWithoutAnOverride() {
+    let locale = AskAgentHelpPrompt.systemPreferredLocale(
+      preferredLanguages: ["ja", "en"],
+      argumentLanguages: nil,
+      appLanguages: nil,
+      globalLanguages: ["zh-Hans", "en"]
+    )
+
+    #expect(AskAgentHelpPrompt.languageKey(for: locale) == .japanese)
+  }
+
+  @Test func everySupportedLocaleRoutesToItsPromptTemplate() {
+    let docs = "/Applications/Prowl.app/Contents/Resources/docs"
+    let routes = [
+      (identifier: "en", sentinel: "bundled documentation"),
+      (identifier: "zh-Hans", sentinel: "Prowl 自带的文档"),
+      (identifier: "zh-Hant", sentinel: "Prowl 內建的文件"),
+      (identifier: "ja", sentinel: "同梱されているドキュメント"),
+    ]
+
+    for route in routes {
+      let strings = AskAgentHelpPrompt.strings(
+        docsDirectoryPath: docs,
+        appLocale: Locale(identifier: "en"),
+        systemLocale: Locale(identifier: route.identifier)
+      )
+      #expect(strings.prompt.contains(route.sentinel))
+    }
+  }
+
   @Test func docPathTrailingSlashIsNormalized() {
     let strings = AskAgentHelpPrompt.strings(
       docsDirectoryPath: "/Applications/Prowl.app/Contents/Resources/docs/",
-      locale: Locale(identifier: "en_US")
+      appLocale: Locale(identifier: "en_US"),
+      systemLocale: Locale(identifier: "en_US")
     )
     #expect(strings.prompt.contains("/Applications/Prowl.app/Contents/Resources/docs/README.md"))
     #expect(strings.prompt.contains("/Applications/Prowl.app/Contents/Resources/docs/overview.md"))
@@ -38,29 +122,54 @@ struct AskAgentHelpPromptTests {
 
   @Test func promptEmbedsResolvedDocPaths() {
     let docs = "/Applications/Prowl.app/Contents/Resources/docs"
-    let strings = AskAgentHelpPrompt.strings(docsDirectoryPath: docs, locale: Locale(identifier: "en_US"))
+    let strings = AskAgentHelpPrompt.strings(
+      docsDirectoryPath: docs,
+      appLocale: Locale(identifier: "en_US"),
+      systemLocale: Locale(identifier: "en_US")
+    )
     #expect(strings.prompt.contains("\(docs)/README.md"))
     #expect(strings.prompt.contains("\(docs)/overview.md"))
   }
 
-  @Test func everyLanguageAsksToReplyInPreferredLanguage() {
-    let docs = "/Applications/Prowl.app/Contents/Resources/docs"
-    let locales = ["en_US", "zh_CN", "zh_TW", "ja_JP"]
-    for identifier in locales {
-      let strings = AskAgentHelpPrompt.strings(docsDirectoryPath: docs, locale: Locale(identifier: identifier))
-      #expect(!strings.prompt.isEmpty)
-      #expect(!strings.title.isEmpty)
-      #expect(strings.prompt.contains(docs))
-    }
+  @Test func englishAppKeepsEnglishChromeForChineseSystemPrompt() {
+    let docs = "/tmp/docs"
+    let english = AskAgentHelpPrompt.strings(
+      docsDirectoryPath: docs,
+      appLocale: Locale(identifier: "en_US"),
+      systemLocale: Locale(identifier: "en_US")
+    )
+    let chineseSystem = AskAgentHelpPrompt.strings(
+      docsDirectoryPath: docs,
+      appLocale: Locale(identifier: "en_US"),
+      systemLocale: Locale(identifier: "zh_CN")
+    )
+
+    #expect(chineseSystem.title == english.title)
+    #expect(chineseSystem.explanation == english.explanation)
+    #expect(chineseSystem.copyButtonTitle == english.copyButtonTitle)
+    #expect(chineseSystem.copiedButtonTitle == english.copiedButtonTitle)
+    #expect(chineseSystem.doneButtonTitle == english.doneButtonTitle)
+    #expect(chineseSystem.prompt != english.prompt)
   }
 
-  @Test func localizedTitlesDiffer() {
+  @Test func chineseAppKeepsChineseChromeForEnglishSystemPrompt() {
     let docs = "/tmp/docs"
-    let english = AskAgentHelpPrompt.strings(docsDirectoryPath: docs, locale: Locale(identifier: "en_US"))
-    let japanese = AskAgentHelpPrompt.strings(docsDirectoryPath: docs, locale: Locale(identifier: "ja_JP"))
-    let simplified = AskAgentHelpPrompt.strings(docsDirectoryPath: docs, locale: Locale(identifier: "zh_CN"))
-    #expect(english.prompt != japanese.prompt)
-    #expect(english.prompt != simplified.prompt)
-    #expect(english.copyButtonTitle == "Copy Prompt")
+    let english = AskAgentHelpPrompt.strings(
+      docsDirectoryPath: docs,
+      appLocale: Locale(identifier: "en_US"),
+      systemLocale: Locale(identifier: "en_US")
+    )
+    let chineseApp = AskAgentHelpPrompt.strings(
+      docsDirectoryPath: docs,
+      appLocale: Locale(identifier: "zh_CN"),
+      systemLocale: Locale(identifier: "en_US")
+    )
+
+    #expect(chineseApp.title != english.title)
+    #expect(chineseApp.explanation != english.explanation)
+    #expect(chineseApp.copyButtonTitle != english.copyButtonTitle)
+    #expect(chineseApp.copiedButtonTitle != english.copiedButtonTitle)
+    #expect(chineseApp.doneButtonTitle != english.doneButtonTitle)
+    #expect(chineseApp.prompt == english.prompt)
   }
 }

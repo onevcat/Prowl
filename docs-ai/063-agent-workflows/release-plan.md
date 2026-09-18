@@ -1,3 +1,8 @@
+> **2026-09-16 D2 naming and scope:** The built-in is **Review Loop**
+> (`prowl.review-loop`), previously called adversarial review / Cross Review in planning.
+> Default rounds are 2–4 with a selectable reviewer in a right split. Implementation
+> and acceptance are tracked in [023](023-review-loop.md).
+
 > **2026-09-10 workflow-only retirement:** The owner superseded D3's additive
 > constraint. `prowl.handoff` is now the sole handoff surface; the legacy CLI, HUD,
 > hardcoded entry points, and compatibility execution path are retired; a one-release non-executing `HANDOFF_RETIRED` CLI stub remains. See [020](020-handoff-workflow.md).
@@ -72,7 +77,7 @@ say when each is cut:
 | D1 (UI refinement) | Merged | #763: post-merge native list/detail refinement, repository-local workflow Settings, Run Setup copy, explicit run targets, file opening, and capsule YAML icons; [063.014](014-workflow-settings-ui-refinement.md) |
 | #726 T1 | Implemented and verified — #767 merged; closure [#769](https://github.com/onevcat/Prowl/pull/769) merged | [064.016](../064-agent-completion-signals/016-t1-contract-test-plan.md): zero-inference inventory and production configuration preflight verified; [runbook](../064-agent-completion-signals/agent-contracts-runbook.md). Eight-runtime headless checks pass; T1 verification and scoped publication are complete; R2b GUI/workflow acceptance belongs to D3. |
 | D3 | Implemented and Debug-accepted; PR #786 | Added `prowl.handoff` with optional receiver launch; legacy handoff execution subsequently retired in favor of the workflow; its one-release `HANDOFF_RETIRED` CLI stub remains. Self-review, two Pi review rounds, and live Codex/Pi E2E complete. See [020](020-handoff-workflow.md). |
-| D2 | Deferred to R3 | `prowl.adversarial-review` built-in + reviewer skill + loop-specific E2E — after the handoff-first R2b release |
+| D2 | Implemented and Debug-accepted | Review Loop (`prowl.review-loop`): configurable review rounds, main dispositions, and clean/capped split-pane E2E. See [023](023-review-loop.md). |
 
 #### R1 PR ledger
 

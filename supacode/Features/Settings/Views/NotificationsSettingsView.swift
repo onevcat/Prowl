@@ -28,8 +28,10 @@ struct NotificationsSettingsView: View {
           } label: {
             Text("Play notification sound")
             Text(
-              "Ignored when system notifications are enabled, as they play sounds"
-                + " according to your settings."
+              """
+              Ignored when system notifications are enabled, as they play sounds\
+               according to your settings.
+              """
             )
           }
           .help("Choose the sound played when a notification is received")
@@ -39,8 +41,10 @@ struct NotificationsSettingsView: View {
             isOn: $store.muteNotificationsForActiveSurface
           )
           .help(
-            "Skip the banner, sound, and dock bounce when the notification comes from "
-              + "the pane you're already looking at."
+            """
+            Skip the banner, sound, and dock bounce when the notification comes from \
+            the pane you're already looking at.
+            """
           )
           Toggle(
             "Move notified worktree to top",
@@ -127,9 +131,9 @@ struct NotificationsSettingsView: View {
     case .available:
       return nil
     case .notificationsDenied:
-      return "Allow notifications for Prowl in System Settings to show the Dock badge."
+      return String(localized: "Allow notifications for Prowl in System Settings to show the Dock badge.")
     case .badgeDisabled:
-      return "Turn on “Badge app icon” for Prowl in System Settings > Notifications."
+      return String(localized: "Turn on “Badge app icon” for Prowl in System Settings > Notifications.")
     }
   }
 }

@@ -324,19 +324,19 @@ private struct WorktreeRowInfoView: View {
     }
     if pullRequestState == "MERGED" {
       appendSeparator()
-      var segment = AttributedString("Merged")
+      var segment = AttributedString(String(localized: "Merged"))
       segment.foregroundColor = PullRequestBadgeStyle.mergedColor
       result.append(segment)
     } else if pullRequestState == "CLOSED" {
       appendSeparator()
-      var segment = AttributedString("Closed")
+      var segment = AttributedString(String(localized: "Closed"))
       segment.foregroundColor = PullRequestBadgeStyle.closedColor
       result.append(segment)
     } else if isQueued {
       // A queued PR is mid-merge, so the queue state takes priority over the
       // merge-readiness label.
       appendSeparator()
-      var segment = AttributedString("Queued")
+      var segment = AttributedString(String(localized: "Queued"))
       segment.foregroundColor = PullRequestBadgeStyle.queuedColor
       result.append(segment)
     } else if let mergeReadiness {

@@ -15,15 +15,20 @@ nonisolated struct LineChangeBadgePresentation: Equatable, Sendable {
     guard skippedUntrackedFileCount > 0 else {
       addedText = "+\(addedLines)"
       incompleteCountDescription = nil
-      accessibilityLabel = "\(addedLines) added lines, \(removedLines) removed lines"
+      accessibilityLabel = String(localized: "\(addedLines) added lines, \(removedLines) removed lines")
       return
     }
 
     addedText = addedLines == 0 ? "+…" : "+\(addedLines)…"
-    let fileNoun = skippedUntrackedFileCount == 1 ? "file was" : "files were"
-    let omission = "\(skippedUntrackedFileCount) untracked \(fileNoun) not counted."
-    incompleteCountDescription = "Addition count is incomplete because \(omission)"
-    accessibilityLabel =
-      "Addition count incomplete, \(addedLines) lines counted; \(omission) \(removedLines) removed lines."
+    let omission =
+      if skippedUntrackedFileCount == 1 {
+        String(localized: "\(skippedUntrackedFileCount) untracked file was not counted.")
+      } else {
+        String(localized: "\(skippedUntrackedFileCount) untracked files were not counted.")
+      }
+    incompleteCountDescription = String(localized: "Addition count is incomplete because \(omission)")
+    accessibilityLabel = String(
+      localized: "Addition count incomplete, \(addedLines) lines counted; \(omission) \(removedLines) removed lines."
+    )
   }
 }

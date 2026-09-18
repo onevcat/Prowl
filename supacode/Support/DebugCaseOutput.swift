@@ -30,7 +30,7 @@ struct LogActionsReducer<Base: Reducer>: Reducer where Base.State: Equatable {
   func reduce(into state: inout Base.State, action: Base.Action) -> Effect<Base.Action> {
     #if DEBUG
       guard tcaActionLoggingEnabled else {
-        return base.reduce(into: &state, action: action)
+        return base._reduce(into: &state, action: action)
       }
       let actionLabel = debugCaseOutput(action)
       // `notice`, not `debug`: in DEBUG `SupaLogger.debug` prints to a stdout
@@ -38,7 +38,7 @@ struct LogActionsReducer<Base: Reducer>: Reducer where Base.State: Equatable {
       // never see it. `notice` routes to the unified log in all configs.
       logger.notice("Action: \(actionLabel)")
       let previousState = state
-      let effects = base.reduce(into: &state, action: action)
+      let effects = base._reduce(into: &state, action: action)
       if previousState != state, let diff = CustomDump.diff(previousState, state) {
         print(diff)
       }
@@ -50,7 +50,7 @@ struct LogActionsReducer<Base: Reducer>: Reducer where Base.State: Equatable {
       let breadcrumb = Breadcrumb(level: .debug, category: "action")
       breadcrumb.message = actionLabel
       SentrySDK.addBreadcrumb(breadcrumb)
-      return base.reduce(into: &state, action: action)
+      return base._reduce(into: &state, action: action)
     #endif
   }
 }

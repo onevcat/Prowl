@@ -120,6 +120,8 @@ your Ghostty config (`~/.config/ghostty/config`). Typical defaults in parenthese
 | New Terminal (tab) | `new_tab` | ⌘T |
 | Close Terminal (pane/surface) | `close_surface` | ⌘W |
 | Close Terminal Tab | `close_tab` | ⌘⇧W |
+| Undo Close (restore the last closed pane / tab) | `undo` | ⌘Z, ⌘⇧T |
+| Redo Close (close it again) | `redo` | ⌘⇧Z |
 | New Split (vertical / horizontal) | `new_split:right` / `new_split:down` | (Ghostty default; config-only, not in the Terminal menu) |
 | Reset Font Size | `reset_font_size` | ⌘0 |
 | Increase Font Size | `increase_font_size:1` | ⌘+ |
@@ -185,3 +187,31 @@ Navigation, copying, scrolling, and the close shortcut itself do not extend this
 window. Enter and Escape do not clear it. This guards against accidental closure
 while editing; it does not detect saved drafts or protect input indefinitely.
 Explicit no-confirmation close operations retain their existing behavior.
+
+### Undo close
+
+Closing a pane or tab keeps it alive for Ghostty's `undo-timeout` (default 5
+seconds). Within that window, Ghostty's `undo` binding (`⌘Z` or `⌘⇧T` by default)
+from any terminal puts the most recently closed pane or tab back where it was: same
+tab position, same split position and ratio, same running process and scrollback.
+`redo` (`⌘⇧Z`) closes it again without a confirmation prompt. Batch closes (Close
+Other Tabs, Close Tabs to the Right, Close All) come back as one unit.
+
+Each close has its own timer; a later close does not extend an earlier one. The
+undo history is app-wide and time-ordered: `⌘Z` restores the latest close even if it
+happened in another tab or worktree, and Prowl selects that worktree and tab (in
+Canvas, the restored card becomes the primary selection) so the restore is visible.
+A pane launched from an Agent Profile keeps its Profile identity, managed-hook
+signals, and Codex notification forwarding across the restore. Closing the last
+tab of a worktree is undoable too: with no terminal left to take the key, the
+main window hands it to Ghostty's app-level binding dispatch, so your real
+`undo` / `redo` bindings apply (defaults `⌘Z`, `⌘⇧T`, `⌘⇧Z`; rebinding, unbinding,
+and `performable:` prefixes are honored) and the tab comes back into that worktree
+(and the book back onto the Shelf). A text field that has focus keeps its own undo,
+other windows are not affected, and no other app-level binding fires through this
+route. When nothing is restorable, `⌘Z` reaches the terminal program as a normal key.
+
+Not restorable: closes whose process had already exited, worktree removal, layout
+restore, Run Script replacement, and a pane whose tab was split or rearranged after
+the close. Set `undo-timeout = 0` in `~/.config/ghostty/config` to disable the
+feature.

@@ -109,11 +109,20 @@ struct WorkflowStatusPopoverButton: View {
   }
 
   private var accessibilityLabel: String {
-    guard let run = presentation.attentionRun ?? presentation.primary else { return "Workflow status" }
-    let count = presentation.activeRunCount > 1 ? ", \(presentation.activeRunCount) active runs" : ""
-    if presentation.hasAttention { return "Workflow needs attention: \(run.currentStepTitle)\(count)" }
-    if run.status.isFinished { return "Workflow finished: \(run.summaryText)\(count)" }
-    return "Workflow running: \(run.currentStepTitle)\(count)"
+    guard let run = presentation.attentionRun ?? presentation.primary else {
+      return String(localized: "Workflow status")
+    }
+    let count =
+      presentation.activeRunCount > 1
+      ? String(localized: ", \(presentation.activeRunCount) active runs")
+      : ""
+    if presentation.hasAttention {
+      return String(localized: "Workflow needs attention: \(run.currentStepTitle)\(count)")
+    }
+    if run.status.isFinished {
+      return String(localized: "Workflow finished: \(run.summaryText)\(count)")
+    }
+    return String(localized: "Workflow running: \(run.currentStepTitle)\(count)")
   }
 
   private func togglePresentation() {

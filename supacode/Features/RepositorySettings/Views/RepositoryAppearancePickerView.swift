@@ -51,8 +51,10 @@ struct RepositoryAppearancePickerView: View {
         defaultIcon: TabIconSource(systemSymbol: "folder.fill"),
         title: "Repository Icon",
         subtitle:
-          "Pick a preset or enter any SF Symbol name. SVG and SF Symbol icons are tinted "
-          + "with the repo color; bitmap formats keep their own colors.",
+          """
+          Pick a preset or enter any SF Symbol name. SVG and SF Symbol icons are tinted \
+          with the repo color; bitmap formats keep their own colors.
+          """,
         presets: RepositoryIconPresets.presets,
         suggestionsSection: { symbolName in
           AnyView(
@@ -195,17 +197,17 @@ struct RepositoryAppearancePickerView: View {
   private var iconHelpText: String {
     switch store.appearance.icon {
     case .userImage(let filename) where !filename.lowercased().hasSuffix(".svg"):
-      return "Bitmap icons keep their original colors and ignore the repo color."
+      return String(localized: "Bitmap icons keep their original colors and ignore the repo color.")
     case .userImage:
-      return "User-provided SVGs are tinted with the repo color."
+      return String(localized: "User-provided SVGs are tinted with the repo color.")
     case .detectedImage:
-      return "Detected automatically from this project's assets. It keeps its original colors."
+      return String(localized: "Detected automatically from this project's assets. It keeps its original colors.")
     case .sfSymbol:
-      return "SF Symbols pick up the repo color when one is set."
+      return String(localized: "SF Symbols pick up the repo color when one is set.")
     case .bundledAsset:
-      return "Bundled icons keep their original artwork."
+      return String(localized: "Bundled icons keep their original artwork.")
     case nil:
-      return "No icon set. Click the icon preview to pick a symbol or import an image."
+      return String(localized: "No icon set. Click the icon preview to pick a symbol or import an image.")
     }
   }
 
@@ -434,8 +436,8 @@ struct RepositoryAppearancePickerView: View {
     panel.canChooseDirectories = false
     panel.canChooseFiles = true
     panel.allowsMultipleSelection = false
-    panel.prompt = "Choose"
-    panel.message = "Choose an image to use as this repository's icon."
+    panel.prompt = String(localized: "Choose")
+    panel.message = String(localized: "Choose an image to use as this repository's icon.")
 
     panel.begin { response in
       guard response == .OK, let url = panel.url else { return }

@@ -129,6 +129,10 @@ final class CodexForwardingRecordStore {
     scheduleCleanupIfNeeded()
   }
 
+  func isRetired(_ record: CodexForwardingRecord) -> Bool {
+    retired[record.locator] != nil
+  }
+
   func cleanupRetired() {
     let date = now()
     for (locator, eligibleAt) in retired where date >= eligibleAt {

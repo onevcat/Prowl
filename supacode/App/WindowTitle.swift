@@ -3,8 +3,8 @@ import IdentifiedCollections
 
 enum WindowTitle {
   static let appName = "Prowl"
-  static let archivedWorktreesTitle = "Archived Worktrees"
-  static let canvasTitle = "Canvas"
+  static let archivedWorktreesTitle = String(localized: "Archived Worktrees")
+  static let canvasTitle = String(localized: "Canvas")
 
   static func format(repository: String, tab: String?) -> String {
     guard let tab, !tab.isEmpty else { return repository }

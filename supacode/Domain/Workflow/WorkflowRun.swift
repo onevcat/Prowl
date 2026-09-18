@@ -274,7 +274,10 @@ nonisolated struct WorkflowHistorySubmission: Codable, Equatable, Sendable {
   var delivery: WorkflowDeliveryRecord
   var accepted: Bool
   var issues: [String]
-  var statusLabel: String { accepted ? "Accepted" : issues.isEmpty ? "Not accepted" : "Needs correction" }
+  var statusLabel: String {
+    if accepted { return String(localized: "Accepted") }
+    return issues.isEmpty ? String(localized: "Not accepted") : String(localized: "Needs correction")
+  }
 }
 
 // MARK: - Position and step records

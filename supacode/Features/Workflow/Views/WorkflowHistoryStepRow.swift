@@ -83,10 +83,10 @@ struct WorkflowHistoryStepRow: View {
       HStack {
         Text(attempt.state == .completed ? "Earlier issue" : "Error").font(.caption).foregroundStyle(.secondary)
         Spacer()
-        WorkflowHistoryIconButton(label: "Open full error", symbol: "arrow.up.forward.square") {
+        WorkflowHistoryIconButton(label: String(localized: "Open full error"), symbol: "arrow.up.forward.square") {
           onOutput(.openText(error, "error.txt"))
         }
-        WorkflowHistoryIconButton(label: "Copy full error", symbol: "doc.on.doc") {
+        WorkflowHistoryIconButton(label: String(localized: "Copy full error"), symbol: "doc.on.doc") {
           onOutput(.copyText(error))
         }
       }

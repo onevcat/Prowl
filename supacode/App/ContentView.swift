@@ -82,8 +82,8 @@ struct ContentView: View {
         store.send(
           .repositories(
             .presentAlert(
-              title: "Unable to open folders",
-              message: "Prowl could not read the selected folders."
+              title: String(localized: "Unable to open folders"),
+              message: String(localized: "Prowl could not read the selected folders.")
             )
           )
         )
@@ -186,7 +186,13 @@ struct ContentView: View {
         WorkflowStartOverlayView(store: workflowStartStore)
       }
     }
-    .background(WindowTabbingDisabler())
+    .background(windowTabbingDisabler)
+  }
+
+  /// Also carries the ⌘Z route for an emptied worktree (docs-ai 069.002).
+  private var windowTabbingDisabler: WindowTabbingDisabler {
+    let manager = terminalManager
+    return WindowTabbingDisabler(dispatchUndoRedoKey: { manager.performAppUndoRedoKey($0) })
   }
 
   private var renameBranchPromptRequest: Binding<PendingRenameBranchRequest?> {

@@ -37,19 +37,24 @@ nonisolated enum MirrorConnectionFailure: Equatable, Sendable {
   func clientMessage(endpoint: String, pairing: Bool) -> String {
     switch self {
     case .handshakeRejected:
-      pairing
-        ? "Host rejected the pairing code. Check the code, or refresh it on Host and try again."
-        : "This Host no longer recognizes this Mac. Enter a new pairing code from Host."
+      if pairing {
+        return String(
+          localized: "Host rejected the pairing code. Check the code, or refresh it on Host and try again."
+        )
+      }
+      return String(localized: "This Host no longer recognizes this Mac. Enter a new pairing code from Host.")
     case .refused:
-      "Nothing is listening at \(endpoint). Check that Host is started and the port is correct."
+      return String(
+        localized: "Nothing is listening at \(endpoint). Check that Host is started and the port is correct."
+      )
     case .unreachable:
-      "Cannot reach \(endpoint). Check that both Macs are on the same network or VPN."
+      return String(localized: "Cannot reach \(endpoint). Check that both Macs are on the same network or VPN.")
     case .unresolvable:
-      "Cannot resolve the address \(endpoint). Check the name or use an IP address."
+      return String(localized: "Cannot resolve the address \(endpoint). Check the name or use an IP address.")
     case .timedOut:
-      "No response from \(endpoint). Check the address and that Host is started."
+      return String(localized: "No response from \(endpoint). Check the address and that Host is started.")
     case .addressInUse, .addressUnavailable, .other:
-      "Cannot connect to \(endpoint): \(detail)"
+      return String(localized: "Cannot connect to \(endpoint): \(detail)")
     }
   }
 
@@ -57,23 +62,23 @@ nonisolated enum MirrorConnectionFailure: Equatable, Sendable {
   func listenerMessage(address: String, port: String) -> String {
     switch self {
     case .addressInUse:
-      "Port \(port) is already in use. Stop the other program or choose another port."
+      String(localized: "Port \(port) is already in use. Stop the other program or choose another port.")
     case .addressUnavailable:
-      "This Mac has no network interface with the address \(address)."
+      String(localized: "This Mac has no network interface with the address \(address).")
     default:
-      "Cannot start Host: \(detail)"
+      String(localized: "Cannot start Host: \(detail)")
     }
   }
 
   private var detail: String {
     switch self {
-    case .handshakeRejected(let status): "TLS handshake failed (\(status))."
-    case .refused: "connection refused."
-    case .unreachable: "network unreachable."
-    case .unresolvable: "address not resolved."
-    case .timedOut: "timed out."
-    case .addressInUse: "address already in use."
-    case .addressUnavailable: "address not available."
+    case .handshakeRejected(let status): String(localized: "TLS handshake failed (\(String(status))).")
+    case .refused: String(localized: "connection refused.")
+    case .unreachable: String(localized: "network unreachable.")
+    case .unresolvable: String(localized: "address not resolved.")
+    case .timedOut: String(localized: "timed out.")
+    case .addressInUse: String(localized: "address already in use.")
+    case .addressUnavailable: String(localized: "address not available.")
     case .other(let text): text
     }
   }

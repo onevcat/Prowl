@@ -358,12 +358,25 @@ nonisolated private final class Walker {
       return
     }
     for (key, value) in inputs.sorted(by: { $0.key < $1.key }) {
-      guard schema.input(named: key) != nil else {
+      guard let input = schema.input(named: key) else {
         collector.error("unknown_action_input", "Action '\(id)' has no input '\(key)'.", at: step.location)
         continue
       }
+      if input.kind == .boolean, case .boolean = value { continue }
+      if input.kind == .boolean, case .string(let text) = value {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("{{"), trimmed.hasSuffix("}}"),
+          !trimmed.dropFirst(2).dropLast(2).contains("}}")
+        else {
+          collector.error(
+            "action_input_type", "Action '\(id)' input '\(key)' must be a boolean or complete expression template.",
+            at: step.location)
+          continue
+        }
+      }
       guard case .string = value else {
-        collector.error("action_input_type", "Action '\(id)' input '\(key)' must be a string.", at: step.location)
+        let expected = input.kind == .boolean ? "a boolean or expression template" : "a string"
+        collector.error("action_input_type", "Action '\(id)' input '\(key)' must be \(expected).", at: step.location)
         continue
       }
     }

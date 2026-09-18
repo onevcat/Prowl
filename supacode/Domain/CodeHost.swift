@@ -17,7 +17,7 @@ nonisolated enum CodeHost: Equatable, Hashable, Sendable {
     case .codeberg: "Codeberg"
     case .sourcehut: "SourceHut"
     case .gitea: "Gitea"
-    case .unknown: "Code Host"
+    case .unknown: String(localized: "Code Host")
     }
   }
 

@@ -22,7 +22,7 @@ extension AppFeature {
       guard let explicitWorktree = state.repositories.terminalWorktree(for: worktreeID) else {
         return .send(
           .repositories(
-            .showToast(.warning("The selected worktree is no longer available."))))
+            .showToast(.warning(String(localized: "The selected worktree is no longer available.")))))
       }
       worktree = explicitWorktree
     } else {
@@ -37,7 +37,10 @@ extension AppFeature {
       return .send(
         .repositories(
           .showToast(
-            .warning("This workflow cannot start — check its file with `prowl workflow validate`")))
+            .warning(
+              String(localized: "This workflow cannot start — check its file with `prowl workflow validate`"))
+          )
+        )
       )
     }
     if !forceSheet, context.canStartImmediately {

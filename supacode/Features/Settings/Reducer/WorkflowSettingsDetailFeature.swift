@@ -82,7 +82,7 @@ struct WorkflowSettingsDetailFeature {
         guard let row = state.row else { return .none }
         do { state.bundleReview = try bundleClient.load(row.url, row.scope) } catch {
           state.alert = AlertState {
-            TextState("Cannot Review Bundle")
+            TextState(String(localized: "Cannot Review Bundle"))
           } message: {
             TextState(String(describing: error))
           }
@@ -138,14 +138,16 @@ struct WorkflowSettingsDetailFeature {
       case .deleteTapped:
         guard let row = state.row, row.scope != .bundle else { return .none }
         state.alert = AlertState {
-          TextState("Delete Workflow?")
+          TextState(String(localized: "Delete Workflow?"))
         } actions: {
-          ButtonState(role: .cancel) { TextState("Cancel") }
+          ButtonState(role: .cancel) { TextState(String(localized: "Cancel")) }
           ButtonState(role: .destructive, action: .confirmDeletion(row.url)) {
-            TextState("Move to Trash")
+            TextState(String(localized: "Move to Trash"))
           }
         } message: {
-          TextState("“\(row.name)” (\(row.fileName)) will be moved to Trash. You can restore it in Finder.")
+          TextState(
+            String(localized: "“\(row.name)” (\(row.fileName)) will be moved to Trash. You can restore it in Finder.")
+          )
         }
         return .none
 
@@ -157,9 +159,9 @@ struct WorkflowSettingsDetailFeature {
         } catch {
           let message = (error as? WorkflowSettingsError)?.message ?? error.localizedDescription
           state.alert = AlertState {
-            TextState("Could Not Delete Workflow")
+            TextState(String(localized: "Could Not Delete Workflow"))
           } actions: {
-            ButtonState { TextState("OK") }
+            ButtonState { TextState(String(localized: "OK")) }
           } message: {
             TextState(message)
           }

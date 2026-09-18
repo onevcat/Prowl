@@ -8,8 +8,8 @@ nonisolated enum MergedWorktreeAction: String, CaseIterable, Codable, Equatable,
 
   var title: String {
     switch self {
-    case .archive: "Archive"
-    case .delete: "Delete"
+    case .archive: String(localized: "Archive")
+    case .delete: String(localized: "Delete")
     }
   }
 }

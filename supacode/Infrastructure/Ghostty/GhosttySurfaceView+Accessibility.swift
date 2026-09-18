@@ -8,7 +8,7 @@ extension GhosttySurfaceView {
       accessibilityPaneIndexHelp = nil
       return
     }
-    accessibilityPaneIndexHelp = "Pane \(index) of \(total)"
+    accessibilityPaneIndexHelp = String(localized: "Pane \(index) of \(total)")
   }
 
   override func isAccessibilityElement() -> Bool {
@@ -30,7 +30,7 @@ extension GhosttySurfaceView {
     if !pwd.isEmpty {
       return pwd
     }
-    return "Terminal pane"
+    return String(localized: "Terminal pane")
   }
 
   override func accessibilityValue() -> Any? {

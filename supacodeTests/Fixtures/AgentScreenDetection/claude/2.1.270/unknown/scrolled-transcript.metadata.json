@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-09-14T14:05:26Z",
+  "cli_version": "2.1.270",
+  "capture_source": "prowl-read-detection",
+  "terminal": {
+    "columns": 88,
+    "rows": 42
+  },
+  "redactions": [
+    "Transcript text, workspace, model, account, timestamps, and custom status values masked with equal-width placeholders."
+  ],
+  "issue": null
+}

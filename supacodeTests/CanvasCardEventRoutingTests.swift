@@ -32,6 +32,19 @@ struct CanvasCardEventRoutingTests {
     #expect(fixture.tapRecorder.selectionTapCount == 1)
     #expect(fixture.tapRecorder.outerTapCount == 0)
   }
+
+  @Test func plainClickOnFocusedCardTerminalDoesNotChangeSelection() async throws {
+    let fixture = CanvasCardEventRoutingFixture(hasHoveredLink: false, isFocused: true)
+    defer { fixture.close() }
+    await fixture.prepareForHitTesting()
+
+    let target = try #require(fixture.sendClick(modifierFlags: []))
+    await fixture.drainMainQueue()
+
+    #expect(target === fixture.surfaceView)
+    #expect(fixture.tapRecorder.selectionTapCount == 0)
+    #expect(fixture.tapRecorder.outerTapCount == 0)
+  }
 }
 
 @MainActor
@@ -43,7 +56,7 @@ private final class CanvasCardEventRoutingFixture {
   private let window: NSWindow
   private let hostingView: NSHostingView<CanvasCardView>
 
-  init(hasHoveredLink: Bool) {
+  init(hasHoveredLink: Bool, isFocused: Bool = false) {
     let runtime = GhosttyRuntime()
     let surfaceView = GhosttySurfaceView(
       runtime: runtime,
@@ -55,14 +68,16 @@ private final class CanvasCardEventRoutingFixture {
     surfaceView.bridge.state.mouseOverLink = hasHoveredLink ? "https://example.com" : nil
 
     let tab = TerminalTabItem(title: "Follower", icon: nil)
+    // A focused card models a plain click on the active card; every other
+    // fixture models a Command-click on a broadcast follower.
     let linkActivationRequested = CanvasInteractionPolicy.linkActivationRequested(
       hasHoveredLink: CanvasInteractionPolicy.hasHoveredLink(in: SplitTree(view: surfaceView)),
-      isCommandModifierActive: true
+      isCommandModifierActive: !isFocused
     )
     let showsSelectionShield = CanvasInteractionPolicy.showsSelectionShield(
-      commandSelectionActive: true,
-      selectionModeActive: true,
-      broadcastFollower: true,
+      commandSelectionActive: !isFocused,
+      selectionModeActive: !isFocused,
+      broadcastFollower: !isFocused,
       linkActivationRequested: linkActivationRequested
     )
     let card = CanvasCardView(
@@ -71,7 +86,7 @@ private final class CanvasCardEventRoutingFixture {
       tree: SplitTree(view: surfaceView),
       activeSurfaceID: surfaceView.id,
       unfocusedSplitOverlay: (nil, 0),
-      isFocused: false,
+      isFocused: isFocused,
       isSelected: true,
       hasUnseenNotification: false,
       tabIcon: nil,
@@ -122,6 +137,10 @@ private final class CanvasCardEventRoutingFixture {
   }
 
   func sendCommandClick() -> NSView? {
+    sendClick(modifierFlags: .command)
+  }
+
+  func sendClick(modifierFlags: NSEvent.ModifierFlags) -> NSView? {
     let point = NSPoint(x: cardSize.width / 2, y: cardSize.height / 2)
     let target = hostingView.hitTest(point)
     let locationInWindow = hostingView.convert(point, to: nil)
@@ -131,7 +150,7 @@ private final class CanvasCardEventRoutingFixture {
       let mouseDown = NSEvent.mouseEvent(
         with: .leftMouseDown,
         location: locationInWindow,
-        modifierFlags: .command,
+        modifierFlags: modifierFlags,
         timestamp: timestamp,
         windowNumber: window.windowNumber,
         context: nil,
@@ -142,7 +161,7 @@ private final class CanvasCardEventRoutingFixture {
       let mouseUp = NSEvent.mouseEvent(
         with: .leftMouseUp,
         location: locationInWindow,
-        modifierFlags: .command,
+        modifierFlags: modifierFlags,
         timestamp: timestamp,
         windowNumber: window.windowNumber,
         context: nil,

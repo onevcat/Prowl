@@ -373,7 +373,7 @@ test-app: ensure-ghostty # Run app/unit tests via xcodebuild
 			set -- -derivedDataPath "$$PROWL_DERIVED_DATA_PATH" "$$@"; \
 		fi; \
 		set +e; \
-		xcodebuild "$$action" -project supacode.xcodeproj -scheme supacode -destination "platform=macOS" -resultBundlePath "$$result_bundle" $(TEST_SIGNING_ARGS) -skipMacroValidation -clonedSourcePackagesDirPath $(SPM_CACHE_DIR) -showBuildTimingSummary SWIFT_COMPILATION_MODE=incremental "$$@" 2>&1 | tee "$$result_bundle.log" | mise exec -- xcsift -w --build-info --format toon; \
+		xcodebuild "$$action" -project supacode.xcodeproj -scheme supacode -destination "platform=macOS" -resultBundlePath "$$result_bundle" $(TEST_SIGNING_ARGS) -skipMacroValidation -clonedSourcePackagesDirPath $(SPM_CACHE_DIR) -showBuildTimingSummary SWIFT_COMPILATION_MODE=incremental "$$@" 2>&1 | tee "$$result_bundle.log" | tee >(PROWL_TEST_PROGRESS_LABEL="$${result_bundle##*/}" awk -f "$(CURRENT_MAKEFILE_DIR)/scripts/test-progress.awk" >&2) | mise exec -- xcsift -w --format toon; \
 		local xcodebuild_status=$${PIPESTATUS[0]}; \
 		set -e; \
 		if [ "$$action" = "test" ] && [ -d "$$result_bundle" ]; then \
@@ -439,7 +439,9 @@ test-cli-unit: # Run CLI unit tests via SwiftPM
 		exit 1; \
 	fi; \
 	echo "CLI unit filter matched $$matching_test_count test(s)."; \
-	swift test --skip-build --skip '$(CLI_INTEGRATION_TEST_FILTER)'
+	swift test --skip-build --skip '$(CLI_INTEGRATION_TEST_FILTER)' 2>&1 \
+		| tee >(PROWL_TEST_PROGRESS_LABEL=cli-unit awk -f "$(CURRENT_MAKEFILE_DIR)/scripts/test-progress.awk" >&2) \
+		| mise exec -- xcsift -w --format toon
 
 test-cli-integration: # Run CLI integration tests via SwiftPM
 	@test_list="$$(swift test list)"; \
@@ -449,7 +451,9 @@ test-cli-integration: # Run CLI integration tests via SwiftPM
 		exit 1; \
 	fi; \
 	echo "CLI integration filter matched $$matching_test_count test(s)."; \
-	swift test --skip-build --filter '$(CLI_INTEGRATION_TEST_FILTER)'
+	swift test --skip-build --filter '$(CLI_INTEGRATION_TEST_FILTER)' 2>&1 \
+		| tee >(PROWL_TEST_PROGRESS_LABEL=cli-integration awk -f "$(CURRENT_MAKEFILE_DIR)/scripts/test-progress.awk" >&2) \
+		| mise exec -- xcsift -w --format toon
 
 benchmark-build: ensure-ghostty embed-cli-debug embed-docs embed-skills # Benchmark clean and compilation-cache build/test time
 	@BUILD_BENCHMARK_ROOT="$(CURRENT_MAKEFILE_DIR)/.build-benchmark/build-time" \
@@ -549,7 +553,14 @@ lint: # Lint code with swiftlint
 check-workflow-naming: # Check maintained workflow source and references for retired names
 	python3 scripts/check_workflow_naming.py
 
-check: format-changed format-lint lint test-scripts check-workflow-naming # Format changed Swift files, then run linters and checks
+.PHONY: check-localization audit-localization
+check-localization: # Check that the string catalog is not broken (no build needed; missing translations are fine)
+	python3 scripts/localization.py check
+
+audit-localization: build-app # Release check: missing, unused, and untranslated strings, and unlocalized UI copy (see the sync-l10n skill)
+	python3 scripts/localization.py audit
+
+check: format-changed format-lint lint test-scripts check-workflow-naming check-localization # Format changed Swift files, then run linters and checks
 
 log-stream: # Stream logs from the app via log stream
 	log stream --predicate 'subsystem == "com.onevcat.prowl"' --style compact --color always

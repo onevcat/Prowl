@@ -39,7 +39,7 @@ struct RepositoryDetailView: View {
     .multilineTextAlignment(.center)
   }
 
-  private var descriptionText: String {
+  private var descriptionText: LocalizedStringKey {
     switch repository.kind {
     case .git:
       "Select a worktree to open its terminal and repository tools."

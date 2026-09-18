@@ -66,3 +66,4 @@ capability needed here. Browser clients are outside this implementation.
 - Updated 2026-09-09: Recorded UI interaction contracts, user-led two-Mac feedback, and the narrowed Draft scope — see [003-ui-and-draft-scope.md](003-ui-and-draft-scope.md).
 - Updated 2026-09-13: Planned unified macOS Host/Client controls and viewport decisions — see [006-macos-ux.md](006-macos-ux.md).
 - Updated 2026-09-13: Polished the macOS popover, pairing sheet and connection form without a protocol change — see [007-ux-polish.md](007-ux-polish.md).
+- Updated 2026-09-17: Planned Mac-side Shell and Agent Profile creation and connection-picker improvements — see [008-client-pane-launch.md](008-client-pane-launch.md).

@@ -1,0 +1,213 @@
+schema: prowl.workflow/v1
+id: prowl.review-loop
+name: Review Loop
+description: Review changes with another agent, address findings, and repeat.
+icon: arrow.triangle.2.circlepath
+inputs:
+  min_rounds:
+    type: integer
+    default: 2
+    min: 1
+    max: 30
+    prompt: Minimum review rounds
+  max_rounds:
+    type: integer
+    default: 4
+    min: 1
+    max: 30
+    prompt: Maximum review rounds
+  focus:
+    type: string
+    default: ''
+    prompt: Additional review focus (optional)
+roles:
+  main:
+    source: current
+  reviewer:
+    source: launch
+    placement: split
+    direction: right
+    background: false
+state:
+  round: {type: integer, initial: 1}
+  findings: {type: string, initial: ''}
+  verdict: {type: string, initial: ''}
+  disposition: {type: string, initial: ''}
+  outcome: {type: string, initial: 'not clean'}
+steps:
+  - id: brief
+    title: Prepare review brief
+    message: main
+    prompt: |
+      Prepare the review brief from this conversation and the actual working tree.
+      Do not implement more changes during this step.
+      ## Scope
+      Identify the task, repository, branch, base commit or comparison range, current HEAD,
+      local staged/unstaged/untracked changes in scope, and any existing PR. Do not assume
+      that all changes are committed or that a PR exists. Exclude unrelated user work.
+      ## Plan
+      State the agreed behavior, constraints, design decisions, relevant plan files,
+      implementation claims, and any known gaps. Separate requirements from assumptions.
+      ## Verification
+      List tests actually run and their results, remaining risks, and useful checks for
+      the reviewer. State any restrictions on edits, tests, commits, pushes, or PR updates.
+      Main owns fixes, tests, commits, pushes, and PR updates by default. The reviewer may
+      run useful tests. Main may explicitly delegate work when that is more appropriate.
+      Additional review focus: {{ inputs.focus }}
+      Requested rounds: minimum {{ inputs.min_rounds }}, maximum {{ inputs.max_rounds }}.
+    expect:
+      delivery: brief
+      sections: ['## Scope', '## Plan', '## Verification']
+      strict: true
+  - id: validate_rounds
+    title: Check round limits
+    action: builtin:assert-condition
+    with:
+      condition: '{{ inputs.min_rounds <= inputs.max_rounds }}'
+      message: Minimum review rounds must not exceed maximum review rounds. Cancel and start with a valid range.
+  - id: first_review
+    title: Initial review
+    launch: reviewer
+    prompt: |
+      You are the independent reviewer in Review Loop. Read the main agent's brief:
+      {{ deliveries.brief.path }}
+      Review the actual changes against the plan, including relevant local changes and
+      the PR if one exists. Find missing or incorrect behavior, material correctness
+      problems, realistic UX regressions, and architecture problems with concrete impact.
+      Focus on P0/P1 and P2 findings with practical impact. Avoid style-only corrections,
+      speculative abstractions, and edge cases without a plausible trigger.
+      You share the worktree with main. Do not edit, commit, push, or comment on the PR
+      unless main explicitly delegates that work. You may run useful verification tests;
+      coordinate expensive tests or shared build resources with main through your report.
+      Report findings with stable IDs, severity, file/line evidence, a realistic trigger,
+      expected versus actual behavior, and a useful verification or regression-test idea.
+      Distinguish tested facts from assumptions. Do not claim clean if required inspection
+      is blocked or incomplete; report the limitation with verdict issues.
+      Deliver ## Findings and ## Verification. In ## Verification, list the files or areas
+      you inspected and those you did not, so later rounds can cover the gaps.
+      Use verdict clean only when no material
+      findings remain, otherwise issues. Complete only this assigned round, then wait
+      for the workflow's next task. Do not dispatch messages or start another review loop.
+      This is round 1 of at most {{ inputs.max_rounds }}; minimum {{ inputs.min_rounds }}.
+      Additional focus: {{ inputs.focus }}
+    expect:
+      delivery: first_findings
+      sections: ['## Findings', '## Verification']
+      verdicts: [clean, issues]
+      strict: true
+  - id: retain_first
+    set:
+      findings: deliveries.first_findings.path
+      verdict: deliveries.first_findings.verdict
+  - id: rounds
+    while: state.round <= inputs.max_rounds
+    steps:
+      - id: assess
+        title: Assess review findings
+        message: main
+        prompt: |
+          Review Loop round {{ state.round }} of {{ inputs.max_rounds }}.
+          Read the review: {{ state.findings }} (reviewer verdict: {{ state.verdict }}).
+          Verify every finding against the agreed plan and actual code. Fix real, worthwhile
+          problems; for logic changes, first add a regression test and observe failure,
+          then fix and run the relevant checks. For UI or other hard-to-test behavior,
+          use practical verification and state what remains unverified.
+          Explain with evidence any finding rejected, deferred, or already addressed.
+          Main owns fixes, tests, commits, pushes, and existing PR updates/comments by
+          default, subject to the original task's restrictions. Do not create a PR merely
+          because this workflow ran. Keep unrelated user changes intact. If a PR exists,
+          record a concise round summary and the disposition of material findings when
+          permitted. Delegate to reviewer only explicitly through this delivery, and only
+          if another round remains. Do not dispatch it yourself or bypass the workflow.
+          Even on the last round, assess and address findings, then report remaining work.
+          Deliver ## Disposition (each finding ID and decision), ## Verification (actual
+          commands/results and current HEAD/local changes), and ## Review State (whether
+          reviewed code changed, remaining issues, and any explicit next-round delegation).
+          Use verdict changed if any in-scope artifact changed after the review, including
+          code, tests, documentation, or configuration. Use follow-up if verification is
+          blocked or failed, a new concern needs review, or delegated work is still pending.
+          Use unchanged only if reviewed artifacts did not change and no further work,
+          verification blockers, or delegation remain. Rejection is not reviewer-confirmed clean.
+          Do not make further changes after this delivery; wait for the next workflow task.
+        expect:
+          delivery: assessment
+          sections: ['## Disposition', '## Verification', '## Review State']
+          verdicts: [changed, unchanged, follow-up]
+          strict: true
+      - id: retain_assessment
+        set:
+          disposition: deliveries.assessment.path
+      - id: clean_exit
+        if: state.verdict == 'clean' && deliveries.assessment.verdict == 'unchanged' && state.round >= inputs.min_rounds
+        then:
+          - id: mark_clean
+            set:
+              outcome: "'clean'"
+          - id: stop_clean
+            break: true
+      - id: maximum_exit
+        if: state.round >= inputs.max_rounds
+        then:
+          - id: stop_at_maximum
+            break: true
+      - id: next_review
+        title: Review current changes
+        message: reviewer
+        prompt: |
+          Continue Review Loop, round {{ state.round + 1 }} of {{ inputs.max_rounds }}.
+          Original scope and plan: {{ deliveries.brief.path }}
+          Previous review: {{ state.findings }}
+          Main's disposition and verification: {{ state.disposition }}
+          Read all three, then inspect the current changes. This round has two parts of
+          equal weight.
+          Part 1, carried-over findings: verify each fix and reassess rejected findings
+          using main's evidence. Do not repeat a resolved finding without new evidence.
+          Keep stable IDs for carried-over findings.
+          Part 2, fresh review: review the current full diff as if you saw it for the first
+          time. Cover the areas your earlier ## Verification listed as not inspected, and
+          treat code added by fixes as new code under review. Look for missed plan gaps,
+          material correctness problems, realistic UX regressions, and architecture problems
+          with concrete impact. Give new findings new IDs. A round that only re-checks
+          earlier findings is incomplete, even when every fix is confirmed.
+          Avoid trivial style issues and implausible edge cases.
+          A prior clean report does not replace this round's independent inspection.
+          You may run useful tests. Edit or publish only if main explicitly delegated it
+          in the latest disposition; report exactly what you changed and verified.
+          If delegated implementation remains unreviewed, report issues and that limitation.
+          Do not claim clean when inspection is blocked or incomplete.
+          Deliver ## Findings with subsections ### Carried Over and ### New (write "none"
+          when a subsection is empty), and ## Verification with evidence, actual test
+          results, and the files or areas you inspected and did not inspect.
+          Choose clean only if no material findings remain; otherwise issues.
+          Finish this round and wait. Do not dispatch messages or start another workflow.
+          Additional focus: {{ inputs.focus }}
+        expect:
+          delivery: next_findings
+          sections: ['## Findings', '## Verification']
+          verdicts: [clean, issues]
+          strict: true
+      - id: retain_review
+        set:
+          round: state.round + 1
+          findings: deliveries.next_findings.path
+          verdict: deliveries.next_findings.verdict
+  - id: summary
+    title: Summarize review outcome
+    message: main
+    prompt: |
+      Review Loop has finished {{ state.round }} round(s). Outcome: {{ state.outcome }}.
+      Last reviewer report: {{ state.findings }}
+      Last main disposition: {{ state.disposition }}
+      Deliver a concise ## Summary and ## Remaining Work. Include scope/current HEAD,
+      material findings and dispositions, verification, and PR status when applicable.
+      If not clean, explicitly state that the round limit was reached and distinguish
+      unresolved findings, rejected/deferred findings, blocked verification, and final fixes
+      that the reviewer has not reviewed. Never describe those fixes as reviewer-approved.
+      Do not modify code, run another review round, or silently extend the limit in this step.
+      The reviewer pane remains available; workflow completion alone does not mean clean.
+    expect:
+      delivery: summary
+      sections: ['## Summary', '## Remaining Work']
+      strict: true
+  - id: finished
+    notify: 'Review Loop: {{ state.outcome }} after {{ state.round }} round(s). Summary: {{ deliveries.summary.path }}'

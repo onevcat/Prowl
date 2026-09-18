@@ -34,7 +34,8 @@ nonisolated struct WorkflowBundleApprovalStore {
   func approve(_ snapshot: WorkflowBundleSnapshot, now: Date) throws {
     // Approval uses the displayed candidate. An edit while the sheet was open requires a new review.
     guard try WorkflowBundleSnapshot.read(snapshot.source).fingerprint == snapshot.fingerprint else {
-      throw WorkflowExpressionError.type("Bundle changed while it was being reviewed. Reopen the review.")
+      throw WorkflowExpressionError.type(
+        String(localized: "Bundle changed while it was being reviewed. Reopen the review."))
     }
     try FileManager.default.createDirectory(
       at: directory, withIntermediateDirectories: true,

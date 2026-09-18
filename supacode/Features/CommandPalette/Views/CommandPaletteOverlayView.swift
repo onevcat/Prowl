@@ -318,7 +318,7 @@ private struct CommandPaletteQueryTextField: NSViewRepresentable {
     let field = QueryField()
     field.delegate = context.coordinator
     field.onEvent = onEvent
-    field.placeholderString = "Search for actions or branches..."
+    field.placeholderString = String(localized: "Search for actions or branches...")
     field.isBordered = false
     field.drawsBackground = false
     field.focusRingType = .none
@@ -454,7 +454,7 @@ private struct CommandPaletteList: View {
   @ViewBuilder
   private func renderSectioned(_ sections: CommandPaletteSuggestions) -> some View {
     if !sections.recent.isEmpty {
-      CommandPaletteSectionHeader(title: "Recent")
+      CommandPaletteSectionHeader(title: String(localized: "Recent"))
       ForEach(sections.recent) { row in
         if let index = rows.firstIndex(where: { $0.id == row.id }) {
           rowView(for: row, index: index)
@@ -462,7 +462,7 @@ private struct CommandPaletteList: View {
       }
     }
     if !sections.suggested.isEmpty {
-      CommandPaletteSectionHeader(title: "Suggested")
+      CommandPaletteSectionHeader(title: String(localized: "Suggested"))
         .padding(.top, sections.recent.isEmpty ? 0 : 6)
       ForEach(sections.suggested) { row in
         if let index = rows.firstIndex(where: { $0.id == row.id }) {
@@ -530,10 +530,10 @@ private struct CommandPaletteRowView: View {
       .openRepositorySettings, .runCustomCommand, .launchAgentProfile, .runWorkflow:
       return nil
     case .deleteWorktree:
-      return "Delete"
+      return String(localized: "Delete")
     #if DEBUG
       case .debugTestToast, .debugSimulateUpdateFound, .debugLightDockNotificationDot:
-        return "Debug"
+        return String(localized: "Debug")
     #endif
     }
   }
@@ -738,87 +738,87 @@ private struct CommandPaletteRowView: View {
     let base: String
     switch row.kind {
     case .worktreeSelect:
-      base = "Switch to \(row.title)"
+      base = String(localized: "Switch to \(row.title)")
     case .checkForUpdates:
-      base = "Check for Updates"
+      base = String(localized: "Check for Updates")
     case .openRepository:
-      base = "Open Repository"
+      base = String(localized: "Open Repository")
     case .newWorkspace:
-      base = "New Workspace"
+      base = String(localized: "New Workspace")
     case .openSettings:
-      base = "Open Settings"
+      base = String(localized: "Open Settings")
     case .newWorktree:
-      base = "New Worktree"
+      base = String(localized: "New Worktree")
     case .viewArchivedWorktrees:
-      base = "View Archived Worktrees"
+      base = String(localized: "View Archived Worktrees")
     case .refreshWorktrees:
-      base = "Refresh Worktrees"
+      base = String(localized: "Refresh Worktrees")
     case .jumpToLatestUnread:
-      base = "Jump to Latest Unread"
+      base = String(localized: "Jump to Latest Unread")
     case .ghosttyCommand:
       base = row.title
     case .openPullRequest, .openRepositoryOnCodeHost:
       base = row.title
     case .markPullRequestReady:
-      base = "Mark pull request ready for review"
+      base = String(localized: "Mark pull request ready for review")
     case .mergePullRequest:
-      base = "Merge pull request"
+      base = String(localized: "Merge pull request")
     case .closePullRequest:
-      base = "Close pull request"
+      base = String(localized: "Close pull request")
     case .copyFailingJobURL:
-      base = "Copy failing job URL"
+      base = String(localized: "Copy failing job URL")
     case .copyCiFailureLogs:
-      base = "Copy CI failure logs"
+      base = String(localized: "Copy CI failure logs")
     case .rerunFailedJobs:
-      base = "Re-run failed jobs"
+      base = String(localized: "Re-run failed jobs")
     case .openFailingCheckDetails:
-      base = "Open failing check details"
+      base = String(localized: "Open failing check details")
     case .installCLI:
-      base = "Install Command Line Tool"
+      base = String(localized: "Install Command Line Tool")
     case .changeFocusedTabIcon:
-      base = "Change Tab Icon"
+      base = String(localized: "Change Tab Icon")
     case .toggleLeftSidebar:
-      base = "Toggle Sidebar"
+      base = String(localized: "Toggle Sidebar")
     case .toggleActiveAgentsPanel:
-      base = "Toggle Active Agents Panel"
+      base = String(localized: "Toggle Active Agents Panel")
     case .toggleCanvas:
-      base = "Toggle Canvas"
+      base = String(localized: "Toggle Canvas")
     case .expandCanvasCard:
-      base = "Expand / Restore Canvas Card"
+      base = String(localized: "Expand / Restore Canvas Card")
     case .arrangeCanvasCards:
-      base = "Arrange Canvas Cards"
+      base = String(localized: "Arrange Canvas Cards")
     case .organizeCanvasCards:
-      base = "Organize Canvas Cards"
+      base = String(localized: "Organize Canvas Cards")
     case .tileCanvasCards:
-      base = "Tile Canvas Cards"
+      base = String(localized: "Tile Canvas Cards")
     case .selectAllCanvasCards:
-      base = "Select All Canvas Cards"
+      base = String(localized: "Select All Canvas Cards")
     case .toggleShelf:
-      base = "Toggle Shelf"
+      base = String(localized: "Toggle Shelf")
     case .showDiff:
-      base = "Show Diff"
+      base = String(localized: "Show Diff")
     case .outgoingChanges:
-      base = "Show committed changes relative to the branch's base"
+      base = String(localized: "Show committed changes relative to the branch's base")
     case .revealInFinder:
-      base = "Reveal in Finder"
+      base = String(localized: "Reveal in Finder")
     case .copyPath:
-      base = "Copy Path"
+      base = String(localized: "Copy Path")
     case .revealInSidebar:
-      base = "Reveal in Sidebar"
+      base = String(localized: "Reveal in Sidebar")
     case .runScript:
-      base = "Run Script"
+      base = String(localized: "Run Script")
     case .stopRunScript:
-      base = "Stop Script"
+      base = String(localized: "Stop Script")
     case .togglePinWorktree(_, let isCurrentlyPinned):
-      base = isCurrentlyPinned ? "Unpin Worktree" : "Pin Worktree"
+      base = isCurrentlyPinned ? String(localized: "Unpin Worktree") : String(localized: "Pin Worktree")
     case .renameBranch:
-      base = "Rename Branch"
+      base = String(localized: "Rename Branch")
     case .openRepositorySettings:
-      base = "Open Repo Settings"
+      base = String(localized: "Open Repo Settings")
     case .deleteWorktree:
-      base = "Delete \(row.title)"
+      base = String(localized: "Delete \(row.title)")
     case .runCustomCommand:
-      base = "Run Custom Command: \(row.title)"
+      base = String(localized: "Run Custom Command: \(row.title)")
     case .launchAgentProfile:
       base = row.title
     case .runWorkflow:

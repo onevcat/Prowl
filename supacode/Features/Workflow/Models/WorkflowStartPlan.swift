@@ -26,9 +26,9 @@ nonisolated struct WorkflowStartPlan: Equatable, Sendable {
     /// The short tag next to the title: what kind of pane serves the role.
     var kindLabel: String {
       switch source {
-      case .current: "This pane"
-      case .launch: "New agent"
-      case .pick: "Existing agent"
+      case .current: String(localized: "This pane")
+      case .launch: String(localized: "New agent")
+      case .pick: String(localized: "Existing agent")
       }
     }
 
@@ -36,11 +36,11 @@ nonisolated struct WorkflowStartPlan: Equatable, Sendable {
     var kindDescription: String {
       switch source {
       case .current:
-        "The pane you start the workflow from. Its agent receives this role's instructions."
+        String(localized: "The pane you start the workflow from. Its agent receives this role's instructions.")
       case .launch:
-        "Prowl starts a new agent from an Agent Profile for this role."
+        String(localized: "Prowl starts a new agent from an Agent Profile for this role.")
       case .pick:
-        "An agent that is already running in this worktree takes this role."
+        String(localized: "An agent that is already running in this worktree takes this role.")
       }
     }
 
@@ -48,7 +48,8 @@ nonisolated struct WorkflowStartPlan: Equatable, Sendable {
     var stepsCaption: String? {
       guard !stepNumbers.isEmpty else { return nil }
       let numbers = stepNumbers.map(String.init).joined(separator: ", ")
-      let prefix = stepNumbers.count == 1 ? "Step \(numbers)" : "Steps \(numbers)"
+      let prefix =
+        stepNumbers.count == 1 ? String(localized: "Step \(numbers)") : String(localized: "Steps \(numbers)")
       return "\(prefix) · \(stepTitles.joined(separator: ", "))"
     }
   }
@@ -115,16 +116,19 @@ nonisolated struct WorkflowStartPlan: Equatable, Sendable {
   private static func placementNote(_ launch: WorkflowLaunchRequirements) -> String {
     switch launch.placement {
     case .tab:
-      return launch.background ? "Opens in a background tab" : "Opens in a new tab"
+      return launch.background
+        ? String(localized: "Opens in a background tab") : String(localized: "Opens in a new tab")
     case .split:
       let side =
         switch launch.direction {
-        case .right: "right"
-        case .left: "left"
-        case .top: "top"
-        case .down: "bottom"
+        case .right: String(localized: "right", comment: "The side of a split: 'a split on the right'.")
+        case .left: String(localized: "left", comment: "The side of a split: 'a split on the left'.")
+        case .top: String(localized: "top", comment: "The side of a split: 'a split on the top'.")
+        case .down: String(localized: "bottom", comment: "The side of a split: 'a split on the bottom'.")
         }
-      return launch.background ? "Opens in a split on the \(side), unfocused" : "Opens in a split on the \(side)"
+      return launch.background
+        ? String(localized: "Opens in a split on the \(side), unfocused")
+        : String(localized: "Opens in a split on the \(side)")
     }
   }
 }

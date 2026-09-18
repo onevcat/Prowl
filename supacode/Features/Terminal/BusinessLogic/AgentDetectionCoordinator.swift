@@ -8,6 +8,8 @@ final class AgentDetectionCoordinator {
   private var process: AgentProcessGeneration?
   private var agent: DetectedAgent?
   private var logProvider: CodexLogProvider?
+  private var nativeProvider: ClaudeRuntimeProvider?
+  private var configRoot: URL?
   private var revision: UInt64 = 0
   private var lastCapturedAt: TimeInterval?
   private var observationInFlight = false
@@ -31,6 +33,7 @@ final class AgentDetectionCoordinator {
 
   private func reset() {
     logProvider = nil
+    nativeProvider = nil
     process = nil
     machine = AgentStateMachine()
   }
@@ -71,23 +74,32 @@ final class AgentDetectionCoordinator {
     guard queuedRevision == revision, !Task.isCancelled else { return nil }
     guard lastCapturedAt.map({ captureTime >= $0 }) ?? true else { return machine.decision }
     lastCapturedAt = captureTime
-    if self.agent != agent || (agent == .codex && process != nil && self.process != process) {
+    let hasProvider = agent == .codex || agent == .claude
+    if self.agent != agent || (hasProvider && process != nil && self.process != process)
+      || (hasProvider && self.configRoot != configRoot)
+    {
       reset()
       self.agent = agent
       self.process = process
+      self.configRoot = configRoot
       if agent == .codex, process != nil { logProvider = CodexLogProvider() }
+      if agent == .claude, process != nil { nativeProvider = ClaudeRuntimeProvider() }
     }
     let expectedRevision = revision
     let inputRevision = interactionRevision
     // Screen capture precedes the file read. A completion can fence this frame;
     // the next poll observes whether the UI has actually changed.
     machine.receive(.screen(screen, contentID: screenContentID), now: now)
-    if let logProvider, let process = self.process {
+    if hasProvider, let process = self.process {
       let events: [AgentDetectionEvent]
       if let sampleOverride {
         events = await sampleOverride(process, configRoot)
-      } else {
+      } else if let logProvider {
         events = await logProvider.sample(process: process, configRoot: configRoot)
+      } else if let nativeProvider {
+        events = await nativeProvider.sample(process: process, configRoot: configRoot)
+      } else {
+        events = [.unavailable]
       }
       guard revision == expectedRevision else { return nil }
       for event in events { machine.receive(event, now: now) }

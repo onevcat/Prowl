@@ -47,7 +47,8 @@ extension SupacodeApp {
       run: { request in
         guard let appStore = storeBox.store, let coordinator = coordinatorBox.coordinator else {
           return .failed(
-            code: CLIErrorCode.transportFailed, message: "Workflow runtime is not available.")
+            code: CLIErrorCode.transportFailed,
+            message: String(localized: "Workflow runtime is not available."))
         }
         let snapshot = makeWorkflowRuntimeSnapshot(
           appStore: appStore, terminalManager: terminalManager)
@@ -56,7 +57,7 @@ extension SupacodeApp {
         else {
           return .failed(
             code: CLIErrorCode.targetNotFound,
-            message: "The source worktree is no longer available.")
+            message: String(localized: "The source worktree is no longer available."))
         }
         let source = WorkflowRunSource(
           worktree: worktree, paneID: request.sourceSurfaceID, paneIsCaller: false)
@@ -72,7 +73,7 @@ extension SupacodeApp {
         if response.ok { return .started }
         return .failed(
           code: response.error?.code ?? CLIErrorCode.transportFailed,
-          message: response.error?.message ?? "The workflow could not be started.")
+          message: response.error?.message ?? String(localized: "The workflow could not be started."))
       }
     )
     // Views outside the store scope (popover, context menu) resolve the global default,
@@ -266,7 +267,7 @@ extension SupacodeApp {
       }
       let rejectedNote: String? =
         if case .success(let binding) = result, binding.rejected[.remembered] != nil {
-          "The previously used profile no longer qualifies."
+          String(localized: "The previously used profile no longer qualifies.")
         } else { nil }
       let candidates = settings.agentProfiles.filter(\.isEnabled).map { profile in
         WorkflowStartLaunchRole.Candidate(

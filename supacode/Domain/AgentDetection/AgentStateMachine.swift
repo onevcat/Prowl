@@ -3,6 +3,7 @@ import Foundation
 /// Internal detection facts, separate from public hook and workflow signals.
 nonisolated enum AgentDetectionEvent: Sendable {
   case screen(AgentScreenDetection, contentID: Int? = nil)
+  case native(AgentNativeSnapshot)
   case inventory(Set<String>)
   case turnStarted(session: String, turn: String)
   case turnEnded(session: String, turn: String)
@@ -26,6 +27,7 @@ nonisolated enum AgentScreenFallback: String, Sendable {
 nonisolated enum AgentStateDecisionReason: Equatable, Sendable {
   case screen(AgentScreenDetectionReason)
   case fallback(AgentScreenFallback)
+  case native(AgentRawState)
   case logOpenWork
   case logTurnEnded
 
@@ -33,6 +35,7 @@ nonisolated enum AgentStateDecisionReason: Equatable, Sendable {
     switch self {
     case .screen(let reason): reason.identifier
     case .fallback(let reason): reason.rawValue
+    case .native(let state): "native.\(state.rawValue)"
     case .logOpenWork: "log.openWork"
     case .logTurnEnded: "log.turnEnded"
     }
@@ -58,6 +61,8 @@ nonisolated struct AgentStateMachine: Sendable {
   }
 
   private var roots: [String: Root] = [:]
+  private var native: AgentNativeSnapshot?
+  private var nativeAvailable = false
   private var available = false
   private var hasLogProvider = false
   private var screen = AgentScreenDetection(state: .unknown, reason: .noRuleMatched)
@@ -73,6 +78,8 @@ nonisolated struct AgentStateMachine: Sendable {
     switch event {
     case .screen(let detection, let contentID):
       observeScreen(detection, contentID: contentID)
+    case .native(let snapshot):
+      observeNative(snapshot)
     case .inventory(let sessions):
       hasLogProvider = true
       available = true
@@ -95,14 +102,14 @@ nonisolated struct AgentStateMachine: Sendable {
     case .childStarted(let root, let child, let work):
       roots[root]?.children[child] = work
     case .childEnded(let root, let child, let work):
-      if let current = roots[root]?.children[child], work == current {
-        roots[root]?.children.removeValue(forKey: child)
-        suppressCompletedScreen(session: root)
-      }
+      endChild(root: root, child: child, work: work)
     case .suspended:
+      nativeAvailable = false
       hasLogProvider = true
       available = false
     case .unavailable:
+      native = nil
+      nativeAvailable = false
       hasLogProvider = true
       available = false
       roots.removeAll()
@@ -117,11 +124,37 @@ nonisolated struct AgentStateMachine: Sendable {
     return decision
   }
 
+  private mutating func observeNative(_ snapshot: AgentNativeSnapshot) {
+    if let native, native.sessionID == snapshot.sessionID, snapshot.statusUpdatedAt < native.statusUpdatedAt {
+      return
+    }
+    let changed = native != snapshot
+    // Busy can acknowledge a retained prompt, but cannot dismiss a newly changed blocker.
+    let canFence =
+      screen.state != .blocked || snapshot.state == .blocked
+      || (snapshot.state == .idle && native != nil) || suppressedScreen == screen
+    native = snapshot
+    nativeAvailable = true
+    hasLogProvider = true
+    if changed, canFence {
+      suppressedSessionID = snapshot.sessionID
+      suppressedScreen = screen
+      suppressedContentID = screenContentID
+    }
+  }
+
   private mutating func observeScreen(_ detection: AgentScreenDetection, contentID: Int?) {
     screen = detection
     screenContentID = contentID
     if detection.state != .unknown { stableScreen = detection.state }
     if suppressedScreen != detection || suppressedContentID != contentID { suppressedScreen = nil }
+  }
+
+  private mutating func endChild(root: String, child: String, work: String?) {
+    if let current = roots[root]?.children[child], work == current {
+      roots[root]?.children.removeValue(forKey: child)
+      suppressCompletedScreen(session: root)
+    }
   }
 
   private mutating func scheduleChild(root: String, child: String, work: String) {
@@ -137,6 +170,20 @@ nonisolated struct AgentStateMachine: Sendable {
   }
 
   private func resolve(now: TimeInterval) -> AgentStateDecision {
+    if let native, nativeAvailable {
+      let suppressed = suppressedSessionID == native.sessionID && suppressedScreen == screen
+      let blocked = native.state == .blocked || (screen.state == .blocked && !suppressed)
+      return AgentStateDecision(
+        state: blocked ? .blocked : native.state,
+        reason: blocked && native.state != .blocked ? .screen(screen.reason) : .native(native.state),
+        logSessionID: native.sessionID, hasOutstandingWork: native.state != .idle)
+    }
+
+    if let native, native.state == .idle,
+      suppressedSessionID == native.sessionID, suppressedScreen == screen
+    {
+      return AgentStateDecision(state: .idle, reason: .fallback(.retainedCompletion))
+    }
     let eligible = roots.filter { _, root in
       root.busy || root.lastActivity.map { now - $0 < activityWindow } == true
     }

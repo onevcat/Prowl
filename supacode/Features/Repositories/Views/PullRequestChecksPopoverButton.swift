@@ -71,8 +71,8 @@ struct PullRequestChecksPopoverButton<Label: View>: View {
 
   private var openPullRequestHelpText: String {
     if let display = openPullRequestShortcut?.display {
-      return "Open pull request on GitHub (\(display)). Hover to show checks."
+      return String(localized: "Open pull request on GitHub (\(display)). Hover to show checks.")
     }
-    return "Open pull request on GitHub. Hover to show checks."
+    return String(localized: "Open pull request on GitHub. Hover to show checks.")
   }
 }

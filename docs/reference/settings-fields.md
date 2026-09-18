@@ -130,3 +130,7 @@ the role). Prefer the page over editing them by hand. See
   = explicit override.
 - Editing the JSON while Prowl is running may be overwritten on save — prefer the
   Settings UI, or change settings while the app is closed.
+- The application language is **not** in `settings.json`. Settings → General → Language reads
+  and writes the per-app `AppleLanguages` default (`defaults read com.onevcat.prowl
+  AppleLanguages`), the same key as System Settings → Language & Region → Applications. No key
+  means "follow the system". A change takes effect on the next launch.

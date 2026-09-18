@@ -402,11 +402,77 @@ func ghosttyCommandItems(_ commands: [GhosttyCommand]) -> [CommandPaletteItem] {
   }
 }
 
+private func commandPaletteAppShortcutID(for kind: CommandPaletteItem.Kind) -> String? {
+  coreCommandPaletteAppShortcutID(for: kind)
+    ?? worktreeCommandPaletteAppShortcutID(for: kind)
+    ?? viewCommandPaletteAppShortcutID(for: kind)
+}
+
+private func coreCommandPaletteAppShortcutID(for kind: CommandPaletteItem.Kind) -> String? {
+  switch kind {
+  case .checkForUpdates: AppShortcuts.CommandID.checkForUpdates
+  case .openRepository: AppShortcuts.CommandID.openRepository
+  case .openSettings: AppShortcuts.CommandID.openSettings
+  case .newWorktree: AppShortcuts.CommandID.newWorktree
+  case .viewArchivedWorktrees: AppShortcuts.CommandID.archivedWorktrees
+  case .refreshWorktrees: AppShortcuts.CommandID.refreshWorktrees
+  case .jumpToLatestUnread: AppShortcuts.CommandID.jumpToLatestUnread
+  default: nil
+  }
+}
+
+private func worktreeCommandPaletteAppShortcutID(for kind: CommandPaletteItem.Kind) -> String? {
+  switch kind {
+  case .runScript: AppShortcuts.CommandID.runScript
+  case .stopRunScript: AppShortcuts.CommandID.stopScript
+  case .renameBranch: AppShortcuts.CommandID.renameBranch
+  default: nil
+  }
+}
+
+private func viewCommandPaletteAppShortcutID(for kind: CommandPaletteItem.Kind) -> String? {
+  sidebarCommandPaletteAppShortcutID(for: kind)
+    ?? canvasCommandPaletteAppShortcutID(for: kind)
+    ?? displayCommandPaletteAppShortcutID(for: kind)
+}
+
+private func sidebarCommandPaletteAppShortcutID(for kind: CommandPaletteItem.Kind) -> String? {
+  switch kind {
+  case .toggleLeftSidebar: AppShortcuts.CommandID.toggleLeftSidebar
+  case .toggleActiveAgentsPanel: AppShortcuts.CommandID.toggleActiveAgentsPanel
+  case .toggleCanvas: AppShortcuts.CommandID.toggleCanvas
+  default: nil
+  }
+}
+
+private func canvasCommandPaletteAppShortcutID(for kind: CommandPaletteItem.Kind) -> String? {
+  switch kind {
+  case .expandCanvasCard: AppShortcuts.CommandID.expandCanvasCard
+  case .arrangeCanvasCards: AppShortcuts.CommandID.arrangeCanvasCards
+  case .organizeCanvasCards: AppShortcuts.CommandID.organizeCanvasCards
+  case .tileCanvasCards: AppShortcuts.CommandID.tileCanvasCards
+  case .selectAllCanvasCards: AppShortcuts.CommandID.selectAllCanvasCards
+  default: nil
+  }
+}
+
+private func displayCommandPaletteAppShortcutID(for kind: CommandPaletteItem.Kind) -> String? {
+  switch kind {
+  case .toggleShelf: AppShortcuts.CommandID.toggleShelf
+  case .showDiff: AppShortcuts.CommandID.showDiff
+  case .outgoingChanges: AppShortcuts.CommandID.outgoingChanges
+  case .revealInSidebar: AppShortcuts.CommandID.revealInSidebar
+  default: nil
+  }
+}
+
 extension CommandPaletteItem {
   /// Build a top-level command backed by an `AppShortcuts` hotkey. Defaults to
   /// `defaultSuggestion: true` (since these are the kinds of actions worth
   /// listing when the palette opens with no query) and uses no subtitle (the
   /// hotkey hint and title already do the work).
+  /// `title` is the raw English localization key, retained for bilingual search;
+  /// only the displayed fallback is localized here.
   static func appShortcut(
     id: String,
     title: String,
@@ -415,14 +481,19 @@ extension CommandPaletteItem {
     keywords: [String] = [],
     priorityTier: Int = defaultPriorityTier
   ) -> CommandPaletteItem {
-    CommandPaletteItem(
+    let localizedTitle =
+      commandPaletteAppShortcutID(for: kind)
+      .flatMap(AppShortcuts.binding(for:))?
+      .localizedTitle
+      ?? String(localized: String.LocalizationValue(title))
+    return CommandPaletteItem(
       id: id,
-      title: title,
+      title: localizedTitle,
       subtitle: nil,
       kind: kind,
       category: category,
       defaultSuggestion: true,
-      keywords: keywords,
+      keywords: [title] + keywords,
       priorityTier: priorityTier
     )
   }
@@ -434,11 +505,12 @@ extension CommandPaletteItem {
     let subtitle = command.description.trimmingCharacters(in: .whitespacesAndNewlines)
     return CommandPaletteItem(
       id: CommandPaletteItemID.ghosttyCommand(command),
-      title: command.title,
+      title: String(localized: String.LocalizationValue(command.title)),
       subtitle: subtitle.isEmpty ? nil : subtitle,
       kind: .ghosttyCommand(command.action),
       category: .terminal,
       defaultSuggestion: false,
+      keywords: [command.title],
       priorityTier: CommandPaletteItem.defaultPriorityTier + 100
     )
   }

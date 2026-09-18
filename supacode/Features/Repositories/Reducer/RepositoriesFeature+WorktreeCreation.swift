@@ -21,21 +21,21 @@ extension RepositoriesFeature {
         !selectedRepository.capabilities.supportsWorktrees
       {
         state.alert = messageAlert(
-          title: "Unable to create worktree",
-          message: "This folder doesn't support worktrees."
+          title: String(localized: "Unable to create worktree"),
+          message: String(localized: "This folder doesn't support worktrees.")
         )
         return .none
       }
       guard let repository = repositoryForWorktreeCreation(state) else {
         let message: String
         if state.repositories.isEmpty {
-          message = "Open a repository to create a worktree."
+          message = String(localized: "Open a repository to create a worktree.")
         } else if state.selectedWorktreeID == nil && state.repositories.count > 1 {
-          message = "Select a worktree to choose which repository to use."
+          message = String(localized: "Select a worktree to choose which repository to use.")
         } else {
-          message = "Unable to resolve a repository for the new worktree."
+          message = String(localized: "Unable to resolve a repository for the new worktree.")
         }
-        state.alert = messageAlert(title: "Unable to create worktree", message: message)
+        state.alert = messageAlert(title: String(localized: "Unable to create worktree"), message: message)
         return .none
       }
       return .send(.worktreeCreation(.createRandomWorktreeInRepository(repository.id)))
@@ -43,22 +43,22 @@ extension RepositoriesFeature {
     case .createRandomWorktreeInRepository(let repositoryID):
       guard let repository = state.repositories[id: repositoryID] else {
         state.alert = messageAlert(
-          title: "Unable to create worktree",
-          message: "Unable to resolve a repository for the new worktree."
+          title: String(localized: "Unable to create worktree"),
+          message: String(localized: "Unable to resolve a repository for the new worktree.")
         )
         return .none
       }
       guard repository.capabilities.supportsWorktrees else {
         state.alert = messageAlert(
-          title: "Unable to create worktree",
-          message: "This folder doesn't support worktrees."
+          title: String(localized: "Unable to create worktree"),
+          message: String(localized: "This folder doesn't support worktrees.")
         )
         return .none
       }
       if state.removingRepositoryIDs.contains(repository.id) {
         state.alert = messageAlert(
-          title: "Unable to create worktree",
-          message: "This repository is being removed."
+          title: String(localized: "Unable to create worktree"),
+          message: String(localized: "This repository is being removed.")
         )
         return .none
       }
@@ -184,8 +184,8 @@ extension RepositoriesFeature {
       guard let repository = state.repositories[id: repositoryID] else {
         state.worktreeCreationPrompt = nil
         state.alert = messageAlert(
-          title: "Unable to create worktree",
-          message: "Unable to resolve a repository for the new worktree."
+          title: String(localized: "Unable to create worktree"),
+          message: String(localized: "Unable to resolve a repository for the new worktree.")
         )
         return .none
       }
@@ -197,7 +197,7 @@ extension RepositoriesFeature {
       let normalizedBranchName = branchName.lowercased()
       if repository.worktrees.contains(where: { $0.name.lowercased() == normalizedBranchName }) {
         state.worktreeCreationPrompt?.isValidating = false
-        state.worktreeCreationPrompt?.validationMessage = "Branch name already exists."
+        state.worktreeCreationPrompt?.validationMessage = String(localized: "Branch name already exists.")
         return .none
       }
       let gitClient = gitClient
@@ -206,7 +206,7 @@ extension RepositoriesFeature {
         let localBranchNames = (try? await gitClient.localBranchNames(rootURL)) ?? []
         let duplicateMessage =
           localBranchNames.contains(normalizedBranchName)
-          ? "Branch name already exists."
+          ? String(localized: "Branch name already exists.")
           : nil
         await send(
           .worktreeCreation(
@@ -256,15 +256,15 @@ extension RepositoriesFeature {
       let repositoryID, let nameSource, let baseRefSource, let fetchRemote, let placement):
       guard let repository = state.repositories[id: repositoryID] else {
         state.alert = messageAlert(
-          title: "Unable to create worktree",
-          message: "Unable to resolve a repository for the new worktree."
+          title: String(localized: "Unable to create worktree"),
+          message: String(localized: "Unable to resolve a repository for the new worktree.")
         )
         return .none
       }
       if state.removingRepositoryIDs.contains(repository.id) {
         state.alert = messageAlert(
-          title: "Unable to create worktree",
-          message: "This repository is being removed."
+          title: String(localized: "Unable to create worktree"),
+          message: String(localized: "This repository is being removed.")
         )
         return .none
       }
@@ -327,13 +327,16 @@ extension RepositoriesFeature {
               WorktreeNameGenerator.nextName(excluding: existing)
             }
             guard let generatedName else {
-              let message =
-                "All default adjective-animal names are already in use. "
-                + "Delete a worktree or rename a branch, then try again."
+              let message = String(
+                localized: """
+                  All default adjective-animal names are already in use. \
+                  Delete a worktree or rename a branch, then try again.
+                  """
+              )
               await send(
                 .worktreeCreation(
                   .createRandomWorktreeFailed(
-                    title: "No available worktree names",
+                    title: String(localized: "No available worktree names"),
                     message: message,
                     pendingID: pendingID,
                     previousSelection: previousSelection,
@@ -352,8 +355,8 @@ extension RepositoriesFeature {
               await send(
                 .worktreeCreation(
                   .createRandomWorktreeFailed(
-                    title: "Branch name required",
-                    message: "Enter a branch name to create a worktree.",
+                    title: String(localized: "Branch name required"),
+                    message: String(localized: "Enter a branch name to create a worktree."),
                     pendingID: pendingID,
                     previousSelection: previousSelection,
                     repositoryID: repository.id,
@@ -368,8 +371,8 @@ extension RepositoriesFeature {
               await send(
                 .worktreeCreation(
                   .createRandomWorktreeFailed(
-                    title: "Branch name invalid",
-                    message: "Branch names can't contain spaces.",
+                    title: String(localized: "Branch name invalid"),
+                    message: String(localized: "Branch names can't contain spaces."),
                     pendingID: pendingID,
                     previousSelection: previousSelection,
                     repositoryID: repository.id,
@@ -384,8 +387,8 @@ extension RepositoriesFeature {
               await send(
                 .worktreeCreation(
                   .createRandomWorktreeFailed(
-                    title: "Branch name invalid",
-                    message: "Enter a valid git branch name and try again.",
+                    title: String(localized: "Branch name invalid"),
+                    message: String(localized: "Enter a valid git branch name and try again."),
                     pendingID: pendingID,
                     previousSelection: previousSelection,
                     repositoryID: repository.id,
@@ -400,8 +403,8 @@ extension RepositoriesFeature {
               await send(
                 .worktreeCreation(
                   .createRandomWorktreeFailed(
-                    title: "Branch name already exists",
-                    message: "Choose a different branch name and try again.",
+                    title: String(localized: "Branch name already exists"),
+                    message: String(localized: "Choose a different branch name and try again."),
                     pendingID: pendingID,
                     previousSelection: previousSelection,
                     repositoryID: repository.id,
@@ -560,7 +563,7 @@ extension RepositoriesFeature {
           }
           throw GitClientError.commandFailed(
             command: "wt sw",
-            message: "Worktree creation finished without a result."
+            message: String(localized: "Worktree creation finished without a result.")
           )
         } catch {
           if progressUpdateThrottle.flush() {
@@ -576,7 +579,7 @@ extension RepositoriesFeature {
           await send(
             .worktreeCreation(
               .createRandomWorktreeFailed(
-                title: "Unable to create worktree",
+                title: String(localized: "Unable to create worktree"),
                 message: error.localizedDescription,
                 pendingID: pendingID,
                 previousSelection: previousSelection,

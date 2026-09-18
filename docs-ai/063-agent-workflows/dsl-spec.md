@@ -370,6 +370,11 @@ creates a new UUID/attempt, and can repeat side effects. It is never automatic.
 with `path` and `branch`. It writes invocation artifacts and has no dependency on shared
 handoff files. `local:<slug>` selects only an action from this bundle.
 
+`builtin:assert-condition` requires a boolean `condition` (literal or complete expression
+template) and a nonempty string `message`. True returns an empty output object; false
+requests attention with the message and does not advance. Invalid types fail. Retry
+retains the original inputs; cancel and restart to correct a start-time input range.
+
 A run directory is `~/.prowl/logs/workflow-runs/<root-name>-<root-hash>/YYYY-MM/<UUID>/`:
 
 ```text

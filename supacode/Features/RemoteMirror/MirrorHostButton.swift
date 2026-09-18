@@ -14,8 +14,9 @@ struct MirrorHostButton: View {
   }
 
   private var status: String {
-    if !mirrors.host.isRunning { return "Host off" }
-    return mirrors.host.subscriberCount == 0 ? "Host listening" : "Host mirroring"
+    if !mirrors.host.isRunning { return String(localized: "Host off") }
+    if mirrors.host.subscriberCount == 0 { return String(localized: "Host listening") }
+    return String(localized: "Host mirroring")
   }
 
   private var tint: Color {
@@ -115,25 +116,37 @@ private struct MirrorSettingsView: View {
   let reconnect: (MirrorKnownHost) -> Void
   @State private var interfaces: [MirrorNetworkInterface] = []
   @State private var deviceToRevoke: MirrorPairedDevice?
+  @State private var mirrorToDisconnect: DisconnectTarget?
+
+  private struct DisconnectTarget {
+    let subscriptionID: UUID
+    let paneTitle: String
+    let deviceName: String
+  }
+
   @State private var hostToRename: MirrorKnownHost?
   @State private var alias = ""
 
   private var listenOptions: [ListenOption] {
-    var options = [ListenOption(address: MirrorHostAddresses.allIPv4, label: "All interfaces (0.0.0.0)")]
+    var options = [
+      ListenOption(address: MirrorHostAddresses.allIPv4, label: String(localized: "All interfaces (0.0.0.0)"))
+    ]
     for interface in interfaces where interface.isIPv4 && !interface.isLoopback {
       options.append(ListenOption(address: interface.address, label: interface.label + " · " + interface.address))
     }
-    options.append(ListenOption(address: MirrorHostAddresses.loopback, label: "This Mac only (127.0.0.1)"))
+    options.append(
+      ListenOption(address: MirrorHostAddresses.loopback, label: String(localized: "This Mac only (127.0.0.1)"))
+    )
     if !options.contains(where: { $0.address == host.address }) {
-      options.append(ListenOption(address: host.address, label: "Custom · " + host.address))
+      options.append(ListenOption(address: host.address, label: String(localized: "Custom · \(host.address)")))
     }
     return options
   }
 
   private var hostStatus: String {
-    if host.isStarting { return "Starting…" }
-    guard host.isRunning else { return "Host is off" }
-    return "Listening · " + Self.mirrors(host.subscriberCount)
+    if host.isStarting { return String(localized: "Starting…") }
+    guard host.isRunning else { return String(localized: "Host is off") }
+    return String(localized: "Listening · \(Self.mirrors(host.subscriberCount))")
   }
 
   var body: some View {
@@ -161,6 +174,18 @@ private struct MirrorSettingsView: View {
       Button("Revoke", role: .destructive) { host.revoke(device.id) }
     } message: { _ in
       Text("The device is disconnected and must pair again before it can mirror this Mac.")
+    }
+    .alert(
+      "Disconnect Mirror?",
+      isPresented: Binding(get: { mirrorToDisconnect != nil }, set: { if !$0 { mirrorToDisconnect = nil } }),
+      presenting: mirrorToDisconnect
+    ) { target in
+      Button("Disconnect", role: .destructive) { host.disconnect(subscriptionID: target.subscriptionID) }
+      Button("Cancel", role: .cancel) {}
+    } message: { target in
+      Text(
+        "Disconnect \(target.deviceName) from \(target.paneTitle)? "
+          + "The terminal keeps running. The device stays paired and can reconnect.")
     }
     .alert(
       "Rename Host",
@@ -230,22 +255,47 @@ private struct MirrorSettingsView: View {
         }
       }
       ForEach(host.devices) { device in
-        HStack(alignment: .top) {
-          VStack(alignment: .leading, spacing: 4) {
-            Text(device.name).lineLimit(1)
-            let panes = host.mirroredPanes(for: device.id)
-            Text(deviceStatus(device, mirrorCount: panes.count)).font(.caption).foregroundStyle(.secondary)
-            ForEach(panes) { pane in
+        VStack(alignment: .leading, spacing: 4) {
+          let panes = host.mirroredPanes(for: device.id)
+          HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 4) {
+              Text(device.name).lineLimit(1)
+              Text(deviceStatus(device, mirrorCount: panes.count)).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("Revoke", role: .destructive) {
+              interact()
+              deviceToRevoke = device
+            }
+            .help("Disconnect this device and require it to pair again")
+          }
+          ForEach(panes) { pane in
+            HStack(spacing: 6) {
+              Circle().fill(.green).frame(width: 6, height: 6)
+                .accessibilityHidden(true)
               Text(pane.title).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 .help(pane.title + "\n" + pane.directory)
+                .accessibilityLabel("Mirroring \(pane.title)")
+              Spacer(minLength: 4)
+              Button {
+                guard let subscriptionID = host.subscriptionID(for: pane.id, deviceID: device.id) else { return }
+                interact()
+                mirrorToDisconnect = DisconnectTarget(
+                  subscriptionID: subscriptionID, paneTitle: pane.title, deviceName: device.name)
+              } label: {
+                Image(systemName: "personalhotspot.slash")
+                  .font(.caption)
+                  .symbolRenderingMode(.monochrome)
+                  .foregroundStyle(.red)
+                  .frame(width: 18, height: 18)
+                  .contentShape(Rectangle())
+              }
+              .buttonStyle(.borderless)
+              .help("Disconnect this mirror; keep the device paired and the terminal running")
+              .accessibilityLabel("Disconnect mirror of \(pane.title) from \(device.name)")
+              .accessibilityIdentifier("disconnect-mirror-\(pane.id)")
             }
           }
-          Spacer()
-          Button("Revoke", role: .destructive) {
-            interact()
-            deviceToRevoke = device
-          }
-          .help("Disconnect this device and require it to pair again")
         }
       }
       if let error = host.error { Text(error).foregroundStyle(.red).textSelection(.enabled) }
@@ -309,24 +359,24 @@ private struct MirrorSettingsView: View {
   }
 
   private func deviceStatus(_ device: MirrorPairedDevice, mirrorCount: Int) -> String {
-    if host.isOnline(device.id) { return "Connected · " + Self.mirrors(mirrorCount) }
-    guard let seen = device.lastSeen else { return "Paired · never connected" }
-    return "Last seen " + seen.formatted(.relative(presentation: .named))
+    if host.isOnline(device.id) { return String(localized: "Connected · \(Self.mirrors(mirrorCount))") }
+    guard let seen = device.lastSeen else { return String(localized: "Paired · never connected") }
+    return String(localized: "Last seen \(seen.formatted(.relative(presentation: .named)))")
   }
 
   private func knownHostCaption(_ known: MirrorKnownHost) -> String {
     var parts: [String] = []
     if known.alias != nil { parts.append(known.endpointID) }
     if let connected = known.lastConnectedAt {
-      parts.append("Last connected " + connected.formatted(.relative(presentation: .named)))
+      parts.append(String(localized: "Last connected \(connected.formatted(.relative(presentation: .named)))"))
     } else {
-      parts.append("Never connected")
+      parts.append(String(localized: "Never connected"))
     }
     return parts.joined(separator: " · ")
   }
 
   private static func mirrors(_ count: Int) -> String {
-    count == 1 ? "1 mirror" : "\(count) mirrors"
+    count == 1 ? String(localized: "1 mirror") : String(localized: "\(count) mirrors")
   }
 }
 
@@ -359,8 +409,10 @@ private struct MirrorPairingView: View {
       } else {
         // Sheets propose no height; without fixedSize multi-line text collapses to one truncated line.
         Text(
-          "On the other device, open Remote Mirror → Client → Connect to a New Host. "
-            + "Enter one of these addresses with the port, then the code below."
+          """
+          On the other device, open Remote Mirror → Client → Connect to a New Host. \
+          Enter one of these addresses with the port, then the code below.
+          """
         )
         .foregroundStyle(.secondary)
         .fixedSize(horizontal: false, vertical: true)
@@ -496,7 +548,7 @@ private struct MirrorPairingView: View {
     NSPasteboard.general.clearContents()
     let done = NSPasteboard.general.setString(value, forType: .string)
     copied = done && value == host.pairingKey
-    copyError = done ? nil : "Unable to copy to the clipboard."
+    copyError = done ? nil : String(localized: "Unable to copy to the clipboard.")
   }
 }
 

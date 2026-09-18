@@ -60,30 +60,32 @@ enum TerminalCloseConfirmationPolicy {
     for decision: TerminalCloseConfirmationDecision,
     worktreeName: String
   ) -> String {
-    let paneText = decision.protectedPaneCount == 1 ? "pane" : "panes"
+    let paneText =
+      decision.protectedPaneCount == 1
+      ? String(localized: "pane")
+      : String(localized: "panes")
     let reasonText: String
     if decision.reasons.contains(.recentInput) {
-      var activities = ["recent input"]
+      var activities = [String(localized: "recent input")]
       if decision.reasons.contains(.agentActive) {
-        activities.append("active agent work or an unseen agent result")
+        activities.append(String(localized: "active agent work or an unseen agent result"))
       }
       if decision.reasons.contains(.longRunningCommand) {
-        activities.append("a command that has been running for at least 10 seconds")
+        activities.append(String(localized: "a command that has been running for at least 10 seconds"))
       }
-      return
-        "This will close \(decision.protectedPaneCount) \(paneText) in “\(worktreeName)” with "
-        + activities.joined(separator: ", ") + ". Closing may lose unsubmitted input."
+      let activitiesList = activities.joined(separator: ", ")
+      let template = String(localized: "This will close %lld %@ in “%@” with %@. Closing may lose unsubmitted input.")
+      return String(format: template, decision.protectedPaneCount, paneText, worktreeName, activitiesList)
     } else if decision.reasons == Set([.agentActive]) {
-      reasonText = "active agent work or an unseen agent result"
+      reasonText = String(localized: "active agent work or an unseen agent result")
     } else if decision.reasons == Set([.longRunningCommand]) {
-      reasonText = "a command that has been running for at least 10 seconds"
+      reasonText = String(localized: "a command that has been running for at least 10 seconds")
     } else {
-      reasonText = "active agent work, unseen agent results, or long-running commands"
+      reasonText = String(localized: "active agent work, unseen agent results, or long-running commands")
     }
-    return
-      "This will close \(decision.protectedPaneCount) \(paneText) in “\(worktreeName)” with \(reasonText)."
+    let template = String(localized: "This will close %lld %@ in “%@” with %@.")
+    return String(format: template, decision.protectedPaneCount, paneText, worktreeName, reasonText)
   }
-
   private static func protectionReason(
     for candidate: TerminalCloseProtectionCandidate,
     threshold: TimeInterval

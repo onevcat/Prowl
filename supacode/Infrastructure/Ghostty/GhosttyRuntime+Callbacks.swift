@@ -179,6 +179,11 @@ extension GhosttyRuntime {
     action: ghostty_action_s
   ) -> Bool {
     guard let app = ghostty_app_t(bitPattern: appBits) else { return false }
+    if target.tag == GHOSTTY_TARGET_APP, let runtime = runtime(fromApp: app),
+      let handled = runtime.handleAppScopedAction(action.tag)
+    {
+      return handled
+    }
     if let runtime = runtime(fromApp: app) {
       if action.tag == GHOSTTY_ACTION_CONFIG_CHANGE, target.tag == GHOSTTY_TARGET_APP {
         let config = action.action.config_change.config

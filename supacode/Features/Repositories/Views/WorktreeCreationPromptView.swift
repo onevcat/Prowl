@@ -58,9 +58,11 @@ struct WorktreeCreationPromptView: View {
               .font(.footnote)
               .foregroundStyle(.tertiary)
               .help(
-                "Suggested by on-device AI based on your repository "
-                  + "context and recent terminal activity. "
-                  + "May not always be accurate."
+                """
+                Suggested by on-device AI based on your repository \
+                context and recent terminal activity. \
+                May not always be accurate.
+                """
               )
           }
         }

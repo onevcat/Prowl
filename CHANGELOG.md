@@ -1,5 +1,27 @@
 # Changelog
 
+## [2026.9.18](https://github.com/onevcat/Prowl/releases/tag/v2026.9.18)
+
+### Improved
+
+- `prowl create tab --background` now works for plain Shell tabs as well as Agent Profile launches, so scripts and agents can open a tab without changing your selection or taking focus. Background split panes still require a Profile.
+
+### Fixed
+
+- Fixed workflows waiting indefinitely to deliver their first task to a fresh Codex session that shows an animated starfield background.
+
+## [2026.9.17](https://github.com/onevcat/Prowl/releases/tag/v2026.9.17)
+
+### New
+
+- Undo closed panes and tabs with ⌘Z or ⌘⇧T within five seconds by default, restoring running programs, scrollback, and split positions—even after closing a worktree’s last tab. Press ⌘⇧Z to close them again; the restore window follows Ghostty’s `undo-timeout` setting.
+- Start the built-in Review Loop workflow to open a selectable reviewer beside your current session. It defaults to 2–4 rounds, checks previous findings and searches for new issues each round, and saves results in workflow history with unresolved work clearly marked.
+
+### Fixed
+
+- Claude’s status no longer incorrectly switches from Working to Idle when you browse transcript history. Activity detection also better accounts for ongoing child tasks and background shell jobs.
+- On macOS 27, clicking inside an active Canvas terminal or Command-clicking a link no longer unexpectedly changes card selection.
+
 ## [2026.9.12](https://github.com/onevcat/Prowl/releases/tag/v2026.9.12)
 
 Agent Workflows are here: turn repeatable tasks into reusable flows that coordinate your agents, run scripts, and keep every step and result in one place.

@@ -8,14 +8,14 @@ struct ToolbarUpdateButton: View {
   private var tooltip: String {
     if isReadyToInstall {
       if let availableVersion, !availableVersion.isEmpty {
-        return "Version \(availableVersion) has been downloaded. Click to relaunch and install."
+        return String(localized: "Version \(availableVersion) has been downloaded. Click to relaunch and install.")
       }
-      return "An update has been downloaded. Click to relaunch and install."
+      return String(localized: "An update has been downloaded. Click to relaunch and install.")
     }
     if let availableVersion, !availableVersion.isEmpty {
-      return "Version \(availableVersion) is available. Click to review and install."
+      return String(localized: "Version \(availableVersion) is available. Click to review and install.")
     }
-    return "A new version is available. Click to review and install."
+    return String(localized: "A new version is available. Click to review and install.")
   }
 
   var body: some View {

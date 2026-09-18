@@ -4656,7 +4656,8 @@ struct RepositoriesFeatureTests {
       }
     } message: {
       TextState(
-        "Find them later in Menu Bar > Worktrees > Archived Worktrees (\(archivedDisplay)).")
+        "Find them later in Menu Bar > Worktrees > Archived Worktrees (\(archivedDisplay))."
+      )
     }
 
     await store.send(.worktreeLifecycle(.requestArchiveWorktrees(targets))) {
@@ -6191,8 +6192,12 @@ struct RepositoriesFeatureTests {
         }
       } message: {
         TextState(
-          "Prowl could not determine which GitHub repository owns this pull request. "
-            + "Check the repository remote and try again."
+          String(
+            localized: """
+              Prowl could not determine which GitHub repository owns this pull request. \
+              Check the repository remote and try again.
+              """
+          )
         )
       }
     }

@@ -39,7 +39,7 @@ final class MirrorReplica {
           guard let port = listener?.port, let executable = SupacodePaths.bundledMirrorRelayURL,
             FileManager.default.isExecutableFile(atPath: executable.path)
           else {
-            self.fail("Cannot start display replica.")
+            self.fail(String(localized: "Cannot start display replica."))
             return
           }
           let command =
@@ -62,7 +62,7 @@ final class MirrorReplica {
     guard let frame = message.frame, frame.columns >= 1, frame.columns <= 1000,
       frame.rows >= 1, frame.rows <= 1000
     else {
-      onFailure?("Invalid Host terminal dimensions.")
+      onFailure?(String(localized: "Invalid Host terminal dimensions."))
       return
     }
     view?.mirrorGrid = (frame.columns, frame.rows)
@@ -118,7 +118,7 @@ final class MirrorReplica {
       if self.peer == nil {
         // Code security: only the helper holding this replica token can forward input.
         guard packet.kind == .authenticate, packet.payload == Data(self.token.utf8) else {
-          candidate.close("Invalid display relay.")
+          candidate.close(String(localized: "Invalid display relay."))
           return
         }
         self.peer = candidate
@@ -141,12 +141,12 @@ final class MirrorReplica {
           guard let sequence = try? MirrorRelayPacket.sequence(packet.payload),
             sequence == displayed.sequence
           else {
-            candidate.close("Invalid display acknowledgement.")
+            candidate.close(String(localized: "Invalid display acknowledgement."))
             return
           }
           self.onMessage?(
             .acknowledge(.init(sequence: sequence, subscriptionID: lease)))
-        default: candidate.close("Invalid display relay message.")
+        default: candidate.close(String(localized: "Invalid display relay message."))
         }
       }
     }
@@ -154,7 +154,7 @@ final class MirrorReplica {
       guard let self, let candidate, !self.stopped,
         self.peer === candidate || self.candidate === candidate
       else { return }
-      self.fail(error ?? "Display replica disconnected.")
+      self.fail(error ?? String(localized: "Display replica disconnected."))
     }
     candidate.start()
   }

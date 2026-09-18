@@ -4,6 +4,7 @@ import SwiftUI
 /// Settings › Workflows › "New Workflow…": name and id the bundle, pick a starter shape, or
 /// hand the job to an agent. Writing the file is the reducer's `createWorkflowTapped`.
 struct NewWorkflowSheet: View {
+  let appLocale: Locale
   @Bindable var store: StoreOf<WorkflowsSettingsFeature>
   @State private var isIconPickerPresented = false
   @FocusState private var nameFieldFocused: Bool
@@ -41,7 +42,11 @@ struct NewWorkflowSheet: View {
     ) {
       AskAgentHelpView(
         strings: workflowAuthoringPromptStrings(
-          directory: store.workflowDirectory, draft: problem == nil ? store.newWorkflow?.request : nil)
+          directory: store.workflowDirectory,
+          draft: problem == nil ? store.newWorkflow?.request : nil,
+          appLocale: appLocale,
+          systemLocale: AskAgentHelpPrompt.systemPreferredLocale()
+        )
       ) {
         store.send(.setAuthoringPromptPresented(false))
       }
@@ -98,8 +103,10 @@ struct NewWorkflowSheet: View {
       Text("Starter")
     } footer: {
       Text(
-        "Create opens the example in your text editor. Edit its instructions to make it your own, "
-          + "then return here to run it. For help writing a workflow, use Create with Agent.")
+        """
+        Create opens the example in your text editor. Edit its instructions to make it your own, \
+        then return here to run it. For help writing a workflow, use Create with Agent.
+        """)
     }
   }
 
@@ -151,7 +158,9 @@ struct NewWorkflowSheet: View {
       Button("Create") { store.send(.createWorkflowTapped) }
         .keyboardShortcut(.defaultAction)
         .disabled(problem != nil)
-        .help(problem ?? "Write the starter bundle and open it in your default YAML editor (Return)")
+        .help(
+          problem ?? String(localized: "Write the starter bundle and open it in your default YAML editor (Return)")
+        )
     }
     .padding(12)
   }
@@ -165,7 +174,7 @@ struct NewWorkflowSheet: View {
     let folder = (store.workflowDirectory.path(percentEncoded: false) as NSString).abbreviatingWithTildeInPath
     let id = store.newWorkflow?.id ?? ""
     let file = id.isEmpty ? "<id>.pwlworkflow" : "\(id).pwlworkflow"
-    return "Creates \(folder)/\(file)/workflow.yaml"
+    return String(localized: "Creates \(folder)/\(file)/workflow.yaml")
   }
 
   private var nameBinding: Binding<String> {
@@ -184,8 +193,8 @@ struct NewWorkflowSheet: View {
 extension WorkflowStarterTemplate.Kind {
   var title: String {
     switch self {
-    case .singleAgent: "Single agent"
-    case .multiAgent: "Multi-agent"
+    case .singleAgent: String(localized: "Single agent")
+    case .multiAgent: String(localized: "Multi-agent")
     }
   }
 
@@ -196,7 +205,7 @@ extension WorkflowStarterTemplate.Kind {
     }
   }
 
-  var summary: String {
+  var summary: LocalizedStringKey {
     switch self {
     case .singleAgent:
       "A prompt template. Prowl sends one instruction to the agent in the current pane and collects its answer."
@@ -205,13 +214,15 @@ extension WorkflowStarterTemplate.Kind {
     }
   }
 
-  var starterDescription: String {
+  var starterDescription: LocalizedStringKey {
     switch self {
     case .singleAgent:
       "The starter asks the current agent for today's date in a chosen style."
     case .multiAgent:
-      "The starter plays rock-paper-scissors: the current agent picks a move, "
-        + "a second agent answers with the winning one."
+      """
+      The starter plays rock-paper-scissors: the current agent picks a move, \
+      a second agent answers with the winning one.
+      """
     }
   }
 }

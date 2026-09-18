@@ -65,6 +65,25 @@ save without a receiver. Follow the returned `self_initiated.line` and deliver t
 with its exact command; do not wait for Prowl to message you again. The receiver reads the
 saved packet and continues the task. A completed run confirms save/launch, not task completion.
 
+## Built-in Review Loop
+
+Use `prowl workflow run prowl.review-loop --role reviewer=<Profile> --json` from the
+implementing agent. Follow the returned `self_initiated.line` to deliver the scope,
+plan, and verification brief. The reviewer opens in a right split in the same tab.
+Optional inputs: `min_rounds=2`, `max_rounds=4` (each 1–30, minimum must not exceed
+maximum), and `focus=<one-line instruction>`. Any qualifying Profile can review.
+
+Prowl handles every round and handoff. Reviewer reports findings; main verifies and
+fixes or explains each disposition. Reviewer may run tests. Main owns commits,
+pushes, and existing PR updates unless it explicitly delegates them, subject to task
+restrictions. Do not dispatch the other role manually. Deliver each assigned step,
+then wait for its next task. Do not change reviewed code after your delivery.
+
+Clean exit needs the minimum rounds, a clean reviewer report, and no later changes
+or pending follow-up from main. At the maximum, main still addresses findings and
+reports remaining issues and fixes not reviewed again. `completed` means the procedure ended; read the final
+summary for `clean` versus `not clean`. The reviewer pane stays open.
+
 ## Running a workflow
 
 ```bash

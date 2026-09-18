@@ -28,6 +28,14 @@ commandResult, commandReceipt; failure, ended, ping, pong. There is no private
 Agent-state or private submission control. Command envelopes preserve the public
 CLI JSON and UUID request ID. See the feature documentation for command scope.
 
+The `launch-profile` capability permits Profile-backed background tab creation.
+`launch-shell` additionally permits a background `create tab` with no `launch`
+field. Neither capability permits arbitrary initial Shell input. Mac clients gate
+Shell creation on `launch-shell`; existing Profile requests remain unchanged.
+The remote `list` command result adds optional `data.worktrees`, using the same
+worktree fields as `data.items[].worktree`, to include known worktrees without
+terminal panes. Clients without that field can still use worktrees from `items`.
+
 ## Authentication and lifecycle
 
 TLS uses ECDHE-PSK with ChaCha20-Poly1305. Enrollment uses identity `pair` and the

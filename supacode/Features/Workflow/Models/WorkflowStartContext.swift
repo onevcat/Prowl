@@ -43,7 +43,7 @@ nonisolated struct WorkflowStartCatalogItem: Equatable, Sendable, Identifiable {
         name: filename,
         workflowDescription: nil,
         icon: nil,
-        validationFailure: "Cannot parse the file.")
+        validationFailure: String(localized: "Cannot parse the file."))
     }
     guard
       let key = WorkflowPreferenceKey.make(
@@ -53,6 +53,9 @@ nonisolated struct WorkflowStartCatalogItem: Equatable, Sendable, Identifiable {
       !disabledWorkflowIDs.contains(key)
     else { return nil }
     let errors = file.diagnostics.errorCount
+    let validationFailure =
+      errors == 1
+      ? String(localized: "\(errors) validation error") : String(localized: "\(errors) validation errors")
     return Self(
       key: key,
       scope: file.scope,
@@ -61,7 +64,7 @@ nonisolated struct WorkflowStartCatalogItem: Equatable, Sendable, Identifiable {
       name: file.definition?.name ?? workflowID,
       workflowDescription: file.definition?.description,
       icon: file.definition?.icon,
-      validationFailure: file.isValid ? nil : "\(errors) validation error\(errors == 1 ? "" : "s")")
+      validationFailure: file.isValid ? nil : validationFailure)
   }
 }
 

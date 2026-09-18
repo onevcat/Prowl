@@ -105,8 +105,10 @@ struct CommandLineToolSettingsView: View {
         }
 
         Text(
-          "prowl reaches the running app through this local Unix socket. "
-            + "Set PROWL_CLI_SOCKET for both Prowl and prowl to use a different path."
+          """
+          prowl reaches the running app through this local Unix socket. \
+          Set PROWL_CLI_SOCKET for both Prowl and prowl to use a different path.
+          """
         )
         .foregroundStyle(.secondary)
         .font(.callout)
@@ -149,9 +151,9 @@ struct CommandLineToolSettingsView: View {
 
   private var connectionStatusText: String {
     switch store.cliServiceStatus {
-    case .listening: "Listening"
-    case .failed: "Not listening"
-    case .stopped: "Not running"
+    case .listening: String(localized: "Listening")
+    case .failed: String(localized: "Not listening")
+    case .stopped: String(localized: "Not running")
     }
   }
 }

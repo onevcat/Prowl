@@ -31,9 +31,12 @@ struct ShortcutSettingsEditor: View {
   @State private var hoveredRecorderCommandID: String?
   private let keyTokenResolver = ShortcutKeyTokenResolver()
 
-  static let globalShortcutHelp =
-    "System-wide shortcut: opens Agent Island while another app is active. "
-    + "While the island is enabled and has agents, this takes precedence over the same shortcut in other apps."
+  static let globalShortcutHelp = String(
+    localized: """
+      System-wide shortcut: opens Agent Island while another app is active. \
+      While the island is enabled and has agents, this takes precedence over the same shortcut in other apps.
+      """
+  )
 
   private var schema: KeybindingSchemaDocument {
     .appDefaultsV1
@@ -96,8 +99,11 @@ struct ShortcutSettingsEditor: View {
       }
     } message: { conflict in
       Text(
-        "“\(conflict.newCommandTitle)” and “\(conflict.existingCommandTitle)” both use \(conflict.binding.display)."
-          + "\n\nChoose Replace to keep the new binding and disable the conflicting one."
+        """
+        “\(conflict.newCommandTitle)” and “\(conflict.existingCommandTitle)” both use \(conflict.binding.display).
+
+        Choose Replace to keep the new binding and disable the conflicting one.
+        """
       )
     }
     .alert(
@@ -329,7 +335,11 @@ struct ShortcutSettingsEditor: View {
     }
     .buttonStyle(.plain)
     .accessibilityLabel("Shortcut for \(commandTitle)")
-    .accessibilityValue(isRecording ? "Recording" : (resolvedBinding?.display ?? "No shortcut assigned"))
+    .accessibilityValue(
+      isRecording
+        ? String(localized: "Recording")
+        : (resolvedBinding?.display ?? String(localized: "No shortcut assigned"))
+    )
     .onHover { hovering in
       if hovering {
         hoveredRecorderCommandID = commandID
@@ -342,7 +352,7 @@ struct ShortcutSettingsEditor: View {
 
   private func shortcutRecorderTitle(resolvedBinding: Keybinding?, isRecording: Bool) -> String {
     if isRecording {
-      return "Recording…"
+      return String(localized: "Recording…")
     }
     return resolvedBinding?.display ?? ""
   }
@@ -397,7 +407,7 @@ struct ShortcutSettingsEditor: View {
       )
     }
 
-    let title = resolvedBinding == nil ? "Disabled" : "Defined"
+    let title = resolvedBinding == nil ? String(localized: "Disabled") : String(localized: "Defined")
     return AnyView(
       Text(title)
         .font(.caption2.monospaced())
@@ -563,7 +573,9 @@ struct ShortcutSettingsEditor: View {
     }
 
     guard let keyToken = keyToken(for: event) else {
-      invalidMessageByCommandID[commandID] = "Unsupported key. Use letters, numbers, punctuation, Return, or arrows."
+      invalidMessageByCommandID[commandID] = String(
+        localized: "Unsupported key. Use letters, numbers, punctuation, Return, or arrows."
+      )
       return
     }
 
@@ -575,7 +587,7 @@ struct ShortcutSettingsEditor: View {
     )
 
     guard !modifiers.isEmpty else {
-      invalidMessageByCommandID[commandID] = "Shortcut must include at least one modifier key."
+      invalidMessageByCommandID[commandID] = String(localized: "Shortcut must include at least one modifier key.")
       return
     }
 
@@ -600,9 +612,12 @@ struct ShortcutSettingsEditor: View {
     }
 
     if let conflictingCommand = activeCustomCommandConflict(for: binding) {
-      invalidMessageByCommandID[commandID] =
-        "“\(binding.display)” is used by the \(conflictingCommand.source.displayTitle.lowercased()) "
-        + "custom command “\(conflictingCommand.command.resolvedTitle)”. Choose another shortcut."
+      invalidMessageByCommandID[commandID] = String(
+        localized: """
+          “\(binding.display)” is used by the \(conflictingCommand.source.displayTitle.lowercased()) \
+          custom command “\(conflictingCommand.command.resolvedTitle)”. Choose another shortcut.
+          """
+      )
       stopRecording()
       return
     }
@@ -634,14 +649,17 @@ struct ShortcutSettingsEditor: View {
   ) -> String? {
     guard let resolvedBinding else { return nil }
     if let command = activeCustomCommandConflict(for: resolvedBinding) {
-      return
-        "Unavailable while the \(command.source.displayTitle.lowercased()) custom command "
-        + "“\(command.command.resolvedTitle)” uses \(resolvedBinding.display). Custom Commands take precedence."
+      return String(
+        localized: """
+          Unavailable while the \(command.source.displayTitle.lowercased()) custom command \
+          “\(command.command.resolvedTitle)” uses \(resolvedBinding.display). Custom Commands take precedence.
+          """
+      )
     }
     if commandID == AppShortcuts.CommandID.toggleAgentIsland,
       islandHotKeyRegistrationFailure == resolvedBinding
     {
-      return "macOS could not register this shortcut globally. Choose another shortcut."
+      return String(localized: "macOS could not register this shortcut globally. Choose another shortcut.")
     }
     return nil
   }
@@ -786,16 +804,22 @@ struct ShortcutSettingsEditor: View {
   }
 
   private func resetConflictMessage(for conflict: ResetConflict) -> String {
-    var message =
-      "Resetting “\(conflict.commandTitle)” restores \(conflict.restoredBinding.display), "
-      + "which is currently used by “\(conflict.occupiedCommandTitle)”."
+    var paragraphs = [
+      String(
+        localized: """
+          Resetting “\(conflict.commandTitle)” restores \(conflict.restoredBinding.display), \
+          which is currently used by “\(conflict.occupiedCommandTitle)”.
+          """
+      )
+    ]
 
     if !conflict.cascadingTitles.isEmpty {
       let cascadingList = conflict.cascadingTitles.joined(separator: " → ")
-      message += "\n\nReset Related will cascade reset: \(cascadingList)."
+      paragraphs.append(String(localized: "Reset Related will cascade reset: \(cascadingList)."))
     }
 
-    return message + "\n\nChoose Reset Related to continue, or Cancel."
+    paragraphs.append(String(localized: "Choose Reset Related to continue, or Cancel."))
+    return paragraphs.joined(separator: "\n\n")
   }
 
   private func commandTitle(for commandID: String) -> String {
@@ -1022,13 +1046,13 @@ private enum ShortcutGroup: String, CaseIterable, Identifiable {
   var title: String {
     switch self {
     case .general:
-      "General"
+      String(localized: "General")
     case .navigation:
-      "Navigation"
+      String(localized: "Navigation")
     case .terminal:
-      "Terminal Tabs & Panes"
+      String(localized: "Terminal Tabs & Panes")
     case .scripts:
-      "Scripts & Panels"
+      String(localized: "Scripts & Panels")
     }
   }
 

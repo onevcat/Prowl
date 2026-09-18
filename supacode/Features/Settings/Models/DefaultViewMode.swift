@@ -1,3 +1,5 @@
+import Foundation
+
 /// Which presentation the app enters on launch. `normal` keeps the
 /// historical behavior (sidebar + terminal detail); `shelf` boots
 /// straight into Shelf and `canvas` boots straight into Canvas, so
@@ -13,11 +15,11 @@ enum DefaultViewMode: String, CaseIterable, Identifiable, Codable, Sendable {
   var title: String {
     switch self {
     case .normal:
-      return "Normal View"
+      return String(localized: "Normal View")
     case .shelf:
-      return "Shelf View"
+      return String(localized: "Shelf View")
     case .canvas:
-      return "Canvas View"
+      return String(localized: "Canvas View")
     }
   }
 }

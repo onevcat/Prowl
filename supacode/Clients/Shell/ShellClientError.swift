@@ -8,7 +8,7 @@ nonisolated struct ShellClientError: LocalizedError, Equatable, Sendable {
   let exitCode: Int32
 
   var errorDescription: String? {
-    var parts: [String] = ["Command failed: \(command)"]
+    var parts: [String] = [String(localized: "Command failed: \(command)")]
     if !stdout.isEmpty {
       parts.append("stdout:\n\(stdout)")
     }

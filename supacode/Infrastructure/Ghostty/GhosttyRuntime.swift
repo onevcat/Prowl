@@ -49,6 +49,11 @@ final class GhosttyRuntime {
   var currentColorScheme: ColorScheme?
   var appKeybindOverrideContents = ""
   var appKeybindOverrideEntries: [String] = []
+  /// App-scoped `undo` / `redo` (no focused surface); see `+AppKey`.
+  var onAppUndo: (() -> Bool)?
+  var onAppRedo: (() -> Bool)?
+  var appUndoRedoOutcome: Bool?
+  var isDispatchingUndoRedoKey = false
   var themeFallbackOverrideContents = ""
   var runtimeOverrideSignature = ""
   var onConfigChange: (() -> Void)?
@@ -417,6 +422,19 @@ final class GhosttyRuntime {
     let key = "focus-follows-mouse"
     _ = ghostty_config_get(config, &value, key, UInt(key.lengthOfBytes(using: .utf8)))
     return value
+  }
+
+  /// Ghostty's `undo-timeout`: how long a closed pane or tab stays restorable.
+  /// libghostty exports the duration in milliseconds; zero disables undo.
+  func undoTimeout() -> Duration {
+    let fallback: Duration = .seconds(5)
+    guard let config else { return fallback }
+    var value: UInt = 0
+    let key = "undo-timeout"
+    guard ghostty_config_get(config, &value, key, UInt(key.lengthOfBytes(using: .utf8))) else {
+      return fallback
+    }
+    return .milliseconds(value)
   }
 
   func shouldShowScrollbar() -> Bool {

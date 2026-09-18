@@ -32,6 +32,7 @@ why Prowl is fully native and CJK-correct.
 | Previous / Next tab | `⌘⇧[` / `⌘⇧]` |
 | Close focused tab | Terminal menu → **Close Terminal Tab** (Ghostty `close_tab`) |
 | Close (right-click a tab) | Close Tab · Close Other Tabs · Close Tabs to the Right · Close All |
+| Undo a close | Ghostty `undo` (typically `⌘Z`) within `undo-timeout` (5 s default) restores the last closed tab or pane in place; `redo` (`⌘⇧Z`) closes it again. See [undo close](../reference/keyboard-shortcuts.md#undo-close) |
 | Rename tab | Right-click → **Rename Tab** (sets a custom title) |
 | Change tab icon | Right-click → **Change Tab Icon** (pick an SF Symbol) |
 | Reorder tabs | Drag tabs in the tab bar |
@@ -167,8 +168,13 @@ launch. Notification bodies are not persisted.
   doesn't pin which split has keyboard focus. The CLI's `pane.focused` is the
   truth.
 - Closing the **last** tab leaves the worktree with no visible terminal (Shelf
-  removes the book; Canvas drops the card).
+  removes the book; Canvas drops the card). `⌘Z` within `undo-timeout` brings
+  it back.
 - Closing a pane or tab asks for confirmation after editing within the last 10 seconds or
   during input-method composition. See [recent input close protection](../reference/keyboard-shortcuts.md#recent-input-close-protection).
+- A closed pane or tab stays restorable for Ghostty's `undo-timeout` (5 s by
+  default). Observers see the close immediately: `prowl agents wait` reports the
+  pane as gone, and a restored pane gets a **new** short handle. See
+  [undo close](../reference/keyboard-shortcuts.md#undo-close).
 - `--capture` and stable reads depend on the pane's shell integration; agents
   running full-screen TUIs may need `read --wait-stable` rather than `--capture`.

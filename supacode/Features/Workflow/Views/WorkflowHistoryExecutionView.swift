@@ -24,7 +24,8 @@ struct WorkflowHistoryExecutionView: View {
         }
         if let directory, let url = WorkflowHistoryExecution.promptURL(invocation, directory: directory) {
           WorkflowHistoryTextFileView(
-            label: "Prompt", contentName: "prompt", url: url, onOutput: onOutput, revision: revision)
+            label: String(localized: "Prompt"), contentName: String(localized: "prompt"), url: url,
+            onOutput: onOutput, revision: revision)
         }
       }
       if let action = definition.actionID {
@@ -37,7 +38,8 @@ struct WorkflowHistoryExecutionView: View {
       if let summary = attempt.summary {
         if definition.kind == "notify" {
           Text("Sent to Prowl Notifications").font(.caption).foregroundStyle(.secondary)
-          WorkflowHistoryInlineTextView(text: summary, name: "notification", onOutput: onOutput)
+          WorkflowHistoryInlineTextView(
+            text: summary, name: "notification", title: String(localized: "notification"), onOutput: onOutput)
         } else {
           Text(summary).font(.caption).textSelection(.enabled)
         }
@@ -89,7 +91,8 @@ private struct WorkflowHistoryActionInputView: View {
   var body: some View {
     Group {
       if let inputs {
-        WorkflowHistoryJSONView(values: inputs, worktree: worktree, onOutput: onOutput, title: "Input")
+        WorkflowHistoryJSONView(
+          values: inputs, worktree: worktree, onOutput: onOutput, title: String(localized: "Input"))
       } else {
         Text(unavailable ? "No saved action input." : "Loading input…").font(.caption).foregroundStyle(.secondary)
       }
@@ -114,17 +117,19 @@ private struct WorkflowHistoryActionInputView: View {
 
 private struct WorkflowHistoryInlineTextView: View {
   let text: String
+  /// The base name of the file that "Open" writes; not copy.
   let name: String
+  let title: String
   let onOutput: (WorkflowHistoryOutputIntent) -> Void
 
   var body: some View {
     let preview = WorkflowHistoryTextPreview(text)
     HStack(alignment: .top) {
-      WorkflowHistoryMarkdownPreview(preview: preview, emptyText: "Empty message")
-      WorkflowHistoryIconButton(label: "Open full \(name)", symbol: "arrow.up.forward.square") {
+      WorkflowHistoryMarkdownPreview(preview: preview, emptyText: String(localized: "Empty message"))
+      WorkflowHistoryIconButton(label: String(localized: "Open full \(title)"), symbol: "arrow.up.forward.square") {
         onOutput(.openText(text, "\(name).md"))
       }
-      WorkflowHistoryIconButton(label: "Copy full \(name)", symbol: "doc.on.doc") {
+      WorkflowHistoryIconButton(label: String(localized: "Copy full \(title)"), symbol: "doc.on.doc") {
         onOutput(.copyText(text))
       }
     }

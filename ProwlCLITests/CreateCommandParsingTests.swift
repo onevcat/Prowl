@@ -4,6 +4,15 @@ import XCTest
 @testable import prowl
 
 final class CreateCommandParsingTests: XCTestCase {
+  func testTabAllowsBackgroundShellButSplitRequiresProfile() throws {
+    let tab = try CreateTabCommand.parse(["App", "--background"])
+    let input = try tab.makeInput()
+    XCTAssertTrue(input.background)
+    XCTAssertNil(input.launch)
+    let pane = try CreatePaneCommand.parse(["p12", "--direction", "right", "--background"])
+    XCTAssertThrowsError(try pane.makeInput())
+  }
+
   func testPaneParsesPositionalAnchorAndDirection() throws {
     let command = try CreatePaneCommand.parse(["p12", "--direction", "up"])
 

@@ -2,8 +2,12 @@ import AppKit
 import ComposableArchitecture
 import Foundation
 
-private let unresolvedGithubRepositoryMessage =
-  "Prowl could not determine which GitHub repository owns this pull request. Check the repository remote and try again."
+private let unresolvedGithubRepositoryMessage = String(
+  localized: """
+    Prowl could not determine which GitHub repository owns this pull request. \
+    Check the repository remote and try again.
+    """
+)
 
 extension RepositoriesFeature {
   static func resolveGithubRemoteInfo(
@@ -313,8 +317,8 @@ extension RepositoriesFeature {
       else {
         return .send(
           .presentAlert(
-            title: "Repository not available",
-            message: "Prowl could not find the selected repository."
+            title: String(localized: "Repository not available"),
+            message: String(localized: "Prowl could not find the selected repository.")
           )
         )
       }
@@ -333,8 +337,8 @@ extension RepositoriesFeature {
           guard let repositoryURL = await gitClient.repositoryWebURL(repoRoot) else {
             await send(
               .presentAlert(
-                title: "Repository URL not available",
-                message: "Prowl could not determine a code host URL for this repository."
+                title: String(localized: "Repository URL not available"),
+                message: String(localized: "Prowl could not determine a code host URL for this repository.")
               )
             )
             return
@@ -345,8 +349,8 @@ extension RepositoriesFeature {
       guard let pullRequest = optionalPullRequest else {
         return .send(
           .presentAlert(
-            title: "Pull request not available",
-            message: "Prowl could not find a pull request for this worktree."
+            title: String(localized: "Pull request not available"),
+            message: String(localized: "Prowl could not find a pull request for this worktree.")
           )
         )
       }
@@ -366,8 +370,8 @@ extension RepositoriesFeature {
         guard let failingCheckDetailsURL, !failingCheckDetailsURL.isEmpty else {
           return .send(
             .presentAlert(
-              title: "Failing check not found",
-              message: "Prowl could not find a failing check URL."
+              title: String(localized: "Failing check not found"),
+              message: String(localized: "Prowl could not find a failing check URL.")
             )
           )
         }
@@ -376,15 +380,15 @@ extension RepositoriesFeature {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(failingCheckDetailsURL, forType: .string)
           }
-          await send(.showToast(.success("Failing job URL copied")))
+          await send(.showToast(.success(String(localized: "Failing job URL copied"))))
         }
 
       case .openFailingCheckDetails:
         guard let failingCheckDetailsURL, let url = URL(string: failingCheckDetailsURL) else {
           return .send(
             .presentAlert(
-              title: "Failing check not found",
-              message: "Prowl could not find a failing check with details."
+              title: String(localized: "Failing check not found"),
+              message: String(localized: "Prowl could not find a failing check with details.")
             )
           )
         }
@@ -400,13 +404,13 @@ extension RepositoriesFeature {
           guard await githubIntegration.isAvailable() else {
             await send(
               .presentAlert(
-                title: "GitHub integration unavailable",
-                message: "Enable GitHub integration to mark a pull request as ready."
+                title: String(localized: "GitHub integration unavailable"),
+                message: String(localized: "Enable GitHub integration to mark a pull request as ready.")
               )
             )
             return
           }
-          await send(.showToast(.inProgress("Marking PR ready…")))
+          await send(.showToast(.inProgress(String(localized: "Marking PR ready…"))))
           do {
             @Shared(.repositorySettings(repoRoot)) var repositorySettings
             guard
@@ -419,7 +423,11 @@ extension RepositoriesFeature {
             else {
               await send(.dismissToast)
               await send(
-                .presentAlert(title: "GitHub repository not resolved", message: unresolvedGithubRepositoryMessage))
+                .presentAlert(
+                  title: String(localized: "GitHub repository not resolved"),
+                  message: unresolvedGithubRepositoryMessage
+                )
+              )
               return
             }
             try await githubCLI.markPullRequestReady(
@@ -428,13 +436,13 @@ extension RepositoriesFeature {
               pullRequest.number,
               repositorySettings.githubAccountOverride
             )
-            await send(.showToast(.success("Pull request marked ready")))
+            await send(.showToast(.success(String(localized: "Pull request marked ready"))))
             await send(.githubIntegration(.delayedPullRequestRefresh(worktreeID)))
           } catch {
             await send(.dismissToast)
             await send(
               .presentAlert(
-                title: "Failed to mark pull request ready",
+                title: String(localized: "Failed to mark pull request ready"),
                 message: error.localizedDescription
               )
             )
@@ -449,8 +457,8 @@ extension RepositoriesFeature {
           guard await githubIntegration.isAvailable() else {
             await send(
               .presentAlert(
-                title: "GitHub integration unavailable",
-                message: "Enable GitHub integration to merge a pull request."
+                title: String(localized: "GitHub integration unavailable"),
+                message: String(localized: "Enable GitHub integration to merge a pull request.")
               )
             )
             return
@@ -458,7 +466,7 @@ extension RepositoriesFeature {
           @Shared(.repositorySettings(repoRoot)) var repositorySettings
           @Shared(.settingsFile) var settingsFile
           let strategy = repositorySettings.pullRequestMergeStrategy ?? settingsFile.global.pullRequestMergeStrategy
-          await send(.showToast(.inProgress("Merging pull request…")))
+          await send(.showToast(.inProgress(String(localized: "Merging pull request…"))))
           do {
             guard
               let remoteInfo = await Self.resolveGithubRemoteInfo(
@@ -470,7 +478,11 @@ extension RepositoriesFeature {
             else {
               await send(.dismissToast)
               await send(
-                .presentAlert(title: "GitHub repository not resolved", message: unresolvedGithubRepositoryMessage))
+                .presentAlert(
+                  title: String(localized: "GitHub repository not resolved"),
+                  message: unresolvedGithubRepositoryMessage
+                )
+              )
               return
             }
             try await githubCLI.mergePullRequest(
@@ -480,14 +492,14 @@ extension RepositoriesFeature {
               strategy,
               repositorySettings.githubAccountOverride
             )
-            await send(.showToast(.success("Pull request merged")))
+            await send(.showToast(.success(String(localized: "Pull request merged"))))
             await send(.worktreeInfoEvent(pullRequestRefresh))
             await send(.githubIntegration(.delayedPullRequestRefresh(worktreeID)))
           } catch {
             await send(.dismissToast)
             await send(
               .presentAlert(
-                title: "Failed to merge pull request",
+                title: String(localized: "Failed to merge pull request"),
                 message: error.localizedDescription
               )
             )
@@ -502,13 +514,13 @@ extension RepositoriesFeature {
           guard await githubIntegration.isAvailable() else {
             await send(
               .presentAlert(
-                title: "GitHub integration unavailable",
-                message: "Enable GitHub integration to close a pull request."
+                title: String(localized: "GitHub integration unavailable"),
+                message: String(localized: "Enable GitHub integration to close a pull request.")
               )
             )
             return
           }
-          await send(.showToast(.inProgress("Closing pull request…")))
+          await send(.showToast(.inProgress(String(localized: "Closing pull request…"))))
           do {
             @Shared(.repositorySettings(repoRoot)) var repositorySettings
             guard
@@ -521,7 +533,11 @@ extension RepositoriesFeature {
             else {
               await send(.dismissToast)
               await send(
-                .presentAlert(title: "GitHub repository not resolved", message: unresolvedGithubRepositoryMessage))
+                .presentAlert(
+                  title: String(localized: "GitHub repository not resolved"),
+                  message: unresolvedGithubRepositoryMessage
+                )
+              )
               return
             }
             try await githubCLI.closePullRequest(
@@ -530,14 +546,14 @@ extension RepositoriesFeature {
               pullRequest.number,
               repositorySettings.githubAccountOverride
             )
-            await send(.showToast(.success("Pull request closed")))
+            await send(.showToast(.success(String(localized: "Pull request closed"))))
             await send(.worktreeInfoEvent(pullRequestRefresh))
             await send(.githubIntegration(.delayedPullRequestRefresh(worktreeID)))
           } catch {
             await send(.dismissToast)
             await send(
               .presentAlert(
-                title: "Failed to close pull request",
+                title: String(localized: "Failed to close pull request"),
                 message: error.localizedDescription
               )
             )
@@ -551,8 +567,8 @@ extension RepositoriesFeature {
           guard await githubIntegration.isAvailable() else {
             await send(
               .presentAlert(
-                title: "GitHub integration unavailable",
-                message: "Enable GitHub integration to copy CI failure logs."
+                title: String(localized: "GitHub integration unavailable"),
+                message: String(localized: "Enable GitHub integration to copy CI failure logs.")
               )
             )
             return
@@ -560,13 +576,13 @@ extension RepositoriesFeature {
           guard !branchName.isEmpty else {
             await send(
               .presentAlert(
-                title: "Branch name unavailable",
-                message: "Prowl could not determine the pull request branch."
+                title: String(localized: "Branch name unavailable"),
+                message: String(localized: "Prowl could not determine the pull request branch.")
               )
             )
             return
           }
-          await send(.showToast(.inProgress("Fetching CI logs…")))
+          await send(.showToast(.inProgress(String(localized: "Fetching CI logs…"))))
           do {
             @Shared(.repositorySettings(repoRoot)) var repositorySettings
             let accountOverride = repositorySettings.githubAccountOverride
@@ -574,8 +590,8 @@ extension RepositoriesFeature {
               await send(.dismissToast)
               await send(
                 .presentAlert(
-                  title: "No workflow runs found",
-                  message: "Prowl could not find any workflow runs for this branch."
+                  title: String(localized: "No workflow runs found"),
+                  message: String(localized: "Prowl could not find any workflow runs for this branch.")
                 )
               )
               return
@@ -584,8 +600,8 @@ extension RepositoriesFeature {
               await send(.dismissToast)
               await send(
                 .presentAlert(
-                  title: "No failing workflow run",
-                  message: "Prowl could not find a failing workflow run to copy logs from."
+                  title: String(localized: "No failing workflow run"),
+                  message: String(localized: "Prowl could not find a failing workflow run to copy logs from.")
                 )
               )
               return
@@ -601,8 +617,8 @@ extension RepositoriesFeature {
               await send(.dismissToast)
               await send(
                 .presentAlert(
-                  title: "No CI logs available",
-                  message: "The workflow run failed but produced no logs."
+                  title: String(localized: "No CI logs available"),
+                  message: String(localized: "The workflow run failed but produced no logs.")
                 )
               )
               return
@@ -611,12 +627,12 @@ extension RepositoriesFeature {
               NSPasteboard.general.clearContents()
               NSPasteboard.general.setString(logs, forType: .string)
             }
-            await send(.showToast(.success("CI failure logs copied")))
+            await send(.showToast(.success(String(localized: "CI failure logs copied"))))
           } catch {
             await send(.dismissToast)
             await send(
               .presentAlert(
-                title: "Failed to copy CI failure logs",
+                title: String(localized: "Failed to copy CI failure logs"),
                 message: error.localizedDescription
               )
             )
@@ -630,8 +646,8 @@ extension RepositoriesFeature {
           guard await githubIntegration.isAvailable() else {
             await send(
               .presentAlert(
-                title: "GitHub integration unavailable",
-                message: "Enable GitHub integration to re-run failed jobs."
+                title: String(localized: "GitHub integration unavailable"),
+                message: String(localized: "Enable GitHub integration to re-run failed jobs.")
               )
             )
             return
@@ -639,13 +655,13 @@ extension RepositoriesFeature {
           guard !branchName.isEmpty else {
             await send(
               .presentAlert(
-                title: "Branch name unavailable",
-                message: "Prowl could not determine the pull request branch."
+                title: String(localized: "Branch name unavailable"),
+                message: String(localized: "Prowl could not determine the pull request branch.")
               )
             )
             return
           }
-          await send(.showToast(.inProgress("Re-running failed jobs…")))
+          await send(.showToast(.inProgress(String(localized: "Re-running failed jobs…"))))
           do {
             @Shared(.repositorySettings(repoRoot)) var repositorySettings
             let accountOverride = repositorySettings.githubAccountOverride
@@ -653,8 +669,8 @@ extension RepositoriesFeature {
               await send(.dismissToast)
               await send(
                 .presentAlert(
-                  title: "No workflow runs found",
-                  message: "Prowl could not find any workflow runs for this branch."
+                  title: String(localized: "No workflow runs found"),
+                  message: String(localized: "Prowl could not find any workflow runs for this branch.")
                 )
               )
               return
@@ -663,20 +679,20 @@ extension RepositoriesFeature {
               await send(.dismissToast)
               await send(
                 .presentAlert(
-                  title: "No failing workflow run",
-                  message: "Prowl could not find a failing workflow run to re-run."
+                  title: String(localized: "No failing workflow run"),
+                  message: String(localized: "Prowl could not find a failing workflow run to re-run.")
                 )
               )
               return
             }
             try await githubCLI.rerunFailedJobs(worktreeRoot, run.databaseId, accountOverride)
-            await send(.showToast(.success("Failed jobs re-run started")))
+            await send(.showToast(.success(String(localized: "Failed jobs re-run started"))))
             await send(.githubIntegration(.delayedPullRequestRefresh(worktreeID)))
           } catch {
             await send(.dismissToast)
             await send(
               .presentAlert(
-                title: "Failed to re-run failed jobs",
+                title: String(localized: "Failed to re-run failed jobs"),
                 message: error.localizedDescription
               )
             )

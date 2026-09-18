@@ -125,6 +125,79 @@ struct AppFeatureTerminalSetupScriptTests {
     #expect(watcherCommands.value == [.setOpenedWorktreeIDs([])])
   }
 
+  @Test(.dependencies) func tabRestoredSelectsTheRestoredWorktree() async {
+    let worktree = makeWorktree()
+    let repositoriesState = makeRepositoriesState(
+      worktree: worktree,
+      pendingSetupScript: false,
+      selected: false
+    )
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositoriesState,
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    }
+    store.exhaustivity = .off
+
+    await store.send(.terminalEvent(.tabRestored(worktreeID: worktree.id, tabID: TerminalTabID())))
+    await store.receive(\.repositories.selectWorktree)
+
+    #expect(store.state.repositories.selection == .worktree(worktree.id))
+    #expect(store.state.repositories.openedWorktreeIDs.contains(worktree.id))
+  }
+
+  @Test(.dependencies) func tabRestoredForUnknownWorktreeDoesNothing() async {
+    let worktree = makeWorktree()
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: makeRepositoriesState(worktree: worktree, pendingSetupScript: false, selected: false),
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    }
+
+    await store.send(.terminalEvent(.tabRestored(worktreeID: "/tmp/repo/missing", tabID: TerminalTabID())))
+    await store.finish()
+  }
+
+  @Test(.dependencies) func tabRestoredIntoTheSelectedWorktreeSendsNothing() async {
+    let worktree = makeWorktree()
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: makeRepositoriesState(worktree: worktree, pendingSetupScript: false, selected: true),
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    }
+
+    await store.send(.terminalEvent(.tabRestored(worktreeID: worktree.id, tabID: TerminalTabID())))
+    await store.finish()
+  }
+
+  @Test(.dependencies) func tabRestoredInCanvasRequestsTheCardFocus() async {
+    let worktree = makeWorktree()
+    var repositoriesState = makeRepositoriesState(worktree: worktree, pendingSetupScript: false, selected: false)
+    repositoriesState.selection = .canvas
+    let tabID = TerminalTabID()
+    let store = TestStore(
+      initialState: AppFeature.State(repositories: repositoriesState, settings: SettingsFeature.State())
+    ) {
+      AppFeature()
+    }
+    store.exhaustivity = .off
+
+    await store.send(.terminalEvent(.tabRestored(worktreeID: worktree.id, tabID: tabID)))
+    await store.receive(\.repositories.newTerminalTabCreatedInCanvas)
+
+    #expect(store.state.repositories.pendingCanvasFocusRequest?.target == .tab(tabID))
+    #expect(store.state.repositories.selection == .canvas)
+  }
+
   @Test(.dependencies) func setupScriptConsumedEventClearsPending() async {
     let worktree = makeWorktree()
     let repositoriesState = makeRepositoriesState(
@@ -216,6 +289,32 @@ struct AppFeatureTerminalSetupScriptTests {
       workingDirectory: URL(fileURLWithPath: "/tmp/repo/wt-1"),
       repositoryRootURL: URL(fileURLWithPath: "/tmp/repo")
     )
+  }
+
+  // Round 3 review finding: plain folders in Canvas.
+  @Test(.dependencies) func tabRestoredInCanvasRequestsTheCardFocusForAPlainFolder() async {
+    let repository = Repository(
+      id: "/tmp/plain-folder",
+      rootURL: URL(fileURLWithPath: "/tmp/plain-folder"),
+      name: "plain-folder",
+      kind: .plain,
+      worktrees: []
+    )
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    repositoriesState.selection = .canvas
+    let tabID = TerminalTabID()
+    let store = TestStore(
+      initialState: AppFeature.State(repositories: repositoriesState, settings: SettingsFeature.State())
+    ) {
+      AppFeature()
+    }
+    store.exhaustivity = .off
+
+    await store.send(.terminalEvent(.tabRestored(worktreeID: repository.id, tabID: tabID)))
+    await store.receive(\.repositories.newTerminalTabCreatedInCanvas)
+
+    #expect(store.state.repositories.pendingCanvasFocusRequest?.target == .tab(tabID))
   }
 
   private func makeRepositoriesState(

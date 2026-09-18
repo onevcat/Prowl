@@ -50,8 +50,10 @@ struct AgentProfilesSettingsView: View {
       VStack(alignment: .leading, spacing: 4) {
         Text("Agent Profiles")
         Text(
-          "Named launch presets for verified agents, available from the toolbar Agents menu "
-            + "and the Command Palette. The first enabled profile is the recommendation fallback."
+          """
+          Named launch presets for verified agents, available from the toolbar Agents menu \
+          and the Command Palette. The first enabled profile is the recommendation fallback.
+          """
         )
         .foregroundStyle(.secondary)
       }

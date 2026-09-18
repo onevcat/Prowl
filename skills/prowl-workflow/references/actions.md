@@ -171,3 +171,13 @@ The action returns `output.path` (an independent briefing/context packet),
 agent. The built-in `prowl.handoff` combines this action with a current-agent briefing and
 an optional receiver launch. Retrying a save creates a new packet and may archive shared
 state again; cancellation does not roll back completed writes.
+
+## Assert condition
+
+`builtin:assert-condition` accepts a required boolean `condition` and nonempty string
+`message`. Use a boolean literal or a complete expression template such as
+`condition: '{{ inputs.min_rounds <= inputs.max_rounds }}'`. A true condition returns
+an empty output object. False requests attention with the supplied message and does
+not advance. Invalid types fail; strings such as `"true"` are not booleans.
+For invalid start inputs, cancel and start with corrected values; retry keeps the
+original inputs. This action needs no script interpreter or bundle approval.

@@ -29,20 +29,20 @@ nonisolated struct WorkflowRunNotice: Equatable, Sendable {
     switch run.status {
     case .needsAttention(let attention):
       kind = .needsAttention
-      title = "\(run.definition.name) needs attention"
+      title = String(localized: "\(run.definition.name) needs attention")
       body = attention.message
     case .completed:
       kind = .completed
-      title = "\(run.definition.name) completed"
-      body = "Workflow completed in \(run.context.worktree.name)."
+      title = String(localized: "\(run.definition.name) completed")
+      body = String(localized: "Workflow completed in \(run.context.worktree.name).")
     case .skipped(let step, let dependent):
       kind = .skipped
-      title = "\(run.definition.name) ended after a skipped step"
-      body = "Step '\(step)' was skipped; step '\(dependent)' depended on its output."
+      title = String(localized: "\(run.definition.name) ended after a skipped step")
+      body = String(localized: "Step '\(step)' was skipped; step '\(dependent)' depended on its output.")
     case .iterationLimitReached:
       kind = .iterationLimitReached
-      title = "\(run.definition.name) reached its iteration limit"
-      body = "The workflow ended after reaching its maximum number of iterations."
+      title = String(localized: "\(run.definition.name) reached its iteration limit")
+      body = String(localized: "The workflow ended after reaching its maximum number of iterations.")
     case .running, .cancelled, .interrupted:
       return nil
     }

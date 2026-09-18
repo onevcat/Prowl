@@ -59,6 +59,30 @@ final class MirrorHost {
     return source.panes().filter { ids.contains($0.id) }
   }
 
+  func subscriptionID(for paneID: UUID, deviceID: UUID) -> UUID? {
+    subscriptions.first { peerID, subscription in
+      devicePeers[peerID] == deviceID && subscription.paneID == paneID
+    }?.value.id
+  }
+
+  func disconnect(subscriptionID: UUID) {
+    // Bind confirmation to the original lease, not a replacement on the same pane.
+    guard let (peerID, _) = subscriptions.first(where: { $0.value.id == subscriptionID }),
+      let peer = peers[peerID]
+    else { return }
+    subscriptions.removeValue(forKey: peerID)
+    subscriberCount = subscriptions.count
+    if subscriptions.isEmpty {
+      pollTask?.cancel()
+      pollTask = nil
+    }
+    cancelCommand(peerID)
+    peer.onMessage = nil
+    peer.send(
+      .failure(.init(error: "This mirror was disconnected by Host.", subscriptionID: subscriptionID)),
+      closeAfterSending: true)
+  }
+
   private func updateDeviceActivity() {
     var next: [UUID: Set<UUID>] = [:]
     for (peerID, subscription) in subscriptions {
@@ -160,7 +184,7 @@ final class MirrorHost {
     guard let portNumber = UInt16(port), portNumber > 0,
       IPv4Address(address) != nil || IPv6Address(address) != nil
     else {
-      self.error = "Enter a listen address of this Mac and a port between 1 and 65535."
+      self.error = String(localized: "Enter a listen address of this Mac and a port between 1 and 65535.")
       return
     }
     do {
@@ -173,7 +197,7 @@ final class MirrorHost {
       try rebuildListener()
     } catch {
       SupaLogger("RemoteMirror").warning("Host start failed: \(error)")
-      self.error = "Cannot start Host: \(error.localizedDescription)"
+      self.error = String(localized: "Cannot start Host: \(error.localizedDescription)")
       isStarting = false
     }
   }
@@ -469,7 +493,7 @@ final class MirrorHost {
               panes: panes,
               capabilities: ["vt-v1", "text-v1", "takeover", "refresh"]
                 + (commandService != nil
-                  ? ["launch-profile", "agents-dispatch"] : [])
+                  ? ["launch-profile", "launch-shell", "agents-dispatch"] : [])
                 + (source.supportsBoundedHistory ? ["history"] : []), hostRunID: hostRunID)))
       case .command:
         try handleCommand(message, peer: peer)

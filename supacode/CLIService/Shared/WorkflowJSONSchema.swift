@@ -398,7 +398,10 @@ nonisolated public enum WorkflowJSONSchema {
             },
             "action": {
               "type": "string",
-              "pattern": "^(builtin:collect-worktree-context|local:(?=[a-z0-9-]{1,64}$)[a-z][a-z0-9]*(?:-[a-z0-9]+)*)$"
+              "anyOf": [
+                { "enum": ["builtin:assert-condition", "builtin:collect-worktree-context", "builtin:save-handoff"] },
+                { "pattern": "^local:(?=[a-z0-9-]{1,64}$)[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" }
+              ]
             },
             "with": {
               "type": "object",

@@ -67,7 +67,7 @@ struct RunScriptToolbarButton: View {
     if isRunning {
       button(
         config: RunScriptButtonConfig(
-          title: "Stop",
+          title: String(localized: "Stop"),
           systemImage: "stop.fill",
           helpText: stopHelpText,
           shortcut: stopShortcut,
@@ -77,7 +77,7 @@ struct RunScriptToolbarButton: View {
     } else {
       button(
         config: RunScriptButtonConfig(
-          title: "Run",
+          title: String(localized: "Run"),
           systemImage: "play.fill",
           helpText: runHelpText,
           shortcut: runShortcut,
@@ -152,9 +152,9 @@ struct UserCustomCommandToolbarButton: View {
     guard isEnabled else {
       switch source {
       case .repository:
-        return "\(title) (Set command script in Repository Settings)"
+        return String(localized: "\(title) (Set command script in Repository Settings)")
       case .global:
-        return "\(title) (Set command script in Settings → Commands)"
+        return String(localized: "\(title) (Set command script in Settings → Commands)")
       }
     }
     var text = title

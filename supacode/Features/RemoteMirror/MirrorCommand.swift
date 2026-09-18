@@ -38,8 +38,14 @@ nonisolated struct MirrorCommandRequest: Codable, Equatable, Sendable {
   struct Create: Codable, Equatable, Sendable {
     let resource: String
     let selector: Selector
-    let launch: Launch
+    let launch: Launch?
     let background: Bool
+    init(worktreeID: String) {
+      resource = "tab"
+      selector = .worktree(worktreeID)
+      launch = nil
+      background = true
+    }
     init(worktreeID: String, profileID: String, prompt: String?) {
       resource = "tab"
       selector = .worktree(worktreeID)

@@ -12,6 +12,8 @@ nonisolated public struct WorkflowActionInput: Equatable, Sendable {
     case path
     /// A role name declared by the workflow; never templated.
     case role
+    /// A boolean literal or a complete expression template.
+    case boolean
   }
 
   public let name: String
@@ -83,6 +85,21 @@ nonisolated public enum WorkflowActionRegistry {
   }
 
   public static let all: [WorkflowActionSchema] = [
+    WorkflowActionSchema(
+      id: "builtin:assert-condition",
+      description:
+        "Require a true condition before continuing; otherwise request attention with the supplied message.",
+      inputs: [
+        WorkflowActionInput(
+          name: "condition", required: true, kind: .boolean,
+          description: "Condition that must be true"),
+        WorkflowActionInput(name: "message", required: true, description: "Failure explanation"),
+      ],
+      outputs: [
+        WorkflowActionOutput(name: "output", description: "Empty JSON object on success"),
+        WorkflowActionOutput(
+          name: "output_path", description: "Path to this invocation's result.json"),
+      ]),
     WorkflowActionSchema(
       id: "builtin:collect-worktree-context",
       description: "Save repository status and diff summary to this action's artifacts.",

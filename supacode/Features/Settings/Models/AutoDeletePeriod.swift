@@ -15,13 +15,13 @@ nonisolated enum AutoDeletePeriod: Int, Codable, CaseIterable, Comparable, Senda
   var label: String {
     switch self {
     #if DEBUG
-      case .immediately: "Immediately (debug)"
+      case .immediately: String(localized: "Immediately (debug)")
     #endif
-    case .oneDay: "After 1 day"
-    case .threeDays: "After 3 days"
-    case .sevenDays: "After 7 days"
-    case .fourteenDays: "After 14 days"
-    case .thirtyDays: "After 30 days"
+    case .oneDay: String(localized: "After 1 day")
+    case .threeDays: String(localized: "After 3 days")
+    case .sevenDays: String(localized: "After 7 days")
+    case .fourteenDays: String(localized: "After 14 days")
+    case .thirtyDays: String(localized: "After 30 days")
     }
   }
 

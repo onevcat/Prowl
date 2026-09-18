@@ -1,20 +1,21 @@
 import AppKit
 import ComposableArchitecture
+import Foundation
 import Sharing
 import SwiftUI
 
 struct RepositorySettingsView: View {
+  let appLocale: Locale
   @Dependency(FeatureFlags.self) private var featureFlags
   @Bindable var store: StoreOf<RepositorySettingsFeature>
   @State private var isBranchPickerPresented = false
   @State private var branchSearchText = ""
   @State private var githubIdentityViewModel = RepositoryGithubIdentityViewModel()
   @Shared(.userGlobalSettings) private var globalSettings
-
   var body: some View {
     let baseRefOptions =
       store.branchOptions.isEmpty ? [store.defaultWorktreeBaseRef] : store.branchOptions
-    let settings = $store.settings
+    let settings: Binding<RepositorySettings> = $store.settings
     let worktreeBaseDirectoryPath = Binding(
       get: { settings.worktreeBaseDirectoryPath.wrappedValue ?? "" },
       set: { settings.worktreeBaseDirectoryPath.wrappedValue = $0 },
@@ -78,10 +79,10 @@ struct RepositorySettingsView: View {
           } header: {
             Text("Workspace")
           } footer: {
+            let metadataPath = ProjectWorkspace.metadataURL(for: store.rootURL).path(
+              percentEncoded: false)
             Text(
-              "Read-only. Defined in "
-                + "\(ProjectWorkspace.metadataURL(for: store.rootURL).path(percentEncoded: false)) "
-                + "— edit that file to change it."
+              "Read-only. Defined in \(metadataPath) — edit that file to change it."
             )
             .font(.footnote)
             .foregroundStyle(.secondary)
@@ -98,7 +99,8 @@ struct RepositorySettingsView: View {
               } label: {
                 HStack {
                   Text(
-                    store.settings.worktreeBaseRef ?? "Automatic (\(store.defaultWorktreeBaseRef))"
+                    store.settings.worktreeBaseRef
+                      ?? String(localized: "Automatic (\(store.defaultWorktreeBaseRef))")
                   )
                   .foregroundStyle(.primary)
                   Spacer()
@@ -114,7 +116,7 @@ struct RepositorySettingsView: View {
                 BranchPickerPopover(
                   searchText: $branchSearchText,
                   options: baseRefOptions,
-                  automaticLabel: "Automatic (\(store.defaultWorktreeBaseRef))",
+                  automaticLabel: String(localized: "Automatic (\(store.defaultWorktreeBaseRef))"),
                   selection: store.settings.worktreeBaseRef,
                   onSelect: { ref in
                     store.settings.worktreeBaseRef = ref
@@ -195,29 +197,45 @@ struct RepositorySettingsView: View {
           Section {
             if store.showsDiffSettings {
               Toggle(isOn: observeLineDiffsAutomatically) {
-                Text("Observe line diffs automatically")
-                Text(
-                  "Keeps each workspace's line-change badge up to date in the background. "
-                    + "Turn off for very large repositories to avoid background git diff work."
-                )
+                VStack(alignment: .leading, spacing: 2) {
+                  Text("Observe line diffs automatically")
+                  Text(
+                    """
+                    Keeps each workspace's line-change badge up to date in the background. \
+                    Turn off for very large repositories to avoid background git diff work.
+                    """
+                  )
+                  .font(.caption)
+                  .foregroundStyle(.secondary)
+                }
               }
               .help(
-                "Refresh workspace line-change badges automatically. "
-                  + "Disable to skip background git diff for large repositories."
+                """
+                Refresh workspace line-change badges automatically. \
+                Disable to skip background git diff for large repositories.
+                """
               )
             }
 
             if store.showsPullRequestSettings {
               Toggle(isOn: fetchPullRequestState) {
-                Text("Fetch pull request state")
-                Text(
-                  "Periodically checks pull request status (open, merged, checks) for this repository's branches. "
-                    + "Turn off to skip background GitHub queries."
-                )
+                VStack(alignment: .leading, spacing: 2) {
+                  Text("Fetch pull request state")
+                  Text(
+                    """
+                    Periodically checks pull request status (open, merged, checks) for this repository's branches. \
+                    Turn off to skip background GitHub queries.
+                    """
+                  )
+                  .font(.caption)
+                  .foregroundStyle(.secondary)
+                }
               }
               .help(
-                "Fetch pull request status for this repository's branches. "
-                  + "Disable to skip background GitHub queries and save API rate limit."
+                """
+                Fetch pull request status for this repository's branches. \
+                Disable to skip background GitHub queries and save API rate limit.
+                """
               )
 
               Picker(selection: settings.githubAccountOverride) {
@@ -282,8 +300,10 @@ struct RepositorySettingsView: View {
           VStack(alignment: .leading, spacing: 4) {
             Text("Agents")
             Text(
-              "Recommended first in the Agents menu for this repository. "
-                + "Without a designation, the last profile launched here is recommended."
+              """
+              Recommended first in the Agents menu for this repository. \
+              Without a designation, the last profile launched here is recommended.
+              """
             )
             .foregroundStyle(.secondary)
           }
@@ -296,12 +316,12 @@ struct RepositorySettingsView: View {
         Section {
           ScriptEnvironmentRow(
             name: "PROWL_WORKTREE_PATH",
-            description: "Path to the active worktree."
+            description: String(localized: "Path to the active worktree.")
           )
           ScriptEnvironmentRow(
             name: "PROWL_ROOT_PATH",
             value: store.rootURL.path(percentEncoded: false),
-            description: "Path to the repository root."
+            description: String(localized: "Path to the repository root.")
           )
         } header: {
           VStack(alignment: .leading, spacing: 4) {
@@ -379,8 +399,11 @@ struct RepositorySettingsView: View {
             VStack(alignment: .leading, spacing: 4) {
               Text("Custom Commands")
               Text(
-                "Repository and global terminal actions. Enabled commands appear in repository order, "
-                  + "then global order. Edit global commands in Settings → Commands."
+                """
+                Repository and global terminal actions. \
+                Enabled commands appear in repository order, then global order. \
+                Edit global commands in Settings → Commands.
+                """
               )
               .foregroundStyle(.secondary)
             }
@@ -403,16 +426,21 @@ struct RepositorySettingsView: View {
           \.setAuthoringPromptPresented)
       ) {
         AskAgentHelpView(
-          strings: workflowAuthoringPromptStrings(directory: workflowsStore.workflowDirectory)
+          strings: workflowAuthoringPromptStrings(
+            directory: workflowsStore.workflowDirectory,
+            appLocale: appLocale,
+            systemLocale: AskAgentHelpPrompt.systemPreferredLocale()
+          )
         ) {
           workflowsStore.send(.setAuthoringPromptPresented(false))
         }
       }
       .sheet(
         isPresented: Binding(
-          get: { workflowsStore.newWorkflow != nil }, set: { if !$0 { workflowsStore.send(.dismissNewWorkflow) } })
+          get: { workflowsStore.newWorkflow != nil },
+          set: { if !$0 { workflowsStore.send(.dismissNewWorkflow) } })
       ) {
-        NewWorkflowSheet(store: workflowsStore)
+        NewWorkflowSheet(appLocale: appLocale, store: workflowsStore)
       }
     } destination: { detailStore in
       if featureFlags.workflowUI {

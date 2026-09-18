@@ -23,7 +23,8 @@ struct WindowTitleTests {
 
   @Test func computeUsesAppTitleWithoutSelection() {
     let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
-    #expect(WindowTitle.compute(repositories: RepositoriesFeature.State(), terminalManager: manager) == "Prowl")
+    let title = WindowTitle.compute(repositories: RepositoriesFeature.State(), terminalManager: manager)
+    #expect(title == "Prowl")
   }
 
   @Test func computeUsesViewTitlesForCanvasAndArchive() {
@@ -34,7 +35,9 @@ struct WindowTitleTests {
     #expect(WindowTitle.compute(repositories: state, terminalManager: manager) == "Canvas")
 
     state.selection = .archivedWorktrees
-    #expect(WindowTitle.compute(repositories: state, terminalManager: manager) == "Archived Worktrees")
+    #expect(
+      WindowTitle.compute(repositories: state, terminalManager: manager) == "Archived Worktrees"
+    )
   }
 
   @Test func computeFallsBackToAppNameWhenWorktreeHasNoActiveTab() {

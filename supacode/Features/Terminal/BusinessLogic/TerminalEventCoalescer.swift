@@ -35,7 +35,7 @@ struct TerminalEventCoalescer {
     case .agentEntryChanged(let entry):
       return .agentEntry(entry.id)
     case .customCommandSucceeded, .notificationReceived, .notificationIndicatorChanged,
-      .tabCreated, .tabClosed, .agentEntryRemoved, .commandPaletteToggleRequested,
+      .tabCreated, .tabClosed, .tabRestored, .agentEntryRemoved, .commandPaletteToggleRequested,
       .setupScriptConsumed, .layoutRestored, .layoutRestoreFailed,
       .agentProfileLaunched, .agentProfileLaunchWarning, .agentProfileLaunchFailed:
       return nil

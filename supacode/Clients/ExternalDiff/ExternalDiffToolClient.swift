@@ -127,8 +127,8 @@ private func runCustomCommand(
   guard !template.isEmpty else {
     onError(
       OpenActionError(
-        title: "Custom diff command is empty",
-        message: "Add a custom diff command in Settings before opening the diff."
+        title: String(localized: "Custom diff command is empty"),
+        message: String(localized: "Add a custom diff command in Settings before opening the diff.")
       )
     )
     return
@@ -155,7 +155,7 @@ private func runCustomCommand(
 
 private func openError(for tool: ExternalDiffTool, error: Error) -> OpenActionError {
   OpenActionError(
-    title: "Unable to open diff in \(tool.title)",
+    title: String(localized: "Unable to open diff in \(tool.title)"),
     message: error.localizedDescription
   )
 }

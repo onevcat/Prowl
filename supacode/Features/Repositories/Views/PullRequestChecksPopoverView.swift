@@ -34,9 +34,9 @@ struct PullRequestChecksPopoverView: View {
     let titleSuffix = Text(verbatim: " #\(pullRequest.number)")
       .foregroundStyle(.secondary)
     let titleLine = Text("\(titlePrefix)\(pullRequest.title)\(titleSuffix)")
-    let authorLogin = pullRequest.authorLogin ?? "Someone"
+    let authorLogin = pullRequest.authorLogin ?? String(localized: "Someone")
     let commitsCount = pullRequest.commitsCount ?? 0
-    let commitsLabel = commitsCount == 1 ? "commit" : "commits"
+    let commitsLabel = commitsCount == 1 ? String(localized: "commit") : String(localized: "commits")
     let baseRefName = pullRequest.baseRefName ?? "base"
     let headRefName = pullRequest.headRefName ?? "branch"
     let baseRef = Text("`\(baseRefName)`").monospaced()
@@ -184,9 +184,9 @@ struct PullRequestChecksPopoverView: View {
 
   private var openPullRequestHelpText: String {
     if let display = openPullRequestShortcut?.display {
-      return "Open pull request on GitHub (\(display))"
+      return String(localized: "Open pull request on GitHub (\(display))")
     }
-    return "Open pull request on GitHub"
+    return String(localized: "Open pull request on GitHub")
   }
 }
 

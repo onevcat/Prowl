@@ -413,6 +413,25 @@ struct SettingsFilePersistenceTests {
     #expect(settings.global.systemNotificationsEnabled == true)
     #expect(settings.global.updatesAutomaticallyDownloadUpdates == true)
   }
+
+  // The language lives in the per-app `AppleLanguages` default, not in settings.json.
+  @Test func settingsFileDoesNotCarryTheAppLanguage() throws {
+    let encoded = try JSONEncoder().encode(GlobalSettings.default)
+    let globalDict = try #require(try JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+
+    #expect(globalDict["appLanguage"] == nil)
+  }
+
+  @Test func fileFromABuildThatStoredTheLanguageStillDecodes() throws {
+    let encoded = try JSONEncoder().encode(GlobalSettings.default)
+    var globalDict = try #require(try JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+    globalDict["appLanguage"] = "zh-Hans"
+
+    let data = try JSONSerialization.data(withJSONObject: globalDict)
+    let decoded = try JSONDecoder().decode(GlobalSettings.self, from: data)
+
+    #expect(decoded == .default)
+  }
 }
 
 nonisolated private final class MutableTestStorage: @unchecked Sendable {

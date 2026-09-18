@@ -172,11 +172,12 @@ Each agent contains:
 - `status`, `raw_state`: detected agent state. `status` is one of `blocked`,
   `working`, `done`, `idle`; `raw_state` is the lower-level detector state.
 - `detection_reason`: optional explanation of the final state decision, shared with
-  `agents read`. Log evidence reports `log.openWork` or `log.turnEnded`; fallback
+  `agents read`. Log evidence reports `log.openWork` or `log.turnEnded`; Claude native
+  evidence reports `native.working`, `native.blocked`, or `native.idle`; fallback
   decisions report `screen.*`. Screen-only decisions report the profile rule ID,
   `fallback.noRuleMatched`, or `legacy.detector`.
 - `screen_reason`: optional rule ID for the current screen classification, including
-  when log evidence controls the final state. Both reason fields omit screen text.
+  when log or native evidence controls the final state. Both reason fields omit screen text.
 - `last_changed_at`: ISO-8601 timestamp for the most recent state change.
 - `project`: display-oriented `name`, `branch`, `path` resolved from the
   agent's working directory.
@@ -334,7 +335,8 @@ first. Because a receipt can precede Codex's own `turn-ended` by a second or two
 `--until idle` between rounds before dispatching again.
 
 For Codex, observed open main or child work in the selected log keeps this
-precondition busy even if a parent `turn-ended` signal has arrived.
+precondition busy even if a parent `turn-ended` signal has arrived. Claude native
+Working/Waiting applies the same veto, including assigned children and background shell work.
 
 The coordinator waits by exact id:
 
@@ -371,7 +373,8 @@ Conditions are `idle`, `blocked`, `changed`, and `exit`. Results include their e
 `source` and `confidence`; `observation.status` describes the combined detected state,
 while `raw_state` retains the screen observation. A `turn-ended` signal can satisfy
 `idle` while a stale screen still reads `working`, but cannot override observed open
-main or child work in the selected Codex log. Log attribution remains heuristic.
+main or child work in the selected Codex log, or Claude native outstanding work.
+Both providers remain heuristic and do not create completion receipts.
 Condition waits observe state, not edges: a signal that already existed
 when the wait was armed satisfies `idle` or `blocked` only if the detector agrees (idle/done,
 or blocked), while a signal arriving after arming counts on its own. To wait for the *next*
@@ -619,6 +622,19 @@ as a workflow run. Poll the returned run ID with `workflow status` and inspect i
 
 `validate` accepts the bundle directory, not its `workflow.yaml`. Loose YAML files are not workflow bundles. See [Workflows](workflows.md#script-actions-and-bundles) for approval and results.
 
+### Built-in Review Loop workflow
+
+```bash
+prowl workflow run prowl.review-loop --role reviewer="Pi Reviewer" --input min_rounds=2 --input max_rounds=4 --json
+```
+
+Start from the implementing agent and follow `data.self_initiated.line` to submit
+the brief. The selected reviewer opens in a right split and stays for all rounds.
+`focus` is optional. Minimum and maximum each accept 1–30; minimum must not exceed
+maximum. Defaults are 2 and 4. The final summary distinguishes clean from a round
+limit reached with remaining work; `completed` alone does not mean clean.
+See [Built-in Review Loop](workflows.md#built-in-review-loop).
+
 ### Built-in handoff workflow
 
 `prowl workflow run prowl.handoff --role receiver=Codex --json` asks the calling agent for
@@ -727,9 +743,9 @@ either positionally or with `--worktree`; `--path` must remain inside it.
 pane="$(prowl create tab "$wt" --json | jq -r '.data.target.pane.id')"
 ```
 
-Without `--profile`, the new tab always takes focus (`--background` is Profile-only), so
-keystrokes a person is typing at that moment land in the new shell; while someone is working
-in the app, prefer a Profile launch with `--background`.
+Without `--background`, the new tab takes focus, so keystrokes a person is typing
+at that moment land in the new shell. Use `--background` to preserve the current
+selection and focus for both Shell and Agent Profile tabs.
 
 Add `--profile <name|uuid>` to launch an enabled Agent Profile instead of a shell. An
 optional kickoff prompt uses the sole stdin spelling `--prompt -`:
@@ -751,8 +767,8 @@ shell retains the reserved carrier. NUL bytes remain invalid, and UTF-8 prompt i
 256 KiB is rejected before creating a surface. For larger requirement sets, keep the content
 in a repository file and use the kickoff prompt to tell the Profile which file to read.
 
-`--background` is Profile-only and creates the tab without changing the selected
-worktree, tab, or pane.
+`--background` creates the tab without changing the selected worktree, tab, or
+pane. Background split-pane creation still requires a Profile.
 
 Claude Code, Codex, GitHub Copilot, Droid, Qoder, Pi, Oh My Pi, and OpenCode Profile launches
 complete managed-signal preflight before a dispatch slot or surface is created. Safe preparation
@@ -791,7 +807,10 @@ Close one explicit tab or pane. The positional form uses a UUID, `pN`, or `tN`; 
 long forms are `--pane <uuid|pN|N>` and `--tab <uuid|tN|N>`. `close` rejects
 worktree targeting and has no focus fallback. Protected agent work or a long-running
 command may trigger GUI confirmation; `--force` skips it only after positive
-identification.
+identification. The close is undoable in the GUI for Ghostty's `undo-timeout`
+(5 s by default): the pane's process keeps running until then, but the CLI treats
+the close as final — the old handle is dead, and a restored pane appears with a
+new handle.
 
 ```bash
 prowl close "$pane" --json

@@ -63,7 +63,7 @@ extension AppFeature {
   ) -> Effect<Action>? {
     switch event {
     case .customCommandSucceeded(_, let name, let durationMs):
-      let message = "\(name) succeeded in \(formatCustomCommandDuration(durationMs))"
+      let message = String(localized: "\(name) succeeded in \(formatCustomCommandDuration(durationMs))")
       return .send(.repositories(.showToast(.success(message))))
 
     case .runScriptStatusChanged(let worktreeID, let isRunning):
@@ -129,6 +129,9 @@ extension AppFeature {
     case .tabClosed(let worktreeID, let remainingTabs):
       return tabClosedEffect(worktreeID: worktreeID, remainingTabs: remainingTabs, state: state)
 
+    case .tabRestored(let worktreeID, let tabID):
+      return tabRestoredEffect(worktreeID: worktreeID, tabID: tabID, state: state)
+
     case .focusChanged(_, let surfaceID):
       // Keep the Active Agents panel's keyboard-navigation anchor in sync with
       // the surface that actually has focus, so control-option-up/down steps from the right place.
@@ -167,12 +170,16 @@ extension AppFeature {
     case .agentProfileLaunchWarning(_, let profileName, let message):
       return .send(
         .repositories(
-          .showToast(.warning("“\(profileName)” launched without managed signals. \(message)"))
+          .showToast(
+            .warning(String(localized: "“\(profileName)” launched without managed signals. \(message)"))
+          )
         )
       )
 
     case .agentProfileLaunchFailed(_, let profileName):
-      return .send(.repositories(.showToast(.warning("Couldn't launch “\(profileName)”"))))
+      return .send(
+        .repositories(.showToast(.warning(String(localized: "Couldn't launch “\(profileName)”"))))
+      )
 
     default:
       return nil
@@ -316,5 +323,27 @@ extension AppFeature {
         await worktreeInfoWatcher.send(.setOpenedWorktreeIDs(syncedOpenedWorktreeIDs))
       }
     )
+  }
+
+  /// An undo restored a tab: make sure the user sees it. In Canvas the card
+  /// takes the primary selection through the same request a new tab uses;
+  /// in normal mode the restored worktree is selected when another one is
+  /// showing. Plain folders select as a repository, like layout restore does.
+  func tabRestoredEffect(
+    worktreeID: Worktree.ID,
+    tabID: TerminalTabID,
+    state: State
+  ) -> Effect<Action> {
+    if state.repositories.isShowingCanvas {
+      return .send(.repositories(.newTerminalTabCreatedInCanvas(worktreeID, tabID)))
+    }
+    if let repo = state.repositories.repositories[id: worktreeID], repo.kind == .plain {
+      guard state.repositories.selection != .repository(worktreeID) else { return .none }
+      return .send(.repositories(.selectRepository(worktreeID)))
+    }
+    guard state.repositories.worktree(for: worktreeID) != nil,
+      state.repositories.selection != .worktree(worktreeID)
+    else { return .none }
+    return .send(.repositories(.selectWorktree(worktreeID)))
   }
 }

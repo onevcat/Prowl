@@ -115,7 +115,7 @@ struct WorktreeTerminalTabsView: View {
         )
       }
     } else {
-      EmptyTerminalPaneView(message: "No terminals open")
+      EmptyTerminalPaneView(message: String(localized: "No terminals open"))
     }
   }
 

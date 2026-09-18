@@ -216,6 +216,37 @@ struct GhosttySurfaceBridgeTests {
     #expect(states == [GHOSTTY_PROGRESS_STATE_SET, GHOSTTY_PROGRESS_STATE_REMOVE])
   }
 
+  @Test func undoFallsThroughWithoutHandler() {
+    let bridge = GhosttySurfaceBridge()
+    var action = ghostty_action_s()
+    action.tag = GHOSTTY_ACTION_UNDO
+
+    #expect(!bridge.handleAction(target: ghostty_target_s(), action: action))
+  }
+
+  @Test func undoAndRedoReportTheHandlerResult() {
+    let bridge = GhosttySurfaceBridge()
+    var undoCalls = 0
+    var redoCalls = 0
+    bridge.onUndo = {
+      undoCalls += 1
+      return true
+    }
+    bridge.onRedo = {
+      redoCalls += 1
+      return false
+    }
+    var undo = ghostty_action_s()
+    undo.tag = GHOSTTY_ACTION_UNDO
+    var redo = ghostty_action_s()
+    redo.tag = GHOSTTY_ACTION_REDO
+
+    #expect(bridge.handleAction(target: ghostty_target_s(), action: undo))
+    #expect(!bridge.handleAction(target: ghostty_target_s(), action: redo))
+    #expect(undoCalls == 1)
+    #expect(redoCalls == 1)
+  }
+
   private func advanceProgressClock(_ clock: TestClock<Duration>, by duration: Duration) async {
     // Let background progress tasks register and wake around TestClock advancement.
     await Task.yield()

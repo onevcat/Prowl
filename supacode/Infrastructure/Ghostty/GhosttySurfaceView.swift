@@ -168,6 +168,17 @@ final class GhosttySurfaceView: NSView, Identifiable {
   private var lastScrollbar: ScrollbarState?
   private var occlusionState = OcclusionState()
   private var lastSurfaceFocus: Bool?
+  /// True between a close that keeps the surface alive for undo and its
+  /// restore or free. While set, the view stays out of every host: a detached
+  /// view must not ask its old scroll wrapper to re-adopt it.
+  private(set) var isPendingClose = false
+  /// The child process has exited, per libghostty's own flag or the
+  /// `show_child_exited` report. Such a surface is not worth keeping for undo:
+  /// there is no running process to bring back.
+  var childProcessHasExited: Bool {
+    if let surface, ghostty_surface_process_exited(surface) { return true }
+    return bridge.state.childExitCode != nil
+  }
   private var eventMonitor: Any?
   private var notificationObservers: [NSObjectProtocol] = []
   var prevPressureStage: Int = 0
@@ -406,7 +417,25 @@ final class GhosttySurfaceView: NSView, Identifiable {
     return true
   }
 
+  /// Takes the surface out of the view tree without freeing it, so a close can
+  /// be undone. The renderer pauses (occluding needs no hierarchy) and the
+  /// process keeps running until `closeSurface()` or `resumeFromPendingClose()`.
+  func suspendForPendingClose() {
+    isPendingClose = true
+    focusDidChange(false)
+    setOcclusion(false)
+    scrollWrapper = nil
+    removeFromSuperview()
+  }
+
+  /// Lets a host adopt the view again after an undo; occlusion is re-applied by
+  /// the host's normal activity sync once the view is attached.
+  func resumeFromPendingClose() {
+    isPendingClose = false
+  }
+
   func closeSurface() {
+    isPendingClose = false
     clearNotificationObservers()
     if let surface {
       if let surfaceRef {
@@ -810,7 +839,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
     // tree and pause Ghostty's renderer. Invalidate the applied cache so the
     // currently desired occlusion value is sent again after reattachment.
     _ = occlusionState.invalidateForAttachmentChange()
-    if superview == nil {
+    if superview == nil, !isPendingClose {
       DispatchQueue.main.async { [weak self] in
         self?.scrollWrapper?.ensureSurfaceAttached()
       }

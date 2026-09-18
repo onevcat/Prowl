@@ -127,7 +127,7 @@ final class MirrorRemoteConnection: MirrorTransport {
         challenge = value
         if let credential = configuration.credential {
           guard credential.hostID == value.hostID else {
-            close("Host identity changed. Pair with this Host again.")
+            close(String(localized: "Host identity changed. Pair with this Host again."))
             return
           }
           connection?.send(

@@ -45,21 +45,22 @@ struct CreateLaunchOptions: ParsableArguments {
   @Option(name: .long, help: "Kickoff prompt source; the only supported value is '-' for stdin.")
   var prompt: String?
 
-  @Flag(name: .long, help: "Create the profile launch without changing the current selection or focus.")
+  @Flag(name: .long, help: "Create without changing selection or focus; split panes require a Profile.")
   var background = false
 
   func resolve(
+    allowsBackgroundShell: Bool = false,
     stdinIsTerminal: Bool = isatty(fileno(stdin)) != 0,
     readStdin: () throws -> Data? = { try FileHandle.standardInput.readToEnd() }
   ) throws -> (launch: CreateLaunchInput?, background: Bool) {
     guard let profile else {
-      if prompt != nil || background {
+      if prompt != nil || (background && !allowsBackgroundShell) {
         throw ExitError(
           code: CLIErrorCode.invalidArgument,
           message: "--prompt and --background require --profile."
         )
       }
-      return (nil, false)
+      return (nil, background)
     }
     guard !profile.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
       throw ExitError(code: CLIErrorCode.invalidArgument, message: "--profile must not be empty.")
@@ -128,7 +129,7 @@ struct CreateTabCommand: ParsableCommand {
   }
 
   func makeInput() throws -> CreateInput {
-    let resolvedLaunch = try launchOptions.resolve()
+    let resolvedLaunch = try launchOptions.resolve(allowsBackgroundShell: true)
     return CreateInput(
       resource: .tab,
       selector: try selector.resolveWorktree(positionalTarget: worktree),

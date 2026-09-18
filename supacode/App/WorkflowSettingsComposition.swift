@@ -16,7 +16,7 @@ extension SupacodeApp {
     WorkflowSettingsClient(
       scan: { scope in
         guard let appStore = storeBox.store else {
-          throw WorkflowSettingsError(message: "Workflow settings are not available yet.")
+          throw WorkflowSettingsError(message: String(localized: "Workflow settings are not available yet."))
         }
         let snapshot = makeWorkflowRuntimeSnapshot(
           appStore: appStore, terminalManager: terminalManager)
@@ -65,7 +65,7 @@ extension SupacodeApp {
           }
         } catch {
           throw WorkflowSettingsError(
-            message: "Could not read a workflow folder: \(error.localizedDescription)")
+            message: String(localized: "Could not read a workflow folder: \(error.localizedDescription)"))
         }
       },
       createWorkflow: { directory, request in
@@ -75,7 +75,7 @@ extension SupacodeApp {
           return try WorkflowStarterTemplate.write(request, in: directory)
         } catch {
           throw WorkflowSettingsError(
-            message: "Could not create the workflow file: \(error.localizedDescription)")
+            message: String(localized: "Could not create the workflow file: \(error.localizedDescription)"))
         }
       },
       trashWorkflow: { url in
@@ -83,7 +83,7 @@ extension SupacodeApp {
           try FileManager.default.trashItem(at: url, resultingItemURL: nil)
         } catch {
           throw WorkflowSettingsError(
-            message: "Could not move the workflow to Trash: \(error.localizedDescription)")
+            message: String(localized: "Could not move the workflow to Trash: \(error.localizedDescription)"))
         }
       },
       runTargets: { scope in

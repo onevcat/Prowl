@@ -1,3 +1,5 @@
+import Foundation
+
 nonisolated struct WorktreeCreationProgress: Hashable, Sendable {
   var stage: WorktreeCreationStage
   var worktreeName: String?
@@ -39,26 +41,26 @@ nonisolated struct WorktreeCreationProgress: Hashable, Sendable {
 
   var titleText: String {
     if let worktreeName, !worktreeName.isEmpty {
-      return "Creating \(worktreeName)"
+      return String(localized: "Creating \(worktreeName)")
     }
-    return "Creating worktree"
+    return String(localized: "Creating worktree")
   }
 
   var detailText: String {
     switch stage {
     case .loadingLocalBranches:
-      return "Reading local branches"
+      return String(localized: "Reading local branches")
     case .choosingWorktreeName:
-      return "Choosing available worktree name"
+      return String(localized: "Choosing available worktree name")
     case .checkingRepositoryMode:
-      return "Checking repository mode"
+      return String(localized: "Checking repository mode")
     case .resolvingBaseReference:
-      return "Resolving base reference (\(baseRefDisplay))"
+      return String(localized: "Resolving base reference (\(baseRefDisplay))")
     case .fetchingRemote:
       if let fetchRemoteName, !fetchRemoteName.isEmpty {
-        return "Fetching \(fetchRemoteName)"
+        return String(localized: "Fetching \(fetchRemoteName)")
       }
-      return "Fetching remote"
+      return String(localized: "Fetching remote")
     case .creatingWorktree:
       if let outputLine = outputLines.last, !outputLine.isEmpty {
         return outputLine
@@ -66,20 +68,24 @@ nonisolated struct WorktreeCreationProgress: Hashable, Sendable {
       if let latestOutputLine, !latestOutputLine.isEmpty {
         return latestOutputLine
       }
-      var copyDetails: [String] = []
-      if copyIgnored == true {
-        let ignoredCount = ignoredFilesToCopyCount ?? 0
-        copyDetails.append("Copying \(ignoredCount) ignored files")
-      }
-      if copyUntracked == true {
-        let untrackedCount = untrackedFilesToCopyCount ?? 0
-        copyDetails.append("copying \(untrackedCount) untracked files")
-      }
-      let copySummary = copyDetails.joined(separator: " and ")
-      return if copySummary.isEmpty {
-        "Creating from \(baseRefBranchDisplay)."
+      let ignoredCount = ignoredFilesToCopyCount ?? 0
+      let untrackedCount = untrackedFilesToCopyCount ?? 0
+      let copySummary: String
+      if copyIgnored == true, copyUntracked == true {
+        copySummary = String(
+          localized: "Copying \(ignoredCount) ignored files and copying \(untrackedCount) untracked files"
+        )
+      } else if copyIgnored == true {
+        copySummary = String(localized: "Copying \(ignoredCount) ignored files")
+      } else if copyUntracked == true {
+        copySummary = String(localized: "copying \(untrackedCount) untracked files")
       } else {
-        "Creating from \(baseRefBranchDisplay). \(copySummary)"
+        copySummary = ""
+      }
+      return if copySummary.isEmpty {
+        String(localized: "Creating from \(baseRefBranchDisplay).")
+      } else {
+        String(localized: "Creating from \(baseRefBranchDisplay). \(copySummary)")
       }
     }
   }
@@ -115,12 +121,12 @@ nonisolated struct WorktreeCreationProgress: Hashable, Sendable {
   private var baseRefBranchDisplay: String {
     let normalized = baseRefDisplay.lowercased()
     if normalized == "main" || normalized == "origin/main" {
-      return "main branch"
+      return String(localized: "main branch")
     }
     if normalized == "head" {
       return "HEAD"
     }
-    return "\(baseRefDisplay) branch"
+    return String(localized: "\(baseRefDisplay) branch")
   }
 }
 

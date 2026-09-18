@@ -18,6 +18,80 @@ struct MirrorHostTests {
     #expect(host.hostRunID == nil)
   }
 
+  @Test func initialHostStartDoesNotRetryIdentityFailure() async {
+    enum Failure: Error { case unavailable }
+    var attempts = 0
+    let host = MirrorHost(
+      source: Source(), enabled: true,
+      loadIdentity: {
+        attempts += 1
+        throw Failure.unavailable
+      }, saveIdentity: { _ in })
+    host.address = "127.0.0.1"
+    host.port = "7880"
+    defer { host.stop() }
+    await #expect(throws: (any Error).self) { try await MirrorTestPort.startHost(host) }
+    #expect(attempts == 1)
+    #expect(host.port == "7880")
+    #expect(!host.isRunning)
+    #expect(host.error != nil)
+  }
+
+  @Test(.timeLimit(.minutes(1)))
+  func hostDisconnectPreservesOtherMirrorsAndRejectsStaleConfirmation() async throws {
+    let source = Source()
+    source.includesOtherPane = true
+    let suite = "MirrorDisconnectTests-\(UUID())"
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let host = MirrorHost(
+      source: source, defaults: defaults, enabled: true, loadIdentity: { Self.identity },
+      saveIdentity: { _ in })
+    host.address = "127.0.0.1"
+    host.port = String(try MirrorTestPort.unusedPort())
+    defer { host.stop() }
+    try await MirrorTestPort.startHost(host)
+    let first = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
+    let other = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
+    defer {
+      first.connection.close()
+      other.connection.close()
+    }
+    var firstMessages = first.messages.makeAsyncIterator()
+    var otherMessages = other.messages.makeAsyncIterator()
+    first.connection.send(.subscribe(.init(paneID: source.id, representation: .text, intent: .ifFree)))
+    let lease = try #require(await firstMessages.next()?.subscriptionID)
+    #expect(await firstMessages.next()?.kind == .textFrame)
+    other.connection.send(.subscribe(.init(paneID: source.otherID, representation: .text, intent: .ifFree)))
+    #expect(await otherMessages.next()?.kind == .subscribed)
+    #expect(await otherMessages.next()?.kind == .textFrame)
+    let deviceID = Self.identity.devices[0].id
+    #expect(host.subscriptionID(for: source.id, deviceID: deviceID) == lease)
+    #expect(host.subscriptionID(for: source.id, deviceID: UUID()) == nil)
+    host.disconnect(subscriptionID: lease)
+    #expect(host.subscriberCount == 1)
+    #expect(host.mirroredPanes(for: deviceID).map(\.id) == [source.otherID])
+    #expect(host.isRunning)
+    #expect(host.devices.count == 1)
+    #expect(await firstMessages.next()?.error == "This mirror was disconnected by Host.")
+    #expect(await firstMessages.next() == nil)
+    #expect(source.input.isEmpty)
+    other.connection.send(.list)
+    #expect(await otherMessages.next()?.kind == .panes)
+
+    let replacement = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
+    defer { replacement.connection.close() }
+    var replacementMessages = replacement.messages.makeAsyncIterator()
+    replacement.connection.send(.subscribe(.init(paneID: source.id, representation: .text, intent: .ifFree)))
+    let newLease = try #require(await replacementMessages.next()?.subscriptionID)
+    #expect(await replacementMessages.next()?.kind == .textFrame)
+    host.disconnect(subscriptionID: lease)
+    #expect(host.subscriptionID(for: source.id, deviceID: deviceID) == newLease)
+    #expect(host.subscriberCount == 2)
+    replacement.connection.send(.list)
+    #expect(await replacementMessages.next()?.kind == .panes)
+  }
+
   @Test(.timeLimit(.minutes(1)))
   func fullSilentHandshakePoolStillAllowsAuthenticatedSubscription() async throws {
     let source = Source()
@@ -29,14 +103,12 @@ struct MirrorHostTests {
       saveIdentity: { _ in })
     host.address = "127.0.0.1"
     host.port = String(try MirrorTestPort.unusedPort())
-    host.start()
     var silent: [NWConnection] = []
     defer {
       for connection in silent { connection.cancel() }
       host.stop()
     }
-    for await ready in Observations({ host.isRunning || host.error != nil }) where ready { break }
-    try #require(host.error == nil)
+    try await MirrorTestPort.startHost(host)
     for _ in 0..<MirrorHost.maximumPendingHandshakes {
       let connection = NWConnection(
         host: "127.0.0.1", port: .init(rawValue: UInt16(host.port)!)!, using: .tcp)
@@ -72,10 +144,8 @@ struct MirrorHostTests {
       saveIdentity: { _ in })
     host.address = "127.0.0.1"
     host.port = String(try MirrorTestPort.unusedPort())
-    host.start()
     defer { host.stop() }
-    for await ready in Observations({ host.isRunning || host.error != nil }) where ready { break }
-    try #require(host.error == nil)
+    try await MirrorTestPort.startHost(host)
     let first = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
     let second = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
     defer {
@@ -86,7 +156,7 @@ struct MirrorHostTests {
     var secondMessages = second.messages.makeAsyncIterator()
     first.connection.send(
       .subscribe(.init(paneID: source.id, representation: .terminal, intent: .ifFree)))
-    let firstLease = try #require(await firstMessages.next()?.subscriptionID)
+    _ = try #require(await firstMessages.next()?.subscriptionID)
     #expect(await firstMessages.next()?.kind == .frame)
     second.connection.send(.list)
     let list = try #require(await secondMessages.next())
@@ -133,9 +203,8 @@ struct MirrorHostTests {
       saveIdentity: { _ in })
     host.address = "127.0.0.1"
     host.port = String(try MirrorTestPort.unusedPort())
-    host.start()
     defer { host.stop() }
-    for await ready in Observations({ host.isRunning || host.error != nil }) where ready { break }
+    try await MirrorTestPort.startHost(host)
     let first = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
     let second = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
     defer {
@@ -172,12 +241,8 @@ struct MirrorHostTests {
       saveIdentity: { _ in })
     host.address = "127.0.0.1"
     host.port = String(try MirrorTestPort.unusedPort())
-    host.start()
     defer { host.stop() }
-    for await ready in Observations({ host.isRunning || host.error != nil }) where ready {
-      break
-    }
-    try #require(host.error == nil)
+    try await MirrorTestPort.startHost(host)
     #expect(source.reads == 0)
     let first = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
     let second = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
@@ -265,10 +330,8 @@ struct MirrorHostTests {
     host.commandService = service
     host.address = "127.0.0.1"
     host.port = String(try MirrorTestPort.unusedPort())
-    host.start()
     defer { host.stop() }
-    for await ready in Observations({ host.isRunning || host.error != nil }) where ready { break }
-    try #require(host.error == nil)
+    try await MirrorTestPort.startHost(host)
     let peer = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
     defer { peer.connection.close() }
     let request = MirrorCommandRequest(
@@ -302,7 +365,7 @@ struct MirrorHostTests {
     #expect(launches == (cancelled ? 0 : 1))
   }
 
-  @Test(.timeLimit(.minutes(1)), arguments: ["takeover", "disconnect", "revoke", "stop"])
+  @Test(.timeLimit(.minutes(1)), arguments: ["takeover", "disconnect", "host-disconnect", "revoke", "stop"])
   func authorityLossCancelsDispatchWaitingForReadiness(mode: String) async throws {
     let source = Source()
     let suite = "MirrorDispatchCancellation-\(UUID())"
@@ -348,10 +411,8 @@ struct MirrorHostTests {
     host.commandService = service
     host.address = "127.0.0.1"
     host.port = String(try MirrorTestPort.unusedPort())
-    host.start()
     defer { host.stop() }
-    for await ready in Observations({ host.isRunning || host.error != nil }) where ready { break }
-    try #require(host.error == nil)
+    try await MirrorTestPort.startHost(host)
     let peer = try await Peer(port: UInt16(host.port)!, key: host.pairingKey)
     defer { peer.connection.close() }
     var messages = peer.messages.makeAsyncIterator()
@@ -377,6 +438,7 @@ struct MirrorHostTests {
     case "disconnect":
       peer.connection.close()
       for await offline in Observations({ host.onlineDeviceIDs.isEmpty }) where offline { break }
+    case "host-disconnect": host.disconnect(subscriptionID: lease)
     case "revoke": host.revoke(Self.identity.devices[0].id)
     default: host.stop()
     }
@@ -392,6 +454,8 @@ struct MirrorHostTests {
 
   @MainActor private final class Source: MirrorPaneSource {
     let id = UUID()
+    let otherID = UUID()
+    var includesOtherPane = false
     var reads = 0
     var input = Data()
     var text = "thinking"
@@ -402,7 +466,9 @@ struct MirrorHostTests {
       return text
     }
     func panes() -> [MirrorPaneDescriptor] {
-      [MirrorPaneDescriptor(id: id, title: "Fixture", directory: "/", busy: false)]
+      let primary = MirrorPaneDescriptor(id: id, title: "Fixture", directory: "/", busy: false)
+      return includesOtherPane
+        ? [primary, MirrorPaneDescriptor(id: otherID, title: "Other", directory: "/", busy: false)] : [primary]
     }
     func snapshot(_ id: UUID) throws -> MirrorFrame {
       reads += 1

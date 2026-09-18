@@ -37,7 +37,7 @@ struct TerminalTabCloseButton: View {
     .onChange(of: isPressing) { _, pressed in
       closeButtonGestureActive = pressed
     }
-    .help(helpText("Close Tab", shortcut: ghosttyShortcuts.display(for: "close_tab")))
+    .help(helpText(String(localized: "Close Tab"), shortcut: ghosttyShortcuts.display(for: "close_tab")))
     .opacity(showClose ? 1 : 0)
     .allowsHitTesting(showClose)
     .animation(.easeInOut(duration: TerminalTabBarMetrics.hoverAnimationDuration), value: isHoveringTab)

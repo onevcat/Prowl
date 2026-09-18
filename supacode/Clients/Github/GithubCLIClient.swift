@@ -7,12 +7,14 @@ import ProwlCLIShared
 // line can prepend to captured stdout and corrupt the JSON.
 enum GithubCLIOutput {
   // No JSON found at all: the likely cause is shell startup output polluting stdout.
-  nonisolated static let noPayloadMessage =
-    "Could not read GitHub CLI output. Your shell startup files may be printing extra output to stdout."
+  nonisolated static let noPayloadMessage = String(
+    localized: "Could not read GitHub CLI output. Your shell startup files may be printing extra output to stdout."
+  )
 
   // Valid JSON was found but failed to decode: the likely cause is an incompatible gh version.
-  nonisolated static let undecodableMessage =
-    "Could not parse GitHub CLI output. The installed GitHub CLI version may be incompatible."
+  nonisolated static let undecodableMessage = String(
+    localized: "Could not parse GitHub CLI output. The installed GitHub CLI version may be incompatible."
+  )
 
   nonisolated private static let logger = SupaLogger("GithubCLI")
 
@@ -906,8 +908,12 @@ nonisolated private func withExpectedGithubAccount<Value>(
   }
   if let host, host != accountOverride.host {
     throw GithubCLIError.commandFailed(
-      "This repository uses \(host), but its GitHub account override is configured for "
-        + "\(accountOverride.host)/\(accountOverride.login). Update the repository's GitHub identity setting."
+      String(
+        localized: """
+          This repository uses \(host), but its GitHub account override is configured for \
+          \(accountOverride.host)/\(accountOverride.login). Update the repository's GitHub identity setting.
+          """
+      )
     )
   }
   await GithubAccountSwitchLock.shared.acquire(host: accountOverride.host)
@@ -989,9 +995,13 @@ nonisolated private func switchGithubAccount(
     )
   } catch {
     throw GithubCLIError.commandFailed(
-      "Prowl is configured to use \(accountOverride.login) on \(accountOverride.host), "
-        + "but gh could not switch to that account. Run "
-        + "`gh auth switch --hostname \(accountOverride.host) --user \(accountOverride.login)` and try again."
+      String(
+        localized: """
+          Prowl is configured to use \(accountOverride.login) on \(accountOverride.host), \
+          but gh could not switch to that account. Run \
+          `gh auth switch --hostname \(accountOverride.host) --user \(accountOverride.login)` and try again.
+          """
+      )
     )
   }
 }
@@ -1280,7 +1290,7 @@ nonisolated private func runGh(
       if isOutdatedGitHubCLI(shellError) {
         throw GithubCLIError.outdated
       }
-      let message = shellError.errorDescription ?? "Command failed: \(command)"
+      let message = shellError.errorDescription ?? String(localized: "Command failed: \(command)")
       throw GithubCLIError.commandFailed(message)
     }
     throw GithubCLIError.commandFailed(error.localizedDescription)

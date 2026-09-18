@@ -199,7 +199,7 @@ struct WorkspaceCreationPromptFeature {
         }
         let url = prompt.url.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !url.isEmpty else {
-          prompt.validationMessage = "Remote URL required."
+          prompt.validationMessage = String(localized: "Remote URL required.")
           state.remoteRepositoryPrompt = prompt
           return .none
         }
@@ -234,7 +234,7 @@ struct WorkspaceCreationPromptFeature {
           automaticBaseRef: refs.defaultBaseRef,
           options: options
         )
-        prompt.validationMessage = options.isEmpty ? "No remote branches found." : nil
+        prompt.validationMessage = options.isEmpty ? String(localized: "No remote branches found.") : nil
         state.remoteRepositoryPrompt = prompt
         return .none
 
@@ -249,11 +249,11 @@ struct WorkspaceCreationPromptFeature {
         }
         let url = prompt.url.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !url.isEmpty else {
-          state.remoteRepositoryPrompt?.validationMessage = "Remote URL required."
+          state.remoteRepositoryPrompt?.validationMessage = String(localized: "Remote URL required.")
           return .none
         }
         guard !prompt.branchOptions.isEmpty else {
-          state.remoteRepositoryPrompt?.validationMessage = "Load remote branches before adding."
+          state.remoteRepositoryPrompt?.validationMessage = String(localized: "Load remote branches before adding.")
           return .none
         }
         let id = uuid().uuidString
@@ -595,6 +595,6 @@ struct WorkspaceCreationPromptFeature {
 
 private struct RemoteBranchLoadTimeoutError: LocalizedError {
   var errorDescription: String? {
-    "Remote branch loading timed out."
+    String(localized: "Remote branch loading timed out.")
   }
 }

@@ -56,7 +56,7 @@ Three sources, later ones winning for the same `id`:
 
 | Source | Location | Notes |
 |---|---|---|
-| Built-in | `Prowl.app/Contents/Resources/workflows/` | ids `prowl.*` are reserved for it. Ships Handoff (`prowl.handoff`). |
+| Built-in | `Prowl.app/Contents/Resources/workflows/` | ids `prowl.*` are reserved for it. Ships Handoff (`prowl.handoff`) and Review Loop (`prowl.review-loop`). |
 | Your workflows | `~/.prowl/workflows/*.pwlworkflow` | personal; not tied to a repository |
 | Repository | `<repo root>/.prowl/workflows/*.pwlworkflow` | travels with the repo; seen only from that repository's worktrees |
 
@@ -64,6 +64,47 @@ A file that fails validation is never offered for a run; a file with the same
 id in two sources is offered once (the repository file wins over yours). A
 workflow is **enabled by default**; switch it off in Settings (below) to hide it
 from every entry point and refuse `prowl workflow run` for it.
+
+## Built-in Review Loop
+
+**Review Loop** (`prowl.review-loop`) reviews changes with another agent, addresses
+findings, and repeats. Start it from the agent that implemented the task:
+
+```bash
+prowl workflow run prowl.review-loop --role reviewer="Pi Reviewer" \
+  --input min_rounds=2 --input max_rounds=4 --json
+```
+
+The reviewer Profile is selectable; no model or runtime is required. Prowl opens it
+in a right split beside the initiating agent, in the same tab, and reuses it across
+rounds. The initiating agent follows the returned `self_initiated.line` to deliver
+its scope, plan, and verification brief. Local changes and existing PRs are both
+supported. `focus` adds an optional single-line review instruction.
+
+Each round includes a reviewer report and main's disposition. Review focuses on
+material correctness, plan gaps, architecture, and realistic UX regressions. Every
+report records which files or areas the reviewer inspected. From round 2 on, the
+reviewer both re-verifies carried-over findings against main's disposition and
+performs a fresh review of the current diff, including code added by fixes and areas
+earlier rounds did not inspect; new findings get new IDs. Main
+verifies findings, fixes worthwhile problems with regression tests where practical,
+and explains rejected or deferred findings. Main owns commits, pushes, and existing
+PR updates unless it explicitly delegates them; task restrictions still apply.
+The reviewer may run useful tests and otherwise leaves shared files unchanged.
+The workflow does not create a PR merely because it ran.
+
+`min_rounds` defaults to **2**, and `max_rounds` to **4** (each accepts 1–30).
+A contradictory range requests attention before reviewer launch; cancel and restart
+with corrected inputs. An early clean report still receives the required minimum
+rounds. Early exit requires both a clean reviewer report and no subsequent in-scope
+changes or pending follow-up from main. At the maximum, main still addresses the
+final findings, then summarizes unresolved issues and final fixes that have not been reviewed again.
+
+A **Completed** run means the review procedure finished, not necessarily that the
+changes are clean. The final notification and summary state `clean` or `not clean`.
+Execution history retains the brief, reports, dispositions, and summary under the
+normal retention policy. The reviewer pane stays open. Neither agent should send
+its own dispatch messages or extend the loop beyond the configured maximum.
 
 ## Starting a workflow
 

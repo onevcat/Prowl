@@ -67,6 +67,16 @@ final class TerminalTabManager {
     return tab.id
   }
 
+  /// Puts a previously closed tab back at `index` (clamped to the array), for
+  /// undo. A tab that is already present is left alone.
+  func insertTab(_ tab: TerminalTabItem, at index: Int, select: Bool) {
+    guard !tabs.contains(where: { $0.id == tab.id }) else { return }
+    tabs.insert(tab, at: min(max(index, 0), tabs.count))
+    if select || selectedTabId == nil {
+      selectedTabId = tab.id
+    }
+  }
+
   func selectTab(_ id: TerminalTabID) {
     guard tabs.contains(where: { $0.id == id }) else { return }
     selectedTabId = id

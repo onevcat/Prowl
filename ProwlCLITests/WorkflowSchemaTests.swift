@@ -208,6 +208,18 @@ final class WorkflowSchemaTests: XCTestCase {
 
   // MARK: - Workflow definition schema
 
+  func testDefinitionSchemaAcceptsEveryShippedWorkflow() throws {
+    let root = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+      .appending(path: "Resources/workflows")
+    let bundles = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+      .filter { $0.pathExtension == "pwlworkflow" }
+    XCTAssertFalse(bundles.isEmpty)
+    for bundle in bundles {
+      let yaml = try String(contentsOf: bundle.appending(path: "workflow.yaml"), encoding: .utf8)
+      try assertDefinitionValidity(yaml, expected: true, bundle.lastPathComponent)
+    }
+  }
+
   func testDefinitionSchemaResourceMatchesTheSwiftConstant() throws {
     let resource = try JSONSerialization.jsonObject(with: ProwlCLIContractBundle.workflowDefinitionSchemaData)
     let constant = try WorkflowJSONSchema.definitionSchemaObject()

@@ -47,10 +47,19 @@ at a `~/.grok/` install (so Cursor's own `agent` entrypoint stays Cursor).
    push the live row out of view and a status row quoted inside a `⏺` block cannot
    read as live. Confirmation text is consulted only around a current numbered
    selection row such as `❯ 1. Yes`; a bare input prompt cuts off the preceding transcript.
+   Claude's internal scroll view keeps the composer visible while hiding live status.
+   When `Jump to bottom (click) ↓` or a counted `new message(s) (click) ↓` control appears
+   in the last non-blank row above that composer, Prowl treats the screen as a viewer
+   and retains the last known state. The control can overlay text in the middle of a row.
+   Return to the bottom to refresh
+   screen-based status; completion while browsing history is not visible to this detector.
    Codex uses exact bottom-of-screen `•`/`◦ Working (... esc to interrupt)` and
    `•`/`◦ Waiting for background terminal (... esc to interrupt)` footer fallbacks.
    Braille-only starfield rows around the composer do not count toward that footer window;
    animation alone does not indicate **Working**.
+   An empty Codex composer hint and status line remain **Idle** evidence with Astra's
+   starfield background, so a workflow can send its first task before any turn has completed.
+   Draft text and attachments do not qualify as an empty composer.
    Its confirmation detector requires a numbered selected row such as `› 1. Yes`
    paired with a live bottom footer or an explicit Yes/No choice structure. It also recognizes
    the current directory-trust, hook-review, and initial sign-in menus as **Blocked** from
@@ -84,7 +93,8 @@ at a `~/.grok/` install (so Cursor's own `agent` entrypoint stays Cursor).
 
 3. **State decision.** Every agent uses one state machine. Codex also supplies
    incremental JSONL lifecycle evidence from process-owned session logs, without
-   installing hooks. Other agents keep their screen-only behavior. An observed open
+   installing hooks. Claude supplies process-scoped native state without hooks.
+   Other agents keep their screen-only behavior. For Codex, an observed open
    parent turn or child task stays **Working** through quiet periods; current
    approval/question UI takes precedence as **Blocked**. Completion closes only
    its matching work. Initial historical records do not start new work.
@@ -96,6 +106,16 @@ at a `~/.grok/` install (so Cursor's own `agent` entrypoint stays Cursor).
    screen. Attribution is heuristic: switching to an old quiet chat before entering
    a new prompt can temporarily retain the previous log candidate.
 
+   Claude reads the detected PID's native registry under its configured root
+   (`~/.claude/sessions` by default). `busy` and `shell` mean **Working**, including
+   assigned child and background shell work; `waiting` means **Blocked**, and `idle`
+   means **Idle**. Process generation is checked before and after each read.
+   `/new` and resume use the registry's current session. Two processes sharing a
+   transcript retain independent states. Missing, partial, stale, or unsupported
+   records fall back to the screen. Background daemon/remote sessions are not
+   supported by this adapter. A manually relocated config root must be supplied
+   through a Prowl launch profile; shell-only overrides can fall back to screen.
+
 For diagnostics and sanitized regression captures, `prowl read --source detection`
 returns the exact active-screen buffer used by stage 2. It is explicitly requested
 because it can differ from the visible viewport when a pane is scrolled; the default
@@ -105,7 +125,8 @@ because it can differ from the visible viewport when a pane is scrolled; the def
 the final state decision and `screen_reason` for the screen rule. Codex can report
 `log.openWork`, `log.turnEnded`, or a `screen.*` fallback reason; `raw_state` remains
 the latest screen classification. A current blocker reports its screen-rule ID.
-Screen-only runtimes keep their existing rule identifiers. An ordinary profile miss
+Claude reports `native.working`, `native.blocked`, or `native.idle`; a fresh screen
+blocker can retain its screen-rule ID. Screen-only runtimes keep their existing rule identifiers. An ordinary profile miss
 reports `fallback.noRuleMatched`; unmigrated classifiers report `legacy.detector`.
 Reasons never include screen text. Screen fallback IDs are:
 
@@ -115,7 +136,7 @@ Reasons never include screen text. Screen fallback IDs are:
 - `screen.afterTurn`: new Working screen evidence appeared after completion.
 - `screen.retainedCompletion`: an unchanged completed frame is still suppressed.
 
-For idle waits and dispatch readiness, a current `log.turnEnded` decision keeps
+For idle waits and dispatch readiness, a current `log.turnEnded` or `native.idle` decision keeps
 the existing idle evidence and stabilization rules even when the screen reports
 `fallback.noRuleMatched`. Without current log authority, that unmatched screen
 provides no idle evidence. Dispatch still checks the input area before delivery.
@@ -123,6 +144,9 @@ provides no idle evidence. Dispatch still checks the input area before delivery.
 Use `status` to decide whether intervention is needed. A blocked `screen_reason`
 with Idle status can be a stale prompt fenced by completion; do not send Enter
 based on the screen reason alone.
+
+Native acquisition warnings report a bounded failure category and recovery, without
+registry content. They use the same per-category 30-second throttle.
 
 Log acquisition warnings use the `AgentDetection` category. `SupaLogger` writes
 them to stdout in Debug and the unified log in Release. They identify the PID, cursor count, and failure category (`incompleteInventory`,

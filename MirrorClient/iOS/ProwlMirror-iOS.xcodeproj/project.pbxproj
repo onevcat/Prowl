@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		A82000000000000000000001 /* MirrorLaunchModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A82000000000000000000002 /* MirrorLaunchModel.swift */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		6C0FBE96305194420093AD5F /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -24,6 +28,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		A82000000000000000000002 /* MirrorLaunchModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Shared/MirrorLaunchModel.swift"; sourceTree = SOURCE_ROOT; };
 		6C0FBE88305194410093AD5F /* ProwlMirror-iOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "ProwlMirror-iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		6C0FBE95305194420093AD5F /* ProwlMirror-iOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "ProwlMirror-iOSTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		6C0FBE9F305194420093AD5F /* ProwlMirror-iOSUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "ProwlMirror-iOSUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -75,6 +80,7 @@
 		6C0FBE7F305194410093AD5F = {
 			isa = PBXGroup;
 			children = (
+				A82000000000000000000002 /* MirrorLaunchModel.swift */,
 				6C0FBE8A305194410093AD5F /* ProwlMirror-iOS */,
 				6C0FBE98305194420093AD5F /* ProwlMirror-iOSTests */,
 				6C0FBEA2305194420093AD5F /* ProwlMirror-iOSUITests */,
@@ -236,6 +242,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A82000000000000000000001 /* MirrorLaunchModel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -877,4 +877,114 @@ struct SettingsFeatureTests {
     }
     await store.receive(\.delegate.cliInstallCompleted)
   }
+
+  @Test(.dependencies) func settingsLoadedLeavesTheLanguageAlone() async {
+    // The language is not part of settings.json, so a settings load must not touch the
+    // choice or the launch snapshot.
+    let store = TestStore(
+      initialState: SettingsFeature.State(appLanguage: .zhHans, effectiveLanguageAtLaunch: .zhHans)
+    ) {
+      SettingsFeature()
+    }
+
+    await store.send(.settingsLoaded(.default))
+    await store.receive(\.delegate.settingsChanged)
+
+    #expect(store.state.appLanguage == .zhHans)
+    #expect(store.state.effectiveLanguageAtLaunch == .zhHans)
+  }
+
+  @Test(.dependencies) func setAppLanguageWritesTheChoice() async {
+    let written = LockIsolated<[AppLanguage]>([])
+    let store = TestStore(initialState: SettingsFeature.State(effectiveLanguageAtLaunch: .english)) {
+      SettingsFeature()
+    } withDependencies: {
+      $0.analyticsClient.capture = { _, _ in }
+      $0.appLanguage.set = { language in written.withValue { $0.append(language) } }
+    }
+
+    await store.send(.setAppLanguage(.zhHans)) {
+      $0.appLanguage = .zhHans
+    }
+    await store.finish()
+
+    #expect(written.value == [.zhHans])
+  }
+
+  @Test(.dependencies) func setAppLanguageIgnoresTheCurrentChoice() async {
+    let written = LockIsolated<[AppLanguage]>([])
+    let store = TestStore(initialState: SettingsFeature.State(appLanguage: .english)) {
+      SettingsFeature()
+    } withDependencies: {
+      $0.appLanguage.set = { language in written.withValue { $0.append(language) } }
+    }
+
+    await store.send(.setAppLanguage(.english))
+    await store.finish()
+
+    #expect(written.value.isEmpty)
+  }
+
+  @Test(.dependencies) func systemToMatchingExplicitLanguageShowsNoPendingRelaunch() async {
+    // The system already resolved to Chinese this launch; picking explicit
+    // Chinese changes nothing next launch, so no restart hint.
+    var state = SettingsFeature.State(effectiveLanguageAtLaunch: .zhHans)
+    state.systemPreferredLanguages = ["zh-Hans"]
+    let store = TestStore(initialState: state) {
+      SettingsFeature()
+    } withDependencies: {
+      $0.analyticsClient.capture = { _, _ in }
+      $0.appLanguage.set = { _ in }
+    }
+
+    #expect(!store.state.languageChangePending)
+    await store.send(.setAppLanguage(.zhHans)) {
+      $0.appLanguage = .zhHans
+    }
+    #expect(!store.state.languageChangePending)
+  }
+
+  @Test(.dependencies) func differentResolvedLanguageShowsPendingRelaunch() async {
+    var state = SettingsFeature.State(effectiveLanguageAtLaunch: .english)
+    state.systemPreferredLanguages = ["en"]
+    let store = TestStore(initialState: state) {
+      SettingsFeature()
+    } withDependencies: {
+      $0.analyticsClient.capture = { _, _ in }
+      $0.appLanguage.set = { _ in }
+    }
+
+    #expect(!store.state.languageChangePending)
+    await store.send(.setAppLanguage(.zhHans)) {
+      $0.appLanguage = .zhHans
+    }
+    #expect(store.state.languageChangePending)
+  }
+
+  @Test(.dependencies) func refreshReadsAChoiceMadeInSystemSettings() async {
+    // The user picked Chinese for Prowl in System Settings while the app was in the background.
+    var state = SettingsFeature.State(effectiveLanguageAtLaunch: .english)
+    state.systemPreferredLanguages = ["en"]
+    let store = TestStore(initialState: state) {
+      SettingsFeature()
+    } withDependencies: {
+      $0.appLanguage.current = { .zhHans }
+      $0.appLanguage.systemLanguages = { ["en", "zh-Hans"] }
+    }
+
+    await store.send(.refreshAppLanguage) {
+      $0.appLanguage = .zhHans
+      $0.systemPreferredLanguages = ["en", "zh-Hans"]
+    }
+    #expect(store.state.languageChangePending)
+  }
+
+  @Test func pendingPredictionIgnoresAnyCommandLineOverride() {
+    // This launch ran in Chinese via a temporary `-AppleLanguages zh-Hans`
+    // override; the choice still resolves to English for the next normal
+    // launch, so the hint compares against that, not the override.
+    var state = SettingsFeature.State(effectiveLanguageAtLaunch: .zhHans)
+    state.systemPreferredLanguages = ["en"]
+    #expect(state.languageChangePending)
+  }
 }

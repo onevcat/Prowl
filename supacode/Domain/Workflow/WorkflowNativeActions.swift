@@ -95,7 +95,18 @@ nonisolated struct WorkflowNativeActionRunner: WorkflowActionExecuting {
     do {
       try context.bundle?.verifyIntegrity()
       let output: WorkflowJSONValue
-      if actionID == "builtin:collect-worktree-context" {
+      if actionID == "builtin:assert-condition" {
+        guard Set(inputs.keys) == ["condition", "message"],
+          case .boolean(let condition) = inputs["condition"],
+          case .string(let message) = inputs["message"],
+          !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+          throw WorkflowActionError.failed(
+            "assert-condition requires a boolean condition and a nonempty message.")
+        }
+        guard condition else { throw WorkflowActionError.failed(message) }
+        output = .object([:])
+      } else if actionID == "builtin:collect-worktree-context" {
         try WorkflowActionRegistry.worktreeContextInput.validate(.object(inputs))
         output = try await collectWorktreeContext(inputs: inputs, context: context, artifacts: artifacts)
         try WorkflowActionRegistry.worktreeContextOutput.validate(output)

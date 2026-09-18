@@ -13,6 +13,9 @@ concurrency:
 jobs:
   build:
     runs-on: macos-26
+    # A green run takes about 15 minutes; a slow runner has taken 2.5x that.
+    # Without this the default is 6 hours, so a stuck run had to be cancelled by hand.
+    timeout-minutes: 45
     permissions:
       contents: read
     env:
@@ -26,6 +29,7 @@ jobs:
           submodules: recursive
       - uses: ./.github/actions/setup-macos
       - run: make lint
+      - run: make check-localization
       - name: Stage debug app resources
         run: make embed-cli-debug embed-docs embed-skills
       - name: Build app and run tests in parallel
@@ -39,14 +43,25 @@ jobs:
             shift
             local log="build/ci-logs/${name}.log"
             local started=$SECONDS
-            echo "::group::${name}"
             # Capture the command's own exit code. Reading $? after an
             # `if cmd; then ...; fi` block yields the `if` status (0 when the
             # condition is false and there is no else), which silently masked
             # failures and let the step pass on a failing build.
             local status=0
-            "$@" >"$log" 2>&1 || status=$?
+            # stdout is buffered into the log and printed as one folded group
+            # when the task ends. stderr streams straight to the console with a
+            # task prefix so progress (the `make test-app` heartbeat, `swift
+            # test` results, make errors) shows while the task is still
+            # running. The group is opened only around the buffered dump: a
+            # `::group::` printed at task start would fold the streamed lines
+            # away too, and GitHub does not nest groups from parallel tasks.
+            # The stderr redirection comes first: redirections apply left to
+            # right, and the process substitution inherits stdout as it is at
+            # that moment, so placing it after `>"$log"` would send the
+            # streamed lines into the log file instead of the console.
+            "$@" 2> >(tee -a "build/ci-logs/${name}.stderr.log" | while IFS= read -r line; do printf '[%s] %s\n' "$name" "$line"; done) >"$log" || status=$?
             printf '| %s | %s | %s |\n' "$name" "$((SECONDS - started))" "$status" >"build/ci-logs/${name}.timing"
+            echo "::group::${name} (exit ${status}, $((SECONDS - started))s)"
             cat "$log"
             echo "::endgroup::"
             return "$status"

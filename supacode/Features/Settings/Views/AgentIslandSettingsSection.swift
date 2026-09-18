@@ -134,7 +134,7 @@ struct AgentIslandSettingsSection: View {
   }
 
   private var displaySelection: Binding<AgentIslandDisplaySelection> {
-    let preference = $store.agentIslandDisplayPreference
+    let preference: Binding<AgentIslandDisplayPreference> = $store.agentIslandDisplayPreference
     return Binding(
       get: { AgentIslandDisplaySelection(preference.wrappedValue) },
       set: { selection in
@@ -159,12 +159,14 @@ struct AgentIslandSettingsSection: View {
   private var displayCaption: String {
     switch store.agentIslandDisplayPreference {
     case .automatic:
-      return "With external monitors connected, follows the monitor containing Prowl's main window."
+      return String(
+        localized: "With external monitors connected, follows the monitor containing Prowl's main window."
+      )
     case .display(let id, let name):
       if let screen = displayCatalog.screens.first(where: { $0.id == id }) {
-        return "Shows only on \(screen.name), even when Prowl moves to another monitor."
+        return String(localized: "Shows only on \(screen.name), even when Prowl moves to another monitor.")
       }
-      return "\(name) is disconnected. Using Automatic until it returns."
+      return String(localized: "\(name) is disconnected. Using Automatic until it returns.")
     }
   }
 }

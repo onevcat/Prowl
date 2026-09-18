@@ -1,8 +1,10 @@
 # Agent state providers — shared architecture
 
-Status: implemented by [#800](https://github.com/onevcat/Prowl/pull/800), released in
+Shared baseline: implemented by [#800](https://github.com/onevcat/Prowl/pull/800), released in
 [v2026.9.12](https://github.com/onevcat/Prowl/releases/tag/v2026.9.12).
-Verified against `e54b1e19` on 2026-09-14. Proposed additions are labeled below.
+Baseline verified against `e54b1e19` on 2026-09-14. The native adapter extension is
+recorded in [068.002](002-native-runtime-implementation.md) and awaits release;
+#800's log policy is unchanged.
 
 ## Acquisition, policy, and consumers
 
@@ -14,9 +16,9 @@ Process generation + terminal screen + optional runtime evidence
   -> terminal state / Active Agents / wait and readiness policy
 ```
 
-Every runtime uses the coordinator and machine. Only Codex currently has a log
-provider; other runtimes use screen observations. This is a shared decision path,
-not yet a general plugin interface for arbitrary providers.
+Every runtime uses the coordinator and machine. Codex has a log provider; Claude
+has a process-scoped native snapshot provider; other runtimes use screen observations.
+This is a shared decision path, not a general plugin interface for arbitrary providers.
 
 | Responsibility | Current source |
 | --- | --- |
@@ -78,16 +80,27 @@ but live CLI reads retain current reasons and normal decision equality.
   or a stronger public confidence level. Those remain governed by
   [064](../064-agent-completion-signals/000-plan.md).
 
-## Extension contract (proposed)
+## Native snapshot decisions
+
+The native event reports current session, aggregate state, and runtime state revision.
+It does not synthesize log turn identities. Current native work remains Working
+through screen Idle/Unknown; native Waiting establishes Blocked. A fresh native
+revision fences its captured screen; first attachment preserves an existing blocker.
+A subsequently changed screen blocker can win.
+Native Idle supports heuristic wait/readiness even with an unmatched screen, while
+native outstanding work vetoes Idle admission. Suspension retains the completed-frame
+fence; revocation removes it. Native snapshots do not share the log recency window.
+
+## Extension contract
 
 Each adapter must define process/session attribution, baseline rules, supported
 schema, bounded acquisition, failure recovery, and exact work ownership. Reuse the
 poll clock and shared policy; extract common readers only where responsibilities
-actually match. Native snapshots need an explicit private fact, not a fabricated
-log turn end. Proposed native-state arbitration is in [claude.md](claude.md).
+actually match. Native snapshots use an explicit private fact, not a fabricated
+log turn end. The implemented native adapter is in [claude.md](claude.md).
 
-Coordinator generation replacement is currently special-cased for Codex. Adding a
-Claude provider must extend that binding lifecycle and preserve capture ordering.
+Coordinator generation replacement and config-root rebinding cover both providers
+and preserve capture ordering.
 A new adapter must also prove that same-session processes cannot borrow each
 other's work and that failures cannot become successful completion.
 

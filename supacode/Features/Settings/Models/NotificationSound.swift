@@ -84,9 +84,9 @@ nonisolated enum NotificationSound: String, CaseIterable, Identifiable, Codable,
   var displayName: String {
     switch self {
     case .never:
-      return "Never"
+      return String(localized: "Never")
     case .supacodeClassic:
-      return "Prowl Classic"
+      return String(localized: "Prowl Classic")
     default:
       if case .system(let name)? = source { return name }
       return rawValue.capitalized

@@ -40,26 +40,26 @@ nonisolated struct PullRequestMergeQueueStatus: Equatable, Hashable {
   var summary: String {
     switch state {
     case .awaitingChecks:
-      return "Awaiting checks in merge queue"
+      return String(localized: "Awaiting checks in merge queue")
     case .unmergeable:
-      return "Cannot merge from queue"
+      return String(localized: "Cannot merge from queue")
     case .locked:
-      return "Merge queue locked"
+      return String(localized: "Merge queue locked")
     case .queued, .mergeable, .unknown:
-      return "In merge queue"
+      return String(localized: "In merge queue")
     }
   }
 
   var positionLabel: String {
-    "Position \(position)"
+    String(localized: "Position \(position)")
   }
 
   var estimatedTimeLabel: String? {
     guard let estimatedTimeToMerge, estimatedTimeToMerge > 0 else { return nil }
-    guard estimatedTimeToMerge >= 60 else { return "<1 min left" }
+    guard estimatedTimeToMerge >= 60 else { return String(localized: "<1 min left") }
     let formatted = Duration.seconds(estimatedTimeToMerge)
       .formatted(.units(allowed: [.days, .hours, .minutes], width: .abbreviated, maximumUnitCount: 2))
-    return "~\(formatted) left"
+    return String(localized: "~\(formatted) left")
   }
 
   var detail: String? {

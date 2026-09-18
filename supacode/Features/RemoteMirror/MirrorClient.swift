@@ -19,6 +19,8 @@ final class MirrorClient: Identifiable {
   private(set) var verifiedHostID: UUID?
   private(set) var endReason: MirrorMessage.EndReason?
   private(set) var supportsTakeover = false
+  private(set) var supportsProfileLaunch = false
+  private(set) var supportsShellLaunch = false
   private(set) var supportsHistory = true
   private(set) var historyTruncated = false
   private(set) var isSubscribed = false
@@ -34,15 +36,18 @@ final class MirrorClient: Identifiable {
   @ObservationIgnored private var historyID: UUID?
   @ObservationIgnored private var historyPageGate = MirrorHistoryPageGate()
   @ObservationIgnored private var subscriptionID: UUID?
+  @ObservationIgnored private lazy var commands = MirrorCommandChannel { [weak self] in self?.peer?.send($0) }
   @ObservationIgnored private var resumeIntent: MirrorMessage.Intent = .ifFree
 
   var statusLabel: String {
-    if isConnecting { return "Connecting…" }
+    if isConnecting { return String(localized: "Connecting…") }
     switch endReason {
-    case .takenOver: return "Taken over"
-    case .hostStopped: return "Host stopped"
-    case .paneClosed: return "Pane closed"
-    case nil: return isSubscribed ? "Connected" : "Disconnected"
+    case .takenOver: return String(localized: "Taken over")
+    case .hostStopped: return String(localized: "Host stopped")
+    case .paneClosed: return String(localized: "Pane closed")
+    case nil:
+      if isSubscribed { return String(localized: "Connected") }
+      return String(localized: "Disconnected")
     }
   }
 
@@ -95,6 +100,7 @@ final class MirrorClient: Identifiable {
     }
     peer.onClose = { [weak self, weak peer] reason in
       guard let self, let peer, self.peer === peer else { return }
+      self.commands.disconnect()
       self.peer = nil
       self.isConnected = false
       self.isConnecting = false
@@ -102,9 +108,16 @@ final class MirrorClient: Identifiable {
       self.isSubscribed = false
       self.subscriptionID = nil
       self.failure = peer.failure
-      self.error = self.error ?? reason ?? "Connection lost. Remote status is unknown."
+      self.error = self.error ?? reason ?? String(localized: "Connection lost. Remote status is unknown.")
     }
     peer.start()
+  }
+
+  func command(_ command: MirrorCommandRequest.Command) async throws -> MirrorJSON {
+    guard isConnected, !isConnecting, selectedPane == nil, peer != nil else {
+      throw MirrorCommandChannel.Failure.unavailable
+    }
+    return try await commands.execute(command)
   }
 
   func refreshPanes() { peer?.send(.list) }
@@ -135,6 +148,7 @@ final class MirrorClient: Identifiable {
   }
 
   func close() {
+    commands.disconnect()
     peer?.onClose = nil
     peer?.close()
     peer = nil
@@ -168,11 +182,17 @@ final class MirrorClient: Identifiable {
   private func receive(_ message: MirrorMessage) {
     switch message.kind {
     case .panes: receivePanes(message)
+    case .commandResult:
+      guard let response = message.commandResponse else {
+        peer?.close("Invalid command response.")
+        return
+      }
+      commands.receive(response)
     case .subscribed:
       guard message.paneID == selectedPane?.id,
         let id = message.subscriptionID
       else {
-        peer?.close("Invalid subscription.")
+        peer?.close(String(localized: "Invalid subscription."))
         return
       }
       subscriptionID = id
@@ -186,7 +206,7 @@ final class MirrorClient: Identifiable {
       guard selectedPane != nil,
         subscriptionID != nil && message.subscriptionID == subscriptionID
       else {
-        peer?.close("Unexpected Host frame.")
+        peer?.close(String(localized: "Unexpected Host frame."))
         return
       }
       isSubscribed = true
@@ -199,7 +219,7 @@ final class MirrorClient: Identifiable {
         historyID == nil || historyID == id,
         historyPageGate.accept(message)
       else {
-        peer?.close("Invalid history page.")
+        peer?.close(String(localized: "Invalid history page."))
         return
       }
       historyTruncated = message.truncated ?? false
@@ -216,27 +236,32 @@ final class MirrorClient: Identifiable {
         return
       }
       if message.error?.hasPrefix("PANE_BUSY") == true { endReason = .takenOver }
-      peer?.close(message.error ?? "Host rejected the request.")
-    default: peer?.close("Unexpected Host message.")
+      peer?.close(message.error ?? String(localized: "Host rejected the request."))
+    default: peer?.close(String(localized: "Unexpected Host message."))
     }
   }
 
   private func receiveEnd(_ message: MirrorMessage) {
     guard let reason = message.reason else {
-      peer?.close("Invalid Host status.")
+      peer?.close(String(localized: "Invalid Host status."))
       return
     }
     endReason = reason
     switch reason {
-    case .takenOver: error = "Another device took over this pane. The last frame is retained."
-    case .hostStopped: error = "Host stopped sharing. The Host program may still be running."
-    case .paneClosed: error = "Host pane closed. Choose another pane from Add to Prowl."
+    case .takenOver:
+      error = String(localized: "Another device took over this pane. The last frame is retained.")
+    case .hostStopped:
+      error = String(localized: "Host stopped sharing. The Host program may still be running.")
+    case .paneClosed:
+      error = String(localized: "Host pane closed. Choose another pane from Add to Prowl.")
     }
     peer?.close()
   }
 
   private func receivePanes(_ message: MirrorMessage) {
     panes = message.panes ?? []
+    supportsProfileLaunch = message.capabilities?.contains("launch-profile") == true
+    supportsShellLaunch = message.capabilities?.contains("launch-shell") == true
     supportsHistory = message.capabilities?.contains("history") == true
     supportsTakeover = message.capabilities?.contains("takeover") == true
     isConnecting = false
@@ -244,7 +269,7 @@ final class MirrorClient: Identifiable {
     if selectedPane != nil, !isSubscribed {
       guard panes.contains(where: { $0.id == selectedPane?.id }) else {
         endReason = .paneClosed
-        error = "Host pane closed. Choose another pane from Add to Prowl."
+        error = String(localized: "Host pane closed. Choose another pane from Add to Prowl.")
         peer?.close()
         return
       }

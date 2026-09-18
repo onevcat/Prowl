@@ -58,6 +58,12 @@ struct CanvasHelpButton: View {
       AppShortcuts.display(for: AppShortcuts.CommandID.selectNextShelfBook, in: resolvedKeybindings),
     ].compactMap { $0 }
     let navKeys = (navUpDown + navLeftRight).joined(separator: " / ")
+    let expandDetail: LocalizedStringKey =
+      if let expandShortcut {
+        "\(expandShortcut), or the card's title-bar button"
+      } else {
+        "Use the card's title-bar button"
+      }
 
     return VStack(alignment: .leading, spacing: 14) {
       Text("Canvas Navigation")
@@ -77,8 +83,7 @@ struct CanvasHelpButton: View {
         canvasHelpRow(
           icon: "arrow.up.left.and.arrow.down.right",
           title: "Expand / restore card",
-          detail: expandShortcut.map { "\($0), or the card's title-bar button" }
-            ?? "Use the card's title-bar button"
+          detail: expandDetail
         )
         if !navKeys.isEmpty {
           canvasHelpRow(
@@ -93,7 +98,7 @@ struct CanvasHelpButton: View {
     .frame(width: 320, alignment: .leading)
   }
 
-  private func canvasHelpRow(icon: String, title: String, detail: String) -> some View {
+  private func canvasHelpRow(icon: String, title: LocalizedStringKey, detail: LocalizedStringKey) -> some View {
     HStack(alignment: .firstTextBaseline, spacing: 10) {
       Image(systemName: icon)
         .foregroundStyle(.secondary)

@@ -19,14 +19,14 @@ struct TerminalTabBarTrailingAccessories: View {
     HStack(spacing: TerminalTabBarMetrics.contentTrailingSpacing) {
       newTabButton
       splitButton(
-        title: "Split Vertically",
+        title: String(localized: "Split Vertically"),
         systemImage: "square.split.2x1",
         shortcutBinding: "new_split:right",
         action: splitVertically
       )
       .disabled(!canSplit)
       splitButton(
-        title: "Split Horizontally",
+        title: String(localized: "Split Horizontally"),
         systemImage: "square.split.1x2",
         shortcutBinding: "new_split:down",
         action: splitHorizontally
@@ -46,7 +46,7 @@ struct TerminalTabBarTrailingAccessories: View {
         .labelStyle(.iconOnly)
     }
     .buttonStyle(.borderless)
-    .help(helpText("New Tab", shortcut: ghosttyShortcuts.display(for: "new_tab")))
+    .help(helpText(String(localized: "New Tab"), shortcut: ghosttyShortcuts.display(for: "new_tab")))
     .onHover { hovering in
       isHoveringButton = hovering
       updateHoverPopoverVisibility()
@@ -102,7 +102,7 @@ struct TerminalTabBarTrailingAccessories: View {
         .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
-      .help(helpText("New Tab", shortcut: ghosttyShortcuts.display(for: "new_tab")))
+      .help(helpText(String(localized: "New Tab"), shortcut: ghosttyShortcuts.display(for: "new_tab")))
 
       Divider()
 
@@ -122,7 +122,7 @@ struct TerminalTabBarTrailingAccessories: View {
         .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
-      .help(helpText("Split Vertically", shortcut: ghosttyShortcuts.display(for: "new_split:right")))
+      .help(helpText(String(localized: "Split Vertically"), shortcut: ghosttyShortcuts.display(for: "new_split:right")))
       .disabled(!canSplit)
 
       Button {
@@ -141,7 +141,9 @@ struct TerminalTabBarTrailingAccessories: View {
         .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
-      .help(helpText("Split Horizontally", shortcut: ghosttyShortcuts.display(for: "new_split:down")))
+      .help(
+        helpText(String(localized: "Split Horizontally"), shortcut: ghosttyShortcuts.display(for: "new_split:down"))
+      )
       .disabled(!canSplit)
     }
     .padding(10)

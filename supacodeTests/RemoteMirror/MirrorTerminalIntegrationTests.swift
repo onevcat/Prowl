@@ -4,6 +4,7 @@ import Darwin
 import GhosttyKit
 import Network
 import Observation
+import ProwlCLIShared
 import SwiftUI
 import Synchronization
 import Testing
@@ -220,6 +221,18 @@ struct MirrorTerminalIntegrationTests {
     #expect(try fixture.source.activeText(fixture.hostView.id).contains("HISTORY:450"))
   }
 
+  @Test(.timeLimit(.minutes(1))) func paneLabelsDoNotChangeWhenAnotherTabOpens() throws {
+    let fixture = try Fixture()
+    defer { fixture.close() }
+    let before = try #require(fixture.source.panes().first)
+    let state = try #require(fixture.manager.activeWorktreeStates.first)
+    _ = state.tabManager.createTab(title: "Another terminal", icon: nil)
+    let after = try #require(fixture.source.panes().first)
+    #expect(after.title == before.title)
+    #expect(after.subtitle == before.subtitle)
+    #expect(after.subtitle == "Mirror integration · Mirror integration")
+  }
+
   @Test(.timeLimit(.minutes(2))) func realTerminalRoundTripAndLifecycle() async throws {
     let fixture = try Fixture()
     defer { fixture.close() }
@@ -406,10 +419,69 @@ struct MirrorTerminalIntegrationTests {
     #expect(fixture.host.subscriberCount == 1)
   }
 
+  @Test(.timeLimit(.minutes(1))) func remoteShellCreationInDormantWorktreePreservesHostSelection()
+    async throws
+  {
+    let fixture = try Fixture()
+    defer { fixture.close() }
+    let dormant = fixture.directory.appending(path: "dormant")
+    try FileManager.default.createDirectory(at: dormant, withIntermediateDirectories: true)
+    let dormantID = dormant.standardizedFileURL.path(percentEncoded: false)
+    var initial = AppFeature.State()
+    initial.repositories.repositories = IdentifiedArray(uniqueElements: [
+      Repository(id: dormantID, rootURL: dormant, name: "Dormant", kind: .plain, worktrees: [])
+    ])
+    initial.repositories.repositoryRoots = [dormant]
+    #expect(
+      ListRuntimeSnapshotBuilder.orderedWorktreeContexts(from: initial.repositories).map(\.id) == [
+        dormantID
+      ])
+    let store = Store(initialState: initial) { AppFeature() }
+    fixture.manager.selectedWorktreeID = fixture.directory.path
+    let hostState = try #require(fixture.manager.stateIfExists(for: fixture.directory.path))
+    let selectedTab = hostState.tabManager.selectedTabId
+    fixture.host.commandService = MirrorCommandService(
+      router: SupacodeApp.makeCLICommandRouter(appStore: store, terminalManager: fixture.manager),
+      worktrees: {
+        [
+          ListCommandWorktree(
+            id: dormantID, name: "Dormant", path: dormantID, rootPath: dormantID,
+            kind: .plain)
+        ]
+      })
+    try await fixture.startHost()
+    let client = fixture.makeClient()
+    client.connect()
+    try await fixture.wait("command discovery") { client.isConnected && !client.isConnecting }
+    #expect(client.supportsShellLaunch)
+    let model = MirrorLaunchModel(
+      supportsShell: true, supportsProfiles: false, execute: client.command)
+    await model.load()
+    #expect(model.worktrees.map(\.id) == [dormantID])
+    let createdPane = await model.create()
+    let pane = try #require(createdPane, "\(model.error ?? "Missing pane")")
+    #expect(fixture.manager.selectedWorktreeID == fixture.directory.path)
+    #expect(hostState.tabManager.selectedTabId == selectedTab)
+    let createdState = try #require(fixture.manager.stateIfExists(for: dormantID))
+    #expect(createdState.tabManager.tabs.count == 1)
+    #expect(createdState.surfaces[pane.id] != nil)
+    #expect(fixture.source.panes().contains { $0.id == pane.id })
+    client.subscribe(pane)
+    try await fixture.wait("created Shell subscription") {
+      client.isSubscribed || client.error != nil
+    }
+    #expect(client.isSubscribed)
+    #expect(client.error == nil)
+  }
+
   private struct Failure: Error { let reason: String }
 
   @MainActor
   private final class Fixture {
+    // Match the app lifetime: queued Ghostty wakeups carry unretained runtime pointers.
+    // Surfaces and connections remain scoped to each fixture.
+    private static let testRuntime = GhosttyRuntime()
+
     let directory: URL
     let runtime: GhosttyRuntime
     let manager: WorktreeTerminalManager
@@ -445,7 +517,8 @@ struct MirrorTerminalIntegrationTests {
         command = "/bin/bash '\(script.path.replacing("'", with: "'\\''"))'"
       }
       previousRuntime = GhosttyRuntime.shared
-      runtime = GhosttyRuntime()
+      runtime = Self.testRuntime
+      GhosttyRuntime.shared = runtime
       manager = WorktreeTerminalManager(runtime: runtime)
       let state = manager.state(
         for: Worktree(
@@ -493,20 +566,7 @@ struct MirrorTerminalIntegrationTests {
     }
 
     func startHost() async throws {
-      for attempt in 1...3 {
-        host.start()
-        try await wait("Host listener") { host.isRunning || host.error != nil }
-        if host.isRunning { return }
-        let occupied = MirrorConnectionFailure.addressInUse.listenerMessage(address: host.address, port: host.port)
-        guard attempt < 3, host.error == occupied else {
-          throw Failure(
-            reason:
-              "Host startup failed at \(host.address):\(host.port): \(host.error ?? "unknown")")
-        }
-        // Port probing releases its socket before Network.framework binds. Retry
-        // only that initial allocation race; reconnects must retain their port.
-        host.port = String(try MirrorTestPort.unusedPort())
-      }
+      try await MirrorTestPort.startHost(host)
     }
 
     func attach(_ view: GhosttySurfaceView) {

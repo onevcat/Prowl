@@ -25,8 +25,10 @@ struct AgentSkillsSectionView: View {
       VStack(alignment: .leading, spacing: 4) {
         Text("Agent Skills")
         Text(
-          "Link the skills bundled in this app into your agents' skill folders, so every agent "
-            + "reads the version that matches the installed app. Same status as prowl skills list."
+          """
+          Link the skills bundled in this app into your agents' skill folders, so every agent \
+          reads the version that matches the installed app. Same status as prowl skills list.
+          """
         )
         .foregroundStyle(.secondary)
       }
@@ -54,9 +56,11 @@ struct AgentSkillsSectionView: View {
     } else {
       if store.noTargetsDetected {
         Text(
-          "No agent skill folder was found in your home directory. Run Claude Code, Codex, or another "
-            + "agent once so it creates its folder, or create one from a terminal with "
-            + "prowl skills install --target claude|codex|agents."
+          """
+          No agent skill folder was found in your home directory. Run Claude Code, Codex, or another \
+          agent once so it creates its folder, or create one from a terminal with \
+          prowl skills install --target claude|codex|agents.
+          """
         )
         .foregroundStyle(.secondary)
         .font(.callout)
@@ -198,11 +202,15 @@ struct AgentSkillsSectionView: View {
 
   private func statusText(_ status: SymlinkInstallStatus) -> String {
     switch status {
-    case .installed: "Installed"
-    case .notInstalled: "Not installed"
+    case .installed: String(localized: "Installed")
+    case .notInstalled: String(localized: "Not installed")
     case .installedDifferentSource(_, let destination):
-      destination == nil ? "Real file or directory" : "Linked elsewhere"
-    case .broken: "Broken link"
+      if destination == nil {
+        String(localized: "Real file or directory")
+      } else {
+        String(localized: "Linked elsewhere")
+      }
+    case .broken: String(localized: "Broken link")
     }
   }
 
@@ -214,7 +222,7 @@ struct AgentSkillsSectionView: View {
       nil
     case .installedDifferentSource(_, let destination):
       destination.map { ("→ \(abbreviated($0))", true) }
-        ?? ("Not a symlink — Prowl never deletes it. Remove it manually to link here.", false)
+        ?? (String(localized: "Not a symlink — Prowl never deletes it. Remove it manually to link here."), false)
     case .broken(_, let destination):
       ("→ \(abbreviated(destination))", true)
     }

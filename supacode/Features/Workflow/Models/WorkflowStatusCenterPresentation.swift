@@ -88,7 +88,7 @@ nonisolated struct WorkflowRunPresentation: Equatable, Sendable, Identifiable {
       case .interrupted: .finished(.interrupted)
       }
     let context = Self.templateContext(for: run, iteration: run.currentIteration)
-    currentStepTitle = Self.title(for: run.currentStep, context: context) ?? "Finishing workflow"
+    currentStepTitle = Self.title(for: run.currentStep, context: context) ?? String(localized: "Finishing workflow")
     currentPrompt = Self.prompt(for: run.currentStep, context: context)
     roles = run.definition.roles.map { role in
       WorkflowRolePresentation(role: role, binding: run.bindings[role.name])
@@ -128,11 +128,11 @@ nonisolated struct WorkflowRunPresentation: Equatable, Sendable, Identifiable {
       return currentStepTitle
     case .finished(let outcome):
       switch outcome {
-      case .completed: return "\(workflowName) completed"
-      case .cancelled: return "\(workflowName) cancelled"
-      case .skipped: return "\(workflowName) ended after a skipped step"
-      case .iterationLimitReached: return "\(workflowName) reached its iteration limit"
-      case .interrupted: return "\(workflowName) was interrupted"
+      case .completed: return String(localized: "\(workflowName) completed")
+      case .cancelled: return String(localized: "\(workflowName) cancelled")
+      case .skipped: return String(localized: "\(workflowName) ended after a skipped step")
+      case .iterationLimitReached: return String(localized: "\(workflowName) reached its iteration limit")
+      case .interrupted: return String(localized: "\(workflowName) was interrupted")
       }
     }
   }
@@ -187,11 +187,11 @@ nonisolated struct WorkflowRunPresentation: Equatable, Sendable, Identifiable {
     case .launch(_, let prompt, _, _):
       source = prompt
     case .action(let id, _):
-      source = "Run action \(id)."
+      source = String(localized: "Run action \(id).")
     case .notify(let text):
       source = text
     case .close(let role):
-      source = "Close the pane bound to \(role)."
+      source = String(localized: "Close the pane bound to \(role).")
     case .control:
       source = nil
     }
@@ -376,48 +376,50 @@ nonisolated struct WorkflowAttentionControl: Equatable, Sendable, Identifiable {
     isDestructive = action == .cancel
     switch action {
     case .focusPane:
-      label = "Focus Pane"
+      label = String(localized: "Focus Pane")
       systemImage = "scope"
       confirmationMessage = nil
     case .nudge:
-      label = "Nudge Again"
+      label = String(localized: "Nudge Again")
       systemImage = "bell.badge"
       confirmationMessage = nil
     case .keepWaiting:
-      label = "Keep Waiting"
+      label = String(localized: "Keep Waiting")
       systemImage = "clock"
       confirmationMessage = nil
     case .retry:
-      label = "Retry"
+      label = String(localized: "Retry")
       systemImage = "arrow.clockwise"
       confirmationMessage = nil
     case .relaunch:
-      label = "Relaunch Role"
+      label = String(localized: "Relaunch Role")
       systemImage = "arrow.trianglehead.2.clockwise.rotate.90"
       confirmationMessage = nil
     case .acceptDelivery:
-      label = "Accept as Delivered"
+      label = String(localized: "Accept as Delivered")
       systemImage = "checkmark"
       confirmationMessage = nil
     case .acceptWithVerdict:
-      label = "Accept with Verdict"
+      label = String(localized: "Accept with Verdict")
       systemImage = "checkmark.circle"
       confirmationMessage = nil
     case .askAgain:
-      label = "Ask Again"
+      label = String(localized: "Ask Again")
       systemImage = "arrowshape.turn.up.left"
       confirmationMessage = nil
     case .skip:
-      label = "Skip Step"
+      label = String(localized: "Skip Step")
       systemImage = "forward.end"
       confirmationMessage = Self.skipConfirmation(
         stepID: attention.stepID,
         consequence: skipConsequence
       )
     case .cancel:
-      label = "Cancel Run"
+      label = String(localized: "Cancel Run")
       systemImage = "xmark"
-      confirmationMessage = "Cancel this workflow run? Its panes and deliveries will be kept."
+      confirmationMessage = String(
+        localized: "Cancel this workflow run? Its panes and deliveries will be kept."
+      )
     }
   }
 
@@ -458,16 +460,22 @@ nonisolated struct WorkflowAttentionControl: Equatable, Sendable, Identifiable {
   ) -> String {
     switch consequence {
     case .noDelivery:
-      "Skip step '\(stepID)'? The workflow continues without an output from this step."
+      String(localized: "Skip step '\(stepID)'? The workflow continues without an output from this step.")
     case .continues(let optionalInputs):
       if optionalInputs.isEmpty {
-        "Skip step '\(stepID)'? The workflow continues without this delivery."
+        String(localized: "Skip step '\(stepID)'? The workflow continues without this delivery.")
       } else {
-        "Skip step '\(stepID)'? The workflow continues without the optional input used by "
-          + optionalInputs.joined(separator: ", ") + "."
+        String(
+          localized: """
+            Skip step '\(stepID)'? The workflow continues without the optional input used by \
+            \(optionalInputs.joined(separator: ", ")).
+            """
+        )
       }
     case .endsRun(let dependent):
-      "Skip step '\(stepID)'? This ends the run because step '\(dependent)' depends on its output."
+      String(
+        localized: "Skip step '\(stepID)'? This ends the run because step '\(dependent)' depends on its output."
+      )
     }
   }
 }

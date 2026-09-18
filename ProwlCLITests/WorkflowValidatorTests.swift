@@ -165,6 +165,34 @@ final class WorkflowValidatorTests: XCTestCase {
 
   // MARK: - Actions
 
+  func testConditionActionAcceptsBooleanLiteralsAndExpressions() {
+    for condition in ["true", "false", "'{{ 1 < 2 }}'"] {
+      XCTAssertEqual(
+        WorkflowFixtures.codes(
+          minimal(
+            steps:
+              "  - id: gate\n    action: builtin:assert-condition\n    with: { condition: \(condition), message: Stop }"
+          )),
+        [])
+    }
+    XCTAssertEqual(
+      WorkflowFixtures.codes(
+        minimal(
+          steps:
+            "  - id: gate\n    action: builtin:assert-condition\n    with: { condition: 1, message: Stop }"
+        )),
+      ["action_input_type"])
+  }
+
+  func testConditionActionRejectsTextThatCannotProduceABoolean() {
+    for condition in ["'true'", "'prefix {{ true }}'", "'{{ true }} suffix'", "'{{ true }}{{ false }}'"] {
+      XCTAssertEqual(
+        WorkflowFixtures.codes(
+          minimal(steps: "  - id: gate\n    action: builtin:assert-condition\n    with: { condition: \(condition), message: Stop }")),
+        ["action_input_type"])
+    }
+  }
+
   func testActionInputsFollowTheRegistry() {
     XCTAssertEqual(WorkflowFixtures.codes(minimal(steps: "  - id: b\n    action: fs.delete")), ["unknown_action"])
     XCTAssertEqual(

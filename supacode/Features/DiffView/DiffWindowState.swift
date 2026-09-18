@@ -187,7 +187,7 @@ final class DiffWindowState {
   private func resolveAndLoadOutgoing(worktreeURL: URL) async {
     guard let outgoingResolver else {
       isLoadingFiles = false
-      loadError = "Outgoing changes are unavailable for this window."
+      loadError = String(localized: "Outgoing changes are unavailable for this window.")
       return
     }
     do {
