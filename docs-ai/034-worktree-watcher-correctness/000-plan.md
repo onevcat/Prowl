@@ -109,3 +109,5 @@ migrating symlinked repository roots to the Git-reported canonical root (#555).
   2026-07-12) — see [002-symlinked-roots.md](002-symlinked-roots.md)
 - Updated 2026-06-30: duplicate worktree watcher crash (#528) — see
   [003-duplicate-watcher-crash.md](003-duplicate-watcher-crash.md)
+- Updated 2026-09-18: per-entry registry monitoring and vnode identity checks after
+  file replacement — see [004-registry-vnode-lifecycle.md](004-registry-vnode-lifecycle.md)
