@@ -106,7 +106,7 @@ final class SendCommandHandler: CommandHandler {
     case .success(let resolved):
       target = resolved
     case .failure(let error):
-      return mapResolverError(error)
+      return error.commandResponse(command: "send")
     }
 
     let waitStream = input.wait ? waiterProvider(target.worktreeID, target.paneID) : nil
@@ -310,15 +310,6 @@ final class SendCommandHandler: CommandHandler {
         focused: target.paneFocused
       )
     )
-  }
-
-  private func mapResolverError(_ error: TargetResolverError) -> CommandResponse {
-    switch error {
-    case .notFound(let message):
-      return errorResponse(code: CLIErrorCode.targetNotFound, message: message)
-    case .notUnique(let message):
-      return errorResponse(code: CLIErrorCode.targetNotUnique, message: message)
-    }
   }
 
   private func errorResponse(code: String, message: String) -> CommandResponse {
