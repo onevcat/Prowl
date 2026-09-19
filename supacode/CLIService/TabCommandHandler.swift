@@ -98,7 +98,7 @@ final class TabCommandHandler: CommandHandler {
     case .success(let resolved):
       target = resolved
     case .failure(let error):
-      return mapResolverError(error)
+      return error.commandResponse(command: "tab")
     }
 
     switch input.action {
@@ -163,15 +163,6 @@ final class TabCommandHandler: CommandHandler {
 
   private func makePayloadTarget(from target: TabResolvedTarget) -> TabTarget {
     TabTarget(from: target)
-  }
-
-  private func mapResolverError(_ error: TargetResolverError) -> CommandResponse {
-    switch error {
-    case .notFound(let message):
-      return errorResponse(code: CLIErrorCode.targetNotFound, message: message)
-    case .notUnique(let message):
-      return errorResponse(code: CLIErrorCode.targetNotUnique, message: message)
-    }
   }
 
   private func errorResponse(code: String, message: String) -> CommandResponse {
