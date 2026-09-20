@@ -183,9 +183,11 @@ extension NSPasteboard {
   static let ghosttyEscapeCharacters = "\\ ()[]{}<>\"'`!#$&;|*?\t"
 
   static func ghosttyEscape(_ str: String) -> String {
-    var result = str
-    for char in ghosttyEscapeCharacters {
-      result = result.replacing(String(char), with: "\\\(char)")
+    var result = ""
+    result.reserveCapacity(str.utf8.count)
+    for char in str {
+      if ghosttyEscapeCharacters.contains(char) { result.append("\\") }
+      result.append(char)
     }
     return result
   }
