@@ -25,6 +25,7 @@ struct ShelfSidebarButton: View {
       .padding(.vertical, 6)
       .contentShape(.rect)
     }
+    .disabled(!store.isShelfActive && !store.canEnterShelf)
     .buttonStyle(.plain)
     .background(isSelected ? Color.accentColor.opacity(0.15) : .clear, in: .rect(cornerRadius: 6))
     .help(

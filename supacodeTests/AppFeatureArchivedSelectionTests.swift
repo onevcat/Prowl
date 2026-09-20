@@ -116,4 +116,22 @@ struct AppFeatureArchivedSelectionTests {
       ]
     )
   }
+  @Test(.dependencies) func failedRepositoryLoadDoesNotCloseItsTerminals() async {
+    var state = AppFeature.State()
+    state.repositories.repositoryRoots = [URL(fileURLWithPath: "/tmp/unavailable")]
+    state.repositories.loadFailuresByID = ["/tmp/unavailable": "Git is unavailable"]
+    let commands = LockIsolated<[TerminalClient.Command]>([])
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in commands.withValue { $0.append(command) } }
+      $0.worktreeInfoWatcher.send = { _ in }
+    }
+    store.exhaustivity = .off
+    await store.send(.repositories(.delegate(.repositoriesChanged([]))))
+    await store.finish()
+    #expect(commands.value.contains(.prunePreservingRepositories(keeping: [], repositoryIDs: ["/tmp/unavailable"])))
+    #expect(!commands.value.contains(.prune([])))
+  }
+
 }

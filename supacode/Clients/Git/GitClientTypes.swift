@@ -54,12 +54,22 @@ nonisolated struct UntrackedLineCountResult: Equatable, Sendable {
 }
 
 enum GitClientError: LocalizedError {
+  case unavailable(details: String)
+  case notRepository
+
   case commandFailed(command: String, message: String)
   case worktreeNotRegistered(path: String)
   case worktreeRecoveryFailed(path: String, removalError: String, recoveryError: String)
 
   var errorDescription: String? {
     switch self {
+    case .unavailable(let details):
+      return String(
+        localized:
+          "Git is unavailable. Check your Git installation. If you use Apple Git, check Command Line Tools. Then retry."
+      ) + "\n\n" + details
+    case .notRepository:
+      return String(localized: "This folder is not a Git repository.")
     case .commandFailed(let command, let message):
       if message.isEmpty {
         return String(localized: "Git command failed: \(command)")

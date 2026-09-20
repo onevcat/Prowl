@@ -590,8 +590,10 @@ nonisolated enum WorkflowRunAdmissionPlaceholder {
 /// `git symbolic-ref --short HEAD` of a worktree, synchronously and cheaply; nil outside Git.
 nonisolated enum WorktreeBranchReader {
   static func branchName(of worktree: URL) -> String? {
+    guard let git = GitExecutableResolver.shared.cachedExecutable else { return nil }
     let process = Process()
-    process.executableURL = URL(filePath: "/usr/bin/git")
+    process.executableURL = git.url
+    process.environment = ProcessInfo.processInfo.environment.merging(git.environment) { _, selected in selected }
     process.arguments = [
       "-C", worktree.path(percentEncoded: false), "symbolic-ref", "--short", "-q", "HEAD",
     ]

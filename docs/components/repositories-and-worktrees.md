@@ -27,9 +27,23 @@ an unread-notification bell, and run/agent status.
 
 A plain folder can't expand; clicking it just opens a terminal there. Prowl
 auto-detects which kind a path is when you add it (it runs `git` to find the repo
-root; "not a git repository" → plain folder). If you later run `git init` in an
+root; a confirmed non-repository result becomes a plain folder). If you later run `git init` in an
 open plain folder, Prowl automatically upgrades it to a git repository and
 refreshes the sidebar.
+
+## Git availability and load errors
+
+Prowl uses a working Git from the app PATH, your login shell PATH, or common
+installation locations. Apple Git requires working Command Line Tools; a full
+Xcode installation is not required. Independent Git installations can also be used.
+
+A Git or repository access failure does not change a saved Git project into a
+plain folder. The sidebar shows **Git is unavailable** or **Unable to read
+repository**. Click the warning icon for guidance and **Copy Details**. After
+fixing Git, permissions, or repository configuration, click **Retry** or use
+**Refresh Worktrees** (`⌘⇧R`). Failed loads use the error row rather than retaining
+an old worktree list. Existing terminal sessions for failed projects stay running.
+Background refreshes do not repeatedly open error dialogs.
 
 ## Adding a repository
 

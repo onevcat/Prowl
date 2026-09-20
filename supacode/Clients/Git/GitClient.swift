@@ -9,12 +9,27 @@ struct GitClient {
 
   private let shell: ShellClient
 
-  nonisolated init(shell: ShellClient = .live) {
+  private let resolveGit: @Sendable (Bool) async throws -> GitExecutable
+
+  nonisolated init(
+    shell: ShellClient = .live,
+    resolveGit: @escaping @Sendable (Bool) async throws -> GitExecutable = {
+      try await GitExecutableResolver.shared.resolve(revalidate: $0)
+    }
+  ) {
     self.shell = shell
+    self.resolveGit = resolveGit
   }
 
   nonisolated func repoRoot(for path: URL) async throws -> URL {
     let normalizedPath = Self.directoryURL(for: path)
+    let git = try await resolveGit(true)
+    do {
+      _ = try await git.run(["rev-parse", "--git-dir"], in: normalizedPath, shell: shell)
+    } catch {
+      if isConfirmedNonRepository(error, at: normalizedPath) { throw GitClientError.notRepository }
+      throw wrapShellError(error, operation: .repoRoot, command: "git rev-parse --git-dir")
+    }
     let wtURL = try wtScriptURL()
     let output = try await runBundledWtProcess(
       operation: .repoRoot,
@@ -291,7 +306,8 @@ struct GitClient {
             directoryOverride: request.directoryOverride
           )
           let envURL = URL(fileURLWithPath: "/usr/bin/env")
-          let localeArguments = ["LANG=C", "LC_ALL=C", "LC_MESSAGES=C"]
+          let git = try await resolveGit(false)
+          let localeArguments = git.environmentArguments + ["LC_MESSAGES=C"]
           let invocationArguments = localeArguments + [wtURL.path(percentEncoded: false)] + arguments
           let command = ([envURL.path(percentEncoded: false)] + invocationArguments).joined(separator: " ")
           var pathLine: String?
@@ -1291,10 +1307,10 @@ struct GitClient {
     operation: GitOperation,
     arguments: [String]
   ) async throws -> String {
-    let env = URL(fileURLWithPath: "/usr/bin/env")
-    let command = ([env.path(percentEncoded: false)] + ["git"] + arguments).joined(separator: " ")
+    let git = try await resolveGit(false)
+    let command = ([git.url.path(percentEncoded: false)] + arguments).joined(separator: " ")
     do {
-      return try await shell.run(env, ["git"] + arguments, nil).stdout
+      return try await git.run(arguments, shell: shell).stdout
     } catch {
       throw wrapShellError(error, operation: operation, command: command)
     }
@@ -1324,31 +1340,14 @@ struct GitClient {
     arguments: [String],
     currentDirectoryURL: URL?
   ) async throws -> String {
+    let git = try await resolveGit(false)
     let command = ([executableURL.path(percentEncoded: false)] + arguments).joined(separator: " ")
     do {
-      return try await shell.run(executableURL, arguments, currentDirectoryURL).stdout
-    } catch {
-      guard shouldFallbackToLoginShell(error) else {
-        throw wrapShellError(error, operation: operation, command: command)
-      }
-      gitLogger.info("Falling back to login shell for \(operation.rawValue)")
-      do {
-        return try await shell.runLogin(executableURL, arguments, currentDirectoryURL).stdout
-      } catch {
-        throw wrapShellError(error, operation: operation, command: command)
-      }
-    }
-  }
-
-  nonisolated private func runLoginShellProcess(
-    operation: GitOperation,
-    executableURL: URL,
-    arguments: [String],
-    currentDirectoryURL: URL?
-  ) async throws -> String {
-    let command = ([executableURL.path(percentEncoded: false)] + arguments).joined(separator: " ")
-    do {
-      return try await shell.runLogin(executableURL, arguments, currentDirectoryURL).stdout
+      return try await shell.run(
+        URL(fileURLWithPath: "/usr/bin/env"),
+        git.environmentArguments + [executableURL.path(percentEncoded: false)] + arguments,
+        currentDirectoryURL
+      ).stdout
     } catch {
       throw wrapShellError(error, operation: operation, command: command)
     }

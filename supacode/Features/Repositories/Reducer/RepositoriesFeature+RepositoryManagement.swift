@@ -103,6 +103,7 @@ extension RepositoriesFeature {
         failures.map { ($0.rootID, $0.message) },
         uniquingKeysWith: { first, _ in first }
       )
+      state.gitUnavailableRepositoryIDs = Set(failures.filter(\.isGitUnavailable).map(\.rootID))
       let invalidRootMessages = invalidRoots.map { String(localized: "\($0) is not a Git repository.") }
       let openFailureMessages = invalidRootMessages + openFailures
       if !openFailureMessages.isEmpty {
@@ -325,6 +326,7 @@ extension RepositoriesFeature {
     case .removeFailedRepository(let repositoryID):
       state.alert = nil
       state.loadFailuresByID.removeValue(forKey: repositoryID)
+      state.gitUnavailableRepositoryIDs.remove(repositoryID)
       state.repositoryRoots.removeAll {
         isSameRepositoryPath($0.standardizedFileURL.path(percentEncoded: false), repositoryID)
       }

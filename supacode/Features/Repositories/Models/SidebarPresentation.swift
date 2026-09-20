@@ -100,6 +100,7 @@ struct FailedRepositoryModel: Equatable, Identifiable {
   var name: String
   var path: String
   var failureMessage: String
+  var isGitUnavailable: Bool = false
   var isReorderable: Bool
 }
 
@@ -158,6 +159,7 @@ extension RepositoriesFeature.State {
               name: Repository.name(for: standardizedRootURL),
               path: path,
               failureMessage: failureMessage,
+              isGitUnavailable: gitUnavailableRepositoryIDs.contains(repositoryID),
               isReorderable: true
             )
           )

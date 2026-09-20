@@ -59,7 +59,7 @@ struct GitClientBranchRefsTests {
       },
       runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
     )
-    let client = GitClient(shell: shell)
+    let client = GitClient(shell: shell, resolveGit: { _ in .testExecutable })
     let repoRoot = URL(fileURLWithPath: "/tmp/repo")
 
     let refs = try await client.branchRefs(for: repoRoot)
@@ -73,7 +73,8 @@ struct GitClientBranchRefsTests {
     let calls = await store.calls
     #expect(calls.count == 4)
     let args = calls[0]
-    #expect(args.first == "git")
+    #expect(args.contains("/usr/bin/git"))
+    #expect(args.contains("PATH=/usr/bin:/bin"))
     #expect(args.contains("for-each-ref"))
     #expect(args.contains("refs/heads"))
     #expect(args.contains("--format=%(refname)"))
@@ -94,7 +95,7 @@ struct GitClientBranchRefsTests {
       },
       runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
     )
-    let client = GitClient(shell: shell)
+    let client = GitClient(shell: shell, resolveGit: { _ in .testExecutable })
     let repoRoot = URL(fileURLWithPath: "/tmp/repo")
 
     let refs = try await client.branchRefs(for: repoRoot)
@@ -125,7 +126,7 @@ struct GitClientBranchRefsTests {
       },
       runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
     )
-    let client = GitClient(shell: shell)
+    let client = GitClient(shell: shell, resolveGit: { _ in .testExecutable })
     let repoRoot = URL(fileURLWithPath: "/tmp/repo")
 
     let options = try await client.branchRefOptions(for: repoRoot)
@@ -150,8 +151,8 @@ struct GitClientBranchRefsTests {
     let shell = ShellClient(
       run: { _, arguments, _ in
         #expect(
-          arguments == [
-            "git",
+          arguments == GitExecutable.testExecutable.environmentArguments + [
+            "/usr/bin/git",
             "ls-remote",
             "--symref",
             "--end-of-options",
@@ -163,7 +164,7 @@ struct GitClientBranchRefsTests {
       },
       runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
     )
-    let client = GitClient(shell: shell)
+    let client = GitClient(shell: shell, resolveGit: { _ in .testExecutable })
 
     let refs = try await client.remoteBranchRefs(for: "git@github.com:onevcat/app.git")
 
@@ -182,7 +183,7 @@ struct GitClientBranchRefsTests {
       },
       runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
     )
-    let client = GitClient(shell: shell)
+    let client = GitClient(shell: shell, resolveGit: { _ in .testExecutable })
 
     let ref = try await client.defaultRemoteBranchRef(for: URL(fileURLWithPath: "/tmp/repo"))
 
@@ -196,7 +197,7 @@ struct GitClientBranchRefsTests {
       },
       runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
     )
-    let client = GitClient(shell: shell)
+    let client = GitClient(shell: shell, resolveGit: { _ in .testExecutable })
 
     let ref = try await client.defaultRemoteBranchRef(for: URL(fileURLWithPath: "/tmp/repo"))
 
@@ -216,7 +217,7 @@ struct GitClientBranchRefsTests {
       },
       runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
     )
-    let client = GitClient(shell: shell)
+    let client = GitClient(shell: shell, resolveGit: { _ in .testExecutable })
 
     let ref = try await client.defaultRemoteBranchRef(for: URL(fileURLWithPath: "/tmp/repo"))
 
@@ -236,7 +237,7 @@ struct GitClientBranchRefsTests {
       },
       runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
     )
-    let client = GitClient(shell: shell)
+    let client = GitClient(shell: shell, resolveGit: { _ in .testExecutable })
 
     let ref = await client.automaticWorktreeBaseRef(for: URL(fileURLWithPath: "/tmp/repo"))
 
@@ -253,7 +254,7 @@ struct GitClientBranchRefsTests {
       },
       runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
     )
-    let client = GitClient(shell: shell)
+    let client = GitClient(shell: shell, resolveGit: { _ in .testExecutable })
 
     let ref = await client.automaticWorktreeBaseRef(for: URL(fileURLWithPath: "/tmp/repo"))
 

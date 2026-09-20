@@ -268,11 +268,16 @@ struct SidebarListView: View {
     let isSelected = store.topSegment == segment
     // Canvas and Shelf need at least one repository; with none, only Normal
     // (Default) is available, so disable them.
-    let isDisabled = requiresRepository && store.repositories.isEmpty
+    let isDisabled =
+      segment == .shelf
+      ? !store.canEnterShelf
+      : requiresRepository && store.repositories.isEmpty
     let localizedTitle = String(localized: title)
     let helpText =
       isDisabled
-      ? String(localized: "\(localizedTitle) — add a repository first")
+      ? (segment == .shelf
+        ? String(localized: "Shelf — open a worktree or folder first")
+        : String(localized: "\(localizedTitle) — add a repository first"))
       : shortcutCommandID.map {
         AppShortcuts.helpText(title: title, commandID: $0, in: resolvedKeybindings)
       } ?? localizedTitle
@@ -377,10 +382,9 @@ struct SidebarListView: View {
         FailedRepositoryRow(
           name: model.name,
           path: model.path,
-          showFailure: {
-            let message = "\(model.path)\n\n\(model.failureMessage)"
-            store.send(.presentAlert(title: String(localized: "Unable to load \(model.name)"), message: message))
-          },
+          isGitUnavailable: model.isGitUnavailable,
+          retry: { store.send(.refreshWorktrees) },
+          showFailure: { store.send(.showRepositoryLoadFailure(model.id)) },
           removeRepository: {
             store.send(.repositoryManagement(.removeFailedRepository(model.id)))
           }

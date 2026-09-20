@@ -62,6 +62,7 @@ struct TerminalClient {
     case endSearch(Worktree)
     case focusSelectedTab(Worktree)
     case prune(Set<Worktree.ID>)
+    case prunePreservingRepositories(keeping: Set<Worktree.ID>, repositoryIDs: Set<Repository.ID>)
     case setNotificationsEnabled(Bool)
     case setCommandFinishedNotification(enabled: Bool, threshold: Int)
     case setCanvasMode(Bool)

@@ -4,65 +4,43 @@ import Testing
 @testable import supacode
 
 struct GitClientShellFallbackTests {
-  private func shellError(
-    stderr: String = "",
-    stdout: String = "",
-    exitCode: Int32 = 1
-  ) -> ShellClientError {
-    ShellClientError(command: "wt root", stdout: stdout, stderr: stderr, exitCode: exitCode)
+  private func error(_ stderr: String, exitCode: Int32 = 128) -> ShellClientError {
+    ShellClientError(command: "git rev-parse --git-dir", stdout: "", stderr: stderr, exitCode: exitCode)
   }
 
-  // MARK: - Should fallback
-
-  @Test func fallsBackWhenExecutableNotFound() {
-    #expect(shouldFallbackToLoginShell(shellError(exitCode: 127)))
+  @Test func directNonRepositoryRequiresAbsentMetadata() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let failure = error("fatal: not a git repository (or any of the parent directories): .git\n")
+    #expect(isConfirmedNonRepository(failure, at: root))
+    try Data("gitdir: /missing".utf8).write(to: root.appending(path: ".git"))
+    #expect(!isConfirmedNonRepository(failure, at: root))
   }
 
-  @Test func fallsBackOnCommandNotFoundMessage() {
-    #expect(shouldFallbackToLoginShell(shellError(stderr: "env: git: command not found")))
+  @Test func symlinkedFolderDoesNotHideAncestorMetadata() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    let real = root.appending(path: "real", directoryHint: .isDirectory)
+    let child = real.appending(path: "child", directoryHint: .isDirectory)
+    let alias = root.appending(path: "alias", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: child, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try Data("gitdir: /missing".utf8).write(to: real.appending(path: ".git"))
+    try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: child)
+    let failure = error("fatal: not a git repository (or any of the parent directories): .git")
+    #expect(!isConfirmedNonRepository(failure, at: alias))
   }
 
-  @Test func fallsBackWhenXcodeLicenseUnaccepted() {
-    let stderr = """
-      You have not agreed to the Xcode license agreements. Please run 'sudo xcodebuild -license' \
-      from within a Terminal window to review and agree to the Xcode and Apple SDKs license.
-      """
-    #expect(shouldFallbackToLoginShell(shellError(stderr: stderr, exitCode: 69)))
-  }
-
-  @Test func fallsBackOnInvalidActiveDeveloperPath() {
-    let stderr = "xcode-select: error: invalid active developer path (/Library/Developer/CommandLineTools)"
-    #expect(shouldFallbackToLoginShell(shellError(stderr: stderr, exitCode: 1)))
-  }
-
-  @Test func fallsBackOnUnknownShellError() {
-    #expect(shouldFallbackToLoginShell(shellError(stderr: "something unexpected", exitCode: 42)))
-  }
-
-  @Test func fallsBackOnEmptyErrorOutput() {
-    #expect(shouldFallbackToLoginShell(shellError(exitCode: 1)))
-  }
-
-  // MARK: - Should NOT fallback
-
-  @Test func doesNotFallBackForGenuineNonGitDirectory() {
-    #expect(
-      shouldFallbackToLoginShell(
-        shellError(stderr: "fatal: not a git repository (or any of the parent directories)", exitCode: 128)
-      ) == false
-    )
-  }
-
-  @Test func doesNotFallBackWhenWtReportsNotGitRepo() {
-    #expect(
-      shouldFallbackToLoginShell(
-        shellError(stderr: "wt: not a git repository", exitCode: 1)
-      ) == false
-    )
-  }
-
-  @Test func doesNotFallBackForNonShellError() {
-    struct OtherError: Error {}
-    #expect(shouldFallbackToLoginShell(OtherError()) == false)
+  @Test func toolchainConfigurationAndAccessFailuresAreNotPlainFolders() {
+    let root = URL(fileURLWithPath: "/tmp")
+    for stderr in [
+      "xcrun: error: missing DEVELOPER_DIR path: /missing\nerror: not a git repository",
+      "fatal: bad config line 1\nerror: not a git repository",
+      "fatal: detected dubious ownership in repository",
+      "fatal: cannot chdir: Permission denied",
+    ] {
+      #expect(!isConfirmedNonRepository(error(stderr), at: root))
+    }
+    #expect(!isConfirmedNonRepository(error("not a git repository", exitCode: 1), at: root))
   }
 }

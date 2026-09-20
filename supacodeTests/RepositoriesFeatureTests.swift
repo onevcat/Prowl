@@ -1731,7 +1731,7 @@ struct RepositoriesFeatureTests {
       }
       $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
       $0.gitClient.repoRoot = { _ in
-        throw GitClientError.commandFailed(command: "git", message: "not a git repository")
+        throw GitClientError.notRepository
       }
     }
     store.exhaustivity = .off
@@ -1787,7 +1787,8 @@ struct RepositoriesFeatureTests {
           }
           return ShellOutput(stdout: "", stderr: "", exitCode: 0)
         }
-      )
+      ),
+      resolveGit: { .testExecutable }
     )
 
     try await runner.run(
@@ -1801,7 +1802,9 @@ struct RepositoriesFeatureTests {
       loginCalls.value == [
         LoginCall(
           executablePath: "/usr/bin/env",
-          arguments: ["git", "-C", "/tmp/repo", "worktree", "add", "/tmp/workspace/repo"],
+          arguments: GitExecutable.testExecutable.environmentArguments + [
+            "/usr/bin/git", "-C", "/tmp/repo", "worktree", "add", "/tmp/workspace/repo",
+          ],
           currentDirectoryPath: "/tmp/repo"
         )
       ])
@@ -2157,7 +2160,7 @@ struct RepositoriesFeatureTests {
           return URL(fileURLWithPath: repoRoot)
         }
         if path == plainRoot {
-          throw GitClientError.commandFailed(command: "wt root", message: "not a git repository")
+          throw GitClientError.notRepository
         }
         Issue.record("Unexpected repoRoot lookup: \(path)")
         return URL(fileURLWithPath: repoRoot)

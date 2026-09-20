@@ -21,7 +21,7 @@ struct GitClientDiffPathEncodingTests {
       },
       runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
     )
-    let client = GitClient(shell: shell)
+    let client = GitClient(shell: shell, resolveGit: { _ in .testExecutable })
 
     let output = await client.diffNameStatus(at: URL(fileURLWithPath: "/tmp/repo"))
 
@@ -29,7 +29,7 @@ struct GitClientDiffPathEncodingTests {
     let calls = await store.calls
     #expect(calls.count == 1)
     let args = calls[0]
-    #expect(args.first == "git")
+    #expect(args.contains("/usr/bin/git"))
     #expect(args.contains("-c"))
     #expect(args.contains("core.quotePath=false"))
     #expect(args.contains("diff"))
@@ -45,7 +45,7 @@ struct GitClientDiffPathEncodingTests {
       },
       runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
     )
-    let client = GitClient(shell: shell)
+    let client = GitClient(shell: shell, resolveGit: { _ in .testExecutable })
 
     let paths = await client.untrackedFilePaths(at: URL(fileURLWithPath: "/tmp/repo"))
 
@@ -53,7 +53,7 @@ struct GitClientDiffPathEncodingTests {
     let calls = await store.calls
     #expect(calls.count == 1)
     let args = calls[0]
-    #expect(args.first == "git")
+    #expect(args.contains("/usr/bin/git"))
     #expect(args.contains("-c"))
     #expect(args.contains("core.quotePath=false"))
     #expect(args.contains("ls-files"))

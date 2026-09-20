@@ -9,6 +9,25 @@ import Testing
 
 @MainActor
 struct WorktreeTerminalManagerTests {
+  @Test func prunePreservesOnlyFailedRepositorySessionsUntilRecovery() {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let failed = makeWorktree()
+    let original = manager.state(for: failed)
+    let otherRoot = URL(fileURLWithPath: "/tmp/removed-repo")
+    let removed = Worktree(
+      id: otherRoot.path, name: "removed", detail: "", workingDirectory: otherRoot, repositoryRootURL: otherRoot)
+    _ = manager.state(for: removed)
+
+    manager.prune(keeping: [], preservingRepositoryIDs: [failed.repositoryRootURL.path])
+    #expect(manager.stateIfExists(for: failed.id) === original)
+    #expect(manager.stateIfExists(for: removed.id) == nil)
+
+    manager.prune(keeping: [failed.id])
+    #expect(manager.stateIfExists(for: failed.id) === original)
+    manager.prune(keeping: [])
+    #expect(manager.stateIfExists(for: failed.id) == nil)
+  }
+
   @Test func buffersEventsUntilStreamCreated() async {
     let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
     let worktree = makeWorktree()

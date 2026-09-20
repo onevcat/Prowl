@@ -487,6 +487,8 @@ final class WorktreeTerminalManager {
     switch command {
     case .prune(let ids):
       prune(keeping: ids)
+    case .prunePreservingRepositories(let ids, let repositoryIDs):
+      prune(keeping: ids, preservingRepositoryIDs: repositoryIDs)
     case .setNotificationsEnabled(let enabled):
       setNotificationsEnabled(enabled)
     case .setCommandFinishedNotification(let enabled, let threshold):
@@ -1171,7 +1173,13 @@ final class WorktreeTerminalManager {
     }
   }
 
-  func prune(keeping worktreeIDs: Set<Worktree.ID>) {
+  func prune(keeping worktreeIDs: Set<Worktree.ID>, preservingRepositoryIDs: Set<Repository.ID> = []) {
+    let failedRoots = Set(preservingRepositoryIDs.map { URL(fileURLWithPath: $0).standardizedFileURL })
+    // A failed load is not evidence that its terminal sessions were removed.
+    let preservedIDs = states.compactMap { id, state in
+      failedRoots.contains(state.repositoryRootURL.standardizedFileURL) ? id : nil
+    }
+    let worktreeIDs = worktreeIDs.union(preservedIDs)
     var removed: [WorktreeTerminalState] = []
     var removedIDs: Set<Worktree.ID> = []
     for (id, state) in states where !worktreeIDs.contains(id) {

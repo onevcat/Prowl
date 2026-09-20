@@ -5,6 +5,10 @@ import Testing
 @testable import supacode
 
 struct HandoffStoreTests {
+  init() async throws {
+    _ = try await GitExecutableResolver.shared.resolve()
+  }
+
   // MARK: - Helpers
 
   private func makeTempRoot() throws -> URL {

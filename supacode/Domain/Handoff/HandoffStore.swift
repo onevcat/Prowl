@@ -499,9 +499,11 @@ nonisolated struct HandoffStore: Sendable {
   /// stderr is discarded; non-zero exit yields nil. Used best-effort for the
   /// appendix — a non-git directory simply produces nil.
   private static func git(_ arguments: [String], in directory: URL) -> String? {
+    guard let git = GitExecutableResolver.shared.cachedExecutable else { return nil }
     let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-    process.arguments = ["git", "-C", directory.path(percentEncoded: false)] + arguments
+    process.executableURL = git.url
+    process.environment = ProcessInfo.processInfo.environment.merging(git.environment) { _, selected in selected }
+    process.arguments = ["-C", directory.path(percentEncoded: false)] + arguments
     let stdout = Pipe()
     process.standardOutput = stdout
     process.standardError = FileHandle.nullDevice
