@@ -143,7 +143,7 @@ extension NSColor {
     let cleaned =
       ghosttyHexColor
       .trimmingCharacters(in: .whitespacesAndNewlines)
-      .replacingOccurrences(of: "#", with: "")
+      .replacing("#", with: "")
     guard cleaned.count == 6, let value = Int(cleaned, radix: 16) else {
       return nil
     }
