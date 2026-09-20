@@ -195,9 +195,7 @@ extension NSPasteboard {
   }()
 
   func getOpinionatedStringContents() -> String? {
-    if let urls = readObjects(forClasses: [NSURL.self]) as? [URL],
-      urls.count > 0
-    {
+    if let urls = readObjects(forClasses: [NSURL.self]) as? [URL], !urls.isEmpty {
       return
         urls
         .map { $0.isFileURL ? Self.ghosttyEscape($0.path) : $0.absoluteString }
