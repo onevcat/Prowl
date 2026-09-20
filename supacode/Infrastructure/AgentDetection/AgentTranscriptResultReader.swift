@@ -160,7 +160,7 @@ nonisolated enum AgentTranscriptResultReader {
   }
 
   private static func decodeClaude(records: [[String: Any]], maxBytes: Int) -> AgentTranscriptResult {
-    guard let closeRecord = records.reversed().first(where: isClaudeTurnDuration) else {
+    guard let closeRecord = records.last(where: isClaudeTurnDuration) else {
       return .failure(.missing)
     }
     guard let closeSessionID = closeRecord["sessionId"] as? String,
