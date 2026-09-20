@@ -11,7 +11,7 @@ struct ToolbarNotificationsPopoverButton: View {
     groups.reduce(0) { count, repository in
       count
         + repository.worktrees.reduce(0) { worktreeCount, worktree in
-          worktreeCount + worktree.notifications.filter { !$0.isRead }.count
+          worktreeCount + worktree.notifications.count(where: { !$0.isRead })
         }
     }
   }

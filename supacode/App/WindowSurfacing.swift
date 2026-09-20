@@ -89,15 +89,15 @@ enum MainWindowSurface {
   }
 
   static func mainWindowCount(in snapshots: [Snapshot]) -> Int {
-    snapshots.filter(isMainWindow).count
+    snapshots.count(where: isMainWindow)
   }
 
   static func visibleMainWindowCount(in snapshots: [Snapshot]) -> Int {
-    snapshots.filter { isMainWindow($0) && $0.isVisible }.count
+    snapshots.count(where: { isMainWindow($0) && $0.isVisible })
   }
 
   static func visibleWindowCount(in snapshots: [Snapshot]) -> Int {
-    snapshots.filter(\.isVisible).count
+    snapshots.count(where: \.isVisible)
   }
 
   private static func snapshot(for window: NSWindow) -> Snapshot {

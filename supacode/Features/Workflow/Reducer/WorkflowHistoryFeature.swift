@@ -72,7 +72,7 @@ struct WorkflowHistoryFeature {
     var runCount: Int { preview.entries.count }
     var totalBytes: Int64 { preview.totalBytes }
     /// Finished runs an explicit Clear may remove; live runs stay.
-    var removableCount: Int { preview.entries.filter(\.removable).count }
+    var removableCount: Int { preview.entries.count(where: \.removable) }
   }
 
   enum Action: Equatable {

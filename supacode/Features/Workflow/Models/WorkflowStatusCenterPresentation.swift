@@ -33,7 +33,7 @@ struct WorkflowStatusCenterPresentation: Equatable {
   /// The run the compact status item names: the most recent active run, else the run that just ended.
   var primary: WorkflowRunPresentation? { runs.first }
   var attentionRun: WorkflowRunPresentation? { runs.first { $0.status.isAttention } }
-  var activeRunCount: Int { runs.filter { !$0.status.isFinished }.count }
+  var activeRunCount: Int { runs.count(where: { !$0.status.isFinished }) }
   var hasAttention: Bool { attentionRun != nil }
 }
 
