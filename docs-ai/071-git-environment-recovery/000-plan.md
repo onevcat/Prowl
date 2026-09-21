@@ -64,3 +64,18 @@ repair an invalid system default, so it is excluded. Bundling Git is a separate
 packaging and maintenance decision.
 
 ## Amendments
+
+PR #824 review follow-up:
+
+- Accept Git's filesystem-boundary non-repository diagnostic in addition to its
+  root-directory diagnostic. Keep the exit-code and metadata checks. Do not accept
+  extra error output or a `wt` wrapper as proof.
+- Bound each executable and login-shell probe with the existing process-group
+  executor. Stop probe descendants on timeout or cancellation; do not add a second
+  process runner or change mutation execution.
+- Track shared-discovery waiters separately. Cancellation releases that waiter
+  immediately. Other waiters keep the probe alive; the last cancellation stops it.
+  Ignore late completion from a cancelled discovery so Retry can start a new one.
+- Cover boundary diagnostics, timeout fallback, cancellation isolation, and retry.
+  Use controlled clocks or explicit gates for concurrency tests and real process
+  fixtures for process-group termination.

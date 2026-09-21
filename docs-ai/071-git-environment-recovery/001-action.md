@@ -7,8 +7,9 @@
 | 2026-09-20 | Reproduced loss of worktree rows and blocked Shelf with an invalid developer directory. | #823 |
 | 2026-09-20 | Added working Git selection, typed discovery failures, recovery controls, and plain-folder Shelf entry. | `fix/git-discovery-toolchain` |
 | 2026-09-20 | Verified the built GUI with failed Apple Git, independent Git, restored access, and plain folders. | Validation below |
+| 2026-09-21 | Hardened filesystem-boundary classification and shared Git discovery timeout/cancellation. | PR #824 follow-up |
 
-## Outcome & current state (as of 2026-09-20)
+## Outcome & current state (as of 2026-09-21)
 
 - `supacode/Clients/Git/GitExecutableResolver.swift` selects a working executable
   from process PATH, login PATH, or common locations. It caches successful selection,
@@ -25,6 +26,15 @@
   Recovery exposes those sessions again; actual removal still uses normal pruning.
 - Shelf accepts plain folders and can open their first terminal. Stale selection
   candidates do not prevent fallback to a valid folder.
+- Direct Git discovery also accepts the two-line filesystem-boundary diagnostic.
+  Exit-code and metadata checks still apply; additional error output is rejected.
+- Executable and login-shell probes use `ShellClient.probe`, backed by the existing
+  `WorkflowScriptExecutor`. Each probe has a five-second deadline and 64 KiB output
+  limits. Timeout or cancellation terminates the process group, including children
+  that ignore SIGTERM. Normal Git commands and mutations keep their existing runner.
+- Shared discovery tracks each waiter. Cancellation releases only that waiter;
+  the last cancellation stops discovery. A generation ID prevents a late cancelled
+  probe from clearing a new discovery or its cache.
 
 ## Validation
 
@@ -47,6 +57,26 @@
 - Local screenshots and fixture data: `/tmp/prowl-823-fixed/`. Controlled shell
   fixtures only supplied login PATH; Git and `wt` were real executables. No system
   developer path was changed. Recovery claims above refer to explicit Retry.
+
+### PR #824 follow-up validation
+
+- Added regression tests before implementation. The filesystem-boundary and
+  cancelled-waiter tests both failed on the original code, then passed after the fix.
+- 501 related Git, repository, terminal, Shelf, shell, handoff, workflow, and diff
+  tests passed. Three real process-cancellation tests passed in a separate batch;
+  both xcresult counts were checked explicitly. The new cancellation test joins
+  the existing isolated batch in `make test-app` because bulk main-actor tests can
+  delay the test's cancellation request beyond its real process deadline.
+- Real process fixtures verified timeout fallback, retry after timeout, and cleanup
+  of a probe and child that ignore SIGTERM. Controlled-clock tests verified waiter
+  cancellation isolation and cancellation of discovery when no waiters remain.
+  An explicit completion gate verified that a late cancelled probe cannot clear
+  the cache populated by Retry.
+- A standalone harness using the current classification function and real Apple Git
+  accepted the filesystem-boundary results at `/nix` and `/Volumes/Recovery`.
+- `make check` passed, including 208 script tests. `make build-app` passed with zero
+  warnings and errors. The earlier GUI scenarios were not repeated for this
+  client-layer follow-up.
 
 ## Deviations from plan
 

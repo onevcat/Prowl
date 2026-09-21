@@ -393,6 +393,7 @@ test-app: ensure-ghostty # Run app/unit tests via xcodebuild
 	shell_cancellation_tests=( \
 		"supacodeTests/ShellClientStreamingTests/cancellingRunStreamConsumerTerminatesProcessAfterItIsReady()" \
 		"supacodeTests/ShellClientStreamingTests/runTerminatesReadyProcessWhenCallingTaskIsCancelled()" \
+		"supacodeTests/ShellClientProbeTests/cancellationStopsProbeAndItsChildren()" \
 	); \
 	skip_args=(); \
 	only_args=(); \
@@ -408,7 +409,7 @@ test-app: ensure-ghostty # Run app/unit tests via xcodebuild
 	done; \
 	run_xcode_tests "$$result_root/supacode-tests.xcresult" test "" "$${skip_args[@]}"; \
 	run_xcode_tests "$$result_root/supacode-mirror-tests.xcresult" test-without-building "" "$${mirror_args[@]}"; \
-	run_xcode_tests "$$result_root/supacode-shell-cancellation-tests.xcresult" test-without-building 2 "$${only_args[@]}"
+	run_xcode_tests "$$result_root/supacode-shell-cancellation-tests.xcresult" test-without-building 3 "$${only_args[@]}"
 
 test-cli-smoke: build-cli # Smoke test CLI executable
 	@set -euo pipefail; \

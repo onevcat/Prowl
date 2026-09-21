@@ -6,14 +6,28 @@ nonisolated let gitLogger = SupaLogger("Git")
 /// Only direct Git discovery can establish that a folder is not a repository.
 /// Existing or inaccessible metadata makes the result uncertain, even if Git says otherwise.
 nonisolated func isConfirmedNonRepository(_ error: Error, at directory: URL) -> Bool {
-  guard let error = error as? ShellClientError, error.exitCode == 128,
-    error.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-      == "fatal: not a git repository (or any of the parent directories): .git"
-  else { return false }
+  guard let error = error as? ShellClientError, error.exitCode == 128 else { return false }
+  let message = error.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+  let lines = message.split(separator: "\n", omittingEmptySubsequences: false)
+  let stoppedAtBoundary =
+    lines.count == 2
+    && lines[0].hasPrefix("fatal: not a git repository (or any parent up to mount point /")
+    && lines[0].hasSuffix(")")
+    && lines[1] == "Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set)."
+  guard
+    message == "fatal: not a git repository (or any of the parent directories): .git"
+      || stoppedAtBoundary
+  else {
+    return false
+  }
   var current = directory.resolvingSymlinksInPath().standardizedFileURL
   while true {
-    guard let names = try? FileManager.default.contentsOfDirectory(atPath: current.path) else { return false }
-    if names.contains(".git") || (names.contains("HEAD") && names.contains("objects")) { return false }
+    guard let names = try? FileManager.default.contentsOfDirectory(atPath: current.path) else {
+      return false
+    }
+    if names.contains(".git") || (names.contains("HEAD") && names.contains("objects")) {
+      return false
+    }
     let parent = current.deletingLastPathComponent().standardizedFileURL
     if parent.path == current.path { return true }
     current = parent

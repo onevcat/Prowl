@@ -5,7 +5,8 @@ import Testing
 
 struct GitClientShellFallbackTests {
   private func error(_ stderr: String, exitCode: Int32 = 128) -> ShellClientError {
-    ShellClientError(command: "git rev-parse --git-dir", stdout: "", stderr: stderr, exitCode: exitCode)
+    ShellClientError(
+      command: "git rev-parse --git-dir", stdout: "", stderr: stderr, exitCode: exitCode)
   }
 
   @Test func directNonRepositoryRequiresAbsentMetadata() throws {
@@ -18,8 +19,25 @@ struct GitClientShellFallbackTests {
     #expect(!isConfirmedNonRepository(failure, at: root))
   }
 
+  @Test func filesystemBoundaryRequiresAbsentMetadata() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let message = """
+      fatal: not a git repository (or any parent up to mount point /Volumes)
+      Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).
+      """
+    #expect(isConfirmedNonRepository(error(message), at: root))
+    #expect(!isConfirmedNonRepository(error(message, exitCode: 1), at: root))
+    #expect(!isConfirmedNonRepository(error("xcrun failed\n" + message), at: root))
+    #expect(!isConfirmedNonRepository(error(message + "\nPermission denied"), at: root))
+    try Data("gitdir: /missing".utf8).write(to: root.appending(path: ".git"))
+    #expect(!isConfirmedNonRepository(error(message), at: root))
+  }
+
   @Test func symlinkedFolderDoesNotHideAncestorMetadata() throws {
-    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    let root = FileManager.default.temporaryDirectory.appending(
+      path: UUID().uuidString, directoryHint: .isDirectory)
     let real = root.appending(path: "real", directoryHint: .isDirectory)
     let child = real.appending(path: "child", directoryHint: .isDirectory)
     let alias = root.appending(path: "alias", directoryHint: .isDirectory)
