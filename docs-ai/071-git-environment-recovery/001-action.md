@@ -8,6 +8,7 @@
 | 2026-09-20 | Added working Git selection, typed discovery failures, recovery controls, and plain-folder Shelf entry. | `fix/git-discovery-toolchain` |
 | 2026-09-20 | Verified the built GUI with failed Apple Git, independent Git, restored access, and plain folders. | Validation below |
 | 2026-09-21 | Hardened filesystem-boundary classification and shared Git discovery timeout/cancellation. | PR #824 follow-up |
+| 2026-09-21 | Closed retained terminal states when a failed repository is removed. | Failed-root removal regression |
 
 ## Outcome & current state (as of 2026-09-21)
 
@@ -24,6 +25,9 @@
   Retry and copyable details. It does not retain stale worktree models.
 - `WorktreeTerminalManager.prune` preserves live sessions belonging to failed roots.
   Recovery exposes those sessions again; actual removal still uses normal pruning.
+  Removing a failed root explicitly emits the repositories-changed delegate, since
+  that root is already absent from the loaded models. Cleanup does not wait for a
+  reload to change those models.
 - Shelf accepts plain folders and can open their first terminal. Stale selection
   candidates do not prevent fallback to a valid folder.
 - Direct Git discovery also accepts the two-line filesystem-boundary diagnostic.
@@ -77,6 +81,21 @@
 - `make check` passed, including 208 script tests. `make build-app` passed with zero
   warnings and errors. The earlier GUI scenarios were not repeated for this
   client-layer follow-up.
+
+### Failed-root removal regression
+
+- Reproduced the leak through `TestStore`, `AppFeature`, and a real
+  `WorktreeTerminalManager`: load failure preserves a terminal state, then the
+  normal failed-repository removal action leaves that state behind. Both cases
+  failed before the fix: removing the last root, and removing one root alongside
+  healthy and still-failed repositories.
+- After the explicit delegate was added, the same tests passed. They verify that
+  the removed state is gone, its persisted entry is removed, and other terminal
+  states retain their identity. No direct test call to `prune` bypasses the action.
+- 337 related app, repository, terminal, Shelf, and sidebar tests passed.
+  `make check` passed, including 208 script tests; `make build-app` passed without
+  warnings or errors. This reproduction checks terminal ownership state, not GUI
+  interaction or live shell PIDs.
 
 ## Deviations from plan
 

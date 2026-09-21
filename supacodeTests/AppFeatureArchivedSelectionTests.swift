@@ -116,6 +116,75 @@ struct AppFeatureArchivedSelectionTests {
       ]
     )
   }
+  @Test(.dependencies, arguments: [false, true])
+  func removingFailedRepositoryClosesOnlyItsPreservedTerminals(keepingOtherRepositories: Bool) async {
+    let root = URL(fileURLWithPath: "/tmp/failed-removal-\(UUID().uuidString)")
+    let repositories = ["removed", "failed", "healthy"].map { name in
+      let url = root.appending(path: name)
+      let worktree = Worktree(
+        id: url.path, name: name, detail: "", workingDirectory: url, repositoryRootURL: url)
+      return Repository(id: url.path, rootURL: url, name: name, worktrees: [worktree])
+    }
+    let removed = repositories[0]
+    let otherFailed = repositories[1]
+    let healthy = repositories[2]
+    let initialRepositories = keepingOtherRepositories ? repositories : [removed]
+    let loadedRepositories = keepingOtherRepositories ? [healthy] : []
+    let failedRepositories = keepingOtherRepositories ? [removed, otherFailed] : [removed]
+    let roots = initialRepositories.map(\.rootURL)
+    let entries = LockIsolated(initialRepositories.map { PersistedRepositoryEntry(path: $0.id, kind: .git) })
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    for repository in initialRepositories {
+      _ = manager.state(for: repository.worktrees[0])
+    }
+    let removedState = manager.stateIfExists(for: removed.id)
+    let otherFailedState = manager.stateIfExists(for: otherFailed.id)
+    let healthyState = manager.stateIfExists(for: healthy.id)
+    var state = AppFeature.State()
+    state.repositories.repositories = IdentifiedArray(uniqueElements: initialRepositories)
+    state.repositories.repositoryRoots = roots
+    state.repositories.snapshotPersistencePhase = .active
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { manager.handleCommand($0) }
+      $0.worktreeInfoWatcher.send = { _ in }
+      $0.repositoryPersistence.loadRepositoryEntries = { entries.value }
+      $0.repositoryPersistence.saveRepositoryEntries = { entries.setValue($0) }
+      $0.gitClient.repoRoot = { url in
+        if url.path == healthy.id { return healthy.rootURL }
+        throw GitClientError.unavailable(details: "Unavailable test Git")
+      }
+      $0.gitClient.worktrees = { url in
+        if url.path == healthy.id { return Array(healthy.worktrees) }
+        throw GitClientError.unavailable(details: "Unavailable test Git")
+      }
+    }
+    store.exhaustivity = .off
+    await store.send(
+      .repositories(
+        .repositoriesLoaded(
+          loadedRepositories,
+          failures: failedRepositories.map {
+            .init(rootID: $0.id, message: "Unavailable test Git", isGitUnavailable: true)
+          },
+          roots: roots, animated: false)))
+    await store.finish()
+    #expect(removedState != nil)
+    #expect(manager.stateIfExists(for: removed.id) === removedState)
+
+    await store.send(.repositories(.repositoryManagement(.removeFailedRepository(removed.id))))
+    await store.finish()
+    #expect(manager.stateIfExists(for: removed.id) == nil)
+    #expect(!entries.value.contains(where: { $0.path == removed.id }))
+    #expect(store.state.repositories.loadFailuresByID[removed.id] == nil)
+    if keepingOtherRepositories {
+      #expect(manager.stateIfExists(for: otherFailed.id) === otherFailedState)
+      #expect(manager.stateIfExists(for: healthy.id) === healthyState)
+      #expect(store.state.repositories.loadFailuresByID[otherFailed.id] != nil)
+    }
+  }
+
   @Test(.dependencies) func failedRepositoryLoadDoesNotCloseItsTerminals() async {
     var state = AppFeature.State()
     state.repositories.repositoryRoots = [URL(fileURLWithPath: "/tmp/unavailable")]

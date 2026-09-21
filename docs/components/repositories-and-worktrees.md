@@ -47,7 +47,8 @@ repository**. Click the warning icon for guidance and **Copy Details**. After
 fixing Git, permissions, or repository configuration, click **Retry** or use
 **Refresh Worktrees** (`⌘⇧R`). Failed loads use the error row rather than retaining
 an old worktree list. Existing terminal sessions for failed projects stay running.
-Background refreshes do not repeatedly open error dialogs.
+Removing a failed project from Prowl closes its retained terminals; other projects'
+terminals stay open. Background refreshes do not repeatedly open error dialogs.
 
 ## Adding a repository
 

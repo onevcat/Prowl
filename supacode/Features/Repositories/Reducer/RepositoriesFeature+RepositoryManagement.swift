@@ -337,6 +337,8 @@ extension RepositoriesFeature {
       let remainingRoots = state.repositoryRoots
       return .merge(
         failedIconCleanup,
+        // Failed roots are absent from the loaded models, so a reload may not emit this delegate.
+        .send(.delegate(.repositoriesChanged(state.repositories))),
         .run { send in
           let loadedEntries = await loadPersistedRepositoryEntries(fallbackRoots: remainingRoots)
           let remainingEntries = loadedEntries.filter { !isSameRepositoryPath($0.path, repositoryID) }

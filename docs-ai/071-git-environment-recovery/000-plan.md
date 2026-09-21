@@ -79,3 +79,8 @@ PR #824 review follow-up:
 - Cover boundary diagnostics, timeout fallback, cancellation isolation, and retry.
   Use controlled clocks or explicit gates for concurrency tests and real process
   fixtures for process-group termination.
+- Removing a failed root must reconcile terminal ownership even when the loaded
+  repository list is unchanged. Reuse the existing repositories-changed delegate
+  immediately after removal instead of waiting for another Git reload. Exercise
+  the full failure/removal reducer flow with a real terminal manager, including
+  the last root and removal alongside healthy and still-failed roots.
