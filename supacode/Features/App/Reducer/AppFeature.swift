@@ -296,6 +296,11 @@ struct AppFeature {
         }
         let archivedIDs = state.repositories.archivedWorktreeIDSet
         let ids = state.repositories.terminalStateIDs.subtracting(archivedIDs)
+        let failedRepositoryIDs = Set(state.repositories.loadFailuresByID.keys)
+        let pruneCommand: TerminalClient.Command =
+          failedRepositoryIDs.isEmpty
+          ? .prune(ids)
+          : .prunePreservingRepositories(keeping: ids, repositoryIDs: failedRepositoryIDs)
         let recencyIDs = CommandPaletteFeature.recencyRetentionIDs(
           from: repositories,
           customCommands: state.selectedCustomCommands
@@ -338,7 +343,7 @@ struct AppFeature {
             .send(.commandPalette(.pruneRecency(recencyIDs))),
             .send(.repositories(.refreshAllCustomTitles)),
             .run { _ in
-              await terminalClient.send(.prune(ids))
+              await terminalClient.send(pruneCommand)
             },
             .run { _ in
               await worktreeInfoWatcher.send(.setWorktrees(worktrees))
@@ -364,7 +369,7 @@ struct AppFeature {
           .send(.commandPalette(.pruneRecency(recencyIDs))),
           .send(.repositories(.refreshAllCustomTitles)),
           .run { _ in
-            await terminalClient.send(.prune(ids))
+            await terminalClient.send(pruneCommand)
           },
           .run { _ in
             await worktreeInfoWatcher.send(.setWorktrees(worktrees))

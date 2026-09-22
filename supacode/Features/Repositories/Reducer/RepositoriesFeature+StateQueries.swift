@@ -664,3 +664,9 @@ struct WorktreeRowSections: Equatable {
     return rows
   }
 }
+
+extension RepositoriesFeature.State {
+  var canEnterShelf: Bool {
+    repositories.contains(where: { $0.kind == .plain }) || !orderedWorktreeRows().isEmpty
+  }
+}

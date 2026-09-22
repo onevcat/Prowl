@@ -23,7 +23,7 @@ struct GitClientRemoveWorktreeTests {
       },
       runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
     )
-    let client = GitClient(shell: shell)
+    let client = GitClient(shell: shell, resolveGit: { _ in .testExecutable })
     let worktree = Worktree(
       id: worktreePath,
       name: "main",
@@ -63,7 +63,7 @@ struct GitClientRemoveWorktreeTests {
       },
       runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
     )
-    let client = GitClient(shell: shell)
+    let client = GitClient(shell: shell, resolveGit: { _ in .testExecutable })
     let worktree = Worktree(
       id: worktreePath,
       name: "feature",
@@ -110,7 +110,7 @@ struct GitClientRemoveWorktreeTests {
       },
       runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
     )
-    let client = GitClient(shell: shell)
+    let client = GitClient(shell: shell, resolveGit: { _ in .testExecutable })
     let worktree = Worktree(
       id: parentURL.path(percentEncoded: false),
       name: "feat",
@@ -163,7 +163,7 @@ struct GitClientRemoveWorktreeTests {
       },
       runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
     )
-    let client = GitClient(shell: shell)
+    let client = GitClient(shell: shell, resolveGit: { _ in .testExecutable })
     let worktree = Worktree(
       id: standardizedURL.path(percentEncoded: false),
       name: name,
@@ -219,7 +219,7 @@ struct GitClientRemoveWorktreeTests {
       },
       runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
     )
-    let client = GitClient(shell: shell)
+    let client = GitClient(shell: shell, resolveGit: { _ in .testExecutable })
     let worktree = Worktree(
       id: worktreePath,
       name: "locked",
@@ -259,7 +259,7 @@ struct GitClientRemoveWorktreeTests {
       },
       runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
     )
-    let client = GitClient(shell: shell)
+    let client = GitClient(shell: shell, resolveGit: { _ in .testExecutable })
     let worktree = Worktree(
       id: worktreePath,
       name: "locked",
@@ -304,7 +304,7 @@ struct GitClientRemoveWorktreeTests {
       },
       runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
     )
-    let client = GitClient(shell: shell)
+    let client = GitClient(shell: shell, resolveGit: { _ in .testExecutable })
     let worktree = Worktree(
       id: symlinkWorktreeURL.path(percentEncoded: false),
       name: "feature",
@@ -330,7 +330,7 @@ struct GitClientRemoveWorktreeTests {
       },
       runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
     )
-    let client = GitClient(shell: shell)
+    let client = GitClient(shell: shell, resolveGit: { _ in .testExecutable })
 
     let outcome = try await client.deleteLocalBranch(
       named: "feature",
@@ -353,7 +353,7 @@ struct GitClientRemoveWorktreeTests {
       },
       runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
     )
-    let client = GitClient(shell: shell)
+    let client = GitClient(shell: shell, resolveGit: { _ in .testExecutable })
 
     await #expect(throws: GitClientError.self) {
       _ = try await client.deleteLocalBranch(

@@ -81,7 +81,7 @@ struct GitClientCreateWorktreeStreamTests {
         }
       }
     )
-    let client = GitClient(shell: shell)
+    let client = GitClient(shell: shell, resolveGit: { _ in .testExecutable })
     let repoRoot = URL(fileURLWithPath: "/tmp/repo")
 
     for try await _ in client.createWorktreeStream(
@@ -129,7 +129,7 @@ struct GitClientCreateWorktreeStreamTests {
         }
       }
     )
-    let client = GitClient(shell: shell)
+    let client = GitClient(shell: shell, resolveGit: { _ in .testExecutable })
     let repoRoot = URL(fileURLWithPath: "/tmp/repo")
     var outputLines: [ShellStreamLine] = []
     var finishedWorktree: Worktree?
@@ -175,7 +175,7 @@ struct GitClientCreateWorktreeStreamTests {
         }
       }
     )
-    let client = GitClient(shell: shell)
+    let client = GitClient(shell: shell, resolveGit: { _ in .testExecutable })
     let repoRoot = URL(fileURLWithPath: "/tmp/repo")
     var finishedWorktree: Worktree?
     for try await event in client.createWorktreeStream(
@@ -201,7 +201,7 @@ struct GitClientCreateWorktreeStreamTests {
         )
       }
     )
-    let client = GitClient(shell: shell)
+    let client = GitClient(shell: shell, resolveGit: { _ in .testExecutable })
     let repoRoot = URL(fileURLWithPath: "/tmp/repo")
     var outputLines: [ShellStreamLine] = []
     var finishedWorktree: Worktree?
@@ -239,7 +239,7 @@ struct GitClientCreateWorktreeStreamTests {
         }
       }
     )
-    let client = GitClient(shell: shell)
+    let client = GitClient(shell: shell, resolveGit: { _ in .testExecutable })
     let repoRoot = URL(fileURLWithPath: "/tmp/repo")
 
     do {
@@ -275,7 +275,7 @@ struct GitClientCreateWorktreeStreamTests {
         }
       }
     )
-    let client = GitClient(shell: shell)
+    let client = GitClient(shell: shell, resolveGit: { _ in .testExecutable })
     let repoRoot = URL(fileURLWithPath: "/tmp/repo")
 
     do {
@@ -312,7 +312,7 @@ struct GitClientCreateWorktreeStreamTests {
         }
       }
     )
-    let client = GitClient(shell: shell)
+    let client = GitClient(shell: shell, resolveGit: { _ in .testExecutable })
     let repoRoot = URL(fileURLWithPath: "/tmp/repo")
 
     let worktree = try await client.createWorktree(
@@ -339,7 +339,7 @@ struct GitClientCreateWorktreeStreamTests {
         )
       }
     )
-    let client = GitClient(shell: shell)
+    let client = GitClient(shell: shell, resolveGit: { _ in .testExecutable })
     let repoRoot = URL(fileURLWithPath: "/tmp/repo")
 
     let worktree = try await client.createWorktree(

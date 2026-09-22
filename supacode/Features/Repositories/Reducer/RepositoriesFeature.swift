@@ -290,6 +290,7 @@ struct RepositoriesFeature {
     var repositoryRoots: [URL] = []
     var repositoryOrderIDs: [Repository.ID] = []
     var loadFailuresByID: [Repository.ID: String] = [:]
+    var gitUnavailableRepositoryIDs: Set<Repository.ID> = []
     /// User-defined display titles indexed by `Repository.ID`. Resolved
     /// once on repo discovery (and refreshed when settings change) so
     /// hot-path display sites — sidebar, shelf spine, canvas card,
@@ -471,6 +472,7 @@ struct RepositoriesFeature {
     case requestRenameBranchPrompt(Worktree.ID)
     case consumePendingRenameBranchRequest(Int)
     case requestRenameBranch(Worktree.ID, String)
+    case showRepositoryLoadFailure(Repository.ID)
     case presentAlert(title: String, message: String)
     case worktreeInfoEvent(WorktreeInfoWatcherClient.Event)
     case worktreeBranchNameLoaded(worktreeID: Worktree.ID, name: String)
@@ -487,6 +489,7 @@ struct RepositoriesFeature {
   struct LoadFailure: Equatable {
     let rootID: Repository.ID
     let message: String
+    var isGitUnavailable: Bool = false
   }
 
   struct DeleteWorktreeTarget: Equatable {
@@ -519,6 +522,8 @@ struct RepositoriesFeature {
   }
 
   enum Alert: Equatable {
+    case retryRepositoryLoad
+    case copyRepositoryLoadFailure(String)
     case confirmArchiveWorktree(Worktree.ID, Repository.ID)
     case confirmArchiveWorktrees([ArchiveWorktreeTarget])
     case confirmForceDeleteBranch(ForceDeleteBranchRequest)

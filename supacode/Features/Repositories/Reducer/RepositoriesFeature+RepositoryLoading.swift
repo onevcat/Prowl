@@ -104,10 +104,8 @@ extension RepositoriesFeature {
   }
 
   nonisolated static func isNotGitRepositoryError(_ error: any Error) -> Bool {
-    guard case GitClientError.commandFailed(_, let message) = error else {
-      return false
-    }
-    return message.localizedCaseInsensitiveContains("not a git repository")
+    if case GitClientError.notRepository = error { return true }
+    return false
   }
 
   nonisolated static func pathsReferToSameFileSystemLocation(_ lhs: String, _ rhs: String) -> Bool {
@@ -156,6 +154,7 @@ extension RepositoriesFeature {
     let entry: PersistedRepositoryEntry
     let repository: Repository?
     let errorMessage: String?
+    var isGitUnavailable: Bool = false
   }
 
   func loadRepositoriesData(_ entries: [PersistedRepositoryEntry]) async -> ([Repository], [LoadFailure]) {
@@ -183,7 +182,11 @@ extension RepositoriesFeature {
               return WorktreesFetchResult(
                 entry: entry,
                 repository: nil,
-                errorMessage: error.localizedDescription
+                errorMessage: error.localizedDescription,
+                isGitUnavailable: {
+                  if case GitClientError.unavailable = error { return true }
+                  return false
+                }()
               )
             }
           case .plain:
@@ -224,7 +227,8 @@ extension RepositoriesFeature {
         failures.append(
           LoadFailure(
             rootID: rootID,
-            message: result.errorMessage ?? String(localized: "Unknown error")
+            message: result.errorMessage ?? String(localized: "Unknown error"),
+            isGitUnavailable: result.isGitUnavailable
           )
         )
       }

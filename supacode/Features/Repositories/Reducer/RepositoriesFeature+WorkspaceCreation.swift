@@ -175,12 +175,18 @@ extension RepositoriesFeature {
     state.workspaceCreationPrompt?.repositories[id: repositoryID] = repository
   }
 
-  static func workspaceGitRunner(shellClient: ShellClient) -> ProjectWorkspaceGitRunner {
+  static func workspaceGitRunner(
+    shellClient: ShellClient,
+    resolveGit: @escaping @Sendable () async throws -> GitExecutable = {
+      try await GitExecutableResolver.shared.resolve()
+    }
+  ) -> ProjectWorkspaceGitRunner {
     ProjectWorkspaceGitRunner { command in
+      let git = try await resolveGit()
       do {
         _ = try await shellClient.runLogin(
           URL(fileURLWithPath: "/usr/bin/env"),
-          ["git"] + command.arguments,
+          git.environmentArguments + [git.url.path(percentEncoded: false)] + command.arguments,
           command.currentDirectoryURL
         )
       } catch let error as ShellClientError {

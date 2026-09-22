@@ -13,6 +13,8 @@ nonisolated struct HandoffCoordinator: Sendable {
     briefing: String,
     now: Date
   ) async throws -> HandoffStore.SaveResult {
+    // Git details are best-effort, but use the same executable as repository discovery.
+    _ = try? await GitExecutableResolver.shared.resolve()
     let store = self.store
     return try await Task.detached {
       try store.writeBriefing(briefing, now: now)

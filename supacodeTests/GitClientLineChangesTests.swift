@@ -25,7 +25,7 @@ struct GitClientLineChangesTests {
       },
       runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
     )
-    let client = GitClient(shell: shell)
+    let client = GitClient(shell: shell, resolveGit: { _ in .testExecutable })
 
     let changes = await client.lineChanges(at: URL(fileURLWithPath: "/tmp/repo"))
 
@@ -34,7 +34,7 @@ struct GitClientLineChangesTests {
     let calls = await store.calls
     #expect(calls.count == 2)
     let diffArgs = try #require(calls.first { $0.contains("--shortstat") })
-    #expect(diffArgs.first == "git")
+    #expect(diffArgs.contains("/usr/bin/git"))
     #expect(diffArgs.contains("diff"))
     #expect(diffArgs.contains("HEAD"))
     #expect(!diffArgs.contains("--numstat"))
@@ -54,7 +54,7 @@ struct GitClientLineChangesTests {
       },
       runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
     )
-    let client = GitClient(shell: shell)
+    let client = GitClient(shell: shell, resolveGit: { _ in .testExecutable })
 
     let changes = await client.lineChanges(at: URL(fileURLWithPath: "/tmp/repo"))
 
@@ -73,7 +73,7 @@ struct GitClientLineChangesTests {
       },
       runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
     )
-    let client = GitClient(shell: shell)
+    let client = GitClient(shell: shell, resolveGit: { _ in .testExecutable })
 
     let changes = await client.lineChanges(at: URL(fileURLWithPath: "/tmp/repo"))
 
@@ -86,7 +86,7 @@ struct GitClientLineChangesTests {
       run: { _, _, _ in ShellOutput(stdout: "\n", stderr: "", exitCode: 0) },
       runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
     )
-    let client = GitClient(shell: shell)
+    let client = GitClient(shell: shell, resolveGit: { _ in .testExecutable })
 
     let changes = await client.lineChanges(at: URL(fileURLWithPath: "/tmp/repo"))
 
@@ -119,7 +119,7 @@ struct GitClientLineChangesTests {
       },
       runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
     )
-    let client = GitClient(shell: shell)
+    let client = GitClient(shell: shell, resolveGit: { _ in .testExecutable })
 
     let changes = await client.lineChanges(at: tempRoot)
 
@@ -157,7 +157,7 @@ struct GitClientLineChangesTests {
       },
       runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
     )
-    let client = GitClient(shell: shell)
+    let client = GitClient(shell: shell, resolveGit: { _ in .testExecutable })
 
     let changes = await client.lineChanges(at: tempRoot)
 
@@ -189,7 +189,7 @@ struct GitClientLineChangesTests {
       },
       runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
     )
-    let client = GitClient(shell: shell)
+    let client = GitClient(shell: shell, resolveGit: { _ in .testExecutable })
 
     let changes = await client.lineChanges(at: tempRoot)
 
@@ -215,7 +215,7 @@ struct GitClientLineChangesTests {
       },
       runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
     )
-    let client = GitClient(shell: shell)
+    let client = GitClient(shell: shell, resolveGit: { _ in .testExecutable })
 
     let changes = await client.lineChanges(at: tempRoot)
 

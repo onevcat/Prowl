@@ -3,17 +3,35 @@ import Sentry
 
 nonisolated let gitLogger = SupaLogger("Git")
 
-nonisolated func shouldFallbackToLoginShell(_ error: Error) -> Bool {
-  guard let shellError = error as? ShellClientError else {
+/// Only direct Git discovery can establish that a folder is not a repository.
+/// Existing or inaccessible metadata makes the result uncertain, even if Git says otherwise.
+nonisolated func isConfirmedNonRepository(_ error: Error, at directory: URL) -> Bool {
+  guard let error = error as? ShellClientError, error.exitCode == 128 else { return false }
+  let message = error.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+  let lines = message.split(separator: "\n", omittingEmptySubsequences: false)
+  let stoppedAtBoundary =
+    lines.count == 2
+    && lines[0].hasPrefix("fatal: not a git repository (or any parent up to mount point /")
+    && lines[0].hasSuffix(")")
+    && lines[1] == "Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set)."
+  guard
+    message == "fatal: not a git repository (or any of the parent directories): .git"
+      || stoppedAtBoundary
+  else {
     return false
   }
-  let output = "\(shellError.stderr)\n\(shellError.stdout)".lowercased()
-  // When git itself ran fine but confirmed this isn't a repo, retrying
-  // under a login shell won't change the answer.
-  if output.contains("not a git repository") {
-    return false
+  var current = directory.resolvingSymlinksInPath().standardizedFileURL
+  while true {
+    guard let names = try? FileManager.default.contentsOfDirectory(atPath: current.path) else {
+      return false
+    }
+    if names.contains(".git") || (names.contains("HEAD") && names.contains("objects")) {
+      return false
+    }
+    let parent = current.deletingLastPathComponent().standardizedFileURL
+    if parent.path == current.path { return true }
+    current = parent
   }
-  return true
 }
 
 nonisolated func wrapShellError(

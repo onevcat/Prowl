@@ -1,6 +1,7 @@
 import ComposableArchitecture
 import Darwin
 import Foundation
+import ProwlCLIShared
 
 nonisolated struct ShellClient: Sendable {
   var run: @Sendable (URL, [String], URL?) async throws -> ShellOutput
@@ -332,6 +333,50 @@ nonisolated private func collectOutput(
 }
 
 extension ShellClient {
+  /// Read-only discovery uses a bounded process group, not the mutation or streaming runner.
+  nonisolated static func probe(timeout: TimeInterval = 5, userShell: URL? = nil) -> ShellClient {
+    ShellClient(
+      run: { executable, arguments, directory in
+        try await runProbe(executable, arguments, directory, timeout: timeout)
+      },
+      runLoginImpl: { executable, arguments, directory, _ in
+        let (shell, command) = loginShellInvocation(
+          userShell: userShell ?? URL(fileURLWithPath: defaultShellPath()))
+        return try await runProbe(
+          shell, ["-l", "-c", command, "--", executable.path(percentEncoded: false)] + arguments,
+          directory, timeout: timeout)
+      }
+    )
+  }
+
+  nonisolated private static func runProbe(
+    _ executable: URL, _ arguments: [String], _ directory: URL?, timeout: TimeInterval
+  ) async throws -> ShellOutput {
+    do {
+      let result = try await WorkflowScriptExecutor.run(
+        .init(
+          executable: executable.path(percentEncoded: false), arguments: arguments,
+          directory: directory ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
+          environment: ProcessInfo.processInfo.environment
+        ).limits(timeout: timeout, outputLimit: 64 * 1024, errorLimit: 64 * 1024),
+        request: Data())
+      return ShellOutput(
+        stdout: (String(bytes: result.stdout, encoding: .utf8) ?? "").trimmingCharacters(
+          in: .whitespacesAndNewlines),
+        stderr: (String(bytes: result.stderr, encoding: .utf8) ?? "").trimmingCharacters(
+          in: .whitespacesAndNewlines),
+        exitCode: result.exitStatus)
+    } catch let error as WorkflowScriptExecutionError {
+      if error.code == "cancelled" { throw CancellationError() }
+      throw ShellClientError(
+        command: ([executable.path(percentEncoded: false)] + arguments).joined(separator: " "),
+        stdout: String(bytes: error.stdout, encoding: .utf8) ?? "",
+        stderr: "Probe failed (\(error.code)): \(error.message)\n"
+          + (String(bytes: error.stderr, encoding: .utf8) ?? ""),
+        exitCode: -1)
+    }
+  }
+
   /// Builds the `(shell, -c command)` pair for a one-shot login-shell command.
   /// We only drive shells we have a correct rc snippet for — zsh, bash, fish.
   /// Anything else (nushell, sh/dash/ksh, pwsh, …) falls back to /bin/zsh, which

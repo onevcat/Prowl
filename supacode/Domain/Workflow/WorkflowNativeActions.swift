@@ -207,10 +207,11 @@ nonisolated struct WorkflowNativeActionRunner: WorkflowActionExecuting {
   }
 
   private func git(_ arguments: [String], root: URL, executionID: String) async throws -> String {
+    let git = try await GitExecutableResolver.shared.resolve()
     let result = try await WorkflowScriptExecutor.run(
       .init(
-        executable: "/usr/bin/git", arguments: arguments,
-        directory: root, environment: ["PATH": "/usr/bin:/bin", "GIT_TERMINAL_PROMPT": "0"]
+        executable: git.url.path(percentEncoded: false), arguments: arguments,
+        directory: root, environment: git.environment.merging(["GIT_TERMINAL_PROMPT": "0"]) { _, value in value }
       ).limits(timeout: 30),
       request: Data(),
       onSpawn: { pid in

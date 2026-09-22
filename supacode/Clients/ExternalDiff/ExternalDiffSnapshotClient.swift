@@ -32,6 +32,7 @@ extension DependencyValues {
 
 private nonisolated struct ExternalDiffSnapshotBuilder {
   func makeSnapshotPair(at workingDirectory: URL) async throws -> ExternalDiffSnapshotPair {
+    let git = try await GitExecutableResolver.shared.resolve()
     let gitClient = GitClient()
     async let trackedOutput = gitClient.diffNameStatus(at: workingDirectory)
     async let untrackedPaths = gitClient.untrackedFilePaths(at: workingDirectory)
@@ -51,7 +52,7 @@ private nonisolated struct ExternalDiffSnapshotBuilder {
       try FileManager.default.createDirectory(at: rightURL, withIntermediateDirectories: true)
 
       for file in files {
-        try copySnapshotFile(file, from: workingDirectory, leftURL: leftURL, rightURL: rightURL)
+        try copySnapshotFile(file, from: workingDirectory, leftURL: leftURL, rightURL: rightURL, git: git)
       }
 
       return ExternalDiffSnapshotPair(leftURL: leftURL, rightURL: rightURL)
@@ -62,10 +63,11 @@ private nonisolated struct ExternalDiffSnapshotBuilder {
     _ file: DiffChangedFile,
     from worktreeURL: URL,
     leftURL: URL,
-    rightURL: URL
+    rightURL: URL,
+    git: GitExecutable
   ) throws {
     if let oldPath = file.oldPath {
-      try writeHeadFile(oldPath, worktreeURL: worktreeURL, destinationRoot: leftURL)
+      try writeHeadFile(oldPath, worktreeURL: worktreeURL, destinationRoot: leftURL, git: git)
     }
     if let newPath = file.newPath {
       let sourceURL = worktreeURL.appending(path: newPath)
@@ -84,7 +86,8 @@ private nonisolated struct ExternalDiffSnapshotBuilder {
   private func writeHeadFile(
     _ relativePath: String,
     worktreeURL: URL,
-    destinationRoot: URL
+    destinationRoot: URL,
+    git: GitExecutable
   ) throws {
     let destinationURL = destinationRoot.appending(path: relativePath)
     try createParentDirectory(for: destinationURL)
@@ -96,7 +99,8 @@ private nonisolated struct ExternalDiffSnapshotBuilder {
     defer { try? outputHandle.close() }
 
     let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+    process.executableURL = git.url
+    process.environment = ProcessInfo.processInfo.environment.merging(git.environment) { _, selected in selected }
     process.arguments = [
       "-C",
       worktreeURL.path(percentEncoded: false),

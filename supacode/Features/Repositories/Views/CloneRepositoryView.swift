@@ -141,9 +141,16 @@ struct CloneRepositoryView: View {
 
   /// Returns `nil` on success, or an error message on failure.
   static func runGitClone(url: String, destination: URL) async -> String? {
-    await withCheckedContinuation { continuation in
+    let git: GitExecutable
+    do {
+      git = try await GitExecutableResolver.shared.resolve(revalidate: true)
+    } catch {
+      return error.localizedDescription
+    }
+    return await withCheckedContinuation { continuation in
       let process = Process()
-      process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+      process.executableURL = git.url
+      process.environment = ProcessInfo.processInfo.environment.merging(git.environment) { _, selected in selected }
       process.arguments = ["clone", "--", url, destination.path]
       process.standardOutput = FileHandle.nullDevice
       let errorLogURL = FileManager.default.temporaryDirectory
