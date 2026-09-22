@@ -358,7 +358,7 @@ test: ensure-ghostty embed-cli-debug embed-docs embed-skills test-app
 test-scripts: # Run tests for the repository's Python scripts
 	@python3 -m unittest discover -s "$(CURRENT_MAKEFILE_DIR)/scripts" -p 'test_*.py'
 
-# Real TLS deadlines run separately from the bulk suite's main-actor work.
+# Real I/O deadlines run separately from the bulk suite's main-actor work.
 test-app: ensure-ghostty # Run app/unit tests via xcodebuild
 	@set -euo pipefail; \
 	result_root="$(CURRENT_MAKEFILE_DIR)/build/test-results"; \
@@ -406,7 +406,18 @@ test-app: ensure-ghostty # Run app/unit tests via xcodebuild
 		skip_args+=("-skip-testing:supacodeTests/$$suite"); \
 		mirror_args+=("-only-testing:supacodeTests/$$suite"); \
 	done; \
+	event_monitor_tests=( \
+		"supacodeTests/GitWorktreeRegistryMonitorTests" \
+		"supacodeTests/CLISocketServerTests/disconnectMonitorActivatesDuringCreation()" \
+		"supacodeTests/CLISocketServerTests/disconnectMonitorOutlivesOriginalDescriptor()" \
+	); \
+	event_args=(); \
+	for test_id in "$${event_monitor_tests[@]}"; do \
+		skip_args+=("-skip-testing:$$test_id"); \
+		event_args+=("-only-testing:$$test_id"); \
+	done; \
 	run_xcode_tests "$$result_root/supacode-tests.xcresult" test "" "$${skip_args[@]}"; \
+	run_xcode_tests "$$result_root/supacode-event-monitor-tests.xcresult" test-without-building "" "$${event_args[@]}"; \
 	run_xcode_tests "$$result_root/supacode-mirror-tests.xcresult" test-without-building "" "$${mirror_args[@]}"; \
 	run_xcode_tests "$$result_root/supacode-shell-cancellation-tests.xcresult" test-without-building 2 "$${only_args[@]}"
 

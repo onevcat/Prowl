@@ -33,7 +33,7 @@ class AppBuildPathTests(unittest.TestCase):
             self.assertTrue((root / "arguments.json").exists(), result.stderr)
             return json.loads((root / "arguments.json").read_text())
 
-    def run_grouped_build(self, fail_mirror=False):
+    def run_grouped_build(self, fail_mirror=False, fail_events=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             shutil.copyfile(Path(__file__).resolve().parents[1] / "Makefile", root / "Makefile")
@@ -44,7 +44,8 @@ class AppBuildPathTests(unittest.TestCase):
             (root / "xcodebuild").write_text(
                 '#!/usr/bin/env python3\nimport json, sys\n'
                 'with open("calls.jsonl", "a") as out: out.write(json.dumps(sys.argv[1:]) + "\\n")\n'
-                f'fail = {fail_mirror!r} and "-only-testing:supacodeTests/MirrorHostTests" in sys.argv\n'
+                f'fail = ({fail_mirror!r} and "-only-testing:supacodeTests/MirrorHostTests" in sys.argv) or '
+                f'({fail_events!r} and "-only-testing:supacodeTests/GitWorktreeRegistryMonitorTests" in sys.argv)\n'
                 'sys.exit(23 if fail else 0)\n'
             )
             (root / "mise").write_text("#!/bin/sh\ncat\n")
@@ -73,6 +74,26 @@ class AppBuildPathTests(unittest.TestCase):
         result, calls = self.run_grouped_build(fail_mirror=True)
         self.assertNotEqual(result.returncode, 0)
         self.assertTrue(any("-only-testing:supacodeTests/MirrorHostTests" in call for call in calls))
+
+    def test_event_monitors_run_once_outside_the_bulk_suite(self):
+        result, calls = self.run_grouped_build()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        targets = [
+            "supacodeTests/GitWorktreeRegistryMonitorTests",
+            "supacodeTests/CLISocketServerTests/disconnectMonitorActivatesDuringCreation()",
+            "supacodeTests/CLISocketServerTests/disconnectMonitorOutlivesOriginalDescriptor()",
+        ]
+        for target in targets:
+            self.assertIn(f"-skip-testing:{target}", calls[0])
+            runs = [call for call in calls if f"-only-testing:{target}" in call]
+            self.assertEqual(len(runs), 1)
+            self.assertEqual(runs[0][0], "test-without-building")
+            self.assertTrue(all(f"-only-testing:{item}" in runs[0] for item in targets))
+
+    def test_event_monitor_failure_fails_the_app_test_target(self):
+        result, calls = self.run_grouped_build(fail_events=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue(any("-only-testing:supacodeTests/GitWorktreeRegistryMonitorTests" in call for call in calls))
 
     def test_default_build_reaches_xcodebuild_with_bash_nounset(self):
         arguments = self.run_failed_build(None)
