@@ -297,7 +297,7 @@ final class CLISocketServer {
       let encoder = JSONEncoder()
       encoder.outputFormatting = [.sortedKeys]
       let responseData = try encoder.encode(response)
-      guard responseData.count > 0, responseData.count <= Self.maximumFrameLength else { return }
+      guard !responseData.isEmpty, responseData.count <= Self.maximumFrameLength else { return }
 
       var responseLength = UInt32(responseData.count).bigEndian
       try withUnsafeBytes(of: &responseLength) { try Self.fdWrite(fildes: clientFD, buffer: $0) }

@@ -244,7 +244,7 @@ final class LifecycleCommandHandler: CommandHandler {
     case .success(let resolved):
       target = resolved
     case .failure(let error):
-      return mapResolverError(command: "create", error: error)
+      return error.commandResponse(command: "create")
     }
 
     let path = normalizedAllowedPath(input.path, worktreePath: target.worktreePath)
@@ -288,7 +288,7 @@ final class LifecycleCommandHandler: CommandHandler {
     case .success(let resolved):
       anchor = resolved
     case .failure(let error):
-      return mapResolverError(command: "create", error: error)
+      return error.commandResponse(command: "create")
     }
 
     if let launch = input.launch {
@@ -496,7 +496,7 @@ final class LifecycleCommandHandler: CommandHandler {
     case .success(let target):
       resolved = target
     case .failure(let error):
-      return mapResolverError(command: "close", error: error)
+      return error.commandResponse(command: "close")
     }
 
     let didClose =
@@ -567,15 +567,6 @@ final class LifecycleCommandHandler: CommandHandler {
 
   private func makePayloadTarget(from target: TabResolvedTarget) -> TabTarget {
     TabTarget(from: target)
-  }
-
-  private func mapResolverError(command: String, error: TargetResolverError) -> CommandResponse {
-    switch error {
-    case .notFound(let message):
-      errorResponse(command: command, code: CLIErrorCode.targetNotFound, message: message)
-    case .notUnique(let message):
-      errorResponse(command: command, code: CLIErrorCode.targetNotUnique, message: message)
-    }
   }
 
   private func errorResponse(command: String, code: String, message: String) -> CommandResponse {

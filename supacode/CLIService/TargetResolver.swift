@@ -28,6 +28,26 @@ struct ResolvedTarget: Sendable {
 enum TargetResolverError: Error {
   case notFound(String)
   case notUnique(String)
+
+  /// The failure response that `command` returns when target resolution fails.
+  func commandResponse(command: String) -> CommandResponse {
+    let code: String
+    let message: String
+    switch self {
+    case .notFound(let text):
+      code = CLIErrorCode.targetNotFound
+      message = text
+    case .notUnique(let text):
+      code = CLIErrorCode.targetNotUnique
+      message = text
+    }
+    return CommandResponse(
+      ok: false,
+      command: command,
+      schemaVersion: "prowl.cli.\(command).v1",
+      error: CommandError(code: code, message: message)
+    )
+  }
 }
 
 @MainActor

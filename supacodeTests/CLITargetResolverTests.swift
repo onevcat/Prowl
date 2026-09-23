@@ -93,6 +93,22 @@ struct CLITargetResolverTests {
     }
   }
 
+  @Test func resolverErrorsMapToCommandFailures() {
+    let notFound = TargetResolverError.notFound("Pane 'p9' not found.").commandResponse(command: "send")
+    #expect(notFound.ok == false)
+    #expect(notFound.command == "send")
+    #expect(notFound.schemaVersion == "prowl.cli.send.v1")
+    #expect(notFound.data == nil)
+    #expect(notFound.error?.code == CLIErrorCode.targetNotFound)
+    #expect(notFound.error?.message == "Pane 'p9' not found.")
+
+    let notUnique = TargetResolverError.notUnique("Worktree 'main' is ambiguous.").commandResponse(command: "close")
+    #expect(notUnique.command == "close")
+    #expect(notUnique.schemaVersion == "prowl.cli.close.v1")
+    #expect(notUnique.error?.code == CLIErrorCode.targetNotUnique)
+    #expect(notUnique.error?.message == "Worktree 'main' is ambiguous.")
+  }
+
   @Test func stalePrefixedHandleDoesNotFallBackToWorktree() {
     let snapshot = makeSnapshot(
       worktreeID: "p3-worktree",

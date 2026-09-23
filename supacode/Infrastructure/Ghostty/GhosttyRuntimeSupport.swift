@@ -143,7 +143,7 @@ extension NSColor {
     let cleaned =
       ghosttyHexColor
       .trimmingCharacters(in: .whitespacesAndNewlines)
-      .replacingOccurrences(of: "#", with: "")
+      .replacing("#", with: "")
     guard cleaned.count == 6, let value = Int(cleaned, radix: 16) else {
       return nil
     }
@@ -183,9 +183,11 @@ extension NSPasteboard {
   static let ghosttyEscapeCharacters = "\\ ()[]{}<>\"'`!#$&;|*?\t"
 
   static func ghosttyEscape(_ str: String) -> String {
-    var result = str
-    for char in ghosttyEscapeCharacters {
-      result = result.replacing(String(char), with: "\\\(char)")
+    var result = ""
+    result.reserveCapacity(str.utf8.count)
+    for char in str {
+      if ghosttyEscapeCharacters.contains(char) { result.append("\\") }
+      result.append(char)
     }
     return result
   }
@@ -195,9 +197,7 @@ extension NSPasteboard {
   }()
 
   func getOpinionatedStringContents() -> String? {
-    if let urls = readObjects(forClasses: [NSURL.self]) as? [URL],
-      urls.count > 0
-    {
+    if let urls = readObjects(forClasses: [NSURL.self]) as? [URL], !urls.isEmpty {
       return
         urls
         .map { $0.isFileURL ? Self.ghosttyEscape($0.path) : $0.absoluteString }

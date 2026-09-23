@@ -218,7 +218,7 @@ extension Array {
     for index in sourceIndexes.reversed() {
       remove(at: index)
     }
-    let removedBeforeDestination = sourceIndexes.filter { $0 < destination }.count
+    let removedBeforeDestination = sourceIndexes.count(where: { $0 < destination })
     insert(contentsOf: movedElements, at: destination - removedBeforeDestination)
   }
 }
