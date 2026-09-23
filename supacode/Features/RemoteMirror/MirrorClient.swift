@@ -184,7 +184,7 @@ final class MirrorClient: Identifiable {
     case .panes: receivePanes(message)
     case .commandResult:
       guard let response = message.commandResponse else {
-        peer?.close("Invalid command response.")
+        peer?.close(String(localized: "Invalid command response."))
         return
       }
       commands.receive(response)

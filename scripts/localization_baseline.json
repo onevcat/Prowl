@@ -28,6 +28,7 @@
   "exemptLiterals": {
     "%@\n\n---\nProwl dispatch completion protocol v%@:\nBefore ending this task, choose exactly one terminal outcome and make this command your final tool action:\nprowl agents dispatch-complete --outcome succeeded|failed --summary \"<concise result>\"\nUse succeeded only when the assigned work is complete and verified. Use failed when it cannot be completed.\nKeep the required summary to a single line with no control characters, and explain the result clearly.\nDo not omit the command; Prowl supplies its dispatch context\nautomatically.": "agent-prompt",
     "%@: pullRequests(first: 5, states: [OPEN, MERGED, CLOSED], headRefName: \"%@\", %@) {\n  nodes {\n    number\n    title\n    state\n    additions\n    deletions\n    isDraft\n    reviewDecision\n    mergeable\n    mergeStateStatus\n    url\n    updatedAt\n    headRefName\n    baseRefName\n    commits {\n      totalCount\n    }\n    author {\n      login\n    }\n    headRepository {\n      name\n      owner { login }\n    }\n    mergeQueueEntry {\n      position\n      estimatedTimeToMerge\n      state\n    }\n    statusCheckRollup {\n      contexts(first: 100) {\n        nodes {\n          ... on CheckRun {\n            name\n            status\n            conclusion\n            startedAt\n            completedAt\n            detailsUrl\n          }\n          ... on StatusContext {\n            context\n            state\n            targetUrl\n            createdAt\n          }\n        }\n      }\n    }\n  }\n}": "identifier",
+    "%@: unexpected version output": "developer",
     "%@; %@; %@; exec \"${__supacode_login_argv[@]}\"": "identifier",
     "(invocation %@)%@; persisting.": "log",
     "Action input evaluation failed: %@": "log",
@@ -79,6 +80,7 @@
     "Invalid dispatch target or prompt size.": "protocol",
     "Kimi CLI": "product-name",
     "Library/Application Support/com.mitchellh.ghostty": "identifier",
+    "Login PATH: %@": "developer",
     "Missing response payload for %@/%@": "other",
     "NSWindow Frame DiffWindow": "identifier",
     "No test activation bridge configured.": "developer",
@@ -93,6 +95,7 @@
     "Pane '%@' does not host an active agent.": "protocol",
     "Pane '%@' is no longer available.": "protocol",
     "Pane '%@' no longer hosts the selected agent.": "protocol",
+    "Probe failed (%@): %@\n": "developer",
     "Prowl main window surfacing %@": "log",
     "Qoder CLI": "product-name",
     "Qwen Code": "product-name",
@@ -109,9 +112,9 @@
     "Step '%@' failed: %@": "log",
     "Step '%@' reached its timeout without a delivery from %@.": "log",
     "Step '%@': native action '%@' not started; the run had moved on.": "log",
+    "Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).": "identifier",
     "Sublime Merge": "product-name",
     "Sublime Text": "product-name",
-    "Tab %@": "protocol",
     "Test": "developer",
     "The Claude input area could not be verified. Check Host before dispatching.": "protocol",
     "The delivered output is %@ bytes; the limit is %@ bytes.": "protocol",
@@ -153,6 +156,8 @@
     "Workspace creation failed: %@": "log",
     "Workspace rollback command failed: %@: %@": "log",
     "Workspace rollback could not remove %@: %@": "log",
+    "Worktree '%@' matches %@ worktrees.": "protocol",
+    "Worktree '%@' not found.": "protocol",
     "Zed Preview": "product-name"
   },
   "blocked": {
@@ -219,6 +224,7 @@
     "The managed hook settings file could not be created.": "The message is shown in a toast and also goes to the prowl CLI JSON or the log through the same value.",
     "The merged OPENCODE_CONFIG_CONTENT could not be serialized; launching unchanged.": "LifecycleCommandWarning.message also goes to the prowl CLI JSON and stderr. Split the toast copy from the CLI message first.",
     "The rendered line of step '%@' is not a single terminal line; nothing was typed.": "The same value goes to log.md, state.json, and the prowl workflow status JSON. Localize it with UI-side copy per WorkflowAttentionReason.",
+    "This mirror was disconnected by Host.": "Host sends it to the client device in a failure frame. Needs client-side copy per failure reason.",
     "Unknown collect-worktree-context input.": "Reaches the action record files and, through an attention reason, log.md and the prowl CLI.",
     "Update workflow state": "Stored as the step title in the run records of the run directory."
   },

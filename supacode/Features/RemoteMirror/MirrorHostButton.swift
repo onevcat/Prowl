@@ -184,8 +184,10 @@ private struct MirrorSettingsView: View {
       Button("Cancel", role: .cancel) {}
     } message: { target in
       Text(
-        "Disconnect \(target.deviceName) from \(target.paneTitle)? "
-          + "The terminal keeps running. The device stays paired and can reconnect.")
+        """
+        Disconnect \(target.deviceName) from \(target.paneTitle)? \
+        The terminal keeps running. The device stays paired and can reconnect.
+        """)
     }
     .alert(
       "Rename Host",

@@ -69,7 +69,9 @@ struct RemoteMirrorPaneView: View {
         if client.showsHistory { history }
       }
     }
-    .navigationTitle(client.selectedPane?.projectName ?? client.selectedPane?.title ?? "Remote Mirror")
+    .navigationTitle(
+      client.selectedPane?.projectName ?? client.selectedPane?.title ?? String(localized: "Remote Mirror")
+    )
     .navigationSubtitle(client.selectedPane?.subtitle ?? "")
     .toolbar {
       ToolbarItem(placement: .navigation) { MirrorHostButton() }

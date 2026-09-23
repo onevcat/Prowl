@@ -6,9 +6,9 @@ final class MirrorCommandChannel {
     case unavailable, timedOut, disconnected
     var errorDescription: String? {
       switch self {
-      case .unavailable: "The Host is not ready for another request."
-      case .timedOut: "The Host did not confirm the request in time."
-      case .disconnected: "The connection closed before Host confirmed the request."
+      case .unavailable: String(localized: "The Host is not ready for another request.")
+      case .timedOut: String(localized: "The Host did not confirm the request in time.")
+      case .disconnected: String(localized: "The connection closed before Host confirmed the request.")
       }
     }
   }

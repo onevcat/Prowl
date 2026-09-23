@@ -540,9 +540,6 @@
         }
       }
     },
-    "%@:%@" : {
-      "shouldTranslate" : false
-    },
     "%lld" : {
       "shouldTranslate" : false
     },
@@ -1573,6 +1570,16 @@
         }
       }
     },
+    "Agent Profile" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agent 配置"
+          }
+        }
+      }
+    },
     "Agent Profiles" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2330,6 +2337,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在合并队列中等待检查"
+          }
+        }
+      }
+    },
+    "Back" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "返回"
           }
         }
       }
@@ -3154,6 +3171,16 @@
         }
       }
     },
+    "Check this folder's permissions and Git configuration, then retry." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请检查此文件夹的权限和 Git 设置，然后重试。"
+          }
+        }
+      }
+    },
     "Checking GitHub CLI..." : {
       "localizations" : {
         "zh-Hans" : {
@@ -3294,6 +3321,16 @@
         }
       }
     },
+    "Choose a Profile" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择配置"
+          }
+        }
+      }
+    },
     "Choose a bare repository folder" : {
       "localizations" : {
         "zh-Hans" : {
@@ -3360,6 +3397,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "选择仓库文件夹"
+          }
+        }
+      }
+    },
+    "Choose a worktree" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择 worktree"
           }
         }
       }
@@ -4624,6 +4671,16 @@
         }
       }
     },
+    "Copy Details" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制详细信息"
+          }
+        }
+      }
+    },
     "Copy Path" : {
       "localizations" : {
         "zh-Hans" : {
@@ -5064,6 +5121,26 @@
         }
       }
     },
+    "Create a Shell or Agent Profile pane in a Host worktree" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在主机的 worktree 中创建 Shell 或 Agent 配置窗格"
+          }
+        }
+      }
+    },
+    "Create a background tab on Host and open its mirror" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在主机上创建后台标签页并打开它的镜像"
+          }
+        }
+      }
+    },
     "Create a branch in %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -5080,6 +5157,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "根据此工作流建议的 Agent 设置创建配置。"
+          }
+        }
+      }
+    },
+    "Create and Mirror" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建并镜像"
           }
         }
       }
@@ -5190,6 +5277,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在创建 worktree"
+          }
+        }
+      }
+    },
+    "Creating…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在创建…"
           }
         }
       }
@@ -5944,6 +6041,56 @@
         }
       }
     },
+    "Disconnect" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "断开连接"
+          }
+        }
+      }
+    },
+    "Disconnect %@ from %@? The terminal keeps running. The device stays paired and can reconnect." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要断开 %1$@ 与 %2$@ 的连接吗？终端会继续运行。设备保持配对，可以重新连接。"
+          }
+        }
+      }
+    },
+    "Disconnect Mirror" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "断开镜像"
+          }
+        }
+      }
+    },
+    "Disconnect Mirror?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要断开镜像吗？"
+          }
+        }
+      }
+    },
+    "Disconnect mirror of %@ from %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "断开 %1$@ 与 %2$@ 的镜像"
+          }
+        }
+      }
+    },
     "Disconnect mirrors and stop listening; local terminals keep running" : {
       "localizations" : {
         "zh-Hans" : {
@@ -5960,6 +6107,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "断开此设备，并要求它重新配对"
+          }
+        }
+      }
+    },
+    "Disconnect this mirror; keep the device paired and the terminal running" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "断开此镜像；设备保持配对，终端继续运行"
           }
         }
       }
@@ -6040,16 +6197,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "显示"
-          }
-        }
-      }
-    },
-    "Display Size" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "显示大小"
           }
         }
       }
@@ -7166,22 +7313,22 @@
         }
       }
     },
-    "Fit the full terminal or scroll at original size; Host dimensions stay unchanged" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "缩放以显示完整终端，或按原始大小滚动；主机上的尺寸保持不变"
-          }
-        }
-      }
-    },
     "Fit to Window" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "适应窗口"
+          }
+        }
+      }
+    },
+    "Fit to Window — click to show Original Size; Host dimensions stay unchanged" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "适应窗口 — 点按以显示原始大小；主机尺寸保持不变"
           }
         }
       }
@@ -7422,6 +7569,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Git 命令失败：%@\n%@"
+          }
+        }
+      }
+    },
+    "Git is unavailable" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git 不可用"
+          }
+        }
+      }
+    },
+    "Git is unavailable. Check your Git installation. If you use Apple Git, check Command Line Tools. Then retry." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git 不可用。请检查你的 Git 安装。如果你使用 Apple Git，请检查 Command Line Tools。然后重试。"
           }
         }
       }
@@ -8056,6 +8223,16 @@
         }
       }
     },
+    "Initial prompt (optional)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "初始提示词（可选）"
+          }
+        }
+      }
+    },
     "Initial setup script that will be launched once after worktree creation" : {
       "localizations" : {
         "zh-Hans" : {
@@ -8272,6 +8449,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "主机终端尺寸无效。"
+          }
+        }
+      }
+    },
+    "Invalid command response." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无效的命令响应。"
           }
         }
       }
@@ -8806,12 +8993,32 @@
         }
       }
     },
+    "Load the previous page from this retained snapshot" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从此保留的快照中加载上一页"
+          }
+        }
+      }
+    },
     "Loading %@…" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在载入%@…"
+          }
+        }
+      }
+    },
+    "Loading Host configuration…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在加载主机设置…"
           }
         }
       }
@@ -9136,6 +9343,16 @@
         }
       }
     },
+    "Mirroring %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在镜像 %@"
+          }
+        }
+      }
+    },
     "Mode" : {
       "localizations" : {
         "zh-Hans" : {
@@ -9412,6 +9629,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在 %2$@ 中新建 %1$@"
+          }
+        }
+      }
+    },
+    "New Pane" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建窗格"
+          }
+        }
+      }
+    },
+    "New Pane…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建窗格…"
           }
         }
       }
@@ -9942,6 +10179,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "未选择 worktree"
+          }
+        }
+      }
+    },
+    "No worktrees are available. Add a project on Host, then refresh." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有可用的 worktree。请在主机上添加项目，然后刷新。"
           }
         }
       }
@@ -11015,6 +11262,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "原始大小"
+          }
+        }
+      }
+    },
+    "Original Size — click to fit the full terminal to this window; Host dimensions stay unchanged" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "原始大小 — 点按以使整个终端适应此窗口；主机尺寸保持不变"
           }
         }
       }
@@ -12181,6 +12438,26 @@
         }
       }
     },
+    "Read a new snapshot of retained terminal text" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "读取保留终端文本的新快照"
+          }
+        }
+      }
+    },
+    "Read a snapshot of retained terminal text" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "读取保留终端文本的快照"
+          }
+        }
+      }
+    },
     "Read previously paired Hosts from secure storage again" : {
       "localizations" : {
         "zh-Hans" : {
@@ -12527,6 +12804,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "重新加载此主机上的窗格列表"
+          }
+        }
+      }
+    },
+    "Reload worktrees and Agent Profiles from Host" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从主机重新加载 worktree 和 Agent 配置"
           }
         }
       }
@@ -13517,6 +13804,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "重试"
+          }
+        }
+      }
+    },
+    "Retry loading repository" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新加载仓库"
+          }
+        }
+      }
+    },
+    "Return to the Host pane list" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "返回主机窗格列表"
+          }
+        }
+      }
+    },
+    "Return to the live terminal" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "返回实时终端"
           }
         }
       }
@@ -15053,6 +15370,26 @@
         }
       }
     },
+    "Shelf — open a worktree or folder first" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "书架 — 请先打开一个 worktree 或文件夹"
+          }
+        }
+      }
+    },
+    "Shell" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shell"
+          }
+        }
+      }
+    },
     "Shortcut" : {
       "localizations" : {
         "zh-Hans" : {
@@ -16493,6 +16830,26 @@
         }
       }
     },
+    "The Host did not confirm the request in time." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主机未及时确认请求。"
+          }
+        }
+      }
+    },
+    "The Host is not ready for another request." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主机尚未准备好处理下一个请求。"
+          }
+        }
+      }
+    },
     "The agent will use the runtime's least-restricted mode. It may execute commands and modify files without prompting; managed or user-defined runtime policies can still apply." : {
       "localizations" : {
         "zh-Hans" : {
@@ -16540,6 +16897,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已配置的 worktree 基准 %@ 在本地不存在。请获取它，或在仓库设置中更新基础分支。"
+          }
+        }
+      }
+    },
+    "The connection closed before Host confirmed the request." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主机确认请求前连接已关闭。"
           }
         }
       }
@@ -16630,6 +16997,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "其他 Prowl 连接时使用的网络端口"
+          }
+        }
+      }
+    },
+    "The new tab opens in the background on Host and is mirrored here." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新标签页会在主机的后台打开，并镜像到这里。"
           }
         }
       }
@@ -17000,6 +17377,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此文件夹已显示在边栏中。仅适用于 Git 的操作会保持隐藏。"
+          }
+        }
+      }
+    },
+    "This folder is not a Git repository." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此文件夹不是 Git 仓库。"
           }
         }
       }
@@ -17520,16 +17907,6 @@
         }
       }
     },
-    "Unable to load %@" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "无法加载 %@"
-          }
-        }
-      }
-    },
     "Unable to open diff in %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -17566,6 +17943,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法准备克隆日志"
+          }
+        }
+      }
+    },
+    "Unable to read repository" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取仓库"
           }
         }
       }
@@ -18217,6 +18604,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "警告"
+          }
+        }
+      }
+    },
+    "What should the Agent do?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agent 应该做什么？"
           }
         }
       }
