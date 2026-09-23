@@ -1,6 +1,6 @@
 {
   "_comment": "Metadata for the docs/ manual. The last_synced_commit is the commit at which docs/ was last verified against the implementation; the sync-docs skill (.claude/skills/sync-docs/SKILL.md) diffs HEAD against it and updates this file. Committed to git on purpose so the baseline persists across sessions and machines. A dotfile + .json so a future docs website does not render it as a page.",
-  "last_synced_commit": "5f868b12e9c2a697e8245245cab16f0a9fe498ac",
-  "last_synced_date": "2026-09-18",
-  "note": "Verified changes across 15 implementation files since the prior baseline. The merged PRs already documented background Shell tab creation (`create tab --background` without a Profile), Codex starfield idle detection, and the flag-gated Remote Mirror host disconnect and client pane launch. No manual content changes were needed."
+  "last_synced_commit": "0259b40d61951a7ec579420a0fa830265299cbd6",
+  "last_synced_date": "2026-09-23",
+  "note": "Verified changes since the prior baseline: mostly UI localization (string catalog, Simplified Chinese, application language setting), Git discovery and repository recovery, and internal CLI error-mapping refactors. The feature PRs already documented the language setting and Git recovery behavior. No manual content changes were needed."
 }
