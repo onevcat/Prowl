@@ -73,7 +73,7 @@ selection.
   active while visible, even if the Active Agents panel is hidden.
 - Spine tint follows the **repository color** when set (toggle
   `shelfSpineTintFollowsRepositoryColor`); otherwise a fallback
-  (`shelfSpineTintFallback`: neutral or system tint) is used.
+  (`shelfSpineTintFallback`: Gray (`neutral`) or System Tint) is used.
 - In Shelf, the toolbar and leading band are tinted with the open book's repo
   color (`windowTintMode`).
 

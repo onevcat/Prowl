@@ -155,6 +155,7 @@ struct AddToProwlView: View {
             .font(.system(size: 11.5))
             .foregroundStyle(.secondary)
             .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
         }
 
         Spacer()

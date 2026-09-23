@@ -17,7 +17,7 @@ enum ShelfSpineTintFallback: String, CaseIterable, Identifiable, Codable, Sendab
   var title: String {
     switch self {
     case .neutral:
-      return String(localized: "Neutral")
+      return String(localized: "Gray")
     case .systemTint:
       return String(localized: "System Tint")
     }

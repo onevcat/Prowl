@@ -12,7 +12,6 @@ struct AppearanceSettingsView: View {
       Form {
         Section {
           Picker(
-            "语言 / Language",
             selection: Binding(
               get: { store.appLanguage },
               set: { store.send(.setAppLanguage($0)) }
@@ -21,6 +20,8 @@ struct AppearanceSettingsView: View {
             ForEach(AppLanguage.allCases) { language in
               Text(language.title).tag(language)
             }
+          } label: {
+            Label("Language", systemImage: "translate")
           }
           Text(
             "The change applies the next time Prowl starts; quitting the app may interrupt running terminal tasks.",
@@ -105,7 +106,7 @@ struct AppearanceSettingsView: View {
             "Follow Repo Color Setting",
             isOn: $store.shelfSpineTintFollowsRepositoryColor
           )
-          .help("When disabled, all Shelf spines use the selected Neutral or System Tint style.")
+          .help("When disabled, all Shelf spines use the selected Gray or System Tint style.")
           Text(shelfSpineTintFootnote)
             .font(.callout)
             .foregroundStyle(.secondary)
@@ -227,9 +228,9 @@ struct AppearanceSettingsView: View {
   private var tintFootnote: String {
     switch store.windowTintMode {
     case .none:
-      return String(localized: "No tint. The nav and toolbar use the neutral system chrome.")
+      return String(localized: "No tint. The nav and toolbar use the default system look.")
     case .repositoryColor:
-      return String(localized: "Uses the active repository's color. Uncolored repositories get a neutral surface.")
+      return String(localized: "Uses the active repository's color. Uncolored repositories use gray.")
     case .custom:
       return String(localized: "Uses your chosen color everywhere, regardless of per-repository colors.")
     }
@@ -239,10 +240,10 @@ struct AppearanceSettingsView: View {
     switch (store.shelfSpineTintFallback, store.shelfSpineTintFollowsRepositoryColor) {
     case (.neutral, true):
       return String(
-        localized: "Uncolored repositories use a neutral spine. Repositories with a custom color still use that color.")
+        localized: "Uncolored repositories use a gray spine. Repositories with a custom color still use that color.")
     case (.neutral, false):
       return String(
-        localized: "Uncolored repositories use a neutral spine. Repository colors are ignored for Shelf spines.")
+        localized: "Uncolored repositories use a gray spine. Repository colors are ignored for Shelf spines.")
     case (.systemTint, true):
       return String(
         localized:
