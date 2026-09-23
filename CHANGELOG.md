@@ -1,5 +1,19 @@
 # Changelog
 
+## [2026.9.23](https://github.com/onevcat/Prowl/releases/tag/v2026.9.23)
+
+### New
+
+- Added Simplified Chinese localization. Choose Follow System, English, or Simplified Chinese in Settings → General → Language, then restart Prowl to apply the change.
+- Search the command palette using Chinese command names or English keywords when using the Chinese interface.
+
+### Fixed
+
+- Prowl now finds another working Git installation when Apple’s Git tooling is unavailable, keeping worktrees and Shelf accessible.
+- Repository load failures now preserve running terminal sessions and show guidance for Git or access problems. Use Retry after resolving the issue.
+- Worktrees moved externally with `git worktree move` now refresh automatically. Detection also remains reliable after Git’s worktree registry is replaced or recreated.
+- Shelf now opens for plain folders even when Git is unavailable.
+
 ## [2026.9.18](https://github.com/onevcat/Prowl/releases/tag/v2026.9.18)
 
 ### Improved
