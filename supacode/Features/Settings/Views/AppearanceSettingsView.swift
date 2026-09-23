@@ -17,7 +17,9 @@ struct AppearanceSettingsView: View {
               set: { store.send(.setAppLanguage($0)) }
             )
           ) {
-            ForEach(AppLanguage.allCases) { language in
+            Text(AppLanguage.system.title).tag(AppLanguage.system)
+            Divider()
+            ForEach(AppLanguage.allCases.filter { $0 != .system }) { language in
               Text(language.title).tag(language)
             }
           } label: {

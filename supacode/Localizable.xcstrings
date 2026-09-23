@@ -7286,6 +7286,16 @@
         }
       }
     },
+    "Follow System" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跟随系统"
+          }
+        }
+      }
+    },
     "Follow Workflow" : {
       "localizations" : {
         "zh-Hans" : {

@@ -11,12 +11,13 @@ nonisolated enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
     rawValue
   }
 
-  /// Each option named in its own language, so a user who picked a language
-  /// they cannot read can still find their way back.
+  /// Each language is named in its own language, so a user who picked a language
+  /// they cannot read can still find their way back. "Follow System" is localized
+  /// because it always sits first in the picker.
   var title: String {
     switch self {
     case .system:
-      return "Follow System / 跟随系统"
+      return String(localized: "Follow System")
     case .zhHans:
       return "简体中文"
     case .english:

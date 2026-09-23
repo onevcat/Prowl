@@ -15,8 +15,9 @@ struct AppLanguageTests {
     #expect(AppLanguage(rawValue: "future-language") == nil)
   }
 
-  @Test func titlesUseNativeLanguageForms() {
-    #expect(AppLanguage.system.title == "Follow System / 跟随系统")
+  @Test func titlesUseNativeLanguageForms() throws {
+    #expect(AppLanguage.system.title == "Follow System")
+    #expect(try chinese("Follow System") == "跟随系统")
     #expect(AppLanguage.zhHans.title == "简体中文")
     #expect(AppLanguage.english.title == "English")
   }
