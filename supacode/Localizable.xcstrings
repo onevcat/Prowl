@@ -1318,7 +1318,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "请先在设置中添加自定义差异命令，再打开差异。"
+            "value" : "请先在设置中添加自定义 Diff 命令，再打开 Diff。"
           }
         }
       }
@@ -3459,7 +3459,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "选择点击差异标记或运行“显示差异”时打开的内容。"
+            "value" : "选择点击 Diff 标记或运行“显示 Diff”时打开的内容。"
           }
         }
       }
@@ -5309,7 +5309,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "自定义差异命令为空"
+            "value" : "自定义 Diff 命令为空"
           }
         }
       }
@@ -5849,7 +5849,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "差异模式"
+            "value" : "Diff 模式"
           }
         }
       }
@@ -5859,7 +5859,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "差异样式"
+            "value" : "Diff 样式"
           }
         }
       }
@@ -5869,7 +5869,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "差异工具"
+            "value" : "Diff 工具"
           }
         }
       }
@@ -5889,7 +5889,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "差异与拉取请求"
+            "value" : "Diff 与拉取请求"
           }
         }
       }
@@ -5999,7 +5999,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "全部关闭"
+            "value" : "全部清除"
           }
         }
       }
@@ -7286,6 +7286,16 @@
         }
       }
     },
+    "Follow System" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跟随系统"
+          }
+        }
+      }
+    },
     "Follow Workflow" : {
       "localizations" : {
         "zh-Hans" : {
@@ -8476,6 +8486,16 @@
         }
       }
     },
+    "Language" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "语言"
+          }
+        }
+      }
+    },
     "Last connected %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -9366,16 +9386,6 @@
         }
       }
     },
-    "Neutral" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "中性"
-          }
-        }
-      }
-    },
     "Never" : {
       "localizations" : {
         "zh-Hans" : {
@@ -9876,12 +9886,12 @@
         }
       }
     },
-    "No tint. The nav and toolbar use the neutral system chrome." : {
+    "No tint. The nav and toolbar use the default system look." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无色调。导航栏和工具栏使用中性的系统外观。"
+            "value" : "无色调。导航栏和工具栏使用系统默认外观。"
           }
         }
       }
@@ -10171,7 +10181,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "自动监测行级差异"
+            "value" : "自动监测行级 Diff"
           }
         }
       }
@@ -10562,7 +10572,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "用以下应用打开差异"
+            "value" : "用以下应用打开 Diff"
           }
         }
       }
@@ -15158,7 +15168,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "显示差异"
+            "value" : "显示 Diff"
           }
         }
       }
@@ -15728,7 +15738,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "用于没有颜色的仓库的脊线样式，或在关闭“跟随仓库颜色”时用于所有脊线。"
+            "value" : "用于没有颜色的仓库的书脊样式，或在关闭“跟随仓库颜色”时用于所有书脊。"
           }
         }
       }
@@ -17525,7 +17535,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法在 %@ 中打开差异"
+            "value" : "无法在 %@ 中打开 Diff"
           }
         }
       }
@@ -17640,22 +17650,22 @@
         }
       }
     },
-    "Uncolored repositories use a neutral spine. Repositories with a custom color still use that color." : {
+    "Uncolored repositories use a gray spine. Repositories with a custom color still use that color." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "未设颜色的仓库使用中性书脊。设有自定义颜色的仓库仍使用该颜色。"
+            "value" : "未设颜色的仓库使用灰色书脊。设有自定义颜色的仓库仍使用该颜色。"
           }
         }
       }
     },
-    "Uncolored repositories use a neutral spine. Repository colors are ignored for Shelf spines." : {
+    "Uncolored repositories use a gray spine. Repository colors are ignored for Shelf spines." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "未设颜色的仓库使用中性书脊。书架书脊会忽略仓库颜色。"
+            "value" : "未设颜色的仓库使用灰色书脊。书架书脊会忽略仓库颜色。"
           }
         }
       }
@@ -18031,12 +18041,12 @@
         }
       }
     },
-    "Uses the active repository's color. Uncolored repositories get a neutral surface." : {
+    "Uses the active repository's color. Uncolored repositories use gray." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "使用当前仓库的颜色。未设颜色的仓库使用中性表面。"
+            "value" : "使用当前仓库的颜色。未设颜色的仓库使用灰色。"
           }
         }
       }
@@ -18241,12 +18251,12 @@
         }
       }
     },
-    "When disabled, all Shelf spines use the selected Neutral or System Tint style." : {
+    "When disabled, all Shelf spines use the selected Gray or System Tint style." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "关闭时，所有书架书脊均使用所选的中性色或系统色调样式。"
+            "value" : "关闭时，所有书架书脊均使用所选的灰色或系统色调样式。"
           }
         }
       }
@@ -19406,16 +19416,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "⌘ + 滚动，或双指开合"
-          }
-        }
-      }
-    },
-    "语言 / Language" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "语言 / Language"
           }
         }
       }
