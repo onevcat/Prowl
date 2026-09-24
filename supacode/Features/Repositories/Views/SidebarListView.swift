@@ -122,11 +122,8 @@ struct SidebarListView: View {
         sidebarHeight = newHeight
       }
       .onDragSessionUpdated { session in
+        // Data transfer can finish before the drag becomes active on macOS.
         if case .ended = session.phase {
-          endSidebarDrag()
-          return
-        }
-        if case .dataTransferCompleted = session.phase {
           endSidebarDrag()
         }
       }

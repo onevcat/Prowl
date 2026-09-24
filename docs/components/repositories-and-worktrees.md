@@ -128,7 +128,8 @@ active, Prowl also refreshes every 30 seconds as a fallback.
   "Unpin". Pinned worktrees sit in a section above the rest. (Not available for
   the main worktree.)
 - **Reorder:** drag repositories or worktrees to rearrange; a thin accent line
-  shows the drop target. Order is persisted.
+  shows the drop target. Order is persisted. You can repeat the drag or cancel
+  with Escape and start another drag without reopening the app.
 - **Expand / Collapse:** click the chevron on a repo header, or cycle the
   sidebar's header button: from all-collapsed it offers **Expand Active**
   (double chevron `»` — expands only repos/workspaces that have open terminal

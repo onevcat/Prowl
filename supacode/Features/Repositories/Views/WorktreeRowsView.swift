@@ -180,10 +180,9 @@ struct WorktreeRowsView: View {
       }
     }
     .onDragSessionUpdated { session in
+      // Data transfer can finish before the drag becomes active on macOS.
       let didEnd =
         if case .ended = session.phase {
-          true
-        } else if case .dataTransferCompleted = session.phase {
           true
         } else {
           false
