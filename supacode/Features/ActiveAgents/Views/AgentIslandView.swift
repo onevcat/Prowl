@@ -21,6 +21,9 @@ struct AgentIslandRootLayout {
   static let floatingCompactWidth: CGFloat = 340
   static let fallbackFloatingCompactHeight: CGFloat = 40
   static let rosterWidth: CGFloat = 420
+  /// The notched roster matches the bar above it, but keeps the two-column callout width so its
+  /// rows stay readable under a narrow cutout.
+  static let minimumNotchedRosterWidth: CGFloat = 380
 
   static func width(
     notchCompactWidth: CGFloat?,
@@ -29,7 +32,7 @@ struct AgentIslandRootLayout {
   ) -> CGFloat {
     let compactWidth = notchCompactWidth ?? floatingCompactWidth
     if isRosterExpanded {
-      return max(compactWidth, rosterWidth)
+      return max(compactWidth, notchCompactWidth == nil ? rosterWidth : minimumNotchedRosterWidth)
     }
     guard attentionEntryCount > 0 else { return compactWidth }
     let attentionWidth = AgentIslandAttentionLayout.layout(entryCount: attentionEntryCount).width
@@ -286,13 +289,15 @@ struct AgentIslandView: View {
   private func notchedCompactContent(layout: AgentIslandNotchLayout) -> some View {
     HStack(spacing: 0) {
       notchedLeadingContent
-        .padding(.leading, 12)
+        .padding(.leading, AgentIslandNotchLayout.outerInset)
+        .padding(.trailing, AgentIslandNotchLayout.innerInset)
         .frame(width: layout.wingWidth, alignment: .leading)
       Color.clear
         .frame(width: layout.cutoutSize.width)
         .accessibilityHidden(true)
       notchedTrailingContent
-        .padding(.trailing, 12)
+        .padding(.leading, AgentIslandNotchLayout.innerInset)
+        .padding(.trailing, AgentIslandNotchLayout.outerInset)
         .frame(width: layout.wingWidth, alignment: .trailing)
     }
     .frame(width: layout.compactWidth, height: layout.compactHeight)
@@ -303,9 +308,10 @@ struct AgentIslandView: View {
   }
 
   private var notchedTrailingContent: some View {
-    HStack(spacing: 5) {
-      AgentIslandIconCluster(entries: islandEntries, pointSize: 20)
+    HStack(spacing: 0) {
+      AgentIslandIconCluster(entries: islandEntries, pointSize: AgentIslandNotchLayout.iconPointSize)
       compactChevron
+        .frame(width: AgentIslandNotchLayout.chevronSlotWidth, alignment: .trailing)
     }
   }
 

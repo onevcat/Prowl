@@ -48,7 +48,7 @@ extension AgentDisplayState {
 }
 
 struct AgentIslandStateSummaryView: View {
-  /// `compact` fits the 108pt notch wing; `regular` is the floating pill's roomier variant.
+  /// `compact` fits the narrow notch wing; `regular` is the floating pill's roomier variant.
   enum Size {
     case compact
     case regular
@@ -58,11 +58,32 @@ struct AgentIslandStateSummaryView: View {
   let size: Size
 
   var body: some View {
-    HStack(spacing: size == .compact ? 6 : 10) {
-      ForEach(summary.items) { item in
+    Group {
+      switch size {
+      case .compact:
+        // The notch wing is only as wide as the icon cluster. Tighten the spacing first, then
+        // drop the Idle count, which needs no attention; the roster still lists those agents.
+        ViewThatFits(in: .horizontal) {
+          itemRow(summary.items, spacing: 6)
+          itemRow(summary.items, spacing: 3)
+          itemRow(summary.items.filter { $0.state != .idle }, spacing: 3)
+        }
+      case .regular:
+        itemRow(summary.items, spacing: 10)
+      }
+    }
+    .lineLimit(1)
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel(summary.accessibilityLabel)
+  }
+
+  private func itemRow(_ items: [AgentIslandStateSummary.Item], spacing: CGFloat) -> some View {
+    HStack(spacing: spacing) {
+      ForEach(items) { item in
         HStack(spacing: size == .compact ? 2 : 3) {
           Image(systemName: item.state.islandSymbolName)
             .font(size == .compact ? .caption2.weight(.bold) : .caption.weight(.bold))
+            .accessibilityHidden(true)
           Text("\(item.count)")
             .font(size == .compact ? .caption.weight(.semibold) : .callout.weight(.semibold))
             .monospacedDigit()
@@ -70,8 +91,5 @@ struct AgentIslandStateSummaryView: View {
         .foregroundStyle(item.state.foregroundStyle)
       }
     }
-    .lineLimit(1)
-    .accessibilityElement(children: .ignore)
-    .accessibilityLabel(summary.accessibilityLabel)
   }
 }

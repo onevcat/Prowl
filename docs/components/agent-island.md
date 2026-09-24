@@ -16,7 +16,9 @@ track acknowledgement on its own: every label and transition comes from the same
 The island is off by default. When enabled, its bar remains visible even with no agent sessions.
 An empty bar shows the Prowl app icon using dedicated 22pt assets for standard and Retina displays; expanding it shows “No running agents” and the settings gear.
 Enable **Only show when agents are running** to hide the bar when the roster is empty. On a notched display it merges with the top edge, exactly as tall as the menu bar, with
-content in two wings on either side of the camera cutout; on other displays it is a centered
+content in two narrow wings on either side of the camera cutout, each only as wide as three agent
+icons so the bar covers as few menu bar items as possible. When the left wing cannot fit every
+state count, it hides the Idle count first; on other displays it is a centered
 floating bar overlaid directly on the menu bar at the same height. It
 stays visible across Spaces and over fullscreen applications and never becomes the active window.
 

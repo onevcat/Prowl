@@ -83,30 +83,36 @@ struct AgentIslandScreenDescriptor: Equatable, Identifiable {
 }
 
 struct AgentIslandNotchLayout: Equatable {
-  private static let minimumCompactWidth: CGFloat = 360
+  /// Icon diameter in the notched bar; smaller than the floating pill's because the bar is only as
+  /// tall as the cutout.
+  static let iconPointSize: CGFloat = 20
+  /// Space between a wing's content and the bar's outer end.
+  static let outerInset: CGFloat = 10
+  /// Space between a wing's content and the camera cutout.
+  static let innerInset: CGFloat = 4
+  /// The chevron glyph plus its spacing after the icon cluster.
+  static let chevronSlotWidth: CGFloat = 14
+  /// Each wing holds only the trailing icon cluster and its chevron, so the bar covers as few
+  /// menu bar status items as possible. The leading state summary adapts to the same width.
+  static let wingWidth: CGFloat =
+    outerInset + AgentIslandIconCluster.width(pointSize: iconPointSize) + chevronSlotWidth + innerInset
   /// The compact bar matches the cutout height so it ends flush with the menu bar. The floor
   /// only guards the 27pt icon cluster against an unusually short safe-area inset.
   private static let minimumCompactHeight: CGFloat = 28
-  private static let minimumWingWidth: CGFloat = 120
 
   let cutoutSize: CGSize
   let compactWidth: CGFloat
   let compactHeight: CGFloat
-  let wingWidth: CGFloat
+  var wingWidth: CGFloat { Self.wingWidth }
 
   init(cutoutSize: CGSize) {
     let cutoutSize = CGSize(
       width: max(0, cutoutSize.width),
       height: max(0, cutoutSize.height)
     )
-    let compactWidth = max(
-      Self.minimumCompactWidth,
-      cutoutSize.width + (Self.minimumWingWidth * 2)
-    )
     self.cutoutSize = cutoutSize
-    self.compactWidth = compactWidth
+    compactWidth = cutoutSize.width + (Self.wingWidth * 2)
     compactHeight = max(Self.minimumCompactHeight, cutoutSize.height)
-    wingWidth = (compactWidth - cutoutSize.width) / 2
   }
 }
 

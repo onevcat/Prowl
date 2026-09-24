@@ -280,6 +280,28 @@ struct AgentIslandIsolationTests {
         isRosterExpanded: false,
         attentionEntryCount: 0
       ) == 425)
+
+  }
+
+  @Test func notchedRosterMatchesTheBarWidth() {
+    #expect(
+      AgentIslandRootLayout.width(
+        notchCompactWidth: 381,
+        isRosterExpanded: true,
+        attentionEntryCount: 0
+      ) == 381)
+    #expect(
+      AgentIslandRootLayout.width(
+        notchCompactWidth: 425,
+        isRosterExpanded: true,
+        attentionEntryCount: 0
+      ) == 425)
+    #expect(
+      AgentIslandRootLayout.width(
+        notchCompactWidth: 346,
+        isRosterExpanded: true,
+        attentionEntryCount: 0
+      ) == 380)
   }
 
   @Test func floatingCompactBarUsesTheDisplayMenuBarHeight() {
