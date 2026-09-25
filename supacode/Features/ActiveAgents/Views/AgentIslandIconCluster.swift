@@ -22,6 +22,14 @@ struct AgentIslandIconCluster: View {
   }
 
   private static let maximumVisibleIcons = 3
+  /// Icons overlap by this much so the cluster stays narrow.
+  private static let iconSpacing: CGFloat = -4
+
+  /// The width of a full cluster. Each icon is a `pointSize + 2` circle with 2pt of padding.
+  static func width(pointSize: CGFloat) -> CGFloat {
+    let count = CGFloat(maximumVisibleIcons)
+    return (pointSize + 6) * count + iconSpacing * (count - 1)
+  }
 
   let projection: Projection
   /// Icon diameter; the notched bar passes a smaller size because it is only as tall as the cutout.
@@ -37,7 +45,7 @@ struct AgentIslandIconCluster: View {
     iconRow
       // Each icon is a `pointSize + 2` circle with 2pt of padding, so the cluster is exactly one
       // padded icon tall.
-      .frame(width: 78, height: pointSize + 6, alignment: .trailing)
+      .frame(width: Self.width(pointSize: pointSize), height: pointSize + 6, alignment: .trailing)
       .animation(
         reduceMotion ? .easeInOut(duration: 0.15) : .spring(duration: 0.3, bounce: 0.32),
         value: projection.identity
@@ -47,7 +55,7 @@ struct AgentIslandIconCluster: View {
 
   private var iconRow: some View {
     ZStack(alignment: .bottomTrailing) {
-      HStack(spacing: -4) {
+      HStack(spacing: Self.iconSpacing) {
         ForEach(projection.entries) { entry in
           AgentIslandRuntimeIcon(
             entry: entry,

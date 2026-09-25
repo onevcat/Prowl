@@ -97,10 +97,18 @@ struct AgentIslandScreenTests {
   @Test func notchedCompactLayoutReservesThePhysicalCutout() {
     let layout = AgentIslandNotchLayout(cutoutSize: CGSize(width: 185, height: 32))
 
-    #expect(layout.compactWidth == 425)
+    // Each wing holds three 20pt icons (70pt) plus the chevron slot and insets.
+    #expect(layout.compactWidth == 381)
     #expect(layout.compactHeight == 32)
-    #expect(layout.wingWidth == 120)
+    #expect(layout.wingWidth == 98)
     #expect((layout.wingWidth * 2) + layout.cutoutSize.width == layout.compactWidth)
+  }
+
+  @Test func notchedWingsDoNotGrowWithANarrowCutout() {
+    let layout = AgentIslandNotchLayout(cutoutSize: CGSize(width: 150, height: 32))
+
+    #expect(layout.wingWidth == 98)
+    #expect(layout.compactWidth == 346)
   }
 
   @Test func notchedCompactHeightFollowsTheCutoutWithAFloorForTheIconCluster() {
