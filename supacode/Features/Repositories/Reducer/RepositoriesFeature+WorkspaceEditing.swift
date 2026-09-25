@@ -108,27 +108,40 @@ extension RepositoriesFeature {
     return .run { send in
       do {
         let result = try await ProjectWorkspace.update(request, gitRunner: gitRunner)
-        // Branch deletion goes through the guarded entry point so protected
-        // branches survive, exactly like workspace removal.
+        // The save is committed at this point. Branch deletion goes through
+        // the guarded entry point so protected branches survive, exactly like
+        // workspace removal; a refused deletion is reported with the other
+        // cleanup failures rather than hidden behind the success toast.
+        var cleanupFailures = result.cleanupFailures
         for removal in result.completedRemovals where removal.deleteBranch {
           guard let sourceLocation = removal.entry.sourceLocation,
             let branchName = removal.entry.branchName
           else {
             continue
           }
-          let outcome = try? await gitClient.deleteLocalBranch(
-            branchName,
-            URL(fileURLWithPath: sourceLocation),
-            true
-          )
-          if case .protected? = outcome {
+          do {
+            let outcome = try await gitClient.deleteLocalBranch(
+              branchName,
+              URL(fileURLWithPath: sourceLocation),
+              true
+            )
+            if case .protected = outcome {
+              workspaceEditingLog.warning(
+                "Skipped deleting protected branch \(branchName) in \(sourceLocation)")
+            }
+          } catch {
             workspaceEditingLog.warning(
-              "Skipped deleting protected branch \(branchName) in \(sourceLocation)")
+              "Could not delete branch \(branchName) in \(sourceLocation): \(error.localizedDescription)")
+            cleanupFailures.append(
+              ProjectWorkspaceCleanupFailure(
+                entryID: removal.entry.id,
+                entryName: removal.entry.name,
+                message: String(
+                  localized: "Branch \(branchName) was not deleted: \(error.localizedDescription)")
+              ))
           }
         }
-        await send(
-          .workspaceEditing(
-            .workspaceSaved(repositoryID, cleanupFailures: result.cleanupFailures)))
+        await send(.workspaceEditing(.workspaceSaved(repositoryID, cleanupFailures: cleanupFailures)))
       } catch {
         workspaceEditingLog.warning("Workspace save failed: \(error.localizedDescription)")
         await send(.workspaceEditing(.workspaceSaveFailed(error.localizedDescription)))

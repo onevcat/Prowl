@@ -173,9 +173,9 @@ first (and rolled back if one fails, leaving the old metadata untouched), then
 `.prowl/workspace.json` is rewritten, then removed repositories are cleaned
 up. Cleanup is best-effort: if a worktree cannot be unregistered, a
 repository path lies outside the workspace folder, or the entry has no recorded
-source (so Prowl cannot tell whether it created the folder), the entry is still
-removed from the metadata and Prowl shows an alert listing what was left on
-disk. Save
+source (so Prowl cannot tell whether it created the folder), or a requested
+branch deletion is refused by git, the entry is still removed from the metadata
+and Prowl shows an alert listing what was left on disk. Save
 cannot be canceled once it has started. After a successful save the sidebar
 reloads and a **Workspace saved** toast appears.
 

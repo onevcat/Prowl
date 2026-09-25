@@ -202,6 +202,69 @@ struct RepositoriesFeatureWorkspaceEditingTests {
     #expect(ProjectWorkspace.load(from: rootURL)?.repositories.map(\.id) == ["app"])
   }
 
+  @Test func saveWorkspaceReportsFailedBranchDeletionAfterCommittedSave() async throws {
+    let rootURL = try makeWorkspaceOnDisk(
+      title: "Branches",
+      repositories: [
+        ProjectWorkspaceRepositoryEntry(id: "app", name: "App", path: "app"),
+        ProjectWorkspaceRepositoryEntry(
+          id: "api", name: "API", path: "api", sourceKind: .localRepository,
+          sourceLocation: "/tmp/source/api", branchName: "feature/api"),
+      ]
+    )
+    defer { try? FileManager.default.removeItem(at: rootURL) }
+    try FileManager.default.createDirectory(
+      at: rootURL.appending(path: "api"), withIntermediateDirectories: true)
+    let repositoryID = rootURL.path(percentEncoded: false)
+    let loaded = try #require(ProjectWorkspace.load(from: rootURL))
+    var initialState = RepositoriesFeature.State()
+    initialState.repositories = [
+      Repository(id: repositoryID, rootURL: rootURL, name: "Branches", kind: .plain, worktrees: [], workspace: loaded)
+    ]
+    initialState.repositoryRoots = [rootURL]
+    initialState.workspaceEditor = WorkspaceEditorFeature.State(
+      editing: loaded, rootURL: rootURL, repositoryID: repositoryID)
+    let deleteAttempts = LockIsolated(0)
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      // `git worktree remove` succeeds; the branch deletion is refused.
+      $0.shellClient.runLoginImpl = { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
+      $0.gitClient.deleteLocalBranch = { _, _, _ in
+        deleteAttempts.withValue { $0 += 1 }
+        throw GitClientError.commandFailed(command: "git branch -D feature/api", message: "checked out elsewhere")
+      }
+      $0.repositoryPersistence.loadRepositoryEntries = {
+        [PersistedRepositoryEntry(path: rootURL.path(percentEncoded: false), kind: .plain)]
+      }
+      $0.repositoryPersistence.saveRepositoryEntries = { _ in }
+      $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
+    }
+    store.exhaustivity = .off
+
+    let api = try #require(loaded.repositories.first { $0.id == "api" })
+    await store.send(
+      .workspaceEditing(
+        .saveWorkspace(
+          ProjectWorkspaceUpdateRequest(
+            rootURL: rootURL,
+            title: "Branches",
+            members: [.existing(loaded.repositories[0])],
+            removals: [ProjectWorkspaceRepositoryRemoval(entry: api, deleteFiles: true, deleteBranch: true)],
+            updatedAt: Date()
+          ))))
+    await store.receive(\.workspaceEditing.workspaceSaved) {
+      $0.workspaceEditor = nil
+    }
+    await store.finish()
+
+    #expect(deleteAttempts.value == 1)
+    // The save is committed; the branch that was explicitly requested but
+    // not deleted must still be surfaced to the user.
+    #expect(ProjectWorkspace.load(from: rootURL)?.repositories.map(\.id) == ["app"])
+    #expect(store.state.alert != nil)
+  }
+
   @Test func saveWorkspaceFailureKeepsEditorOpenWithMessage() async throws {
     let missingRoot = FileManager.default.temporaryDirectory
       .appending(path: "prowl-missing-\(UUID().uuidString)")

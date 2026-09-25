@@ -9,6 +9,7 @@
 | 2026-09-25 | `WorkspaceCreationPromptFeature` → `WorkspaceEditorFeature` with `mode`, existing-member rows, staged removal, reorder, task links, description; `WorkspaceCreationPromptView` → `WorkspaceEditorView` | PR #830 |
 | 2026-09-25 | `RepositoriesFeature+WorkspaceEditing.swift` (`workspaceEditing` action family), entry points in sidebar, detail view, Settings, Command Palette, Worktrees menu | PR #830 |
 | 2026-09-25 | Tests, `docs/` manual updates, this record | PR #830 |
+| 2026-09-25 | Review Loop round 2 (Pi Reviewer): a refused branch deletion after a committed save is reported in the cleanup alert instead of vanishing behind the success toast | PR #830 |
 | 2026-09-25 | Review Loop round 1 (Pi Reviewer): never delete a remote entry without a recorded source; surface the main window synchronously before the Settings-originated request; one interleaved member order so added rows can be moved among existing ones | PR #830 |
 
 ## Outcome & current state (as of 2026-09-25)
@@ -50,7 +51,8 @@
     from disk in an effect and presents the editor (`promptLoaded`), optionally pre-marking
     a child (sidebar row id = working-directory path); `saveWorkspace` runs
     `ProjectWorkspace.update`, deletes opted-in branches through
-    `gitClient.deleteLocalBranch` (protected branches skipped), then `workspaceSaved`
+    `gitClient.deleteLocalBranch` (protected branches skipped, a thrown deletion error is
+    appended to the cleanup failures), then `workspaceSaved`
     reloads repositories, toasts "Workspace saved", and alerts on cleanup failures;
     `workspaceSaveFailed` keeps the sheet open with the message (or alerts when the sheet
     is already gone). Save is deliberately not cancellable.
