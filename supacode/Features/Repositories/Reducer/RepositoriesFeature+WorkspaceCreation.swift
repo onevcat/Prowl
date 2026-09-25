@@ -32,6 +32,11 @@ extension RepositoriesFeature {
   ) -> Effect<Action> {
     switch action {
     case .promptRequested:
+      // The sheet is one presentation slot: never replace an open editor (and
+      // its unsaved edits or in-flight save) with a fresh creation sheet.
+      guard state.workspaceEditor == nil else {
+        return .none
+      }
       let candidates = state.workspaceCreationCandidates
       let title = "Workspace"
       // Seed with the collision-free base path synchronously (pure path math),

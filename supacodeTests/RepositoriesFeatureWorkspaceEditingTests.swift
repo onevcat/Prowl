@@ -90,6 +90,26 @@ struct RepositoriesFeatureWorkspaceEditingTests {
     await store.send(.workspaceEditing(.promptRequested("/tmp/git", removingChildID: nil)))
   }
 
+  @Test func newWorkspaceRequestDoesNotReplaceAnOpenEditor() async {
+    let rootURL = URL(fileURLWithPath: "/tmp/ws")
+    let workspace = ProjectWorkspace(
+      id: "/tmp/ws", title: "Open",
+      repositories: [ProjectWorkspaceRepositoryEntry(id: "app", name: "App", path: "app")])
+    var initialState = RepositoriesFeature.State()
+    initialState.workspaceEditor = WorkspaceEditorFeature.State(
+      editing: workspace, rootURL: rootURL, repositoryID: "/tmp/ws")
+    initialState.workspaceEditor?.title = "Unsaved rename"
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    // Menu and palette entries stay enabled while the sheet is up; the
+    // request must not discard the unsaved edit.
+    await store.send(.workspaceCreation(.promptRequested))
+    #expect(store.state.workspaceEditor?.title == "Unsaved rename")
+    #expect(store.state.workspaceEditor?.mode == .edit(repositoryID: "/tmp/ws"))
+  }
+
   @Test func staleCreationRootPathResultDoesNotTouchAnEditSession() async {
     // Creation resolves a unique default folder off the main actor; a result
     // that lands after the creation sheet was canceled and an edit sheet
