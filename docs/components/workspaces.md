@@ -135,7 +135,6 @@ A workspace stays editable after creation. Open the editor from any of:
 - the sidebar: right-click the workspace row (or its `…` menu) → **Edit
   Workspace…**, or right-click a child row → **Edit Workspace…** / **Remove
   from Workspace…**;
-- the workspace detail view (select the workspace row) → **Edit Workspace…**;
 - Settings → the workspace under Repositories → **Edit Workspace…** (the editor
   opens as a sheet on the main window, which is brought to the front);
 - the Command Palette → **Edit Workspace** while a workspace or one of its

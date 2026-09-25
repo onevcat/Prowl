@@ -33,7 +33,8 @@ struct RepositorySettingsView: View {
       set: { settings.fetchPullRequestState.wrappedValue = $0 },
     )
     let exampleWorktreePath = store.exampleWorktreePath
-    let folderName = Repository.name(for: store.rootURL)
+    // A workspace is named by its metadata title, not its folder.
+    let folderName = store.workspace?.title ?? Repository.name(for: store.rootURL)
     @Bindable var workflowsStore = store.scope(state: \.workflows, action: \.workflows)
 
     NavigationStack(path: $workflowsStore.scope(state: \.path, action: \.path)) {

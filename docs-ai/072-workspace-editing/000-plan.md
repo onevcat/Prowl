@@ -42,7 +42,8 @@ one editor surface instead of two. Bootstrap scripts stay out of scope.
 - **Reorder** members (move up / down) so the sidebar and metadata list follow the user's
   mental order.
 - **Discoverable entry points:** sidebar workspace header menu and child row context menu,
-  a button on the workspace detail view, a button in Settings → the workspace's page,
+  a button on the workspace detail view (see the action log: not reachable today), a
+  button in Settings → the workspace's page,
   the Command Palette, and the File menu next to "New Workspace…".
 - **Creation parity:** the create sheet gains the same optional Description, Task Links
   and per-repository Role fields so a workspace can be fully described up front.

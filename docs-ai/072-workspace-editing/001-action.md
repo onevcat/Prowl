@@ -83,6 +83,12 @@
 
 ## Deviations from plan
 
+- The "Edit Workspace…" button on `WorkspaceDetailView` is not reachable in the current
+  app: selecting a workspace row always opens its terminal (`selectedTerminalWorktree`
+  returns the plain-folder worktree), so `RepositoryDetailView` is only shown for git
+  repositories without a selected worktree. The button stays for the day that view is
+  reachable again; the user manual does not list it as an entry point.
+
 - The plan listed "settings-originated request through `AppFeature`" as a test; it exists,
   and `AppFeature` uses `appLifecycleClient.surfaceMainWindow` rather than a new client.
 - `.dismiss` on the sheet cannot be blocked while saving: TCA's `ifLet` clears the child
