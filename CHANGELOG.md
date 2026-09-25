@@ -1,5 +1,16 @@
 # Changelog
 
+## [2026.9.25](https://github.com/onevcat/Prowl/releases/tag/v2026.9.25)
+
+### Improved
+
+- Agent Island takes up less menu bar space on notched displays, leaving more room for status items. Its expanded agent list now matches the compact bar’s width.
+- When space is tight, Agent Island hides the Idle count. Idle agents remain in the expanded list, and VoiceOver still reads all counts.
+
+### Fixed
+
+- Fixed sidebar repository and worktree reordering becoming unresponsive after an earlier drag. Insertion indicators and drops now remain active until the interaction ends, including when retrying after cancellation.
+
 ## [2026.9.23](https://github.com/onevcat/Prowl/releases/tag/v2026.9.23)
 
 ### New
