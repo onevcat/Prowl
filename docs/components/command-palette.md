@@ -43,8 +43,10 @@ selected worktree has a pull request).
   Merge PR, Close PR. See [github-pull-requests](github-pull-requests.md).
 - **Terminal:** font size, find, tab/pane selection, new/close terminal (mirrors
   the Ghostty-bridged commands; search-only).
-- **App:** Check for Updates, Open Settings, Open Repository, **Install Command
-  Line Tool**, Repo Settings.
+- **App:** Check for Updates, Open Settings, Open Repository, New Workspace,
+  **Install Command Line Tool**, Repo Settings, and **Edit Workspace** while a
+  workspace (or one of its children) is selected — see
+  [workspaces](workspaces.md).
 - **Custom commands:** enabled local and Global Custom Commands appear here with their
   source. Same-titled commands can coexist; disabled commands do not appear.
 - **Agent profiles** (when a terminal worktree is selected): a
