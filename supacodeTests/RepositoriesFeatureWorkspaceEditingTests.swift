@@ -90,6 +90,29 @@ struct RepositoriesFeatureWorkspaceEditingTests {
     await store.send(.workspaceEditing(.promptRequested("/tmp/git", removingChildID: nil)))
   }
 
+  @Test func staleCreationRootPathResultDoesNotTouchAnEditSession() async {
+    // Creation resolves a unique default folder off the main actor; a result
+    // that lands after the creation sheet was canceled and an edit sheet
+    // opened must not rewrite the edit session's root.
+    let rootURL = URL(fileURLWithPath: "/Users/someone/.prowl/workspaces/Workspace")
+    let workspace = ProjectWorkspace(
+      id: rootURL.path(percentEncoded: false), title: "Workspace",
+      repositories: [ProjectWorkspaceRepositoryEntry(id: "app", name: "App", path: "app")])
+    var initialState = RepositoriesFeature.State()
+    initialState.workspaceEditor = WorkspaceEditorFeature.State(
+      editing: workspace, rootURL: rootURL, repositoryID: rootURL.path(percentEncoded: false))
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(
+      .workspaceCreation(
+        .defaultRootPathResolved(
+          path: rootURL.path(percentEncoded: false) + "-2",
+          requestedRootPath: rootURL.path(percentEncoded: false))))
+    #expect(store.state.workspaceEditor?.rootPath == rootURL.path(percentEncoded: false))
+  }
+
   @Test func saveWorkspaceWritesMetadataReloadsAndToasts() async throws {
     let rootURL = try makeWorkspaceOnDisk(
       title: "Before",

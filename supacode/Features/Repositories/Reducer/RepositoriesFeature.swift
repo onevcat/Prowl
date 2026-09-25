@@ -106,6 +106,7 @@ struct RepositoriesFeature {
     static let worktreePromptLoad = "repositories.worktreePromptLoad"
     static let worktreePromptValidation = "repositories.worktreePromptValidation"
     static let workspaceCreation = "repositories.workspaceCreation"
+    static let workspaceRootPathResolution = "repositories.workspaceRootPathResolution"
     static let workspaceChildrenRefresh = "repositories.workspaceChildrenRefresh"
     static func archiveScript(_ worktreeID: Worktree.ID) -> String {
       "repositories.archiveScript.\(worktreeID)"

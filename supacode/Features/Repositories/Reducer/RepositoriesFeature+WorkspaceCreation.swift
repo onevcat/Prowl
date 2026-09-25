@@ -49,11 +49,15 @@ extension RepositoriesFeature {
         let resolved = ProjectWorkspace.uniqueWorkspaceRootPath(folderName: folderName)
         await send(.workspaceCreation(.defaultRootPathResolved(path: resolved, requestedRootPath: requestedRootPath)))
       }
+      .cancellable(id: CancelID.workspaceRootPathResolution, cancelInFlight: true)
 
     case .defaultRootPathResolved(let path, let requestedRootPath):
       // Only adopt the de-duplicated path if the user has not edited the field
-      // since the prompt opened.
-      guard state.workspaceEditor?.rootPath == requestedRootPath else {
+      // since the prompt opened, and only for the creation sheet: an edit
+      // session opened right after a canceled creation must keep its own root.
+      guard let editor = state.workspaceEditor, editor.mode == .create,
+        editor.rootPath == requestedRootPath
+      else {
         return .none
       }
       state.workspaceEditor?.rootPath = path
@@ -63,10 +67,14 @@ extension RepositoriesFeature {
       let wasCreating = state.workspaceEditor?.isSaving == true
       state.workspaceEditor = nil
       guard wasCreating else {
-        return .cancel(id: CancelID.workspaceCreation)
+        return .merge(
+          .cancel(id: CancelID.workspaceCreation),
+          .cancel(id: CancelID.workspaceRootPathResolution)
+        )
       }
       return .merge(
         .cancel(id: CancelID.workspaceCreation),
+        .cancel(id: CancelID.workspaceRootPathResolution),
         .send(.showToast(.warning(String(localized: "Workspace creation canceled"))))
       )
 
