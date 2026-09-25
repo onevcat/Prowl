@@ -5,10 +5,10 @@
 | Date | Change | Ref |
 | --- | --- | --- |
 | 2026-09-25 | Plan written after reading PR #602 and the entry-042 code; branch `feature/workspace-editing` from `main` (`869b5d9f`) | this entry |
-| 2026-09-25 | Domain: `ProjectWorkspace.update`, `ProjectWorkspaceUpdateRequest` / `Member` / `Removal` / `Result`, description, task links, and role on creation, unknown-key-preserving `encodeMetadata`, minimum member count 1 | PR #TBD |
-| 2026-09-25 | `WorkspaceCreationPromptFeature` → `WorkspaceEditorFeature` with `mode`, existing-member rows, staged removal, reorder, task links, description; `WorkspaceCreationPromptView` → `WorkspaceEditorView` | PR #TBD |
-| 2026-09-25 | `RepositoriesFeature+WorkspaceEditing.swift` (`workspaceEditing` action family), entry points in sidebar, detail view, Settings, Command Palette, Worktrees menu | PR #TBD |
-| 2026-09-25 | Tests, `docs/` manual updates, this record | PR #TBD |
+| 2026-09-25 | Domain: `ProjectWorkspace.update`, `ProjectWorkspaceUpdateRequest` / `Member` / `Removal` / `Result`, description, task links, and role on creation, unknown-key-preserving `encodeMetadata`, minimum member count 1 | PR #830 |
+| 2026-09-25 | `WorkspaceCreationPromptFeature` → `WorkspaceEditorFeature` with `mode`, existing-member rows, staged removal, reorder, task links, description; `WorkspaceCreationPromptView` → `WorkspaceEditorView` | PR #830 |
+| 2026-09-25 | `RepositoriesFeature+WorkspaceEditing.swift` (`workspaceEditing` action family), entry points in sidebar, detail view, Settings, Command Palette, Worktrees menu | PR #830 |
+| 2026-09-25 | Tests, `docs/` manual updates, this record | PR #830 |
 
 ## Outcome & current state (as of 2026-09-25)
 

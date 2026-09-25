@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | Implemented |
 | **Anchor date** | 2026-09-25 |
-| **Primary PRs** | (fill in as they merge) |
+| **Primary PRs** | #830 |
 | **Related** | [042-project-workspaces](../042-project-workspaces/000-plan.md), [062-workspace-child-diff](../062-workspace-child-diff/000-plan.md), `docs/components/workspaces.md`, PR #602 (superseded reference) |
 
 ## Background
