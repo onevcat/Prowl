@@ -148,20 +148,92 @@ struct WorkspaceEditorFeatureTests {
       WorkspaceEditorFeature()
     }
 
-    await store.send(.existingRepositoryMovedUp("app"))
-    await store.send(.existingRepositoryMovedDown("app")) {
-      $0.existingRepositories = [
-        WorkspaceEditorExistingRepository(entry: self.apiEntry),
-        WorkspaceEditorExistingRepository(entry: self.appEntry),
-      ]
+    #expect(store.state.orderedMemberKeys == [.existing("app"), .existing("api")])
+    await store.send(.memberMovedUp(.existing("app")))
+    await store.send(.memberMovedDown(.existing("app"))) {
+      $0.memberOrder = [.existing("api"), .existing("app")]
     }
-    await store.send(.existingRepositoryMovedDown("app"))
-    await store.send(.existingRepositoryMovedUp("app")) {
-      $0.existingRepositories = [
-        WorkspaceEditorExistingRepository(entry: self.appEntry),
-        WorkspaceEditorExistingRepository(entry: self.apiEntry),
-      ]
+    await store.send(.memberMovedDown(.existing("app")))
+    await store.send(.memberMovedUp(.existing("app"))) {
+      $0.memberOrder = [.existing("app"), .existing("api")]
     }
+    #expect(store.state.orderedMembers.map(\.id) == [.existing("app"), .existing("api")])
+  }
+
+  @Test func addedMemberCanMoveBeforeExistingMembersAndSubmitKeepsThatOrder() async {
+    let now = Date(timeIntervalSince1970: 1_700_000_000)
+    let shared = ProjectWorkspaceCreationRepository(
+      id: "/tmp/source/shared",
+      name: "Shared",
+      rootURL: URL(fileURLWithPath: "/tmp/source/shared")
+    )
+    let store = TestStore(initialState: makeEditState()) {
+      WorkspaceEditorFeature()
+    } withDependencies: {
+      $0.date.now = now
+    }
+
+    await store.send(.addOpenedRepository("/tmp/source/shared")) {
+      $0.repositories = [shared]
+    }
+    await store.receive(\.delegate.baseRefSourceChanged)
+    // Added rows append after existing members until they are moved.
+    #expect(
+      store.state.orderedMemberKeys == [.existing("app"), .existing("api"), .added("/tmp/source/shared")])
+    await store.send(.memberMovedUp(.added("/tmp/source/shared"))) {
+      $0.memberOrder = [.existing("app"), .added("/tmp/source/shared"), .existing("api")]
+    }
+    await store.send(.memberMovedUp(.added("/tmp/source/shared"))) {
+      $0.memberOrder = [.added("/tmp/source/shared"), .existing("app"), .existing("api")]
+    }
+    await store.send(.memberMovedUp(.added("/tmp/source/shared")))
+
+    await store.send(.submitButtonTapped)
+    await store.receive(
+      .delegate(
+        .submit(
+          .update(
+            ProjectWorkspaceUpdateRequest(
+              rootURL: rootURL,
+              title: "Checkout Flow",
+              description: "Ship the flow",
+              taskLinks: ["https://example.com/issues/1"],
+              members: [
+                .added(
+                  ProjectWorkspaceRepositoryPlan(
+                    id: "/tmp/source/shared",
+                    name: "Shared",
+                    path: nil,
+                    sourceKind: .existingPath,
+                    sourceLocation: "/tmp/source/shared",
+                    checkout: .link
+                  )),
+                .existing(appEntry),
+                .existing(apiEntry),
+              ],
+              updatedAt: now
+            )
+          )
+        )
+      )
+    )
+  }
+
+  @Test func removedRowsDropOutOfTheOrder() async {
+    var state = makeEditState()
+    state.repositories = [
+      ProjectWorkspaceCreationRepository(
+        id: "/tmp/source/shared", name: "Shared", rootURL: URL(fileURLWithPath: "/tmp/source/shared"))
+    ]
+    state.memberOrder = [.added("/tmp/source/shared"), .existing("app"), .existing("api")]
+    let store = TestStore(initialState: state) {
+      WorkspaceEditorFeature()
+    }
+
+    await store.send(.removeRepository("/tmp/source/shared")) {
+      $0.repositories = []
+    }
+    #expect(store.state.orderedMemberKeys == [.existing("app"), .existing("api")])
   }
 
   @Test func submitRefusesToRemoveTheLastMember() async {

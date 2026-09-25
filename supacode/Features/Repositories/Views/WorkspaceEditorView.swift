@@ -248,20 +248,22 @@ struct WorkspaceEditorView: View {
         .disabled(store.isSaving)
       }
       helpText(repositoriesHelpText)
+      let members = store.orderedMembers
       VStack(spacing: 0) {
-        ForEach(store.existingRepositories) { repository in
-          existingRepositoryEditor(repository)
-            .id(repository.id)
-          Divider()
-        }
-        ForEach(store.repositories) { repository in
-          repositoryEditor(repository)
-            .id(repository.id)
-          if repository.id != store.repositories.last?.id {
+        ForEach(members) { member in
+          switch member {
+          case .existing(let repository):
+            existingRepositoryEditor(repository)
+              .id(repository.id)
+          case .added(let repository):
+            repositoryEditor(repository)
+              .id(repository.id)
+          }
+          if member.id != members.last?.id {
             Divider()
           }
         }
-        if store.existingRepositories.isEmpty, store.repositories.isEmpty {
+        if members.isEmpty {
           Text("No repositories yet. Add one from the buttons above.")
             .font(.callout)
             .foregroundStyle(.secondary)
@@ -367,24 +369,7 @@ struct WorkspaceEditorView: View {
           .foregroundStyle(.red)
       }
       Spacer()
-      Button {
-        store.send(.existingRepositoryMovedUp(repository.id))
-      } label: {
-        Image(systemName: "chevron.up")
-          .accessibilityLabel("Move Up")
-      }
-      .buttonStyle(.borderless)
-      .help("Move Up")
-      .disabled(store.isSaving || store.existingRepositories.first?.id == repository.id)
-      Button {
-        store.send(.existingRepositoryMovedDown(repository.id))
-      } label: {
-        Image(systemName: "chevron.down")
-          .accessibilityLabel("Move Down")
-      }
-      .buttonStyle(.borderless)
-      .help("Move Down")
-      .disabled(store.isSaving || store.existingRepositories.last?.id == repository.id)
+      moveButtons(for: .existing(repository.id))
       if repository.isMarkedForRemoval {
         Button("Undo") {
           store.send(.existingRepositoryRemovalUndone(repository.id))
@@ -403,6 +388,32 @@ struct WorkspaceEditorView: View {
         .help("Remove from Workspace on save")
         .disabled(store.isSaving)
       }
+    }
+  }
+
+  /// Move Up / Move Down for any row; the order interleaves existing and
+  /// added members so a new repository can go anywhere in the list.
+  private func moveButtons(for key: WorkspaceEditorMemberKey) -> some View {
+    let keys = store.orderedMemberKeys
+    return HStack(spacing: 4) {
+      Button {
+        store.send(.memberMovedUp(key))
+      } label: {
+        Image(systemName: "chevron.up")
+          .accessibilityLabel("Move Up")
+      }
+      .buttonStyle(.borderless)
+      .help("Move Up")
+      .disabled(store.isSaving || keys.first == key)
+      Button {
+        store.send(.memberMovedDown(key))
+      } label: {
+        Image(systemName: "chevron.down")
+          .accessibilityLabel("Move Down")
+      }
+      .buttonStyle(.borderless)
+      .help("Move Down")
+      .disabled(store.isSaving || keys.last == key)
     }
   }
 
@@ -558,6 +569,8 @@ struct WorkspaceEditorView: View {
       }
 
       Spacer()
+
+      moveButtons(for: .added(repository.id))
 
       Button {
         store.send(.removeRepository(repository.id))

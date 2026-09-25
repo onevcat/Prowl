@@ -38,9 +38,11 @@ struct AppFeatureWorkspaceEditingTests {
     store.exhaustivity = .off
 
     await store.send(.settings(.delegate(.editWorkspace("/tmp/ws"))))
+    // Surfacing must already have happened when the request is dispatched,
+    // so the sheet never attaches to a hidden or minimized main window.
+    #expect(surfaced.value)
     await store.receive(\.repositories.workspaceEditing.promptRequested)
     await store.finish()
-    #expect(surfaced.value)
   }
 
   @Test(.dependencies) func settingsEditWorkspaceIgnoresNonWorkspaceRepositories() async {

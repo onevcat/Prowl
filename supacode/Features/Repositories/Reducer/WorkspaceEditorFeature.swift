@@ -53,6 +53,27 @@ enum WorkspaceEditorSubmission: Equatable, Sendable {
   case update(ProjectWorkspaceUpdateRequest)
 }
 
+/// Identifies one row of the editor across both member collections so a
+/// single order can interleave existing and added members.
+enum WorkspaceEditorMemberKey: Equatable, Hashable, Sendable {
+  case existing(String)
+  case added(Repository.ID)
+}
+
+enum WorkspaceEditorMember: Equatable, Identifiable {
+  case existing(WorkspaceEditorExistingRepository)
+  case added(ProjectWorkspaceCreationRepository)
+
+  var id: WorkspaceEditorMemberKey {
+    switch self {
+    case .existing(let repository):
+      return .existing(repository.id)
+    case .added(let repository):
+      return .added(repository.id)
+    }
+  }
+}
+
 @Reducer
 struct WorkspaceEditorFeature {
   private enum CancelID {
@@ -87,6 +108,10 @@ struct WorkspaceEditorFeature {
     var validationRequestID = 0
     var isSaving = false
     var remoteRepositoryPrompt: RemoteRepositoryPromptState?
+    /// Explicit member order, changed only by move actions. Keys for rows
+    /// that were added since the last move are appended by `orderedMemberKeys`,
+    /// existing members first, so add/remove never have to touch it.
+    var memberOrder: [WorkspaceEditorMemberKey] = []
 
     var availableOpenedRepositories: [ProjectWorkspaceCreationRepository] {
       openedRepositoryCandidates.filter { repositories[id: $0.id] == nil }
@@ -103,6 +128,34 @@ struct WorkspaceEditorFeature {
 
     var hasPendingRemovals: Bool {
       existingRepositories.contains(where: \.isMarkedForRemoval)
+    }
+
+    /// `memberOrder` reconciled with the rows that currently exist: stale
+    /// keys drop out, new rows append (existing members before added ones).
+    var orderedMemberKeys: [WorkspaceEditorMemberKey] {
+      let present =
+        Set(existingRepositories.ids.map(WorkspaceEditorMemberKey.existing))
+        .union(repositories.ids.map(WorkspaceEditorMemberKey.added))
+      var keys = memberOrder.filter { present.contains($0) }
+      var seen = Set(keys)
+      for id in existingRepositories.ids where seen.insert(.existing(id)).inserted {
+        keys.append(.existing(id))
+      }
+      for id in repositories.ids where seen.insert(.added(id)).inserted {
+        keys.append(.added(id))
+      }
+      return keys
+    }
+
+    var orderedMembers: [WorkspaceEditorMember] {
+      orderedMemberKeys.compactMap { key in
+        switch key {
+        case .existing(let id):
+          return existingRepositories[id: id].map(WorkspaceEditorMember.existing)
+        case .added(let id):
+          return repositories[id: id].map(WorkspaceEditorMember.added)
+        }
+      }
     }
 
     init(
@@ -234,8 +287,8 @@ struct WorkspaceEditorFeature {
     case existingRepositoryRemovalUndone(String)
     case existingRepositoryDeleteFilesChanged(String, Bool)
     case existingRepositoryDeleteBranchChanged(String, Bool)
-    case existingRepositoryMovedUp(String)
-    case existingRepositoryMovedDown(String)
+    case memberMovedUp(WorkspaceEditorMemberKey)
+    case memberMovedDown(WorkspaceEditorMemberKey)
     case rootPathChosen(String)
     case cancelButtonTapped
     case submitButtonTapped
@@ -609,20 +662,22 @@ struct WorkspaceEditorFeature {
         state.existingRepositories[id: entryID]?.removal = removal
         return .none
 
-      case .existingRepositoryMovedUp(let entryID):
-        guard let index = state.existingRepositories.index(id: entryID), index > 0 else {
+      case .memberMovedUp(let key):
+        var keys = state.orderedMemberKeys
+        guard let index = keys.firstIndex(of: key), index > 0 else {
           return .none
         }
-        state.existingRepositories.swapAt(index, index - 1)
+        keys.swapAt(index, index - 1)
+        state.memberOrder = keys
         return .none
 
-      case .existingRepositoryMovedDown(let entryID):
-        guard let index = state.existingRepositories.index(id: entryID),
-          index < state.existingRepositories.count - 1
-        else {
+      case .memberMovedDown(let key):
+        var keys = state.orderedMemberKeys
+        guard let index = keys.firstIndex(of: key), index < keys.count - 1 else {
           return .none
         }
-        state.existingRepositories.swapAt(index, index + 1)
+        keys.swapAt(index, index + 1)
+        state.memberOrder = keys
         return .none
 
       case .rootPathChosen(let path):
@@ -658,11 +713,11 @@ struct WorkspaceEditorFeature {
           )
           return .none
         }
-        var plans: [ProjectWorkspaceRepositoryPlan] = []
+        var plansByID: [Repository.ID: ProjectWorkspaceRepositoryPlan] = [:]
         for repository in state.repositories {
           switch Self.plan(for: repository) {
           case .success(let plan):
-            plans.append(plan)
+            plansByID[repository.id] = plan
           case .failure(let error):
             state.setValidation(
               error.localizedDescription,
@@ -672,6 +727,13 @@ struct WorkspaceEditorFeature {
           }
         }
         state.clearValidation()
+        // Both submissions follow the user's row order, interleaving existing
+        // and added members.
+        let orderedKeys = state.orderedMemberKeys
+        let plans = orderedKeys.compactMap { key -> ProjectWorkspaceRepositoryPlan? in
+          guard case .added(let id) = key else { return nil }
+          return plansByID[id]
+        }
         let description = state.description.trimmingCharacters(in: .whitespacesAndNewlines)
         let taskLinks = state.taskLinks.map { $0.value.trimmingCharacters(in: .whitespacesAndNewlines) }
           .filter { !$0.isEmpty }
@@ -693,11 +755,18 @@ struct WorkspaceEditorFeature {
             )
           )
         case .edit:
-          let members: [ProjectWorkspaceUpdateMember] =
-            state.existingRepositories
-            .filter { !$0.isMarkedForRemoval }
-            .map { .existing($0.editedEntry) }
-            + plans.map { .added($0) }
+          let members: [ProjectWorkspaceUpdateMember] = orderedKeys.compactMap { key in
+            switch key {
+            case .existing(let id):
+              guard let repository = state.existingRepositories[id: id], !repository.isMarkedForRemoval
+              else {
+                return nil
+              }
+              return .existing(repository.editedEntry)
+            case .added(let id):
+              return plansByID[id].map { .added($0) }
+            }
+          }
           let removals = state.existingRepositories.compactMap { repository in
             repository.removal.map { removal in
               ProjectWorkspaceRepositoryRemoval(

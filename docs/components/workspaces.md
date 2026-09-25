@@ -152,8 +152,8 @@ outside Prowl are respected). It lets you change:
 - **Name** and **Role** of every existing repository. Source, path, and
   checkout are shown as read-only provenance; to change them, remove the
   repository and add it again.
-- **Order**: move existing repositories up or down. The sidebar and the
-  metadata follow the new order.
+- **Order**: move any repository up or down, including ones added in the
+  same edit. The sidebar and the metadata follow the new order.
 - **Added repositories**: the same **Add Opened** / **Add Remote** / **Add
   Local** sources and Link / Create Branch / Use Existing checkouts as
   creation. They are materialized when you save.
@@ -171,9 +171,11 @@ Nothing changes until you press **Save**. Save runs in this order so the
 workspace is never left half-changed: added repositories are materialized
 first (and rolled back if one fails, leaving the old metadata untouched), then
 `.prowl/workspace.json` is rewritten, then removed repositories are cleaned
-up. Cleanup is best-effort: if a worktree cannot be unregistered, or a
-repository path lies outside the workspace folder, the entry is still removed
-from the metadata and Prowl shows an alert listing what was left on disk. Save
+up. Cleanup is best-effort: if a worktree cannot be unregistered, a
+repository path lies outside the workspace folder, or the entry has no recorded
+source (so Prowl cannot tell whether it created the folder), the entry is still
+removed from the metadata and Prowl shows an alert listing what was left on
+disk. Save
 cannot be canceled once it has started. After a successful save the sidebar
 reloads and a **Workspace saved** toast appears.
 

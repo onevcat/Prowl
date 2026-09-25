@@ -412,6 +412,48 @@ struct ProjectWorkspaceUpdateTests {
     #expect(result.completedRemovals.map(\.id) == ["api"])
   }
 
+  @Test func updateNeverDeletesRemoteEntryWithoutRecordedSource() async throws {
+    let rootURL = try makeTemporaryRoot(prefix: "prowl-update-sourceless")
+    defer { try? FileManager.default.removeItem(at: rootURL) }
+    let folderURL = rootURL.appending(path: "api", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
+    let sentinelURL = folderURL.appending(path: "notes.txt")
+    try Data("keep".utf8).write(to: sentinelURL)
+    try writeWorkspaceJSON(
+      """
+      {
+        "title": "Sourceless",
+        "repositories": [
+          { "id": "app", "name": "App", "path": "app", "source_kind": "existing_path" },
+          { "id": "api", "name": "API", "path": "api", "source_kind": "remote" }
+        ]
+      }
+      """,
+      to: rootURL
+    )
+    let existing = try #require(ProjectWorkspace.load(from: rootURL))
+    let appEntry = try #require(existing.repositories.first { $0.id == "app" })
+    let apiEntry = try #require(existing.repositories.first { $0.id == "api" })
+    #expect(apiEntry.sourceLocation == nil)
+
+    let result = try await ProjectWorkspace.update(
+      ProjectWorkspaceUpdateRequest(
+        rootURL: rootURL,
+        title: "Sourceless",
+        members: [.existing(appEntry)],
+        removals: [ProjectWorkspaceRepositoryRemoval(entry: apiEntry, deleteFiles: true)],
+        updatedAt: Date()
+      ),
+      gitRunner: failingGitRunner
+    )
+
+    // Ownership cannot be established, so the folder stays and is reported.
+    #expect(result.cleanupFailures.map(\.entryID) == ["api"])
+    #expect(result.completedRemovals.isEmpty)
+    #expect(FileManager.default.fileExists(atPath: sentinelURL.path(percentEncoded: false)))
+    #expect(ProjectWorkspace.load(from: rootURL)?.repositories.map(\.id) == ["app"])
+  }
+
   @Test func updateRejectsInvalidRequests() async throws {
     let rootURL = try makeTemporaryRoot(prefix: "prowl-update-invalid")
     let appURL = try makeTemporaryRoot(prefix: "prowl-app")

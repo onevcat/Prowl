@@ -9,6 +9,7 @@
 | 2026-09-25 | `WorkspaceCreationPromptFeature` → `WorkspaceEditorFeature` with `mode`, existing-member rows, staged removal, reorder, task links, description; `WorkspaceCreationPromptView` → `WorkspaceEditorView` | PR #830 |
 | 2026-09-25 | `RepositoriesFeature+WorkspaceEditing.swift` (`workspaceEditing` action family), entry points in sidebar, detail view, Settings, Command Palette, Worktrees menu | PR #830 |
 | 2026-09-25 | Tests, `docs/` manual updates, this record | PR #830 |
+| 2026-09-25 | Review Loop round 1 (Pi Reviewer): never delete a remote entry without a recorded source; surface the main window synchronously before the Settings-originated request; one interleaved member order so added rows can be moved among existing ones | PR #830 |
 
 ## Outcome & current state (as of 2026-09-25)
 
@@ -25,7 +26,8 @@
     failure, occupied names seeded with every current entry path) → write metadata →
     best-effort cleanup of removals with `deleteFiles`. Cleanup deletes a symlink, a
     remote clone folder, or runs `git worktree remove --force` against the recorded source;
-    paths outside the root and entries without a source are reported, never deleted.
+    paths outside the root and entries without a recorded source (whatever their kind) are
+    reported, never deleted.
     Branch deletion is left to the caller through `completedRemovals`.
   - `encodeMetadata(_:preservingUnknownKeysIn:)` merges the encoded model over the
     existing JSON so unknown top-level and per-entry keys (matched by `id`, falling back
@@ -36,6 +38,9 @@
     `deleteFiles` / `deleteBranch`), `repositories` (new rows, unchanged), `description`,
     `taskLinks` (`WorkspaceTaskLinkDraft`), `isSaving`. `init(editing:rootURL:repositoryID:...)`
     pre-fills from a `ProjectWorkspace`.
+  - `memberOrder` / `orderedMemberKeys` hold one order across existing and added rows
+    (`WorkspaceEditorMemberKey`); `memberMovedUp` / `memberMovedDown` work on any row and
+    the submission follows that order.
   - `submitButtonTapped` validates (title, ≥1 remaining member, new-row plans) and emits
     `Delegate.submit(.create(draft))` or `.submit(.update(request))`; `updatedAt` comes
     from `@Dependency(\.date.now)`.

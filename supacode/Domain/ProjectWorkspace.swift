@@ -801,14 +801,20 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
       return nil
     }
     do {
-      if isSymbolicLink || entry.sourceKind == .remote {
-        // A symlink removal never touches the linked checkout; a clone is
-        // wholly owned by the workspace.
+      if isSymbolicLink {
+        // A symlink removal never touches the linked checkout.
         try fileManager.removeItem(at: entryURL)
         return nil
       }
-      guard let sourceLocation = entry.sourceLocation else {
+      // Without a recorded source Prowl cannot tell whether it created the
+      // folder, so it is never deleted, whatever the source kind claims.
+      guard let sourceLocation = entry.sourceLocation, !sourceLocation.isEmpty else {
         return String(localized: "\(entryPath) was not created by Prowl and was left in place.")
+      }
+      if entry.sourceKind == .remote {
+        // A clone is wholly owned by the workspace.
+        try fileManager.removeItem(at: entryURL)
+        return nil
       }
       try await gitRunner.run(
         ProjectWorkspaceGitCommand(

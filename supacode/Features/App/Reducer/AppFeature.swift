@@ -584,10 +584,9 @@ struct AppFeature {
         }
         // The editor is a sheet on the main window; bring it forward from
         // the Settings window first so the sheet is not opened out of sight.
-        return .merge(
-          .run { _ in _ = await appLifecycleClient.surfaceMainWindow() },
-          .send(.repositories(.workspaceEditing(.promptRequested(repositoryID, removingChildID: nil))))
-        )
+        // Surfacing is synchronous so it strictly precedes the request.
+        _ = appLifecycleClient.surfaceMainWindow()
+        return .send(.repositories(.workspaceEditing(.promptRequested(repositoryID, removingChildID: nil))))
 
       case .settings(.delegate(.cliInstallCompleted(let result))):
         switch result {
