@@ -12,17 +12,29 @@ struct WorkspaceEditorView: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
       headerSection
-      ScrollView {
-        VStack(alignment: .leading, spacing: 16) {
-          titleSection
-          if !store.mode.isEditing {
-            folderSection
+      // The reader wraps the scroll view so a validation error can bring the
+      // offending repository row into view.
+      ScrollViewReader { proxy in
+        ScrollView {
+          VStack(alignment: .leading, spacing: 16) {
+            titleSection
+            if !store.mode.isEditing {
+              folderSection
+            }
+            descriptionSection
+            taskLinksSection
+            repositoriesSection
           }
-          descriptionSection
-          taskLinksSection
-          repositoriesSection
+          .padding(.trailing, 4)
         }
-        .padding(.trailing, 4)
+        .onChange(of: store.validationRequestID) { _, _ in
+          guard let repositoryID = validationRepositoryID else {
+            return
+          }
+          withAnimation(.easeInOut(duration: 0.2)) {
+            proxy.scrollTo(repositoryID, anchor: .center)
+          }
+        }
       }
       .frame(maxHeight: 560)
 
@@ -236,35 +248,25 @@ struct WorkspaceEditorView: View {
         .disabled(store.isSaving)
       }
       helpText(repositoriesHelpText)
-      ScrollViewReader { proxy in
-        VStack(spacing: 0) {
-          ForEach(store.existingRepositories) { repository in
-            existingRepositoryEditor(repository)
-              .id(repository.id)
+      VStack(spacing: 0) {
+        ForEach(store.existingRepositories) { repository in
+          existingRepositoryEditor(repository)
+            .id(repository.id)
+          Divider()
+        }
+        ForEach(store.repositories) { repository in
+          repositoryEditor(repository)
+            .id(repository.id)
+          if repository.id != store.repositories.last?.id {
             Divider()
           }
-          ForEach(store.repositories) { repository in
-            repositoryEditor(repository)
-              .id(repository.id)
-            if repository.id != store.repositories.last?.id {
-              Divider()
-            }
-          }
-          if store.existingRepositories.isEmpty, store.repositories.isEmpty {
-            Text("No repositories yet. Add one from the buttons above.")
-              .font(.callout)
-              .foregroundStyle(.secondary)
-              .frame(maxWidth: .infinity, alignment: .center)
-              .padding(.vertical, 24)
-          }
         }
-        .onChange(of: store.validationRequestID) { _, _ in
-          guard let repositoryID = validationRepositoryID else {
-            return
-          }
-          withAnimation(.easeInOut(duration: 0.2)) {
-            proxy.scrollTo(repositoryID, anchor: .center)
-          }
+        if store.existingRepositories.isEmpty, store.repositories.isEmpty {
+          Text("No repositories yet. Add one from the buttons above.")
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.vertical, 24)
         }
       }
       .clipShape(.rect(cornerRadius: 8))
@@ -483,7 +485,8 @@ struct WorkspaceEditorView: View {
         .help("Delete the branch with git branch -D after the worktree is removed. Protected branches are kept.")
         .disabled(store.isSaving || !removal.deleteFiles)
       }
-      helpText(removalHelp(repository.entry))
+      helpText(
+        "The entry leaves the workspace metadata when you save. Files stay on disk unless you delete them here.")
     }
   }
 
@@ -525,10 +528,6 @@ struct WorkspaceEditorView: View {
         localized:
           "Unregisters the worktree from its source repository (git worktree remove --force) and deletes the folder.")
     }
-  }
-
-  private func removalHelp(_ entry: ProjectWorkspaceRepositoryEntry) -> LocalizedStringKey {
-    "The entry leaves the workspace metadata when you save. Files stay on disk unless you delete them here."
   }
 
   // MARK: - New member rows
