@@ -284,6 +284,19 @@ struct RepositoriesFeature {
     case workspaceCreationFailed(String)
   }
 
+  @CasePathable
+  enum WorkspaceEditingAction: Equatable {
+    /// Opens the editor on an existing workspace. `removingChildID` is a
+    /// child working-directory path (sidebar row id) to pre-mark for removal.
+    case promptRequested(Repository.ID, removingChildID: String?)
+    case promptLoaded(Repository.ID, ProjectWorkspace, removingChildID: String?)
+    case promptCanceled
+    case promptDismissed
+    case saveWorkspace(ProjectWorkspaceUpdateRequest)
+    case workspaceSaved(Repository.ID, cleanupFailures: [ProjectWorkspaceCleanupFailure])
+    case workspaceSaveFailed(String)
+  }
+
   @ObservableState
   struct State: Equatable {
     var repositories: IdentifiedArrayOf<Repository> = []
@@ -386,7 +399,7 @@ struct RepositoriesFeature {
     var workflowRoleBadgesBySurfaceID: [UUID: String] = [:]
     @Shared(.appStorage("sidebarCollapsedRepositoryIDs")) var collapsedRepositoryIDs: [Repository.ID] = []
     @Presents var worktreeCreationPrompt: WorktreeCreationPromptFeature.State?
-    @Presents var workspaceCreationPrompt: WorkspaceCreationPromptFeature.State?
+    @Presents var workspaceEditor: WorkspaceEditorFeature.State?
     @Presents var alert: AlertState<Alert>?
   }
 
@@ -420,6 +433,7 @@ struct RepositoriesFeature {
     case githubIntegration(GithubIntegrationAction)
     case repositoryManagement(RepositoryManagementAction)
     case workspaceCreation(WorkspaceCreationAction)
+    case workspaceEditing(WorkspaceEditingAction)
     case activeAgents(ActiveAgentsFeature.Action)
     case task
     case repositorySnapshotLoaded([Repository]?)
@@ -481,7 +495,7 @@ struct RepositoriesFeature {
     case showToast(StatusToast)
     case dismissToast
     case worktreeCreationPrompt(PresentationAction<WorktreeCreationPromptFeature.Action>)
-    case workspaceCreationPrompt(PresentationAction<WorkspaceCreationPromptFeature.Action>)
+    case workspaceEditor(PresentationAction<WorkspaceEditorFeature.Action>)
     case alert(PresentationAction<Alert>)
     case delegate(Delegate)
   }
@@ -583,6 +597,7 @@ struct RepositoriesFeature {
       githubIntegrationReducer
       repositoryManagementReducer
       workspaceCreationReducer
+      workspaceEditingReducer
       Scope(state: \.activeAgents, action: \.activeAgents) {
         ActiveAgentsFeature()
       }
@@ -604,8 +619,8 @@ struct RepositoriesFeature {
     .ifLet(\.$worktreeCreationPrompt, action: \.worktreeCreationPrompt) {
       WorktreeCreationPromptFeature()
     }
-    .ifLet(\.$workspaceCreationPrompt, action: \.workspaceCreationPrompt) {
-      WorkspaceCreationPromptFeature()
+    .ifLet(\.$workspaceEditor, action: \.workspaceEditor) {
+      WorkspaceEditorFeature()
     }
   }
 
@@ -618,3 +633,4 @@ struct RepositoriesFeature {
 // - RepositoriesFeature+GithubIntegration.swift
 // - RepositoriesFeature+RepositoryManagement.swift
 // - RepositoriesFeature+WorkspaceCreation.swift
+// - RepositoriesFeature+WorkspaceEditing.swift

@@ -39,7 +39,7 @@ extension RepositoriesFeature {
       // the reducer body performs no filesystem I/O.
       let folderName = ProjectWorkspace.defaultWorkspaceFolderName(for: title)
       let requestedRootPath = ProjectWorkspace.workspaceRootPath(folderName: folderName, suffix: nil)
-      state.workspaceCreationPrompt = WorkspaceCreationPromptFeature.State(
+      state.workspaceEditor = WorkspaceEditorFeature.State(
         repositories: [],
         title: title,
         rootPath: requestedRootPath,
@@ -53,15 +53,15 @@ extension RepositoriesFeature {
     case .defaultRootPathResolved(let path, let requestedRootPath):
       // Only adopt the de-duplicated path if the user has not edited the field
       // since the prompt opened.
-      guard state.workspaceCreationPrompt?.rootPath == requestedRootPath else {
+      guard state.workspaceEditor?.rootPath == requestedRootPath else {
         return .none
       }
-      state.workspaceCreationPrompt?.rootPath = path
+      state.workspaceEditor?.rootPath = path
       return .none
 
     case .promptCanceled, .promptDismissed:
-      let wasCreating = state.workspaceCreationPrompt?.isCreating == true
-      state.workspaceCreationPrompt = nil
+      let wasCreating = state.workspaceEditor?.isSaving == true
+      state.workspaceEditor = nil
       guard wasCreating else {
         return .cancel(id: CancelID.workspaceCreation)
       }
@@ -71,7 +71,7 @@ extension RepositoriesFeature {
       )
 
     case .refreshBaseRefs(let repositoryID):
-      guard let repository = state.workspaceCreationPrompt?.repositories[id: repositoryID] else {
+      guard let repository = state.workspaceEditor?.repositories[id: repositoryID] else {
         return .none
       }
       return workspaceBaseRefsEffect(for: [repository])
@@ -93,8 +93,8 @@ extension RepositoriesFeature {
       return .none
 
     case .createWorkspace(let draft):
-      state.workspaceCreationPrompt?.isCreating = true
-      state.workspaceCreationPrompt?.validationMessage = nil
+      state.workspaceEditor?.isSaving = true
+      state.workspaceEditor?.validationMessage = nil
       let request = ProjectWorkspaceCreationRequest(draft: draft, createdAt: now)
       let gitRunner = Self.workspaceGitRunner(shellClient: shellClient)
       return .run { send in
@@ -114,16 +114,16 @@ extension RepositoriesFeature {
 
     case .workspaceCreated(let rootURL):
       analyticsClient.capture("workspace_created", [String: Any]?.none)
-      state.workspaceCreationPrompt = nil
+      state.workspaceEditor = nil
       return .merge(
         .send(.showToast(.success(String(localized: "Workspace created")))),
         .send(.repositoryManagement(.openRepositories([rootURL])))
       )
 
     case .workspaceCreationFailed(let message):
-      if state.workspaceCreationPrompt != nil {
-        state.workspaceCreationPrompt?.isCreating = false
-        state.workspaceCreationPrompt?.validationMessage = message
+      if state.workspaceEditor != nil {
+        state.workspaceEditor?.isSaving = false
+        state.workspaceEditor?.validationMessage = message
       } else {
         state.alert = messageAlert(title: String(localized: "Unable to create workspace"), message: message)
       }
@@ -155,14 +155,14 @@ extension RepositoriesFeature {
     sourceLocation: String,
     result: WorkspaceBaseRefsResult
   ) {
-    guard var repository = state.workspaceCreationPrompt?.repositories[id: repositoryID],
+    guard var repository = state.workspaceEditor?.repositories[id: repositoryID],
       repository.sourceKind == sourceKind,
       repository.sourceLocation == sourceLocation
     else {
       return
     }
     if let errorMessage = result.errorMessage {
-      state.workspaceCreationPrompt?.validationMessage = errorMessage
+      state.workspaceEditor?.validationMessage = errorMessage
     }
     let baseRef = trimmedNonEmpty(repository.baseRef)
     let baseRefOptions = ProjectWorkspaceCreationRepository.normalizedBaseRefOptions(result.options)
@@ -172,7 +172,7 @@ extension RepositoriesFeature {
     } else {
       repository.baseRef = result.defaultBaseRef
     }
-    state.workspaceCreationPrompt?.repositories[id: repositoryID] = repository
+    state.workspaceEditor?.repositories[id: repositoryID] = repository
   }
 
   static func workspaceGitRunner(

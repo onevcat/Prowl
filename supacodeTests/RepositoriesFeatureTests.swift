@@ -740,7 +740,7 @@ struct RepositoriesFeatureTests {
     await store.finish()
   }
 
-  @Test func workspaceCreationPromptOffersOpenedRepositoriesWithoutAddingThem() async {
+  @Test func workspaceEditorOffersOpenedRepositoriesWithoutAddingThem() async {
     let repository = makeRepository(id: "/tmp/repo-a", name: "Repo A", worktrees: [])
     let store = TestStore(initialState: makeState(repositories: [repository])) {
       RepositoriesFeature()
@@ -750,7 +750,7 @@ struct RepositoriesFeatureTests {
     let requestedRootPath = defaultWorkspaceBaseRootPath(for: title)
     let resolvedRootPath = expectedDefaultWorkspaceRootPath(for: title)
     await store.send(.workspaceCreation(.promptRequested)) {
-      $0.workspaceCreationPrompt = WorkspaceCreationPromptFeature.State(
+      $0.workspaceEditor = WorkspaceEditorFeature.State(
         repositories: [],
         title: title,
         rootPath: requestedRootPath,
@@ -767,12 +767,12 @@ struct RepositoriesFeatureTests {
       await store.receive(\.workspaceCreation.defaultRootPathResolved)
     } else {
       await store.receive(\.workspaceCreation.defaultRootPathResolved) {
-        $0.workspaceCreationPrompt?.rootPath = resolvedRootPath
+        $0.workspaceEditor?.rootPath = resolvedRootPath
       }
     }
   }
 
-  @Test func workspaceCreationPromptAddsOpenedRepositoryOnRequest() async {
+  @Test func workspaceEditorAddsOpenedRepositoryOnRequest() async {
     let repoRootA = "/tmp/repo-a"
     let candidate = ProjectWorkspaceCreationRepository(
       id: repoRootA,
@@ -780,14 +780,14 @@ struct RepositoriesFeatureTests {
       rootURL: URL(fileURLWithPath: repoRootA)
     )
     let store = TestStore(
-      initialState: WorkspaceCreationPromptFeature.State(
+      initialState: WorkspaceEditorFeature.State(
         repositories: [],
         title: "Workspace",
         rootPath: "/tmp/workspace",
         openedRepositoryCandidates: [candidate]
       )
     ) {
-      WorkspaceCreationPromptFeature()
+      WorkspaceEditorFeature()
     }
 
     await store.send(.addOpenedRepository(repoRootA)) {
@@ -811,13 +811,13 @@ struct RepositoriesFeatureTests {
       ]
     )
     let store = TestStore(
-      initialState: WorkspaceCreationPromptFeature.State(
+      initialState: WorkspaceEditorFeature.State(
         repositories: [repo],
         title: "Workspace",
         rootPath: "/tmp/workspace"
       )
     ) {
-      WorkspaceCreationPromptFeature()
+      WorkspaceEditorFeature()
     }
 
     await store.send(.repositoryResetLocalBranchChanged(repoID, true)) {
@@ -830,7 +830,7 @@ struct RepositoriesFeatureTests {
     }
   }
 
-  @Test func workspaceCreationPromptIgnoresDuplicateOpenedRepository() async {
+  @Test func workspaceEditorIgnoresDuplicateOpenedRepository() async {
     let repoRootA = "/tmp/repo-a"
     let candidate = ProjectWorkspaceCreationRepository(
       id: repoRootA,
@@ -838,20 +838,20 @@ struct RepositoriesFeatureTests {
       rootURL: URL(fileURLWithPath: repoRootA)
     )
     let store = TestStore(
-      initialState: WorkspaceCreationPromptFeature.State(
+      initialState: WorkspaceEditorFeature.State(
         repositories: [candidate],
         title: "Workspace",
         rootPath: "/tmp/workspace",
         openedRepositoryCandidates: [candidate]
       )
     ) {
-      WorkspaceCreationPromptFeature()
+      WorkspaceEditorFeature()
     }
 
     await store.send(.addOpenedRepository(repoRootA))
   }
 
-  @Test func workspaceCreationPromptOffersLoadedRepositories() async {
+  @Test func workspaceEditorOffersLoadedRepositories() async {
     let testID = UUID().uuidString
     let repoRootA = "/tmp/\(testID)-repo-a"
     let repoRootB = "/tmp/\(testID)-repo-b"
@@ -868,7 +868,7 @@ struct RepositoriesFeatureTests {
     let requestedRootPath = defaultWorkspaceBaseRootPath(for: title)
     let resolvedRootPath = expectedDefaultWorkspaceRootPath(for: title)
     await store.send(.workspaceCreation(.promptRequested)) {
-      $0.workspaceCreationPrompt = WorkspaceCreationPromptFeature.State(
+      $0.workspaceEditor = WorkspaceEditorFeature.State(
         repositories: [],
         title: title,
         rootPath: requestedRootPath,
@@ -890,12 +890,12 @@ struct RepositoriesFeatureTests {
       await store.receive(\.workspaceCreation.defaultRootPathResolved)
     } else {
       await store.receive(\.workspaceCreation.defaultRootPathResolved) {
-        $0.workspaceCreationPrompt?.rootPath = resolvedRootPath
+        $0.workspaceEditor?.rootPath = resolvedRootPath
       }
     }
   }
 
-  @Test func workspaceCreationPromptLoadsBaseRefsForAddedOpenedRepository() async {
+  @Test func workspaceEditorLoadsBaseRefsForAddedOpenedRepository() async {
     let testID = UUID().uuidString
     let repoRootA = "/tmp/\(testID)-repo-a"
     let repoRootB = "/tmp/\(testID)-repo-b"
@@ -928,7 +928,7 @@ struct RepositoriesFeatureTests {
     let requestedRootPath = defaultWorkspaceBaseRootPath(for: title)
     let resolvedRootPath = expectedDefaultWorkspaceRootPath(for: title)
     await store.send(.workspaceCreation(.promptRequested)) {
-      $0.workspaceCreationPrompt = WorkspaceCreationPromptFeature.State(
+      $0.workspaceEditor = WorkspaceEditorFeature.State(
         repositories: [],
         title: title,
         rootPath: requestedRootPath,
@@ -950,11 +950,11 @@ struct RepositoriesFeatureTests {
       await store.receive(\.workspaceCreation.defaultRootPathResolved)
     } else {
       await store.receive(\.workspaceCreation.defaultRootPathResolved) {
-        $0.workspaceCreationPrompt?.rootPath = resolvedRootPath
+        $0.workspaceEditor?.rootPath = resolvedRootPath
       }
     }
-    await store.send(.workspaceCreationPrompt(.presented(.addOpenedRepository(repoRootA)))) {
-      $0.workspaceCreationPrompt?.repositories.append(
+    await store.send(.workspaceEditor(.presented(.addOpenedRepository(repoRootA)))) {
+      $0.workspaceEditor?.repositories.append(
         ProjectWorkspaceCreationRepository(
           id: repoRootA,
           name: "Repo A",
@@ -962,18 +962,18 @@ struct RepositoriesFeatureTests {
         )
       )
     }
-    await store.receive(\.workspaceCreationPrompt.presented.delegate.baseRefSourceChanged)
+    await store.receive(\.workspaceEditor.presented.delegate.baseRefSourceChanged)
     await store.receive(\.workspaceCreation.refreshBaseRefs)
     await store.receive(\.workspaceCreation.baseRefsLoaded) {
-      $0.workspaceCreationPrompt?.repositories[id: repoRootA]?.baseRef = "main"
-      $0.workspaceCreationPrompt?.repositories[id: repoRootA]?.baseRefOptions = [
+      $0.workspaceEditor?.repositories[id: repoRootA]?.baseRef = "main"
+      $0.workspaceEditor?.repositories[id: repoRootA]?.baseRefOptions = [
         GitBranchRefOption(ref: "main", kind: .local),
         GitBranchRefOption(ref: "origin/main", kind: .remoteTracking),
       ]
     }
   }
 
-  @Test func workspaceCreationPromptSubmitBuildsDraft() async {
+  @Test func workspaceEditorSubmitBuildsDraft() async {
     let repoRootA = "/tmp/repo-a"
     let repoRootB = "/tmp/repo-b"
     let repositories = [
@@ -989,59 +989,61 @@ struct RepositoriesFeatureTests {
       ),
     ]
     let store = TestStore(
-      initialState: WorkspaceCreationPromptFeature.State(
+      initialState: WorkspaceEditorFeature.State(
         repositories: repositories,
         title: " Multi Repo ",
         rootPath: " /tmp/multi-repo-workspace "
       )
     ) {
-      WorkspaceCreationPromptFeature()
+      WorkspaceEditorFeature()
     }
 
-    await store.send(.createButtonTapped)
+    await store.send(.submitButtonTapped)
     await store.receive(
       .delegate(
         .submit(
-          ProjectWorkspaceCreationDraft(
-            title: "Multi Repo",
-            rootURL: URL(filePath: "/tmp/multi-repo-workspace", directoryHint: .isDirectory),
-            repositories: [
-              ProjectWorkspaceRepositoryPlan(
-                id: repoRootA,
-                name: "Repo A",
-                path: nil,
-                sourceKind: .existingPath,
-                sourceLocation: repoRootA,
-                checkout: .link
-              ),
-              ProjectWorkspaceRepositoryPlan(
-                id: repoRootB,
-                name: "Repo B",
-                path: nil,
-                sourceKind: .existingPath,
-                sourceLocation: repoRootB,
-                checkout: .link
-              ),
-            ]
+          .create(
+            ProjectWorkspaceCreationDraft(
+              title: "Multi Repo",
+              rootURL: URL(filePath: "/tmp/multi-repo-workspace", directoryHint: .isDirectory),
+              repositories: [
+                ProjectWorkspaceRepositoryPlan(
+                  id: repoRootA,
+                  name: "Repo A",
+                  path: nil,
+                  sourceKind: .existingPath,
+                  sourceLocation: repoRootA,
+                  checkout: .link
+                ),
+                ProjectWorkspaceRepositoryPlan(
+                  id: repoRootB,
+                  name: "Repo B",
+                  path: nil,
+                  sourceKind: .existingPath,
+                  sourceLocation: repoRootB,
+                  checkout: .link
+                ),
+              ]
+            )
           )
         )
       )
     )
   }
 
-  @Test func workspaceCreationPromptAddsRemoteRepositoryAfterLoadingRefs() async {
+  @Test func workspaceEditorAddsRemoteRepositoryAfterLoadingRefs() async {
     let options = [
       GitBranchRefOption(ref: "origin/feature/login", kind: .fetchedRemote),
       GitBranchRefOption(ref: "origin/main", kind: .fetchedRemote),
     ]
     let store = TestStore(
-      initialState: WorkspaceCreationPromptFeature.State(
+      initialState: WorkspaceEditorFeature.State(
         repositories: [],
         title: "Workspace",
         rootPath: "/tmp/workspace"
       )
     ) {
-      WorkspaceCreationPromptFeature()
+      WorkspaceEditorFeature()
     } withDependencies: {
       $0.uuid = .incrementing
       $0.gitClient.remoteBranchRefs = { remoteURL in
@@ -1051,7 +1053,7 @@ struct RepositoriesFeatureTests {
     }
 
     await store.send(.addRemoteButtonTapped) {
-      $0.remoteRepositoryPrompt = WorkspaceCreationPromptFeature.RemoteRepositoryPromptState()
+      $0.remoteRepositoryPrompt = WorkspaceEditorFeature.RemoteRepositoryPromptState()
     }
     await store.send(.remoteRepositoryPromptURLChanged(" git@github.com:onevcat/app.git ")) {
       $0.remoteRepositoryPrompt?.url = " git@github.com:onevcat/app.git "
@@ -1086,15 +1088,15 @@ struct RepositoriesFeatureTests {
     }
   }
 
-  @Test func workspaceCreationPromptFolderFollowsTitleUntilEdited() async {
+  @Test func workspaceEditorFolderFollowsTitleUntilEdited() async {
     let store = TestStore(
-      initialState: WorkspaceCreationPromptFeature.State(
+      initialState: WorkspaceEditorFeature.State(
         repositories: [],
         title: "Workspace",
         rootPath: "/tmp/workspace"
       )
     ) {
-      WorkspaceCreationPromptFeature()
+      WorkspaceEditorFeature()
     }
 
     let requestedRootPath = defaultWorkspaceBaseRootPath(for: "Client App")
@@ -1123,19 +1125,19 @@ struct RepositoriesFeatureTests {
     }
   }
 
-  @Test func workspaceCreationPromptRemoteLoadUsesDetectedDefaultFromOptions() async {
+  @Test func workspaceEditorRemoteLoadUsesDetectedDefaultFromOptions() async {
     let store = TestStore(
-      initialState: WorkspaceCreationPromptFeature.State(
+      initialState: WorkspaceEditorFeature.State(
         repositories: [],
         title: "Workspace",
         rootPath: "/tmp/workspace"
       )
     ) {
-      WorkspaceCreationPromptFeature()
+      WorkspaceEditorFeature()
     }
 
     await store.send(.addRemoteButtonTapped) {
-      $0.remoteRepositoryPrompt = WorkspaceCreationPromptFeature.RemoteRepositoryPromptState()
+      $0.remoteRepositoryPrompt = WorkspaceEditorFeature.RemoteRepositoryPromptState()
     }
     await store.send(
       .remoteRepositoryPromptLoaded(
@@ -1156,15 +1158,15 @@ struct RepositoriesFeatureTests {
     }
   }
 
-  @Test func workspaceCreationPromptAddsLocalRepository() async {
+  @Test func workspaceEditorAddsLocalRepository() async {
     let store = TestStore(
-      initialState: WorkspaceCreationPromptFeature.State(
+      initialState: WorkspaceEditorFeature.State(
         repositories: [],
         title: "Workspace",
         rootPath: "/tmp/workspace"
       )
     ) {
-      WorkspaceCreationPromptFeature()
+      WorkspaceEditorFeature()
     } withDependencies: {
       $0.uuid = .incrementing
     }
@@ -1182,10 +1184,10 @@ struct RepositoriesFeatureTests {
     await store.receive(.delegate(.baseRefSourceChanged(UUID(0).uuidString)))
   }
 
-  @Test func workspaceCreationPromptClearsAndReloadsBaseRefsWhenSourceLocationChanges() async {
+  @Test func workspaceEditorClearsAndReloadsBaseRefsWhenSourceLocationChanges() async {
     let repositoryID = "repo"
     let store = TestStore(
-      initialState: WorkspaceCreationPromptFeature.State(
+      initialState: WorkspaceEditorFeature.State(
         repositories: [
           ProjectWorkspaceCreationRepository(
             id: repositoryID,
@@ -1201,7 +1203,7 @@ struct RepositoriesFeatureTests {
         rootPath: "/tmp/workspace"
       )
     ) {
-      WorkspaceCreationPromptFeature()
+      WorkspaceEditorFeature()
     }
 
     await store.send(.repositorySourceLocationChanged(repositoryID, "/tmp/repo-b.git")) {
@@ -1212,10 +1214,10 @@ struct RepositoriesFeatureTests {
     await store.receive(.delegate(.baseRefSourceChanged(repositoryID)))
   }
 
-  @Test func workspaceCreationPromptClearsBaseRefsWhenRemoteSourceLocationChanges() async {
+  @Test func workspaceEditorClearsBaseRefsWhenRemoteSourceLocationChanges() async {
     let repositoryID = "remote"
     let store = TestStore(
-      initialState: WorkspaceCreationPromptFeature.State(
+      initialState: WorkspaceEditorFeature.State(
         repositories: [
           ProjectWorkspaceCreationRepository(
             id: repositoryID,
@@ -1231,7 +1233,7 @@ struct RepositoriesFeatureTests {
         rootPath: "/tmp/workspace"
       )
     ) {
-      WorkspaceCreationPromptFeature()
+      WorkspaceEditorFeature()
     }
 
     await store.send(
@@ -1243,11 +1245,11 @@ struct RepositoriesFeatureTests {
     }
   }
 
-  @Test func workspaceCreationPromptRejectsUnknownBaseRef() async {
+  @Test func workspaceEditorRejectsUnknownBaseRef() async {
     let repoRootA = "/tmp/repo-a"
     let repoRootB = "/tmp/repo-b"
     let store = TestStore(
-      initialState: WorkspaceCreationPromptFeature.State(
+      initialState: WorkspaceEditorFeature.State(
         repositories: [
           ProjectWorkspaceCreationRepository(
             id: repoRootA,
@@ -1266,7 +1268,7 @@ struct RepositoriesFeatureTests {
         rootPath: "/tmp/workspace"
       )
     ) {
-      WorkspaceCreationPromptFeature()
+      WorkspaceEditorFeature()
     }
 
     await store.send(.repositoryBaseRefChanged(repoRootA, "missing-branch"))
@@ -1275,11 +1277,11 @@ struct RepositoriesFeatureTests {
     }
   }
 
-  @Test func workspaceCreationPromptRequiresExistingRefForUseExistingMode() async {
+  @Test func workspaceEditorRequiresExistingRefForUseExistingMode() async {
     let repoRootA = "/tmp/repo-a"
     let repoRootB = "/tmp/repo-b"
     let store = TestStore(
-      initialState: WorkspaceCreationPromptFeature.State(
+      initialState: WorkspaceEditorFeature.State(
         repositories: [
           ProjectWorkspaceCreationRepository(
             id: repoRootA,
@@ -1298,10 +1300,10 @@ struct RepositoriesFeatureTests {
         rootPath: "/tmp/workspace"
       )
     ) {
-      WorkspaceCreationPromptFeature()
+      WorkspaceEditorFeature()
     }
 
-    await store.send(.createButtonTapped) {
+    await store.send(.submitButtonTapped) {
       $0.validationMessage = "Choose an existing branch for Repo A."
       $0.validationTarget = .repository(repoRootA, .baseRef)
       $0.validationRequestID = 1
@@ -1313,10 +1315,10 @@ struct RepositoriesFeatureTests {
     }
   }
 
-  @Test func workspaceCreationPromptRequiresBranchNameForCreateBranchMode() async {
+  @Test func workspaceEditorRequiresBranchNameForCreateBranchMode() async {
     let repoRootB = "/tmp/repo-b"
     let store = TestStore(
-      initialState: WorkspaceCreationPromptFeature.State(
+      initialState: WorkspaceEditorFeature.State(
         repositories: [
           ProjectWorkspaceCreationRepository(
             id: "remote",
@@ -1337,10 +1339,10 @@ struct RepositoriesFeatureTests {
         rootPath: "/tmp/workspace"
       )
     ) {
-      WorkspaceCreationPromptFeature()
+      WorkspaceEditorFeature()
     }
 
-    await store.send(.createButtonTapped) {
+    await store.send(.submitButtonTapped) {
       $0.validationMessage = "Branch name required for Remote."
       $0.validationTarget = .repository("remote", .branchName)
       $0.validationRequestID = 1
@@ -1352,10 +1354,10 @@ struct RepositoriesFeatureTests {
     }
   }
 
-  @Test func workspaceCreationPromptResetsLinkModeWhenSwitchingToBare() async {
+  @Test func workspaceEditorResetsLinkModeWhenSwitchingToBare() async {
     let repositoryID = "repo"
     let store = TestStore(
-      initialState: WorkspaceCreationPromptFeature.State(
+      initialState: WorkspaceEditorFeature.State(
         repositories: [
           ProjectWorkspaceCreationRepository(
             id: repositoryID,
@@ -1367,7 +1369,7 @@ struct RepositoriesFeatureTests {
         rootPath: "/tmp/workspace"
       )
     ) {
-      WorkspaceCreationPromptFeature()
+      WorkspaceEditorFeature()
     }
 
     await store.send(.repositorySourceKindChanged(repositoryID, .bareRepository)) {
@@ -1745,19 +1747,19 @@ struct RepositoriesFeatureTests {
 
   @Test func workspaceCreationCancelWhileCreatingShowsToast() async {
     var initialState = RepositoriesFeature.State()
-    initialState.workspaceCreationPrompt = WorkspaceCreationPromptFeature.State(
+    initialState.workspaceEditor = WorkspaceEditorFeature.State(
       repositories: [],
       title: "Workspace",
       rootPath: "/tmp/workspace"
     )
-    initialState.workspaceCreationPrompt?.isCreating = true
+    initialState.workspaceEditor?.isSaving = true
     let store = TestStore(initialState: initialState) {
       RepositoriesFeature()
     }
     store.exhaustivity = .off
 
     await store.send(.workspaceCreation(.promptCanceled)) {
-      $0.workspaceCreationPrompt = nil
+      $0.workspaceEditor = nil
     }
     await store.receive(\.showToast, .warning("Workspace creation canceled"))
   }
@@ -1816,7 +1818,7 @@ struct RepositoriesFeatureTests {
       .standardizedFileURL
     defer { try? FileManager.default.removeItem(at: rootURL) }
     var initialState = RepositoriesFeature.State()
-    initialState.workspaceCreationPrompt = WorkspaceCreationPromptFeature.State(
+    initialState.workspaceEditor = WorkspaceEditorFeature.State(
       repositories: [],
       title: "Feature",
       rootPath: rootURL.path(percentEncoded: false)
@@ -1856,10 +1858,10 @@ struct RepositoriesFeatureTests {
     )
 
     await store.send(.workspaceCreation(.createWorkspace(draft))) {
-      $0.workspaceCreationPrompt?.isCreating = true
+      $0.workspaceEditor?.isSaving = true
     }
     await store.receive(\.workspaceCreation.workspaceCreated) {
-      $0.workspaceCreationPrompt = nil
+      $0.workspaceEditor = nil
     }
     await store.receive(\.showToast, .success("Workspace created")) {
       $0.statusToast = .success("Workspace created")
@@ -1873,7 +1875,7 @@ struct RepositoriesFeatureTests {
   @Test func workspaceBaseRefsLoadErrorSurfacesValidationMessage() async {
     let repositoryID = "/tmp/repo"
     var initialState = RepositoriesFeature.State()
-    initialState.workspaceCreationPrompt = WorkspaceCreationPromptFeature.State(
+    initialState.workspaceEditor = WorkspaceEditorFeature.State(
       repositories: [
         ProjectWorkspaceCreationRepository(
           id: repositoryID,
@@ -1900,7 +1902,7 @@ struct RepositoriesFeatureTests {
         )
       )
     ) {
-      $0.workspaceCreationPrompt?.validationMessage = "Could not read branches for Repo: boom"
+      $0.workspaceEditor?.validationMessage = "Could not read branches for Repo: boom"
     }
   }
 

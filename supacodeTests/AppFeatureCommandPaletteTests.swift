@@ -380,7 +380,7 @@ struct AppFeatureCommandPaletteTests {
     let resolvedRootPath = expectedDefaultWorkspaceRootPath(for: title)
     await store.send(.commandPalette(.delegate(.newWorkspace)))
     await store.receive(\.repositories.workspaceCreation.promptRequested) {
-      $0.repositories.workspaceCreationPrompt = WorkspaceCreationPromptFeature.State(
+      $0.repositories.workspaceEditor = WorkspaceEditorFeature.State(
         repositories: [],
         title: title,
         rootPath: requestedRootPath
@@ -390,7 +390,7 @@ struct AppFeatureCommandPaletteTests {
       await store.receive(\.repositories.workspaceCreation.defaultRootPathResolved)
     } else {
       await store.receive(\.repositories.workspaceCreation.defaultRootPathResolved) {
-        $0.repositories.workspaceCreationPrompt?.rootPath = resolvedRootPath
+        $0.repositories.workspaceEditor?.rootPath = resolvedRootPath
       }
     }
   }

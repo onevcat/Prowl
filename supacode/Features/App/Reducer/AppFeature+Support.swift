@@ -82,7 +82,7 @@ extension AppFeature.State {
       || alert != nil
       || repositories.isOpenPanelPresented
       || repositories.worktreeCreationPrompt != nil
-      || repositories.workspaceCreationPrompt != nil
+      || repositories.workspaceEditor != nil
       || repositories.pendingRenameBranchRequest != nil
       || repositories.deleteWorktreeConfirmation != nil
       || repositories.removeWorkspaceConfirmation != nil

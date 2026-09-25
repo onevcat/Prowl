@@ -2,23 +2,90 @@ import ComposableArchitecture
 import Foundation
 import IdentifiedCollections
 
+/// A member that already exists in the edited workspace. Its source, path and
+/// checkout are read-only provenance; only the display name and role can be
+/// edited, and the member can be marked for removal until Save.
+struct WorkspaceEditorExistingRepository: Equatable, Identifiable, Sendable {
+  struct Removal: Equatable, Sendable {
+    var deleteFiles = false
+    var deleteBranch = false
+  }
+
+  let entry: ProjectWorkspaceRepositoryEntry
+  var name: String
+  var role: String
+  var removal: Removal?
+
+  var id: String { entry.id }
+
+  var isMarkedForRemoval: Bool { removal != nil }
+
+  /// Branch deletion is offered on the same terms as workspace removal: a
+  /// worktree checkout with a recorded branch and source repository.
+  var offersBranchDeletion: Bool {
+    entry.sourceKind != .remote && entry.branchName != nil && entry.sourceLocation != nil
+  }
+
+  init(entry: ProjectWorkspaceRepositoryEntry) {
+    self.entry = entry
+    name = entry.name
+    role = entry.role ?? ""
+  }
+
+  /// The entry as it should be saved, carrying the edited name and role.
+  var editedEntry: ProjectWorkspaceRepositoryEntry {
+    var entry = entry
+    let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    entry.name = trimmedName.isEmpty ? self.entry.name : trimmedName
+    let trimmedRole = role.trimmingCharacters(in: .whitespacesAndNewlines)
+    entry.role = trimmedRole.isEmpty ? nil : trimmedRole
+    return entry
+  }
+}
+
+struct WorkspaceTaskLinkDraft: Equatable, Identifiable, Sendable {
+  let id: String
+  var value: String
+}
+
+enum WorkspaceEditorSubmission: Equatable, Sendable {
+  case create(ProjectWorkspaceCreationDraft)
+  case update(ProjectWorkspaceUpdateRequest)
+}
+
 @Reducer
-struct WorkspaceCreationPromptFeature {
+struct WorkspaceEditorFeature {
   private enum CancelID {
-    static let remoteRepositoryPromptLoad = "workspaceCreationPrompt.remoteRepositoryPromptLoad"
+    static let remoteRepositoryPromptLoad = "workspaceEditor.remoteRepositoryPromptLoad"
+  }
+
+  enum Mode: Equatable, Sendable {
+    case create
+    case edit(repositoryID: Repository.ID)
+
+    var isEditing: Bool {
+      if case .edit = self { return true }
+      return false
+    }
   }
 
   @ObservableState
   struct State: Equatable {
+    var mode: Mode
+    /// Members that already exist on disk (edit mode only), in saved order.
+    var existingRepositories: IdentifiedArrayOf<WorkspaceEditorExistingRepository>
+    /// Members added in this session; materialized on Create / Save.
     var repositories: IdentifiedArrayOf<ProjectWorkspaceCreationRepository>
     var openedRepositoryCandidates: IdentifiedArrayOf<ProjectWorkspaceCreationRepository>
     var title: String
+    var description: String
+    var taskLinks: IdentifiedArrayOf<WorkspaceTaskLinkDraft>
     var rootPath: String
     var isRootPathDirty = false
     var validationMessage: String?
     var validationTarget: ValidationTarget?
     var validationRequestID = 0
-    var isCreating = false
+    var isSaving = false
     var remoteRepositoryPrompt: RemoteRepositoryPromptState?
 
     var availableOpenedRepositories: [ProjectWorkspaceCreationRepository] {
@@ -29,19 +96,65 @@ struct WorkspaceCreationPromptFeature {
       PathPolicy.normalizePath(rootPath, resolvingSymlinks: false) ?? rootPath
     }
 
+    /// Members that will exist after Create / Save.
+    var remainingRepositoryCount: Int {
+      existingRepositories.filter { !$0.isMarkedForRemoval }.count + repositories.count
+    }
+
+    var hasPendingRemovals: Bool {
+      existingRepositories.contains(where: \.isMarkedForRemoval)
+    }
+
     init(
       repositories: [ProjectWorkspaceCreationRepository],
       title: String,
       rootPath: String,
       openedRepositoryCandidates: [ProjectWorkspaceCreationRepository] = []
     ) {
+      mode = .create
+      existingRepositories = []
       self.repositories = IdentifiedArray(repositories, uniquingIDsWith: { current, _ in current })
       self.openedRepositoryCandidates = IdentifiedArray(
         openedRepositoryCandidates,
         uniquingIDsWith: { current, _ in current }
       )
       self.title = title
+      description = ""
+      taskLinks = []
       self.rootPath = rootPath
+    }
+
+    init(
+      editing workspace: ProjectWorkspace,
+      rootURL: URL,
+      repositoryID: Repository.ID,
+      openedRepositoryCandidates: [ProjectWorkspaceCreationRepository] = [],
+      taskLinkIDs: (Int) -> String = { "task-link-\($0)" }
+    ) {
+      mode = .edit(repositoryID: repositoryID)
+      existingRepositories = IdentifiedArray(
+        workspace.repositories.map(WorkspaceEditorExistingRepository.init(entry:)),
+        uniquingIDsWith: { current, _ in current }
+      )
+      repositories = []
+      self.openedRepositoryCandidates = IdentifiedArray(
+        openedRepositoryCandidates,
+        uniquingIDsWith: { current, _ in current }
+      )
+      title = workspace.title
+      description = workspace.description
+      taskLinks = IdentifiedArray(
+        workspace.taskLinks.enumerated().map { index, link in
+          WorkspaceTaskLinkDraft(id: taskLinkIDs(index), value: link)
+        },
+        uniquingIDsWith: { current, _ in current }
+      )
+      var path = rootURL.standardizedFileURL.path(percentEncoded: false)
+      while path.count > 1, path.hasSuffix("/") {
+        path.removeLast()
+      }
+      rootPath = path
+      isRootPathDirty = true
     }
 
     mutating func clearValidation() {
@@ -60,6 +173,7 @@ struct WorkspaceCreationPromptFeature {
     case title
     case rootPath
     case repository(Repository.ID, RepositoryField)
+    case existingRepository(String)
   }
 
   enum RepositoryField: Equatable, Sendable {
@@ -87,6 +201,10 @@ struct WorkspaceCreationPromptFeature {
   enum Action: BindableAction, Equatable {
     case binding(BindingAction<State>)
     case titleChanged(String)
+    case descriptionChanged(String)
+    case addTaskLinkButtonTapped
+    case taskLinkChanged(String, String)
+    case removeTaskLink(String)
     case rootPathChanged(String)
     case automaticRootPathResolved(path: String, requestedRootPath: String)
     case addOpenedRepository(Repository.ID)
@@ -103,15 +221,24 @@ struct WorkspaceCreationPromptFeature {
     case repositorySourceKindChanged(Repository.ID, ProjectWorkspaceRepositorySourceKind)
     case repositoryCheckoutModeChanged(Repository.ID, ProjectWorkspaceRepositoryCheckoutMode)
     case repositoryNameChanged(Repository.ID, String)
+    case repositoryRoleChanged(Repository.ID, String)
     case repositoryPathChanged(Repository.ID, String)
     case repositorySourceChosen(Repository.ID, String)
     case repositorySourceLocationChanged(Repository.ID, String)
     case repositoryBranchNameChanged(Repository.ID, String)
     case repositoryBaseRefChanged(Repository.ID, String)
     case repositoryResetLocalBranchChanged(Repository.ID, Bool)
+    case existingRepositoryNameChanged(String, String)
+    case existingRepositoryRoleChanged(String, String)
+    case existingRepositoryMarkedForRemoval(String)
+    case existingRepositoryRemovalUndone(String)
+    case existingRepositoryDeleteFilesChanged(String, Bool)
+    case existingRepositoryDeleteBranchChanged(String, Bool)
+    case existingRepositoryMovedUp(String)
+    case existingRepositoryMovedDown(String)
     case rootPathChosen(String)
     case cancelButtonTapped
-    case createButtonTapped
+    case submitButtonTapped
     case delegate(Delegate)
   }
 
@@ -119,10 +246,11 @@ struct WorkspaceCreationPromptFeature {
   enum Delegate: Equatable {
     case baseRefSourceChanged(Repository.ID)
     case cancel
-    case submit(ProjectWorkspaceCreationDraft)
+    case submit(WorkspaceEditorSubmission)
   }
 
   @Dependency(\.uuid) var uuid
+  @Dependency(\.date.now) var now
   @Dependency(GitClientDependency.self) var gitClient
 
   var body: some Reducer<State, Action> {
@@ -136,7 +264,7 @@ struct WorkspaceCreationPromptFeature {
       case .titleChanged(let title):
         state.title = title
         state.clearValidation()
-        guard !state.isRootPathDirty else {
+        guard !state.mode.isEditing, !state.isRootPathDirty else {
           return .none
         }
         let folderName = ProjectWorkspace.defaultWorkspaceFolderName(for: title)
@@ -147,6 +275,26 @@ struct WorkspaceCreationPromptFeature {
           await send(
             .automaticRootPathResolved(path: resolved, requestedRootPath: requestedRootPath))
         }
+
+      case .descriptionChanged(let description):
+        state.description = description
+        state.clearValidation()
+        return .none
+
+      case .addTaskLinkButtonTapped:
+        state.taskLinks.append(WorkspaceTaskLinkDraft(id: uuid().uuidString, value: ""))
+        state.clearValidation()
+        return .none
+
+      case .taskLinkChanged(let linkID, let value):
+        state.taskLinks[id: linkID]?.value = value
+        state.clearValidation()
+        return .none
+
+      case .removeTaskLink(let linkID):
+        state.taskLinks.remove(id: linkID)
+        state.clearValidation()
+        return .none
 
       case .rootPathChanged(let rootPath):
         state.rootPath = rootPath
@@ -339,6 +487,11 @@ struct WorkspaceCreationPromptFeature {
         state.clearValidation()
         return .none
 
+      case .repositoryRoleChanged(let repositoryID, let role):
+        state.repositories[id: repositoryID]?.role = role
+        state.clearValidation()
+        return .none
+
       case .repositoryPathChanged(let repositoryID, let path):
         state.repositories[id: repositoryID]?.path = path
         state.clearValidation()
@@ -410,6 +563,68 @@ struct WorkspaceCreationPromptFeature {
         state.clearValidation()
         return .none
 
+      case .existingRepositoryNameChanged(let entryID, let name):
+        state.existingRepositories[id: entryID]?.name = name
+        state.clearValidation()
+        return .none
+
+      case .existingRepositoryRoleChanged(let entryID, let role):
+        state.existingRepositories[id: entryID]?.role = role
+        state.clearValidation()
+        return .none
+
+      case .existingRepositoryMarkedForRemoval(let entryID):
+        guard state.existingRepositories[id: entryID] != nil else {
+          return .none
+        }
+        state.existingRepositories[id: entryID]?.removal = .init()
+        state.clearValidation()
+        return .none
+
+      case .existingRepositoryRemovalUndone(let entryID):
+        state.existingRepositories[id: entryID]?.removal = nil
+        state.clearValidation()
+        return .none
+
+      case .existingRepositoryDeleteFilesChanged(let entryID, let deleteFiles):
+        guard var removal = state.existingRepositories[id: entryID]?.removal else {
+          return .none
+        }
+        removal.deleteFiles = deleteFiles
+        if !deleteFiles {
+          removal.deleteBranch = false
+        }
+        state.existingRepositories[id: entryID]?.removal = removal
+        return .none
+
+      case .existingRepositoryDeleteBranchChanged(let entryID, let deleteBranch):
+        guard let repository = state.existingRepositories[id: entryID],
+          var removal = repository.removal,
+          removal.deleteFiles || !deleteBranch,
+          repository.offersBranchDeletion || !deleteBranch
+        else {
+          return .none
+        }
+        removal.deleteBranch = deleteBranch
+        state.existingRepositories[id: entryID]?.removal = removal
+        return .none
+
+      case .existingRepositoryMovedUp(let entryID):
+        guard let index = state.existingRepositories.index(id: entryID), index > 0 else {
+          return .none
+        }
+        state.existingRepositories.swapAt(index, index - 1)
+        return .none
+
+      case .existingRepositoryMovedDown(let entryID):
+        guard let index = state.existingRepositories.index(id: entryID),
+          index < state.existingRepositories.count - 1
+        else {
+          return .none
+        }
+        state.existingRepositories.swapAt(index, index + 1)
+        return .none
+
       case .rootPathChosen(let path):
         state.rootPath = path
         state.isRootPathDirty = true
@@ -419,7 +634,7 @@ struct WorkspaceCreationPromptFeature {
       case .cancelButtonTapped:
         return .send(.delegate(.cancel))
 
-      case .createButtonTapped:
+      case .submitButtonTapped:
         let title = state.title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else {
           state.setValidation(
@@ -436,7 +651,7 @@ struct WorkspaceCreationPromptFeature {
           )
           return .none
         }
-        guard state.repositories.count >= 2 else {
+        guard state.remainingRepositoryCount >= 1 else {
           state.setValidation(
             ProjectWorkspaceCreationError.notEnoughRepositories.localizedDescription,
             target: nil
@@ -457,17 +672,59 @@ struct WorkspaceCreationPromptFeature {
           }
         }
         state.clearValidation()
-        return .send(
-          .delegate(
-            .submit(
-              ProjectWorkspaceCreationDraft(
-                title: title,
-                rootURL: URL(filePath: rootPath, directoryHint: .isDirectory),
-                repositories: plans
+        let description = state.description.trimmingCharacters(in: .whitespacesAndNewlines)
+        let taskLinks = state.taskLinks.map { $0.value.trimmingCharacters(in: .whitespacesAndNewlines) }
+          .filter { !$0.isEmpty }
+        switch state.mode {
+        case .create:
+          return .send(
+            .delegate(
+              .submit(
+                .create(
+                  ProjectWorkspaceCreationDraft(
+                    title: title,
+                    description: description,
+                    taskLinks: taskLinks,
+                    rootURL: URL(filePath: rootPath, directoryHint: .isDirectory),
+                    repositories: plans
+                  )
+                )
               )
             )
           )
-        )
+        case .edit:
+          let members: [ProjectWorkspaceUpdateMember] =
+            state.existingRepositories
+            .filter { !$0.isMarkedForRemoval }
+            .map { .existing($0.editedEntry) }
+            + plans.map { .added($0) }
+          let removals = state.existingRepositories.compactMap { repository in
+            repository.removal.map { removal in
+              ProjectWorkspaceRepositoryRemoval(
+                entry: repository.entry,
+                deleteFiles: removal.deleteFiles,
+                deleteBranch: removal.deleteFiles && removal.deleteBranch
+              )
+            }
+          }
+          return .send(
+            .delegate(
+              .submit(
+                .update(
+                  ProjectWorkspaceUpdateRequest(
+                    rootURL: URL(filePath: rootPath, directoryHint: .isDirectory),
+                    title: title,
+                    description: description,
+                    taskLinks: taskLinks,
+                    members: members,
+                    removals: removals,
+                    updatedAt: now
+                  )
+                )
+              )
+            )
+          )
+        }
 
       case .delegate:
         return .none
@@ -521,7 +778,8 @@ struct WorkspaceCreationPromptFeature {
     case .missingPath:
       return .rootPath
     case .notEnoughRepositories, .linkCheckoutUnsupported, .destinationIsFile,
-      .workspaceAlreadyExists, .repositoryDoesNotExist, .linkAlreadyExists, .gitCommandFailed:
+      .workspaceAlreadyExists, .workspaceMetadataMissing, .repositoryDoesNotExist,
+      .linkAlreadyExists, .gitCommandFailed:
       return nil
     }
   }
@@ -580,10 +838,12 @@ struct WorkspaceCreationPromptFeature {
         }
       }
     }
+    let role = repository.role?.trimmingCharacters(in: .whitespacesAndNewlines)
     return .success(
       ProjectWorkspaceRepositoryPlan(
         id: repository.id,
         name: repository.name,
+        role: role?.isEmpty == false ? role : nil,
         path: repository.path,
         sourceKind: repository.sourceKind,
         sourceLocation: sourceLocation,
