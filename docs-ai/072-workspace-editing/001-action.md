@@ -9,6 +9,7 @@
 | 2026-09-25 | `WorkspaceCreationPromptFeature` → `WorkspaceEditorFeature` with `mode`, existing-member rows, staged removal, reorder, task links, description; `WorkspaceCreationPromptView` → `WorkspaceEditorView` | PR #830 |
 | 2026-09-25 | `RepositoriesFeature+WorkspaceEditing.swift` (`workspaceEditing` action family), entry points in sidebar, detail view, Settings, Command Palette, Worktrees menu | PR #830 |
 | 2026-09-25 | Tests, `docs/` manual updates, this record | PR #830 |
+| 2026-09-25 | Debug visual verification in an isolated instance: create sheet, sidebar after create, palette item, edit sheet with staged removal, interleaved reorder, save (toast, disk, branch cleanup), Settings entry surfacing the main window; screenshots on PR #830 | PR #830 |
 | 2026-09-25 | Review Loop round 4 (Pi Reviewer): New Workspace… no longer replaces an open editor sheet (unsaved edits or an in-flight save survive) | PR #830 |
 | 2026-09-25 | Review Loop round 3 (Pi Reviewer): the creation sheet's default-folder resolver is cancelled on dismissal and its result only applies to a `.create` editor, so it can never rewrite an edit session's root | PR #830 |
 | 2026-09-25 | Review Loop round 2 (Pi Reviewer): a refused branch deletion after a committed save is reported in the cleanup alert instead of vanishing behind the success toast | PR #830 |
