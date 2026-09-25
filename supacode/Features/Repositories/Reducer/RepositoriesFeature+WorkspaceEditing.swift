@@ -32,13 +32,11 @@ extension RepositoriesFeature {
       else {
         return .none
       }
-      let uuid = uuid
       var editor = WorkspaceEditorFeature.State(
         editing: workspace,
         rootURL: repository.rootURL,
         repositoryID: repositoryID,
-        openedRepositoryCandidates: state.workspaceCreationCandidates,
-        taskLinkIDs: { _ in uuid().uuidString }
+        openedRepositoryCandidates: state.workspaceCreationCandidates
       )
       if let removingChildID,
         let entry = workspace.repositories.first(where: { entry in

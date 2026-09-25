@@ -26,10 +26,25 @@ shared folder, materializes the selected repositories, writes
 workspace needs at least one repository; more can be added later (see
 [Editing a workspace](#editing-a-workspace)).
 
-Besides the title and folder, the creation sheet takes an optional
-**Description**, a list of **Task Links** (URLs or issue keys, one per row),
-and an optional **Role** per repository (`app`, `backend`, `docs`, …). All of
-them land in `.prowl/workspace.json` so agents can read them.
+The sheet has two levels. The **Workspace** panel holds the metadata: a
+**Title** (the folder name follows it until you press **Change…**), an optional
+**Description**, optional **Task Links** (URLs or issue keys, one per line),
+and the repository list with **Add Repository…**. Every row says in one line
+what Create will do with it ("Link → shares the live checkout at …", "New
+branch feature/x from main → worktree", "Clone git@… @ origin/main"), and a
+footer line summarizes the whole operation. Create is disabled until at least
+one repository is listed.
+
+**Add Repository…** opens the second level inside the same sheet, one
+repository at a time. First pick the source — **Opened in Prowl** (a list of
+the sidebar repositories), **Local Folder…** (an open panel), or **Remote URL**
+(branches load automatically once you stop typing or press Return). Then set
+**Name**, an optional **Role** (`app`, `backend`, `docs`, …), and the
+**Checkout**: **Link**, **New Branch** (name plus base branch), or **Existing
+Branch**. The folder name inside the workspace lives under **Advanced** and
+defaults to the repository name. **Add** returns to the workspace panel with
+the new row; **Back** discards it. All of this lands in `.prowl/workspace.json`
+so agents can read it.
 
 While a workspace is being created the prompt shows a spinner. **Cancel** stops
 the creation and rolls back everything created so far: cloned folders, created
@@ -142,24 +157,25 @@ A workspace stays editable after creation. Open the editor from any of:
 - the Worktrees menu → **Edit Workspace...** (enabled when a workspace is
   selected).
 
-The editor is the same sheet as creation, pre-filled from
+The editor is the same two-level sheet as creation, pre-filled from
 `.prowl/workspace.json` (re-read from disk when it opens, so edits made
 outside Prowl are respected). It lets you change:
 
 - **Title**, **Description**, and **Task Links**. The title is display-only;
   the folder on disk keeps its name.
-- **Name** and **Role** of every existing repository. Source, path, and
-  checkout are shown as read-only provenance; to change them, remove the
-  repository and add it again.
-- **Order**: move any repository up or down, including ones added in the
-  same edit. The sidebar and the metadata follow the new order.
-- **Added repositories**: the same **Add Opened** / **Add Remote** / **Add
-  Local** sources and Link / Create Branch / Use Existing checkouts as
-  creation. They are materialized when you save.
-- **Removed repositories**: the trash button marks a repository for removal
-  (**Undo** restores it). By default only the metadata entry goes away and the
-  folder stays. Tick **Also delete the folder inside the workspace** to remove
-  what Prowl materialized: the symlink for a linked repository (the source is
+- **Name** and **Role** of every existing repository: hover a row and press the
+  pencil (or right-click → **Edit…**). Source and checkout are shown as a
+  read-only summary; to change them, remove the repository and add it again.
+- **Order**: right-click a row → **Move Up** / **Move Down**, for existing and
+  newly added rows alike. The sidebar and the metadata follow the new order.
+- **Added repositories**: **Add Repository…** with the same sources and
+  checkouts as creation. They are materialized when you save and show
+  "Added on save" until then.
+- **Removed repositories**: the trash button on a row (or **Remove from
+  Workspace on save** inside the row's editor) marks it for removal; **Undo**
+  restores it. By default only the metadata entry goes away and the folder
+  stays. Tick **Also delete the folder inside the workspace** to remove what
+  Prowl materialized: the symlink for a linked repository (the source is
   untouched), `git worktree remove --force` plus the folder for a worktree, or
   the cloned folder for a remote. Worktree entries with a recorded branch
   additionally offer **Delete branch … in the source repository**, which goes

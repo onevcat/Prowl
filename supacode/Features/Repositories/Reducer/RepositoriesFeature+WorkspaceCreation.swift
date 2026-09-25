@@ -19,12 +19,6 @@ extension RepositoriesFeature.State {
 
 nonisolated private let workspaceLog = SupaLogger("workspace")
 
-nonisolated private struct WorkspaceBaseRefsResult: Sendable {
-  var options: [GitBranchRefOption] = []
-  var defaultBaseRef: String?
-  var errorMessage: String?
-}
-
 extension RepositoriesFeature {
   func reduceWorkspaceCreation(
     state: inout State,
@@ -83,28 +77,6 @@ extension RepositoriesFeature {
         .send(.showToast(.warning(String(localized: "Workspace creation canceled"))))
       )
 
-    case .refreshBaseRefs(let repositoryID):
-      guard let repository = state.workspaceEditor?.repositories[id: repositoryID] else {
-        return .none
-      }
-      return workspaceBaseRefsEffect(for: [repository])
-
-    case .baseRefsLoaded(
-      let repositoryID, let sourceKind, let sourceLocation, let options, let defaultBaseRef, let errorMessage
-    ):
-      Self.applyLoadedBaseRefs(
-        into: &state,
-        repositoryID: repositoryID,
-        sourceKind: sourceKind,
-        sourceLocation: sourceLocation,
-        result: WorkspaceBaseRefsResult(
-          options: options,
-          defaultBaseRef: defaultBaseRef,
-          errorMessage: errorMessage
-        )
-      )
-      return .none
-
     case .createWorkspace(let draft):
       state.workspaceEditor?.isSaving = true
       state.workspaceEditor?.validationMessage = nil
@@ -153,41 +125,6 @@ extension RepositoriesFeature {
     }
   }
 
-  private static func trimmedNonEmpty(_ value: String?) -> String? {
-    guard let value else {
-      return nil
-    }
-    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-    return trimmed.isEmpty ? nil : trimmed
-  }
-
-  private static func applyLoadedBaseRefs(
-    into state: inout State,
-    repositoryID: Repository.ID,
-    sourceKind: ProjectWorkspaceRepositorySourceKind,
-    sourceLocation: String,
-    result: WorkspaceBaseRefsResult
-  ) {
-    guard var repository = state.workspaceEditor?.repositories[id: repositoryID],
-      repository.sourceKind == sourceKind,
-      repository.sourceLocation == sourceLocation
-    else {
-      return
-    }
-    if let errorMessage = result.errorMessage {
-      state.workspaceEditor?.validationMessage = errorMessage
-    }
-    let baseRef = trimmedNonEmpty(repository.baseRef)
-    let baseRefOptions = ProjectWorkspaceCreationRepository.normalizedBaseRefOptions(result.options)
-    repository.baseRefOptions = baseRefOptions
-    if let baseRef, baseRefOptions.contains(where: { $0.ref == baseRef }) {
-      repository.baseRef = baseRef
-    } else {
-      repository.baseRef = result.defaultBaseRef
-    }
-    state.workspaceEditor?.repositories[id: repositoryID] = repository
-  }
-
   static func workspaceGitRunner(
     shellClient: ShellClient,
     resolveGit: @escaping @Sendable () async throws -> GitExecutable = {
@@ -210,87 +147,6 @@ extension RepositoriesFeature {
       } catch {
         throw error
       }
-    }
-  }
-
-  private func workspaceBaseRefsEffect(for repositories: [ProjectWorkspaceCreationRepository]) -> Effect<Action> {
-    guard !repositories.isEmpty else {
-      return .none
-    }
-    let gitClient = gitClient
-    return .run { send in
-      for repository in repositories {
-        let result = await Self.workspaceBaseRefs(for: repository, gitClient: gitClient)
-        await send(
-          .workspaceCreation(
-            .baseRefsLoaded(
-              repositoryID: repository.id,
-              sourceKind: repository.sourceKind,
-              sourceLocation: repository.sourceLocation,
-              options: result.options,
-              defaultBaseRef: result.defaultBaseRef,
-              errorMessage: result.errorMessage
-            )
-          )
-        )
-      }
-    }
-  }
-
-  private static func workspaceBaseRefs(
-    for repository: ProjectWorkspaceCreationRepository,
-    gitClient: GitClientDependency
-  ) async -> WorkspaceBaseRefsResult {
-    switch repository.sourceKind {
-    case .remote:
-      return WorkspaceBaseRefsResult()
-
-    case .existingPath, .localRepository, .bareRepository:
-      guard let sourceURL = repository.localSourceURL else {
-        return WorkspaceBaseRefsResult()
-      }
-
-      let repositoryURL: URL
-      if repository.sourceKind == .bareRepository {
-        repositoryURL = sourceURL
-      } else {
-        repositoryURL = (try? await gitClient.repoRoot(sourceURL)) ?? sourceURL
-      }
-
-      async let automaticBaseRefTask = gitClient.automaticWorktreeBaseRef(repositoryURL)
-      async let refsTask = gitClient.branchRefOptions(repositoryURL)
-      let automaticBaseRef = await automaticBaseRefTask
-      let refs: [GitBranchRefOption]
-      var errorMessage: String?
-      do {
-        refs = try await refsTask
-      } catch {
-        refs = []
-        let name = repository.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let displayName = name.isEmpty ? repositoryURL.lastPathComponent : name
-        errorMessage = String(
-          localized: "Could not read branches for \(displayName): \(error.localizedDescription)"
-        )
-        workspaceLog.warning(
-          "Branch detection failed for \(repositoryURL.path(percentEncoded: false)): \(error)"
-        )
-      }
-      let options = ProjectWorkspaceCreationRepository.baseRefOptions(
-        automaticBaseRef: automaticBaseRef,
-        options: refs
-      )
-      let defaultBaseRef =
-        automaticBaseRef != nil || !refs.isEmpty
-        ? ProjectWorkspaceCreationRepository.preferredBaseRef(
-          automaticBaseRef: automaticBaseRef,
-          options: options
-        )
-        : nil
-      return WorkspaceBaseRefsResult(
-        options: options,
-        defaultBaseRef: defaultBaseRef,
-        errorMessage: errorMessage
-      )
     }
   }
 }

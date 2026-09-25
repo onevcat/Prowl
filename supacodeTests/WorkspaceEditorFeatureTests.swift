@@ -37,8 +37,16 @@ struct WorkspaceEditorFeatureTests {
       id: rootURL.path(percentEncoded: false),
       title: "Checkout Flow",
       description: "Ship the flow",
-      taskLinks: ["https://example.com/issues/1"],
+      taskLinks: ["https://example.com/issues/1", "PROWL-7"],
       repositories: [appEntry, apiEntry]
+    )
+  }
+
+  private var sharedCandidate: ProjectWorkspaceCreationRepository {
+    ProjectWorkspaceCreationRepository(
+      id: "/tmp/source/shared",
+      name: "Shared",
+      rootURL: URL(fileURLWithPath: "/tmp/source/shared")
     )
   }
 
@@ -47,13 +55,7 @@ struct WorkspaceEditorFeatureTests {
       editing: workspace,
       rootURL: rootURL,
       repositoryID: "/tmp/workspaces/checkout-flow",
-      openedRepositoryCandidates: [
-        ProjectWorkspaceCreationRepository(
-          id: "/tmp/source/shared",
-          name: "Shared",
-          rootURL: URL(fileURLWithPath: "/tmp/source/shared")
-        )
-      ]
+      openedRepositoryCandidates: [sharedCandidate]
     )
   }
 
@@ -63,17 +65,17 @@ struct WorkspaceEditorFeatureTests {
     #expect(state.mode == .edit(repositoryID: "/tmp/workspaces/checkout-flow"))
     #expect(state.title == "Checkout Flow")
     #expect(state.description == "Ship the flow")
-    #expect(state.taskLinks.map(\.value) == ["https://example.com/issues/1"])
-    #expect(state.taskLinks.map(\.id) == ["task-link-0"])
+    #expect(state.taskLinksText == "https://example.com/issues/1\nPROWL-7")
+    #expect(state.taskLinks == ["https://example.com/issues/1", "PROWL-7"])
     #expect(state.rootPath == "/tmp/workspaces/checkout-flow")
     #expect(state.isRootPathDirty)
     #expect(state.existingRepositories.map(\.id) == ["app", "api"])
     #expect(state.existingRepositories[id: "app"]?.role == "macOS app")
-    #expect(state.existingRepositories[id: "api"]?.role == "")
     #expect(state.existingRepositories[id: "app"]?.offersBranchDeletion == true)
     #expect(state.existingRepositories[id: "api"]?.offersBranchDeletion == false)
     #expect(state.repositories.isEmpty)
     #expect(state.remainingRepositoryCount == 2)
+    #expect(state.memberEditor == nil)
   }
 
   @Test func titleChangeInEditModeKeepsRootPath() async {
@@ -87,150 +89,128 @@ struct WorkspaceEditorFeatureTests {
     #expect(store.state.rootPath == "/tmp/workspaces/checkout-flow")
   }
 
-  @Test func taskLinksCanBeAddedEditedAndRemoved() async {
+  @Test func taskLinksTextParsesOneLinkPerLineAndDropsBlanks() async {
     let store = TestStore(initialState: makeEditState()) {
       WorkspaceEditorFeature()
-    } withDependencies: {
-      $0.uuid = .incrementing
     }
 
-    await store.send(.addTaskLinkButtonTapped) {
-      $0.taskLinks.append(WorkspaceTaskLinkDraft(id: UUID(0).uuidString, value: ""))
+    await store.send(.taskLinksTextChanged("  https://example.com/issues/2 \n\n PROWL-42\n   ")) {
+      $0.taskLinksText = "  https://example.com/issues/2 \n\n PROWL-42\n   "
     }
-    await store.send(.taskLinkChanged(UUID(0).uuidString, "PROWL-42")) {
-      $0.taskLinks[id: UUID(0).uuidString]?.value = "PROWL-42"
-    }
-    await store.send(.removeTaskLink("task-link-0")) {
-      $0.taskLinks.remove(id: "task-link-0")
-    }
-    #expect(store.state.taskLinks.map(\.value) == ["PROWL-42"])
+    #expect(store.state.taskLinks == ["https://example.com/issues/2", "PROWL-42"])
   }
 
-  @Test func removalMarkingGatesDeleteFlagsAndCanBeUndone() async {
+  @Test func addRepositoryPresentsTheMemberEditorWithUnusedCandidates() async {
+    var state = makeEditState()
+    state.repositories = [sharedCandidate]
+    let store = TestStore(initialState: state) {
+      WorkspaceEditorFeature()
+    }
+
+    // The only candidate is already added, so the picker offers nothing.
+    await store.send(.addRepositoryButtonTapped) {
+      $0.memberEditor = .add(openedCandidates: [])
+    }
+  }
+
+  @Test func memberEditorCommitAddsANewRowAndReplacesAReEditedOne() async {
     let store = TestStore(initialState: makeEditState()) {
       WorkspaceEditorFeature()
     }
 
-    // Flags on an unmarked member are ignored.
-    await store.send(.existingRepositoryDeleteFilesChanged("app", true))
-    await store.send(.existingRepositoryMarkedForRemoval("app")) {
-      $0.existingRepositories[id: "app"]?.removal = .init()
+    await store.send(.addRepositoryButtonTapped) {
+      $0.memberEditor = .add(openedCandidates: [self.sharedCandidate])
+    }
+    await store.send(.memberEditor(.presented(.delegate(.commitAdded(sharedCandidate))))) {
+      $0.repositories = [self.sharedCandidate]
+      $0.memberEditor = nil
+    }
+    #expect(store.state.orderedMemberKeys == [.existing("app"), .existing("api"), .added("/tmp/source/shared")])
+
+    var renamed = sharedCandidate
+    renamed.name = "Shared Kit"
+    renamed.role = "library"
+    await store.send(.editMember(.added("/tmp/source/shared"))) {
+      $0.memberEditor = .editAdded(self.sharedCandidate)
+    }
+    await store.send(.memberEditor(.presented(.delegate(.commitAdded(renamed))))) {
+      $0.repositories = [renamed]
+      $0.memberEditor = nil
+    }
+    await store.send(.editMember(.added("/tmp/source/shared"))) {
+      $0.memberEditor = .editAdded(renamed)
+    }
+    await store.send(.memberEditor(.presented(.delegate(.removeAdded("/tmp/source/shared"))))) {
+      $0.repositories = []
+      $0.memberEditor = nil
+    }
+  }
+
+  @Test func editingAnExistingMemberRoundTripsNameRoleAndRemoval() async {
+    let store = TestStore(initialState: makeEditState()) {
+      WorkspaceEditorFeature()
+    }
+    var app = WorkspaceEditorExistingRepository(entry: appEntry)
+    app.name = "Mac App"
+    app.role = ""
+    app.removal = .init(deleteFiles: true, deleteBranch: true)
+
+    await store.send(.editMember(.existing("app"))) {
+      $0.memberEditor = .editExisting(WorkspaceEditorExistingRepository(entry: self.appEntry))
+    }
+    await store.send(.memberEditor(.presented(.delegate(.commitExisting(app))))) {
+      $0.existingRepositories[id: "app"] = app
+      $0.memberEditor = nil
     }
     #expect(store.state.remainingRepositoryCount == 1)
-    #expect(store.state.hasPendingRemovals)
-    // Branch deletion requires file deletion.
-    await store.send(.existingRepositoryDeleteBranchChanged("app", true))
-    await store.send(.existingRepositoryDeleteFilesChanged("app", true)) {
-      $0.existingRepositories[id: "app"]?.removal?.deleteFiles = true
-    }
-    await store.send(.existingRepositoryDeleteBranchChanged("app", true)) {
-      $0.existingRepositories[id: "app"]?.removal?.deleteBranch = true
-    }
-    // Turning file deletion off clears the branch choice.
-    await store.send(.existingRepositoryDeleteFilesChanged("app", false)) {
-      $0.existingRepositories[id: "app"]?.removal = .init(deleteFiles: false, deleteBranch: false)
-    }
-    await store.send(.existingRepositoryRemovalUndone("app")) {
+    await store.send(.undoRemoval("app")) {
       $0.existingRepositories[id: "app"]?.removal = nil
     }
-    // A clone has no branch to delete.
-    await store.send(.existingRepositoryMarkedForRemoval("api")) {
+    var reopened = app
+    reopened.removal = nil
+    await store.send(.editMember(.existing("app"))) {
+      $0.memberEditor = .editExisting(reopened)
+    }
+    await store.send(.memberEditor(.presented(.delegate(.cancel)))) {
+      $0.memberEditor = nil
+    }
+  }
+
+  @Test func removeMemberMarksExistingAndDropsAdded() async {
+    var state = makeEditState()
+    state.repositories = [sharedCandidate]
+    let store = TestStore(initialState: state) {
+      WorkspaceEditorFeature()
+    }
+
+    await store.send(.removeMember(.existing("api"))) {
       $0.existingRepositories[id: "api"]?.removal = .init()
     }
-    await store.send(.existingRepositoryDeleteFilesChanged("api", true)) {
-      $0.existingRepositories[id: "api"]?.removal?.deleteFiles = true
+    await store.send(.removeMember(.added("/tmp/source/shared"))) {
+      $0.repositories = []
     }
-    await store.send(.existingRepositoryDeleteBranchChanged("api", true))
+    await store.send(.removeMember(.existing("missing")))
+    #expect(store.state.hasPendingRemovals)
+    #expect(store.state.remainingRepositoryCount == 1)
   }
 
-  @Test func existingMembersCanBeReordered() async {
-    let store = TestStore(initialState: makeEditState()) {
+  @Test func membersCanBeReorderedAcrossExistingAndAddedRows() async {
+    var state = makeEditState()
+    state.repositories = [sharedCandidate]
+    let store = TestStore(initialState: state) {
       WorkspaceEditorFeature()
     }
 
-    #expect(store.state.orderedMemberKeys == [.existing("app"), .existing("api")])
+    #expect(store.state.orderedMemberKeys == [.existing("app"), .existing("api"), .added("/tmp/source/shared")])
     await store.send(.memberMovedUp(.existing("app")))
-    await store.send(.memberMovedDown(.existing("app"))) {
-      $0.memberOrder = [.existing("api"), .existing("app")]
-    }
-    await store.send(.memberMovedDown(.existing("app")))
-    await store.send(.memberMovedUp(.existing("app"))) {
-      $0.memberOrder = [.existing("app"), .existing("api")]
-    }
-    #expect(store.state.orderedMembers.map(\.id) == [.existing("app"), .existing("api")])
-  }
-
-  @Test func addedMemberCanMoveBeforeExistingMembersAndSubmitKeepsThatOrder() async {
-    let now = Date(timeIntervalSince1970: 1_700_000_000)
-    let shared = ProjectWorkspaceCreationRepository(
-      id: "/tmp/source/shared",
-      name: "Shared",
-      rootURL: URL(fileURLWithPath: "/tmp/source/shared")
-    )
-    let store = TestStore(initialState: makeEditState()) {
-      WorkspaceEditorFeature()
-    } withDependencies: {
-      $0.date.now = now
-    }
-
-    await store.send(.addOpenedRepository("/tmp/source/shared")) {
-      $0.repositories = [shared]
-    }
-    await store.receive(\.delegate.baseRefSourceChanged)
-    // Added rows append after existing members until they are moved.
-    #expect(
-      store.state.orderedMemberKeys == [.existing("app"), .existing("api"), .added("/tmp/source/shared")])
     await store.send(.memberMovedUp(.added("/tmp/source/shared"))) {
       $0.memberOrder = [.existing("app"), .added("/tmp/source/shared"), .existing("api")]
     }
     await store.send(.memberMovedUp(.added("/tmp/source/shared"))) {
       $0.memberOrder = [.added("/tmp/source/shared"), .existing("app"), .existing("api")]
     }
-    await store.send(.memberMovedUp(.added("/tmp/source/shared")))
-
-    await store.send(.submitButtonTapped)
-    await store.receive(
-      .delegate(
-        .submit(
-          .update(
-            ProjectWorkspaceUpdateRequest(
-              rootURL: rootURL,
-              title: "Checkout Flow",
-              description: "Ship the flow",
-              taskLinks: ["https://example.com/issues/1"],
-              members: [
-                .added(
-                  ProjectWorkspaceRepositoryPlan(
-                    id: "/tmp/source/shared",
-                    name: "Shared",
-                    path: nil,
-                    sourceKind: .existingPath,
-                    sourceLocation: "/tmp/source/shared",
-                    checkout: .link
-                  )),
-                .existing(appEntry),
-                .existing(apiEntry),
-              ],
-              updatedAt: now
-            )
-          )
-        )
-      )
-    )
-  }
-
-  @Test func removedRowsDropOutOfTheOrder() async {
-    var state = makeEditState()
-    state.repositories = [
-      ProjectWorkspaceCreationRepository(
-        id: "/tmp/source/shared", name: "Shared", rootURL: URL(fileURLWithPath: "/tmp/source/shared"))
-    ]
-    state.memberOrder = [.added("/tmp/source/shared"), .existing("app"), .existing("api")]
-    let store = TestStore(initialState: state) {
-      WorkspaceEditorFeature()
-    }
-
-    await store.send(.removeRepository("/tmp/source/shared")) {
+    await store.send(.memberMovedDown(.existing("api")))
+    await store.send(.removeMember(.added("/tmp/source/shared"))) {
       $0.repositories = []
     }
     #expect(store.state.orderedMemberKeys == [.existing("app"), .existing("api")])
@@ -246,34 +226,23 @@ struct WorkspaceEditorFeatureTests {
 
     await store.send(.submitButtonTapped) {
       $0.validationMessage = "Add at least one repository."
-      $0.validationTarget = nil
-      $0.validationRequestID = 1
+      $0.validationTarget = .repositories
     }
   }
 
-  @Test func submitInEditModeBuildsUpdateRequest() async {
+  @Test func submitInEditModeBuildsUpdateRequestInRowOrder() async {
     let now = Date(timeIntervalSince1970: 1_700_000_000)
     var state = makeEditState()
     state.title = "  Checkout Flow v2 "
     state.description = " Ship it \n"
-    state.taskLinks = [
-      WorkspaceTaskLinkDraft(id: "a", value: "  https://example.com/issues/2 "),
-      WorkspaceTaskLinkDraft(id: "b", value: "   "),
-    ]
+    state.taskLinksText = "  https://example.com/issues/2 \n\n"
     state.existingRepositories[id: "app"]?.name = " Mac App "
     state.existingRepositories[id: "app"]?.role = ""
     state.existingRepositories[id: "api"]?.removal = .init(deleteFiles: true, deleteBranch: false)
-    state.repositories = [
-      {
-        var repository = ProjectWorkspaceCreationRepository(
-          id: "/tmp/source/shared",
-          name: "Shared",
-          rootURL: URL(fileURLWithPath: "/tmp/source/shared")
-        )
-        repository.role = " library "
-        return repository
-      }()
-    ]
+    var shared = sharedCandidate
+    shared.role = " library "
+    state.repositories = [shared]
+    state.memberOrder = [.added("/tmp/source/shared"), .existing("app"), .existing("api")]
     let store = TestStore(initialState: state) {
       WorkspaceEditorFeature()
     } withDependencies: {
@@ -294,7 +263,6 @@ struct WorkspaceEditorFeatureTests {
               description: "Ship it",
               taskLinks: ["https://example.com/issues/2"],
               members: [
-                .existing(renamedApp),
                 .added(
                   ProjectWorkspaceRepositoryPlan(
                     id: "/tmp/source/shared",
@@ -305,6 +273,7 @@ struct WorkspaceEditorFeatureTests {
                     sourceLocation: "/tmp/source/shared",
                     checkout: .link
                   )),
+                .existing(renamedApp),
               ],
               removals: [
                 ProjectWorkspaceRepositoryRemoval(entry: apiEntry, deleteFiles: true, deleteBranch: false)
@@ -317,20 +286,20 @@ struct WorkspaceEditorFeatureTests {
     )
   }
 
-  @Test func submitInCreateModeCarriesDescriptionLinksAndRole() async {
-    var repository = ProjectWorkspaceCreationRepository(
-      id: "/tmp/repo-a",
-      name: "Repo A",
-      rootURL: URL(fileURLWithPath: "/tmp/repo-a")
-    )
-    repository.role = "app"
+  @Test func submitInCreateModeCarriesDescriptionLinksRoleAndOrder() async {
+    var repoA = ProjectWorkspaceCreationRepository(
+      id: "/tmp/repo-a", name: "Repo A", rootURL: URL(fileURLWithPath: "/tmp/repo-a"))
+    repoA.role = "app"
+    let repoB = ProjectWorkspaceCreationRepository(
+      id: "/tmp/repo-b", name: "Repo B", rootURL: URL(fileURLWithPath: "/tmp/repo-b"))
     var state = WorkspaceEditorFeature.State(
-      repositories: [repository],
-      title: "Solo",
-      rootPath: "/tmp/solo-workspace"
+      repositories: [repoA, repoB],
+      title: " Multi Repo ",
+      rootPath: " /tmp/multi-repo-workspace "
     )
-    state.description = "Just one"
-    state.taskLinks = [WorkspaceTaskLinkDraft(id: "a", value: "PROWL-1")]
+    state.description = "Just two"
+    state.taskLinksText = "PROWL-1"
+    state.memberOrder = [.added("/tmp/repo-b"), .added("/tmp/repo-a")]
     let store = TestStore(initialState: state) {
       WorkspaceEditorFeature()
     }
@@ -341,11 +310,19 @@ struct WorkspaceEditorFeatureTests {
         .submit(
           .create(
             ProjectWorkspaceCreationDraft(
-              title: "Solo",
-              description: "Just one",
+              title: "Multi Repo",
+              description: "Just two",
               taskLinks: ["PROWL-1"],
-              rootURL: URL(filePath: "/tmp/solo-workspace", directoryHint: .isDirectory),
+              rootURL: URL(filePath: "/tmp/multi-repo-workspace", directoryHint: .isDirectory),
               repositories: [
+                ProjectWorkspaceRepositoryPlan(
+                  id: "/tmp/repo-b",
+                  name: "Repo B",
+                  path: nil,
+                  sourceKind: .existingPath,
+                  sourceLocation: "/tmp/repo-b",
+                  checkout: .link
+                ),
                 ProjectWorkspaceRepositoryPlan(
                   id: "/tmp/repo-a",
                   name: "Repo A",
@@ -354,7 +331,7 @@ struct WorkspaceEditorFeatureTests {
                   sourceKind: .existingPath,
                   sourceLocation: "/tmp/repo-a",
                   checkout: .link
-                )
+                ),
               ]
             )
           )
@@ -363,7 +340,7 @@ struct WorkspaceEditorFeatureTests {
     )
   }
 
-  @Test func submitValidatesAddedRowsBeforeBuildingUpdate() async {
+  @Test func submitReportsAStaleInvalidRow() async {
     var state = makeEditState()
     state.repositories = [
       ProjectWorkspaceCreationRepository(
@@ -380,8 +357,30 @@ struct WorkspaceEditorFeatureTests {
 
     await store.send(.submitButtonTapped) {
       $0.validationMessage = "Choose an existing branch for Remote."
-      $0.validationTarget = .repository("remote", .baseRef)
-      $0.validationRequestID = 1
+      $0.validationTarget = .repositories
     }
+  }
+
+  @Test func createModeFolderFollowsTitleUntilChosen() async {
+    let store = TestStore(
+      initialState: WorkspaceEditorFeature.State(repositories: [], title: "Workspace", rootPath: "/tmp/x")
+    ) {
+      WorkspaceEditorFeature()
+    }
+    store.exhaustivity = .off
+
+    await store.send(.titleChanged("Checkout Flow")) {
+      $0.title = "Checkout Flow"
+      $0.rootPath = ProjectWorkspace.workspaceRootPath(folderName: "Checkout-Flow", suffix: nil)
+    }
+    await store.receive(\.automaticRootPathResolved)
+    await store.send(.rootPathChosen("/tmp/custom")) {
+      $0.rootPath = "/tmp/custom"
+      $0.isRootPathDirty = true
+    }
+    await store.send(.titleChanged("Other")) {
+      $0.title = "Other"
+    }
+    #expect(store.state.rootPath == "/tmp/custom")
   }
 }

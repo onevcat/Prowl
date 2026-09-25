@@ -271,15 +271,6 @@ struct RepositoriesFeature {
     case defaultRootPathResolved(path: String, requestedRootPath: String)
     case promptCanceled
     case promptDismissed
-    case refreshBaseRefs(Repository.ID)
-    case baseRefsLoaded(
-      repositoryID: Repository.ID,
-      sourceKind: ProjectWorkspaceRepositorySourceKind,
-      sourceLocation: String,
-      options: [GitBranchRefOption],
-      defaultBaseRef: String?,
-      errorMessage: String?
-    )
     case createWorkspace(ProjectWorkspaceCreationDraft)
     case workspaceCreated(URL)
     case workspaceCreationFailed(String)

@@ -155,4 +155,6 @@ one editor surface instead of two. Bootstrap scripts stay out of scope.
 
 ## Amendments
 
-(none yet)
+- Updated 2026-09-25: the single-sheet editor was judged too complex; replaced by a two-level
+  editor (workspace panel + one-repository-at-a-time panel) — see
+  [002-two-level-editor.md](002-two-level-editor.md)

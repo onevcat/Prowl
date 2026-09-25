@@ -840,9 +840,6 @@ extension RepositoriesFeature {
       }
       return .send(.workspaceCreation(.promptCanceled))
 
-    case .workspaceEditor(.presented(.delegate(.baseRefSourceChanged(let repositoryID)))):
-      return .send(.workspaceCreation(.refreshBaseRefs(repositoryID)))
-
     case .workspaceEditor(.presented(.delegate(.submit(.create(let draft))))):
       return .send(.workspaceCreation(.createWorkspace(draft)))
 
