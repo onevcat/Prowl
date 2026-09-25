@@ -622,7 +622,11 @@ struct WorktreeDetailView: View {
     } else if let selectedRepository = repositories.selectedRepository {
       RepositoryDetailView(
         repository: selectedRepository,
-        customTitle: repositories.repositoryCustomTitles[selectedRepository.id]
+        customTitle: repositories.repositoryCustomTitles[selectedRepository.id],
+        onEditWorkspace: {
+          store.send(
+            .repositories(.workspaceEditing(.promptRequested(selectedRepository.id, removingChildID: nil))))
+        }
       )
     } else {
       EmptyStateView(store: store.scope(state: \.repositories, action: \.repositories))

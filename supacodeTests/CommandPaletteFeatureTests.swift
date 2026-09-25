@@ -1841,7 +1841,7 @@ private func makeItem(
 private func testCategory(for kind: CommandPaletteItem.Kind) -> CommandPaletteItem.Category {
   switch kind {
   case .checkForUpdates, .openSettings, .openRepository, .newWorkspace, .installCLI,
-    .openRepositorySettings:
+    .openRepositorySettings, .editWorkspace:
     return .app
   case .newWorktree, .refreshWorktrees, .viewArchivedWorktrees,
     .changeFocusedTabIcon,
@@ -1880,7 +1880,7 @@ private func testDefaultSuggestion(for kind: CommandPaletteItem.Kind) -> Bool {
     .toggleShelf, .showDiff, .outgoingChanges,
     .revealInFinder, .copyPath, .revealInSidebar,
     .runScript, .stopRunScript, .togglePinWorktree, .renameBranch,
-    .openRepositorySettings:
+    .openRepositorySettings, .editWorkspace:
     return true
   case .worktreeSelect, .changeFocusedTabIcon,
     .ghosttyCommand, .openRepositoryOnCodeHost,

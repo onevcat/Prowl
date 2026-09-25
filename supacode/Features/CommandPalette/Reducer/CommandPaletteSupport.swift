@@ -32,6 +32,10 @@ enum CommandPaletteItemID {
   static let globalRenameBranch = "global.rename-branch"
   static let globalDeleteWorktree = "global.delete-worktree"
 
+  static func editWorkspace(_ repositoryID: Repository.ID) -> CommandPaletteItem.ID {
+    "repo.\(repositoryID).edit-workspace"
+  }
+
   static func openRepositorySettings(_ repositoryID: Repository.ID) -> CommandPaletteItem.ID {
     "repo.\(repositoryID).open-settings"
   }
@@ -195,6 +199,7 @@ func delegateAction(for kind: CommandPaletteItem.Kind) -> CommandPaletteFeature.
     .newWorktree,
     .openRepository,
     .newWorkspace,
+    .editWorkspace,
     .viewArchivedWorktrees,
     .refreshWorktrees,
     .jumpToLatestUnread,
@@ -242,6 +247,9 @@ func appDelegateAction(for kind: CommandPaletteItem.Kind) -> CommandPaletteFeatu
   if let delegate = viewDelegateAction(for: kind) {
     return delegate
   }
+  if let delegate = workspaceDelegateAction(for: kind) {
+    return delegate
+  }
   switch kind {
   case .checkForUpdates:
     return .checkForUpdates
@@ -251,8 +259,6 @@ func appDelegateAction(for kind: CommandPaletteItem.Kind) -> CommandPaletteFeatu
     return .newWorktree
   case .openRepository:
     return .openRepository
-  case .newWorkspace:
-    return .newWorkspace
   case .viewArchivedWorktrees:
     return .viewArchivedWorktrees
   case .refreshWorktrees:
@@ -267,6 +273,17 @@ func appDelegateAction(for kind: CommandPaletteItem.Kind) -> CommandPaletteFeatu
     return .stopRunScript
   case .renameBranch:
     return .renameBranch
+  default:
+    return nil
+  }
+}
+
+func workspaceDelegateAction(for kind: CommandPaletteItem.Kind) -> CommandPaletteFeature.Delegate? {
+  switch kind {
+  case .newWorkspace:
+    return .newWorkspace
+  case .editWorkspace(let repositoryID):
+    return .editWorkspace(repositoryID)
   default:
     return nil
   }
@@ -367,6 +384,7 @@ func pullRequestDelegateAction(
     .renameBranch,
     .deleteWorktree,
     .openRepositorySettings,
+    .editWorkspace,
     .runCustomCommand,
     .launchAgentProfile,
     .runWorkflow:

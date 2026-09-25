@@ -126,6 +126,7 @@ struct RepositorySettingsFeature {
     case setGlobalCommandEnabled(UserCustomCommand.ID, Bool)
     case setDefaultAgentProfileID(AgentProfile.ID?)
     case branchDataLoaded([String], defaultBaseRef: String)
+    case editWorkspaceTapped
     case workflows(WorkflowsSettingsFeature.Action)
     case delegate(Delegate)
     case binding(BindingAction<State>)
@@ -134,6 +135,8 @@ struct RepositorySettingsFeature {
   @CasePathable
   enum Delegate: Equatable {
     case settingsChanged(URL)
+    /// The workspace editor lives on the main window; the app surfaces it.
+    case editWorkspace(Repository.ID)
   }
 
   @Dependency(GitClientDependency.self) private var gitClient
@@ -373,6 +376,10 @@ struct RepositorySettingsFeature {
         state.branchOptions = options
         state.isBranchDataLoaded = true
         return .none
+
+      case .editWorkspaceTapped:
+        guard state.workspace != nil else { return .none }
+        return .send(.delegate(.editWorkspace(state.repositoryID)))
 
       case .symbolPickerDismissed:
         state.isSymbolPickerPresented = false

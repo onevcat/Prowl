@@ -103,6 +103,13 @@ struct WorktreeCommands: Commands {
         store.send(.repositories(.workspaceCreation(.promptRequested)))
       }
       .help("New Workspace")
+      Button("Edit Workspace...", systemImage: "folder.badge.gearshape") {
+        if let workspaceID = selectedWorkspaceID {
+          store.send(.repositories(.workspaceEditing(.promptRequested(workspaceID, removingChildID: nil))))
+        }
+      }
+      .help("Edit the selected workspace's title, description, links, and repositories")
+      .disabled(selectedWorkspaceID == nil)
       Button("Open Worktree") {
         openSelectedWorktreeAction?()
       }
@@ -173,6 +180,13 @@ struct WorktreeCommands: Commands {
 
   private var worktreeShortcutCommandIDs: [String] {
     AppShortcuts.worktreeSelectionCommandIDs
+  }
+
+  private var selectedWorkspaceID: Repository.ID? {
+    guard let repository = store.repositories.selectedRepository, repository.isWorkspace else {
+      return nil
+    }
+    return repository.id
   }
 
   private var selectedCodeHostWorktreeID: Worktree.ID? {

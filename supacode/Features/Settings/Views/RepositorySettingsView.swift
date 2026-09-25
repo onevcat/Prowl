@@ -74,6 +74,12 @@ struct RepositorySettingsView: View {
                 }
               }
               WorkspaceRepositoriesGridView(workspace: workspace, rootURL: store.rootURL)
+              Button {
+                store.send(.editWorkspaceTapped)
+              } label: {
+                Label("Edit Workspace…", systemImage: "folder.badge.gearshape")
+              }
+              .help("Open the workspace editor to change its title, description, links, and repositories")
             }
             .frame(maxWidth: .infinity, alignment: .leading)
           } header: {
@@ -81,12 +87,10 @@ struct RepositorySettingsView: View {
           } footer: {
             let metadataPath = ProjectWorkspace.metadataURL(for: store.rootURL).path(
               percentEncoded: false)
-            Text(
-              "Read-only. Defined in \(metadataPath) — edit that file to change it."
-            )
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-            .textSelection(.enabled)
+            Text("Stored in \(metadataPath). Edit Workspace opens the editor in the main window.")
+              .font(.footnote)
+              .foregroundStyle(.secondary)
+              .textSelection(.enabled)
           }
         }
 

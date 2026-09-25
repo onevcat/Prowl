@@ -256,6 +256,12 @@ struct RepositorySectionView: View {
             onShowOutgoingChanges: { childID in
               store.send(
                 .delegate(.showOutgoingChanges(.workspaceChild(workspaceID: repository.id, path: childID))))
+            },
+            onEditWorkspace: {
+              store.send(.workspaceEditing(.promptRequested(repository.id, removingChildID: nil)))
+            },
+            onRemoveFromWorkspace: { childID in
+              store.send(.workspaceEditing(.promptRequested(repository.id, removingChildID: childID)))
             }
           )
         } else {
@@ -304,6 +310,13 @@ struct RepositorySectionView: View {
       }
     }
     Divider()
+    if repository.isWorkspace {
+      Button("Edit Workspace…") {
+        store.send(.workspaceEditing(.promptRequested(repository.id, removingChildID: nil)))
+      }
+      .help("Edit the workspace title, description, links, and repositories")
+      .disabled(isRemovingRepository)
+    }
     Button("Repo Settings…") {
       openRepoSettings()
     }

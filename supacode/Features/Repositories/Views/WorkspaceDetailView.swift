@@ -3,6 +3,7 @@ import SwiftUI
 struct WorkspaceDetailView: View {
   let repository: Repository
   let workspace: ProjectWorkspace
+  var onEdit: (() -> Void)?
 
   var body: some View {
     VStack(alignment: .leading, spacing: 18) {
@@ -42,6 +43,15 @@ struct WorkspaceDetailView: View {
           .font(.subheadline)
           .foregroundStyle(.tertiary)
       }
+      Spacer(minLength: 12)
+      if let onEdit {
+        Button {
+          onEdit()
+        } label: {
+          Label("Edit Workspace…", systemImage: "folder.badge.gearshape")
+        }
+        .help("Edit the workspace title, description, links, and repositories")
+      }
     }
   }
 
@@ -55,10 +65,18 @@ struct WorkspaceDetailView: View {
       Text("Task Links")
         .font(.headline)
       ForEach(workspace.taskLinks, id: \.self) { link in
-        Text(link)
-          .font(.subheadline.monospaced())
-          .foregroundStyle(.secondary)
-          .textSelection(.enabled)
+        if let url = Self.openableURL(link) {
+          Link(destination: url) {
+            Text(link)
+              .font(.subheadline.monospaced())
+          }
+          .help("Open \(link)")
+        } else {
+          Text(link)
+            .font(.subheadline.monospaced())
+            .foregroundStyle(.secondary)
+            .textSelection(.enabled)
+        }
       }
     }
   }
@@ -69,5 +87,16 @@ struct WorkspaceDetailView: View {
         .font(.headline)
       WorkspaceRepositoriesGridView(workspace: workspace, rootURL: repository.rootURL)
     }
+  }
+
+  /// Task links are free text (an issue key is as valid as a URL); only
+  /// values with a web scheme become clickable.
+  static func openableURL(_ link: String) -> URL? {
+    guard let url = URL(string: link), let scheme = url.scheme?.lowercased(),
+      scheme == "http" || scheme == "https", url.host() != nil
+    else {
+      return nil
+    }
+    return url
   }
 }

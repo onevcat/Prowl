@@ -72,6 +72,7 @@ struct CommandPaletteFeature {
     case togglePinWorktree(Worktree.ID, isCurrentlyPinned: Bool)
     case renameBranch
     case openRepositorySettings(Repository.ID)
+    case editWorkspace(Repository.ID)
     case runCustomCommand(EffectiveCustomCommand.Identifier)
     case launchAgentProfile(AgentProfile.ID)
     case runWorkflow(String)
@@ -297,17 +298,7 @@ struct CommandPaletteFeature {
       items.append(contentsOf: ghosttyCommandItems(ghosttyCommands))
     }
     if let repository = activeRepository(in: repositories) {
-      items.append(
-        CommandPaletteItem(
-          id: CommandPaletteItemID.openRepositorySettings(repository.id),
-          title: String(localized: "Repo Settings"),
-          subtitle: repository.name,
-          kind: .openRepositorySettings(repository.id),
-          category: .app,
-          defaultSuggestion: true,
-          keywords: ["Repo Settings", "repo", "settings", "configure", "preferences", "仓库", "设置", "偏好设置"]
-        )
-      )
+      items.append(contentsOf: activeRepositoryItems(for: repository))
     }
     items.append(
       contentsOf: selectedCodeHostItems(
@@ -331,6 +322,9 @@ struct CommandPaletteFeature {
     for repository in repositories {
       ids.append(contentsOf: CommandPaletteItemID.pullRequestIDs(repositoryID: repository.id))
       ids.append(CommandPaletteItemID.openRepositorySettings(repository.id))
+      if repository.isWorkspace {
+        ids.append(CommandPaletteItemID.editWorkspace(repository.id))
+      }
       for worktree in repository.worktrees {
         ids.append(CommandPaletteItemID.worktreeSelect(worktree.id))
         ids.append(CommandPaletteItemID.changeFocusedTabIcon(worktree.id))
@@ -355,6 +349,39 @@ private func selectableWorktreeItems(
       defaultSuggestion: false
     )
   }
+}
+
+/// Repo-scoped app items: settings for every repository, plus the workspace
+/// editor when the active repository is a workspace.
+private func activeRepositoryItems(for repository: Repository) -> [CommandPaletteItem] {
+  var items = [
+    CommandPaletteItem(
+      id: CommandPaletteItemID.openRepositorySettings(repository.id),
+      title: String(localized: "Repo Settings"),
+      subtitle: repository.name,
+      kind: .openRepositorySettings(repository.id),
+      category: .app,
+      defaultSuggestion: true,
+      keywords: ["Repo Settings", "repo", "settings", "configure", "preferences", "仓库", "设置", "偏好设置"]
+    )
+  ]
+  if repository.isWorkspace {
+    items.append(
+      CommandPaletteItem(
+        id: CommandPaletteItemID.editWorkspace(repository.id),
+        title: String(localized: "Edit Workspace"),
+        subtitle: repository.name,
+        kind: .editWorkspace(repository.id),
+        category: .app,
+        defaultSuggestion: true,
+        keywords: [
+          "Edit Workspace", "workspace", "add repository", "remove repository", "rename",
+          "工作区", "编辑工作区", "添加仓库",
+        ]
+      )
+    )
+  }
+  return items
 }
 
 private func globalCommandItems(

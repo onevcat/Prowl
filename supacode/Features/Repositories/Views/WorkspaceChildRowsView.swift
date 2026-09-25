@@ -11,6 +11,8 @@ struct WorkspaceChildRowsView: View {
   let onSelect: (String) -> Void
   let onShowDiff: (String) -> Void
   let onShowOutgoingChanges: (String) -> Void
+  let onEditWorkspace: () -> Void
+  let onRemoveFromWorkspace: (String) -> Void
 
   var body: some View {
     ForEach(rows) { row in
@@ -72,6 +74,15 @@ struct WorkspaceChildRowsView: View {
           onShowOutgoingChanges(row.id)
         }
         .help("Show committed changes relative to this repository's base")
+        Divider()
+        Button("Edit Workspace…") {
+          onEditWorkspace()
+        }
+        .help("Edit the workspace title, description, links, and repositories")
+        Button("Remove from Workspace…") {
+          onRemoveFromWorkspace(row.id)
+        }
+        .help("Open the workspace editor with \(row.repositoryName) marked for removal")
       }
       .id(row.id)
     }
