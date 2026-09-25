@@ -287,6 +287,9 @@ private struct WorkspacePanelView: View {
     let removed = store.existingRepositories.filter(\.isMarkedForRemoval).count
     let remaining = store.remainingRepositoryCount
     if store.mode.isEditing {
+      guard remaining > 0 else {
+        return String(localized: "A workspace keeps at least one repository. Undo a removal or add one.")
+      }
       guard added > 0 || removed > 0 else {
         return remaining == 1
           ? String(localized: "Save keeps 1 repository.")

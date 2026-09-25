@@ -9,6 +9,7 @@
 | 2026-09-25 | `WorkspaceCreationPromptFeature` → `WorkspaceEditorFeature` with `mode`, existing-member rows, staged removal, reorder, task links, description; `WorkspaceCreationPromptView` → `WorkspaceEditorView` | PR #830 |
 | 2026-09-25 | `RepositoriesFeature+WorkspaceEditing.swift` (`workspaceEditing` action family), entry points in sidebar, detail view, Settings, Command Palette, Worktrees menu | PR #830 |
 | 2026-09-25 | Tests, `docs/` manual updates, this record | PR #830 |
+| 2026-09-25 | Two-level editor (002): `WorkspaceEditorFeature` keeps metadata + member list, new `WorkspaceMemberEditorFeature` / `WorkspaceMemberEditorView` add or edit one repository at a time; base-ref loading moved out of `RepositoriesFeature`; Debug pass repeated on the new sheets (screenshots on PR #830) | PR #830 |
 | 2026-09-25 | Debug visual verification in an isolated instance: create sheet, sidebar after create, palette item, edit sheet with staged removal, interleaved reorder, save (toast, disk, branch cleanup), Settings entry surfacing the main window; screenshots on PR #830 | PR #830 |
 | 2026-09-25 | Review Loop round 4 (Pi Reviewer): New Workspace… no longer replaces an open editor sheet (unsaved edits or an in-flight save survive) | PR #830 |
 | 2026-09-25 | Review Loop round 3 (Pi Reviewer): the creation sheet's default-folder resolver is cancelled on dismissal and its result only applies to a `.create` editor, so it can never rewrite an edit session's root | PR #830 |
@@ -39,9 +40,19 @@
 - **Editor reducer** — `supacode/Features/Repositories/Reducer/WorkspaceEditorFeature.swift`
   - `State.mode` (`.create` / `.edit(repositoryID:)`), `existingRepositories`
     (`WorkspaceEditorExistingRepository`: entry, editable name/role, `removal` with
-    `deleteFiles` / `deleteBranch`), `repositories` (new rows, unchanged), `description`,
-    `taskLinks` (`WorkspaceTaskLinkDraft`), `isSaving`. `init(editing:rootURL:repositoryID:...)`
-    pre-fills from a `ProjectWorkspace`.
+    `deleteFiles` / `deleteBranch`), `repositories` (added drafts), `description`,
+    `taskLinksText` (one link per line, parsed by `taskLinks`), `isSaving`, and
+    `@Presents memberEditor`. `init(editing:rootURL:repositoryID:...)` pre-fills from a
+    `ProjectWorkspace`. `addRepositoryButtonTapped` / `editMember` present the member
+    editor; its `commitAdded` / `commitExisting` / `removeAdded` delegates update the lists.
+- **Member editor** — `supacode/Features/Repositories/Reducer/WorkspaceMemberEditorFeature.swift`
+  (`Mode.add` / `.editAdded` / `.editExisting`; source step with opened candidates, local
+  folder, and a remote URL that loads branches after an 800 ms pause or Return; configure
+  step on a `ProjectWorkspaceCreationRepository` draft with base refs loaded through
+  `GitClientDependency`; existing members expose name, role, and the staged removal) and
+  `supacode/Features/Repositories/Views/WorkspaceMemberEditorView.swift` (source cards,
+  segmented Link / New Branch / Existing Branch, Advanced folder field, shared
+  `WorkspaceMemberSummary` sentences, `WorkspaceBranchRefPickerView`).
   - `memberOrder` / `orderedMemberKeys` hold one order across existing and added rows
     (`WorkspaceEditorMemberKey`); `memberMovedUp` / `memberMovedDown` work on any row and
     the submission follows that order.
@@ -61,10 +72,11 @@
     is already gone). Save is deliberately not cancellable.
   - `RepositoriesFeature.State.workspaceEditor` replaces `workspaceCreationPrompt`;
     `RepositoriesFeature+CoreReducer.swift` routes the editor delegate by mode.
-- **Views** — `supacode/Features/Repositories/Views/WorkspaceEditorView.swift` (shared form;
-  existing rows with Name/Role, provenance line, Move Up/Down, trash → inline removal
-  options + Undo; new rows gain Role; Description and Task Links sections; Cancel disabled
-  while saving in edit mode), `WorkspaceDetailView.swift` (Edit Workspace… button,
+- **Views** — `supacode/Features/Repositories/Views/WorkspaceEditorView.swift` (sheet
+  container that swaps between the workspace panel and the member editor; the panel has
+  Title, Description, Task Links, derived Folder + Change…, the member rows with a
+  what-will-happen sentence, hover Edit / Remove, Undo, context-menu Move Up / Down, and a
+  footer summary; Cancel disabled while saving in edit mode), `WorkspaceDetailView.swift` (Edit Workspace… button,
   clickable http(s) task links), `WorkspaceChildRowsView.swift` (Edit Workspace… /
   Remove from Workspace…), `RepositorySectionView.swift` (header menu item),
   `supacode/Features/Settings/Views/RepositorySettingsView.swift` (Edit Workspace… button
