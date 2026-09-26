@@ -228,9 +228,10 @@ and the confirmation names the target worktree).
 The repository **header** menu (right-click, or the **⋯** button) offers
 **New Worktree** (git repos only), **Repo Settings…**, and
 **Remove Repository**. Plain folders and workspaces get **Copy Path** /
-**Reveal in Finder** instead of New Worktree; git repo headers deliberately have
-no path actions because a repository's root can be a bare directory — use the
-worktree rows for paths.
+**Reveal in Finder** instead of New Worktree, and workspaces additionally get
+**Edit Workspace…** (see [workspaces](workspaces.md)); git repo headers
+deliberately have no path actions because a repository's root can be a bare
+directory — use the worktree rows for paths.
 
 ## Repository appearance (icon & color)
 

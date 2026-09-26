@@ -1,0 +1,117 @@
+# 072 — Workspace Editing: Action Log
+
+## Timeline
+
+| Date | Change | Ref |
+| --- | --- | --- |
+| 2026-09-25 | Plan written after reading PR #602 and the entry-042 code; branch `feature/workspace-editing` from `main` (`869b5d9f`) | this entry |
+| 2026-09-25 | Domain: `ProjectWorkspace.update`, `ProjectWorkspaceUpdateRequest` / `Member` / `Removal` / `Result`, description, task links, and role on creation, unknown-key-preserving `encodeMetadata`, minimum member count 1 | PR #830 |
+| 2026-09-25 | `WorkspaceCreationPromptFeature` → `WorkspaceEditorFeature` with `mode`, existing-member rows, staged removal, reorder, task links, description; `WorkspaceCreationPromptView` → `WorkspaceEditorView` | PR #830 |
+| 2026-09-25 | `RepositoriesFeature+WorkspaceEditing.swift` (`workspaceEditing` action family), entry points in sidebar, detail view, Settings, Command Palette, Worktrees menu | PR #830 |
+| 2026-09-25 | Tests, `docs/` manual updates, this record | PR #830 |
+| 2026-09-25 | Two-level editor (002): `WorkspaceEditorFeature` keeps metadata + member list, new `WorkspaceMemberEditorFeature` / `WorkspaceMemberEditorView` add or edit one repository at a time; base-ref loading moved out of `RepositoriesFeature`; Debug pass repeated on the new sheets (screenshots on PR #830) | PR #830 |
+| 2026-09-25 | Debug visual verification in an isolated instance: create sheet, sidebar after create, palette item, edit sheet with staged removal, interleaved reorder, save (toast, disk, branch cleanup), Settings entry surfacing the main window; screenshots on PR #830 | PR #830 |
+| 2026-09-25 | Review Loop round 4 (Pi Reviewer): New Workspace… no longer replaces an open editor sheet (unsaved edits or an in-flight save survive) | PR #830 |
+| 2026-09-25 | Review Loop round 3 (Pi Reviewer): the creation sheet's default-folder resolver is cancelled on dismissal and its result only applies to a `.create` editor, so it can never rewrite an edit session's root | PR #830 |
+| 2026-09-25 | Review Loop round 2 (Pi Reviewer): a refused branch deletion after a committed save is reported in the cleanup alert instead of vanishing behind the success toast | PR #830 |
+| 2026-09-25 | Review Loop round 1 (Pi Reviewer): never delete a remote entry without a recorded source; surface the main window synchronously before the Settings-originated request; one interleaved member order so added rows can be moved among existing ones | PR #830 |
+
+## Outcome & current state (as of 2026-09-25)
+
+- **Domain** — `supacode/Domain/ProjectWorkspace.swift`
+  - `ProjectWorkspaceCreationDraft` carries `description` and `taskLinks`;
+    `ProjectWorkspaceRepositoryPlan` / `ProjectWorkspaceCreationRepository` carry `role`.
+    `create` writes them and now accepts one repository (`notEnoughRepositories` reads
+    "Add at least one repository.").
+  - `ProjectWorkspace.update(_:fileManager:gitRunner:)` takes a
+    `ProjectWorkspaceUpdateRequest` (root, title, description, task links, ordered
+    `members` of `.existing(entry)` / `.added(plan)`, `removals`, `updatedAt`) and returns a
+    `ProjectWorkspaceUpdateResult` (saved workspace, `cleanupFailures`,
+    `completedRemovals`). Order: validate → materialize additions (ledger rollback on
+    failure, occupied names seeded with every current entry path) → write metadata →
+    best-effort cleanup of removals with `deleteFiles`. Cleanup deletes a symlink, a
+    remote clone folder, or runs `git worktree remove --force` against the recorded source;
+    paths outside the root and entries without a recorded source (whatever their kind) are
+    reported, never deleted.
+    Branch deletion is left to the caller through `completedRemovals`.
+  - `encodeMetadata(_:preservingUnknownKeysIn:)` merges the encoded model over the
+    existing JSON so unknown top-level and per-entry keys (matched by `id`, falling back
+    to `path` / `name`) survive; known keys always follow the model.
+- **Editor reducer** — `supacode/Features/Repositories/Reducer/WorkspaceEditorFeature.swift`
+  - `State.mode` (`.create` / `.edit(repositoryID:)`), `existingRepositories`
+    (`WorkspaceEditorExistingRepository`: entry, editable name/role, `removal` with
+    `deleteFiles` / `deleteBranch`), `repositories` (added drafts), `description`,
+    `taskLinksText` (one link per line, parsed by `taskLinks`), `isSaving`, and
+    `@Presents memberEditor`. `init(editing:rootURL:repositoryID:...)` pre-fills from a
+    `ProjectWorkspace`. `addRepositoryButtonTapped` / `editMember` present the member
+    editor; its `commitAdded` / `commitExisting` / `removeAdded` delegates update the lists.
+- **Member editor** — `supacode/Features/Repositories/Reducer/WorkspaceMemberEditorFeature.swift`
+  (`Mode.add` / `.editAdded` / `.editExisting`; source step with opened candidates, local
+  folder, and a remote URL that loads branches after an 800 ms pause or Return; configure
+  step on a `ProjectWorkspaceCreationRepository` draft with base refs loaded through
+  `GitClientDependency`; existing members expose name, role, and the staged removal) and
+  `supacode/Features/Repositories/Views/WorkspaceMemberEditorView.swift` (source cards,
+  segmented Link / New Branch / Existing Branch, Advanced folder field, shared
+  `WorkspaceMemberSummary` sentences, `WorkspaceBranchRefPickerView`).
+  - `memberOrder` / `orderedMemberKeys` hold one order across existing and added rows
+    (`WorkspaceEditorMemberKey`); `memberMovedUp` / `memberMovedDown` work on any row and
+    the submission follows that order.
+  - `submitButtonTapped` validates (title, ≥1 remaining member, new-row plans) and emits
+    `Delegate.submit(.create(draft))` or `.submit(.update(request))`; `updatedAt` comes
+    from `@Dependency(\.date.now)`.
+- **Repositories wiring** —
+  `supacode/Features/Repositories/Reducer/RepositoriesFeature+WorkspaceEditing.swift`
+  - `WorkspaceEditingAction`: `promptRequested(id, removingChildID:)` re-reads the metadata
+    from disk in an effect and presents the editor (`promptLoaded`), optionally pre-marking
+    a child (sidebar row id = working-directory path); `saveWorkspace` runs
+    `ProjectWorkspace.update`, deletes opted-in branches through
+    `gitClient.deleteLocalBranch` (protected branches skipped, a thrown deletion error is
+    appended to the cleanup failures), then `workspaceSaved`
+    reloads repositories, toasts "Workspace saved", and alerts on cleanup failures;
+    `workspaceSaveFailed` keeps the sheet open with the message (or alerts when the sheet
+    is already gone). Save is deliberately not cancellable.
+  - `RepositoriesFeature.State.workspaceEditor` replaces `workspaceCreationPrompt`;
+    `RepositoriesFeature+CoreReducer.swift` routes the editor delegate by mode.
+- **Views** — `supacode/Features/Repositories/Views/WorkspaceEditorView.swift` (sheet
+  container that swaps between the workspace panel and the member editor; the panel has
+  Title, Description, Task Links, derived Folder + Change…, the member rows with a
+  what-will-happen sentence, hover Edit / Remove, Undo, context-menu Move Up / Down, and a
+  footer summary; Cancel disabled while saving in edit mode), `WorkspaceDetailView.swift` (Edit Workspace… button,
+  clickable http(s) task links), `WorkspaceChildRowsView.swift` (Edit Workspace… /
+  Remove from Workspace…), `RepositorySectionView.swift` (header menu item),
+  `supacode/Features/Settings/Views/RepositorySettingsView.swift` (Edit Workspace… button
+  replacing the read-only note).
+- **Other entry points** — `RepositorySettingsFeature.Delegate.editWorkspace` →
+  `SettingsFeature.Delegate.editWorkspace` → `AppFeature` surfaces the main window and
+  sends `promptRequested`; `CommandPaletteItem.Kind.editWorkspace` (offered when the active
+  repository is a workspace); `supacode/Commands/WorktreeCommands.swift` "Edit Workspace...".
+- **Tests** — `supacodeTests/ProjectWorkspaceUpdateTests.swift`,
+  `supacodeTests/WorkspaceEditorFeatureTests.swift`,
+  `supacodeTests/RepositoriesFeatureWorkspaceEditingTests.swift`,
+  `supacodeTests/AppFeatureWorkspaceEditingTests.swift`; existing creation tests updated
+  for the rename and the new submission enum.
+- **Docs** — `docs/components/workspaces.md` (Editing a workspace, metadata no longer
+  read-only, minimum count), `docs/components/command-palette.md`,
+  `docs/components/repositories-and-worktrees.md`, `docs/components/settings.md`.
+
+## Deviations from plan
+
+- The "Edit Workspace…" button on `WorkspaceDetailView` is not reachable in the current
+  app: selecting a workspace row always opens its terminal (`selectedTerminalWorktree`
+  returns the plain-folder worktree), so `RepositoryDetailView` is only shown for git
+  repositories without a selected worktree. The button stays for the day that view is
+  reachable again; the user manual does not list it as an entry point.
+
+- The plan listed "settings-originated request through `AppFeature`" as a test; it exists,
+  and `AppFeature` uses `appLifecycleClient.surfaceMainWindow` rather than a new client.
+- `.dismiss` on the sheet cannot be blocked while saving: TCA's `ifLet` clears the child
+  state before the reducer sees the action. The Cancel button is disabled instead, and a
+  failure arriving after the sheet is gone is shown as an alert. Not a behavior gap, but
+  the plan implied the reducer could refuse a dismissal.
+- Unknown-key preservation also matches entries without an `id` (by `path`, then `name`),
+  which the plan did not spell out.
+
+## Open questions
+
+- Reordering is Move Up / Move Down buttons; drag reordering inside the sheet was not
+  attempted. Revisit if the list grows beyond a handful of members.

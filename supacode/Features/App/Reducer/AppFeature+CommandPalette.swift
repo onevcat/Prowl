@@ -125,6 +125,10 @@ extension AppFeature {
     case .newWorkspace:
       return .send(.repositories(.workspaceCreation(.promptRequested)))
 
+    case .editWorkspace(let repositoryID):
+      return .send(
+        .repositories(.workspaceEditing(.promptRequested(repositoryID, removingChildID: nil))))
+
     default:
       return nil
     }

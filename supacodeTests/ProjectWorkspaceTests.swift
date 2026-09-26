@@ -439,7 +439,7 @@ struct ProjectWorkspaceTests {
     )
 
     #expect(
-      WorkspaceCreationPromptFeature.plan(for: repository).map(\.checkout)
+      WorkspaceEditorFeature.plan(for: repository).map(\.checkout)
         == .success(.trackRemoteRef(remoteRef: "origin/chore/x", branchName: "chore/x"))
     )
   }
@@ -462,7 +462,7 @@ struct ProjectWorkspaceTests {
     // out the local branch directly instead of resetting it to the remote.
     #expect(repository.resettableLocalBranchName == "chore/x")
     #expect(
-      WorkspaceCreationPromptFeature.plan(for: repository).map(\.checkout)
+      WorkspaceEditorFeature.plan(for: repository).map(\.checkout)
         == .success(.useExistingRef("chore/x"))
     )
   }
@@ -492,19 +492,19 @@ struct ProjectWorkspaceTests {
     repository.resetLocalBranchToRemote = true
 
     #expect(
-      WorkspaceCreationPromptFeature.plan(for: repository).map(\.checkout)
+      WorkspaceEditorFeature.plan(for: repository).map(\.checkout)
         == .success(.trackRemoteRef(remoteRef: "origin/chore/x", branchName: "chore/x"))
     )
   }
 
   @Test func defaultRepositoryNameStripsGitSuffix() {
     #expect(
-      WorkspaceCreationPromptFeature.defaultRepositoryName(
+      WorkspaceEditorFeature.defaultRepositoryName(
         for: URL(fileURLWithPath: "/tmp/maker.git"))
         == "maker"
     )
     #expect(
-      WorkspaceCreationPromptFeature.defaultRepositoryName(for: URL(fileURLWithPath: "/tmp/maker"))
+      WorkspaceEditorFeature.defaultRepositoryName(for: URL(fileURLWithPath: "/tmp/maker"))
         == "maker"
     )
   }
@@ -725,7 +725,7 @@ struct ProjectWorkspaceTests {
     )
 
     #expect(
-      WorkspaceCreationPromptFeature.plan(for: repository)
+      WorkspaceEditorFeature.plan(for: repository)
         == .failure(.missingBranchName("App"))
     )
   }
@@ -736,7 +736,7 @@ struct ProjectWorkspaceTests {
       name: "App",
       rootURL: URL(fileURLWithPath: "/tmp/app")
     )
-    #expect(WorkspaceCreationPromptFeature.plan(for: linked).map(\.checkout) == .success(.link))
+    #expect(WorkspaceEditorFeature.plan(for: linked).map(\.checkout) == .success(.link))
 
     var existing = ProjectWorkspaceCreationRepository(
       id: "api",
@@ -746,12 +746,12 @@ struct ProjectWorkspaceTests {
       checkoutMode: .useExistingRef
     )
     #expect(
-      WorkspaceCreationPromptFeature.plan(for: existing)
+      WorkspaceEditorFeature.plan(for: existing)
         == .failure(.missingExistingRef("API"))
     )
     existing.baseRef = "main"
     #expect(
-      WorkspaceCreationPromptFeature.plan(for: existing).map(\.checkout)
+      WorkspaceEditorFeature.plan(for: existing).map(\.checkout)
         == .success(.useExistingRef("main"))
     )
   }

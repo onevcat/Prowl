@@ -60,6 +60,7 @@ nonisolated enum ProjectWorkspaceRepositoryCheckout: Equatable, Hashable, Sendab
 nonisolated struct ProjectWorkspaceCreationRepository: Equatable, Hashable, Sendable, Identifiable {
   var id: String
   var name: String
+  var role: String?
   var path: String?
   var sourceKind: ProjectWorkspaceRepositorySourceKind
   var sourceLocation: String
@@ -201,10 +202,29 @@ nonisolated struct ProjectWorkspaceCreationRepository: Equatable, Hashable, Send
 nonisolated struct ProjectWorkspaceRepositoryPlan: Equatable, Sendable, Identifiable {
   var id: String
   var name: String
+  var role: String?
   var path: String?
   var sourceKind: ProjectWorkspaceRepositorySourceKind
   var sourceLocation: String
   var checkout: ProjectWorkspaceRepositoryCheckout
+
+  init(
+    id: String,
+    name: String,
+    role: String? = nil,
+    path: String?,
+    sourceKind: ProjectWorkspaceRepositorySourceKind,
+    sourceLocation: String,
+    checkout: ProjectWorkspaceRepositoryCheckout
+  ) {
+    self.id = id
+    self.name = name
+    self.role = role
+    self.path = path
+    self.sourceKind = sourceKind
+    self.sourceLocation = sourceLocation
+    self.checkout = checkout
+  }
 
   var localSourceURL: URL? {
     sourceKind.localSourceURL(from: sourceLocation)
@@ -213,15 +233,21 @@ nonisolated struct ProjectWorkspaceRepositoryPlan: Equatable, Sendable, Identifi
 
 nonisolated struct ProjectWorkspaceCreationDraft: Equatable, Sendable {
   var title: String
+  var description: String
+  var taskLinks: [String]
   var rootURL: URL
   var repositories: [ProjectWorkspaceRepositoryPlan]
 
   init(
     title: String,
+    description: String = "",
+    taskLinks: [String] = [],
     rootURL: URL,
     repositories: [ProjectWorkspaceRepositoryPlan]
   ) {
     self.title = title
+    self.description = description
+    self.taskLinks = taskLinks
     self.rootURL = rootURL.standardizedFileURL
     self.repositories = repositories
   }
@@ -230,6 +256,80 @@ nonisolated struct ProjectWorkspaceCreationDraft: Equatable, Sendable {
 nonisolated struct ProjectWorkspaceCreationRequest: Equatable, Sendable {
   var draft: ProjectWorkspaceCreationDraft
   var createdAt: Date
+}
+
+/// One member of an edited workspace, in the order it should appear in the
+/// saved metadata. Existing entries carry the (possibly renamed / re-roled)
+/// metadata as-is; added members are materialized on save.
+nonisolated enum ProjectWorkspaceUpdateMember: Equatable, Sendable {
+  case existing(ProjectWorkspaceRepositoryEntry)
+  case added(ProjectWorkspaceRepositoryPlan)
+}
+
+/// A member dropped from the workspace. `deleteFiles` removes what Prowl
+/// materialized under the workspace root (symlink, worktree, or clone);
+/// `deleteBranch` additionally asks the caller to delete the recorded branch
+/// through the guarded branch-deletion path once the worktree is gone.
+nonisolated struct ProjectWorkspaceRepositoryRemoval: Equatable, Sendable, Identifiable {
+  var entry: ProjectWorkspaceRepositoryEntry
+  var deleteFiles: Bool
+  var deleteBranch: Bool
+
+  var id: String { entry.id }
+
+  init(entry: ProjectWorkspaceRepositoryEntry, deleteFiles: Bool = false, deleteBranch: Bool = false) {
+    self.entry = entry
+    self.deleteFiles = deleteFiles
+    self.deleteBranch = deleteBranch
+  }
+}
+
+nonisolated struct ProjectWorkspaceUpdateRequest: Equatable, Sendable {
+  var rootURL: URL
+  var title: String
+  var description: String
+  var taskLinks: [String]
+  var members: [ProjectWorkspaceUpdateMember]
+  var removals: [ProjectWorkspaceRepositoryRemoval]
+  var updatedAt: Date
+
+  init(
+    rootURL: URL,
+    title: String,
+    description: String = "",
+    taskLinks: [String] = [],
+    members: [ProjectWorkspaceUpdateMember],
+    removals: [ProjectWorkspaceRepositoryRemoval] = [],
+    updatedAt: Date
+  ) {
+    self.rootURL = rootURL.standardizedFileURL
+    self.title = title
+    self.description = description
+    self.taskLinks = taskLinks
+    self.members = members
+    self.removals = removals
+    self.updatedAt = updatedAt
+  }
+}
+
+/// A removed member whose files stayed on disk. The metadata is already
+/// saved without the entry, so this is reported rather than thrown.
+nonisolated struct ProjectWorkspaceCleanupFailure: Equatable, Sendable, Identifiable {
+  var entryID: String
+  var entryName: String
+  var message: String
+
+  var id: String { entryID }
+}
+
+nonisolated struct ProjectWorkspaceUpdateResult: Equatable, Sendable {
+  var workspace: ProjectWorkspace
+  var cleanupFailures: [ProjectWorkspaceCleanupFailure]
+
+  /// Removals whose files were cleaned up, so branch deletion can proceed
+  /// safely. A worktree whose unregistration failed is excluded: deleting
+  /// its branch would leave git with a dangling checkout.
+  var completedRemovals: [ProjectWorkspaceRepositoryRemoval]
 }
 
 nonisolated struct ProjectWorkspaceGitCommand: Equatable, Sendable {
@@ -256,6 +356,7 @@ nonisolated enum ProjectWorkspaceCreationError: LocalizedError, Equatable, Senda
   case linkCheckoutUnsupported(String)
   case destinationIsFile(String)
   case workspaceAlreadyExists(String)
+  case workspaceMetadataMissing(String)
   case repositoryDoesNotExist(String)
   case linkAlreadyExists(String)
   case gitCommandFailed(command: String, message: String)
@@ -267,7 +368,7 @@ nonisolated enum ProjectWorkspaceCreationError: LocalizedError, Equatable, Senda
     case .missingPath:
       return String(localized: "Workspace folder required.")
     case .notEnoughRepositories:
-      return String(localized: "Select at least two repositories.")
+      return String(localized: "Add at least one repository.")
     case .missingRepositoryName:
       return String(localized: "Repository name required.")
     case .missingRepositorySource(let name):
@@ -282,6 +383,8 @@ nonisolated enum ProjectWorkspaceCreationError: LocalizedError, Equatable, Senda
       return String(localized: "\(path) is a file. Choose a folder path instead.")
     case .workspaceAlreadyExists(let path):
       return String(localized: "\(path) already contains a Prowl workspace.")
+    case .workspaceMetadataMissing(let path):
+      return String(localized: "\(path) has no workspace metadata to update.")
     case .repositoryDoesNotExist(let path):
       return String(localized: "\(path) does not exist.")
     case .linkAlreadyExists(let path):
@@ -522,7 +625,7 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
     guard !title.isEmpty else {
       throw ProjectWorkspaceCreationError.missingTitle
     }
-    guard request.draft.repositories.count >= 2 else {
+    guard !request.draft.repositories.isEmpty else {
       throw ProjectWorkspaceCreationError.notEnoughRepositories
     }
     let rootPath = normalizedPath(request.draft.rootURL, resolvingSymlinks: false)
@@ -570,21 +673,232 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
       let workspace = ProjectWorkspace(
         id: rootPath,
         title: title,
+        description: request.draft.description,
+        taskLinks: request.draft.taskLinks,
         repositories: entries,
         createdAt: request.createdAt,
         updatedAt: request.createdAt
       )
       .normalized(relativeTo: rootURL)
-      let encoder = JSONEncoder()
-      encoder.dateEncodingStrategy = .iso8601
-      encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-      try encoder.encode(workspace).write(to: metadataURL, options: .atomic)
+      try encodeMetadata(workspace, preservingUnknownKeysIn: nil)
+        .write(to: metadataURL, options: .atomic)
       ledger.createdURLs.append(metadataURL)
       return workspace
     } catch {
       await rollback(ledger, rootURL: rootURL, fileManager: fileManager, gitRunner: gitRunner)
       throw error
     }
+  }
+
+  /// Applies an edit to an existing workspace. Steps run in the order that
+  /// keeps what is already on disk safe when the risky step fails:
+  ///
+  /// 1. validate the request;
+  /// 2. materialize added members (rolled back on failure);
+  /// 3. write the metadata atomically, keeping unknown JSON keys;
+  /// 4. clean up removed members best-effort, after the metadata no longer
+  ///    references them. Cleanup failures are reported, not thrown.
+  static func update(
+    _ request: ProjectWorkspaceUpdateRequest,
+    fileManager: FileManager = .default,
+    gitRunner: ProjectWorkspaceGitRunner
+  ) async throws -> ProjectWorkspaceUpdateResult {
+    let title = request.title.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !title.isEmpty else {
+      throw ProjectWorkspaceCreationError.missingTitle
+    }
+    guard !request.members.isEmpty else {
+      throw ProjectWorkspaceCreationError.notEnoughRepositories
+    }
+    let rootPath = normalizedPath(request.rootURL, resolvingSymlinks: false)
+    let rootURL = URL(fileURLWithPath: rootPath, isDirectory: true).standardizedFileURL
+    let metadataURL = metadataURL(for: rootURL)
+    guard let existingData = try? Data(contentsOf: metadataURL), let existing = load(from: rootURL)
+    else {
+      throw ProjectWorkspaceCreationError.workspaceMetadataMissing(rootPath)
+    }
+
+    var ledger = MaterializationLedger()
+    // Every current path stays occupied, including members being removed:
+    // their folders are still on disk while additions are materialized, so a
+    // re-added repository gets a suffixed folder instead of a collision.
+    ledger.occupiedNames = Set(existing.repositories.map { $0.path.lowercased() })
+    let workspace: ProjectWorkspace
+    do {
+      var entries: [RepositoryEntry] = []
+      for member in request.members {
+        switch member {
+        case .existing(let entry):
+          entries.append(entry)
+        case .added(let plan):
+          entries.append(
+            try await materialize(
+              plan,
+              workspaceRootURL: rootURL,
+              ledger: &ledger,
+              fileManager: fileManager,
+              gitRunner: gitRunner
+            )
+          )
+        }
+      }
+      var updated = existing
+      updated.title = title
+      updated.description = request.description
+      updated.taskLinks = request.taskLinks
+      updated.repositories = entries
+      updated.updatedAt = request.updatedAt
+      workspace = updated.normalized(relativeTo: rootURL)
+      try encodeMetadata(workspace, preservingUnknownKeysIn: existingData)
+        .write(to: metadataURL, options: .atomic)
+    } catch {
+      await rollback(ledger, rootURL: rootURL, fileManager: fileManager, gitRunner: gitRunner)
+      throw error
+    }
+
+    var cleanupFailures: [ProjectWorkspaceCleanupFailure] = []
+    var completedRemovals: [ProjectWorkspaceRepositoryRemoval] = []
+    for removal in request.removals {
+      guard removal.deleteFiles else {
+        continue
+      }
+      if let message = await removeMemberFiles(
+        removal.entry, rootURL: rootURL, fileManager: fileManager, gitRunner: gitRunner)
+      {
+        cleanupFailures.append(
+          ProjectWorkspaceCleanupFailure(
+            entryID: removal.entry.id, entryName: removal.entry.name, message: message))
+      } else {
+        completedRemovals.append(removal)
+      }
+    }
+    return ProjectWorkspaceUpdateResult(
+      workspace: workspace,
+      cleanupFailures: cleanupFailures,
+      completedRemovals: completedRemovals
+    )
+  }
+
+  /// Removes what Prowl materialized for one member under the workspace root.
+  /// Returns a user-facing message when the folder was left in place. Paths
+  /// outside the workspace root and folders Prowl did not create are never
+  /// deleted.
+  private static func removeMemberFiles(
+    _ entry: RepositoryEntry,
+    rootURL: URL,
+    fileManager: FileManager,
+    gitRunner: ProjectWorkspaceGitRunner
+  ) async -> String? {
+    let rootPath = normalizedPath(rootURL, resolvingSymlinks: false)
+    let entryURL = entry.resolvedURL(relativeTo: rootURL)
+    let entryPath = entryURL.path(percentEncoded: false)
+    guard entryPath.hasPrefix(rootPath + "/") else {
+      return String(localized: "\(entryPath) is outside the workspace folder and was left in place.")
+    }
+    let isSymbolicLink =
+      (try? entryURL.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == true
+    guard isSymbolicLink || fileManager.fileExists(atPath: entryPath) else {
+      return nil
+    }
+    do {
+      if isSymbolicLink {
+        // A symlink removal never touches the linked checkout.
+        try fileManager.removeItem(at: entryURL)
+        return nil
+      }
+      // Without a recorded source Prowl cannot tell whether it created the
+      // folder, so it is never deleted, whatever the source kind claims.
+      guard let sourceLocation = entry.sourceLocation, !sourceLocation.isEmpty else {
+        return String(localized: "\(entryPath) was not created by Prowl and was left in place.")
+      }
+      if entry.sourceKind == .remote {
+        // A clone is wholly owned by the workspace.
+        try fileManager.removeItem(at: entryURL)
+        return nil
+      }
+      try await gitRunner.run(
+        ProjectWorkspaceGitCommand(
+          arguments: ["-C", sourceLocation, "worktree", "remove", "--force", entryPath],
+          currentDirectoryURL: nil
+        )
+      )
+      return nil
+    } catch {
+      log.warning("Workspace member cleanup failed for \(entryPath): \(error)")
+      return error.localizedDescription
+    }
+  }
+
+  private static let knownTopLevelKeys = Set(
+    [
+      CodingKeys.schemaVersion, .id, .title, .description, .taskLinks, .repositories, .createdAt,
+      .updatedAt,
+    ].map(\.stringValue))
+  private static let knownEntryKeys = Set(
+    [
+      RepositoryEntry.CodingKeys.id, .name, .role, .path, .sourceKind, .sourceLocation,
+      .branchName, .baseRef,
+    ].map(\.stringValue))
+
+  /// Encodes the metadata. When the existing file is supplied, keys this
+  /// version of Prowl does not model (top-level, and per repository entry
+  /// matched by `id`) are carried over so other tools' fields survive a save;
+  /// known keys always follow the model, so a cleared optional is dropped.
+  static func encodeMetadata(
+    _ workspace: ProjectWorkspace,
+    preservingUnknownKeysIn existingData: Data?
+  ) throws -> Data {
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .iso8601
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+    let encoded = try encoder.encode(workspace)
+    guard let existingData,
+      let existingObject = try? JSONSerialization.jsonObject(with: existingData) as? [String: Any],
+      let newObject = try JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+    else {
+      return encoded
+    }
+    var merged = mergedObject(existing: existingObject, new: newObject, knownKeys: knownTopLevelKeys)
+    if let newEntries = newObject[CodingKeys.repositories.stringValue] as? [[String: Any]] {
+      let existingEntries =
+        existingObject[CodingKeys.repositories.stringValue] as? [[String: Any]] ?? []
+      // Key by the same fallback chain `normalized` uses for a missing id,
+      // so hand-written entries without an `id` still keep their extra keys.
+      var existingEntriesByID: [String: [String: Any]] = [:]
+      for entry in existingEntries {
+        let key =
+          (entry[RepositoryEntry.CodingKeys.id.stringValue] as? String)?.nilIfEmpty
+          ?? (entry[RepositoryEntry.CodingKeys.path.stringValue] as? String)?.nilIfEmpty
+          ?? (entry[RepositoryEntry.CodingKeys.name.stringValue] as? String)?.nilIfEmpty
+        if let key {
+          existingEntriesByID[key] = entry
+        }
+      }
+      merged[CodingKeys.repositories.stringValue] = newEntries.map { entry in
+        guard let key = entry[RepositoryEntry.CodingKeys.id.stringValue] as? String,
+          let existingEntry = existingEntriesByID[key]
+        else {
+          return entry
+        }
+        return mergedObject(existing: existingEntry, new: entry, knownKeys: knownEntryKeys)
+      }
+    }
+    return try JSONSerialization.data(
+      withJSONObject: merged,
+      options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+    )
+  }
+
+  private static func mergedObject(
+    existing: [String: Any],
+    new: [String: Any],
+    knownKeys: Set<String>
+  ) -> [String: Any] {
+    var result = existing.filter { !knownKeys.contains($0.key) }
+    for (key, value) in new {
+      result[key] = value
+    }
+    return result
   }
 
   private struct MaterializationLedger: Sendable {
@@ -815,6 +1129,7 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
     return RepositoryEntry(
       id: repository.id.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? workspacePath,
       name: name,
+      role: repository.role?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
       path: workspacePath,
       sourceKind: repository.sourceKind,
       sourceLocation: normalizedSourceLocation,

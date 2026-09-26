@@ -87,6 +87,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
     case deleteWorktree(Worktree.ID, Repository.ID)
     case renameBranch
     case openRepositorySettings(Repository.ID)
+    case editWorkspace(Repository.ID)
     case runCustomCommand(EffectiveCustomCommand.Identifier, systemImage: String)
     case launchAgentProfile(AgentProfile.ID)
     case runWorkflow(String)
@@ -176,6 +177,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
       .togglePinWorktree,
       .deleteWorktree,
       .openRepositorySettings,
+      .editWorkspace,
       .runCustomCommand,
       .launchAgentProfile,
       .runWorkflow:

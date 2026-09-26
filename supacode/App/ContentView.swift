@@ -95,9 +95,9 @@ struct ContentView: View {
       promptStore in
       WorktreeCreationPromptView(store: promptStore)
     }
-    .sheet(item: $repositoriesStore.scope(state: \.workspaceCreationPrompt, action: \.workspaceCreationPrompt)) {
+    .sheet(item: $repositoriesStore.scope(state: \.workspaceEditor, action: \.workspaceEditor)) {
       promptStore in
-      WorkspaceCreationPromptView(store: promptStore)
+      WorkspaceEditorView(store: promptStore)
     }
     .sheet(item: renameBranchPromptRequest) { request in
       RenameBranchPromptView(

@@ -578,6 +578,16 @@ struct AppFeature {
       case .settings(.delegate(.terminalFontSizeChanged)):
         return .none
 
+      case .settings(.delegate(.editWorkspace(let repositoryID))):
+        guard state.repositories.repositories[id: repositoryID]?.isWorkspace == true else {
+          return .none
+        }
+        // The editor is a sheet on the main window; bring it forward from
+        // the Settings window first so the sheet is not opened out of sight.
+        // Surfacing is synchronous so it strictly precedes the request.
+        _ = appLifecycleClient.surfaceMainWindow()
+        return .send(.repositories(.workspaceEditing(.promptRequested(repositoryID, removingChildID: nil))))
+
       case .settings(.delegate(.cliInstallCompleted(let result))):
         switch result {
         case .installed(let path):

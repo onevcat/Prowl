@@ -275,6 +275,7 @@ struct SettingsFeature {
     case terminalFontSizeChanged(Float32?)
     case terminalLayoutSnapshotCleared(success: Bool)
     case cliInstallCompleted(CLIInstallResultMessage)
+    case editWorkspace(Repository.ID)
   }
 
   @Dependency(FeatureFlags.self) private var featureFlags
@@ -615,6 +616,9 @@ struct SettingsFeature {
 
       case .alert:
         return .none
+
+      case .repositorySettings(.delegate(.editWorkspace(let repositoryID))):
+        return .send(.delegate(.editWorkspace(repositoryID)))
 
       case .repositorySettings:
         return .none

@@ -527,7 +527,7 @@ private struct CommandPaletteRowView: View {
       .toggleShelf, .showDiff, .outgoingChanges,
       .revealInFinder, .copyPath, .revealInSidebar,
       .runScript, .stopRunScript, .togglePinWorktree, .renameBranch,
-      .openRepositorySettings, .runCustomCommand, .launchAgentProfile, .runWorkflow:
+      .openRepositorySettings, .editWorkspace, .runCustomCommand, .launchAgentProfile, .runWorkflow:
       return nil
     case .deleteWorktree:
       return String(localized: "Delete")
@@ -618,6 +618,8 @@ private struct CommandPaletteRowView: View {
       return "pencil"
     case .openRepositorySettings:
       return "gearshape"
+    case .editWorkspace:
+      return "folder.badge.gearshape"
     case .deleteWorktree:
       return "trash"
     case .runCustomCommand(_, let systemImage):
@@ -651,6 +653,7 @@ private struct CommandPaletteRowView: View {
       .revealInFinder, .copyPath, .revealInSidebar,
       .runScript, .stopRunScript, .togglePinWorktree, .renameBranch,
       .openRepositorySettings,
+      .editWorkspace,
       .deleteWorktree, .runCustomCommand, .launchAgentProfile, .runWorkflow:
       return true
     case .worktreeSelect:
@@ -815,6 +818,8 @@ private struct CommandPaletteRowView: View {
       base = String(localized: "Rename Branch")
     case .openRepositorySettings:
       base = String(localized: "Open Repo Settings")
+    case .editWorkspace:
+      base = String(localized: "Edit Workspace")
     case .deleteWorktree:
       base = String(localized: "Delete \(row.title)")
     case .runCustomCommand:

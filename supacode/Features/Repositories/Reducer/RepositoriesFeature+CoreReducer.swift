@@ -12,7 +12,8 @@ extension RepositoriesFeature {
     switch action {
     case .worktreeCreation, .worktreeLifecycle, .worktreeOrdering, .githubIntegration,
       .repositoryManagement,
-      .workspaceCreation:
+      .workspaceCreation,
+      .workspaceEditing:
       return .none
 
     case .activeAgents(.entryTapped(let id)),
@@ -833,19 +834,25 @@ extension RepositoriesFeature {
     case .worktreeCreationPrompt:
       return .none
 
-    case .workspaceCreationPrompt(.presented(.delegate(.cancel))):
+    case .workspaceEditor(.presented(.delegate(.cancel))):
+      if state.workspaceEditor?.mode.isEditing == true {
+        return .send(.workspaceEditing(.promptCanceled))
+      }
       return .send(.workspaceCreation(.promptCanceled))
 
-    case .workspaceCreationPrompt(.presented(.delegate(.baseRefSourceChanged(let repositoryID)))):
-      return .send(.workspaceCreation(.refreshBaseRefs(repositoryID)))
-
-    case .workspaceCreationPrompt(.presented(.delegate(.submit(let draft)))):
+    case .workspaceEditor(.presented(.delegate(.submit(.create(let draft))))):
       return .send(.workspaceCreation(.createWorkspace(draft)))
 
-    case .workspaceCreationPrompt(.dismiss):
+    case .workspaceEditor(.presented(.delegate(.submit(.update(let request))))):
+      return .send(.workspaceEditing(.saveWorkspace(request)))
+
+    case .workspaceEditor(.dismiss):
+      if state.workspaceEditor?.mode.isEditing == true {
+        return .send(.workspaceEditing(.promptDismissed))
+      }
       return .send(.workspaceCreation(.promptDismissed))
 
-    case .workspaceCreationPrompt:
+    case .workspaceEditor:
       return .none
 
     case .alert(.presented(.confirmArchiveWorktree(let worktreeID, let repositoryID))):

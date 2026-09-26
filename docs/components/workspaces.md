@@ -23,7 +23,28 @@ Use **Add...** from the sidebar toolbar and choose **Add Workspace**, or use the
 Worktrees menu or command palette to create a workspace. Prowl creates the
 shared folder, materializes the selected repositories, writes
 `.prowl/workspace.json`, and opens the workspace as a runnable folder. A
-workspace needs at least two repositories.
+workspace needs at least one repository; more can be added later (see
+[Editing a workspace](#editing-a-workspace)).
+
+The sheet has two levels. The **Workspace** panel holds the metadata: a
+**Title** (the folder name follows it until you press **Change…**), an optional
+**Description**, optional **Task Links** (URLs or issue keys, one per line),
+and the repository list with **Add Repository…**. Every row says in one line
+what Create will do with it ("Link → shares the live checkout at …", "New
+branch feature/x from main → worktree", "Clone git@… @ origin/main"), and a
+footer line summarizes the whole operation. Create is disabled until at least
+one repository is listed.
+
+**Add Repository…** opens the second level inside the same sheet, one
+repository at a time. First pick the source — **Opened in Prowl** (a list of
+the sidebar repositories), **Local Folder…** (an open panel), or **Remote URL**
+(branches load automatically once you stop typing or press Return). Then set
+**Name**, an optional **Role** (`app`, `backend`, `docs`, …), and the
+**Checkout**: **Link**, **New Branch** (name plus base branch), or **Existing
+Branch**. The folder name inside the workspace lives under **Advanced** and
+defaults to the repository name. **Add** returns to the workspace panel with
+the new row; **Back** discards it. All of this lands in `.prowl/workspace.json`
+so agents can read it.
 
 While a workspace is being created the prompt shows a spinner. **Cancel** stops
 the creation and rolls back everything created so far: cloned folders, created
@@ -112,13 +133,70 @@ including immediately after a newly created workspace is opened. Click a child
 row to select it and focus its terminal tab rooted at that repository folder
 inside the workspace, creating that tab the first time it is selected.
 Right-click a child row for **Copy Path** / **Reveal in Finder** /
-**Show Diff** / **Show Outgoing Changes**.
+**Show Diff** / **Show Outgoing Changes** / **Edit Workspace…** /
+**Remove from Workspace…** (opens the editor with that repository already
+marked for removal).
 
 Diff works per child repository: click the child's `+N/-M` badge to open the
 diff for that repository, or, with a child selected, use `⌘⇧Y` (Show Diff),
 `⌘⌥⇧Y` (Show Outgoing Changes), or the matching Command Palette items. All
 configured diff tools apply; the Hunk tool opens a workspace terminal tab
 rooted at the child folder. See [diff-view](diff-view.md).
+
+## Editing a workspace
+
+A workspace stays editable after creation. Open the editor from any of:
+
+- the sidebar: right-click the workspace row (or its `…` menu) → **Edit
+  Workspace…**, or right-click a child row → **Edit Workspace…** / **Remove
+  from Workspace…**;
+- Settings → the workspace under Repositories → **Edit Workspace…** (the editor
+  opens as a sheet on the main window, which is brought to the front);
+- the Command Palette → **Edit Workspace** while a workspace or one of its
+  children is selected;
+- the Worktrees menu → **Edit Workspace...** (enabled when a workspace is
+  selected).
+
+The editor is the same two-level sheet as creation, pre-filled from
+`.prowl/workspace.json` (re-read from disk when it opens, so edits made
+outside Prowl are respected). It lets you change:
+
+- **Title**, **Description**, and **Task Links**. The title is display-only;
+  the folder on disk keeps its name.
+- **Name** and **Role** of every existing repository: hover a row and press the
+  pencil (or right-click → **Edit…**). Source and checkout are shown as a
+  read-only summary; to change them, remove the repository and add it again.
+- **Order**: right-click a row → **Move Up** / **Move Down**, for existing and
+  newly added rows alike. The sidebar and the metadata follow the new order.
+- **Added repositories**: **Add Repository…** with the same sources and
+  checkouts as creation. They are materialized when you save and show
+  "Added on save" until then.
+- **Removed repositories**: the trash button on a row (or **Remove from
+  Workspace on save** inside the row's editor) marks it for removal; **Undo**
+  restores it. By default only the metadata entry goes away and the folder
+  stays. Tick **Also delete the folder inside the workspace** to remove what
+  Prowl materialized: the symlink for a linked repository (the source is
+  untouched), `git worktree remove --force` plus the folder for a worktree, or
+  the cloned folder for a remote. Worktree entries with a recorded branch
+  additionally offer **Delete branch … in the source repository**, which goes
+  through the same protected-branch guard as the rest of Prowl. A workspace
+  must keep at least one repository.
+
+Nothing changes until you press **Save**. Save runs in this order so the
+workspace is never left half-changed: added repositories are materialized
+first (and rolled back if one fails, leaving the old metadata untouched), then
+`.prowl/workspace.json` is rewritten, then removed repositories are cleaned
+up. Cleanup is best-effort: if a worktree cannot be unregistered, a
+repository path lies outside the workspace folder, or the entry has no recorded
+source (so Prowl cannot tell whether it created the folder), or a requested
+branch deletion is refused by git, the entry is still removed from the metadata
+and Prowl shows an alert listing what was left on disk. Save
+cannot be canceled once it has started. After a successful save the sidebar
+reloads and a **Workspace saved** toast appears.
+
+Paths inside the workspace are kept unique: adding a repository whose folder
+name is still occupied (for example by a member you are removing without
+deleting its folder) gets a `-2` suffix instead of failing.
 
 ## Removing a workspace
 
@@ -141,8 +219,11 @@ anyway would leave a dangling worktree registration in the source repository.
 ## Metadata
 
 The workspace's repository settings page (Settings → the workspace under
-Repositories) shows this metadata read-only; edit `.prowl/workspace.json` to
-change it.
+Repositories) shows this metadata and offers **Edit Workspace…**, which opens
+the editor described above. `.prowl/workspace.json` remains the source of
+truth: hand edits are picked up on the next reload, and when Prowl saves it
+keeps top-level and per-repository keys it does not know about, so fields
+written by other tools survive.
 
 Example `.prowl/workspace.json`:
 
