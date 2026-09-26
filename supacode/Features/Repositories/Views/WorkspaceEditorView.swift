@@ -303,7 +303,7 @@ private struct WorkspacePanelView: View {
         parts.append(
           removed == 1 ? String(localized: "removes 1") : String(localized: "removes \(removed)"))
       }
-      let changes = parts.joined(separator: ", ")
+      let changes = parts.formatted(.list(type: .and, width: .narrow))
       return String(localized: "Save \(changes); \(remaining) repositories afterwards.")
     }
     guard remaining > 0 else {
@@ -342,7 +342,7 @@ private struct WorkspacePanelView: View {
     if clones > 0 {
       parts.append(clones == 1 ? String(localized: "1 clone") : String(localized: "\(clones) clones"))
     }
-    return parts.joined(separator: ", ")
+    return parts.formatted(.list(type: .and, width: .narrow))
   }
 
   private func chooseFolder() {

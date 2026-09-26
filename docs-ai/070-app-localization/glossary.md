@@ -54,6 +54,7 @@ When “profile” and “configuration” meet in one sentence, write 设置 fo
 | built-in, bundled | 内置 |
 | active | 活跃 for an agent; 进行中 for a run; 当前 for the focused pane |
 | dismiss | 关闭 |
+| Undo / Undo Removal | 撤销 / 撤销移除 |
 | pin / Pin to top | 固定 / 置顶 |
 | Reveal in Finder | 在访达中显示 |
 | account | 账户 |
@@ -72,6 +73,8 @@ When “profile” and “configuration” meet in one sentence, write 设置 fo
 | rebase / squash / merge | 变基 / 压缩合并 / 合并 |
 | checkout (n.) | 检出 |
 | symlink / link | 符号链接 / 链接 |
+| clone (n.) / worktree (n.) / link (n.) in a count | 克隆 / worktree / 链接 (`1 个克隆`, `%lld 个链接`) |
+| base ref / base branch | 基线引用 / 基线分支 (`Base branch` in a picker); 基准 for “relative to its base” |
 
 ## Scripts and workflows
 
