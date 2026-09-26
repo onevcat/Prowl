@@ -207,6 +207,16 @@
         }
       }
     },
+    "%@ has no workspace metadata to update." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 没有可更新的工作区元数据。"
+          }
+        }
+      }
+    },
     "%@ in %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -283,6 +293,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ 不在你的 shell 的 PATH 中"
+          }
+        }
+      }
+    },
+    "%@ is outside the workspace folder and was left in place." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 位于工作区文件夹之外，已原样保留。"
           }
         }
       }
@@ -423,6 +443,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ 已中断"
+          }
+        }
+      }
+    },
+    "%@ was not created by Prowl and was left in place." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 不是由 Prowl 创建的，已原样保留。"
           }
         }
       }
@@ -653,6 +683,16 @@
         }
       }
     },
+    "%lld clones" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个克隆"
+          }
+        }
+      }
+    },
     "%lld commands" : {
       "localizations" : {
         "zh-Hans" : {
@@ -714,6 +754,16 @@
         }
       }
     },
+    "%lld links" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个链接"
+          }
+        }
+      }
+    },
     "%lld mirrors" : {
       "localizations" : {
         "zh-Hans" : {
@@ -740,16 +790,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已完成百分之 %lld"
-          }
-        }
-      }
-    },
-    "%lld remote branches loaded" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已加载 %lld 个远程分支"
           }
         }
       }
@@ -840,6 +880,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld 个验证错误"
+          }
+        }
+      }
+    },
+    "%lld worktrees" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个 worktree"
           }
         }
       }
@@ -943,6 +993,16 @@
     "/" : {
       "shouldTranslate" : false
     },
+    "1 clone" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 个克隆"
+          }
+        }
+      }
+    },
     "1 finished run will be deleted. Runs that are still active are kept. This cannot be undone." : {
       "comment" : "Clear workflow history confirmation: singular (1 run)",
       "localizations" : {
@@ -950,6 +1010,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "将删除 1 个已完成的运行。仍在进行中的运行会被保留。此操作无法撤销。"
+          }
+        }
+      }
+    },
+    "1 link" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 个链接"
           }
         }
       }
@@ -970,6 +1040,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "1 项检查成功"
+          }
+        }
+      }
+    },
+    "1 worktree" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 个 worktree"
           }
         }
       }
@@ -1060,16 +1140,6 @@
         }
       }
     },
-    "A short name for the shared task folder shown in the sidebar and workspace metadata." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "共享任务文件夹的简短名称，显示在边栏和工作区元数据中。"
-          }
-        }
-      }
-    },
     "A step sends this role instructions, so its pane must host a detected agent." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1086,6 +1156,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "这里已存在使用此 ID 的工作流。"
+          }
+        }
+      }
+    },
+    "A workspace gathers several repositories in one folder so an agent can work across them from a single root." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作区把多个仓库集中到一个文件夹中，让 Agent 可以从同一个根目录跨仓库工作。"
+          }
+        }
+      }
+    },
+    "A workspace keeps at least one repository. Undo a removal or add one." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作区至少要保留一个仓库。请撤销一次移除，或添加一个仓库。"
           }
         }
       }
@@ -1180,42 +1270,12 @@
         }
       }
     },
-    "Add Local" : {
+    "Add %@" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "添加本地"
-          }
-        }
-      }
-    },
-    "Add Local Repository" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "添加本地仓库"
-          }
-        }
-      }
-    },
-    "Add Opened" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "添加已打开的"
-          }
-        }
-      }
-    },
-    "Add Opened Path" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "添加已打开的路径"
+            "value" : "添加 %@"
           }
         }
       }
@@ -1226,26 +1286,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "添加配置"
-          }
-        }
-      }
-    },
-    "Add Remote" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "添加远程"
-          }
-        }
-      }
-    },
-    "Add Remote Repository" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "添加远程仓库"
           }
         }
       }
@@ -1266,6 +1306,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "添加仓库或工作区"
+          }
+        }
+      }
+    },
+    "Add Repository…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加仓库…"
           }
         }
       }
@@ -1330,6 +1380,16 @@
         }
       }
     },
+    "Add a repository to create the workspace." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加一个仓库以创建工作区。"
+          }
+        }
+      }
+    },
     "Add an environment variable override for this profile's launches" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1340,12 +1400,32 @@
         }
       }
     },
-    "Add at least two repositories. Opened and local repositories can be linked or materialized as worktrees." : {
+    "Add an opened, local, or remote repository to this workspace" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "请至少添加两个仓库。已打开的仓库和本地仓库可以链接，也可以生成为 worktree。"
+            "value" : "向此工作区添加已打开的、本地的或远程的仓库"
+          }
+        }
+      }
+    },
+    "Add at least one repository." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请至少添加一个仓库。"
+          }
+        }
+      }
+    },
+    "Add at least one. Each repository is linked, checked out on a branch, or cloned into the workspace folder." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请至少添加一个。每个仓库会被链接、检出到某个分支，或克隆到工作区文件夹中。"
           }
         }
       }
@@ -1370,6 +1450,16 @@
         }
       }
     },
+    "Add this repository to the workspace list (↩)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将此仓库添加到工作区列表（↩）"
+          }
+        }
+      }
+    },
     "Add to Prowl" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1390,42 +1480,12 @@
         }
       }
     },
-    "Added by choosing a repository folder from disk." : {
+    "Added on save" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "通过从磁盘选择仓库文件夹添加。"
-          }
-        }
-      }
-    },
-    "Added from a local bare repository." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "从本地裸仓库添加。"
-          }
-        }
-      }
-    },
-    "Added from a remote URL and cloned into the workspace." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "从远程 URL 添加，并克隆到工作区中。"
-          }
-        }
-      }
-    },
-    "Added from repositories already opened in Prowl." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "从已在 Prowl 中打开的仓库添加。"
+            "value" : "保存时添加"
           }
         }
       }
@@ -1460,22 +1520,22 @@
         }
       }
     },
+    "Adds a symlink to the source checkout. Edits in the workspace change the original folder directly." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加一个指向源检出的符号链接。在工作区中的编辑会直接修改原始文件夹。"
+          }
+        }
+      }
+    },
     "Advanced" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "高级"
-          }
-        }
-      }
-    },
-    "Advanced source: a local bare repository used only for git worktree materialization." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "高级来源：仅用于生成 git worktree 的本地裸仓库。"
           }
         }
       }
@@ -1790,6 +1850,16 @@
         }
       }
     },
+    "Also delete the folder inside the workspace" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同时删除工作区内的文件夹"
+          }
+        }
+      }
+    },
     "Also delete the workspace folder and its worktrees" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1966,6 +2036,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在自动清理已合并或已过期的 worktree 时生效，且仅适用于 Prowl 创建的分支。手动删除对话框则会记住你上次的选择。"
+          }
+        }
+      }
+    },
+    "Apply changes to this repository (↩)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "应用对此仓库的更改（↩）"
           }
         }
       }
@@ -2361,6 +2441,16 @@
         }
       }
     },
+    "Back to the workspace" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "返回工作区"
+          }
+        }
+      }
+    },
     "Background refresh of line-change badges and pull request status" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2381,32 +2471,12 @@
         }
       }
     },
-    "Bare Worktree" : {
+    "Base branch" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "裸仓库 Worktree"
-          }
-        }
-      }
-    },
-    "Bare repository folder" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "裸仓库文件夹"
-          }
-        }
-      }
-    },
-    "Base ref" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "基线引用"
+            "value" : "基线分支"
           }
         }
       }
@@ -2511,12 +2581,12 @@
         }
       }
     },
-    "Branch action" : {
+    "Branch %@ was not deleted: %@" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "分支操作"
+            "value" : "分支 %1$@ 未被删除：%2$@"
           }
         }
       }
@@ -2627,6 +2697,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "未选择此分支"
+          }
+        }
+      }
+    },
+    "Branches load as soon as you finish typing." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入完成后会自动加载分支。"
           }
         }
       }
@@ -3101,6 +3181,16 @@
         }
       }
     },
+    "Change…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更改…"
+          }
+        }
+      }
+    },
     "Check" : {
       "localizations" : {
         "zh-Hans" : {
@@ -3201,6 +3291,16 @@
         }
       }
     },
+    "Checkout" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "检出"
+          }
+        }
+      }
+    },
     "Choices this workflow asks for before it starts." : {
       "localizations" : {
         "zh-Hans" : {
@@ -3241,16 +3341,6 @@
         }
       }
     },
-    "Choose Branch Action" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "选择分支操作"
-          }
-        }
-      }
-    },
     "Choose Existing" : {
       "localizations" : {
         "zh-Hans" : {
@@ -3261,32 +3351,12 @@
         }
       }
     },
-    "Choose Folder" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "选择文件夹"
-          }
-        }
-      }
-    },
     "Choose Image…" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "选择图像…"
-          }
-        }
-      }
-    },
-    "Choose Repository Source" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "选择仓库来源"
           }
         }
       }
@@ -3311,32 +3381,12 @@
         }
       }
     },
-    "Choose Workspace Folder" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "选择工作区文件夹"
-          }
-        }
-      }
-    },
     "Choose a Profile" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "选择配置"
-          }
-        }
-      }
-    },
-    "Choose a bare repository folder" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "选择裸仓库文件夹"
           }
         }
       }
@@ -3351,12 +3401,32 @@
         }
       }
     },
+    "Choose a different folder for the workspace root" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为工作区根目录选择另一个文件夹"
+          }
+        }
+      }
+    },
     "Choose a file from the sidebar to view changes" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "从边栏中选择一个文件以查看更改"
+          }
+        }
+      }
+    },
+    "Choose a git repository on disk." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择磁盘上的一个 git 仓库。"
           }
         }
       }
@@ -3751,6 +3821,36 @@
         }
       }
     },
+    "Clone %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "克隆 %@"
+          }
+        }
+      }
+    },
+    "Clone %@ @ %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "克隆 %1$@ @ %2$@"
+          }
+        }
+      }
+    },
+    "Clone %@, new branch %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "克隆 %1$@，新建分支 %2$@"
+          }
+        }
+      }
+    },
     "Clone a remote repository into a local directory" : {
       "localizations" : {
         "zh-Hans" : {
@@ -3777,6 +3877,56 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "克隆失败"
+          }
+        }
+      }
+    },
+    "Clone from an SSH or HTTPS git URL into the workspace." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从 SSH 或 HTTPS git URL 克隆到工作区。"
+          }
+        }
+      }
+    },
+    "Clone of %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 的克隆"
+          }
+        }
+      }
+    },
+    "Clone of %@ @ %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ 的克隆 @ %2$@"
+          }
+        }
+      }
+    },
+    "Clones the repository into the workspace and checks out the selected branch." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将仓库克隆到工作区，并检出所选分支。"
+          }
+        }
+      }
+    },
+    "Clones the repository into the workspace and creates the new branch from the selected base." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将仓库克隆到工作区，并从所选基准创建新分支。"
           }
         }
       }
@@ -5091,26 +5241,6 @@
         }
       }
     },
-    "Create Branch" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "创建分支"
-          }
-        }
-      }
-    },
-    "Create Branch materializes an isolated checkout on a new branch from the selected base ref." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "“创建分支”会基于所选的基线引用，在新分支上生成一份独立的检出。"
-          }
-        }
-      }
-    },
     "Create Workspace (↩)" : {
       "localizations" : {
         "zh-Hans" : {
@@ -5221,6 +5351,26 @@
         }
       }
     },
+    "Creates %@ with %lld repositories (%@)." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建 %1$@，包含 %2$lld 个仓库（%3$@）。"
+          }
+        }
+      }
+    },
+    "Creates %@ with 1 repository (%@)." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建 %1$@，包含 1 个仓库（%2$@）。"
+          }
+        }
+      }
+    },
     "Creates %@/%@/workflow.yaml" : {
       "localizations" : {
         "zh-Hans" : {
@@ -5237,6 +5387,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "根据角色的要求和首选配置创建新的 Agent 窗格。"
+          }
+        }
+      }
+    },
+    "Creates a worktree on the selected branch, or a local tracking branch for a remote ref." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在所选分支上创建 worktree；如果是远程引用，则创建本地跟踪分支。"
+          }
+        }
+      }
+    },
+    "Creates a worktree on the selected branch. A matching local branch already exists; choose whether to keep or reset it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在所选分支上创建 worktree。同名的本地分支已存在，请选择保留还是重置它。"
+          }
+        }
+      }
+    },
+    "Creates an isolated worktree on a new branch. The source checkout is left untouched." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在新分支上创建独立的 worktree。源检出保持不变。"
           }
         }
       }
@@ -5581,6 +5761,16 @@
         }
       }
     },
+    "Defaults to the repository name. Prowl adds a suffix if the folder already exists." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "默认为仓库名称。如果文件夹已存在，Prowl 会添加后缀。"
+          }
+        }
+      }
+    },
     "Defined" : {
       "localizations" : {
         "zh-Hans" : {
@@ -5861,6 +6051,16 @@
         }
       }
     },
+    "Deletes the cloned folder, including any uncommitted work in it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除克隆的文件夹，包括其中所有未提交的工作。"
+          }
+        }
+      }
+    },
     "Deletes worktrees when their pull requests are merged. %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -5881,12 +6081,12 @@
         }
       }
     },
-    "Destination folder under the workspace root. It does not change the original source path." : {
+    "Description" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "工作区根目录下的目标文件夹。不会更改原始来源路径。"
+            "value" : "描述"
           }
         }
       }
@@ -6037,6 +6237,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已在设置中停用。"
+          }
+        }
+      }
+    },
+    "Discard changes to this repository (Esc)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "放弃对此仓库的更改（Esc）"
           }
         }
       }
@@ -6211,26 +6421,6 @@
         }
       }
     },
-    "Display name and default folder name for this remote repository." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "此远程仓库的显示名称和默认文件夹名称。"
-          }
-        }
-      }
-    },
-    "Display name for this repository in the workspace metadata." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "此仓库在工作区元数据中的显示名称。"
-          }
-        }
-      }
-    },
     "Display relay disconnected." : {
       "localizations" : {
         "zh-Hans" : {
@@ -6371,12 +6561,92 @@
         }
       }
     },
+    "Edit Repository" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑仓库"
+          }
+        }
+      }
+    },
+    "Edit Workspace" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑工作区"
+          }
+        }
+      }
+    },
+    "Edit Workspace..." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑工作区…"
+          }
+        }
+      }
+    },
+    "Edit Workspace…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑工作区…"
+          }
+        }
+      }
+    },
+    "Edit the selected workspace's title, description, links, and repositories" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑所选工作区的标题、描述、链接和仓库"
+          }
+        }
+      }
+    },
+    "Edit the workspace title, description, links, and repositories" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑工作区的标题、描述、链接和仓库"
+          }
+        }
+      }
+    },
     "Edit this profile" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "编辑此配置"
+          }
+        }
+      }
+    },
+    "Edit this repository" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑此仓库"
+          }
+        }
+      }
+    },
+    "Edit…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑…"
           }
         }
       }
@@ -6711,6 +6981,16 @@
         }
       }
     },
+    "Every opened repository is already in this workspace" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所有已打开的仓库都已在此工作区中"
+          }
+        }
+      }
+    },
     "Evicting polite overcommit" : {
       "localizations" : {
         "zh-Hans" : {
@@ -6751,6 +7031,16 @@
         }
       }
     },
+    "Existing Branch" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "现有分支"
+          }
+        }
+      }
+    },
     "Existing agent" : {
       "localizations" : {
         "zh-Hans" : {
@@ -6761,22 +7051,12 @@
         }
       }
     },
-    "Existing branch" : {
+    "Existing branch %@ → worktree" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "现有分支"
-          }
-        }
-      }
-    },
-    "Existing opened repository path. Link keeps using this checkout; branch actions create workspace worktrees from it." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已打开的现有仓库路径。“链接”会继续使用这份检出；分支操作则会基于它创建工作区 worktree。"
+            "value" : "现有分支 %@ → worktree"
           }
         }
       }
@@ -7202,6 +7482,16 @@
         }
       }
     },
+    "Files stay on disk unless you delete them here." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "除非在这里删除，否则文件会保留在磁盘上。"
+          }
+        }
+      }
+    },
     "Fills the symbol name field with this suggestion." : {
       "localizations" : {
         "zh-Hans" : {
@@ -7449,6 +7739,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "跟随工作流"
+          }
+        }
+      }
+    },
+    "Follows the title until you change it. Prowl creates the workspace in this folder." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在你更改之前会跟随标题。Prowl 会在此文件夹中创建工作区。"
           }
         }
       }
@@ -8029,6 +8329,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "首次为一组卡片打开画布时卡片的排列方式。"
+          }
+        }
+      }
+    },
+    "How this repository is placed in the workspace" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此仓库放入工作区的方式"
           }
         }
       }
@@ -8643,6 +8953,16 @@
         }
       }
     },
+    "Keep this repository in the workspace" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在工作区中保留此仓库"
+          }
+        }
+      }
+    },
     "Keeps each workspace's line-change badge up to date in the background. Turn off for very large repositories to avoid background git diff work." : {
       "localizations" : {
         "zh-Hans" : {
@@ -8833,16 +9153,6 @@
         }
       }
     },
-    "Link adds a symlink to the source checkout, so workspace edits affect the original folder directly." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "“链接”会添加指向源检出的符号链接，因此在工作区中的修改会直接影响原始文件夹。"
-          }
-        }
-      }
-    },
     "Link is not available for %@." : {
       "localizations" : {
         "zh-Hans" : {
@@ -8869,6 +9179,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "将此应用内置的技能链接到各 Agent 的技能文件夹，让每个 Agent 读取与已安装应用匹配的版本。状态与 prowl skills list 一致。"
+          }
+        }
+      }
+    },
+    "Link → shares the live checkout at %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "链接 → 共享 %@ 处的实时检出"
           }
         }
       }
@@ -8933,16 +9253,6 @@
         }
       }
     },
-    "Load" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "加载"
-          }
-        }
-      }
-    },
     "Load Earlier 200 Lines" : {
       "localizations" : {
         "zh-Hans" : {
@@ -8959,36 +9269,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "加载更多"
-          }
-        }
-      }
-    },
-    "Load Remote Branches" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "加载远程分支"
-          }
-        }
-      }
-    },
-    "Load branches before adding so Prowl can choose an existing branch safely." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "添加前请先加载分支，以便 Prowl 安全地选择现有分支。"
-          }
-        }
-      }
-    },
-    "Load remote branches before adding." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "添加前请先加载远程分支。"
           }
         }
       }
@@ -9019,6 +9299,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在加载主机设置…"
+          }
+        }
+      }
+    },
+    "Loading branches…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在加载分支…"
           }
         }
       }
@@ -9063,6 +9353,16 @@
         }
       }
     },
+    "Local Folder…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本地文件夹…"
+          }
+        }
+      }
+    },
     "Local branch “%@”" : {
       "localizations" : {
         "zh-Hans" : {
@@ -9079,16 +9379,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "本地分支“%@”已存在，将被重置为此引用。"
-          }
-        }
-      }
-    },
-    "Local repository folder on disk. It can be linked as-is or used as the source for a workspace worktree." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "磁盘上的本地仓库文件夹。可以直接链接，也可以用作工作区 worktree 的来源。"
           }
         }
       }
@@ -9633,6 +9923,16 @@
         }
       }
     },
+    "New Branch" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建分支"
+          }
+        }
+      }
+    },
     "New Pane" : {
       "localizations" : {
         "zh-Hans" : {
@@ -9779,6 +10079,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "新建的 Agent 将显示在这里"
+          }
+        }
+      }
+    },
+    "New branch %@ from %@ → worktree" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "基于 %2$@ 新建分支 %1$@ → worktree"
+          }
+        }
+      }
+    },
+    "New branch from %@ → worktree" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "基于 %@ 新建分支 → worktree"
+          }
+        }
+      }
+    },
+    "New branch name" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新分支名称"
           }
         }
       }
@@ -10039,6 +10369,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此工作区元数据中未声明任何仓库。"
+          }
+        }
+      }
+    },
+    "No repositories yet" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还没有仓库"
           }
         }
       }
@@ -11035,6 +11375,26 @@
         }
       }
     },
+    "Open the workspace editor to change its title, description, links, and repositories" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开工作区编辑器，更改其标题、描述、链接和仓库"
+          }
+        }
+      }
+    },
+    "Open the workspace editor with %@ marked for removal" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开工作区编辑器，并将 %@ 标记为待移除"
+          }
+        }
+      }
+    },
     "Open this worktree's pull request on the code host" : {
       "localizations" : {
         "zh-Hans" : {
@@ -11191,6 +11551,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "可选步骤"
+          }
+        }
+      }
+    },
+    "Optional. One issue URL or identifier per line." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可选。每行一个 issue URL 或标识符。"
+          }
+        }
+      }
+    },
+    "Optional. Shown to you and to agents working in this workspace." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可选。会展示给你以及在此工作区中工作的 Agent。"
+          }
+        }
+      }
+    },
+    "Optional: app, backend, docs…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可选：app、backend、docs…"
           }
         }
       }
@@ -11606,22 +11996,22 @@
         }
       }
     },
+    "Pick one of the repositories already in the sidebar." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从边栏中已有的仓库里选择一个。"
+          }
+        }
+      }
+    },
     "Pick the app automatically based on the project type" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "根据项目类型自动选择应用"
-          }
-        }
-      }
-    },
-    "Picked from Disk" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "从磁盘选取"
           }
         }
       }
@@ -12117,6 +12507,16 @@
         }
       }
     },
+    "Prowl creates the workspace in this folder." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prowl 会在此文件夹中创建工作区。"
+          }
+        }
+      }
+    },
     "Prowl is configured to use %@ on %@, but gh could not switch to that account. Run `gh auth switch --hostname %@ --user %@` and try again." : {
       "localizations" : {
         "zh-Hans" : {
@@ -12464,16 +12864,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "重新从安全存储中读取先前配对的主机"
-          }
-        }
-      }
-    },
-    "Read-only. Defined in %@ — edit that file to change it." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "只读。在 %@ 中定义——要更改请编辑该文件。"
           }
         }
       }
@@ -12838,16 +13228,6 @@
         }
       }
     },
-    "Remote Clone" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "远程克隆"
-          }
-        }
-      }
-    },
     "Remote Mirror" : {
       "localizations" : {
         "zh-Hans" : {
@@ -12898,16 +13278,6 @@
         }
       }
     },
-    "Remote URL cloned into the workspace folder after branches are loaded." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "加载分支后克隆到工作区文件夹中的远程 URL。"
-          }
-        }
-      }
-    },
     "Remote URL required." : {
       "localizations" : {
         "zh-Hans" : {
@@ -12934,16 +13304,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "远程连接超时。对方已不再响应。"
-          }
-        }
-      }
-    },
-    "Remote git URL to clone into the workspace, such as SSH or HTTPS." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "要克隆到工作区的远程 git URL，例如 SSH 或 HTTPS 地址。"
           }
         }
       }
@@ -13024,6 +13384,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "移除并将文件放入废纸篓"
+          }
+        }
+      }
+    },
+    "Remove from Workspace on save" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存时从工作区移除"
+          }
+        }
+      }
+    },
+    "Remove from Workspace…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从工作区移除…"
+          }
+        }
+      }
+    },
+    "Remove from the workspace on save" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存时从工作区移除"
           }
         }
       }
@@ -13128,6 +13518,26 @@
         }
       }
     },
+    "Remove this repository" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除此仓库"
+          }
+        }
+      }
+    },
+    "Remove this repository from the workspace before it is created" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在创建工作区之前，把此仓库从工作区中移除"
+          }
+        }
+      }
+    },
     "Remove workspace (↩)" : {
       "localizations" : {
         "zh-Hans" : {
@@ -13174,6 +13584,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已删除 1 个运行。"
+          }
+        }
+      }
+    },
+    "Removed on save" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存时移除"
+          }
+        }
+      }
+    },
+    "Removes only the symlink; the linked repository is untouched." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只移除符号链接；被链接的仓库保持不变。"
           }
         }
       }
@@ -13474,16 +13904,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "仓库和全局的终端操作。已启用的命令先按仓库顺序、再按全局顺序显示。可在“设置 → 命令”中编辑全局命令。"
-          }
-        }
-      }
-    },
-    "Repository folder" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "仓库文件夹"
           }
         }
       }
@@ -14338,6 +14758,16 @@
         }
       }
     },
+    "Runs git branch -D after the worktree is removed. Protected branches are kept." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除 worktree 后运行 git branch -D。受保护的分支会被保留。"
+          }
+        }
+      }
+    },
     "Runs git fetch <remote> before creating a worktree." : {
       "localizations" : {
         "zh-Hans" : {
@@ -14448,6 +14878,26 @@
         }
       }
     },
+    "Save %@; %lld repositories afterwards." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存将%1$@；保存后共 %2$lld 个仓库。"
+          }
+        }
+      }
+    },
+    "Save Workspace (↩)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存工作区（↩）"
+          }
+        }
+      }
+    },
     "Save and Run" : {
       "localizations" : {
         "zh-Hans" : {
@@ -14468,12 +14918,52 @@
         }
       }
     },
+    "Save keeps %lld repositories." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存后保留 %lld 个仓库。"
+          }
+        }
+      }
+    },
+    "Save keeps 1 repository." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存后保留 1 个仓库。"
+          }
+        }
+      }
+    },
     "Saved terminal layout cleared" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "已清除保存的终端布局"
+          }
+        }
+      }
+    },
+    "Saving cannot be canceled" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存过程无法取消"
+          }
+        }
+      }
+    },
+    "Saving…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在保存…"
           }
         }
       }
@@ -15136,16 +15626,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "选择所有卡片进行广播"
-          }
-        }
-      }
-    },
-    "Select at least two repositories." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "请至少选择两个仓库。"
           }
         }
       }
@@ -16010,6 +16490,16 @@
         }
       }
     },
+    "Some folders were left in place" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "部分文件夹已原样保留"
+          }
+        }
+      }
+    },
     "Some worktrees couldn't be removed" : {
       "localizations" : {
         "zh-Hans" : {
@@ -16046,6 +16536,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "源文件"
+          }
+        }
+      }
+    },
+    "Source and checkout are fixed once a repository is in the workspace. Remove and add it again to change them." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仓库加入工作区后，来源和检出方式就固定了。如需更改，请移除后重新添加。"
           }
         }
       }
@@ -16446,6 +16946,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "停止 Prowl 为此 worktree 跟踪的运行脚本"
+          }
+        }
+      }
+    },
+    "Stored in %@. Edit Workspace opens the editor in the main window." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "存储在 %@。“编辑工作区”会在主窗口中打开编辑器。"
           }
         }
       }
@@ -16947,6 +17457,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "主机上“添加设备”中显示的八位配对码。\n60 秒后过期。"
+          }
+        }
+      }
+    },
+    "The entry leaves the workspace metadata when you save." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存时，此条目会从工作区元数据中移除。"
           }
         }
       }
@@ -17977,6 +18497,16 @@
         }
       }
     },
+    "Unable to save workspace" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法保存工作区"
+          }
+        }
+      }
+    },
     "Unable to show outgoing changes" : {
       "localizations" : {
         "zh-Hans" : {
@@ -18093,6 +18623,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "未提交的更改将丢失。"
+          }
+        }
+      }
+    },
+    "Undo" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "撤销"
+          }
+        }
+      }
+    },
+    "Undo Removal" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "撤销移除"
           }
         }
       }
@@ -18218,6 +18768,16 @@
         }
       }
     },
+    "Unregisters the worktree from its source repository and deletes the folder." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从源仓库注销该 worktree，并删除文件夹。"
+          }
+        }
+      }
+    },
     "Unsupported key. Use letters, numbers, or punctuation." : {
       "localizations" : {
         "zh-Hans" : {
@@ -18304,36 +18864,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "使用专用主目录"
-          }
-        }
-      }
-    },
-    "Use Existing" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "使用现有项"
-          }
-        }
-      }
-    },
-    "Use Existing checks out the selected branch. If a matching local branch already exists, choose whether to keep or reset it." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "“使用现有项”会检出所选分支。如果已存在同名的本地分支，请选择保留还是重置它。"
-          }
-        }
-      }
-    },
-    "Use Existing checks out the selected local branch or creates a local tracking branch from a remote ref." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "“使用现有项”会检出所选的本地分支，或基于远程引用创建本地跟踪分支。"
           }
         }
       }
@@ -18628,6 +19158,16 @@
         }
       }
     },
+    "What this workspace is for, in a few words" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用几个词说明这个工作区的用途"
+          }
+        }
+      }
+    },
     "When a new version is available, a small badge appears next to the notifications bell. Click it to review, install, and choose future background downloads." : {
       "localizations" : {
         "zh-Hans" : {
@@ -18678,12 +19218,12 @@
         }
       }
     },
-    "Where Prowl creates the workspace root. Until you edit it, this path follows the workspace title." : {
+    "Where does the repository come from?" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Prowl 创建工作区根目录的位置。在你编辑之前，此路径会随工作区标题变化。"
+            "value" : "仓库来自哪里？"
           }
         }
       }
@@ -18988,16 +19528,6 @@
         }
       }
     },
-    "Workspace folder" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "工作区文件夹"
-          }
-        }
-      }
-    },
     "Workspace folder required." : {
       "localizations" : {
         "zh-Hans" : {
@@ -19008,12 +19538,12 @@
         }
       }
     },
-    "Workspace title" : {
+    "Workspace saved" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "工作区标题"
+            "value" : "工作区已保存"
           }
         }
       }
@@ -19084,6 +19614,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "worktree 名称无效。"
+          }
+        }
+      }
+    },
+    "Worktree on %@ from %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "来自 %2$@ 的 %1$@ 分支 worktree"
           }
         }
       }
@@ -19301,6 +19841,26 @@
         }
       }
     },
+    "adds %lld" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新增 %lld 个"
+          }
+        }
+      }
+    },
+    "adds 1" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新增 1 个"
+          }
+        }
+      }
+    },
     "agentState.blocked" : {
       "localizations" : {
         "en" : {
@@ -19428,6 +19988,16 @@
         }
       }
     },
+    "from" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "基于"
+          }
+        }
+      }
+    },
     "gh could not verify this account in time." : {
       "localizations" : {
         "zh-Hans" : {
@@ -19474,6 +20044,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在 %@ 中"
+          }
+        }
+      }
+    },
+    "in the source repository" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "（位于源仓库）"
           }
         }
       }
@@ -19644,6 +20224,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "最近的输入"
+          }
+        }
+      }
+    },
+    "removes %lld" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除 %lld 个"
+          }
+        }
+      }
+    },
+    "removes 1" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除 1 个"
           }
         }
       }
