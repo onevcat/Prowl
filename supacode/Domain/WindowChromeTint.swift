@@ -124,9 +124,12 @@ enum WindowChromeTint {
     }
   }
 
-  /// Resolves the toolbar background to an opaque sRGB color under the
-  /// requested app appearance. An explicit background keeps tinted chrome
-  /// visible when AppKit does not sample the content behind the toolbar.
+  /// Resolves the fallback fullscreen toolbar background to an opaque sRGB
+  /// color under the requested app appearance. The normal window path keeps
+  /// the toolbar background hidden so the original content tint / system
+  /// material composition remains untouched; this fallback is only for the
+  /// fullscreen AppKit toolbar surface, which can stop sampling the content
+  /// behind it.
   static func fullscreenToolbarBackgroundComponents(
     fill: Fill?,
     colorScheme: ColorScheme
@@ -176,8 +179,8 @@ enum WindowChromeTint {
     colorScheme == .dark ? .black : .white
   }
 
-  static func usesExplicitToolbarBackground(isFullScreen: Bool, fill: Fill? = nil) -> Bool {
-    isFullScreen || fill != nil
+  static func usesExplicitToolbarBackground(isFullScreen: Bool) -> Bool {
+    isFullScreen
   }
 
   static func toolbarFallbackState(current: Bool, event: ToolbarFallbackEvent) -> Bool {
@@ -210,8 +213,8 @@ extension View {
   /// Sets the real SwiftUI/AppKit window toolbar background. This is kept
   /// separate from `windowChromeTint`: the tint bands color the content
   /// behind full-bleed chrome, while the toolbar itself must also have an
-  /// explicit background because macOS can stop sampling that content on
-  /// initial display or in fullscreen.
+  /// explicit background because macOS can stop sampling that content when
+  /// a window is zoomed or fullscreen.
   func windowToolbarChromeBackground(
     _ fill: WindowChromeTint.Fill?,
     forceMaterialScrim: Bool = false
@@ -293,7 +296,7 @@ private struct WindowToolbarChromeBackgroundModifier: ViewModifier {
     let background: AnyShapeStyle =
       forceMaterialScrim ? AnyShapeStyle(.bar) : AnyShapeStyle(colorBackground)
     let visibility: Visibility =
-      forceMaterialScrim || WindowChromeTint.usesExplicitToolbarBackground(isFullScreen: isFullScreen, fill: fill)
+      forceMaterialScrim || WindowChromeTint.usesExplicitToolbarBackground(isFullScreen: isFullScreen)
       ? .visible : .hidden
 
     content

@@ -131,20 +131,9 @@ struct WindowChromeTintTests {
   }
 
   @Test
-  func untintedToolbarBackgroundIsOnlyExplicitInFullscreen() {
+  func explicitToolbarBackgroundIsOnlyForFullscreen() {
     #expect(!WindowChromeTint.usesExplicitToolbarBackground(isFullScreen: false))
     #expect(WindowChromeTint.usesExplicitToolbarBackground(isFullScreen: true))
-  }
-
-  @Test
-  func tintedToolbarHasAnExplicitBackgroundBeforeFullscreen() {
-    for color: RepositoryColorChoice? in [.green, nil] {
-      let fill = WindowChromeTint.fill(mode: .repositoryColor, customColor: nil, repositoryColor: color)
-      #expect(WindowChromeTint.usesExplicitToolbarBackground(isFullScreen: false, fill: fill))
-      #expect(WindowChromeTint.usesExplicitToolbarBackground(isFullScreen: true, fill: fill))
-    }
-    let customFill = WindowChromeTint.fill(mode: .custom, customColor: .orange, repositoryColor: nil)
-    #expect(WindowChromeTint.usesExplicitToolbarBackground(isFullScreen: false, fill: customFill))
   }
 
   @Test

@@ -62,7 +62,7 @@ JSON is pretty-printed with sorted keys. Legacy `~/.supacode` is migrated to
 | `agentIslandOnlyShowWithAgents` | Bool | `false` | Hide Agent Island when the Active Agents roster is empty. |
 | `agentIslandFloatingPositions` | object (`{"positionsByDisplayID":{}}`) | Empty positions | Saved horizontal positions per display UUID (0–1); absent entries use the center. Applies to displays without a notch. |
 | `agentIslandDisplayPreference` | object (`{"mode":"automatic"}` or `{"mode":"display","id":"<CG display UUID>","name":"<last known name>"}`) | `{"mode":"automatic"}` | Select Agent Island placement. A missing fixed display temporarily follows Automatic while preserving its UUID for reconnection. |
-| `windowTintMode` | enum (`none`/`repositoryColor`/`custom`) | `repositoryColor` | How the window chrome is tinted. Default and Shelf show the toolbar tint on launch, without a window resize. Canvas keeps its toolbar untinted. |
+| `windowTintMode` | enum (`none`/`repositoryColor`/`custom`) | `repositoryColor` | How the window chrome is tinted. |
 | `windowTintCustomColor` | color | default | The custom tint color (when `windowTintMode = custom`). |
 | `showRunButtonInToolbar` | Bool | `true` | Show the Run Script button in the toolbar. |
 | `showDefaultEditorInToolbar` | Bool | `true` | Show the open-in-editor button in the toolbar. |
