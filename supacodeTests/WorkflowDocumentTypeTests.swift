@@ -28,4 +28,19 @@ struct WorkflowDocumentTypeTests {
       documents.first { ($0["LSItemContentTypes"] as? [String])?.contains(Self.identifier) == true })
     #expect(document["CFBundleTypeRole"] as? String == "None")
   }
+
+  /// No icon file is bundled: Finder composes the icon from the app icon and this label.
+  @Test func iconIsSystemGeneratedWithAWorkflowLabel() throws {
+    let documents = try #require(
+      Bundle.main.object(forInfoDictionaryKey: "CFBundleDocumentTypes") as? [[String: Any]])
+    let document = try #require(
+      documents.first { ($0["LSItemContentTypes"] as? [String])?.contains(Self.identifier) == true })
+    #expect(document["CFBundleTypeIconSystemGenerated"] as? Bool == true)
+
+    let exported = try #require(
+      Bundle.main.object(forInfoDictionaryKey: "UTExportedTypeDeclarations") as? [[String: Any]])
+    let type = try #require(exported.first { $0["UTTypeIdentifier"] as? String == Self.identifier })
+    let icons = try #require(type["UTTypeIcons"] as? [String: Any])
+    #expect(icons["UTTypeIconText"] as? String == "Workflow")
+  }
 }
