@@ -21,7 +21,7 @@ struct GithubRateLimitClassifierTests {
       stderr: "gh: API rate limit already exceeded for user ID 1.",
       succeeded: false
     )
-    #expect(signal == GithubRateLimitSignal(isRefusal: true, retryAfter: nil, resetAt: nil))
+    #expect(signal == GithubRateLimitSignal(isRefusal: true))
   }
 
   @Test func rateLimitedErrorTypeIsARefusalEvenWhenGhExitsZero() {
@@ -38,7 +38,19 @@ struct GithubRateLimitClassifierTests {
       {"message":"You have exceeded a secondary rate limit.","documentation_url":"https://docs.github.com"}
       """
     let signal = GithubRateLimitClassifier.classify(stdout: stdout, stderr: "", succeeded: false)
-    #expect(signal == GithubRateLimitSignal(isRefusal: true, retryAfter: .seconds(120), resetAt: nil))
+    #expect(signal == GithubRateLimitSignal(isRefusal: true, retryAfter: .seconds(120)))
+  }
+
+  @Test func retryAfterAsHTTPDateIsRead() {
+    let stdout = """
+      HTTP/2.0 403 Forbidden
+      Retry-After: Wed, 21 Oct 2026 07:28:00 GMT
+
+      {"message":"You have exceeded a secondary rate limit."}
+      """
+    let signal = GithubRateLimitClassifier.classify(stdout: stdout, stderr: "", succeeded: false)
+    #expect(signal?.isRefusal == true)
+    #expect(signal?.retryAfterDate == Date(timeIntervalSince1970: 1_792_567_680))
   }
 
   @Test func tooManyRequestsIsARefusal() {
@@ -57,11 +69,7 @@ struct GithubRateLimitClassifierTests {
     let signal = GithubRateLimitClassifier.classify(stdout: stdout, stderr: "", succeeded: false)
     #expect(
       signal
-        == GithubRateLimitSignal(
-          isRefusal: true,
-          retryAfter: nil,
-          resetAt: Date(timeIntervalSince1970: 1_790_892_842)
-        ))
+        == GithubRateLimitSignal(isRefusal: true, resetAt: Date(timeIntervalSince1970: 1_790_892_842)))
   }
 
   @Test func spendingTheLastOfTheBudgetBlocksWithoutDiscardingTheAnswer() {
@@ -120,7 +128,7 @@ struct GithubRateLimitGateTests {
     let gate = GithubRateLimitGate(now: { clock.value }, jitter: { 0 })
 
     let ticket = try await gate.admit()
-    let retryAt = await gate.record(ticket, signal: GithubRateLimitSignal(isRefusal: true))
+    let retryAt = await gate.record(ticket, signal: GithubRateLimitSignal(isRefusal: true), answered: true)
     #expect(retryAt == clock.value.addingTimeInterval(60))
 
     clock.withValue { $0.addTimeInterval(59) }
@@ -136,11 +144,11 @@ struct GithubRateLimitGateTests {
     let clock = LockIsolated(Date(timeIntervalSince1970: 1_000_000))
     let gate = GithubRateLimitGate(now: { clock.value }, jitter: { 0 })
     let first = try await gate.admit()
-    _ = await gate.record(first, signal: GithubRateLimitSignal(isRefusal: true))
+    _ = await gate.record(first, signal: GithubRateLimitSignal(isRefusal: true), answered: true)
     clock.withValue { $0.addTimeInterval(60) }
 
     let probe = try await gate.admit()
-    let retryAt = await gate.record(probe, signal: GithubRateLimitSignal(isRefusal: true))
+    let retryAt = await gate.record(probe, signal: GithubRateLimitSignal(isRefusal: true), answered: true)
 
     #expect(retryAt == clock.value.addingTimeInterval(120))
   }
@@ -150,7 +158,8 @@ struct GithubRateLimitGateTests {
     let gate = GithubRateLimitGate(now: { clock.value }, jitter: { 0 })
     let ticket = try await gate.admit()
 
-    let retryAt = await gate.record(ticket, signal: GithubRateLimitSignal(isRefusal: true, retryAfter: .seconds(7)))
+    let retryAt = await gate.record(
+      ticket, signal: GithubRateLimitSignal(isRefusal: true, retryAfter: .seconds(7)), answered: true)
 
     #expect(retryAt == clock.value.addingTimeInterval(7))
   }
@@ -158,14 +167,15 @@ struct GithubRateLimitGateTests {
   @Test func answeredProbeReopensTheGateAndResetsTheBackoff() async throws {
     let clock = LockIsolated(Date(timeIntervalSince1970: 1_000_000))
     let gate = GithubRateLimitGate(now: { clock.value }, jitter: { 0 })
-    _ = await gate.record(try await gate.admit(), signal: GithubRateLimitSignal(isRefusal: true))
+    _ = await gate.record(try await gate.admit(), signal: GithubRateLimitSignal(isRefusal: true), answered: true)
     clock.withValue { $0.addTimeInterval(60) }
 
     let probe = try await gate.admit()
-    #expect(await gate.record(probe, signal: nil) == nil)
+    #expect(await gate.record(probe, signal: nil, answered: true) == nil)
 
     #expect(try await gate.admit() == GithubRateLimitGate.Ticket(isProbe: false))
-    let retryAt = await gate.record(try await gate.admit(), signal: GithubRateLimitSignal(isRefusal: true))
+    let retryAt = await gate.record(
+      try await gate.admit(), signal: GithubRateLimitSignal(isRefusal: true), answered: true)
     #expect(retryAt == clock.value.addingTimeInterval(60))
   }
 
@@ -174,9 +184,9 @@ struct GithubRateLimitGateTests {
     let gate = GithubRateLimitGate(now: { clock.value }, jitter: { 0 })
     let early = try await gate.admit()
     let refused = try await gate.admit()
-    let retryAt = await gate.record(refused, signal: GithubRateLimitSignal(isRefusal: true))
+    let retryAt = await gate.record(refused, signal: GithubRateLimitSignal(isRefusal: true), answered: true)
 
-    #expect(await gate.record(early, signal: nil) == nil)
+    #expect(await gate.record(early, signal: nil, answered: true) == nil)
 
     await #expect(throws: GithubCLIError.rateLimited(retryAt: retryAt!)) {
       _ = try await gate.admit()
@@ -186,7 +196,7 @@ struct GithubRateLimitGateTests {
   @Test func requestsArrivingDuringTheProbeWaitForItsAnswer() async throws {
     let clock = LockIsolated(Date(timeIntervalSince1970: 1_000_000))
     let gate = GithubRateLimitGate(now: { clock.value }, jitter: { 0 })
-    _ = await gate.record(try await gate.admit(), signal: GithubRateLimitSignal(isRefusal: true))
+    _ = await gate.record(try await gate.admit(), signal: GithubRateLimitSignal(isRefusal: true), answered: true)
     clock.withValue { $0.addTimeInterval(60) }
     let probe = try await gate.admit()
 
@@ -194,17 +204,98 @@ struct GithubRateLimitGateTests {
     while await gate.waitingRequestCount == 0 {
       await Task.yield()
     }
-    let refusedAgain = await gate.record(probe, signal: GithubRateLimitSignal(isRefusal: true))
+    let refusedAgain = await gate.record(probe, signal: GithubRateLimitSignal(isRefusal: true), answered: true)
 
     await #expect(throws: GithubCLIError.rateLimited(retryAt: refusedAgain!)) {
       _ = try await waiter.value
     }
   }
 
+  @Test func probeThatFailsLocallyKeepsTheGateClosed() async throws {
+    let clock = LockIsolated(Date(timeIntervalSince1970: 1_000_000))
+    let gate = GithubRateLimitGate(now: { clock.value }, jitter: { 0 })
+    _ = await gate.record(try await gate.admit(), signal: GithubRateLimitSignal(isRefusal: true), answered: true)
+    clock.withValue { $0.addTimeInterval(60) }
+    let probe = try await gate.admit()
+    let waiters = (0..<3).map { _ in Task { try await gate.admit() } }
+    while await gate.waitingRequestCount < 3 {
+      await Task.yield()
+    }
+
+    #expect(await gate.record(probe, signal: nil, answered: false) == nil)
+
+    // Exactly one waiter becomes the next probe; the others keep waiting.
+    #expect(await gate.waitingRequestCount == 2)
+
+    _ = await gate.record(GithubRateLimitGate.Ticket(isProbe: true), signal: nil, answered: true)
+    var tickets: [GithubRateLimitGate.Ticket] = []
+    for waiter in waiters {
+      tickets.append(try await waiter.value)
+    }
+    #expect(tickets.filter(\.isProbe).count == 1)
+    #expect(tickets.count == 3)
+  }
+
+  @Test func cancelledWaiterNeverReceivesATicket() async throws {
+    let clock = LockIsolated(Date(timeIntervalSince1970: 1_000_000))
+    let gate = GithubRateLimitGate(now: { clock.value }, jitter: { 0 })
+    _ = await gate.record(try await gate.admit(), signal: GithubRateLimitSignal(isRefusal: true), answered: true)
+    clock.withValue { $0.addTimeInterval(60) }
+    let probe = try await gate.admit()
+    let waiter = Task { try await gate.admit() }
+    while await gate.waitingRequestCount == 0 {
+      await Task.yield()
+    }
+
+    waiter.cancel()
+    await #expect(throws: CancellationError.self) {
+      _ = try await waiter.value
+    }
+    #expect(await gate.waitingRequestCount == 0)
+    await gate.abandon(probe)
+    #expect(try await gate.admit() == GithubRateLimitGate.Ticket(isProbe: true))
+  }
+
+  @Test func refusalsWithRetryTimesStillCountTowardTheBackoff() async throws {
+    let clock = LockIsolated(Date(timeIntervalSince1970: 1_000_000))
+    let gate = GithubRateLimitGate(now: { clock.value }, jitter: { 0 })
+    let timed = GithubRateLimitSignal(isRefusal: true, retryAfter: .seconds(10))
+    _ = await gate.record(try await gate.admit(), signal: timed, answered: true)
+    clock.withValue { $0.addTimeInterval(10) }
+    _ = await gate.record(try await gate.admit(), signal: timed, answered: true)
+    clock.withValue { $0.addTimeInterval(10) }
+
+    let retryAt = await gate.record(
+      try await gate.admit(),
+      signal: GithubRateLimitSignal(isRefusal: true),
+      answered: true
+    )
+
+    #expect(retryAt == clock.value.addingTimeInterval(240))
+  }
+
+  @Test func retryTimesStreamFollowsTheGate() async throws {
+    let clock = LockIsolated(Date(timeIntervalSince1970: 1_000_000))
+    let gate = GithubRateLimitGate(now: { clock.value }, jitter: { 0 })
+    var iterator = await gate.retryTimes().makeAsyncIterator()
+    #expect(await iterator.next() == .some(nil))
+
+    let retryAt = await gate.record(
+      try await gate.admit(),
+      signal: GithubRateLimitSignal(isRefusal: true),
+      answered: true
+    )
+    #expect(await iterator.next() == .some(retryAt))
+
+    clock.withValue { $0.addTimeInterval(60) }
+    _ = await gate.record(try await gate.admit(), signal: nil, answered: true)
+    #expect(await iterator.next() == .some(nil))
+  }
+
   @Test func abandonedProbePassesToTheNextRequest() async throws {
     let clock = LockIsolated(Date(timeIntervalSince1970: 1_000_000))
     let gate = GithubRateLimitGate(now: { clock.value }, jitter: { 0 })
-    _ = await gate.record(try await gate.admit(), signal: GithubRateLimitSignal(isRefusal: true))
+    _ = await gate.record(try await gate.admit(), signal: GithubRateLimitSignal(isRefusal: true), answered: true)
     clock.withValue { $0.addTimeInterval(60) }
     let probe = try await gate.admit()
 
@@ -293,7 +384,7 @@ struct GithubRateLimitedClientTests {
   @Test func versionCheckRunsWhileRateLimited() async throws {
     let clock = LockIsolated(Date(timeIntervalSince1970: 1_000_000))
     let gate = GithubRateLimitGate(now: { clock.value }, jitter: { 0 })
-    _ = await gate.record(try await gate.admit(), signal: GithubRateLimitSignal(isRefusal: true))
+    _ = await gate.record(try await gate.admit(), signal: GithubRateLimitSignal(isRefusal: true), answered: true)
     let launches = LockIsolated(0)
     let client = GithubCLIClient.live(
       shell: fakeGh(launches: launches) { _ in ShellOutput(stdout: "gh version 2.102.0", stderr: "", exitCode: 0) },

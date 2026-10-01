@@ -193,6 +193,7 @@ struct GithubCLIClient: Sendable {
   var isAvailable: @Sendable () async -> Bool
   var authStatusSnapshot: @Sendable () async throws -> GithubAuthStatusSnapshot
   var authStatus: @Sendable () async throws -> GithubAuthStatus?
+  var rateLimitRetryTimes: @Sendable () async -> AsyncStream<Date?>
 }
 
 extension GithubCLIClient: DependencyKey {
@@ -219,7 +220,8 @@ extension GithubCLIClient: DependencyKey {
       runLogs: runLogsFetcher(shell: shell, resolver: resolver, gate: gate),
       isAvailable: isAvailableFetcher(shell: shell, resolver: resolver),
       authStatusSnapshot: authStatusSnapshotFetcher(shell: shell, resolver: resolver, gate: gate),
-      authStatus: authStatusFetcher(shell: shell, resolver: resolver, gate: gate)
+      authStatus: authStatusFetcher(shell: shell, resolver: resolver, gate: gate),
+      rateLimitRetryTimes: { await gate.retryTimes() }
     )
   }
 
@@ -253,7 +255,8 @@ extension GithubCLIClient: DependencyKey {
         ]
       )
     },
-    authStatus: { GithubAuthStatus(username: "testuser", host: "github.com") }
+    authStatus: { GithubAuthStatus(username: "testuser", host: "github.com") },
+    rateLimitRetryTimes: { AsyncStream { $0.finish() } }
   )
 }
 
@@ -1341,6 +1344,10 @@ nonisolated private func runGh(
 ) async throws -> String {
   let command = (["gh"] + arguments).joined(separator: " ")
   let ticket = try await gate.admit()
+  if Task.isCancelled {
+    await gate.abandon(ticket)
+    throw CancellationError()
+  }
   let stdout: String
   do {
     stdout = try await launchGh(shell: shell, resolver: resolver, arguments: arguments, repoRoot: repoRoot)
@@ -1349,16 +1356,18 @@ nonisolated private func runGh(
       await gate.abandon(ticket)
       throw githubCLIError(from: error, command: command)
     }
-    let signal = (error as? ShellClientError).flatMap {
+    let shellError = error as? ShellClientError
+    let signal = shellError.flatMap {
       GithubRateLimitClassifier.classify(stdout: $0.stdout, stderr: $0.stderr, succeeded: false)
     }
-    if let retryAt = await gate.record(ticket, signal: signal) {
+    let answered = shellError.flatMap { GithubRateLimitClassifier.responseStatus(in: $0.stdout) } != nil
+    if let retryAt = await gate.record(ticket, signal: signal, answered: answered) {
       throw GithubCLIError.rateLimited(retryAt: retryAt)
     }
     throw githubCLIError(from: error, command: command)
   }
   let signal = GithubRateLimitClassifier.classify(stdout: stdout, stderr: "", succeeded: true)
-  if let retryAt = await gate.record(ticket, signal: signal) {
+  if let retryAt = await gate.record(ticket, signal: signal, answered: true) {
     throw GithubCLIError.rateLimited(retryAt: retryAt)
   }
   return stdout

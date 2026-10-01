@@ -78,11 +78,6 @@ final class PullRequestRefreshCoordinator {
       worktreeIDs: [Worktree.ID],
       message: String
     )
-    case rateLimited(
-      repositoryID: Repository.ID,
-      worktreeIDs: [Worktree.ID],
-      retryAt: Date
-    )
   }
 
   private let githubCLI: GithubCLIClient
@@ -253,10 +248,15 @@ final class PullRequestRefreshCoordinator {
         prsByRepo: prsByRepo,
         failedMessagesByRepo: failedMessagesByRepo
       )
-    } catch GithubCLIError.rateLimited(let retryAt) {
+    } catch let error as GithubCLIError where error.isRateLimited {
+      // A smaller query cannot fix a rate limit; the gate reports the retry time on its own.
       for request in requests {
         resultHandler(
-          .rateLimited(repositoryID: request.repositoryID, worktreeIDs: request.worktreeIDs, retryAt: retryAt)
+          .failed(
+            repositoryID: request.repositoryID,
+            worktreeIDs: request.worktreeIDs,
+            message: error.localizedDescription
+          )
         )
       }
     } catch {

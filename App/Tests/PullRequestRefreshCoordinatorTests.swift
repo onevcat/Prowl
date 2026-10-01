@@ -183,7 +183,7 @@ struct PullRequestRefreshCoordinatorTests {
     #expect(failed == ["alpha"])
   }
 
-  @Test func rateLimitedBatchSkipsFallbackAndReportsRetryTime() async throws {
+  @Test func rateLimitedBatchSkipsFallback() async throws {
     let clock = TestClock()
     let probe = CoordinatorProbe()
     let outcomes = OutcomeCollector()
@@ -204,11 +204,10 @@ struct PullRequestRefreshCoordinatorTests {
     coordinator.enqueue(request(repo: "alpha"))
     coordinator.enqueue(request(repo: "beta"))
     await advanceCoordinatorClock(clock, by: .milliseconds(250))
-    await waitUntil { await outcomes.rateLimitedRepositories().count == 2 }
+    await waitUntil { await outcomes.failedRepositories().count == 2 }
 
     #expect(await probe.legacyCalls().isEmpty)
-    #expect(Set(await outcomes.rateLimitedRepositories()) == ["alpha", "beta"])
-    #expect(await outcomes.rateLimitedRetryTimes() == [retryAt, retryAt])
+    #expect(Set(await outcomes.failedRepositories()) == ["alpha", "beta"])
   }
 
   @Test func rateLimitedRepositoryInPartialResultSkipsFallback() async throws {
@@ -851,24 +850,6 @@ actor OutcomeCollector {
     outcomes.compactMap {
       if case .refreshed(let id, _, _, _, _) = $0 {
         return id
-      }
-      return nil
-    }
-  }
-
-  func rateLimitedRepositories() -> [String] {
-    outcomes.compactMap {
-      if case .rateLimited(let id, _, _) = $0 {
-        return id
-      }
-      return nil
-    }
-  }
-
-  func rateLimitedRetryTimes() -> [Date] {
-    outcomes.compactMap {
-      if case .rateLimited(_, _, let retryAt) = $0 {
-        return retryAt
       }
       return nil
     }

@@ -32,22 +32,27 @@ run through `runLocalGh`, outside the gate.
   `RATE_LIMIT`; or on a rate-limit message in stderr of a failed command. Payload
   text, such as a pull request title, is never read. A successful answer that spends
   the last of the budget blocks until `X-RateLimit-Reset` without discarding its data.
-- **Backoff.** `Retry-After` sets the wait when present, then `X-RateLimit-Reset`.
-  Otherwise the wait starts at 60 s and doubles per consecutive refusal, with up to
-  25% added jitter, capped at 1 h.
+- **Backoff.** `Retry-After` sets the wait when present, in seconds or as an HTTP date,
+  then `X-RateLimit-Reset`. Otherwise the wait starts at 60 s and doubles per
+  consecutive refusal, timed or not, with up to 25% added jitter, capped at 1 h.
 - **Probe.** When the wait ends, exactly one request goes out. Requests arriving
-  meanwhile wait for its answer instead of racing it. An answer that is not a refusal
-  reopens the gate and resets the backoff; a refusal starts the next, longer wait. A
-  request admitted before the gate closed cannot reopen it, and a cancelled probe
-  passes the probe role on.
-- **No fallback on a refusal.** `PullRequestRefreshCoordinator` emits
-  `Outcome.rateLimited(retryAt:)` and skips the per-repository fallback; other
-  failures still fall back.
-- **Surface.** `RepositoriesFeature.State.githubRateLimitedUntil` is set by the
-  rate-limited outcome and cleared by the next refresh GitHub answers. The toolbar
-  status area shows "GitHub rate-limited, retrying at HH:MM" below a toast or running
-  workflow and above PR status; Settings → GitHub shows the same. User PR actions fail
-  with `GithubCLIError.rateLimited`, whose message is "GitHub rate-limited until HH:MM".
+  meanwhile wait for GitHub's answer to it instead of racing it, and a waiting request
+  that is cancelled leaves the queue without launching. Only an answer from GitHub
+  itself reopens the gate: gh succeeded, or its output carries an HTTP status that is
+  not a refusal. A probe that fails locally, or is cancelled, passes the probe role to
+  one waiting request. A refusal starts the next, longer wait, and a request admitted
+  before the gate closed cannot reopen it.
+- **No fallback on a refusal.** `PullRequestRefreshCoordinator` reports a rate-limited
+  batch as failed and skips the per-repository fallback; other failures still fall
+  back.
+- **Surface.** The gate publishes its retry time (`GithubCLIClient.rateLimitRetryTimes`),
+  so the UI follows the gate itself rather than inferring the limit from refresh
+  outcomes. `RepositoriesFeature` subscribes in `.task` and stores
+  `githubRateLimitedUntil`; the toolbar status area shows "GitHub rate-limited, retrying
+  at HH:MM" below a toast or running workflow and above PR status. Settings → GitHub
+  subscribes while open and reloads the account list once the limit lifts. User PR
+  actions fail with `GithubCLIError.rateLimited`, whose message is "GitHub rate-limited
+  until HH:MM".
 
 The gate is process-wide and keyed to nothing narrower: a limit on one account pauses
 requests for every account and host Prowl uses. That is the conservative reading of a
@@ -64,5 +69,6 @@ pull request's state.
 Tests: `App/Tests/GithubRateLimitTests.swift` (classifier, gate, and a fake gh that
 asserts no process starts before the retry time and that `Retry-After` is honored),
 `PullRequestRefreshCoordinatorTests.swift` (no fallback on a refusal),
-`BatchedPullRequestRefreshReducerTests.swift`, and
+`BatchedPullRequestRefreshReducerTests.swift` (the reducer follows the gate's retry
+times), and
 `WorkflowStatusCenterPresentationTests.swift` (toolbar precedence).

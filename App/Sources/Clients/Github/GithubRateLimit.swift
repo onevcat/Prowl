@@ -6,6 +6,7 @@ import Foundation
 nonisolated struct GithubRateLimitSignal: Equatable, Sendable {
   var isRefusal: Bool
   var retryAfter: Duration?
+  var retryAfterDate: Date?
   var resetAt: Date?
 }
 
@@ -14,7 +15,9 @@ nonisolated struct GithubRateLimitSignal: Equatable, Sendable {
 nonisolated enum GithubRateLimitClassifier {
   static func classify(stdout: String, stderr: String, succeeded: Bool) -> GithubRateLimitSignal? {
     let response = parseResponseHead(stdout)
-    let retryAfter = response.fields["retry-after"].flatMap(Int.init).map { Duration.seconds($0) }
+    let retryAfterField = response.fields["retry-after"]
+    let retryAfter = retryAfterField.flatMap(Int.init).map { Duration.seconds($0) }
+    let retryAfterDate = retryAfter == nil ? retryAfterField.flatMap(parseHTTPDate) : nil
     let budgetExhausted = response.fields["x-ratelimit-remaining"] == "0"
     let resetAt =
       budgetExhausted
@@ -30,17 +33,41 @@ nonisolated enum GithubRateLimitClassifier {
       isRefusal = true
     case 403:
       // A 403 is also a permission answer; GitHub marks the rate-limit kind with these.
-      isRefusal = retryAfter != nil || budgetExhausted || bodySaysLimited || stderrSaysLimited
+      isRefusal = retryAfterField != nil || budgetExhausted || bodySaysLimited || stderrSaysLimited
     default:
       isRefusal = bodySaysLimited || stderrSaysLimited
     }
     if isRefusal {
-      return GithubRateLimitSignal(isRefusal: true, retryAfter: retryAfter, resetAt: resetAt)
+      return GithubRateLimitSignal(
+        isRefusal: true,
+        retryAfter: retryAfter,
+        retryAfterDate: retryAfterDate,
+        resetAt: resetAt
+      )
     }
     if budgetExhausted {
-      return GithubRateLimitSignal(isRefusal: false, retryAfter: retryAfter, resetAt: resetAt)
+      return GithubRateLimitSignal(
+        isRefusal: false,
+        retryAfter: retryAfter,
+        retryAfterDate: retryAfterDate,
+        resetAt: resetAt
+      )
     }
     return nil
+  }
+
+  // The HTTP status gh printed with `--include`, which shows that GitHub itself answered.
+  static func responseStatus(in stdout: String) -> Int? {
+    parseResponseHead(stdout).status
+  }
+
+  // Retry-After may also be an HTTP date (RFC 9110), such as "Wed, 21 Oct 2026 07:28:00 GMT".
+  private static func parseHTTPDate(_ value: String) -> Date? {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.timeZone = TimeZone(identifier: "GMT")
+    formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+    return formatter.date(from: value)
   }
 
   private struct ResponseHead {
@@ -101,8 +128,8 @@ nonisolated enum GithubRateLimitClassifier {
 
 // One gate for every gh call that reaches GitHub. Several tools and agents share the account, and a
 // refused request can extend a secondary limit for all of them, so once GitHub refuses, Prowl sends
-// nothing until the retry time. Then exactly one request goes out as a probe; the others wait for its
-// answer instead of racing it.
+// nothing until the retry time. Then exactly one request goes out as a probe; the others wait for
+// GitHub's answer to it instead of racing it.
 actor GithubRateLimitGate {
   static let shared = GithubRateLimitGate()
 
@@ -119,11 +146,17 @@ actor GithubRateLimitGate {
     case probing(lastUntil: Date)
   }
 
+  private struct Waiter {
+    let id: UUID
+    let continuation: CheckedContinuation<Ticket, Error>
+  }
+
   private let now: @Sendable () -> Date
   private let jitter: @Sendable () -> Double
   private var phase: Phase = .open
   private var consecutiveRefusals = 0
-  private var waiters: [CheckedContinuation<Result<Ticket, GithubCLIError>, Never>] = []
+  private var waiters: [Waiter] = []
+  private var observers: [UUID: AsyncStream<Date?>.Continuation] = [:]
 
   init(
     now: @escaping @Sendable () -> Date = { Date() },
@@ -146,6 +179,19 @@ actor GithubRateLimitGate {
     waiters.count
   }
 
+  // The retry time while GitHub is refusing the account, nil while requests flow. Each subscriber
+  // receives the current value first.
+  func retryTimes() -> AsyncStream<Date?> {
+    let (stream, continuation) = AsyncStream<Date?>.makeStream(bufferingPolicy: .bufferingNewest(1))
+    let id = UUID()
+    observers[id] = continuation
+    continuation.onTermination = { _ in
+      Task { await self.removeObserver(id) }
+    }
+    continuation.yield(retryTime)
+    return stream
+  }
+
   func admit() async throws -> Ticket {
     switch phase {
     case .open:
@@ -157,19 +203,33 @@ actor GithubRateLimitGate {
       phase = .probing(lastUntil: until)
       return Ticket(isProbe: true)
     case .probing:
-      let result = await withCheckedContinuation { continuation in
-        waiters.append(continuation)
+      let id = UUID()
+      return try await withTaskCancellationHandler {
+        try await withCheckedThrowingContinuation { continuation in
+          if Task.isCancelled {
+            continuation.resume(throwing: CancellationError())
+          } else {
+            waiters.append(Waiter(id: id, continuation: continuation))
+          }
+        }
+      } onCancel: {
+        Task { await self.cancelWaiter(id) }
       }
-      return try result.get()
     }
   }
 
-  // Records what GitHub answered a ticket. Returns the retry time when the request must be reported
-  // as rate-limited, nil when its output stands.
-  func record(_ ticket: Ticket, signal: GithubRateLimitSignal?) -> Date? {
+  // Records how a ticket's request ended. `answered` means GitHub itself responded: gh succeeded, or
+  // its output carries an HTTP status. Returns the retry time when the request must be reported as
+  // rate-limited, nil when its own result stands.
+  func record(_ ticket: Ticket, signal: GithubRateLimitSignal?, answered: Bool) -> Date? {
     guard let signal else {
       if ticket.isProbe, case .probing = phase {
-        reopen()
+        if answered {
+          reopen()
+        } else {
+          // A local failure says nothing about GitHub; one more request has to find out.
+          handOffProbe()
+        }
       }
       return nil
     }
@@ -188,16 +248,51 @@ actor GithubRateLimitGate {
     }
   }
 
-  // A probe cancelled before GitHub answered settles nothing: hand the probe to a waiter, or let the
-  // next request become it.
+  // A probe cancelled before GitHub answered settles nothing.
   func abandon(_ ticket: Ticket) {
-    guard ticket.isProbe, case .probing(let lastUntil) = phase else {
+    guard ticket.isProbe, case .probing = phase else {
+      return
+    }
+    handOffProbe()
+  }
+
+  private var retryTime: Date? {
+    switch phase {
+    case .open:
+      nil
+    case .blocked(let until):
+      until
+    case .probing(let lastUntil):
+      lastUntil
+    }
+  }
+
+  private func handOffProbe() {
+    guard case .probing(let lastUntil) = phase else {
       return
     }
     if waiters.isEmpty {
       phase = .blocked(until: lastUntil)
     } else {
-      waiters.removeFirst().resume(returning: .success(Ticket(isProbe: true)))
+      waiters.removeFirst().continuation.resume(returning: Ticket(isProbe: true))
+    }
+  }
+
+  private func cancelWaiter(_ id: UUID) {
+    guard let index = waiters.firstIndex(where: { $0.id == id }) else {
+      return
+    }
+    waiters.remove(at: index).continuation.resume(throwing: CancellationError())
+  }
+
+  private func removeObserver(_ id: UUID) {
+    observers.removeValue(forKey: id)
+  }
+
+  private func publish() {
+    let value = retryTime
+    for observer in observers.values {
+      observer.yield(value)
     }
   }
 
@@ -207,29 +302,35 @@ actor GithubRateLimitGate {
     let admitted = waiters
     waiters.removeAll()
     for waiter in admitted {
-      waiter.resume(returning: .success(Ticket(isProbe: false)))
+      waiter.continuation.resume(returning: Ticket(isProbe: false))
     }
+    publish()
   }
 
   private func block(for signal: GithubRateLimitSignal) -> Date {
     let current = now()
+    if signal.isRefusal {
+      consecutiveRefusals += 1
+    }
     let until: Date
     if let retryAfter = signal.retryAfter {
       until = current.addingTimeInterval(retryAfter.timeInterval)
+    } else if let retryAfterDate = signal.retryAfterDate, retryAfterDate > current {
+      until = retryAfterDate
     } else if let resetAt = signal.resetAt, resetAt > current {
       until = resetAt
     } else {
-      consecutiveRefusals += 1
       until = current.addingTimeInterval(
-        Self.backoff(afterRefusals: consecutiveRefusals, jitter: jitter()).timeInterval
+        Self.backoff(afterRefusals: max(consecutiveRefusals, 1), jitter: jitter()).timeInterval
       )
     }
     phase = .blocked(until: until)
     let refused = waiters
     waiters.removeAll()
     for waiter in refused {
-      waiter.resume(returning: .failure(.rateLimited(retryAt: until)))
+      waiter.continuation.resume(throwing: GithubCLIError.rateLimited(retryAt: until))
     }
+    publish()
     return until
   }
 }
