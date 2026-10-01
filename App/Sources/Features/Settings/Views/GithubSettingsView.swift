@@ -9,6 +9,7 @@ final class GithubSettingsViewModel {
     case outdated
     case notAuthenticated
     case authenticated(GithubAuthStatusSnapshot)
+    case rateLimited(retryAt: Date)
     case error(String)
   }
 
@@ -43,6 +44,8 @@ final class GithubSettingsViewModel {
         state = .unavailable
       case .commandFailed(let message):
         state = .error(message)
+      case .rateLimited(let retryAt):
+        state = .rateLimited(retryAt: retryAt)
       }
     } catch {
       state = .error(error.localizedDescription)
@@ -126,6 +129,23 @@ struct GithubSettingsView: View {
                   .font(.body)
                 }
               }
+            }
+
+          case .rateLimited(let retryAt):
+            VStack(alignment: .leading, spacing: 8) {
+              Label(
+                "GitHub rate-limited, retrying at \(retryAt, format: .dateTime.hour().minute())",
+                systemImage: "exclamationmark.triangle"
+              )
+              .foregroundStyle(.orange)
+              Text(
+                """
+                GitHub refused requests for this account's rate limit. Prowl sends none until the retry time, \
+                so other tools on the account keep working.
+                """
+              )
+              .foregroundStyle(.secondary)
+              .font(.callout)
             }
 
           case .error(let message):

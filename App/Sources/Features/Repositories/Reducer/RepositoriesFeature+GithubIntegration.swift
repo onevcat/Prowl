@@ -713,6 +713,7 @@ extension RepositoriesFeature {
         )
       }
       state.githubIntegrationAvailability = .disabled
+      state.githubRateLimitedUntil = nil
       state.pendingPullRequestRefreshByRepositoryID.removeAll()
       state.queuedPullRequestRefreshByRepositoryID.removeAll()
       state.inFlightPullRequestRefreshRepositoryIDs.removeAll()
@@ -745,6 +746,7 @@ extension RepositoriesFeature {
   ) -> Effect<Action> {
     switch outcome {
     case .refreshed(let repositoryID, _, let worktreeIDs, let prsByBranch, let confirmedNoPrBranches):
+      state.githubRateLimitedUntil = nil
       guard let repository = state.repositories[id: repositoryID] else {
         state.inFlightPullRequestRefreshRepositoryIDs.remove(repositoryID)
         clearPullRequestRefreshTracking(repositoryID: repositoryID, state: &state)
@@ -789,40 +791,53 @@ extension RepositoriesFeature {
         ),
         .send(.githubIntegration(.repositoryPullRequestRefreshCompleted(repositoryID)))
       )
+    case .rateLimited(let repositoryID, let worktreeIDs, let retryAt):
+      state.githubRateLimitedUntil = retryAt
+      return reduceFailedBatch(repositoryID: repositoryID, worktreeIDs: worktreeIDs, state: &state)
     case .failed(let repositoryID, let worktreeIDs, _):
-      state.prRefreshFailedBatchRepositoryIDs.insert(repositoryID)
-      guard consumePullRequestRefreshBatch(repositoryID: repositoryID, state: &state) else {
-        return .none
-      }
-      let mergedPRsByBranch =
-        state.prRefreshResultsByRepositoryID.removeValue(
-          forKey: repositoryID
-        ) ?? [:]
-      state.prRefreshFailedBatchRepositoryIDs.remove(repositoryID)
-      _ = state.prRefreshNoPrBranchesByID.removeValue(forKey: repositoryID)
-      state.prRefreshResultPrioritiesByRepositoryID.removeValue(forKey: repositoryID)
-      guard !mergedPRsByBranch.isEmpty,
-        let repository = state.repositories[id: repositoryID]
-      else {
-        return .send(.githubIntegration(.repositoryPullRequestRefreshCompleted(repositoryID)))
-      }
-      return .merge(
-        .send(
-          .githubIntegration(
-            .repositoryPullRequestsLoaded(
-              repositoryID: repositoryID,
-              pullRequestsByWorktreeID: pullRequestsByWorktreeID(
-                repository: repository,
-                worktreeIDs: worktreeIDs,
-                prsByBranch: mergedPRsByBranch,
-                confirmedNoPrBranches: []
-              )
+      return reduceFailedBatch(repositoryID: repositoryID, worktreeIDs: worktreeIDs, state: &state)
+    }
+  }
+
+  // A failed batch leaves branch status unknown, so it keeps the pull requests other hosts returned
+  // and confirms no branch as having none.
+  private func reduceFailedBatch(
+    repositoryID: Repository.ID,
+    worktreeIDs: [Worktree.ID],
+    state: inout State
+  ) -> Effect<Action> {
+    state.prRefreshFailedBatchRepositoryIDs.insert(repositoryID)
+    guard consumePullRequestRefreshBatch(repositoryID: repositoryID, state: &state) else {
+      return .none
+    }
+    let mergedPRsByBranch =
+      state.prRefreshResultsByRepositoryID.removeValue(
+        forKey: repositoryID
+      ) ?? [:]
+    state.prRefreshFailedBatchRepositoryIDs.remove(repositoryID)
+    _ = state.prRefreshNoPrBranchesByID.removeValue(forKey: repositoryID)
+    state.prRefreshResultPrioritiesByRepositoryID.removeValue(forKey: repositoryID)
+    guard !mergedPRsByBranch.isEmpty,
+      let repository = state.repositories[id: repositoryID]
+    else {
+      return .send(.githubIntegration(.repositoryPullRequestRefreshCompleted(repositoryID)))
+    }
+    return .merge(
+      .send(
+        .githubIntegration(
+          .repositoryPullRequestsLoaded(
+            repositoryID: repositoryID,
+            pullRequestsByWorktreeID: pullRequestsByWorktreeID(
+              repository: repository,
+              worktreeIDs: worktreeIDs,
+              prsByBranch: mergedPRsByBranch,
+              confirmedNoPrBranches: []
             )
           )
-        ),
-        .send(.githubIntegration(.repositoryPullRequestRefreshCompleted(repositoryID)))
-      )
-    }
+        )
+      ),
+      .send(.githubIntegration(.repositoryPullRequestRefreshCompleted(repositoryID)))
+    )
   }
 
   private func mergePullRequestRefreshResults(

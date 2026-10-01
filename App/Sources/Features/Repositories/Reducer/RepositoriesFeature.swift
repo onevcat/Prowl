@@ -348,6 +348,9 @@ struct RepositoriesFeature {
     var statusToast: StatusToast?
     var snapshotPersistencePhase: SnapshotPersistencePhase = .idle
     var githubIntegrationAvailability: GithubIntegrationAvailability = .unknown
+    /// When GitHub last refused a pull request refresh for the account's rate limit, the time Prowl
+    /// sends its next request. Cleared by the next refresh GitHub answers.
+    var githubRateLimitedUntil: Date?
     var pendingPullRequestRefreshByRepositoryID: [Repository.ID: PendingPullRequestRefresh] = [:]
     var inFlightPullRequestRefreshRepositoryIDs: Set<Repository.ID> = []
     var prRefreshBatchCountsByRepositoryID: [Repository.ID: Int] = [:]

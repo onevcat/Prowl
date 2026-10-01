@@ -387,6 +387,60 @@ struct BatchedPullRequestRefreshReducerTests {
     await store.finish()
   }
 
+  @Test func coordinatorOutcomeRateLimitedRecordsRetryTimeAndKeepsPullRequests() async {
+    let context = makeContext()
+    var initialState = context.state
+    initialState.inFlightPullRequestRefreshRepositoryIDs = [context.repository.id]
+    let retryAt = Date(timeIntervalSince1970: 1_000_060)
+
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.pullRequestRefreshCoordinator = .unimplemented
+    }
+
+    let outcome = PullRequestRefreshCoordinator.Outcome.rateLimited(
+      repositoryID: context.repository.id,
+      worktreeIDs: context.worktreeIDs,
+      retryAt: retryAt
+    )
+
+    await store.send(.githubIntegration(.pullRequestRefreshBatchOutcome(outcome))) {
+      $0.githubRateLimitedUntil = retryAt
+    }
+    await store.receive(\.githubIntegration.repositoryPullRequestRefreshCompleted) {
+      $0.inFlightPullRequestRefreshRepositoryIDs = []
+    }
+    await store.finish()
+  }
+
+  @Test func coordinatorOutcomeRefreshedClearsRateLimit() async {
+    let context = makeContext()
+    var initialState = context.state
+    initialState.inFlightPullRequestRefreshRepositoryIDs = [context.repository.id]
+    initialState.githubRateLimitedUntil = Date(timeIntervalSince1970: 1_000_060)
+
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.pullRequestRefreshCoordinator = .unimplemented
+    }
+
+    let outcome = PullRequestRefreshCoordinator.Outcome.refreshed(
+      repositoryID: context.repository.id,
+      repositoryRootURL: context.repoRootURL,
+      worktreeIDs: context.worktreeIDs,
+      prsByBranch: [:],
+      confirmedNoPrBranches: []
+    )
+
+    await store.send(.githubIntegration(.pullRequestRefreshBatchOutcome(outcome))) {
+      $0.githubRateLimitedUntil = nil
+    }
+    await store.skipReceivedActions()
+    await store.finish()
+  }
+
   @Test func coordinatorOutcomeConfirmedNoPrClearsStalePullRequest() async {
     let context = makeContext()
     let stalePullRequest = makePullRequestFixture(url: "https://github.com/khoi/alpha/pull/7")

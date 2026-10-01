@@ -302,7 +302,7 @@ struct GithubCLIClientTests {
       switch error {
       case .commandFailed:
         break
-      case .outdated, .unavailable:
+      case .outdated, .unavailable, .rateLimited:
         Issue.record("Unexpected GithubCLIError: \(error.localizedDescription)")
       }
     } catch {
@@ -611,7 +611,7 @@ struct GithubCLIClientTests {
       switch error {
       case .commandFailed:
         break
-      case .outdated, .unavailable:
+      case .outdated, .unavailable, .rateLimited:
         Issue.record("Unexpected GithubCLIError: \(error.localizedDescription)")
       }
     } catch {
