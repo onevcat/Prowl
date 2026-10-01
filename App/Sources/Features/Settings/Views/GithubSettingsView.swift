@@ -57,6 +57,13 @@ final class GithubSettingsViewModel {
       case .commandFailed(let message):
         state = .error(message)
       case .rateLimited(let retryAt):
+        // The gate may have reopened while this load was in flight, after the observer already
+        // saw the recovery; its current state decides between reloading and waiting for it.
+        var gateState = await githubCLI.rateLimitRetryTimes().makeAsyncIterator()
+        if case .some(.none) = await gateState.next() {
+          await load()
+          return
+        }
         state = .rateLimited(retryAt: retryAt)
       }
     } catch {

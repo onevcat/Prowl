@@ -416,3 +416,68 @@ private func fakeGh(
     }
   )
 }
+
+@MainActor
+struct GithubSettingsRateLimitTests {
+  nonisolated static let snapshot = GithubAuthStatusSnapshot(
+    hosts: [
+      "github.com": [
+        GithubAuthAccountStatus(
+          host: "github.com",
+          login: "octo",
+          active: true,
+          state: "success",
+          gitProtocol: "ssh",
+          scopes: nil,
+          tokenSource: nil
+        )
+      ]
+    ]
+  )
+
+  @Test func loadRefusedWhileTheGateReopensLoadsAgain() async {
+    let calls = LockIsolated(0)
+    let viewModel = withDependencies {
+      $0.githubIntegration.isAvailable = { true }
+      $0.githubCLI.authStatusSnapshot = {
+        let call = calls.withValue { count -> Int in
+          count += 1
+          return count
+        }
+        if call == 1 {
+          throw GithubCLIError.rateLimited(retryAt: Date(timeIntervalSince1970: 1_000_060))
+        }
+        return Self.snapshot
+      }
+      // The gate already reopened by the time the refusal arrives.
+      $0.githubCLI.rateLimitRetryTimes = { AsyncStream { $0.yield(nil) } }
+    } operation: {
+      GithubSettingsViewModel()
+    }
+
+    await viewModel.load()
+
+    #expect(calls.value == 2)
+    #expect(viewModel.state == .authenticated(Self.snapshot))
+  }
+
+  @Test func loadRefusedWhileTheGateIsClosedShowsTheRetryTime() async {
+    let retryAt = Date(timeIntervalSince1970: 1_000_060)
+    let calls = LockIsolated(0)
+    let viewModel = withDependencies {
+      $0.githubIntegration.isAvailable = { true }
+      $0.githubCLI.authStatusSnapshot = {
+        calls.withValue { $0 += 1 }
+        throw GithubCLIError.rateLimited(retryAt: retryAt)
+      }
+      $0.githubCLI.rateLimitRetryTimes = { AsyncStream { $0.yield(retryAt) } }
+    } operation: {
+      GithubSettingsViewModel()
+    }
+
+    await viewModel.load()
+
+    #expect(calls.value == 1)
+    #expect(viewModel.state == .rateLimited(retryAt: retryAt))
+  }
+}
