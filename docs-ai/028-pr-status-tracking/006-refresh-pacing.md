@@ -26,9 +26,10 @@ once it arrives. This amendment reduces the load that provokes one.
   `max(unfocusedInterval, unfocusedIntervalPerWorktree × tracked worktrees)`, defaults
   60 s and 2 s. All repositories still fire together so the coordinator folds them into
   one query per host; the interval keeps that query's cost per hour flat as it grows.
-  Each timer reads the interval again after it fires, so a change in the worktree count
-  never restarts an unchanged repository's timer. The focused repository keeps its 30 s
-  interval.
+  Each timer reads the interval again after it fires, so a longer interval never restarts
+  an unchanged repository's timer. A shorter one brings the refresh forward to when the
+  shorter interval, counted from the start of the current wait, would have fired. The
+  focused repository keeps its 30 s interval.
 - **One query at a time, each paced.** The coordinator sends one query per call: it
   splits a batch into groups of at most 15 repositories and the fallback into groups of
   at most 25 branches, and waits `minimumQueryGap` (15 s) before every query after the

@@ -43,9 +43,14 @@ final class WorktreeInfoWatcherManager {
     let task: Task<Void, Never>
   }
 
+  // Times are offsets on the manager's clock, so a shorter interval can be measured against the
+  // sleep already under way.
   private struct PullRequestRefreshTask {
+    let id: UUID
     let isFocused: Bool
     let task: Task<Void, Never>
+    var sleepStartedAt: Duration
+    var fireTime: Duration
   }
 
   private struct PullRequestSelectionCooldownTask {
@@ -103,6 +108,7 @@ final class WorktreeInfoWatcherManager {
   private let worktreeRegistryMonitorFactory: WorktreeRegistryMonitorFactory
   private let remoteConfigMonitorFactory: RemoteConfigMonitorFactory
   private let sleep: @Sendable (Duration) async throws -> Void
+  private let elapsed: @Sendable () -> Duration
   private var worktrees: [Worktree.ID: Worktree] = [:]
   private var headWatchers: [Worktree.ID: HeadWatcher] = [:]
   private var worktreeFileEventMonitors: [Worktree.ID: WorktreeFileEventMonitoring] = [:]
@@ -172,6 +178,8 @@ final class WorktreeInfoWatcherManager {
     self.sleep = { duration in
       try await clock.sleep(for: duration)
     }
+    let origin = clock.now
+    self.elapsed = { origin.duration(to: clock.now) }
     branchChangedDebouncer = KeyedDebouncer(interval: .milliseconds(200), clock: clock)
     repositoryWorktreesDebouncer = KeyedDebouncer(interval: repositoryWorktreesEventDebounceInterval, clock: clock)
     remoteConfigDebouncer = KeyedDebouncer(interval: remoteConfigEventDebounceInterval, clock: clock)
@@ -522,40 +530,73 @@ final class WorktreeInfoWatcherManager {
     }
     let isFocused = selectedWorktreeID.map { worktreeIDs.contains($0) } ?? false
     let interval = pullRequestInterval(isFocused: isFocused)
-    // A running timer reads the interval again after each refresh, so a change in the worktree
-    // count needs no restart; restarting would push an unchanged repository's next refresh back
-    // every time a worktree appears elsewhere.
     if let existing = pullRequestTasks[repositoryRootURL], existing.isFocused == isFocused, !immediate {
+      // A running timer reads the interval again after each refresh, so a longer interval needs no
+      // restart; restarting would push an unchanged repository's refresh back every time a
+      // worktree appears elsewhere. A shorter one brings the refresh forward to when the shorter
+      // interval, counted from the same start, would have fired.
+      let shortenedFireTime = existing.sleepStartedAt + interval
+      guard shortenedFireTime < existing.fireTime else {
+        return
+      }
+      let remaining = shortenedFireTime - elapsed()
+      if remaining > .zero {
+        startPullRequestTimer(repositoryRootURL: repositoryRootURL, isFocused: isFocused, firstDelay: remaining)
+        return
+      }
+      emitPullRequestRefresh(repositoryRootURL: repositoryRootURL)
+      startPullRequestTimer(repositoryRootURL: repositoryRootURL, isFocused: isFocused, firstDelay: interval)
       return
     }
-    pullRequestTasks[repositoryRootURL]?.task.cancel()
     if immediate {
       emitPullRequestRefresh(repositoryRootURL: repositoryRootURL)
     }
-    let initialDelay = interval + pullRequestPhaseOffset(repositoryRootURL, interval)
+    let firstDelay = interval + pullRequestPhaseOffset(repositoryRootURL, interval)
+    startPullRequestTimer(repositoryRootURL: repositoryRootURL, isFocused: isFocused, firstDelay: firstDelay)
+  }
+
+  private func startPullRequestTimer(repositoryRootURL: URL, isFocused: Bool, firstDelay: Duration) {
+    pullRequestTasks[repositoryRootURL]?.task.cancel()
+    let id = UUID()
     let sleep = self.sleep
     let task = Task { [weak self, sleep] in
-      do {
-        try await sleep(initialDelay)
-      } catch {
-        return
-      }
+      var delay = firstDelay
       while !Task.isCancelled {
-        let nextInterval = await MainActor.run { () -> Duration? in
-          self?.emitPullRequestRefresh(repositoryRootURL: repositoryRootURL)
-          return self?.pullRequestInterval(isFocused: isFocused)
-        }
-        guard let nextInterval else {
-          return
-        }
         do {
-          try await sleep(nextInterval)
+          try await sleep(delay)
         } catch {
           return
         }
+        let nextDelay = await MainActor.run { () -> Duration? in
+          guard let self else { return nil }
+          self.emitPullRequestRefresh(repositoryRootURL: repositoryRootURL)
+          let next = self.pullRequestInterval(isFocused: isFocused)
+          self.recordPullRequestSleep(repositoryRootURL: repositoryRootURL, id: id, delay: next)
+          return next
+        }
+        guard let nextDelay else {
+          return
+        }
+        delay = nextDelay
       }
     }
-    pullRequestTasks[repositoryRootURL] = PullRequestRefreshTask(isFocused: isFocused, task: task)
+    let now = elapsed()
+    pullRequestTasks[repositoryRootURL] = PullRequestRefreshTask(
+      id: id,
+      isFocused: isFocused,
+      task: task,
+      sleepStartedAt: now,
+      fireTime: now + firstDelay
+    )
+  }
+
+  private func recordPullRequestSleep(repositoryRootURL: URL, id: UUID, delay: Duration) {
+    guard pullRequestTasks[repositoryRootURL]?.id == id else {
+      return
+    }
+    let now = elapsed()
+    pullRequestTasks[repositoryRootURL]?.sleepStartedAt = now
+    pullRequestTasks[repositoryRootURL]?.fireTime = now + delay
   }
 
   // Every repository's background refresh lands in one batched query per host, so its size, and
