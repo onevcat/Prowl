@@ -568,7 +568,10 @@ final class WorktreeInfoWatcherManager {
           return
         }
         let nextDelay = await MainActor.run { () -> Duration? in
-          guard let self else { return nil }
+          // A timer replaced while its sleep was ending must not refresh as well as its successor.
+          guard let self, !Task.isCancelled, self.pullRequestTasks[repositoryRootURL]?.id == id else {
+            return nil
+          }
           self.emitPullRequestRefresh(repositoryRootURL: repositoryRootURL)
           let next = self.pullRequestInterval(isFocused: isFocused)
           self.recordPullRequestSleep(repositoryRootURL: repositoryRootURL, id: id, delay: next)
