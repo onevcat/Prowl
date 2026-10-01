@@ -215,7 +215,7 @@ struct GithubCLIClientTests {
       ])
   }
 
-  @Test func batchPullRequestsCapsConcurrencyAtThree() async throws {
+  @Test func batchPullRequestsRunsChunksOneAtATime() async throws {
     let probe = GithubBatchShellProbe()
     let shell = ShellClient(
       run: { executableURL, arguments, _ in
@@ -250,7 +250,7 @@ struct GithubCLIClientTests {
 
     let snapshot = await probe.snapshot()
     #expect(snapshot.ghCallCount == 4)
-    #expect(snapshot.maxInFlight == 3)
+    #expect(snapshot.maxInFlight == 1)
     #expect(snapshot.whichCallCount == 1)
     #expect(snapshot.loginCallCount == 4)
   }
@@ -509,7 +509,7 @@ struct GithubCLIClientTests {
     #expect(result.failedRepos.isEmpty)
   }
 
-  @Test func batchAcrossRepositoriesCapsConcurrencyAtThree() async throws {
+  @Test func batchAcrossRepositoriesRunsChunksOneAtATime() async throws {
     let probe = GithubBatchShellProbe()
     let shell = makeBatchAcrossShellMock(probe: probe) { arguments in
       try await ContinuousClock().sleep(for: .milliseconds(80))
@@ -524,7 +524,7 @@ struct GithubCLIClientTests {
 
     let snapshot = await probe.snapshot()
     #expect(snapshot.ghCallCount == 4)
-    #expect(snapshot.maxInFlight == 3)
+    #expect(snapshot.maxInFlight == 1)
   }
 
   @Test func batchAcrossRepositoriesRoutesPartialErrorsToFailedRepos() async throws {

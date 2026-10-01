@@ -83,6 +83,7 @@ final class PullRequestRefreshCoordinator {
   private let githubCLI: GithubCLIClient
   private let clock: any Clock<Duration>
   private let softTimeout: Duration
+  private let minimumBatchGap: Duration
   private let resultHandler: @MainActor (Outcome) -> Void
 
   private nonisolated struct BatchKey: Hashable, Sendable {
@@ -94,17 +95,22 @@ final class PullRequestRefreshCoordinator {
   private let flushDebouncer: KeyedDebouncer<BatchKey>
   private var inflightHosts: Set<BatchKey> = []
   private var queuedByHost: [BatchKey: [Repository.ID: Request]] = [:]
+  // Advanced by reset and cancelHost, so a batch that finishes its gap after either one does not
+  // release state that now belongs to a newer batch.
+  private var generation = 0
 
   init(
     githubCLI: GithubCLIClient,
     clock: any Clock<Duration>,
     debounceWindow: Duration = .milliseconds(250),
     softTimeout: Duration = .seconds(12),
+    minimumBatchGap: Duration = .seconds(15),
     resultHandler: @MainActor @escaping (Outcome) -> Void
   ) {
     self.githubCLI = githubCLI
     self.clock = clock
     self.softTimeout = softTimeout
+    self.minimumBatchGap = minimumBatchGap
     self.resultHandler = resultHandler
     flushDebouncer = KeyedDebouncer(interval: debounceWindow, clock: clock)
   }
@@ -143,6 +149,7 @@ final class PullRequestRefreshCoordinator {
   }
 
   func cancelHost(_ host: String) {
+    generation += 1
     flushDebouncer.cancelAll { $0.host == host }
     pendingByHost = pendingByHost.filter { $0.key.host != host }
     queuedByHost = queuedByHost.filter { $0.key.host != host }
@@ -150,6 +157,7 @@ final class PullRequestRefreshCoordinator {
   }
 
   func reset() {
+    generation += 1
     flushDebouncer.cancelAll()
     pendingByHost.removeAll()
     queuedByHost.removeAll()
@@ -205,8 +213,17 @@ final class PullRequestRefreshCoordinator {
       return
     }
     inflightHosts.insert(key)
+    let startedGeneration = generation
     let requests = Array(bucket.values)
     await processBatch(key: key, requests: requests)
+    // Requests that arrive during the gap merge into the next batch instead of starting their own,
+    // so a burst of new worktrees costs one query rather than one each.
+    if minimumBatchGap > .zero {
+      try? await clock.sleep(for: minimumBatchGap)
+    }
+    guard generation == startedGeneration else {
+      return
+    }
     inflightHosts.remove(key)
     if let queued = queuedByHost.removeValue(forKey: key), !queued.isEmpty {
       pendingByHost[key, default: [:]].merge(queued) { _, new in new }
@@ -260,37 +277,24 @@ final class PullRequestRefreshCoordinator {
     key: BatchKey,
     groups: [RepoRequestGroup]
   ) async -> RepoFetchResults {
-    // Run per-repo fallback requests concurrently; serial awaits here would multiply
-    // a slow recovery path by the number of repos in the batch.
-    await withTaskGroup(of: RepoFetchOutcome.self) { taskGroup in
-      let githubCLI = self.githubCLI
-      for repoGroup in groups {
-        taskGroup.addTask {
-          do {
-            let prs = try await githubCLI.batchPullRequests(
-              key.host,
-              repoGroup.key.owner,
-              repoGroup.key.repo,
-              repoGroup.branches,
-              key.accountOverride
-            )
-            return .success(repoGroup.key, prs)
-          } catch {
-            return .failed(repoGroup.key, String(describing: error))
-          }
-        }
+    // One repository at a time: the fallback runs after a failed batch, which is exactly when a
+    // burst of parallel queries does the most harm to an account other tools share.
+    var results = RepoFetchResults()
+    for repoGroup in groups {
+      do {
+        let prs = try await githubCLI.batchPullRequests(
+          key.host,
+          repoGroup.key.owner,
+          repoGroup.key.repo,
+          repoGroup.branches,
+          key.accountOverride
+        )
+        results.successByRepo[repoGroup.key] = prs
+      } catch {
+        results.failedMessagesByRepo[repoGroup.key] = String(describing: error)
       }
-      var results = RepoFetchResults()
-      for await outcome in taskGroup {
-        switch outcome {
-        case .success(let repoKey, let prsByBranch):
-          results.successByRepo[repoKey] = prsByBranch
-        case .failed(let repoKey, let message):
-          results.failedMessagesByRepo[repoKey] = message
-        }
-      }
-      return results
     }
+    return results
   }
 
   private func runBatchWithTimeout(
@@ -306,8 +310,10 @@ final class PullRequestRefreshCoordinator {
         let value = try await githubCLI.batchPullRequestsAcrossRepositories(host, requests, accountOverride)
         return .completed(value)
       }
+      // Chunks run one at a time, so the deadline grows with the number of chunks.
+      let chunkCount = max(1, (requests.count + crossRepoBatchAliasLimit - 1) / crossRepoBatchAliasLimit)
       group.addTask {
-        try await clock.sleep(for: softTimeout)
+        try await clock.sleep(for: softTimeout * chunkCount)
         return .timedOut
       }
       defer { group.cancelAll() }
@@ -438,10 +444,6 @@ final class PullRequestRefreshCoordinator {
     var failedMessagesByRepo: [RepoKey: String] = [:]
   }
 
-  private enum RepoFetchOutcome: Sendable {
-    case success(RepoKey, [String: GithubPullRequest])
-    case failed(RepoKey, String)
-  }
 }
 
 enum PullRequestRefreshCoordinatorError: Error, Equatable {

@@ -183,6 +183,70 @@ struct PullRequestRefreshCoordinatorTests {
     #expect(failed == ["alpha"])
   }
 
+  @Test func requestsArrivingWithinTheGapMergeIntoOneLaterBatch() async throws {
+    let clock = TestClock()
+    let probe = CoordinatorProbe()
+    let outcomes = OutcomeCollector()
+    let coordinator = makeCoordinator(
+      probe: probe,
+      clock: clock,
+      outcomes: outcomes,
+      minimumBatchGap: .seconds(15),
+      batched: { _, requests in successResult(for: requests) }
+    )
+
+    coordinator.enqueue(request(repo: "alpha"))
+    await advanceCoordinatorClock(clock, by: .milliseconds(250))
+    await waitUntil { await probe.batchedCalls().count == 1 }
+
+    // A burst of new worktrees across repositories, each arriving on its own.
+    for repo in ["beta", "gamma", "delta"] {
+      coordinator.enqueue(request(repo: repo))
+      await advanceCoordinatorClock(clock, by: .seconds(1))
+    }
+    #expect(await probe.batchedCalls().count == 1)
+
+    await advanceCoordinatorClock(clock, by: .seconds(12))
+    await waitUntil { await probe.batchedCalls().count == 2 }
+    let calls = await probe.batchedCalls()
+    #expect(calls.count == 2)
+    #expect(Set(calls[1].requests.map(\.repo)) == ["beta", "gamma", "delta"])
+  }
+
+  @Test func fallbackQueriesOneRepositoryAtATime() async throws {
+    let clock = TestClock()
+    let probe = CoordinatorProbe()
+    let outcomes = OutcomeCollector()
+    let release = AsyncStreamFlag()
+    let coordinator = makeCoordinator(
+      probe: probe,
+      clock: clock,
+      outcomes: outcomes,
+      batched: { _, _ in
+        throw GithubCLIError.commandFailed("network down")
+      },
+      legacy: { _, _, _, _ in
+        // The first query holds until released; a parallel fallback would start the second meanwhile.
+        await release.wait()
+        return [:]
+      }
+    )
+
+    coordinator.enqueue(request(repo: "alpha"))
+    coordinator.enqueue(request(repo: "beta"))
+    await advanceCoordinatorClock(clock, by: .milliseconds(250))
+    await waitUntil { await probe.legacyCalls().count == 1 }
+    for _ in 0..<50 {
+      await Task.yield()
+    }
+    let whileFirstRuns = await probe.legacyCalls()
+
+    await release.signal()
+    await waitUntil { await probe.legacyCalls().count == 2 }
+
+    #expect(whileFirstRuns.count == 1)
+  }
+
   @Test func inflightHostBuffersNewEnqueueAndFlushesAfterCompletion() async throws {
     let clock = TestClock()
     let probe = CoordinatorProbe()
@@ -632,6 +696,7 @@ private func makeCoordinator(
   outcomes: OutcomeCollector,
   debounce: Duration = .milliseconds(250),
   softTimeout: Duration = .seconds(6),
+  minimumBatchGap: Duration = .zero,
   batched:
     @escaping @Sendable (String, [CrossRepoPullRequestRequest]) async throws ->
     CrossRepoPullRequestResult,
@@ -652,7 +717,8 @@ private func makeCoordinator(
     githubCLI: client,
     clock: clock,
     debounceWindow: debounce,
-    softTimeout: softTimeout
+    softTimeout: softTimeout,
+    minimumBatchGap: minimumBatchGap
   ) { outcome in
     Task { await outcomes.record(outcome) }
   }

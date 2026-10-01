@@ -99,3 +99,6 @@ As of the anchor wave (reconstructed from #256/#305/#366/#379 PR descriptions):
   [003-status-fidelity-and-refresh-cadence.md](003-status-fidelity-and-refresh-cadence.md)
 - Updated 2026-07-08: flicker elimination and explicit no-PR semantics (#533 → #538 →
   #539) — see [004-flicker-and-no-pr-semantics.md](004-flicker-and-no-pr-semantics.md)
+- Updated 2026-10-02: refresh only repositories whose worktrees changed, scale the
+  background sweep with the worktree count, and run one query at a time with a minimum
+  gap — see [006-refresh-pacing.md](006-refresh-pacing.md)
