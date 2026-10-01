@@ -33,6 +33,9 @@ GitHub remote, stale PR badges are cleared.
 - Review decision (approved / changes requested / pending).
 - **CI status:** a rollup of all checks (success / failure / in-progress /
   expected / skipped) with failing/success counts and per-check detail URLs.
+  Every worktree's pull request carries the counts; the selected worktree's
+  also lists each check with its URL. Hovering the PR tag of another worktree
+  shows the counts and asks you to select that worktree to list each check.
 - **Merge readiness:** Prowl evaluates blockers in order — merge conflicts,
   changes requested, failed checks, other non-mergeable states.
 - **Merge queue:** for repos that use GitHub merge queues, an open PR waiting in

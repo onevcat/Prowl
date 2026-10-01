@@ -148,17 +148,21 @@ nonisolated struct CrossRepoPullRequestRequest: Sendable, Hashable {
   let repo: String
   let branches: [String]
   let allowedHeadRepositories: Set<RepoKey>
+  /// Branches whose pull request also lists each check, not only the per-state counts.
+  let detailBranches: Set<String>
 
   init(
     owner: String,
     repo: String,
     branches: [String],
-    allowedHeadRepositories: Set<RepoKey>? = nil
+    allowedHeadRepositories: Set<RepoKey>? = nil,
+    detailBranches: Set<String> = []
   ) {
     self.owner = owner
     self.repo = repo
     self.branches = branches
     self.allowedHeadRepositories = allowedHeadRepositories ?? [RepoKey(owner: owner, repo: repo)]
+    self.detailBranches = detailBranches
   }
 
   var key: RepoKey {

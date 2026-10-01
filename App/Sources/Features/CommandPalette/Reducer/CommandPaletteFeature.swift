@@ -857,7 +857,7 @@ private func pullRequestItems(
 ) -> [CommandPaletteItem] {
   let isOpen = pullRequest.state.uppercased() == "OPEN"
   let mergeReadiness = PullRequestMergeReadiness(pullRequest: pullRequest)
-  let breakdown = PullRequestCheckBreakdown(checks: pullRequest.statusCheckRollup?.checks ?? [])
+  let breakdown = pullRequest.checkBreakdown
   let canMerge = isOpen && !pullRequest.isDraft && !mergeReadiness.isBlocking
 
   var items: [CommandPaletteItem] = [
@@ -936,7 +936,7 @@ private func makeFailingPullRequestItems(
 ) -> [CommandPaletteItem] {
   let isOpen = pullRequest.state.uppercased() == "OPEN"
   let checks = pullRequest.statusCheckRollup?.checks ?? []
-  let hasFailingChecks = PullRequestCheckBreakdown(checks: checks).failed > 0
+  let hasFailingChecks = pullRequest.checkBreakdown.failed > 0
   guard isOpen && hasFailingChecks else { return [] }
   let hasFailingCheckWithDetails = checks.contains { $0.checkState == .failure && $0.detailsUrl != nil }
   let leadingTier = pullRequest.isDraft ? 1 : 0

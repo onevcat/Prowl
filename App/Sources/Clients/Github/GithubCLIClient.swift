@@ -426,7 +426,8 @@ nonisolated private func sanitizeCrossRepoRequests(
         owner: request.owner,
         repo: request.repo,
         branches: branches,
-        allowedHeadRepositories: request.allowedHeadRepositories
+        allowedHeadRepositories: request.allowedHeadRepositories,
+        detailBranches: Set(request.detailBranches.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) })
       )
     )
   }
@@ -595,54 +596,7 @@ nonisolated private func makeCrossRepoBatchQuery(
       let selection = """
           \(branchAlias): pullRequests(\(pullRequestsArgs)) {
             nodes {
-              number
-              title
-              state
-              additions
-              deletions
-              isDraft
-              reviewDecision
-              mergeable
-              mergeStateStatus
-              url
-              updatedAt
-              headRefName
-              baseRefName
-              commits {
-                totalCount
-              }
-              author {
-                login
-              }
-              headRepository {
-                name
-                owner { login }
-              }
-              mergeQueueEntry {
-                position
-                estimatedTimeToMerge
-                state
-              }
-              statusCheckRollup {
-                contexts(first: 100) {
-                  nodes {
-                    ... on CheckRun {
-                      name
-                      status
-                      conclusion
-                      startedAt
-                      completedAt
-                      detailsUrl
-                    }
-                    ... on StatusContext {
-                      context
-                      state
-                      targetUrl
-                      createdAt
-                    }
-                  }
-                }
-              }
+        \(pullRequestNodeFields(includeCheckDetails: request.detailBranches.contains(branch)))
             }
           }
         """
@@ -669,6 +623,70 @@ nonisolated private func makeCrossRepoBatchQuery(
     branchAliasesByRepo: branchAliasesByRepo,
     allowedHeadRepositoriesByRepoAlias: allowedHeadRepositoriesByRepoAlias
   )
+}
+
+// The pull request fields every refresh reads. Each check is listed only when asked for: per-state
+// counts carry the badge and merge readiness, while a list of up to 100 contexts per pull request
+// is most of what a batched query costs GitHub to resolve.
+nonisolated func pullRequestNodeFields(includeCheckDetails: Bool) -> String {
+  let checkDetails =
+    includeCheckDetails
+    ? """
+        nodes {
+          ... on CheckRun {
+            name
+            status
+            conclusion
+            startedAt
+            completedAt
+            detailsUrl
+          }
+          ... on StatusContext {
+            context
+            state
+            targetUrl
+            createdAt
+          }
+        }
+    """
+    : ""
+  return """
+    number
+    title
+    state
+    additions
+    deletions
+    isDraft
+    reviewDecision
+    mergeable
+    mergeStateStatus
+    url
+    updatedAt
+    headRefName
+    baseRefName
+    commits {
+      totalCount
+    }
+    author {
+      login
+    }
+    headRepository {
+      name
+      owner { login }
+    }
+    mergeQueueEntry {
+      position
+      estimatedTimeToMerge
+      state
+    }
+    statusCheckRollup {
+      contexts\(includeCheckDetails ? "(first: 100)" : "") {
+        checkRunCountsByState { state count }
+        statusContextCountsByState { state count }
+    \(checkDetails)
+      }
+    }
+    """
 }
 
 nonisolated private func rankCrossRepoPullRequests(
@@ -1180,54 +1198,7 @@ nonisolated private func makeBatchPullRequestsQuery(
     let selection = """
       \(alias): pullRequests(first: 5, states: [OPEN, MERGED, CLOSED], headRefName: \"\(escapedBranch)\", \(orderBy)) {
         nodes {
-          number
-          title
-          state
-          additions
-          deletions
-          isDraft
-          reviewDecision
-          mergeable
-          mergeStateStatus
-          url
-          updatedAt
-          headRefName
-          baseRefName
-          commits {
-            totalCount
-          }
-          author {
-            login
-          }
-          headRepository {
-            name
-            owner { login }
-          }
-          mergeQueueEntry {
-            position
-            estimatedTimeToMerge
-            state
-          }
-          statusCheckRollup {
-            contexts(first: 100) {
-              nodes {
-                ... on CheckRun {
-                  name
-                  status
-                  conclusion
-                  startedAt
-                  completedAt
-                  detailsUrl
-                }
-                ... on StatusContext {
-                  context
-                  state
-                  targetUrl
-                  createdAt
-                }
-              }
-            }
-          }
+      \(pullRequestNodeFields(includeCheckDetails: false))
         }
       }
       """

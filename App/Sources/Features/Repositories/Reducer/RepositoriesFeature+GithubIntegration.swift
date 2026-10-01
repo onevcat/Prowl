@@ -118,11 +118,14 @@ extension RepositoriesFeature {
           return .none
         }
         state.inFlightPullRequestRefreshRepositoryIDs.insert(repositoryID)
+        // Only the selected worktree's pull request lists each check; the rest carry counts.
+        let detailBranches = worktrees.filter { $0.id == state.selectedWorktreeID }.map(\.name)
         return enqueueBatchedPullRequestRefresh(
           repositoryID: repositoryID,
           repositoryRootURL: repositoryRootURL,
           worktrees: worktrees,
-          branches: branches
+          branches: branches,
+          detailBranches: detailBranches
         )
       case .unknown:
         queuePullRequestRefresh(
@@ -926,7 +929,8 @@ extension RepositoriesFeature {
     repositoryID: Repository.ID,
     repositoryRootURL: URL,
     worktrees: [Worktree],
-    branches: [String]
+    branches: [String],
+    detailBranches: [String] = []
   ) -> Effect<Action> {
     let worktreeIDs = worktrees.map(\.id)
     let coordinatorClient = pullRequestRefreshCoordinator
@@ -965,7 +969,8 @@ extension RepositoriesFeature {
             repositories: hostRemoteInfos,
             accountOverride: repositorySettings.githubAccountOverride,
             branches: branches,
-            worktreeIDs: worktreeIDs
+            worktreeIDs: worktreeIDs,
+            detailBranches: detailBranches
           )
         )
       }

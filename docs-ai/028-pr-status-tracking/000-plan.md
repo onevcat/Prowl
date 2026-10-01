@@ -99,3 +99,5 @@ As of the anchor wave (reconstructed from #256/#305/#366/#379 PR descriptions):
   [003-status-fidelity-and-refresh-cadence.md](003-status-fidelity-and-refresh-cadence.md)
 - Updated 2026-07-08: flicker elimination and explicit no-PR semantics (#533 → #538 →
   #539) — see [004-flicker-and-no-pr-semantics.md](004-flicker-and-no-pr-semantics.md)
+- Updated 2026-10-02: badge refreshes fetch per-state check counts, and only the selected
+  worktree's pull request lists each check — see [007-check-counts.md](007-check-counts.md)

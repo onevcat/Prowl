@@ -62,6 +62,37 @@ struct BatchedPullRequestRefreshReducerTests {
     #expect(request.branches == ["main", "feature"])
   }
 
+  @Test func refreshListsChecksOnlyForTheSelectedWorktree() async {
+    let context = makeContext()
+    var initialState = context.state
+    initialState.selection = .worktree(context.featureWorktree.id)
+    let enqueued = LockIsolated<[PullRequestRefreshCoordinator.Request]>([])
+
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.githubRemoteInfos = { _ in [context.remoteInfo] }
+      $0.pullRequestRefreshCoordinator = PullRequestRefreshCoordinatorClient(
+        enqueue: { request in enqueued.withValue { $0.append(request) } },
+        cancelHost: { _ in },
+        reset: {}
+      )
+    }
+    store.exhaustivity = .off
+
+    await store.send(
+      .worktreeInfoEvent(
+        .repositoryPullRequestRefresh(
+          repositoryRootURL: context.repoRootURL,
+          worktreeIDs: context.worktreeIDs
+        )
+      )
+    )
+    await store.finish()
+
+    #expect(enqueued.value.map(\.detailBranches) == [[context.featureWorktree.name]])
+  }
+
   @Test func refreshWaitsForAllHostBatchesBeforeCompleting() async {
     let context = makeContext()
     let enqueued = LockIsolated<[PullRequestRefreshCoordinator.Request]>([])

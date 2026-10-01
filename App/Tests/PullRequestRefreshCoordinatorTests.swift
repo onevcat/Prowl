@@ -183,6 +183,36 @@ struct PullRequestRefreshCoordinatorTests {
     #expect(failed == ["alpha"])
   }
 
+  @Test func detailBranchesReachTheBatchedQuery() async throws {
+    let clock = TestClock()
+    let probe = CoordinatorProbe()
+    let outcomes = OutcomeCollector()
+    let coordinator = makeCoordinator(
+      probe: probe, clock: clock, outcomes: outcomes,
+      batched: { _, requests in successResult(for: requests) }
+    )
+
+    coordinator.enqueue(request(repo: "alpha", branches: ["feat-1", "feat-2"]))
+    coordinator.enqueue(
+      PullRequestRefreshCoordinator.Request(
+        repositoryID: "alpha",
+        repositoryRootURL: URL(fileURLWithPath: "/tmp/alpha"),
+        host: "github.com",
+        owner: "khoi",
+        repo: "alpha",
+        accountOverride: nil,
+        branches: ["feat-2"],
+        worktreeIDs: ["alpha-wt"],
+        detailBranches: ["feat-2"]
+      )
+    )
+    await advanceCoordinatorClock(clock, by: .milliseconds(250))
+    await waitUntil { await probe.batchedCalls().count == 1 }
+
+    let call = try #require(await probe.batchedCalls().first)
+    #expect(call.requests.map(\.detailBranches) == [["feat-2"]])
+  }
+
   @Test func inflightHostBuffersNewEnqueueAndFlushesAfterCompletion() async throws {
     let clock = TestClock()
     let probe = CoordinatorProbe()
