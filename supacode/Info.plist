@@ -42,8 +42,49 @@
 	<string>$(PROWL_POSTHOG_API_KEY)</string>
 	<key>ProwlPostHogHost</key>
 	<string>$(PROWL_POSTHOG_HOST)</string>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Prowl Workflow</string>
+			<key>CFBundleTypeRole</key>
+			<string>None</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSTypeIsPackage</key>
+			<true/>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<true/>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.onevcat.prowl.workflow</string>
+			</array>
+		</dict>
+	</array>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.onevcat.prowl.workflow</string>
+			<key>UTTypeDescription</key>
+			<string>Prowl Workflow</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>com.apple.package</string>
+			</array>
+			<key>UTTypeIcons</key>
+			<dict>
+				<key>UTTypeIconText</key>
+				<string>Workflow</string>
+			</dict>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>pwlworkflow</string>
+				</array>
+			</dict>
+		</dict>
 		<dict>
 			<key>UTTypeIdentifier</key>
 			<string>com.onevcat.prowl.ghosttySurfaceId</string>
