@@ -191,7 +191,7 @@ struct PullRequestRefreshCoordinatorTests {
       probe: probe,
       clock: clock,
       outcomes: outcomes,
-      minimumBatchGap: .seconds(15),
+      minimumQueryGap: .seconds(15),
       batched: { _, requests in successResult(for: requests) }
     )
 
@@ -211,6 +211,62 @@ struct PullRequestRefreshCoordinatorTests {
     let calls = await probe.batchedCalls()
     #expect(calls.count == 2)
     #expect(Set(calls[1].requests.map(\.repo)) == ["beta", "gamma", "delta"])
+  }
+
+  @Test func batchOfManyRepositoriesSpacesEachQuery() async throws {
+    let clock = TestClock()
+    let probe = CoordinatorProbe()
+    let outcomes = OutcomeCollector()
+    let coordinator = makeCoordinator(
+      probe: probe,
+      clock: clock,
+      outcomes: outcomes,
+      minimumQueryGap: .seconds(15),
+      batched: { _, requests in successResult(for: requests) }
+    )
+
+    // Twenty repositories need two queries of at most fifteen repositories each.
+    for index in 0..<20 {
+      coordinator.enqueue(request(repo: "repo-\(index)"))
+    }
+    await advanceCoordinatorClock(clock, by: .milliseconds(250))
+    await waitUntil { await probe.batchedCalls().count == 1 }
+    await advanceCoordinatorClock(clock, by: .seconds(14))
+    #expect(await probe.batchedCalls().count == 1)
+
+    await advanceCoordinatorClock(clock, by: .seconds(1))
+    await waitUntil { await probe.batchedCalls().count == 2 }
+    let calls = await probe.batchedCalls()
+    #expect(calls.map(\.requests.count).sorted() == [5, 15])
+  }
+
+  @Test func fallbackSpacesEachQuery() async throws {
+    let clock = TestClock()
+    let probe = CoordinatorProbe()
+    let outcomes = OutcomeCollector()
+    let coordinator = makeCoordinator(
+      probe: probe,
+      clock: clock,
+      outcomes: outcomes,
+      minimumQueryGap: .seconds(15),
+      batched: { _, _ in
+        throw GithubCLIError.commandFailed("network down")
+      },
+      legacy: { _, _, _, _ in [:] }
+    )
+
+    coordinator.enqueue(request(repo: "alpha"))
+    coordinator.enqueue(request(repo: "beta"))
+    await advanceCoordinatorClock(clock, by: .milliseconds(250))
+    // The failed batch query came first, so the first fallback query waits the gap too.
+    await advanceCoordinatorClock(clock, by: .seconds(15))
+    await waitUntil { await probe.legacyCalls().count == 1 }
+    await advanceCoordinatorClock(clock, by: .seconds(14))
+    #expect(await probe.legacyCalls().count == 1)
+
+    await advanceCoordinatorClock(clock, by: .seconds(1))
+    await waitUntil { await probe.legacyCalls().count == 2 }
+    #expect(await probe.legacyCalls().count == 2)
   }
 
   @Test func fallbackQueriesOneRepositoryAtATime() async throws {
@@ -696,7 +752,7 @@ private func makeCoordinator(
   outcomes: OutcomeCollector,
   debounce: Duration = .milliseconds(250),
   softTimeout: Duration = .seconds(6),
-  minimumBatchGap: Duration = .zero,
+  minimumQueryGap: Duration = .zero,
   batched:
     @escaping @Sendable (String, [CrossRepoPullRequestRequest]) async throws ->
     CrossRepoPullRequestResult,
@@ -718,7 +774,7 @@ private func makeCoordinator(
     clock: clock,
     debounceWindow: debounce,
     softTimeout: softTimeout,
-    minimumBatchGap: minimumBatchGap
+    minimumQueryGap: minimumQueryGap
   ) { outcome in
     Task { await outcomes.record(outcome) }
   }

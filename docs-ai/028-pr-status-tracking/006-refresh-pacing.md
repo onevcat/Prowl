@@ -26,24 +26,25 @@ once it arrives. This amendment reduces the load that provokes one.
   `max(unfocusedInterval, unfocusedIntervalPerWorktree × tracked worktrees)`, defaults
   60 s and 2 s. All repositories still fire together so the coordinator folds them into
   one query per host; the interval keeps that query's cost per hour flat as it grows.
-  The focused repository keeps its 30 s interval.
-- **One query at a time.** `crossRepoBatchMaxConcurrentRequests` and
-  `batchPullRequestsMaxConcurrentRequests` are 1, and the fallback queries one
-  repository at a time. The coordinator's soft timeout scales with the number of
-  cross-repository chunks, since they now run in sequence.
-- **Minimum gap.** After a batch, `PullRequestRefreshCoordinator` holds the host key for
-  `minimumBatchGap` (15 s) before the next batch starts. Requests arriving meanwhile
-  merge into that next batch.
+  Each timer reads the interval again after it fires, so a change in the worktree count
+  never restarts an unchanged repository's timer. The focused repository keeps its 30 s
+  interval.
+- **One query at a time, each paced.** The coordinator sends one query per call: it
+  splits a batch into groups of at most 15 repositories and the fallback into groups of
+  at most 25 branches, and waits `minimumQueryGap` (15 s) before every query after the
+  first. After a batch it holds the host key for the same gap, and requests arriving
+  meanwhile merge into the next batch. The client's own chunk concurrency is 1 as well.
 
 Worst case for 50 worktrees across about 10 repositories on one host: one background
 sweep every 100 s (36 per hour) plus the focused repository every 30 s (120 per hour),
-about 156 GraphQL queries per hour. The 15 s gap caps any mix of requests at 240 per
-hour. The sampled incident ran at roughly 1,300 per hour.
+about 156 GraphQL queries per hour. Because every query waits 15 s after the previous
+one, any mix of refreshes stays at or below 240 per hour. The sampled incident ran at
+roughly 1,300 per hour.
 
 ## Refs
 
 Tests: `App/Tests/WorktreeInfoWatcherManagerTests.swift` (only the changed
 repository refreshes; the sweep slows with the worktree count),
 `PullRequestRefreshCoordinatorTests.swift` (requests within the gap merge into one later
-batch; the fallback runs one repository at a time), `GithubCLIClientTests.swift`
+batch; a large batch and the fallback space each query), `GithubCLIClientTests.swift`
 (chunks run one at a time).

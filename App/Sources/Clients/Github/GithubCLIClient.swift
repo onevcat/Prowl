@@ -1044,7 +1044,7 @@ nonisolated private func deduplicatedBranches(_ branches: [String]) -> [String] 
   return branches.filter { !$0.isEmpty && seen.insert($0).inserted }
 }
 
-nonisolated private let batchPullRequestsChunkSize = 25
+nonisolated let batchPullRequestsChunkSize = 25
 nonisolated private let batchPullRequestsMaxConcurrentRequests = 1
 
 nonisolated private func makeBranchChunks(

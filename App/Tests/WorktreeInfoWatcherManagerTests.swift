@@ -447,6 +447,45 @@ struct WorktreeInfoWatcherManagerTests {
     try FileManager.default.removeItem(at: tempRepository.tempRoot)
   }
 
+  @Test func worktreeAddedElsewhereDoesNotPostponeAnUnchangedRepository() async throws {
+    let clock = TestClock()
+    let steadyRepository = try makeTempRepository(worktreeNames: ["sparrow"])
+    let growingRepository = try makeTempRepository(worktreeNames: ["finch"])
+    let manager = WorktreeInfoWatcherManager(
+      focusedInterval: .seconds(3_600),
+      unfocusedInterval: .milliseconds(50),
+      unfocusedIntervalPerWorktree: .milliseconds(100),
+      clock: clock
+    )
+    let (collector, task) = startCollecting(manager.eventStream())
+
+    manager.handleCommand(.setWorktrees(steadyRepository.worktrees))
+    await drainAsyncEvents(120)
+    #expect(await collector.pullRequestRefreshCount(repositoryRootURL: steadyRepository.tempRoot) == 1)
+
+    // A second worktree elsewhere raises the sweep interval from 100 ms to 200 ms; the steady
+    // repository's refresh that was already due at 100 ms still runs then.
+    await clock.advance(by: .milliseconds(60))
+    manager.handleCommand(.setWorktrees(steadyRepository.worktrees + growingRepository.worktrees))
+    await drainAsyncEvents(120)
+    await clock.advance(by: .milliseconds(40))
+    await drainAsyncEvents(120)
+    #expect(await collector.pullRequestRefreshCount(repositoryRootURL: steadyRepository.tempRoot) == 2)
+
+    // After that refresh, the new interval applies.
+    await clock.advance(by: .milliseconds(199))
+    await drainAsyncEvents(120)
+    #expect(await collector.pullRequestRefreshCount(repositoryRootURL: steadyRepository.tempRoot) == 2)
+    await clock.advance(by: .milliseconds(1))
+    await drainAsyncEvents(120)
+    #expect(await collector.pullRequestRefreshCount(repositoryRootURL: steadyRepository.tempRoot) == 3)
+
+    manager.handleCommand(.stop)
+    await task.value
+    try FileManager.default.removeItem(at: steadyRepository.tempRoot)
+    try FileManager.default.removeItem(at: growingRepository.tempRoot)
+  }
+
   @Test func selectionRefreshUsesCooldownWithinRepository() async throws {
     let clock = TestClock()
     let tempRepository = try makeTempRepository(worktreeNames: ["sparrow", "swift"])

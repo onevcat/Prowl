@@ -95,8 +95,9 @@ Prowl paces its pull request queries:
   seconds with 50 worktrees.
 - Adding or removing worktrees refreshes only the repositories they belong to.
 - One query runs at a time, and Prowl waits at least 15 seconds between
-  batches. Refreshes requested in the meantime join the next batch, so opening
-  many worktrees at once costs one query, not one each.
+  queries, including the queries of one large refresh. Refreshes requested in
+  the meantime join the next query, so opening many worktrees at once costs one
+  query, not one each.
 
 ## Gotchas for agents
 

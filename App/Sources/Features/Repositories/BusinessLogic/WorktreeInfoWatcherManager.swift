@@ -43,6 +43,11 @@ final class WorktreeInfoWatcherManager {
     let task: Task<Void, Never>
   }
 
+  private struct PullRequestRefreshTask {
+    let isFocused: Bool
+    let task: Task<Void, Never>
+  }
+
   private struct PullRequestSelectionCooldownTask {
     let id: UUID
     let task: Task<Void, Never>
@@ -111,7 +116,7 @@ final class WorktreeInfoWatcherManager {
   private let remoteConfigDebouncer: KeyedDebouncer<URL>
   private let restartDebouncer: KeyedDebouncer<Worktree.ID>
   private let lineChangesRefreshDebouncer: KeyedDebouncer<Worktree.ID>
-  private var pullRequestTasks: [URL: RefreshTask] = [:]
+  private var pullRequestTasks: [URL: PullRequestRefreshTask] = [:]
   private var lineChangeSafetyTasks: [Worktree.ID: RefreshTask] = [:]
   private var deferredLineChangeIDs: Set<Worktree.ID> = []
   private var openedWorktreeIDs: Set<Worktree.ID> = []
@@ -516,8 +521,11 @@ final class WorktreeInfoWatcherManager {
       return
     }
     let isFocused = selectedWorktreeID.map { worktreeIDs.contains($0) } ?? false
-    let interval = isFocused ? refreshTiming.focused : unfocusedPullRequestInterval
-    if let existing = pullRequestTasks[repositoryRootURL], existing.interval == interval, !immediate {
+    let interval = pullRequestInterval(isFocused: isFocused)
+    // A running timer reads the interval again after each refresh, so a change in the worktree
+    // count needs no restart; restarting would push an unchanged repository's next refresh back
+    // every time a worktree appears elsewhere.
+    if let existing = pullRequestTasks[repositoryRootURL], existing.isFocused == isFocused, !immediate {
       return
     }
     pullRequestTasks[repositoryRootURL]?.task.cancel()
@@ -533,24 +541,31 @@ final class WorktreeInfoWatcherManager {
         return
       }
       while !Task.isCancelled {
-        await MainActor.run {
+        let nextInterval = await MainActor.run { () -> Duration? in
           self?.emitPullRequestRefresh(repositoryRootURL: repositoryRootURL)
+          return self?.pullRequestInterval(isFocused: isFocused)
+        }
+        guard let nextInterval else {
+          return
         }
         do {
-          try await sleep(interval)
+          try await sleep(nextInterval)
         } catch {
           return
         }
       }
     }
-    pullRequestTasks[repositoryRootURL] = RefreshTask(interval: interval, task: task)
+    pullRequestTasks[repositoryRootURL] = PullRequestRefreshTask(isFocused: isFocused, task: task)
   }
 
   // Every repository's background refresh lands in one batched query per host, so its size, and
   // the server time GitHub charges the shared account for it, grows with the total worktree count.
   // Spacing the sweep out by the same count keeps that cost per hour flat.
-  private var unfocusedPullRequestInterval: Duration {
-    max(refreshTiming.unfocused, refreshTiming.unfocusedPerWorktree * worktrees.count)
+  private func pullRequestInterval(isFocused: Bool) -> Duration {
+    if isFocused {
+      return refreshTiming.focused
+    }
+    return max(refreshTiming.unfocused, refreshTiming.unfocusedPerWorktree * worktrees.count)
   }
 
   private func repositoryWorktreeIDs(for repositoryRootURL: URL) -> [Worktree.ID] {
