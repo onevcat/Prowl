@@ -37,13 +37,15 @@ counts.
 - **Popover.** For a pull request fetched with counts only, the popover shows the ring
   and summary and the line "Select this worktree to list each check."
 
-The single-repository fallback query asks for counts only.
+The single-repository fallback query takes the same detail branches, so a failed batch does
+not drop the selected worktree's checks.
 
 ## Refs
 
 Tests: `App/Tests/PullRequestCheckCountsTests.swift` (every count state decodes into
 the bucket of the matching single check; counts win over a capped list; merge readiness
-reads counts; only detail branches list checks in the batch query),
-`PullRequestRefreshCoordinatorTests.swift` (detail branches reach the batched query),
+reads counts; only detail branches list checks in the batch and single-repository queries),
+`PullRequestRefreshCoordinatorTests.swift` (detail branches reach the batched query and the
+fallback),
 `BatchedPullRequestRefreshReducerTests.swift` (only the selected worktree's branch is a
 detail branch).

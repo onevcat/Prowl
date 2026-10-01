@@ -285,6 +285,7 @@ final class PullRequestRefreshCoordinator {
               repoGroup.key.owner,
               repoGroup.key.repo,
               repoGroup.branches,
+              repoGroup.detailBranches,
               key.accountOverride
             )
             return .success(repoGroup.key, prs)

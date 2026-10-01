@@ -187,6 +187,8 @@ struct GithubPullRequestsRequest: Sendable {
   let host: String
   let owner: String
   let repo: String
+  /// Branches whose pull request also lists each check, not only the per-state counts.
+  var detailBranches: Set<String> = []
 }
 
 nonisolated struct GithubRepoViewRemoteInfoResponse: Decodable, Sendable {

@@ -5806,7 +5806,7 @@ struct RepositoriesFeatureTests {
         Issue.record("remoteInfo should not be requested when GitHub integration is unavailable")
         return nil
       }
-      $0.githubCLI.batchPullRequests = { _, _, _, _, _ in
+      $0.githubCLI.batchPullRequests = { _, _, _, _, _, _ in
         Issue.record("batchPullRequests should not run when GitHub integration is unavailable")
         return [:]
       }
@@ -7441,7 +7441,7 @@ struct RepositoriesFeatureTests {
         #expect(url.path(percentEncoded: false) == childID)
         return GithubRemoteInfo(host: "github.com", owner: "onevcat", repo: "app")
       }
-      $0.githubCLI.batchPullRequests = { host, owner, repo, branches, accountOverride in
+      $0.githubCLI.batchPullRequests = { host, owner, repo, branches, _, accountOverride in
         #expect(accountOverride == nil)
         calls.withValue {
           $0.append(

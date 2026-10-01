@@ -165,4 +165,34 @@ struct PullRequestCheckCountsTests {
     #expect(detailRange.lowerBound > selectedBlock.lowerBound)
     #expect(detailRange.lowerBound < otherBlock.lowerBound)
   }
+
+  @Test func singleRepositoryQueryListsChecksOnlyForDetailBranches() async throws {
+    let observedArguments = ObservedArguments()
+    let shell = ShellClient(
+      run: { executableURL, _, _ in
+        if executableURL.lastPathComponent == "which" {
+          return ShellOutput(stdout: "/usr/bin/gh", stderr: "", exitCode: 0)
+        }
+        return ShellOutput(stdout: "", stderr: "", exitCode: 0)
+      },
+      runLoginImpl: { executableURL, arguments, _, _ in
+        guard executableURL.lastPathComponent == "gh" else {
+          return ShellOutput(stdout: "", stderr: "", exitCode: 0)
+        }
+        await observedArguments.append(arguments)
+        return ShellOutput(stdout: #"{"data":{"repository":{}}}"#, stderr: "", exitCode: 0)
+      }
+    )
+    let client = GithubCLIClient.live(shell: shell)
+
+    _ = try await client.batchPullRequests("github.com", "khoi", "repo", ["quiet", "selected"], ["selected"], nil)
+
+    let arguments = try #require(await observedArguments.snapshot().first)
+    let query = try #require(arguments.first { $0.hasPrefix("query=") })
+    #expect(query.components(separatedBy: "checkRunCountsByState").count - 1 == 2)
+    #expect(query.components(separatedBy: "... on CheckRun").count - 1 == 1)
+    let detailRange = try #require(query.range(of: "... on CheckRun"))
+    let selectedBlock = try #require(query.range(of: "branch1:"))
+    #expect(detailRange.lowerBound > selectedBlock.lowerBound)
+  }
 }

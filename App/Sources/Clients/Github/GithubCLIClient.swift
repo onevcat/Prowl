@@ -180,7 +180,8 @@ struct GithubCLIClient: Sendable {
   var resolveRemoteInfo: @Sendable (URL) async -> GithubRemoteInfo?
   var latestRun: @Sendable (URL, String, GithubAccountOverride?) async throws -> GithubWorkflowRun?
   var batchPullRequests:
-    @Sendable (String, String, String, [String], GithubAccountOverride?) async throws -> [String: GithubPullRequest]
+    @Sendable (String, String, String, [String], Set<String>, GithubAccountOverride?) async throws -> [String:
+      GithubPullRequest]
   var batchPullRequestsAcrossRepositories:
     @Sendable (String, [CrossRepoPullRequestRequest], GithubAccountOverride?) async throws -> CrossRepoPullRequestResult
   var mergePullRequest:
@@ -225,7 +226,7 @@ extension GithubCLIClient: DependencyKey {
     defaultBranch: { _ in "main" },
     resolveRemoteInfo: { _ in nil },
     latestRun: { _, _, _ in nil },
-    batchPullRequests: { _, _, _, _, _ in [:] },
+    batchPullRequests: { _, _, _, _, _, _ in [:] },
     batchPullRequestsAcrossRepositories: { _, _, _ in CrossRepoPullRequestResult() },
     mergePullRequest: { _, _, _, _, _ in },
     closePullRequest: { _, _, _, _ in },
@@ -336,8 +337,11 @@ nonisolated private func latestRunFetcher(
 nonisolated private func batchPullRequestsFetcher(
   shell: ShellClient,
   resolver: GithubCLIExecutableResolver
-) -> @Sendable (String, String, String, [String], GithubAccountOverride?) async throws -> [String: GithubPullRequest] {
-  { host, owner, repo, branches, accountOverride in
+)
+  -> @Sendable (String, String, String, [String], Set<String>, GithubAccountOverride?) async throws -> [String:
+  GithubPullRequest]
+{
+  { host, owner, repo, branches, detailBranches, accountOverride in
     try await withExpectedGithubAccount(
       shell: shell,
       resolver: resolver,
@@ -348,7 +352,7 @@ nonisolated private func batchPullRequestsFetcher(
       guard !dedupedBranches.isEmpty else {
         return [:]
       }
-      let request = GithubPullRequestsRequest(host: host, owner: owner, repo: repo)
+      let request = GithubPullRequestsRequest(host: host, owner: owner, repo: repo, detailBranches: detailBranches)
       let chunks = makeBranchChunks(
         dedupedBranches,
         chunkSize: batchPullRequestsChunkSize
@@ -1152,7 +1156,7 @@ nonisolated private func fetchPullRequestsChunk(
   chunk: [String],
   chunkIndex: Int
 ) async throws -> (Int, [String: GithubPullRequest]) {
-  let (query, aliasMap) = makeBatchPullRequestsQuery(branches: chunk)
+  let (query, aliasMap) = makeBatchPullRequestsQuery(branches: chunk, detailBranches: request.detailBranches)
   let output = try await runGh(
     shell: shell,
     resolver: resolver,
@@ -1186,7 +1190,8 @@ nonisolated private func fetchPullRequestsChunk(
 }
 
 nonisolated private func makeBatchPullRequestsQuery(
-  branches: [String]
+  branches: [String],
+  detailBranches: Set<String>
 ) -> (query: String, aliasMap: [String: String]) {
   var aliasMap: [String: String] = [:]
   var selections: [String] = []
@@ -1198,7 +1203,7 @@ nonisolated private func makeBatchPullRequestsQuery(
     let selection = """
       \(alias): pullRequests(first: 5, states: [OPEN, MERGED, CLOSED], headRefName: \"\(escapedBranch)\", \(orderBy)) {
         nodes {
-      \(pullRequestNodeFields(includeCheckDetails: false))
+      \(pullRequestNodeFields(includeCheckDetails: detailBranches.contains(branch)))
         }
       }
       """
