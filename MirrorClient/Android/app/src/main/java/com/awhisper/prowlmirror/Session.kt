@@ -47,7 +47,17 @@ data class SessionState(
     val loadingHistory: Boolean = false,
     val showsHistory: Boolean = false,
     val follow: Boolean = true,
+    val scrolling: ScrollDirection? = null,
+    val scrollCompletion: ScrollCompletion? = null,
+    val scrollBounds: ScrollBounds = ScrollBounds(),
 ) {
+    val canScrollRemote: Boolean
+        get() = status == Status.live && "remote-scroll" in capabilities &&
+            !showsHistory && scrolling == null
+
+    fun canScrollRemote(direction: ScrollDirection): Boolean =
+        canScrollRemote && scrollBounds.allows(direction)
+
     val canSend: Boolean
         get() =
             status == Status.live &&
@@ -133,6 +143,17 @@ class Session(
     private val historyGate = HistoryGate()
     private var historyTimeout: Job? = null
     private var commandPending: Pair<String, CompletableDeferred<JsonObject>>? = null
+    private var scrollTimeout: Job? = null
+    private data class ScrollRequest(
+        val id: String,
+        val lease: String,
+        val direction: ScrollDirection,
+        val sequence: Long,
+    )
+    private var scrollRequest: ScrollRequest? = null
+    private data class PendingScrollState(val sequence: Long, val bounds: ScrollBounds)
+    private var pendingScrollState: PendingScrollState? = null
+    private var expectsScrollState = false
 
     private data class Submission(
         val id: String,
@@ -213,6 +234,10 @@ class Session(
     }
 
     private fun detach() {
+        clearScroll()
+        pendingScrollState = null
+        expectsScrollState = false
+        state.update { it.copy(scrollBounds = ScrollBounds()) }
         historyTimeout?.cancel()
         state.update { it.copy(loadingHistory = false) }
         generation++
@@ -320,13 +345,19 @@ class Session(
     }
 
     private fun subscribe() {
+        clearScroll()
         val pane = state.value.pane ?: return
         lease = null
-        state.update { it.copy(status = Status.subscribing, sequence = 0) }
+        pendingScrollState = null
+        expectsScrollState = "scroll-state-v1" in state.value.capabilities
+        state.update { it.copy(status = Status.subscribing, sequence = 0, scrollBounds = ScrollBounds()) }
         send(
             control(
                 "subscribe",
-                obj("paneID" to pane.id, "representation" to "text-v1", "intent" to intent),
+                obj(
+                    "paneID" to pane.id, "representation" to "text-v1", "intent" to intent,
+                    "includeScrollState" to true.takeIf { expectsScrollState },
+                ),
             )
         )
     }
@@ -360,6 +391,9 @@ class Session(
                 val listing = command(Commands.list())
                 if (lease != activeLease || submission != item) return@launch
                 val input = Commands.input(listing, item.pane, item.text)
+                check(!input.has("agentsInput") || "agent-input" in state.value.capabilities) {
+                    "Update Host to support interactive Agent input"
+                }
                 check(!input.has("send") || "shell-send" in state.value.capabilities) {
                     "Host cannot verify an empty command line for remote shell Send. Use an Agent Profile or control the shell on Host"
                 }
@@ -432,6 +466,7 @@ class Session(
     fun loadHistory(refresh: Boolean = false) {
         val active = lease ?: return
         if (state.value.loadingHistory || "history" !in state.value.capabilities) return
+        clearScroll()
         if (refresh) {
             historyGate.reset()
             state.update { it.copy(history = emptyList()) }
@@ -462,6 +497,67 @@ class Session(
             }
     }
 
+    fun scrollRemote(direction: ScrollDirection) {
+        val active = lease ?: return
+        if (!state.value.canScrollRemote(direction)) return
+        val request = ScrollRequest(uuid(), active, direction, state.value.sequence)
+        scrollRequest = request
+        state.update {
+            it.copy(scrolling = direction, scrollCompletion = null, follow = false, error = null)
+        }
+        scrollTimeout = scope.launch {
+            delay(5_000)
+            if (scrollRequest?.id == request.id) {
+                clearScroll()
+                state.update {
+                    it.copy(error = "Remote scroll timed out. Check the current screen before trying again.")
+                }
+            }
+        }
+        send(control("scroll", obj(
+            "requestID" to request.id,
+            "direction" to direction.wireName,
+            "subscriptionID" to active,
+        )))
+    }
+
+    fun consumeScrollCompletion(id: String) {
+        state.update {
+            if (it.scrollCompletion?.requestID == id) it.copy(scrollCompletion = null) else it
+        }
+    }
+
+    private fun clearScroll() {
+        scrollTimeout?.cancel()
+        scrollTimeout = null
+        scrollRequest = null
+        state.update { it.copy(scrolling = null, scrollCompletion = null) }
+    }
+
+    private fun scrollResult(p: JsonObject) {
+        val request = scrollRequest ?: return
+        if (canonical(p.string("requestID")) != request.id ||
+            canonical(p.string("subscriptionID")) != request.lease) return
+        val sequence = p.longInteger("sequence")
+        require(sequence > request.sequence && sequence <= state.value.sequence) {
+            "Remote scroll result has no matching frame"
+        }
+        clearScroll()
+        state.update { it.copy(scrollCompletion = ScrollCompletion(request.id, request.direction)) }
+    }
+
+    private fun receiveScrollState(p: JsonObject) {
+        require(expectsScrollState && state.value.status == Status.live &&
+            canonical(p.string("subscriptionID")) == lease) { "Unexpected scroll state" }
+        val sequence = p.longInteger("sequence")
+        require(pendingScrollState == null && sequence > state.value.sequence) {
+            "Invalid scroll state sequence"
+        }
+        pendingScrollState = PendingScrollState(
+            sequence, ScrollBounds(p.optionalFlag("atTop"), p.optionalFlag("atBottom")),
+        )
+    }
+
     private fun receive(packet: Packet) {
         if (packet is Packet.Text) {
             require(packet.text.toByteArray().size <= 1024 * 1024) {
@@ -474,8 +570,17 @@ class Session(
             ) {
                 "Invalid frame lease or sequence"
             }
+            val bounds = if (expectsScrollState) {
+                val pending = pendingScrollState
+                require(pending != null && pending.sequence == packet.sequence) {
+                    "Text frame has no matching scroll state"
+                }
+                pending.bounds
+            } else ScrollBounds()
+            pendingScrollState = null
             state.update {
                 it.copy(
+                    scrollBounds = bounds,
                     text = packet.text,
                     sequence = packet.sequence,
                     truncated = packet.truncated,
@@ -504,6 +609,8 @@ class Session(
                 else if (state.value.status != Status.live) subscribe()
             }
             "subscribed" -> {
+                clearScroll()
+                pendingScrollState = null
                 require(canonical(p.string("paneID")) == state.value.pane?.id)
                 lease = canonical(p.string("subscriptionID"))
                 runID = canonical(p.string("hostRunID"))
@@ -514,6 +621,7 @@ class Session(
                     it.copy(
                         status = Status.live,
                         error = null,
+                        scrollBounds = ScrollBounds(),
                         history = emptyList(),
                         historyOffset = 0,
                         historyTime = null,
@@ -538,7 +646,15 @@ class Session(
             }
             "failure" -> {
                 val error = p.string("error")
-                if (
+                if (error.startsWith("SCROLL_UNAVAILABLE") || error.startsWith("SCROLL_BUSY")) {
+                    val request = scrollRequest
+                    if (request != null &&
+                        p.optionalString("subscriptionID")?.let(::canonical) == request.lease &&
+                        p.optionalString("requestID")?.let(::canonical) == request.id) {
+                        clearScroll()
+                        state.update { it.copy(error = error) }
+                    }
+                } else if (
                     error.startsWith("HISTORY_UNAVAILABLE") &&
                         state.value.loadingHistory &&
                         p.optionalString("subscriptionID")?.let(::canonical) == lease
@@ -551,6 +667,8 @@ class Session(
                     failed(error)
                 }
             }
+            "scrollResult" -> scrollResult(p)
+            "scrollState" -> receiveScrollState(p)
             "historyPage" -> {
                 require(
                     canonical(p.string("subscriptionID")) == lease && state.value.loadingHistory
@@ -584,12 +702,11 @@ class Session(
         val data = response.getAsJsonObject("data")
         val accepted =
             response.flag("ok") &&
-                (data?.getAsJsonObject("dispatch")?.optionalString("id") != null ||
-                    (response.optionalString("command") == "send" &&
-                        data?.getAsJsonObject("input")?.let {
-                            it.integer("bytes") == s.text.toByteArray().size &&
-                                it.flag("trailing_enter_sent")
-                        } == true))
+                response.optionalString("command") in setOf("send", "agents.input") &&
+                data?.getAsJsonObject("input")?.let {
+                    it.integer("bytes") == s.text.toByteArray().size &&
+                        it.flag("trailing_enter_sent")
+                } == true
         val error = response.getAsJsonObject("error")
         val rejection =
             error?.optionalString("code")?.takeUnless {
@@ -602,7 +719,7 @@ class Session(
                     else if (rejection != null) Delivery.REJECTED else Delivery.UNKNOWN,
                 draft = if (accepted && it.draftRevision == s.revision) "" else it.draft,
                 hint =
-                    if (accepted) "Dispatched. Agent completion is separate."
+                    if (accepted) "Sent. Agent completion is separate."
                     else
                         error?.optionalString("message")
                             ?: "Delivery unconfirmed. Check Host before sending again.",

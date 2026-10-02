@@ -95,7 +95,7 @@ final class MirrorCommandService {
   private func validate(_ command: MirrorCommandRequest.Command) -> MirrorJSON? {
     switch command {
     case .list, .profiles: break
-    case .agentsDispatch(let input):
+    case .agentsInput(let input), .agentsDispatch(let input):
       guard UUID(uuidString: input.pane) != nil, input.prompt.utf8.count <= MirrorWire.maximumInput
       else {
         return failure("Invalid dispatch target or prompt size.")

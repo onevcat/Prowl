@@ -116,6 +116,7 @@ private struct MirrorSettingsView: View {
   let reconnect: (MirrorKnownHost) -> Void
   @State private var interfaces: [MirrorNetworkInterface] = []
   @State private var deviceToRevoke: MirrorPairedDevice?
+  @State private var revokeAllPresented = false
   @State private var mirrorToDisconnect: DisconnectTarget?
 
   private struct DisconnectTarget {
@@ -174,6 +175,19 @@ private struct MirrorSettingsView: View {
       Button("Revoke", role: .destructive) { host.revoke(device.id) }
     } message: { _ in
       Text("The device is disconnected and must pair again before it can mirror this Mac.")
+    }
+    .alert(
+      "Revoke All Devices?", isPresented: $revokeAllPresented
+    ) {
+      Button("Revoke All Devices", role: .destructive) { host.revokeAllDevices() }
+      Button("Cancel", role: .cancel) {}
+    } message: {
+      Text(
+        """
+        All devices will be disconnected and must pair again. \
+        Saved connections and the current pairing code will no longer work. Local terminals keep running.
+        """
+      )
     }
     .alert(
       "Disconnect Mirror?",
@@ -255,6 +269,16 @@ private struct MirrorSettingsView: View {
           .buttonStyle(.borderedProminent)
           .help("Allow paired Prowl devices to connect to this Mac")
         }
+      }
+      if !host.devices.isEmpty {
+        Button("Revoke All Devices…", role: .destructive) {
+          interact()
+          revokeAllPresented = true
+        }
+        .help(
+          "Disconnect all devices and require fresh pairing, including devices currently offline"
+        )
+        .accessibilityIdentifier("remote-mirror-revoke-all-devices")
       }
       ForEach(host.devices) { device in
         VStack(alignment: .leading, spacing: 4) {
@@ -385,6 +409,7 @@ private struct MirrorSettingsView: View {
 private struct MirrorPairingView: View {
   @Bindable var host: MirrorHost
   let dismiss: () -> Void
+  @State private var qrAddress = ""
   @State private var hasRequestedCode = false
   @State private var copied = false
   @State private var copyError: String?
@@ -395,9 +420,9 @@ private struct MirrorPairingView: View {
     MirrorHostAddresses.reachable(listenAddress: host.address, interfaces: interfaces)
   }
 
-  private var localName: String? {
-    guard host.address != MirrorHostAddresses.loopback else { return nil }
-    return MirrorHostAddresses.localHostName()
+  private var pairingAddress: String? {
+    let choices = reachable.filter { !$0.isLoopback && $0.address != "::1" }
+    return choices.first(where: { $0.address == qrAddress })?.address ?? choices.first?.address
   }
 
   var body: some View {
@@ -413,13 +438,13 @@ private struct MirrorPairingView: View {
         Text(
           """
           On the other device, open Remote Mirror → Client → Connect to a New Host. \
-          Enter one of these addresses with the port, then the code below.
+          Copy the connection details and paste into any connection field on Mac, or scan the QR code on mobile.
           """
         )
         .foregroundStyle(.secondary)
         .fixedSize(horizontal: false, vertical: true)
-        addresses
         code
+        pairingQR
       }
       if let error = copyError ?? host.error {
         Text(error).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
@@ -452,6 +477,7 @@ private struct MirrorPairingView: View {
       hasRequestedCode = true
       host.addDevice()
     }
+    .onChange(of: qrAddress) { _, _ in copied = false }
     .onChange(of: host.pairingKey) { _, _ in
       copied = false
       copyError = nil
@@ -471,64 +497,46 @@ private struct MirrorPairingView: View {
     }
   }
 
-  private var addresses: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      Text("This Mac’s address").font(.subheadline.weight(.semibold))
-      // A grid lets the label column fit names like Thunderbolt Bridge without a fixed width.
-      Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 6) {
-        if let localName {
-          addressRow(label: "Name", value: localName + ":" + host.port)
+  private var pairingQR: some View {
+    let choices = reachable.filter { !$0.isLoopback && $0.address != "::1" }
+    let selected = pairingAddress
+    return VStack(spacing: 8) {
+      if let expires = host.pairingExpiresAt, let selected {
+        if choices.count > 1 {
+          Picker("Connection address", selection: Binding(get: { selected }, set: { qrAddress = $0 })) {
+            ForEach(choices) { item in
+              Text("\(item.label): \(item.address)").tag(item.address)
+            }
+          }
+          .help("Choose the Wi-Fi or VPN address reachable from your Mirror device")
         }
-        ForEach(reachable) { interface in
-          addressRow(label: interface.label, value: interface.address + ":" + host.port)
+        Text("\(selected):\(host.port)").font(.body.monospaced()).textSelection(.enabled)
+        Button(copied ? "Copied" : "Copy Connection Details", systemImage: copied ? "checkmark" : "doc.on.doc") {
+          copyConnectionDetails()
         }
-      }
-      if reachable.isEmpty, localName == nil {
-        Text("No network address found. Connect this Mac to a network.").font(.caption).foregroundStyle(.secondary)
+        .keyboardShortcut("c", modifiers: .command)
+        .help("Copy the address, port and pairing code together (⌘C)")
+        .accessibilityIdentifier("remote-mirror-copy-connection")
+        MirrorPairingQRCode(
+          address: selected, port: host.port, code: host.pairingKey, expires: expires)
+        Text("In Prowl Mirror on your phone, tap Scan QR Code.")
+          .font(.caption).foregroundStyle(.secondary)
+      } else if selected == nil {
+        Text("No network address is available for pairing. Start Host on a Wi-Fi or VPN interface.")
+          .font(.caption).foregroundStyle(.secondary)
           .fixedSize(horizontal: false, vertical: true)
       }
-      Text(
-        "Reachable on your local network or VPN. The internet cannot reach this port unless your router forwards it."
-      )
-      .font(.caption).foregroundStyle(.secondary)
-      .fixedSize(horizontal: false, vertical: true)
     }
-  }
-
-  private func addressRow(label: String, value: String) -> some View {
-    GridRow {
-      Text(label).foregroundStyle(.secondary).lineLimit(1)
-      Text(value).font(.body.monospaced()).textSelection(.enabled).lineLimit(1)
-        .frame(maxWidth: .infinity, alignment: .leading)
-      Button {
-        copy(value)
-      } label: {
-        Label("Copy \(value)", systemImage: "doc.on.doc").labelStyle(.iconOnly)
-      }
-      .buttonStyle(.borderless)
-      .help("Copy \(value)")
-    }
+    .frame(maxWidth: .infinity)
   }
 
   private var code: some View {
     VStack(spacing: 8) {
       if let expires = host.pairingExpiresAt {
-        HStack(spacing: 12) {
-          Text(host.pairingKey)
-            .font(.largeTitle.monospaced().weight(.semibold))
-            .textSelection(.enabled)
-            .accessibilityIdentifier("remote-mirror-pairing-key")
-          Button {
-            copy(host.pairingKey)
-          } label: {
-            Label(copied ? "Copied" : "Copy the pairing code", systemImage: copied ? "checkmark" : "doc.on.doc")
-              .labelStyle(.iconOnly)
-          }
-          .buttonStyle(.borderless)
-          .keyboardShortcut("c", modifiers: .command)
-          .help("Copy the pairing code (⌘C)")
-          .accessibilityIdentifier("remote-mirror-copy-key")
-        }
+        Text(host.pairingKey)
+          .font(.largeTitle.monospaced().weight(.semibold))
+          .textSelection(.enabled)
+          .accessibilityIdentifier("remote-mirror-pairing-key")
         HStack(spacing: 4) {
           Text("Expires in")
           Text(expires, style: .timer).monospacedDigit()
@@ -546,11 +554,20 @@ private struct MirrorPairingView: View {
     .padding(.vertical, 8)
   }
 
-  private func copy(_ value: String) {
-    NSPasteboard.general.clearContents()
-    let done = NSPasteboard.general.setString(value, forType: .string)
-    copied = done && value == host.pairingKey
-    copyError = done ? nil : String(localized: "Unable to copy to the clipboard.")
+  private func copyConnectionDetails() {
+    do {
+      guard let address = pairingAddress, let port = UInt16(host.port), let expires = host.pairingExpiresAt else {
+        throw MirrorPairingPayload.Problem.invalid
+      }
+      let payload = try MirrorPairingPayload(address: address, port: port, code: host.pairingKey, expires: expires)
+      let value = try payload.encoded()
+      NSPasteboard.general.clearContents()
+      copied = NSPasteboard.general.setString(value, forType: .string)
+      copyError = copied ? nil : String(localized: "Unable to copy to the clipboard.")
+    } catch {
+      copied = false
+      copyError = error.localizedDescription
+    }
   }
 }
 

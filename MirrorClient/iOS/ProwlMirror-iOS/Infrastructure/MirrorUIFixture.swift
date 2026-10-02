@@ -14,7 +14,7 @@
     static func launchCommand(_ command: MirrorCommandRequest.Command) async throws -> MirrorJSON {
       let payload: String
       switch command {
-      case .agentsDispatch, .send: throw CancellationError()
+      case .agentsInput, .agentsDispatch, .send: throw CancellationError()
       case .list:
         payload =
           #"{"ok":true,"data":{"items":[{"worktree":{"id":"fixture-worktree","name":"main","path":"/Projects/Prowl","root_path":"/Projects/Prowl"}}]}}"#
@@ -56,9 +56,15 @@
       private let history = MirrorHistory(
         text: (1...401).map { "Retained line \($0)" }.joined(separator: "\n"), truncated: true)
       private var sequence: UInt64 = 0
+      private var scrollPage = 0
+      private var scrollTask: Task<Void, Never>?
+      private var includesScrollState = false
 
       func start() { onReady?() }
-      func close(_ reason: String?) { onClose?(reason) }
+      func close(_ reason: String?) {
+        scrollTask?.cancel()
+        onClose?(reason)
+      }
 
       func send(_ message: MirrorMessage, closeAfterSending: Bool) {
         switch message.kind {
@@ -68,10 +74,13 @@
               .init(
                 panes: [pane],
                 capabilities: [
-                  "text-v1", "history", "refresh", "launch-profile", "agents-dispatch",
+                  "text-v1", "history", "refresh", "launch-profile", "agents-dispatch", "agent-input",
                   "shell-send",
-                ], hostRunID: UUID())))
+                ] + (CommandLine.arguments.contains("--mirror-ui-no-scroll-fixture") ? [] : ["remote-scroll"])
+                  + (CommandLine.arguments.contains("--mirror-ui-scroll-boundary-fixture") ? ["scroll-state-v1"] : []),
+                hostRunID: UUID())))
         case .subscribe:
+          if case .subscribe(let payload) = message { includesScrollState = payload.includeScrollState == true }
           onMessage?(
             .subscribed(.init(paneID: pane.id, subscriptionID: lease, hostRunID: run)))
           frame()
@@ -81,8 +90,11 @@
             Task {
               do {
                 let response = try await MirrorUIFixture.launchCommand(request.request.command)
-                onMessage?(.commandResult(.init(commandResponse: .init(
-                  requestID: request.requestID, response: response))))
+                onMessage?(
+                  .commandResult(
+                    .init(
+                      commandResponse: .init(
+                        requestID: request.requestID, response: response))))
               } catch { onClose?(error.localizedDescription) }
             }
             return
@@ -101,10 +113,14 @@
                 ])
               ]),
             ])
-          case .agentsDispatch:
+          case .agentsInput(let input):
             payload = .object([
-              "ok": .bool(true),
-              "data": .object(["dispatch": .object(["id": .string(UUID().uuidString)])]),
+              "ok": .bool(true), "command": .string("agents.input"),
+              "data": .object([
+                "input": .object([
+                  "bytes": .number(Double(input.prompt.utf8.count)), "trailing_enter_sent": .bool(true),
+                ])
+              ]),
             ])
           default:
             onClose?("Unexpected fixture command")
@@ -114,6 +130,8 @@
             .commandResult(
               .init(commandResponse: .init(requestID: request.requestID, response: payload))))
         case .refresh: frame()
+        case .scroll:
+          scroll(message)
         case .history:
           do {
             let page = try history.page(before: message.offset ?? history.lines.count)
@@ -129,8 +147,44 @@
         }
       }
 
+      private func scroll(_ message: MirrorMessage) {
+        if CommandLine.arguments.contains("--mirror-ui-scroll-delay-fixture") {
+          scrollTask = Task { [weak self] in
+            do { try await ContinuousClock().sleep(for: .seconds(2)) } catch { return }
+            self?.completeScroll(message)
+          }
+        } else {
+          completeScroll(message)
+        }
+      }
+
+      private func completeScroll(_ message: MirrorMessage) {
+        guard let id = message.scrollRequestID, let direction = message.scrollDirection else { return }
+        scrollPage += direction == .upward ? -1 : 1
+        if includesScrollState { scrollPage = min(0, max(-2, scrollPage)) }
+        frame()
+        onMessage?(.scrollResult(.init(requestID: id, sequence: sequence, subscriptionID: lease)))
+      }
+
       private func frame() {
         sequence += 1
+        if includesScrollState {
+          onMessage?(
+            .scrollState(
+              .init(atTop: scrollPage == -2, atBottom: scrollPage == 0, sequence: sequence, subscriptionID: lease)))
+        }
+        if CommandLine.arguments.contains("--mirror-ui-scroll-fixture") {
+          let text =
+            CommandLine.arguments.contains("--mirror-ui-scroll-long-fixture")
+            ? (1...40).map { "```text\nRemote \(scrollPage) marker \($0)\n```" }.joined(separator: "\n")
+            : "Remote page \(scrollPage)\nUse the buttons above to scroll the Host."
+          onMessage?(
+            .textFrame(
+              .init(
+                sequence: sequence, text: text,
+                subscriptionID: lease)))
+          return
+        }
         if CommandLine.arguments.contains("--mirror-ui-large-table-fixture") {
           let rows = (0..<10_000).map { "| Row \($0) | Value \($0) |" }.joined(separator: "\n")
           onMessage?(

@@ -32,7 +32,6 @@ struct CLISendCommandHandlerTests {
   private static func makeHandler(
     resolveResult: Result<SendResolvedTarget, TargetResolverError> = .success(makeTarget()),
     waiterResult: (exitCode: Int?, durationMs: Int)? = nil,
-    waiterDelay: Duration? = nil,
     textDelivery: (@MainActor (SendResolvedTarget, String, Bool) -> Void)? = nil,
     captureProvider: (@MainActor (SendResolvedTarget) -> ReadCaptureInput?)? = nil
   ) -> SendCommandHandler {
@@ -45,16 +44,8 @@ struct CLISendCommandHandlerTests {
       waiterProvider: { _, _ in
         guard let waiterResult else { return nil }
         return AsyncStream { continuation in
-          if let delay = waiterDelay {
-            Task {
-              try? await Task.sleep(for: delay)
-              continuation.yield(waiterResult)
-              continuation.finish()
-            }
-          } else {
-            continuation.yield(waiterResult)
-            continuation.finish()
-          }
+          continuation.yield(waiterResult)
+          continuation.finish()
         }
       },
       captureProvider: captureProvider
@@ -122,9 +113,10 @@ struct CLISendCommandHandlerTests {
   }
 
   @Test func timeoutReturnsWaitTimeoutError() async throws {
-    let handler = Self.makeHandler(
-      waiterResult: (exitCode: 0, durationMs: 5000),
-      waiterDelay: .seconds(10)
+    let handler = SendCommandHandler(
+      resolveProvider: { _ in .success(Self.makeTarget()) },
+      textDelivery: { _, _, _ in true },
+      waiterProvider: { _, _ in AsyncStream { _ in } }
     )
     let response = await handler.handle(
       envelope: Self.makeEnvelope(timeoutSeconds: 1)

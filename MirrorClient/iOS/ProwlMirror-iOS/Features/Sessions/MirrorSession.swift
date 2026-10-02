@@ -35,7 +35,18 @@ final class MirrorSession: Identifiable {
   private(set) var error: String?
   private(set) var supportsHistory = false
   private(set) var supportsLaunch = false
+  private(set) var supportsRemoteScroll = false
+  private(set) var isScrolling = false
+  private(set) var scrollError: String?
+  private(set) var completedScroll: ScrollCompletion?
+  private(set) var scrollAtTop: Bool?
+  private(set) var scrollAtBottom: Bool?
+  @ObservationIgnored private var supportsScrollState = false
+  @ObservationIgnored private var pendingScrollState: MirrorMessage.ScrollStatePayload?
+  @ObservationIgnored private var pendingScroll: PendingScroll?
+  @ObservationIgnored private var scrollTimeout: Task<Void, Never>?
   @ObservationIgnored private var supportsShellSend = false
+  @ObservationIgnored private var supportsAgentInput = false
   @ObservationIgnored private var pendingCommand: PendingCommand?
   @ObservationIgnored private var commandTimeout: Task<Void, Never>?
   @ObservationIgnored private let clock: any Clock<Duration>
@@ -44,13 +55,30 @@ final class MirrorSession: Identifiable {
     let id: UUID
     let continuation: CheckedContinuation<MirrorJSON, any Error>
   }
+  private struct PendingScroll {
+    let id: UUID
+    let direction: MirrorMessage.ScrollDirection
+    let subscriptionID: UUID
+    let baseline: UInt64
+  }
+  struct ScrollCompletion: Equatable {
+    let id: UUID
+    let direction: MirrorMessage.ScrollDirection
+  }
+  var canScroll: Bool {
+    status == .live && supportsRemoteScroll && subscriptionID != nil && !isScrolling && !showsHistory
+  }
+  func canScroll(_ direction: MirrorMessage.ScrollDirection) -> Bool {
+    canScroll && (direction == .upward ? scrollAtTop != true : scrollAtBottom != true)
+  }
   private enum CommandFailure: LocalizedError {
-    case unavailable, disconnected, timedOut, shellUnavailable
+    case unavailable, disconnected, timedOut, shellUnavailable, agentInputUnavailable
     var errorDescription: String? {
       switch self {
       case .unavailable: "Host command service is unavailable or another command is pending."
       case .disconnected: "Connection lost before Host confirmed the command."
       case .timedOut: "Host did not confirm the command in time."
+      case .agentInputUnavailable: "Update Host to support interactive Agent input."
       case .shellUnavailable: "This Host does not support shell submission. Choose an Agent pane."
       }
     }
@@ -128,6 +156,13 @@ final class MirrorSession: Identifiable {
     status = .connecting
     supportsLaunch = false
     supportsShellSend = false
+    supportsAgentInput = false
+    supportsRemoteScroll = false
+    supportsScrollState = false
+    clearScrollState()
+    clearScroll()
+    scrollError = nil
+    completedScroll = nil
     generation = UUID()
     let attempt = generation
     do {
@@ -151,6 +186,8 @@ final class MirrorSession: Identifiable {
         self.transport = nil
         self.finishCommand(.failure(CommandFailure.disconnected))
         self.subscriptionID = nil
+        self.clearScroll()
+        self.clearScrollState()
         self.markDeliveryUncertain()
         self.isLoadingHistory = false
         if self.status == .live || self.status == .connecting || self.status == .subscribing
@@ -228,6 +265,8 @@ final class MirrorSession: Identifiable {
     old?.onClose = nil
     old?.close(nil)
     subscriptionID = nil
+    clearScroll()
+    clearScrollState()
     markDeliveryUncertain()
     isLoadingHistory = false
     status = .disconnected
@@ -277,7 +316,7 @@ final class MirrorSession: Identifiable {
     let request = Submission(
       id: UUID(), text: draft, paneID: pane.id, runID: hostRunID,
       draftRevision: draftRevision, configuration: configuration,
-      outcome: .init(status: .pending, detail: "Host is checking readiness and dispatching…"))
+      outcome: .init(status: .pending, detail: "Host is checking readiness and sending…"))
     submission = request
     Task { await routeSubmission(request, lease: subscriptionID) }
     let clock = clock
@@ -294,6 +333,7 @@ final class MirrorSession: Identifiable {
       guard status == .live, subscriptionID == lease, submission?.id == request.id else { return }
       let input = try MirrorInputRoute.command(
         listing: listing, paneID: request.paneID, text: request.text)
+      if case .agentsInput = input, !supportsAgentInput { throw CommandFailure.agentInputUnavailable }
       if case .send = input, !supportsShellSend { throw CommandFailure.shellUnavailable }
       send(
         .command(
@@ -314,12 +354,10 @@ final class MirrorSession: Identifiable {
     else { return }
     struct Result: Decodable {
       struct Payload: Decodable {
-        struct Dispatch: Decodable { let id: String }
         struct Input: Decodable {
           let bytes: Int
           let trailing_enter_sent: Bool
         }
-        let dispatch: Dispatch?
         let input: Input?
       }
       struct Failure: Decodable {
@@ -335,16 +373,11 @@ final class MirrorSession: Identifiable {
       markDeliveryUncertain()
       return
     }
-    if result.ok, let dispatch = result.data?.dispatch {
-      current.outcome = .init(
-        status: .accepted, detail: "Dispatched (" + dispatch.id + "). Agent completion is separate."
-      )
-      if current.draftRevision == draftRevision { draft = "" }
-    } else if result.ok, result.command == "send", let input = result.data?.input,
+    if result.ok, ["send", "agents.input"].contains(result.command ?? ""), let input = result.data?.input,
       input.bytes == current.text.utf8.count, input.trailing_enter_sent
     {
       current.outcome = .init(
-        status: .accepted, detail: "Sent to the shell. Command completion is separate.")
+        status: .accepted, detail: "Sent. Agent completion is separate.")
       if current.draftRevision == draftRevision { draft = "" }
     } else if let error = result.error,
       !["REMOTE_COMMAND_UNCONFIRMED", "DISPATCH_FAILED", "SEND_FAILED"].contains(error.code)
@@ -398,13 +431,96 @@ final class MirrorSession: Identifiable {
           subscriptionID: subscriptionID)))
   }
 
+  func scroll(_ direction: MirrorMessage.ScrollDirection) {
+    guard canScroll(direction), let subscriptionID else { return }
+    let request = PendingScroll(id: UUID(), direction: direction, subscriptionID: subscriptionID, baseline: revision)
+    pendingScroll = request
+    isScrolling = true
+    scrollError = nil
+    followsLatest = false
+    let clock = clock
+    scrollTimeout = Task { [weak self] in
+      do { try await clock.sleep(for: .seconds(5)) } catch { return }
+      guard self?.pendingScroll?.id == request.id else { return }
+      self?.clearScroll()
+      self?.scrollError = String(
+        localized: "Host did not confirm the scroll in time. Check the screen before trying again.")
+    }
+    send(.scroll(.init(requestID: request.id, direction: direction, subscriptionID: subscriptionID)))
+  }
+
+  private func clearScroll() {
+    scrollTimeout?.cancel()
+    scrollTimeout = nil
+    pendingScroll = nil
+    isScrolling = false
+  }
+
+  private func clearScrollState() {
+    pendingScrollState = nil
+    scrollAtTop = nil
+    scrollAtBottom = nil
+  }
+
+  private func receiveScrollState(_ message: MirrorMessage) {
+    guard case .scrollState(let state) = message,
+      state.subscriptionID == subscriptionID, state.sequence > revision
+    else { return }
+    guard supportsScrollState else {
+      invalidMessage()
+      return
+    }
+    pendingScrollState = state
+  }
+
+  private func commitScrollState(sequence: UInt64) -> Bool {
+    guard supportsScrollState else { return true }
+    guard let state = pendingScrollState, state.sequence == sequence,
+      state.subscriptionID == subscriptionID
+    else { return false }
+    pendingScrollState = nil
+    scrollAtTop = state.atTop
+    scrollAtBottom = state.atBottom
+    return true
+  }
+
+  private func receiveScrollResult(_ message: MirrorMessage) {
+    guard let pendingScroll, message.scrollRequestID == pendingScroll.id,
+      message.subscriptionID == pendingScroll.subscriptionID, subscriptionID == pendingScroll.subscriptionID
+    else { return }
+    guard let sequence = message.sequence, sequence > pendingScroll.baseline, sequence <= revision else {
+      invalidMessage()
+      return
+    }
+    completedScroll = ScrollCompletion(id: pendingScroll.id, direction: pendingScroll.direction)
+    clearScroll()
+  }
+
+  private func consumeScrollFailure(_ message: MirrorMessage) -> Bool {
+    guard message.error?.hasPrefix("SCROLL_UNAVAILABLE") == true || message.error?.hasPrefix("SCROLL_BUSY") == true
+    else {
+      return false
+    }
+    guard let pendingScroll, message.subscriptionID == pendingScroll.subscriptionID,
+      message.scrollRequestID == pendingScroll.id
+    else { return true }
+    clearScroll()
+    scrollError = message.error
+    return true
+  }
+
   private func subscribe() {
     guard let pane else { return }
     status = .subscribing
     revision = 0
     subscriptionID = nil
+    clearScroll()
+    clearScrollState()
     send(
-      .subscribe(.init(paneID: pane.id, representation: .text, intent: intent)))
+      .subscribe(
+        .init(
+          paneID: pane.id, representation: .text, intent: intent,
+          includeScrollState: supportsScrollState ? true : nil)))
   }
 
   private func send(_ message: MirrorMessage) { transport?.send(message, closeAfterSending: false) }
@@ -419,9 +535,12 @@ final class MirrorSession: Identifiable {
         return
       }
       supportsLaunch = message.capabilities?.contains("launch-profile") == true
+      supportsAgentInput = message.capabilities?.contains("agent-input") == true
       supportsShellSend = message.capabilities?.contains("shell-send") == true
       supportsRefresh = message.capabilities?.contains("refresh") == true
       supportsHistory = message.capabilities?.contains("history") == true
+      supportsRemoteScroll = message.capabilities?.contains("remote-scroll") == true
+      supportsScrollState = message.capabilities?.contains("scroll-state-v1") == true
       if supportsSubmission { querySubmission() }
       panes = message.panes ?? []
       onVerifiedConnection?(configuration)
@@ -466,7 +585,7 @@ final class MirrorSession: Identifiable {
     case .textFrame:
       guard let lease = subscriptionID, message.subscriptionID == lease,
         let sequence = message.sequence, sequence > revision, let replacement = message.text,
-        replacement.utf8.count <= MirrorWire.maximumPayload / 8
+        replacement.utf8.count <= MirrorWire.maximumPayload / 8, commitScrollState(sequence: sequence)
       else {
         invalidMessage()
         return
@@ -476,6 +595,10 @@ final class MirrorSession: Identifiable {
       updatedAt = Date()
       status = .live
       send(.acknowledge(.init(sequence: sequence, subscriptionID: lease)))
+    case .scrollResult:
+      receiveScrollResult(message)
+    case .scrollState:
+      receiveScrollState(message)
     case .historyPage:
       guard isLoadingHistory, subscriptionID != nil,
         message.subscriptionID == subscriptionID, let id = message.historyID,
@@ -513,6 +636,7 @@ final class MirrorSession: Identifiable {
       }
       transport?.close(nil)
     case .failure:
+      if consumeScrollFailure(message) { return }
       if message.error?.hasPrefix("HISTORY_UNAVAILABLE") == true,
         message.subscriptionID == subscriptionID
       {

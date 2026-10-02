@@ -122,13 +122,42 @@ struct MirrorCommandServiceTests {
     #expect(handler.count == 0)
   }
 
+  @Test func interactiveDeliveryKeepsRequestReceiptsAndPaneOwnership() async throws {
+    let handler = DispatchHandler()
+    let service = MirrorCommandService(router: CLICommandRouter(agentsDispatchHandler: handler))
+    let pane = UUID()
+    let id = UUID()
+    let request = MirrorCommandRequest(
+      requestID: id,
+      request: .init(
+        command: .agentsInput(.init(pane: pane.uuidString, prompt: "hello"))))
+    #expect(request.request.command.targetPaneID == pane)
+    #expect(try await service.execute(request, authorize: { false }).response.decode(CommandResponse.self).ok == false)
+    #expect(handler.count == 0)
+    #expect(try await service.execute(request).response.decode(CommandResponse.self).ok)
+    #expect(try await service.receipt(id, paneID: pane).response.decode(CommandResponse.self).ok)
+    #expect(try await service.execute(request).response.decode(CommandResponse.self).ok)
+    #expect(handler.count == 1)
+    #expect(handler.prompt == "hello")
+    #expect(try await service.receipt(id, paneID: UUID()).response.decode(CommandResponse.self).ok == false)
+    let changed = MirrorCommandRequest(
+      requestID: id,
+      request: .init(
+        command: .agentsInput(.init(pane: pane.uuidString, prompt: "different"))))
+    #expect(try await service.execute(changed).response.decode(CommandResponse.self).ok == false)
+    #expect(handler.count == 1)
+  }
+
   private final class DispatchHandler: CommandHandler {
     var count = 0
     var prompt: String?
     func handle(envelope: CommandEnvelope) async -> CommandResponse {
       count += 1
       await Task.yield()
-      if case .agentsDispatch(let input) = envelope.command { prompt = input.prompt }
+      switch envelope.command {
+      case .agentsInput(let input), .agentsDispatch(let input): prompt = input.prompt
+      default: break
+      }
       return CommandResponse(
         ok: true, command: "agents.dispatch", schemaVersion: "prowl.cli.agents.dispatch.v1")
     }

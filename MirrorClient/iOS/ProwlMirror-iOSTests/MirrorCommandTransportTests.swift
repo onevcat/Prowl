@@ -158,6 +158,28 @@ struct MirrorCommandTransportTests {
     #expect(session.submission?.outcome.status == .accepted)
   }
 
+  @Test(.timeLimit(.minutes(1))) func oldHostRejectsWithoutDispatchFallback() async {
+    let channel = Channel()
+    channel.supportsAgentInput = false
+    let session = makeSession(channel)
+    session.connect()
+    session.select(channel.pane)
+    session.draft = "hello"
+    session.submitDraft()
+    let changes = AsyncStream.makeStream(of: Void.self)
+    defer { changes.continuation.finish() }
+    changes.continuation.yield(())
+    for await _ in changes.stream {
+      let finished = withObservationTracking {
+        session.submission?.outcome.status == .rejected
+      } onChange: { changes.continuation.yield(()) }
+      if finished { break }
+    }
+    #expect(channel.commands.count == 1)
+    #expect(session.draft == "hello")
+    #expect(session.submission?.outcome.detail.contains("Update Host") == true)
+  }
+
   private func makeSession(_ channel: Channel) -> MirrorSession {
     MirrorSession(
       configuration: .init(address: "127.0.0.1", port: 7880, pairingKey: "ABCD-EFGH"),
@@ -170,6 +192,7 @@ struct MirrorCommandTransportTests {
     var onClose: ((String?) -> Void)?
     var supportsLaunch = true
     var supportsShellSend = false
+    var supportsAgentInput = true
     var reply: ((MirrorCommandRequest) -> Void)?
     var commands: [MirrorCommandRequest] = []
     let inputs = AsyncStream.makeStream(of: MirrorCommandRequest.self)
@@ -184,7 +207,13 @@ struct MirrorCommandTransportTests {
       let json: MirrorJSON =
         success
         ? .object([
-          "ok": .bool(true), "data": .object(["dispatch": .object(["id": .string("d1")])]),
+          "ok": .bool(true), "command": .string("agents.input"),
+          "data": .object(["input": .object([
+            "bytes": .number(Double(commands.first(where: { $0.requestID == id }).map {
+              if case .agentsInput(let input) = $0.request.command { return input.prompt.utf8.count }
+              return 0
+            } ?? 0)), "trailing_enter_sent": .bool(true),
+          ])]),
         ])
         : .object([
           "ok": .bool(false),
@@ -201,6 +230,7 @@ struct MirrorCommandTransportTests {
             .init(
               panes: [pane],
               capabilities: ["text-v1", "agents-dispatch"]
+                + (supportsAgentInput ? ["agent-input"] : [])
                 + (supportsLaunch ? ["launch-profile"] : [])
                 + (supportsShellSend ? ["shell-send"] : []), hostRunID: UUID())))
       } else if message.kind == .subscribe {

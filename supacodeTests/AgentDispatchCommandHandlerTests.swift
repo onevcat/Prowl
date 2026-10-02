@@ -628,6 +628,115 @@ struct AgentDispatchCommandHandlerTests {
     #expect(cancelled == ["d10"])
   }
 
+  @Test func interactiveInputIgnoresPendingWithoutMutatingItOrInjectingProtocol() async throws {
+    let target = resolvedTarget()
+    let pending = AgentDispatchSnapshot(record: .pending(id: "old-task", createdAt: Self.start), binding: nil)
+    var delivered: [String] = []
+    var issued = 0
+    var cancelled = 0
+    let handler = AgentDispatchCommandHandler(
+      resolveTarget: { _ in .success(target) }, pendingDispatch: { _ in pending },
+      conditionSnapshot: { _ in self.snapshot(target, status: .idle, signal: self.turnEnded) },
+      issueDispatch: { _ in
+        issued += 1
+        return .failure(.surfacePending)
+      },
+      deliverPrompt: { _, text in
+        delivered.append(text)
+        return true
+      },
+      cancelDispatch: { _ in cancelled += 1 })
+    for text in ["你好\nsecond line", "follow-up"] {
+      let response = await handler.handle(envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: text))))
+      #expect(response.ok)
+      #expect(response.command == "agents.input")
+      struct Payload: Decodable { let input: SendInputInfo }
+      let data = try #require(response.data).decode(as: Payload.self)
+      #expect(data.input.bytes == text.utf8.count)
+      #expect(data.input.trailingEnterSent)
+    }
+    #expect(delivered == ["你好\nsecond line", "follow-up"])
+    #expect(issued == 0 && cancelled == 0)
+    let automated = await handler.handle(envelope: dispatch(pane: target.paneID))
+    #expect(automated.error?.code == CLIErrorCode.dispatchPending)
+  }
+
+  @Test func interactiveInputRetainsProtectionAndReportsUnconfirmedDelivery() async {
+    let target = resolvedTarget()
+    for (status, protection, delivered) in [
+      (AgentDisplayState.working, String?.none, false), (.idle, "Local draft", false), (.idle, nil, false),
+    ] {
+      var calls = 0
+      let handler = AgentDispatchCommandHandler(
+        resolveTarget: { _ in .success(target) }, inputProtection: { _ in protection },
+        conditionSnapshot: { _ in self.snapshot(target, status: status, signal: self.turnEnded) },
+        deliverPrompt: { _, _ in
+          calls += 1
+          return delivered
+        })
+      let response = await handler.handle(envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: "hello"))))
+      #expect(!response.ok)
+      if status == .idle && protection == nil {
+        #expect(response.error?.code == CLIErrorCode.sendFailed)
+        #expect(calls == 1)
+      } else {
+        #expect(response.error?.code == CLIErrorCode.dispatchTargetBusy)
+        #expect(calls == 0)
+      }
+    }
+  }
+
+  @Test func concurrentInteractiveAndAutomatedInputsCannotInterleave() async {
+    let target = resolvedTarget()
+    let started = AsyncStream.makeStream(of: Void.self)
+    let release = AsyncStream.makeStream(of: Void.self)
+    defer {
+      started.continuation.finish()
+      release.continuation.finish()
+    }
+    let handler = AgentDispatchCommandHandler(
+      resolveTarget: { _ in .success(target) },
+      conditionSnapshot: { _ in self.snapshot(target, status: .idle, signal: self.turnEnded) },
+      deliverPrompt: { _, _ in
+        started.continuation.yield(())
+        for await _ in release.stream { break }
+        return true
+      })
+    let first = Task {
+      await handler.handle(envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: "one"))))
+    }
+    for await _ in started.stream { break }
+    let second = await handler.handle(envelope: dispatch(pane: target.paneID))
+    #expect(second.error?.code == CLIErrorCode.dispatchTargetBusy)
+    release.continuation.yield(())
+    #expect(await first.value.ok)
+  }
+
+  @Test func interactiveInputRejectsInvalidTextAndCancelledRequests() async {
+    let target = resolvedTarget()
+    var calls = 0
+    let handler = AgentDispatchCommandHandler(
+      resolveTarget: { _ in .success(target) },
+      conditionSnapshot: { _ in self.snapshot(target, status: .idle, signal: self.turnEnded) },
+      deliverPrompt: { _, _ in
+        calls += 1
+        return true
+      })
+    for text in ["", "   ", "escape\u{1b}"] {
+      let response = await handler.handle(envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: text))))
+      #expect(response.error?.code == CLIErrorCode.invalidArgument)
+    }
+    let task = Task {
+      withUnsafeCurrentTask { $0?.cancel() }
+      return await handler.handle(envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: "hello"))))
+    }
+    #expect(await task.value.ok == false)
+    #expect(calls == 0)
+    // Cancellation must release the per-pane in-flight guard.
+    #expect(await handler.handle(envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: "retry")))).ok)
+    #expect(calls == 1)
+  }
+
   // MARK: - Helpers
 
   private static let start = Date(timeIntervalSince1970: 1_000)

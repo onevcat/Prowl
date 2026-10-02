@@ -288,6 +288,7 @@ private fun HostDialog(
                 Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                PairingScanButton(connect = connect, failed = { error = it })
                 saved.takeLast(5).reversed().forEach { host ->
                     TextButton(
                         onClick = {
@@ -399,6 +400,13 @@ private fun Reading(session: Session, state: SessionState) {
             if (state.follow && !state.showsHistory && blocks.isNotEmpty())
                 scroll.scrollToItem(blocks.lastIndex)
         }
+        LaunchedEffect(state.scrollCompletion) {
+            val completion = state.scrollCompletion
+            if (!state.showsHistory && completion != null && blocks.isNotEmpty()) {
+                scroll.scrollToItem(0)
+                session.consumeScrollCompletion(completion.requestID)
+            }
+        }
         Column(Modifier.fillMaxSize()) {
             if (state.showsHistory)
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -411,6 +419,25 @@ private fun Reading(session: Session, state: SessionState) {
                     }
                     if (state.historyTruncated)
                         Text("History truncated", style = MaterialTheme.typography.labelSmall)
+                }
+            else if ("remote-scroll" in state.capabilities)
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(
+                        onClick = { session.scrollRemote(ScrollDirection.UP) },
+                        enabled = state.canScrollRemote(ScrollDirection.UP),
+                    ) { Text("Scroll up") }
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                        if (state.scrolling != null) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                                Text("Loading…", modifier = Modifier.padding(start = 8.dp))
+                            }
+                        }
+                    }
+                    TextButton(
+                        onClick = { session.scrollRemote(ScrollDirection.DOWN) },
+                        enabled = state.canScrollRemote(ScrollDirection.DOWN),
+                    ) { Text("Scroll down") }
                 }
             LazyColumn(
                 Modifier.weight(1f).fillMaxWidth().testTag("mirror-output"),

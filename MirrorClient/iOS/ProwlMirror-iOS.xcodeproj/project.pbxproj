@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		A82000000000000000000001 /* MirrorLaunchModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A82000000000000000000002 /* MirrorLaunchModel.swift */; };
+		A83000000000000000000001 /* MirrorPairingPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = A83000000000000000000002 /* MirrorPairingPayload.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -29,6 +30,7 @@
 
 /* Begin PBXFileReference section */
 		A82000000000000000000002 /* MirrorLaunchModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Shared/MirrorLaunchModel.swift"; sourceTree = SOURCE_ROOT; };
+		A83000000000000000000002 /* MirrorPairingPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Shared/MirrorPairingPayload.swift"; sourceTree = SOURCE_ROOT; };
 		6C0FBE88305194410093AD5F /* ProwlMirror-iOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "ProwlMirror-iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		6C0FBE95305194420093AD5F /* ProwlMirror-iOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "ProwlMirror-iOSTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		6C0FBE9F305194420093AD5F /* ProwlMirror-iOSUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "ProwlMirror-iOSUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -81,6 +83,7 @@
 			isa = PBXGroup;
 			children = (
 				A82000000000000000000002 /* MirrorLaunchModel.swift */,
+				A83000000000000000000002 /* MirrorPairingPayload.swift */,
 				6C0FBE8A305194410093AD5F /* ProwlMirror-iOS */,
 				6C0FBE98305194420093AD5F /* ProwlMirror-iOSTests */,
 				6C0FBEA2305194420093AD5F /* ProwlMirror-iOSUITests */,
@@ -243,6 +246,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A82000000000000000000001 /* MirrorLaunchModel.swift in Sources */,
+				A83000000000000000000001 /* MirrorPairingPayload.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -407,6 +411,7 @@
 				DEVELOPMENT_TEAM = 4HRXWL85AP;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Scan a Prowl Host pairing code to connect.";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Connect to your Prowl Host to mirror terminal panes.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -443,6 +448,7 @@
 				DEVELOPMENT_TEAM = 4HRXWL85AP;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Scan a Prowl Host pairing code to connect.";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Connect to your Prowl Host to mirror terminal panes.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;

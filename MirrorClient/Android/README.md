@@ -21,11 +21,11 @@ Select an open pane, or New Agent Pane → workspace → available Host Agent Pr
 → optional initial message. Models and permissions come from that Profile. There
 is no private AI console or dependency on personal shell wrappers.
 
-- Active text replaces the last snapshot; it is not an append-only transcript.
+- Live text replaces the last viewport snapshot; it is not an append-only transcript.
 - Markdown emphasis/inline code, code fences and tables have readable previews;
   expanding code/table freezes the detail and supports copying the original text.
 - Multiline input sends only on Send or two physical Returns within 350 ms.
-  IME composition disables Send. Host checks Agent readiness through public dispatch;
+  IME composition disables Send. Host checks Agent readiness through shared interactive input;
   shell Send requires an explicit Host capability. Current Hosts refuse it because
   they cannot verify an empty command line; the draft remains available.
 - An unconfirmed delivery preserves the draft and blocks accidental resending.
@@ -34,6 +34,24 @@ is no private AI console or dependency on personal shell wrappers.
   If another client claims a free pane before Mirror completes, Android reports it busy.
 - History is a bounded frozen snapshot with earlier-page loading. Returning to Live
   keeps receiving current output. Closing a mirror never stops the Host program.
+- Hosts with `remote-scroll` show **Scroll up / Scroll down** above the Live text.
+  Only these buttons send remote scroll input; swipes, edge pulls, selection and
+  History remain local. **Follow latest** stays below the text and follows new frames.
+  These actions scroll the actual Host pane, including a terminal application's own
+  scroll handling. Host targets its pane height minus three rows (at least one row),
+  with exact native scrollback movement and equivalent precision wheel input for
+  applications. Internal Host profiles adjust known Agent wheel steps (Codex: three
+  rows per event, reserving eight composer/status rows). Host precision-scroll
+  settings and the application can affect the distance. One request runs at
+  a time with a loading indicator; an unchanged screen also completes normally.
+  Requests time out after five seconds and are never replayed after reconnecting.
+  Hosts with `scroll-state-v1` can confirm the top/bottom boundary: the matching
+  button is disabled until a newer frame permits scrolling again. Unknown bounds,
+  including applications that manage their own scrolling, stay enabled; unchanged
+  text alone never disables a direction. Older Hosts need no boundary metadata.
+  Both directions resume reading at the top of the returned screen. Automatic
+  following is paused by remote scrolling. Completion is consumed once: switching
+  panes or recreating the reader preserves later local reading positions.
 - Saving credentials does not persist terminal output or drafts across process death.
   Rotation retains the current ViewModel; reopening the app offers saved Hosts.
 
@@ -69,3 +87,14 @@ The shared [wire contract](../../docs/remote-mirror-wire.md) is owned by Prowl. 
 protocol or 64-hex-code compatibility. Update both ends together.
 
 Source attribution and upstream terms: [ThirdPartyNotices](ThirdPartyNotices/README.md).
+
+Ordinary Send requires Host capability `agent-input`. It does not add a completion
+prompt or create a pending dispatch; prior automation receipts remain unchanged.
+Delivery confirmation and reconnect receipt lookup remain separate from task success.
+
+Use **Scan QR Code** in the Host connection form to scan **Add a Device** on Host.
+Scanning connects with the encoded address, port and short-lived code. Camera
+permission is optional; manual entry remains available. The scanner opens in portrait
+without a red scanning line. Refresh expired codes on Host.
+The Live scroll toolbar places Scroll up on the left and Scroll down on the right,
+with loading feedback centered between them.

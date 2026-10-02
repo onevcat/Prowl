@@ -10,6 +10,7 @@ Runtime dependencies:
 - AndroidX / Jetpack Compose: Apache License 2.0.
 - Kotlin and kotlinx.coroutines: Apache License 2.0.
 - Gson: Apache License 2.0.
+- ZXing Android Embedded and ZXing Core: Apache License 2.0.
 - Bouncy Castle Java libraries: [Bouncy Castle licence](https://www.bouncycastle.org/licence.html).
 
 Android uses Bouncy Castle's low-level `PSKTlsClient`, not the JSSE trust managers

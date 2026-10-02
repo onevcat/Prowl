@@ -6,7 +6,7 @@ nonisolated enum MirrorInputRoute {
     guard result.ok, let item = result.data?.items.first(where: { UUID(uuidString: $0.pane.id) == paneID }) else {
       throw Refusal.missing
     }
-    if item.pane.agent != nil { return .agentsDispatch(.init(pane: paneID.uuidString, prompt: text)) }
+    if item.pane.agent != nil { return .agentsInput(.init(pane: paneID.uuidString, prompt: text)) }
     guard item.task.status == "idle" else { throw Refusal.busy }
     return .send(.init(pane: paneID, text: text))
   }

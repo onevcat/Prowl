@@ -156,6 +156,7 @@ private struct AddConnectionView: View {
   @State private var error: String?
   @State private var session: MirrorSession?
   @State private var added = false
+  @State private var showsScanner = false
 
   var body: some View {
     NavigationStack {
@@ -199,6 +200,13 @@ private struct AddConnectionView: View {
           }
         } else {
           Section("Host connection") {
+            Button {
+              showsScanner = true
+            } label: {
+              Label("Scan QR Code", systemImage: "qrcode.viewfinder")
+            }
+            .disabled(session?.status == .connecting)
+            .accessibilityIdentifier("scan-pairing-qr")
             TextField("Host IP", text: $address)
               .textInputAutocapitalization(.never).autocorrectionDisabled()
               .accessibilityIdentifier("host-address")
@@ -231,6 +239,18 @@ private struct AddConnectionView: View {
             port = String(saved.port)
             key = saved.pairingKey
           }
+        } catch { self.error = error.localizedDescription }
+      }
+    }
+    .sheet(isPresented: $showsScanner) {
+      MirrorPairingScanner { text in
+        showsScanner = false
+        do {
+          let payload = try MirrorPairingPayload.parse(text)
+          address = payload.address
+          port = String(payload.port)
+          key = payload.code
+          connect()
         } catch { self.error = error.localizedDescription }
       }
     }
@@ -340,6 +360,35 @@ private struct MirrorReadingView: View {
           .onChange(of: session.revision) { _, _ in
             if session.followsLatest { proxy.scrollTo("latest", anchor: .bottom) }
           }
+          .onChange(of: session.completedScroll) { _, completion in
+            guard completion != nil else { return }
+            position.scrollTo(edge: .top)
+          }
+          .safeAreaInset(edge: .top) {
+            VStack(alignment: .leading, spacing: 8) {
+              HStack {
+                Button("Scroll Up", systemImage: "arrow.up") { session.scroll(.upward) }
+                  .disabled(!session.canScroll(.upward))
+                  .accessibilityIdentifier("mirror-scroll-up")
+                  .help("Scroll the Host pane toward earlier output")
+                Spacer()
+                if session.isScrolling {
+                  ProgressView("Scrolling…").accessibilityIdentifier("mirror-scroll-progress")
+                }
+                Spacer()
+                Button("Scroll Down", systemImage: "arrow.down") { session.scroll(.downward) }
+                  .disabled(!session.canScroll(.downward))
+                  .accessibilityIdentifier("mirror-scroll-down")
+                  .help("Scroll the Host pane toward later output")
+              }
+              if let error = session.scrollError {
+                Text(error).foregroundStyle(.secondary)
+              } else if session.status == .live && !session.supportsRemoteScroll {
+                Text("Update Host to enable remote scrolling.").foregroundStyle(.secondary)
+              }
+            }
+            .font(.caption).padding(.horizontal).padding(.vertical, 8).background(.bar)
+          }
           .safeAreaInset(edge: .bottom) {
             HStack {
               Toggle("Follow latest", isOn: $session.followsLatest).toggleStyle(.button)
@@ -349,6 +398,7 @@ private struct MirrorReadingView: View {
                 proxy.scrollTo("latest", anchor: .bottom)
               }
             }
+            .disabled(session.isScrolling)
             .font(.caption).padding(.horizontal).padding(.vertical, 8).background(.bar)
           }
         }

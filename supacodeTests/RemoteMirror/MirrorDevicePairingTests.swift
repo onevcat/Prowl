@@ -27,9 +27,11 @@ struct MirrorDevicePairingTests {
     #expect(host.pairingKey.isEmpty)
     host.addDevice()
     try await listening(host)
-    let first = Client(port: UInt16(host.port)!, code: host.pairingKey) {
-      #expect(host.isRunning && !host.isStarting)
-    }
+    let first = Client(
+      port: UInt16(host.port)!, code: host.pairingKey,
+      onPersist: {
+        #expect(host.isRunning && !host.isStarting)
+      })
     defer { first.peer.close() }
     try await first.start(stage: "first pairing")
     #expect(host.devices.count == 1)
@@ -44,9 +46,11 @@ struct MirrorDevicePairingTests {
     #expect(host.mirroredPanes(for: firstCredential.deviceID).map(\.id) == [source.id])
     host.addDevice()
     try await listening(host)
-    let second = Client(port: UInt16(host.port)!, code: host.pairingKey) {
-      #expect(host.isRunning && !host.isStarting)
-    }
+    let second = Client(
+      port: UInt16(host.port)!, code: host.pairingKey,
+      onPersist: {
+        #expect(host.isRunning && !host.isStarting)
+      })
     defer { second.peer.close() }
     try await second.start(stage: "second pairing")
     #expect(host.devices.count == 2)
@@ -86,6 +90,105 @@ struct MirrorDevicePairingTests {
       return
     }
     #expect(rejected.reason?.contains("no longer recognizes") == true)
+  }
+
+  @Test(.timeLimit(.minutes(1)), arguments: [false, true])
+  func revokeAllRequiresFreshPairing(saveFails: Bool) async throws {
+    let vault = Vault()
+    var rejectSave = false
+    let source = Source()
+    let suite = "MirrorRevokeAllTests-\(UUID())"
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let host = MirrorHost(
+      source: source, defaults: defaults, enabled: true,
+      loadIdentity: { vault.identity },
+      saveIdentity: {
+        if rejectSave {
+          throw MirrorCredentialVault.Failure(status: errSecIO, operation: .saveIdentity)
+        }
+        vault.identity = $0
+      })
+    host.address = "127.0.0.1"
+    host.port = String(try MirrorTestPort.unusedPort())
+    defer { host.stop() }
+    try await MirrorTestPort.startHost(host)
+    var clients: [Client] = []
+    var credentials: [MirrorDeviceCredential] = []
+    defer { for client in clients { client.peer.close() } }
+    for _ in 0..<2 {
+      host.addDevice()
+      try await listening(host)
+      let client = Client(port: UInt16(host.port)!, code: host.pairingKey)
+      clients.append(client)
+      try await client.start(stage: "pair before revoke all")
+      credentials.append(try #require(client.saved?.credential))
+    }
+    clients[0].peer.send(
+      .subscribe(.init(paneID: source.id, representation: .text, intent: .ifFree)))
+    var messages = clients[0].messages.makeAsyncIterator()
+    #expect(await messages.next()?.kind == .subscribed)
+    #expect(await messages.next()?.text == "current")
+    clients[1].peer.close()
+    for await offline in Observations({ !host.isOnline(credentials[1].deviceID) }) where offline {
+      break
+    }
+    host.addDevice()
+    try await listening(host)
+    let oldCode = host.pairingKey
+    let hostID = vault.identity?.id
+    rejectSave = saveFails
+    host.revokeAllDevices()
+    if saveFails {
+      #expect(host.error != nil)
+      #expect(host.devices.count == 2)
+      #expect(vault.identity?.devices.count == 2)
+      #expect(!clients[0].closed)
+      #expect(host.subscriberCount == 1)
+      #expect(host.pairingKey == oldCode)
+      return
+    }
+    for await closed in Observations({ clients[0].closed }) where closed { break }
+    try await listening(host)
+    #expect(host.devices.isEmpty)
+    #expect(host.onlineDeviceIDs.isEmpty)
+    #expect(host.subscriberCount == 0)
+    #expect(host.pairingKey.isEmpty)
+    #expect(host.pairingExpiresAt == nil)
+    #expect(host.lastPairedDevice == nil)
+    #expect(vault.identity?.devices.isEmpty == true)
+    #expect(vault.identity?.id == hostID)
+    host.stop()
+    host.start()
+    try await listening(host)
+    #expect(host.devices.isEmpty)
+    let rejected =
+      credentials.map { Client(port: UInt16(host.port)!, credential: $0) }
+      + [Client(port: UInt16(host.port)!, code: oldCode)]
+    for client in rejected {
+      clients.append(client)
+      client.peer.start()
+      for await closed in Observations({ client.closed }) where closed { break }
+      #expect(!client.ready)
+      guard case .handshakeRejected = client.peer.failure else {
+        Issue.record("Old device or pairing code was not rejected at TLS")
+        continue
+      }
+    }
+    host.addDevice()
+    try await listening(host)
+    var restoredOldAccess = false
+    let fresh = Client(
+      port: UInt16(host.port)!, code: host.pairingKey,
+      restore: { configuration in
+        restoredOldAccess = true
+        return .init(
+          address: configuration.address, port: configuration.port, pairingKey: "", credential: credentials[0])
+      })
+    clients.append(fresh)
+    try await fresh.start(stage: "fresh pairing after revoke all")
+    #expect(!restoredOldAccess)
+    #expect(host.devices.count == 1)
   }
 
   @Test(.timeLimit(.minutes(1))) func pairingConnectionCannotListAndWindowExpires() async throws {
@@ -373,6 +476,7 @@ struct MirrorDevicePairingTests {
     let messages: AsyncStream<MirrorMessage>
     init(
       port: UInt16, code: String = "", credential: MirrorDeviceCredential? = nil,
+      restore: @escaping (MirrorSavedConnection) throws -> MirrorSavedConnection? = { _ in nil },
       onPersist: @escaping () -> Void = {}
     ) {
       let events = AsyncStream.makeStream(of: MirrorMessage.self)
@@ -380,7 +484,7 @@ struct MirrorDevicePairingTests {
       peer = MirrorRemoteConnection(
         configuration: .init(
           address: "127.0.0.1", port: port, pairingKey: code, credential: credential),
-        restore: { _ in nil },
+        restore: restore,
         persist: { [weak self] in
           self?.saved = $0
           onPersist()

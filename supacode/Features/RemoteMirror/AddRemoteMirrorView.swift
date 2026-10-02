@@ -24,7 +24,7 @@ struct AddRemoteMirrorView: View {
     return mirrors.knownHosts.host(address: endpoint.address, port: endpoint.port)
   }
 
-  /// A saved credential is used silently; the code field appears only when one is missing or rejected.
+  /// Saved access is the default, but users can explicitly replace it after Host revocation.
   private var needsPairingCode: Bool { requiresNewCode || knownHost == nil }
 
   var body: some View {
@@ -133,18 +133,18 @@ struct AddRemoteMirrorView: View {
   private var form: some View {
     VStack(alignment: .leading, spacing: 16) {
       // Sheets propose no height; without fixedSize multi-line text collapses to one truncated line.
-      Text("Enter the address shown on Host under Remote Mirror → Add a Device.")
+      Text("Paste connection details from Host into any field below, or enter the address and pairing code manually.")
         .foregroundStyle(.secondary)
         .fixedSize(horizontal: false, vertical: true)
       Form {
-        TextField("Address", text: $address, prompt: Text("IP address"))
+        TextField("Address", text: connectionField($address), prompt: Text("IP address"))
           .accessibilityIdentifier("remote-mirror-address")
-        TextField("Port", text: $port, prompt: Text("7880"))
+        TextField("Port", text: connectionField($port), prompt: Text("7880"))
       }
       .disabled(isConnecting)
       if needsPairingCode {
         VStack(spacing: 6) {
-          TextField("Pairing Code", text: $pairingCode, prompt: Text("XXXX-XXXX"))
+          TextField("Pairing Code", text: connectionField($pairingCode, isCode: true), prompt: Text("XXXX-XXXX"))
             .labelsHidden()
             .font(.title.monospaced())
             .multilineTextAlignment(.center)
@@ -152,10 +152,6 @@ struct AddRemoteMirrorView: View {
             .frame(maxWidth: 220)
             .focused($codeFocused)
             .disabled(isConnecting)
-            .onChange(of: pairingCode) { _, next in
-              let formatted = MirrorPairingCode.formatted(next)
-              if formatted != next { pairingCode = formatted }
-            }
             .accessibilityIdentifier("remote-mirror-pairing-code")
           Text("The eight-character code shown on Host under Add a Device.\nIt expires after 60 seconds.")
             .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
@@ -163,15 +159,52 @@ struct AddRemoteMirrorView: View {
         }
         .frame(maxWidth: .infinity)
       } else if let knownHost {
-        Label("Already paired with \(knownHost.displayName). No code is needed.", systemImage: "checkmark.seal")
-          .font(.caption).foregroundStyle(.secondary)
-          .fixedSize(horizontal: false, vertical: true)
+        HStack {
+          Label("Already paired with \(knownHost.displayName). No code is needed.", systemImage: "checkmark.seal")
+            .font(.caption).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+          Spacer()
+          Button("Pair Again…") {
+            client?.close()
+            client = nil
+            error = nil
+            pairingCode = ""
+            requiresNewCode = true
+            codeFocused = true
+          }
+          .help("Enter a fresh code from Host instead of using saved device access")
+          .accessibilityIdentifier("remote-mirror-pair-again")
+        }
       }
       if let message = client?.error ?? error {
         Text(message).foregroundStyle(.red).textSelection(.enabled)
           .fixedSize(horizontal: false, vertical: true)
       }
     }
+  }
+
+  private func connectionField(_ field: Binding<String>, isCode: Bool = false) -> Binding<String> {
+    Binding(
+      get: { field.wrappedValue },
+      set: { value in
+        do {
+          if let payload = try MirrorEndpointInput.pastedPairingPayload(value) {
+            client?.close()
+            client = nil
+            address = payload.address
+            port = String(payload.port)
+            pairingCode = MirrorPairingCode.formatted(payload.code)
+            requiresNewCode = true
+            error = nil
+          } else {
+            field.wrappedValue = isCode ? MirrorPairingCode.formatted(value) : value
+          }
+        } catch let problem as MirrorEndpointInput.Problem {
+          self.error = problem.message
+        } catch {
+          self.error = error.localizedDescription
+        }
+      })
   }
 
   private func panePicker(_ client: MirrorClient) -> some View {

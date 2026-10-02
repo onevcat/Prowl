@@ -63,6 +63,48 @@ class CoreTest {
     }
 
     @Test
+    fun scrollControlsUseSwiftEnvelopeAndStrictSequenceNumbers() {
+        val requestID = "00010203-0405-0607-0809-0A0B0C0D0E0F"
+        val lease = "11111111-2222-3333-4444-555555555555"
+        val encoded = Wire.encode(control("scroll", obj(
+            "requestID" to requestID, "direction" to "up", "subscriptionID" to lease,
+        )))
+        assertEquals(
+            "{\"scroll\":{\"_0\":{\"requestID\":\"$requestID\",\"direction\":\"up\",\"subscriptionID\":\"$lease\"}}}",
+            String(encoded.drop(5).toByteArray()),
+        )
+        val result = Wire.read(ByteArrayInputStream(Wire.encode(control("scrollResult", obj(
+            "requestID" to requestID, "sequence" to Long.MAX_VALUE, "subscriptionID" to lease,
+        ))))) as Packet.Control
+        assertEquals("scrollResult", result.kind)
+        assertEquals(Long.MAX_VALUE, result.payload().longInteger("sequence"))
+        for (invalid in listOf("1", 1.5, java.math.BigInteger("9223372036854775808"))) {
+            assertThrows(Exception::class.java) { obj("sequence" to invalid).longInteger("sequence") }
+        }
+    }
+
+    @Test
+    fun scrollStateUsesSwiftEnvelopeAndStrictOptionalBounds() {
+        val lease = "11111111-2222-3333-4444-555555555555"
+        val packet = control("scrollState", obj(
+            "atTop" to true, "atBottom" to false, "sequence" to 12, "subscriptionID" to lease,
+        ))
+        val encoded = Wire.encode(packet)
+        assertEquals(
+            "{\"scrollState\":{\"_0\":{\"atTop\":true,\"atBottom\":false,\"sequence\":12,\"subscriptionID\":\"$lease\"}}}",
+            String(encoded.drop(5).toByteArray()),
+        )
+        val payload = (Wire.read(ByteArrayInputStream(encoded)) as Packet.Control).payload()
+        assertEquals(true, payload.optionalFlag("atTop"))
+        assertEquals(false, payload.optionalFlag("atBottom"))
+        assertNull(payload.optionalFlag("missing"))
+        payload.add("atTop", com.google.gson.JsonNull.INSTANCE)
+        assertNull(payload.optionalFlag("atTop"))
+        assertThrows(Exception::class.java) { obj("atTop" to "true").optionalFlag("atTop") }
+        assertThrows(Exception::class.java) { obj("atTop" to 1).optionalFlag("atTop") }
+    }
+
+    @Test
     fun pairingAndProofBinding() {
         assertEquals("ABCD2345", Authentication.code("abcd-2345"))
         assertThrows(Exception::class.java) { Authentication.code("0OIL1111") }
@@ -112,7 +154,7 @@ class CoreTest {
                     ),
             )
         assertTrue(
-            Commands.input(listing("claude", "running"), pane, "hello").has("agentsDispatch")
+            Commands.input(listing("claude", "running"), pane, "hello").has("agentsInput")
         )
         assertTrue(Commands.input(listing(null, "idle"), pane, "hello").has("send"))
         assertThrows(Exception::class.java) { Commands.input(listing(null, "running"), pane, "x") }

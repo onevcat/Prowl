@@ -30,11 +30,17 @@ fun JsonObject.flag(key: String): Boolean =
     get(key)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isBoolean }?.asBoolean
         ?: throw IOException("Missing or invalid $key")
 
+fun JsonObject.optionalFlag(key: String): Boolean? =
+    if (!has(key) || get(key).isJsonNull) null else flag(key)
+
 fun JsonObject.optionalString(key: String): String? =
     if (!has(key) || get(key).isJsonNull) null else string(key)
 
 fun JsonObject.integer(key: String): Int =
     stringNumber(key).toIntOrNull() ?: throw IOException("Invalid $key")
+
+fun JsonObject.longInteger(key: String): Long =
+    stringNumber(key).toLongOrNull() ?: throw IOException("Invalid $key")
 
 private fun JsonObject.stringNumber(key: String): String =
     get(key)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asString
@@ -98,6 +104,9 @@ object Wire {
             "acknowledge",
             "input",
             "refresh",
+            "scroll",
+            "scrollResult",
+            "scrollState",
             "history",
             "historyPage",
             "command",
@@ -217,7 +226,7 @@ object Commands {
                 .firstOrNull { canonical(it.record("pane").string("id")) == pane }
                 ?: throw IOException("Pane is no longer available")
         if (item.record("pane").optionalString("agent") != null)
-            return obj("agentsDispatch" to obj("_0" to obj("pane" to pane, "prompt" to text)))
+            return obj("agentsInput" to obj("_0" to obj("pane" to pane, "prompt" to text)))
         if (item.record("task").optionalString("status") != "idle")
             throw IOException("Shell is busy or its state is unknown")
         return obj(

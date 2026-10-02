@@ -3,6 +3,17 @@ import ProwlCLIShared
 import XCTest
 
 final class DispatchWireModelTests: XCTestCase {
+  func testInteractiveInputRoundTripsWithoutDispatchMetadata() throws {
+    let input = DispatchInput(pane: UUID().uuidString, prompt: "你好\nfollow-up")
+    let data = try JSONEncoder().encode(CommandEnvelope(output: .json, command: .agentsInput(input)))
+    let decoded = try JSONDecoder().decode(CommandEnvelope.self, from: data)
+    XCTAssertEqual(decoded.command.name, "agents.input")
+    guard case .agentsInput(let actual) = decoded.command else {
+      return XCTFail("Expected interactive input")
+    }
+    XCTAssertEqual(actual, input)
+  }
+
   func testDispatchCommandsRoundTripWithStableNames() throws {
     let commands: [Command] = [
       .agentsDispatch(DispatchInput(pane: "p7", prompt: "Round two.\nRe-review the diff.")),

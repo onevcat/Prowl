@@ -120,7 +120,6 @@ extension GhosttyRuntime {
     _ len: Int,
     _ confirm: Bool
   ) {
-    _ = userdata
     guard let content, len > 0 else { return }
     let items: [(mime: String, data: String)] = (0..<len).compactMap { index in
       let item = content.advanced(by: index).pointee
@@ -128,6 +127,19 @@ extension GhosttyRuntime {
       return (mime: String(cString: mimePtr), data: String(cString: dataPtr))
     }
     guard !items.isEmpty else { return }
+    let exportUserdataBits = userdata.map { UInt(bitPattern: $0) }
+    if Thread.isMainThread {
+      let consumed = MainActor.assumeIsolated {
+        guard
+          let capture = surfaceBridge(
+            fromUserdata: exportUserdataBits.flatMap { UnsafeMutableRawPointer(bitPattern: $0) })?
+            .captureClipboard
+        else { return false }
+        capture(items)
+        return true
+      }
+      if consumed { return }
+    }
     if Thread.isMainThread {
       MainActor.assumeIsolated {
         writeClipboard(

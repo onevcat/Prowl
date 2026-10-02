@@ -17,12 +17,13 @@ nonisolated struct MirrorCommandRequest: Codable, Equatable, Sendable {
     case list(Empty)
     case profiles(Empty)
     case create(Create)
+    case agentsInput(Dispatch)
     case agentsDispatch(Dispatch)
     case send(MirrorShellInput)
 
     var targetPaneID: UUID? {
       switch self {
-      case .agentsDispatch(let input): UUID(uuidString: input.pane)
+      case .agentsInput(let input), .agentsDispatch(let input): UUID(uuidString: input.pane)
       case .send(let input): UUID(uuidString: input.selector.value)
       default: nil
       }

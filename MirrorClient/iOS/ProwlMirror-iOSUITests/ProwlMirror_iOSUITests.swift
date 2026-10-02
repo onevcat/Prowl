@@ -3,6 +3,192 @@ import XCTest
 
 final class ProwlMirror_iOSUITests: XCTestCase {
   @MainActor
+  func testHostBoundariesDisableOnlyTheReachedDirection() {
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-fixture", "--mirror-ui-scroll-fixture", "--mirror-ui-scroll-boundary-fixture"]
+    XCUIDevice.shared.orientation = .portrait
+    app.launch()
+    let scrollUp = app.buttons["mirror-scroll-up"]
+    let scrollDown = app.buttons["mirror-scroll-down"]
+    XCTAssertTrue(scrollUp.waitForExistence(timeout: 10))
+    func page(_ number: Int) -> XCUIElement {
+      app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Remote page \(number)\n")).firstMatch
+    }
+    XCTAssertTrue(scrollUp.isEnabled)
+    XCTAssertFalse(scrollDown.isEnabled)
+    XCTAssertLessThan(scrollUp.frame.maxY, page(0).frame.minY)
+    scrollUp.tap()
+    XCTAssertTrue(page(-1).waitForExistence(timeout: 5))
+    XCTAssertTrue(scrollUp.isEnabled && scrollDown.isEnabled)
+    scrollUp.tap()
+    XCTAssertTrue(page(-2).waitForExistence(timeout: 5))
+    XCTAssertFalse(scrollUp.isEnabled)
+    XCTAssertTrue(scrollDown.isEnabled)
+    let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+    attachment.name = "Top controls at Host scroll boundary"
+    attachment.lifetime = .keepAlways
+    add(attachment)
+    scrollDown.tap()
+    XCTAssertTrue(page(-1).waitForExistence(timeout: 5))
+    XCTAssertTrue(scrollUp.isEnabled && scrollDown.isEnabled)
+    scrollDown.tap()
+    XCTAssertTrue(page(0).waitForExistence(timeout: 5))
+    XCTAssertTrue(scrollUp.isEnabled)
+    XCTAssertFalse(scrollDown.isEnabled)
+    app.buttons["History"].tap()
+    XCTAssertTrue(app.buttons["Load Earlier 200 Lines"].waitForExistence(timeout: 5))
+    XCTAssertFalse(scrollUp.exists)
+    app.buttons["Live Output"].tap()
+    XCTAssertTrue(scrollUp.waitForExistence(timeout: 5))
+    XCTAssertTrue(scrollUp.isEnabled)
+    XCTAssertFalse(scrollDown.isEnabled)
+  }
+
+  @MainActor
+  func testOldHostKeepsScrollButtonsDisabledAndLocalReaderAvailable() {
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-fixture", "--mirror-ui-scroll-fixture", "--mirror-ui-no-scroll-fixture"]
+    XCUIDevice.shared.orientation = .portrait
+    app.launch()
+    let scrollUp = app.buttons["mirror-scroll-up"]
+    let scrollDown = app.buttons["mirror-scroll-down"]
+    XCTAssertTrue(scrollUp.waitForExistence(timeout: 10))
+    XCTAssertFalse(scrollUp.isEnabled)
+    XCTAssertFalse(scrollDown.isEnabled)
+    let text = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Remote page 0\n")).firstMatch
+    XCTAssertTrue(text.exists)
+    XCTAssertLessThan(scrollUp.frame.maxY, text.frame.minY)
+    app.scrollViews["mirror-live-scroll"].swipeDown()
+    app.scrollViews["mirror-live-scroll"].swipeUp()
+    XCTAssertTrue(text.exists)
+    XCTAssertTrue(app.buttons["Latest"].isEnabled)
+  }
+
+  @MainActor
+  func testSelectingTextDoesNotScrollTheHost() {
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-fixture", "--mirror-ui-scroll-fixture"]
+    XCUIDevice.shared.orientation = .portrait
+    app.launch()
+    let text = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Remote page 0\n")).firstMatch
+    XCTAssertTrue(text.waitForExistence(timeout: 10))
+    let start = text.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.25))
+    start.press(forDuration: 1, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 140)))
+    XCTAssertTrue(text.exists)
+    XCTAssertTrue(
+      app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Copy")).firstMatch.exists)
+    XCTAssertFalse(
+      app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Remote page -1\n")).firstMatch.exists)
+    let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+    attachment.name = "Text selection leaves Host scroll unchanged"
+    attachment.lifetime = .keepAlways
+    add(attachment)
+  }
+
+  @MainActor
+  func testRemoteScrollAlwaysRevealsTheTopWhileInteriorDragStaysLocal() {
+    let app = XCUIApplication()
+    app.launchArguments = [
+      "--mirror-ui-fixture", "--mirror-ui-scroll-fixture", "--mirror-ui-scroll-long-fixture",
+    ]
+    XCUIDevice.shared.orientation = .portrait
+    app.launch()
+    let scrollUp = app.buttons["mirror-scroll-up"]
+    let reading = app.scrollViews["mirror-live-scroll"]
+    XCTAssertTrue(scrollUp.waitForExistence(timeout: 10))
+    scrollUp.tap()
+    let earlier = app.staticTexts["Remote -1 marker 1"]
+    expectation(
+      for: NSPredicate { _, _ in
+        earlier.exists && earlier.isHittable && earlier.frame.minY >= reading.frame.minY
+          && earlier.frame.maxY <= reading.frame.maxY
+      }, evaluatedWith: nil)
+    waitForExpectations(timeout: 5)
+    reading.swipeUp()
+    let sameScreen = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Remote -1 marker "))
+    XCTAssertTrue(sameScreen.allElementsBoundByIndex.contains { $0.isHittable })
+    app.buttons["mirror-scroll-down"].tap()
+    let later = app.staticTexts["Remote 0 marker 1"]
+    expectation(
+      for: NSPredicate { _, _ in
+        later.exists && later.isHittable && later.frame.minY >= reading.frame.minY
+          && later.frame.maxY <= reading.frame.maxY
+      }, evaluatedWith: nil)
+    waitForExpectations(timeout: 5)
+  }
+
+  @MainActor
+  func testRemoteScrollShowsLoadingAndKeepsHistoryIndependent() {
+    let app = XCUIApplication()
+    app.launchArguments = [
+      "--mirror-ui-fixture", "--mirror-ui-scroll-fixture", "--mirror-ui-scroll-delay-fixture",
+    ]
+    XCUIDevice.shared.orientation = .portrait
+    app.launch()
+    let scrollUp = app.buttons["mirror-scroll-up"]
+    let scrollDown = app.buttons["mirror-scroll-down"]
+    let progress = app.descendants(matching: .any).matching(identifier: "mirror-scroll-progress").firstMatch
+    XCTAssertTrue(scrollUp.waitForExistence(timeout: 10))
+    scrollUp.tap()
+    XCTAssertTrue(progress.waitForExistence(timeout: 5))
+    XCTAssertFalse(scrollUp.isEnabled)
+    XCTAssertFalse(scrollDown.isEnabled)
+    let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+    attachment.name = "Remote scroll loading"
+    attachment.lifetime = .keepAlways
+    add(attachment)
+    let olderPage = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Remote page -1\n")).firstMatch
+    XCTAssertTrue(olderPage.waitForExistence(timeout: 8))
+    XCTAssertFalse(progress.exists)
+    scrollDown.tap()
+    app.buttons["History"].tap()
+    XCTAssertTrue(app.staticTexts["Loaded lines 202–401"].waitForExistence(timeout: 5))
+    XCTAssertFalse(scrollUp.exists)
+    app.buttons["Load Earlier 200 Lines"].tap()
+    XCTAssertTrue(app.staticTexts["Loaded lines 2–401"].waitForExistence(timeout: 5))
+    app.buttons["Live Output"].tap()
+    let latestPage = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Remote page 0\n")).firstMatch
+    XCTAssertTrue(latestPage.waitForExistence(timeout: 8))
+    XCTAssertTrue(scrollUp.isEnabled)
+    XCTAssertTrue(scrollDown.isEnabled)
+  }
+
+  @MainActor
+  func testRemoteScrollButtonsLeaveLocalGesturesAndHistoryUnchanged() {
+    let app = XCUIApplication()
+    app.launchArguments = ["--mirror-ui-fixture", "--mirror-ui-scroll-fixture"]
+    XCUIDevice.shared.orientation = .portrait
+    app.launch()
+    let scrollUp = app.buttons["mirror-scroll-up"]
+    let down = app.buttons["mirror-scroll-down"]
+    XCTAssertTrue(scrollUp.waitForExistence(timeout: 10))
+    XCTAssertTrue(scrollUp.isEnabled)
+    func page(_ number: Int) -> XCUIElement {
+      app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Remote page \(number)\n")).firstMatch
+    }
+    scrollUp.tap()
+    XCTAssertTrue(page(-1).waitForExistence(timeout: 5))
+    down.tap()
+    XCTAssertTrue(page(0).waitForExistence(timeout: 5))
+    XCTAssertLessThan(scrollUp.frame.maxY, page(0).frame.minY)
+    let reading = app.scrollViews["mirror-live-scroll"]
+    reading.swipeDown()
+    XCTAssertTrue(page(0).exists)
+    reading.swipeUp()
+    XCTAssertTrue(page(0).exists)
+    let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+    attachment.name = "Remote scroll controls"
+    attachment.lifetime = .keepAlways
+    add(attachment)
+    app.buttons["History"].tap()
+    XCTAssertTrue(app.buttons["Load Earlier 200 Lines"].waitForExistence(timeout: 5))
+    XCTAssertFalse(scrollUp.exists)
+    XCTAssertFalse(down.exists)
+    app.buttons["Load Earlier 200 Lines"].tap()
+    XCTAssertTrue(app.staticTexts["Loaded lines 2–401"].waitForExistence(timeout: 5))
+  }
+
+  @MainActor
   func testClearingBothPairingHalvesAllowsCredentialReconnect() {
     let app = XCUIApplication()
     app.launchArguments = ["--mirror-ui-fixture"]

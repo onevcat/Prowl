@@ -39,6 +39,56 @@ Ghostty, existing remote debug apps, or any physical device.
   selection cancellation, session-specific dialogs, session-owned launch state,
   and Unicode-safe detail chunking.
 
+## Initial remote scrolling validation (2026-10-01, before button-only revision)
+
+- Debug APK, instrumentation APK and lint succeeded with JDK 17 / Android SDK 34.
+- 37 JVM tests ran: 36 passed; the optional native TLS fixture was not running,
+  so its one test was skipped. Remote scroll tests cover capability negotiation,
+  single in-flight requests, unchanged frames, request/lease/sequence validation,
+  five-second timeout, late responses, recoverable errors, disconnect without replay,
+  and preserving History access.
+- All 12 instrumented UI tests passed on the Android 16 phone emulator, including
+  seven remote scrolling cases. They exercise buttons/loading, unchanged output,
+  top/bottom pulls, local text scrolling, reading anchors, long-press selection,
+  unavailable responses, History and older Hosts. A held selection drag initially
+  reproduced an unwanted remote request; it now passes without sending input.
+- UI tests use a fake Host transport inside the actual application UI. They do not
+  send input to any real pane or validate end-to-end scrolling over TLS.
+- The emulator ran read-only with snapshot loading/saving disabled. No physical
+  phone, saved Host credential or existing pane was used.
+- Logs: `/tmp/prowl-android-scroll-final-build.log` and
+  `/tmp/prowl-android-scroll-ui-final-direct.log`. Loading, completed, long-text,
+  History and error screenshots were inspected under
+  `/tmp/prowl-android-scroll-screenshots/`.
+
+## Button-only scrolling and boundaries (2026-10-01)
+
+- Removed remote gesture recognition and its classifier. Live remote input is now
+  limited to the two top buttons; ordinary reading, edge pulls and selection remain
+  local. The bottom Follow latest control is unchanged.
+- Added opt-in `scroll-state-v1` metadata pairing. Only a matching lease/sequence
+  commits Host boundary flags with its text frame. Missing/null flags mean unknown;
+  an unchanged frame does not establish a boundary. New frames can re-enable either
+  direction, and disconnect/reconnect clears old flags and pending metadata.
+- JDK 17 / Android SDK 34: `:app:testDebugUnitTest :app:assembleDebug
+  :app:assembleDebugAndroidTest :app:lintDebug` succeeded. 40 JVM tests ran:
+  39 passed; the optional native TLS fixture test was skipped. Lint reported no
+  errors and 14 existing dependency/library warnings.
+- Unit coverage includes unknown/known bounds, direction-specific send guards,
+  capability opt-in, frame pairing, malformed flags, duplicate/stale/wrong-lease
+  metadata, missing/mismatched metadata, reconnect and older Hosts.
+- All 13 instrumentation tests passed on the isolated Android 16 phone emulator,
+  including eight scrolling cases. Actual Compose UI checks verify buttons above
+  the reading area, Follow latest below it, top/bottom disabled states and recovery,
+  local-only edge pulls/horizontal swipes/selection, loading/no-op completion,
+  local reading anchors, older Hosts and unchanged History.
+- The UI fixture injects Host messages through a fake transport; it does not claim
+  real Host/TLS or physical-device validation. The emulator ran read-only without
+  snapshots and was stopped afterward. No physical phone or real Host was touched.
+- Logs: `/tmp/prowl-android-buttons-final-build.log` and
+  `/tmp/prowl-android-buttons-ui.log` (`OK (13 tests)`). Boundary, loading and
+  long-text screenshots were inspected under `/tmp/prowl-android-buttons-screenshots/`.
+
 ## Not represented as passed
 
 - Physical phone/tablet, vendor-specific IME, actual Bluetooth/USB keyboard.

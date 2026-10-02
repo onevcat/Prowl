@@ -66,7 +66,13 @@ Device labels use the Mac local host name or the iOS system device name; pairing
 does not resolve a DNS name to obtain this label.
 
 Revocation removes the persisted secret and disconnects all connections for that device;
-other devices remain connected. Device records are limited to 64. If enrollment
+other devices remain connected. **Revoke All Devices…** asks for confirmation, then
+removes every device's saved authorization, including offline devices, disconnects
+all clients, and invalidates the current pairing code. Host keeps listening and
+local terminals keep running. Saved client connections cannot reconnect until each
+device pairs again with a fresh code. In the Mac connection form, **Pair Again…**
+shows the code field and bypasses saved access even if the connection error was
+reported as a network failure. Device records are limited to 64. If enrollment
 succeeds on Host but its response or the client's save is lost, open a new window
 and remove the unused device record. Unreadable saved entries are omitted from the Host list without deleting them.
 Errors that prevent pairing or connection remain visible in plain language, naming
@@ -99,10 +105,51 @@ A project that has never opened a terminal is not yet a pane, but its worktree i
 available in **New Pane…** on a current Host. The Host terminal owns the
 grid. Mac clients default to **Fit to Window**, shrinking the complete terminal to
 fit without changing the Host PTY. **Original Size** restores readable native-size
-glyphs with local scrolling. It starts at the top; subsequent window resizes preserve
+glyphs with local panning. It starts at the top; subsequent window resizes preserve
 the manual scroll position within the available bounds. Large Host grids can make
 Fit to Window text small. iOS
 renders replacement text with local reflow. Cleared output is not an archive.
+
+On a Host advertising remote scrolling, **Scroll Up** and **Scroll Down** move
+the live Host terminal by its current pane height minus three rows (at least one
+row). Native scrollback moves by that exact number of rows. Application-owned
+scrolling receives the equivalent precision wheel distance. Internal Agent defaults account for known application
+wheel steps: Codex uses three rows per event and reserves eight pane rows for its
+composer/status area, in addition to the three-row overlap. Unlisted Agents use
+one row per event with no extra reservation. These are compiled constants, not
+user settings, and never affect native Ghostty scrollback. Host precision-scroll
+settings and application behavior can still affect TUI distance. These buttons sit above the live
+view on all clients. Wheel and touch gestures only move the local readable view;
+they never request remote scrolling. Each completed remote scroll resets the local
+reader to the top in both directions, including Mac Original Size mode. Follow
+latest remains below the mobile reader.
+
+A current Host sends frame-matched boundary state. **Scroll Up** is disabled at
+a known top and **Scroll Down** at a known bottom. Native terminal scrollback can
+provide these boundaries. Application-owned TUI history, or a screen whose range
+cannot be established, leaves them unknown and the buttons available. An unchanged
+frame does not prove a boundary. Older Hosts without boundary metadata keep both
+directions available when remote scrolling is supported.
+
+**Scrolling…** remains visible until a fresh Host frame confirms the request,
+or a five-second timeout ends the wait. A boundary that does not change the frame
+still completes. Requests are never automatically replayed after uncertainty.
+The Host handles scrolling using its terminal's negotiated mouse/alternate-scroll
+mode, aimed at the center of its grid. Application-specific scroll regions or
+bindings can change the distance or response; this is not an exact line-number
+navigation contract. Both devices share the Host view, so scrolling can move the
+Host user's view too. An older Host leaves remote scrolling unavailable.
+
+The Mac client keeps the original styled terminal while an application redraws
+its own screen. When the Host viewport moves into native terminal scrollback,
+it displays **Host scrollback · Plain text** using that viewport's physical rows.
+Returning to the active viewport restores the styled terminal. This is selected
+from terminal state, independent of the Agent being run. The existing Ghostty
+APIs expose scrollback text but not its styles; mobile remains text throughout.
+
+History remains a separate, read-only view. Its scrolling and page loading do not
+send remote scroll input or change the frozen snapshot. No output archive or
+cross-frame text merging is added.
 
 Host samples subscribed panes every 200 ms and allows only one unacknowledged frame
 per subscription. Unchanged frames are omitted; text geometry and truncation are
@@ -135,7 +182,14 @@ public CLI router. There is no special AI Control Console, bundled private contr
 skill, or separate agent-launch implementation. Profile settings determine model
 and permissions.
 
-Every Send first reads public `list`. A detected Agent uses public `agents dispatch`.
+Every Send first reads public `list`. A detected Agent uses structured `agentsInput`
+(`agents.input`), advertised by the `agent-input` capability. Update Host if this
+capability is missing; mobile clients never fall back to task dispatch.
+Interactive input delivers the message as written, without a `[Prowl]` prefix or a
+completion instruction. It creates no dispatch record and does not require
+`dispatch-complete`. An existing pending automation receipt is neither completed nor
+abandoned and does not block this human input, just as local typing does not settle
+an automation task. The usual Agent readiness and local input protections still apply.
 Host rechecks the exact subscribed pane and lease, plus input protection, before delivery.
 Mobile shell panes are read-only: Host cannot yet verify an empty shell command line,
 so structured shell Send is refused and its capability is not advertised. An idle task
@@ -143,14 +197,14 @@ can still contain an older local draft. Use an Agent Profile for mobile prompts,
 control the shell on Host. Local CLI `send` and Mac mirror keyboard input retain their
 existing direct-input behavior.
 
-Shared Agent dispatch rejects IME composition and recent Host editing. Claude must
+Shared Agent input delivery rejects IME composition and recent Host editing. Claude must
 have a recognized empty composer. It inserts text, waits up to two seconds for the
 paste echo, and only then sends Enter, provided the surface/Agent/edit revision is
 unchanged. Codex has an explicit idle-composer rule; the delivery boundary also
 checks formatter dim styling so a hint is not confused with an identically worded
 draft. Unknown layouts, wrapped drafts and attachments refuse delivery.
 
-A successful dispatch receipt confirms delivery, not Agent completion. Replies are
+A successful input receipt confirms delivery, not Agent completion. Replies are
 correlated by UUID. Unknown delivery preserves the draft and is not automatically
 replayed; reconnection queries the original request receipt on the same Host run.
 If delivery stops after paste but before Enter, text may remain in the Host composer;
@@ -158,7 +212,7 @@ check it before retrying.
 
 Host retains up to 1024 mutation receipts per App lifetime, and rejects further mutations
 when full. Catalog reads do not consume this budget. A retained mutation ID reused with
-different parameters is rejected. Takeover/disconnect cancels a dispatch still waiting for readiness. Explicit device revocation or Host stop
+different parameters is rejected. Takeover/disconnect cancels input still waiting for readiness. Explicit device revocation or Host stop
 also cancels pending Profile preparation, including requests whose connection was
 already lost. A plain disconnect alone does not cancel accepted Profile creation;
 check Host before retrying an uncertain result. Existing terminal programs continue.
@@ -189,3 +243,44 @@ Native clients live in [MirrorClient/iOS](../MirrorClient/iOS/) (iPhone and iPad
 and [MirrorClient/Android](../MirrorClient/Android/) (phones and tablets). Each
 project retains its own build and test entry points; neither is built by the Mac
 App target or release pipeline. See [client setup](../MirrorClient/README.md).
+
+### Copy connection details to Mac
+
+On Host, open **Add a Device**, choose the Wi-Fi or VPN address reachable from
+Mirror, and click **Copy Connection Details**. This single copy includes the
+address, port, pairing code and expiry. In Mac Mirror's connection form, paste
+into the address, port or pairing-code field; all three fields fill together,
+even when pasting into an existing value. Click **Connect** to pair. Fresh copied
+details bypass saved device access, including credentials revoked by Host.
+Expired or malformed details show an error without replacing existing fields.
+
+### Scan to pair a phone
+
+Open **Add a Device** on Host, then **Scan QR Code** in the mobile app's Host
+connection form. The QR includes the numeric IP address, port and current pairing
+code. Scanning starts the normal authenticated pairing flow and then offers the
+Host panes. Choose the Wi-Fi or VPN address reachable from your phone in **Connection
+address** when Host has multiple interfaces. Both devices still need network access
+to that address; scanning does not create a tunnel.
+
+The QR expires with the existing 60-second, single-use code. Refresh Code on Host
+and scan again if it expires. Camera permission is requested only when scanning;
+manual entry remains available if permission is denied or scanning is unsupported.
+On Android, the scanner opens in portrait without a red scanning line. The Live
+scroll toolbar places **Scroll up** and **Scroll down** at opposite ends, with
+loading feedback between them. Each completed scroll moves the reader to the top
+once. Switching panes or recreating the Android reader preserves subsequent local
+reading positions instead of repeating that move.
+
+### Native history appearance on Mac
+
+When both Macs support styled scrollback, **Scroll Up/Down** keeps the same
+terminal renderer, font, font size and colors used by the live Mirror display.
+This is separate from **History**, which remains a retained-text snapshot.
+Older Hosts, histories exceeding the replay limit, or a viewport that cannot be
+reconstructed safely use the existing **Host scrollback · Plain text** fallback.
+Mobile clients continue using text-v1 and require no update for this feature.
+Mac frame updates also work with a fixed Ghostty `title`, including after a config
+reload. If the local replica cannot confirm frame parsing within 30 seconds,
+Mirror disconnects with an error rather than silently stopping updates. Reconnect
+to try again.

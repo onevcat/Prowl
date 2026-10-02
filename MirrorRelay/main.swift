@@ -74,7 +74,7 @@ enum MirrorRelay {
         // The formatter emits modes only when they differ from defaults. A full
         // reset prevents a prior frame's paste/cursor modes from leaking forward.
         var output = Data("\u{1b}c\u{1b}[?2026h".utf8)
-        output.append(payload.dropFirst(8))
+        output.append(MirrorDisplayFrame.passiveSnapshot(Data(payload.dropFirst(8))))
         output.append(Data("\u{1b}[?2026l".utf8))
         try writeAll(output, to: STDOUT_FILENO)
         try writeAll(

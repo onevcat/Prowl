@@ -32,6 +32,7 @@ final class AgentDispatchCommandHandler: CommandHandler {
     case settling(String)
   }
 
+  private var deliveringPanes: Set<String> = []
   private let inputProtection: InputProtection
   private let resolveTarget: ResolveTarget
   private let pendingDispatch: PendingDispatch
@@ -69,9 +70,20 @@ final class AgentDispatchCommandHandler: CommandHandler {
   }
 
   func handle(envelope: CommandEnvelope) async -> CommandResponse {
-    guard case .agentsDispatch(let input) = envelope.command else {
-      return failure(code: CLIErrorCode.invalidArgument, message: "Expected an agents.dispatch command.")
+    switch envelope.command {
+    case .agentsDispatch(let input):
+      return await handle(input: input, interactive: false)
+    case .agentsInput(let input):
+      let response = await handle(input: input, interactive: true)
+      return CommandResponse(
+        ok: response.ok, command: "agents.input", schemaVersion: "prowl.cli.agents.input.v1",
+        data: response.data, error: response.error)
+    default:
+      return failure(code: CLIErrorCode.invalidArgument, message: "Expected an Agent input command.")
     }
+  }
+
+  private func handle(input: DispatchInput, interactive: Bool) async -> CommandResponse {
     if let message = input.validationErrorMessage {
       return failure(code: CLIErrorCode.invalidArgument, message: message)
     }
@@ -84,13 +96,47 @@ final class AgentDispatchCommandHandler: CommandHandler {
     case .success(let resolved):
       target = resolved
     }
-    if let pending = pendingDispatch(target) {
+    guard deliveringPanes.insert(target.paneID).inserted else {
+      return failure(code: CLIErrorCode.dispatchTargetBusy, message: "Another input is being delivered to this pane.")
+    }
+    defer { deliveringPanes.remove(target.paneID) }
+    if !interactive, let pending = pendingDispatch(target) {
       return pendingFailure(pending, target: target)
     }
     if let refusal = await prepareDelivery(target: target) {
       return refusal
     }
 
+    guard !Task.isCancelled else {
+      return failure(code: CLIErrorCode.timeout, message: "Input was cancelled before delivery.")
+    }
+    if interactive {
+      // Human input does not assert an outcome for an automation task or create a new one.
+      guard await deliverPrompt(target, input.prompt) else {
+        return failure(
+          code: CLIErrorCode.sendFailed, message: "Input delivery is unconfirmed. Check the pane before retrying.")
+      }
+      struct Payload: Encodable {
+        let input: SendInputInfo
+      }
+      do {
+        return try CommandResponse(
+          ok: true, command: "agents.input", schemaVersion: "prowl.cli.agents.input.v1",
+          data: RawJSON(
+            encoding: Payload(
+              input: .init(
+                source: "argument", characters: input.prompt.count, bytes: input.prompt.utf8.count,
+                trailingEnterSent: true))))
+      } catch {
+        return failure(
+          code: CLIErrorCode.sendFailed, message: "Input was delivered but its receipt could not be encoded.")
+      }
+    }
+
+    return await dispatch(input: input, target: target)
+  }
+
+  private func dispatch(input: DispatchInput, target: TabResolvedTarget) async -> CommandResponse {
     let issued: AgentDispatchSnapshot
     switch issueDispatch(target) {
     case .success(let snapshot):

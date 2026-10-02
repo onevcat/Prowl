@@ -15,6 +15,8 @@ nonisolated enum MirrorEndpointInput {
     case invalidPort
     case missingPairingCode
     case invalidPairingCode
+    case invalidPairingDetails
+    case expiredPairingDetails
 
     var message: String {
       switch self {
@@ -25,7 +27,26 @@ nonisolated enum MirrorEndpointInput {
       case .missingPairingCode: String(localized: "Enter the pairing code shown on Host.")
       case .invalidPairingCode:
         String(localized: "Pairing codes have eight letters or digits, shown as XXXX-XXXX.")
+      case .invalidPairingDetails:
+        String(localized: "Invalid connection details. Copy Connection Details again from Host.")
+      case .expiredPairingDetails:
+        String(localized: "These connection details expired. Refresh Code on Host, then copy and paste again.")
       }
+    }
+  }
+
+  static func pastedPairingPayload(_ input: String, now: Date = Date()) throws(Problem) -> MirrorPairingPayload? {
+    guard input.contains("\"prowl-mirror-pairing\"") else { return nil }
+    // Paste may insert into an existing value rather than replace the whole field.
+    guard input.utf8.count <= 4096, let start = input.firstIndex(of: "{"), let end = input.lastIndex(of: "}"),
+      start < end
+    else { throw .invalidPairingDetails }
+    do {
+      return try MirrorPairingPayload.parse(String(input[start...end]), now: now)
+    } catch MirrorPairingPayload.Problem.expired {
+      throw .expiredPairingDetails
+    } catch {
+      throw .invalidPairingDetails
     }
   }
 

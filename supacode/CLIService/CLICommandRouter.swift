@@ -85,7 +85,7 @@ final class CLICommandRouter {
     case .agentsRead: handler = agentsReadHandler
     case .agentsSignal: handler = agentsSignalHandler
     case .agentsHook: handler = agentsHookHandler
-    case .agentsDispatch: handler = agentsDispatchHandler
+    case .agentsInput, .agentsDispatch: handler = agentsDispatchHandler
     case .agentsDispatchComplete: handler = agentsDispatchCompleteHandler
     case .agentsDispatchAbandon: handler = agentsDispatchAbandonHandler
     case .agentsWait: handler = agentsWaitHandler
