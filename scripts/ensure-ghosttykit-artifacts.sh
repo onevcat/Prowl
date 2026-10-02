@@ -195,7 +195,7 @@ fi
 
 if try_fetch_prebuilt; then
   if [[ "$previous_sha" != "$GHOSTTY_SHA" ]]; then
-    rm -rf ~/Library/Developer/Xcode/DerivedData/supacode-*
+    rm -rf ~/Library/Developer/Xcode/DerivedData/Prowl-*
     echo "Cleared Xcode DerivedData for ghostty header/module changes"
   fi
   exit 0
