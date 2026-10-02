@@ -63,7 +63,7 @@ class AppBuildPathTests(unittest.TestCase):
         result, calls = self.run_grouped_build()
         self.assertEqual(result.returncode, 0, result.stderr)
         for suite in ["MirrorHostTests", "MirrorDevicePairingTests", "MirrorConnectionTests",
-                      "MirrorTerminalIntegrationTests"]:
+                      "MirrorTerminalIntegrationTests", "MirrorReplicaInputTests"]:
             target = f"supacodeTests/{suite}"
             self.assertIn(f"-skip-testing:{target}", calls[0])
             runs = [call for call in calls if f"-only-testing:{target}" in call]

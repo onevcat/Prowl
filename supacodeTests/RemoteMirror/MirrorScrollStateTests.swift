@@ -61,8 +61,10 @@ struct MirrorScrollStateTests {
     state.receiveResult(requestID: previous, sequence: 1)
     state.didPresent(sequence: 1)
     #expect(state.requestID == next)
+    await clock.advance()
     state.cancel()
-    await clock.run()
+    await clock.advance()
+    try await clock.checkSuspension()
     #expect(!state.isLoading)
   }
 
@@ -71,8 +73,10 @@ struct MirrorScrollStateTests {
     let state = MirrorScrollState(clock: clock)
     state.didPresent(sequence: 100)
     _ = state.begin()
+    await clock.advance()
     state.reset()
-    await clock.run()
+    await clock.advance()
+    try await clock.checkSuspension()
     let next = try #require(state.begin())
     state.didPresent(sequence: 1)
     state.receiveResult(requestID: next, sequence: 1)

@@ -91,8 +91,7 @@ struct MirrorVTExportSpikeTests {
     init(directory: URL, file: String, title: String) throws {
       config = try #require(ghostty_config_new())
       let configuration = directory.appending(path: "ghostty.conf")
-      try
-        "font-size = 12\nbackground = #20242c\nforeground = #e0e0e0\nscrollback-limit = 10000000\n"
+      try "font-size = 12\nbackground = #20242c\nforeground = #e0e0e0\nscrollback-limit = 10000000\n"
         .write(
           to: configuration, atomically: true, encoding: .utf8)
       ghostty_config_load_file(config, configuration.path)

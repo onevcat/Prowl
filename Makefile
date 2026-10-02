@@ -402,7 +402,7 @@ test-app: ensure-ghostty # Run app/unit tests via xcodebuild
 		skip_args+=("-skip-testing:$$test_id"); \
 		only_args+=("-only-testing:$$test_id"); \
 	done; \
-	mirror_suites=(MirrorHostTests MirrorDevicePairingTests MirrorConnectionTests MirrorTerminalIntegrationTests); \
+	mirror_suites=(MirrorHostTests MirrorDevicePairingTests MirrorConnectionTests MirrorTerminalIntegrationTests MirrorReplicaInputTests); \
 	mirror_args=(); \
 	for suite in "$${mirror_suites[@]}"; do \
 		skip_args+=("-skip-testing:supacodeTests/$$suite"); \
