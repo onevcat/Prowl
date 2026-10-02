@@ -12,7 +12,7 @@ class AppBuildPathTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             shutil.copyfile(Path(__file__).resolve().parents[1] / "Makefile", root / "Makefile")
-            (root / "overrides.mk").write_text("ensure-ghostty:\n\t@true\n")
+            (root / "overrides.mk").write_text("ensure-ghostty ensure-project:\n\t@true\n")
             (root / "xcodebuild").write_text(
                 '#!/usr/bin/env python3\nimport json, pathlib, sys\n'
                 'pathlib.Path("arguments.json").write_text(json.dumps(sys.argv[1:]))\n'
@@ -37,7 +37,7 @@ class AppBuildPathTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             shutil.copyfile(Path(__file__).resolve().parents[1] / "Makefile", root / "Makefile")
-            (root / "overrides.mk").write_text("ensure-ghostty:\n\t@true\n")
+            (root / "overrides.mk").write_text("ensure-ghostty ensure-project:\n\t@true\n")
             (root / "scripts").mkdir()
             for name in ["assert-xcresult-tests.sh", "print-xcresult-failures.sh"]:
                 (root / "scripts" / name).write_text("exit 0\n")

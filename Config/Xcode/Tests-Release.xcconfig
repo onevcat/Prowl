@@ -1,0 +1,3 @@
+#include "Tests.xcconfig"
+
+TEST_HOST = $(BUILT_PRODUCTS_DIR)/Prowl.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ProwlApp

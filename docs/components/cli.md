@@ -710,7 +710,7 @@ extract the JSON string without adding a newline:
 ```bash
 # Run from the Prowl source checkout so the private staging path is ignored.
 repo_root="$(git rev-parse --show-toplevel)"
-test -f "$repo_root/supacode.xcodeproj/project.pbxproj"
+test -f "$repo_root/Tuist.swift"
 staging="$repo_root/.local/agent-screen-captures"
 mkdir -p "$staging"
 capture="$(prowl read --pane "$pane" --source detection --json)"

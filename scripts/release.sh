@@ -185,7 +185,7 @@ TAG="v$VERSION"
 ensure_release_not_published "$REPO" "$TAG"
 
 BUILD="$(date +%Y%m%d)"
-CURRENT_BUILD="$(/usr/bin/awk -F' = ' '/CURRENT_PROJECT_VERSION = [0-9]+;/{gsub(/;/,""); print $2; exit}' "$PROJECT_DIR/supacode.xcodeproj/project.pbxproj")"
+CURRENT_BUILD="$(/usr/bin/awk -F' = ' '/^CURRENT_PROJECT_VERSION = [0-9]+$/{print $2; exit}' "$PROJECT_DIR/Config/Xcode/Version.xcconfig")"
 if [[ "$CURRENT_BUILD" -ge "$BUILD" ]] 2>/dev/null; then
   BUILD="$((CURRENT_BUILD + 1))"
 fi
