@@ -7,7 +7,7 @@
 | 2026-10-02 | Research and a Tuist spike in a scratch copy (Tuist 4.208.0, Xcode 27.0): settings parity, build, 41 tests, iOS client in the same workspace | [000-plan.md](000-plan.md) |
 | 2026-10-03 | Decisions agreed; plan written | [000-plan.md](000-plan.md) |
 | 2026-10-03 | S1: Tuist generates the macOS and iOS projects; the `.xcodeproj` folders leave Git; version in an xcconfig file | [002-s1-generated-projects.md](002-s1-generated-projects.md), #848 |
-| 2026-10-03 | S2: folders move to `App`, `CLI`, `Mirror`, `Shared`; module, targets, and types use the Prowl name; three SwiftPM packages; legacy-name check | [003-s2-names-and-layout.md](003-s2-names-and-layout.md) |
+| 2026-10-03 | S2: folders move to `App`, `CLI`, `Mirror`, `Shared`; module, targets, and types use the Prowl name; three SwiftPM packages; legacy-name check | [003-s2-names-and-layout.md](003-s2-names-and-layout.md), #849 |
 
 ## Outcome & current state (as of 2026-10-03)
 

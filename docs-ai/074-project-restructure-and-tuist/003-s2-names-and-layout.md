@@ -63,4 +63,4 @@ repository name, and test data that names the upstream repository.
 
 ## Refs
 
-PR: (fill in)
+PR #849 (stacked on #848)
