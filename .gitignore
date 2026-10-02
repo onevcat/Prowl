@@ -33,7 +33,7 @@ playground.xcworkspace
 .derivedData/
 
 # Embedded CLI binary (built by `make embed-cli`)
-Resources/prowl-cli/prowl
+App/Resources/prowl-cli/prowl
 
 # CocoaPods
 #
@@ -71,11 +71,11 @@ fastlane/test_output
 Derived/
 .tuist_generated_stamp
 
-Frameworks/GhosttyKit.xcframework
-Resources/ghostty
-Resources/terminfo
-Resources/docs
-Resources/skills
+App/Frameworks/GhosttyKit.xcframework
+App/Resources/ghostty
+App/Resources/terminfo
+App/Resources/docs
+App/Resources/skills
 .ghostty_hash
 .ghostty_build_stamp
 .build_settings_cache.json
@@ -95,4 +95,4 @@ Config/Secrets.env
 .build-benchmark/
 scripts/__pycache__/
 
-Resources/prowl-mirror-relay/
+App/Resources/prowl-mirror-relay/
