@@ -183,3 +183,4 @@ Risks:
   current product design and the spike shows no effect.
 
 ## Amendments
+- Updated 2026-10-03: S1 implemented and verified (generated projects, version xcconfig, workspace builds) — see [002-s1-generated-projects.md](002-s1-generated-projects.md)
