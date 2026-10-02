@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| **Status** | Planned |
+| **Status** | Implemented (S1 and S2; S3 is an optional trial and is not started) |
 | **Anchor date** | 2026-10-03 |
 | **Primary PRs** | #848 (S1) |
 | **Related** | [004-prowl-rebrand](../004-prowl-rebrand/000-plan.md), [016-dev-build-and-ci-workflow](../016-dev-build-and-ci-workflow/000-plan.md), [017-upstream-sync-process](../017-upstream-sync-process/000-plan.md), [067-remote-mirror](../067-remote-mirror/000-plan.md), [release-runbook.md](../001-fork-bootstrap-and-release-pipeline/release-runbook.md) |
@@ -185,3 +185,4 @@ Risks:
 ## Amendments
 
 - Updated 2026-10-03: S1 implemented and verified (generated projects, version xcconfig, workspace builds) — see [002-s1-generated-projects.md](002-s1-generated-projects.md)
+- Updated 2026-10-03: S2 implemented and verified (product layout, Prowl names, three SwiftPM packages, legacy-name check) — see [003-s2-names-and-layout.md](003-s2-names-and-layout.md)
