@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | Planned |
 | **Anchor date** | 2026-10-03 |
-| **Primary PRs** | (fill in as they merge) |
+| **Primary PRs** | #848 (S1) |
 | **Related** | [004-prowl-rebrand](../004-prowl-rebrand/000-plan.md), [016-dev-build-and-ci-workflow](../016-dev-build-and-ci-workflow/000-plan.md), [017-upstream-sync-process](../017-upstream-sync-process/000-plan.md), [067-remote-mirror](../067-remote-mirror/000-plan.md), [release-runbook.md](../001-fork-bootstrap-and-release-pipeline/release-runbook.md) |
 
 ## Background
@@ -183,4 +183,5 @@ Risks:
   current product design and the spike shows no effect.
 
 ## Amendments
+
 - Updated 2026-10-03: S1 implemented and verified (generated projects, version xcconfig, workspace builds) — see [002-s1-generated-projects.md](002-s1-generated-projects.md)
