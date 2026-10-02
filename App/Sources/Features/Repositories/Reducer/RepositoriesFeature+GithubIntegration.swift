@@ -72,6 +72,8 @@ extension RepositoriesFeature {
       else {
         return .none
       }
+      // An action just changed this pull request; its refresh must not wait for the cadence.
+      state.pullRequestRefreshForcedWorktreeIDs.insert(worktreeID)
       let repositoryRootURL = worktree.repositoryRootURL
       let worktreeIDs = repository.worktrees.map(\.id)
       return .run { send in
@@ -94,9 +96,10 @@ extension RepositoriesFeature {
       }
       let selectedWorktreeID = state.selectedWorktreeID
       let checkedAt = state.pullRequestCheckedAtByWorktreeID
-      let currentDate = worktreeIDs.contains { checkedAt[$0] != nil } ? now : nil
+      let forced = state.pullRequestRefreshForcedWorktreeIDs
+      let currentDate = worktreeIDs.contains { checkedAt[$0] != nil && !forced.contains($0) } ? now : nil
       let worktrees = worktreeIDs.compactMap { state.worktree(for: $0) }.filter { worktree in
-        guard let currentDate else {
+        guard let currentDate, !forced.contains(worktree.id) else {
           return true
         }
         return PullRequestRefreshCadence.isDue(
@@ -132,6 +135,7 @@ extension RepositoriesFeature {
           return .none
         }
         state.inFlightPullRequestRefreshRepositoryIDs.insert(repositoryID)
+        state.pullRequestRefreshForcedWorktreeIDs.subtract(dueWorktreeIDs)
         return enqueueBatchedPullRequestRefresh(
           repositoryID: repositoryID,
           repositoryRootURL: repositoryRootURL,

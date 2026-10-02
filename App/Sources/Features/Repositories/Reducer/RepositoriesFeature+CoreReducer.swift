@@ -1010,9 +1010,7 @@ extension RepositoriesFeature {
         var effects: [Effect<Action>] = []
         let worktreeIDs = repository.worktrees.map(\.id)
         // A changed remote can point every branch at different pull requests.
-        for worktreeID in worktreeIDs {
-          state.pullRequestCheckedAtByWorktreeID.removeValue(forKey: worktreeID)
-        }
+        state.pullRequestRefreshForcedWorktreeIDs.formUnion(worktreeIDs)
         if repository.capabilities.supportsPullRequests, !worktreeIDs.isEmpty {
           effects.append(
             .send(

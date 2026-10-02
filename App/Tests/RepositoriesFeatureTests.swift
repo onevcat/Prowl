@@ -490,7 +490,9 @@ struct RepositoriesFeatureTests {
       .worktreeInfoEvent(
         .repositoryRemoteConfigurationChanged(repositoryRootURL: repository.rootURL)
       )
-    )
+    ) {
+      $0.pullRequestRefreshForcedWorktreeIDs = [mainWorktree.id, featureWorktree.id]
+    }
     await store.receive(\.githubIntegration.repositoryPullRequestRefreshRequested) {
       $0.pendingPullRequestRefreshByRepositoryID[repository.id] = RepositoriesFeature.PendingPullRequestRefresh(
         repositoryRootURL: repository.rootURL,
@@ -502,7 +504,7 @@ struct RepositoriesFeatureTests {
     }
   }
 
-  @Test func repositoryRemoteConfigurationChangedForgetsWhenBranchesWereAnswered() async {
+  @Test func repositoryRemoteConfigurationChangedMarksEveryBranchDue() async {
     let repoRoot = "/tmp/repo"
     let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
     let featureWorktree = makeWorktree(id: "\(repoRoot)/feature", name: "feature", repoRoot: repoRoot)
@@ -519,19 +521,42 @@ struct RepositoriesFeatureTests {
     }
     store.exhaustivity = .off
 
-    // A changed remote can point every branch at other pull requests, so all of them are due.
+    // A changed remote can point every branch at other pull requests, so all of them are due,
+    // whatever an answer from the old remote records meanwhile.
     await store.send(
       .worktreeInfoEvent(
         .repositoryRemoteConfigurationChanged(repositoryRootURL: repository.rootURL)
       )
     ) {
-      $0.pullRequestCheckedAtByWorktreeID = [:]
+      $0.pullRequestRefreshForcedWorktreeIDs = [mainWorktree.id, featureWorktree.id]
     }
     await store.receive(\.githubIntegration.repositoryPullRequestRefreshRequested) {
       $0.pendingPullRequestRefreshByRepositoryID[repository.id] = RepositoriesFeature.PendingPullRequestRefresh(
         repositoryRootURL: repository.rootURL,
         worktreeIDs: [mainWorktree.id, featureWorktree.id]
       )
+    }
+  }
+
+  @Test func repositoriesLoadedForgetsRefreshHistoryOfRemovedWorktrees() async {
+    let worktree = makeWorktree(id: "/tmp/repo/main", name: "main")
+    let removed = makeWorktree(id: "/tmp/repo/removed", name: "removed")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var initialState = makeState(repositories: [repository])
+    let answeredAt = Date(timeIntervalSince1970: 1_000_000)
+    initialState.pullRequestCheckedAtByWorktreeID = [worktree.id: answeredAt, removed.id: answeredAt]
+    initialState.pullRequestRefreshForcedWorktreeIDs = [removed.id]
+
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+    store.exhaustivity = .off
+
+    await store.send(
+      .repositoriesLoaded([repository], failures: [], roots: [repository.rootURL], animated: false)
+    ) {
+      $0.pullRequestCheckedAtByWorktreeID = [worktree.id: answeredAt]
+      $0.pullRequestRefreshForcedWorktreeIDs = []
     }
   }
 

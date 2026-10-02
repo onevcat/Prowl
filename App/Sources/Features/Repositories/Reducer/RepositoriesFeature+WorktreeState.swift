@@ -150,6 +150,7 @@ func cleanupWorktreeState(
   state.archiveScriptProgressByWorktreeID.removeValue(forKey: worktreeID)
   state.deletingWorktreeIDs.remove(worktreeID)
   state.worktreeInfoByID.removeValue(forKey: worktreeID)
+  state.forgetPullRequestRefreshHistory(of: worktreeID)
   let didUpdatePinned = state.pinnedWorktreeIDs.contains(worktreeID)
   if didUpdatePinned {
     state.pinnedWorktreeIDs.removeAll { $0 == worktreeID }
@@ -306,4 +307,18 @@ nonisolated func normalizedLineChanges(_ entry: WorktreeInfoEntry?) -> GitLineCh
 
 nonisolated func normalizedLineChanges(_ changes: GitLineChanges) -> GitLineChanges? {
   changes.isEmpty ? nil : changes
+}
+
+extension RepositoriesFeature.State {
+  // A worktree ID is its path, so a worktree created again at a removed one's path must start
+  // without the removed worktree's refresh history.
+  mutating func forgetPullRequestRefreshHistory(of worktreeID: Worktree.ID) {
+    pullRequestCheckedAtByWorktreeID.removeValue(forKey: worktreeID)
+    pullRequestRefreshForcedWorktreeIDs.remove(worktreeID)
+  }
+
+  mutating func forgetPullRequestRefreshHistory(keeping worktreeIDs: Set<Worktree.ID>) {
+    pullRequestCheckedAtByWorktreeID = pullRequestCheckedAtByWorktreeID.filter { worktreeIDs.contains($0.key) }
+    pullRequestRefreshForcedWorktreeIDs.formIntersection(worktreeIDs)
+  }
 }
