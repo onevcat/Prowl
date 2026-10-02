@@ -1,5 +1,7 @@
 import AppKit
+import Clocks
 import Foundation
+import GhosttyKit
 import Testing
 
 @testable import supacode
@@ -7,10 +9,22 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct MirrorReplicaInputTests {
-  private static let runtime = GhosttyRuntime()
-
-  @Test(.timeLimit(.minutes(1))) func replayDoesNotForwardAutomaticTerminalReports() async throws {
-    let replica = MirrorReplica(runtime: Self.runtime)
+  @Test(.timeLimit(.minutes(2)), arguments: [false, true])
+  func replayDoesNotForwardAutomaticTerminalReports(staticTitle: Bool) async throws {
+    let runtime = GhosttyRuntime()
+    let configFile = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString + ".conf")
+    defer { try? FileManager.default.removeItem(at: configFile) }
+    func reloadTitle(_ title: String) throws {
+      let config = try #require(ghostty_config_new())
+      defer { ghostty_config_free(config) }
+      try "title = \(title)\n".write(to: configFile, atomically: true, encoding: .utf8)
+      ghostty_config_load_file(config, configFile.path)
+      ghostty_config_finalize(config)
+      ghostty_app_update_config(runtime.app, config)
+    }
+    if staticTitle { try reloadTitle("Fixed replica title") }
+    let clock = TestClock()
+    let replica = MirrorReplica(runtime: runtime, clock: clock)
     let lease = UUID()
     var input = Data()
     var acknowledged: UInt64 = 0
@@ -29,6 +43,7 @@ struct MirrorReplicaInputTests {
     window.contentView = view
     defer { window.close() }
     for sequence in 1...3 {
+      if staticTitle, sequence == 2 { try reloadTitle("Reloaded fixed title") }
       replica.display(
         .frame(
           .init(
@@ -44,8 +59,21 @@ struct MirrorReplicaInputTests {
     #expect(input.isEmpty, "Frame replay generated Host input: \(Array(input))")
 
     view.insertText("用户输入", replacementRange: NSRange(location: NSNotFound, length: 0))
-    try await wait { (String(data: input, encoding: .utf8) ?? "").contains("用户输入") }
-    #expect((String(data: input, encoding: .utf8) ?? "").contains("\u{1b}[200~用户输入\u{1b}[201~"))
+    try await wait {
+      (String(data: input, encoding: .utf8) ?? "").contains("\u{1b}[200~用户输入\u{1b}[201~")
+    }
+    #expect(view.bridge.state.pwd?.contains("prowl-replica-") != true)
+    #expect(view.bridge.state.title?.contains("prowl-replica-") != true)
+
+    // A lost parser callback must report failure rather than hold Host's frame gate forever.
+    var failure: String?
+    replica.onFailure = { failure = $0 }
+    view.bridge.consumeWorkingDirectory = { _ in true }
+    replica.display(
+      .frame(.init(frame: .init(columns: 80, rows: 24, bytes: Data("LAST".utf8)), sequence: 4, subscriptionID: lease)))
+    await clock.advance(by: .seconds(30))
+    #expect(failure?.contains("timed out") == true)
+    #expect(acknowledged == 3)
   }
 
   private func wait(until condition: @MainActor () -> Bool) async throws {
@@ -55,7 +83,7 @@ struct MirrorReplicaInputTests {
       timer.invalidate()
       continuation.finish()
     }
-    let deadline = ContinuousClock.now.advanced(by: .seconds(10))
+    let deadline = ContinuousClock.now.advanced(by: .seconds(30))
     for await _ in ticks {
       if condition() { return }
       if ContinuousClock.now >= deadline { throw Timeout() }

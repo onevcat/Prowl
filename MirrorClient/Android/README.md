@@ -50,7 +50,8 @@ is no private AI console or dependency on personal shell wrappers.
   including applications that manage their own scrolling, stay enabled; unchanged
   text alone never disables a direction. Older Hosts need no boundary metadata.
   Both directions resume reading at the top of the returned screen. Automatic
-  following is paused by remote scrolling.
+  following is paused by remote scrolling. Completion is consumed once: switching
+  panes or recreating the reader preserves later local reading positions.
 - Saving credentials does not persist terminal output or drafts across process death.
   Rotation retains the current ViewModel; reopening the app offers saved Hosts.
 

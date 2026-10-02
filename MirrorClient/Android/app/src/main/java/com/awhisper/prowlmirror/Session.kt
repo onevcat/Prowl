@@ -521,6 +521,12 @@ class Session(
         )))
     }
 
+    fun consumeScrollCompletion(id: String) {
+        state.update {
+            if (it.scrollCompletion?.requestID == id) it.copy(scrollCompletion = null) else it
+        }
+    }
+
     private fun clearScroll() {
         scrollTimeout?.cancel()
         scrollTimeout = null

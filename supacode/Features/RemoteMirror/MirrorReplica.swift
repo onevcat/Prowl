@@ -16,6 +16,8 @@ final class MirrorReplica {
   @ObservationIgnored private var peer: MirrorRelayConnection?
   @ObservationIgnored private var candidate: MirrorRelayConnection?
   @ObservationIgnored private let runtime: GhosttyRuntime
+  @ObservationIgnored private let clock: any Clock<Duration>
+  @ObservationIgnored private var parseTimeout: Task<Void, Never>?
   @ObservationIgnored private let token = UUID().uuidString + UUID().uuidString
   @ObservationIgnored private var pending: MirrorMessage?
   @ObservationIgnored private var pendingScrollback: MirrorStyledScrollback?
@@ -29,7 +31,10 @@ final class MirrorReplica {
   @ObservationIgnored private var stopped = false
   @ObservationIgnored private var needsRestart = false
 
-  init(runtime: GhosttyRuntime) { self.runtime = runtime }
+  init(runtime: GhosttyRuntime, clock: any Clock<Duration> = ContinuousClock()) {
+    self.runtime = runtime
+    self.clock = clock
+  }
 
   func start() throws {
     if needsRestart { stop() }
@@ -55,10 +60,15 @@ final class MirrorReplica {
           self.view = GhosttySurfaceView(
             runtime: self.runtime, workingDirectory: nil,
             context: GHOSTTY_SURFACE_CONTEXT_WINDOW, command: command)
-          self.view?.bridge.consumeTitle = { [weak self] title in
-            guard let self, title == self.presentationMarker else { return false }
+          self.view?.bridge.consumeWorkingDirectory = { [weak self] path in
+            guard let self, path == self.presentationMarker else { return false }
             self.didParseFrame()
             return true
+          }
+          // Ghostty can also derive a title from OSC 7. Do not expose private markers.
+          self.view?.bridge.consumeTitle = { [weak self] title in
+            guard let self else { return false }
+            return title.hasPrefix("/prowl-replica-\(self.token)-")
           }
         case .failed(let error): self.fail(error.localizedDescription)
         default: break
@@ -102,8 +112,15 @@ final class MirrorReplica {
       displayedMessage = message
       displayedScrollback = styledScrollback
       expectedViewportText = viewportText
-      let marker = "prowl-replica-\(token)-\(sequence)"
+      let marker = "/prowl-replica-\(token)-\(sequence)"
       presentationMarker = marker
+      parseTimeout?.cancel()
+      let clock = clock
+      parseTimeout = Task { @MainActor [weak self] in
+        do { try await clock.sleep(for: .seconds(30)) } catch { return }
+        guard let self, self.presentationMarker == marker else { return }
+        self.fail(String(localized: "Display replica timed out while parsing a Host frame. Reconnect to try again."))
+      }
       var payload = MirrorRelayPacket.sequenceBytes(sequence)
       payload.append(frame.bytes)
       if let styledScrollback {
@@ -115,7 +132,8 @@ final class MirrorReplica {
         payload.append(Data(String(repeating: "\r\n", count: Int(frame.rows)).utf8))
         payload.append(Data("\u{1b}[?25l".utf8))
       }
-      payload.append(Data("\u{1b}]2;\(marker)\u{7}".utf8))
+      // Unlike title callbacks, OSC 7 remains available with a static title and after config reloads.
+      payload.append(Data("\u{1b}]7;file://localhost\(marker)\u{7}".utf8))
       peer.send(MirrorRelayPacket(kind: .frame, payload: payload))
     } else {
       pending = message
@@ -129,6 +147,8 @@ final class MirrorReplica {
       let lease = message.subscriptionID, let terminal = view?.surface
     else { return }
     presentationMarker = nil
+    parseTimeout?.cancel()
+    parseTimeout = nil
     guard let scrollback = displayedScrollback else {
       usesStyledScrollback = false
       resumeRendering()
@@ -176,6 +196,8 @@ final class MirrorReplica {
 
   func stop() {
     stopped = true
+    parseTimeout?.cancel()
+    parseTimeout = nil
     presentationTask?.cancel()
     presentationTask = nil
     needsRestart = false

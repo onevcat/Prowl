@@ -93,6 +93,10 @@ Both mobile clients now anchor both completed directions at the top. Mac exposes
 a correlated completion identity only after the reply and displayed frame match;
 the viewport resets once for each completion, including Original Size mode.
 Ordinary subsequent frames and duplicate results preserve local reading offsets.
+Android consumes each matching completion after positioning the reader. Keeping a
+consumed completion in Session would replay it when composition is recreated and
+overwrite the saved reading position. Unknown completion IDs leave the current
+event intact.
 
 Verification: 23 Mac tests pass, including real TUI event counts in both
 directions, exact native scrolling with a detected Codex Agent, correlated
@@ -118,9 +122,14 @@ A synchronous surface-scoped callback intercepts only that binding's temporary
 file path, leaving the system clipboard untouched. Bounded archives are cached
 briefly; unbounded/oversized histories keep the established text fallback. The
 replica restores live input modes, replays history with trailing blank padding, waits for a
-private end-of-stream title marker, scrolls locally, and verifies the visible
+private end-of-stream OSC 7 working-directory marker, scrolls locally, and verifies the visible
 text against Host before revealing styled history. PTY write acknowledgement
-alone is insufficient because parsing may still be in flight.
+alone is insufficient because parsing may still be in flight. The replica consumes
+the marker before it updates public working-directory or title state. Unlike OSC 2
+title callbacks, this callback is not disabled by a fixed Ghostty `title`, including
+after configuration reload. A 30-second parser watchdog reports a stalled replica
+and disconnects Mirror rather than leaving Host's outstanding frame unacknowledged
+indefinitely.
 
 The archive omits trailing empty rows. Locating from the retained buffer start
 rather than its bottom avoids dropped rows at the active/history boundary.

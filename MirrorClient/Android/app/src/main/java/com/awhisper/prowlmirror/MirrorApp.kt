@@ -404,6 +404,7 @@ private fun Reading(session: Session, state: SessionState) {
             val completion = state.scrollCompletion
             if (!state.showsHistory && completion != null && blocks.isNotEmpty()) {
                 scroll.scrollToItem(0)
+                session.consumeScrollCompletion(completion.requestID)
             }
         }
         Column(Modifier.fillMaxSize()) {

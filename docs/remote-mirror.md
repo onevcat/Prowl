@@ -268,7 +268,9 @@ and scan again if it expires. Camera permission is requested only when scanning;
 manual entry remains available if permission is denied or scanning is unsupported.
 On Android, the scanner opens in portrait without a red scanning line. The Live
 scroll toolbar places **Scroll up** and **Scroll down** at opposite ends, with
-loading feedback between them.
+loading feedback between them. Each completed scroll moves the reader to the top
+once. Switching panes or recreating the Android reader preserves subsequent local
+reading positions instead of repeating that move.
 
 ### Native history appearance on Mac
 
@@ -278,3 +280,7 @@ This is separate from **History**, which remains a retained-text snapshot.
 Older Hosts, histories exceeding the replay limit, or a viewport that cannot be
 reconstructed safely use the existing **Host scrollback · Plain text** fallback.
 Mobile clients continue using text-v1 and require no update for this feature.
+Mac frame updates also work with a fixed Ghostty `title`, including after a config
+reload. If the local replica cannot confirm frame parsing within 30 seconds,
+Mirror disconnects with an error rather than silently stopping updates. Reconnect
+to try again.

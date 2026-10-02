@@ -9,6 +9,7 @@ final class GhosttySurfaceBridge {
   weak var surfaceView: GhosttySurfaceView?
   // Local replica markers acknowledge parsing, rather than merely a PTY write.
   var consumeTitle: ((String) -> Bool)?
+  var consumeWorkingDirectory: ((String) -> Bool)?
   var captureClipboard: (([(mime: String, data: String)]) -> Void)?
   struct MirrorScrollbar {
     let total: UInt64
@@ -263,6 +264,9 @@ final class GhosttySurfaceBridge {
       return true
 
     case GHOSTTY_ACTION_PWD:
+      if let path = string(from: action.action.pwd.pwd), consumeWorkingDirectory?(path) == true {
+        return true
+      }
       state.pwd = string(from: action.action.pwd.pwd)
       if let surfaceView {
         NSAccessibility.post(element: surfaceView, notification: .valueChanged)

@@ -2,6 +2,8 @@ package com.awhisper.prowlmirror
 
 import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.*
@@ -25,6 +27,7 @@ class RemoteScrollTest {
     private val lease = uuid()
     private var sequence = 1L
     private var includesScrollState = false
+    private val compositionGeneration = mutableStateOf(0)
 
     @After
     fun close() {
@@ -74,7 +77,7 @@ class RemoteScrollTest {
             model.sessions += session
             model.selected = session.id
         }
-        rule.setContent { MirrorApp(model) }
+        rule.setContent { key(compositionGeneration.value) { MirrorApp(model) } }
     }
 
     private fun bounds(sequence: Long, atTop: Boolean? = null, atBottom: Boolean? = null) {
@@ -225,6 +228,25 @@ class RemoteScrollTest {
         rule.runOnIdle {
             assertTrue(session.state.value.follow)
             assertEquals(2, sent.count { it.kind == "scroll" })
+        }
+    }
+
+    @Test
+    fun rebuildingReaderDoesNotReplayCompletedRemoteScroll() {
+        val text = (1..140).joinToString("\n") { "Terminal row $it" }
+        show(text)
+        rule.onNodeWithText("Scroll up").performClick()
+        complete(text)
+        rule.onNodeWithTag("mirror-output").performTouchInput { swipeUp() }
+        var position = 0 to 0
+        rule.runOnIdle {
+            position = session.liveScrollIndex to session.liveScrollOffset
+            assertTrue(position.first > 0 || position.second > 0)
+            compositionGeneration.value++
+        }
+        rule.waitForIdle()
+        rule.runOnIdle {
+            assertEquals(position, session.liveScrollIndex to session.liveScrollOffset)
         }
     }
 
