@@ -2,7 +2,7 @@ import Foundation
 import ProwlCLIShared
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct WorkflowRunStoreTests {
   nonisolated private static let now = Date(timeIntervalSince1970: 1_760_000_000)

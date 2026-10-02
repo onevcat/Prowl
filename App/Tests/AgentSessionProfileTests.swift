@@ -3,7 +3,7 @@ import Foundation
 import SQLite3
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct AgentSessionProfileTests {
   private let home = URL(fileURLWithPath: "/Users/me", isDirectory: true)

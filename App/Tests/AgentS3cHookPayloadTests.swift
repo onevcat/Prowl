@@ -2,7 +2,7 @@ import Foundation
 import ProwlCLIShared
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 /// S3c relays Pi, Oh My Pi, and OpenCode through Prowl's own bundled extensions, which forward
 /// the runtime's native event names inside the Claude-shaped envelope (docs-ai 064.010). The

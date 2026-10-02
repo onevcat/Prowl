@@ -1,7 +1,7 @@
 import ComposableArchitecture
 import Foundation
 
-nonisolated private let workspaceEditingLog = SupaLogger("workspace")
+nonisolated private let workspaceEditingLog = ProwlLogger("workspace")
 
 extension RepositoriesFeature {
   func reduceWorkspaceEditing(

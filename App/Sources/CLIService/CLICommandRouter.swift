@@ -1,4 +1,4 @@
-// supacode/CLIService/CLICommandRouter.swift
+// App/Sources/CLIService/CLICommandRouter.swift
 // Routes incoming command envelopes to the appropriate handler.
 
 import Foundation

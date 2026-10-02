@@ -1,6 +1,6 @@
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 /// Every typed rule must be witnessed by a captured screen.
 ///

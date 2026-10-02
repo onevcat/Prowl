@@ -4,7 +4,7 @@ import Foundation
 import Sharing
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 @MainActor
 struct AgentProfilesFeatureTests {
@@ -281,7 +281,7 @@ struct AgentProfilesFeatureTests {
 
     let persisted = try JSONDecoder().decode(
       UserRepositorySettings.self,
-      from: #require(localStorage.data(at: SupacodePaths.userRepositorySettingsURL(for: rootURL)))
+      from: #require(localStorage.data(at: ProwlPaths.userRepositorySettingsURL(for: rootURL)))
     )
     #expect(persisted.defaultAgentProfileID == profileID)
 

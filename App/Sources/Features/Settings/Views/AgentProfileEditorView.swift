@@ -373,7 +373,7 @@ struct AgentProfileEditorView: View {
   private var previewText: String {
     let plan = try? AgentProfileLaunchPlanner.plan(
       for: store.profile,
-      homeBaseDirectory: SupacodePaths.agentProfileHomesDirectory
+      homeBaseDirectory: ProwlPaths.agentProfileHomesDirectory
     )
     return plan?.previewText ?? String(localized: "Unavailable")
   }

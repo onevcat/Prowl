@@ -2,7 +2,7 @@ import ComposableArchitecture
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct WorktreeCreationPlacementTests {
   // MARK: - Name validation
@@ -44,7 +44,7 @@ struct WorktreeCreationPlacementTests {
   }
 
   @Test func noOverridesResolvesToNil() {
-    let resolved = SupacodePaths.resolvedWorktreeDirectory(
+    let resolved = ProwlPaths.resolvedWorktreeDirectory(
       defaultBaseDirectory: defaultBase,
       repositoryRootURL: repoRoot,
       nameOverride: nil,
@@ -55,7 +55,7 @@ struct WorktreeCreationPlacementTests {
   }
 
   @Test func nameOnlyOverridesLeafUnderDefaultBase() {
-    let resolved = SupacodePaths.resolvedWorktreeDirectory(
+    let resolved = ProwlPaths.resolvedWorktreeDirectory(
       defaultBaseDirectory: defaultBase,
       repositoryRootURL: repoRoot,
       nameOverride: "custom-leaf",
@@ -66,7 +66,7 @@ struct WorktreeCreationPlacementTests {
   }
 
   @Test func pathOnlyOverridesParentKeepingBranchLeaf() {
-    let resolved = SupacodePaths.resolvedWorktreeDirectory(
+    let resolved = ProwlPaths.resolvedWorktreeDirectory(
       defaultBaseDirectory: defaultBase,
       repositoryRootURL: repoRoot,
       nameOverride: nil,
@@ -77,7 +77,7 @@ struct WorktreeCreationPlacementTests {
   }
 
   @Test func bothOverridesCombineParentAndLeaf() {
-    let resolved = SupacodePaths.resolvedWorktreeDirectory(
+    let resolved = ProwlPaths.resolvedWorktreeDirectory(
       defaultBaseDirectory: defaultBase,
       repositoryRootURL: repoRoot,
       nameOverride: "leaf",
@@ -88,7 +88,7 @@ struct WorktreeCreationPlacementTests {
   }
 
   @Test func whitespaceOnlyOverridesResolveToNil() {
-    let resolved = SupacodePaths.resolvedWorktreeDirectory(
+    let resolved = ProwlPaths.resolvedWorktreeDirectory(
       defaultBaseDirectory: defaultBase,
       repositoryRootURL: repoRoot,
       nameOverride: "  ",
@@ -101,7 +101,7 @@ struct WorktreeCreationPlacementTests {
   // MARK: - previewWorktreeDirectory
 
   @Test func previewFallsBackToDefaultBaseAndBranchWhenEmpty() {
-    let preview = SupacodePaths.previewWorktreeDirectory(
+    let preview = ProwlPaths.previewWorktreeDirectory(
       defaultBaseDirectory: defaultBase,
       repositoryRootURL: repoRoot,
       nameOverride: "",
@@ -112,7 +112,7 @@ struct WorktreeCreationPlacementTests {
   }
 
   @Test func previewReflectsOverrides() {
-    let preview = SupacodePaths.previewWorktreeDirectory(
+    let preview = ProwlPaths.previewWorktreeDirectory(
       defaultBaseDirectory: defaultBase,
       repositoryRootURL: repoRoot,
       nameOverride: "leaf",

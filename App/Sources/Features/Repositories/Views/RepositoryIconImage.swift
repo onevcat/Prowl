@@ -60,7 +60,7 @@ struct RepositoryIconImage: View {
 
   @ViewBuilder
   private func userImage(filename: String) -> some View {
-    let url = SupacodePaths.repositoryIconFileURL(
+    let url = ProwlPaths.repositoryIconFileURL(
       filename: filename, repositoryRootURL: repositoryRootURL
     )
     if let nsImage = Self.loadImage(at: url, asTemplate: icon.isTintable) {

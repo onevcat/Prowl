@@ -2,7 +2,7 @@ import Foundation
 import ProwlCLIShared
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 /// A temporary skills bundle plus a temporary home with `~/.claude` and `~/.agents` detected
 /// and `~/.codex` absent. The real `~/.claude`, `~/.codex`, and `~/.agents` are never touched.

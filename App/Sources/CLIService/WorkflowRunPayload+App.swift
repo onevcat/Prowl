@@ -1,4 +1,4 @@
-// supacode/CLIService/WorkflowRunPayload+App.swift
+// App/Sources/CLIService/WorkflowRunPayload+App.swift
 // Maps a live `WorkflowRun` or a persisted `WorkflowRunRecord` to the `prowl workflow` wire
 // payload (docs-ai 063 B3, decision W5). Delivery tokens never appear: the completion commands of
 // the current activation are the only place a token is spelled, and only to the caller that

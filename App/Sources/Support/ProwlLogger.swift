@@ -1,6 +1,6 @@
 import OSLog
 
-nonisolated struct SupaLogger: Sendable {
+nonisolated struct ProwlLogger: Sendable {
   private let category: String
   private let logger: Logger
   /// Signposter for emitting `os_signpost` intervals/events visible in

@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 actor DiffPathShellCallStore {
   private(set) var calls: [[String]] = []

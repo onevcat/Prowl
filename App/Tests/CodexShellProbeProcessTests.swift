@@ -2,7 +2,7 @@ import Darwin
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct CodexShellProbeProcessTests {
   @Test func successfulChildReturnsOutputBeforeTheDeadline() async throws {

@@ -33,7 +33,7 @@ struct AskAgentHelpView: View {
   /// The bundled docs directory, falling back to the standard install path so
   /// the prompt always shows a sensible location even if the bundle lookup fails.
   static var resolvedDocsDirectoryPath: String {
-    SupacodePaths.bundledDocsDirectoryPath ?? "/Applications/Prowl.app/Contents/Resources/docs"
+    ProwlPaths.bundledDocsDirectoryPath ?? "/Applications/Prowl.app/Contents/Resources/docs"
   }
 
   var body: some View {

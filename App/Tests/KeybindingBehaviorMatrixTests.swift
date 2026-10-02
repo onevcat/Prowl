@@ -2,7 +2,7 @@ import CustomDump
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 // MARK: - Behavior matrix tests for the keybinding resolver pipeline.
 // Dimensions: scope × conflict-policy × state (default / override / disable / migrate / reset).

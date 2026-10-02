@@ -117,7 +117,7 @@ enum WindowLifecycleDiagnostics {
     case resolveVisibleMainWindow
   }
 
-  private static let logger = SupaLogger("WindowLifecycle")
+  private static let logger = ProwlLogger("WindowLifecycle")
   private static let heartbeatInterval: TimeInterval = 1.0
   private static let stallThreshold: TimeInterval = 0.3
   private static let windowlessReminderInterval: TimeInterval = 5.0

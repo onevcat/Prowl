@@ -1,4 +1,4 @@
-// supacode/CLIService/CLICommandContext.swift
+// App/Sources/CLIService/CLICommandContext.swift
 // Per-connection context threaded from the socket server to handlers.
 
 import Foundation

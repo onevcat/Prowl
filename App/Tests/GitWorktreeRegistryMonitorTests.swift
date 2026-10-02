@@ -2,7 +2,7 @@ import Foundation
 import Testing
 import XCTest
 
-@testable import supacode
+@testable import Prowl
 
 @Suite(.serialized)
 @MainActor

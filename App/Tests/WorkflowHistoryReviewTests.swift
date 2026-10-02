@@ -2,7 +2,7 @@ import Foundation
 import ProwlCLIShared
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct WorkflowHistoryReviewTests {
   private func start(_ body: String, roles: [String: WorkflowRoleBinding] = [:]) throws -> WorkflowRunMachine {

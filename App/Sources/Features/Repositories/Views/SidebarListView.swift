@@ -798,7 +798,7 @@ extension SidebarItem {
     }
 
     private static var mockState: RepositoriesFeature.State {
-      let repo1Root = URL(fileURLWithPath: "/tmp/supacode")
+      let repo1Root = URL(fileURLWithPath: "/tmp/prowl")
       let repo1Worktrees: IdentifiedArrayOf<Worktree> = [
         Worktree(
           id: repo1Root.path, name: "main", detail: ".",
@@ -818,7 +818,7 @@ extension SidebarItem {
         ),
       ]
       let repo1 = Repository(
-        id: repo1Root.path, rootURL: repo1Root, name: "supacode", worktrees: repo1Worktrees
+        id: repo1Root.path, rootURL: repo1Root, name: "Prowl", worktrees: repo1Worktrees
       )
 
       let repo2Root = URL(fileURLWithPath: "/tmp/ghostty")

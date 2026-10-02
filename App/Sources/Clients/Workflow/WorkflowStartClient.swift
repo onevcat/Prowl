@@ -1,4 +1,4 @@
-// supacode/Clients/Workflow/WorkflowStartClient.swift
+// App/Sources/Clients/Workflow/WorkflowStartClient.swift
 // GUI-side access to workflow starts (docs-ai 063 C2). The live value is assembled in
 // WorkflowRuntimeComposition from the same catalog, resolver, settings, and coordinator the
 // CLI path uses — the GUI never grows its own run-creation logic (011 decision 1).

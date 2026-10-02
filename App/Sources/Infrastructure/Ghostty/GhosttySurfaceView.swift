@@ -5,7 +5,7 @@ import GhosttyKit
 import QuartzCore
 import SwiftUI
 
-let surfaceLogger = SupaLogger("Surface")
+let surfaceLogger = ProwlLogger("Surface")
 
 enum GhosttyEventText {
   static func characters(for event: NSEvent) -> String? {
@@ -638,7 +638,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
     // Retained as the single diagnostic entry point for focus regressions.
     // Filter `make log-stream | grep '\[ShelfFocus\] focusDidChange'` to
     // trace every focused-bit transition across the app.
-    SupaLogger("SurfaceFocus").info(
+    ProwlLogger("SurfaceFocus").info(
       "[ShelfFocus] focusDidChange surface=\(debugID) \(self.focused) -> \(focused)"
     )
     self.focused = focused

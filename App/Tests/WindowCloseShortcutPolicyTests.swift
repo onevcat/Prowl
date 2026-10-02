@@ -1,7 +1,7 @@
 import SwiftUI
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct WindowCloseShortcutPolicyTests {
   @Test func closeWindowDoesNotClaimCommandWWhenCloseSurfaceUsesCommandW() {

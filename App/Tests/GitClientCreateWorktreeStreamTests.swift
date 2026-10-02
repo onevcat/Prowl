@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 nonisolated final class GitShellInvocationRecorder: @unchecked Sendable {
   struct Snapshot {

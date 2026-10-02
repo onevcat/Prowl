@@ -1,4 +1,4 @@
-// supacode/Features/Workflow/Reducer/WorkflowRunsFeature.swift
+// App/Sources/Features/Workflow/Reducer/WorkflowRunsFeature.swift
 // The reducer that owns every live workflow run (docs-ai 063 B3, decision H2/W1). The pure
 // `WorkflowRunMachine` is reconstructed per transition; this reducer performs its effects against
 // the terminal, dispatch, launch, store, native-action, and watchdog boundaries, answers the CLI
@@ -140,7 +140,7 @@ struct WorkflowRunsFeature {
   @Dependency(\.uuid) var uuid
   @Dependency(\.continuousClock) var clock
 
-  nonisolated private static let logger = SupaLogger("WorkflowRuns")
+  nonisolated private static let logger = ProwlLogger("WorkflowRuns")
 
   var body: some Reducer<State, Action> {
     Reduce { state, action in

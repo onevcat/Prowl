@@ -24,7 +24,7 @@ nonisolated enum CodexTUISessionLog {
     return delay >= -1 && delay <= processStartWindow
   }
 
-  static func url(for surfaceID: UUID, in directory: URL = SupacodePaths.codexTUISessionLogDirectory) -> URL {
+  static func url(for surfaceID: UUID, in directory: URL = ProwlPaths.codexTUISessionLogDirectory) -> URL {
     directory.appending(path: "\(surfaceID.uuidString).\(fileExtension)", directoryHint: .notDirectory)
   }
 
@@ -36,7 +36,7 @@ nonisolated enum CodexTUISessionLog {
   /// Variables a pane adds to its launch environment. A value the caller already set wins.
   static func environment(
     for surfaceID: UUID,
-    directory: URL = SupacodePaths.codexTUISessionLogDirectory
+    directory: URL = ProwlPaths.codexTUISessionLogDirectory
   ) -> [String: String] {
     [
       recordEnvironmentKey: "1",
@@ -46,7 +46,7 @@ nonisolated enum CodexTUISessionLog {
 
   static func removeLog(
     for surfaceID: UUID,
-    directory: URL = SupacodePaths.codexTUISessionLogDirectory,
+    directory: URL = ProwlPaths.codexTUISessionLogDirectory,
     fileManager: FileManager = .default
   ) {
     try? fileManager.removeItem(at: url(for: surfaceID, in: directory))
@@ -54,7 +54,7 @@ nonisolated enum CodexTUISessionLog {
 
   /// Creates the private directory and removes logs untouched for `staleAge`.
   static func prepareDirectory(
-    _ directory: URL = SupacodePaths.codexTUISessionLogDirectory,
+    _ directory: URL = ProwlPaths.codexTUISessionLogDirectory,
     now: Date = Date(),
     fileManager: FileManager = .default
   ) {

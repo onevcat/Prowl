@@ -2,7 +2,7 @@ import Foundation
 import ProwlCLIShared
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 /// Exercises the live client against a temporary skills root and a temporary home; the real
 /// `~/.claude`, `~/.codex`, and `~/.agents` are never read or written.

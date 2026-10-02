@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 actor GithubBatchShellProbe {
   struct Snapshot {
@@ -762,7 +762,7 @@ struct GithubCLIClientTests {
 
   @Test func executableResolutionFallsBackToCommonInstallPathWhenShellPathMissesGh() async throws {
     let fallbackDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
-      .appendingPathComponent("supacode-gh-fallback-\(UUID().uuidString)", isDirectory: true)
+      .appendingPathComponent("prowl-gh-fallback-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: fallbackDirectory, withIntermediateDirectories: true)
     defer {
       try? FileManager.default.removeItem(at: fallbackDirectory)
@@ -824,7 +824,7 @@ struct GithubCLIClientTests {
       }
     )
     let missingGh = URL(fileURLWithPath: NSTemporaryDirectory())
-      .appendingPathComponent("supacode-gh-missing-\(UUID().uuidString)/gh")
+      .appendingPathComponent("prowl-gh-missing-\(UUID().uuidString)/gh")
     let client = GithubCLIClient.live(shell: shell, fallbackExecutableURLs: [missingGh])
 
     #expect(await client.isAvailable() == false)
@@ -836,7 +836,7 @@ struct GithubCLIClientTests {
 
   @Test func executableResolutionPicksFirstExecutableFallbackAndSkipsMisses() async throws {
     let fallbackDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
-      .appendingPathComponent("supacode-gh-order-\(UUID().uuidString)", isDirectory: true)
+      .appendingPathComponent("prowl-gh-order-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: fallbackDirectory, withIntermediateDirectories: true)
     defer {
       try? FileManager.default.removeItem(at: fallbackDirectory)

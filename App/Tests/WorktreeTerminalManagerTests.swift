@@ -5,7 +5,7 @@ import GhosttyKit
 import ProwlCLIShared
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 @MainActor
 struct WorktreeTerminalManagerTests {

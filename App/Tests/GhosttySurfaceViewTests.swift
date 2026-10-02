@@ -3,7 +3,7 @@ import Foundation
 import GhosttyKit
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 @MainActor
 struct GhosttySurfaceViewTests {
@@ -474,12 +474,12 @@ struct GhosttySurfaceViewTests {
 
   @Test func normalizedWorkingDirectoryPathRemovesTrailingSlashForNonRootPath() {
     #expect(
-      GhosttySurfaceView.normalizedWorkingDirectoryPath("/Users/onevcat/Sync/github/supacode/")
-        == "/Users/onevcat/Sync/github/supacode"
+      GhosttySurfaceView.normalizedWorkingDirectoryPath("/Users/onevcat/Sync/github/Prowl/")
+        == "/Users/onevcat/Sync/github/Prowl"
     )
     #expect(
-      GhosttySurfaceView.normalizedWorkingDirectoryPath("/Users/onevcat/Sync/github/supacode///")
-        == "/Users/onevcat/Sync/github/supacode"
+      GhosttySurfaceView.normalizedWorkingDirectoryPath("/Users/onevcat/Sync/github/Prowl///")
+        == "/Users/onevcat/Sync/github/Prowl"
     )
   }
 

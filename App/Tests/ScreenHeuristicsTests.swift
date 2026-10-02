@@ -1,7 +1,7 @@
 import ProwlCLIShared
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct ScreenHeuristicsTests {
   @Test func unknownAgentIsUnknown() {

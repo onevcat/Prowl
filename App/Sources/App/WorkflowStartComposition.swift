@@ -1,4 +1,4 @@
-// supacode/App/WorkflowStartComposition.swift
+// App/Sources/App/WorkflowStartComposition.swift
 // Live assembly of WorkflowStartClient (docs-ai 063 C2). The GUI start path reads the same
 // catalog, resolver, and settings the CLI path reads, and submits through
 // WorkflowRuntimeCoordinator.run — admission stays the single authority (011 decision 1).
@@ -7,11 +7,11 @@ import ComposableArchitecture
 import Foundation
 import ProwlCLIShared
 
-extension SupacodeApp {
+extension ProwlApp {
   @MainActor
   static func makeWorkflowStartClient(
     terminalManager: WorktreeTerminalManager,
-    storeBox: SupacodeAppStoreBox,
+    storeBox: ProwlAppStoreBox,
     coordinatorBox: WorkflowCoordinatorBox,
     reservations: WorkflowPaneReservations
   ) -> WorkflowStartClient {

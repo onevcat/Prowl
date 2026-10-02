@@ -10,7 +10,7 @@ nonisolated enum WorkflowHistoryStorageKey: DependencyKey {
     }) {
       return testValue
     }
-    if let directory = SupacodePaths.debugDataDirectory {
+    if let directory = ProwlPaths.debugDataDirectory {
       return WorkflowHistoryStorage(baseURL: directory.appending(path: "logs/workflow-runs"))
     }
     return .user

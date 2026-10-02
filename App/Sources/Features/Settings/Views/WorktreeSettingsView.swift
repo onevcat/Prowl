@@ -7,7 +7,7 @@ struct WorktreeSettingsView: View {
   var body: some View {
     let exampleRepositoryRoot = FileManager.default.homeDirectoryForCurrentUser
       .appending(path: "code/my-repo", directoryHint: .isDirectory)
-    let exampleWorktreePath = SupacodePaths.exampleWorktreePath(
+    let exampleWorktreePath = ProwlPaths.exampleWorktreePath(
       for: exampleRepositoryRoot,
       globalDefaultPath: store.defaultWorktreeBaseDirectoryPath,
       repositoryOverridePath: nil

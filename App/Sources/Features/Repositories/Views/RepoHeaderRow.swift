@@ -117,7 +117,7 @@ struct TabCountBadge: View {
 #Preview("RepoHeaderRow") {
   VStack(alignment: .leading, spacing: 12) {
     RepoHeaderRow(
-      name: "supacode",
+      name: "Prowl",
       isRemoving: false,
       icon: nil,
       iconTint: nil,

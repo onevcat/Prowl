@@ -1,7 +1,7 @@
 import Foundation
 import ProwlCLIShared
 
-private let dispatchLogger = SupaLogger("AgentDispatchCommandHandler")
+private let dispatchLogger = ProwlLogger("AgentDispatchCommandHandler")
 
 /// `prowl agents dispatch <pane> --prompt -`: creates a pending dispatch for an agent that
 /// already runs in the pane and types the prompt plus the completion protocol into it

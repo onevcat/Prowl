@@ -5,7 +5,7 @@ import IdentifiedCollections
 import Sharing
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct RepositoryPersistenceClientTests {
   @Test(.dependencies) func savesAndLoadsRootsAndPins() async throws {

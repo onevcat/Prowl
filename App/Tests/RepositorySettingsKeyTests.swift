@@ -4,7 +4,7 @@ import Foundation
 import Sharing
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct RepositorySettingsKeyTests {
   @Test func encodingOmitsNilWorktreeBaseRef() throws {
@@ -85,8 +85,8 @@ struct RepositorySettingsKeyTests {
     let globalStorage = SettingsTestStorage()
     let localStorage = RepositoryLocalSettingsTestStorage()
     let rootURL = URL(fileURLWithPath: "/tmp/repo")
-    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json")
-    let localURL = SupacodePaths.repositorySettingsURL(for: rootURL)
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/prowl-settings-\(UUID().uuidString).json")
+    let localURL = ProwlPaths.repositorySettingsURL(for: rootURL)
     let legacyData = Data(
       """
       {
@@ -168,11 +168,11 @@ struct RepositorySettingsKeyTests {
     #expect(!decoded.fetchesPullRequestState)
   }
 
-  @Test(.dependencies) func loadPrefersLocalSupacodeJSONOverGlobalEntry() throws {
+  @Test(.dependencies) func loadPrefersLocalSettingsFileOverGlobalEntry() throws {
     let globalStorage = SettingsTestStorage()
     let localStorage = RepositoryLocalSettingsTestStorage()
     let rootURL = URL(fileURLWithPath: "/tmp/repo")
-    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json")
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/prowl-settings-\(UUID().uuidString).json")
     let repositoryID = rootURL.standardizedFileURL.path(percentEncoded: false)
     var globalSettings = RepositorySettings.default
     globalSettings.runScript = "echo global"
@@ -192,7 +192,7 @@ struct RepositorySettingsKeyTests {
 
     try localStorage.save(
       encode(localSettings),
-      at: SupacodePaths.repositorySettingsURL(for: rootURL)
+      at: ProwlPaths.repositorySettingsURL(for: rootURL)
     )
 
     let loaded = withDependencies {
@@ -211,7 +211,7 @@ struct RepositorySettingsKeyTests {
     let globalStorage = SettingsTestStorage()
     let localStorage = RepositoryLocalSettingsTestStorage()
     let rootURL = URL(fileURLWithPath: "/tmp/repo")
-    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json")
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/prowl-settings-\(UUID().uuidString).json")
     let repositoryID = rootURL.standardizedFileURL.path(percentEncoded: false)
     var globalSettings = RepositorySettings.default
     globalSettings.runScript = "echo global"
@@ -243,9 +243,9 @@ struct RepositorySettingsKeyTests {
     let globalStorage = SettingsTestStorage()
     let localStorage = RepositoryLocalSettingsTestStorage()
     let rootURL = URL(fileURLWithPath: "/tmp/repo")
-    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json")
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/prowl-settings-\(UUID().uuidString).json")
     let repositoryID = rootURL.standardizedFileURL.path(percentEncoded: false)
-    let localURL = SupacodePaths.repositorySettingsURL(for: rootURL)
+    let localURL = ProwlPaths.repositorySettingsURL(for: rootURL)
     var globalSettings = RepositorySettings.default
     globalSettings.runScript = "echo global"
 
@@ -278,9 +278,9 @@ struct RepositorySettingsKeyTests {
     let globalStorage = SettingsTestStorage()
     let localStorage = RepositoryLocalSettingsTestStorage()
     let rootURL = URL(fileURLWithPath: "/tmp/repo")
-    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json")
-    let localURL = SupacodePaths.repositorySettingsURL(for: rootURL)
-    let legacyURL = SupacodePaths.legacyRepositorySettingsURL(for: rootURL)
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/prowl-settings-\(UUID().uuidString).json")
+    let localURL = ProwlPaths.repositorySettingsURL(for: rootURL)
+    let legacyURL = ProwlPaths.legacyRepositorySettingsURL(for: rootURL)
     var legacySettings = RepositorySettings.default
     legacySettings.runScript = "echo from-legacy"
 
@@ -306,9 +306,9 @@ struct RepositorySettingsKeyTests {
     let globalStorage = SettingsTestStorage()
     let localStorage = RepositoryLocalSettingsTestStorage()
     let rootURL = URL(fileURLWithPath: "/tmp/repo")
-    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json")
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/prowl-settings-\(UUID().uuidString).json")
     let repositoryID = rootURL.standardizedFileURL.path(percentEncoded: false)
-    let localURL = SupacodePaths.repositorySettingsURL(for: rootURL)
+    let localURL = ProwlPaths.repositorySettingsURL(for: rootURL)
 
     try localStorage.save(encode(.default), at: localURL)
 
@@ -346,9 +346,9 @@ struct RepositorySettingsKeyTests {
     let globalStorage = SettingsTestStorage()
     let localStorage = RepositoryLocalSettingsTestStorage()
     let rootURL = URL(fileURLWithPath: "/tmp/repo")
-    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json")
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/prowl-settings-\(UUID().uuidString).json")
     let repositoryID = rootURL.standardizedFileURL.path(percentEncoded: false)
-    let localURL = SupacodePaths.repositorySettingsURL(for: rootURL)
+    let localURL = ProwlPaths.repositorySettingsURL(for: rootURL)
 
     var updated = RepositorySettings.default
     updated.runScript = "echo global"

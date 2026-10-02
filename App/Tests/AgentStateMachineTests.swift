@@ -1,6 +1,6 @@
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct AgentStateMachineTests {
   private func screen(_ state: AgentRawState) -> AgentDetectionEvent {

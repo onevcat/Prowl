@@ -5,7 +5,7 @@ import ProwlCLIShared
 import Sharing
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 @MainActor
 struct AppFeatureAgentProfileTests {
@@ -42,7 +42,7 @@ struct AppFeatureAgentProfileTests {
 
     let expectedPlan = try AgentProfileLaunchPlanner.plan(
       for: profile,
-      homeBaseDirectory: SupacodePaths.agentProfileHomesDirectory
+      homeBaseDirectory: ProwlPaths.agentProfileHomesDirectory
     )
     #expect(sent.value == [.launchAgentProfile(worktree, plan: expectedPlan)])
     // Dispatch must not record launch memory: a launch that fails to create a

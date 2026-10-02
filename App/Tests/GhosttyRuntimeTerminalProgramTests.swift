@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct GhosttyRuntimeTerminalProgramTests {
   /// `TERM_PROGRAM` reports Prowl with its version (upstream #440).

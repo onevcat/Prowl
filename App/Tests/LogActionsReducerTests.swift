@@ -1,7 +1,7 @@
 import ComposableArchitecture
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 private struct Counter: Reducer {
   struct State: Equatable {

@@ -1,4 +1,4 @@
-// supacodeTests/WorkflowRunsFeatureTests.swift
+// App/Tests/WorkflowRunsFeatureTests.swift
 // The reducer that wires B2's machine to the boundaries (docs-ai 063 B3): ordered effect
 // execution, the two-phase `deliver` rendezvous, late launches, and the restart scan.
 
@@ -8,7 +8,7 @@ import Foundation
 import ProwlCLIShared
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 /// A line the fake terminal received, with whether the instruction file it points at existed.
 struct WorkflowTypedLineRecord {

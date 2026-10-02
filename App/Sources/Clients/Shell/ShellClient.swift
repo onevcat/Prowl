@@ -147,7 +147,7 @@ extension DependencyValues {
   }
 }
 
-private nonisolated let shellLogger = SupaLogger("Shell")
+private nonisolated let shellLogger = ProwlLogger("Shell")
 
 /// Coordinates cancellation before and after the worker has started the
 /// subprocess. A cancellation request must never be lost while `Process.run()`
@@ -407,10 +407,10 @@ extension ShellClient {
   /// arguments, hit its own `exit`, and kill the probe shell before `exec` ran (upstream #477). The
   /// exec reads from the saved array, so clearing the live positionals is safe.
   nonisolated private static func posixLoginCommand(rcFile: String) -> String {
-    let capture = "__supacode_login_argv=(\"$@\")"
+    let capture = "__prowl_login_argv=(\"$@\")"
     let clear = "set --"
     let source = "[ -f \(rcFile) ] && . \(rcFile) >/dev/null 2>&1"
-    return "\(capture); \(clear); \(source); exec \"${__supacode_login_argv[@]}\""
+    return "\(capture); \(clear); \(source); exec \"${__prowl_login_argv[@]}\""
   }
 }
 

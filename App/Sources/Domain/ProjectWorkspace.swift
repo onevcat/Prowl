@@ -481,7 +481,7 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
   nonisolated static let metadataDirectoryName = ".prowl"
   nonisolated static let metadataFileName = "workspace.json"
   nonisolated static let currentSchemaVersion = "prowl.workspace.v1"
-  nonisolated private static let log = SupaLogger("workspace")
+  nonisolated private static let log = ProwlLogger("workspace")
 
   var schemaVersion: String
   var id: String
@@ -1016,7 +1016,7 @@ nonisolated struct ProjectWorkspace: Codable, Equatable, Hashable, Sendable {
 
   nonisolated static func workspaceRootPath(folderName: String, suffix: Int?) -> String {
     let component = suffix.map { "\(folderName)-\($0)" } ?? folderName
-    return SupacodePaths.workspacesDirectory
+    return ProwlPaths.workspacesDirectory
       .appending(path: component, directoryHint: .isDirectory)
       .standardizedFileURL
       .path(percentEncoded: false)

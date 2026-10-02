@@ -2,7 +2,7 @@ import Darwin
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 @Suite(.serialized) struct CodexConfigReadProcessTests {
   @Test func appServerInputPipeSuppressesSIGPIPE() {

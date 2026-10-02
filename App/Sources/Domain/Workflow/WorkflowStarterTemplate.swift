@@ -1,4 +1,4 @@
-// supacode/Domain/Workflow/WorkflowStarterTemplate.swift
+// App/Sources/Domain/Workflow/WorkflowStarterTemplate.swift
 // The bundle Settings › Workflows › "New Workflow…" writes (docs-ai 063 D1, 022): a small,
 // valid workflow of the kind the user picked, with the name, id, and icon they entered. The
 // comments explain the file to someone who edits it by hand and point at the bundled manual

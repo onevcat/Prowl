@@ -1,11 +1,11 @@
-// supacodeTests/OpenCommandHandlerTests.swift
+// App/Tests/OpenCommandHandlerTests.swift
 // Unit tests for OpenCommandHandler — contract-aligned.
 
 import Foundation
 import ProwlCLIShared
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct OpenCommandHandlerTests {
 
@@ -352,7 +352,7 @@ struct OpenCommandHandlerTests {
     var tabCreatedForWorktree: String?
     var tabCreatedAtPath: String?
 
-    let subpath = "/Users/test/Projects/Prowl/supacode"
+    let subpath = "/Users/test/Projects/Prowl/App"
 
     let handler = makeHandler(
       resolver: { _ in

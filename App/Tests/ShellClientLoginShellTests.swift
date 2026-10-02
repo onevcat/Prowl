@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct ShellClientLoginShellTests {
   @Test func supportedShellsRunAsThemselves() {
@@ -16,13 +16,13 @@ struct ShellClientLoginShellTests {
     #expect(result.shell.lastPathComponent == "fish")
     #expect(result.command.contains("exec $argv"))
     // fish scopes argv across source, so it must NOT get the zsh/bash capture (which isn't valid fish).
-    #expect(!result.command.contains("__supacode_login_argv"))
+    #expect(!result.command.contains("__prowl_login_argv"))
   }
 
   @Test func bashSourcesBashrc() {
     let result = ShellClient.loginShellInvocation(userShell: URL(fileURLWithPath: "/bin/bash"))
     #expect(result.command.contains("~/.bashrc"))
-    #expect(result.command.contains("exec \"${__supacode_login_argv[@]}\""))
+    #expect(result.command.contains("exec \"${__prowl_login_argv[@]}\""))
   }
 
   /// Regression for upstream #100: any shell we don't have a correct rc snippet for must
@@ -37,7 +37,7 @@ struct ShellClientLoginShellTests {
     for path in shells {
       let result = ShellClient.loginShellInvocation(userShell: URL(fileURLWithPath: path))
       #expect(result.shell.path == "/bin/zsh")
-      #expect(result.command.contains("exec \"${__supacode_login_argv[@]}\""))
+      #expect(result.command.contains("exec \"${__prowl_login_argv[@]}\""))
     }
   }
 
@@ -47,14 +47,14 @@ struct ShellClientLoginShellTests {
   @Test func zshAndBashCaptureArgsBeforeSourcingRc() {
     for path in ["/bin/zsh", "/bin/bash"] {
       let command = ShellClient.loginShellInvocation(userShell: URL(fileURLWithPath: path)).command
-      guard let captureRange = command.range(of: "__supacode_login_argv=(\"$@\")"),
+      guard let captureRange = command.range(of: "__prowl_login_argv=(\"$@\")"),
         let sourceRange = command.range(of: "~/.")
       else {
         Issue.record("\(path) snippet missing capture or source: \(command)")
         continue
       }
       #expect(captureRange.lowerBound < sourceRange.lowerBound)
-      #expect(command.contains("exec \"${__supacode_login_argv[@]}\""))
+      #expect(command.contains("exec \"${__prowl_login_argv[@]}\""))
     }
   }
 
@@ -65,7 +65,7 @@ struct ShellClientLoginShellTests {
   @Test func zshAndBashClearPositionalsBeforeSourcingRc() {
     for path in ["/bin/zsh", "/bin/bash"] {
       let command = ShellClient.loginShellInvocation(userShell: URL(fileURLWithPath: path)).command
-      guard let captureRange = command.range(of: "__supacode_login_argv=(\"$@\")"),
+      guard let captureRange = command.range(of: "__prowl_login_argv=(\"$@\")"),
         let clearRange = command.range(of: "set --"),
         let sourceRange = command.range(of: "~/.")
       else {
@@ -74,7 +74,7 @@ struct ShellClientLoginShellTests {
       }
       #expect(captureRange.lowerBound < clearRange.lowerBound)
       #expect(clearRange.lowerBound < sourceRange.lowerBound)
-      #expect(command.contains("exec \"${__supacode_login_argv[@]}\""))
+      #expect(command.contains("exec \"${__prowl_login_argv[@]}\""))
     }
   }
 }

@@ -3,7 +3,7 @@ import GhosttyKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-nonisolated let ghosttyLogger = SupaLogger("GhosttyRuntime")
+nonisolated let ghosttyLogger = ProwlLogger("GhosttyRuntime")
 
 // Explicitly isolated rather than relying on the module's MainActor default:
 // when a Release (whole-module) build's swiftmodule is deserialized by the test
@@ -22,7 +22,7 @@ final class GhosttyRuntime {
   nonisolated(unsafe) static var ghosttyExecutableResolutionAttempted = false
   nonisolated(unsafe) static var cachedFallbackThemePair: GhosttyThemePair?
   // Prowl constructs a single GhosttyRuntime for the whole app lifetime
-  // (see `supacodeApp.init`). This weak reference gives UI surfaces that
+  // (see `ProwlApp.init`). This weak reference gives UI surfaces that
   // don't otherwise have access to the runtime (e.g. the Settings window) a
   // direct way to trigger app-level actions without threading the instance
   // through SwiftUI's environment or reducers.

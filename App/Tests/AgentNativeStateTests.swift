@@ -1,6 +1,6 @@
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct AgentNativeStateTests {
   private func snapshot(_ state: AgentRawState, session: String = "a", revision: Double = 1) -> AgentDetectionEvent {

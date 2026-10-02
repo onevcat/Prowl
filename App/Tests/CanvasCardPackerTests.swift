@@ -1,7 +1,7 @@
 import CoreGraphics
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct CanvasCardPackerTests {
   private let packer = CanvasCardPacker(spacing: 20, titleBarHeight: 28)

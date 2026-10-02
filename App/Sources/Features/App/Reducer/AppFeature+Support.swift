@@ -2,8 +2,8 @@ import ComposableArchitecture
 import Foundation
 import ProwlCLIShared
 
-let appLogger = SupaLogger("App")
-let notificationJumpLogger = SupaLogger("NotificationJump")
+let appLogger = ProwlLogger("App")
+let notificationJumpLogger = ProwlLogger("NotificationJump")
 
 enum CancelID {
   static let periodicRefresh = "app.periodicRefresh"
@@ -266,7 +266,7 @@ extension AppFeature {
       state.resolvedKeybindings.keybinding(for: command.keybindingID)?.userCustomShortcut
     }
     return .run { _ in
-      let logger = SupaLogger("Shortcuts")
+      let logger = ProwlLogger("Shortcuts")
       for conflict in userOverrideConflicts {
         logger.warning(
           "shortcut_conflict reason=userOverride app_action=\"\(conflict.appActionTitle)\" "

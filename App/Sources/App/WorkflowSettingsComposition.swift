@@ -1,4 +1,4 @@
-// supacode/App/WorkflowSettingsComposition.swift
+// App/Sources/App/WorkflowSettingsComposition.swift
 // Live assembly of WorkflowSettingsClient (docs-ai 063 D1). The Settings page scans the same
 // three sources with the same validation inputs the CLI's `workflow list` and the start sheet
 // use, so a file's status never differs between the page, the popover, and the CLI.
@@ -7,11 +7,11 @@ import ComposableArchitecture
 import Foundation
 import ProwlCLIShared
 
-extension SupacodeApp {
+extension ProwlApp {
   @MainActor
   static func makeWorkflowSettingsClient(
     terminalManager: WorktreeTerminalManager,
-    storeBox: SupacodeAppStoreBox
+    storeBox: ProwlAppStoreBox
   ) -> WorkflowSettingsClient {
     WorkflowSettingsClient(
       scan: { scope in

@@ -1,4 +1,4 @@
-// supacodeTests/WorkflowRunAdmissionTests.swift
+// App/Tests/WorkflowRunAdmissionTests.swift
 // Preflight of `prowl workflow run` (docs-ai 063 B3): definition selection, source and binding
 // legality, one run per pane, frozen plans, and the initial record.
 
@@ -9,7 +9,7 @@ import GhosttyKit
 import ProwlCLIShared
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 @MainActor
 struct WorkflowRunAdmissionTests {

@@ -6,7 +6,7 @@ import ProwlCLIShared
 import Sharing
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 @MainActor
 struct ShelfFeatureTests {

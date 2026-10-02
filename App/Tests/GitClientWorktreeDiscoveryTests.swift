@@ -2,7 +2,7 @@ import ConcurrencyExtras
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 nonisolated final class GitWorktreeDiscoveryRecorder: @unchecked Sendable {
   struct Invocation: Equatable {

@@ -4,7 +4,7 @@ import Foundation
 import ProwlCLIShared
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 @MainActor
 struct AppFeaturePlainFolderTerminalTests {
@@ -13,7 +13,7 @@ struct AppFeaturePlainFolderTerminalTests {
     let settingsStorage = SettingsTestStorage()
     let localStorage = RepositoryLocalSettingsTestStorage()
     let settingsFileURL = URL(
-      fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json"
+      fileURLWithPath: "/tmp/prowl-settings-\(UUID().uuidString).json"
     )
     let sentTerminalCommands = LockIsolated<[TerminalClient.Command]>([])
     let watcherCommands = LockIsolated<[WorktreeInfoWatcherClient.Command]>([])
@@ -41,7 +41,7 @@ struct AppFeaturePlainFolderTerminalTests {
     )
     try localStorage.save(
       JSONEncoder().encode(userSettings),
-      at: SupacodePaths.userRepositorySettingsURL(for: repository.rootURL)
+      at: ProwlPaths.userRepositorySettingsURL(for: repository.rootURL)
     )
 
     let store = TestStore(

@@ -3,7 +3,7 @@ import ConcurrencyExtras
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct GitExecutableResolverTests {
   @Test func brokenAppleGitFallsBackAndResolutionDoesNotChangeDeveloperDirectory() async throws {

@@ -454,7 +454,7 @@ extension RepositoriesFeature {
   }
 }
 
-nonisolated private let workspaceRemovalLog = SupaLogger("workspace")
+nonisolated private let workspaceRemovalLog = ProwlLogger("workspace")
 
 nonisolated struct WorkspaceBranchDeletion: Sendable, Equatable {
   let sourceLocation: String

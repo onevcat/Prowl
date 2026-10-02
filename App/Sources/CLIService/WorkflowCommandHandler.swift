@@ -1,4 +1,4 @@
-// supacode/CLIService/WorkflowCommandHandler.swift
+// App/Sources/CLIService/WorkflowCommandHandler.swift
 // Handles `prowl workflow` over the socket (docs-ai 063 B1/B3): `list` resolves the worktree
 // whose repo source is searched and runs three-source discovery; `run` resolves the source pane
 // or worktree and hands admission to the runtime; `status`, `deliver`, and `cancel` are attributed by

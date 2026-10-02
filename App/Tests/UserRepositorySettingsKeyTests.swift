@@ -5,13 +5,13 @@ import ProwlCLIShared
 import Sharing
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct UserRepositorySettingsKeyTests {
   @Test(.dependencies) func loadMissingFileReturnsDefaultAndCreatesLocalFile() throws {
     let localStorage = RepositoryLocalSettingsTestStorage()
     let rootURL = URL(fileURLWithPath: "/tmp/repo")
-    let localURL = SupacodePaths.userRepositorySettingsURL(for: rootURL)
+    let localURL = ProwlPaths.userRepositorySettingsURL(for: rootURL)
 
     let loaded = withDependencies {
       $0.repositoryLocalSettingsStorage = localStorage.storage
@@ -30,7 +30,7 @@ struct UserRepositorySettingsKeyTests {
   @Test(.dependencies) func savePersistsCustomCommandsToUserFile() throws {
     let localStorage = RepositoryLocalSettingsTestStorage()
     let rootURL = URL(fileURLWithPath: "/tmp/repo")
-    let localURL = SupacodePaths.userRepositorySettingsURL(for: rootURL)
+    let localURL = ProwlPaths.userRepositorySettingsURL(for: rootURL)
 
     let customSettings = UserRepositorySettings(
       customCommands: [
@@ -64,8 +64,8 @@ struct UserRepositorySettingsKeyTests {
   @Test(.dependencies) func loadMigratesLegacyRepositoryRootUserFile() throws {
     let localStorage = RepositoryLocalSettingsTestStorage()
     let rootURL = URL(fileURLWithPath: "/tmp/repo")
-    let localURL = SupacodePaths.userRepositorySettingsURL(for: rootURL)
-    let legacyURL = SupacodePaths.legacyUserRepositorySettingsURL(for: rootURL)
+    let localURL = ProwlPaths.userRepositorySettingsURL(for: rootURL)
+    let legacyURL = ProwlPaths.legacyUserRepositorySettingsURL(for: rootURL)
 
     let customSettings = UserRepositorySettings(
       customCommands: [
@@ -102,7 +102,7 @@ struct UserRepositorySettingsKeyTests {
   @Test(.dependencies) func savePersistsMoreThanThreeCustomCommands() throws {
     let localStorage = RepositoryLocalSettingsTestStorage()
     let rootURL = URL(fileURLWithPath: "/tmp/repo")
-    let localURL = SupacodePaths.userRepositorySettingsURL(for: rootURL)
+    let localURL = ProwlPaths.userRepositorySettingsURL(for: rootURL)
 
     let commands = (0..<5).map { index in
       UserCustomCommand(

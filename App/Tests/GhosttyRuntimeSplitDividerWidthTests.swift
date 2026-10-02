@@ -1,7 +1,7 @@
 import CoreGraphics
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct GhosttyRuntimeSplitDividerWidthTests {
   @Test func parsesBareIntegerValue() {

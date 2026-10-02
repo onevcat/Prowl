@@ -7,7 +7,7 @@ import ProwlCLIShared
 import SwiftUI
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 @MainActor
 struct AppFeatureCommandPaletteTests {
@@ -902,7 +902,7 @@ struct AppFeatureCommandPaletteTests {
     settings.externalDiffCustomCommand = "my-diff {leftPath} {rightPath}"
     let storage = SettingsTestStorage()
     let settingsFileURL = URL(
-      fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json"
+      fileURLWithPath: "/tmp/prowl-settings-\(UUID().uuidString).json"
     )
     let launched = LockIsolated<[(ExternalDiffSettings, DiffTarget)]>([])
     let store = withDependencies {
@@ -954,7 +954,7 @@ struct AppFeatureCommandPaletteTests {
     settings.externalDiffCustomCommand = "my-diff {leftPath} {rightPath}"
     let storage = SettingsTestStorage()
     let settingsFileURL = URL(
-      fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json"
+      fileURLWithPath: "/tmp/prowl-settings-\(UUID().uuidString).json"
     )
     let launched = LockIsolated<[(ExternalDiffSettings, DiffTarget)]>([])
     let store = withDependencies {

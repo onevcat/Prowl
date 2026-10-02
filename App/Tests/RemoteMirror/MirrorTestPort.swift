@@ -2,7 +2,7 @@ import Darwin
 import Observation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 nonisolated enum MirrorTestPort {
   @MainActor

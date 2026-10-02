@@ -1,18 +1,18 @@
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct GitAutomaticBaseRefIntegrationTests {
   @Test func fallsBackToLocalHeadForBareRepo() async throws {
     let tempRoot = URL(filePath: "/tmp", directoryHint: .isDirectory)
     let id = UUID().uuidString
     let bareURL = tempRoot.appending(
-      path: "supacode-bare-\(id).git",
+      path: "prowl-bare-\(id).git",
       directoryHint: URL.DirectoryHint.isDirectory
     )
     let workURL = tempRoot.appending(
-      path: "supacode-work-\(id)",
+      path: "prowl-work-\(id)",
       directoryHint: URL.DirectoryHint.isDirectory
     )
     defer {

@@ -39,7 +39,7 @@ actor CodexLogProvider {
     surfaceID: UUID? = nil,
     startedAt: Date = Date(),
     time: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
-    diagnostic: @escaping @Sendable (String) -> Void = { SupaLogger("AgentDetection").warning($0) },
+    diagnostic: @escaping @Sendable (String) -> Void = { ProwlLogger("AgentDetection").warning($0) },
     daemonBinding: DaemonBinding? = nil
   ) {
     self.startedAt = startedAt

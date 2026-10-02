@@ -2,7 +2,7 @@ import Foundation
 import ProwlCLIShared
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 /// Interprets the machine's effects against the run store, a fake activation bridge, a fake
 /// launch boundary, and the native action runner — the executable specification of how B3's

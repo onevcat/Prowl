@@ -1,4 +1,4 @@
-// supacode/CLIService/CommandHandlerProtocol.swift
+// App/Sources/CLIService/CommandHandlerProtocol.swift
 // Protocol for command handlers on the app side.
 
 import Foundation

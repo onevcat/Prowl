@@ -1,4 +1,4 @@
-// supacode/Features/Workflow/Views/WorkflowStartOverlayView.swift
+// App/Sources/Features/Workflow/Views/WorkflowStartOverlayView.swift
 // The workflow start sheet (docs-ai 063 C2): a centered card that explains who takes part and
 // what will happen, and collects the choices a run needs before it exists. Every choice is
 // sent as a typed action; the reducer owns eligibility (011 decision 1) and the view renders

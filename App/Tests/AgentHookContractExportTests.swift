@@ -2,7 +2,7 @@ import Foundation
 import ProwlCLIShared
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 /// Export real production launch preparation. Inference belongs to the opt-in Python runner;
 /// no credentials enter the test host or its result bundle.

@@ -41,7 +41,7 @@ nonisolated struct RepositoryIconAssetStore: Sendable {
 
 nonisolated extension RepositoryIconAssetStore {
   static var liveValue: RepositoryIconAssetStore {
-    fileSystemValue(repositoryIconsDirectory: SupacodePaths.repositoryIconsDirectory(for:))
+    fileSystemValue(repositoryIconsDirectory: ProwlPaths.repositoryIconsDirectory(for:))
   }
 
   static func fileSystemValue(

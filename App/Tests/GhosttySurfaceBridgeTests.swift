@@ -3,7 +3,7 @@ import ConcurrencyExtras
 import GhosttyKit
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 // Serialized: the coalescing tests drive a TestClock with two concurrent
 // sleepers (flush + stale watch); parallel execution can race `advance` before

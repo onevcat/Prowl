@@ -13,7 +13,7 @@ actor ClaudeRuntimeProvider {
   init(
     processStart: @escaping @Sendable (pid_t) -> Date? = { ProcessDetection.processStartDate(pid: $0) },
     time: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
-    diagnostic: @escaping @Sendable (String) -> Void = { SupaLogger("AgentDetection").warning($0) }
+    diagnostic: @escaping @Sendable (String) -> Void = { ProwlLogger("AgentDetection").warning($0) }
   ) {
     self.processStart = processStart
     self.time = time

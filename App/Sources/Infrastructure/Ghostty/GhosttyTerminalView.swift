@@ -1,6 +1,6 @@
 import SwiftUI
 
-private let terminalHostLogger = SupaLogger("TerminalHost")
+private let terminalHostLogger = ProwlLogger("TerminalHost")
 
 struct GhosttyTerminalView: NSViewRepresentable {
   let surfaceView: GhosttySurfaceView

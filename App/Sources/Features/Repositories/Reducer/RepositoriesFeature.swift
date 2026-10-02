@@ -11,7 +11,7 @@ nonisolated let worktreeCreationProgressLineLimit = 200
 nonisolated let worktreeCreationProgressUpdateStride = 20
 nonisolated let archiveScriptProgressLineLimit = 200
 let secondsPerDay: Double = 86_400
-let repositoriesLogger = SupaLogger("RepositoriesFeature")
+let repositoriesLogger = ProwlLogger("RepositoriesFeature")
 
 nonisolated struct WorktreeCreationProgressUpdateThrottle {
   private let stride: Int

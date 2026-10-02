@@ -5,7 +5,7 @@ import Foundation
 import ProwlCLIShared
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 @MainActor
 struct AppFeatureDefaultEditorTests {
@@ -17,7 +17,7 @@ struct AppFeatureDefaultEditorTests {
     let repositoriesState = makeRepositoriesState(worktree: worktree)
     let storage = SettingsTestStorage()
     let settingsFileURL = URL(
-      fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json"
+      fileURLWithPath: "/tmp/prowl-settings-\(UUID().uuidString).json"
     )
     let store = withDependencies {
       $0.settingsFileStorage = storage.storage
@@ -51,7 +51,7 @@ struct AppFeatureDefaultEditorTests {
     let settingsStorage = SettingsTestStorage()
     let localStorage = RepositoryLocalSettingsTestStorage()
     let settingsFileURL = URL(
-      fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json"
+      fileURLWithPath: "/tmp/prowl-settings-\(UUID().uuidString).json"
     )
     let repositoryID = worktree.repositoryRootURL.standardizedFileURL.path(percentEncoded: false)
     var globalRepositorySettings = RepositorySettings.default
@@ -75,7 +75,7 @@ struct AppFeatureDefaultEditorTests {
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
     try localStorage.save(
       encoder.encode(localRepositorySettings),
-      at: SupacodePaths.repositorySettingsURL(for: worktree.repositoryRootURL)
+      at: ProwlPaths.repositorySettingsURL(for: worktree.repositoryRootURL)
     )
 
     let store = TestStore(
@@ -114,7 +114,7 @@ struct AppFeatureDefaultEditorTests {
     let repositoriesState = makeRepositoriesState(worktree: worktree)
     let storage = SettingsTestStorage()
     let settingsFileURL = URL(
-      fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json"
+      fileURLWithPath: "/tmp/prowl-settings-\(UUID().uuidString).json"
     )
     let store = TestStore(
       initialState: AppFeature.State(
@@ -143,7 +143,7 @@ struct AppFeatureDefaultEditorTests {
     let watcherCommands = LockIsolated<[WorktreeInfoWatcherClient.Command]>([])
     let storage = SettingsTestStorage()
     let settingsFileURL = URL(
-      fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json"
+      fileURLWithPath: "/tmp/prowl-settings-\(UUID().uuidString).json"
     )
     let store = TestStore(
       initialState: AppFeature.State(
@@ -178,7 +178,7 @@ struct AppFeatureDefaultEditorTests {
     let storage = SettingsTestStorage()
     let localStorage = RepositoryLocalSettingsTestStorage()
     let settingsFileURL = URL(
-      fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json"
+      fileURLWithPath: "/tmp/prowl-settings-\(UUID().uuidString).json"
     )
     let store = TestStore(
       initialState: AppFeature.State(
@@ -206,7 +206,7 @@ struct AppFeatureDefaultEditorTests {
     let storage = SettingsTestStorage()
     let localStorage = RepositoryLocalSettingsTestStorage()
     let settingsFileURL = URL(
-      fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json"
+      fileURLWithPath: "/tmp/prowl-settings-\(UUID().uuidString).json"
     )
     let store = withDependencies {
       $0.settingsFileStorage = storage.storage

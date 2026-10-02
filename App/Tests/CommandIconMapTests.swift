@@ -1,6 +1,6 @@
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct CommandIconMapTests {
   // MARK: - First-token resolution

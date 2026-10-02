@@ -2,7 +2,7 @@ import Foundation
 import Synchronization
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct ClaudeRuntimeProviderTests {
   private let session = "d5afa682-cb4a-4d23-95a0-16a4bb621be6"

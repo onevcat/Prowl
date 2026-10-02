@@ -11,20 +11,20 @@ extension TerminalLayoutPersistenceClient: DependencyKey {
   static let liveValue = TerminalLayoutPersistenceClient(
     loadSnapshot: {
       loadTerminalLayoutSnapshot(
-        at: SupacodePaths.terminalLayoutSnapshotURL,
+        at: ProwlPaths.terminalLayoutSnapshotURL,
         fileManager: .default
       )
     },
     saveSnapshot: { payload in
       saveTerminalLayoutSnapshot(
         payload,
-        at: SupacodePaths.terminalLayoutSnapshotURL,
-        cacheDirectory: SupacodePaths.cacheDirectory,
+        at: ProwlPaths.terminalLayoutSnapshotURL,
+        cacheDirectory: ProwlPaths.cacheDirectory,
         fileManager: .default
       )
     },
     clearSnapshot: {
-      discardTerminalLayoutSnapshot(at: SupacodePaths.terminalLayoutSnapshotURL, fileManager: .default)
+      discardTerminalLayoutSnapshot(at: ProwlPaths.terminalLayoutSnapshotURL, fileManager: .default)
     }
   )
 
@@ -42,7 +42,7 @@ extension DependencyValues {
   }
 }
 
-private nonisolated let terminalLayoutPersistenceLogger = SupaLogger("TerminalLayoutPersistence")
+private nonisolated let terminalLayoutPersistenceLogger = ProwlLogger("TerminalLayoutPersistence")
 
 @discardableResult
 nonisolated func discardTerminalLayoutSnapshot(

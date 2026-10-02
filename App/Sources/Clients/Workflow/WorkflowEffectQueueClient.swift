@@ -1,4 +1,4 @@
-// supacode/Clients/Workflow/WorkflowEffectQueueClient.swift
+// App/Sources/Clients/Workflow/WorkflowEffectQueueClient.swift
 // One FIFO per run for the machine's ordered effects (docs-ai 063 B3). The reducer enqueues
 // every batch synchronously as it reduces; a single long-lived effect per run performs them one
 // after another, so an instruction file exists before the line that names it is typed and

@@ -2,7 +2,7 @@ import Foundation
 import ProwlCLIShared
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct WorkflowStarterTemplateTests {
   @Test(arguments: WorkflowStarterTemplate.Kind.allCases)

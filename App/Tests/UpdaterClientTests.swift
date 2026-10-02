@@ -1,7 +1,7 @@
 import Sparkle
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct UpdaterClientTests {
   @Test func backgroundUpdateDoesNotPreserveInstallingState() {

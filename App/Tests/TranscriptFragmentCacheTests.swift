@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 /// Fingerprint matching re-reads the same transcript tails every time a pane's
 /// session cache expires. `TranscriptFragmentCache` replays the parsed result

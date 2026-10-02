@@ -2,7 +2,7 @@ import Foundation
 import IdentifiedCollections
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 @MainActor
 struct RepositorySectionViewTests {
@@ -229,7 +229,7 @@ struct RepositorySectionViewTests {
     let repository = Repository(
       id: "/tmp/prowl",
       rootURL: repositoryRootURL,
-      name: "supacode",
+      name: "Prowl",
       kind: .git,
       worktrees: [worktree]
     )

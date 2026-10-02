@@ -6,7 +6,7 @@ import Observation
 import ProwlCLIShared
 import Sharing
 
-let terminalStateLogger = SupaLogger("TerminalState")
+let terminalStateLogger = ProwlLogger("TerminalState")
 let activeAgentDetectionInterval: Duration = .milliseconds(300)
 let idleAgentDetectionInterval: Duration = .seconds(2)
 
@@ -648,7 +648,7 @@ final class WorktreeTerminalState {
     do {
       try AgentProfileHomeProvisioner.provision(
         home: home,
-        base: SupacodePaths.agentProfileHomesDirectory
+        base: ProwlPaths.agentProfileHomesDirectory
       )
       return true
     } catch {

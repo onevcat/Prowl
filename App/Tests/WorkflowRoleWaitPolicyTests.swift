@@ -1,4 +1,4 @@
-// supacodeTests/WorkflowRoleWaitPolicyTests.swift
+// App/Tests/WorkflowRoleWaitPolicyTests.swift
 // The idle wait of a `message` step (063 B3): baseline-aware exact evidence, exact needs-input
 // precedence, detector stabilization, blocked grace, appearance grace, pending records.
 
@@ -6,7 +6,7 @@ import Foundation
 import ProwlCLIShared
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 @MainActor
 struct WorkflowRoleWaitPolicyTests {

@@ -1,7 +1,7 @@
 import CoreGraphics
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct CanvasSpatialNavigationTests {
   private typealias Entry = CanvasSpatialNavigation.CardEntry

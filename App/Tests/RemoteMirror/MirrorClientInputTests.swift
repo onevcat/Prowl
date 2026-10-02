@@ -3,7 +3,7 @@ import Network
 import Security
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct MirrorConnectionFailureTests {
   @Test func mapsTransportErrorsToClasses() {

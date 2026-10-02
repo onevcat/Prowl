@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct AgentScreenScanCacheTests {
   /// With no cache, the helper scans from scratch and returns a scan that

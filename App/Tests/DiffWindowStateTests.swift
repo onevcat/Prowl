@@ -4,7 +4,7 @@ import Foundation
 import Testing
 import YiTong
 
-@testable import supacode
+@testable import Prowl
 
 @MainActor
 struct DiffWindowStateTests {

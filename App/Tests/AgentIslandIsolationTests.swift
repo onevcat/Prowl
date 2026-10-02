@@ -3,7 +3,7 @@ import ComposableArchitecture
 import DependenciesTestSupport
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 @MainActor
 struct AgentIslandIsolationTests {

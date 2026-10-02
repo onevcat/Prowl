@@ -1,7 +1,7 @@
 import Foundation
 import Sentry
 
-nonisolated let gitLogger = SupaLogger("Git")
+nonisolated let gitLogger = ProwlLogger("Git")
 
 /// Only direct Git discovery can establish that a folder is not a repository.
 /// Existing or inaccessible metadata makes the result uncertain, even if Git says otherwise.

@@ -1,4 +1,4 @@
-// supacode/App/WorkflowRuntimeComposition.swift
+// App/Sources/App/WorkflowRuntimeComposition.swift
 // The live boundaries of the workflow runner (docs-ai 063 B3): the activation bridge over the
 // dispatch store, the idle wait built on the #733 evidence rules, the profile launch with
 // child-only workflow environment, the per-activation watchdog sources, admission facts, and the
@@ -67,13 +67,13 @@ struct WorkflowRuntimeInstallation {
   }
 }
 
-extension SupacodeApp {
-  private static let workflowLogger = SupaLogger("Workflow")
+extension ProwlApp {
+  private static let workflowLogger = ProwlLogger("Workflow")
 
   @MainActor
   static func makeWorkflowRuntime(
     terminalManager: WorktreeTerminalManager,
-    storeBox: SupacodeAppStoreBox
+    storeBox: ProwlAppStoreBox
   ) -> WorkflowRuntimeInstallation {
     let bridge = makeWorkflowActivationBridge(terminalManager: terminalManager, storeBox: storeBox)
     let coordinatorBox = WorkflowCoordinatorBox()
@@ -102,7 +102,7 @@ extension SupacodeApp {
   @MainActor
   static func makeWorkflowActivationBridge(
     terminalManager: WorktreeTerminalManager,
-    storeBox: SupacodeAppStoreBox
+    storeBox: ProwlAppStoreBox
   ) -> LiveWorkflowActivationBridge {
     LiveWorkflowActivationBridge(terminalManager: terminalManager) { surfaceID in
       guard let appStore = storeBox.store else { return nil }
@@ -134,7 +134,7 @@ extension SupacodeApp {
   static func makeWorkflowConditionSnapshot(
     surfaceID: UUID,
     terminalManager: WorktreeTerminalManager,
-    storeBox: SupacodeAppStoreBox
+    storeBox: ProwlAppStoreBox
   ) -> AgentConditionSnapshot {
     let observed = terminalManager.agentObservationSnapshot(surfaceID: surfaceID)
     let agent = storeBox.store?.state.repositories.activeAgents.entries.first {
@@ -158,7 +158,7 @@ extension SupacodeApp {
   static func makeWorkflowWatchdogClient(
     terminalManager: WorktreeTerminalManager,
     activationBridge: LiveWorkflowActivationBridge,
-    storeBox: SupacodeAppStoreBox
+    storeBox: ProwlAppStoreBox
   ) -> WorkflowWatchdogClient {
     WorkflowWatchdogClient(arm: { _, request in
       let sources = WorkflowWatchdog.Sources(
@@ -190,7 +190,7 @@ extension SupacodeApp {
   @MainActor
   static func makeWorkflowRuntimeClient(
     terminalManager: WorktreeTerminalManager,
-    storeBox: SupacodeAppStoreBox,
+    storeBox: ProwlAppStoreBox,
     reservations: WorkflowPaneReservations = WorkflowPaneReservations()
   ) -> WorkflowRuntimeClient {
     WorkflowRuntimeClient(
@@ -293,7 +293,7 @@ extension SupacodeApp {
   private static func waitForWorkflowRole(
     surfaceID: UUID,
     terminalManager: WorktreeTerminalManager,
-    storeBox: SupacodeAppStoreBox
+    storeBox: ProwlAppStoreBox
   ) async -> WorkflowRoleWaitOutcome {
     let clock = ContinuousClock()
     var elapsed = 0
@@ -524,7 +524,7 @@ extension SupacodeApp {
         try AgentProfileLaunchPlanner.plan(
           for: profile,
           intent: .prompt(WorkflowRunAdmissionPlaceholder.prompt),
-          homeBaseDirectory: SupacodePaths.agentProfileHomesDirectory)
+          homeBaseDirectory: ProwlPaths.agentProfileHomesDirectory)
       },
       bundledSkill: { id in bundledSkills.first { $0.id == id } }
     )
@@ -578,7 +578,7 @@ extension SupacodeApp {
 @MainActor
 struct WorkflowLaunchBoundary {
   let terminalManager: WorktreeTerminalManager
-  let storeBox: SupacodeAppStoreBox
+  let storeBox: ProwlAppStoreBox
   let reservations: WorkflowPaneReservations
 }
 

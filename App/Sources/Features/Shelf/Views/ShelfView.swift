@@ -3,7 +3,7 @@ import ComposableArchitecture
 import Sharing
 import SwiftUI
 
-private let shelfLogger = SupaLogger("Shelf")
+private let shelfLogger = ProwlLogger("Shelf")
 
 /// Root view for Shelf presentation mode.
 ///

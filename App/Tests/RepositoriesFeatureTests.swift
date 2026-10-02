@@ -8,7 +8,7 @@ import ProwlCLIShared
 import Sharing
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 @MainActor
 struct RepositoriesFeatureTests {
@@ -3221,7 +3221,7 @@ struct RepositoriesFeatureTests {
     await store.receive(\.worktreeCreation.createRandomWorktreeSucceeded)
     await store.finish()
 
-    let expectedBaseDirectory = SupacodePaths.worktreeBaseDirectory(
+    let expectedBaseDirectory = ProwlPaths.worktreeBaseDirectory(
       for: repository.rootURL,
       globalDefaultPath: "/tmp/global-worktrees",
       repositoryOverridePath: "/tmp/repo-override"
@@ -3274,7 +3274,7 @@ struct RepositoriesFeatureTests {
     await store.receive(\.worktreeCreation.createRandomWorktreeSucceeded)
     await store.finish()
 
-    let expectedBaseDirectory = SupacodePaths.worktreeBaseDirectory(
+    let expectedBaseDirectory = ProwlPaths.worktreeBaseDirectory(
       for: repository.rootURL,
       globalDefaultPath: "/tmp/global-worktrees",
       repositoryOverridePath: nil
@@ -3440,12 +3440,12 @@ struct RepositoriesFeatureTests {
     let repoRoot = "/tmp/repo"
     let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
     let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
-    let createTimeBaseDirectory = SupacodePaths.worktreeBaseDirectory(
+    let createTimeBaseDirectory = ProwlPaths.worktreeBaseDirectory(
       for: repository.rootURL,
       globalDefaultPath: "/tmp/worktrees-original",
       repositoryOverridePath: nil
     )
-    let changedBaseDirectory = SupacodePaths.worktreeBaseDirectory(
+    let changedBaseDirectory = ProwlPaths.worktreeBaseDirectory(
       for: repository.rootURL,
       globalDefaultPath: "/tmp/worktrees-changed",
       repositoryOverridePath: nil
@@ -7768,7 +7768,7 @@ struct RepositoriesFeatureTests {
 // before the unique-path effect resolves (no filesystem lookup).
 func defaultWorkspaceBaseRootPath(for title: String) -> String {
   let folderName = ProjectWorkspace.defaultWorkspaceFolderName(for: title)
-  return SupacodePaths.workspacesDirectory
+  return ProwlPaths.workspacesDirectory
     .appending(path: folderName, directoryHint: .isDirectory)
     .standardizedFileURL
     .path(percentEncoded: false)

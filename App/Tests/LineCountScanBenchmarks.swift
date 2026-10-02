@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 extension PerformanceBenchmarks {
   /// Pins the #644/#652 untracked line-count scanner against the pre-#644

@@ -2,7 +2,7 @@ import ComposableArchitecture
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 @MainActor
 struct WorkspaceEditorFeatureTests {

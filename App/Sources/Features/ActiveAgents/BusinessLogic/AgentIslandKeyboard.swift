@@ -185,7 +185,7 @@ private struct AgentIslandCarbonHotKeyDescriptor {
 @MainActor
 final class AgentIslandGlobalHotKeys {
   private static let signature: OSType = 0x5052_574C  // PRWL
-  private static let logger = SupaLogger("AgentIsland")
+  private static let logger = ProwlLogger("AgentIsland")
 
   private var eventHandler: EventHandlerRef?
   private var hotKeys: [UInt32: EventHotKeyRef] = [:]

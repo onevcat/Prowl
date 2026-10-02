@@ -1,4 +1,4 @@
-// supacode/CLIService/CLISocketServer.swift
+// App/Sources/CLIService/CLISocketServer.swift
 // Unix domain socket server that listens for CLI command requests.
 
 import Foundation
@@ -10,7 +10,7 @@ import ProwlCLIShared
   import Glibc
 #endif
 
-private let cliSocketLogger = SupaLogger("CLISocketServer")
+private let cliSocketLogger = ProwlLogger("CLISocketServer")
 
 @MainActor
 final class CLISocketServer {

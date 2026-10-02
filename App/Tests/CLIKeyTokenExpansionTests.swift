@@ -3,7 +3,7 @@ import Carbon
 import ProwlCLIShared
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct CLIKeyTokenExpansionTests {
   @Test func normalizesExpandedModifierCombos() {

@@ -1,7 +1,7 @@
 import AppKit
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct MirroredTerminalKeyTests {
   @Test func enterEventNormalizes() throws {

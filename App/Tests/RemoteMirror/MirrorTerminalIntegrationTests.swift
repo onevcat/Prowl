@@ -9,7 +9,7 @@ import SwiftUI
 import Synchronization
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 @Suite(.serialized)
 @MainActor
@@ -777,7 +777,7 @@ struct MirrorTerminalIntegrationTests {
     let hostState = try #require(fixture.manager.stateIfExists(for: fixture.directory.path))
     let selectedTab = hostState.tabManager.selectedTabId
     fixture.host.commandService = MirrorCommandService(
-      router: SupacodeApp.makeCLICommandRouter(appStore: store, terminalManager: fixture.manager),
+      router: ProwlApp.makeCLICommandRouter(appStore: store, terminalManager: fixture.manager),
       worktrees: {
         [
           ListCommandWorktree(

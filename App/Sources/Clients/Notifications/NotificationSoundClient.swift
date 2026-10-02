@@ -24,7 +24,7 @@ private enum NotificationSoundCache {
       // The hard-coded system sound list can drift across macOS releases; a
       // dropped sound would otherwise die silently.
       guard let made = NSSound(named: name) else {
-        SupaLogger("Notifications").warning("System sound \(name) is unavailable; in-app sound will not play.")
+        ProwlLogger("Notifications").warning("System sound \(name) is unavailable; in-app sound will not play.")
         return nil
       }
       return made
@@ -32,12 +32,12 @@ private enum NotificationSoundCache {
       // The bundled chime is a packaging invariant; a missing or unreadable
       // file means the sound is silently dead, so leave a trail.
       guard let url = Bundle.main.url(forResource: resource, withExtension: fileExtension) else {
-        SupaLogger("Notifications").warning(
+        ProwlLogger("Notifications").warning(
           "Bundled \(resource).\(fileExtension) is missing; in-app sound will not play.")
         return nil
       }
       guard let made = NSSound(contentsOf: url, byReference: true) else {
-        SupaLogger("Notifications").warning("Bundled \(resource).\(fileExtension) could not be loaded as an NSSound.")
+        ProwlLogger("Notifications").warning("Bundled \(resource).\(fileExtension) could not be loaded as an NSSound.")
         return nil
       }
       return made

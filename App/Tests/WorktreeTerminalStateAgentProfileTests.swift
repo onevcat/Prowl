@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 /// Terminal-layer behavior of `launchAgentProfile` that is testable without a
 /// live Ghostty surface (docs-ai 053/005).

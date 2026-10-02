@@ -282,7 +282,7 @@ nonisolated struct KeybindingMigrationResult: Equatable, Sendable {
 }
 
 nonisolated enum LegacyCustomCommandShortcutMigration {
-  private static let logger = SupaLogger("Shortcuts")
+  private static let logger = ProwlLogger("Shortcuts")
 
   static func migrate(commands: [UserCustomCommand]) -> KeybindingMigrationResult {
     migrate(commands: commands.map { EffectiveCustomCommand(source: .repository, command: $0) })

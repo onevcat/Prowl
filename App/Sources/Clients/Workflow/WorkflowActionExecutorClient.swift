@@ -1,4 +1,4 @@
-// supacode/Clients/Workflow/WorkflowActionExecutorClient.swift
+// App/Sources/Clients/Workflow/WorkflowActionExecutorClient.swift
 // The boundary the reducer runs a native `action` step through (docs-ai 063 B3): the app uses
 // the bundled runner, tests substitute one they can hold or fail at will.
 

@@ -1,11 +1,11 @@
-// supacodeTests/CLICommandEnvelopeTests.swift
+// App/Tests/CLICommandEnvelopeTests.swift
 // Contract tests for CommandEnvelope, CommandResponse, and shared types.
 
 import Foundation
 import ProwlCLIShared
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct CLICommandEnvelopeTests {
 

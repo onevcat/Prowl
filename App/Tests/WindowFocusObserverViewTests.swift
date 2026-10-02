@@ -1,7 +1,7 @@
 import AppKit
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 /// Regression guard for the Shelf-entry focus bug: when a
 /// `WindowFocusObserverNSView` is torn off its host window (e.g. one

@@ -4,7 +4,7 @@ import Foundation
 import Sharing
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct RepositoryAppearancesKeyTests {
   @Test(.dependencies) func loadReturnsEmptyDictionaryWhenFileMissing() {

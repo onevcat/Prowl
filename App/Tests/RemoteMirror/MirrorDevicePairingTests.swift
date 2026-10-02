@@ -5,7 +5,7 @@ import Observation
 import Security
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 @MainActor
 struct MirrorDevicePairingTests {

@@ -2,7 +2,7 @@ import Foundation
 import ProwlCLIShared
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 // swiftlint:disable file_length type_body_length
 struct WorkflowRunMachineTests {

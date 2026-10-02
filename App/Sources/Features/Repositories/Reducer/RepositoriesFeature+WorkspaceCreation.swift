@@ -17,7 +17,7 @@ extension RepositoriesFeature.State {
   }
 }
 
-nonisolated private let workspaceLog = SupaLogger("workspace")
+nonisolated private let workspaceLog = ProwlLogger("workspace")
 
 extension RepositoriesFeature {
   func reduceWorkspaceCreation(

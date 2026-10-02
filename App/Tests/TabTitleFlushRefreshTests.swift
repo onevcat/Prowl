@@ -4,7 +4,7 @@ import Foundation
 import GhosttyKit
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 /// A tab title held back by coalescing must refresh the Active Agents subtitle the
 /// same way a title written straight through `updateTitle` does. Those are two

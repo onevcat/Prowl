@@ -1,4 +1,4 @@
-// supacode/Domain/Workflow/WorkflowActivationBridge.swift
+// App/Sources/Domain/Workflow/WorkflowActivationBridge.swift
 // The dispatch-store seam of the run machine's effects (docs-ai 063.007, decision H3). B3
 // implements it over `WorktreeTerminalManager` / `AgentDispatchStore`; B2 tests use a fake.
 // Trust never comes from here: a delivery is attributed by the caller pane's pending record,

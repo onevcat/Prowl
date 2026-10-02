@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct WindowChromeTintTests {
   // MARK: - fill(mode:customColor:repositoryColor:)

@@ -24,7 +24,7 @@ extension AgentProfileHomeClient: DependencyKey {
       // canonical base escape) before touching anything.
       try? AgentProfileHomeProvisioner.provision(
         home: home,
-        base: SupacodePaths.agentProfileHomesDirectory
+        base: ProwlPaths.agentProfileHomesDirectory
       )
       NSWorkspace.shared.activateFileViewerSelecting([home])
     },
@@ -32,7 +32,7 @@ extension AgentProfileHomeClient: DependencyKey {
       guard let home = containedHome(for: id) else { return }
       try AgentProfileHomeProvisioner.validatePhysicalContainment(
         home: home,
-        base: SupacodePaths.agentProfileHomesDirectory
+        base: ProwlPaths.agentProfileHomesDirectory
       )
       guard FileManager.default.fileExists(atPath: AgentProfileLaunchPlanner.pathString(home)) else {
         return
@@ -50,7 +50,7 @@ extension AgentProfileHomeClient: DependencyKey {
   )
 
   private nonisolated static func containedHome(for id: AgentProfile.ID) -> URL? {
-    let base = SupacodePaths.agentProfileHomesDirectory
+    let base = ProwlPaths.agentProfileHomesDirectory
     let home = AgentProfileLaunchPlanner.dedicatedHomeDirectory(for: id, base: base)
     return AgentProfileLaunchPlanner.isContained(home, in: base) ? home : nil
   }

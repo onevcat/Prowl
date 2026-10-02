@@ -4,7 +4,7 @@ import Foundation
 import IdentifiedCollections
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 @MainActor
 struct CommandPaletteFeatureTests {
@@ -1374,8 +1374,8 @@ struct CommandPaletteFeatureTests {
     )
   }
 
-  @Test func supacodeItemsBeatGhosttyItemsWhenScoresTie() {
-    let supacodeItem = makeItem(
+  @Test func prowlItemsBeatGhosttyItemsWhenScoresTie() {
+    let prowlItem = makeItem(
       id: "global.open-settings",
       title: "Open Settings",
       subtitle: nil,
@@ -1391,10 +1391,10 @@ struct CommandPaletteFeatureTests {
 
     expectNoDifference(
       CommandPaletteFeature.filterItems(
-        items: [ghosttyItem, supacodeItem],
+        items: [ghosttyItem, prowlItem],
         query: "open settings"
       ),
-      [supacodeItem, ghosttyItem]
+      [prowlItem, ghosttyItem]
     )
   }
 

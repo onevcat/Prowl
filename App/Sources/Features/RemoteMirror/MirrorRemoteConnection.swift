@@ -94,7 +94,7 @@ final class MirrorRemoteConnection: MirrorTransport {
       }
       peer.start()
     } catch {
-      SupaLogger("RemoteMirror").warning("Host connection failed: \(error)")
+      ProwlLogger("RemoteMirror").warning("Host connection failed: \(error)")
       close(error.localizedDescription)
     }
   }
@@ -142,13 +142,13 @@ final class MirrorRemoteConnection: MirrorTransport {
           let code = try MirrorPairingCode.normalized(configuration.pairingKey)
           #if DEBUG
             let lookupStarted = ProcessInfo.processInfo.systemUptime
-            SupaLogger("MirrorPairing").notice("Device name lookup started")
+            ProwlLogger("MirrorPairing").notice("Device name lookup started")
           #endif
           // Read local configuration; hostname resolution can block the authentication deadline.
           let name = String(((SCDynamicStoreCopyLocalHostName(nil) as String?) ?? "Mac").prefix(80))
           #if DEBUG
             let elapsed = ProcessInfo.processInfo.systemUptime - lookupStarted
-            SupaLogger("MirrorPairing").notice(
+            ProwlLogger("MirrorPairing").notice(
               "Device name lookup completed after \(elapsed) seconds")
           #endif
           connection?.send(
@@ -185,7 +185,7 @@ final class MirrorRemoteConnection: MirrorTransport {
       default: throw MirrorProtocolError.invalidMessage
       }
     } catch {
-      SupaLogger("RemoteMirror").warning("Host connection failed: \(error)")
+      ProwlLogger("RemoteMirror").warning("Host connection failed: \(error)")
       close(error.localizedDescription)
     }
   }

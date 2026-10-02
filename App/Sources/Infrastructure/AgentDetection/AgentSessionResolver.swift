@@ -1,6 +1,6 @@
 import Foundation
 
-private nonisolated let agentSessionLogger = SupaLogger("AgentSession")
+private nonisolated let agentSessionLogger = ProwlLogger("AgentSession")
 
 nonisolated struct AgentSession: Equatable, Sendable {
   enum Source: String, Equatable, Sendable {

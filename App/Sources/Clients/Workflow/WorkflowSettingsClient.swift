@@ -1,4 +1,4 @@
-// supacode/Clients/Workflow/WorkflowSettingsClient.swift
+// App/Sources/Clients/Workflow/WorkflowSettingsClient.swift
 // The filesystem side of Settings › Agents › Workflows (docs-ai 063 D1): scan every source,
 // write a starter file, reveal a file, and watch the source directories so the page follows
 // edits made in an editor. Row derivation is pure (`WorkflowSettingsCatalog`); the live scan is

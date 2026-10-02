@@ -2,7 +2,7 @@ import Foundation
 import ProwlCLIShared
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct WorkflowBindingResolverTests {
   private static let claudeID = UUID(uuidString: "00000000-0000-0000-0000-00000000000A")!

@@ -31,7 +31,7 @@ struct SidebarFooterView: View {
         .help("View release notes")
         Divider()
         Button("Submit GitHub Issue", systemImage: "exclamationmark.bubble") {
-          if let url = URL(string: "https://github.com/onevcat/supacode/issues/new") {
+          if let url = URL(string: "https://github.com/onevcat/Prowl/issues/new") {
             openURL(url)
           }
         }

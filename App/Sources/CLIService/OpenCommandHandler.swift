@@ -1,4 +1,4 @@
-// supacode/CLIService/OpenCommandHandler.swift
+// App/Sources/CLIService/OpenCommandHandler.swift
 // Handles `prowl open [path]` — resolves path to worktree, selects it, brings app to front.
 // Response payload follows docs-ai/013-prowl-cli/contracts/open.md contract.
 

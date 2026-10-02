@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 /// RAII helper: creates a unique scratch directory under `$TMPDIR` and
 /// removes it on deinit so test runs don't accumulate orphan folders
@@ -79,7 +79,7 @@ struct RepositoryIconAssetStoreTests {
     let copied = try Data(contentsOf: resolved)
     #expect(copied == Data([0x01, 0x02, 0x03]))
 
-    let productionURL = SupacodePaths.repositoryIconFileURL(
+    let productionURL = ProwlPaths.repositoryIconFileURL(
       filename: filename, repositoryRootURL: fixture.repoRoot.url
     )
     #expect(!FileManager.default.fileExists(atPath: productionURL.path(percentEncoded: false)))

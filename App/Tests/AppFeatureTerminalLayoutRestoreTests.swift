@@ -6,7 +6,7 @@ import ProwlCLIShared
 import SwiftUI
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 // `repositoriesChanged` kicks off workflow history maintenance, which reads the
 // date dependency. Isolate history per test so recovery cannot interrupt another test's runs.

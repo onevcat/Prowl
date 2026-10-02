@@ -5,7 +5,7 @@ import Foundation
 import Sharing
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 @MainActor
 struct RepositorySettingsAppearanceTests {

@@ -382,9 +382,9 @@ func workflowAuthoringPromptStrings(
 extension WorkflowStarterTemplate {
   /// The manual and skill inside this app bundle, falling back to the standard install path.
   nonisolated static var bundledDocumentation: Documentation {
-    let resources = SupacodePaths.bundledDocsURL?.deletingLastPathComponent()
+    let resources = ProwlPaths.bundledDocsURL?.deletingLastPathComponent()
     return Documentation(
-      manualPath: SupacodePaths.bundledDocsURL?
+      manualPath: ProwlPaths.bundledDocsURL?
         .appending(path: "components/workflows.md", directoryHint: .notDirectory)
         .path(percentEncoded: false) ?? Documentation.standard.manualPath,
       skillPath: resources?

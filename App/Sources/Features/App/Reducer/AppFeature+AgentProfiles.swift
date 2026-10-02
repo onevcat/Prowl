@@ -22,7 +22,7 @@ extension AppFeature {
     do {
       plan = try AgentProfileLaunchPlanner.plan(
         for: profile,
-        homeBaseDirectory: SupacodePaths.agentProfileHomesDirectory
+        homeBaseDirectory: ProwlPaths.agentProfileHomesDirectory
       )
     } catch {
       appLogger.warning("Agent profile launch planning failed: \(error)")

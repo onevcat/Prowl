@@ -1,4 +1,4 @@
-// supacode/CLIService/WorkflowRunAdmission.swift
+// App/Sources/CLIService/WorkflowRunAdmission.swift
 // Preflight of `prowl workflow run` (docs-ai 063 B3, decisions W2/W4): the effective definition,
 // source and worktree facts, binding legality (explicit `--role` overrides, remembered bindings,
 // suggestion, Recommended), one run per pane, the frozen launch plans, and the run directory with
@@ -235,7 +235,7 @@ enum WorkflowRunAdmission {
             try FileManager.default.removeItem(at: directory)
           }
         } catch {
-          SupaLogger("WorkflowAdmission").warning("Cannot remove unpublished run at \(directory.path): \(error)")
+          ProwlLogger("WorkflowAdmission").warning("Cannot remove unpublished run at \(directory.path): \(error)")
         }
         context.occupancy?.finish()
       }

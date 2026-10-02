@@ -24,7 +24,7 @@ struct NotificationsSettingsView: View {
               NotificationSoundLabel(sound: sound).tag(sound)
             }
             Divider()
-            NotificationSoundLabel(sound: .supacodeClassic).tag(NotificationSound.supacodeClassic)
+            NotificationSoundLabel(sound: .prowlClassic).tag(NotificationSound.prowlClassic)
           } label: {
             Text("Play notification sound")
             Text(

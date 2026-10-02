@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 /// Every pane resolves its session independently, but panes in one project all
 /// enumerate the same transcript directory. That walk grows with the number of

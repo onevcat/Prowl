@@ -1,6 +1,6 @@
 import Foundation
 
-@testable import supacode
+@testable import Prowl
 
 nonisolated final class SettingsTestStorage: @unchecked Sendable {
   private let lock = NSLock()

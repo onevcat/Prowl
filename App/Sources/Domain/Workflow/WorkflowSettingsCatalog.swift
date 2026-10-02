@@ -1,4 +1,4 @@
-// supacode/Domain/Workflow/WorkflowSettingsCatalog.swift
+// App/Sources/Domain/Workflow/WorkflowSettingsCatalog.swift
 // Rows of Settings › Agents › Workflows (docs-ai 063 D1): a pure derivation over one filesystem
 // scan and UserGlobalSettings, so the page shows exactly what the enabled set, the bind-mode
 // overrides, and the binding memory hold — and can be tested without the disk.

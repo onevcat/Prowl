@@ -112,7 +112,7 @@ extension RepositoryPersistenceClient: DependencyKey {
         }
       },
       loadRepositorySnapshot: {
-        let snapshotURL = SupacodePaths.repositorySnapshotURL
+        let snapshotURL = ProwlPaths.repositorySnapshotURL
         guard let data = try? Data(contentsOf: snapshotURL) else {
           return nil
         }
@@ -153,14 +153,14 @@ extension RepositoryPersistenceClient: DependencyKey {
         }
       },
       saveRepositorySnapshot: { repositories in
-        let snapshotURL = SupacodePaths.repositorySnapshotURL
+        let snapshotURL = ProwlPaths.repositorySnapshotURL
         guard !repositories.isEmpty else {
           discardRepositorySnapshot(at: snapshotURL)
           return
         }
         do {
           try FileManager.default.createDirectory(
-            at: SupacodePaths.cacheDirectory,
+            at: ProwlPaths.cacheDirectory,
             withIntermediateDirectories: true
           )
           let encoder = JSONEncoder()
@@ -211,7 +211,7 @@ extension DependencyValues {
   }
 }
 
-private nonisolated let repositoryPersistenceLogger = SupaLogger("Repositories")
+private nonisolated let repositoryPersistenceLogger = ProwlLogger("Repositories")
 
 private nonisolated func discardRepositorySnapshot(at url: URL) {
   guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {

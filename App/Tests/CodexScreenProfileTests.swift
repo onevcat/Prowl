@@ -1,6 +1,6 @@
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct CodexScreenProfileTests {
   @Test func liveComposerRejectsDraftsImagesAndMissingFooter() {

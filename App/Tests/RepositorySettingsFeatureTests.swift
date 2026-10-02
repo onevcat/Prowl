@@ -3,7 +3,7 @@ import DependenciesTestSupport
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 @MainActor
 struct RepositorySettingsFeatureTests {
@@ -46,9 +46,9 @@ struct RepositorySettingsFeatureTests {
     let rootURL = URL(fileURLWithPath: "/tmp/folder-\(UUID().uuidString)")
     let settingsStorage = SettingsTestStorage()
     let localStorage = RepositoryLocalSettingsTestStorage()
-    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json")
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/prowl-settings-\(UUID().uuidString).json")
     let expectedDefaultWorktreeBaseDirectoryPath =
-      SupacodePaths.normalizedWorktreeBaseDirectoryPath("/tmp/worktrees")
+      ProwlPaths.normalizedWorktreeBaseDirectoryPath("/tmp/worktrees")
     let storedSettings = RepositorySettings(
       setupScript: "echo setup",
       archiveScript: "echo archive",
@@ -76,7 +76,7 @@ struct RepositorySettingsFeatureTests {
     try #require(
       try? localStorage.save(
         userSettingsData,
-        at: SupacodePaths.userRepositorySettingsURL(for: rootURL)
+        at: ProwlPaths.userRepositorySettingsURL(for: rootURL)
       )
     )
 
@@ -142,7 +142,7 @@ struct RepositorySettingsFeatureTests {
     let rootURL = URL(fileURLWithPath: "/tmp/repo-\(UUID().uuidString)")
     let settingsStorage = SettingsTestStorage()
     let localStorage = RepositoryLocalSettingsTestStorage()
-    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json")
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/prowl-settings-\(UUID().uuidString).json")
 
     let store = TestStore(
       initialState: RepositorySettingsFeature.State(
@@ -180,7 +180,7 @@ struct RepositorySettingsFeatureTests {
     await store.receive(\.delegate.settingsChanged)
 
     let savedData = try #require(
-      localStorage.data(at: SupacodePaths.userRepositorySettingsURL(for: rootURL)))
+      localStorage.data(at: ProwlPaths.userRepositorySettingsURL(for: rootURL)))
     let decoded = try JSONDecoder().decode(UserRepositorySettings.self, from: savedData)
     #expect(decoded.customCommands.first?.shortcut == conflicted.customCommands.first?.shortcut)
   }
@@ -208,7 +208,7 @@ struct RepositorySettingsFeatureTests {
 
     let persisted = try JSONDecoder().decode(
       UserRepositorySettings.self,
-      from: #require(localStorage.data(at: SupacodePaths.userRepositorySettingsURL(for: rootURL)))
+      from: #require(localStorage.data(at: ProwlPaths.userRepositorySettingsURL(for: rootURL)))
     )
     #expect(!persisted.isGlobalCommandEnabled("global-build"))
 
@@ -222,8 +222,8 @@ struct RepositorySettingsFeatureTests {
     let rootURL = URL(fileURLWithPath: "/tmp/repo-\(UUID().uuidString)")
     let settingsStorage = SettingsTestStorage()
     let localStorage = RepositoryLocalSettingsTestStorage()
-    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json")
-    let repositorySettingsURL = SupacodePaths.repositorySettingsURL(for: rootURL)
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/prowl-settings-\(UUID().uuidString).json")
+    let repositorySettingsURL = ProwlPaths.repositorySettingsURL(for: rootURL)
 
     // Pre-seed a per-repo settings file so save() writes through to it
     // instead of falling back to the global settings file.
@@ -259,8 +259,8 @@ struct RepositorySettingsFeatureTests {
     let rootURL = URL(fileURLWithPath: "/tmp/repo-\(UUID().uuidString)")
     let settingsStorage = SettingsTestStorage()
     let localStorage = RepositoryLocalSettingsTestStorage()
-    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json")
-    let repositorySettingsURL = SupacodePaths.repositorySettingsURL(for: rootURL)
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/prowl-settings-\(UUID().uuidString).json")
+    let repositorySettingsURL = ProwlPaths.repositorySettingsURL(for: rootURL)
 
     let seedData = try #require(try? JSONEncoder().encode(RepositorySettings.default))
     try #require(try? localStorage.save(seedData, at: repositorySettingsURL))
@@ -294,7 +294,7 @@ struct RepositorySettingsFeatureTests {
     let rootURL = URL(fileURLWithPath: "/tmp/repo-\(UUID().uuidString)")
     let settingsStorage = SettingsTestStorage()
     let localStorage = RepositoryLocalSettingsTestStorage()
-    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json")
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/prowl-settings-\(UUID().uuidString).json")
     let gitProbeGate = LockIsolated<CheckedContinuation<Void, Never>?>(nil)
 
     let initialUserSettings = UserRepositorySettings(
@@ -316,7 +316,7 @@ struct RepositorySettingsFeatureTests {
     try #require(
       try? localStorage.save(
         initialData,
-        at: SupacodePaths.userRepositorySettingsURL(for: rootURL)
+        at: ProwlPaths.userRepositorySettingsURL(for: rootURL)
       )
     )
 

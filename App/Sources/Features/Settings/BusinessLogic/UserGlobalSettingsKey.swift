@@ -7,9 +7,9 @@ nonisolated struct UserGlobalSettingsKeyID: Hashable, Sendable {
 }
 
 nonisolated enum UserGlobalSettingsURLKey: DependencyKey {
-  static var liveValue: URL { SupacodePaths.userGlobalSettingsURL }
-  static var previewValue: URL { SupacodePaths.userGlobalSettingsURL }
-  static var testValue: URL { SupacodePaths.userGlobalSettingsURL }
+  static var liveValue: URL { ProwlPaths.userGlobalSettingsURL }
+  static var previewValue: URL { ProwlPaths.userGlobalSettingsURL }
+  static var testValue: URL { ProwlPaths.userGlobalSettingsURL }
 }
 
 extension DependencyValues {
@@ -44,7 +44,7 @@ nonisolated struct UserGlobalSettingsKey: SharedKey {
     do {
       try storage.save(try Self.encoder.encode(settings), url)
     } catch {
-      SupaLogger("Settings").warning("Unable to write user global settings: \(error.localizedDescription)")
+      ProwlLogger("Settings").warning("Unable to write user global settings: \(error.localizedDescription)")
     }
     continuation.resume(returning: settings)
   }

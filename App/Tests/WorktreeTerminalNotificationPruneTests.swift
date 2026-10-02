@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct WorktreeTerminalNotificationPruneTests {
   private func notification(surface: UUID, title: String, isRead: Bool) -> WorktreeTerminalNotification {

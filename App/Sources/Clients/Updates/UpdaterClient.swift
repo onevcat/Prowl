@@ -2,7 +2,7 @@ import AppKit
 import ComposableArchitecture
 import Sparkle
 
-private let updaterLogger = SupaLogger("Updater")
+private let updaterLogger = ProwlLogger("Updater")
 
 struct UpdaterClient {
   var configure: @MainActor @Sendable (_ checks: Bool, _ checkInBackground: Bool) -> Void

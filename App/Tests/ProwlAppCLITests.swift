@@ -4,16 +4,16 @@ import GhosttyKit
 import ProwlCLIShared
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 @MainActor
-struct SupacodeAppCLITests {
+struct ProwlAppCLITests {
   @Test func cliRouterWiresAgentsKeyAndReadHandlersInsteadOfStubHandlers() async {
     let store = Store(initialState: AppFeature.State()) {
       AppFeature()
     }
     let terminalManager = WorktreeTerminalManager(runtime: GhosttyRuntime())
-    let router = SupacodeApp.makeCLICommandRouter(appStore: store, terminalManager: terminalManager)
+    let router = ProwlApp.makeCLICommandRouter(appStore: store, terminalManager: terminalManager)
 
     let agentsResponse = await router.route(
       CommandEnvelope(output: .json, command: .agents(AgentsInput()))
@@ -55,7 +55,7 @@ struct SupacodeAppCLITests {
     let surfaceID = try #require(state.focusedSurfaceId(in: tabID))
     var observer = terminalManager.observeAgentState(surfaceID: surfaceID).makeAsyncIterator()
     _ = try await observer.next()
-    let router = SupacodeApp.makeCLICommandRouter(
+    let router = ProwlApp.makeCLICommandRouter(
       appStore: store,
       terminalManager: terminalManager,
       agentSignalCallerResolver: { context in
@@ -86,9 +86,9 @@ struct SupacodeAppCLITests {
     let contexts = ["/Project/first", "/Project/second"].map {
       ListRuntimeSnapshotBuilder.WorktreeContext(id: $0, name: "main", path: $0, rootPath: $0, kind: .plain)
     }
-    guard case .failure(.notFound) = SupacodeApp.resolveCLITabCreationTarget("missing", worktrees: contexts),
-      case .failure(.notUnique) = SupacodeApp.resolveCLITabCreationTarget("main", worktrees: contexts),
-      case .success(let target) = SupacodeApp.resolveCLITabCreationTarget("/Project/first", worktrees: contexts)
+    guard case .failure(.notFound) = ProwlApp.resolveCLITabCreationTarget("missing", worktrees: contexts),
+      case .failure(.notUnique) = ProwlApp.resolveCLITabCreationTarget("main", worktrees: contexts),
+      case .success(let target) = ProwlApp.resolveCLITabCreationTarget("/Project/first", worktrees: contexts)
     else {
       Issue.record("Creation must resolve exactly one known worktree")
       return
@@ -105,7 +105,7 @@ struct SupacodeAppCLITests {
       worktrees: []
     )
 
-    let resolved = SupacodeApp.resolveCLITerminalWorktree(
+    let resolved = ProwlApp.resolveCLITerminalWorktree(
       id: repository.id,
       repositories: [repository]
     )

@@ -2,7 +2,7 @@ import CustomDump
 import SwiftUI
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 @MainActor
 struct AppShortcutsTests {

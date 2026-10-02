@@ -1,11 +1,11 @@
-// supacodeTests/CLICommandResponseTests.swift
+// App/Tests/CLICommandResponseTests.swift
 // Contract tests for CommandResponse and RawJSON encoding/decoding.
 
 import Foundation
 import ProwlCLIShared
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct CLICommandResponseTests {
 

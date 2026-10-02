@@ -1,11 +1,11 @@
-// supacodeTests/CLITargetSelectorTests.swift
+// App/Tests/CLITargetSelectorTests.swift
 // Tests for TargetSelector mutual exclusivity and encoding.
 
 import Foundation
 import ProwlCLIShared
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct CLITargetSelectorTests {
 

@@ -3,7 +3,7 @@ import Foundation
 import GhosttyKit
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 /// Agent TUIs animate a spinner glyph inside the terminal title (`⠦ spx-h` →
 /// `⠧ spx-h`) at roughly 10 Hz. Each frame reaches `emitAgentEntry` as a new

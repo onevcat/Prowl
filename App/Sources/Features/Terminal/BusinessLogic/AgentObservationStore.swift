@@ -1,7 +1,7 @@
 import Foundation
 import ProwlCLIShared
 
-private let observationLogger = SupaLogger("AgentObservation")
+private let observationLogger = ProwlLogger("AgentObservation")
 
 private struct AgentSignalChannelRecord {
   var state: AgentSignalChannelState

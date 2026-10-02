@@ -1,6 +1,6 @@
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct LineChangeBadgePresentationTests {
   @Test func exactCountsUseTheExistingLabels() {

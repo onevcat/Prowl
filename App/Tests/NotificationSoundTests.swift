@@ -1,24 +1,24 @@
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct NotificationSoundTests {
   @Test func sourceMapsEachCaseToExactlyOneKind() {
     #expect(NotificationSound.never.source == nil)
     #expect(NotificationSound.funk.source == .system(name: "Funk"))
     #expect(NotificationSound.tink.source == .system(name: "Tink"))
-    #expect(NotificationSound.supacodeClassic.source == .bundled(resource: "notification", withExtension: "wav"))
+    #expect(NotificationSound.prowlClassic.source == .bundled(resource: "notification", withExtension: "wav"))
   }
 
   @Test func displayNamesAreUnambiguous() {
     #expect(NotificationSound.never.displayName == "Never")
-    #expect(NotificationSound.supacodeClassic.displayName == "Prowl Classic")
+    #expect(NotificationSound.prowlClassic.displayName == "Prowl Classic")
     #expect(NotificationSound.funk.displayName == "Funk")
   }
 
   @Test func pickerGroupsCoverEveryCaseWithoutOverlap() {
-    let grouped = [NotificationSound.never] + NotificationSound.systemCases + [.supacodeClassic]
+    let grouped = [NotificationSound.never] + NotificationSound.systemCases + [.prowlClassic]
     #expect(Set(grouped) == Set(NotificationSound.allCases))
     #expect(grouped.count == NotificationSound.allCases.count)
   }
@@ -28,7 +28,7 @@ struct NotificationSoundTests {
   @Test func rawValueContractIsStable() throws {
     #expect(NotificationSound.never.rawValue == "never")
     #expect(NotificationSound.hero.rawValue == "hero")
-    #expect(NotificationSound.supacodeClassic.rawValue == "supacodeClassic")
+    #expect(NotificationSound.prowlClassic.rawValue == "supacodeClassic")
     #expect(
       Set(NotificationSound.allCases.map(\.rawValue)) == [
         "never", "basso", "blow", "bottle", "frog", "funk", "glass", "hero",

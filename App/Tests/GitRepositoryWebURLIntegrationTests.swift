@@ -1,11 +1,11 @@
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct GitRepositoryWebURLIntegrationTests {
   @Test func returnsNilWhenRepositoryHasNoRemote() async throws {
-    let repoURL = try makeTemporaryRepo(namePrefix: "supacode-weburl-no-remote")
+    let repoURL = try makeTemporaryRepo(namePrefix: "prowl-weburl-no-remote")
     defer { try? FileManager.default.removeItem(at: repoURL) }
 
     let url = await GitClient().repositoryWebURL(for: repoURL)
@@ -14,7 +14,7 @@ struct GitRepositoryWebURLIntegrationTests {
   }
 
   @Test func returnsNilWhenRemoteCannotBeParsed() async throws {
-    let repoURL = try makeTemporaryRepo(namePrefix: "supacode-weburl-unparseable")
+    let repoURL = try makeTemporaryRepo(namePrefix: "prowl-weburl-unparseable")
     defer { try? FileManager.default.removeItem(at: repoURL) }
 
     try runGit([
@@ -28,7 +28,7 @@ struct GitRepositoryWebURLIntegrationTests {
   }
 
   @Test func preservesCustomPortAndPathPrefixFromRemote() async throws {
-    let repoURL = try makeTemporaryRepo(namePrefix: "supacode-weburl-port-prefix")
+    let repoURL = try makeTemporaryRepo(namePrefix: "prowl-weburl-port-prefix")
     defer { try? FileManager.default.removeItem(at: repoURL) }
 
     try runGit([

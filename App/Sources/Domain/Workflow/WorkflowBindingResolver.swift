@@ -1,4 +1,4 @@
-// supacode/Domain/Workflow/WorkflowBindingResolver.swift
+// App/Sources/Domain/Workflow/WorkflowBindingResolver.swift
 // Pure binding resolution for `launch` roles (dsl-spec §3, decision H10): remembered binding →
 // enabled profile matching `suggest` exactly → 053 Recommended over the `agents`-filtered set →
 // ask. Every candidate is re-validated; the memory key carries a digest of the role's

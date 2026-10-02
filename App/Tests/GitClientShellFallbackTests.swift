@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct GitClientShellFallbackTests {
   private func error(_ stderr: String, exitCode: Int32 = 128) -> ShellClientError {

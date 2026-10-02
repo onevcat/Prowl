@@ -2,7 +2,7 @@ import Foundation
 import ProwlCLIShared
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 /// S3b decodes Copilot, Droid, and Qoder through the Claude-shaped path. Their real
 /// payloads were captured from Copilot CLI 1.0.80, Factory Droid 0.202.0, and Qoder CLI

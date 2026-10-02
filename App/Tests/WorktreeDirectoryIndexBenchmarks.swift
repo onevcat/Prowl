@@ -2,7 +2,7 @@ import Foundation
 import IdentifiedCollections
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 extension PerformanceBenchmarks {
   /// Pins the #648/#655 directory index against the pre-#648 shape it replaced:

@@ -1,7 +1,7 @@
 import Foundation
 
 actor GithubCLIExecutableResolver {
-  nonisolated private static let logger = SupaLogger("GithubCLI")
+  nonisolated private static let logger = ProwlLogger("GithubCLI")
 
   private let fallbackExecutableURLs: [URL]
   private var cachedExecutableURL: URL?

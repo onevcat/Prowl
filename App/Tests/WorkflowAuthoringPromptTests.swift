@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct WorkflowAuthoringPromptTests {
   private let skill = "/Applications/Prowl.app/Contents/Resources/skills/prowl-workflow/SKILL.md"

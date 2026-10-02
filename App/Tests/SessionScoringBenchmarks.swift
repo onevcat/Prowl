@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 extension PerformanceBenchmarks {
   /// Pins the #650/#657 fragment cache: a poll whose transcript tails are

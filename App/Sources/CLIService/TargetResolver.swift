@@ -1,4 +1,4 @@
-// supacode/CLIService/TargetResolver.swift
+// App/Sources/CLIService/TargetResolver.swift
 // Resolves target selectors against current app state.
 
 import Foundation

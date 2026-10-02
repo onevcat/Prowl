@@ -49,7 +49,7 @@ final class MirrorReplica {
         guard let self, !self.stopped, self.listener === listener else { return }
         switch state {
         case .ready:
-          guard let port = listener?.port, let executable = SupacodePaths.bundledMirrorRelayURL,
+          guard let port = listener?.port, let executable = ProwlPaths.bundledMirrorRelayURL,
             FileManager.default.isExecutableFile(atPath: executable.path)
           else {
             self.fail(String(localized: "Cannot start display replica."))

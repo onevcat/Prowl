@@ -1,6 +1,6 @@
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 extension PerformanceBenchmarks {
   /// Tracks absolute changed-screen classification cost over the same sanitized

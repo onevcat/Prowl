@@ -2,7 +2,7 @@ import Foundation
 import Synchronization
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct CodexLogProviderTests {
   private func fixture() throws -> URL {

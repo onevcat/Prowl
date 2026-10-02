@@ -1,7 +1,7 @@
 import GhosttyKit
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct WorktreeTerminalStateFontSizeTests {
   @Test func tabContextUsesDefaultFontSizeOnly() {

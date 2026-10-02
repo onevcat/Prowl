@@ -1411,7 +1411,7 @@ struct GitClient {
     ]
     for baseURL in candidates {
       let trashBaseURL = baseURL.appending(
-        path: "supacode-worktree-trash",
+        path: "prowl-worktree-trash",
         directoryHint: URL.DirectoryHint.isDirectory
       )
       do {

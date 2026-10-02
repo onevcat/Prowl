@@ -2,7 +2,7 @@ import Clocks
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 // Serialized: these tests drive TestClock-backed debounce and timeout tasks.
 // Running them in parallel can race clock advancement ahead of task suspension

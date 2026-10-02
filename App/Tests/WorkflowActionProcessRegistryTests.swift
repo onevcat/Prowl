@@ -4,7 +4,7 @@ import Foundation
 import ProwlCLIShared
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct WorkflowActionProcessRegistryTests {
   @Test func recoveryTargetsOnlyAnAbandonedOwnedGroup() throws {

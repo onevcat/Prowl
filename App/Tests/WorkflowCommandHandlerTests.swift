@@ -1,4 +1,4 @@
-// supacodeTests/WorkflowCommandHandlerTests.swift
+// App/Tests/WorkflowCommandHandlerTests.swift
 // `prowl workflow list` over the socket: worktree resolution, three-source discovery, enabled set.
 
 import Foundation
@@ -6,7 +6,7 @@ import GhosttyKit
 import ProwlCLIShared
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 @MainActor
 struct WorkflowCommandHandlerTests {

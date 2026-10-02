@@ -1,4 +1,4 @@
-// supacode/CLIService/ReadCommandHandler.swift
+// App/Sources/CLIService/ReadCommandHandler.swift
 // Handles `prowl read` by resolving target and reading snapshot/last text.
 
 import Foundation

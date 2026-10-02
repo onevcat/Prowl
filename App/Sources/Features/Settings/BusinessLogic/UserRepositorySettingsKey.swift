@@ -24,7 +24,7 @@ nonisolated struct UserRepositorySettingsKey: SharedKey {
     continuation: LoadContinuation<UserRepositorySettings>
   ) {
     @Dependency(\.repositoryLocalSettingsStorage) var repositoryLocalSettingsStorage
-    let settingsURL = SupacodePaths.userRepositorySettingsURL(for: rootURL)
+    let settingsURL = ProwlPaths.userRepositorySettingsURL(for: rootURL)
     let decoder = JSONDecoder()
     if let localData = try? repositoryLocalSettingsStorage.load(settingsURL) {
       if let settings = try? decoder.decode(UserRepositorySettings.self, from: localData) {
@@ -32,12 +32,12 @@ nonisolated struct UserRepositorySettingsKey: SharedKey {
         return
       }
       let path = settingsURL.path(percentEncoded: false)
-      SupaLogger("Settings").warning(
+      ProwlLogger("Settings").warning(
         "Unable to decode user repository settings at \(path); trying legacy settings."
       )
     }
 
-    let legacySettingsURL = SupacodePaths.legacyUserRepositorySettingsURL(for: rootURL)
+    let legacySettingsURL = ProwlPaths.legacyUserRepositorySettingsURL(for: rootURL)
     if let legacyData = try? repositoryLocalSettingsStorage.load(legacySettingsURL) {
       if let legacySettings = try? decoder.decode(UserRepositorySettings.self, from: legacyData) {
         let normalized = legacySettings.normalized()
@@ -48,7 +48,7 @@ nonisolated struct UserRepositorySettingsKey: SharedKey {
           try repositoryLocalSettingsStorage.save(data, settingsURL)
         } catch {
           let path = settingsURL.path(percentEncoded: false)
-          SupaLogger("Settings").warning(
+          ProwlLogger("Settings").warning(
             "Unable to write user repository settings to \(path): \(error.localizedDescription)"
           )
         }
@@ -56,7 +56,7 @@ nonisolated struct UserRepositorySettingsKey: SharedKey {
         return
       }
       let path = legacySettingsURL.path(percentEncoded: false)
-      SupaLogger("Settings").warning(
+      ProwlLogger("Settings").warning(
         "Unable to decode legacy user repository settings at \(path); using defaults."
       )
     }
@@ -69,7 +69,7 @@ nonisolated struct UserRepositorySettingsKey: SharedKey {
       try repositoryLocalSettingsStorage.save(data, settingsURL)
     } catch {
       let path = settingsURL.path(percentEncoded: false)
-      SupaLogger("Settings").warning(
+      ProwlLogger("Settings").warning(
         "Unable to write user repository settings to \(path): \(error.localizedDescription)"
       )
     }
@@ -90,7 +90,7 @@ nonisolated struct UserRepositorySettingsKey: SharedKey {
     continuation: SaveContinuation
   ) {
     @Dependency(\.repositoryLocalSettingsStorage) var repositoryLocalSettingsStorage
-    let settingsURL = SupacodePaths.userRepositorySettingsURL(for: rootURL)
+    let settingsURL = ProwlPaths.userRepositorySettingsURL(for: rootURL)
     do {
       let encoder = JSONEncoder()
       encoder.outputFormatting = [.prettyPrinted, .sortedKeys]

@@ -1,10 +1,10 @@
-// supacode/CLIService/SendCommandHandler.swift
+// App/Sources/CLIService/SendCommandHandler.swift
 // Handles `prowl send` by resolving target, delivering text, and optionally waiting.
 
 import Foundation
 import ProwlCLIShared
 
-private let sendLogger = SupaLogger("SendCommandHandler")
+private let sendLogger = ProwlLogger("SendCommandHandler")
 
 /// Resolved target metadata for payload construction (no live view reference).
 struct SendResolvedTarget: Sendable {

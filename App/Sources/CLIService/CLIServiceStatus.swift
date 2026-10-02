@@ -1,4 +1,4 @@
-// supacode/CLIService/CLIServiceStatus.swift
+// App/Sources/CLIService/CLIServiceStatus.swift
 // Whether Prowl is listening for `prowl` on its socket (docs-ai 063 D1, deferred from C0).
 // The socket server publishes it; Settings › CLI & Skills and the workflow start preflight
 // read it, so a `prowl` that cannot connect is explained instead of looking healthy.

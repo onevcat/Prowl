@@ -88,7 +88,7 @@ struct RepositorySettingsFeature {
     }
 
     var exampleWorktreePath: String {
-      SupacodePaths.exampleWorktreePath(
+      ProwlPaths.exampleWorktreePath(
         for: rootURL,
         globalDefaultPath: globalDefaultWorktreeBaseDirectoryPath,
         repositoryOverridePath: settings.worktreeBaseDirectoryPath
@@ -193,7 +193,7 @@ struct RepositorySettingsFeature {
             branches = try await gitClient.branchRefs(rootURL)
           } catch {
             let rootPath = rootURL.path(percentEncoded: false)
-            SupaLogger("Settings").warning(
+            ProwlLogger("Settings").warning(
               "Branch refs failed for \(rootPath): \(error.localizedDescription)"
             )
             branches = []
@@ -222,7 +222,7 @@ struct RepositorySettingsFeature {
       ):
         var updatedSettings = settings
         updatedSettings.worktreeBaseDirectoryPath =
-          SupacodePaths.normalizedWorktreeBaseDirectoryPath(
+          ProwlPaths.normalizedWorktreeBaseDirectoryPath(
             updatedSettings.worktreeBaseDirectoryPath,
             repositoryRootURL: state.rootURL
           )
@@ -233,7 +233,7 @@ struct RepositorySettingsFeature {
         state.settings = updatedSettings
         state.userSettings = userSettings.normalized()
         state.globalDefaultWorktreeBaseDirectoryPath =
-          SupacodePaths.normalizedWorktreeBaseDirectoryPath(globalDefaultWorktreeBaseDirectoryPath)
+          ProwlPaths.normalizedWorktreeBaseDirectoryPath(globalDefaultWorktreeBaseDirectoryPath)
         state.globalCopyIgnoredOnWorktreeCreate = globalCopyIgnoredOnWorktreeCreate
         state.globalCopyUntrackedOnWorktreeCreate = globalCopyUntrackedOnWorktreeCreate
         state.globalPullRequestMergeStrategy = globalPullRequestMergeStrategy
@@ -398,7 +398,7 @@ struct RepositorySettingsFeature {
         let rootURL = state.rootURL
         var normalizedSettings = state.settings
         normalizedSettings.worktreeBaseDirectoryPath =
-          SupacodePaths.normalizedWorktreeBaseDirectoryPath(
+          ProwlPaths.normalizedWorktreeBaseDirectoryPath(
             normalizedSettings.worktreeBaseDirectoryPath,
             repositoryRootURL: rootURL
           )

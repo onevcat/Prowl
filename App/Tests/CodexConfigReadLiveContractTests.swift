@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct CodexConfigReadLiveContractTests {
   @Test(.enabled(if: ProcessInfo.processInfo.environment["PROWL_RUN_LIVE_CODEX_CONTRACT"] == "1"))

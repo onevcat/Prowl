@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-private let shelfLogger = SupaLogger("Shelf")
+private let shelfLogger = ProwlLogger("Shelf")
 
 /// Renders the terminal content for the currently open book.
 ///

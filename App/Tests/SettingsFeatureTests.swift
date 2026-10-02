@@ -6,7 +6,7 @@ import ProwlCLIShared
 import Sharing
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 @MainActor
 struct SettingsFeatureTests {
@@ -337,9 +337,9 @@ struct SettingsFeatureTests {
   @Test(.dependencies) func settingsLoadedNormalizesDefaultWorktreeBaseDirectoryPath() async {
     var loaded = GlobalSettings.default
     loaded.defaultWorktreeBaseDirectoryPath = " ~/worktrees "
-    let expectedPath = SupacodePaths.normalizedWorktreeBaseDirectoryPath(" ~/worktrees ")!
+    let expectedPath = ProwlPaths.normalizedWorktreeBaseDirectoryPath(" ~/worktrees ")!
     let storage = SettingsTestStorage()
-    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json")
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/prowl-settings-\(UUID().uuidString).json")
     let store = TestStore(initialState: SettingsFeature.State()) {
       SettingsFeature()
     } withDependencies: {
@@ -356,7 +356,7 @@ struct SettingsFeatureTests {
 
   @Test(.dependencies) func changingDefaultWorktreeBaseDirectoryUpdatesRepositorySettingsState() async {
     let rootURL = URL(fileURLWithPath: "/tmp/repo")
-    let expectedPath = SupacodePaths.normalizedWorktreeBaseDirectoryPath(" ~/worktrees ")!
+    let expectedPath = ProwlPaths.normalizedWorktreeBaseDirectoryPath(" ~/worktrees ")!
     @Shared(.settingsFile) var settingsFile
     $settingsFile.withLock { $0.global = .default }
     var state = SettingsFeature.State()

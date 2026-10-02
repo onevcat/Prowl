@@ -1,7 +1,7 @@
 import AppKit
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 /// Window and responder guards for the no-terminal undo key (docs-ai 069.002).
 @MainActor

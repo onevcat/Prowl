@@ -461,7 +461,7 @@ struct WorkspaceMemberEditorFeature {
         errorMessage = String(
           localized: "Could not read branches for \(displayName): \(error.localizedDescription)"
         )
-        SupaLogger("workspace").warning(
+        ProwlLogger("workspace").warning(
           "Branch detection failed for \(repositoryURL.path(percentEncoded: false)): \(error)"
         )
       }

@@ -4,7 +4,7 @@ import ProwlCLIShared
 import Sharing
 import SwiftUI
 
-private let terminalLogger = SupaLogger("Terminal")
+private let terminalLogger = ProwlLogger("Terminal")
 private let layoutRestoreFailureMessage = "Saved terminal layout was invalid and has been reset"
 
 @MainActor
@@ -62,17 +62,17 @@ final class WorktreeTerminalManager {
         await CodexShellLaunchEnvironmentProbe.resolve(cwd: $0, pathOverride: $1)
       },
     hookResourcesProvider: @escaping @MainActor () -> AgentHookResources? = {
-      guard let url = SupacodePaths.bundledCLIURL else { return nil }
+      guard let url = ProwlPaths.bundledCLIURL else { return nil }
       return AgentHookResources(
         bundledCLIPath: url.path(percentEncoded: false),
         socketPath: ProwlSocket.defaultPath,
-        copilotPluginPath: SupacodePaths.bundledCopilotHookPluginURL?.path(percentEncoded: false),
-        piExtensionPath: SupacodePaths.bundledPiHookExtensionURL?.path(percentEncoded: false),
-        ompExtensionPath: SupacodePaths.bundledOMPHookExtensionURL?.path(percentEncoded: false),
-        opencodePluginPath: SupacodePaths.bundledOpenCodeHookPluginURL?.path(percentEncoded: false)
+        copilotPluginPath: ProwlPaths.bundledCopilotHookPluginURL?.path(percentEncoded: false),
+        piExtensionPath: ProwlPaths.bundledPiHookExtensionURL?.path(percentEncoded: false),
+        ompExtensionPath: ProwlPaths.bundledOMPHookExtensionURL?.path(percentEncoded: false),
+        opencodePluginPath: ProwlPaths.bundledOpenCodeHookPluginURL?.path(percentEncoded: false)
       )
     },
-    forwardingRecordBaseDirectory: URL = SupacodePaths.agentHookForwardingDirectory,
+    forwardingRecordBaseDirectory: URL = ProwlPaths.agentHookForwardingDirectory,
     undoCloseClock: any Clock<Duration> = ContinuousClock(),
     skipsSurfaceCreationForTesting: Bool = false
   ) {
@@ -1413,15 +1413,15 @@ final class WorktreeTerminalManager {
     guard let payload = makeLayoutSnapshotPayload() else {
       terminalLogger.info("[LayoutRestore] persistSync: no active states, clearing snapshot")
       discardTerminalLayoutSnapshot(
-        at: SupacodePaths.terminalLayoutSnapshotURL, fileManager: .default)
+        at: ProwlPaths.terminalLayoutSnapshotURL, fileManager: .default)
       return
     }
     terminalLogger.info(
       "[LayoutRestore] persistSync: saving \(payload.worktrees.count) worktree(s)")
     let saved = saveTerminalLayoutSnapshot(
       payload,
-      at: SupacodePaths.terminalLayoutSnapshotURL,
-      cacheDirectory: SupacodePaths.cacheDirectory,
+      at: ProwlPaths.terminalLayoutSnapshotURL,
+      cacheDirectory: ProwlPaths.cacheDirectory,
       fileManager: .default
     )
     terminalLogger.info("[LayoutRestore] persistSync: save result=\(saved)")
@@ -1547,7 +1547,7 @@ final class WorktreeTerminalManager {
       self.codexConfigReadProcess = CodexConfigReadProcess()
       self.codexShellEnvironmentResolver = { _, _ in nil }
       self.hookResourcesProvider = { nil }
-      self.forwardingRecordBaseDirectory = SupacodePaths.agentHookForwardingDirectory
+      self.forwardingRecordBaseDirectory = ProwlPaths.agentHookForwardingDirectory
       self.baselineFontSize = 13
       self.closeUndoStack = TerminalCloseUndoStack(timeout: .zero)
     }

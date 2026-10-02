@@ -4,7 +4,7 @@ import Foundation
 import Sharing
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct SettingsFilePersistenceTests {
   @Test func legacyGlobalSettingsDefaultsAgentIslandFields() throws {
@@ -194,7 +194,7 @@ struct SettingsFilePersistenceTests {
     #expect(settings.global.updatesAutomaticallyDownloadUpdates == true)
     #expect(settings.global.inAppNotificationsEnabled == true)
     // Missing key (pre-feature file) decodes to the default sound.
-    #expect(settings.global.notificationSound == .supacodeClassic)
+    #expect(settings.global.notificationSound == .prowlClassic)
     #expect(settings.global.systemNotificationsEnabled == false)
     #expect(settings.global.moveNotifiedWorktreeToTop == true)
     #expect(settings.global.analyticsEnabled == true)
@@ -382,7 +382,7 @@ struct SettingsFilePersistenceTests {
       return settings
     }
 
-    #expect(settings.global.notificationSound == .supacodeClassic)
+    #expect(settings.global.notificationSound == .prowlClassic)
   }
 
   @Test(.dependencies) func decodesUnrecognizedNotificationSoundAsDefaultWithoutResettingSiblings() throws {
@@ -407,7 +407,7 @@ struct SettingsFilePersistenceTests {
     }
 
     // The unknown sound falls back to the default...
-    #expect(settings.global.notificationSound == .supacodeClassic)
+    #expect(settings.global.notificationSound == .prowlClassic)
     // ...but the rest of the file survives. This is what `try?` buys over `try`.
     #expect(settings.global.appearanceMode == .dark)
     #expect(settings.global.systemNotificationsEnabled == true)

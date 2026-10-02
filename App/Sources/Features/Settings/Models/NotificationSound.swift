@@ -23,7 +23,7 @@ nonisolated enum NotificationSound: String, CaseIterable, Identifiable, Codable,
   case tink
   /// The bundled Prowl chime; the raw value keeps upstream's `supacodeClassic`
   /// spelling because it is the persisted contract.
-  case supacodeClassic
+  case prowlClassic = "supacodeClassic"
 
   /// How a choice resolves to an in-app sound, or `nil` when nothing plays.
   /// Exactly one kind per case, so invalid combinations are unrepresentable.
@@ -66,7 +66,7 @@ nonisolated enum NotificationSound: String, CaseIterable, Identifiable, Codable,
       return .system(name: "Submarine")
     case .tink:
       return .system(name: "Tink")
-    case .supacodeClassic:
+    case .prowlClassic:
       return .bundled(resource: "notification", withExtension: "wav")
     }
   }
@@ -85,7 +85,7 @@ nonisolated enum NotificationSound: String, CaseIterable, Identifiable, Codable,
     switch self {
     case .never:
       return String(localized: "Never")
-    case .supacodeClassic:
+    case .prowlClassic:
       return String(localized: "Prowl Classic")
     default:
       if case .system(let name)? = source { return name }

@@ -1,4 +1,4 @@
-// supacode/CLIService/WorkflowRuntimeCoordinator.swift
+// App/Sources/CLIService/WorkflowRuntimeCoordinator.swift
 // The socket side of `prowl workflow run / status / deliver / cancel` (docs-ai 063 B3). It reads the
 // reducer's sessions, attributes a `deliver` to an activation (decision W3), enters the reducer
 // through actions, and awaits the `deliver` rendezvous (decision W1). It owns no run state.

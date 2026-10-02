@@ -2,7 +2,7 @@ import CoreGraphics
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct CanvasExpandGeometryTests {
   private let metrics = CanvasExpandGeometry.Metrics(

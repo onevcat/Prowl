@@ -1,7 +1,7 @@
 import Foundation
 import ProwlCLIShared
 
-// supacode/CLIService/WorkflowRoleWaitPolicy.swift
+// App/Sources/CLIService/WorkflowRoleWaitPolicy.swift
 // The pure decision core of a `message` step's idle wait (docs-ai 063 B3, dsl-spec §10): the
 // #733 evidence rules without their five-second cap, evaluated against the baseline captured
 // when the wait started so a fresh exact `turn-ended` ends the wait even while the screen

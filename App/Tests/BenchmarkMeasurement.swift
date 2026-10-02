@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 /// Root suite for the timed benchmarks that pin the hot paths optimized in the
 /// #644–#665 performance wave against the naive implementations they replaced.

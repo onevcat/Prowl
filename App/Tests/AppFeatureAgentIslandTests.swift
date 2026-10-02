@@ -4,7 +4,7 @@ import Foundation
 import Sharing
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 /// Island-originated actions surface the main window before reusing the sidebar's own paths.
 @MainActor

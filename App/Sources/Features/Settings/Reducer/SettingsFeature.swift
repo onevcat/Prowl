@@ -120,7 +120,7 @@ struct SettingsFeature {
       promptForWorktreeCreation = settings.promptForWorktreeCreation
       fetchRemoteBeforeWorktreeCreation = settings.fetchOriginBeforeWorktreeCreation
       defaultWorktreeBaseDirectoryPath =
-        SupacodePaths.normalizedWorktreeBaseDirectoryPath(settings.defaultWorktreeBaseDirectoryPath) ?? ""
+        ProwlPaths.normalizedWorktreeBaseDirectoryPath(settings.defaultWorktreeBaseDirectoryPath) ?? ""
       copyIgnoredOnWorktreeCreate = settings.copyIgnoredOnWorktreeCreate
       copyUntrackedOnWorktreeCreate = settings.copyUntrackedOnWorktreeCreate
       pullRequestMergeStrategy = settings.pullRequestMergeStrategy
@@ -184,7 +184,7 @@ struct SettingsFeature {
         mergedWorktreeAction: mergedWorktreeAction,
         promptForWorktreeCreation: promptForWorktreeCreation,
         fetchOriginBeforeWorktreeCreation: fetchRemoteBeforeWorktreeCreation,
-        defaultWorktreeBaseDirectoryPath: SupacodePaths.normalizedWorktreeBaseDirectoryPath(
+        defaultWorktreeBaseDirectoryPath: ProwlPaths.normalizedWorktreeBaseDirectoryPath(
           defaultWorktreeBaseDirectoryPath
         ),
         copyIgnoredOnWorktreeCreate: copyIgnoredOnWorktreeCreate,
@@ -298,7 +298,7 @@ struct SettingsFeature {
       case .settingsLoaded(let settings):
         let normalizedDefaultEditorID = OpenWorktreeAction.normalizedDefaultEditorID(settings.defaultEditorID)
         let normalizedWorktreeBaseDirPath =
-          SupacodePaths.normalizedWorktreeBaseDirectoryPath(settings.defaultWorktreeBaseDirectoryPath)
+          ProwlPaths.normalizedWorktreeBaseDirectoryPath(settings.defaultWorktreeBaseDirectoryPath)
         let normalizedSettings: GlobalSettings
         if normalizedDefaultEditorID == settings.defaultEditorID,
           normalizedWorktreeBaseDirPath == settings.defaultWorktreeBaseDirectoryPath

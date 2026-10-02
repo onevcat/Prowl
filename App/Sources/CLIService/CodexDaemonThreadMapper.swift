@@ -68,7 +68,7 @@ actor CodexDaemonThreadMapper {
   private let sessionLogLimit = 64 * 1_024 * 1_024
 
   init(
-    sessionLogDirectory: URL = SupacodePaths.codexTUISessionLogDirectory,
+    sessionLogDirectory: URL = ProwlPaths.codexTUISessionLogDirectory,
     fileManager: FileManager = .default,
     openFilePaths: @escaping @Sendable (pid_t) -> [String]? = { pid in
       var complete = false

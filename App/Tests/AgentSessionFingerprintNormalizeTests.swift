@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 /// `normalize` runs an ASCII byte-scan fast path in place of the Swift Regex +
 /// grapheme-split reference. It must be indistinguishable from that reference

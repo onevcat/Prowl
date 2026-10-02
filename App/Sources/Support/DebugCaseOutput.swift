@@ -25,7 +25,7 @@ extension Reducer where State: Equatable {
 struct LogActionsReducer<Base: Reducer>: Reducer where Base.State: Equatable {
   let base: Base
 
-  private let logger = SupaLogger("TCA")
+  private let logger = ProwlLogger("TCA")
 
   func reduce(into state: inout Base.State, action: Base.Action) -> Effect<Base.Action> {
     #if DEBUG
@@ -33,7 +33,7 @@ struct LogActionsReducer<Base: Reducer>: Reducer where Base.State: Equatable {
         return base._reduce(into: &state, action: action)
       }
       let actionLabel = debugCaseOutput(action)
-      // `notice`, not `debug`: in DEBUG `SupaLogger.debug` prints to a stdout
+      // `notice`, not `debug`: in DEBUG `ProwlLogger.debug` prints to a stdout
       // that a Finder/launchd-launched app discards, so `make log-stream` would
       // never see it. `notice` routes to the unified log in all configs.
       logger.notice("Action: \(actionLabel)")

@@ -3,7 +3,7 @@ import Foundation
 import GhosttyKit
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 /// `detectAgentState` re-emits on any `PaneAgentState` change, including
 /// internal bookkeeping churn (raw-state oscillation, session miss streaks).

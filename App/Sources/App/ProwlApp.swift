@@ -1,6 +1,6 @@
 //
-//  supacodeApp.swift
-//  supacode
+//  ProwlApp.swift
+//  Prowl
 //
 //  Created by khoi on 20/1/26.
 //
@@ -16,14 +16,14 @@ import Sharing
 import SwiftUI
 
 @MainActor
-final class SupacodeAppStoreBox {
+final class ProwlAppStoreBox {
   weak var store: StoreOf<AppFeature>?
 }
 
 private enum GhosttyCLI {
   static func argv(resolvedKeybindings: ResolvedKeybindingMap) -> [UnsafeMutablePointer<CChar>?] {
     var args: [UnsafeMutablePointer<CChar>?] = []
-    let executable = CommandLine.arguments.first ?? "supacode"
+    let executable = CommandLine.arguments.first ?? "prowl"
     args.append(strdup(executable))
     for keybindArgument in AppShortcuts.ghosttyCLIKeybindArguments(from: resolvedKeybindings) {
       args.append(strdup(keybindArgument))
@@ -34,7 +34,7 @@ private enum GhosttyCLI {
 }
 
 @MainActor
-final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
+final class ProwlAppDelegate: NSObject, NSApplicationDelegate {
   var appStore: StoreOf<AppFeature>? {
     didSet {
       guard let appStore else { return }
@@ -108,8 +108,8 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
 
 @main
 @MainActor
-struct SupacodeApp: App {
-  @NSApplicationDelegateAdaptor(SupacodeAppDelegate.self) private var appDelegate
+struct ProwlApp: App {
+  @NSApplicationDelegateAdaptor(ProwlAppDelegate.self) private var appDelegate
   @State private var ghostty: GhosttyRuntime
   @State private var ghosttyShortcuts: GhosttyShortcutManager
   @State private var terminalManager: WorktreeTerminalManager
@@ -226,7 +226,7 @@ struct SupacodeApp: App {
     _remoteMirror = State(initialValue: mirrors)
     let worktreeInfoWatcher = WorktreeInfoWatcherManager()
     _worktreeInfoWatcher = State(initialValue: worktreeInfoWatcher)
-    let storeBox = SupacodeAppStoreBox()
+    let storeBox = ProwlAppStoreBox()
     let workflowRuntime = Self.makeWorkflowRuntime(terminalManager: terminalManager, storeBox: storeBox)
 
     let coordinator = Self.makePullRequestRefreshCoordinator(storeBox: storeBox)
@@ -310,7 +310,7 @@ struct SupacodeApp: App {
   /// requests created or retargeted after the diff window was opened.
   @MainActor
   private static func makeOutgoingChangesClient(
-    storeBox: SupacodeAppStoreBox
+    storeBox: ProwlAppStoreBox
   ) -> OutgoingChangesClient {
     .live(
       pullRequestInfo: { targetID in
@@ -321,7 +321,7 @@ struct SupacodeApp: App {
 
   @MainActor
   private static func makePullRequestRefreshCoordinator(
-    storeBox: SupacodeAppStoreBox
+    storeBox: ProwlAppStoreBox
   ) -> PullRequestRefreshCoordinator {
     PullRequestRefreshCoordinator(
       githubCLI: .liveValue,
@@ -1199,7 +1199,7 @@ struct SupacodeApp: App {
         terminalManager: terminalManager
       ),
       paneByShellPID: terminalManager.paneByShellPID(),
-      bundleWorkflowsURL: SupacodePaths.bundledWorkflowsURL,
+      bundleWorkflowsURL: ProwlPaths.bundledWorkflowsURL,
       userWorkflowsURL: WorkflowSources.userDirectory(
         home: FileManager.default.homeDirectoryForCurrentUser),
       disabledWorkflowIDs: Set(settings.disabledWorkflowIDs),
@@ -1245,7 +1245,7 @@ struct SupacodeApp: App {
       router: cliRouter,
       onStatusChanged: { CLIServiceStatusPublisher.shared.publish($0) }
     )
-    let logger = SupaLogger("CLIService")
+    let logger = ProwlLogger("CLIService")
     Task.detached(priority: .utility) { CodexTUISessionLog.prepareDirectory() }
     do {
       try cliServer.start()
@@ -1460,7 +1460,7 @@ struct SupacodeApp: App {
       plan = try AgentProfileLaunchPlanner.plan(
         for: request.profile,
         intent: intent,
-        homeBaseDirectory: SupacodePaths.agentProfileHomesDirectory
+        homeBaseDirectory: ProwlPaths.agentProfileHomesDirectory
       )
     } catch {
       return .failure(.planning(error, profile: request.profile))

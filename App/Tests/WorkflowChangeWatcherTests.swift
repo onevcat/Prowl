@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct WorkflowChangeWatcherTests {
   private func temporaryDirectory() throws -> URL {

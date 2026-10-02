@@ -1,4 +1,4 @@
-// supacode/CLIService/WorkflowCLIRendezvous.swift
+// App/Sources/CLIService/WorkflowCLIRendezvous.swift
 // The request/response seam between a socket handler and the workflow reducer (docs-ai 063 B3,
 // decision W1). It owns continuations only, never run state: the handler registers a request,
 // sends the reducer action, then awaits; the reducer resolves when the command's declared

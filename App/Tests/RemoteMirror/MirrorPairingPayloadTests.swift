@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct MirrorPairingPayloadTests {
   private let now = Date(timeIntervalSince1970: 1_800_000_000)

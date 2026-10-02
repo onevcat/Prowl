@@ -2,7 +2,7 @@ import Foundation
 import ProwlCLIShared
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 /// S3c injects Prowl's bundled extensions into Pi (`-e`), Oh My Pi (`--hook`), and OpenCode
 /// (`OPENCODE_CONFIG_CONTENT`), measured on Pi 0.84.3, Oh My Pi 18.0.6, and OpenCode 1.18.23

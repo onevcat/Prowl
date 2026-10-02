@@ -1,4 +1,4 @@
-// supacode/Clients/Workflow/WorkflowRuntimeClient.swift
+// App/Sources/Clients/Workflow/WorkflowRuntimeClient.swift
 // Terminal-side operations the workflow reducer cannot own (docs-ai 063 B3): the idle wait, the
 // typed line, the profile launch, closing a pane, and the user notification. The live values are
 // composed in `WorkflowRuntimeComposition.swift`; neither the run machine nor the dispatch store

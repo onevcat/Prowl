@@ -16,7 +16,7 @@ enum GithubCLIOutput {
     localized: "Could not parse GitHub CLI output. The installed GitHub CLI version may be incompatible."
   )
 
-  nonisolated private static let logger = SupaLogger("GithubCLI")
+  nonisolated private static let logger = ProwlLogger("GithubCLI")
 
   // Every balanced top-level JSON value ({...} or [...]) in `output`, in source order. An opener that
   // never balances (a stray brace from shell noise) is skipped, so leading noise cannot swallow a real
@@ -1031,7 +1031,7 @@ nonisolated private func restoreGithubAccountIfNeeded(
       repoRoot: nil
     )
   } catch {
-    SupaLogger("GithubCLI").warning(
+    ProwlLogger("GithubCLI").warning(
       "Failed to restore gh active account for \(host) to \(previousLogin): \(error.localizedDescription)"
     )
   }

@@ -2,7 +2,7 @@ import Clocks
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 /// `TerminalTabManager.tabs` is observed as a whole, so one tab's title write
 /// rebuilds the entire tab bar. Agent TUIs animate a spinner glyph into the

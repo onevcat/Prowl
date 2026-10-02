@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct TerminalCloseConfirmationPolicyTests {
   @Test func multipleReasonsCountEachPaneOnce() {

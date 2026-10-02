@@ -141,7 +141,7 @@ extension RepositoriesFeature {
       }
       @Shared(.settingsFile) var settingsFile
       @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
-      let defaultWorktreeBaseDirectory = SupacodePaths.worktreeBaseDirectory(
+      let defaultWorktreeBaseDirectory = ProwlPaths.worktreeBaseDirectory(
         for: repository.rootURL,
         globalDefaultPath: settingsFile.global.defaultWorktreeBaseDirectoryPath,
         repositoryOverridePath: repositorySettings.worktreeBaseDirectoryPath
@@ -273,7 +273,7 @@ extension RepositoriesFeature {
       @Shared(.settingsFile) var settingsFile
       @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
       let globalDefaultWorktreeBaseDirectoryPath = settingsFile.global.defaultWorktreeBaseDirectoryPath
-      let worktreeBaseDirectory = SupacodePaths.worktreeBaseDirectory(
+      let worktreeBaseDirectory = ProwlPaths.worktreeBaseDirectory(
         for: repository.rootURL,
         globalDefaultPath: globalDefaultWorktreeBaseDirectoryPath,
         repositoryOverridePath: repositorySettings.worktreeBaseDirectoryPath
@@ -486,7 +486,7 @@ extension RepositoriesFeature {
             copyUntracked ? ((try? await gitClient.untrackedFileCount(repository.rootURL)) ?? 0) : 0
           // Resolve an explicit destination from the dialog's name / parent-folder
           // overrides; nil keeps `wt`'s default `base/<branch>` placement.
-          let directoryOverride = SupacodePaths.resolvedWorktreeDirectory(
+          let directoryOverride = ProwlPaths.resolvedWorktreeDirectory(
             defaultBaseDirectory: worktreeBaseDirectory,
             repositoryRootURL: repository.rootURL,
             nameOverride: placement.name,
@@ -702,4 +702,4 @@ extension RepositoriesFeature {
   }
 }
 
-private nonisolated let worktreeCreationLogger = SupaLogger("WorktreeCreation")
+private nonisolated let worktreeCreationLogger = ProwlLogger("WorktreeCreation")

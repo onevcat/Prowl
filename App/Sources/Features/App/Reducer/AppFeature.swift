@@ -133,7 +133,7 @@ struct AppFeature {
     let core = Reduce<State, Action> { state, action in
       switch action {
       case .appLaunched:
-        try? SupacodePaths.migrateLegacyCacheFilesIfNeeded()
+        try? ProwlPaths.migrateLegacyCacheFilesIfNeeded()
         appLogger.info(
           "[LayoutRestore] appLaunched: launchRestoreMode=\(String(describing: state.launchRestoreMode))"
         )

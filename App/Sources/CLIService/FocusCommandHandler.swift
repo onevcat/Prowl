@@ -1,4 +1,4 @@
-// supacode/CLIService/FocusCommandHandler.swift
+// App/Sources/CLIService/FocusCommandHandler.swift
 // Handles `prowl focus` by resolving, focusing, and returning final pane context.
 
 import Foundation

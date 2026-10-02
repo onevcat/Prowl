@@ -1,4 +1,4 @@
-// supacode/CLIService/PaneCommandHandler.swift
+// App/Sources/CLIService/PaneCommandHandler.swift
 
 import Foundation
 import ProwlCLIShared

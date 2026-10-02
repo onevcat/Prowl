@@ -3,7 +3,7 @@ import Foundation
 import ProwlCLIShared
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 /// Rendering rules for the three S3b runtimes. Each one injects differently, and the
 /// asymmetries below were measured against Copilot CLI 1.0.80, Factory Droid 0.202.0, and

@@ -1,7 +1,7 @@
 import Sharing
 import SwiftUI
 
-private let shelfLogger = SupaLogger("Shelf")
+private let shelfLogger = ProwlLogger("Shelf")
 
 /// Vertical spine rendering for a single book on the Shelf.
 ///

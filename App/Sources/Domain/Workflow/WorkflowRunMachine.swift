@@ -1,4 +1,4 @@
-// supacode/Domain/Workflow/WorkflowRunMachine.swift
+// App/Sources/Domain/Workflow/WorkflowRunMachine.swift
 // The pure run state machine (docs-ai 063 B2, decision H2): `apply(event)` and `deliver(...)`
 // mutate a `WorkflowRun` value and return the effects the wiring layer must perform. No I/O
 // happens here; every transport concern is an effect.

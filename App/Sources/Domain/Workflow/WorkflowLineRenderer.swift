@@ -1,4 +1,4 @@
-// supacode/Domain/Workflow/WorkflowLineRenderer.swift
+// App/Sources/Domain/Workflow/WorkflowLineRenderer.swift
 // The text a workflow run puts in front of an agent (docs-ai 063, dsl-spec §4/§10): the typed
 // line formats, the single place that spells `prowl workflow deliver`, the launch protocol block,
 // and the rendered-text boundary every typed line crosses.

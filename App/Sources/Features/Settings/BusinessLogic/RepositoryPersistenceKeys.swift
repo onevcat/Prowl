@@ -5,9 +5,9 @@ import Sharing
 nonisolated struct RepositoryEntriesKeyID: Hashable, Sendable {}
 
 nonisolated enum RepositoryEntriesFileURLKey: DependencyKey {
-  static var liveValue: URL { SupacodePaths.repositoryEntriesURL }
-  static var previewValue: URL { SupacodePaths.repositoryEntriesURL }
-  static var testValue: URL { SupacodePaths.repositoryEntriesURL }
+  static var liveValue: URL { ProwlPaths.repositoryEntriesURL }
+  static var previewValue: URL { ProwlPaths.repositoryEntriesURL }
+  static var testValue: URL { ProwlPaths.repositoryEntriesURL }
 }
 
 extension DependencyValues {

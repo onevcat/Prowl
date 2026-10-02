@@ -2,7 +2,7 @@ import Darwin
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 nonisolated final class LoginStreamCallRecorder: @unchecked Sendable {
   struct Snapshot {

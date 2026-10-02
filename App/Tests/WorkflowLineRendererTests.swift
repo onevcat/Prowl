@@ -2,7 +2,7 @@ import Foundation
 import ProwlCLIShared
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct WorkflowLineRendererTests {
   private let token = "6F9619FF-8B86-D011-B42D-00C04FC964FF"

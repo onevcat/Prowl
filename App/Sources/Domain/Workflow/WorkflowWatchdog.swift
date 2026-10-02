@@ -1,4 +1,4 @@
-// supacode/Domain/Workflow/WorkflowWatchdog.swift
+// App/Sources/Domain/Workflow/WorkflowWatchdog.swift
 // The state-driven watchdog of a waiting activation (dsl-spec §10, decision G3 / H6): exact
 // signals first through the activation's epoch-gated dispatch observation, the detector as a
 // fallback, cancellable grace deadlines on an injected clock, and a re-read of the role's

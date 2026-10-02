@@ -1,4 +1,4 @@
-// supacode/CLIService/TabCommandHandler.swift
+// App/Sources/CLIService/TabCommandHandler.swift
 
 import Foundation
 import ProwlCLIShared

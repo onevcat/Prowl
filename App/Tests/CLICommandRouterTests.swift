@@ -1,11 +1,11 @@
-// supacodeTests/CLICommandRouterTests.swift
+// App/Tests/CLICommandRouterTests.swift
 // Unit tests for CLICommandRouter and StubCommandHandler.
 
 import Foundation
 import ProwlCLIShared
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct CLICommandRouterTests {
 

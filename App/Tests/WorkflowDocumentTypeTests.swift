@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 /// The test host is the app, so `Bundle.main` carries the Info.plist that Launch Services reads.
 struct WorkflowDocumentTypeTests {

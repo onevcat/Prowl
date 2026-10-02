@@ -24,7 +24,7 @@ nonisolated struct RepositorySettingsKey: SharedKey {
     continuation: LoadContinuation<RepositorySettings>
   ) {
     @Dependency(\.repositoryLocalSettingsStorage) var repositoryLocalSettingsStorage
-    let repositorySettingsURL = SupacodePaths.repositorySettingsURL(for: rootURL)
+    let repositorySettingsURL = ProwlPaths.repositorySettingsURL(for: rootURL)
     let decoder = JSONDecoder()
     if let localData = try? repositoryLocalSettingsStorage.load(repositorySettingsURL) {
       if let settings = try? decoder.decode(RepositorySettings.self, from: localData) {
@@ -32,12 +32,12 @@ nonisolated struct RepositorySettingsKey: SharedKey {
         return
       }
       let path = repositorySettingsURL.path(percentEncoded: false)
-      SupaLogger("Settings").warning(
+      ProwlLogger("Settings").warning(
         "Unable to decode repository settings at \(path); trying legacy and global migrations."
       )
     }
 
-    let legacySettingsURL = SupacodePaths.legacyRepositorySettingsURL(for: rootURL)
+    let legacySettingsURL = ProwlPaths.legacyRepositorySettingsURL(for: rootURL)
     if let legacyData = try? repositoryLocalSettingsStorage.load(legacySettingsURL) {
       if let legacySettings = try? decoder.decode(RepositorySettings.self, from: legacyData) {
         do {
@@ -47,7 +47,7 @@ nonisolated struct RepositorySettingsKey: SharedKey {
           try repositoryLocalSettingsStorage.save(data, repositorySettingsURL)
         } catch {
           let path = repositorySettingsURL.path(percentEncoded: false)
-          SupaLogger("Settings").warning(
+          ProwlLogger("Settings").warning(
             "Unable to write migrated repository settings to \(path): \(error.localizedDescription)"
           )
         }
@@ -55,7 +55,7 @@ nonisolated struct RepositorySettingsKey: SharedKey {
         return
       }
       let path = legacySettingsURL.path(percentEncoded: false)
-      SupaLogger("Settings").warning(
+      ProwlLogger("Settings").warning(
         "Unable to decode legacy repository settings at \(path); migrating from global settings."
       )
     }
@@ -85,7 +85,7 @@ nonisolated struct RepositorySettingsKey: SharedKey {
     continuation: SaveContinuation
   ) {
     @Dependency(\.repositoryLocalSettingsStorage) var repositoryLocalSettingsStorage
-    let repositorySettingsURL = SupacodePaths.repositorySettingsURL(for: rootURL)
+    let repositorySettingsURL = ProwlPaths.repositorySettingsURL(for: rootURL)
     if (try? repositoryLocalSettingsStorage.load(repositorySettingsURL)) != nil {
       do {
         let encoder = JSONEncoder()

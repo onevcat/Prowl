@@ -1,10 +1,10 @@
-// supacode/CLIService/KeyCommandHandler.swift
+// App/Sources/CLIService/KeyCommandHandler.swift
 // Handles `prowl key` by resolving target, delivering key events, and building response.
 
 import Foundation
 import ProwlCLIShared
 
-private let keyLogger = SupaLogger("KeyCommandHandler")
+private let keyLogger = ProwlLogger("KeyCommandHandler")
 
 /// Result of delivering key events to a terminal pane.
 struct KeyDeliveryResult: Sendable {

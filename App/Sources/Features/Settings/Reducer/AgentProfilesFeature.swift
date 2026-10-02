@@ -87,7 +87,7 @@ struct AgentProfilesFeature {
             do {
               try await client.trashHome(profileID)
             } catch {
-              SupaLogger("Settings").warning("Unable to trash profile home: \(error)")
+              ProwlLogger("Settings").warning("Unable to trash profile home: \(error)")
             }
           }
         )

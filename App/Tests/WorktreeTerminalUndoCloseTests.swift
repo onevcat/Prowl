@@ -4,7 +4,7 @@ import GhosttyKit
 import ProwlCLIShared
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 /// Undo for pane and tab closes (docs-ai 069): the manager-level flow from a
 /// close through ⌘Z / ⌘⇧Z, expiry, and invalidation.

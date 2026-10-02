@@ -1,7 +1,7 @@
 import Foundation
 import ProwlCLIShared
 
-nonisolated enum SupacodePaths {
+nonisolated enum ProwlPaths {
   /// Isolates live Debug acceptance from personal settings and runtime data.
   static var debugDataDirectory: URL? {
     #if DEBUG

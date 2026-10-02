@@ -1,4 +1,4 @@
-// supacode/Domain/Workflow/WorkflowRun.swift
+// App/Sources/Domain/Workflow/WorkflowRun.swift
 // The state of one workflow run (docs-ai 063 B2, dsl-spec §5/§8/§10): frozen context and
 // bindings, the position cursor, invocations and activations, deliveries, and the attention
 // vocabulary the panel renders. Transitions live in WorkflowRunMachine.

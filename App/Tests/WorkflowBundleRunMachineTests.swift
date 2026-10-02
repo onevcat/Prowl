@@ -2,7 +2,7 @@ import Foundation
 import ProwlCLIShared
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 struct WorkflowBundleRunMachineTests {
   private func start(_ definition: WorkflowDefinition) throws -> (

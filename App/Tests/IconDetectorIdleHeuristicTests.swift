@@ -1,6 +1,6 @@
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 /// Pure-shape detection of the shell's idle prompt
 /// (`isLikelyIdleTitleByShape`). The bootstrap filter that runs

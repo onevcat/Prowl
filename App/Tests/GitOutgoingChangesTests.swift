@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 actor OutgoingChangesShellCallStore {
   private(set) var calls: [[String]] = []

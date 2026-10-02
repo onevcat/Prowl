@@ -1,4 +1,4 @@
-// supacode/Domain/Workflow/WorkflowDeliveryValidator.swift
+// App/Sources/Domain/Workflow/WorkflowDeliveryValidator.swift
 // Validation of a `prowl workflow deliver` body against the step's `expect` (dsl-spec §5): size
 // caps, format, required sections, and the verdict declaration.
 

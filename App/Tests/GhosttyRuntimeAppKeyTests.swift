@@ -2,7 +2,7 @@ import AppKit
 import GhosttyKit
 import Testing
 
-@testable import supacode
+@testable import Prowl
 
 /// Config-to-dispatch for the no-terminal undo key: Ghostty resolves the
 /// user's real `undo` / `redo` bindings (docs-ai 069.002, review round 2).

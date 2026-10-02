@@ -112,7 +112,7 @@ final class MirrorHost {
       }
       try rebuildListener()
     } catch {
-      SupaLogger("RemoteMirror").warning("Host device operation failed: \(error)")
+      ProwlLogger("RemoteMirror").warning("Host device operation failed: \(error)")
       self.error = error.localizedDescription
     }
   }
@@ -123,7 +123,7 @@ final class MirrorHost {
     pairingTask?.cancel()
     pairingTask = nil
     do { if isRunning { try rebuildListener() } } catch {
-      SupaLogger("RemoteMirror").warning("Host device operation failed: \(error)")
+      ProwlLogger("RemoteMirror").warning("Host device operation failed: \(error)")
       self.error = error.localizedDescription
     }
   }
@@ -143,7 +143,7 @@ final class MirrorHost {
       }
       try rebuildListener()
     } catch {
-      SupaLogger("RemoteMirror").warning("Host device operation failed: \(error)")
+      ProwlLogger("RemoteMirror").warning("Host device operation failed: \(error)")
       self.error = error.localizedDescription
     }
   }
@@ -170,7 +170,7 @@ final class MirrorHost {
       }
       if isRunning || isStarting { try rebuildListener() }
     } catch {
-      SupaLogger("RemoteMirror").warning("Host device reset failed: \(error)")
+      ProwlLogger("RemoteMirror").warning("Host device reset failed: \(error)")
       self.error = error.localizedDescription
     }
   }
@@ -237,7 +237,7 @@ final class MirrorHost {
       isStarting = true
       try rebuildListener()
     } catch {
-      SupaLogger("RemoteMirror").warning("Host start failed: \(error)")
+      ProwlLogger("RemoteMirror").warning("Host start failed: \(error)")
       self.error = String(localized: "Cannot start Host: \(error.localizedDescription)")
       isStarting = false
     }
@@ -308,7 +308,7 @@ final class MirrorHost {
           self.completePairings()
           self.onStarted?()
         case .failed(let error):
-          SupaLogger("RemoteMirror").warning("Host listener failed: \(error)")
+          ProwlLogger("RemoteMirror").warning("Host listener failed: \(error)")
           self.stop()
           self.error = MirrorConnectionFailure(error).listenerMessage(address: self.address, port: self.port)
         default: break
