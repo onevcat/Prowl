@@ -2,7 +2,7 @@
 
 > Every settings field with its exact name, type, default, and effect — useful for
 > reading or writing the JSON directly. Source of truth:
-> `supacode/Features/Settings/Models/GlobalSettings.swift` and `RepositorySettings.swift`.
+> `App/Sources/Features/Settings/Models/GlobalSettings.swift` and `RepositorySettings.swift`.
 
 **Keywords:** settings fields, global settings, repository settings, defaults, settings.json, prowl.json, config, json schema
 

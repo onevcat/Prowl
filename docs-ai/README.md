@@ -56,6 +56,29 @@ What is *not* here: reviews, audits, routine investigations, test reports, worki
 small polish PRs (git history covers them), and current user-facing behavior (`docs/` is the
 agent-facing manual for that).
 
+## Paths in entries before 074
+
+Entry [074](074-project-restructure-and-tuist/000-plan.md) (2026-10) renamed the project from
+`supacode` to `Prowl` and moved the folders. Numbered files are immutable, so entries `001`–`073`
+keep the old paths. Use this table to find a file that an old entry names:
+
+| Old path or name | Now |
+| --- | --- |
+| `supacode/…` | `App/Sources/…` |
+| `supacodeTests/…` | `App/Tests/…` |
+| `supacode/CLIService/Shared/…` | `Shared/Sources/ProwlCLIShared/…` |
+| `supacode/Features/RemoteMirror/RelayWire/…` | `Mirror/Relay/Sources/MirrorRelayProtocol/…` |
+| `supacode/Info.plist`, `supacode/*.entitlements` | `App/Config/Info.plist`, `App/Config/Prowl*.entitlements` |
+| `supacode/App/supacodeApp.swift`, `SupacodePaths`, `SupaLogger` | `App/Sources/App/ProwlApp.swift`, `ProwlPaths`, `ProwlLogger` |
+| `Resources/…`, `Frameworks/…` | `App/Resources/…`, `App/Frameworks/…` |
+| `Resources/git-wt` | `ThirdParty/git-wt` |
+| `ProwlCLI/…`, `ProwlCLIContracts/…`, `ProwlCLITests/…`, root `Package.swift` | `CLI/Sources/prowl/…`, `CLI/Sources/ProwlCLIContracts/…`, `CLI/Tests/ProwlCLITests/…`, `CLI/Package.swift` |
+| `MirrorRelay/…`, `MirrorRelayTests/…` | `Mirror/Relay/Sources/prowl-mirror-relay/…`, `Mirror/Relay/Tests/MirrorRelayTests/…` |
+| `MirrorClient/…` | `Mirror/…` |
+| `bins/…` | `scripts/bin/…` |
+| `supacode.xcodeproj`, scheme and module `supacode`, target `supacodeTests` | Generated `Prowl.xcworkspace` (`make generate`), scheme and module `Prowl`, target `ProwlTests` |
+| `~/Library/Caches/supacode-spm-cache`, `build/supacode.xcarchive` | `~/Library/Caches/prowl-spm-cache`, `build/Prowl.xcarchive` |
+
 ## Index
 
 | # | Entry | Anchor | Topic |

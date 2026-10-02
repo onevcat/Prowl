@@ -1,17 +1,17 @@
 {
   "exemptPaths": {
-    "supacode/CLIService/**": "protocol: CLI responses stay in English",
-    "supacode/Infrastructure/AgentDetection/**": "identifier: text matched against agent screens",
-    "supacode/Features/Debug/**": "developer: debug-only UI",
-    "supacode/**/*Prompt.swift": "agent-prompt",
-    "supacode/**/*Template*.swift": "agent-prompt: starter templates",
-    "supacode/Domain/Workflow/WorkflowLineRenderer.swift": "agent-prompt: lines typed into an agent",
-    "supacode/Clients/BranchNameSuggestion/**": "agent-prompt",
-    "supacode/Support/**": "developer: diagnostics and helpers without UI",
-    "supacode/Domain/Handoff/**": "agent-prompt: handoff documents written for agents"
+    "App/Sources/CLIService/**": "protocol: CLI responses stay in English",
+    "App/Sources/Infrastructure/AgentDetection/**": "identifier: text matched against agent screens",
+    "App/Sources/Features/Debug/**": "developer: debug-only UI",
+    "App/Sources/**/*Prompt.swift": "agent-prompt",
+    "App/Sources/**/*Template*.swift": "agent-prompt: starter templates",
+    "App/Sources/Domain/Workflow/WorkflowLineRenderer.swift": "agent-prompt: lines typed into an agent",
+    "App/Sources/Clients/BranchNameSuggestion/**": "agent-prompt",
+    "App/Sources/Support/**": "developer: diagnostics and helpers without UI",
+    "App/Sources/Domain/Handoff/**": "agent-prompt: handoff documents written for agents"
   },
   "exemptLinePatterns": {
-    "SupaLogger\\(|[Ll]ogger\\.|\\.log\\(|Diagnostics\\.log|sentryCapture": "log",
+    "ProwlLogger\\(|[Ll]ogger\\.|\\.log\\(|Diagnostics\\.log|sentryCapture": "log",
     "reportIssue|fatalError|preconditionFailure|assertionFailure|precondition\\(|assert\\(": "developer",
     "systemImage:|systemName:|Image\\(\"|NSImage\\(named": "identifier: symbol and asset names",
     "accessibilityIdentifier|\\.capture\\(": "identifier",
@@ -20,17 +20,17 @@
     "defaultValue: \"": "localized: the default value of a keyed string",
     "keywords: \\[": "identifier: search keywords of the Command Palette",
     "^\\s*case \\w+ = \"": "identifier: raw value of an enum case",
-    "\\b\\w*[Ll]og\\.(debug|info|notice|warning|error)\\(": "log: a SupaLogger instance held in a variable"
+    "\\b\\w*[Ll]og\\.(debug|info|notice|warning|error)\\(": "log: a ProwlLogger instance held in a variable"
   },
   "runtimeKeyPaths": {
-    "supacode/App/AppShortcuts.swift": "titles are looked up through Binding.localizedTitle",
-    "supacode/Features/CommandPalette/Reducer/CommandPaletteFeature.swift": "item titles are looked up in CommandPaletteSupport"
+    "App/Sources/App/AppShortcuts.swift": "titles are looked up through Binding.localizedTitle",
+    "App/Sources/Features/CommandPalette/Reducer/CommandPaletteFeature.swift": "item titles are looked up in CommandPaletteSupport"
   },
   "exemptLiterals": {
     "%@\n\n---\nProwl dispatch completion protocol v%@:\nBefore ending this task, choose exactly one terminal outcome and make this command your final tool action:\nprowl agents dispatch-complete --outcome succeeded|failed --summary \"<concise result>\"\nUse succeeded only when the assigned work is complete and verified. Use failed when it cannot be completed.\nKeep the required summary to a single line with no control characters, and explain the result clearly.\nDo not omit the command; Prowl supplies its dispatch context\nautomatically.": "agent-prompt",
     "%@: pullRequests(first: 5, states: [OPEN, MERGED, CLOSED], headRefName: \"%@\", %@) {\n  nodes {\n    number\n    title\n    state\n    additions\n    deletions\n    isDraft\n    reviewDecision\n    mergeable\n    mergeStateStatus\n    url\n    updatedAt\n    headRefName\n    baseRefName\n    commits {\n      totalCount\n    }\n    author {\n      login\n    }\n    headRepository {\n      name\n      owner { login }\n    }\n    mergeQueueEntry {\n      position\n      estimatedTimeToMerge\n      state\n    }\n    statusCheckRollup {\n      contexts(first: 100) {\n        nodes {\n          ... on CheckRun {\n            name\n            status\n            conclusion\n            startedAt\n            completedAt\n            detailsUrl\n          }\n          ... on StatusContext {\n            context\n            state\n            targetUrl\n            createdAt\n          }\n        }\n      }\n    }\n  }\n}": "identifier",
     "%@: unexpected version output": "developer",
-    "%@; %@; %@; exec \"${__supacode_login_argv[@]}\"": "identifier",
+    "%@; %@; %@; exec \"${__prowl_login_argv[@]}\"": "identifier",
     "(invocation %@)%@; persisting.": "log",
     "Action input evaluation failed: %@": "log",
     "Agent '%@' is not supported by agents read.": "protocol",

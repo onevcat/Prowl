@@ -1,5 +1,5 @@
 #include "App.xcconfig"
 
-CODE_SIGN_ENTITLEMENTS = supacode/supacode.entitlements
+CODE_SIGN_ENTITLEMENTS = Config/Prowl.entitlements
 COMPILATION_CACHE_ENABLE_CACHING = NO
 DEBUG_INFORMATION_FORMAT = dwarf-with-dsym

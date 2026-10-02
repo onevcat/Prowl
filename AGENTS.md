@@ -32,13 +32,13 @@ make bump-version                # Bump version (date-based YYYY.M.DD) and creat
 
 Debug builds are ad-hoc signed by default, so building needs no certificate. An ad-hoc signature's designated requirement is its cdhash, which changes on every rebuild, so macOS re-asks for Desktop/Documents/Downloads access from Prowl Debug — and from the commands running in its panes — after each build. If your worktrees live in those folders, set `PROWL_DEVELOPMENT_TEAM=<Team ID>` (environment or `Config/Secrets.env`) and `make build-app` / `make test` sign the Debug app and test host with your Apple Development identity instead; the Team ID is the certificate's OU, not the ID in parentheses after your name. With it set, replace the `CODE_SIGNING_*` settings in ad-hoc `xcodebuild test` invocations like the one below with `DEVELOPMENT_TEAM=<Team ID>` so the test host keeps the same signature.
 
-The Xcode projects are not in Git. [Tuist](https://tuist.dev) generates `Prowl.xcworkspace` (the macOS app and the iOS mirror client) from `Workspace.swift`, `Project.swift`, `MirrorClient/iOS/Project.swift`, and the build settings in `Config/Xcode/*.xcconfig`. The `make` targets generate it when it is absent or older than these files. To change a target, a dependency, a build setting, or a scheme, edit the manifest or the xcconfig file, never the generated project. Source folders are synchronized folders, so a new source file needs no manifest change. The package lockfile is `.package.resolved`; always build with `-workspace Prowl.xcworkspace`.
+The Xcode projects are not in Git. [Tuist](https://tuist.dev) generates `Prowl.xcworkspace` (the macOS app and the iOS mirror client) from `Workspace.swift`, `App/Project.swift`, `Mirror/iOS/Project.swift`, and the build settings in `App/Config/*.xcconfig`. The `make` targets generate it when it is absent or older than these files. To change a target, a dependency, a build setting, or a scheme, edit the manifest or the xcconfig file, never the generated project. Source folders are synchronized folders, so a new source file needs no manifest change. The package lockfile is `.package.resolved`; always build with `-workspace Prowl.xcworkspace`.
 
 Run a single test class or method (after `make generate`):
 
 ```bash
-xcodebuild test -workspace Prowl.xcworkspace -scheme supacode -destination "platform=macOS" \
-  -only-testing:supacodeTests/TerminalTabManagerTests \
+xcodebuild test -workspace Prowl.xcworkspace -scheme Prowl -destination "platform=macOS" \
+  -only-testing:ProwlTests/TerminalTabManagerTests \
   CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" -skipMacroValidation
 ```
 
@@ -46,14 +46,29 @@ xcodebuild test -workspace Prowl.xcworkspace -scheme supacode -destination "plat
 
 ```bash
 # XCTest (func testFoo)
--only-testing:supacodeTests/FooTests/testBar
+-only-testing:ProwlTests/FooTests/testBar
 # Swift Testing (@Test func bar)
--only-testing:"supacodeTests/FooTests/bar()"
+-only-testing:"ProwlTests/FooTests/bar()"
 ```
 
 Requires [mise](https://mise.jdx.dev/) for zig, tuist, swiftlint, and xcsift tooling.
 
 `make log-stream` shows no `TCA` action lines by default: per-action logging — the action label plus a full app-state snapshot and diff — is gated off because it runs on every action and shows up as steady main-thread cost. Launch with `PROWL_LOG_TCA_ACTIONS=1` (scheme env var, or exported before `open`) to trace the action stream through the unified log.
+
+## Repository Layout
+
+| Folder | Content |
+| --- | --- |
+| `App/` | The macOS app: `Sources/` (module `Prowl`), `Tests/` (`ProwlTests`), `Resources/` (bundled files), `Config/` (`Info.plist`, entitlements, xcconfig), `Project.swift` |
+| `CLI/` | SwiftPM package of the `prowl` CLI, its contracts, and its tests |
+| `Shared/` | SwiftPM package `ProwlShared` (library `ProwlCLIShared`): code that the app and the CLI share |
+| `Mirror/` | Remote Mirror parts: `iOS/`, `Android/`, `Relay/` (SwiftPM package of the relay process), `Shared/` (sources that the app and the iOS client compile) |
+| `ThirdParty/` | Submodules: `ghostty`, `git-wt` |
+| `docs/`, `skills/` | Agent-facing manual and skills; the app bundles both |
+| `docs-ai/` | Design records. Numbered files before entry 074 use the old paths; `docs-ai/README.md` has the path table |
+| `scripts/`, `Config/` | Tooling (`scripts/bin/` holds binaries and helper scripts) and local configuration templates |
+
+The project name is Prowl everywhere. The old name `supacode` stays only for stored data, the legacy settings readers, the keychain profile `supacode-notary`, and the upstream repository; `make check` rejects other uses.
 
 ## Architecture
 
@@ -91,7 +106,7 @@ Reducer ← .terminalEvent(Event) ← AsyncStream<Event>
 
 - **Commands**: `createTab`, `closeFocusedTab`, `prune`, `setSelectedWorktreeID`, etc.
 - **Events**: `notificationReceived`, `tabCreated`, `tabClosed`, `focusChanged`, `taskStatusChanged`
-- Wired in `supacodeApp.swift`, subscribed in `AppFeature.task`
+- Wired in `ProwlApp.swift`, subscribed in `AppFeature.task`
 
 ### Key Dependencies
 
@@ -122,7 +137,7 @@ Reducer ← .terminalEvent(Event) ← AsyncStream<Event>
 - Avoid `GeometryReader` when `containerRelativeFrame()` or `visualEffect()` would work
 - Do not use NSNotification to communicate between reducers.
 - Prefer `@Shared` directly in reducers for app storage and shared settings; do not introduce new dependency clients solely to wrap `@Shared`.
-- Use `SupaLogger` for all logging. Never use `print()` or `os.Logger` directly. `SupaLogger` prints in DEBUG and uses `os.Logger` in release.
+- Use `ProwlLogger` for all logging. Never use `print()` or `os.Logger` directly. `ProwlLogger` prints in DEBUG and uses `os.Logger` in release.
 - UI copy is localized (`docs-ai/070-app-localization/000-plan.md`). Write it so the compiler can extract it: a literal passed straight to SwiftUI (`Text("…")`, `.help("…")`), `String(localized: "…")` when you need a `String`, and a `LocalizedStringKey` or `LocalizedStringResource` parameter for a helper that takes copy. Write long copy as one multi-line literal, not a `+` chain. Do not translate during feature work: the `sync-l10n` skill adds translations and removes unused entries at release time. Tests run in English (pinned in the scheme), so assert on literal English copy.
 
 ### Formatting & Linting
@@ -152,7 +167,7 @@ Reducer ← .terminalEvent(Event) ← AsyncStream<Event>
 ## Rules
 
 - After a task, ensure the app builds: `make build-app`
-- When working on CLI code (`ProwlCLI/`, `ProwlCLITests/`, `Package.swift`), run `make build-cli`, `make test-cli-smoke`, `make test-cli-unit`, and `make test-cli-integration` before committing.
+- When working on CLI code (`CLI/`, `Shared/`, `Mirror/Relay/`), run `make build-cli`, `make test-cli-smoke`, `make test-cli-unit`, and `make test-cli-integration` before committing.
 - When you change user-facing behavior (keyboard shortcuts, settings, the `prowl` CLI, or a feature's UX), update the matching file under `docs/` in the same change. For a full audit, run the `sync-docs` skill.
 - `docs-ai/` is curated, durable product/design documentation — never a working-note archive. Use the `write-ai-doc` skill only for a substantial feature or a non-trivial fix whose design and result must guide future implementation. Do not create entries for reviews, audits, routine research or investigations, status reports, test runs, or docs-only work unless onevcat explicitly asks for a `docs-ai/` record. When uncertain, do not create an entry. For qualifying work, create `docs-ai/NNN-<slug>/000-plan.md` before coding and complete `001-action.md` after implementation. Follow-up work on the same topic amends the existing entry (see `docs-ai/README.md`).
 - When implementing a new feature or fixing a bug that is unrelated to the current branch's active work, first create a dedicated branch from the latest `origin/main`; then work, commit, push, and open a PR from that branch.
@@ -164,5 +179,5 @@ Reducer ← .terminalEvent(Event) ← AsyncStream<Event>
 
 ## Submodules
 
-- `ThirdParty/ghostty` (`https://github.com/ghostty-org/ghostty`): Source dependency used to build `Frameworks/GhosttyKit.xcframework` and terminal resources.
-- `Resources/git-wt` (`https://github.com/khoi/git-wt.git`): Bundled `wt` CLI used by Prowl Git worktree flows at runtime.
+- `ThirdParty/ghostty` (`https://github.com/ghostty-org/ghostty`): Source dependency used to build `App/Frameworks/GhosttyKit.xcframework` and terminal resources.
+- `ThirdParty/git-wt` (`https://github.com/khoi/git-wt.git`): Bundled `wt` CLI used by Prowl Git worktree flows at runtime.

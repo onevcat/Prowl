@@ -28,7 +28,7 @@ RULES = (
     (r"\bworkflow\s+[^`\n]*\|done\b", "Use deliver in command summaries."),
     (r"`done\s+(?:-|--json)", "Use deliver in completion recipes."),
 )
-ROOTS = ("supacode/", "ProwlCLI/", "ProwlCLIContracts/", "Resources/workflows/", "docs/", "skills/")
+ROOTS = ("App/Sources/", "CLI/Sources/prowl/", "CLI/Sources/ProwlCLIContracts/", "App/Resources/workflows/", "docs/", "skills/")
 REFERENCES = (
     "docs-ai/063-agent-workflows/000-plan.md",
     "docs-ai/063-agent-workflows/dsl-spec.md",

@@ -239,10 +239,10 @@ Real Agent and cross-device acceptance remain separate from component/socket tes
 
 ## Mobile client projects
 
-Native clients live in [MirrorClient/iOS](../MirrorClient/iOS/) (iPhone and iPad)
-and [MirrorClient/Android](../MirrorClient/Android/) (phones and tablets). Each
+Native clients live in [Mirror/iOS](../Mirror/iOS/) (iPhone and iPad)
+and [Mirror/Android](../Mirror/Android/) (phones and tablets). Each
 project retains its own build and test entry points; neither is built by the Mac
-App target or release pipeline. See [client setup](../MirrorClient/README.md).
+App target or release pipeline. See [client setup](../Mirror/README.md).
 
 ### Copy connection details to Mac
 

@@ -5,7 +5,7 @@ supports Android phones and tablets (Android 8.0 / API 26 or later). At 840 dp
 available width the pane drawer becomes a persistent sidebar. Both layouts share
 session, protocol and rendering code; rotation is supported, not locked.
 
-The Android project lives in `MirrorClient/Android/` in the Prowl repository.
+The Android project lives in `Mirror/Android/` in the Prowl repository.
 The original Gradle project name and application ID are preserved.
 
 ## Connect
@@ -57,7 +57,7 @@ is no private AI console or dependency on personal shell wrappers.
 
 ## Build and test
 
-Open `MirrorClient/Android/` in Android Studio, or change to that directory
+Open `Mirror/Android/` in Android Studio, or change to that directory
 and use JDK 17 and an installed Android
 SDK 34. Set `ANDROID_HOME` or create an untracked `local.properties` with `sdk.dir`.
 

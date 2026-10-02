@@ -6,8 +6,9 @@ import Testing
 struct WorkflowRoleRequirementsTests {
   @Test func shippedHandoffIsAValidBuiltInBundle() throws {
     let root = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+      .deletingLastPathComponent().deletingLastPathComponent()
     let file = WorkflowDiscovery.load(
-      url: root.appending(path: "Resources/workflows/handoff.pwlworkflow"),
+      url: root.appending(path: "App/Resources/workflows/handoff.pwlworkflow"),
       scope: .bundle, context: .init(scope: .bundle))
     #expect(file.isValid)
     #expect(file.definition?.id == "prowl.handoff")

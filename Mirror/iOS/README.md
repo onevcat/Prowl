@@ -90,10 +90,10 @@ Take Over is explicit. Editing a connection never silently creates a new pane.
 
 ## Build and tests
 
-Tuist generates the Xcode project from `MirrorClient/iOS/Project.swift`; the project file is not in
+Tuist generates the Xcode project from `Mirror/iOS/Project.swift`; the project file is not in
 Git. Run `make generate` at the Prowl repository root, open `Prowl.xcworkspace`, and select the
 `ProwlMirror-iOS` scheme. For work on this client only,
-`mise exec -- tuist generate --path MirrorClient/iOS` generates `ProwlMirror-iOS.xcworkspace` in this
+`mise exec -- tuist generate --path Mirror/iOS` generates `ProwlMirror-iOS.xcworkspace` in this
 folder and does not need the Mac app's build inputs. Simulator signing stays enabled for Keychain tests. Unit tests cover wire vectors, native TLS transport,
 command correlation/routing, reading and keyboard behavior. The Host's real App
 target covers pairing, revocation, terminal capture and input protection; there is

@@ -173,4 +173,4 @@ wait-store subscribers promptly; no response is written to a disconnected peer.
 All dispatch records and wait mode/screen payloads are strict tagged unions with
 `additionalProperties: false`. Errors may include governed `error.details`; legacy errors
 omit it. Canonical executable schemas live in
-[`cli-output-schema.json`](../../../ProwlCLIContracts/Resources/cli-output-schema.json).
+[`cli-output-schema.json`](../../../CLI/Sources/ProwlCLIContracts/Resources/cli-output-schema.json).

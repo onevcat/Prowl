@@ -205,4 +205,4 @@ but they are never selected for installation.
 `PATH_NOT_DIRECTORY`, and `SKILLS_FAILED` use the common error envelope with
 `schema_version: "prowl.cli.skills.v1"`. Because the command never uses the socket,
 `APP_NOT_RUNNING`, `SOCKET_PERMISSION_DENIED`, and `TRANSPORT_FAILED` cannot occur. See
-[`cli-output-schema.json`](../../../ProwlCLIContracts/Resources/cli-output-schema.json).
+[`cli-output-schema.json`](../../../CLI/Sources/ProwlCLIContracts/Resources/cli-output-schema.json).

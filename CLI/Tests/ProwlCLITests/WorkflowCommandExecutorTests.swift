@@ -90,7 +90,8 @@ final class WorkflowCommandExecutorTests: XCTestCase {
   func testActionSchemaMatchesTheCheckedInContract() throws {
     let payload = try executor().schema(action: true)
     let url = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-      .appending(path: "ProwlCLIContracts/Resources/action-definition-schema.json")
+      .deletingLastPathComponent()
+      .appending(path: "Sources/ProwlCLIContracts/Resources/action-definition-schema.json")
     let expected = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? NSDictionary
     let actual = try JSONSerialization.jsonObject(with: payload.schema.bytes) as? NSDictionary
     XCTAssertEqual(actual, expected)

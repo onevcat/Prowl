@@ -46,17 +46,17 @@ appDefault  →  migratedLegacy (from old custom command shortcuts)  →  userOv
 
 | Purpose | File |
 |---------|------|
-| **Data models, resolver, migration** | `supacode/App/KeybindingSchema.swift` |
-| **Built-in command registry** | `supacode/App/AppShortcuts.swift` |
-| **Conflict detection** | `supacode/Features/Settings/BusinessLogic/ShortcutConflictDetector.swift` |
-| **Cascading reset planner** | `supacode/Features/Settings/BusinessLogic/ShortcutResetPlanner.swift` |
-| **NSEvent → key token** | `supacode/Features/Settings/BusinessLogic/ShortcutKeyTokenResolver.swift` |
-| **Settings UI & recorder** | `supacode/Features/Settings/Views/ShortcutsSettingsView.swift` |
-| **Persistence (GlobalSettings)** | `supacode/Features/Settings/Models/GlobalSettings.swift` |
-| **Settings reducer** | `supacode/Features/Settings/Reducer/SettingsFeature.swift` |
-| **App-level resolution & propagation** | `supacode/Features/App/Reducer/AppFeature.swift` |
-| **SwiftUI environment key** | `supacode/App/ResolvedKeybindingsEnvironment.swift` |
-| **Ghostty init & keybinding sync** | `supacode/App/supacodeApp.swift` |
+| **Data models, resolver, migration** | `App/Sources/App/KeybindingSchema.swift` |
+| **Built-in command registry** | `App/Sources/App/AppShortcuts.swift` |
+| **Conflict detection** | `App/Sources/Features/Settings/BusinessLogic/ShortcutConflictDetector.swift` |
+| **Cascading reset planner** | `App/Sources/Features/Settings/BusinessLogic/ShortcutResetPlanner.swift` |
+| **NSEvent → key token** | `App/Sources/Features/Settings/BusinessLogic/ShortcutKeyTokenResolver.swift` |
+| **Settings UI & recorder** | `App/Sources/Features/Settings/Views/ShortcutsSettingsView.swift` |
+| **Persistence (GlobalSettings)** | `App/Sources/Features/Settings/Models/GlobalSettings.swift` |
+| **Settings reducer** | `App/Sources/Features/Settings/Reducer/SettingsFeature.swift` |
+| **App-level resolution & propagation** | `App/Sources/Features/App/Reducer/AppFeature.swift` |
+| **SwiftUI environment key** | `App/Sources/App/ResolvedKeybindingsEnvironment.swift` |
+| **Ghostty init & keybinding sync** | `App/Sources/App/ProwlApp.swift` |
 
 ## How It Works
 

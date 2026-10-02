@@ -116,7 +116,7 @@ stderr after the receipt line.
 
 Optional fields are omitted rather than encoded as `null`. The executable schema is
 `#/$defs/agentsSignalResponse` in
-[`cli-output-schema.json`](../../../ProwlCLIContracts/Resources/cli-output-schema.json).
+[`cli-output-schema.json`](../../../CLI/Sources/ProwlCLIContracts/Resources/cli-output-schema.json).
 
 ## Errors
 

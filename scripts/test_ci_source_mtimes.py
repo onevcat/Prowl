@@ -30,8 +30,8 @@ class SourceMtimeTests(unittest.TestCase):
         module.save(self.root, ["Source.swift"], self.manifest)
 
     def test_app_scope_excludes_cli_owned_inputs(self):
-        files = ["Package.swift", "supacode/CLIService/Shared/Model.swift",
-                 "supacode/Support/Model.swift", "supacodeTests/ModelTests.swift"]
+        files = ["CLI/Package.swift", "Shared/Sources/ProwlCLIShared/Model.swift",
+                 "App/Sources/Support/Model.swift", "App/Tests/ModelTests.swift"]
         for name in files:
             path = self.root / name
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -40,7 +40,7 @@ class SourceMtimeTests(unittest.TestCase):
         subprocess.run(["git", "-C", str(self.root), "add", "--", *files], check=True)
         app = set(module.tracked_inputs(self.root, "app"))
         cli = set(module.tracked_inputs(self.root, "cli"))
-        self.assertEqual(app, {"supacode/Support/Model.swift", "supacodeTests/ModelTests.swift"})
+        self.assertEqual(app, {"App/Sources/Support/Model.swift", "App/Tests/ModelTests.swift"})
         self.assertFalse(app & cli)
 
     def test_restores_only_identical_content(self):

@@ -3,7 +3,7 @@ import ProjectDescription
 
 // `tuist generate` resolves Swift packages. Use the checkout directory that the Makefile
 // passes to `xcodebuild`, so that generation and builds share one copy.
-let packageCheckouts = NSHomeDirectory() + "/Library/Caches/supacode-spm-cache/SourcePackages"
+let packageCheckouts = NSHomeDirectory() + "/Library/Caches/prowl-spm-cache/SourcePackages"
 
 let tuist = Tuist(
   project: .tuist(

@@ -5,7 +5,7 @@
 # a scenario when sourced.
 
 socket="${PROWL_SELF_VERIFY_SOCKET:-/tmp/prowl-self-verify.sock}"
-cli="${PROWL_SELF_VERIFY_CLI:-./.build/debug/prowl}"
+cli="${PROWL_SELF_VERIFY_CLI:-./CLI/.build/debug/prowl}"
 scratch_dir="${PROWL_SELF_VERIFY_DIR:-/tmp/prowl-self-verify}"
 
 prowl_debug() {

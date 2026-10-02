@@ -1,7 +1,7 @@
 # Reference: Keyboard Shortcuts
 
 > The complete, authoritative shortcut table. Source of truth:
-> `supacode/App/AppShortcuts.swift` (app actions) and `supacode/Commands/*.swift`
+> `App/Sources/App/AppShortcuts.swift` (app actions) and `App/Sources/Commands/*.swift`
 > (menu wiring). Terminal-level keys come from the Ghostty engine.
 
 **Keywords:** keyboard, shortcuts, hotkeys, keybindings, key bindings, remap, ⌘, command, shortcut list

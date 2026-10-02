@@ -15,6 +15,20 @@ Future upstream checks should only inspect commits **after** this baseline.
 
 ---
 
+## 2026-10-03 — Fork layout and names changed (074)
+
+- The fork renamed the project from `supacode` to `Prowl` and moved the folders
+  (`docs-ai/074-project-restructure-and-tuist/000-plan.md`). Upstream paths map as follows when a
+  commit is ported: `supacode/…` → `App/Sources/…`, `supacodeTests/…` → `App/Tests/…`,
+  `Resources/…` → `App/Resources/…`. The full table is in `docs-ai/README.md`.
+- Like upstream, the fork now generates its Xcode projects with Tuist, but it keeps Xcode-native
+  Swift packages (upstream uses `Tuist/Package.swift` and `.external`). The earlier decision to
+  skip the upstream Tuist migration (2026-04-20) is replaced by entry 074; the upstream manifests
+  are not ported.
+- Entries below this one use the old paths.
+
+---
+
 ## 2026-08-30 — Ghostty fork patch: lazy display link
 
 - Added `a0671ce9` `Backport Ghostty lazy display link creation` to `onevcat/ghostty`

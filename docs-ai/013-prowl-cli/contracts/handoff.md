@@ -16,4 +16,4 @@ The success payload reports `action`, `artifact_path`, source/destination agents
 repository summary, change count, briefing state, optional archived path/session
 context, and optional launched pane. The complete response contract, including the
 v2 schema discriminator, is `#/$defs/handoffResponse` in
-[`schema-bundle.json`](../../../ProwlCLIContracts/Resources/cli-output-schema.json).
+[`schema-bundle.json`](../../../CLI/Sources/ProwlCLIContracts/Resources/cli-output-schema.json).

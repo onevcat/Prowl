@@ -1,9 +1,7 @@
 import ProjectDescription
 
-// The macOS app. `make generate` turns this manifest into `Prowl.xcodeproj`; the generated
-// project is not in Git. Build settings are in `Config/Xcode/*.xcconfig`.
-
-let configDirectory = "Config/Xcode"
+// The macOS app. `make generate` turns this manifest into `App/Prowl.xcodeproj`; the generated
+// project is not in Git. Build settings are in `Config/*.xcconfig`.
 
 func configurations(
   _ name: String,
@@ -11,21 +9,29 @@ func configurations(
   release: SettingsDictionary = [:]
 ) -> [Configuration] {
   [
-    .debug(name: .debug, settings: debug, xcconfig: "\(configDirectory)/\(name)-Debug.xcconfig"),
-    .release(name: .release, settings: release, xcconfig: "\(configDirectory)/\(name)-Release.xcconfig"),
+    .debug(name: .debug, settings: debug, xcconfig: "Config/\(name)-Debug.xcconfig"),
+    .release(name: .release, settings: release, xcconfig: "Config/\(name)-Release.xcconfig"),
   ]
 }
 
-// Folders that the Makefile stages or that are submodules. Xcode copies each one into the
-// app bundle as a folder. They must exist before generation (`make generate` checks this).
-let bundledFolders = [
-  "docs", "workflows", "skills", "ghostty", "terminfo", "git-wt", "prowl-cli", "agent-hooks",
+// Folders that Xcode copies into the app bundle, each as one folder. The Makefile stages the
+// ignored ones; `git-wt` is a submodule. They must exist before generation (`make generate`
+// checks this).
+let bundledFolders: [Path] = [
+  "Resources/docs",
+  "Resources/workflows",
+  "Resources/skills",
+  "Resources/ghostty",
+  "Resources/terminfo",
+  "Resources/prowl-cli",
+  "Resources/agent-hooks",
+  "../ThirdParty/git-wt",
 ]
 
 let verifyGitWtScript = """
-  WT_SCRIPT="${PROJECT_DIR}/Resources/git-wt/wt"
+  WT_SCRIPT="${PROJECT_DIR}/../ThirdParty/git-wt/wt"
   if [ ! -f "$WT_SCRIPT" ]; then
-    echo "error: Missing $WT_SCRIPT. Run: git submodule update --init Resources/git-wt" >&2
+    echo "error: Missing $WT_SCRIPT. Run: git submodule update --init ThirdParty/git-wt" >&2
     exit 1
   fi
   if [ ! -x "$WT_SCRIPT" ]; then
@@ -54,7 +60,7 @@ let project = Project(
     disableSynthesizedResourceAccessors: true
   ),
   packages: [
-    .package(path: "supacode/CLIService/Shared"),
+    .package(path: "../Shared"),
     .package(url: "https://github.com/pointfreeco/swift-case-paths", from: "1.7.2"),
     .package(url: "https://github.com/sparkle-project/Sparkle", .exact("2.9.2")),
     .package(url: "https://github.com/pointfreeco/swift-dependencies", from: "1.10.1"),
@@ -67,23 +73,20 @@ let project = Project(
   settings: .settings(configurations: configurations("Project"), defaultSettings: .none),
   targets: [
     .target(
-      name: "supacode",
+      name: "Prowl",
       destinations: .macOS,
       product: .app,
       productName: "Prowl",
       bundleId: "com.onevcat.prowl",
-      infoPlist: .file(path: "supacode/Info.plist"),
-      sources: ["MirrorClient/Shared/*.swift"],
-      resources: .resources(bundledFolders.map { .folderReference(path: "Resources/\($0)") }),
-      buildableFolders: [
-        .folder(
-          "supacode",
-          exceptions: .exceptions([
-            // `CLIService/Shared` is the `ProwlCLIShared` package, not app source.
-            .exception(excluded: ["Info.plist", "CLIService/Shared"])
-          ])
-        )
+      infoPlist: .file(path: "Config/Info.plist"),
+      // Sources that the app shares with the mirror clients and the relay process. The app
+      // compiles them into its own module.
+      sources: [
+        "../Mirror/Shared/*.swift",
+        "../Mirror/Relay/Sources/MirrorRelayProtocol/*.swift",
       ],
+      resources: .resources(bundledFolders.map { .folderReference(path: $0) }),
+      buildableFolders: ["Sources"],
       copyFiles: [
         .resources(
           name: "Embed mirror relay",
@@ -124,18 +127,18 @@ let project = Project(
       )
     ),
     .target(
-      name: "supacodeTests",
+      name: "ProwlTests",
       destinations: .macOS,
       product: .unitTests,
       bundleId: "com.onevcat.prowlTests",
       infoPlist: nil,
       // `Fixtures` goes into the test bundle as one folder, not as separate files.
-      resources: [.folderReference(path: "supacodeTests/Fixtures")],
+      resources: [.folderReference(path: "Tests/Fixtures")],
       buildableFolders: [
-        .folder("supacodeTests", exceptions: .exceptions([.exception(excluded: ["Fixtures"])]))
+        .folder("Tests", exceptions: .exceptions([.exception(excluded: ["Fixtures"])]))
       ],
       dependencies: [
-        .target(name: "supacode"),
+        .target(name: "Prowl"),
         .package(product: "DependenciesTestSupport"),
         .package(product: "OrderedCollections"),
         .package(product: "ProwlCLIShared"),
@@ -145,17 +148,17 @@ let project = Project(
   ],
   schemes: [
     .scheme(
-      name: "supacode",
-      buildAction: .buildAction(targets: ["supacode"]),
+      name: "Prowl",
+      buildAction: .buildAction(targets: ["Prowl"]),
       testAction: .targets(
-        [.testableTarget(target: "supacodeTests", parallelization: .enabled)],
+        [.testableTarget(target: "ProwlTests", parallelization: .enabled)],
         configuration: .debug,
         // Tests assert on English copy.
         options: .options(language: "en", region: "US")
       ),
-      runAction: .runAction(configuration: .debug, executable: "supacode"),
+      runAction: .runAction(configuration: .debug, executable: "Prowl"),
       archiveAction: .archiveAction(configuration: .release),
-      profileAction: .profileAction(configuration: .debug, executable: "supacode"),
+      profileAction: .profileAction(configuration: .debug, executable: "Prowl"),
       analyzeAction: .analyzeAction(configuration: .debug)
     )
   ]

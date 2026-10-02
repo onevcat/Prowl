@@ -45,7 +45,7 @@ The goal is to keep facts correct with **low churn**, not to perfect the prose.
 2. **Diff the implementation since the baseline.** List source files that changed:
    ```bash
    git diff --name-only <baseline_commit>..HEAD -- \
-     supacode/ ProwlCLI/ Package.swift Resources/git-wt
+     App/Sources/ CLI/ Shared/ ThirdParty/git-wt
    ```
    If nothing relevant changed, report "Docs up to date as of `<HEAD>`." then go
    to step 6 (bump the baseline) and stop.
@@ -55,22 +55,22 @@ The goal is to keep facts correct with **low churn**, not to perfect the prose.
 
    | Source that changed | Docs to re-check |
    |---------------------|------------------|
-   | `supacode/App/AppShortcuts.swift`, `supacode/Commands/**` | `reference/keyboard-shortcuts.md` (+ shortcut mentions in the relevant `components/*.md`) |
-   | `supacode/Features/Settings/Models/GlobalSettings.swift`, `RepositorySettings.swift`, `UserRepositorySettings.swift` | `reference/settings-fields.md`, `components/settings.md`, `components/custom-actions.md` |
-   | `ProwlCLI/**`, `supacode/CLIService/**` | `components/cli.md` |
-   | `supacode/Clients/CLIInstall/**` | `components/cli.md`, `components/settings.md` |
-   | `supacode/Features/Repositories/**`, `supacode/Domain/Worktree*.swift`, `supacode/Domain/Repository*.swift`, `supacode/Clients/Git/**`, `Resources/git-wt` | `components/repositories-and-worktrees.md` |
-   | `supacode/Features/Terminal/**`, `supacode/Infrastructure/Ghostty/**` | `components/terminal.md` |
-   | `supacode/Features/Canvas/**` | `components/canvas.md` |
-   | `supacode/Features/Shelf/**` | `components/shelf.md` |
-   | `supacode/Features/CommandPalette/**` | `components/command-palette.md` |
-   | `supacode/Features/ActiveAgents/**` | `components/active-agents.md` |
-   | `supacode/Domain/AgentDetection/**`, `supacode/Infrastructure/AgentDetection/**` | `components/agent-detection.md` |
-   | `supacode/Clients/Notifications/**`, `WorktreeTerminalState+Notifications.swift`, `supacode/Clients/Dock/**` | `components/notifications.md` |
-   | `supacode/Features/DiffView/**` | `components/diff-view.md` |
-   | `supacode/Clients/Github/**` | `components/github-pull-requests.md` |
-   | `supacode/Clients/Updates/**`, `supacode/Features/Updates/**` | `components/updates.md` |
-   | view-mode switching (`supacode/Features/App/**`, `ContentView.swift`) | `components/view-modes.md` |
+   | `App/Sources/App/AppShortcuts.swift`, `App/Sources/Commands/**` | `reference/keyboard-shortcuts.md` (+ shortcut mentions in the relevant `components/*.md`) |
+   | `App/Sources/Features/Settings/Models/GlobalSettings.swift`, `RepositorySettings.swift`, `UserRepositorySettings.swift` | `reference/settings-fields.md`, `components/settings.md`, `components/custom-actions.md` |
+   | `CLI/Sources/prowl/**`, `App/Sources/CLIService/**` | `components/cli.md` |
+   | `App/Sources/Clients/CLIInstall/**` | `components/cli.md`, `components/settings.md` |
+   | `App/Sources/Features/Repositories/**`, `App/Sources/Domain/Worktree*.swift`, `App/Sources/Domain/Repository*.swift`, `App/Sources/Clients/Git/**`, `ThirdParty/git-wt` | `components/repositories-and-worktrees.md` |
+   | `App/Sources/Features/Terminal/**`, `App/Sources/Infrastructure/Ghostty/**` | `components/terminal.md` |
+   | `App/Sources/Features/Canvas/**` | `components/canvas.md` |
+   | `App/Sources/Features/Shelf/**` | `components/shelf.md` |
+   | `App/Sources/Features/CommandPalette/**` | `components/command-palette.md` |
+   | `App/Sources/Features/ActiveAgents/**` | `components/active-agents.md` |
+   | `App/Sources/Domain/AgentDetection/**`, `App/Sources/Infrastructure/AgentDetection/**` | `components/agent-detection.md` |
+   | `App/Sources/Clients/Notifications/**`, `WorktreeTerminalState+Notifications.swift`, `App/Sources/Clients/Dock/**` | `components/notifications.md` |
+   | `App/Sources/Features/DiffView/**` | `components/diff-view.md` |
+   | `App/Sources/Clients/Github/**` | `components/github-pull-requests.md` |
+   | `App/Sources/Clients/Updates/**`, `App/Sources/Features/Updates/**` | `components/updates.md` |
+   | view-mode switching (`App/Sources/Features/App/**`, `ContentView.swift`) | `components/view-modes.md` |
 
    `overview.md`, `concepts.md`, and `README.md` only need touch-ups for the
    addition/removal of a **major** feature — leave them alone otherwise.
@@ -81,10 +81,10 @@ The goal is to keep facts correct with **low churn**, not to perfect the prose.
 
    | Claim type | Source of truth |
    |------------|-----------------|
-   | Keyboard shortcuts (key + modifiers + command ID, remappability) | `supacode/App/AppShortcuts.swift`; menu wiring in `supacode/Commands/*.swift` |
-   | Settings field names / types / defaults | `supacode/Features/Settings/Models/GlobalSettings.swift`, `RepositorySettings.swift` |
-   | CLI commands / flags / ranges / error codes / JSON fields | `ProwlCLI/**` and `supacode/CLIService/**` (and, if the CLI is installed, `prowl <cmd> --help` for confirmation) |
-   | Feature behavior / entry points | the corresponding `supacode/Features/**` or `supacode/Clients/**` |
+   | Keyboard shortcuts (key + modifiers + command ID, remappability) | `App/Sources/App/AppShortcuts.swift`; menu wiring in `App/Sources/Commands/*.swift` |
+   | Settings field names / types / defaults | `App/Sources/Features/Settings/Models/GlobalSettings.swift`, `RepositorySettings.swift` |
+   | CLI commands / flags / ranges / error codes / JSON fields | `CLI/Sources/prowl/**` and `App/Sources/CLIService/**` (and, if the CLI is installed, `prowl <cmd> --help` for confirmation) |
+   | Feature behavior / entry points | the corresponding `App/Sources/Features/**` or `App/Sources/Clients/**` |
 
    When in doubt whether something is a real, user-facing change, **leave the doc
    as-is and flag it** in the report rather than editing.

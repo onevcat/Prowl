@@ -210,7 +210,8 @@ final class WorkflowSchemaTests: XCTestCase {
 
   func testDefinitionSchemaAcceptsEveryShippedWorkflow() throws {
     let root = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-      .appending(path: "Resources/workflows")
+      .deletingLastPathComponent().deletingLastPathComponent()
+      .appending(path: "App/Resources/workflows")
     let bundles = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
       .filter { $0.pathExtension == "pwlworkflow" }
     XCTAssertFalse(bundles.isEmpty)

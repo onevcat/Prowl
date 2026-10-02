@@ -11,8 +11,10 @@ import XCTest
 #endif
 
 final class ProwlCLIIntegrationTests: XCTestCase {
-  private var repoRoot: URL {
+  /// The `CLI` package folder: this file is in `CLI/Tests/ProwlCLITests`.
+  private var packageRoot: URL {
     URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
       .deletingLastPathComponent()
       .deletingLastPathComponent()
   }
@@ -769,8 +771,8 @@ final class ProwlCLIIntegrationTests: XCTestCase {
       data: RawJSON(
         encoding: OpenResponseData(
           invocation: "open-subcommand",
-          requestedPath: repoRoot.path,
-          resolvedPath: repoRoot.path,
+          requestedPath: packageRoot.path,
+          resolvedPath: packageRoot.path,
           resolution: "exact-root",
           appLaunched: false,
           broughtToFront: true
@@ -790,7 +792,7 @@ final class ProwlCLIIntegrationTests: XCTestCase {
       XCTAssertEqual(input.invocation, "open-subcommand")
       XCTAssertEqual(
         URL(fileURLWithPath: openedPath).resolvingSymlinksInPath().path,
-        repoRoot.resolvingSymlinksInPath().path
+        packageRoot.resolvingSymlinksInPath().path
       )
     } else {
       XCTFail("Expected open command envelope")
@@ -810,8 +812,8 @@ final class ProwlCLIIntegrationTests: XCTestCase {
       data: RawJSON(
         encoding: OpenResponseData(
           invocation: "implicit-open",
-          requestedPath: repoRoot.path,
-          resolvedPath: repoRoot.path,
+          requestedPath: packageRoot.path,
+          resolvedPath: packageRoot.path,
           resolution: "exact-root",
           appLaunched: false,
           broughtToFront: true
@@ -3442,7 +3444,7 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     return try runProcess(
       executable: binaryPath,
       arguments: args,
-      currentDirectory: repoRoot.path,
+      currentDirectory: packageRoot.path,
       environment: mergedEnvironment,
       stdinData: stdinData
     )
@@ -3461,7 +3463,7 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     return try runProcess(
       executable: "/bin/sh",
       arguments: ["-c", "trap - PIPE; exec \"$@\"", "sh", binaryPath] + args,
-      currentDirectory: repoRoot.path,
+      currentDirectory: packageRoot.path,
       environment: mergedEnvironment,
       stdinData: stdinData
     )
@@ -3469,9 +3471,9 @@ final class ProwlCLIIntegrationTests: XCTestCase {
 
   private func ensureProwlBinary() throws -> String {
     let candidates = [
-      repoRoot.appendingPathComponent(".build/debug/prowl").path,
-      repoRoot.appendingPathComponent(".build/arm64-apple-macosx/debug/prowl").path,
-      repoRoot.appendingPathComponent(".build/x86_64-apple-macosx/debug/prowl").path,
+      packageRoot.appendingPathComponent(".build/debug/prowl").path,
+      packageRoot.appendingPathComponent(".build/arm64-apple-macosx/debug/prowl").path,
+      packageRoot.appendingPathComponent(".build/x86_64-apple-macosx/debug/prowl").path,
     ]
 
     if let existing = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {

@@ -11,9 +11,9 @@ GHOSTTY_ARTIFACT_FLAVOR="${PROWL_GHOSTTY_ARTIFACT_FLAVOR:-prowl-v1}"
 CHECKSUMS_FILE="${PROWL_GHOSTTY_CHECKSUMS_FILE:-$SCRIPT_DIR/ghosttykit-checksums.txt}"
 VALIDATOR="${PROWL_GHOSTTY_ARTIFACT_VALIDATOR:-$SCRIPT_DIR/validate-ghosttykit-artifacts.py}"
 
-XCFRAMEWORK_PATH="$PROJECT_DIR/Frameworks/GhosttyKit.xcframework"
-GHOSTTY_RESOURCE_PATH="$PROJECT_DIR/Resources/ghostty"
-TERMINFO_RESOURCE_PATH="$PROJECT_DIR/Resources/terminfo"
+XCFRAMEWORK_PATH="$PROJECT_DIR/App/Frameworks/GhosttyKit.xcframework"
+GHOSTTY_RESOURCE_PATH="$PROJECT_DIR/App/Resources/ghostty"
+TERMINFO_RESOURCE_PATH="$PROJECT_DIR/App/Resources/terminfo"
 GHOSTTY_HASH_FILE="$PROJECT_DIR/.ghostty_hash"
 GHOSTTY_BUILD_STAMP="$PROJECT_DIR/.ghostty_build_stamp"
 
@@ -195,7 +195,7 @@ fi
 
 if try_fetch_prebuilt; then
   if [[ "$previous_sha" != "$GHOSTTY_SHA" ]]; then
-    rm -rf ~/Library/Developer/Xcode/DerivedData/supacode-*
+    rm -rf ~/Library/Developer/Xcode/DerivedData/Prowl-*
     echo "Cleared Xcode DerivedData for ghostty header/module changes"
   fi
   exit 0

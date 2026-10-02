@@ -1,2 +1,2 @@
 # Agent-screen fixtures preserve trailing blank terminal rows as detector input.
-supacodeTests/Fixtures/AgentScreenDetection/**/*.txt -whitespace
+App/Tests/Fixtures/AgentScreenDetection/**/*.txt -whitespace

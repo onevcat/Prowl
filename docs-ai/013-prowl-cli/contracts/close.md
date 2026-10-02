@@ -47,4 +47,4 @@ it was closed.
 
 `INVALID_ARGUMENT`, `TARGET_NOT_FOUND`, `TARGET_NOT_UNIQUE`, and `CLOSE_FAILED`
 use the common response envelope in
-[`schema-bundle.json`](../../../ProwlCLIContracts/Resources/cli-output-schema.json).
+[`schema-bundle.json`](../../../CLI/Sources/ProwlCLIContracts/Resources/cli-output-schema.json).

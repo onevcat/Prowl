@@ -2,6 +2,7 @@
 
 import PackageDescription
 
+// Code that the macOS app and the `prowl` CLI share: the CLI wire contract and the workflow model.
 let package = Package(
   name: "ProwlShared",
   platforms: [.macOS(.v13)],
@@ -18,8 +19,7 @@ let package = Package(
       dependencies: [
         .product(name: "Yams", package: "Yams"),
         .product(name: "JSONSchema", package: "swift-json-schema"),
-      ],
-      path: "."
+      ]
     )
   ]
 )

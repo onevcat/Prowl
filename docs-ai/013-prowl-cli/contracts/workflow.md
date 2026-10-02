@@ -332,7 +332,7 @@ contract; messages are not.
 ```
 
 `data.schema` is the Draft 2020-12 workflow definition schema
-(`ProwlCLIContracts/Resources/workflow-definition-schema.json`, `$id`
+(`CLI/Sources/ProwlCLIContracts/Resources/workflow-definition-schema.json`, `$id`
 `https://prowl.onev.cat/contracts/workflow/v1/workflow-definition.json`). In text mode the
 schema is printed alone, pretty-printed.
 
@@ -356,12 +356,12 @@ schema is printed alone, pretty-printed.
 
 ## Verification
 
-`ProwlCLITests/WorkflowDocumentParserTests`, `WorkflowValidatorTests`,
+`CLI/Tests/ProwlCLITests/WorkflowDocumentParserTests`, `WorkflowValidatorTests`,
 `WorkflowDiscoveryTests`, `WorkflowSchemaTests` (output contract for every action + definition
 schema pinned to `WorkflowJSONSchema.definitionSchemaJSON`), `WorkflowCommandParsingTests`,
 `WorkflowCommandExecutorTests`, and the `workflow` cases in `ProwlCLIIntegrationTests`
 (real `prowl` process for `validate`/`schema`, mock socket for `list` and `deliver`);
-`supacodeTests/WorkflowCommandHandlerTests` (worktree / source resolution, enabled set),
+`ProwlTests/WorkflowCommandHandlerTests` (worktree / source resolution, enabled set),
 `WorkflowRunAdmissionTests` (preflight), `WorkflowRuntimeCoordinatorTests` (`deliver`
 attribution, `status`, `cancel`), `WorkflowCLIRendezvousTests`, and `WorkflowRunsFeatureTests`
 (the reducer: ordered effects, the two-phase `deliver` answer, late launches, restart scan).

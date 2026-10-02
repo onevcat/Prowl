@@ -94,7 +94,7 @@ log "preflight checks..."
 for cmd in gh jq codesign xcrun create-dmg; do
   command -v "$cmd" >/dev/null 2>&1 || die "$cmd is required but not found"
 done
-[[ -x "$PROJECT_DIR/bins/generate_appcast" ]] || die "bins/generate_appcast not found"
+[[ -x "$PROJECT_DIR/scripts/bin/generate_appcast" ]] || die "scripts/bin/generate_appcast not found"
 
 SENTRY_ENABLED=1
 if [[ "${SKIP_SENTRY:-}" == "1" ]]; then
@@ -185,7 +185,7 @@ TAG="v$VERSION"
 ensure_release_not_published "$REPO" "$TAG"
 
 BUILD="$(date +%Y%m%d)"
-CURRENT_BUILD="$(/usr/bin/awk -F' = ' '/^CURRENT_PROJECT_VERSION = [0-9]+$/{print $2; exit}' "$PROJECT_DIR/Config/Xcode/Version.xcconfig")"
+CURRENT_BUILD="$(/usr/bin/awk -F' = ' '/^CURRENT_PROJECT_VERSION = [0-9]+$/{print $2; exit}' "$PROJECT_DIR/App/Config/Version.xcconfig")"
 if [[ "$CURRENT_BUILD" -ge "$BUILD" ]] 2>/dev/null; then
   BUILD="$((CURRENT_BUILD + 1))"
 fi
@@ -262,7 +262,7 @@ if [[ "$SENTRY_ENABLED" -eq 1 ]]; then
   sentry-cli releases new "$SENTRY_RELEASE_NAME" \
     || log "WARNING: failed to create Sentry release (continuing)"
 
-  DSYM_DIR="build/supacode.xcarchive/dSYMs"
+  DSYM_DIR="build/Prowl.xcarchive/dSYMs"
   if [[ -d "$DSYM_DIR" ]]; then
     log "uploading dSYM from $DSYM_DIR to Sentry..."
     sentry-cli debug-files upload --include-sources --wait "$DSYM_DIR" \
@@ -275,7 +275,7 @@ if [[ "$SENTRY_ENABLED" -eq 1 ]]; then
   # dSYM for it into the archive — the archive-dSYM upload above therefore never covers
   # Sparkle. Upload the dSYMs bundled inside the xcframework directly so each new Sparkle
   # version is symbolicated automatically, instead of relying on a one-off manual bulk upload.
-  SPARKLE_XCFRAMEWORK="$HOME/Library/Caches/supacode-spm-cache/SourcePackages/artifacts/sparkle/Sparkle/Sparkle.xcframework"
+  SPARKLE_XCFRAMEWORK="$HOME/Library/Caches/prowl-spm-cache/SourcePackages/artifacts/sparkle/Sparkle/Sparkle.xcframework"
   if [[ -d "$SPARKLE_XCFRAMEWORK" ]]; then
     log "uploading Sparkle xcframework dSYMs to Sentry..."
     sentry-cli debug-files upload --wait "$SPARKLE_XCFRAMEWORK" \
@@ -410,7 +410,7 @@ cp "$NOTES_FILE" "$STAGING/$ARCHIVE_BASE.md"
 # Fetch existing appcast from the latest GitHub release for version history
 curl -fsSL "https://github.com/$REPO/releases/latest/download/appcast.xml" -o "$STAGING/appcast.xml" 2>/dev/null || true
 
-"$PROJECT_DIR/bins/generate_appcast" \
+"$PROJECT_DIR/scripts/bin/generate_appcast" \
   --ed-key-file "$SPARKLE_KEY_FILE" \
   --download-url-prefix "https://github.com/$REPO/releases/download/$TAG/" \
   --embed-release-notes \
