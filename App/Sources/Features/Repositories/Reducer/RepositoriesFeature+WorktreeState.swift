@@ -315,10 +315,31 @@ extension RepositoriesFeature.State {
   mutating func forgetPullRequestRefreshHistory(of worktreeID: Worktree.ID) {
     pullRequestCheckedAtByWorktreeID.removeValue(forKey: worktreeID)
     pullRequestRefreshForcedWorktreeIDs.remove(worktreeID)
+    for repositoryID in Array(sentPullRequestRefreshMarks.keys) {
+      sentPullRequestRefreshMarks[repositoryID]?.remove(worktreeID)
+    }
+  }
+
+  /// Marks the refresh in flight for `repositoryID`, or for every repository, still carries go
+  /// back on the next refresh: GitHub did not answer for those branches.
+  mutating func restoreUnansweredPullRequestRefreshMarks(of repositoryID: Repository.ID? = nil) {
+    if let repositoryID {
+      if let unanswered = sentPullRequestRefreshMarks.removeValue(forKey: repositoryID) {
+        pullRequestRefreshForcedWorktreeIDs.formUnion(unanswered)
+      }
+      return
+    }
+    for unanswered in sentPullRequestRefreshMarks.values {
+      pullRequestRefreshForcedWorktreeIDs.formUnion(unanswered)
+    }
+    sentPullRequestRefreshMarks.removeAll()
   }
 
   mutating func forgetPullRequestRefreshHistory(keeping worktreeIDs: Set<Worktree.ID>) {
     pullRequestCheckedAtByWorktreeID = pullRequestCheckedAtByWorktreeID.filter { worktreeIDs.contains($0.key) }
     pullRequestRefreshForcedWorktreeIDs.formIntersection(worktreeIDs)
+    sentPullRequestRefreshMarks = sentPullRequestRefreshMarks.mapValues {
+      $0.intersection(worktreeIDs)
+    }
   }
 }

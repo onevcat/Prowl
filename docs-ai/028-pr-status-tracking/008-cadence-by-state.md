@@ -35,9 +35,11 @@ when some worktree has a recorded time.
 `pullRequestRefreshForcedWorktreeIDs` marks worktrees the next refresh must ask about
 whatever their cadence says: the worktree a pull request action just changed
 (`delayedPullRequestRefresh`), and every worktree of a repository whose remote
-configuration changed. A mark clears only when a refresh that asks about the worktree is
-sent, so an answer to an older request, such as one to the previous remote still in
-flight, cannot undo it. A worktree ID is its path, so removing a worktree forgets its
+configuration changed. Sending a refresh moves its marks into
+`sentPullRequestRefreshMarks`; a mark drops when GitHub answers for its branch, and any
+still there when the refresh completes, because it failed or never reached GitHub, is
+marked again. An answer to an older request, such as one to the previous remote still in
+flight, never carried the new marks and cannot clear them. A worktree ID is its path, so removing a worktree forgets its
 recorded time and mark; a worktree created again at that path starts as never answered.
 
 The HEAD watcher sees branch switches, not pushes or new commits, so a pull request
@@ -54,6 +56,7 @@ Tests: `App/Tests/PullRequestRefreshCadenceTests.swift` (the interval for each s
 the selected and never-answered cases), `BatchedPullRequestRefreshReducerTests.swift`
 (only due worktrees are asked; nothing due sends nothing; the selected worktree is always
 asked; only answered branches record a time; a marked worktree is asked despite a recent
-answer and then unmarked; a pull request action marks its worktree),
+answer; a mark survives a refresh that never reaches GitHub; an answered branch drops its
+mark and an unanswered one keeps it; a pull request action marks its worktree),
 `RepositoriesFeatureTests.swift` (a remote change marks every branch; loading forgets the
 history of removed worktrees).

@@ -135,7 +135,11 @@ extension RepositoriesFeature {
           return .none
         }
         state.inFlightPullRequestRefreshRepositoryIDs.insert(repositoryID)
-        state.pullRequestRefreshForcedWorktreeIDs.subtract(dueWorktreeIDs)
+        let sentMarks = state.pullRequestRefreshForcedWorktreeIDs.intersection(dueWorktreeIDs)
+        state.pullRequestRefreshForcedWorktreeIDs.subtract(sentMarks)
+        if !sentMarks.isEmpty {
+          state.sentPullRequestRefreshMarks[repositoryID, default: []].formUnion(sentMarks)
+        }
         return enqueueBatchedPullRequestRefresh(
           repositoryID: repositoryID,
           repositoryRootURL: repositoryRootURL,
@@ -200,6 +204,7 @@ extension RepositoriesFeature {
         }
         state.queuedPullRequestRefreshByRepositoryID.removeAll()
         state.inFlightPullRequestRefreshRepositoryIDs.removeAll()
+        state.restoreUnansweredPullRequestRefreshMarks()
         clearAllPullRequestRefreshTracking(state: &state)
         return .run { send in
           while !Task.isCancelled {
@@ -234,6 +239,7 @@ extension RepositoriesFeature {
       )
 
     case .repositoryPullRequestRefreshCompleted(let repositoryID):
+      state.restoreUnansweredPullRequestRefreshMarks(of: repositoryID)
       state.inFlightPullRequestRefreshRepositoryIDs.remove(repositoryID)
       clearPullRequestRefreshTracking(repositoryID: repositoryID, state: &state)
       guard state.githubIntegrationAvailability == .available,
@@ -724,6 +730,7 @@ extension RepositoriesFeature {
         state.pendingPullRequestRefreshByRepositoryID.removeAll()
         state.queuedPullRequestRefreshByRepositoryID.removeAll()
         state.inFlightPullRequestRefreshRepositoryIDs.removeAll()
+        state.restoreUnansweredPullRequestRefreshMarks()
         clearAllPullRequestRefreshTracking(state: &state)
         return .merge(
           .cancel(id: CancelID.githubIntegrationRecovery),
@@ -734,6 +741,7 @@ extension RepositoriesFeature {
       state.pendingPullRequestRefreshByRepositoryID.removeAll()
       state.queuedPullRequestRefreshByRepositoryID.removeAll()
       state.inFlightPullRequestRefreshRepositoryIDs.removeAll()
+      state.restoreUnansweredPullRequestRefreshMarks()
       clearAllPullRequestRefreshTracking(state: &state)
       let worktreeIDs = Array(state.worktreeInfoByID.keys)
       for worktreeID in worktreeIDs {
@@ -773,6 +781,7 @@ extension RepositoriesFeature {
             continue
           }
           state.pullRequestCheckedAtByWorktreeID[worktreeID] = checkedAt
+          state.sentPullRequestRefreshMarks[repositoryID]?.remove(worktreeID)
         }
       }
       guard let repository = state.repositories[id: repositoryID] else {

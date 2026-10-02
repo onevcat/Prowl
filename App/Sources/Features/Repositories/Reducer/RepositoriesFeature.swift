@@ -356,6 +356,9 @@ struct RepositoriesFeature {
     /// clears only when a refresh that asks about the worktree is sent, so an answer to an older
     /// request cannot undo it.
     var pullRequestRefreshForcedWorktreeIDs: Set<Worktree.ID> = []
+    /// Marks a sent refresh carries until GitHub answers for their branches. Whatever is left when
+    /// the refresh completes, because it failed or never reached GitHub, is marked again.
+    var sentPullRequestRefreshMarks: [Repository.ID: Set<Worktree.ID>] = [:]
     var pendingPullRequestRefreshByRepositoryID: [Repository.ID: PendingPullRequestRefresh] = [:]
     var inFlightPullRequestRefreshRepositoryIDs: Set<Repository.ID> = []
     var prRefreshBatchCountsByRepositoryID: [Repository.ID: Int] = [:]
