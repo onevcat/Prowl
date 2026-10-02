@@ -84,6 +84,22 @@ that repository, then switches the host back to the previously active account.
 This uses `gh`'s stored authentication state; Prowl still never reads or stores
 GitHub tokens.
 
+## Which pull requests a refresh asks about
+
+Background refreshes skip pull requests that are unlikely to have changed, so
+each query to the shared `gh` account stays small:
+
+- The selected worktree is always refreshed.
+- An open PR with checks still running, mergeability still being computed, or a
+  place in the merge queue is refreshed every time.
+- A settled open PR is refreshed every 3 minutes, a branch without a PR every 5
+  minutes, and a merged or closed PR every 30 minutes.
+- A new worktree is refreshed right away, and so is every worktree of a
+  repository whose remotes change.
+
+A PR opened outside Prowl therefore appears within 5 minutes, or at once when you
+select its worktree.
+
 ## Gotchas for agents
 
 - No `gh` / not authenticated → no PR features. If a human expects PR actions and

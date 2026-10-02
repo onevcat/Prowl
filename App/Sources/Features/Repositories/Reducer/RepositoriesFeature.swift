@@ -348,6 +348,9 @@ struct RepositoriesFeature {
     var statusToast: StatusToast?
     var snapshotPersistencePhase: SnapshotPersistencePhase = .idle
     var githubIntegrationAvailability: GithubIntegrationAvailability = .unknown
+    /// When GitHub last answered a pull request refresh for each worktree; a periodic refresh skips
+    /// a worktree whose pull request has settled until its cadence comes round.
+    var pullRequestCheckedAtByWorktreeID: [Worktree.ID: Date] = [:]
     var pendingPullRequestRefreshByRepositoryID: [Repository.ID: PendingPullRequestRefresh] = [:]
     var inFlightPullRequestRefreshRepositoryIDs: Set<Repository.ID> = []
     var prRefreshBatchCountsByRepositoryID: [Repository.ID: Int] = [:]

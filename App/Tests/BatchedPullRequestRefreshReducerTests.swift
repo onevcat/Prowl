@@ -62,6 +62,139 @@ struct BatchedPullRequestRefreshReducerTests {
     #expect(request.branches == ["main", "feature"])
   }
 
+  @Test func periodicRefreshAsksOnlyForDueWorktrees() async {
+    let context = makeContext()
+    let now = Date(timeIntervalSince1970: 1_000_000)
+    var initialState = context.state
+    var merged = WorktreeInfoEntry()
+    merged.pullRequest = makePullRequestFixture(state: "MERGED")
+    initialState.worktreeInfoByID[context.featureWorktree.id] = merged
+    // The merged pull request was answered a minute ago; the branch without one ten minutes ago.
+    initialState.pullRequestCheckedAtByWorktreeID = [
+      context.featureWorktree.id: now.addingTimeInterval(-60),
+      context.mainWorktree.id: now.addingTimeInterval(-600),
+    ]
+    let enqueued = LockIsolated<[PullRequestRefreshCoordinator.Request]>([])
+
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.date.now = now
+      $0.gitClient.githubRemoteInfos = { _ in [context.remoteInfo] }
+      $0.pullRequestRefreshCoordinator = PullRequestRefreshCoordinatorClient(
+        enqueue: { request in enqueued.withValue { $0.append(request) } },
+        cancelHost: { _ in },
+        reset: {}
+      )
+    }
+    store.exhaustivity = .off
+
+    await store.send(
+      .worktreeInfoEvent(
+        .repositoryPullRequestRefresh(repositoryRootURL: context.repoRootURL, worktreeIDs: context.worktreeIDs)
+      )
+    )
+    await store.finish()
+
+    #expect(enqueued.value.map(\.branches) == [["main"]])
+    #expect(enqueued.value.map(\.worktreeIDs) == [[context.mainWorktree.id]])
+  }
+
+  @Test func periodicRefreshWithNothingDueSendsNoQuery() async {
+    let context = makeContext()
+    let now = Date(timeIntervalSince1970: 1_000_000)
+    var initialState = context.state
+    initialState.pullRequestCheckedAtByWorktreeID = [
+      context.featureWorktree.id: now.addingTimeInterval(-60),
+      context.mainWorktree.id: now.addingTimeInterval(-60),
+    ]
+
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.date.now = now
+      $0.pullRequestRefreshCoordinator = PullRequestRefreshCoordinatorClient(
+        enqueue: { _ in Issue.record("Nothing is due, so nothing should be enqueued") },
+        cancelHost: { _ in },
+        reset: {}
+      )
+    }
+
+    await store.send(
+      .worktreeInfoEvent(
+        .repositoryPullRequestRefresh(repositoryRootURL: context.repoRootURL, worktreeIDs: context.worktreeIDs)
+      )
+    )
+    await store.receive(\.githubIntegration.repositoryPullRequestRefreshRequested)
+    await store.finish()
+  }
+
+  @Test func selectedWorktreeIsAskedForEvenWhenRecentlyAnswered() async {
+    let context = makeContext()
+    let now = Date(timeIntervalSince1970: 1_000_000)
+    var initialState = context.state
+    initialState.selection = .worktree(context.featureWorktree.id)
+    initialState.pullRequestCheckedAtByWorktreeID = [
+      context.featureWorktree.id: now.addingTimeInterval(-5),
+      context.mainWorktree.id: now.addingTimeInterval(-5),
+    ]
+    let enqueued = LockIsolated<[PullRequestRefreshCoordinator.Request]>([])
+
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.date.now = now
+      $0.gitClient.githubRemoteInfos = { _ in [context.remoteInfo] }
+      $0.pullRequestRefreshCoordinator = PullRequestRefreshCoordinatorClient(
+        enqueue: { request in enqueued.withValue { $0.append(request) } },
+        cancelHost: { _ in },
+        reset: {}
+      )
+    }
+    store.exhaustivity = .off
+
+    await store.send(
+      .worktreeInfoEvent(
+        .repositoryPullRequestRefresh(repositoryRootURL: context.repoRootURL, worktreeIDs: context.worktreeIDs)
+      )
+    )
+    await store.finish()
+
+    #expect(enqueued.value.map(\.branches) == [["feature"]])
+  }
+
+  @Test func answeredRefreshRecordsWhenEachBranchWasAnswered() async {
+    let context = makeContext()
+    let now = Date(timeIntervalSince1970: 1_000_000)
+    var initialState = context.state
+    initialState.inFlightPullRequestRefreshRepositoryIDs = [context.repository.id]
+
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.date.now = now
+      $0.pullRequestRefreshCoordinator = .unimplemented
+    }
+    store.exhaustivity = .off
+
+    // GitHub answered for "feature"; "main" stayed unknown after a partial failure.
+    await store.send(
+      .githubIntegration(
+        .pullRequestRefreshBatchOutcome(
+          .refreshed(
+            repositoryID: context.repository.id,
+            repositoryRootURL: context.repoRootURL,
+            worktreeIDs: context.worktreeIDs,
+            prsByBranch: ["feature": makePullRequestFixture()],
+            confirmedNoPrBranches: []
+          )
+        ))
+    ) {
+      $0.pullRequestCheckedAtByWorktreeID = [context.featureWorktree.id: now]
+    }
+    await store.finish()
+  }
+
   @Test func refreshWaitsForAllHostBatchesBeforeCompleting() async {
     let context = makeContext()
     let enqueued = LockIsolated<[PullRequestRefreshCoordinator.Request]>([])
@@ -71,6 +204,7 @@ struct BatchedPullRequestRefreshReducerTests {
     let store = TestStore(initialState: context.state) {
       RepositoriesFeature()
     } withDependencies: {
+      $0.date.now = refreshDate
       $0.gitClient.githubRemoteInfos = { _ in [context.remoteInfo, enterpriseInfo] }
       $0.pullRequestRefreshCoordinator = PullRequestRefreshCoordinatorClient(
         enqueue: { request in
@@ -114,6 +248,7 @@ struct BatchedPullRequestRefreshReducerTests {
           )
         ))
     ) {
+      $0.pullRequestCheckedAtByWorktreeID[context.featureWorktree.id] = refreshDate
       $0.prRefreshBatchCountsByRepositoryID[context.repository.id] = 1
       $0.prRefreshResultsByRepositoryID[context.repository.id] = ["feature": githubPullRequest]
       $0.prRefreshNoPrBranchesByID[context.repository.id] = []
@@ -166,6 +301,7 @@ struct BatchedPullRequestRefreshReducerTests {
     let store = TestStore(initialState: context.state) {
       RepositoriesFeature()
     } withDependencies: {
+      $0.date.now = refreshDate
       $0.gitClient.githubRemoteInfos = { _ in [context.remoteInfo, enterpriseInfo] }
       $0.pullRequestRefreshCoordinator = PullRequestRefreshCoordinatorClient(
         enqueue: { request in
@@ -209,6 +345,7 @@ struct BatchedPullRequestRefreshReducerTests {
           )
         ))
     ) {
+      $0.pullRequestCheckedAtByWorktreeID[context.featureWorktree.id] = refreshDate
       $0.prRefreshBatchCountsByRepositoryID[context.repository.id] = 1
       $0.prRefreshResultsByRepositoryID[context.repository.id] = ["feature": enterprisePullRequest]
       $0.prRefreshNoPrBranchesByID[context.repository.id] = []
@@ -339,6 +476,7 @@ struct BatchedPullRequestRefreshReducerTests {
     let store = TestStore(initialState: initialState) {
       RepositoriesFeature()
     } withDependencies: {
+      $0.date.now = refreshDate
       $0.pullRequestRefreshCoordinator = .unimplemented
     }
 
@@ -351,7 +489,9 @@ struct BatchedPullRequestRefreshReducerTests {
       confirmedNoPrBranches: []
     )
 
-    await store.send(.githubIntegration(.pullRequestRefreshBatchOutcome(outcome)))
+    await store.send(.githubIntegration(.pullRequestRefreshBatchOutcome(outcome))) {
+      $0.pullRequestCheckedAtByWorktreeID[context.featureWorktree.id] = refreshDate
+    }
     await store.receive(\.githubIntegration.repositoryPullRequestsLoaded) {
       var entry = WorktreeInfoEntry()
       entry.pullRequest = pullRequest
@@ -399,6 +539,7 @@ struct BatchedPullRequestRefreshReducerTests {
     let store = TestStore(initialState: initialState) {
       RepositoriesFeature()
     } withDependencies: {
+      $0.date.now = refreshDate
       $0.pullRequestRefreshCoordinator = .unimplemented
     }
 
@@ -410,7 +551,9 @@ struct BatchedPullRequestRefreshReducerTests {
       confirmedNoPrBranches: ["feature"]
     )
 
-    await store.send(.githubIntegration(.pullRequestRefreshBatchOutcome(outcome)))
+    await store.send(.githubIntegration(.pullRequestRefreshBatchOutcome(outcome))) {
+      $0.pullRequestCheckedAtByWorktreeID[context.featureWorktree.id] = refreshDate
+    }
     await store.receive(\.githubIntegration.repositoryPullRequestsLoaded) {
       $0.worktreeInfoByID.removeValue(forKey: context.featureWorktree.id)
     }
@@ -466,6 +609,7 @@ struct BatchedPullRequestRefreshReducerTests {
     let store = TestStore(initialState: initialState) {
       RepositoriesFeature()
     } withDependencies: {
+      $0.date.now = refreshDate
       $0.pullRequestRefreshCoordinator = .unimplemented
     }
 
@@ -495,6 +639,7 @@ struct BatchedPullRequestRefreshReducerTests {
           )
         ))
     ) {
+      $0.pullRequestCheckedAtByWorktreeID[context.featureWorktree.id] = refreshDate
       $0.prRefreshBatchCountsByRepositoryID = [:]
       $0.prRefreshFailedBatchRepositoryIDs = []
     }
@@ -520,6 +665,7 @@ struct BatchedPullRequestRefreshReducerTests {
     let store = TestStore(initialState: initialState) {
       RepositoriesFeature()
     } withDependencies: {
+      $0.date.now = refreshDate
       $0.pullRequestRefreshCoordinator = .unimplemented
     }
 
@@ -535,6 +681,7 @@ struct BatchedPullRequestRefreshReducerTests {
           )
         ))
     ) {
+      $0.pullRequestCheckedAtByWorktreeID[context.featureWorktree.id] = refreshDate
       $0.prRefreshBatchCountsByRepositoryID[context.repository.id] = 1
       $0.prRefreshResultsByRepositoryID[context.repository.id] = [:]
       $0.prRefreshNoPrBranchesByID[context.repository.id] = ["feature"]
@@ -574,6 +721,7 @@ struct BatchedPullRequestRefreshReducerTests {
     let store = TestStore(initialState: initialState) {
       RepositoriesFeature()
     } withDependencies: {
+      $0.date.now = refreshDate
       $0.pullRequestRefreshCoordinator = .unimplemented
     }
 
@@ -589,6 +737,7 @@ struct BatchedPullRequestRefreshReducerTests {
           )
         ))
     ) {
+      $0.pullRequestCheckedAtByWorktreeID[context.featureWorktree.id] = refreshDate
       $0.prRefreshBatchCountsByRepositoryID[context.repository.id] = 1
       $0.prRefreshResultsByRepositoryID[context.repository.id] = [:]
       $0.prRefreshNoPrBranchesByID[context.repository.id] = ["feature"]
@@ -696,6 +845,8 @@ private func makeContext() -> RefreshTestContext {
   )
 }
 
+nonisolated private let refreshDate = Date(timeIntervalSince1970: 1_700_000_000)
+
 @MainActor
 private struct RefreshTestContext {
   let repoRoot: String
@@ -711,12 +862,13 @@ private struct RefreshTestContext {
 
 nonisolated private func makePullRequestFixture(
   title: String = "Coord PR",
-  url: String = "https://example.com/coord-pr/7"
+  url: String = "https://example.com/coord-pr/7",
+  state: String = "OPEN"
 ) -> GithubPullRequest {
   GithubPullRequest(
     number: 7,
     title: title,
-    state: "OPEN",
+    state: state,
     additions: 0,
     deletions: 0,
     isDraft: false,

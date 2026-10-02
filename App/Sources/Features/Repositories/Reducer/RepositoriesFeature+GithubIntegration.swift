@@ -92,12 +92,26 @@ extension RepositoriesFeature {
       guard repositorySettings.fetchesPullRequestState else {
         return .none
       }
-      let worktrees = worktreeIDs.compactMap { state.worktree(for: $0) }
+      let selectedWorktreeID = state.selectedWorktreeID
+      let checkedAt = state.pullRequestCheckedAtByWorktreeID
+      let currentDate = worktreeIDs.contains { checkedAt[$0] != nil } ? now : nil
+      let worktrees = worktreeIDs.compactMap { state.worktree(for: $0) }.filter { worktree in
+        guard let currentDate else {
+          return true
+        }
+        return PullRequestRefreshCadence.isDue(
+          pullRequest: state.worktreeInfo(for: worktree.id)?.pullRequest,
+          lastCheckedAt: checkedAt[worktree.id],
+          now: currentDate,
+          isSelected: worktree.id == selectedWorktreeID
+        )
+      }
       guard let firstWorktree = worktrees.first,
         let repositoryID = state.repositoryID(containing: firstWorktree.id)
       else {
         return .none
       }
+      let dueWorktreeIDs = worktrees.map(\.id)
       var seen = Set<String>()
       let branches =
         worktrees
@@ -112,7 +126,7 @@ extension RepositoriesFeature {
           queuePullRequestRefresh(
             repositoryID: repositoryID,
             repositoryRootURL: repositoryRootURL,
-            worktreeIDs: worktreeIDs,
+            worktreeIDs: dueWorktreeIDs,
             refreshesByRepositoryID: &state.queuedPullRequestRefreshByRepositoryID
           )
           return .none
@@ -128,7 +142,7 @@ extension RepositoriesFeature {
         queuePullRequestRefresh(
           repositoryID: repositoryID,
           repositoryRootURL: repositoryRootURL,
-          worktreeIDs: worktreeIDs,
+          worktreeIDs: dueWorktreeIDs,
           refreshesByRepositoryID: &state.pendingPullRequestRefreshByRepositoryID
         )
         return .send(.githubIntegration(.refreshGithubIntegrationAvailability))
@@ -136,7 +150,7 @@ extension RepositoriesFeature {
         queuePullRequestRefresh(
           repositoryID: repositoryID,
           repositoryRootURL: repositoryRootURL,
-          worktreeIDs: worktreeIDs,
+          worktreeIDs: dueWorktreeIDs,
           refreshesByRepositoryID: &state.pendingPullRequestRefreshByRepositoryID
         )
         return .none
@@ -144,7 +158,7 @@ extension RepositoriesFeature {
         queuePullRequestRefresh(
           repositoryID: repositoryID,
           repositoryRootURL: repositoryRootURL,
-          worktreeIDs: worktreeIDs,
+          worktreeIDs: dueWorktreeIDs,
           refreshesByRepositoryID: &state.pendingPullRequestRefreshByRepositoryID
         )
         return .none
@@ -745,6 +759,18 @@ extension RepositoriesFeature {
   ) -> Effect<Action> {
     switch outcome {
     case .refreshed(let repositoryID, _, let worktreeIDs, let prsByBranch, let confirmedNoPrBranches):
+      // Only a branch GitHub answered for, with a pull request or a confirmed absence of one, has
+      // known state; a branch left unknown by a partial failure stays due.
+      let answeredBranches = Set(prsByBranch.keys).union(confirmedNoPrBranches)
+      if !answeredBranches.isEmpty {
+        let checkedAt = now
+        for worktreeID in worktreeIDs {
+          guard let name = state.worktree(for: worktreeID)?.name, answeredBranches.contains(name) else {
+            continue
+          }
+          state.pullRequestCheckedAtByWorktreeID[worktreeID] = checkedAt
+        }
+      }
       guard let repository = state.repositories[id: repositoryID] else {
         state.inFlightPullRequestRefreshRepositoryIDs.remove(repositoryID)
         clearPullRequestRefreshTracking(repositoryID: repositoryID, state: &state)

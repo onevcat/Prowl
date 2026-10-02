@@ -502,6 +502,39 @@ struct RepositoriesFeatureTests {
     }
   }
 
+  @Test func repositoryRemoteConfigurationChangedForgetsWhenBranchesWereAnswered() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(id: "\(repoRoot)/feature", name: "feature", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.githubIntegrationAvailability = .unavailable
+    initialState.codeHostByRepositoryID[repository.id] = .github
+    let answeredAt = Date(timeIntervalSince1970: 1_000_000)
+    initialState.pullRequestCheckedAtByWorktreeID = [mainWorktree.id: answeredAt, featureWorktree.id: answeredAt]
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.repositoryWebURL = { _ in nil }
+    }
+    store.exhaustivity = .off
+
+    // A changed remote can point every branch at other pull requests, so all of them are due.
+    await store.send(
+      .worktreeInfoEvent(
+        .repositoryRemoteConfigurationChanged(repositoryRootURL: repository.rootURL)
+      )
+    ) {
+      $0.pullRequestCheckedAtByWorktreeID = [:]
+    }
+    await store.receive(\.githubIntegration.repositoryPullRequestRefreshRequested) {
+      $0.pendingPullRequestRefreshByRepositoryID[repository.id] = RepositoriesFeature.PendingPullRequestRefresh(
+        repositoryRootURL: repository.rootURL,
+        worktreeIDs: [mainWorktree.id, featureWorktree.id]
+      )
+    }
+  }
+
   @Test func repositoriesLoadedEmitsChangedDelegateWhenTransitioningFromRestoring() async {
     let worktree = makeWorktree(id: "/tmp/repo/main", name: "main")
     let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
