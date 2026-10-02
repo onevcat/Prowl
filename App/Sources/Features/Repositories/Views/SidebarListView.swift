@@ -818,7 +818,7 @@ extension SidebarItem {
         ),
       ]
       let repo1 = Repository(
-        id: repo1Root.path, rootURL: repo1Root, name: "Prowl", worktrees: repo1Worktrees
+        id: repo1Root.path, rootURL: repo1Root, name: "prowl", worktrees: repo1Worktrees
       )
 
       let repo2Root = URL(fileURLWithPath: "/tmp/ghostty")
