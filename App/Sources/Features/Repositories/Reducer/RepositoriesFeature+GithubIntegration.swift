@@ -771,19 +771,6 @@ extension RepositoriesFeature {
   ) -> Effect<Action> {
     switch outcome {
     case .refreshed(let repositoryID, _, let worktreeIDs, let prsByBranch, let confirmedNoPrBranches):
-      // Only a branch GitHub answered for, with a pull request or a confirmed absence of one, has
-      // known state; a branch left unknown by a partial failure stays due.
-      let answeredBranches = Set(prsByBranch.keys).union(confirmedNoPrBranches)
-      if !answeredBranches.isEmpty {
-        let checkedAt = now
-        for worktreeID in worktreeIDs {
-          guard let name = state.worktree(for: worktreeID)?.name, answeredBranches.contains(name) else {
-            continue
-          }
-          state.pullRequestCheckedAtByWorktreeID[worktreeID] = checkedAt
-          state.sentPullRequestRefreshMarks[repositoryID]?.remove(worktreeID)
-        }
-      }
       guard let repository = state.repositories[id: repositoryID] else {
         state.inFlightPullRequestRefreshRepositoryIDs.remove(repositoryID)
         clearPullRequestRefreshTracking(repositoryID: repositoryID, state: &state)
@@ -811,6 +798,17 @@ extension RepositoriesFeature {
       // it arrived before this final refreshed outcome — suppress confirmed clears.
       let confirmedNoPrBranches = hadFailedBatch ? [] : accumulatedConfirmedNoPrBranches
       state.prRefreshResultPrioritiesByRepositoryID.removeValue(forKey: repositoryID)
+      // A branch's status is settled only when every host batch came back and none failed: a found
+      // pull request or a confirmed absence then records when GitHub answered and drops its mark.
+      // Otherwise the branch stays due, and a sent mark goes back on completion.
+      if !hadFailedBatch {
+        recordAnsweredPullRequestRefresh(
+          repositoryID: repositoryID,
+          worktreeIDs: worktreeIDs,
+          answeredBranches: Set(mergedPRsByBranch.keys).union(confirmedNoPrBranches),
+          state: &state
+        )
+      }
       let prsByWorktreeID = pullRequestsByWorktreeID(
         repository: repository,
         worktreeIDs: worktreeIDs,
@@ -924,6 +922,25 @@ extension RepositoriesFeature {
     state.prRefreshFailedBatchRepositoryIDs.removeAll()
     state.prRefreshRemotePrioritiesByRepositoryID.removeAll()
     state.prRefreshResultPrioritiesByRepositoryID.removeAll()
+  }
+
+  private func recordAnsweredPullRequestRefresh(
+    repositoryID: Repository.ID,
+    worktreeIDs: [Worktree.ID],
+    answeredBranches: Set<String>,
+    state: inout State
+  ) {
+    guard !answeredBranches.isEmpty else {
+      return
+    }
+    let checkedAt = now
+    for worktreeID in worktreeIDs {
+      guard let name = state.worktree(for: worktreeID)?.name, answeredBranches.contains(name) else {
+        continue
+      }
+      state.pullRequestCheckedAtByWorktreeID[worktreeID] = checkedAt
+      state.sentPullRequestRefreshMarks[repositoryID]?.remove(worktreeID)
+    }
   }
 
   private func consumePullRequestRefreshBatch(

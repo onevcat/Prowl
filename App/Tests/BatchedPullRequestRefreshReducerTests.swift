@@ -275,6 +275,47 @@ struct BatchedPullRequestRefreshReducerTests {
     #expect(store.state.sentPullRequestRefreshMarks.isEmpty)
   }
 
+  @Test func markSurvivesWhenOneHostConfirmsAndAnotherFails() async {
+    let context = makeContext()
+    var initialState = context.state
+    initialState.inFlightPullRequestRefreshRepositoryIDs = [context.repository.id]
+    initialState.prRefreshBatchCountsByRepositoryID[context.repository.id] = 2
+    initialState.sentPullRequestRefreshMarks = [context.repository.id: [context.featureWorktree.id]]
+
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.date.now = refreshDate
+      $0.pullRequestRefreshCoordinator = .unimplemented
+    }
+    store.exhaustivity = .off
+
+    await store.send(
+      .githubIntegration(
+        .pullRequestRefreshBatchOutcome(
+          .refreshed(
+            repositoryID: context.repository.id,
+            repositoryRootURL: context.repoRootURL,
+            worktreeIDs: context.worktreeIDs,
+            prsByBranch: [:],
+            confirmedNoPrBranches: ["feature"]
+          )
+        ))
+    )
+    await store.send(
+      .githubIntegration(
+        .pullRequestRefreshBatchOutcome(
+          .failed(repositoryID: context.repository.id, worktreeIDs: context.worktreeIDs, message: "host down")
+        ))
+    )
+    await store.receive(\.githubIntegration.repositoryPullRequestRefreshCompleted)
+    await store.finish()
+
+    // The failed host leaves the branch's status unknown: no answer is recorded and the mark is back.
+    #expect(store.state.pullRequestCheckedAtByWorktreeID.isEmpty)
+    #expect(store.state.pullRequestRefreshForcedWorktreeIDs == [context.featureWorktree.id])
+  }
+
   @Test func pullRequestActionMarksItsWorktreeForTheNextRefresh() async {
     let context = makeContext()
     let store = TestStore(initialState: context.state) {
@@ -374,7 +415,6 @@ struct BatchedPullRequestRefreshReducerTests {
           )
         ))
     ) {
-      $0.pullRequestCheckedAtByWorktreeID[context.featureWorktree.id] = refreshDate
       $0.prRefreshBatchCountsByRepositoryID[context.repository.id] = 1
       $0.prRefreshResultsByRepositoryID[context.repository.id] = ["feature": githubPullRequest]
       $0.prRefreshNoPrBranchesByID[context.repository.id] = []
@@ -393,6 +433,7 @@ struct BatchedPullRequestRefreshReducerTests {
           )
         ))
     ) {
+      $0.pullRequestCheckedAtByWorktreeID[context.featureWorktree.id] = refreshDate
       $0.prRefreshBatchCountsByRepositoryID = [:]
       $0.prRefreshResultsByRepositoryID = [:]
       $0.prRefreshNoPrBranchesByID = [:]
@@ -471,7 +512,6 @@ struct BatchedPullRequestRefreshReducerTests {
           )
         ))
     ) {
-      $0.pullRequestCheckedAtByWorktreeID[context.featureWorktree.id] = refreshDate
       $0.prRefreshBatchCountsByRepositoryID[context.repository.id] = 1
       $0.prRefreshResultsByRepositoryID[context.repository.id] = ["feature": enterprisePullRequest]
       $0.prRefreshNoPrBranchesByID[context.repository.id] = []
@@ -490,6 +530,7 @@ struct BatchedPullRequestRefreshReducerTests {
           )
         ))
     ) {
+      $0.pullRequestCheckedAtByWorktreeID[context.featureWorktree.id] = refreshDate
       $0.prRefreshBatchCountsByRepositoryID = [:]
       $0.prRefreshResultsByRepositoryID = [:]
       $0.prRefreshNoPrBranchesByID = [:]
@@ -765,7 +806,6 @@ struct BatchedPullRequestRefreshReducerTests {
           )
         ))
     ) {
-      $0.pullRequestCheckedAtByWorktreeID[context.featureWorktree.id] = refreshDate
       $0.prRefreshBatchCountsByRepositoryID = [:]
       $0.prRefreshFailedBatchRepositoryIDs = []
     }
@@ -807,7 +847,6 @@ struct BatchedPullRequestRefreshReducerTests {
           )
         ))
     ) {
-      $0.pullRequestCheckedAtByWorktreeID[context.featureWorktree.id] = refreshDate
       $0.prRefreshBatchCountsByRepositoryID[context.repository.id] = 1
       $0.prRefreshResultsByRepositoryID[context.repository.id] = [:]
       $0.prRefreshNoPrBranchesByID[context.repository.id] = ["feature"]
@@ -863,7 +902,6 @@ struct BatchedPullRequestRefreshReducerTests {
           )
         ))
     ) {
-      $0.pullRequestCheckedAtByWorktreeID[context.featureWorktree.id] = refreshDate
       $0.prRefreshBatchCountsByRepositoryID[context.repository.id] = 1
       $0.prRefreshResultsByRepositoryID[context.repository.id] = [:]
       $0.prRefreshNoPrBranchesByID[context.repository.id] = ["feature"]
@@ -882,6 +920,7 @@ struct BatchedPullRequestRefreshReducerTests {
           )
         ))
     ) {
+      $0.pullRequestCheckedAtByWorktreeID[context.featureWorktree.id] = refreshDate
       $0.prRefreshBatchCountsByRepositoryID = [:]
       $0.prRefreshResultsByRepositoryID = [:]
       $0.prRefreshNoPrBranchesByID = [:]

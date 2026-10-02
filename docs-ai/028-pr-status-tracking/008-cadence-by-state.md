@@ -26,9 +26,9 @@ asks GitHub about it:
 | Merged or closed | every 1,800 s |
 
 `RepositoriesFeature.State.pullRequestCheckedAtByWorktreeID` records when GitHub last
-answered for each worktree. A `.refreshed` outcome records the time only for worktrees
-whose branch is in `prsByBranch` or `confirmedNoPrBranches`, so a branch left unknown by a
-partial failure stays due. `repositoryPullRequestRefreshRequested` filters the requested
+answered for each worktree. The time is recorded when the last host batch of a refresh
+comes back and none failed, and only for worktrees whose branch has a pull request or a
+confirmed absence of one, so a branch left unknown by a partial failure stays due. `repositoryPullRequestRefreshRequested` filters the requested
 worktrees through `isDue` and sends no query when none is due; it reads the date only
 when some worktree has a recorded time.
 
@@ -56,7 +56,8 @@ Tests: `App/Tests/PullRequestRefreshCadenceTests.swift` (the interval for each s
 the selected and never-answered cases), `BatchedPullRequestRefreshReducerTests.swift`
 (only due worktrees are asked; nothing due sends nothing; the selected worktree is always
 asked; only answered branches record a time; a marked worktree is asked despite a recent
-answer; a mark survives a refresh that never reaches GitHub; an answered branch drops its
+answer; a mark survives a refresh that never reaches GitHub, and one where a host fails after
+another confirmed no pull request; an answered branch drops its
 mark and an unanswered one keeps it; a pull request action marks its worktree),
 `RepositoriesFeatureTests.swift` (a remote change marks every branch; loading forgets the
 history of removed worktrees).
