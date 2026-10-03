@@ -13,7 +13,7 @@ struct MirrorComposerTests {
     view.selectedRange = NSRange(location: 8, length: 0)
     var sends = 0
     view.onSubmit = { sends += 1 }
-    let press = ReturnPress()
+    let press = ReturnPress(key: ReturnKey())
     let event = KeyEvent()
     view.pressesBegan([press], with: event)
     #expect(view.text == "message\n\n")
@@ -57,8 +57,15 @@ struct MirrorComposerTests {
     override var characters: String { "\r" }
     override var charactersIgnoringModifiers: String { "\r" }
   }
+  /// `UIPress` is not isolated to the main actor, but `UIKey` is. The test makes the key on the
+  /// main actor, and `key` only returns it.
   private final class ReturnPress: UIPress {
-    override var key: UIKey? { ReturnKey() }
+    private let returnKey: UIKey
+    init(key: UIKey) {
+      returnKey = key
+      super.init()
+    }
+    override var key: UIKey? { returnKey }
   }
   private final class KeyEvent: UIPressesEvent {
     var time: TimeInterval = 0

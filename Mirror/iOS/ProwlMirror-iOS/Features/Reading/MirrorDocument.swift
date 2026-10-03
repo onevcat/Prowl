@@ -19,7 +19,33 @@ nonisolated struct MirrorDocument {
     }
   }
 
+  /// One item of the reading layout and a scroll anchor: a code or table block, a text block
+  /// that fits in one layout chunk, or one chunk of a longer text block.
+  struct Row: Identifiable {
+    struct ID: Hashable, Comparable {
+      let block: Int
+      let chunk: Int
+
+      static func < (lhs: ID, rhs: ID) -> Bool { (lhs.block, lhs.chunk) < (rhs.block, rhs.chunk) }
+    }
+
+    let id: ID
+    let block: Block
+    /// The chunk to show, or nil to show the whole block.
+    let chunk: MirrorTextLayout.Chunk?
+  }
+
   let blocks: [Block]
+
+  var rows: [Row] {
+    blocks.flatMap { block -> [Row] in
+      let whole = [Row(id: .init(block: block.id, chunk: 0), block: block, chunk: nil)]
+      guard case .text(_, let content) = block else { return whole }
+      let chunks = MirrorTextLayout.chunks(content)
+      guard chunks.count > 1 else { return whole }
+      return chunks.map { Row(id: .init(block: block.id, chunk: $0.id), block: block, chunk: $0) }
+    }
+  }
 
   init(_ text: String) {
     let lines = text.components(separatedBy: "\n")

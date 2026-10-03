@@ -36,7 +36,9 @@ App state is cached at a fixed CI DerivedData path. Its restore prefix includes 
 Xcode build, Ghostty revision, project/package/build configuration and tracked input paths.
 Added/deleted source or resource paths therefore start fresh instead of retaining stale
 products. CLI-owned Shared timestamps are excluded from App timestamp restoration. Content
-changes retain normal compiler/resource invalidation; the existing CAS remains available.
+changes retain normal compiler/resource invalidation. (Correction, 2026-10-04: the separate
+CAS cache step did not remain available. With the fixed DerivedData path the CAS moved into it,
+so that step cached a path that never existed; see [008](008-cas-fallback-and-cache-scope.md).)
 
 ## Verification
 

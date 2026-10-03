@@ -1,0 +1,61 @@
+name: mirror-ios
+
+# The iOS mirror client needs only a minimal check, so CI runs its unit tests only when the
+# client changes and for release tags (GitHub does not apply path filters to tags). The UI
+# suite runs locally with `make test-mirror-ios`.
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+    paths:
+      - Mirror/iOS/**
+      - Mirror/Shared/**
+      - scripts/select_ios_simulator.py
+      - .github/workflows/mirror-ios.yml
+  pull_request:
+    paths:
+      - Mirror/iOS/**
+      - Mirror/Shared/**
+      - scripts/select_ios_simulator.py
+      - .github/workflows/mirror-ios.yml
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The project needs no submodule, GhosttyKit, CLI, or Swift package, so this job does not use
+  # setup-macos. It also must not save the setup-macos caches, or it would take the cache keys
+  # of the Mac app job.
+  mirror-ios:
+    runs-on: macos-26
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      MISE_HTTP_TIMEOUT: 120
+      MISE_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Install only the tools that the iOS mirror targets use.
+      MISE_EXEC_AUTO_INSTALL: false
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Tuist and xcsift
+        run: |
+          brew install mise
+          mise install tuist github:ldomaradzki/xcsift
+      - name: Test iOS mirror
+        run: make test-mirror-ios-unit
+      - name: Upload xcresult bundle and log (on failure)
+        # A job that reaches its timeout is cancelled, and its partial results are still useful.
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mirror-ios-xcresult-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            build/test-results/mirror-ios-unit.xcresult
+            build/test-results/mirror-ios-unit.xcresult.log
+          if-no-files-found: ignore
+          retention-days: 7

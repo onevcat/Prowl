@@ -92,7 +92,7 @@ struct MirrorSessionTests {
       .textFrame(.init(sequence: 2, text: "new live", subscriptionID: lease)))
     #expect(session.historyLines == ["first", "last"])
     #expect(session.text == "new live")
-    session.liveReadingOffset = 300
+    session.liveReadingAnchor = .init(row: .init(block: 0, chunk: 0), offset: 300)
     session.historyReadingOffset = 200
     session.updateConnection(
       .init(
@@ -100,7 +100,7 @@ struct MirrorSessionTests {
         pairingKey: String(repeating: "a", count: 64)))
     #expect(session.historyLines.isEmpty)
     #expect(!session.showsHistory)
-    #expect(session.liveReadingOffset == 0)
+    #expect(session.liveReadingAnchor == nil)
     #expect(session.historyReadingOffset == 0)
   }
 

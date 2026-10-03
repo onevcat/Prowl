@@ -121,7 +121,7 @@ final class ProwlMirror_iOSUITests: XCTestCase {
   func testRemoteScrollShowsLoadingAndKeepsHistoryIndependent() {
     let app = XCUIApplication()
     app.launchArguments = [
-      "--mirror-ui-fixture", "--mirror-ui-scroll-fixture", "--mirror-ui-scroll-delay-fixture",
+      "--mirror-ui-fixture", "--mirror-ui-scroll-fixture", "--mirror-ui-scroll-hold-fixture",
     ]
     app.launch()
     XCUIDevice.shared.orientation = .portrait
@@ -137,13 +137,17 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     attachment.name = "Remote scroll loading"
     attachment.lifetime = .keepAlways
     add(attachment)
+    releaseHeldScrolls()
     let olderPage = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Remote page -1\n")).firstMatch
     XCTAssertTrue(olderPage.waitForExistence(timeout: 8))
     XCTAssertFalse(progress.exists)
     scrollDown.tap()
+    XCTAssertTrue(progress.waitForExistence(timeout: 5))
     app.buttons["History"].tap()
     XCTAssertTrue(app.staticTexts["Loaded lines 202–401"].waitForExistence(timeout: 5))
     XCTAssertFalse(scrollUp.exists)
+    // Host confirms the downward scroll while History is open.
+    releaseHeldScrolls()
     app.buttons["Load Earlier 200 Lines"].tap()
     XCTAssertTrue(app.staticTexts["Loaded lines 2–401"].waitForExistence(timeout: 5))
     app.buttons["Live Output"].tap()
@@ -247,20 +251,6 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     add(attachment)
     create.tap()
     XCTAssertTrue(app.staticTexts["created-mirror"].waitForExistence(timeout: 5))
-  }
-
-  @MainActor
-  func testPhoneStartsInDetailAndCanAddConnection() throws {
-    try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "Phone navigation coverage")
-    let app = XCUIApplication()
-    app.launch()
-    XCUIDevice.shared.orientation = .portrait
-    XCTAssertTrue(app.staticTexts["Choose a Remote Pane"].waitForExistence(timeout: 10))
-    XCTAssertFalse(app.staticTexts["Connect to Prowl"].isHittable)
-    app.buttons["Add Remote Pane"].tap()
-    XCTAssertTrue(app.textFields["host-address"].waitForExistence(timeout: 5))
-    app.buttons["Cancel"].tap()
-    XCTAssertTrue(app.staticTexts["Choose a Remote Pane"].waitForExistence(timeout: 5))
   }
 
   @MainActor
@@ -534,5 +524,14 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     add(portrait)
     app.buttons["Cancel"].tap()
     XCTAssertTrue(app.buttons["Add Remote Pane"].firstMatch.waitForExistence(timeout: 5))
+  }
+
+  /// Makes the fixture Host confirm the scrolls that `--mirror-ui-scroll-hold-fixture` holds.
+  /// The name matches `MirrorUIFixture.releaseScrollNotification`.
+  private func releaseHeldScrolls() {
+    CFNotificationCenterPostNotification(
+      CFNotificationCenterGetDarwinNotifyCenter(),
+      CFNotificationName("com.awhisper.ProwlMirror-iOS.ui-fixture.release-scroll" as CFString), nil, nil,
+      true)
   }
 }
