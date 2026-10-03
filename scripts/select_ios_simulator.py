@@ -5,6 +5,9 @@ Simulator model names change with each Xcode release, so the caller gives a regu
 expression for the full name (for example `iPhone [0-9]+ Pro`). The newest matching
 model on the newest runtime that the selected Xcode supports is used.
 """
+# macOS includes Python 3.9, which cannot evaluate `X | None` annotations at run time.
+from __future__ import annotations
+
 import json
 import re
 import subprocess

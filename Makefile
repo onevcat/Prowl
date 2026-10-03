@@ -426,6 +426,8 @@ ensure-mirror-ios-project:
 
 # Run iOS mirror tests on one simulator form factor.
 # $(1): result bundle name, $(2): simulator name pattern, $(3): test selection arguments
+# The UI tests take minutes and xcsift reports only at the end, so a heartbeat on stderr shows
+# progress, and the raw log stays next to the result bundle.
 define run_mirror_ios_tests
 @set -euo pipefail; \
 result_bundle="$(CURRENT_MAKEFILE_DIR)/build/test-results/$(1).xcresult"; \
@@ -434,7 +436,10 @@ destination="$$(python3 "$(CURRENT_MAKEFILE_DIR)/scripts/select_ios_simulator.py
 rm -rf "$$result_bundle"; \
 xcodebuild test -project "$(IOS_MIRROR_PROJECT)" -scheme "$(IOS_MIRROR_SCHEME)" \
 	-destination "$$destination" -resultBundlePath "$$result_bundle" -parallel-testing-enabled NO \
-	$(3) 2>&1 | mise exec -- xcsift -w --format toon
+	$(3) 2>&1 | tee "$$result_bundle.log" \
+	| tee >(PROWL_TEST_PROGRESS_LABEL=$(1) PROWL_TEST_PROGRESS_INTERVAL=5 \
+		awk -f "$(CURRENT_MAKEFILE_DIR)/scripts/test-progress.awk" >&2) \
+	| mise exec -- xcsift -w --format toon
 endef
 
 test-mirror-ios: test-mirror-ios-ipad test-mirror-ios-iphone # Run iOS mirror unit/UI tests on their matching simulator form factors

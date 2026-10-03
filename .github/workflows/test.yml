@@ -148,12 +148,15 @@ jobs:
           mise install tuist github:ldomaradzki/xcsift
       - name: Test iOS mirror
         run: make test-mirror-ios-${{ matrix.form-factor }}
-      - name: Upload xcresult bundle (on failure)
-        if: failure()
+      - name: Upload xcresult bundle and log (on failure)
+        # A job that reaches its timeout is cancelled, and its partial results are still useful.
+        if: failure() || cancelled()
         uses: actions/upload-artifact@v4
         with:
           name: ios-mirror-${{ matrix.form-factor }}-xcresult-${{ github.run_id }}-${{ github.run_attempt }}
-          path: build/test-results/mirror-ios-${{ matrix.form-factor }}.xcresult
+          path: |
+            build/test-results/mirror-ios-${{ matrix.form-factor }}.xcresult
+            build/test-results/mirror-ios-${{ matrix.form-factor }}.xcresult.log
           if-no-files-found: ignore
           retention-days: 7
 
