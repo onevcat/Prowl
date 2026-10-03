@@ -24,6 +24,20 @@ SPM_CACHE_DIR := $(HOME)/Library/Caches/prowl-spm-cache/SourcePackages
 XCODE_WORKSPACE := $(CURRENT_MAKEFILE_DIR)/Prowl.xcworkspace
 APP_SCHEME := Prowl
 TEST_TARGET := ProwlTests
+IOS_MIRROR_PROJECT := $(CURRENT_MAKEFILE_DIR)/Mirror/iOS/ProwlMirror-iOS.xcodeproj
+IOS_MIRROR_SCHEME := ProwlMirror-iOS
+# Regular expressions for the full simulator name. Each Xcode release renames the models,
+# so scripts/select_ios_simulator.py uses the newest match on the newest supported runtime.
+IOS_MIRROR_IPAD_SIMULATOR_PATTERN ?= iPad Pro 11-inch \(M[0-9]+\)
+IOS_MIRROR_IPHONE_SIMULATOR_PATTERN ?= iPhone [0-9]+ Pro
+IOS_MIRROR_IPHONE_ONLY_TESTS := \
+	ProwlMirror-iOSUITests/ProwlMirror_iOSUITests/testClearingBothPairingHalvesAllowsCredentialReconnect \
+	ProwlMirror-iOSUITests/ProwlMirror_iOSUITests/testHostBoundariesDisableOnlyTheReachedDirection \
+	ProwlMirror-iOSUITests/ProwlMirror_iOSUITests/testRemoteScrollAlwaysRevealsTheTopWhileInteriorDragStaysLocal \
+	ProwlMirror-iOSUITests/ProwlMirror_iOSUITests/testRemoteScrollButtonsLeaveLocalGesturesAndHistoryUnchanged \
+	ProwlMirror-iOSUITests/ProwlMirror_iOSUITests/testRemoteScrollShowsLoadingAndKeepsHistoryIndependent \
+	ProwlMirror-iOSUITests/ProwlMirror_iOSUITests/testSelectingTextDoesNotScrollTheHost \
+	ProwlMirror-iOSUITests/ProwlMirror_iOSUITests/testPhoneStartsInDetailAndCanAddConnection
 XCODE_CONFIG_DIR := $(APP_DIR)/Config
 VERSION_XCCONFIG := $(XCODE_CONFIG_DIR)/Version.xcconfig
 TUIST_STAMP := $(CURRENT_MAKEFILE_DIR)/.tuist_generated_stamp
@@ -86,7 +100,7 @@ TEST_SIGNING_ARGS := CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_
 endif
 
 .DEFAULT_GOAL := help
-.PHONY: build-ghostty-xcframework ensure-ghostty sync-ghostty _record-ghostty-hash generate ensure-project build-app build-cli build-cli-release embed-cli-debug embed-cli embed-docs embed-skills run-app install-dev-build install-release archive export-archive format format-changed format-lint lint check test test-app test-scripts test-cli-smoke test-cli-unit test-cli-integration benchmark-build bump-version log-stream agent-versions
+.PHONY: build-ghostty-xcframework ensure-ghostty sync-ghostty _record-ghostty-hash generate ensure-project ensure-mirror-ios-project build-app build-cli build-cli-release embed-cli-debug embed-cli embed-docs embed-skills run-app install-dev-build install-release archive export-archive format format-changed format-lint lint check test test-app test-mirror-ios test-mirror-ios-ipad test-mirror-ios-iphone test-scripts test-cli-smoke test-cli-unit test-cli-integration benchmark-build bump-version log-stream agent-versions
 .PHONY: test-agent-contracts _test-agent-contract-codex _test-agent-contract-export
 
 help:  # Display this help.
@@ -404,6 +418,35 @@ export-archive: # Export xarchive
 	bash -o pipefail -c 'xcodebuild -exportArchive -archivePath build/Prowl.xcarchive -exportPath build/export -exportOptionsPlist build/ExportOptions.plist 2>&1 | mise exec -- xcsift -qw --format toon'
 
 test: ensure-ghostty embed-cli-debug embed-docs embed-skills test-app
+
+# Internal: generate only the iOS mirror project. It has no package and does not need the
+# Mac app's build inputs (GhosttyKit, CLI, bundled resources), so the CI job can skip them.
+ensure-mirror-ios-project:
+	@cd "$(CURRENT_MAKEFILE_DIR)" && mise exec -- tuist generate --path Mirror/iOS --no-open
+
+# Run iOS mirror tests on one simulator form factor.
+# $(1): result bundle name, $(2): simulator name pattern, $(3): test selection arguments
+define run_mirror_ios_tests
+@set -euo pipefail; \
+result_bundle="$(CURRENT_MAKEFILE_DIR)/build/test-results/$(1).xcresult"; \
+mkdir -p "$${result_bundle%/*}"; \
+destination="$$(python3 "$(CURRENT_MAKEFILE_DIR)/scripts/select_ios_simulator.py" "$(2)")"; \
+rm -rf "$$result_bundle"; \
+xcodebuild test -project "$(IOS_MIRROR_PROJECT)" -scheme "$(IOS_MIRROR_SCHEME)" \
+	-destination "$$destination" -resultBundlePath "$$result_bundle" -parallel-testing-enabled NO \
+	$(3) 2>&1 | mise exec -- xcsift -w --format toon
+endef
+
+test-mirror-ios: test-mirror-ios-ipad test-mirror-ios-iphone # Run iOS mirror unit/UI tests on their matching simulator form factors
+
+test-mirror-ios-ipad: ensure-mirror-ios-project # Run the iOS mirror unit tests and the iPad UI tests
+	$(call run_mirror_ios_tests,mirror-ios-ipad,$(IOS_MIRROR_IPAD_SIMULATOR_PATTERN),\
+		-only-testing:ProwlMirror-iOSTests -only-testing:ProwlMirror-iOSUITests \
+		$(foreach test,$(IOS_MIRROR_IPHONE_ONLY_TESTS),-skip-testing:$(test)))
+
+test-mirror-ios-iphone: ensure-mirror-ios-project # Run the iOS mirror UI tests that need an iPhone
+	$(call run_mirror_ios_tests,mirror-ios-iphone,$(IOS_MIRROR_IPHONE_SIMULATOR_PATTERN),\
+		$(foreach test,$(IOS_MIRROR_IPHONE_ONLY_TESTS),-only-testing:$(test)))
 
 test-scripts: # Run tests for the repository's scripts
 	@python3 -m unittest discover -s "$(CURRENT_MAKEFILE_DIR)/scripts" -p 'test_*.py'

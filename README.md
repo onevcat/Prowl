@@ -116,15 +116,26 @@ macOS 26.0+
 
 A personal fork of [Supacode](https://github.com/supabitapp/supacode), built on [The Composable Architecture](https://github.com/pointfreeco/swift-composable-architecture) and [libghostty](https://github.com/ghostty-org/ghostty), maintained for daily use. Requires [mise](https://mise.jdx.dev/) for dev tooling.
 
+### First build from a fresh clone
+
+```bash
+git clone --recurse-submodules https://github.com/onevcat/Prowl.git
+cd Prowl
+make build-app
+```
+
+`make build-app` installs the pinned development tools and fetches the pinned GhosttyKit
+artifact when needed. If you cloned without `--recurse-submodules`, run
+`git submodule update --init --recursive` before building.
+
 ### Build & run
 
 ```bash
 make build-ghostty-xcframework   # Build GhosttyKit from Zig source
 make build-app                   # Build the macOS app (Debug)
 make generate                    # Generate Prowl.xcworkspace with Tuist to open the project in Xcode
-make run-app                     # Build, install, and launch Debug from /Applications/Prowl Debug.app
-make install-debug               # Build Debug and install to /Applications/Prowl Debug.app
-make install-dev-build           # Alias-compatible Debug install target
+make run-app                     # Build and launch Debug from Xcode build products
+make install-dev-build           # Build Debug and install to /Applications/Prowl Debug.app
 make install-release             # Build Release, sign locally, install to /Applications
 ```
 

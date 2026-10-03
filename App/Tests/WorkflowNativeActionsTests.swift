@@ -26,7 +26,11 @@ struct WorkflowNativeActionsTests {
   private func runGit(_ arguments: [String], in directory: URL) throws {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-    process.arguments = ["-C", directory.path(percentEncoded: false)] + arguments
+    process.arguments =
+      [
+        "-c", "core.hooksPath=/dev/null", "-c", "commit.gpgSign=false",
+        "-C", directory.path(percentEncoded: false),
+      ] + arguments
     process.standardOutput = FileHandle.nullDevice
     process.standardError = FileHandle.nullDevice
     try process.run()
