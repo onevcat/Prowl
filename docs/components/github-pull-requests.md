@@ -91,8 +91,9 @@ GitHub limits requests per account. When GitHub refuses a request for its rate
 limit, Prowl stops sending GitHub requests of any kind:
 
 - It waits as long as GitHub's `Retry-After` header asks. Without one, it waits
-  one minute, then doubles the wait after each further refusal, up to one hour,
-  with a little random spread.
+  until `X-RateLimit-Reset` when GitHub reports an exhausted budget. Otherwise,
+  it waits one minute, then doubles the wait after each further refusal, up to
+  one hour, with a little random spread.
 - When the wait ends, one request goes out first. If GitHub answers it, Prowl
   resumes; if GitHub refuses again, the next, longer wait starts.
 - It never retries a refused query as smaller per-repository queries.
