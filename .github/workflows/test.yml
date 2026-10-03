@@ -32,6 +32,8 @@ jobs:
       - run: make check-localization
       - name: Stage debug app resources
         run: make embed-cli-debug embed-docs embed-skills
+      - name: Generate workspace
+        run: make ensure-project
       - name: Build app and run tests in parallel
         shell: bash
         run: |
@@ -86,6 +88,8 @@ jobs:
             python3 scripts/summarize-xcode-build.py build/test-results/*.build.json
           } >> "$GITHUB_STEP_SUMMARY"
           exit "$failed"
+      - name: Test iOS mirror
+        run: make test-mirror-ios
       - name: Collect mirror diagnostics
         if: always()
         shell: bash
@@ -117,3 +121,22 @@ jobs:
           path: build/test-results/**/*.xcresult
           if-no-files-found: ignore
           retention-days: 7
+
+  android-mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - uses: android-actions/setup-android@v4
+      - name: Install Android SDK 34
+        run: sdkmanager 'platforms;android-34' 'build-tools;34.0.0'
+      - name: Build and test Android mirror
+        working-directory: Mirror/Android
+        run: ./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest :app:lintDebug

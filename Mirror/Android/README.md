@@ -10,7 +10,8 @@ The original Gradle project name and application ID are preserved.
 
 ## Connect
 
-Use the matching Prowl `feat/mobile-mirror` Host with `PROWL_REMOTE_MIRROR=1`.
+Use a Prowl Host built from the same revision (or a matching Prowl release), with
+`PROWL_REMOTE_MIRROR=1`.
 On Mac: Start Host → Add a Device. On Android: Add Remote Pane → enter IP/port
 and the two halves of the single-use, 60-second code. The default port is 7880. After enrollment, credentials
 are encrypted using Android Keystore and the short code is discarded. Pick a saved
@@ -57,9 +58,9 @@ is no private AI console or dependency on personal shell wrappers.
 
 ## Build and test
 
-Open `Mirror/Android/` in Android Studio, or change to that directory
-and use JDK 17 and an installed Android
-SDK 34. Set `ANDROID_HOME` or create an untracked `local.properties` with `sdk.dir`.
+Open `Mirror/Android/` in Android Studio, or change to that directory and use
+Android Studio's bundled JBR or JDK 17 with an installed Android SDK 34. Set
+`ANDROID_HOME` or create an untracked `local.properties` with `sdk.dir`.
 
     ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
 

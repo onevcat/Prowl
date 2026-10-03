@@ -8,8 +8,8 @@ alongside the old app and does not automatically migrate its saved connections.
 
 ## Review-aligned experiment
 
-Use the matching Prowl `feat/mobile-mirror` branch, with `PROWL_REMOTE_MIRROR=1` on
-Mac. Upgrade both ends together: legacy protocol negotiation, 64-character keys,
+Use a Prowl Host built from the same revision (or a matching Prowl release), with
+`PROWL_REMOTE_MIRROR=1` on Mac. Upgrade both ends together: legacy protocol negotiation, 64-character keys,
 and mirror-private submission/state messages have been removed.
 
 On Host, **Start Host → Add a Device** creates a single-use code that expires after
@@ -98,6 +98,17 @@ folder and does not need the Mac app's build inputs. Simulator signing stays ena
 command correlation/routing, reading and keyboard behavior. The Host's real App
 target covers pairing, revocation, terminal capture and input protection; there is
 no copied Host implementation in this client's tests.
+
+Run the iOS mirror unit and UI suites on their matching simulator form factors:
+
+```bash
+make test-mirror-ios
+```
+
+The target runs the split-pane and composer tests on iPad, then the remote-scroll,
+pairing, and phone-navigation tests on iPhone. Override
+`IOS_MIRROR_IPAD_SIMULATOR` or `IOS_MIRROR_IPHONE_SIMULATOR` if those simulator names
+are unavailable locally.
 
 DEBUG-only `--mirror-ui-fixture` and `--mirror-ui-launch-fixture` supply deterministic
 UI data without connecting to Host or starting an Agent. Component and socket tests

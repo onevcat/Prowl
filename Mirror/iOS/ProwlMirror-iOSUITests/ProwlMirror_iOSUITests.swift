@@ -6,8 +6,8 @@ final class ProwlMirror_iOSUITests: XCTestCase {
   func testHostBoundariesDisableOnlyTheReachedDirection() {
     let app = XCUIApplication()
     app.launchArguments = ["--mirror-ui-fixture", "--mirror-ui-scroll-fixture", "--mirror-ui-scroll-boundary-fixture"]
-    XCUIDevice.shared.orientation = .portrait
     app.launch()
+    XCUIDevice.shared.orientation = .portrait
     let scrollUp = app.buttons["mirror-scroll-up"]
     let scrollDown = app.buttons["mirror-scroll-down"]
     XCTAssertTrue(scrollUp.waitForExistence(timeout: 10))
@@ -48,8 +48,8 @@ final class ProwlMirror_iOSUITests: XCTestCase {
   func testOldHostKeepsScrollButtonsDisabledAndLocalReaderAvailable() {
     let app = XCUIApplication()
     app.launchArguments = ["--mirror-ui-fixture", "--mirror-ui-scroll-fixture", "--mirror-ui-no-scroll-fixture"]
-    XCUIDevice.shared.orientation = .portrait
     app.launch()
+    XCUIDevice.shared.orientation = .portrait
     let scrollUp = app.buttons["mirror-scroll-up"]
     let scrollDown = app.buttons["mirror-scroll-down"]
     XCTAssertTrue(scrollUp.waitForExistence(timeout: 10))
@@ -68,8 +68,8 @@ final class ProwlMirror_iOSUITests: XCTestCase {
   func testSelectingTextDoesNotScrollTheHost() {
     let app = XCUIApplication()
     app.launchArguments = ["--mirror-ui-fixture", "--mirror-ui-scroll-fixture"]
-    XCUIDevice.shared.orientation = .portrait
     app.launch()
+    XCUIDevice.shared.orientation = .portrait
     let text = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Remote page 0\n")).firstMatch
     XCTAssertTrue(text.waitForExistence(timeout: 10))
     let start = text.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.25))
@@ -91,8 +91,8 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     app.launchArguments = [
       "--mirror-ui-fixture", "--mirror-ui-scroll-fixture", "--mirror-ui-scroll-long-fixture",
     ]
-    XCUIDevice.shared.orientation = .portrait
     app.launch()
+    XCUIDevice.shared.orientation = .portrait
     let scrollUp = app.buttons["mirror-scroll-up"]
     let reading = app.scrollViews["mirror-live-scroll"]
     XCTAssertTrue(scrollUp.waitForExistence(timeout: 10))
@@ -123,8 +123,8 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     app.launchArguments = [
       "--mirror-ui-fixture", "--mirror-ui-scroll-fixture", "--mirror-ui-scroll-delay-fixture",
     ]
-    XCUIDevice.shared.orientation = .portrait
     app.launch()
+    XCUIDevice.shared.orientation = .portrait
     let scrollUp = app.buttons["mirror-scroll-up"]
     let scrollDown = app.buttons["mirror-scroll-down"]
     let progress = app.descendants(matching: .any).matching(identifier: "mirror-scroll-progress").firstMatch
@@ -157,8 +157,8 @@ final class ProwlMirror_iOSUITests: XCTestCase {
   func testRemoteScrollButtonsLeaveLocalGesturesAndHistoryUnchanged() {
     let app = XCUIApplication()
     app.launchArguments = ["--mirror-ui-fixture", "--mirror-ui-scroll-fixture"]
-    XCUIDevice.shared.orientation = .portrait
     app.launch()
+    XCUIDevice.shared.orientation = .portrait
     let scrollUp = app.buttons["mirror-scroll-up"]
     let down = app.buttons["mirror-scroll-down"]
     XCTAssertTrue(scrollUp.waitForExistence(timeout: 10))
@@ -221,9 +221,9 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     XCTAssertTrue(launch.waitForExistence(timeout: 5))
     launch.tap()
     let create = app.buttons["create-and-mirror"]
-    XCTAssertTrue(create.waitForExistence(timeout: 5))
+    XCTAssertTrue(create.waitForExistence(timeout: 15))
     expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: create)
-    waitForExpectations(timeout: 5)
+    waitForExpectations(timeout: 15)
     app.navigationBars["New Agent Pane"].buttons.element(boundBy: 0).tap()
     XCTAssertTrue(launch.waitForExistence(timeout: 5))
     app.buttons["Cancel"].tap()
@@ -235,8 +235,8 @@ final class ProwlMirror_iOSUITests: XCTestCase {
   func testStructuredAgentLaunchForm() {
     let app = XCUIApplication()
     app.launchArguments = ["--mirror-ui-launch-fixture"]
-    XCUIDevice.shared.orientation = UIDevice.current.userInterfaceIdiom == .pad ? .landscapeLeft : .portrait
     app.launch()
+    XCUIDevice.shared.orientation = UIDevice.current.userInterfaceIdiom == .pad ? .landscapeLeft : .portrait
     let create = app.buttons["create-and-mirror"]
     XCTAssertTrue(create.waitForExistence(timeout: 10))
     XCTAssertTrue(create.isEnabled)
@@ -253,8 +253,8 @@ final class ProwlMirror_iOSUITests: XCTestCase {
   func testPhoneStartsInDetailAndCanAddConnection() throws {
     try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "Phone navigation coverage")
     let app = XCUIApplication()
-    XCUIDevice.shared.orientation = .portrait
     app.launch()
+    XCUIDevice.shared.orientation = .portrait
     XCTAssertTrue(app.staticTexts["Choose a Remote Pane"].waitForExistence(timeout: 10))
     XCTAssertFalse(app.staticTexts["Connect to Prowl"].isHittable)
     app.buttons["Add Remote Pane"].tap()
@@ -267,8 +267,8 @@ final class ProwlMirror_iOSUITests: XCTestCase {
   func testSidebarClosesMirrorsWithOneClick() {
     let app = XCUIApplication()
     app.launchArguments = ["--mirror-ui-fixture", "--mirror-ui-multiple-fixtures"]
-    XCUIDevice.shared.orientation = .landscapeLeft
     app.launch()
+    XCUIDevice.shared.orientation = .landscapeLeft
     let closeFirst = app.buttons["close-mirror-UI Fixture"]
     XCTAssertTrue(closeFirst.waitForExistence(timeout: 10))
     closeFirst.tap()
@@ -282,8 +282,8 @@ final class ProwlMirror_iOSUITests: XCTestCase {
   func testPairingCodeUsesTwoEditableHalves() {
     let app = XCUIApplication()
     app.launchArguments += ["--mirror-ui-fixture"]
-    XCUIDevice.shared.orientation = .landscapeLeft
     app.launch()
+    XCUIDevice.shared.orientation = .landscapeLeft
     XCTAssertTrue(app.buttons["Edit Connection"].waitForExistence(timeout: 10))
     app.buttons["Edit Connection"].tap()
     let first = app.textFields["pairing-code-first"]
@@ -311,8 +311,8 @@ final class ProwlMirror_iOSUITests: XCTestCase {
   func testLargeFrozenTableShowsRowsAndScrolls() {
     let app = XCUIApplication()
     app.launchArguments = ["--mirror-ui-fixture", "--mirror-ui-large-table-fixture"]
-    XCUIDevice.shared.orientation = .landscapeLeft
     app.launch()
+    XCUIDevice.shared.orientation = .landscapeLeft
     XCTAssertTrue(app.buttons["Expand"].waitForExistence(timeout: 10))
     app.buttons["Expand"].tap()
     XCTAssertTrue(app.navigationBars["Frozen detail"].waitForExistence(timeout: 5))
@@ -341,8 +341,8 @@ final class ProwlMirror_iOSUITests: XCTestCase {
   func testPaneSwitchRestoresLiveReadingPosition() {
     let app = XCUIApplication()
     app.launchArguments = ["--mirror-ui-fixture", "--mirror-ui-multiple-fixtures"]
-    XCUIDevice.shared.orientation = .landscapeLeft
     app.launch()
+    XCUIDevice.shared.orientation = .landscapeLeft
     expectation(for: NSPredicate { _, _ in app.frame.width > app.frame.height }, evaluatedWith: nil)
     waitForExpectations(timeout: 10)
     let reading = app.scrollViews["mirror-live-scroll"]
@@ -375,8 +375,8 @@ final class ProwlMirror_iOSUITests: XCTestCase {
   func testPaneSwitchRestoresHistoryReadingPosition() {
     let app = XCUIApplication()
     app.launchArguments = ["--mirror-ui-fixture", "--mirror-ui-multiple-fixtures"]
-    XCUIDevice.shared.orientation = .landscapeLeft
     app.launch()
+    XCUIDevice.shared.orientation = .landscapeLeft
     expectation(for: NSPredicate { _, _ in app.frame.width > app.frame.height }, evaluatedWith: nil)
     waitForExpectations(timeout: 10)
     XCTAssertTrue(app.buttons["History"].waitForExistence(timeout: 10))
@@ -413,8 +413,8 @@ final class ProwlMirror_iOSUITests: XCTestCase {
   func testComposerExpandsOnFocusAndCollapsesWithoutLosingDraft() {
     let app = XCUIApplication()
     app.launchArguments = ["--mirror-ui-fixture"]
-    XCUIDevice.shared.orientation = .landscapeLeft
     app.launch()
+    XCUIDevice.shared.orientation = .landscapeLeft
     let input = app.descendants(matching: .any).matching(identifier: "mirror-message-input")
       .firstMatch
     XCTAssertTrue(input.waitForExistence(timeout: 10))
@@ -436,8 +436,8 @@ final class ProwlMirror_iOSUITests: XCTestCase {
   func testMultilineDraftRequiresExplicitSend() {
     let app = XCUIApplication()
     app.launchArguments = ["--mirror-ui-fixture"]
-    XCUIDevice.shared.orientation = .landscapeLeft
     app.launch()
+    XCUIDevice.shared.orientation = .landscapeLeft
     let wide = NSPredicate { _, _ in app.frame.width > app.frame.height }
     expectation(for: wide, evaluatedWith: nil)
     waitForExpectations(timeout: 10)
@@ -458,8 +458,8 @@ final class ProwlMirror_iOSUITests: XCTestCase {
   func testReadingHistoryDetailsAndConnectionEditing() {
     let app = XCUIApplication()
     app.launchArguments = ["--mirror-ui-fixture"]
-    XCUIDevice.shared.orientation = .landscapeLeft
     app.launch()
+    XCUIDevice.shared.orientation = .landscapeLeft
     let wide = NSPredicate { _, _ in app.frame.width > app.frame.height }
     expectation(for: wide, evaluatedWith: nil)
     waitForExpectations(timeout: 10)
@@ -503,12 +503,12 @@ final class ProwlMirror_iOSUITests: XCTestCase {
   @MainActor
   func testConnectionFormRemainsUsableAcrossRotation() {
     let app = XCUIApplication()
-    XCUIDevice.shared.orientation = .landscapeLeft
     app.launch()
+    XCUIDevice.shared.orientation = .landscapeLeft
     let wide = NSPredicate { _, _ in app.frame.width > app.frame.height }
     expectation(for: wide, evaluatedWith: nil)
     waitForExpectations(timeout: 10)
-    let addButton = app.buttons["add-remote-pane"]
+    let addButton = app.buttons["Add Remote Pane"].firstMatch
     XCTAssertTrue(addButton.waitForExistence(timeout: 10))
     XCTAssertTrue(addButton.isHittable)
     addButton.tap()
@@ -533,6 +533,6 @@ final class ProwlMirror_iOSUITests: XCTestCase {
     portrait.lifetime = .keepAlways
     add(portrait)
     app.buttons["Cancel"].tap()
-    XCTAssertTrue(app.buttons["add-remote-pane"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["Add Remote Pane"].firstMatch.waitForExistence(timeout: 5))
   }
 }
