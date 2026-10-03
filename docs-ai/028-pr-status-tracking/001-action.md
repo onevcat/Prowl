@@ -42,6 +42,12 @@ Grouped by problem wave; rows chronological within each wave.
 | 2026-07-05 | Supersedes #533: fix the nil-literal no-op clear (`updateValue(nil, forKey:)`); order-independent cross-host suppression via `prRefreshFailedBatchRepositoryIDs`; the missing non-empty-set test coverage | PR #538 → [004](004-flicker-and-no-pr-semantics.md) |
 | 2026-07-08 | Preserve last-known `mergeable`/`mergeStateStatus` when GitHub returns transient `UNKNOWN` (kills the "Blocked" flash) | PR #539 → [004](004-flicker-and-no-pr-semantics.md) |
 
+### Wave 5 — Rate limits & refresh load (October)
+
+| Date | Change | Ref |
+| --- | --- | --- |
+| 2026-10-02 | Badges read per-state check counts (`checkRunCountsByState`, `statusContextCountsByState`); only the selected worktree's pull request lists each check | [007](007-check-counts.md) |
+
 ## Outcome & current state (as of 2026-07-12)
 
 Client layer, `supacode/Clients/Github/`:
