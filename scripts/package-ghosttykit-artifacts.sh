@@ -5,9 +5,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 DIST_DIR="${PROWL_GHOSTTY_ARTIFACT_DIST_DIR:-$PROJECT_DIR/dist/ghosttykit}"
 
-XCFRAMEWORK_PATH="$PROJECT_DIR/Frameworks/GhosttyKit.xcframework"
-GHOSTTY_RESOURCE_PATH="$PROJECT_DIR/Resources/ghostty"
-TERMINFO_RESOURCE_PATH="$PROJECT_DIR/Resources/terminfo"
+XCFRAMEWORK_PATH="$PROJECT_DIR/App/Frameworks/GhosttyKit.xcframework"
+GHOSTTY_RESOURCE_PATH="$PROJECT_DIR/App/Resources/ghostty"
+TERMINFO_RESOURCE_PATH="$PROJECT_DIR/App/Resources/terminfo"
 
 hash_file() {
   if command -v shasum >/dev/null 2>&1; then

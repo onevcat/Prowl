@@ -204,7 +204,7 @@ def _publish(report_path, policy):
     report = read_json(report_path)
     require(isinstance(report, dict) and report.get("contract_revision") == rules.REVISION
             and report.get("mode") == "verify", "Only current-revision verify reports can be published.")
-    validate_eligibility(report, core.source_fingerprint(), core.file_hash(core.ROOT / 'Resources/prowl-cli/prowl'),
+    validate_eligibility(report, core.source_fingerprint(), core.file_hash(core.ROOT / 'App/Resources/prowl-cli/prowl'),
                          datetime.datetime.now(datetime.timezone.utc))
     validate_artifacts(report, report_path.parent)
     bundles = [('export.xcresult', 'export-test-summary.json')]

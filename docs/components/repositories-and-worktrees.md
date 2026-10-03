@@ -95,7 +95,7 @@ single folder, so slashes, `.`/`..`, and `.git` are rejected).
 Press **↩** to create, **Esc** to cancel. Branch names are validated live
 (`git check-ref-format`).
 
-**Creation runs through the bundled `wt` CLI** (`Resources/git-wt`) and streams
+**Creation runs through the bundled `wt` CLI** (`ThirdParty/git-wt`) and streams
 progress through stages: reading local branches → choosing a name → checking repo
 mode → resolving the base ref → fetching → creating. A **Pending** row shows the
 live status until it's ready.

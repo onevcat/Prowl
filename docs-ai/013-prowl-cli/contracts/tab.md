@@ -12,4 +12,4 @@ release only.
 
 `tab` success payloads retain `{ "action": "create"|"close", "target": … }`.
 The complete legacy response schema is `#/$defs/tabResponse` in
-[`schema-bundle.json`](../../../ProwlCLIContracts/Resources/cli-output-schema.json).
+[`schema-bundle.json`](../../../CLI/Sources/ProwlCLIContracts/Resources/cli-output-schema.json).

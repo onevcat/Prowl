@@ -165,7 +165,7 @@ based on the screen reason alone.
 Native acquisition warnings report a bounded failure category and recovery, without
 registry content. They use the same per-category 30-second throttle.
 
-Log acquisition warnings use the `AgentDetection` category. `SupaLogger` writes
+Log acquisition warnings use the `AgentDetection` category. `ProwlLogger` writes
 them to stdout in Debug and the unified log in Release. They identify the PID, cursor count, and failure category (`incompleteInventory`,
 `partialHeader`, `unknownLineage`, or `continuityLost`). Warnings are limited to one per failure category per provider every 30 seconds;
 a successful read reports recovery once after any failure, including a throttled one.

@@ -6,7 +6,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 SCENARIO="${1:-ci}"
 SAMPLES="${2:-1}"
 BENCHMARK_ROOT="${BUILD_BENCHMARK_ROOT:-$ROOT/.build-benchmark/build-time}"
-SOURCE_PACKAGES="${SPM_CACHE_DIR:-$HOME/Library/Caches/supacode-spm-cache/SourcePackages}"
+SOURCE_PACKAGES="${SPM_CACHE_DIR:-$HOME/Library/Caches/prowl-spm-cache/SourcePackages}"
 CAS_PATH="$BENCHMARK_ROOT/ci/CompilationCache.noindex"
 DERIVED_DATA_PATH="$BENCHMARK_ROOT/ci/DerivedData"
 RESULT_BUNDLE_PATH="$BENCHMARK_ROOT/ci/TestResults.xcresult"
@@ -97,7 +97,7 @@ run_case() {
   local -a command=(
     xcodebuild
     -workspace "$ROOT/Prowl.xcworkspace"
-    -scheme supacode
+    -scheme Prowl
     -configuration Debug
     -destination "platform=macOS,arch=$(uname -m)"
     -derivedDataPath "$DERIVED_DATA_PATH"

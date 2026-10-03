@@ -23,10 +23,10 @@ import unittest
 
 SCRIPT = pathlib.Path(__file__).resolve().parent / "make-detection-fixture.py"
 DETECTED_AGENT_SWIFT = (
-    SCRIPT.parent.parent / "supacode/Domain/AgentDetection/DetectedAgent.swift"
+    SCRIPT.parent.parent / "App/Sources/Domain/AgentDetection/DetectedAgent.swift"
 )
 SCREEN_HEURISTICS_SWIFT = (
-    SCRIPT.parent.parent / "supacode/Infrastructure/AgentDetection/ScreenHeuristics.swift"
+    SCRIPT.parent.parent / "App/Sources/Infrastructure/AgentDetection/ScreenHeuristics.swift"
 )
 
 

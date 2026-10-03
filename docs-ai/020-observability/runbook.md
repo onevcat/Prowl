@@ -15,7 +15,7 @@ Quick-start reference for investigating production issues using the Sentry + Pos
 
 ## Stack overview
 
-Two independent pipelines, both initialized in `supacode/App/supacodeApp.swift > bootstrapTelemetry`:
+Two independent pipelines, both initialized in `App/Sources/App/ProwlApp.swift > bootstrapTelemetry`:
 
 ### Sentry (crash + error + App Hang)
 
@@ -139,7 +139,7 @@ Everything is hand-instrumented via `analyticsClient.capture(...)`. Events marke
 | `update_checked` | — | manual Check for Updates |
 | `repository_removed` | — | |
 
-† `counters` = `{ repository_count, opened_worktree_count, terminal_tab_count }` assembled by the `contextProvider` closure in `supacodeApp.swift` from the TCA store + `WorktreeTerminalManager`.
+† `counters` = `{ repository_count, opened_worktree_count, terminal_tab_count }` assembled by the `contextProvider` closure in `ProwlApp.swift` from the TCA store + `WorktreeTerminalManager`.
 
 Thresholds are **monotonic per session**: crossing 2 GB → dropping to 1 GB → crossing 2 GB again fires `memory_threshold_2048mb` exactly once. We want the session's envelope, not event storms.
 
@@ -149,7 +149,7 @@ Thresholds are **monotonic per session**: crossing 2 GB → dropping to 1 GB →
 
 Wake-from-sleep, Mission Control space switch, external display (dis)connect all trigger `_NSMenuBarDisplayManagerActiveSpaceChanged` → NSWindow replicant rebuild → `mach_msg` IPC to WindowServer. On a busy main thread this can block > 3s. **Not an app bug.**
 
-Filtered in `supacode/Support/SentryEventFilter.swift`. Current signatures:
+Filtered in `App/Sources/Support/SentryEventFilter.swift`. Current signatures:
 
 - `_NSMenuBarDisplayManagerActiveSpaceChanged`
 - `NSMenuBarLocalDisplayWindow`
@@ -172,13 +172,13 @@ Disabled via `captureApplicationLifecycleEvents = false` + `captureScreenViews =
 
 | Concern | File |
 |---|---|
-| SDK init + `beforeSend` wiring | `supacode/App/supacodeApp.swift > bootstrapTelemetry` |
-| PostHog event wrapper | `supacode/Clients/Analytics/AnalyticsClient.swift` |
-| Super properties | `supacode/Support/AnalyticsContext.swift` |
-| User identity | `supacode/Support/InstallIdentifier.swift` |
-| Memory probe (`phys_footprint`) | `supacode/Support/MemoryProbe.swift` |
-| Memory watchdog (baseline + thresholds) | `supacode/Support/MemoryWatchdog.swift` |
-| System hang filter | `supacode/Support/SentryEventFilter.swift` |
+| SDK init + `beforeSend` wiring | `App/Sources/App/ProwlApp.swift > bootstrapTelemetry` |
+| PostHog event wrapper | `App/Sources/Clients/Analytics/AnalyticsClient.swift` |
+| Super properties | `App/Sources/Support/AnalyticsContext.swift` |
+| User identity | `App/Sources/Support/InstallIdentifier.swift` |
+| Memory probe (`phys_footprint`) | `App/Sources/Support/MemoryProbe.swift` |
+| Memory watchdog (baseline + thresholds) | `App/Sources/Support/MemoryWatchdog.swift` |
+| System hang filter | `App/Sources/Support/SentryEventFilter.swift` |
 | Release pipeline (dSYM upload + release tracking) | `scripts/release.sh` |
 | Credentials template | `Config/Secrets.env.template` |
 

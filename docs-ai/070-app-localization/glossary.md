@@ -1,6 +1,6 @@
 # Simplified Chinese Glossary
 
-Living document. Follow it for every `zh-Hans` value in `supacode/Localizable.xcstrings`, and
+Living document. Follow it for every `zh-Hans` value in `App/Sources/Localizable.xcstrings`, and
 update it in the same change when a new term needs a decision. Background and tooling:
 [000-plan.md](000-plan.md).
 
@@ -100,7 +100,7 @@ When “profile” and “configuration” meet in one sentence, write 设置 fo
 
 ## Playful copy
 
-The loading messages of `supacode/App/AppLoadingView.swift` are jokes. Do not translate them
+The loading messages of `App/Sources/App/AppLoadingView.swift` are jokes. Do not translate them
 word for word: give each English line a Chinese line with a joke that works in Chinese developer
 culture (`Aligning refs` → 正在对齐颗粒度, `Reducing agent flattery` → 正在帮 Agent 戒掉彩虹屁).
 

@@ -135,6 +135,7 @@ What was done. | ## Refs: PR #x | ## Current state (optional)
 - `docs/` (the user-facing agent manual) is separate: current behavior goes there,
   history/decisions/runbooks go in docs-ai. Never link `doc-onevcat/` — that directory
   was dissolved into docs-ai in 2026-07.
-- The Xcode module/scheme is still `supacode`; `supacode/...` paths are correct.
+- The app module and scheme are `Prowl`; the app sources are in `App/Sources/...`. Numbered
+  entries before 074 use the old paths (`supacode/...`); the path table is in `docs-ai/README.md`.
 - After adding or renaming an entry, add/refresh its row in `docs-ai/README.md`'s index.
 - Do not state build/test results you didn't produce.

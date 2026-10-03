@@ -110,7 +110,7 @@ manifest is reviewed source of truth for downloaded artifact integrity.
 Verify the prebuilt path from a clean artifact state:
 
 ```bash
-rm -rf Frameworks/GhosttyKit.xcframework Resources/ghostty Resources/terminfo .ghostty_hash .ghostty_build_stamp
+rm -rf App/Frameworks/GhosttyKit.xcframework App/Resources/ghostty App/Resources/terminfo .ghostty_hash .ghostty_build_stamp
 make ensure-ghostty
 make build-app
 ```

@@ -42,7 +42,7 @@ Use the smallest surface that can prove the assertion:
 2. Use the repository's `prowl-ui` skill for native UI labels, roles, enabled or selected state, navigation, sheets, menus,
    popovers, and buttons, but only after its deterministic preflight returns `READY`.
 3. Use a PID-scoped screenshot only for geometry, clipping, visual hierarchy, or other pixel-level assertions.
-4. Use targeted `SupaLogger` markers only when neither public CLI state nor accessibility state exposes the behavior.
+4. Use targeted `ProwlLogger` markers only when neither public CLI state nor accessibility state exposes the behavior.
 
 A screenshot alone does not prove that a control is enabled, selected, actionable, or wired to the intended behavior.
 AppleScript coordinate loops are not an acceptable fallback. If no suitable control surface exists, report `SKIPPED` or
@@ -67,7 +67,7 @@ during self-verification.
 
 - Work from the Prowl repository root.
 - Preserve unrelated user changes and never stop the user's installed Prowl app.
-- Use the repo CLI (`./.build/debug/prowl`) when CLI code or protocol behavior changed.
+- Use the repo CLI (`./CLI/.build/debug/prowl`) when CLI code or protocol behavior changed.
 - Treat the debug app as sharing the installed app's `~/Library` data. Do not mutate real settings unless the scenario
   explicitly requires it and restores the previous value.
 - Limit read-only recovery to two short retries after a transient error. Never retry an action whose delivery is uncertain;
@@ -121,7 +121,7 @@ Build the repo CLI when required:
 
 ```bash
 make build-cli
-cli="./.build/debug/prowl"
+cli="./CLI/.build/debug/prowl"
 ```
 
 Seed the debug app and create a disposable tab:

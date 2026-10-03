@@ -1,4 +1,4 @@
-"""Behavioral tests for the bundled managed-hook extensions in Resources/agent-hooks.
+"""Behavioral tests for the bundled managed-hook extensions in App/Resources/agent-hooks.
 
 The extensions are TypeScript relays loaded in-process by Pi, Oh My Pi, and OpenCode. Node runs
 them here with the same handler contract those runtimes use, against a capture script standing
@@ -16,7 +16,7 @@ import textwrap
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-HOOKS = ROOT / "Resources" / "agent-hooks"
+HOOKS = ROOT / "App" / "Resources" / "agent-hooks"
 NODE = shutil.which("node")
 
 CAPTURE = textwrap.dedent(

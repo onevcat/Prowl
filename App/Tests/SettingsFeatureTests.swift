@@ -1,0 +1,990 @@
+import ComposableArchitecture
+import CustomDump
+import DependenciesTestSupport
+import Foundation
+import ProwlCLIShared
+import Sharing
+import Testing
+
+@testable import Prowl
+
+@MainActor
+struct SettingsFeatureTests {
+  @Test(.dependencies) func loadSettings() async {
+    let loaded = GlobalSettings(
+      appearanceMode: .dark,
+      defaultEditorID: OpenWorktreeAction.automaticSettingsID,
+      confirmBeforeQuit: true,
+      updatesAutomaticallyCheckForUpdates: false,
+      updatesAutomaticallyDownloadUpdates: true,
+      inAppNotificationsEnabled: false,
+      systemNotificationsEnabled: true,
+      moveNotifiedWorktreeToTop: false,
+      analyticsEnabled: false,
+      crashReportsEnabled: true,
+      githubIntegrationEnabled: true,
+      deleteBranchOnAutomaticCleanup: false,
+      mergedWorktreeAction: .archive,
+      promptForWorktreeCreation: true
+    )
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = loaded }
+
+    let store = TestStore(initialState: SettingsFeature.State()) {
+      SettingsFeature()
+    }
+
+    await store.send(.task)
+    await store.receive(\.settingsLoaded) {
+      $0.appearanceMode = .dark
+      $0.defaultEditorID = OpenWorktreeAction.automaticSettingsID
+      $0.confirmBeforeQuit = true
+      $0.updatesAutomaticallyCheckForUpdates = false
+      $0.updatesAutomaticallyDownloadUpdates = true
+      $0.inAppNotificationsEnabled = false
+      $0.moveNotifiedWorktreeToTop = false
+      $0.systemNotificationsEnabled = true
+      $0.analyticsEnabled = false
+      $0.crashReportsEnabled = true
+      $0.githubIntegrationEnabled = true
+      $0.deleteBranchOnAutomaticCleanup = false
+      $0.mergedWorktreeAction = .archive
+      $0.promptForWorktreeCreation = true
+    }
+    await store.receive(\.delegate.settingsChanged)
+  }
+
+  @Test(.dependencies) func selectingWorkflowsOwnsThePageStateAndLeavingTearsItDown() async {
+    let store = TestStore(initialState: SettingsFeature.State()) {
+      SettingsFeature()
+    }
+
+    await store.send(.setSelection(.workflows)) {
+      $0.selection = .workflows
+      $0.workflows = .init()
+    }
+    await store.send(.setSelection(.commandLineTool)) {
+      $0.selection = .commandLineTool
+      $0.workflows = nil
+      $0.agentSkills = .init()
+    }
+    await store.send(.setSelection(.workflows)) {
+      $0.selection = .workflows
+      $0.workflows = .init()
+      $0.agentSkills = nil
+    }
+  }
+
+  @Test(.dependencies) func refreshCLIServiceStatusReadsTheServer() async {
+    let store = TestStore(initialState: SettingsFeature.State()) {
+      SettingsFeature()
+    } withDependencies: {
+      $0[CLIServiceStatusClient.self].current = { .failed(.socketAlreadyOwned, path: "/tmp/cli.sock") }
+    }
+
+    await store.send(.refreshCLIServiceStatus) {
+      $0.cliServiceStatus = .failed(.socketAlreadyOwned, path: "/tmp/cli.sock")
+    }
+  }
+
+  @Test(.dependencies) func savesUpdatesChanges() async {
+    let initialSettings = GlobalSettings(
+      appearanceMode: .system,
+      defaultEditorID: OpenWorktreeAction.automaticSettingsID,
+      confirmBeforeQuit: true,
+      updatesAutomaticallyCheckForUpdates: false,
+      updatesAutomaticallyDownloadUpdates: false,
+      inAppNotificationsEnabled: false,
+      systemNotificationsEnabled: false,
+      moveNotifiedWorktreeToTop: true,
+      analyticsEnabled: true,
+      crashReportsEnabled: false,
+      githubIntegrationEnabled: true,
+      deleteBranchOnAutomaticCleanup: true,
+      mergedWorktreeAction: nil,
+      promptForWorktreeCreation: false
+    )
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = initialSettings }
+
+    let store = TestStore(initialState: SettingsFeature.State(settings: initialSettings)) {
+      SettingsFeature()
+    }
+
+    await store.send(.binding(.set(\.appearanceMode, .light))) {
+      $0.appearanceMode = .light
+    }
+    let expectedSettings = GlobalSettings(
+      appearanceMode: .light,
+      defaultEditorID: initialSettings.defaultEditorID,
+      confirmBeforeQuit: initialSettings.confirmBeforeQuit,
+      updatesAutomaticallyCheckForUpdates: initialSettings.updatesAutomaticallyCheckForUpdates,
+      updatesAutomaticallyDownloadUpdates: initialSettings.updatesAutomaticallyDownloadUpdates,
+      inAppNotificationsEnabled: initialSettings.inAppNotificationsEnabled,
+      systemNotificationsEnabled: initialSettings.systemNotificationsEnabled,
+      moveNotifiedWorktreeToTop: initialSettings.moveNotifiedWorktreeToTop,
+      analyticsEnabled: initialSettings.analyticsEnabled,
+      crashReportsEnabled: initialSettings.crashReportsEnabled,
+      githubIntegrationEnabled: initialSettings.githubIntegrationEnabled,
+      deleteBranchOnAutomaticCleanup: initialSettings.deleteBranchOnAutomaticCleanup,
+      mergedWorktreeAction: initialSettings.mergedWorktreeAction,
+      promptForWorktreeCreation: initialSettings.promptForWorktreeCreation
+    )
+    await store.receive(\.delegate.settingsChanged)
+
+    expectNoDifference(settingsFile.global, expectedSettings)
+  }
+
+  @Test(.dependencies) func setSystemNotificationsEnabledPersistsChanges() async {
+    var initialSettings = GlobalSettings.default
+    initialSettings.systemNotificationsEnabled = false
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = initialSettings }
+
+    let store = TestStore(initialState: SettingsFeature.State(settings: initialSettings)) {
+      SettingsFeature()
+    }
+
+    await store.send(.setSystemNotificationsEnabled(true)) {
+      $0.systemNotificationsEnabled = true
+    }
+    await store.receive(\.delegate.settingsChanged)
+    #expect(settingsFile.global.systemNotificationsEnabled == true)
+  }
+
+  @Test(.dependencies) func selectingNotificationSoundPlaysPreview() async {
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = .default }
+
+    let played = LockIsolated<[NotificationSound]>([])
+    let store = TestStore(initialState: SettingsFeature.State()) {
+      SettingsFeature()
+    } withDependencies: {
+      $0[NotificationSoundClient.self].play = { sound in
+        played.withValue { $0.append(sound) }
+      }
+    }
+
+    await store.send(.binding(.set(\.notificationSound, .glass))) {
+      $0.notificationSound = .glass
+    }
+    await store.receive(\.delegate.settingsChanged)
+
+    // Picking a sound auditions it through the in-app player.
+    #expect(played.value == [.glass])
+  }
+
+  @Test(.dependencies) func doesNotPreviewWhenSystemNotificationsEnabled() async {
+    var settings = GlobalSettings.default
+    settings.systemNotificationsEnabled = true
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = settings }
+
+    let played = LockIsolated<[NotificationSound]>([])
+    let store = TestStore(initialState: SettingsFeature.State(settings: settings)) {
+      SettingsFeature()
+    } withDependencies: {
+      $0[NotificationSoundClient.self].play = { sound in
+        played.withValue { $0.append(sound) }
+      }
+    }
+
+    await store.send(.binding(.set(\.notificationSound, .glass))) {
+      $0.notificationSound = .glass
+    }
+    await store.receive(\.delegate.settingsChanged)
+
+    // With system notifications on the in-app path is unused, so no preview.
+    #expect(played.value.isEmpty)
+  }
+
+  @Test(.dependencies) func doesNotPreviewWhenNeverSelected() async {
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = .default }
+
+    let played = LockIsolated<[NotificationSound]>([])
+    let store = TestStore(initialState: SettingsFeature.State()) {
+      SettingsFeature()
+    } withDependencies: {
+      $0[NotificationSoundClient.self].play = { sound in
+        played.withValue { $0.append(sound) }
+      }
+    }
+
+    await store.send(.binding(.set(\.notificationSound, .never))) {
+      $0.notificationSound = .never
+    }
+    await store.receive(\.delegate.settingsChanged)
+
+    // "Never" has nothing to audition.
+    #expect(played.value.isEmpty)
+  }
+
+  @Test(.dependencies) func refreshDockBadgeAuthorizationStoresSystemState() async {
+    let store = TestStore(initialState: SettingsFeature.State()) {
+      SettingsFeature()
+    } withDependencies: {
+      $0.systemNotificationClient.dockBadgeAuthorization = { .badgeDisabled }
+    }
+
+    await store.send(.refreshDockBadgeAuthorization)
+    await store.receive(\.dockBadgeAuthorizationResponse) {
+      $0.dockBadgeAuthorization = .badgeDisabled
+    }
+  }
+
+  @Test(.dependencies) func selectionDoesNotMutateRepositorySettings() async {
+    let selection = SettingsSection.repository("repo-id")
+    let store = TestStore(initialState: SettingsFeature.State()) {
+      SettingsFeature()
+    }
+
+    await store.send(.setSelection(selection)) {
+      $0.selection = selection
+    }
+
+    await store.send(.setSelection(.general)) {
+      $0.selection = .general
+    }
+  }
+
+  @Test(.dependencies) func showShortcutNavigatesToAndTargetsEditableCommand() async {
+    var state = SettingsFeature.State()
+    state.selection = .notifications
+    let commandID = AppShortcuts.CommandID.toggleAgentIsland
+    let store = TestStore(initialState: state) {
+      SettingsFeature()
+    }
+
+    await store.send(.showShortcutButtonTapped(commandID: commandID)) {
+      $0.shortcutNavigationTargetCommandID = commandID
+    }
+    await store.receive(\.setSelection) {
+      $0.selection = .shortcuts
+    }
+    await store.send(.shortcutNavigationTargetConsumed) {
+      $0.shortcutNavigationTargetCommandID = nil
+    }
+  }
+
+  @Test(.dependencies) func showShortcutIgnoresFixedAndUnknownCommands() async {
+    let store = TestStore(initialState: SettingsFeature.State()) {
+      SettingsFeature()
+    }
+
+    await store.send(.showShortcutButtonTapped(commandID: AppShortcuts.CommandID.quitApplication))
+    await store.send(.showShortcutButtonTapped(commandID: "unknown_command"))
+  }
+
+  @Test(.dependencies) func loadingSettingsDoesNotResetSelection() async {
+    let rootURL = URL(fileURLWithPath: "/tmp/repo")
+    let selection = SettingsSection.repository("repo-id")
+    var state = SettingsFeature.State()
+    state.selection = selection
+    state.repositorySettings = RepositorySettingsFeature.State(
+      rootURL: rootURL,
+      repositoryKind: .git,
+      settings: .default,
+      userSettings: .default
+    )
+    let store = TestStore(initialState: state) {
+      SettingsFeature()
+    }
+
+    let loaded = GlobalSettings(
+      appearanceMode: .light,
+      defaultEditorID: OpenWorktreeAction.automaticSettingsID,
+      confirmBeforeQuit: false,
+      updatesAutomaticallyCheckForUpdates: false,
+      updatesAutomaticallyDownloadUpdates: true,
+      inAppNotificationsEnabled: false,
+      systemNotificationsEnabled: true,
+      moveNotifiedWorktreeToTop: true,
+      analyticsEnabled: true,
+      crashReportsEnabled: false,
+      githubIntegrationEnabled: true,
+      deleteBranchOnAutomaticCleanup: true,
+      mergedWorktreeAction: .archive,
+      promptForWorktreeCreation: false
+    )
+
+    await store.send(.settingsLoaded(loaded)) {
+      $0.appearanceMode = .light
+      $0.defaultEditorID = OpenWorktreeAction.automaticSettingsID
+      $0.confirmBeforeQuit = false
+      $0.updatesAutomaticallyCheckForUpdates = false
+      $0.updatesAutomaticallyDownloadUpdates = true
+      $0.inAppNotificationsEnabled = false
+      $0.moveNotifiedWorktreeToTop = true
+      $0.systemNotificationsEnabled = true
+      $0.analyticsEnabled = true
+      $0.crashReportsEnabled = false
+      $0.githubIntegrationEnabled = true
+      $0.deleteBranchOnAutomaticCleanup = true
+      $0.mergedWorktreeAction = .archive
+      $0.promptForWorktreeCreation = false
+      $0.selection = selection
+      $0.repositorySettings = RepositorySettingsFeature.State(
+        rootURL: rootURL,
+        repositoryKind: .git,
+        settings: .default,
+        userSettings: .default
+      )
+    }
+    await store.receive(\.delegate.settingsChanged)
+  }
+
+  @Test(.dependencies) func settingsLoadedNormalizesDefaultWorktreeBaseDirectoryPath() async {
+    var loaded = GlobalSettings.default
+    loaded.defaultWorktreeBaseDirectoryPath = " ~/worktrees "
+    let expectedPath = ProwlPaths.normalizedWorktreeBaseDirectoryPath(" ~/worktrees ")!
+    let storage = SettingsTestStorage()
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/prowl-settings-\(UUID().uuidString).json")
+    let store = TestStore(initialState: SettingsFeature.State()) {
+      SettingsFeature()
+    } withDependencies: {
+      $0.settingsFileStorage = storage.storage
+      $0.settingsFileURL = settingsFileURL
+    }
+
+    await store.send(.settingsLoaded(loaded)) {
+      $0.defaultWorktreeBaseDirectoryPath = expectedPath
+    }
+    await store.receive(\.delegate.settingsChanged)
+    #expect(store.state.defaultWorktreeBaseDirectoryPath == expectedPath)
+  }
+
+  @Test(.dependencies) func changingDefaultWorktreeBaseDirectoryUpdatesRepositorySettingsState() async {
+    let rootURL = URL(fileURLWithPath: "/tmp/repo")
+    let expectedPath = ProwlPaths.normalizedWorktreeBaseDirectoryPath(" ~/worktrees ")!
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = .default }
+    var state = SettingsFeature.State()
+    state.repositorySettings = RepositorySettingsFeature.State(
+      rootURL: rootURL,
+      repositoryKind: .git,
+      settings: .default,
+      userSettings: .default
+    )
+    let store = TestStore(initialState: state) {
+      SettingsFeature()
+    }
+
+    await store.send(.binding(.set(\.defaultWorktreeBaseDirectoryPath, " ~/worktrees "))) {
+      $0.defaultWorktreeBaseDirectoryPath = " ~/worktrees "
+      $0.repositorySettings?.globalDefaultWorktreeBaseDirectoryPath = expectedPath
+    }
+    await store.receive(\.delegate.settingsChanged)
+    #expect(store.state.repositorySettings?.globalDefaultWorktreeBaseDirectoryPath == expectedPath)
+    #expect(settingsFile.global.defaultWorktreeBaseDirectoryPath == expectedPath)
+  }
+
+  @Test(.dependencies) func changingCanvasDefaultLayoutPersists() async {
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = .default }
+    let store = TestStore(initialState: SettingsFeature.State()) {
+      SettingsFeature()
+    }
+    // Default is Tile; switch to Uniform and confirm it persists.
+    #expect(store.state.canvasDefaultLayout == .tile)
+    await store.send(.binding(.set(\.canvasDefaultLayout, .uniform))) {
+      $0.canvasDefaultLayout = .uniform
+    }
+    await store.receive(\.delegate.settingsChanged)
+    #expect(settingsFile.global.canvasDefaultLayout == .uniform)
+  }
+
+  @Test(.dependencies) func changingGlobalOverrideDefaultsUpdatesRepositorySettingsState() async {
+    let rootURL = URL(fileURLWithPath: "/tmp/repo")
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = .default }
+    var state = SettingsFeature.State()
+    state.repositorySettings = RepositorySettingsFeature.State(
+      rootURL: rootURL,
+      repositoryKind: .git,
+      settings: .default,
+      userSettings: .default
+    )
+    let store = TestStore(initialState: state) {
+      SettingsFeature()
+    }
+
+    await store.send(.binding(.set(\.copyIgnoredOnWorktreeCreate, true))) {
+      $0.copyIgnoredOnWorktreeCreate = true
+      $0.repositorySettings?.globalCopyIgnoredOnWorktreeCreate = true
+    }
+    await store.receive(\.delegate.settingsChanged)
+
+    await store.send(.binding(.set(\.copyUntrackedOnWorktreeCreate, true))) {
+      $0.copyUntrackedOnWorktreeCreate = true
+      $0.repositorySettings?.globalCopyUntrackedOnWorktreeCreate = true
+    }
+    await store.receive(\.delegate.settingsChanged)
+
+    await store.send(.binding(.set(\.pullRequestMergeStrategy, .squash))) {
+      $0.pullRequestMergeStrategy = .squash
+      $0.repositorySettings?.globalPullRequestMergeStrategy = .squash
+    }
+    await store.receive(\.delegate.settingsChanged)
+
+    #expect(store.state.repositorySettings?.globalCopyIgnoredOnWorktreeCreate == true)
+    #expect(store.state.repositorySettings?.globalCopyUntrackedOnWorktreeCreate == true)
+    #expect(store.state.repositorySettings?.globalPullRequestMergeStrategy == .squash)
+    #expect(settingsFile.global.copyIgnoredOnWorktreeCreate == true)
+    #expect(settingsFile.global.copyUntrackedOnWorktreeCreate == true)
+    #expect(settingsFile.global.pullRequestMergeStrategy == .squash)
+  }
+
+  @Test(.dependencies) func setTerminalFontSizePersistsWithoutAnalyticsOrGlobalFanout() async {
+    var initialSettings = GlobalSettings.default
+    initialSettings.analyticsEnabled = true
+    initialSettings.terminalFontSize = nil
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = initialSettings }
+    let capturedEvents = LockIsolated<[String]>([])
+
+    let store = TestStore(initialState: SettingsFeature.State(settings: initialSettings)) {
+      SettingsFeature()
+    } withDependencies: {
+      $0.analyticsClient.capture = { event, _ in
+        capturedEvents.withValue { $0.append(event) }
+      }
+    }
+
+    await store.send(.setTerminalFontSize(18)) {
+      $0.terminalFontSize = 18
+    }
+    await store.receive(\.delegate.terminalFontSizeChanged)
+    await store.finish()
+
+    #expect(settingsFile.global.terminalFontSize == 18)
+    #expect(capturedEvents.value.isEmpty)
+  }
+
+  @Test(.dependencies) func setTerminalFontSizeIgnoresDuplicateValue() async {
+    var initialSettings = GlobalSettings.default
+    initialSettings.analyticsEnabled = true
+    initialSettings.terminalFontSize = 18
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = initialSettings }
+    let capturedEvents = LockIsolated<[String]>([])
+
+    let store = TestStore(initialState: SettingsFeature.State(settings: initialSettings)) {
+      SettingsFeature()
+    } withDependencies: {
+      $0.analyticsClient.capture = { event, _ in
+        capturedEvents.withValue { $0.append(event) }
+      }
+    }
+
+    await store.send(.setTerminalFontSize(18))
+    await store.finish()
+
+    #expect(settingsFile.global.terminalFontSize == 18)
+    #expect(capturedEvents.value.isEmpty)
+  }
+
+  @Test(.dependencies) func keybindingOverridesPersistAndFanOut() async {
+    var initialSettings = GlobalSettings.default
+    initialSettings.keybindingUserOverrides = .empty
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = initialSettings }
+
+    let overrides = KeybindingUserOverrideStore(
+      overrides: [
+        AppShortcuts.CommandID.openSettings: KeybindingUserOverride(
+          binding: Keybinding(key: ";", modifiers: .init(command: true))
+        )
+      ]
+    )
+
+    let store = TestStore(initialState: SettingsFeature.State(settings: initialSettings)) {
+      SettingsFeature()
+    }
+
+    await store.send(.binding(.set(\.keybindingUserOverrides, overrides))) {
+      $0.keybindingUserOverrides = overrides
+    }
+    await store.receive(\.delegate.settingsChanged)
+
+    #expect(settingsFile.global.keybindingUserOverrides == overrides)
+  }
+
+  @Test(.dependencies) func clearShortcutPersistsDisabledOverrideAndFansOut() async {
+    var initialSettings = GlobalSettings.default
+    initialSettings.keybindingUserOverrides = .empty
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = initialSettings }
+
+    let commandID = AppShortcuts.CommandID.openSettings
+    let clearedOverride = KeybindingUserOverride(binding: nil, isEnabled: false)
+    let store = TestStore(initialState: SettingsFeature.State(settings: initialSettings)) {
+      SettingsFeature()
+    }
+
+    await store.send(.clearShortcutButtonTapped(commandID: commandID)) {
+      $0.keybindingUserOverrides.overrides[commandID] = clearedOverride
+    }
+    await store.receive(\.delegate.settingsChanged)
+
+    #expect(settingsFile.global.keybindingUserOverrides.overrides[commandID] == clearedOverride)
+
+    let resolved = KeybindingResolver.resolve(
+      schema: .appResolverSchema(),
+      userOverrides: settingsFile.global.keybindingUserOverrides
+    )
+    #expect(resolved.binding(for: commandID)?.binding == nil)
+    #expect(resolved.binding(for: commandID)?.source == .userOverride)
+  }
+
+  @Test(.dependencies) func clearShortcutIgnoresFixedAndUnknownCommands() async {
+    var initialSettings = GlobalSettings.default
+    initialSettings.keybindingUserOverrides = .empty
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = initialSettings }
+
+    let store = TestStore(initialState: SettingsFeature.State(settings: initialSettings)) {
+      SettingsFeature()
+    }
+
+    await store.send(.clearShortcutButtonTapped(commandID: AppShortcuts.CommandID.quitApplication))
+    await store.send(.clearShortcutButtonTapped(commandID: "unknown_command"))
+    await store.finish()
+
+    #expect(store.state.keybindingUserOverrides == .empty)
+    #expect(settingsFile.global.keybindingUserOverrides == .empty)
+  }
+
+  @Test(.dependencies) func clearShortcutPreservesOtherOverridesAndIsIdempotent() async {
+    let commandID = AppShortcuts.CommandID.openSettings
+    let otherCommandID = AppShortcuts.CommandID.commandPalette
+    let otherOverride = KeybindingUserOverride(
+      binding: Keybinding(key: "k", modifiers: .init(command: true, shift: true))
+    )
+    var initialSettings = GlobalSettings.default
+    initialSettings.keybindingUserOverrides = KeybindingUserOverrideStore(
+      overrides: [
+        commandID: KeybindingUserOverride(
+          binding: Keybinding(key: ";", modifiers: .init(command: true))
+        ),
+        otherCommandID: otherOverride,
+      ]
+    )
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = initialSettings }
+
+    let clearedOverride = KeybindingUserOverride(binding: nil, isEnabled: false)
+    let store = TestStore(initialState: SettingsFeature.State(settings: initialSettings)) {
+      SettingsFeature()
+    }
+
+    await store.send(.clearShortcutButtonTapped(commandID: commandID)) {
+      $0.keybindingUserOverrides.overrides[commandID] = clearedOverride
+    }
+    await store.receive(\.delegate.settingsChanged)
+    await store.send(.clearShortcutButtonTapped(commandID: commandID))
+    await store.finish()
+
+    #expect(settingsFile.global.keybindingUserOverrides.overrides[commandID] == clearedOverride)
+    #expect(settingsFile.global.keybindingUserOverrides.overrides[otherCommandID] == otherOverride)
+  }
+
+  @Test(.dependencies) func clearedShortcutDoesNotConflictWhenReassigned() async throws {
+    var initialSettings = GlobalSettings.default
+    initialSettings.keybindingUserOverrides = .empty
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = initialSettings }
+
+    let clearedCommandID = AppShortcuts.CommandID.openSettings
+    let reassignedCommandID = AppShortcuts.CommandID.commandPalette
+    let schema = KeybindingSchemaDocument.appResolverSchema()
+    let clearedBinding = schema.commands.first { $0.id == clearedCommandID }?.defaultBinding
+    let reassignedCommand = schema.commands.first { $0.id == reassignedCommandID }
+    let store = TestStore(initialState: SettingsFeature.State(settings: initialSettings)) {
+      SettingsFeature()
+    }
+
+    await store.send(.clearShortcutButtonTapped(commandID: clearedCommandID)) {
+      $0.keybindingUserOverrides.overrides[clearedCommandID] = KeybindingUserOverride(
+        binding: nil,
+        isEnabled: false
+      )
+    }
+    await store.receive(\.delegate.settingsChanged)
+
+    let conflict = ShortcutConflictDetector.firstConflictCommandID(
+      commandID: reassignedCommandID,
+      binding: try #require(clearedBinding),
+      policy: try #require(reassignedCommand?.conflictPolicy),
+      schema: schema,
+      userOverrides: store.state.keybindingUserOverrides
+    )
+    #expect(conflict == nil)
+  }
+
+  @Test(.dependencies) func autoShowActiveAgentsPanelPersistsChanges() async {
+    var initialSettings = GlobalSettings.default
+    initialSettings.autoShowActiveAgentsPanel = false
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = initialSettings }
+
+    let store = TestStore(initialState: SettingsFeature.State(settings: initialSettings)) {
+      SettingsFeature()
+    }
+
+    await store.send(.binding(.set(\.autoShowActiveAgentsPanel, true))) {
+      $0.autoShowActiveAgentsPanel = true
+    }
+    await store.receive(\.delegate.settingsChanged)
+
+    #expect(settingsFile.global.autoShowActiveAgentsPanel == true)
+  }
+
+  @Test(.dependencies) func showActiveAgentTabTitlesPersistsChanges() async {
+    var initialSettings = GlobalSettings.default
+    initialSettings.showActiveAgentTabTitles = false
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = initialSettings }
+
+    let store = TestStore(initialState: SettingsFeature.State(settings: initialSettings)) {
+      SettingsFeature()
+    }
+
+    await store.send(.binding(.set(\.showActiveAgentTabTitles, true))) {
+      $0.showActiveAgentTabTitles = true
+    }
+    await store.receive(\.delegate.settingsChanged)
+
+    #expect(settingsFile.global.showActiveAgentTabTitles == true)
+  }
+
+  @Test(.dependencies) func showActiveAgentStatusInShelfPersistsChanges() async {
+    var initialSettings = GlobalSettings.default
+    initialSettings.showActiveAgentStatusInShelf = true
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = initialSettings }
+
+    let store = TestStore(initialState: SettingsFeature.State(settings: initialSettings)) {
+      SettingsFeature()
+    }
+
+    await store.send(.binding(.set(\.showActiveAgentStatusInShelf, false))) {
+      $0.showActiveAgentStatusInShelf = false
+    }
+    await store.receive(\.delegate.settingsChanged)
+
+    #expect(settingsFile.global.showActiveAgentStatusInShelf == false)
+  }
+
+  @Test(.dependencies) func emptyIslandVisibilitySettingPersistsBothDirections() async {
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = .default }
+    let store = TestStore(initialState: SettingsFeature.State(settings: .default)) {
+      SettingsFeature()
+    }
+    #expect(!store.state.agentIslandOnlyShowWithAgents)
+    for enabled in [true, false] {
+      await store.send(.binding(.set(\.agentIslandOnlyShowWithAgents, enabled))) {
+        $0.agentIslandOnlyShowWithAgents = enabled
+      }
+      await store.receive(\.delegate.settingsChanged)
+      #expect(settingsFile.global.agentIslandOnlyShowWithAgents == enabled)
+    }
+  }
+
+  @Test(.dependencies) func agentIslandSettingsPersistChanges() async {
+    let initialSettings = GlobalSettings.default
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = initialSettings }
+
+    let store = TestStore(initialState: SettingsFeature.State(settings: initialSettings)) {
+      SettingsFeature()
+    }
+
+    await store.send(.binding(.set(\.agentIslandEnabled, true))) {
+      $0.agentIslandEnabled = true
+    }
+    await store.receive(\.delegate.settingsChanged)
+    await store.send(
+      .setAgentIslandFloatingPosition(displayID: "display-uuid", normalizedPosition: 0.25)
+    ) {
+      $0.agentIslandFloatingPositions.setNormalizedPosition(0.25, for: "display-uuid")
+    }
+    await store.receive(\.delegate.settingsChanged)
+    await store.send(.setAgentIslandSilentOpacity(0.6)) {
+      $0.agentIslandSilentOpacity = 0.6
+    }
+    await store.receive(\.delegate.settingsChanged)
+    await store.send(
+      .setAgentIslandDisplayPreference(.display(id: "display-uuid", name: "Studio Display"))
+    ) {
+      $0.agentIslandDisplayPreference = .display(id: "display-uuid", name: "Studio Display")
+    }
+    await store.receive(\.delegate.settingsChanged)
+
+    #expect(settingsFile.global.agentIslandEnabled)
+    #expect(
+      settingsFile.global.agentIslandDisplayPreference
+        == .display(id: "display-uuid", name: "Studio Display")
+    )
+    #expect(
+      settingsFile.global.agentIslandFloatingPositions.normalizedPosition(for: "display-uuid")
+        == 0.25
+    )
+    #expect(settingsFile.global.agentIslandSilentOpacity == 0.6)
+  }
+
+  @Test(.dependencies) func resettingAgentIslandFloatingPositionsPersists() async {
+    var initialSettings = GlobalSettings.default
+    initialSettings.agentIslandFloatingPositions.setNormalizedPosition(0.25, for: "display-uuid")
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = initialSettings }
+
+    let store = TestStore(initialState: SettingsFeature.State(settings: initialSettings)) {
+      SettingsFeature()
+    }
+
+    await store.send(.resetIslandFloatingPositionsTapped) {
+      $0.agentIslandFloatingPositions = .init()
+    }
+    await store.receive(\.delegate.settingsChanged)
+
+    #expect(settingsFile.global.agentIslandFloatingPositions.isEmpty)
+  }
+
+  @Test(.dependencies) func disablingAnalyticsResetsClient() async {
+    var initialSettings = GlobalSettings.default
+    initialSettings.analyticsEnabled = true
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = initialSettings }
+    let resetCount = LockIsolated(0)
+
+    let store = TestStore(initialState: SettingsFeature.State(settings: initialSettings)) {
+      SettingsFeature()
+    } withDependencies: {
+      $0.analyticsClient.capture = { _, _ in }
+      $0.analyticsClient.reset = {
+        resetCount.withValue { $0 += 1 }
+      }
+    }
+
+    await store.send(.binding(.set(\.analyticsEnabled, false))) {
+      $0.analyticsEnabled = false
+    }
+    await store.receive(\.delegate.settingsChanged)
+    await store.finish()
+
+    #expect(resetCount.value == 1)
+    #expect(settingsFile.global.analyticsEnabled == false)
+  }
+
+  @Test(.dependencies) func togglingOtherSettingWhileAnalyticsOffDoesNotReset() async {
+    var initialSettings = GlobalSettings.default
+    initialSettings.analyticsEnabled = false
+    initialSettings.confirmBeforeQuit = true
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = initialSettings }
+    let resetCount = LockIsolated(0)
+
+    let store = TestStore(initialState: SettingsFeature.State(settings: initialSettings)) {
+      SettingsFeature()
+    } withDependencies: {
+      $0.analyticsClient.capture = { _, _ in }
+      $0.analyticsClient.reset = {
+        resetCount.withValue { $0 += 1 }
+      }
+    }
+
+    await store.send(.binding(.set(\.confirmBeforeQuit, false))) {
+      $0.confirmBeforeQuit = false
+    }
+    await store.receive(\.delegate.settingsChanged)
+    await store.finish()
+
+    #expect(resetCount.value == 0)
+  }
+
+  @Test(.dependencies) func clearTerminalLayoutSnapshotSendsDelegate() async {
+    let store = TestStore(initialState: SettingsFeature.State()) {
+      SettingsFeature()
+    } withDependencies: {
+      $0.terminalLayoutPersistence.clearSnapshot = { true }
+    }
+
+    await store.send(.clearTerminalLayoutSnapshotButtonTapped)
+    await store.receive(\.delegate.terminalLayoutSnapshotCleared)
+  }
+
+  @Test(.dependencies) func alertButtonActionClearsThePresentationInTheReducer() async {
+    let store = TestStore(initialState: SettingsFeature.State()) {
+      SettingsFeature()
+    }
+
+    await store.send(.showNotificationPermissionAlert(errorMessage: nil)) {
+      $0.alert = AlertState {
+        TextState("Prowl cannot send system notifications")
+      } actions: {
+        ButtonState(action: .openSystemNotificationSettings) {
+          TextState("Open System Settings")
+        }
+        ButtonState(role: .cancel, action: .dismiss) {
+          TextState("Cancel")
+        }
+      } message: {
+        TextState(
+          "Notification permission is turned off. Open System Settings to allow Prowl to send notifications."
+        )
+      }
+    }
+
+    // The presentation reducer must clear the ephemeral alert itself — if the
+    // clearing only happened through the view's dismiss writeback, alert
+    // state set while the Settings window is closed would wedge as
+    // permanently "presented".
+    await store.send(.alert(.presented(.dismiss))) {
+      $0.alert = nil
+    }
+  }
+
+  @Test(.dependencies) func uninstallAlwaysAlertsEvenAfterSilentInstall() async {
+    let store = TestStore(initialState: SettingsFeature.State()) {
+      SettingsFeature()
+    } withDependencies: {
+      $0.cliInstallClient.install = { _ in }
+      $0.cliInstallClient.uninstall = { _ in }
+      $0.cliInstallClient.installationStatus = { _ in .notInstalled }
+    }
+
+    // A palette-triggered install suppresses its own alert…
+    await store.send(.installCLIButtonTapped(showAlert: false)) {
+      $0.cliInstallShowAlert = false
+    }
+    await store.receive(\.cliInstallCompleted)
+    await store.receive(\.delegate.cliInstallCompleted)
+
+    // …but a later uninstall from Settings must still report its result.
+    await store.send(.uninstallCLIButtonTapped) {
+      $0.cliInstallShowAlert = true
+    }
+    await store.receive(\.cliInstallCompleted) {
+      $0.alert = AlertState {
+        TextState("Command Line Tool Uninstalled")
+      } actions: {
+        ButtonState(action: .dismiss) { TextState("OK") }
+      } message: {
+        TextState("The prowl command line tool has been removed.")
+      }
+    }
+    await store.receive(\.delegate.cliInstallCompleted)
+  }
+
+  @Test(.dependencies) func settingsLoadedLeavesTheLanguageAlone() async {
+    // The language is not part of settings.json, so a settings load must not touch the
+    // choice or the launch snapshot.
+    let store = TestStore(
+      initialState: SettingsFeature.State(appLanguage: .zhHans, effectiveLanguageAtLaunch: .zhHans)
+    ) {
+      SettingsFeature()
+    }
+
+    await store.send(.settingsLoaded(.default))
+    await store.receive(\.delegate.settingsChanged)
+
+    #expect(store.state.appLanguage == .zhHans)
+    #expect(store.state.effectiveLanguageAtLaunch == .zhHans)
+  }
+
+  @Test(.dependencies) func setAppLanguageWritesTheChoice() async {
+    let written = LockIsolated<[AppLanguage]>([])
+    let store = TestStore(initialState: SettingsFeature.State(effectiveLanguageAtLaunch: .english)) {
+      SettingsFeature()
+    } withDependencies: {
+      $0.analyticsClient.capture = { _, _ in }
+      $0.appLanguage.set = { language in written.withValue { $0.append(language) } }
+    }
+
+    await store.send(.setAppLanguage(.zhHans)) {
+      $0.appLanguage = .zhHans
+    }
+    await store.finish()
+
+    #expect(written.value == [.zhHans])
+  }
+
+  @Test(.dependencies) func setAppLanguageIgnoresTheCurrentChoice() async {
+    let written = LockIsolated<[AppLanguage]>([])
+    let store = TestStore(initialState: SettingsFeature.State(appLanguage: .english)) {
+      SettingsFeature()
+    } withDependencies: {
+      $0.appLanguage.set = { language in written.withValue { $0.append(language) } }
+    }
+
+    await store.send(.setAppLanguage(.english))
+    await store.finish()
+
+    #expect(written.value.isEmpty)
+  }
+
+  @Test(.dependencies) func systemToMatchingExplicitLanguageShowsNoPendingRelaunch() async {
+    // The system already resolved to Chinese this launch; picking explicit
+    // Chinese changes nothing next launch, so no restart hint.
+    var state = SettingsFeature.State(effectiveLanguageAtLaunch: .zhHans)
+    state.systemPreferredLanguages = ["zh-Hans"]
+    let store = TestStore(initialState: state) {
+      SettingsFeature()
+    } withDependencies: {
+      $0.analyticsClient.capture = { _, _ in }
+      $0.appLanguage.set = { _ in }
+    }
+
+    #expect(!store.state.languageChangePending)
+    await store.send(.setAppLanguage(.zhHans)) {
+      $0.appLanguage = .zhHans
+    }
+    #expect(!store.state.languageChangePending)
+  }
+
+  @Test(.dependencies) func differentResolvedLanguageShowsPendingRelaunch() async {
+    var state = SettingsFeature.State(effectiveLanguageAtLaunch: .english)
+    state.systemPreferredLanguages = ["en"]
+    let store = TestStore(initialState: state) {
+      SettingsFeature()
+    } withDependencies: {
+      $0.analyticsClient.capture = { _, _ in }
+      $0.appLanguage.set = { _ in }
+    }
+
+    #expect(!store.state.languageChangePending)
+    await store.send(.setAppLanguage(.zhHans)) {
+      $0.appLanguage = .zhHans
+    }
+    #expect(store.state.languageChangePending)
+  }
+
+  @Test(.dependencies) func refreshReadsAChoiceMadeInSystemSettings() async {
+    // The user picked Chinese for Prowl in System Settings while the app was in the background.
+    var state = SettingsFeature.State(effectiveLanguageAtLaunch: .english)
+    state.systemPreferredLanguages = ["en"]
+    let store = TestStore(initialState: state) {
+      SettingsFeature()
+    } withDependencies: {
+      $0.appLanguage.current = { .zhHans }
+      $0.appLanguage.systemLanguages = { ["en", "zh-Hans"] }
+    }
+
+    await store.send(.refreshAppLanguage) {
+      $0.appLanguage = .zhHans
+      $0.systemPreferredLanguages = ["en", "zh-Hans"]
+    }
+    #expect(store.state.languageChangePending)
+  }
+
+  @Test func pendingPredictionIgnoresAnyCommandLineOverride() {
+    // This launch ran in Chinese via a temporary `-AppleLanguages zh-Hans`
+    // override; the choice still resolves to English for the next normal
+    // launch, so the hint compares against that, not the override.
+    var state = SettingsFeature.State(effectiveLanguageAtLaunch: .zhHans)
+    state.systemPreferredLanguages = ["en"]
+    #expect(state.languageChangePending)
+  }
+}

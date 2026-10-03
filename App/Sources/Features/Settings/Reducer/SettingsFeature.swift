@@ -1,0 +1,696 @@
+import ComposableArchitecture
+import Foundation
+import ProwlCLIShared
+import SwiftUI
+
+@Reducer
+struct SettingsFeature {
+  @ObservableState
+  struct State: Equatable {
+    var appearanceMode: AppearanceMode
+    /// The language choice. It mirrors the per-app `AppleLanguages` default, which
+    /// System Settings can also change, so `refreshAppLanguage` reads it again.
+    var appLanguage: AppLanguage
+    /// Immutable snapshot of the language this launch runs in, captured before any
+    /// localized UI is built. The pending-change hint compares the next launch with it.
+    var effectiveLanguageAtLaunch: ResolvedAppLanguage
+    /// The system languages without the per-app override. Used only to predict the
+    /// language of the next launch when the choice is "Follow System".
+    var systemPreferredLanguages: [String] = []
+    /// Localizations the app ships, in fallback order.
+    var supportedAppLanguages: [String] = ResolvedAppLanguage.allCases.map(\.rawValue)
+    var defaultEditorID: String
+    var confirmBeforeQuit: Bool
+    var updatesAutomaticallyCheckForUpdates: Bool
+    var updatesAutomaticallyDownloadUpdates: Bool
+    var inAppNotificationsEnabled: Bool
+    var notificationSound: NotificationSound
+    var systemNotificationsEnabled: Bool
+    var muteNotificationsForActiveSurface: Bool
+    var moveNotifiedWorktreeToTop: Bool
+    var commandFinishedNotificationEnabled: Bool
+    var commandFinishedNotificationThreshold: Int
+    var analyticsEnabled: Bool
+    var crashReportsEnabled: Bool
+    var githubIntegrationEnabled: Bool
+    var deleteBranchOnAutomaticCleanup: Bool
+    var mergedWorktreeAction: MergedWorktreeAction?
+    var archivedAutoDeletePeriod: AutoDeletePeriod?
+    var promptForWorktreeCreation: Bool
+    var fetchRemoteBeforeWorktreeCreation: Bool
+    var defaultWorktreeBaseDirectoryPath: String
+    var copyIgnoredOnWorktreeCreate: Bool
+    var copyUntrackedOnWorktreeCreate: Bool
+    var pullRequestMergeStrategy: PullRequestMergeStrategy
+    var restoreTerminalLayoutOnLaunch: Bool
+    var terminalFontSize: Float32?
+    var keybindingUserOverrides: KeybindingUserOverrideStore
+    var defaultViewMode: DefaultViewMode
+    var canvasDefaultLayout: CanvasDefaultLayout
+    var dimUnfocusedSplits: Bool
+    var autoShowActiveAgentsPanel: Bool
+    var showActiveAgentTabTitles: Bool
+    var showActiveAgentStatusInShelf: Bool
+    var agentIslandOnlyShowWithAgents: Bool
+    var agentIslandEnabled: Bool
+    var agentIslandDisplayPreference: AgentIslandDisplayPreference
+    var agentIslandFloatingPositions: AgentIslandFloatingPositions
+    var agentIslandSilentOpacity: Double
+    var windowTintMode: WindowTintMode
+    var shelfSpineTintFallback: ShelfSpineTintFallback
+    var shelfSpineTintFollowsRepositoryColor: Bool
+    /// Mirrors `GlobalSettings.windowTintCustomColor` as a live `Color` so
+    /// the `ColorPicker` can bind to it directly; converted back to the
+    /// persistable `TintColor` at the `globalSettings` boundary.
+    var windowTintCustomColor: Color
+    var showRunButtonInToolbar: Bool
+    var showDefaultEditorInToolbar: Bool
+    var dockBounceMode: DockBounceMode
+    var showNotificationDotOnDock: Bool
+    var externalDiffToolID: String
+    var externalDiffCustomCommand: String
+    var detectRepositoryIconsAutomatically: Bool
+    var cliInstallStatus: CLIInstallStatus = .notInstalled
+    var cliInstallShowAlert: Bool = true
+    /// Whether this app instance is listening for `prowl` (docs-ai 063 D1); refreshed with the
+    /// install status when the CLI & Skills page appears.
+    var cliServiceStatus: CLIServiceStatus = .stopped
+    /// Whether macOS will render the Dock notification badge (notification
+    /// permission + the per-app "Badge app icon" switch). Refreshed when the
+    /// Notifications settings pane appears.
+    var dockBadgeAuthorization: SystemNotificationClient.DockBadgeAuthorization = .available
+    var selection: SettingsSection? = .general
+    var shortcutNavigationTargetCommandID: String?
+    var repositorySettings: RepositorySettingsFeature.State?
+    var globalCustomCommands: GlobalCustomCommandsFeature.State?
+    var agentProfiles: AgentProfilesFeature.State?
+    var agentSkills: AgentSkillsFeature.State?
+    var workflows: WorkflowsSettingsFeature.State?
+    @Presents var alert: AlertState<Alert>?
+
+    init(
+      settings: GlobalSettings = .default,
+      appLanguage: AppLanguage = .system,
+      effectiveLanguageAtLaunch: ResolvedAppLanguage = .english,
+      systemPreferredLanguages: [String] = []
+    ) {
+      let normalizedDefaultEditorID = OpenWorktreeAction.normalizedDefaultEditorID(settings.defaultEditorID)
+      appearanceMode = settings.appearanceMode
+      self.appLanguage = appLanguage
+      self.effectiveLanguageAtLaunch = effectiveLanguageAtLaunch
+      self.systemPreferredLanguages = systemPreferredLanguages
+
+      defaultEditorID = normalizedDefaultEditorID
+      confirmBeforeQuit = settings.confirmBeforeQuit
+      updatesAutomaticallyCheckForUpdates = settings.updatesAutomaticallyCheckForUpdates
+      updatesAutomaticallyDownloadUpdates = settings.updatesAutomaticallyDownloadUpdates
+      inAppNotificationsEnabled = settings.inAppNotificationsEnabled
+      notificationSound = settings.notificationSound
+      systemNotificationsEnabled = settings.systemNotificationsEnabled
+      muteNotificationsForActiveSurface = settings.muteNotificationsForActiveSurface
+      moveNotifiedWorktreeToTop = settings.moveNotifiedWorktreeToTop
+      commandFinishedNotificationEnabled = settings.commandFinishedNotificationEnabled
+      commandFinishedNotificationThreshold = settings.commandFinishedNotificationThreshold
+      analyticsEnabled = settings.analyticsEnabled
+      crashReportsEnabled = settings.crashReportsEnabled
+      githubIntegrationEnabled = settings.githubIntegrationEnabled
+      deleteBranchOnAutomaticCleanup = settings.deleteBranchOnAutomaticCleanup
+      mergedWorktreeAction = settings.mergedWorktreeAction
+      archivedAutoDeletePeriod = settings.archivedAutoDeletePeriod
+      promptForWorktreeCreation = settings.promptForWorktreeCreation
+      fetchRemoteBeforeWorktreeCreation = settings.fetchOriginBeforeWorktreeCreation
+      defaultWorktreeBaseDirectoryPath =
+        ProwlPaths.normalizedWorktreeBaseDirectoryPath(settings.defaultWorktreeBaseDirectoryPath) ?? ""
+      copyIgnoredOnWorktreeCreate = settings.copyIgnoredOnWorktreeCreate
+      copyUntrackedOnWorktreeCreate = settings.copyUntrackedOnWorktreeCreate
+      pullRequestMergeStrategy = settings.pullRequestMergeStrategy
+      restoreTerminalLayoutOnLaunch = settings.restoreTerminalLayoutOnLaunch
+      terminalFontSize = settings.terminalFontSize
+      keybindingUserOverrides = settings.keybindingUserOverrides
+      defaultViewMode = settings.defaultViewMode
+      canvasDefaultLayout = settings.canvasDefaultLayout
+      dimUnfocusedSplits = settings.dimUnfocusedSplits
+      autoShowActiveAgentsPanel = settings.autoShowActiveAgentsPanel
+      showActiveAgentTabTitles = settings.showActiveAgentTabTitles
+      showActiveAgentStatusInShelf = settings.showActiveAgentStatusInShelf
+      agentIslandOnlyShowWithAgents = settings.agentIslandOnlyShowWithAgents
+      agentIslandEnabled = settings.agentIslandEnabled
+      agentIslandDisplayPreference = settings.agentIslandDisplayPreference
+      agentIslandFloatingPositions = settings.agentIslandFloatingPositions
+      agentIslandSilentOpacity = settings.agentIslandSilentOpacity
+      windowTintMode = settings.windowTintMode
+      shelfSpineTintFallback = settings.shelfSpineTintFallback
+      shelfSpineTintFollowsRepositoryColor = settings.shelfSpineTintFollowsRepositoryColor
+      windowTintCustomColor = settings.windowTintCustomColor.color
+      showRunButtonInToolbar = settings.showRunButtonInToolbar
+      showDefaultEditorInToolbar = settings.showDefaultEditorInToolbar
+      dockBounceMode = settings.dockBounceMode
+      showNotificationDotOnDock = settings.showNotificationDotOnDock
+      externalDiffToolID = settings.externalDiffToolID
+      externalDiffCustomCommand = settings.externalDiffCustomCommand
+      detectRepositoryIconsAutomatically = settings.detectRepositoryIconsAutomatically
+    }
+
+    /// True only when the language the *next normal launch* (no command-line
+    /// override) would resolve to differs from this launch's snapshot — so
+    /// system → the same explicit language the system already resolved to
+    /// never produces a false "takes effect after restart" hint.
+    var languageChangePending: Bool {
+      AppLanguageResolver.resolve(
+        preference: appLanguage,
+        platformLanguages: systemPreferredLanguages,
+        supportedLanguages: supportedAppLanguages
+      ) != effectiveLanguageAtLaunch
+    }
+
+    var globalSettings: GlobalSettings {
+      var settings = GlobalSettings(
+        appearanceMode: appearanceMode,
+        defaultEditorID: defaultEditorID,
+        confirmBeforeQuit: confirmBeforeQuit,
+        updatesAutomaticallyCheckForUpdates: updatesAutomaticallyCheckForUpdates,
+        updatesAutomaticallyDownloadUpdates: updatesAutomaticallyDownloadUpdates,
+        inAppNotificationsEnabled: inAppNotificationsEnabled,
+        notificationSound: notificationSound,
+        systemNotificationsEnabled: systemNotificationsEnabled,
+        muteNotificationsForActiveSurface: muteNotificationsForActiveSurface,
+        moveNotifiedWorktreeToTop: moveNotifiedWorktreeToTop,
+        commandFinishedNotificationEnabled: commandFinishedNotificationEnabled,
+        commandFinishedNotificationThreshold: commandFinishedNotificationThreshold,
+        analyticsEnabled: analyticsEnabled,
+        crashReportsEnabled: crashReportsEnabled,
+        githubIntegrationEnabled: githubIntegrationEnabled,
+        deleteBranchOnAutomaticCleanup: deleteBranchOnAutomaticCleanup,
+        mergedWorktreeAction: mergedWorktreeAction,
+        promptForWorktreeCreation: promptForWorktreeCreation,
+        fetchOriginBeforeWorktreeCreation: fetchRemoteBeforeWorktreeCreation,
+        defaultWorktreeBaseDirectoryPath: ProwlPaths.normalizedWorktreeBaseDirectoryPath(
+          defaultWorktreeBaseDirectoryPath
+        ),
+        copyIgnoredOnWorktreeCreate: copyIgnoredOnWorktreeCreate,
+        copyUntrackedOnWorktreeCreate: copyUntrackedOnWorktreeCreate,
+        pullRequestMergeStrategy: pullRequestMergeStrategy,
+        restoreTerminalLayoutOnLaunch: restoreTerminalLayoutOnLaunch,
+        archivedAutoDeletePeriod: archivedAutoDeletePeriod,
+        terminalFontSize: terminalFontSize,
+        keybindingUserOverrides: keybindingUserOverrides,
+        defaultViewMode: defaultViewMode,
+        canvasDefaultLayout: canvasDefaultLayout,
+        dimUnfocusedSplits: dimUnfocusedSplits,
+        autoShowActiveAgentsPanel: autoShowActiveAgentsPanel,
+        showActiveAgentTabTitles: showActiveAgentTabTitles,
+        showActiveAgentStatusInShelf: showActiveAgentStatusInShelf,
+        agentIslandOnlyShowWithAgents: agentIslandOnlyShowWithAgents,
+        agentIslandEnabled: agentIslandEnabled,
+        agentIslandDisplayPreference: agentIslandDisplayPreference,
+        agentIslandFloatingPositions: agentIslandFloatingPositions,
+        agentIslandSilentOpacity: agentIslandSilentOpacity,
+        windowTintMode: windowTintMode,
+        windowTintCustomColor: TintColor(windowTintCustomColor),
+        showRunButtonInToolbar: showRunButtonInToolbar,
+        showDefaultEditorInToolbar: showDefaultEditorInToolbar,
+        dockBounceMode: dockBounceMode,
+        showNotificationDotOnDock: showNotificationDotOnDock,
+        shelfSpineTintFallback: shelfSpineTintFallback,
+        shelfSpineTintFollowsRepositoryColor: shelfSpineTintFollowsRepositoryColor
+      )
+      settings.externalDiffToolID = externalDiffToolID
+      settings.externalDiffCustomCommand = externalDiffCustomCommand
+      settings.detectRepositoryIconsAutomatically = detectRepositoryIconsAutomatically
+      return settings
+    }
+  }
+
+  enum Action: BindableAction {
+    case task
+    case settingsLoaded(GlobalSettings)
+    case setAppLanguage(AppLanguage)
+    case refreshAppLanguage
+
+    case setSelection(SettingsSection?)
+    case setSystemNotificationsEnabled(Bool)
+    case setCommandFinishedNotificationThreshold(String)
+    case setTerminalFontSize(Float32?)
+    case setAgentIslandEnabled(Bool)
+    case setAgentIslandFloatingPosition(displayID: String, normalizedPosition: Double)
+    case setAgentIslandSilentOpacity(Double)
+    case setAgentIslandDisplayPreference(AgentIslandDisplayPreference)
+    case resetIslandFloatingPositionsTapped
+    case showShortcutButtonTapped(commandID: String)
+    case shortcutNavigationTargetConsumed
+    case clearShortcutButtonTapped(commandID: String)
+    case clearTerminalLayoutSnapshotButtonTapped
+    case installCLIButtonTapped(showAlert: Bool = true)
+    case uninstallCLIButtonTapped
+    case cliInstallCompleted(Result<String, CLIInstallError>)
+    case refreshCLIInstallStatus
+    case refreshCLIServiceStatus
+    case refreshDockBadgeAuthorization
+    case dockBadgeAuthorizationResponse(SystemNotificationClient.DockBadgeAuthorization)
+    case showNotificationPermissionAlert(errorMessage: String?)
+    case repositorySettings(RepositorySettingsFeature.Action)
+    case globalCustomCommands(GlobalCustomCommandsFeature.Action)
+    case agentProfiles(AgentProfilesFeature.Action)
+    case agentSkills(AgentSkillsFeature.Action)
+    case workflows(WorkflowsSettingsFeature.Action)
+    case alert(PresentationAction<Alert>)
+    case delegate(Delegate)
+    case binding(BindingAction<State>)
+  }
+
+  enum Alert: Equatable {
+    case dismiss
+    case openSystemNotificationSettings
+  }
+
+  enum CLIInstallResultMessage: Equatable {
+    case installed(path: String)
+    case uninstalled
+    case failed(message: String)
+  }
+
+  @CasePathable
+  enum Delegate: Equatable {
+    case settingsChanged(GlobalSettings)
+    case terminalFontSizeChanged(Float32?)
+    case terminalLayoutSnapshotCleared(success: Bool)
+    case cliInstallCompleted(CLIInstallResultMessage)
+    case editWorkspace(Repository.ID)
+  }
+
+  @Dependency(FeatureFlags.self) private var featureFlags
+  @Dependency(AnalyticsClient.self) private var analyticsClient
+  @Dependency(SystemNotificationClient.self) private var systemNotificationClient
+  @Dependency(NotificationSoundClient.self) private var notificationSoundClient
+  @Dependency(TerminalLayoutPersistenceClient.self) private var terminalLayoutPersistence
+  @Dependency(CLIInstallClient.self) private var cliInstallClient
+  @Dependency(CLIServiceStatusClient.self) private var cliServiceStatusClient
+  @Dependency(AppLanguageClient.self) private var appLanguageClient
+
+  var body: some Reducer<State, Action> {
+    BindingReducer()
+    Reduce<State, Action> { state, action in
+      switch action {
+      case .task:
+        @Shared(.settingsFile) var settingsFile
+        return .send(.settingsLoaded(settingsFile.global))
+
+      case .settingsLoaded(let settings):
+        let normalizedDefaultEditorID = OpenWorktreeAction.normalizedDefaultEditorID(settings.defaultEditorID)
+        let normalizedWorktreeBaseDirPath =
+          ProwlPaths.normalizedWorktreeBaseDirectoryPath(settings.defaultWorktreeBaseDirectoryPath)
+        let normalizedSettings: GlobalSettings
+        if normalizedDefaultEditorID == settings.defaultEditorID,
+          normalizedWorktreeBaseDirPath == settings.defaultWorktreeBaseDirectoryPath
+        {
+          normalizedSettings = settings
+        } else {
+          var updatedSettings = settings
+          updatedSettings.defaultEditorID = normalizedDefaultEditorID
+          updatedSettings.defaultWorktreeBaseDirectoryPath = normalizedWorktreeBaseDirPath
+          normalizedSettings = updatedSettings
+          @Shared(.settingsFile) var settingsFile
+          $settingsFile.withLock { $0.global = normalizedSettings }
+        }
+        state.appearanceMode = normalizedSettings.appearanceMode
+        state.defaultEditorID = normalizedSettings.defaultEditorID
+        state.confirmBeforeQuit = normalizedSettings.confirmBeforeQuit
+        state.updatesAutomaticallyCheckForUpdates = normalizedSettings.updatesAutomaticallyCheckForUpdates
+        state.updatesAutomaticallyDownloadUpdates = normalizedSettings.updatesAutomaticallyDownloadUpdates
+        state.inAppNotificationsEnabled = normalizedSettings.inAppNotificationsEnabled
+        state.notificationSound = normalizedSettings.notificationSound
+        state.systemNotificationsEnabled = normalizedSettings.systemNotificationsEnabled
+        state.muteNotificationsForActiveSurface = normalizedSettings.muteNotificationsForActiveSurface
+        state.moveNotifiedWorktreeToTop = normalizedSettings.moveNotifiedWorktreeToTop
+        state.commandFinishedNotificationEnabled = normalizedSettings.commandFinishedNotificationEnabled
+        state.commandFinishedNotificationThreshold = normalizedSettings.commandFinishedNotificationThreshold
+        state.analyticsEnabled = normalizedSettings.analyticsEnabled
+        state.crashReportsEnabled = normalizedSettings.crashReportsEnabled
+        state.githubIntegrationEnabled = normalizedSettings.githubIntegrationEnabled
+        state.deleteBranchOnAutomaticCleanup = normalizedSettings.deleteBranchOnAutomaticCleanup
+        state.mergedWorktreeAction = normalizedSettings.mergedWorktreeAction
+        state.archivedAutoDeletePeriod = normalizedSettings.archivedAutoDeletePeriod
+        state.promptForWorktreeCreation = normalizedSettings.promptForWorktreeCreation
+        state.fetchRemoteBeforeWorktreeCreation = normalizedSettings.fetchOriginBeforeWorktreeCreation
+        state.defaultWorktreeBaseDirectoryPath = normalizedSettings.defaultWorktreeBaseDirectoryPath ?? ""
+        state.copyIgnoredOnWorktreeCreate = normalizedSettings.copyIgnoredOnWorktreeCreate
+        state.copyUntrackedOnWorktreeCreate = normalizedSettings.copyUntrackedOnWorktreeCreate
+        state.pullRequestMergeStrategy = normalizedSettings.pullRequestMergeStrategy
+        state.restoreTerminalLayoutOnLaunch = normalizedSettings.restoreTerminalLayoutOnLaunch
+        state.terminalFontSize = normalizedSettings.terminalFontSize
+        state.keybindingUserOverrides = normalizedSettings.keybindingUserOverrides
+        state.defaultViewMode = normalizedSettings.defaultViewMode
+        state.dimUnfocusedSplits = normalizedSettings.dimUnfocusedSplits
+        state.autoShowActiveAgentsPanel = normalizedSettings.autoShowActiveAgentsPanel
+        state.showActiveAgentTabTitles = normalizedSettings.showActiveAgentTabTitles
+        state.showActiveAgentStatusInShelf = normalizedSettings.showActiveAgentStatusInShelf
+        state.agentIslandOnlyShowWithAgents = normalizedSettings.agentIslandOnlyShowWithAgents
+        state.agentIslandEnabled = normalizedSettings.agentIslandEnabled
+        state.agentIslandDisplayPreference = normalizedSettings.agentIslandDisplayPreference
+        state.agentIslandFloatingPositions = normalizedSettings.agentIslandFloatingPositions
+        state.agentIslandSilentOpacity = normalizedSettings.agentIslandSilentOpacity
+        state.windowTintMode = normalizedSettings.windowTintMode
+        state.shelfSpineTintFallback = normalizedSettings.shelfSpineTintFallback
+        state.shelfSpineTintFollowsRepositoryColor = normalizedSettings.shelfSpineTintFollowsRepositoryColor
+        state.windowTintCustomColor = normalizedSettings.windowTintCustomColor.color
+        state.showRunButtonInToolbar = normalizedSettings.showRunButtonInToolbar
+        state.showDefaultEditorInToolbar = normalizedSettings.showDefaultEditorInToolbar
+        state.dockBounceMode = normalizedSettings.dockBounceMode
+        state.showNotificationDotOnDock = normalizedSettings.showNotificationDotOnDock
+        state.externalDiffToolID = normalizedSettings.externalDiffToolID
+        state.externalDiffCustomCommand = normalizedSettings.externalDiffCustomCommand
+        state.canvasDefaultLayout = normalizedSettings.canvasDefaultLayout
+        state.detectRepositoryIconsAutomatically = normalizedSettings.detectRepositoryIconsAutomatically
+        state.syncGlobalDefaults(from: normalizedSettings)
+        return .send(.delegate(.settingsChanged(normalizedSettings)))
+
+      case .setAppLanguage(let language):
+        guard language != state.appLanguage else { return .none }
+        state.appLanguage = language
+        let analyticsEnabled = state.analyticsEnabled
+        return .run { [analyticsClient, appLanguageClient] _ in
+          appLanguageClient.set(language)
+          if analyticsEnabled {
+            analyticsClient.capture("settings_changed", nil)
+          }
+        }
+
+      case .refreshAppLanguage:
+        state.appLanguage = appLanguageClient.current()
+        state.systemPreferredLanguages = appLanguageClient.systemLanguages()
+        return .none
+
+      case .binding(\.notificationSound):
+        let sound = state.notificationSound
+        // Preview the chosen sound, but only on the in-app path: with system
+        // notifications on, the banner plays the macOS default instead. `.never`
+        // has nothing to audition.
+        let shouldPreview = !state.systemNotificationsEnabled && sound != .never
+        state.syncGlobalDefaults(from: state.globalSettings)
+        return .merge(
+          persist(state),
+          shouldPreview ? .run { _ in await notificationSoundClient.play(sound) } : .none
+        )
+
+      case .binding:
+        state.commandFinishedNotificationThreshold = min(max(state.commandFinishedNotificationThreshold, 0), 600)
+        state.syncGlobalDefaults(from: state.globalSettings)
+        return persist(state)
+
+      case .setCommandFinishedNotificationThreshold(let text):
+        if let parsed = Int(text) {
+          state.commandFinishedNotificationThreshold = min(max(parsed, 0), 600)
+        } else {
+          state.commandFinishedNotificationThreshold = 10
+        }
+        return persist(state)
+
+      case .setSystemNotificationsEnabled(let isEnabled):
+        state.systemNotificationsEnabled = isEnabled
+        state.syncGlobalDefaults(from: state.globalSettings)
+        return persist(state)
+
+      case .setTerminalFontSize(let fontSize):
+        guard state.terminalFontSize != fontSize else { return .none }
+        state.terminalFontSize = fontSize
+        return .merge(
+          persist(state, captureAnalytics: false, emitSettingsChanged: false),
+          .send(.delegate(.terminalFontSizeChanged(fontSize)))
+        )
+
+      case .setAgentIslandEnabled(let enabled):
+        state.agentIslandEnabled = enabled
+        state.syncGlobalDefaults(from: state.globalSettings)
+        return persist(state)
+
+      case .setAgentIslandFloatingPosition(let displayID, let normalizedPosition):
+        state.agentIslandFloatingPositions.setNormalizedPosition(
+          normalizedPosition,
+          for: displayID
+        )
+        return persist(state)
+
+      case .setAgentIslandSilentOpacity(let opacity):
+        state.agentIslandSilentOpacity = AgentIslandOpacityPolicy.normalizedSilentOpacity(opacity)
+        return persist(state, captureAnalytics: false)
+
+      case .setAgentIslandDisplayPreference(let preference):
+        state.agentIslandDisplayPreference = preference
+        return persist(state)
+
+      case .resetIslandFloatingPositionsTapped:
+        guard !state.agentIslandFloatingPositions.isEmpty else { return .none }
+        state.agentIslandFloatingPositions = .init()
+        return persist(state)
+
+      case .showShortcutButtonTapped(let commandID):
+        guard
+          KeybindingSchemaDocument.appDefaultsV1.commands.contains(where: {
+            $0.id == commandID && $0.allowUserOverride
+          })
+        else {
+          return .none
+        }
+        state.shortcutNavigationTargetCommandID = commandID
+        return .send(.setSelection(.shortcuts))
+
+      case .shortcutNavigationTargetConsumed:
+        state.shortcutNavigationTargetCommandID = nil
+        return .none
+
+      case .clearShortcutButtonTapped(let commandID):
+        guard
+          let command = KeybindingSchemaDocument.appDefaultsV1.commands.first(where: { $0.id == commandID }),
+          command.allowUserOverride
+        else {
+          return .none
+        }
+
+        let clearedOverride = KeybindingUserOverride(binding: nil, isEnabled: false)
+        guard state.keybindingUserOverrides.overrides[commandID] != clearedOverride else {
+          return .none
+        }
+
+        state.keybindingUserOverrides.overrides[commandID] = clearedOverride
+        state.syncGlobalDefaults(from: state.globalSettings)
+        return persist(state)
+
+      case .clearTerminalLayoutSnapshotButtonTapped:
+        return .run { send in
+          let success = await terminalLayoutPersistence.clearSnapshot()
+          await send(.delegate(.terminalLayoutSnapshotCleared(success: success)))
+        }
+
+      case .installCLIButtonTapped(let showAlert):
+        state.cliInstallShowAlert = showAlert
+        let installPath = cliDefaultInstallPath
+        return .run { [cliInstallClient] send in
+          do {
+            try await cliInstallClient.install(installPath)
+            let path = installPath.path(percentEncoded: false)
+            await send(.cliInstallCompleted(.success(path)))
+          } catch let error as CLIInstallError {
+            await send(.cliInstallCompleted(.failure(error)))
+          } catch {
+            await send(.cliInstallCompleted(.failure(CLIInstallError(message: error.localizedDescription))))
+          }
+        }
+
+      case .uninstallCLIButtonTapped:
+        // Uninstall is only reachable from the Settings UI, so its result
+        // must always alert — without this, a palette-triggered install
+        // (showAlert: false) leaves the flag stuck and a failed uninstall
+        // would report nothing at all.
+        state.cliInstallShowAlert = true
+        let installPath = cliDefaultInstallPath
+        return .run { [cliInstallClient] send in
+          do {
+            try await cliInstallClient.uninstall(installPath)
+            await send(.cliInstallCompleted(.success("")))
+          } catch let error as CLIInstallError {
+            await send(.cliInstallCompleted(.failure(error)))
+          } catch {
+            await send(.cliInstallCompleted(.failure(CLIInstallError(message: error.localizedDescription))))
+          }
+        }
+
+      case .cliInstallCompleted(.success(let path)):
+        if state.cliInstallShowAlert {
+          if path.isEmpty {
+            state.alert = AlertState {
+              TextState(String(localized: "Command Line Tool Uninstalled"))
+            } actions: {
+              ButtonState(action: .dismiss) { TextState(String(localized: "OK")) }
+            } message: {
+              TextState(String(localized: "The prowl command line tool has been removed."))
+            }
+          } else {
+            state.alert = AlertState {
+              TextState(String(localized: "Command Line Tool Installed"))
+            } actions: {
+              ButtonState(action: .dismiss) { TextState(String(localized: "OK")) }
+            } message: {
+              TextState(String(localized: "The prowl command is now available at \(path)."))
+            }
+          }
+        }
+        state.cliInstallStatus = cliInstallClient.installationStatus(cliDefaultInstallPath)
+        let result: CLIInstallResultMessage = path.isEmpty ? .uninstalled : .installed(path: path)
+        return .send(.delegate(.cliInstallCompleted(result)))
+
+      case .cliInstallCompleted(.failure(let error)):
+        if state.cliInstallShowAlert {
+          state.alert = AlertState {
+            TextState(String(localized: "Command Line Tool Error"))
+          } actions: {
+            ButtonState(action: .dismiss) { TextState(String(localized: "OK")) }
+          } message: {
+            TextState(error.message)
+          }
+        }
+        state.cliInstallStatus = cliInstallClient.installationStatus(cliDefaultInstallPath)
+        return .send(.delegate(.cliInstallCompleted(.failed(message: error.message))))
+
+      case .refreshCLIInstallStatus:
+        state.cliInstallStatus = cliInstallClient.installationStatus(cliDefaultInstallPath)
+        return .none
+
+      case .refreshCLIServiceStatus:
+        state.cliServiceStatus = cliServiceStatusClient.current()
+        return .none
+
+      case .refreshDockBadgeAuthorization:
+        return .run { send in
+          await send(.dockBadgeAuthorizationResponse(systemNotificationClient.dockBadgeAuthorization()))
+        }
+
+      case .dockBadgeAuthorizationResponse(let authorization):
+        state.dockBadgeAuthorization = authorization
+        return .none
+
+      case .showNotificationPermissionAlert:
+        state.alert = AlertState {
+          TextState(String(localized: "Prowl cannot send system notifications"))
+        } actions: {
+          ButtonState(action: .openSystemNotificationSettings) {
+            TextState(String(localized: "Open System Settings"))
+          }
+          ButtonState(role: .cancel, action: .dismiss) {
+            TextState(String(localized: "Cancel"))
+          }
+        } message: {
+          TextState(
+            String(
+              localized:
+                "Notification permission is turned off. Open System Settings to allow Prowl to send notifications.")
+          )
+        }
+        return .none
+
+      case .setSelection(let selection):
+        let resolvedSelection = selection == .workflows && !featureFlags.workflowUI ? .profiles : selection ?? .general
+        state.selection = resolvedSelection
+        // Owned here rather than in AppFeature so `ifLet` observes the removal and cancels an
+        // in-flight link effect (or the Workflows page's directory watcher) instead of letting
+        // its completion land on nil child state.
+        if resolvedSelection == .commandLineTool {
+          if state.agentSkills == nil {
+            state.agentSkills = .init()
+          }
+        } else {
+          state.agentSkills = nil
+        }
+        if resolvedSelection == .workflows {
+          if state.workflows == nil {
+            state.workflows = .init()
+          }
+        } else {
+          state.workflows = nil
+        }
+        return .none
+
+      case .alert(.presented(.openSystemNotificationSettings)):
+        return .run { _ in
+          await systemNotificationClient.openSettings()
+        }
+
+      case .alert:
+        return .none
+
+      case .repositorySettings(.delegate(.editWorkspace(let repositoryID))):
+        return .send(.delegate(.editWorkspace(repositoryID)))
+
+      case .repositorySettings:
+        return .none
+
+      case .globalCustomCommands:
+        return .none
+
+      case .agentProfiles:
+        return .none
+
+      case .agentSkills:
+        return .none
+
+      case .workflows:
+        return .none
+
+      case .delegate:
+        return .none
+      }
+    }
+    .ifLet(\.repositorySettings, action: \.repositorySettings) {
+      RepositorySettingsFeature()
+    }
+    .ifLet(\.globalCustomCommands, action: \.globalCustomCommands) {
+      GlobalCustomCommandsFeature()
+    }
+    .ifLet(\.agentProfiles, action: \.agentProfiles) {
+      AgentProfilesFeature()
+    }
+    .ifLet(\.agentSkills, action: \.agentSkills) {
+      AgentSkillsFeature()
+    }
+    .ifLet(\.workflows, action: \.workflows) {
+      WorkflowsSettingsFeature()
+    }
+    // Without this, alert state is only cleared by the view's dismiss
+    // writeback: state set while the Settings window is closed (or closed
+    // while an alert is up) would wedge as permanently "presented".
+    .ifLet(\.$alert, action: \.alert)
+  }
+
+  private func persist(
+    _ state: State,
+    captureAnalytics: Bool = true,
+    emitSettingsChanged: Bool = true
+  ) -> Effect<Action> {
+    let settings = state.globalSettings
+    @Shared(.settingsFile) var settingsFile
+    let previouslyAnalyticsEnabled = settingsFile.global.analyticsEnabled
+    $settingsFile.withLock { $0.global = settings }
+    if captureAnalytics, settings.analyticsEnabled {
+      analyticsClient.capture("settings_changed", nil)
+    }
+    if previouslyAnalyticsEnabled, !settings.analyticsEnabled {
+      analyticsClient.reset()
+    }
+    if emitSettingsChanged {
+      return .send(.delegate(.settingsChanged(settings)))
+    }
+    return .none
+  }
+}
+
+extension SettingsFeature.State {
+  mutating func syncGlobalDefaults(from settings: GlobalSettings) {
+    repositorySettings?.globalDefaultWorktreeBaseDirectoryPath =
+      settings.defaultWorktreeBaseDirectoryPath
+    repositorySettings?.globalCopyIgnoredOnWorktreeCreate =
+      settings.copyIgnoredOnWorktreeCreate
+    repositorySettings?.globalCopyUntrackedOnWorktreeCreate =
+      settings.copyUntrackedOnWorktreeCreate
+    repositorySettings?.globalPullRequestMergeStrategy =
+      settings.pullRequestMergeStrategy
+  }
+}

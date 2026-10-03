@@ -6,7 +6,7 @@ import unittest
 class AgentWaitScreenProviderTests(unittest.TestCase):
     def test_wait_screen_uses_detection_buffer(self):
         root = pathlib.Path(__file__).resolve().parents[1]
-        source = (root / "supacode" / "App" / "supacodeApp.swift").read_text()
+        source = (root / "App" / "Sources" / "App" / "ProwlApp.swift").read_text()
         match = re.search(
             r"screenProvider:\s*\{ target in(?P<body>.*?)\n\s*\}\n\s*\)",
             source,

@@ -28,4 +28,4 @@ Condition and exact-receipt waiting, and re-dispatching a new task into an exist
 pane with `prowl agents dispatch`, are specified by [agents-wait](agents-wait.md).
 The complete roster response schema is
 `#/$defs/agentsResponse` in
-[`schema-bundle.json`](../../../ProwlCLIContracts/Resources/cli-output-schema.json).
+[`schema-bundle.json`](../../../CLI/Sources/ProwlCLIContracts/Resources/cli-output-schema.json).

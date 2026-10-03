@@ -171,4 +171,4 @@ common error envelope. Unsupported prompted starts and invalid prompt values ret
 under `CREATE_FAILED`. Client-side version mismatch errors warn that an ordinary shell or
 Profile pane may already have been created and direct the caller to inspect `prowl list` and
 close it. See
-[`cli-output-schema.json`](../../../ProwlCLIContracts/Resources/cli-output-schema.json).
+[`cli-output-schema.json`](../../../CLI/Sources/ProwlCLIContracts/Resources/cli-output-schema.json).

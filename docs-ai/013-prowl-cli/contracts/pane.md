@@ -13,4 +13,4 @@ It is retained for one shipped release only.
 
 The legacy success payload remains `{ "action": "close", "target": … }`; the
 complete schema is `#/$defs/paneResponse` in
-[`schema-bundle.json`](../../../ProwlCLIContracts/Resources/cli-output-schema.json).
+[`schema-bundle.json`](../../../CLI/Sources/ProwlCLIContracts/Resources/cli-output-schema.json).

@@ -2,5 +2,5 @@
 	path = ThirdParty/ghostty
 	url = https://github.com/onevcat/ghostty.git
 [submodule "Resources/git-wt"]
-	path = Resources/git-wt
+	path = ThirdParty/git-wt
 	url = https://github.com/khoi/git-wt.git

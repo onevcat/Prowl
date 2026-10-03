@@ -2,7 +2,7 @@
 """Turn a `prowl read --source detection` capture into a corpus fixture.
 
 Implements steps 3, 6, and 7 of the capture-and-promotion procedure in
-`supacodeTests/Fixtures/AgentScreenDetection/README.md`: it rejects a capture
+`App/Tests/Fixtures/AgentScreenDetection/README.md`: it rejects a capture
 that is not detector-faithful, reduces the screen to the exact slice the
 detector reads for the given agent, and applies redactions without changing
 the visible width of any line.
@@ -25,7 +25,7 @@ Usage:
         --agent claude \\
         --redact /Users/me=/Users/usr \\
         --redact 'Acme Inc=<ORG_0000>' \\
-        > supacodeTests/Fixtures/AgentScreenDetection/claude/2.1.226/idle/composer.txt
+        > App/Tests/Fixtures/AgentScreenDetection/claude/2.1.226/idle/composer.txt
 
 Each `--redact OLD=NEW` is applied in order. `NEW` may differ in length from
 `OLD`: the difference is taken out of, or added to, that line's trailing spaces,
@@ -49,7 +49,7 @@ import sys
 import unicodedata
 
 # Ports of `agentDetectionRecentLineLimit` and `piAgentDetectionRecentLineLimit`
-# in `supacode/Infrastructure/AgentDetection/ScreenHeuristics.swift`.
+# in `App/Sources/Infrastructure/AgentDetection/ScreenHeuristics.swift`.
 # `test_tail_limits_match_the_swift_constants` fails when either one drifts.
 DETECTOR_TAIL_LIMIT = 24
 PI_DETECTOR_TAIL_LIMIT = 32

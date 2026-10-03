@@ -1,9 +1,0 @@
-{
-  "archiveScript" : "",
-  "copyIgnoredOnWorktreeCreate" : true,
-  "copyUntrackedOnWorktreeCreate" : true,
-  "openActionID" : "xcode",
-  "pullRequestMergeStrategy" : "merge",
-  "runScript" : "make run-app",
-  "setupScript" : "git submodule update -f --depth=1 --init --no-fetch  -j 8 --progress\ncodex"
-}

@@ -8,15 +8,10 @@ import os
 from pathlib import Path
 import subprocess
 
-INPUTS = [
-    "Package.swift", "Package.resolved", "ProwlCLI", "ProwlCLITests",
-    "ProwlCLIContracts", "supacode/CLIService/Shared",
-]
+# The SwiftPM packages. The app also compiles `Shared` and the relay wire types.
+INPUTS = ["CLI", "Shared", "Mirror/Relay"]
 # The Xcode projects are generated; the manifests and xcconfig files are their tracked inputs.
-APP_INPUTS = [
-    "supacode", "supacodeTests", "MirrorClient/Shared", "Project.swift", "Workspace.swift",
-    "Tuist.swift", "Config/Xcode", ".package.resolved",
-]
+APP_INPUTS = ["App", "Mirror/Shared", "Workspace.swift", "Tuist.swift", ".package.resolved"]
 
 
 def tracked_inputs(root, scope):
@@ -94,7 +89,7 @@ def main():
     args = parser.parse_args()
     root = Path.cwd().resolve()
     names = tracked_inputs(root, args.scope)
-    manifest = args.manifest or root / ".build/prowl-ci-source-mtimes.json"
+    manifest = args.manifest or root / "CLI/.build/prowl-ci-source-mtimes.json"
     if args.scope == "app" and args.manifest is None:
         parser.error("--scope app requires --manifest")
     if args.action == "save":

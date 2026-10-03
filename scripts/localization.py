@@ -44,10 +44,10 @@ import sys
 
 
 ROOT = Path(__file__).resolve().parent.parent
-CATALOG = ROOT / "supacode" / "Localizable.xcstrings"
+CATALOG = ROOT / "App" / "Sources" / "Localizable.xcstrings"
 BASELINE = ROOT / "scripts" / "localization_baseline.json"
-SOURCES = "supacode"
-TARGET = "supacode"
+SOURCES = "App/Sources"
+TARGET = "Prowl"
 TABLE = "Localizable"
 EXEMPT_CATEGORIES = ("identifier", "product-name", "log", "agent-prompt", "protocol", "developer", "other")
 

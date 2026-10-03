@@ -114,9 +114,9 @@ class TranslationIssueTests(unittest.TestCase):
 
 class ExtractionIssueTests(unittest.TestCase):
     def test_reports_key_in_code_without_entry(self):
-        extracted = {"Open": {"supacode/A.swift:3"}, "Close": {"supacode/B.swift:9", "supacode/B.swift:4"}}
+        extracted = {"Open": {"App/Sources/A.swift:3"}, "Close": {"App/Sources/B.swift:9", "App/Sources/B.swift:4"}}
         issues = extraction_issues(catalog({"Open": entry("打开")}), extracted)
-        self.assertEqual(issues.missing, {"Close": ["supacode/B.swift:4", "supacode/B.swift:9"]})
+        self.assertEqual(issues.missing, {"Close": ["App/Sources/B.swift:4", "App/Sources/B.swift:9"]})
         self.assertEqual(issues.unused, [])
 
     def test_reports_entry_without_use(self):
@@ -202,45 +202,45 @@ class CandidateLiteralTests(unittest.TestCase):
 
     def test_finds_sentences_anywhere(self):
         text = 'let message = "Unable to create worktree"\nlet key = "defaultEditorID"\n'
-        self.assertEqual(self.scan("supacode/Domain/Thing.swift", text), ["Unable to create worktree"])
+        self.assertEqual(self.scan("App/Sources/Domain/Thing.swift", text), ["Unable to create worktree"])
 
     def test_finds_single_words_only_in_view_files(self):
         text = 'Text(flag ? "Ready" : label)\n'
-        self.assertEqual(self.scan("supacode/Features/X/Views/Row.swift", text), ["Ready"])
-        self.assertEqual(self.scan("supacode/Domain/Thing.swift", text), [])
+        self.assertEqual(self.scan("App/Sources/Features/X/Views/Row.swift", text), ["Ready"])
+        self.assertEqual(self.scan("App/Sources/Domain/Thing.swift", text), [])
 
     def test_describes_interpolation_as_a_placeholder(self):
         text = 'return "Cannot reach \\(endpoint). Check the network."\n'
-        self.assertEqual(self.scan("supacode/Domain/Thing.swift", text), ["Cannot reach %@. Check the network."])
+        self.assertEqual(self.scan("App/Sources/Domain/Thing.swift", text), ["Cannot reach %@. Check the network."])
 
     def test_finds_one_word_with_a_value_anywhere(self):
         text = 'let label = "Automatic (\\(ref))"\nlet header = "Bearer \\(token)"\nlet key = "prefix-\\(id)"\n'
-        self.assertEqual(self.scan("supacode/Domain/Thing.swift", text), ["Automatic (%@)", "Bearer %@"])
+        self.assertEqual(self.scan("App/Sources/Domain/Thing.swift", text), ["Automatic (%@)", "Bearer %@"])
 
     def test_skips_file_names_and_identifiers(self):
         text = 'let a = "Cargo.toml"\nlet b = "PROWL_LAUNCH_HOOK_TOKEN"\nlet c = "\\(home)/.local/bin/gh"\n'
-        self.assertEqual(self.scan("supacode/Domain/Thing.swift", text), [])
+        self.assertEqual(self.scan("App/Sources/Domain/Thing.swift", text), [])
 
     def test_skips_comments(self):
-        self.assertEqual(self.scan("supacode/Domain/Thing.swift", '// "Not real copy here"\n'), [])
+        self.assertEqual(self.scan("App/Sources/Domain/Thing.swift", '// "Not real copy here"\n'), [])
 
     def test_reads_past_quotes_inside_an_interpolation(self):
         text = 'let text = "Launching role \\(redelivery ? "again" : "now") for you"\n'
-        self.assertEqual(self.scan("supacode/Domain/Thing.swift", text), ["Launching role %@ for you"])
+        self.assertEqual(self.scan("App/Sources/Domain/Thing.swift", text), ["Launching role %@ for you"])
 
     def test_reads_a_multi_line_literal_as_one_string(self):
         text = 'let text = """\n    Host is off. \\\n    Start Host first.\n    """\nlet next = 1\n'
-        self.assertEqual(self.scan("supacode/Domain/Thing.swift", text), ["Host is off. Start Host first."])
+        self.assertEqual(self.scan("App/Sources/Domain/Thing.swift", text), ["Host is off. Start Host first."])
 
     def test_keeps_a_space_that_follows_a_line_continuation(self):
         text = 'Text(\n  """\n  They play sounds\\\n   according to your settings.\n  """\n)\n'
         self.assertEqual(
-            self.scan("supacode/Domain/Thing.swift", text), ["They play sounds according to your settings."]
+            self.scan("App/Sources/Domain/Thing.swift", text), ["They play sounds according to your settings."]
         )
 
     def test_reports_the_line_where_the_literal_starts(self):
         text = 'let a = 1\nlet text = "Unable to create worktree"\n'
-        self.assertEqual(candidate_literals("supacode/Domain/Thing.swift", text), [(2, "Unable to create worktree")])
+        self.assertEqual(candidate_literals("App/Sources/Domain/Thing.swift", text), [(2, "Unable to create worktree")])
 
 
 class BaselineTests(unittest.TestCase):
@@ -252,62 +252,62 @@ class BaselineTests(unittest.TestCase):
     def test_reports_only_candidates_that_nobody_has_triaged(self):
         baseline = self.baseline(exemptLiterals={"Claude Code": "product-name"}, debt=["Unable to create worktree"])
         found = {
-            "Claude Code": ["supacode/Domain/A.swift:1"],
-            "Unable to create worktree": ["supacode/Features/B.swift:2"],
-            "Brand new copy": ["supacode/Features/C.swift:3"],
+            "Claude Code": ["App/Sources/Domain/A.swift:1"],
+            "Unable to create worktree": ["App/Sources/Features/B.swift:2"],
+            "Brand new copy": ["App/Sources/Features/C.swift:3"],
         }
         self.assertEqual(unknown_candidates(found, baseline, extracted={}), {"Brand new copy": found["Brand new copy"]})
 
     def test_ignores_what_the_compiler_extracted_from_the_same_file(self):
-        found = {"Open %@": ["supacode/Features/C.swift:3"]}
-        extracted = {"Open %lld": {"supacode/Features/C.swift:3"}}
+        found = {"Open %@": ["App/Sources/Features/C.swift:3"]}
+        extracted = {"Open %lld": {"App/Sources/Features/C.swift:3"}}
         self.assertEqual(unknown_candidates(found, self.baseline(), extracted), {})
 
     def test_reports_a_verbatim_copy_in_the_same_file(self):
-        found = {"Listening": ["supacode/Features/Status.swift:140", "supacode/Features/Status.swift:154"]}
-        extracted = {"Listening": {"supacode/Features/Status.swift:140"}}
+        found = {"Listening": ["App/Sources/Features/Status.swift:140", "App/Sources/Features/Status.swift:154"]}
+        extracted = {"Listening": {"App/Sources/Features/Status.swift:140"}}
         self.assertEqual(
             unknown_candidates(found, self.baseline(), extracted),
-            {"Listening": ["supacode/Features/Status.swift:154"]},
+            {"Listening": ["App/Sources/Features/Status.swift:154"]},
         )
 
     def test_does_not_confuse_two_files_with_the_same_name(self):
-        found = {"Open %@": ["supacode/Features/A/Row.swift:3"]}
-        extracted = {"Open %@": {"supacode/Features/B/Row.swift:3"}}
+        found = {"Open %@": ["App/Sources/Features/A/Row.swift:3"]}
+        extracted = {"Open %@": {"App/Sources/Features/B/Row.swift:3"}}
         self.assertEqual(list(unknown_candidates(found, self.baseline(), extracted)), ["Open %@"])
 
     def test_trusts_a_run_time_key_only_where_titles_are_looked_up(self):
-        baseline = self.baseline(runtimeKeyPaths={"supacode/App/AppShortcuts.swift": "Binding.localizedTitle"})
-        found = {"Toggle Canvas": ["supacode/App/AppShortcuts.swift:3", "supacode/Features/Tooltip.swift:8"]}
+        baseline = self.baseline(runtimeKeyPaths={"App/Sources/App/AppShortcuts.swift": "Binding.localizedTitle"})
+        found = {"Toggle Canvas": ["App/Sources/App/AppShortcuts.swift:3", "App/Sources/Features/Tooltip.swift:8"]}
         self.assertEqual(
             unknown_candidates(found, baseline, {}, runtime_keys={"Toggle Canvas"}),
-            {"Toggle Canvas": ["supacode/Features/Tooltip.swift:8"]},
+            {"Toggle Canvas": ["App/Sources/Features/Tooltip.swift:8"]},
         )
 
     def test_trusts_catalog_keys_in_a_file_that_looks_titles_up_at_run_time(self):
-        baseline = self.baseline(runtimeKeyPaths={"supacode/App/AppShortcuts.swift": "Binding.localizedTitle"})
+        baseline = self.baseline(runtimeKeyPaths={"App/Sources/App/AppShortcuts.swift": "Binding.localizedTitle"})
         found = {
-            "Toggle Left Sidebar": ["supacode/App/AppShortcuts.swift:3"],
-            "Not in the catalog": ["supacode/App/AppShortcuts.swift:4"],
+            "Toggle Left Sidebar": ["App/Sources/App/AppShortcuts.swift:3"],
+            "Not in the catalog": ["App/Sources/App/AppShortcuts.swift:4"],
         }
-        unknown = unknown_candidates(found, baseline, {"Toggle Left Sidebar": {"supacode/Commands/SidebarCommands.swift:15"}})
+        unknown = unknown_candidates(found, baseline, {"Toggle Left Sidebar": {"App/Sources/Commands/SidebarCommands.swift:15"}})
         self.assertEqual(list(unknown), ["Not in the catalog"])
 
     def test_reports_a_literal_that_only_another_file_localizes(self):
-        found = {"Toggle Canvas": ["supacode/App/Menu.swift:3", "supacode/Features/Palette.swift:9"]}
-        extracted = {"Toggle Canvas": {"supacode/App/Menu.swift:3"}}
+        found = {"Toggle Canvas": ["App/Sources/App/Menu.swift:3", "App/Sources/Features/Palette.swift:9"]}
+        extracted = {"Toggle Canvas": {"App/Sources/App/Menu.swift:3"}}
         self.assertEqual(
             unknown_candidates(found, self.baseline(), extracted),
-            {"Toggle Canvas": ["supacode/Features/Palette.swift:9"]},
+            {"Toggle Canvas": ["App/Sources/Features/Palette.swift:9"]},
         )
 
     def test_exempts_by_path_and_by_line(self):
         baseline = self.baseline(
-            exemptPaths={"supacode/CLIService/**": "protocol"},
+            exemptPaths={"App/Sources/CLIService/**": "protocol"},
             exemptLinePatterns={r"[Ll]ogger\.": "log"},
         )
-        self.assertTrue(baseline.exempts_path("supacode/CLIService/Handler.swift"))
-        self.assertFalse(baseline.exempts_path("supacode/Features/View.swift"))
+        self.assertTrue(baseline.exempts_path("App/Sources/CLIService/Handler.swift"))
+        self.assertFalse(baseline.exempts_path("App/Sources/Features/View.swift"))
         self.assertTrue(baseline.exempts_line('  logger.info("Something happened here")'))
 
     def test_latest_triage_decision_wins(self):
@@ -338,28 +338,28 @@ class BaselineTests(unittest.TestCase):
     def test_lists_debt_in_the_files_a_release_touched(self):
         baseline = self.baseline(debt=["Expand All", "Cancel Run"], exemptLiterals={"Claude Code": "product-name"})
         still_open = {
-            "Expand All": ["supacode/Features/Sidebar.swift:3"],
-            "Cancel Run": ["supacode/Features/Workflow.swift:9"],
-            "Claude Code": ["supacode/Features/Sidebar.swift:5"],
+            "Expand All": ["App/Sources/Features/Sidebar.swift:3"],
+            "Cancel Run": ["App/Sources/Features/Workflow.swift:9"],
+            "Claude Code": ["App/Sources/Features/Sidebar.swift:5"],
         }
         self.assertEqual(
-            debt_places(still_open, baseline, changed={"supacode/Features/Sidebar.swift"}),
-            {"supacode/Features/Sidebar.swift": [(3, "Expand All")]},
+            debt_places(still_open, baseline, changed={"App/Sources/Features/Sidebar.swift"}),
+            {"App/Sources/Features/Sidebar.swift": [(3, "Expand All")]},
         )
         self.assertEqual(len(debt_places(still_open, baseline, changed=None)), 2)
 
     def test_names_the_places_of_a_literal_outside_the_changed_files(self):
         baseline = self.baseline(debt=["Open on %@"])
-        still_open = {"Open on %@": ["supacode/Commands/Menu.swift:3", "supacode/Features/Button.swift:9"]}
+        still_open = {"Open on %@": ["App/Sources/Commands/Menu.swift:3", "App/Sources/Features/Button.swift:9"]}
         self.assertEqual(
-            places_elsewhere(still_open, "Open on %@", changed={"supacode/Commands/Menu.swift"}),
-            ["supacode/Features/Button.swift:9"],
+            places_elsewhere(still_open, "Open on %@", changed={"App/Sources/Commands/Menu.swift"}),
+            ["App/Sources/Features/Button.swift:9"],
         )
 
     def test_debt_is_paid_when_every_place_is_localized(self):
         baseline = self.baseline(debt=["Expand All", "Collapse All"])
-        found = {"Expand All": ["supacode/Features/Sidebar.swift:3"], "Collapse All": ["supacode/Features/Sidebar.swift:4"]}
-        still_open = open_places(found, baseline, {"Expand All": {"supacode/Features/Sidebar.swift:3"}})
+        found = {"Expand All": ["App/Sources/Features/Sidebar.swift:3"], "Collapse All": ["App/Sources/Features/Sidebar.swift:4"]}
+        still_open = open_places(found, baseline, {"Expand All": {"App/Sources/Features/Sidebar.swift:3"}})
         self.assertEqual(baseline.obsolete(set(still_open)), ["Expand All"])
 
 

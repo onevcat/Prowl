@@ -9,40 +9,45 @@ MAKEFLAGS += --no-builtin-rules
 # Derived values (DO NOT TOUCH).
 CURRENT_MAKEFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 CURRENT_MAKEFILE_DIR := $(patsubst %/,%,$(dir $(CURRENT_MAKEFILE_PATH)))
-GHOSTTY_XCFRAMEWORK_PATH := $(CURRENT_MAKEFILE_DIR)/Frameworks/GhosttyKit.xcframework
-GHOSTTY_RESOURCE_PATH := $(CURRENT_MAKEFILE_DIR)/Resources/ghostty
-GHOSTTY_TERMINFO_PATH := $(CURRENT_MAKEFILE_DIR)/Resources/terminfo
+APP_DIR := $(CURRENT_MAKEFILE_DIR)/App
+CLI_PACKAGE := $(CURRENT_MAKEFILE_DIR)/CLI
+RELAY_PACKAGE := $(CURRENT_MAKEFILE_DIR)/Mirror/Relay
+SHARED_PACKAGE := $(CURRENT_MAKEFILE_DIR)/Shared
+GHOSTTY_XCFRAMEWORK_PATH := $(APP_DIR)/Frameworks/GhosttyKit.xcframework
+GHOSTTY_RESOURCE_PATH := $(APP_DIR)/Resources/ghostty
+GHOSTTY_TERMINFO_PATH := $(APP_DIR)/Resources/terminfo
 GHOSTTY_BUILD_OUTPUTS := $(GHOSTTY_XCFRAMEWORK_PATH) $(GHOSTTY_RESOURCE_PATH) $(GHOSTTY_TERMINFO_PATH)
 GHOSTTY_BUILD_STAMP := $(CURRENT_MAKEFILE_DIR)/.ghostty_build_stamp
 GHOSTTY_HASH_FILE := $(CURRENT_MAKEFILE_DIR)/.ghostty_hash
-SPM_CACHE_DIR := $(HOME)/Library/Caches/supacode-spm-cache/SourcePackages
+SPM_CACHE_DIR := $(HOME)/Library/Caches/prowl-spm-cache/SourcePackages
 # Tuist generates the workspace and the Xcode projects from the manifests; they are not in Git.
 XCODE_WORKSPACE := $(CURRENT_MAKEFILE_DIR)/Prowl.xcworkspace
-APP_SCHEME := supacode
-XCODE_CONFIG_DIR := $(CURRENT_MAKEFILE_DIR)/Config/Xcode
+APP_SCHEME := Prowl
+TEST_TARGET := ProwlTests
+XCODE_CONFIG_DIR := $(APP_DIR)/Config
 VERSION_XCCONFIG := $(XCODE_CONFIG_DIR)/Version.xcconfig
 TUIST_STAMP := $(CURRENT_MAKEFILE_DIR)/.tuist_generated_stamp
 TUIST_INPUTS := \
 	$(CURRENT_MAKEFILE_DIR)/Tuist.swift \
 	$(CURRENT_MAKEFILE_DIR)/Workspace.swift \
-	$(CURRENT_MAKEFILE_DIR)/Project.swift \
-	$(CURRENT_MAKEFILE_DIR)/MirrorClient/iOS/Project.swift \
+	$(APP_DIR)/Project.swift \
+	$(CURRENT_MAKEFILE_DIR)/Mirror/iOS/Project.swift \
 	$(CURRENT_MAKEFILE_DIR)/.package.resolved \
 	$(CURRENT_MAKEFILE_DIR)/mise.toml \
 	$(wildcard $(XCODE_CONFIG_DIR)/*.xcconfig) \
-	$(wildcard $(CURRENT_MAKEFILE_DIR)/MirrorClient/iOS/Config/*.xcconfig)
+	$(wildcard $(CURRENT_MAKEFILE_DIR)/Mirror/iOS/Config/*.xcconfig)
 # Paths that the app target copies into the bundle. Tuist reads them at generation time.
 TUIST_REQUIRED_PATHS := \
-	Frameworks/GhosttyKit.xcframework \
-	Resources/ghostty Resources/terminfo Resources/git-wt/wt \
-	Resources/docs Resources/skills Resources/agent-hooks Resources/workflows \
-	Resources/prowl-cli/prowl Resources/prowl-mirror-relay/prowl-mirror-relay
-CLI_DEBUG_RESOURCE_PATH := $(CURRENT_MAKEFILE_DIR)/Resources/prowl-cli/prowl
-CLI_SOURCE_DIRS := $(CURRENT_MAKEFILE_DIR)/ProwlCLI $(CURRENT_MAKEFILE_DIR)/supacode/CLIService/Shared
+	App/Frameworks/GhosttyKit.xcframework \
+	App/Resources/ghostty App/Resources/terminfo ThirdParty/git-wt/wt \
+	App/Resources/docs App/Resources/skills App/Resources/agent-hooks App/Resources/workflows \
+	App/Resources/prowl-cli/prowl App/Resources/prowl-mirror-relay/prowl-mirror-relay
+CLI_DEBUG_RESOURCE_PATH := $(APP_DIR)/Resources/prowl-cli/prowl
+RELAY_RESOURCE_DIR := $(APP_DIR)/Resources/prowl-mirror-relay
+CLI_VERSION_FILE := $(SHARED_PACKAGE)/Sources/ProwlCLIShared/ProwlVersion.swift
+CLI_SOURCE_DIRS := $(CLI_PACKAGE) $(SHARED_PACKAGE)
 CLI_SOURCE_INPUTS := \
 	$(CURRENT_MAKEFILE_PATH) \
-	$(CURRENT_MAKEFILE_DIR)/Package.swift \
-	$(CURRENT_MAKEFILE_DIR)/Package.resolved \
 	$(VERSION_XCCONFIG) \
 	$(shell find $(CLI_SOURCE_DIRS) -name .build -prune -o -type f -print 2>/dev/null)
 VERSION ?=
@@ -52,6 +57,8 @@ BUILD_BENCHMARK_SCENARIO ?= ci
 BUILD_BENCHMARK_SAMPLES ?= 1
 CLI_INTEGRATION_TEST_FILTER ?= ProwlCLIIntegrationTests
 FORMAT_BASE_REF ?= origin/main
+# The same source set as before the move to the product layout (docs-ai 074).
+SWIFT_FORMAT_PATHS := App/Sources App/Tests Shared/Sources/ProwlCLIShared Mirror/Relay/Sources/MirrorRelayProtocol
 BUILD_SETTINGS_CACHE := $(CURRENT_MAKEFILE_DIR)/.build_settings_cache.json
 
 # Release-only analytics/crash credentials. Included from Config/Secrets.env if present,
@@ -94,7 +101,7 @@ build-ghostty-xcframework: $(GHOSTTY_BUILD_STAMP) # Build ghostty framework
 $(GHOSTTY_BUILD_STAMP):
 	git submodule update --init --recursive ThirdParty/ghostty
 	@cd $(CURRENT_MAKEFILE_DIR)/ThirdParty/ghostty && mise exec -- zig build -Doptimize=ReleaseFast -Demit-xcframework=true -Dsentry=false
-	rsync -a ThirdParty/ghostty/macos/GhosttyKit.xcframework Frameworks
+	rsync -a ThirdParty/ghostty/macos/GhosttyKit.xcframework "$(APP_DIR)/Frameworks"
 	@src="$(CURRENT_MAKEFILE_DIR)/ThirdParty/ghostty/zig-out/share/ghostty"; \
 	dst="$(GHOSTTY_RESOURCE_PATH)"; \
 	terminfo_src="$(CURRENT_MAKEFILE_DIR)/ThirdParty/ghostty/zig-out/share/terminfo"; \
@@ -141,18 +148,18 @@ sync-ghostty: # Force sync GhosttyKit to current submodule HEAD (always rebuilds
 	rm -rf ~/Library/Developer/Xcode/DerivedData/Prowl-*
 	@echo "Done. Xcode module cache cleared for fresh compilation."
 
-embed-docs: # Stage docs/ into Resources for bundling into the app (.app/Contents/Resources/docs)
+embed-docs: # Stage docs/ into App/Resources for bundling into the app (.app/Contents/Resources/docs)
 	@set -euo pipefail; \
 	src="$(CURRENT_MAKEFILE_DIR)/docs"; \
-	dst="$(CURRENT_MAKEFILE_DIR)/Resources/docs"; \
+	dst="$(APP_DIR)/Resources/docs"; \
 	mkdir -p "$$dst"; \
 	rsync -a --delete --exclude '.sync-meta.json' "$$src/" "$$dst/"; \
 	echo "embedded docs at $$dst"
 
-embed-skills: # Stage skills/ into Resources for bundling into the app (.app/Contents/Resources/skills)
+embed-skills: # Stage skills/ into App/Resources for bundling into the app (.app/Contents/Resources/skills)
 	@set -euo pipefail; \
 	src="$(CURRENT_MAKEFILE_DIR)/skills"; \
-	dst="$(CURRENT_MAKEFILE_DIR)/Resources/skills"; \
+	dst="$(APP_DIR)/Resources/skills"; \
 	mkdir -p "$$dst"; \
 	rsync -a --delete "$$src/" "$$dst/"; \
 	echo "embedded skills at $$dst"
@@ -186,7 +193,7 @@ sync-cli-version: # Sync app MARKETING_VERSION into ProwlCLIShared/ProwlVersion.
 		echo "error: MARKETING_VERSION not found in $(VERSION_XCCONFIG)" >&2; \
 		exit 1; \
 	fi; \
-	dst="$(CURRENT_MAKEFILE_DIR)/supacode/CLIService/Shared/ProwlVersion.swift"; \
+	dst="$(CLI_VERSION_FILE)"; \
 	tmp="$$(mktemp)"; \
 	trap 'rm -f "$$tmp"' EXIT; \
 	printf '// Auto-generated by Makefile (sync-cli-version). Do not edit.\n\npublic enum ProwlVersion {\n  public static let current = "%s"\n}\n' "$$version" > "$$tmp"; \
@@ -196,20 +203,20 @@ sync-cli-version: # Sync app MARKETING_VERSION into ProwlCLIShared/ProwlVersion.
 	fi
 
 build-cli: sync-cli-version # Build Swift CLI binary (SPM)
-	swift build --product prowl
-	swift build --product prowl-mirror-relay
+	swift build --package-path "$(CLI_PACKAGE)" --product prowl
+	swift build --package-path "$(RELAY_PACKAGE)" --product prowl-mirror-relay
 
 build-cli-release: sync-cli-version # Build universal CLI binary in release mode
-	swift build -c release --arch arm64 --arch x86_64 --product prowl
-	swift build -c release --arch arm64 --arch x86_64 --product prowl-mirror-relay
+	swift build --package-path "$(CLI_PACKAGE)" -c release --arch arm64 --arch x86_64 --product prowl
+	swift build --package-path "$(RELAY_PACKAGE)" -c release --arch arm64 --arch x86_64 --product prowl-mirror-relay
 
-embed-cli-debug: embed-mirror-relay-debug $(CLI_DEBUG_RESOURCE_PATH) # Build debug CLI and copy into Resources for dev builds
+embed-cli-debug: embed-mirror-relay-debug $(CLI_DEBUG_RESOURCE_PATH) # Build debug CLI and copy into App/Resources for dev builds
 
 $(CLI_DEBUG_RESOURCE_PATH): $(CLI_SOURCE_INPUTS)
 	$(MAKE) build-cli
 	@set -euo pipefail; \
-	bin="$$(swift build --show-bin-path)/prowl"; \
-	dst="$(CURRENT_MAKEFILE_DIR)/Resources/prowl-cli"; \
+	bin="$$(swift build --package-path "$(CLI_PACKAGE)" --show-bin-path)/prowl"; \
+	dst="$(APP_DIR)/Resources/prowl-cli"; \
 	mkdir -p "$$dst"; \
 	if [ ! -f "$$dst/prowl" ] || ! cmp -s "$$bin" "$$dst/prowl"; then \
 		cp "$$bin" "$$dst/prowl"; \
@@ -219,10 +226,10 @@ $(CLI_DEBUG_RESOURCE_PATH): $(CLI_SOURCE_INPUTS)
 	chmod +x "$$dst/prowl"; \
 	echo "embedded CLI binary at $$dst/prowl"
 
-embed-cli: embed-mirror-relay-release build-cli-release # Build release CLI and copy into Resources for distribution
+embed-cli: embed-mirror-relay-release build-cli-release # Build release CLI and copy into App/Resources for distribution
 	@set -euo pipefail; \
-	bin="$$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)/prowl"; \
-	dst="$(CURRENT_MAKEFILE_DIR)/Resources/prowl-cli"; \
+	bin="$$(swift build --package-path "$(CLI_PACKAGE)" -c release --arch arm64 --arch x86_64 --show-bin-path)/prowl"; \
+	dst="$(APP_DIR)/Resources/prowl-cli"; \
 	mkdir -p "$$dst"; \
 	cp "$$bin" "$$dst/prowl"; \
 	strip -S -x "$$dst/prowl"; \
@@ -391,10 +398,10 @@ install-release: build-ghostty-xcframework # Build Release, sign locally, instal
 	echo "installed $$DST (Release build, locally signed)"
 
 archive: build-ghostty-xcframework embed-cli embed-docs embed-skills ensure-project # Archive Release build for distribution
-	bash -o pipefail -c 'xcodebuild -workspace "$(XCODE_WORKSPACE)" -scheme $(APP_SCHEME) -configuration Release -archivePath build/supacode.xcarchive archive CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="$$APPLE_TEAM_ID" CODE_SIGN_IDENTITY="$$DEVELOPER_ID_IDENTITY_SHA" OTHER_CODE_SIGN_FLAGS="--timestamp" PROWL_SENTRY_DSN="$(PROWL_SENTRY_DSN)" PROWL_POSTHOG_API_KEY="$(PROWL_POSTHOG_API_KEY)" PROWL_POSTHOG_HOST="$(PROWL_POSTHOG_HOST)" -skipMacroValidation -clonedSourcePackagesDirPath $(SPM_CACHE_DIR) $(XCODEBUILD_FLAGS) 2>&1 | mise exec -- xcsift -qw --format toon'
+	bash -o pipefail -c 'xcodebuild -workspace "$(XCODE_WORKSPACE)" -scheme $(APP_SCHEME) -configuration Release -archivePath build/Prowl.xcarchive archive CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="$$APPLE_TEAM_ID" CODE_SIGN_IDENTITY="$$DEVELOPER_ID_IDENTITY_SHA" OTHER_CODE_SIGN_FLAGS="--timestamp" PROWL_SENTRY_DSN="$(PROWL_SENTRY_DSN)" PROWL_POSTHOG_API_KEY="$(PROWL_POSTHOG_API_KEY)" PROWL_POSTHOG_HOST="$(PROWL_POSTHOG_HOST)" -skipMacroValidation -clonedSourcePackagesDirPath $(SPM_CACHE_DIR) $(XCODEBUILD_FLAGS) 2>&1 | mise exec -- xcsift -qw --format toon'
 
 export-archive: # Export xarchive
-	bash -o pipefail -c 'xcodebuild -exportArchive -archivePath build/supacode.xcarchive -exportPath build/export -exportOptionsPlist build/ExportOptions.plist 2>&1 | mise exec -- xcsift -qw --format toon'
+	bash -o pipefail -c 'xcodebuild -exportArchive -archivePath build/Prowl.xcarchive -exportPath build/export -exportOptionsPlist build/ExportOptions.plist 2>&1 | mise exec -- xcsift -qw --format toon'
 
 test: ensure-ghostty embed-cli-debug embed-docs embed-skills test-app
 
@@ -435,9 +442,9 @@ test-app: ensure-ghostty ensure-project # Run app/unit tests via xcodebuild
 		fi; \
 	}; \
 	shell_cancellation_tests=( \
-		"supacodeTests/ShellClientStreamingTests/cancellingRunStreamConsumerTerminatesProcessAfterItIsReady()" \
-		"supacodeTests/ShellClientStreamingTests/runTerminatesReadyProcessWhenCallingTaskIsCancelled()" \
-		"supacodeTests/ShellClientProbeTests/cancellationStopsProbeAndItsChildren()" \
+		"$(TEST_TARGET)/ShellClientStreamingTests/cancellingRunStreamConsumerTerminatesProcessAfterItIsReady()" \
+		"$(TEST_TARGET)/ShellClientStreamingTests/runTerminatesReadyProcessWhenCallingTaskIsCancelled()" \
+		"$(TEST_TARGET)/ShellClientProbeTests/cancellationStopsProbeAndItsChildren()" \
 	); \
 	skip_args=(); \
 	only_args=(); \
@@ -448,27 +455,27 @@ test-app: ensure-ghostty ensure-project # Run app/unit tests via xcodebuild
 	mirror_suites=(MirrorHostTests MirrorDevicePairingTests MirrorConnectionTests MirrorTerminalIntegrationTests MirrorReplicaInputTests); \
 	mirror_args=(); \
 	for suite in "$${mirror_suites[@]}"; do \
-		skip_args+=("-skip-testing:supacodeTests/$$suite"); \
-		mirror_args+=("-only-testing:supacodeTests/$$suite"); \
+		skip_args+=("-skip-testing:$(TEST_TARGET)/$$suite"); \
+		mirror_args+=("-only-testing:$(TEST_TARGET)/$$suite"); \
 	done; \
 	event_monitor_tests=( \
-		"supacodeTests/GitWorktreeRegistryMonitorTests" \
-		"supacodeTests/CLISocketServerTests/disconnectMonitorActivatesDuringCreation()" \
-		"supacodeTests/CLISocketServerTests/disconnectMonitorOutlivesOriginalDescriptor()" \
+		"$(TEST_TARGET)/GitWorktreeRegistryMonitorTests" \
+		"$(TEST_TARGET)/CLISocketServerTests/disconnectMonitorActivatesDuringCreation()" \
+		"$(TEST_TARGET)/CLISocketServerTests/disconnectMonitorOutlivesOriginalDescriptor()" \
 	); \
 	event_args=(); \
 	for test_id in "$${event_monitor_tests[@]}"; do \
 		skip_args+=("-skip-testing:$$test_id"); \
 		event_args+=("-only-testing:$$test_id"); \
 	done; \
-	run_xcode_tests "$$result_root/supacode-tests.xcresult" test "" "$${skip_args[@]}"; \
-	run_xcode_tests "$$result_root/supacode-event-monitor-tests.xcresult" test-without-building "" "$${event_args[@]}"; \
-	run_xcode_tests "$$result_root/supacode-mirror-tests.xcresult" test-without-building "" "$${mirror_args[@]}"; \
-	run_xcode_tests "$$result_root/supacode-shell-cancellation-tests.xcresult" test-without-building 3 "$${only_args[@]}"
+	run_xcode_tests "$$result_root/prowl-tests.xcresult" test "" "$${skip_args[@]}"; \
+	run_xcode_tests "$$result_root/prowl-event-monitor-tests.xcresult" test-without-building "" "$${event_args[@]}"; \
+	run_xcode_tests "$$result_root/prowl-mirror-tests.xcresult" test-without-building "" "$${mirror_args[@]}"; \
+	run_xcode_tests "$$result_root/prowl-shell-cancellation-tests.xcresult" test-without-building 3 "$${only_args[@]}"
 
 test-cli-smoke: build-cli # Smoke test CLI executable
 	@set -euo pipefail; \
-	bin="$$(swift build --show-bin-path)/prowl"; \
+	bin="$$(swift build --package-path "$(CLI_PACKAGE)" --show-bin-path)/prowl"; \
 	tmp_root="$${TMPDIR:-/tmp}"; \
 	tmp_dir="$$(mktemp -d "$${tmp_root%/}/prowl-smoke.XXXXXX")"; \
 	trap 'rm -rf "$$tmp_dir"' EXIT; \
@@ -487,27 +494,30 @@ test-cli-smoke: build-cli # Smoke test CLI executable
 		"$$bin" skills list --json >"$$skills_response"; \
 	jq -e '.ok and .data.action == "list" and (.data.skills | map(.id)) == ["prowl-cli"]' "$$skills_response" >/dev/null
 
-test-cli-unit: # Run CLI unit tests via SwiftPM
-	@test_list="$$(swift test list)"; \
+test-cli-unit: # Run CLI and mirror relay unit tests via SwiftPM
+	@test_list="$$(swift test --package-path "$(CLI_PACKAGE)" list)"; \
 	matching_test_count="$$(printf '%s\n' "$$test_list" | grep -Evc '$(CLI_INTEGRATION_TEST_FILTER)' || true)"; \
 	if [ "$$matching_test_count" -eq 0 ]; then \
 		echo "error: CLI unit filter matched zero tests" >&2; \
 		exit 1; \
 	fi; \
 	echo "CLI unit filter matched $$matching_test_count test(s)."; \
-	swift test --skip-build --skip '$(CLI_INTEGRATION_TEST_FILTER)' 2>&1 \
+	swift test --package-path "$(CLI_PACKAGE)" --skip-build --skip '$(CLI_INTEGRATION_TEST_FILTER)' 2>&1 \
 		| tee >(PROWL_TEST_PROGRESS_LABEL=cli-unit awk -f "$(CURRENT_MAKEFILE_DIR)/scripts/test-progress.awk" >&2) \
+		| mise exec -- xcsift -w --format toon; \
+	swift test --package-path "$(RELAY_PACKAGE)" 2>&1 \
+		| tee >(PROWL_TEST_PROGRESS_LABEL=relay-unit awk -f "$(CURRENT_MAKEFILE_DIR)/scripts/test-progress.awk" >&2) \
 		| mise exec -- xcsift -w --format toon
 
 test-cli-integration: # Run CLI integration tests via SwiftPM
-	@test_list="$$(swift test list)"; \
+	@test_list="$$(swift test --package-path "$(CLI_PACKAGE)" list)"; \
 	matching_test_count="$$(printf '%s\n' "$$test_list" | grep -Ec '$(CLI_INTEGRATION_TEST_FILTER)' || true)"; \
 	if [ "$$matching_test_count" -eq 0 ]; then \
 		echo "error: CLI integration filter matched zero tests: $(CLI_INTEGRATION_TEST_FILTER)" >&2; \
 		exit 1; \
 	fi; \
 	echo "CLI integration filter matched $$matching_test_count test(s)."; \
-	swift test --skip-build --filter '$(CLI_INTEGRATION_TEST_FILTER)' 2>&1 \
+	swift test --package-path "$(CLI_PACKAGE)" --skip-build --filter '$(CLI_INTEGRATION_TEST_FILTER)' 2>&1 \
 		| tee >(PROWL_TEST_PROGRESS_LABEL=cli-integration awk -f "$(CURRENT_MAKEFILE_DIR)/scripts/test-progress.awk" >&2) \
 		| mise exec -- xcsift -w --format toon
 
@@ -529,7 +539,7 @@ bench: ensure-ghostty embed-cli-debug embed-docs embed-skills ensure-project # R
 	TEST_RUNNER_PROWL_BENCH_LOG_DIR="$$bench_log_dir" \
 	xcodebuild test -workspace "$(XCODE_WORKSPACE)" -scheme $(APP_SCHEME) -destination "platform=macOS,arch=$$(uname -m)" \
 		-configuration Release \
-		-only-testing:supacodeTests/PerformanceBenchmarks \
+		-only-testing:$(TEST_TARGET)/PerformanceBenchmarks \
 		-parallel-testing-enabled NO \
 		-derivedDataPath "$(CURRENT_MAKEFILE_DIR)/build/bench-derived-data" \
 		CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" -skipMacroValidation \
@@ -566,7 +576,7 @@ _test-agent-contract-codex: ensure-ghostty embed-cli-debug embed-docs embed-skil
 		xcodebuild test -workspace "$(XCODE_WORKSPACE)" -scheme $(APP_SCHEME) -destination "platform=macOS" \
 		-resultBundlePath "$$PROWL_CONTRACT_RESULT" $(TEST_SIGNING_ARGS) -skipMacroValidation \
 		-clonedSourcePackagesDirPath "$(SPM_CACHE_DIR)" SWIFT_COMPILATION_MODE=incremental \
-		-only-testing:'supacodeTests/CodexConfigReadLiveContractTests/scratchPrecedenceAndProjectExclusion()' \
+		-only-testing:'$(TEST_TARGET)/CodexConfigReadLiveContractTests/scratchPrecedenceAndProjectExclusion()' \
 		2>&1 | mise exec -- xcsift -w --format toon
 
 _test-agent-contract-export: ensure-ghostty embed-cli-debug embed-docs embed-skills ensure-project
@@ -578,18 +588,18 @@ _test-agent-contract-export: ensure-ghostty embed-cli-debug embed-docs embed-ski
 		xcodebuild test -workspace "$(XCODE_WORKSPACE)" -scheme $(APP_SCHEME) -destination "platform=macOS" \
 		-resultBundlePath "$$PROWL_CONTRACT_RESULT" $(TEST_SIGNING_ARGS) -skipMacroValidation \
 		-clonedSourcePackagesDirPath "$(SPM_CACHE_DIR)" SWIFT_COMPILATION_MODE=incremental \
-		-only-testing:'supacodeTests/AgentHookContractExportTests/exportPreparedLaunches()' \
+		-only-testing:'$(TEST_TARGET)/AgentHookContractExportTests/exportPreparedLaunches()' \
 		2>&1 | mise exec -- xcsift -w --format toon
 
 format: # Format all Swift code with swift-format (full-tree cleanup)
-	swift-format -p --in-place --recursive --configuration ./.swift-format.json supacode supacodeTests
+	swift-format -p --in-place --recursive --configuration ./.swift-format.json $(SWIFT_FORMAT_PATHS)
 
 format-changed: # Format Swift files changed from FORMAT_BASE_REF (default: origin/main)
 	@base="$$(git merge-base HEAD "$(FORMAT_BASE_REF)" 2>/dev/null || git rev-parse HEAD)"; \
 	mapfile -t files < <( \
 		{ \
-			git diff --name-only --diff-filter=ACMR "$$base" -- supacode supacodeTests; \
-			git ls-files --others --exclude-standard -- supacode supacodeTests; \
+			git diff --name-only --diff-filter=ACMR "$$base" -- $(SWIFT_FORMAT_PATHS); \
+			git ls-files --others --exclude-standard -- $(SWIFT_FORMAT_PATHS); \
 		} | awk '/\.swift$$/' | sort -u \
 	); \
 	if [ "$${#files[@]}" -eq 0 ]; then \
@@ -600,7 +610,7 @@ format-changed: # Format Swift files changed from FORMAT_BASE_REF (default: orig
 	fi
 
 format-lint: # Check Swift formatting without rewriting files
-	swift-format lint --strict --recursive --configuration ./.swift-format.json supacode supacodeTests
+	swift-format lint --strict --recursive --configuration ./.swift-format.json $(SWIFT_FORMAT_PATHS)
 
 lint: # Lint code with swiftlint
 	mise exec -- swiftlint lint --quiet --config .swiftlint.yml
@@ -609,6 +619,10 @@ lint: # Lint code with swiftlint
 check-workflow-naming: # Check maintained workflow source and references for retired names
 	python3 scripts/check_workflow_naming.py
 
+.PHONY: check-legacy-naming
+check-legacy-naming: # Check that the legacy project name is used only where it must stay (docs-ai 074)
+	python3 scripts/check_legacy_naming.py
+
 .PHONY: check-localization audit-localization
 check-localization: # Check that the string catalog is not broken (no build needed; missing translations are fine)
 	python3 scripts/localization.py check
@@ -616,7 +630,7 @@ check-localization: # Check that the string catalog is not broken (no build need
 audit-localization: build-app # Release check: missing, unused, and untranslated strings, and unlocalized UI copy (see the sync-l10n skill)
 	python3 scripts/localization.py audit
 
-check: format-changed format-lint lint test-scripts check-workflow-naming check-localization # Format changed Swift files, then run linters and checks
+check: format-changed format-lint lint test-scripts check-workflow-naming check-legacy-naming check-localization # Format changed Swift files, then run linters and checks
 
 log-stream: # Stream logs from the app via log stream
 	log stream --predicate 'subsystem == "com.onevcat.prowl"' --style compact --color always
@@ -659,21 +673,20 @@ bump-version: # Bump app version (usage: make bump-version [VERSION=YYYY.M.DD] [
 		exit 1; \
 	fi; \
 	printf '// Auto-generated by Makefile (sync-cli-version). Do not edit.\n\npublic enum ProwlVersion {\n  public static let current = "%s"\n}\n' "$$version" > \
-		"$(CURRENT_MAKEFILE_DIR)/supacode/CLIService/Shared/ProwlVersion.swift"; \
-	git add "$(VERSION_XCCONFIG)" \
-		"$(CURRENT_MAKEFILE_DIR)/supacode/CLIService/Shared/ProwlVersion.swift"; \
+		"$(CLI_VERSION_FILE)"; \
+	git add "$(VERSION_XCCONFIG)" "$(CLI_VERSION_FILE)"; \
 	git commit -m "bump v$$version"; \
 	git tag -s "v$$version" -m "v$$version"; \
 	echo "version bumped to $$version (build $$build), tagged v$$version"
 
 .PHONY: embed-mirror-relay-debug embed-mirror-relay-release
 embed-mirror-relay-debug:
-	swift build --product prowl-mirror-relay
-	@mkdir -p Resources/prowl-mirror-relay
-	cp "$$(swift build --show-bin-path)/prowl-mirror-relay" Resources/prowl-mirror-relay/prowl-mirror-relay
+	swift build --package-path "$(RELAY_PACKAGE)" --product prowl-mirror-relay
+	@mkdir -p "$(RELAY_RESOURCE_DIR)"
+	cp "$$(swift build --package-path "$(RELAY_PACKAGE)" --show-bin-path)/prowl-mirror-relay" "$(RELAY_RESOURCE_DIR)/prowl-mirror-relay"
 
 embed-mirror-relay-release:
-	swift build -c release --arch arm64 --arch x86_64 --product prowl-mirror-relay
-	@mkdir -p Resources/prowl-mirror-relay
-	cp "$$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)/prowl-mirror-relay" Resources/prowl-mirror-relay/prowl-mirror-relay
-	strip -S -x Resources/prowl-mirror-relay/prowl-mirror-relay
+	swift build --package-path "$(RELAY_PACKAGE)" -c release --arch arm64 --arch x86_64 --product prowl-mirror-relay
+	@mkdir -p "$(RELAY_RESOURCE_DIR)"
+	cp "$$(swift build --package-path "$(RELAY_PACKAGE)" -c release --arch arm64 --arch x86_64 --show-bin-path)/prowl-mirror-relay" "$(RELAY_RESOURCE_DIR)/prowl-mirror-relay"
+	strip -S -x "$(RELAY_RESOURCE_DIR)/prowl-mirror-relay"

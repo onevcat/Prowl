@@ -147,7 +147,7 @@ durable record.
 
 ## Reference
 
-Benchmark inventory (all under `supacodeTests/`, suite root `PerformanceBenchmarks`):
+Benchmark inventory (all under `App/Tests/`, suite root `PerformanceBenchmarks`):
 
 | Suite / check | Pins | Floor | Asserts in |
 | --- | --- | --- | --- |
@@ -162,10 +162,10 @@ File → suite map for intent classification and suspect naming:
 
 | Changed path | Affected check |
 | --- | --- |
-| `supacode/Clients/Git/GitClient.swift`, `UntrackedLineCountCache.swift` | LineCountScan |
-| `supacode/Infrastructure/AgentDetection/AgentSessionResolver.swift` | FingerprintNormalize, SessionScoring |
-| `supacode/Domain/WorktreeDirectoryIndex.swift`, `supacode/Support/PathPolicy.swift` | WorktreeDirectoryIndex |
-| `supacode/Features/Terminal/Models/TerminalTabManager.swift`, `WorktreeTerminalState+AgentDetection.swift` | measure-titles, coalescing/dedup unit tests |
+| `App/Sources/Clients/Git/GitClient.swift`, `UntrackedLineCountCache.swift` | LineCountScan |
+| `App/Sources/Infrastructure/AgentDetection/AgentSessionResolver.swift` | FingerprintNormalize, SessionScoring |
+| `App/Sources/Domain/WorktreeDirectoryIndex.swift`, `App/Sources/Support/PathPolicy.swift` | WorktreeDirectoryIndex |
+| `App/Sources/Features/Terminal/Models/TerminalTabManager.swift`, `WorktreeTerminalState+AgentDetection.swift` | measure-titles, coalescing/dedup unit tests |
 | Sidebar / Active Agents views and reducers | counting tests only (no timing suite) |
 
 Caveats:

@@ -18,7 +18,7 @@ Read these first:
   a living document of this skill, so this edit of `docs-ai/` is expected.
 
 All edits to the catalog and the baseline go through `scripts/localization.py`. Do not edit
-`supacode/Localizable.xcstrings` or `scripts/localization_baseline.json` by hand: the script
+`App/Sources/Localizable.xcstrings` or `scripts/localization_baseline.json` by hand: the script
 validates placeholders and keeps the catalog in the exact format Xcode writes.
 
 ## Guiding principles
@@ -58,10 +58,10 @@ for `build-app` + `audit`.
      ```json
      {
        "broken": ["\"Copy %@\": zh-Hans placeholders [] do not match source [@]"],
-       "missing": {"Stop Host": ["supacode/Features/RemoteMirror/MirrorHostButton.swift:88"]},
+       "missing": {"Stop Host": ["App/Sources/Features/RemoteMirror/MirrorHostButton.swift:88"]},
        "unused": ["Legacy banner"],
        "untranslated": ["\"Close\": no zh-Hans translation"],
-       "suspects": {"Beta channel %@": ["supacode/Features/Settings/Views/UpdatesSettingsView.swift:53"]},
+       "suspects": {"Beta channel %@": ["App/Sources/Features/Settings/Views/UpdatesSettingsView.swift:53"]},
        "obsolete": ["A literal that left the code"],
        "debt": 622
      }
@@ -154,7 +154,7 @@ for `build-app` + `audit`.
    - `apply` prints what it added and updated; keep the numbers for the report. It rejects a
      value with wrong placeholders and prints why.
    - For `broken`, put the corrected value in the same file. To see the current value, read
-     `supacode/Localizable.xcstrings`; reading is fine, only editing goes through the script.
+     `App/Sources/Localizable.xcstrings`; reading is fine, only editing goes through the script.
    - Translate into **every** language the catalog uses (`untranslated` names the language).
    - `null` means "do not translate": a key that is only placeholders, punctuation, or a
      sample value such as `XXXX-XXXX`.
@@ -170,7 +170,7 @@ for `build-app` + `audit`.
    `String.LocalizationValue(<variable>)` is invisible to the compiler. Find the literal in the
    Swift sources:
    ```bash
-   git grep -nF '"<key>"' -- 'supacode/*.swift'
+   git grep -nF '"<key>"' -- 'App/Sources/*.swift'
    ```
    When it is still a run-time key, mark it with `{"<key>": {"manual": true}}` through `apply`.
    Then:
@@ -220,7 +220,7 @@ String(localized: "b")` inside a `switch` expression. Use `if`/`else` there.
 
 ## Committing
 
-- Stage only `supacode/Localizable.xcstrings`, `scripts/localization_baseline.json`, the
+- Stage only `App/Sources/Localizable.xcstrings`, `scripts/localization_baseline.json`, the
   glossary when it changed, and the Swift files you made localizable. Never `git add .`.
 - **As part of release prep** (the `release` skill, on `main`): commit as its own commit before
   the version bump and tag, for example `git commit -m "Sync localization for <VERSION>"`.

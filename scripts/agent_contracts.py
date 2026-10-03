@@ -300,14 +300,14 @@ def run_preflight(row, directory, resolve, timeout):
 
 
 def source_fingerprint():
-    paths = [ROOT / "Makefile", pathlib.Path(__file__), ROOT / "supacodeTests/CodexConfigReadLiveContractTests.swift",
+    paths = [ROOT / "Makefile", pathlib.Path(__file__), ROOT / "App/Tests/CodexConfigReadLiveContractTests.swift",
              ROOT / "scripts/agent_contract_live.py", ROOT / "scripts/agent_contract_expectations.py",
-             ROOT / "scripts/agent_contract_attestation.py", ROOT / "scripts/agent_versions.py", ROOT / "supacodeTests/AgentHookContractExportTests.swift"]
-    paths += sorted((ROOT / "supacode/Domain/AgentRuntime").glob("*.swift"))
-    paths += sorted((ROOT / "supacode/Domain/AgentProfile").glob("*.swift"))
-    paths += sorted((ROOT / "supacode/CLIService/Shared").glob("*.swift"))
+             ROOT / "scripts/agent_contract_attestation.py", ROOT / "scripts/agent_versions.py", ROOT / "App/Tests/AgentHookContractExportTests.swift"]
+    paths += sorted((ROOT / "App/Sources/Domain/AgentRuntime").glob("*.swift"))
+    paths += sorted((ROOT / "App/Sources/Domain/AgentProfile").glob("*.swift"))
+    paths += sorted((ROOT / "Shared/Sources/ProwlCLIShared").glob("*.swift"))
     paths += sorted((ROOT / "ProwlCLI").rglob("*.swift"))
-    paths += sorted((ROOT / "Resources/agent-hooks").rglob("*"))
+    paths += sorted((ROOT / "App/Resources/agent-hooks").rglob("*"))
     digest = hashlib.sha256()
     for path in paths:
         if path.is_file():
@@ -410,7 +410,7 @@ def main(argv=None):
             "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "config_path": str(config), "report_path": str(directory / "report.json"),
             "source_fingerprint": source_fingerprint(), "release_ready": False,
-            "bridge_sha256": hashlib.sha256((ROOT / "Resources/prowl-cli/prowl").read_bytes()).hexdigest() if args.mode in ("live", "verify") and (ROOT / "Resources/prowl-cli/prowl").exists() else None,
+            "bridge_sha256": hashlib.sha256((ROOT / "App/Resources/prowl-cli/prowl").read_bytes()).hexdigest() if args.mode in ("live", "verify") and (ROOT / "App/Resources/prowl-cli/prowl").exists() else None,
             "inference_requested": args.mode in ("live", "verify"), "attestation_updated": False, "runtimes": rows,
         }
         report["source_stable"] = started_fingerprint == report["source_fingerprint"]

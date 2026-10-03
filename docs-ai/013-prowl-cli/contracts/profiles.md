@@ -64,4 +64,4 @@ Availability is advisory and never controls launch admission.
 ## Errors
 
 `PROFILES_FAILED` uses the common error envelope in
-[`cli-output-schema.json`](../../../ProwlCLIContracts/Resources/cli-output-schema.json).
+[`cli-output-schema.json`](../../../CLI/Sources/ProwlCLIContracts/Resources/cli-output-schema.json).

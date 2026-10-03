@@ -1,0 +1,848 @@
+import Clocks
+import Foundation
+import ProwlCLIShared
+import Testing
+
+@testable import Prowl
+
+@MainActor
+struct AgentDispatchCommandHandlerTests {
+  @Test func nativeIdleSupportsHeuristicReadinessAndBusyVetoesOldCompletion() {
+    var agent = agentEntry(surfaceID: UUID(), status: .idle)
+    agent.stateDecision = AgentStateDecision(state: .idle, reason: .native(.idle), logSessionID: "session")
+    let current = AgentConditionSnapshot(
+      agent: agent, signal: nil, revision: 1, isLive: true, signals: .empty,
+      screenDetection: .init(state: .unknown, reason: .noRuleMatched))
+    #expect(AgentConditionEvidence.normalizedState(current) == "idle")
+    #expect(AgentConditionEvidence.idleVerdict(for: current) == .settling("idle"))
+    agent.stateDecision = AgentStateDecision(
+      state: .working, reason: .native(.working), logSessionID: "session", hasOutstandingWork: true)
+    let busy = AgentConditionSnapshot(
+      agent: agent, signal: turnEnded, revision: 2, isLive: true, signals: .empty)
+    guard case .busy = AgentConditionEvidence.idleVerdict(for: busy) else {
+      Issue.record("Native outstanding work released readiness")
+      return
+    }
+  }
+
+  @Test func fallbackIdleIsNotEvidenceForDispatchOrWait() {
+    let agent = agentEntry(surfaceID: UUID(), status: .idle)
+    let snapshot = AgentConditionSnapshot(
+      agent: agent, signal: nil, revision: 1, isLive: true, signals: .empty,
+      screenDetection: .init(state: .idle, reason: .noRuleMatched))
+    #expect(AgentConditionEvidence.normalizedState(snapshot) == "unknown")
+    guard case .busy = AgentConditionEvidence.idleVerdict(for: snapshot) else {
+      Issue.record("An unrecognized composer must not permit dispatch")
+      return
+    }
+    #expect(!AgentConditionEvidence.detectorReports(.idle, normalizedState: "unknown"))
+  }
+
+  @Test func freshLogCompletionSurvivesUnmatchedScreenButExpiredCompletionDoesNot() {
+    let screen = AgentScreenDetection(state: .idle, reason: .noRuleMatched)
+    var machine = AgentStateMachine()
+    _ = machine.receive(.inventory(["session"]), now: 0)
+    _ = machine.receive(.screen(screen), now: 0)
+    _ = machine.receive(.turnStarted(session: "session", turn: "turn"), now: 1)
+    let completed = machine.receive(.turnEnded(session: "session", turn: "turn"), now: 2)
+    #expect(completed.reason == .logTurnEnded)
+    #expect(completed.state == .idle)
+    #expect(!completed.hasOutstandingWork)
+    var agent = agentEntry(surfaceID: UUID(), status: .idle)
+    agent.stateDecision = completed
+    let current = AgentConditionSnapshot(
+      agent: agent, signal: nil, revision: 1, isLive: true, signals: .empty, screenDetection: screen)
+    #expect(AgentConditionEvidence.normalizedState(current) == "idle")
+    // Log-backed detector evidence still follows the existing stabilization policy.
+    #expect(AgentConditionEvidence.idleVerdict(for: current) == .settling("idle"))
+    let corroborated = AgentConditionSnapshot(
+      agent: agent, signal: turnEnded, revision: 1, isLive: true, signals: .empty, screenDetection: screen)
+    #expect(AgentConditionEvidence.idleVerdict(for: corroborated) == .idle)
+
+    let expired = machine.receive(.tick, now: 2 + machine.activityWindow + 1)
+    #expect(expired.reason == .fallback(.retainedCompletion))
+    agent.stateDecision = expired
+    let stale = AgentConditionSnapshot(
+      agent: agent, signal: nil, revision: 2, isLive: true, signals: .empty, screenDetection: screen)
+    #expect(AgentConditionEvidence.normalizedState(stale) == "unknown")
+    #expect(AgentConditionEvidence.idleVerdict(for: stale) == .busy("unknown"))
+    let staleSignal = AgentConditionSnapshot(
+      agent: agent, signal: turnEnded, revision: 2, isLive: true, signals: .empty, screenDetection: screen)
+    #expect(AgentConditionEvidence.idleVerdict(for: staleSignal) == .settling("unknown"))
+  }
+
+  @Test func unmatchedScreenDoesNotEraseBlockedOrAbsentState() {
+    let blocked = AgentConditionSnapshot(
+      agent: agentEntry(surfaceID: UUID(), status: .blocked), signal: nil,
+      revision: 1, isLive: true, signals: .empty,
+      screenDetection: .init(state: .idle, reason: .noRuleMatched))
+    #expect(AgentConditionEvidence.normalizedState(blocked) == "blocked")
+    let absent = AgentConditionSnapshot(
+      agent: nil, signal: nil, revision: 1, isLive: true, signals: .empty,
+      screenDetection: .init(state: .idle, reason: .noRuleMatched))
+    #expect(AgentConditionEvidence.normalizedState(absent) == "absent")
+  }
+
+  @Test func completionRequiresCallerContextAndReturnsImmutableReceipt() async throws {
+    let caller = CallerPane(worktreeID: "w1", surfaceID: UUID())
+    let target = makeTarget(paneID: caller.surfaceID.uuidString)
+    let snapshot = AgentDispatchSnapshot(
+      record: .completed(
+        id: "d1",
+        outcome: .succeeded,
+        summary: "Done",
+        createdAt: Self.start,
+        completedAt: Self.start
+      ),
+      binding: AgentDispatchBinding(surfaceID: caller.surfaceID, target: target, evidenceEpoch: UUID())
+    )
+    let handler = AgentDispatchCompleteCommandHandler(
+      resolveCaller: { _ in caller },
+      complete: { surfaceID, outcome, summary in
+        #expect(surfaceID == caller.surfaceID)
+        #expect(outcome == .succeeded)
+        #expect(summary == "Done")
+        return .success(AgentDispatchMutationResult(snapshot: snapshot, replayed: false))
+      },
+      now: { Self.start }
+    )
+
+    let missingContext = await handler.handle(
+      envelope: envelope(.agentsDispatchComplete(.init(dispatchID: "d1", outcome: .succeeded, summary: "Done")))
+    )
+    #expect(missingContext.error?.code == CLIErrorCode.dispatchContextRequired)
+
+    let response = await handler.handle(
+      envelope: envelope(.agentsDispatchComplete(.init(dispatchID: "d1", outcome: .succeeded, summary: "Done"))),
+      context: CLICommandContext(callerProcessID: 123)
+    )
+    #expect(response.ok)
+    let payload = try #require(response.data).decode(as: DispatchCompleteCommandPayload.self)
+    #expect(payload.target == target)
+    #expect(payload.receipt.id == "d1")
+    #expect(!payload.replayed)
+  }
+
+  /// A worker launched with an older `PROWL_DISPATCH_ID` — or none at all — still completes
+  /// whatever its pane currently holds: the pane, not the id, addresses the record.
+  @Test func completionResolvesThePaneRecordRegardlessOfLaunchDispatchID() async throws {
+    let caller = CallerPane(worktreeID: "w1", surfaceID: UUID())
+    let target = makeTarget(paneID: caller.surfaceID.uuidString)
+    let current = AgentDispatchSnapshot(
+      record: .completed(id: "d2", outcome: .failed, summary: "No", createdAt: Self.start, completedAt: Self.start),
+      binding: AgentDispatchBinding(surfaceID: caller.surfaceID, target: target, evidenceEpoch: UUID())
+    )
+    var completedSurfaces: [UUID] = []
+    let handler = AgentDispatchCompleteCommandHandler(
+      resolveCaller: { _ in caller },
+      complete: { surfaceID, _, _ in
+        completedSurfaces.append(surfaceID)
+        return .success(AgentDispatchMutationResult(snapshot: current, replayed: false))
+      }
+    )
+    for launchID in ["d1", nil] {
+      let response = await handler.handle(
+        envelope: envelope(.agentsDispatchComplete(.init(dispatchID: launchID, outcome: .failed, summary: "No"))),
+        context: CLICommandContext(callerProcessID: 123)
+      )
+      #expect(response.ok)
+      let payload = try #require(response.data).decode(as: DispatchCompleteCommandPayload.self)
+      #expect(payload.receipt.id == "d2")
+    }
+    #expect(completedSurfaces == [caller.surfaceID, caller.surfaceID])
+  }
+
+  /// A workflow activation is completed by `prowl workflow deliver`, never here (063 B3, W3).
+  @Test func completionIsInterceptedBeforeTheStoreForWorkflowActivations() async throws {
+    let caller = CallerPane(worktreeID: "w1", surfaceID: UUID())
+    var completed = 0
+    let handler = AgentDispatchCompleteCommandHandler(
+      resolveCaller: { _ in caller },
+      complete: { _, _, _ in
+        completed += 1
+        return .failure(.notFound)
+      },
+      intercept: { surfaceID in
+        #expect(surfaceID == caller.surfaceID)
+        return CommandError(
+          code: CLIErrorCode.workflowDeliveryRequired, message: "deliver with prowl workflow deliver -")
+      }
+    )
+    let response = await handler.handle(
+      envelope: envelope(.agentsDispatchComplete(.init(dispatchID: nil, outcome: .succeeded, summary: "Done"))),
+      context: CLICommandContext(callerProcessID: 123)
+    )
+    #expect(response.ok == false)
+    #expect(response.command == "agents.dispatch-complete")
+    #expect(response.error?.code == CLIErrorCode.workflowDeliveryRequired)
+    #expect(response.error?.message == "deliver with prowl workflow deliver -")
+    #expect(completed == 0)
+  }
+
+  @Test func completionMapsStoreFailuresToStableCodes() async {
+    let caller = CallerPane(worktreeID: "w1", surfaceID: UUID())
+    for (error, code) in [
+      (AgentDispatchStoreError.notFound, CLIErrorCode.dispatchNotFound),
+      (.sourceMismatch, CLIErrorCode.dispatchSourceMismatch),
+      (.alreadyCompleted, CLIErrorCode.dispatchAlreadyCompleted),
+      (.alreadyTerminal, CLIErrorCode.dispatchAlreadyTerminal),
+    ] {
+      let handler = AgentDispatchCompleteCommandHandler(
+        resolveCaller: { _ in caller },
+        complete: { _, _, _ in .failure(error) }
+      )
+      let response = await handler.handle(
+        envelope: envelope(.agentsDispatchComplete(.init(dispatchID: "d1", outcome: .failed, summary: "No"))),
+        context: CLICommandContext(callerProcessID: 123)
+      )
+      #expect(response.error?.code == code)
+    }
+  }
+
+  @Test func abandonmentNeedsNoCallerAndIsIdempotent() async throws {
+    let target = makeTarget(paneID: UUID().uuidString)
+    let snapshot = AgentDispatchSnapshot(
+      record: .abandoned(id: "d1", createdAt: Self.start, abandonedAt: Self.start, reason: "Stop"),
+      binding: AgentDispatchBinding(surfaceID: UUID(), target: target, evidenceEpoch: UUID())
+    )
+    let handler = AgentDispatchAbandonCommandHandler(
+      abandon: { id, reason in
+        #expect(id == "d1")
+        #expect(reason == "Stop")
+        return .success(AgentDispatchMutationResult(snapshot: snapshot, replayed: true))
+      },
+      now: { Self.start }
+    )
+    let response = await handler.handle(
+      envelope: envelope(.agentsDispatchAbandon(.init(dispatchID: "d1", reason: "Stop")))
+    )
+    #expect(response.ok)
+    let payload = try #require(response.data).decode(as: DispatchAbandonCommandPayload.self)
+    #expect(payload.target == target)
+    #expect(payload.replayed)
+  }
+
+  // MARK: - agents dispatch
+
+  @Test func dispatchRejectsInvalidPromptsBeforeResolvingAnything() async {
+    var resolved = 0
+    let handler = AgentDispatchCommandHandler(resolveTarget: { _ in
+      resolved += 1
+      return .failure(.notFound("unused"))
+    })
+    for prompt in ["", "   \n", "bad\u{1B}[201~", "bell\u{07}", "cr\r\n"] {
+      let response = await handler.handle(envelope: envelope(.agentsDispatch(.init(pane: "p7", prompt: prompt))))
+      #expect(response.error?.code == CLIErrorCode.invalidArgument, "prompt: \(prompt.debugDescription)")
+    }
+    #expect(resolved == 0)
+    #expect(DispatchInput(pane: "p7", prompt: "line one\n\tline two").validationErrorMessage == nil)
+  }
+
+  @Test func dispatchMapsTargetResolutionFailures() async {
+    let notFound = AgentDispatchCommandHandler(resolveTarget: { _ in .failure(.notFound("No pane p9.")) })
+    let response = await notFound.handle(envelope: dispatch(pane: "p9"))
+    #expect(response.error?.code == CLIErrorCode.targetNotFound)
+    #expect(response.error?.message == "No pane p9.")
+
+    let notUnique = AgentDispatchCommandHandler(resolveTarget: { _ in .failure(.notUnique("Ambiguous.")) })
+    #expect(await notUnique.handle(envelope: dispatch(pane: "p9")).error?.code == CLIErrorCode.targetNotUnique)
+  }
+
+  @Test func dispatchRefusesWhileThePaneHoldsAPendingRecordAndNeverIssuesAnother() async throws {
+    let target = resolvedTarget()
+    let pending = AgentDispatchSnapshot(
+      record: .pending(id: "d1", createdAt: Self.start),
+      binding: AgentDispatchBinding(
+        surfaceID: surfaceID(of: target), target: TabTarget(from: target), evidenceEpoch: UUID())
+    )
+    var issued = 0
+    let handler = AgentDispatchCommandHandler(
+      resolveTarget: { _ in .success(target) },
+      pendingDispatch: { _ in pending },
+      conditionSnapshot: { _ in self.snapshot(target, status: .idle, signal: self.turnEnded) },
+      issueDispatch: { _ in
+        issued += 1
+        return .failure(.surfacePending)
+      }
+    )
+    let response = await handler.handle(envelope: dispatch(pane: target.paneID))
+    #expect(response.error?.code == CLIErrorCode.dispatchPending)
+    #expect(issued == 0)
+    let details = try #require(response.error?.details).decode(as: AgentDispatchErrorDetails.self)
+    #expect(details.record?.id == "d1")
+    #expect(details.record?.state == .pending)
+    #expect(details.target == TabTarget(from: target))
+  }
+
+  @Test func dispatchNeedsADetectedAgentAndALiveSurface() async throws {
+    let target = resolvedTarget()
+    let absent = AgentDispatchCommandHandler(
+      resolveTarget: { _ in .success(target) },
+      conditionSnapshot: { _ in .init(agent: nil, signal: nil, revision: 1, isLive: true, signals: .empty) }
+    )
+    let notFound = await absent.handle(envelope: dispatch(pane: target.paneID))
+    #expect(notFound.error?.code == CLIErrorCode.agentNotFound)
+    let details = try #require(notFound.error?.details).decode(as: AgentDispatchErrorDetails.self)
+    #expect(details.target == TabTarget(from: target))
+    #expect(details.record == nil)
+
+    let closed = AgentDispatchCommandHandler(
+      resolveTarget: { _ in .success(target) },
+      conditionSnapshot: { _ in .init(agent: nil, signal: nil, revision: 0, isLive: false, signals: .empty) }
+    )
+    #expect(await closed.handle(envelope: dispatch(pane: target.paneID)).error?.code == CLIErrorCode.agentGone)
+  }
+
+  @Test func dispatchRefusesWorkingBlockedAndRuntimeNeedsInputAgents() async throws {
+    struct BusyCase {
+      let status: AgentDisplayState
+      let signal: AgentSignal?
+      let label: String
+    }
+    let target = resolvedTarget()
+    let cases = [
+      BusyCase(status: .working, signal: nil, label: "working"),
+      BusyCase(status: .blocked, signal: nil, label: "blocked"),
+      BusyCase(status: .blocked, signal: turnEnded, label: "blocked despite an old turn-ended"),
+      BusyCase(status: .idle, signal: needsInput, label: "runtime needs-input while the screen looks idle"),
+    ]
+    for busy in cases {
+      var issued = 0
+      let handler = AgentDispatchCommandHandler(
+        resolveTarget: { _ in .success(target) },
+        conditionSnapshot: { _ in
+          self.snapshot(target, status: busy.status, signal: busy.signal, channels: [self.liveClaudeChannel])
+        },
+        issueDispatch: { _ in
+          issued += 1
+          return .failure(.bindingMissing)
+        }
+      )
+      let response = await handler.handle(envelope: dispatch(pane: target.paneID))
+      let comment = Comment(rawValue: busy.label)
+      #expect(response.error?.code == CLIErrorCode.dispatchTargetBusy, comment)
+      #expect(issued == 0, comment)
+      let details = try #require(response.error?.details).decode(as: AgentDispatchErrorDetails.self)
+      #expect(details.observation?.status.rawValue == busy.status.rawValue, comment)
+      #expect(details.signals?.channels.count == 1, comment)
+    }
+  }
+
+  @Test func dispatchWithCorroboratedTurnEndedIssuesBindsThenDeliversPrefixedProtocol() async throws {
+    let target = resolvedTarget()
+    let issued = AgentDispatchSnapshot(
+      record: .pending(id: "d7", createdAt: Self.start),
+      binding: AgentDispatchBinding(
+        surfaceID: surfaceID(of: target), target: TabTarget(from: target), evidenceEpoch: UUID())
+    )
+    var lifecycle: [String] = []
+    var delivered: String?
+    let handler = AgentDispatchCommandHandler(
+      resolveTarget: { _ in .success(target) },
+      conditionSnapshot: { _ in
+        self.snapshot(target, status: .done, signal: self.turnEnded, channels: [self.liveClaudeChannel])
+      },
+      issueDispatch: { resolved in
+        lifecycle.append("issue:\(resolved.paneID)")
+        return .success(issued)
+      },
+      deliverPrompt: { _, text in
+        lifecycle.append("deliver")
+        delivered = text
+        return true
+      },
+      cancelDispatch: { lifecycle.append("cancel:\($0)") },
+      now: { Self.start }
+    )
+    let response = await handler.handle(
+      envelope: envelope(.agentsDispatch(.init(pane: target.paneID, prompt: "Round two: re-review the diff.")))
+    )
+    #expect(response.ok)
+    #expect(response.command == "agents.dispatch")
+    #expect(response.schemaVersion == "prowl.cli.agents.dispatch.v1")
+    #expect(lifecycle == ["issue:\(target.paneID)", "deliver"])
+    let payload = try #require(response.data).decode(as: AgentDispatchCommandPayload.self)
+    #expect(payload.dispatch.id == "d7")
+    #expect(payload.dispatch.state == .pending)
+    #expect(payload.target == TabTarget(from: target))
+
+    let text = try #require(delivered)
+    #expect(text == AgentDispatchPrompt.renderInjected(userPrompt: "Round two: re-review the diff."))
+    #expect(text.hasPrefix("[Prowl] Round two: re-review the diff.\n"))
+    #expect(text.contains("Prowl dispatch completion protocol v\(AgentDispatchPrompt.protocolVersion)"))
+    #expect(text.contains("prowl agents dispatch-complete --outcome succeeded|failed"))
+    #expect(!text.contains("d7"))
+  }
+
+  /// Right after a turn the detector still shows `working` for its hold period although the
+  /// runtime already reported `turn-ended`; the precondition waits for the corroboration
+  /// instead of refusing, like `--until idle` would keep polling.
+  @Test func inputProtectionIsRecheckedAfterIdleEvidence() async {
+    let target = resolvedTarget()
+    var checks = 0
+    var issued = false
+    let handler = AgentDispatchCommandHandler(
+      resolveTarget: { _ in .success(target) },
+      inputProtection: { _ in
+        checks += 1
+        return checks == 2 ? "Host started editing" : nil
+      },
+      conditionSnapshot: { _ in
+        self.snapshot(target, status: .done, signal: self.turnEnded, channels: [self.liveClaudeChannel])
+      },
+      issueDispatch: { _ in
+        issued = true
+        return .failure(.bindingMissing)
+      })
+    let response = await handler.handle(envelope: dispatch(pane: target.paneID))
+    #expect(response.error?.code == CLIErrorCode.dispatchTargetBusy)
+    #expect(checks == 2)
+    #expect(!issued)
+  }
+
+  @Test func cancelledDispatchNeverIssuesOrDelivers() async {
+    let clock = TestClock()
+    let target = resolvedTarget()
+    var issued = false
+    var delivered = false
+    let handler = AgentDispatchCommandHandler(
+      resolveTarget: { _ in .success(target) },
+      conditionSnapshot: { _ in
+        self.snapshot(target, status: .working, signal: self.turnEnded, channels: [self.liveClaudeChannel])
+      },
+      issueDispatch: { _ in
+        issued = true
+        return .failure(.bindingMissing)
+      },
+      deliverPrompt: { _, _ in
+        delivered = true
+        return true
+      },
+      clock: clock)
+    let task = Task { await handler.handle(envelope: self.dispatch(pane: target.paneID)) }
+    await clock.advance(by: .milliseconds(200))
+    task.cancel()
+    let response = await task.value
+    #expect(!response.ok)
+    #expect(!issued && !delivered)
+  }
+
+  @Test func dispatchWaitsForTheDetectorToCorroborateAFreshTurnEnded() async throws {
+    let clock = TestClock()
+    let target = resolvedTarget()
+    let issued = AgentDispatchSnapshot(
+      record: .pending(id: "d11", createdAt: Self.start),
+      binding: AgentDispatchBinding(
+        surfaceID: surfaceID(of: target), target: TabTarget(from: target), evidenceEpoch: UUID())
+    )
+    var reads = 0
+    var delivered = 0
+    let handler = AgentDispatchCommandHandler(
+      resolveTarget: { _ in .success(target) },
+      conditionSnapshot: { _ in
+        reads += 1
+        return self.snapshot(
+          target, status: reads > 3 ? .done : .working, signal: self.turnEnded, channels: [self.liveClaudeChannel])
+      },
+      issueDispatch: { _ in .success(issued) },
+      deliverPrompt: { _, _ in
+        delivered += 1
+        return true
+      },
+      clock: clock,
+      now: { Self.start }
+    )
+    let task = Task { await handler.handle(envelope: self.dispatch(pane: target.paneID)) }
+    for _ in 0..<3 {
+      await Task.yield()
+      await clock.advance(by: .milliseconds(200))
+    }
+    let response = await task.value
+    #expect(response.ok)
+    #expect(reads == 4)
+    #expect(delivered == 1)
+  }
+
+  @Test func dispatchRefusesWhenTheDetectorNeverCorroboratesWithinTheGrace() async throws {
+    let clock = TestClock()
+    let target = resolvedTarget()
+    var issued = 0
+    let handler = AgentDispatchCommandHandler(
+      resolveTarget: { _ in .success(target) },
+      conditionSnapshot: { _ in
+        self.snapshot(target, status: .working, signal: self.turnEnded, channels: [self.liveClaudeChannel])
+      },
+      issueDispatch: { _ in
+        issued += 1
+        return .failure(.bindingMissing)
+      },
+      clock: clock,
+      now: { Self.start }
+    )
+    let task = Task { await handler.handle(envelope: self.dispatch(pane: target.paneID)) }
+    for _ in 0..<(AgentDispatchCommandHandler.idleGraceMilliseconds / 200) {
+      await Task.yield()
+      await clock.advance(by: .milliseconds(200))
+    }
+    let response = await task.value
+    #expect(response.error?.code == CLIErrorCode.dispatchTargetBusy)
+    #expect(issued == 0)
+    let details = try #require(response.error?.details).decode(as: AgentDispatchErrorDetails.self)
+    #expect(details.observation?.status == .working)
+  }
+
+  @Test func dispatchWithoutRuntimeEvidenceWaitsForTwoSecondsOfStableIdleDetection() async throws {
+    let clock = TestClock()
+    let target = resolvedTarget()
+    let issued = AgentDispatchSnapshot(
+      record: .pending(id: "d8", createdAt: Self.start),
+      binding: AgentDispatchBinding(
+        surfaceID: surfaceID(of: target), target: TabTarget(from: target), evidenceEpoch: UUID())
+    )
+    var reads = 0
+    let handler = AgentDispatchCommandHandler(
+      resolveTarget: { _ in .success(target) },
+      conditionSnapshot: { _ in
+        reads += 1
+        return self.snapshot(target, status: .idle, signal: nil)
+      },
+      issueDispatch: { _ in .success(issued) },
+      deliverPrompt: { _, _ in true },
+      clock: clock,
+      now: { Self.start }
+    )
+    let task = Task { await handler.handle(envelope: self.dispatch(pane: target.paneID)) }
+    for _ in 0..<9 {
+      await Task.yield()
+      await clock.advance(by: .milliseconds(200))
+    }
+    #expect(!task.isCancelled)
+    await Task.yield()
+    await clock.advance(by: .milliseconds(200))
+    let response = await task.value
+    #expect(response.ok)
+    #expect(reads == 11)
+  }
+
+  @Test func dispatchStabilizationAbortsWhenTheAgentStartsWorking() async throws {
+    let clock = TestClock()
+    let target = resolvedTarget()
+    var reads = 0
+    var issued = 0
+    let handler = AgentDispatchCommandHandler(
+      resolveTarget: { _ in .success(target) },
+      conditionSnapshot: { _ in
+        reads += 1
+        return self.snapshot(target, status: reads > 3 ? .working : .idle, signal: nil)
+      },
+      issueDispatch: { _ in
+        issued += 1
+        return .failure(.bindingMissing)
+      },
+      clock: clock,
+      now: { Self.start }
+    )
+    let task = Task { await handler.handle(envelope: self.dispatch(pane: target.paneID)) }
+    for _ in 0..<4 {
+      await Task.yield()
+      await clock.advance(by: .milliseconds(200))
+    }
+    let response = await task.value
+    #expect(response.error?.code == CLIErrorCode.dispatchTargetBusy)
+    #expect(issued == 0)
+  }
+
+  @Test func dispatchWithALiveChannelHoldingNoLevelStillUsesTheStabilizedDetector() async throws {
+    let clock = TestClock()
+    let target = resolvedTarget()
+    let issued = AgentDispatchSnapshot(
+      record: .pending(id: "d9", createdAt: Self.start),
+      binding: AgentDispatchBinding(
+        surfaceID: surfaceID(of: target), target: TabTarget(from: target), evidenceEpoch: UUID())
+    )
+    let handler = AgentDispatchCommandHandler(
+      resolveTarget: { _ in .success(target) },
+      conditionSnapshot: { _ in
+        self.snapshot(target, status: .idle, signal: nil, channels: [self.liveClaudeChannel])
+      },
+      issueDispatch: { _ in .success(issued) },
+      deliverPrompt: { _, _ in true },
+      clock: clock,
+      now: { Self.start }
+    )
+    let task = Task { await handler.handle(envelope: self.dispatch(pane: target.paneID)) }
+    for _ in 0..<10 {
+      await Task.yield()
+      await clock.advance(by: .milliseconds(200))
+    }
+    let response = await task.value
+    #expect(response.ok)
+  }
+
+  @Test func dispatchMapsIssuanceFailuresAndRollsBackAFailedDelivery() async throws {
+    let target = resolvedTarget()
+    let idle: AgentDispatchCommandHandler.ConditionSnapshotProvider = { _ in
+      self.snapshot(target, status: .idle, signal: self.turnEnded)
+    }
+    let capacity = AgentDispatchCommandHandler(
+      resolveTarget: { _ in .success(target) },
+      conditionSnapshot: idle,
+      issueDispatch: { _ in .failure(.capacityExceeded) }
+    )
+    #expect(
+      await capacity.handle(envelope: dispatch(pane: target.paneID)).error?.code
+        == CLIErrorCode.dispatchCapacityExceeded
+    )
+
+    let raced = AgentDispatchCommandHandler(
+      resolveTarget: { _ in .success(target) },
+      conditionSnapshot: idle,
+      issueDispatch: { _ in .failure(.surfacePending) }
+    )
+    #expect(await raced.handle(envelope: dispatch(pane: target.paneID)).error?.code == CLIErrorCode.dispatchPending)
+
+    let unbound = AgentDispatchCommandHandler(
+      resolveTarget: { _ in .success(target) },
+      conditionSnapshot: idle,
+      issueDispatch: { _ in .failure(.bindingMissing) }
+    )
+    #expect(await unbound.handle(envelope: dispatch(pane: target.paneID)).error?.code == CLIErrorCode.dispatchFailed)
+
+    var cancelled: [String] = []
+    let undeliverable = AgentDispatchCommandHandler(
+      resolveTarget: { _ in .success(target) },
+      conditionSnapshot: idle,
+      issueDispatch: { _ in
+        .success(
+          AgentDispatchSnapshot(
+            record: .pending(id: "d10", createdAt: Self.start),
+            binding: AgentDispatchBinding(
+              surfaceID: self.surfaceID(of: target), target: TabTarget(from: target), evidenceEpoch: UUID())
+          ))
+      },
+      deliverPrompt: { _, _ in false },
+      cancelDispatch: { cancelled.append($0) }
+    )
+    let response = await undeliverable.handle(envelope: dispatch(pane: target.paneID))
+    #expect(response.error?.code == CLIErrorCode.dispatchFailed)
+    #expect(cancelled == ["d10"])
+  }
+
+  @Test func interactiveInputIgnoresPendingWithoutMutatingItOrInjectingProtocol() async throws {
+    let target = resolvedTarget()
+    let pending = AgentDispatchSnapshot(record: .pending(id: "old-task", createdAt: Self.start), binding: nil)
+    var delivered: [String] = []
+    var issued = 0
+    var cancelled = 0
+    let handler = AgentDispatchCommandHandler(
+      resolveTarget: { _ in .success(target) }, pendingDispatch: { _ in pending },
+      conditionSnapshot: { _ in self.snapshot(target, status: .idle, signal: self.turnEnded) },
+      issueDispatch: { _ in
+        issued += 1
+        return .failure(.surfacePending)
+      },
+      deliverPrompt: { _, text in
+        delivered.append(text)
+        return true
+      },
+      cancelDispatch: { _ in cancelled += 1 })
+    for text in ["你好\nsecond line", "follow-up"] {
+      let response = await handler.handle(envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: text))))
+      #expect(response.ok)
+      #expect(response.command == "agents.input")
+      struct Payload: Decodable { let input: SendInputInfo }
+      let data = try #require(response.data).decode(as: Payload.self)
+      #expect(data.input.bytes == text.utf8.count)
+      #expect(data.input.trailingEnterSent)
+    }
+    #expect(delivered == ["你好\nsecond line", "follow-up"])
+    #expect(issued == 0 && cancelled == 0)
+    let automated = await handler.handle(envelope: dispatch(pane: target.paneID))
+    #expect(automated.error?.code == CLIErrorCode.dispatchPending)
+  }
+
+  @Test func interactiveInputRetainsProtectionAndReportsUnconfirmedDelivery() async {
+    let target = resolvedTarget()
+    for (status, protection, delivered) in [
+      (AgentDisplayState.working, String?.none, false), (.idle, "Local draft", false), (.idle, nil, false),
+    ] {
+      var calls = 0
+      let handler = AgentDispatchCommandHandler(
+        resolveTarget: { _ in .success(target) }, inputProtection: { _ in protection },
+        conditionSnapshot: { _ in self.snapshot(target, status: status, signal: self.turnEnded) },
+        deliverPrompt: { _, _ in
+          calls += 1
+          return delivered
+        })
+      let response = await handler.handle(envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: "hello"))))
+      #expect(!response.ok)
+      if status == .idle && protection == nil {
+        #expect(response.error?.code == CLIErrorCode.sendFailed)
+        #expect(calls == 1)
+      } else {
+        #expect(response.error?.code == CLIErrorCode.dispatchTargetBusy)
+        #expect(calls == 0)
+      }
+    }
+  }
+
+  @Test func concurrentInteractiveAndAutomatedInputsCannotInterleave() async {
+    let target = resolvedTarget()
+    let started = AsyncStream.makeStream(of: Void.self)
+    let release = AsyncStream.makeStream(of: Void.self)
+    defer {
+      started.continuation.finish()
+      release.continuation.finish()
+    }
+    let handler = AgentDispatchCommandHandler(
+      resolveTarget: { _ in .success(target) },
+      conditionSnapshot: { _ in self.snapshot(target, status: .idle, signal: self.turnEnded) },
+      deliverPrompt: { _, _ in
+        started.continuation.yield(())
+        for await _ in release.stream { break }
+        return true
+      })
+    let first = Task {
+      await handler.handle(envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: "one"))))
+    }
+    for await _ in started.stream { break }
+    let second = await handler.handle(envelope: dispatch(pane: target.paneID))
+    #expect(second.error?.code == CLIErrorCode.dispatchTargetBusy)
+    release.continuation.yield(())
+    #expect(await first.value.ok)
+  }
+
+  @Test func interactiveInputRejectsInvalidTextAndCancelledRequests() async {
+    let target = resolvedTarget()
+    var calls = 0
+    let handler = AgentDispatchCommandHandler(
+      resolveTarget: { _ in .success(target) },
+      conditionSnapshot: { _ in self.snapshot(target, status: .idle, signal: self.turnEnded) },
+      deliverPrompt: { _, _ in
+        calls += 1
+        return true
+      })
+    for text in ["", "   ", "escape\u{1b}"] {
+      let response = await handler.handle(envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: text))))
+      #expect(response.error?.code == CLIErrorCode.invalidArgument)
+    }
+    let task = Task {
+      withUnsafeCurrentTask { $0?.cancel() }
+      return await handler.handle(envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: "hello"))))
+    }
+    #expect(await task.value.ok == false)
+    #expect(calls == 0)
+    // Cancellation must release the per-pane in-flight guard.
+    #expect(await handler.handle(envelope: envelope(.agentsInput(.init(pane: target.paneID, prompt: "retry")))).ok)
+    #expect(calls == 1)
+  }
+
+  // MARK: - Helpers
+
+  private static let start = Date(timeIntervalSince1970: 1_000)
+
+  private var turnEnded: AgentSignal {
+    AgentSignal(
+      kind: .turnEnded,
+      source: .hook(runtime: .claude, event: "Stop"),
+      confidence: .exact,
+      timestamp: Self.start,
+      sessionID: nil,
+      detail: nil,
+      claimedOrigin: nil
+    )
+  }
+
+  private var needsInput: AgentSignal {
+    AgentSignal(
+      kind: .needsInput,
+      source: .hook(runtime: .claude, event: "Notification"),
+      confidence: .exact,
+      timestamp: Self.start,
+      sessionID: nil,
+      detail: nil,
+      claimedOrigin: nil
+    )
+  }
+
+  private var liveClaudeChannel: AgentSignalChannelPayload {
+    AgentSignalChannelPayload(
+      source: "hook_claude",
+      state: .verifiedLive,
+      confidence: "exact",
+      events: [.sessionStart, .turnEnded, .needsInput, .sessionEnd],
+      lastSeenAt: "2026-08-29T00:00:00.000Z"
+    )
+  }
+
+  private func envelope(_ command: Command) -> CommandEnvelope {
+    CommandEnvelope(output: .json, command: command)
+  }
+
+  private func dispatch(pane: String) -> CommandEnvelope {
+    envelope(.agentsDispatch(.init(pane: pane, prompt: "Round two.")))
+  }
+
+  private func makeTarget(paneID: String) -> TabTarget {
+    TabTarget(
+      worktree: .init(id: "w1", name: "App", path: "/App", rootPath: "/App", kind: "worktree"),
+      tab: .init(id: "t1", title: "Agent", selected: true),
+      pane: .init(id: paneID, title: "Agent", cwd: "/App", focused: true)
+    )
+  }
+
+  private func resolvedTarget() -> TabResolvedTarget {
+    let value = makeTarget(paneID: UUID().uuidString)
+    return TabResolvedTarget(
+      worktreeID: value.worktree.id,
+      worktreeName: value.worktree.name,
+      worktreePath: value.worktree.path,
+      worktreeRootPath: value.worktree.rootPath,
+      worktreeKind: value.worktree.kind,
+      tabID: value.tab.id,
+      tabTitle: value.tab.title,
+      tabSelected: value.tab.selected,
+      paneID: value.pane.id,
+      paneTitle: value.pane.title,
+      paneCWD: value.pane.cwd,
+      paneFocused: value.pane.focused
+    )
+  }
+
+  private func surfaceID(of target: TabResolvedTarget) -> UUID {
+    UUID(uuidString: target.paneID)!
+  }
+
+  private func snapshot(
+    _ target: TabResolvedTarget,
+    status: AgentDisplayState,
+    signal: AgentSignal?,
+    channels: [AgentSignalChannelPayload] = []
+  ) -> AgentConditionSnapshot {
+    AgentConditionSnapshot(
+      agent: agentEntry(surfaceID: surfaceID(of: target), status: status),
+      signal: signal,
+      revision: 3,
+      isLive: true,
+      signals: AgentSignalsPayload(channels: channels, last: nil, lastBinding: nil)
+    )
+  }
+
+  private func agentEntry(surfaceID: UUID, status: AgentDisplayState) -> ActiveAgentEntry {
+    ActiveAgentEntry(
+      id: surfaceID,
+      worktreeID: "w1",
+      worktreeName: "App",
+      workingDirectory: URL(fileURLWithPath: "/App"),
+      tabID: TerminalTabID(rawValue: UUID()),
+      paneTitle: "Agent",
+      surfaceID: surfaceID,
+      paneIndex: 0,
+      iconLookupToken: "claude",
+      agent: .claude,
+      rawState: status == .working ? .working : status == .blocked ? .blocked : .idle,
+      displayState: status,
+      lastChangedAt: Self.start
+    )
+  }
+}
