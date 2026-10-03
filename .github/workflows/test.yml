@@ -38,8 +38,6 @@ jobs:
         with:
           submodules: recursive
       - uses: ./.github/actions/setup-macos
-      - run: make lint
-      - run: make check-localization
       - name: Stage debug app resources
         run: make embed-cli-debug embed-docs embed-skills
       - name: Generate workspace
@@ -84,13 +82,14 @@ jobs:
           # SwiftPM serializes access to .build; keep its checks in one branch.
           run_task cli-tests make test-cli-smoke test-cli-unit test-cli-integration &
           pid_cli=$!
-          run_task scripts make test-scripts &
-          pid_scripts=$!
+          # Lint and the localization check need no build, so they run beside it.
+          run_task checks make lint check-localization test-scripts &
+          pid_checks=$!
 
           failed=0
           wait "$pid_app" || failed=1
           wait "$pid_cli" || failed=1
-          wait "$pid_scripts" || failed=1
+          wait "$pid_checks" || failed=1
           {
             printf '## Build and test wall time\n\n| Task | Seconds | Exit status |\n| --- | ---: | ---: |\n'
             cat build/ci-logs/*.timing
