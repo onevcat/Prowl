@@ -95,9 +95,11 @@ final class PullRequestRefreshCoordinator {
   private let flushDebouncer: KeyedDebouncer<BatchKey>
   private var inflightHosts: Set<BatchKey> = []
   private var queuedByHost: [BatchKey: [Repository.ID: Request]] = [:]
-  // Advanced by reset and cancelHost, so a batch that finishes its gap after either one does not
-  // release state that now belongs to a newer batch.
+  // Advanced by reset, and per host by cancelHost, so a batch that finishes its gap after either one
+  // does not release state that now belongs to a newer batch, while cancelling one host leaves the
+  // batches of every other host running.
   private var generation = 0
+  private var hostGenerations: [String: Int] = [:]
 
   init(
     githubCLI: GithubCLIClient,
@@ -149,7 +151,7 @@ final class PullRequestRefreshCoordinator {
   }
 
   func cancelHost(_ host: String) {
-    generation += 1
+    hostGenerations[host, default: 0] += 1
     flushDebouncer.cancelAll { $0.host == host }
     pendingByHost = pendingByHost.filter { $0.key.host != host }
     queuedByHost = queuedByHost.filter { $0.key.host != host }
@@ -213,7 +215,7 @@ final class PullRequestRefreshCoordinator {
       return
     }
     inflightHosts.insert(key)
-    let startedGeneration = generation
+    let startedGeneration = currentGeneration(of: key)
     let requests = Array(bucket.values)
     await processBatch(key: key, requests: requests)
     // Requests that arrive during the gap merge into the next batch instead of starting their own,
@@ -221,7 +223,7 @@ final class PullRequestRefreshCoordinator {
     if minimumQueryGap > .zero {
       try? await clock.sleep(for: minimumQueryGap)
     }
-    guard generation == startedGeneration else {
+    guard currentGeneration(of: key) == startedGeneration else {
       return
     }
     inflightHosts.remove(key)
@@ -229,6 +231,11 @@ final class PullRequestRefreshCoordinator {
       pendingByHost[key, default: [:]].merge(queued) { _, new in new }
       await flush(key: key)
     }
+  }
+
+  // Both counters only grow, so the sum changes whenever either one does.
+  private func currentGeneration(of key: BatchKey) -> Int {
+    generation + hostGenerations[key.host, default: 0]
   }
 
   private func processBatch(key: BatchKey, requests: [Request]) async {

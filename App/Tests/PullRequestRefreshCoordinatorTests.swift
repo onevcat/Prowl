@@ -651,6 +651,33 @@ struct PullRequestRefreshCoordinatorTests {
     #expect(calls.map(\.host) == ["host-b"])
   }
 
+  @Test func cancellingOneHostLeavesAnotherHostsQueueRunning() async throws {
+    let clock = TestClock()
+    let probe = CoordinatorProbe()
+    let outcomes = OutcomeCollector()
+    let coordinator = makeCoordinator(
+      probe: probe,
+      clock: clock,
+      outcomes: outcomes,
+      minimumQueryGap: .seconds(15),
+      batched: { _, requests in successResult(for: requests) }
+    )
+
+    coordinator.enqueue(request(repo: "alpha", host: "host-b"))
+    await advanceCoordinatorClock(clock, by: .milliseconds(250))
+    await waitUntil { await probe.batchedCalls().count == 1 }
+
+    // host-b is in its gap: a request queues behind it, then a different host is cancelled.
+    coordinator.enqueue(request(repo: "beta", host: "host-b"))
+    coordinator.cancelHost("host-a")
+    await advanceCoordinatorClock(clock, by: .seconds(15))
+    await waitUntil { await probe.batchedCalls().count == 2 }
+
+    let calls = await probe.batchedCalls()
+    #expect(calls.count == 2)
+    #expect(calls.last?.requests.map(\.repo) == ["beta"])
+  }
+
   @Test func batchedSuccessEmitsRefreshedWithBranchPRs() async throws {
     let clock = TestClock()
     let probe = CoordinatorProbe()
