@@ -29,7 +29,7 @@ struct MirrorComposer: UIViewRepresentable {
     }
     view.canSubmit = session.canSubmit
     if !view.canSubmit { view.gesture.cancel() }
-    if !isEditing, view.isFirstResponder { view.resignFirstResponder() }
+    if !isEditing, view.isFirstResponder { _ = view.resignFirstResponder() }
   }
 
   func sizeThatFits(_ proposal: ProposedViewSize, uiView: ComposerTextView, context: Context)
