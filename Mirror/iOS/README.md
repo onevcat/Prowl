@@ -99,19 +99,19 @@ command correlation/routing, reading and keyboard behavior. The Host's real App
 target covers pairing, revocation, terminal capture and input protection; there is
 no copied Host implementation in this client's tests.
 
-Run the iOS mirror unit and UI suites on their matching simulator form factors:
+Run the iOS mirror unit and UI suites on an iPad simulator:
 
 ```bash
 make test-mirror-ios
 ```
 
 The target generates only this project, so it does not need the Mac app's build inputs.
-It runs the split-pane and composer tests on iPad (`make test-mirror-ios-ipad`), then the
-remote-scroll, pairing, and phone-navigation tests on iPhone (`make test-mirror-ios-iphone`).
-The UI suites take several minutes. It uses the newest iPad Pro 11-inch and iPhone Pro
-simulators on the newest runtime that the selected Xcode supports. To use other models,
-set `IOS_MIRROR_IPAD_SIMULATOR_PATTERN` or `IOS_MIRROR_IPHONE_SIMULATOR_PATTERN` to a
-regular expression for the full simulator name.
+The UI suite takes several minutes. `make test-mirror-ios-unit` runs only the unit tests.
+CI runs only the unit tests, and only when a pull request changes `Mirror/iOS/` or
+`Mirror/Shared/`, and for release tags. Run the UI suite locally before you merge changes to
+this client. The target uses the newest iPad Pro 11-inch simulator on the newest runtime that
+the selected Xcode supports. To use another model, set `IOS_MIRROR_SIMULATOR_PATTERN` to a
+regular expression for the full simulator name. The UI tests also pass on iPhone.
 
 DEBUG-only `--mirror-ui-fixture` and `--mirror-ui-launch-fixture` supply deterministic
 UI data without connecting to Host or starting an Agent. Component and socket tests

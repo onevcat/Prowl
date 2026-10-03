@@ -1,10 +1,20 @@
 name: test
 
+# The Mac app. The mirror clients have their own workflows, and a change to only those
+# clients does not run this one.
 on:
   push:
     branches:
       - main
+    paths-ignore:
+      - Mirror/iOS/**
+      - Mirror/Android/**
+      - .github/workflows/mirror-*.yml
   pull_request:
+    paths-ignore:
+      - Mirror/iOS/**
+      - Mirror/Android/**
+      - .github/workflows/mirror-*.yml
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -119,62 +129,3 @@ jobs:
           path: build/test-results/**/*.xcresult
           if-no-files-found: ignore
           retention-days: 7
-
-  # Runs in parallel with `build`, one job for each simulator form factor. The iOS mirror
-  # project needs no submodule, GhosttyKit, CLI, or Swift package, so this job does not use
-  # setup-macos. It also must not save the setup-macos caches: this job ends first and would
-  # take the cache keys of `build`.
-  ios-mirror:
-    name: ios-mirror (${{ matrix.form-factor }})
-    runs-on: macos-26
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        form-factor: [ipad, iphone]
-    env:
-      MISE_HTTP_TIMEOUT: 120
-      MISE_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      # Install only the tools that the iOS mirror targets use.
-      MISE_EXEC_AUTO_INSTALL: false
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-    steps:
-      - uses: actions/checkout@v6
-      - name: Install Tuist and xcsift
-        run: |
-          brew install mise
-          mise install tuist github:ldomaradzki/xcsift
-      - name: Test iOS mirror
-        run: make test-mirror-ios-${{ matrix.form-factor }}
-      - name: Upload xcresult bundle and log (on failure)
-        # A job that reaches its timeout is cancelled, and its partial results are still useful.
-        if: failure() || cancelled()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ios-mirror-${{ matrix.form-factor }}-xcresult-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            build/test-results/mirror-ios-${{ matrix.form-factor }}.xcresult
-            build/test-results/mirror-ios-${{ matrix.form-factor }}.xcresult.log
-          if-no-files-found: ignore
-          retention-days: 7
-
-  android-mirror:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: gradle
-      - uses: android-actions/setup-android@v4
-      - name: Install Android SDK 34
-        run: sdkmanager 'platforms;android-34' 'build-tools;34.0.0'
-      - name: Build and test Android mirror
-        working-directory: Mirror/Android
-        run: ./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
