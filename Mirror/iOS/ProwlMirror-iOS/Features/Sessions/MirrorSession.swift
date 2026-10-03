@@ -50,6 +50,7 @@ final class MirrorSession: Identifiable {
   @ObservationIgnored private var pendingCommand: PendingCommand?
   @ObservationIgnored private var commandTimeout: Task<Void, Never>?
   @ObservationIgnored private let clock: any Clock<Duration>
+  @ObservationIgnored private let scrollConfirmationTimeout: Duration
 
   private struct PendingCommand {
     let id: UUID
@@ -141,12 +142,14 @@ final class MirrorSession: Identifiable {
   init(
     configuration: MirrorSavedConnection,
     clock: any Clock<Duration> = ContinuousClock(),
+    scrollConfirmationTimeout: Duration = .seconds(5),
     makeTransport: @escaping (MirrorSavedConnection) throws -> any MirrorTransport = {
       configuration in
       MirrorRemoteConnection(configuration: configuration)
     }
   ) {
     self.clock = clock
+    self.scrollConfirmationTimeout = scrollConfirmationTimeout
     self.configuration = configuration
     self.makeTransport = makeTransport
   }
@@ -441,8 +444,9 @@ final class MirrorSession: Identifiable {
     scrollError = nil
     followsLatest = false
     let clock = clock
+    let timeout = scrollConfirmationTimeout
     scrollTimeout = Task { [weak self] in
-      do { try await clock.sleep(for: .seconds(5)) } catch { return }
+      do { try await clock.sleep(for: timeout) } catch { return }
       guard self?.pendingScroll?.id == request.id else { return }
       self?.clearScroll()
       self?.scrollError = String(

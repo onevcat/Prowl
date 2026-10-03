@@ -6,13 +6,21 @@ struct ContentView: View {
   @State private var sessions: [MirrorSession] = []
   @State private var selectedID: UUID?
   @State private var showsConnection = false
-  @State private var columns: NavigationSplitViewVisibility =
-    UIDevice.current.userInterfaceIdiom == .phone ? .detailOnly : .all
-  @State private var compactColumn: NavigationSplitViewColumn =
-    UIDevice.current.userInterfaceIdiom == .phone ? .detail : .sidebar
+  @State private var columns: NavigationSplitViewVisibility
+  @State private var compactColumn: NavigationSplitViewColumn
   @State private var wasBackgrounded = false
 
+  /// iPhone starts on the detail column with the session list hidden; larger devices show both.
+  static func initialLayout(for idiom: UIUserInterfaceIdiom) -> (
+    columns: NavigationSplitViewVisibility, compactColumn: NavigationSplitViewColumn
+  ) {
+    idiom == .phone ? (.detailOnly, .detail) : (.all, .sidebar)
+  }
+
   init() {
+    let layout = Self.initialLayout(for: UIDevice.current.userInterfaceIdiom)
+    _columns = State(initialValue: layout.columns)
+    _compactColumn = State(initialValue: layout.compactColumn)
     #if DEBUG
       if CommandLine.arguments.contains("--mirror-ui-fixture") {
         let multiple = CommandLine.arguments.contains("--mirror-ui-multiple-fixtures")
