@@ -95,7 +95,7 @@ jobs:
             printf '## Build and test wall time\n\n| Task | Seconds | Exit status |\n| --- | ---: | ---: |\n'
             cat build/ci-logs/*.timing
             printf '\nTasks run in parallel; their times must not be added.\n\n'
-            python3 scripts/summarize-xcode-build.py build/test-results/*.build.json
+            python3 scripts/summarize-xcode-build.py build/test-results/*.build.json build/test-results/*.action.json
           } >> "$GITHUB_STEP_SUMMARY"
           exit "$failed"
       - name: Collect mirror diagnostics
@@ -120,6 +120,7 @@ jobs:
             build/ci-logs/
             build/test-results/*.log
             build/test-results/*.build.json
+            build/test-results/*.action.json
           if-no-files-found: ignore
           retention-days: 7
       - name: Upload xcresult bundle (on failure)

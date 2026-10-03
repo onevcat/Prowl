@@ -467,6 +467,10 @@ test-app: ensure-ghostty ensure-project # Run app/unit tests via xcodebuild
 			xcrun xcresulttool get log --path "$$result_bundle" --type build --compact > "$$result_bundle.build.json" \
 				|| echo "warning: could not export Xcode build metrics" >&2; \
 		fi; \
+		if [ -d "$$result_bundle" ]; then \
+			xcrun xcresulttool get log --path "$$result_bundle" --type action --compact > "$$result_bundle.action.json" \
+				|| echo "warning: could not export the Xcode test action log" >&2; \
+		fi; \
 		if [ "$$xcodebuild_status" -ne 0 ]; then \
 			bash "$(CURRENT_MAKEFILE_DIR)/scripts/print-xcresult-failures.sh" "$$result_bundle" || true; \
 			return "$$xcodebuild_status"; \
