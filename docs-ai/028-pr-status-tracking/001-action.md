@@ -46,7 +46,7 @@ Grouped by problem wave; rows chronological within each wave.
 
 | Date | Change | Ref |
 | --- | --- | --- |
-| 2026-10-02 | Refresh only the repositories whose worktrees changed; background sweep every 60 s or 2 s per worktree, whichever is longer; one query in flight per host, at least 15 s apart, with chunked batches and a sequential fallback | [006](006-refresh-pacing.md) |
+| 2026-10-02 | Refresh only the repositories whose worktrees changed; background sweep every 60 s or 2 s per worktree, whichever is longer; one query in flight per host and account, at least 15 s apart, with chunked batches and a sequential fallback | [006](006-refresh-pacing.md) |
 
 ## Outcome & current state (as of 2026-07-12)
 
