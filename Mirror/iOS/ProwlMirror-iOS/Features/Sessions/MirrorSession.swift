@@ -89,7 +89,9 @@ final class MirrorSession: Identifiable {
   private(set) var historyTruncated = false
   private(set) var isLoadingHistory = false
   var showsHistory = false
-  var liveReadingOffset: CGFloat = 0
+  /// The reading view writes it on every scroll and reads it only when it appears, so a change
+  /// must not update views.
+  @ObservationIgnored var liveReadingAnchor: MirrorReadingAnchor?
   var historyReadingOffset: CGFloat = 0
   @ObservationIgnored private var historyID: UUID?
   @ObservationIgnored private var historyBytes = 0
@@ -242,7 +244,7 @@ final class MirrorSession: Identifiable {
       text = ""
       revision = 0
       updatedAt = nil
-      liveReadingOffset = 0
+      liveReadingAnchor = nil
       historyReadingOffset = 0
       historyID = nil
       historyLines = []

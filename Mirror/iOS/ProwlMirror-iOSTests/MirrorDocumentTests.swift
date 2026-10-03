@@ -22,4 +22,18 @@ struct MirrorDocumentTests {
     #expect(MirrorDocument("").blocks == [.text(0, "")])
     #expect(MirrorDocument("done").blocks == [.text(0, "done")])
   }
+
+  @Test func rowsKeepShortBlocksWholeAndSplitLongTextIntoChunks() {
+    let long = (1...40).map { "line \($0)" }.joined(separator: "\n")
+    let document = MirrorDocument("intro\n```\ncode\n```\n" + long)
+    #expect(
+      document.rows.map(\.id) == [
+        .init(block: 0, chunk: 0), .init(block: 1, chunk: 0), .init(block: 2, chunk: 0),
+        .init(block: 2, chunk: 1),
+      ])
+    #expect(document.rows[0].chunk == nil)
+    #expect(document.rows[1].chunk == nil)
+    #expect(document.rows[2...].map { $0.chunk?.raw ?? "" }.joined() == long)
+    #expect(document.rows[2...].allSatisfy { $0.block == document.blocks[2] })
+  }
 }

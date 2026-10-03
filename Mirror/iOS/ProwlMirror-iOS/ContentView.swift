@@ -279,16 +279,26 @@ private struct AddConnectionView: View {
   }
 }
 
+/// The row tops and the visible top of the live reader. It is not observable: it changes on every
+/// scroll, and no view shows it.
+private final class MirrorLiveReadingLayout {
+  var rowTops: [MirrorDocument.Row.ID: CGFloat] = [:]
+  var visibleTop: CGFloat = 0
+}
+
 private struct MirrorReadingView: View {
   @Bindable var session: MirrorSession
   @State private var showsConnectionEditor = false
-  @State private var position: ScrollPosition
-  @State private var observedInitialPosition = false
+  @State private var position = ScrollPosition(edge: .top)
+  @State private var layout = MirrorLiveReadingLayout()
+  /// The anchor to restore when the live reader appears. While it is set, scrolling does not
+  /// replace the stored anchor.
+  @State private var restoring: MirrorReadingAnchor?
   @State private var isEditing = false
 
   init(session: MirrorSession) {
     self.session = session
-    _position = State(initialValue: ScrollPosition(y: session.liveReadingOffset))
+    _restoring = State(initialValue: session.liveReadingAnchor)
   }
 
   var body: some View {
@@ -331,37 +341,42 @@ private struct MirrorReadingView: View {
         ScrollViewReader { proxy in
           ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-              MirrorDocumentView(text: session.text)
+              MirrorDocumentView(text: session.text, onRowTop: rowTopChanged)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityIdentifier("mirror-live-text")
               Color.clear.frame(height: 1).id("latest")
             }
             .padding()
+            .coordinateSpace(MirrorDocumentView.rowSpace)
           }
           .scrollPosition($position)
           .accessibilityIdentifier("mirror-live-scroll")
-          .onDisappear { observedInitialPosition = false }
+          .onDisappear { restoring = session.liveReadingAnchor }
           .onAppear {
             if session.followsLatest {
+              restoring = nil
               position.scrollTo(edge: .bottom)
-            } else {
-              position.scrollTo(y: session.liveReadingOffset)
+            } else if let restoring {
+              restore(restoring, with: proxy)
             }
           }
           .onScrollGeometryChange(for: CGFloat.self) { geometry in
             max(0, geometry.contentOffset.y + geometry.contentInsets.top)
-          } action: { _, offset in
-            if observedInitialPosition { session.liveReadingOffset = offset }
-            observedInitialPosition = true
+          } action: { _, top in
+            layout.visibleTop = top
+            storeAnchor()
           }
           .onScrollPhaseChange { _, phase in
-            if phase == .interacting { session.followsLatest = false }
+            guard phase == .interacting else { return }
+            session.followsLatest = false
+            restoring = nil
           }
           .onChange(of: session.revision) { _, _ in
             if session.followsLatest { proxy.scrollTo("latest", anchor: .bottom) }
           }
           .onChange(of: session.completedScroll) { _, completion in
             guard completion != nil else { return }
+            restoring = nil
             position.scrollTo(edge: .top)
           }
           .safeAreaInset(edge: .top) {
@@ -470,6 +485,38 @@ private struct MirrorReadingView: View {
       }
     }
   }
+
+  private func restore(_ anchor: MirrorReadingAnchor, with proxy: ScrollViewProxy) {
+    if let top = layout.rowTops[anchor.row] {
+      restoring = nil
+      position.scrollTo(y: top + anchor.offset)
+    } else if MirrorDocument(session.text).rows.contains(where: { $0.id == anchor.row }) {
+      // Lay out the anchor row first. `rowTopChanged` then applies the offset in the row.
+      proxy.scrollTo(anchor.row, anchor: .top)
+    } else {
+      restoring = nil
+      position.scrollTo(edge: .bottom)
+    }
+  }
+
+  private func rowTopChanged(_ row: MirrorDocument.Row.ID, _ top: CGFloat?) {
+    layout.rowTops[row] = top
+    guard let top else { return }
+    if let anchor = restoring {
+      guard anchor.row == row else { return }
+      restoring = nil
+      position.scrollTo(y: top + anchor.offset)
+    } else {
+      storeAnchor()
+    }
+  }
+
+  private func storeAnchor() {
+    guard restoring == nil,
+      let anchor = MirrorReadingAnchor(top: layout.visibleTop, rowTops: layout.rowTops)
+    else { return }
+    session.liveReadingAnchor = anchor
+  }
 }
 
 private struct MirrorConnectionEditor: View {
@@ -551,18 +598,21 @@ private struct MirrorHistoryView: View {
       .font(.caption).foregroundStyle(.secondary)
       ScrollViewReader { proxy in
         ScrollView {
-          LazyVStack(alignment: .leading) {
+          VStack(alignment: .leading) {
             Button("Load Earlier 200 Lines") { session.loadHistory() }
               .disabled(
                 session.historyOffset == 0 || session.isLoadingHistory || session.status != .live)
-            ForEach(
-              session.historyOffset..<(session.historyOffset + session.historyLines.count),
-              id: \.self
-            ) { index in
-              let line = session.historyLines[index - session.historyOffset]
-              Text(line.isEmpty ? " " : line).textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .id(index)
+            // iOS 27 sends no taps to a button in the same stack as selectable text rows.
+            LazyVStack(alignment: .leading) {
+              ForEach(
+                session.historyOffset..<(session.historyOffset + session.historyLines.count),
+                id: \.self
+              ) { index in
+                let line = session.historyLines[index - session.historyOffset]
+                Text(line.isEmpty ? " " : line).textSelection(.enabled)
+                  .frame(maxWidth: .infinity, alignment: .leading)
+                  .id(index)
+              }
             }
           }
         }
