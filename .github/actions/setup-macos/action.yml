@@ -1,11 +1,12 @@
 name: Setup macOS build deps
-description: Install + cache mise tools and GhosttyKit build outputs
+description: Install mise tools and restore the build caches. Run save-macos-caches at the end of the job to save them.
 
 runs:
   using: composite
   steps:
     - name: Mise cache
-      uses: actions/cache@v4
+      id: mise_cache
+      uses: actions/cache/restore@v4
       with:
         path: |
           ~/.local/share/mise
@@ -31,7 +32,8 @@ runs:
         echo "Xcode cache identity: $XCODE_CACHE_ID"
 
     - name: CLI SwiftPM build cache
-      uses: actions/cache@v4
+      id: cli_cache
+      uses: actions/cache/restore@v4
       with:
         path: |
           CLI/.build
@@ -53,7 +55,7 @@ runs:
         printf '%s\n' "GHOSTTY_SHA=$GHOSTTY_SHA" >> "$GITHUB_ENV"
     - name: Ghostty cache
       id: ghostty_cache
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: |
           App/Frameworks/GhosttyKit.xcframework
@@ -76,25 +78,13 @@ runs:
         touch .ghostty_build_stamp
 
     - name: SPM cache
-      uses: actions/cache@v4
+      id: spm_cache
+      uses: actions/cache/restore@v4
       with:
         path: ~/Library/Caches/prowl-spm-cache/SourcePackages
         key: ${{ runner.os }}-${{ runner.arch }}-spm-v1-${{ hashFiles('.package.resolved') }}
         restore-keys: |
           ${{ runner.os }}-${{ runner.arch }}-spm-v1-
-
-    - name: Xcode compilation cache
-      uses: actions/cache@v4
-      with:
-        path: ~/Library/Developer/Xcode/DerivedData/CompilationCache.noindex
-        # GitHub cache entries are immutable. A source-state suffix guarantees that a
-        # successful changed build saves newly compiled objects; restore-keys select the
-        # newest compatible CAS. Never restore across Xcode builds because compiler cache
-        # keys and storage formats are toolchain-specific.
-        key: ${{ runner.os }}-${{ runner.arch }}-xcode-compilation-cache-v3-${{ env.XCODE_CACHE_ID }}-${{ hashFiles('.package.resolved', 'Tuist.swift', 'Workspace.swift', 'App/Project.swift', 'App/Config/**', 'mise.toml', 'Makefile', '.github/actions/setup-macos/action.yml', '.github/workflows/test.yml') }}-${{ hashFiles('App/**/*.swift', 'Shared/Sources/**/*.swift', 'Mirror/Shared/*.swift', 'Mirror/Relay/Sources/**/*.swift') }}
-        restore-keys: |
-          ${{ runner.os }}-${{ runner.arch }}-xcode-compilation-cache-v3-${{ env.XCODE_CACHE_ID }}-${{ hashFiles('.package.resolved', 'Tuist.swift', 'Workspace.swift', 'App/Project.swift', 'App/Config/**', 'mise.toml', 'Makefile', '.github/actions/setup-macos/action.yml', '.github/workflows/test.yml') }}-
-          ${{ runner.os }}-${{ runner.arch }}-xcode-compilation-cache-v3-${{ env.XCODE_CACHE_ID }}-
 
     - name: App incremental cache identity
       shell: bash
@@ -105,7 +95,8 @@ runs:
         APP_WORKSPACE_ID="$(pwd -P | shasum -a 256 | cut -d ' ' -f 1)"
         printf '%s\n' "APP_INPUT_PATHS_ID=$APP_INPUT_PATHS_ID" "APP_WORKSPACE_ID=$APP_WORKSPACE_ID" >> "$GITHUB_ENV"
     - name: App incremental build cache
-      uses: actions/cache@v4
+      id: app_cache
+      uses: actions/cache/restore@v4
       with:
         path: ${{ env.PROWL_DERIVED_DATA_PATH }}
         # Incremental state needs a stricter boundary than the content-addressed cache.
@@ -113,6 +104,43 @@ runs:
         key: ${{ runner.os }}-${{ runner.arch }}-app-incremental-v2-${{ env.XCODE_CACHE_ID }}-${{ env.APP_WORKSPACE_ID }}-${{ env.GHOSTTY_SHA }}-${{ env.APP_INPUT_PATHS_ID }}-${{ hashFiles('CLI/Package.swift', 'CLI/Package.resolved', 'Shared/Package.swift', 'Mirror/Relay/Package.swift', '.package.resolved', 'Tuist.swift', 'Workspace.swift', 'App/Project.swift', 'App/Config/**', 'mise.toml', 'Makefile', '.github/actions/setup-macos/action.yml', '.github/workflows/test.yml', 'scripts/ci-source-mtimes.py') }}-${{ hashFiles('App/**/*.swift', 'Shared/Sources/**/*.swift', 'Mirror/Shared/*.swift', 'Mirror/Relay/Sources/**/*.swift') }}
         restore-keys: |
           ${{ runner.os }}-${{ runner.arch }}-app-incremental-v2-${{ env.XCODE_CACHE_ID }}-${{ env.APP_WORKSPACE_ID }}-${{ env.GHOSTTY_SHA }}-${{ env.APP_INPUT_PATHS_ID }}-${{ hashFiles('CLI/Package.swift', 'CLI/Package.resolved', 'Shared/Package.swift', 'Mirror/Relay/Package.swift', '.package.resolved', 'Tuist.swift', 'Workspace.swift', 'App/Project.swift', 'App/Config/**', 'mise.toml', 'Makefile', '.github/actions/setup-macos/action.yml', '.github/workflows/test.yml', 'scripts/ci-source-mtimes.py') }}-
+    # Xcode keeps the compilation cache (CAS) in the DerivedData folder, so the App incremental
+    # cache carries it. When no compatible incremental state exists (changed file roster or build
+    # configuration), keep only the CAS of the newest App build for this Xcode. The build is then
+    # clean, but it replays compiler outputs from the content-addressed cache.
+    - name: Compilation cache of an earlier App build
+      id: app_cas
+      if: steps.app_cache.outputs.cache-matched-key == ''
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ env.PROWL_DERIVED_DATA_PATH }}
+        key: ${{ runner.os }}-${{ runner.arch }}-app-incremental-v2-${{ env.XCODE_CACHE_ID }}-${{ env.APP_WORKSPACE_ID }}-
+        restore-keys: |
+          ${{ runner.os }}-${{ runner.arch }}-app-incremental-v2-${{ env.XCODE_CACHE_ID }}-${{ env.APP_WORKSPACE_ID }}-
+    - name: Keep only the compilation cache
+      if: steps.app_cas.outputs.cache-matched-key != ''
+      shell: bash
+      run: |
+        set -euo pipefail
+        find "$PROWL_DERIVED_DATA_PATH" -mindepth 1 -maxdepth 1 ! -name CompilationCache.noindex -exec rm -rf {} +
+        du -sh "$PROWL_DERIVED_DATA_PATH/CompilationCache.noindex" 2>/dev/null || echo "No compilation cache in the restored state"
     - name: Restore unchanged App source times
       shell: bash
       run: python3 scripts/ci-source-mtimes.py restore --scope app --manifest "$PROWL_DERIVED_DATA_PATH/source-times.json"
+
+    - name: Cache keys for save-macos-caches
+      shell: bash
+      run: |
+        set -euo pipefail
+        {
+          echo "PROWL_MISE_CACHE_KEY=${{ steps.mise_cache.outputs.cache-primary-key }}"
+          echo "PROWL_MISE_CACHE_HIT=${{ steps.mise_cache.outputs.cache-hit }}"
+          echo "PROWL_CLI_CACHE_KEY=${{ steps.cli_cache.outputs.cache-primary-key }}"
+          echo "PROWL_CLI_CACHE_HIT=${{ steps.cli_cache.outputs.cache-hit }}"
+          echo "PROWL_GHOSTTY_CACHE_KEY=${{ steps.ghostty_cache.outputs.cache-primary-key }}"
+          echo "PROWL_GHOSTTY_CACHE_HIT=${{ steps.ghostty_cache.outputs.cache-hit }}"
+          echo "PROWL_SPM_CACHE_KEY=${{ steps.spm_cache.outputs.cache-primary-key }}"
+          echo "PROWL_SPM_CACHE_HIT=${{ steps.spm_cache.outputs.cache-hit }}"
+          echo "PROWL_APP_CACHE_KEY=${{ steps.app_cache.outputs.cache-primary-key }}"
+          echo "PROWL_APP_CACHE_HIT=${{ steps.app_cache.outputs.cache-hit }}"
+        } >> "$GITHUB_ENV"

@@ -110,6 +110,7 @@ jobs:
         run: |
           python3 scripts/ci-source-mtimes.py save
           python3 scripts/ci-source-mtimes.py save --scope app --manifest "$PROWL_DERIVED_DATA_PATH/source-times.json"
+      - uses: ./.github/actions/save-macos-caches
       - name: Upload build and test logs
         if: always()
         uses: actions/upload-artifact@v4
