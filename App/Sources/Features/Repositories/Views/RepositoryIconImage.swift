@@ -44,14 +44,14 @@ struct RepositoryIconImage: View {
     case .sfSymbol(let name):
       Image(systemName: name)
         .resizable()
-        .aspectRatio(contentMode: .fit)
+        .scaledToFit()
         .symbolRenderingMode(.monochrome)
         .foregroundStyle(resolvedTint)
         .accessibilityHidden(true)
     case .bundledAsset(let assetName):
       Image(assetName)
         .resizable()
-        .aspectRatio(contentMode: .fit)
+        .scaledToFit()
         .accessibilityHidden(true)
     case .userImage(let filename), .detectedImage(let filename):
       userImage(filename: filename)
@@ -67,13 +67,13 @@ struct RepositoryIconImage: View {
       if icon.isTintable {
         Image(nsImage: nsImage)
           .resizable()
-          .aspectRatio(contentMode: .fit)
+          .scaledToFit()
           .foregroundStyle(resolvedTint)
           .accessibilityHidden(true)
       } else {
         Image(nsImage: nsImage)
           .resizable()
-          .aspectRatio(contentMode: .fit)
+          .scaledToFit()
           .clipShape(.rect(cornerRadius: size * 0.18))
           .accessibilityHidden(true)
       }
@@ -83,7 +83,7 @@ struct RepositoryIconImage: View {
       // visible.
       Image(systemName: "questionmark.square.dashed")
         .resizable()
-        .aspectRatio(contentMode: .fit)
+        .scaledToFit()
         .foregroundStyle(.tertiary)
         .accessibilityHidden(true)
     }
