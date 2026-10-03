@@ -96,7 +96,7 @@ run_case() {
 
   local -a command=(
     xcodebuild
-    -project "$ROOT/supacode.xcodeproj"
+    -workspace "$ROOT/Prowl.xcworkspace"
     -scheme supacode
     -configuration Debug
     -destination "platform=macOS,arch=$(uname -m)"

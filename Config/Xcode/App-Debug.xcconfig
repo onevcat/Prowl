@@ -1,0 +1,7 @@
+#include "App.xcconfig"
+
+CODE_SIGN_ENTITLEMENTS = supacode/supacodeDebug.entitlements
+COMPILATION_CACHE_ENABLE_CACHING = YES
+DEBUG_INFORMATION_FORMAT = dwarf
+ENABLE_DEBUG_DYLIB = NO
+INFOPLIST_KEY_CFBundleDisplayName = Prowl Debug

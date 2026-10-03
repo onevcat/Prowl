@@ -2,16 +2,18 @@
 
 Native clients for Prowl Remote Mirror:
 
-- [iOS](iOS/README.md): iPhone and iPad; open `iOS/ProwlMirror-iOS.xcodeproj` in Xcode.
+- [iOS](iOS/README.md): iPhone and iPad; run `make generate` at the repository root, then open
+  `Prowl.xcworkspace` in Xcode and select the `ProwlMirror-iOS` scheme.
 - [Android](Android/README.md): phones and tablets; open `Android/` in Android Studio.
 
 Launch the matching Mac Host with `PROWL_REMOTE_MIRROR=1`. Pair via **Start Host →
 Add a Device**. Both clients follow the shared [wire contract](../docs/remote-mirror-wire.md)
 and [Host behavior](../docs/remote-mirror.md). Upgrade Host and clients together.
 
-These are independent native projects within this repository. They do not add
-mobile targets to the Mac Xcode project, Makefile, or release pipeline. Use each
-client's documented build/test commands from its own directory. Build outputs,
+These are independent native projects within this repository. The iOS project is in
+the generated workspace next to the Mac project, but the clients add no targets to the
+Mac Xcode project, the Makefile build targets, or the release pipeline. Use each
+client's documented build/test commands. Build outputs,
 SDK paths, IDE user settings and signing credentials stay untracked.
 
 ## Import provenance

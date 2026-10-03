@@ -12,6 +12,11 @@ INPUTS = [
     "Package.swift", "Package.resolved", "ProwlCLI", "ProwlCLITests",
     "ProwlCLIContracts", "supacode/CLIService/Shared",
 ]
+# The Xcode projects are generated; the manifests and xcconfig files are their tracked inputs.
+APP_INPUTS = [
+    "supacode", "supacodeTests", "MirrorClient/Shared", "Project.swift", "Workspace.swift",
+    "Tuist.swift", "Config/Xcode", ".package.resolved",
+]
 
 
 def tracked_inputs(root, scope):
@@ -26,7 +31,7 @@ def tracked_inputs(root, scope):
         return sorted(cli)
     # The CLI cache owns shared-source timestamps. Restoring a second timestamp
     # for those files would invalidate SwiftPM's restored incremental state.
-    return sorted(listed(["supacode", "supacodeTests", "supacode.xcodeproj"]) - cli)
+    return sorted(listed(APP_INPUTS) - cli)
 
 
 def regular_input(root, name):

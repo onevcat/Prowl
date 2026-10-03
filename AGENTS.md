@@ -4,6 +4,7 @@ This fork is primarily for onevcat-specific customizations; before doing any rel
 
 ```bash
 make build-ghostty-xcframework  # Rebuild GhosttyKit from Zig source (requires mise)
+make generate                    # Generate Prowl.xcworkspace and the Xcode projects with Tuist (to open them in Xcode)
 make build-app                   # Build macOS app (Debug) via xcodebuild
 make run-app                     # Build and launch Debug app
 make install-dev-build           # Build and copy to /Applications (Debug)
@@ -31,10 +32,12 @@ make bump-version                # Bump version (date-based YYYY.M.DD) and creat
 
 Debug builds are ad-hoc signed by default, so building needs no certificate. An ad-hoc signature's designated requirement is its cdhash, which changes on every rebuild, so macOS re-asks for Desktop/Documents/Downloads access from Prowl Debug — and from the commands running in its panes — after each build. If your worktrees live in those folders, set `PROWL_DEVELOPMENT_TEAM=<Team ID>` (environment or `Config/Secrets.env`) and `make build-app` / `make test` sign the Debug app and test host with your Apple Development identity instead; the Team ID is the certificate's OU, not the ID in parentheses after your name. With it set, replace the `CODE_SIGNING_*` settings in ad-hoc `xcodebuild test` invocations like the one below with `DEVELOPMENT_TEAM=<Team ID>` so the test host keeps the same signature.
 
-Run a single test class or method:
+The Xcode projects are not in Git. [Tuist](https://tuist.dev) generates `Prowl.xcworkspace` (the macOS app and the iOS mirror client) from `Workspace.swift`, `Project.swift`, `MirrorClient/iOS/Project.swift`, and the build settings in `Config/Xcode/*.xcconfig`. The `make` targets generate it when it is absent or older than these files. To change a target, a dependency, a build setting, or a scheme, edit the manifest or the xcconfig file, never the generated project. Source folders are synchronized folders, so a new source file needs no manifest change. The package lockfile is `.package.resolved`; always build with `-workspace Prowl.xcworkspace`.
+
+Run a single test class or method (after `make generate`):
 
 ```bash
-xcodebuild test -project supacode.xcodeproj -scheme supacode -destination "platform=macOS" \
+xcodebuild test -workspace Prowl.xcworkspace -scheme supacode -destination "platform=macOS" \
   -only-testing:supacodeTests/TerminalTabManagerTests \
   CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" -skipMacroValidation
 ```
@@ -48,7 +51,7 @@ xcodebuild test -project supacode.xcodeproj -scheme supacode -destination "platf
 -only-testing:"supacodeTests/FooTests/bar()"
 ```
 
-Requires [mise](https://mise.jdx.dev/) for zig, swiftlint, and xcsift tooling.
+Requires [mise](https://mise.jdx.dev/) for zig, tuist, swiftlint, and xcsift tooling.
 
 `make log-stream` shows no `TCA` action lines by default: per-action logging — the action label plus a full app-state snapshot and diff — is gated off because it runs on every action and shows up as steady main-thread cost. Launch with `PROWL_LOG_TCA_ACTIONS=1` (scheme env var, or exported before `open`) to trace the action stream through the unified log.
 
