@@ -570,6 +570,12 @@
         }
       }
     },
+    "%@: %@" : {
+      "shouldTranslate" : false
+    },
+    "%@:%@" : {
+      "shouldTranslate" : false
+    },
     "%lld" : {
       "shouldTranslate" : false
     },
@@ -1780,6 +1786,16 @@
         }
       }
     },
+    "All devices will be disconnected and must pair again. Saved connections and the current pairing code will no longer work. Local terminals keep running." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所有设备都将断开连接，并且必须重新配对。已保存的连接和当前配对码将不再有效。本地终端会继续运行。"
+          }
+        }
+      }
+    },
     "All interfaces (0.0.0.0)" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2831,6 +2847,16 @@
         }
       }
     },
+    "Buttons scroll the Host terminal. Scrolling the display only pans locally." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按钮用于滚动主机终端。在显示区域滚动只会移动本地视图。"
+          }
+        }
+      }
+    },
     "CI failure logs copied" : {
       "localizations" : {
         "zh-Hans" : {
@@ -3537,6 +3563,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "选择克隆目标位置"
+          }
+        }
+      }
+    },
+    "Choose the Wi-Fi or VPN address reachable from your Mirror device" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择镜像设备可访问的 Wi-Fi 或 VPN 地址"
           }
         }
       }
@@ -4691,6 +4727,16 @@
         }
       }
     },
+    "Connection address" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接地址"
+          }
+        }
+      }
+    },
     "Connection lost. Remote status is unknown." : {
       "localizations" : {
         "zh-Hans" : {
@@ -4807,6 +4853,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "复制 CI 失败日志"
+          }
+        }
+      }
+    },
+    "Copy Connection Details" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "拷贝连接信息"
           }
         }
       }
@@ -4951,6 +5007,16 @@
         }
       }
     },
+    "Copy the address, port and pairing code together (⌘C)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一起拷贝地址、端口和配对码（⌘C）"
+          }
+        }
+      }
+    },
     "Copy the agent's working directory path" : {
       "localizations" : {
         "zh-Hans" : {
@@ -4967,26 +5033,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "复制此 Agent 会话日志在磁盘上的路径"
-          }
-        }
-      }
-    },
-    "Copy the pairing code" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "复制配对码"
-          }
-        }
-      }
-    },
-    "Copy the pairing code (⌘C)" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "复制配对码（⌘C）"
           }
         }
       }
@@ -6291,6 +6337,16 @@
         }
       }
     },
+    "Disconnect all devices and require fresh pairing, including devices currently offline" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "断开所有设备的连接，并要求重新配对，包括当前离线的设备"
+          }
+        }
+      }
+    },
     "Disconnect mirror of %@ from %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -6447,6 +6503,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "显示副本已断开。"
+          }
+        }
+      }
+    },
+    "Display replica timed out while parsing a Host frame. Reconnect to try again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "镜像显示解析主机画面超时。请重新连接后重试。"
           }
         }
       }
@@ -6821,6 +6887,16 @@
         }
       }
     },
+    "Enter a fresh code from Host instead of using saved device access" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入主机上的新配对码，不使用已保存的设备授权"
+          }
+        }
+      }
+    },
     "Enter a listen address of this Mac and a port between 1 and 65535." : {
       "localizations" : {
         "zh-Hans" : {
@@ -6907,16 +6983,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "请输入主机地址。"
-          }
-        }
-      }
-    },
-    "Enter the address shown on Host under Remote Mirror → Add a Device." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "输入主机上“远程镜像 → 添加设备”中显示的地址。"
           }
         }
       }
@@ -8193,6 +8259,16 @@
         }
       }
     },
+    "Host could not scroll." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主机无法滚动。"
+          }
+        }
+      }
+    },
     "Host disconnected." : {
       "localizations" : {
         "zh-Hans" : {
@@ -8289,6 +8365,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "主机拒绝了该请求。"
+          }
+        }
+      }
+    },
+    "Host returned an invalid scroll result." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主机返回了无效的滚动结果。"
+          }
+        }
+      }
+    },
+    "Host scrollback · Plain text" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主机回滚缓冲区 · 纯文本"
           }
         }
       }
@@ -8449,6 +8545,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "就地"
+          }
+        }
+      }
+    },
+    "In Prowl Mirror on your phone, tap Scan QR Code." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在手机的 Prowl Mirror 中，轻点“扫描二维码”。"
           }
         }
       }
@@ -8743,6 +8849,16 @@
         }
       }
     },
+    "Invalid Host scroll state." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主机滚动状态无效。"
+          }
+        }
+      }
+    },
     "Invalid Host status." : {
       "localizations" : {
         "zh-Hans" : {
@@ -8763,12 +8879,32 @@
         }
       }
     },
+    "Invalid Host viewport frame." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主机视口画面无效。"
+          }
+        }
+      }
+    },
     "Invalid command response." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "无效的命令响应。"
+          }
+        }
+      }
+    },
+    "Invalid connection details. Copy Connection Details again from Host." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接信息无效。请在主机上重新拷贝连接信息。"
           }
         }
       }
@@ -8819,6 +8955,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "远程镜像消息无效。"
+          }
+        }
+      }
+    },
+    "Invalid scroll result." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "滚动结果无效。"
           }
         }
       }
@@ -10293,12 +10439,12 @@
         }
       }
     },
-    "No network address found. Connect this Mac to a network." : {
+    "No network address is available for pairing. Start Host on a Wi-Fi or VPN interface." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "未找到网络地址。请将这台 Mac 接入网络。"
+            "value" : "没有可用于配对的网络地址。请在 Wi-Fi 或 VPN 接口上启动主机。"
           }
         }
       }
@@ -10803,12 +10949,12 @@
         }
       }
     },
-    "On the other device, open Remote Mirror → Client → Connect to a New Host. Enter one of these addresses with the port, then the code below." : {
+    "On the other device, open Remote Mirror → Client → Connect to a New Host. Copy the connection details and paste into any connection field on Mac, or scan the QR code on mobile." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在另一台设备上打开“远程镜像 → 客户端 → 连接到新主机”，输入以下任一地址和端口，然后输入下方的配对码。"
+            "value" : "在另一台设备上，打开远程镜像 → 客户端 → 连接新主机。拷贝连接信息并粘贴到 Mac 上的任意连接字段中，或在移动设备上扫描二维码。"
           }
         }
       }
@@ -11786,6 +11932,16 @@
         }
       }
     },
+    "Pair Again…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新配对…"
+          }
+        }
+      }
+    },
     "Paired with %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -11812,6 +11968,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "配对码"
+          }
+        }
+      }
+    },
+    "Pairing QR code" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配对二维码"
           }
         }
       }
@@ -11882,6 +12048,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "粘贴"
+          }
+        }
+      }
+    },
+    "Paste connection details from Host into any field below, or enter the address and pairing code manually." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将主机上的连接信息粘贴到下方任意字段中，或手动输入地址和配对码。"
           }
         }
       }
@@ -12824,16 +13000,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在重新运行失败的作业…"
-          }
-        }
-      }
-    },
-    "Reachable on your local network or VPN. The internet cannot reach this port unless your router forwards it." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "可通过本地网络或 VPN 访问。除非路由器转发了此端口，否则无法从互联网访问。"
           }
         }
       }
@@ -14428,6 +14594,36 @@
         }
       }
     },
+    "Revoke All Devices" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "撤销所有设备授权"
+          }
+        }
+      }
+    },
+    "Revoke All Devices?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "撤销所有设备授权？"
+          }
+        }
+      }
+    },
+    "Revoke All Devices…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "撤销所有设备授权…"
+          }
+        }
+      }
+    },
     "Right" : {
       "localizations" : {
         "zh-Hans" : {
@@ -14968,6 +15164,16 @@
         }
       }
     },
+    "Scan a Prowl pairing QR code from Add a Device on Host." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请扫描主机“添加设备”中的 Prowl 配对二维码。"
+          }
+        }
+      }
+    },
     "Script Actions" : {
       "localizations" : {
         "zh-Hans" : {
@@ -14994,6 +15200,66 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "脚本可以读取和修改文件、使用网络，并以你的权限运行程序。\n批准适用于此版本 Bundle 中的每个文件。"
+          }
+        }
+      }
+    },
+    "Scroll Down" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "向下滚动"
+          }
+        }
+      }
+    },
+    "Scroll Up" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "向上滚动"
+          }
+        }
+      }
+    },
+    "Scroll the Host terminal down by about a page, keeping three rows of overlap" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将主机终端向下滚动约一页，保留三行重叠内容"
+          }
+        }
+      }
+    },
+    "Scroll the Host terminal up by about a page, keeping three rows of overlap" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将主机终端向上滚动约一页，保留三行重叠内容"
+          }
+        }
+      }
+    },
+    "Scrolling timed out. The Host may have moved; check the live view before trying again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "滚动超时。主机可能已经滚动，请检查实时视图后再重试。"
+          }
+        }
+      }
+    },
+    "Scrolling…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在滚动…"
           }
         }
       }
@@ -17751,6 +18017,16 @@
         }
       }
     },
+    "These connection details expired. Refresh Code on Host, then copy and paste again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接信息已过期。请在主机上刷新配对码，然后重新拷贝并粘贴。"
+          }
+        }
+      }
+    },
     "This Host no longer recognizes this Mac. Enter a new pairing code from Host." : {
       "localizations" : {
         "zh-Hans" : {
@@ -17777,16 +18053,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "仅这台 Mac（127.0.0.1）"
-          }
-        }
-      }
-    },
-    "This Mac’s address" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "这台 Mac 的地址"
           }
         }
       }
@@ -17907,6 +18173,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此文件夹不是 Git 仓库。"
+          }
+        }
+      }
+    },
+    "This pairing code expired. Refresh Code on Host and scan again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配对码已过期。请在主机上刷新配对码，然后重新扫描。"
           }
         }
       }
@@ -18427,6 +18703,16 @@
         }
       }
     },
+    "Unable to generate the QR code. Use the address and pairing code above." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法生成二维码。请使用上方的地址和配对码。"
+          }
+        }
+      }
+    },
     "Unable to open diff in %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -18667,6 +18953,26 @@
         }
       }
     },
+    "Unexpected Host scroll state." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "收到非预期的主机滚动状态。"
+          }
+        }
+      }
+    },
+    "Unexpected Host viewport." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "收到非预期的主机视口。"
+          }
+        }
+      }
+    },
     "Unified" : {
       "localizations" : {
         "zh-Hans" : {
@@ -18834,6 +19140,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "更新 GitHub CLI 至最新版本以使用 GitHub 集成。"
+          }
+        }
+      }
+    },
+    "Update Host to enable remote scrolling." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更新主机以启用远程滚动。"
           }
         }
       }
