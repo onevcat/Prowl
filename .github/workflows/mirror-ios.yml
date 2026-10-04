@@ -33,7 +33,8 @@ jobs:
   # setup-macos. It also must not save the setup-macos caches, or it would take the cache keys
   # of the Mac app job.
   mirror-ios:
-    runs-on: macos-26
+    # Use the same Xcode as the Mac app job (see test.yml).
+    runs-on: xcode-27
     timeout-minutes: 20
     permissions:
       contents: read

@@ -22,7 +22,10 @@ concurrency:
 
 jobs:
   build:
-    runs-on: macos-26
+    # The Swift 6.4 toolchain selects different package manifests than Swift 6.3 and earlier,
+    # so .package.resolved changes with the Xcode major version. Use the same Xcode as local
+    # builds and releases. GitHub marks this image as a preview until a macos-27 label exists.
+    runs-on: xcode-27
     # A green run takes 6 to 10 minutes, and a slow runner has taken 2.5 times as long. The test
     # watchdog stops a hung test run sooner; this limit stops anything else that hangs. Without
     # it the default is 6 hours, so a stuck run had to be cancelled by hand.
