@@ -1,10 +1,20 @@
 name: test
 
+# The Mac app. The mirror clients have their own workflows, and a change to only those
+# clients does not run this one.
 on:
   push:
     branches:
       - main
+    paths-ignore:
+      - Mirror/iOS/**
+      - Mirror/Android/**
+      - .github/workflows/mirror-*.yml
   pull_request:
+    paths-ignore:
+      - Mirror/iOS/**
+      - Mirror/Android/**
+      - .github/workflows/mirror-*.yml
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -28,8 +38,6 @@ jobs:
         with:
           submodules: recursive
       - uses: ./.github/actions/setup-macos
-      - run: make lint
-      - run: make check-localization
       - name: Stage debug app resources
         run: make embed-cli-debug embed-docs embed-skills
       - name: Generate workspace
@@ -74,18 +82,19 @@ jobs:
           # SwiftPM serializes access to .build; keep its checks in one branch.
           run_task cli-tests make test-cli-smoke test-cli-unit test-cli-integration &
           pid_cli=$!
-          run_task scripts make test-scripts &
-          pid_scripts=$!
+          # Lint and the localization check need no build, so they run beside it.
+          run_task checks make lint check-localization test-scripts &
+          pid_checks=$!
 
           failed=0
           wait "$pid_app" || failed=1
           wait "$pid_cli" || failed=1
-          wait "$pid_scripts" || failed=1
+          wait "$pid_checks" || failed=1
           {
             printf '## Build and test wall time\n\n| Task | Seconds | Exit status |\n| --- | ---: | ---: |\n'
             cat build/ci-logs/*.timing
             printf '\nTasks run in parallel; their times must not be added.\n\n'
-            python3 scripts/summarize-xcode-build.py build/test-results/*.build.json
+            python3 scripts/summarize-xcode-build.py build/test-results/*.build.json build/test-results/*.action.json
           } >> "$GITHUB_STEP_SUMMARY"
           exit "$failed"
       - name: Collect mirror diagnostics
@@ -100,6 +109,7 @@ jobs:
         run: |
           python3 scripts/ci-source-mtimes.py save
           python3 scripts/ci-source-mtimes.py save --scope app --manifest "$PROWL_DERIVED_DATA_PATH/source-times.json"
+      - uses: ./.github/actions/save-macos-caches
       - name: Upload build and test logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -109,6 +119,7 @@ jobs:
             build/ci-logs/
             build/test-results/*.log
             build/test-results/*.build.json
+            build/test-results/*.action.json
           if-no-files-found: ignore
           retention-days: 7
       - name: Upload xcresult bundle (on failure)
@@ -119,59 +130,3 @@ jobs:
           path: build/test-results/**/*.xcresult
           if-no-files-found: ignore
           retention-days: 7
-
-  # Runs in parallel with `build`, one job for each simulator form factor. The iOS mirror
-  # project needs no submodule, GhosttyKit, CLI, or Swift package, so this job does not use
-  # setup-macos. It also must not save the setup-macos caches: this job ends first and would
-  # take the cache keys of `build`.
-  ios-mirror:
-    name: ios-mirror (${{ matrix.form-factor }})
-    runs-on: macos-26
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        form-factor: [ipad, iphone]
-    env:
-      MISE_HTTP_TIMEOUT: 120
-      MISE_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      # Install only the tools that the iOS mirror targets use.
-      MISE_EXEC_AUTO_INSTALL: false
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-    steps:
-      - uses: actions/checkout@v6
-      - name: Install Tuist and xcsift
-        run: |
-          brew install mise
-          mise install tuist github:ldomaradzki/xcsift
-      - name: Test iOS mirror
-        run: make test-mirror-ios-${{ matrix.form-factor }}
-      - name: Upload xcresult bundle (on failure)
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ios-mirror-${{ matrix.form-factor }}-xcresult-${{ github.run_id }}-${{ github.run_attempt }}
-          path: build/test-results/mirror-ios-${{ matrix.form-factor }}.xcresult
-          if-no-files-found: ignore
-          retention-days: 7
-
-  android-mirror:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: gradle
-      - uses: android-actions/setup-android@v4
-      - name: Install Android SDK 34
-        run: sdkmanager 'platforms;android-34' 'build-tools;34.0.0'
-      - name: Build and test Android mirror
-        working-directory: Mirror/Android
-        run: ./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest :app:lintDebug

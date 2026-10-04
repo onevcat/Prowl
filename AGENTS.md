@@ -14,7 +14,8 @@ make format                      # Run full-tree swift-format cleanup
 make lint                        # Run swiftlint only
 make check                       # Run changed-file format, swift-format lint, swiftlint, and the string catalog check
 make audit-localization          # Release check of the string catalog and unlocalized UI copy (see the sync-l10n skill)
-make test                        # Run all tests
+make test                        # Run the Mac app tests
+make test-all                    # Run every test suite: scripts, CLI, Mac app, iOS mirror (unit and UI), Android mirror
 make benchmark-build             # Benchmark CI-like clean/warm-CAS build and test time
 make bench                       # Run performance benchmarks with -O; append absolute medians to ~/Library/Logs/Prowl/measurements/bench/
 make measure-cpu                 # Steady-state CPU + per-symbol attribution of the running Prowl Debug app

@@ -1,0 +1,44 @@
+name: mirror-android
+
+# The Android mirror client needs only a minimal check, so CI runs it only when the client
+# changes and for each published release.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - Mirror/Android/**
+      - .github/workflows/mirror-android.yml
+  pull_request:
+    paths:
+      - Mirror/Android/**
+      - .github/workflows/mirror-android.yml
+  # Release tags are lightweight, so `git push --follow-tags` does not push them and
+  # `gh release create` makes them on GitHub. That sends no tag push event.
+  release:
+    types:
+      - published
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mirror-android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - uses: android-actions/setup-android@v4
+      - name: Install Android SDK 34
+        run: sdkmanager 'platforms;android-34' 'build-tools;34.0.0'
+      - name: Build and test Android mirror
+        working-directory: Mirror/Android
+        run: ./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest :app:lintDebug

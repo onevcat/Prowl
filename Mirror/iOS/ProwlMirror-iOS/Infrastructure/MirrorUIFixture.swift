@@ -28,11 +28,19 @@
       return try JSONDecoder().decode(MirrorJSON.self, from: Data(payload.utf8))
     }
 
+    /// With `--mirror-ui-scroll-hold-fixture`, the fixture Host confirms a scroll only when the UI
+    /// test posts this Darwin notification, so the test can check the loading state at any speed.
+    static let releaseScrollNotification = "com.awhisper.ProwlMirror-iOS.ui-fixture.release-scroll"
+    private static var holdsScroll: Bool {
+      CommandLine.arguments.contains("--mirror-ui-scroll-hold-fixture")
+    }
+
     static func session(name: String = "UI Fixture", longOutput: Bool = false) -> MirrorSession {
       let channel = Channel(name: name, longOutput: longOutput)
       let session = MirrorSession(
         configuration: .init(
           address: "127.0.0.1", port: 7880, pairingKey: ""),
+        scrollConfirmationTimeout: holdsScroll ? .seconds(120) : .seconds(5),
         makeTransport: { _ in channel })
       session.connect()
       session.select(channel.pane)
@@ -50,6 +58,20 @@
         pane = MirrorPaneDescriptor(
           id: UUID(), title: "\(name) · Codex", directory: "/fixture", busy: false,
           projectName: name, subtitle: "Codex · main")
+        if MirrorUIFixture.holdsScroll {
+          CFNotificationCenterAddObserver(
+            CFNotificationCenterGetDarwinNotifyCenter(), Unmanaged.passUnretained(self).toOpaque(),
+            { _, observer, _, _, _ in
+              guard let observer else { return }
+              let channel = Unmanaged<Channel>.fromOpaque(observer).takeUnretainedValue()
+              Task { @MainActor in channel.releaseHeldScrolls() }
+            },
+            MirrorUIFixture.releaseScrollNotification as CFString, nil, .deliverImmediately)
+        }
+      }
+      deinit {
+        CFNotificationCenterRemoveEveryObserver(
+          CFNotificationCenterGetDarwinNotifyCenter(), Unmanaged.passUnretained(self).toOpaque())
       }
       private let lease = UUID()
       private let run = UUID()
@@ -57,12 +79,12 @@
         text: (1...401).map { "Retained line \($0)" }.joined(separator: "\n"), truncated: true)
       private var sequence: UInt64 = 0
       private var scrollPage = 0
-      private var scrollTask: Task<Void, Never>?
+      private var heldScrolls: [MirrorMessage] = []
       private var includesScrollState = false
 
       func start() { onReady?() }
       func close(_ reason: String?) {
-        scrollTask?.cancel()
+        heldScrolls = []
         onClose?(reason)
       }
 
@@ -148,14 +170,17 @@
       }
 
       private func scroll(_ message: MirrorMessage) {
-        if CommandLine.arguments.contains("--mirror-ui-scroll-delay-fixture") {
-          scrollTask = Task { [weak self] in
-            do { try await ContinuousClock().sleep(for: .seconds(2)) } catch { return }
-            self?.completeScroll(message)
-          }
+        if MirrorUIFixture.holdsScroll {
+          heldScrolls.append(message)
         } else {
           completeScroll(message)
         }
+      }
+
+      private func releaseHeldScrolls() {
+        let scrolls = heldScrolls
+        heldScrolls = []
+        scrolls.forEach(completeScroll)
       }
 
       private func completeScroll(_ message: MirrorMessage) {

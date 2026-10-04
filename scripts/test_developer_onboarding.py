@@ -25,10 +25,10 @@ class DeveloperOnboardingTests(unittest.TestCase):
                 self.assertIn(expected, readme)
                 self.assertNotIn("feat/mobile-mirror", readme)
 
-    def test_ios_readme_has_a_repeatable_cross_device_test_command(self):
+    def test_ios_readme_has_a_repeatable_test_command(self):
         readme = (ROOT / "Mirror/iOS/README.md").read_text()
         self.assertIn("make test-mirror-ios", readme)
-        self.assertIn("matching simulator form factors", readme)
+        self.assertIn("CI runs only the unit tests", readme)
 
     def test_android_readme_accepts_android_studios_bundled_jbr(self):
         readme = (ROOT / "Mirror/Android/README.md").read_text()
