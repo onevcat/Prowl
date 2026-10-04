@@ -81,18 +81,21 @@ make build-app
 
 ### Workflow UI release scope
 
-The next public release includes the default-on Workflow UI, action bundles, run history,
-and workflow-only Handoff. The hidden-UI scope applied to v2026.9.6 and is historical.
-Follow the current [workflow release scope](../063-agent-workflows/release-plan.md).
+Workflow UI, action bundles, run history, and workflow-only Handoff shipped in
+v2026.9.12. Review Loop (`prowl.review-loop`, formerly adversarial review) shipped
+in v2026.9.17. The hidden-UI scope of v2026.9.6 and the earlier D2 deferral are
+historical. Follow the [workflow release record](../063-agent-workflows/release-plan.md)
+and generate new release notes from the changes since the previous release tag.
 
 - Launch the candidate without `PROWL_WORKFLOW_UI`: workflow launch, status, history,
   Settings, and the bundled workflow skill are available. A fresh process with
   `PROWL_WORKFLOW_UI=0` hides the UI; CLI workflow and skill commands remain available.
 - D3 Handoff acceptance is recorded in [020](../063-agent-workflows/020-handoff-workflow.md).
   Distinguish its live workflow tests from later retirement UI checks and the receiver-focus
-  amendment's stated evidence limit. D2 adversarial review remains deferred to R3.
-- Advertise workflows and Handoff in this release. Do not present the deferred built-in
-  adversarial review as available.
+  amendment's stated evidence limit. D2 Review Loop acceptance is recorded in
+  [023](../063-agent-workflows/023-review-loop.md).
+- Workflows, Handoff, and Review Loop are available. Describe changes to them only
+  when they are part of the current release diff; do not announce them again as new.
 - Keep normal signing/notarization, version checks, and runtime contract verification below.
   Surface these results in maintainer approval before publishing.
 
@@ -117,8 +120,8 @@ Use the owner's existing DeepSeek V4 Flash configuration for compatible runtimes
   required check needs resolution or an explicit owner-approved release-scope exception,
   recorded in the release plan. It must not be silently treated as success.
 - Add targeted Debug workflow E2E for workflow behavior changes and important release
-  acceptance. D3 handoff and D2 review require their own E2E when they ship; T1 does not
-  replace those checks. D3 is in this release; D2 remains deferred to R3.
+  acceptance. D3 Handoff and D2 Review Loop have separate acceptance records; T1 does
+  not replace those checks or establish current GUI/workflow behavior.
 
 The `/release` skill surfaces this reminder. Direct invocation of `scripts/release.sh` does
 not currently enforce T1; maintainers running the script must complete this check first.

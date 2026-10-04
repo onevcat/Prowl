@@ -1,3 +1,10 @@
+> **2026-10-04 release preparation:** Workflow UI, action bundles, history, and D3
+> Handoff shipped in **v2026.9.12**. D2 Review Loop shipped in **v2026.9.17** after
+> its separate Debug acceptance in [023](023-review-loop.md). The earlier next-release
+> scope, D2 deferral, and dated status table below are historical planning records,
+> not gates for the current release. Every new release still requires fresh T1
+> verification/publication; workflow behavior changes need targeted Debug E2E.
+>
 > **2026-09-16 D2 naming and scope:** The built-in is **Review Loop**
 > (`prowl.review-loop`), previously called adversarial review / Cross Review in planning.
 > Default rounds are 2–4 with a selectable reviewer in a right split. Implementation
