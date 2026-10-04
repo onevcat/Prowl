@@ -2,7 +2,7 @@ import ArgumentParser
 import Foundation
 import ProwlCLIShared
 
-extension AgentSignalEvent: ExpressibleByArgument {}
+extension AgentSignalEvent: @retroactive ExpressibleByArgument {}
 
 struct AgentsSignalCommand: ParsableCommand {
   static let configuration = CommandConfiguration(
