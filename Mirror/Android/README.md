@@ -64,6 +64,8 @@ Android Studio's bundled JBR or JDK 17 with an installed Android SDK 34. Set
 
     ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
 
+From the repository root, `make test-mirror-android` runs the same tasks.
+
 APK: `app/build/outputs/apk/debug/app-debug.apk`.
 With an available emulator/device:
 

@@ -91,7 +91,7 @@ TEST_SIGNING_ARGS := CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_
 endif
 
 .DEFAULT_GOAL := help
-.PHONY: build-ghostty-xcframework ensure-ghostty sync-ghostty _record-ghostty-hash generate ensure-project ensure-mirror-ios-project build-app build-cli build-cli-release embed-cli-debug embed-cli embed-docs embed-skills run-app install-dev-build install-release archive export-archive format format-changed format-lint lint check test test-app test-mirror-ios test-mirror-ios-unit test-scripts test-cli-smoke test-cli-unit test-cli-integration benchmark-build bump-version log-stream agent-versions
+.PHONY: build-ghostty-xcframework ensure-ghostty sync-ghostty _record-ghostty-hash generate ensure-project ensure-mirror-ios-project build-app build-cli build-cli-release embed-cli-debug embed-cli embed-docs embed-skills run-app install-dev-build install-release archive export-archive format format-changed format-lint lint check test test-all test-app test-mirror-ios test-mirror-ios-unit test-mirror-android test-scripts test-cli-smoke test-cli-unit test-cli-integration benchmark-build bump-version log-stream agent-versions
 .PHONY: test-agent-contracts _test-agent-contract-codex _test-agent-contract-export
 
 help:  # Display this help.
@@ -410,6 +410,17 @@ export-archive: # Export xarchive
 
 test: ensure-ghostty embed-cli-debug embed-docs embed-skills test-app
 
+# Recipe lines, not prerequisites, so that `make -j` cannot start two xcodebuild runs: a second
+# `xcodebuild test` in the same checkout can hang. The quick suites run first.
+test-all: # Run every test suite: scripts, CLI, Mac app, iOS mirror (unit and UI), Android mirror
+	$(MAKE) test-scripts
+	$(MAKE) test-cli-unit
+	$(MAKE) test-cli-smoke
+	$(MAKE) test-cli-integration
+	$(MAKE) test
+	$(MAKE) test-mirror-ios
+	$(MAKE) test-mirror-android
+
 # Internal: generate only the iOS mirror project. It has no package and does not need the
 # Mac app's build inputs (GhosttyKit, CLI, bundled resources), so the CI job can skip them.
 ensure-mirror-ios-project:
@@ -440,6 +451,9 @@ test-mirror-ios: ensure-mirror-ios-project # Run the iOS mirror unit and UI test
 
 test-mirror-ios-unit: ensure-mirror-ios-project # Run the iOS mirror unit tests (CI runs only these)
 	$(call run_mirror_ios_tests,mirror-ios-unit,-only-testing:ProwlMirror-iOSTests)
+
+test-mirror-android: # Build, unit test and lint the Android mirror (needs JDK 17 and Android SDK 34)
+	cd "$(CURRENT_MAKEFILE_DIR)/Mirror/Android" && ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
 
 test-scripts: # Run tests for the repository's scripts
 	@python3 -m unittest discover -s "$(CURRENT_MAKEFILE_DIR)/scripts" -p 'test_*.py'

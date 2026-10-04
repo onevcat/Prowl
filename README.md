@@ -147,6 +147,7 @@ make format-changed        # Format changed Swift files only
 make format                # Full-tree Swift format cleanup
 make lint                  # SwiftLint only
 make test                  # Run app/unit tests
+make test-all              # Run every test suite, including the CLI and both mirror clients
 make log-stream            # Stream app logs (subsystem: com.onevcat.prowl)
 ```
 
