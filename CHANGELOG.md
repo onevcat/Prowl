@@ -1,5 +1,22 @@
 # Changelog
 
+## [2026.10.4](https://github.com/onevcat/Prowl/releases/tag/v2026.10.4)
+
+### New
+
+- `.pwlworkflow` bundles now appear as packages with a Prowl workflow icon in Finder. Use **Show Package Contents** to browse their files; open and run workflows from Prowl, not by double-clicking the bundle.
+
+### Improved
+
+- Experimental Remote Mirror remains opt-in with `PROWL_REMOTE_MIRROR=1`. Pair another Mac by copying and pasting connection details, or scan the Host’s QR code with a compatible mobile Mirror client. Mobile clients are distributed separately.
+- Mirror’s **Scroll Up** and **Scroll Down** controls move the Host’s shared terminal view by about a page. Mac Mirror preserves scrollback styling when supported, with a plain-text fallback.
+- Use **Pair Again…** to replace saved Mirror access, or **Revoke All Devices…** on Host to require every device to pair again.
+
+### Fixed
+
+- Mirror input from compatible mobile clients is no longer blocked by a pending automation dispatch. Fixed Mac Mirror updates stalling when a terminal uses a fixed title or reloads its configuration.
+- Canvas mode’s Run and custom-command buttons now match the spacing and margins in Normal and Shelf modes.
+
 ## [2026.9.29](https://github.com/onevcat/Prowl/releases/tag/v2026.9.29)
 
 This release adds workspace editing and more reliable status tracking for Codex sessions.
