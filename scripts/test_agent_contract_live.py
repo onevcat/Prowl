@@ -45,6 +45,28 @@ class ResponseTests(unittest.TestCase):
 
 
 class ExportTests(unittest.TestCase):
+    def test_suite_exports_current_app_resource_directory(self):
+        import tempfile
+        from pathlib import Path
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        row = dict(runtime='pi', executable='/test/pi', inventory={'status': 'passed'},
+                   route={'status': 'configured'})
+        binary = SimpleNamespace(path='/test/pi', search_path='/test')
+        captured = []
+
+        def export(requests, directory, search_path, timeout):
+            captured.extend(requests)
+            return ([{'status': 'blocked'} for _ in requests], 'nonce')
+
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(live, 'runtime_configuration', return_value=('model', [], {})), \
+                 patch.object(live, 'export_launches', side_effect=export):
+                live.run_suite([row], Path(directory), lambda _: binary, {}, 1, 1, verify=True)
+        self.assertEqual(len(captured), 2)
+        for request in captured:
+            self.assertEqual(Path(request['resources']), live.core.ROOT / 'App/Resources')
+
     def test_rejects_skipped_zero_stale_and_wrong_runtime(self):
         counts = dict(result='Passed', totalTestCount=1, passedTests=1, failedTests=0, skippedTests=0)
         receipt = dict(schema=1, nonce='current', launches=[{'runtime': 'pi'}])

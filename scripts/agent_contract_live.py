@@ -299,7 +299,7 @@ def run_suite(rows, directory, resolver, environment, timeout, build_timeout, ve
     requests, selected = [], []
     with tempfile.TemporaryDirectory(prefix='prowl-contract-') as scratch:
         root = Path(scratch).resolve()
-        resources = core.ROOT / 'Resources'
+        resources = core.ROOT / 'App/Resources'
         for row in rows:
             row['live'] = {'status': 'blocked', 'reason': 'route_not_configured'}
             if row['runtime'] == 'qodercli' and row['route'].get('wire_api') != 'runtime-managed':
