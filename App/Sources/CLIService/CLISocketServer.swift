@@ -36,6 +36,7 @@ final class CLISocketServer {
   }
   private let acceptQueue = DispatchQueue(
     label: "com.onevcat.prowl.cli-accept", qos: .userInitiated)
+  private var acceptSource: DispatchSourceRead?
 
   init(
     router: CLICommandRouter,
@@ -96,9 +97,7 @@ final class CLISocketServer {
       releaseSocketLock()
       throw CLIServiceError.socketCreationFailed
     }
-    do {
-      try Self.setCloseOnExec(serverFD)
-    } catch {
+    guard (try? Self.setCloseOnExec(serverFD)) != nil, Self.setNonBlocking(serverFD, true) else {
       close(serverFD)
       serverFD = -1
       releaseSocketLock()
@@ -138,28 +137,29 @@ final class CLISocketServer {
     isRunning = true
     ownsSocket = true
 
-    // Run the blocking accept loop on a dedicated dispatch queue so it does
-    // not occupy a Swift cooperative-thread-pool thread (which would starve
-    // the concurrency runtime and hang the app – especially during testing).
-    let listeningFD = serverFD
-    let onClientAccepted = onClientAccepted
-    acceptQueue.async { [weak self] in
-      Self.acceptLoop(
-        serverFD: listeningFD,
-        server: self,
-        onClientAccepted: onClientAccepted
-      )
-    }
+    // Accept from a read source on a dedicated dispatch queue, not from a
+    // thread blocked in accept(): on Darwin, close() can wait forever for an
+    // accept() that misses the close wakeup. The source also keeps accepting
+    // off the Swift cooperative thread pool.
+    let source = Self.makeAcceptSource(
+      serverFD: serverFD,
+      queue: acceptQueue,
+      server: self,
+      onClientAccepted: onClientAccepted
+    )
+    acceptSource = source
+    source.activate()
   }
 
   /// Stop the server and clean up.
   func stop() {
     isRunning = false
     status = .stopped
-    if serverFD >= 0 {
-      close(serverFD)
-      serverFD = -1
-    }
+    // The cancel handler closes the listening socket after the last accept
+    // event, so no accept() can run on a closed or reused descriptor.
+    acceptSource?.cancel()
+    acceptSource = nil
+    serverFD = -1
     if ownsSocket {
       unlink(socketPath)
       ownsSocket = false
@@ -217,9 +217,25 @@ final class CLISocketServer {
     }
   }
 
-  // MARK: - Accept loop (runs on acceptQueue, NOT in Swift concurrency)
+  // MARK: - Accept source (runs on acceptQueue, NOT in Swift concurrency)
 
-  private nonisolated static func acceptLoop(
+  /// Nonisolated so the handlers are not inferred as main-actor closures:
+  /// they run on `queue`.
+  private nonisolated static func makeAcceptSource(
+    serverFD: Int32,
+    queue: DispatchQueue,
+    server: CLISocketServer,
+    onClientAccepted: (@Sendable () -> Void)?
+  ) -> DispatchSourceRead {
+    let source = DispatchSource.makeReadSource(fileDescriptor: serverFD, queue: queue)
+    source.setEventHandler { [weak server] in
+      Self.acceptPendingClients(serverFD: serverFD, server: server, onClientAccepted: onClientAccepted)
+    }
+    source.setCancelHandler { Darwin.close(serverFD) }
+    return source
+  }
+
+  private nonisolated static func acceptPendingClients(
     serverFD: Int32,
     server: CLISocketServer?,
     onClientAccepted: (@Sendable () -> Void)?
@@ -227,7 +243,9 @@ final class CLISocketServer {
     while true {
       let clientFD = Darwin.accept(serverFD, nil, nil)
       guard clientFD >= 0 else {
-        // serverFD was closed (stop() called) or an error occurred – exit.
+        if errno == EINTR || errno == ECONNABORTED { continue }
+        // EAGAIN means the backlog is empty. On any error, the source fires
+        // again while a client is still waiting.
         return
       }
       if let server {
@@ -325,6 +343,9 @@ final class CLISocketServer {
   }
 
   nonisolated static func configureAcceptedClient(_ fileDescriptor: Int32) -> Bool {
+    // An accepted socket inherits O_NONBLOCK from the listening socket on
+    // Darwin; request I/O expects blocking reads and writes.
+    guard setNonBlocking(fileDescriptor, false) else { return false }
     #if canImport(Darwin)
       var enabled: Int32 = 1
       let noSigPipe = withUnsafePointer(to: &enabled) {
@@ -414,6 +435,13 @@ final class CLISocketServer {
     guard fcntl(fileDescriptor, F_SETFD, flags | FD_CLOEXEC) == 0 else {
       throw CLIServiceError.closeOnExecFailed
     }
+  }
+
+  private nonisolated static func setNonBlocking(_ fileDescriptor: Int32, _ enabled: Bool) -> Bool {
+    let flags = fcntl(fileDescriptor, F_GETFL)
+    guard flags >= 0 else { return false }
+    let updated = enabled ? flags | O_NONBLOCK : flags & ~O_NONBLOCK
+    return updated == flags || fcntl(fileDescriptor, F_SETFL, updated) == 0
   }
 
   private static func canConnect(to socketPath: String) -> Bool {
