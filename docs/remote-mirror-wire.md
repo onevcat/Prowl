@@ -77,11 +77,12 @@ Binary frame formats remain unchanged.
 {"scrollResult":{"_0":{"requestID":"UUID","sequence":42,"subscriptionID":"UUID"}}}
 ```
 
-Direction is exactly `up` or `down`. Host applies one discrete wheel notch through
-Ghostty at the terminal center, honoring its configured wheel multiplier and
-application mouse/alternate-scroll negotiation. Distance depends on the program
-and configuration, not a fixed page size. Mobile live text uses the Host viewport;
-retained-text History capture remains unchanged.
+Direction is exactly `up` or `down`. Native scrollback moves by the Host pane
+height minus three rows (at least one row). Application-owned scrolling receives
+precision wheel input at the terminal center, adjusted for known Agent wheel units
+and reserved rows. Application behavior and Host precision-scroll settings can
+change the distance; this is not a fixed page-size contract. Mobile live text uses
+the Host viewport; retained-text History capture remains unchanged.
 
 There is one pending scroll per subscription. After applying input, Host waits
 at least 200 ms and prefers a changed capture; after 800 ms it requests a fresh
