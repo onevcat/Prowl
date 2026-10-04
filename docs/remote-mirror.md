@@ -19,10 +19,10 @@ A listener is reachable from the local network or a VPN; the internet cannot rea
 it unless a router forwards the port. Without a paired device key or a live pairing
 code, a connection fails during the TLS handshake.
 
-**Add a Device** opens a modal pairing sheet. It lists the addresses a Client can
-enter (the Bonjour name and each interface reachable through the current listen
-setting, each with the port and a copy button), then a large 60-second code with a
-copy button (⌘C). If the listener is restarting, the sheet waits before generating
+**Add a Device** opens a modal pairing sheet with a 60-second code, a reachable
+Wi-Fi or VPN address and port, and a QR code. **Copy Connection Details** (⌘C)
+copies the address, port, code, and expiry together. When multiple addresses are
+available, choose **Connection address** first. If the listener is restarting, the sheet waits before generating
 its first code; if Host is off, the sheet offers **Start Host**. **Refresh Code**
 replaces the code; **Cancel** invalidates an unused code without stopping Host or
 revoking a device that already paired. When a device completes pairing, the sheet
