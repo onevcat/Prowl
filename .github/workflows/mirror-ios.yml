@@ -1,14 +1,12 @@
 name: mirror-ios
 
 # The iOS mirror client needs only a minimal check, so CI runs its unit tests only when the
-# client changes and for release tags (GitHub does not apply path filters to tags). The UI
-# suite runs locally with `make test-mirror-ios`.
+# client changes and for each published release. The UI suite runs locally with
+# `make test-mirror-ios`.
 on:
   push:
     branches:
       - main
-    tags:
-      - 'v*'
     paths:
       - Mirror/iOS/**
       - Mirror/Shared/**
@@ -20,6 +18,11 @@ on:
       - Mirror/Shared/**
       - scripts/select_ios_simulator.py
       - .github/workflows/mirror-ios.yml
+  # Release tags are lightweight, so `git push --follow-tags` does not push them and
+  # `gh release create` makes them on GitHub. That sends no tag push event.
+  release:
+    types:
+      - published
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

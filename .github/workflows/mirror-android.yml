@@ -1,13 +1,11 @@
 name: mirror-android
 
 # The Android mirror client needs only a minimal check, so CI runs it only when the client
-# changes and for release tags (GitHub does not apply path filters to tags).
+# changes and for each published release.
 on:
   push:
     branches:
       - main
-    tags:
-      - 'v*'
     paths:
       - Mirror/Android/**
       - .github/workflows/mirror-android.yml
@@ -15,6 +13,11 @@ on:
     paths:
       - Mirror/Android/**
       - .github/workflows/mirror-android.yml
+  # Release tags are lightweight, so `git push --follow-tags` does not push them and
+  # `gh release create` makes them on GitHub. That sends no tag push event.
+  release:
+    types:
+      - published
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

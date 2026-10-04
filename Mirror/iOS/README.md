@@ -108,7 +108,7 @@ make test-mirror-ios
 The target generates only this project, so it does not need the Mac app's build inputs.
 The UI suite takes several minutes. `make test-mirror-ios-unit` runs only the unit tests.
 CI runs only the unit tests, and only when a pull request changes `Mirror/iOS/` or
-`Mirror/Shared/`, and for release tags. Run the UI suite locally before you merge changes to
+`Mirror/Shared/`, and for each published release. Run the UI suite locally before you merge changes to
 this client. The target uses the newest iPad Pro 11-inch simulator on the newest runtime that
 the selected Xcode supports. To use another model, set `IOS_MIRROR_SIMULATOR_PATTERN` to a
 regular expression for the full simulator name. The UI tests also pass on iPhone.

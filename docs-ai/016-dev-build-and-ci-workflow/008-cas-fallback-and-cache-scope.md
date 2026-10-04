@@ -36,8 +36,11 @@ incremental cache compiles in under 2 minutes. Three problems caused this or mad
   GhosttyKit miss is slow to rebuild.
 - The mirror clients have their own workflows, `.github/workflows/mirror-ios.yml` and
   `.github/workflows/mirror-android.yml`. They run for changes to their client (and
-  `Mirror/Shared/` for iOS) and for `v*` tags; GitHub does not apply path filters to tags.
-  CI runs only the iOS mirror unit tests (`make test-mirror-ios-unit`); the UI suite runs
+  `Mirror/Shared/` for iOS) and for each published release. They use the `release` event,
+  not a `v*` tag push: `scripts/release.sh` makes lightweight tags, which
+  `git push --follow-tags` does not push, and `gh release create` then makes the tag on
+  GitHub. The v2026.9.29 release recorded no tag push event. The release check runs after
+  publication, so it reports problems but does not block the Mac app release. CI runs only the iOS mirror unit tests (`make test-mirror-ios-unit`); the UI suite runs
   locally with `make test-mirror-ios`. The Mac app workflow ignores changes to only the
   mirror clients.
 - `make test-app` exports each pass's test action log (`*.action.json`), and the CI summary
