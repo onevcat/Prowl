@@ -124,7 +124,7 @@ Starting the same agents, running the same build, the same "review this and hand
 
 ### 🚀 Agent Profiles — every agent, launched your way
 
-<img align="right" width="200" src="https://prowl.onev.cat/images/shots/agents-menu.webp" alt="The toolbar Agents menu: a Run a workflow section with Hello World and Handoff, then one launch row per Agent Profile for fifteen runtimes">
+<img align="right" width="240" src="https://prowl.onev.cat/images/shots/agents-menu.webp" alt="The toolbar Agents menu: a Run a workflow section, then launch rows for Claude Code, Codex, Gemini CLI, Cursor Agent and Cline">
 
 A profile is a named launch preset: runtime, model, reasoning effort, execution mode, and where the pane opens. Prowl creates one for each agent CLI you have installed, so the toolbar's Agents menu is ready on first launch. One click starts a fresh agent in the current worktree, set up exactly how you want it.
 
