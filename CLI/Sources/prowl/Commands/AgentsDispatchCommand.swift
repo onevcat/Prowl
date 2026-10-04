@@ -2,9 +2,9 @@ import ArgumentParser
 import Foundation
 import ProwlCLIShared
 
-extension DispatchCompletionOutcome: ExpressibleByArgument {}
-extension AgentWaitCondition: ExpressibleByArgument {}
-extension AgentWaitMinimumConfidence: ExpressibleByArgument {}
+extension DispatchCompletionOutcome: @retroactive ExpressibleByArgument {}
+extension AgentWaitCondition: @retroactive ExpressibleByArgument {}
+extension AgentWaitMinimumConfidence: @retroactive ExpressibleByArgument {}
 
 struct AgentsDispatchCompleteCommand: ParsableCommand {
   static let configuration = CommandConfiguration(

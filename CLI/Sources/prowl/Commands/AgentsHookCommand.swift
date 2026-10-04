@@ -8,7 +8,7 @@ import ProwlCLIShared
   import Glibc
 #endif
 
-extension AgentNativeHookRuntime: ExpressibleByArgument {}
+extension AgentNativeHookRuntime: @retroactive ExpressibleByArgument {}
 
 struct AgentsHookCommand: ParsableCommand {
   static let configuration = CommandConfiguration(
