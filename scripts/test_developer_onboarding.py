@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 import unittest
 
 
@@ -13,9 +14,13 @@ class DeveloperOnboardingTests(unittest.TestCase):
             "git clone --recurse-submodules https://github.com/onevcat/Prowl.git",
             readme,
         )
-        self.assertIn("make run-app                     # Build and launch Debug from Xcode build products", readme)
-        self.assertIn("make install-dev-build           # Build Debug and install to /Applications/Prowl Debug.app", readme)
-        self.assertNotIn("make install-debug", readme)
+        # Check the documented targets, not their descriptions, so copy edits do not break the test.
+        documented = set(re.findall(r"^make ([\w-]+)", readme, re.MULTILINE))
+        self.assertTrue({"build-app", "run-app", "install-dev-build"} <= documented)
+
+        makefile = (ROOT / "Makefile").read_text()
+        defined = set(re.findall(r"^([\w-]+):", makefile, re.MULTILINE))
+        self.assertEqual(documented - defined, set())
 
     def test_mirror_readmes_describe_revision_matched_hosts(self):
         expected = "same revision (or a matching Prowl release)"
