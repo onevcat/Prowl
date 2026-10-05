@@ -160,49 +160,25 @@ extension GhosttyRuntime {
     // (`theme = light:X,dark:X`) back into a single `theme = X`. Trusting that
     // alone would make us apply the single-theme fallback over the user's
     // explicit light/dark choice, so re-derive the theme mode from the raw
-    // config text when we can read it. The background tone still comes from the
+    // config text when it sets one. The background tone still comes from the
     // resolved CLI output.
     guard let rawMode = rawUserThemeMode(source: .ghosttyDefault) else { return snapshot }
     return GhosttyUserConfigSnapshot(themeMode: rawMode, backgroundTone: snapshot.backgroundTone)
   }
 
+  /// The `theme` as written, from the source's files and their includes; the last
+  /// one wins, as in Ghostty. `+show-config` collapses `light:X,dark:X` to `X`, so
+  /// the raw text decides whether the user chose a light/dark pair.
   nonisolated static func rawUserThemeMode(source: GhosttyConfigSource) -> GhosttyThemeMode? {
-    guard let url = source.rawThemeFileURL,
-      let contents = try? String(contentsOf: url, encoding: .utf8),
-      let spec = GhosttyUserConfigSnapshot.rawThemeSpec(fromConfig: contents)
-    else { return nil }
+    guard let spec = GhosttyRawConfig.lastValue(of: "theme", files: source.userConfigFileURLs) else {
+      return nil
+    }
     return GhosttyUserConfigSnapshot.parseThemeMode(from: spec)
-  }
-
-  /// Mirrors Ghostty's macOS default-config selection: prefer the Application
-  /// Support file when present, otherwise fall back to the XDG config. Within
-  /// each location the modern `config.ghostty` wins over the legacy `config`.
-  /// `theme` set through `config-file` includes isn't resolved here; those rare
-  /// setups simply keep the previous `+show-config` behavior.
-  nonisolated static func preferredGhosttyConfigURL() -> URL? {
-    let (appSupport, xdg) = defaultGhosttyConfigDirectories()
-    let candidates = [
-      appSupport.appending(path: "config.ghostty"),
-      appSupport.appending(path: "config"),
-      xdg.appending(path: "config.ghostty"),
-      xdg.appending(path: "config"),
-    ]
-    return candidates.first { FileManager.default.fileExists(atPath: $0.path) }
   }
 
   /// Ghostty's default config files in the order it loads them: XDG before
   /// Application Support, and the legacy `config` before `config.ghostty` in each.
   nonisolated static func defaultGhosttyConfigFileURLs() -> [URL] {
-    let (appSupport, xdg) = defaultGhosttyConfigDirectories()
-    return [
-      xdg.appending(path: "config"),
-      xdg.appending(path: "config.ghostty"),
-      appSupport.appending(path: "config"),
-      appSupport.appending(path: "config.ghostty"),
-    ]
-  }
-
-  private nonisolated static func defaultGhosttyConfigDirectories() -> (appSupport: URL, xdg: URL) {
     let home = FileManager.default.homeDirectoryForCurrentUser
     let appSupport = home.appending(
       path: "Library/Application Support/com.mitchellh.ghostty",
@@ -214,7 +190,13 @@ extension GhosttyRuntime {
     } else {
       xdgRoot = home.appending(path: ".config", directoryHint: .isDirectory)
     }
-    return (appSupport, xdgRoot.appending(path: "ghostty", directoryHint: .isDirectory))
+    let xdg = xdgRoot.appending(path: "ghostty", directoryHint: .isDirectory)
+    return [
+      xdg.appending(path: "config"),
+      xdg.appending(path: "config.ghostty"),
+      appSupport.appending(path: "config"),
+      appSupport.appending(path: "config.ghostty"),
+    ]
   }
 
   nonisolated static func runGhosttyCommand(arguments: [String]) -> String? {

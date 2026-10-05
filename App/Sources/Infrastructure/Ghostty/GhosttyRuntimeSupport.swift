@@ -62,23 +62,6 @@ nonisolated struct GhosttyUserConfigSnapshot: Equatable, Sendable {
     return .init(themeMode: themeMode, backgroundTone: backgroundTone)
   }
 
-  /// The raw `theme` value as written in a user's Ghostty config file, or `nil`
-  /// when none is set. Unlike `ghostty +show-config`, this preserves an explicit
-  /// same-name light/dark pair (`theme = light:X,dark:X`) instead of collapsing
-  /// it back to a single `theme = X`. Later lines win, matching Ghostty.
-  static func rawThemeSpec(fromConfig contents: String) -> String? {
-    var lastSpec: String?
-    for rawLine in contents.split(whereSeparator: \.isNewline) {
-      let line = String(rawLine).trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !line.hasPrefix("#"), let separator = line.firstIndex(of: "=") else { continue }
-      let key = line[..<separator].trimmingCharacters(in: .whitespacesAndNewlines)
-      guard key == "theme" else { continue }
-      let value = line[line.index(after: separator)...].trimmingCharacters(in: .whitespacesAndNewlines)
-      if !value.isEmpty { lastSpec = value }
-    }
-    return lastSpec
-  }
-
   static func parseThemeMode(from spec: String?) -> GhosttyThemeMode {
     guard let spec, !spec.isEmpty else { return .none }
 
