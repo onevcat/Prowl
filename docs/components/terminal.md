@@ -149,7 +149,26 @@ Selection for Find** (`search_selection`). These are Ghostty-managed.
 
 Scrollback, wide/CJK character rendering, and copy/paste are handled by Ghostty
 with its defaults — Prowl doesn't override them. Customize terminal behavior in
-your Ghostty config at `~/.config/ghostty/config`.
+the Ghostty config that Prowl uses (see [Ghostty config](#ghostty-config)).
+
+## Ghostty config
+
+By default Prowl reads the same config files as the standalone Ghostty app
+(`config` or `config.ghostty` in `~/.config/ghostty/` and in
+`~/Library/Application Support/com.mitchellh.ghostty/`, plus their `config-file`
+includes), so a change applies to both apps.
+
+**Settings → General → Terminal Config → Choose File…** selects a dedicated file
+for Prowl only (`ghosttyConfigPath`). That file **replaces** Ghostty's config
+files; it is not layered on top of them, so copy any setting you want to keep.
+Relative `config-file` includes resolve from the file's folder. If the file does
+not exist, terminals use Ghostty's built-in defaults and Settings shows a
+warning; **Open Config** creates it. **Use Ghostty's Config** returns to the
+shared files. **Open Config** and **Reload** act on whichever source is active,
+and a change of source applies to running terminals immediately.
+
+Prowl-only keys such as `prowl-split-divider-width` are read from the active
+source's file.
 
 ## Color scheme
 

@@ -48,6 +48,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var externalDiffToolID: String = ExternalDiffTool.builtIn.settingsID
   var externalDiffCustomCommand: String = ""
   var detectRepositoryIconsAutomatically: Bool = true
+  /// A Ghostty config file used instead of Ghostty's default files; `nil` shares Ghostty's config.
+  var ghosttyConfigPath: String?
 
   static let `default` = GlobalSettings(
     appearanceMode: .dark,
@@ -244,6 +246,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     try container.encode(externalDiffToolID, forKey: .externalDiffToolID)
     try container.encode(externalDiffCustomCommand, forKey: .externalDiffCustomCommand)
     try container.encode(detectRepositoryIconsAutomatically, forKey: .detectRepositoryIconsAutomatically)
+    try container.encodeIfPresent(ghosttyConfigPath, forKey: .ghosttyConfigPath)
   }
 
   private enum CodingKeys: String, CodingKey {
@@ -296,6 +299,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     case externalDiffToolID
     case externalDiffCustomCommand
     case detectRepositoryIconsAutomatically
+    case ghosttyConfigPath
     // Legacy keys for migration
     case automaticallyArchiveMergedWorktrees
     case notificationSoundEnabled
@@ -369,9 +373,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     } else {
       archivedAutoDeletePeriod = Self.default.archivedAutoDeletePeriod
     }
-    terminalFontSize =
-      try container.decodeIfPresent(Float32.self, forKey: .terminalFontSize)
-      ?? Self.default.terminalFontSize
+    (terminalFontSize, ghosttyConfigPath) = try Self.decodeTerminalSettings(from: container)
     keybindingUserOverrides =
       try container.decodeIfPresent(KeybindingUserOverrideStore.self, forKey: .keybindingUserOverrides)
       ?? Self.default.keybindingUserOverrides
@@ -442,6 +444,16 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
       floatingPositions: floatingPositions,
       silentOpacity: silentOpacity
     )
+  }
+
+  private static func decodeTerminalSettings(
+    from container: KeyedDecodingContainer<CodingKeys>
+  ) throws -> (Float32?, String?) {
+    let fontSize =
+      try container.decodeIfPresent(Float32.self, forKey: .terminalFontSize)
+      ?? Self.default.terminalFontSize
+    let configPath = try container.decodeIfPresent(String.self, forKey: .ghosttyConfigPath)
+    return (fontSize, configPath)
   }
 
   private static func decodeViewSettings(

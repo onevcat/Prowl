@@ -185,6 +185,13 @@ struct ProwlApp: App {
     #endif
   }
 
+  private static func makeGhosttyRuntime(initialSettings: GlobalSettings) -> GhosttyRuntime {
+    GhosttyRuntime(
+      initialColorScheme: initialSettings.appearanceMode.colorScheme,
+      configSource: GhosttyConfigSource(dedicatedPath: initialSettings.ghosttyConfigPath)
+    )
+  }
+
   private static func initializeGhostty(resolvedKeybindings: ResolvedKeybindingMap) {
     let ghosttyArgv = GhosttyCLI.argv(resolvedKeybindings: resolvedKeybindings)
     ghosttyArgv.withUnsafeBufferPointer { buffer in
@@ -212,7 +219,7 @@ struct ProwlApp: App {
       setenv("GHOSTTY_RESOURCES_DIR", resourceURL.path, 1)
     }
     Self.initializeGhostty(resolvedKeybindings: initialResolvedKeybindings)
-    let runtime = GhosttyRuntime(initialColorScheme: initialSettings.appearanceMode.colorScheme)
+    let runtime = Self.makeGhosttyRuntime(initialSettings: initialSettings)
     _ghostty = State(initialValue: runtime)
     let shortcuts = GhosttyShortcutManager(runtime: runtime)
     _ghosttyShortcuts = State(initialValue: shortcuts)
@@ -1674,12 +1681,16 @@ struct ProwlApp: App {
         WindowLifecycleDiagnostics.logWithWindows("mainWindow content onAppear")
         WindowLifecycleDiagnostics.noteMainWindowAppeared()
         syncGhosttyManagedShortcuts(with: store.resolvedKeybindings)
+        ghostty.setConfigSource(GhosttyConfigSource(dedicatedPath: store.settings.ghosttyConfigPath))
       }
       .onDisappear {
         WindowLifecycleDiagnostics.logWithWindows("mainWindow content onDisappear")
       }
       .onChange(of: store.resolvedKeybindings) { _, newValue in
         syncGhosttyManagedShortcuts(with: newValue)
+      }
+      .onChange(of: store.settings.ghosttyConfigPath) { _, newValue in
+        ghostty.setConfigSource(GhosttyConfigSource(dedicatedPath: newValue))
       }
       .preferredColorScheme(store.settings.appearanceMode.colorScheme)
     }

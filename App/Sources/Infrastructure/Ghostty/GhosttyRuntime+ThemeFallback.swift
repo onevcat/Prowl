@@ -12,21 +12,23 @@ extension GhosttyRuntime {
       setThemeFallbackOverride("")
       return
     }
+    let source = configSource
     Task { [weak self] in
-      let snapshot = await Self.probeUserConfigSnapshot()
+      let snapshot = await Self.probeUserConfigSnapshot(source: source)
       let pair: GhosttyThemePair? =
         snapshot?.themeMode.allowsMismatchFallback == true ? await Self.probeFallbackThemePair() : nil
-      self?.applyResolvedThemeFallback(for: scheme, snapshot: snapshot, pair: pair)
+      self?.applyResolvedThemeFallback(for: scheme, source: source, snapshot: snapshot, pair: pair)
     }
   }
 
   @MainActor
   func applyResolvedThemeFallback(
     for scheme: ColorScheme,
+    source: GhosttyConfigSource,
     snapshot: GhosttyUserConfigSnapshot?,
     pair: GhosttyThemePair?
   ) {
-    guard currentColorScheme == scheme else { return }
+    guard currentColorScheme == scheme, configSource == source else { return }
     // `.none` (no user theme) is treated like a single dark theme here: Ghostty's
     // no-theme default is the fixed dark `#282C34` reported by `+show-config`, so
     // its `backgroundTone` resolves to `.dark` and adapts to a light app the same
@@ -100,17 +102,7 @@ extension GhosttyRuntime {
       }
     }
 
-    guard let updated = ghostty_config_new() else { return }
-    ghostty_config_load_default_files(updated)
-    ghostty_config_load_recursive_files(updated)
-    ghostty_config_load_cli_args(updated)
-    Self.loadTerminalProgramOverrides(into: updated)
-    for url in overrideURLs {
-      url.path.withCString { path in
-        ghostty_config_load_file(updated, path)
-      }
-    }
-    ghostty_config_finalize(updated)
+    guard let updated = Self.makeConfig(source: configSource, overrideFileURLs: overrideURLs) else { return }
     ghostty_app_update_config(app, updated)
     if let clone = ghostty_config_clone(updated) {
       setConfig(clone)
@@ -121,12 +113,38 @@ extension GhosttyRuntime {
     NotificationCenter.default.post(name: .ghosttyRuntimeConfigDidChange, object: self)
   }
 
-  nonisolated static func probeUserConfigSnapshot() async -> GhosttyUserConfigSnapshot? {
+  nonisolated static func probeUserConfigSnapshot(source: GhosttyConfigSource) async -> GhosttyUserConfigSnapshot? {
     // `await` ensures this runs on a cooperative executor rather than on the
     // caller's MainActor, so the synchronous subprocess calls below never block
     // the main thread.
     await Task.yield()
-    return userConfigSnapshotFromCLI()
+    switch source {
+    case .ghosttyDefault:
+      return userConfigSnapshotFromCLI()
+    case .file:
+      // `ghostty +show-config` only reads Ghostty's default files, so a
+      // dedicated file is resolved in process instead.
+      return userConfigSnapshot(loading: source)
+    }
+  }
+
+  /// Resolves the background of `source` alone, without Prowl's overrides.
+  nonisolated static func userConfigSnapshot(loading source: GhosttyConfigSource) -> GhosttyUserConfigSnapshot? {
+    guard let config = ghostty_config_new() else { return nil }
+    defer { ghostty_config_free(config) }
+    source.load(into: config)
+    ghostty_config_finalize(config)
+
+    var color = ghostty_config_color_s()
+    let key = "background"
+    let backgroundTone: GhosttyTerminalTone =
+      ghostty_config_get(config, &color, key, UInt(key.lengthOfBytes(using: .utf8)))
+      ? GhosttyUserConfigSnapshot.classifyBackgroundTone(of: NSColor(ghostty: color))
+      : .unknown
+    return GhosttyUserConfigSnapshot(
+      themeMode: rawUserThemeMode(source: source) ?? .none,
+      backgroundTone: backgroundTone
+    )
   }
 
   nonisolated static func probeFallbackThemePair() async -> GhosttyThemePair? {
@@ -142,29 +160,26 @@ extension GhosttyRuntime {
     // (`theme = light:X,dark:X`) back into a single `theme = X`. Trusting that
     // alone would make us apply the single-theme fallback over the user's
     // explicit light/dark choice, so re-derive the theme mode from the raw
-    // config text when we can read it. The background tone still comes from the
+    // config text when it sets one. The background tone still comes from the
     // resolved CLI output.
-    guard let rawMode = rawUserThemeMode() else { return snapshot }
+    guard let rawMode = rawUserThemeMode(source: .ghosttyDefault) else { return snapshot }
     return GhosttyUserConfigSnapshot(themeMode: rawMode, backgroundTone: snapshot.backgroundTone)
   }
 
-  nonisolated static func rawUserThemeMode() -> GhosttyThemeMode? {
-    guard let url = preferredGhosttyConfigURL(),
-      let contents = try? String(contentsOf: url, encoding: .utf8),
-      let spec = GhosttyUserConfigSnapshot.rawThemeSpec(fromConfig: contents)
-    else { return nil }
+  /// The `theme` as written, from the source's files and their includes; the last
+  /// one wins, as in Ghostty. `+show-config` collapses `light:X,dark:X` to `X`, so
+  /// the raw text decides whether the user chose a light/dark pair.
+  nonisolated static func rawUserThemeMode(source: GhosttyConfigSource) -> GhosttyThemeMode? {
+    guard let spec = GhosttyRawConfig.lastValue(of: "theme", files: source.userConfigFileURLs) else {
+      return nil
+    }
     return GhosttyUserConfigSnapshot.parseThemeMode(from: spec)
   }
 
-  /// Mirrors Ghostty's macOS default-config selection: prefer the Application
-  /// Support file when present, otherwise fall back to the XDG config. Within
-  /// each location the modern `config.ghostty` wins over the legacy `config`.
-  /// `theme` set through `config-file` includes isn't resolved here; those rare
-  /// setups simply keep the previous `+show-config` behavior.
-  nonisolated static func preferredGhosttyConfigURL() -> URL? {
-    let fileManager = FileManager.default
-    let home = fileManager.homeDirectoryForCurrentUser
-
+  /// Ghostty's default config files in the order it loads them: XDG before
+  /// Application Support, and the legacy `config` before `config.ghostty` in each.
+  nonisolated static func defaultGhosttyConfigFileURLs() -> [URL] {
+    let home = FileManager.default.homeDirectoryForCurrentUser
     let appSupport = home.appending(
       path: "Library/Application Support/com.mitchellh.ghostty",
       directoryHint: .isDirectory
@@ -176,14 +191,12 @@ extension GhosttyRuntime {
       xdgRoot = home.appending(path: ".config", directoryHint: .isDirectory)
     }
     let xdg = xdgRoot.appending(path: "ghostty", directoryHint: .isDirectory)
-
-    let candidates = [
-      appSupport.appending(path: "config.ghostty"),
-      appSupport.appending(path: "config"),
-      xdg.appending(path: "config.ghostty"),
+    return [
       xdg.appending(path: "config"),
+      xdg.appending(path: "config.ghostty"),
+      appSupport.appending(path: "config"),
+      appSupport.appending(path: "config.ghostty"),
     ]
-    return candidates.first { fileManager.fileExists(atPath: $0.path) }
   }
 
   nonisolated static func runGhosttyCommand(arguments: [String]) -> String? {

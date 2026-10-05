@@ -213,7 +213,7 @@ extension GhosttyRuntime {
       }
     }
     if action.tag == GHOSTTY_ACTION_OPEN_CONFIG, target.tag == GHOSTTY_TARGET_APP {
-      openGhosttyConfig()
+      openGhosttyConfig(source: runtime(fromApp: app)?.configSource ?? .ghosttyDefault)
       return true
     }
     if action.tag == GHOSTTY_ACTION_QUIT {
@@ -243,12 +243,17 @@ extension GhosttyRuntime {
     }
   }
 
-  static func openGhosttyConfig() {
-    let configStr = ghostty_config_open_path()
-    defer { ghostty_string_free(configStr) }
-    guard let ptr = configStr.ptr else { return }
-    let path = String(data: Data(bytes: ptr, count: Int(configStr.len)), encoding: .utf8) ?? ""
-    guard !path.isEmpty else { return }
+  /// Opens the config file of `source` in the default text editor. Like Ghostty,
+  /// it creates an empty file first when none exists.
+  static func openGhosttyConfig(source: GhosttyConfigSource) {
+    guard let path = source.editableFilePath, !path.isEmpty else { return }
+    if !FileManager.default.fileExists(atPath: path) {
+      let created = FileManager.default.createFile(atPath: path, contents: nil)
+      guard created else {
+        ghosttyLogger.warning("Failed to create Ghostty config file: \(path)")
+        return
+      }
+    }
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
     process.arguments = ["-t", path]

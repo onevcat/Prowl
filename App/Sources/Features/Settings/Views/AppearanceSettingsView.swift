@@ -64,21 +64,11 @@ struct AppearanceSettingsView: View {
             Text("theme = light:Monokai Pro Light Sun,dark:Dimmed Monokai")
               .monospaced()
               .textSelection(.enabled)
-            HStack(spacing: 8) {
-              Button("Open Config") {
-                GhosttyRuntime.openGhosttyConfig()
-              }
-              .help("Open your Ghostty config file in the default text editor.")
-              Button("Reload") {
-                GhosttyRuntime.shared?.reloadAppConfig()
-              }
-              .help("Re-read the Ghostty config from disk and apply it to running terminals.")
-            }
-            .controlSize(.small)
           }
           .font(.footnote)
           .foregroundStyle(.secondary)
         }
+        TerminalConfigSettingsSection(store: store)
         Section("Window Tint") {
           Picker("Tint nav & toolbar", selection: $store.windowTintMode) {
             ForEach(WindowTintMode.allCases) { mode in
