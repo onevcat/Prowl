@@ -14,7 +14,7 @@ struct TerminalConfigSettingsSection: View {
     Section("Terminal Config") {
       LabeledContent("Ghostty config") {
         if let path = store.ghosttyConfigPath {
-          Text(path)
+          Text(Self.displayPath(path))
             .monospaced()
             .lineLimit(1)
             .truncationMode(.middle)
@@ -58,6 +58,14 @@ struct TerminalConfigSettingsSection: View {
         .foregroundStyle(.secondary)
       }
     }
+  }
+
+  /// Shows a path inside the home folder as `~/…`.
+  static func displayPath(_ path: String) -> String {
+    let home = FileManager.default.homeDirectoryForCurrentUser.path(percentEncoded: false)
+    let prefix = home.hasSuffix("/") ? home : home + "/"
+    guard path.hasPrefix(prefix) else { return path }
+    return "~/" + path.dropFirst(prefix.count)
   }
 
   // `generation` only makes SwiftUI evaluate the check again after a button
