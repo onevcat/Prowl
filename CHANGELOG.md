@@ -1,5 +1,19 @@
 # Changelog
 
+## [2026.10.6](https://github.com/onevcat/Prowl/releases/tag/v2026.10.6)
+
+This release adds a separate terminal configuration for Prowl and fixes font rendering, font size resets, and a quit hang.
+
+### New
+
+- Use a dedicated Ghostty config through Settings → General → Terminal Config → Choose File…. It replaces the shared Ghostty config and applies to running terminals immediately; select Use Ghostty's Config to switch back.
+
+### Fixed
+
+- Chinese, Japanese, and Korean text now uses appropriate system fonts when no font is configured, avoiding mismatched fonts and oversized characters. Explicit font settings remain respected.
+- Resetting terminal font size now correctly follows the config, so new tabs and splits pick up later `font-size` changes instead of retaining the old size.
+- Fixed a rare hang when quitting Prowl after CLI activity.
+
 ## [2026.10.4](https://github.com/onevcat/Prowl/releases/tag/v2026.10.4)
 
 ### New
