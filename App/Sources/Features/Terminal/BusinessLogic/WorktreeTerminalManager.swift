@@ -36,7 +36,6 @@ final class WorktreeTerminalManager {
   private var commandFinishedNotificationEnabled = true
   private var commandFinishedNotificationThreshold = 10
   private var preferredFontSize: Float32?
-  private let baselineFontSize: Float32
   private var lastNotificationIndicatorCount: Int?
   private var eventContinuation: AsyncStream<TerminalClient.Event>.Continuation?
   private var pendingEvents: [TerminalClient.Event] = []
@@ -88,7 +87,13 @@ final class WorktreeTerminalManager {
     self.codexShellEnvironmentResolver = codexShellEnvironmentResolver
     self.hookResourcesProvider = hookResourcesProvider
     self.forwardingRecordBaseDirectory = forwardingRecordBaseDirectory
-    baselineFontSize = runtime.defaultFontSize()
+    // A remembered size equal to the config's size means "follow the config".
+    // Builds that read the config size as 0 saved such sizes, so clear them here
+    // and send the cleared value to Settings.
+    if preferredFontSize != nil, normalizedFontSize(preferredFontSize) == nil {
+      self.preferredFontSize = nil
+      emit(.fontSizeChanged(nil))
+    }
     closeUndoStack.onExpire = { [weak self] surfaces in
       self?.free(surfaces)
     }
@@ -1354,6 +1359,10 @@ final class WorktreeTerminalManager {
     return (runtime.splitDividerColor(), runtime.splitDividerWidth())
   }
 
+  var preferredFontSizeForTesting: Float32? {
+    preferredFontSize
+  }
+
   func syncPreferredFontSize(from worktreeID: Worktree.ID) {
     guard let state = states[worktreeID] else { return }
     let fontSize = state.focusedFontSize()
@@ -1366,6 +1375,7 @@ final class WorktreeTerminalManager {
     emit(.fontSizeChanged(normalized))
   }
 
+  /// `nil` when `fontSize` equals the config's size, so the config stays in charge.
   private func normalizedFontSize(_ fontSize: Float32?) -> Float32? {
     guard let fontSize else { return nil }
     let epsilon: Float32 = 0.01
@@ -1374,6 +1384,13 @@ final class WorktreeTerminalManager {
     }
     return fontSize
   }
+
+  /// The config's `font-size`, read each time so a reloaded config counts.
+  private var baselineFontSize: Float32 {
+    runtime?.defaultFontSize() ?? Self.previewBaselineFontSize
+  }
+
+  private static let previewBaselineFontSize: Float32 = 13
 
   private func emit(_ event: TerminalClient.Event) {
     guard eventCoalescer.shouldEmit(event) else { return }
@@ -1548,7 +1565,6 @@ final class WorktreeTerminalManager {
       self.codexShellEnvironmentResolver = { _, _ in nil }
       self.hookResourcesProvider = { nil }
       self.forwardingRecordBaseDirectory = ProwlPaths.agentHookForwardingDirectory
-      self.baselineFontSize = 13
       self.closeUndoStack = TerminalCloseUndoStack(timeout: .zero)
     }
   #endif

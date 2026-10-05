@@ -40,5 +40,6 @@
   on macOS today) would not be checked for fonts.
 - A user who sets only `font-family-bold` or `font-family-italic` still gets the mapping;
   Ghostty applies codepoint overrides to every style. Not observed in practice.
-- `GhosttyRuntime.defaultFontSize()` reads the `f32` `font-size` into a `Double`, so it
-  returns 0. Found during this work; not changed here.
+- `GhosttyRuntime.defaultFontSize()` read the `f32` `font-size` into a `Double`, so it
+  returned 0 and remembered font sizes never went back to "follow the config". Found during
+  this work and fixed separately in #863.
