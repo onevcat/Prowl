@@ -3377,6 +3377,16 @@
         }
       }
     },
+    "Choose File…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择文件…"
+          }
+        }
+      }
+    },
     "Choose Image…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -3403,6 +3413,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "选择符号…"
+          }
+        }
+      }
+    },
+    "Choose a Ghostty config file for Prowl. Ghostty's own config files will be ignored." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为 Prowl 选择一个 Ghostty 配置文件。Ghostty 自身的配置文件将被忽略。"
           }
         }
       }
@@ -7909,6 +7929,16 @@
         }
       }
     },
+    "Ghostty config" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ghostty 配置"
+          }
+        }
+      }
+    },
     "Git Repository URL" : {
       "localizations" : {
         "zh-Hans" : {
@@ -11501,6 +11531,16 @@
         }
       }
     },
+    "Open the Ghostty config file that Prowl uses in the default text editor." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在默认文本编辑器中打开 Prowl 当前使用的 Ghostty 配置文件。"
+          }
+        }
+      }
+    },
     "Open the bundle location in Finder" : {
       "localizations" : {
         "zh-Hans" : {
@@ -11567,16 +11607,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "打开工作流日志"
-          }
-        }
-      }
-    },
-    "Open your Ghostty config file in the default text editor." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在默认文本编辑器中打开你的 Ghostty 配置文件。"
           }
         }
       }
@@ -12773,6 +12803,16 @@
         }
       }
     },
+    "Prowl reads the same config files as the standalone Ghostty app." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prowl 读取与独立 Ghostty 应用相同的配置文件。"
+          }
+        }
+      }
+    },
     "Prowl revalidates automatically when the workflow file changes." : {
       "localizations" : {
         "zh-Hans" : {
@@ -12964,16 +13004,6 @@
         }
       }
     },
-    "Re-read the Ghostty config from disk and apply it to running terminals." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "从磁盘重新读取 Ghostty 配置并应用到正在运行的终端。"
-          }
-        }
-      }
-    },
     "Re-run Failed Jobs" : {
       "localizations" : {
         "zh-Hans" : {
@@ -13030,6 +13060,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "重新从安全存储中读取先前配对的主机"
+          }
+        }
+      }
+    },
+    "Read the Ghostty config from disk again and apply it to running terminals." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从磁盘重新读取 Ghostty 配置并应用到正在运行的终端。"
+          }
+        }
+      }
+    },
+    "Read the config files of the standalone Ghostty app again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "改回读取独立 Ghostty 应用的配置文件。"
           }
         }
       }
@@ -16086,6 +16136,16 @@
         }
       }
     },
+    "Shared with Ghostty" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "与 Ghostty 共用"
+          }
+        }
+      }
+    },
     "Sharpening code opinions" : {
       "localizations" : {
         "zh-Hans" : {
@@ -17486,6 +17546,16 @@
         }
       }
     },
+    "Terminal Config" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "终端配置"
+          }
+        }
+      }
+    },
     "Terminal Layout" : {
       "localizations" : {
         "zh-Hans" : {
@@ -17733,6 +17803,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "保存时，此条目会从工作区元数据中移除。"
+          }
+        }
+      }
+    },
+    "The file does not exist. Terminals use Ghostty's built-in defaults until you create it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该文件不存在。在创建它之前，终端使用 Ghostty 的内置默认值。"
           }
         }
       }
@@ -19184,6 +19264,16 @@
         }
       }
     },
+    "Use Ghostty's Config" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用 Ghostty 的配置"
+          }
+        }
+      }
+    },
     "Use Selection for Find" : {
       "localizations" : {
         "zh-Hans" : {
@@ -19200,6 +19290,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "添加仓库时，使用项目自身的应用图标或标识作为仓库图标。"
+          }
+        }
+      }
+    },
+    "Use a separate Ghostty config file for Prowl only. Ghostty's own config files are then ignored." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅为 Prowl 使用单独的 Ghostty 配置文件，Ghostty 自身的配置文件将被忽略。"
+          }
+        }
+      }
+    },
+    "Use for Prowl" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用于 Prowl"
           }
         }
       }

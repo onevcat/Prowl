@@ -8,7 +8,8 @@
     "App/Sources/Domain/Workflow/WorkflowLineRenderer.swift": "agent-prompt: lines typed into an agent",
     "App/Sources/Clients/BranchNameSuggestion/**": "agent-prompt",
     "App/Sources/Support/**": "developer: diagnostics and helpers without UI",
-    "App/Sources/Domain/Handoff/**": "agent-prompt: handoff documents written for agents"
+    "App/Sources/Domain/Handoff/**": "agent-prompt: handoff documents written for agents",
+    "App/Sources/Infrastructure/Ghostty/GhosttyCJKFontFallback.swift": "identifier: system font family names given to Ghostty"
   },
   "exemptLinePatterns": {
     "ProwlLogger\\(|[Ll]ogger\\.|\\.log\\(|Diagnostics\\.log|sentryCapture": "log",
