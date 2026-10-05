@@ -9,10 +9,10 @@ the root cause in Ghostty's CoreText fallback.
 ## Change
 
 - `GhosttyCJKFontFallback` (`App/Sources/Infrastructure/Ghostty/GhosttyCJKFontFallback.swift`):
-  - `configuresFont(files:)` reads the source's files and their `config-file` includes in
-    Ghostty's order (`?` optional prefix, quotes, `~/`, paths relative to the including file,
-    cycles stop) and tracks the final state of `font-family` and `font-codepoint-map`. A
-    blank value clears the list, as in Ghostty.
+  - `configuresFont(files:)` reads the source's files and their `config-file` includes through
+    `GhosttyRawConfig` (S1), which mirrors Ghostty's `Config.loadRecursiveFiles`, and tracks
+    the final state of `font-family` and `font-codepoint-map`. A blank value clears the list,
+    as in Ghostty.
   - `cjkFamily(preferredLanguages:)` returns the family that CoreText picks for ideographs.
   - `preferredLanguages()` uses a `-AppleLanguages` launch argument, else the global
     `AppleLanguages` (`AppLanguageStore.systemLanguages`), else `Locale.preferredLanguages`.
@@ -40,4 +40,4 @@ the root cause in Ghostty's CoreText fallback.
 
 ## Refs
 
-PR: (this slice), stacked on #860
+PR: #861, stacked on #860

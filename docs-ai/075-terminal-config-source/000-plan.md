@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | Implemented |
 | **Anchor date** | 2026-10-05 |
-| **Primary PRs** | #860 (S1), S2 stacked on #860 |
+| **Primary PRs** | #860 (S1), #861 (S2, stacked on #860) |
 | **Related** | [007-ghostty-embedding-integration](../007-ghostty-embedding-integration/000-plan.md), `docs/components/terminal.md`, issue #693 |
 
 ## Background

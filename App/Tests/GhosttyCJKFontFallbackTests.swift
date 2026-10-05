@@ -118,6 +118,7 @@ struct GhosttyCJKFontFallbackTests {
     #expect(GhosttyCJKFontFallback.configuresFont(files: [second, first]))
   }
 
+  /// Includes are read as Ghostty loads them; a cleared include does not count.
   @Test func includesAreFollowedLikeGhostty() throws {
     let directory = try Self.makeDirectory()
     defer { try? FileManager.default.removeItem(at: directory) }
@@ -132,14 +133,10 @@ struct GhosttyCJKFontFallbackTests {
       to: directory.appending(path: "config.ghostty")
     )
     #expect(GhosttyCJKFontFallback.configuresFont(files: [main]))
-  }
 
-  @Test func includeCyclesTerminate() throws {
-    let directory = try Self.makeDirectory()
-    defer { try? FileManager.default.removeItem(at: directory) }
-    let first = try Self.write("config-file = b.ghostty\n", to: directory.appending(path: "a.ghostty"))
-    _ = try Self.write("config-file = a.ghostty\n", to: directory.appending(path: "b.ghostty"))
-    #expect(!GhosttyCJKFontFallback.configuresFont(files: [first]))
+    let cleared = try Self.write(
+      "config-file = nested/fonts.ghostty\nconfig-file =\n", to: directory.appending(path: "cleared.ghostty"))
+    #expect(!GhosttyCJKFontFallback.configuresFont(files: [cleared]))
   }
 
   private static func makeDirectory() throws -> URL {

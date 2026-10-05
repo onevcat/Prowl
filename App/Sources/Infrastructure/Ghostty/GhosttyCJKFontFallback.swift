@@ -101,72 +101,21 @@ nonisolated enum GhosttyCJKFontFallback {
   }
 
   /// Whether the config sets `font-family` or `font-codepoint-map`, reading `files` and their
-  /// `config-file` includes in Ghostty's order. A blank value clears the list, as in Ghostty.
-  /// `ghostty_config_get` cannot read these repeatable keys, so this parses the raw text.
+  /// `config-file` includes as Ghostty loads them. A blank value clears the list, as in
+  /// Ghostty. `ghostty_config_get` cannot read these repeatable keys, so this reads the raw text.
   static func configuresFont(files: [URL]) -> Bool {
-    var queue = files.map(\.standardizedFileURL)
-    var visited = Set<URL>()
     var familyCount = 0
     var codepointMapCount = 0
-    var index = 0
-    while index < queue.count {
-      let file = queue[index]
-      index += 1
-      guard visited.insert(file).inserted,
-        let contents = try? String(contentsOf: file, encoding: .utf8)
-      else { continue }
-      for (key, value) in entries(in: contents) {
-        switch key {
-        case "font-family":
-          familyCount = value.isEmpty ? 0 : familyCount + 1
-        case "font-codepoint-map":
-          codepointMapCount = value.isEmpty ? 0 : codepointMapCount + 1
-        case "config-file":
-          if let include = includeURL(value, relativeTo: file) {
-            queue.append(include)
-          }
-        default:
-          continue
-        }
+    for entry in GhosttyRawConfig.entries(files: files) {
+      switch entry.key {
+      case "font-family":
+        familyCount = entry.value.isEmpty ? 0 : familyCount + 1
+      case "font-codepoint-map":
+        codepointMapCount = entry.value.isEmpty ? 0 : codepointMapCount + 1
+      default:
+        continue
       }
     }
     return familyCount > 0 || codepointMapCount > 0
-  }
-
-  /// `key = value` pairs in order. Comments take a full line; quotes around a value are
-  /// removed.
-  static func entries(in contents: String) -> [(key: String, value: String)] {
-    contents.split(whereSeparator: \.isNewline).compactMap { rawLine in
-      let line = rawLine.trimmingCharacters(in: .whitespaces)
-      guard !line.hasPrefix("#"), let separator = line.firstIndex(of: "=") else { return nil }
-      let key = line[..<separator].trimmingCharacters(in: .whitespaces)
-      var value = line[line.index(after: separator)...].trimmingCharacters(in: .whitespaces)
-      if value.count >= 2, value.hasPrefix("\""), value.hasSuffix("\"") {
-        value = String(value.dropFirst().dropLast())
-      }
-      return (key, value)
-    }
-  }
-
-  /// Resolves a `config-file` value like Ghostty: a leading `?` marks it optional, `~/`
-  /// expands to the home folder, and a relative path starts at the including file's folder.
-  private static func includeURL(_ value: String, relativeTo file: URL) -> URL? {
-    var path = value
-    if path.hasPrefix("?") {
-      path.removeFirst()
-    }
-    if path.count >= 2, path.hasPrefix("\""), path.hasSuffix("\"") {
-      path = String(path.dropFirst().dropLast())
-    }
-    guard !path.isEmpty else { return nil }
-    if path.hasPrefix("~/") {
-      return FileManager.default.homeDirectoryForCurrentUser
-        .appending(path: String(path.dropFirst(2)))
-        .standardizedFileURL
-    }
-    if path.hasPrefix("/") {
-      return URL(fileURLWithPath: path).standardizedFileURL
-    }
-    return file.deletingLastPathComponent().appending(path: path).standardizedFileURL
   }
 }

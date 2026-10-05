@@ -6,7 +6,9 @@
 | --- | --- | --- |
 | 2026-10-05 | Reproduced the report in a Debug instance: no Ghostty config, `ja-JP`, kana-first Japanese text rendered in BIZ UDGothic with oversized glyphs | — |
 | 2026-10-05 | S1: `GhosttyConfigSource`, one config builder, dedicated config file in Settings → General → Terminal Config | #860, [002](002-dedicated-config-file.md) |
-| 2026-10-05 | S2: CJK font fallback when the active config sets no font | stacked on #860, [003](003-cjk-font-fallback.md) |
+| 2026-10-05 | S2: CJK font fallback when the active config sets no font | #861, [003](003-cjk-font-fallback.md) |
+| 2026-10-05 | S1 review loop, 3 rounds, clean: the raw `theme` lookup now follows `config-file` includes (`GhosttyRawConfig`), including Ghostty's blank-value reset and root-reload rules | #860 (`ea751a7f`, `24b0cf01`) |
+| 2026-10-05 | S2 reuses `GhosttyRawConfig` for font detection instead of its own parser | #861 |
 
 ## Outcome & current state (as of 2026-10-05)
 
@@ -14,6 +16,8 @@
   comes from; loading, the editable file, the raw theme file, and the files to scan.
 - `App/Sources/Infrastructure/Ghostty/GhosttyRuntime.swift` — `makeConfig(source:overrideFileURLs:)`
   builds every config: source, CLI args, `TERM_PROGRAM`, CJK fallback, runtime overrides.
+- `App/Sources/Infrastructure/Ghostty/GhosttyRawConfig.swift` — raw `key = value` reader
+  that follows `config-file` includes like Ghostty; used for the `theme` spec and the font keys.
 - `App/Sources/Infrastructure/Ghostty/GhosttyCJKFontFallback.swift` — font detection,
   language choice, and the generated `font-codepoint-map` lines.
 - `App/Sources/Features/Settings/Views/TerminalConfigSettingsSection.swift` — Settings UI;
