@@ -54,10 +54,11 @@ nonisolated enum GhosttyRawConfig {
     return entry.value
   }
 
-  /// The entries of one file. Like Ghostty, a comment takes a full line, and quotes
-  /// around a whole value are removed.
+  /// The entries of one file. Like Ghostty, a leading UTF-8 byte order mark is
+  /// skipped, a comment takes a full line, and quotes around a whole value are removed.
   static func entries(in contents: String) -> [Entry] {
-    contents.split(whereSeparator: \.isNewline).compactMap { rawLine in
+    let text = contents.hasPrefix("\u{FEFF}") ? contents.dropFirst() : Substring(contents)
+    return text.split(whereSeparator: \.isNewline).compactMap { rawLine in
       let line = rawLine.trimmingCharacters(in: .whitespaces)
       guard !line.hasPrefix("#"), let separator = line.firstIndex(of: "=") else { return nil }
       let key = line[..<separator].trimmingCharacters(in: .whitespaces)
