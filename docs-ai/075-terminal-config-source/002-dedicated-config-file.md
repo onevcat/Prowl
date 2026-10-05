@@ -18,7 +18,11 @@ the user's config comes from.
 - Theme fallback: `ghostty +show-config` accepts only its own flags and always reads the
   default files, so a dedicated file is resolved in process
   (`GhosttyRuntime.userConfigSnapshot(loading:)`). The shared source keeps the CLI probe, so
-  its behavior does not change for users without the Ghostty app.
+  its behavior does not change for users without the Ghostty app. For both sources the raw
+  `theme` spec (which keeps a same-name light/dark pair) comes from `GhosttyRawConfig`: the
+  source's files and their `config-file` includes in Ghostty's load order, last value wins.
+  Before review round 1 it read only one root file, so a light/dark pair set in an include
+  was missed and the fallback could replace it.
 - **Open Config**, Ghostty's `open_config` action, and `prowl-split-divider-width` use the
   active source's file (`editableFilePath`). Open Config creates a missing dedicated file.
 - Settings: `GlobalSettings.ghosttyConfigPath`, `SettingsFeature.setGhosttyConfigPath`

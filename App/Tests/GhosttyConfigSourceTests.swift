@@ -23,10 +23,21 @@ struct GhosttyConfigSourceTests {
     #expect(GhosttyConfigSource.normalizedPath("  /tmp/a.conf ") == "/tmp/a.conf")
   }
 
-  @Test func dedicatedFileIsTheEditableAndThemeFile() {
+  @Test func dedicatedFileIsTheEditableAndOnlyRootFile() {
     let source = GhosttyConfigSource.file(path: "/tmp/prowl-ghostty.conf")
     #expect(source.editableFilePath == "/tmp/prowl-ghostty.conf")
-    #expect(source.rawThemeFileURL == URL(fileURLWithPath: "/tmp/prowl-ghostty.conf"))
+    #expect(source.userConfigFileURLs == [URL(fileURLWithPath: "/tmp/prowl-ghostty.conf")])
+  }
+
+  @Test func sharedSourceListsGhosttyDefaultFilesInLoadOrder() {
+    let names = GhosttyConfigSource.ghosttyDefault.userConfigFileURLs.map {
+      "\($0.deletingLastPathComponent().lastPathComponent)/\($0.lastPathComponent)"
+    }
+    #expect(
+      names == [
+        "ghostty/config", "ghostty/config.ghostty",
+        "com.mitchellh.ghostty/config", "com.mitchellh.ghostty/config.ghostty",
+      ])
   }
 
   @Test func dedicatedFileReplacesTheSharedConfig() throws {
@@ -107,6 +118,34 @@ struct GhosttyConfigSourceTests {
     let dual = try #require(GhosttyRuntime.userConfigSnapshot(loading: source))
     #expect(dual.themeMode == .dual)
     #expect(dual.backgroundTone == .dark)
+  }
+
+  /// A light/dark pair set in an include is the user's explicit choice, so the
+  /// theme fallback must not treat the config as having no theme.
+  @Test func dedicatedFileSnapshotFollowsIncludesForTheTheme() throws {
+    let directory = try Self.makeDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try "theme = light:My Light,dark:My Dark\n".write(
+      to: directory.appending(path: "themes.ghostty"), atomically: true, encoding: .utf8)
+    let file = directory.appending(path: "prowl.ghostty")
+    try "background = #101010\nconfig-file = themes.ghostty\n".write(to: file, atomically: true, encoding: .utf8)
+
+    let source = GhosttyConfigSource.file(path: file.path(percentEncoded: false))
+    let snapshot = try #require(GhosttyRuntime.userConfigSnapshot(loading: source))
+    #expect(snapshot.themeMode == .dual)
+  }
+
+  /// Ghostty loads includes after the file that names them, so an included theme wins.
+  @Test func includedThemeWinsOverTheRootTheme() throws {
+    let directory = try Self.makeDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try "theme = Single\n".write(
+      to: directory.appending(path: "themes.ghostty"), atomically: true, encoding: .utf8)
+    let file = directory.appending(path: "prowl.ghostty")
+    try "config-file = themes.ghostty\ntheme = light:A,dark:B\n".write(to: file, atomically: true, encoding: .utf8)
+
+    let source = GhosttyConfigSource.file(path: file.path(percentEncoded: false))
+    #expect(GhosttyRuntime.rawUserThemeMode(source: source) == .single)
   }
 
   private static func makeDirectory() throws -> URL {
