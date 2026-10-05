@@ -409,6 +409,7 @@ final class GhosttyRuntime {
       let contents = GhosttyCJKFontFallback.overrideContents(
         userConfigFiles: source.userConfigFileURLs,
         arguments: ProcessInfo.processInfo.arguments,
+        themeDirectories: ghosttyThemeDirectories(),
         preferredLanguages: GhosttyCJKFontFallback.preferredLanguages()
       )
     else { return }

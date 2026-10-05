@@ -13,7 +13,7 @@ nonisolated enum GhosttyCJKFontFallback {
 
   /// Kana, CJK punctuation, ideographs, and fullwidth forms.
   static let cjkRanges = [
-    "U+2E80-U+2FDF",  // CJK Radicals Supplement, Kangxi Radicals
+    "U+2E80-U+2FFF",  // CJK Radicals Supplement, Kangxi Radicals, Ideographic Description
     "U+3000-U+303F",  // CJK Symbols and Punctuation
     "U+3040-U+30FF",  // Hiragana, Katakana
     "U+3100-U+312F",  // Bopomofo
@@ -22,17 +22,22 @@ nonisolated enum GhosttyCJKFontFallback {
     "U+3400-U+4DBF",  // CJK Unified Ideographs Extension A
     "U+4E00-U+9FFF",  // CJK Unified Ideographs
     "U+F900-U+FAFF",  // CJK Compatibility Ideographs
+    "U+FE10-U+FE1F",  // Vertical Forms
     "U+FE30-U+FE4F",  // CJK Compatibility Forms
-    "U+FF00-U+FFEF",  // Halfwidth and Fullwidth Forms
+    "U+FF00-U+FF9F",  // Fullwidth forms and halfwidth katakana
+    "U+FFE0-U+FFEF",  // Fullwidth and halfwidth symbols
+    "U+1AFF0-U+1B16F",  // Kana Extended-A/B, Kana Supplement, Small Kana Extension
+    "U+20000-U+323AF",  // CJK Unified Ideographs Extension B-H, Compatibility Ideographs Supplement
   ]
 
-  /// Hangul Jamo, Compatibility Jamo, Jamo Extended-A/B, and syllables.
+  /// Hangul Jamo, Compatibility Jamo, Jamo Extended-A/B, syllables, and halfwidth Hangul.
   static let hangulRanges = [
     "U+1100-U+11FF",
     "U+3130-U+318F",
     "U+A960-U+A97F",
     "U+AC00-U+D7AF",
     "U+D7B0-U+D7FF",
+    "U+FFA0-U+FFDC",
   ]
 
   /// The config lines Prowl adds, or `nil` when the user's config sets a font. A mapped
@@ -41,9 +46,12 @@ nonisolated enum GhosttyCJKFontFallback {
   static func overrideContents(
     userConfigFiles: [URL],
     arguments: [String] = [],
+    themeDirectories: [URL] = [],
     preferredLanguages: [String]
   ) -> String? {
-    guard !configuresFont(files: userConfigFiles, arguments: arguments) else { return nil }
+    guard !configuresFont(files: userConfigFiles, arguments: arguments, themeDirectories: themeDirectories) else {
+      return nil
+    }
     let family = cjkFamily(preferredLanguages: preferredLanguages)
     return """
       font-codepoint-map = \(cjkRanges.joined(separator: ","))=\(family)
@@ -104,14 +112,30 @@ nonisolated enum GhosttyCJKFontFallback {
     return "PingFang SC"
   }
 
-  /// Whether the config sets `font-family` or `font-codepoint-map`: `files` and their
-  /// `config-file` includes as Ghostty loads them, then the launch `arguments`, which Ghostty
-  /// reads after the files. A blank value clears the list, as in Ghostty.
+  /// Whether the config sets `font-family` or `font-codepoint-map`. The user's entries are
+  /// `files` and their `config-file` includes as Ghostty loads them, then the launch
+  /// `arguments`. The active theme can set a font too; Ghostty loads it first, so the user's
+  /// entries come after it. With a light/dark pair, a font in either theme counts.
   /// `ghostty_config_get` cannot read these repeatable keys, so this reads the raw text.
-  static func configuresFont(files: [URL], arguments: [String] = []) -> Bool {
+  static func configuresFont(files: [URL], arguments: [String] = [], themeDirectories: [URL] = []) -> Bool {
+    let userEntries = GhosttyRawConfig.entries(files: files) + GhosttyRawConfig.entries(arguments: arguments)
+    let themeFiles =
+      userEntries.last { $0.key == "theme" }
+      .map { themeFileURLs(spec: $0.value, directories: themeDirectories) } ?? []
+    guard !themeFiles.isEmpty else { return setsFont(userEntries) }
+    return themeFiles.contains { theme in
+      // A theme file cannot name other files, so its `config-file` lines are not followed.
+      let contents = (try? String(contentsOf: theme, encoding: .utf8)) ?? ""
+      return setsFont(GhosttyRawConfig.entries(in: contents) + userEntries)
+    }
+  }
+
+  /// Whether `font-family` or `font-codepoint-map` holds a value after `entries`, where a
+  /// blank value clears the list, as in Ghostty.
+  private static func setsFont(_ entries: [GhosttyRawConfig.Entry]) -> Bool {
     var familyCount = 0
     var codepointMapCount = 0
-    for entry in GhosttyRawConfig.entries(files: files) + GhosttyRawConfig.entries(arguments: arguments) {
+    for entry in entries {
       switch entry.key {
       case "font-family":
         familyCount = entry.value.isEmpty ? 0 : familyCount + 1
@@ -122,5 +146,29 @@ nonisolated enum GhosttyCJKFontFallback {
       }
     }
     return familyCount > 0 || codepointMapCount > 0
+  }
+
+  /// The theme files for a `theme` value, found like Ghostty: an absolute path is used as
+  /// is, and a name is looked up in `directories` in order. A value with `,`, `:`, or `=`
+  /// is a light/dark pair. A blank value means no theme.
+  static func themeFileURLs(spec: String, directories: [URL]) -> [URL] {
+    let names: [String]
+    if spec.contains(where: { $0 == "," || $0 == ":" || $0 == "=" }) {
+      names = spec.split(separator: ",").compactMap { part in
+        guard let separator = part.firstIndex(where: { $0 == ":" || $0 == "=" }) else { return nil }
+        let key = part[..<separator].trimmingCharacters(in: .whitespaces).lowercased()
+        guard key == "light" || key == "dark" else { return nil }
+        return part[part.index(after: separator)...].trimmingCharacters(in: .whitespaces)
+      }
+    } else {
+      names = [spec.trimmingCharacters(in: .whitespaces)]
+    }
+    return names.filter { !$0.isEmpty }.compactMap { name in
+      if name.hasPrefix("/") {
+        return FileManager.default.fileExists(atPath: name) ? URL(fileURLWithPath: name) : nil
+      }
+      return directories.map { $0.appending(path: name) }
+        .first { FileManager.default.fileExists(atPath: $0.path(percentEncoded: false)) }
+    }
   }
 }

@@ -10,6 +10,7 @@
 | 2026-10-05 | S1 review loop, 3 rounds, clean: the raw `theme` lookup now follows `config-file` includes (`GhosttyRawConfig`), including Ghostty's blank-value reset and root-reload rules | #860 (`ea751a7f`, `24b0cf01`) |
 | 2026-10-05 | S2 reuses `GhosttyRawConfig` for font detection instead of its own parser | #861 |
 | 2026-10-05 | S2 review round 1: skip a UTF-8 byte order mark in raw config (fix lives in #860), count `--font-family=` / `--font-codepoint-map=` launch arguments as configured fonts | #860 (`24494d37`), #861 |
+| 2026-10-05 | S2 review round 2: supplementary ideographs and kana ranges, halfwidth Hangul to the Hangul family, a font set by the active theme counts as configured | #861 |
 
 ## Outcome & current state (as of 2026-10-05)
 
@@ -35,6 +36,8 @@
 
 ## Open questions
 
+- A theme found only in a folder that Ghostty searches but Prowl does not list (none known
+  on macOS today) would not be checked for fonts.
 - A user who sets only `font-family-bold` or `font-family-italic` still gets the mapping;
   Ghostty applies codepoint overrides to every style. Not observed in practice.
 - `GhosttyRuntime.defaultFontSize()` reads the `f32` `font-size` into a `Double`, so it

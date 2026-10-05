@@ -48,12 +48,17 @@ struct GhosttyCJKFontFallbackTests {
     )
     let lines = contents.split(whereSeparator: \.isNewline).map(String.init)
     #expect(lines.count == 2)
-    #expect(lines[0].hasPrefix("font-codepoint-map = U+2E80-U+2FDF,"))
+    #expect(lines[0].hasPrefix("font-codepoint-map = U+2E80-U+2FFF,"))
     #expect(lines[0].contains("U+3040-U+30FF"))
     #expect(lines[0].contains("U+4E00-U+9FFF"))
-    #expect(lines[0].contains("U+FF00-U+FFEF"))
+    #expect(lines[0].contains("U+FF00-U+FF9F"))
+    #expect(lines[0].contains("U+FFE0-U+FFEF"))
+    #expect(!lines[0].contains("U+FFA0"))
+    #expect(lines[0].contains("U+1AFF0-U+1B16F"))
+    #expect(lines[0].contains("U+20000-U+323AF"))
     #expect(lines[0].hasSuffix("=Hiragino Sans"))
     #expect(lines[1].contains("U+AC00-U+D7AF"))
+    #expect(lines[1].contains("U+FFA0-U+FFDC"))
     #expect(lines[1].hasSuffix("=Apple SD Gothic Neo"))
   }
 
@@ -155,6 +160,34 @@ struct GhosttyCJKFontFallbackTests {
       GhosttyCJKFontFallback.overrideContents(
         userConfigFiles: [empty], arguments: ["Prowl", "--font-family=Menlo"], preferredLanguages: ["ja"]) == nil
     )
+  }
+
+  /// A theme file can set a font, and the user's config loads after it.
+  @Test func fontFromTheActiveThemeIsAConfiguredFont() throws {
+    let directory = try Self.makeDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let userThemes = directory.appending(path: "user-themes", directoryHint: .isDirectory)
+    let builtInThemes = directory.appending(path: "resources-themes", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: userThemes, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: builtInThemes, withIntermediateDirectories: true)
+    _ = try Self.write(
+      "font-family = Maple Mono NF CN\nconfig-file = ignored.ghostty\n", to: userThemes.appending(path: "Fonty"))
+    _ = try Self.write("background = #000000\n", to: builtInThemes.appending(path: "Plain"))
+    let absoluteTheme = try Self.write(
+      "font-codepoint-map = U+3040-U+30FF=Klee One\n", to: directory.appending(path: "absolute-theme"))
+    let directories = [userThemes, builtInThemes]
+    func configures(_ config: String) throws -> Bool {
+      let root = try Self.write(config, to: directory.appending(path: "config-\(UUID().uuidString).ghostty"))
+      return GhosttyCJKFontFallback.configuresFont(files: [root], themeDirectories: directories)
+    }
+
+    #expect(try configures("theme = Fonty\n"))
+    #expect(try configures("theme = light:Plain,dark:Fonty\n"))
+    #expect(try configures("theme = \(absoluteTheme.path(percentEncoded: false))\n"))
+    #expect(try !configures("theme = Plain\n"))
+    #expect(try !configures("theme = Missing\n"))
+    #expect(try !configures("theme = Fonty\nfont-family =\n"))
+    #expect(try !configures("theme = Fonty\ntheme =\n"))
   }
 
   /// Includes are read as Ghostty loads them; a cleared include does not count.

@@ -12,8 +12,17 @@ the root cause in Ghostty's CoreText fallback.
   - `configuresFont(files:)` reads the source's files and their `config-file` includes through
     `GhosttyRawConfig` (S1), which mirrors Ghostty's `Config.loadRecursiveFiles` and skips a
     UTF-8 byte order mark, then the `--key=value` launch arguments that Ghostty reads after the
-    files (`GhosttyRawConfig.entries(arguments:)`, stops at `-e`). It tracks the final state of
-    `font-family` and `font-codepoint-map`; a blank value clears the list, as in Ghostty.
+    files (`GhosttyRawConfig.entries(arguments:)`, stops at `-e`). The active theme can also
+    set a font: `themeFileURLs(spec:directories:)` finds it like Ghostty (absolute path, then
+    the XDG `ghostty/themes` folder, then `GHOSTTY_RESOURCES_DIR/themes`), and its entries
+    count before the user's (Ghostty loads the theme first). With a light/dark pair, a font
+    in either theme counts. It tracks the final state of `font-family` and
+    `font-codepoint-map`; a blank value clears the list, as in Ghostty.
+  - Ranges: kana (including Kana Supplement and Extended), CJK punctuation, BMP and
+    supplementary ideographs (Extension A–H, compatibility), vertical and compatibility forms,
+    fullwidth forms, halfwidth katakana → CJK family; Hangul, including halfwidth Hangul →
+    Apple SD Gothic Neo. Apple SD Gothic Neo has no halfwidth Hangul glyphs, so those still
+    use Ghostty's normal fallback.
   - `cjkFamily(preferredLanguages:)` returns the family that CoreText picks for ideographs.
   - `preferredLanguages()` uses a `-AppleLanguages` launch argument, else the global
     `AppleLanguages` (`AppLanguageStore.systemLanguages`), else `Locale.preferredLanguages`.

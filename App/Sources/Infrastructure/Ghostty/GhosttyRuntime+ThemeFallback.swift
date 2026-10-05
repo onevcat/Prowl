@@ -179,24 +179,38 @@ extension GhosttyRuntime {
   /// Ghostty's default config files in the order it loads them: XDG before
   /// Application Support, and the legacy `config` before `config.ghostty` in each.
   nonisolated static func defaultGhosttyConfigFileURLs() -> [URL] {
-    let home = FileManager.default.homeDirectoryForCurrentUser
-    let appSupport = home.appending(
+    let appSupport = FileManager.default.homeDirectoryForCurrentUser.appending(
       path: "Library/Application Support/com.mitchellh.ghostty",
       directoryHint: .isDirectory
     )
-    let xdgRoot: URL
-    if let xdg = ProcessInfo.processInfo.environment["XDG_CONFIG_HOME"], !xdg.isEmpty {
-      xdgRoot = URL(fileURLWithPath: xdg, isDirectory: true)
-    } else {
-      xdgRoot = home.appending(path: ".config", directoryHint: .isDirectory)
-    }
-    let xdg = xdgRoot.appending(path: "ghostty", directoryHint: .isDirectory)
+    let xdg = ghosttyXDGConfigDirectory()
     return [
       xdg.appending(path: "config"),
       xdg.appending(path: "config.ghostty"),
       appSupport.appending(path: "config"),
       appSupport.appending(path: "config.ghostty"),
     ]
+  }
+
+  /// Where Ghostty looks for a theme name, in order: the user's XDG themes
+  /// folder, then the bundled resources (`GHOSTTY_RESOURCES_DIR`).
+  nonisolated static func ghosttyThemeDirectories() -> [URL] {
+    var directories = [ghosttyXDGConfigDirectory().appending(path: "themes", directoryHint: .isDirectory)]
+    if let resources = ProcessInfo.processInfo.environment["GHOSTTY_RESOURCES_DIR"], !resources.isEmpty {
+      directories.append(URL(fileURLWithPath: resources, isDirectory: true).appending(path: "themes"))
+    }
+    return directories
+  }
+
+  /// `$XDG_CONFIG_HOME/ghostty`, or `~/.config/ghostty` when it is not set.
+  private nonisolated static func ghosttyXDGConfigDirectory() -> URL {
+    let root: URL
+    if let xdg = ProcessInfo.processInfo.environment["XDG_CONFIG_HOME"], !xdg.isEmpty {
+      root = URL(fileURLWithPath: xdg, isDirectory: true)
+    } else {
+      root = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".config", directoryHint: .isDirectory)
+    }
+    return root.appending(path: "ghostty", directoryHint: .isDirectory)
   }
 
   nonisolated static func runGhosttyCommand(arguments: [String]) -> String? {
