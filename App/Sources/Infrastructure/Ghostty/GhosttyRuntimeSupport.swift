@@ -62,23 +62,6 @@ nonisolated struct GhosttyUserConfigSnapshot: Equatable, Sendable {
     return .init(themeMode: themeMode, backgroundTone: backgroundTone)
   }
 
-  /// The raw `theme` value as written in a user's Ghostty config file, or `nil`
-  /// when none is set. Unlike `ghostty +show-config`, this preserves an explicit
-  /// same-name light/dark pair (`theme = light:X,dark:X`) instead of collapsing
-  /// it back to a single `theme = X`. Later lines win, matching Ghostty.
-  static func rawThemeSpec(fromConfig contents: String) -> String? {
-    var lastSpec: String?
-    for rawLine in contents.split(whereSeparator: \.isNewline) {
-      let line = String(rawLine).trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !line.hasPrefix("#"), let separator = line.firstIndex(of: "=") else { continue }
-      let key = line[..<separator].trimmingCharacters(in: .whitespacesAndNewlines)
-      guard key == "theme" else { continue }
-      let value = line[line.index(after: separator)...].trimmingCharacters(in: .whitespacesAndNewlines)
-      if !value.isEmpty { lastSpec = value }
-    }
-    return lastSpec
-  }
-
   static func parseThemeMode(from spec: String?) -> GhosttyThemeMode {
     guard let spec, !spec.isEmpty else { return .none }
 
@@ -108,7 +91,10 @@ nonisolated struct GhosttyUserConfigSnapshot: Equatable, Sendable {
     // noticeably tinted backgrounds, so gating on saturation misclassifies
     // them as unknown and defeats the whole fallback.
     guard let spec, let color = NSColor(ghosttyHexColor: spec) else { return .unknown }
+    return classifyBackgroundTone(of: color)
+  }
 
+  static func classifyBackgroundTone(of color: NSColor) -> GhosttyTerminalTone {
     let luminance = color.luminance
     if luminance >= 0.65 {
       return .light
@@ -154,7 +140,7 @@ extension NSColor {
     self.init(red: red, green: green, blue: blue, alpha: 1)
   }
 
-  convenience init(ghostty: ghostty_config_color_s) {
+  nonisolated convenience init(ghostty: ghostty_config_color_s) {
     let red = Double(ghostty.r) / 255
     let green = Double(ghostty.g) / 255
     let blue = Double(ghostty.b) / 255

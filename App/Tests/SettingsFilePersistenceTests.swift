@@ -45,6 +45,21 @@ struct SettingsFilePersistenceTests {
     #expect(decoded.agentIslandSilentOpacity == 0.6)
   }
 
+  @Test func ghosttyConfigPathRoundTripsAndDefaultsToSharedConfig() throws {
+    let encodedDefault = try JSONEncoder().encode(GlobalSettings.default)
+    let defaultDictionary = try #require(
+      try JSONSerialization.jsonObject(with: encodedDefault) as? [String: Any]
+    )
+    #expect(defaultDictionary["ghosttyConfigPath"] == nil)
+    #expect(try JSONDecoder().decode(GlobalSettings.self, from: encodedDefault).ghosttyConfigPath == nil)
+
+    var settings = GlobalSettings.default
+    settings.ghosttyConfigPath = "/Users/me/.config/prowl/ghostty.conf"
+    let data = try JSONEncoder().encode(settings)
+    let decoded = try JSONDecoder().decode(GlobalSettings.self, from: data)
+    #expect(decoded.ghosttyConfigPath == "/Users/me/.config/prowl/ghostty.conf")
+  }
+
   @Test(.dependencies) func loadWritesDefaultsWhenMissing() throws {
     let storage = SettingsTestStorage()
 
