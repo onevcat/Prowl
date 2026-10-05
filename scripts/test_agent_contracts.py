@@ -184,6 +184,19 @@ class PreflightEvidenceTests(unittest.TestCase):
                 contracts.validate_preflight({**self.evidence(), **changes}, self.summary(), "this-run", "/tools/codex")
 
 
+class SourceFingerprintTests(unittest.TestCase):
+    def test_checkout_contains_every_fingerprinted_source(self):
+        self.assertRegex(contracts.source_fingerprint(), "^[0-9a-f]{64}$")
+
+    def test_moved_source_is_an_error_not_a_silent_omission(self):
+        with tempfile.TemporaryDirectory() as temp:
+            original = contracts.ROOT
+            contracts.ROOT = pathlib.Path(temp)
+            self.addCleanup(setattr, contracts, "ROOT", original)
+            with self.assertRaises(contracts.EvidenceError):
+                contracts.source_fingerprint()
+
+
 class CommandTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
