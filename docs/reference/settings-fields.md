@@ -48,7 +48,7 @@ JSON is pretty-printed with sorted keys. Legacy `~/.supacode` is migrated to
 | `copyUntrackedOnWorktreeCreate` | Bool | `false` | Copy untracked files into new worktrees. |
 | `pullRequestMergeStrategy` | enum (`merge`/`squash`/`rebase`) | `merge` | Default PR merge strategy. |
 | `restoreTerminalLayoutOnLaunch` | Bool | `false` | Restore tabs/splits on launch. |
-| `terminalFontSize` | Float32? | `nil` | Remembered terminal font size. |
+| `terminalFontSize` | Float32? | `nil` | Remembered terminal font size; `nil` follows Ghostty's `font-size`. A size equal to Ghostty's `font-size` is stored as `nil`, also at launch. |
 | `archivedAutoDeletePeriod` | enum? (days) | `nil` | Auto-delete archived worktrees after N days; `nil` = never. |
 | `keybindingUserOverrides` | object | empty | User keyboard-shortcut remappings. |
 | `defaultViewMode` | enum (`normal`/`shelf`/`canvas`) | `normal` | View mode on launch. |

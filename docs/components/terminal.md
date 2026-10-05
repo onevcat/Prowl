@@ -138,6 +138,9 @@ When a command finishes (via OSC 133), Prowl can:
   `⌘0` / `⌘+` / `⌘-`).
 - The chosen size is remembered (`terminalFontSize`) and applied across worktrees;
   new tabs and splits inherit the focused pane's size.
+- Going back to Ghostty's `font-size` (for example with **Reset**) clears the
+  remembered size, so later changes to `font-size` apply again. A remembered size
+  that equals the current `font-size` is cleared at launch.
 
 ## In-terminal search
 

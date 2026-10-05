@@ -396,12 +396,13 @@ final class GhosttyRuntime {
 
   func defaultFontSize() -> Float32 {
     guard let config else { return 0 }
-    var value: Double = 0
+    // `font-size` is an `f32` in Ghostty, so the value must be a 4-byte float.
+    var value: Float32 = 0
     let key = "font-size"
     guard ghostty_config_get(config, &value, key, UInt(key.lengthOfBytes(using: .utf8))) else {
       return 0
     }
-    return Float32(value)
+    return value
   }
 
   func commandPaletteEntries() -> [GhosttyCommand] {
