@@ -38,8 +38,12 @@ nonisolated enum GhosttyCJKFontFallback {
   /// The config lines Prowl adds, or `nil` when the user's config sets a font. A mapped
   /// font that lacks a codepoint is skipped by Ghostty, so the normal fallback still
   /// covers the gaps.
-  static func overrideContents(userConfigFiles: [URL], preferredLanguages: [String]) -> String? {
-    guard !configuresFont(files: userConfigFiles) else { return nil }
+  static func overrideContents(
+    userConfigFiles: [URL],
+    arguments: [String] = [],
+    preferredLanguages: [String]
+  ) -> String? {
+    guard !configuresFont(files: userConfigFiles, arguments: arguments) else { return nil }
     let family = cjkFamily(preferredLanguages: preferredLanguages)
     return """
       font-codepoint-map = \(cjkRanges.joined(separator: ","))=\(family)
@@ -100,13 +104,14 @@ nonisolated enum GhosttyCJKFontFallback {
     return "PingFang SC"
   }
 
-  /// Whether the config sets `font-family` or `font-codepoint-map`, reading `files` and their
-  /// `config-file` includes as Ghostty loads them. A blank value clears the list, as in
-  /// Ghostty. `ghostty_config_get` cannot read these repeatable keys, so this reads the raw text.
-  static func configuresFont(files: [URL]) -> Bool {
+  /// Whether the config sets `font-family` or `font-codepoint-map`: `files` and their
+  /// `config-file` includes as Ghostty loads them, then the launch `arguments`, which Ghostty
+  /// reads after the files. A blank value clears the list, as in Ghostty.
+  /// `ghostty_config_get` cannot read these repeatable keys, so this reads the raw text.
+  static func configuresFont(files: [URL], arguments: [String] = []) -> Bool {
     var familyCount = 0
     var codepointMapCount = 0
-    for entry in GhosttyRawConfig.entries(files: files) {
+    for entry in GhosttyRawConfig.entries(files: files) + GhosttyRawConfig.entries(arguments: arguments) {
       switch entry.key {
       case "font-family":
         familyCount = entry.value.isEmpty ? 0 : familyCount + 1

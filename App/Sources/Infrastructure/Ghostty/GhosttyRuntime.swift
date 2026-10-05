@@ -408,6 +408,7 @@ final class GhosttyRuntime {
     guard
       let contents = GhosttyCJKFontFallback.overrideContents(
         userConfigFiles: source.userConfigFileURLs,
+        arguments: ProcessInfo.processInfo.arguments,
         preferredLanguages: GhosttyCJKFontFallback.preferredLanguages()
       )
     else { return }

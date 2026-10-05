@@ -118,6 +118,45 @@ struct GhosttyCJKFontFallbackTests {
     #expect(GhosttyCJKFontFallback.configuresFont(files: [second, first]))
   }
 
+  /// Ghostty skips a UTF-8 byte order mark, so a font on the first line still counts.
+  @Test func fontAfterAByteOrderMarkIsAConfiguredFont() throws {
+    let directory = try Self.makeDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let bom: [UInt8] = [0xEF, 0xBB, 0xBF]
+    let root = directory.appending(path: "config.ghostty")
+    try Data(bom + Array("font-family = Maple Mono NF CN\n".utf8)).write(to: root)
+    let include = directory.appending(path: "fonts.ghostty")
+    try Data(bom + Array("font-codepoint-map = U+3040-U+30FF=Klee One\n".utf8)).write(to: include)
+    let includingRoot = try Self.write("config-file = fonts.ghostty\n", to: directory.appending(path: "b.ghostty"))
+
+    #expect(GhosttyCJKFontFallback.configuresFont(files: [root]))
+    #expect(GhosttyCJKFontFallback.configuresFont(files: [includingRoot]))
+    #expect(
+      GhosttyCJKFontFallback.overrideContents(userConfigFiles: [root], preferredLanguages: ["ja"]) == nil
+    )
+  }
+
+  /// Ghostty reads `--key=value` launch arguments after the config files.
+  @Test func launchArgumentFontsCountLikeConfigLines() throws {
+    let directory = try Self.makeDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let empty = try Self.write("# no fonts\n", to: directory.appending(path: "empty.ghostty"))
+    let family = try Self.write("font-family = Menlo\n", to: directory.appending(path: "family.ghostty"))
+
+    #expect(GhosttyCJKFontFallback.configuresFont(files: [empty], arguments: ["Prowl", "--font-family=Menlo"]))
+    #expect(
+      GhosttyCJKFontFallback.configuresFont(
+        files: [empty], arguments: ["Prowl", "--font-codepoint-map=U+3040-U+30FF=Klee One"]))
+    #expect(!GhosttyCJKFontFallback.configuresFont(files: [family], arguments: ["Prowl", "--font-family="]))
+    #expect(
+      !GhosttyCJKFontFallback.configuresFont(
+        files: [empty], arguments: ["Prowl", "-AppleLanguages", "(ja-JP)", "-e", "--font-family=Menlo"]))
+    #expect(
+      GhosttyCJKFontFallback.overrideContents(
+        userConfigFiles: [empty], arguments: ["Prowl", "--font-family=Menlo"], preferredLanguages: ["ja"]) == nil
+    )
+  }
+
   /// Includes are read as Ghostty loads them; a cleared include does not count.
   @Test func includesAreFollowedLikeGhostty() throws {
     let directory = try Self.makeDirectory()

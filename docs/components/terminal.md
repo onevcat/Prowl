@@ -152,7 +152,8 @@ with its defaults. Customize terminal behavior in the Ghostty config that Prowl
 uses (see [Ghostty config](#ghostty-config)).
 
 **CJK font fallback.** When the active Ghostty config sets neither `font-family`
-nor `font-codepoint-map` (including its `config-file` includes), Prowl maps kana,
+nor `font-codepoint-map` (including its `config-file` includes and `--font-family=…`
+launch arguments), Prowl maps kana,
 CJK punctuation, CJK ideographs, and fullwidth forms to one system CJK font, and
 Hangul to Apple SD Gothic Neo. Without this, Ghostty picks a font for kana and
 punctuation by scoring every installed font, which often selects BIZ UDGothic,

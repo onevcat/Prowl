@@ -45,6 +45,21 @@ nonisolated enum GhosttyRawConfig {
     return result
   }
 
+  /// The `--key=value` launch arguments that Ghostty reads as configuration
+  /// (`Config.loadCliArgs`). The first argument is the executable, and the
+  /// arguments after `-e` are a command. The shell already removed any quotes.
+  static func entries(arguments: [String]) -> [Entry] {
+    var result: [Entry] = []
+    for argument in arguments.dropFirst() {
+      if argument == "-e" { break }
+      guard argument.hasPrefix("--"), let separator = argument.firstIndex(of: "=") else { continue }
+      let key = argument[argument.index(argument.startIndex, offsetBy: 2)..<separator]
+      let value = argument[argument.index(after: separator)...]
+      result.append(Entry(key: String(key), value: String(value)))
+    }
+    return result
+  }
+
   /// The value of the last `key` line, or `nil` when there is none or the last one
   /// is blank (a blank value clears the setting in Ghostty).
   static func lastValue(of key: String, files: [URL]) -> String? {

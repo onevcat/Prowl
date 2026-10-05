@@ -9,6 +9,7 @@
 | 2026-10-05 | S2: CJK font fallback when the active config sets no font | #861, [003](003-cjk-font-fallback.md) |
 | 2026-10-05 | S1 review loop, 3 rounds, clean: the raw `theme` lookup now follows `config-file` includes (`GhosttyRawConfig`), including Ghostty's blank-value reset and root-reload rules | #860 (`ea751a7f`, `24b0cf01`) |
 | 2026-10-05 | S2 reuses `GhosttyRawConfig` for font detection instead of its own parser | #861 |
+| 2026-10-05 | S2 review round 1: skip a UTF-8 byte order mark in raw config (fix lives in #860), count `--font-family=` / `--font-codepoint-map=` launch arguments as configured fonts | #860 (`24494d37`), #861 |
 
 ## Outcome & current state (as of 2026-10-05)
 
