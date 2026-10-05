@@ -53,13 +53,43 @@ struct GhosttyRawConfigTests {
     #expect(values == ["root-1", "root-2", "a-include", "deep"])
   }
 
+  /// Like Ghostty, only includes count as loaded: a root file named by an include
+  /// loads once more, and the include cycle stops after that.
   @Test func includeCyclesStop() throws {
     let directory = try Self.makeDirectory()
     defer { try? FileManager.default.removeItem(at: directory) }
     let first = try Self.write("config-file = b.ghostty\nvalue = a\n", to: directory.appending(path: "a.ghostty"))
     _ = try Self.write("config-file = a.ghostty\nvalue = b\n", to: directory.appending(path: "b.ghostty"))
     let values = GhosttyRawConfig.entries(files: [first]).filter { $0.key == "value" }.map(\.value)
-    #expect(values == ["a", "b"])
+    #expect(values == ["a", "b", "a"])
+  }
+
+  /// A blank `config-file` clears the includes named so far, so Ghostty never loads them.
+  @Test func blankConfigFileClearsEarlierIncludes() throws {
+    let directory = try Self.makeDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    _ = try Self.write("value = dropped\n", to: directory.appending(path: "dropped.ghostty"))
+    _ = try Self.write("value = kept\n", to: directory.appending(path: "kept.ghostty"))
+    let root = try Self.write(
+      """
+      config-file = dropped.ghostty
+      config-file =
+      config-file = kept.ghostty
+      """,
+      to: directory.appending(path: "config.ghostty")
+    )
+    let values = GhosttyRawConfig.entries(files: [root]).filter { $0.key == "value" }.map(\.value)
+    #expect(values == ["kept"])
+  }
+
+  /// The blank value also clears includes that an earlier root file named.
+  @Test func blankConfigFileInALaterRootClearsEarlierRootIncludes() throws {
+    let directory = try Self.makeDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    _ = try Self.write("value = dropped\n", to: directory.appending(path: "dropped.ghostty"))
+    let first = try Self.write("config-file = dropped.ghostty\n", to: directory.appending(path: "a.ghostty"))
+    let second = try Self.write("config-file = \"\"\n", to: directory.appending(path: "b.ghostty"))
+    #expect(GhosttyRawConfig.entries(files: [first, second]).filter { $0.key == "value" }.isEmpty)
   }
 
   @Test func includePathsResolveLikeGhostty() {

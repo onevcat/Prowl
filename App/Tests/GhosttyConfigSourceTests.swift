@@ -135,6 +135,21 @@ struct GhosttyConfigSourceTests {
     #expect(snapshot.themeMode == .dual)
   }
 
+  /// A blank `config-file` drops the include, so its light/dark pair never applies.
+  @Test func clearedIncludeThemeIsNotTheUsersTheme() throws {
+    let directory = try Self.makeDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try "theme = light:My Light,dark:My Dark\n".write(
+      to: directory.appending(path: "themes.ghostty"), atomically: true, encoding: .utf8)
+    let file = directory.appending(path: "prowl.ghostty")
+    try "config-file = themes.ghostty\nconfig-file =\n".write(to: file, atomically: true, encoding: .utf8)
+
+    let source = GhosttyConfigSource.file(path: file.path(percentEncoded: false))
+    #expect(GhosttyRuntime.rawUserThemeMode(source: source) == nil)
+    let snapshot = try #require(GhosttyRuntime.userConfigSnapshot(loading: source))
+    #expect(snapshot.themeMode == .none)
+  }
+
   /// Ghostty loads includes after the file that names them, so an included theme wins.
   @Test func includedThemeWinsOverTheRootTheme() throws {
     let directory = try Self.makeDirectory()

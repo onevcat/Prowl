@@ -10,26 +10,37 @@ nonisolated enum GhosttyRawConfig {
     let value: String
   }
 
-  /// The entries of `files`, then of their includes. Like Ghostty, includes load
-  /// after every file that names them, in the order they are named. Each file is
-  /// read once, so include cycles stop; missing files are skipped.
+  /// The entries of `files`, then of their includes, as Ghostty loads them
+  /// (`Config.loadRecursiveFiles`): every root file first, then the include list in
+  /// order while it grows. A blank `config-file` clears the list. Only includes
+  /// count as loaded, so a root file named by an include loads once more and the
+  /// cycle stops after that. Missing files are skipped.
   static func entries(files: [URL]) -> [Entry] {
-    var queue = files.map(\.standardizedFileURL)
-    var visited = Set<URL>()
     var result: [Entry] = []
-    var index = 0
-    while index < queue.count {
-      let file = queue[index]
-      index += 1
-      guard visited.insert(file).inserted,
-        let contents = try? String(contentsOf: file, encoding: .utf8)
-      else { continue }
+    var includes: [URL] = []
+    func read(_ file: URL) {
+      guard let contents = try? String(contentsOf: file, encoding: .utf8) else { return }
       for entry in entries(in: contents) {
         result.append(entry)
-        if entry.key == "config-file", let include = includeURL(entry.value, relativeTo: file) {
-          queue.append(include)
+        guard entry.key == "config-file" else { continue }
+        if entry.value.isEmpty {
+          includes.removeAll()
+        } else if let include = includeURL(entry.value, relativeTo: file) {
+          includes.append(include)
         }
       }
+    }
+
+    for file in files {
+      read(file.standardizedFileURL)
+    }
+    var loaded = Set<URL>()
+    var index = 0
+    while index < includes.count {
+      let include = includes[index]
+      index += 1
+      guard loaded.insert(include).inserted else { continue }
+      read(include)
     }
     return result
   }
