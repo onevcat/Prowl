@@ -23,6 +23,16 @@ struct GhosttyRawConfigTests {
     #expect(GhosttyRawConfig.lastValue(of: "font-family", files: [file]) == nil)
   }
 
+  /// Ghostty skips a UTF-8 byte order mark before the first key.
+  @Test func byteOrderMarkIsSkipped() throws {
+    let directory = try Self.makeDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let file = directory.appending(path: "config.ghostty")
+    try Data([0xEF, 0xBB, 0xBF] + Array("theme = light:A,dark:B\n".utf8)).write(to: file)
+    #expect(GhosttyRawConfig.lastValue(of: "theme", files: [file]) == "light:A,dark:B")
+    #expect(GhosttyRawConfig.entries(in: "\u{FEFF}font-family = Menlo").first?.key == "font-family")
+  }
+
   @Test func blankValueClearsTheSetting() throws {
     let directory = try Self.makeDirectory()
     defer { try? FileManager.default.removeItem(at: directory) }
