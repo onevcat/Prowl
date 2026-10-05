@@ -43,6 +43,7 @@ final class GhosttyRuntime {
 
   var config: ghostty_config_t?
   private(set) var app: ghostty_app_t?
+  private(set) var configSource: GhosttyConfigSource
   var observers: [NSObjectProtocol] = []
   var surfaceRefs: [SurfaceReference] = []
   var lastColorScheme: ghostty_color_scheme_e?
@@ -59,8 +60,9 @@ final class GhosttyRuntime {
   var onConfigChange: (() -> Void)?
   var onQuit: (() -> Void)?
 
-  init(initialColorScheme: ColorScheme? = nil) {
-    guard let config = Self.loadConfig() else {
+  init(initialColorScheme: ColorScheme? = nil, configSource: GhosttyConfigSource = .ghosttyDefault) {
+    self.configSource = configSource
+    guard let config = Self.loadConfig(source: configSource) else {
       preconditionFailure("ghostty_config_new failed")
     }
     self.config = config
@@ -254,9 +256,21 @@ final class GhosttyRuntime {
       ghostty_config_free(clone)
       return
     }
-    guard let config = Self.loadConfig() else { return }
+    guard let config = Self.loadConfig(source: configSource) else { return }
     applyConfig(config, target: target, app: app)
     ghostty_config_free(config)
+  }
+
+  /// Switches where the user's Ghostty config comes from and applies it to
+  /// running terminals.
+  func setConfigSource(_ source: GhosttyConfigSource) {
+    guard source != configSource else { return }
+    configSource = source
+    reloadAppConfig()
+    // The theme fallback compares the app appearance with the new config's background.
+    if let currentColorScheme {
+      reconcileThemeFallback(for: currentColorScheme)
+    }
   }
 
   /// Re-reads the user's Ghostty config from disk and re-applies Prowl's
@@ -343,12 +357,25 @@ final class GhosttyRuntime {
     return trigger.isEmpty ? nil : trigger
   }
 
-  static func loadConfig() -> ghostty_config_t? {
+  static func loadConfig(source: GhosttyConfigSource) -> ghostty_config_t? {
+    makeConfig(source: source, overrideFileURLs: [])
+  }
+
+  /// Builds a finalized config: the user's config from `source`, then Prowl's
+  /// fixed overrides, then `overrideFileURLs` in order. Later files win.
+  nonisolated static func makeConfig(
+    source: GhosttyConfigSource,
+    overrideFileURLs: [URL]
+  ) -> ghostty_config_t? {
     guard let config = ghostty_config_new() else { return nil }
-    ghostty_config_load_default_files(config)
-    ghostty_config_load_recursive_files(config)
+    source.load(into: config)
     ghostty_config_load_cli_args(config)
     loadTerminalProgramOverrides(into: config)
+    for url in overrideFileURLs {
+      url.path.withCString { path in
+        ghostty_config_load_file(config, path)
+      }
+    }
     ghostty_config_finalize(config)
     return config
   }
@@ -493,12 +520,12 @@ final class GhosttyRuntime {
   }
 
   /// Reads a Prowl-specific override for the visible divider thickness from the
-  /// primary Ghostty config file (the one returned by `ghostty_config_open_path`).
+  /// config file Prowl edits (see `GhosttyConfigSource.editableFilePath`).
   /// Ghostty itself has no such option (and its own divider size is hardcoded),
   /// so we layer a `prowl-split-divider-width = N` directive on top of the
   /// user's existing Ghostty config to avoid carrying another fork patch.
   func splitDividerWidth() -> CGFloat? {
-    Self.parseProwlSplitDividerWidth(at: Self.ghosttyConfigPath())
+    Self.parseProwlSplitDividerWidth(at: configSource.editableFilePath)
   }
 
   nonisolated static func ghosttyConfigPath() -> String? {

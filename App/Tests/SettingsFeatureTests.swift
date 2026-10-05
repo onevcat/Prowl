@@ -152,6 +152,31 @@ struct SettingsFeatureTests {
     #expect(settingsFile.global.systemNotificationsEnabled == true)
   }
 
+  @Test(.dependencies) func setGhosttyConfigPathNormalizesAndPersists() async {
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = .default }
+
+    let store = TestStore(initialState: SettingsFeature.State(settings: .default)) {
+      SettingsFeature()
+    }
+
+    await store.send(.setGhosttyConfigPath("  /tmp/prowl.ghostty \n")) {
+      $0.ghosttyConfigPath = "/tmp/prowl.ghostty"
+    }
+    await store.receive(\.delegate.settingsChanged)
+    #expect(settingsFile.global.ghosttyConfigPath == "/tmp/prowl.ghostty")
+
+    // The same path again is not a change.
+    await store.send(.setGhosttyConfigPath("/tmp/prowl.ghostty"))
+
+    // A blank path returns to Ghostty's shared config.
+    await store.send(.setGhosttyConfigPath("  ")) {
+      $0.ghosttyConfigPath = nil
+    }
+    await store.receive(\.delegate.settingsChanged)
+    #expect(settingsFile.global.ghosttyConfigPath == nil)
+  }
+
   @Test(.dependencies) func selectingNotificationSoundPlaysPreview() async {
     @Shared(.settingsFile) var settingsFile
     $settingsFile.withLock { $0.global = .default }

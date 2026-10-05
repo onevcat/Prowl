@@ -108,7 +108,10 @@ nonisolated struct GhosttyUserConfigSnapshot: Equatable, Sendable {
     // noticeably tinted backgrounds, so gating on saturation misclassifies
     // them as unknown and defeats the whole fallback.
     guard let spec, let color = NSColor(ghosttyHexColor: spec) else { return .unknown }
+    return classifyBackgroundTone(of: color)
+  }
 
+  static func classifyBackgroundTone(of color: NSColor) -> GhosttyTerminalTone {
     let luminance = color.luminance
     if luminance >= 0.65 {
       return .light
@@ -154,7 +157,7 @@ extension NSColor {
     self.init(red: red, green: green, blue: blue, alpha: 1)
   }
 
-  convenience init(ghostty: ghostty_config_color_s) {
+  nonisolated convenience init(ghostty: ghostty_config_color_s) {
     let red = Double(ghostty.r) / 255
     let green = Double(ghostty.g) / 255
     let blue = Double(ghostty.b) / 255

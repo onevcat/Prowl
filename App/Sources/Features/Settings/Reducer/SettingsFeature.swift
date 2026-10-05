@@ -68,6 +68,7 @@ struct SettingsFeature {
     var dockBounceMode: DockBounceMode
     var showNotificationDotOnDock: Bool
     var externalDiffToolID: String
+    var ghosttyConfigPath: String?
     var externalDiffCustomCommand: String
     var detectRepositoryIconsAutomatically: Bool
     var cliInstallStatus: CLIInstallStatus = .notInstalled
@@ -149,6 +150,7 @@ struct SettingsFeature {
       externalDiffToolID = settings.externalDiffToolID
       externalDiffCustomCommand = settings.externalDiffCustomCommand
       detectRepositoryIconsAutomatically = settings.detectRepositoryIconsAutomatically
+      ghosttyConfigPath = settings.ghosttyConfigPath
     }
 
     /// True only when the language the *next normal launch* (no command-line
@@ -217,6 +219,7 @@ struct SettingsFeature {
       settings.externalDiffToolID = externalDiffToolID
       settings.externalDiffCustomCommand = externalDiffCustomCommand
       settings.detectRepositoryIconsAutomatically = detectRepositoryIconsAutomatically
+      settings.ghosttyConfigPath = ghosttyConfigPath
       return settings
     }
   }
@@ -231,6 +234,7 @@ struct SettingsFeature {
     case setSystemNotificationsEnabled(Bool)
     case setCommandFinishedNotificationThreshold(String)
     case setTerminalFontSize(Float32?)
+    case setGhosttyConfigPath(String?)
     case setAgentIslandEnabled(Bool)
     case setAgentIslandFloatingPosition(displayID: String, normalizedPosition: Double)
     case setAgentIslandSilentOpacity(Double)
@@ -361,6 +365,7 @@ struct SettingsFeature {
         state.externalDiffCustomCommand = normalizedSettings.externalDiffCustomCommand
         state.canvasDefaultLayout = normalizedSettings.canvasDefaultLayout
         state.detectRepositoryIconsAutomatically = normalizedSettings.detectRepositoryIconsAutomatically
+        state.ghosttyConfigPath = normalizedSettings.ghosttyConfigPath
         state.syncGlobalDefaults(from: normalizedSettings)
         return .send(.delegate(.settingsChanged(normalizedSettings)))
 
@@ -417,6 +422,12 @@ struct SettingsFeature {
           persist(state, captureAnalytics: false, emitSettingsChanged: false),
           .send(.delegate(.terminalFontSizeChanged(fontSize)))
         )
+
+      case .setGhosttyConfigPath(let path):
+        let normalizedPath = GhosttyConfigSource.normalizedPath(path)
+        guard state.ghosttyConfigPath != normalizedPath else { return .none }
+        state.ghosttyConfigPath = normalizedPath
+        return persist(state)
 
       case .setAgentIslandEnabled(let enabled):
         state.agentIslandEnabled = enabled

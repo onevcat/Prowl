@@ -12,21 +12,23 @@ extension GhosttyRuntime {
       setThemeFallbackOverride("")
       return
     }
+    let source = configSource
     Task { [weak self] in
-      let snapshot = await Self.probeUserConfigSnapshot()
+      let snapshot = await Self.probeUserConfigSnapshot(source: source)
       let pair: GhosttyThemePair? =
         snapshot?.themeMode.allowsMismatchFallback == true ? await Self.probeFallbackThemePair() : nil
-      self?.applyResolvedThemeFallback(for: scheme, snapshot: snapshot, pair: pair)
+      self?.applyResolvedThemeFallback(for: scheme, source: source, snapshot: snapshot, pair: pair)
     }
   }
 
   @MainActor
   func applyResolvedThemeFallback(
     for scheme: ColorScheme,
+    source: GhosttyConfigSource,
     snapshot: GhosttyUserConfigSnapshot?,
     pair: GhosttyThemePair?
   ) {
-    guard currentColorScheme == scheme else { return }
+    guard currentColorScheme == scheme, configSource == source else { return }
     // `.none` (no user theme) is treated like a single dark theme here: Ghostty's
     // no-theme default is the fixed dark `#282C34` reported by `+show-config`, so
     // its `backgroundTone` resolves to `.dark` and adapts to a light app the same
@@ -100,17 +102,7 @@ extension GhosttyRuntime {
       }
     }
 
-    guard let updated = ghostty_config_new() else { return }
-    ghostty_config_load_default_files(updated)
-    ghostty_config_load_recursive_files(updated)
-    ghostty_config_load_cli_args(updated)
-    Self.loadTerminalProgramOverrides(into: updated)
-    for url in overrideURLs {
-      url.path.withCString { path in
-        ghostty_config_load_file(updated, path)
-      }
-    }
-    ghostty_config_finalize(updated)
+    guard let updated = Self.makeConfig(source: configSource, overrideFileURLs: overrideURLs) else { return }
     ghostty_app_update_config(app, updated)
     if let clone = ghostty_config_clone(updated) {
       setConfig(clone)
@@ -121,12 +113,38 @@ extension GhosttyRuntime {
     NotificationCenter.default.post(name: .ghosttyRuntimeConfigDidChange, object: self)
   }
 
-  nonisolated static func probeUserConfigSnapshot() async -> GhosttyUserConfigSnapshot? {
+  nonisolated static func probeUserConfigSnapshot(source: GhosttyConfigSource) async -> GhosttyUserConfigSnapshot? {
     // `await` ensures this runs on a cooperative executor rather than on the
     // caller's MainActor, so the synchronous subprocess calls below never block
     // the main thread.
     await Task.yield()
-    return userConfigSnapshotFromCLI()
+    switch source {
+    case .ghosttyDefault:
+      return userConfigSnapshotFromCLI()
+    case .file:
+      // `ghostty +show-config` only reads Ghostty's default files, so a
+      // dedicated file is resolved in process instead.
+      return userConfigSnapshot(loading: source)
+    }
+  }
+
+  /// Resolves the background of `source` alone, without Prowl's overrides.
+  nonisolated static func userConfigSnapshot(loading source: GhosttyConfigSource) -> GhosttyUserConfigSnapshot? {
+    guard let config = ghostty_config_new() else { return nil }
+    defer { ghostty_config_free(config) }
+    source.load(into: config)
+    ghostty_config_finalize(config)
+
+    var color = ghostty_config_color_s()
+    let key = "background"
+    let backgroundTone: GhosttyTerminalTone =
+      ghostty_config_get(config, &color, key, UInt(key.lengthOfBytes(using: .utf8)))
+      ? GhosttyUserConfigSnapshot.classifyBackgroundTone(of: NSColor(ghostty: color))
+      : .unknown
+    return GhosttyUserConfigSnapshot(
+      themeMode: rawUserThemeMode(source: source) ?? .none,
+      backgroundTone: backgroundTone
+    )
   }
 
   nonisolated static func probeFallbackThemePair() async -> GhosttyThemePair? {
@@ -144,12 +162,12 @@ extension GhosttyRuntime {
     // explicit light/dark choice, so re-derive the theme mode from the raw
     // config text when we can read it. The background tone still comes from the
     // resolved CLI output.
-    guard let rawMode = rawUserThemeMode() else { return snapshot }
+    guard let rawMode = rawUserThemeMode(source: .ghosttyDefault) else { return snapshot }
     return GhosttyUserConfigSnapshot(themeMode: rawMode, backgroundTone: snapshot.backgroundTone)
   }
 
-  nonisolated static func rawUserThemeMode() -> GhosttyThemeMode? {
-    guard let url = preferredGhosttyConfigURL(),
+  nonisolated static func rawUserThemeMode(source: GhosttyConfigSource) -> GhosttyThemeMode? {
+    guard let url = source.rawThemeFileURL,
       let contents = try? String(contentsOf: url, encoding: .utf8),
       let spec = GhosttyUserConfigSnapshot.rawThemeSpec(fromConfig: contents)
     else { return nil }
