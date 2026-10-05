@@ -42,6 +42,16 @@ nonisolated enum GhosttyConfigSource: Equatable, Sendable {
     ghostty_config_load_recursive_files(config)
   }
 
+  /// The files this source loads before their `config-file` includes, in load order.
+  var userConfigFileURLs: [URL] {
+    switch self {
+    case .ghosttyDefault:
+      GhosttyRuntime.defaultGhosttyConfigFileURLs()
+    case .file(let path):
+      [URL(fileURLWithPath: path)]
+    }
+  }
+
   /// The file that Open Config edits and that Prowl-only keys such as
   /// `prowl-split-divider-width` are read from. For the shared files this asks
   /// Ghostty, which creates its preferred file when none exists.

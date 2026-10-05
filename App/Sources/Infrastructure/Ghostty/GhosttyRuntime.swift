@@ -371,6 +371,7 @@ final class GhosttyRuntime {
     source.load(into: config)
     ghostty_config_load_cli_args(config)
     loadTerminalProgramOverrides(into: config)
+    loadCJKFontFallback(into: config, source: source)
     for url in overrideFileURLs {
       url.path.withCString { path in
         ghostty_config_load_file(config, path)
@@ -399,6 +400,28 @@ final class GhosttyRuntime {
     let info = Bundle.main.infoDictionary
     let candidates = [info?["CFBundleShortVersionString"], info?["CFBundleVersion"]]
     return candidates.lazy.compactMap { $0 as? String }.first { !$0.isEmpty }
+  }
+
+  /// Maps the CJK ranges to the system CJK font when the user's config sets no
+  /// font. See `GhosttyCJKFontFallback`.
+  nonisolated static func loadCJKFontFallback(into config: ghostty_config_t, source: GhosttyConfigSource) {
+    guard
+      let contents = GhosttyCJKFontFallback.overrideContents(
+        userConfigFiles: source.userConfigFileURLs,
+        preferredLanguages: GhosttyCJKFontFallback.preferredLanguages()
+      )
+    else { return }
+    let url = URL(fileURLWithPath: NSTemporaryDirectory())
+      .appendingPathComponent("prowl-ghostty-cjk-fonts.conf")
+    do {
+      try contents.write(to: url, atomically: true, encoding: .utf8)
+    } catch {
+      ghosttyLogger.warning("Failed to write CJK font fallback file: \(error.localizedDescription)")
+      return
+    }
+    url.path.withCString { path in
+      ghostty_config_load_file(config, path)
+    }
   }
 
   nonisolated static func loadTerminalProgramOverrides(into config: ghostty_config_t) {

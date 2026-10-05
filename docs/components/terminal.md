@@ -3,7 +3,7 @@
 > The terminal layer: tabs within a worktree, splitting a tab into panes, the
 > Ghostty engine underneath, tab titles & icons, shell integration, and fonts.
 
-**Keywords:** terminal, tab, split, pane, surface, ghostty, font size, shell integration, OSC 133, scrollback, find, search, close tab, new tab, tab title, tab icon, CJK
+**Keywords:** terminal, tab, split, pane, surface, ghostty, font size, shell integration, OSC 133, scrollback, find, search, close tab, new tab, tab title, tab icon, CJK, font fallback, Japanese, Hiragino, ghostty config, dedicated config
 
 **Related:** [concepts](../concepts.md) · [canvas](canvas.md) · [shelf](shelf.md) · [agent-detection](agent-detection.md) · [cli](cli.md) · [keyboard-shortcuts](../reference/keyboard-shortcuts.md)
 
@@ -148,8 +148,27 @@ Selection for Find** (`search_selection`). These are Ghostty-managed.
 ## Scrollback, CJK, copy/paste
 
 Scrollback, wide/CJK character rendering, and copy/paste are handled by Ghostty
-with its defaults — Prowl doesn't override them. Customize terminal behavior in
-the Ghostty config that Prowl uses (see [Ghostty config](#ghostty-config)).
+with its defaults. Customize terminal behavior in the Ghostty config that Prowl
+uses (see [Ghostty config](#ghostty-config)).
+
+**CJK font fallback.** When the active Ghostty config sets neither `font-family`
+nor `font-codepoint-map` (including its `config-file` includes), Prowl maps kana,
+CJK punctuation, CJK ideographs, and fullwidth forms to one system CJK font, and
+Hangul to Apple SD Gothic Neo. Without this, Ghostty picks a font for kana and
+punctuation by scoring every installed font, which often selects BIZ UDGothic,
+BIZ UDMincho, or Osaka-Mono, so CJK text changes face and size within a line.
+The font follows the first CJK language in the system language list (a
+`-AppleLanguages` launch argument wins; Prowl's own app language does not count):
+
+| First CJK language | Font |
+|---|---|
+| Japanese | Hiragino Sans |
+| Korean | Apple SD Gothic Neo |
+| Traditional Chinese (Taiwan) | PingFang TC |
+| Traditional Chinese (Hong Kong, Macau) | PingFang HK |
+| Simplified Chinese, or no CJK language | PingFang SC |
+
+Set `font-family` or `font-codepoint-map` to take over; Prowl then adds nothing.
 
 ## Ghostty config
 

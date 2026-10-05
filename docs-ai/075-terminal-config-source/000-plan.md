@@ -2,9 +2,9 @@
 
 | | |
 | --- | --- |
-| **Status** | Planned |
+| **Status** | Implemented |
 | **Anchor date** | 2026-10-05 |
-| **Primary PRs** | (fill in as they merge) |
+| **Primary PRs** | #860 (S1), S2 stacked on #860 |
 | **Related** | [007-ghostty-embedding-integration](../007-ghostty-embedding-integration/000-plan.md), `docs/components/terminal.md`, issue #693 |
 
 ## Background
@@ -35,7 +35,7 @@ come from that:
 
 ## Goals
 
-- S1 (#693): Settings → General → Appearance can point Prowl at one dedicated Ghostty config
+- S1 (#693): Settings → General → Terminal Config can point Prowl at one dedicated Ghostty config
   file. That file replaces Ghostty's default files; it does not layer on top of them.
 - S2: When the active config source sets no `font-family` and no `font-codepoint-map`, Prowl
   maps the CJK ranges to the system CJK font for the user's languages, so CJK text uses one
@@ -97,3 +97,4 @@ come from that:
 
 ## Amendments
 - Updated 2026-10-05: S1 dedicated config file implemented — see [002-dedicated-config-file.md](002-dedicated-config-file.md)
+- Updated 2026-10-05: S2 CJK font fallback implemented — see [003-cjk-font-fallback.md](003-cjk-font-fallback.md); action log in [001-action.md](001-action.md)

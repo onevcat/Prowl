@@ -37,4 +37,4 @@ the user's config comes from.
 
 ## Refs
 
-PR: (this slice)
+PR: #860

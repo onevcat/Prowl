@@ -180,9 +180,30 @@ extension GhosttyRuntime {
   /// `theme` set through `config-file` includes isn't resolved here; those rare
   /// setups simply keep the previous `+show-config` behavior.
   nonisolated static func preferredGhosttyConfigURL() -> URL? {
-    let fileManager = FileManager.default
-    let home = fileManager.homeDirectoryForCurrentUser
+    let (appSupport, xdg) = defaultGhosttyConfigDirectories()
+    let candidates = [
+      appSupport.appending(path: "config.ghostty"),
+      appSupport.appending(path: "config"),
+      xdg.appending(path: "config.ghostty"),
+      xdg.appending(path: "config"),
+    ]
+    return candidates.first { FileManager.default.fileExists(atPath: $0.path) }
+  }
 
+  /// Ghostty's default config files in the order it loads them: XDG before
+  /// Application Support, and the legacy `config` before `config.ghostty` in each.
+  nonisolated static func defaultGhosttyConfigFileURLs() -> [URL] {
+    let (appSupport, xdg) = defaultGhosttyConfigDirectories()
+    return [
+      xdg.appending(path: "config"),
+      xdg.appending(path: "config.ghostty"),
+      appSupport.appending(path: "config"),
+      appSupport.appending(path: "config.ghostty"),
+    ]
+  }
+
+  private nonisolated static func defaultGhosttyConfigDirectories() -> (appSupport: URL, xdg: URL) {
+    let home = FileManager.default.homeDirectoryForCurrentUser
     let appSupport = home.appending(
       path: "Library/Application Support/com.mitchellh.ghostty",
       directoryHint: .isDirectory
@@ -193,15 +214,7 @@ extension GhosttyRuntime {
     } else {
       xdgRoot = home.appending(path: ".config", directoryHint: .isDirectory)
     }
-    let xdg = xdgRoot.appending(path: "ghostty", directoryHint: .isDirectory)
-
-    let candidates = [
-      appSupport.appending(path: "config.ghostty"),
-      appSupport.appending(path: "config"),
-      xdg.appending(path: "config.ghostty"),
-      xdg.appending(path: "config"),
-    ]
-    return candidates.first { fileManager.fileExists(atPath: $0.path) }
+    return (appSupport, xdgRoot.appending(path: "ghostty", directoryHint: .isDirectory))
   }
 
   nonisolated static func runGhosttyCommand(arguments: [String]) -> String? {
