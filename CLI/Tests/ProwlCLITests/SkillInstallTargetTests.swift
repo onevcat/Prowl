@@ -4,14 +4,14 @@ import XCTest
 
 final class SkillInstallTargetTests: XCTestCase {
   func testExactV1TargetDefinitions() {
-    XCTAssertEqual(SkillInstallTarget.all.map(\.id), ["claude", "codex", "agents"])
+    XCTAssertEqual(SkillInstallTarget.all.map(\.id), ["claude", "codex", "agents", "devin"])
     XCTAssertEqual(
       SkillInstallTarget.all.map(\.userDirectory),
-      [".claude/skills", ".codex/skills", ".agents/skills"]
+      [".claude/skills", ".codex/skills", ".agents/skills", ".config/devin/skills"]
     )
     XCTAssertEqual(
       SkillInstallTarget.all.map(\.projectDirectory),
-      [".claude/skills", ".codex/skills", ".agents/skills"]
+      [".claude/skills", ".codex/skills", ".agents/skills", ".devin/skills"]
     )
     XCTAssertEqual(SkillInstallTarget.target(id: "codex")?.displayName, "Codex")
     XCTAssertNil(SkillInstallTarget.target(id: "cursor"))

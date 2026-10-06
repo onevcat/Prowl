@@ -1488,8 +1488,8 @@ final class ProwlCLIIntegrationTests: XCTestCase {
       XCTAssertEqual(skills.map { $0["id"] as? String }, ["prowl-cli", "reviewer"])
       XCTAssertEqual(skills.map { $0["audience"] as? String }, ["user", "workflow"])
       let targets = try XCTUnwrap(skills[0]["targets"] as? [[String: Any]])
-      XCTAssertEqual(targets.map { $0["id"] as? String }, ["claude", "codex", "agents"])
-      XCTAssertEqual(targets.map { $0["detected"] as? Bool }, [true, false, true])
+      XCTAssertEqual(targets.map { $0["id"] as? String }, ["claude", "codex", "agents", "devin"])
+      XCTAssertEqual(targets.map { $0["detected"] as? Bool }, [true, false, true, false])
       XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.socketPath), "The command never touches the socket")
 
       let text = try runProwl(args: ["skills", "list", "--no-color"], environment: fixture.environment)
@@ -1504,7 +1504,7 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     try withSkillsFixture { fixture in
       let install = try runProwl(
         args: [
-          "skills", "install", "prowl-cli", "--target", "claude", "--target", "codex", "--target", "agents", "--json",
+          "skills", "install", "prowl-cli", "--target", "claude", "--target", "codex", "--target", "agents", "--target", "devin", "--json",
         ],
         environment: fixture.environment
       )
@@ -1517,11 +1517,11 @@ final class ProwlCLIIntegrationTests: XCTestCase {
       XCTAssertEqual(installData["root"] as? String, fixture.home.path(percentEncoded: false))
       XCTAssertNil(installData["note"])
       let installResults = try XCTUnwrap(installData["results"] as? [[String: Any]])
-      XCTAssertEqual(installResults.map { $0["target"] as? String }, ["claude", "codex", "agents"])
+      XCTAssertEqual(installResults.map { $0["target"] as? String }, ["claude", "codex", "agents", "devin"])
       XCTAssertEqual(
-        installResults.map { $0["before"] as? String }, ["not_installed", "not_installed", "not_installed"])
-      XCTAssertEqual(installResults.map { $0["after"] as? String }, ["installed", "installed", "installed"])
-      for target in [".claude", ".codex", ".agents"] {
+        installResults.map { $0["before"] as? String }, ["not_installed", "not_installed", "not_installed", "not_installed"])
+      XCTAssertEqual(installResults.map { $0["after"] as? String }, ["installed", "installed", "installed", "installed"])
+      for target in [".claude", ".codex", ".agents", ".config/devin"] {
         let link = fixture.home.appending(path: "\(target)/skills/prowl-cli").path(percentEncoded: false)
         XCTAssertEqual(try FileManager.default.destinationOfSymbolicLink(atPath: link), fixture.skillPath("prowl-cli"))
       }
@@ -1531,7 +1531,7 @@ final class ProwlCLIIntegrationTests: XCTestCase {
       let listData = try XCTUnwrap(try jsonObject(from: list.stdout)["data"] as? [String: Any])
       let listed = try XCTUnwrap(listData["skills"] as? [[String: Any]])
       let statuses = try XCTUnwrap(listed[0]["targets"] as? [[String: Any]]).map { $0["status"] as? String }
-      XCTAssertEqual(statuses, ["installed", "installed", "installed"])
+      XCTAssertEqual(statuses, ["installed", "installed", "installed", "installed"])
 
       let uninstall = try runProwl(args: ["skills", "uninstall", "--json"], environment: fixture.environment)
       XCTAssertEqual(uninstall.exitCode, 0, uninstall.stderr)
@@ -1539,10 +1539,10 @@ final class ProwlCLIIntegrationTests: XCTestCase {
       let uninstallData = try XCTUnwrap(try jsonObject(from: uninstall.stdout)["data"] as? [String: Any])
       XCTAssertEqual(uninstallData["action"] as? String, "uninstall")
       let uninstallResults = try XCTUnwrap(uninstallData["results"] as? [[String: Any]])
-      XCTAssertEqual(uninstallResults.map { $0["target"] as? String }, ["claude", "codex", "agents"])
+      XCTAssertEqual(uninstallResults.map { $0["target"] as? String }, ["claude", "codex", "agents", "devin"])
       XCTAssertEqual(
-        uninstallResults.map { $0["after"] as? String }, ["not_installed", "not_installed", "not_installed"])
-      for target in [".claude", ".codex", ".agents"] {
+        uninstallResults.map { $0["after"] as? String }, ["not_installed", "not_installed", "not_installed", "not_installed"])
+      for target in [".claude", ".codex", ".agents", ".config/devin"] {
         let link = fixture.home.appending(path: "\(target)/skills/prowl-cli").path(percentEncoded: false)
         XCTAssertNil(try? FileManager.default.attributesOfItem(atPath: link))
         XCTAssertTrue(FileManager.default.fileExists(atPath: fixture.home.appending(path: "\(target)/skills").path()))

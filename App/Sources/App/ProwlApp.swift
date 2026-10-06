@@ -812,6 +812,9 @@ struct ProwlApp: App {
       },
       textDelivery: { target, text, trailingEnter in
         guard let state = terminalManager.stateIfExists(for: target.worktreeID) else { return false }
+        if trailingEnter, state.surfaceAgentStates[target.paneID]?.detectedAgent == .devin {
+          return await state.deliverAgentDispatch(text, surfaceID: target.paneID)
+        }
         let delivery = CLISendTextDelivery(
           insertText: { paneID, payload in
             state.insertCommittedText(payload, in: paneID)

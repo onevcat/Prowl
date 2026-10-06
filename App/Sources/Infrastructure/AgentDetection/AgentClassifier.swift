@@ -13,6 +13,7 @@ private let knownAgentBinaries: [String: DetectedAgent] = [
   "opencode": .opencode, "open-code": .opencode,
   "copilot": .copilot, "github-copilot": .copilot, "ghcs": .copilot,
   "kimi": .kimi, "kimi code": .kimi,
+  "devin": .devin,
   "droid": .droid,
   "amp": .amp, "amp-local": .amp,
   "qodercli": .qoder,
@@ -94,7 +95,11 @@ private func agentCandidates(for process: ForegroundProcess) -> [(name: String, 
   var candidates: [(String, Int)] = []
 
   if let argv0 = process.argv0, let name = normalizedProcessName(argv0) {
-    candidates.append((name, 80))
+    // The REPL delegates to `devin acp`, which owns the native session lock.
+    // Keep the shell-launched parent as launchProcessID while resolving that child.
+    let arguments = process.arguments ?? process.cmdline?.split(whereSeparator: \.isWhitespace).map(String.init) ?? []
+    let isDevinEngine = name == "devin" && arguments.dropFirst().first == "acp"
+    candidates.append((name, isDevinEngine ? 90 : 80))
   }
   if let name = normalizedProcessName(process.name) {
     candidates.append((name, 70))
@@ -123,10 +128,9 @@ private func identifyAgent(candidate: (name: String, score: Int), process: Foreg
     }
     return nil
   }
-  // Grok Build is a direct Mach-O executable, never a wrapped-runtime script.
-  // A bare `grok` cmdline token is a model argument (`node app.js --model
-  // grok`), not the agent — only argv0/name evidence may identify it.
-  if candidate.name == "grok", candidate.score == 40 {
+  // Grok Build and Devin are native executables, not wrapped-runtime scripts.
+  // Their names can also be model arguments; require argv0/name evidence.
+  if ["grok", "devin"].contains(candidate.name), candidate.score == 40 {
     return nil
   }
   return identifyAgent(processName: candidate.name)

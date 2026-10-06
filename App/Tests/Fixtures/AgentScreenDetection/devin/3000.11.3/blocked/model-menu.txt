@@ -1,0 +1,30 @@
+⠀⠛⠿⠟⠻⣶⣾⣶⡄  Devin CLI
+⠀⣤⣶⣦⣴⠿⢿⠿⠃  v3000.11.3
+⠀⠻⢿⠿⠃⠀⠀⠀⠀
+
+ Free plan, use /upgrade to access better models · 00% remaining (resets in 0h 00m)
+
+❭ /model
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+/ Type to search
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❭ SWE-1.6 Slow
+  Adaptive  Pro
+  Claude Fable 5.1  Pro
+  Claude Haiku 4.5  Pro
+  Claude Opus 5.5  Pro
+  Claude Sonnet 5.5  Pro
+  DeepSeek V4.1 Flash  Pro
+  Fusion  Pro
+  Gemini 3.8 Flash  Pro
+  GLM-5.3  Pro
+  ↓ more below
+
+  ━━━━●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Input        Cached input   Output
+  $0.5 / 1M    $0.2 / 1M      $2.5 / 1M
+
+  ✱ New  ✱ Promotion  ✱ Beta
+
+↑↓ select · ↵ confirm · esc cancel

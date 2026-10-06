@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-10-06T04:48:36Z",
+  "cli_version": "3000.11.3",
+  "capture_source": "prowl-read-detection",
+  "terminal": {
+    "columns": 152,
+    "rows": 50
+  },
+  "redactions": [
+    "workflow delivery token masked at its original width"
+  ],
+  "issue": null
+}

@@ -255,24 +255,27 @@ nonisolated enum AgentRuntimeError: Error, Equatable, Sendable {
 }
 
 nonisolated enum AgentRuntimeAdapterRegistry {
+  private static let adapters: [AgentProfileRuntime: any AgentRuntimeAdapter] = [
+    .claude: ClaudeCodeRuntimeAdapter(),
+    .codex: CodexRuntimeAdapter(),
+    .gemini: GeminiRuntimeAdapter(),
+    .cursor: CursorRuntimeAdapter(),
+    .cline: ClineRuntimeAdapter(),
+    .opencode: OpenCodeRuntimeAdapter(),
+    .copilot: CopilotRuntimeAdapter(),
+    .kimi: KimiRuntimeAdapter(),
+    .droid: DroidRuntimeAdapter(),
+    .devin: DevinRuntimeAdapter(),
+    .amp: AmpRuntimeAdapter(),
+    .qoder: QoderRuntimeAdapter(),
+    .qwen: QwenRuntimeAdapter(),
+    .grok: GrokRuntimeAdapter(),
+    .pi: PiRuntimeAdapter(),
+    .omp: OMPRuntimeAdapter(),
+  ]
+
   static func profileAdapter(for runtime: AgentProfileRuntime) -> (any AgentRuntimeAdapter)? {
-    switch runtime {
-    case .claude: ClaudeCodeRuntimeAdapter()
-    case .codex: CodexRuntimeAdapter()
-    case .gemini: GeminiRuntimeAdapter()
-    case .cursor: CursorRuntimeAdapter()
-    case .cline: ClineRuntimeAdapter()
-    case .opencode: OpenCodeRuntimeAdapter()
-    case .copilot: CopilotRuntimeAdapter()
-    case .kimi: KimiRuntimeAdapter()
-    case .droid: DroidRuntimeAdapter()
-    case .amp: AmpRuntimeAdapter()
-    case .qoder: QoderRuntimeAdapter()
-    case .qwen: QwenRuntimeAdapter()
-    case .grok: GrokRuntimeAdapter()
-    case .pi: PiRuntimeAdapter()
-    case .omp: OMPRuntimeAdapter()
-    }
+    adapters[runtime]
   }
 
   /// Canonical launch adapter for one detected runtime.
@@ -882,7 +885,7 @@ nonisolated private struct OMPRuntimeAdapter: AgentRuntimeAdapter {
 }
 
 nonisolated extension [String] {
-  fileprivate func optionValue(long: String, short: String? = nil) -> String? {
+  func optionValue(long: String, short: String? = nil) -> String? {
     for index in indices.reversed() {
       let argument = self[index]
       if argument == long || short == argument {

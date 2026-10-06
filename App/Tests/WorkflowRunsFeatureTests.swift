@@ -99,6 +99,8 @@ struct WorkflowRunsFeatureTests {
     var responses: [(requestID: UUID, resolution: WorkflowRequestResolution)] = []
     var roleWaitOutcome: WorkflowRoleWaitOutcome = .idle
     var launchOutcome: Result<WorkflowLaunchResult, WorkflowLaunchError>?
+    var deliveryEntered: AsyncStream<Void>.Continuation?
+    var deliveryRelease: AsyncStream<Void>?
     /// What the liveness guard answered on each `deliverLine`.
     var guardAnswers: [Bool] = []
     private var dispatchCounter = 0
@@ -130,6 +132,11 @@ struct WorkflowRunsFeatureTests {
           let live = isLive()
           guardAnswers.append(live)
           guard live else { return .stale }
+          if let deliveryRelease {
+            deliveryEntered?.yield()
+            for await _ in deliveryRelease { break }
+            guard isLive() else { return .stale }
+          }
           let pointer = line.split(separator: " ").first { $0.hasPrefix("/") }.map(String.init)
           let existed = pointer.map { FileManager.default.fileExists(atPath: $0) } ?? true
           typed.append(WorkflowTypedLineRecord(surfaceID: surfaceID, line: line, instructionExisted: existed))
@@ -781,6 +788,28 @@ struct WorkflowRunsFeatureTests {
     #expect(store.state.sessions[runID]?.run.phase == .injecting(ordinal: 1))
     await store.send(.userAction(runID: runID, .cancel))
     await store.finish(timeout: Self.timeout)
+  }
+
+  @Test(.dependencies) func cancellationDuringPasteWaitReturnsTheUnsubmittedIssuance() async throws {
+    let fixture = try Fixture()
+    defer { fixture.cleanUp() }
+    let entered = AsyncStream<Void>.makeStream()
+    let release = AsyncStream<Void>.makeStream()
+    fixture.deliveryEntered = entered.continuation
+    fixture.deliveryRelease = release.stream
+    let store = makeStore(fixture, queue: WorkflowEffectQueue().client)
+    let (session, effects) = try fixture.session()
+    let runID = session.run.id
+    await store.send(.started(session, effects: effects))
+    await store.receive(.event(runID: runID, .roleIdle(ordinal: 1)), timeout: Self.timeout)
+    for await _ in entered.stream { break }
+    #expect(fixture.opened.count == 1)
+    await store.send(.userAction(runID: runID, .cancel))
+    release.continuation.yield()
+    await store.finish(timeout: Self.timeout)
+    #expect(fixture.cancelled == ["dispatch-1"])
+    #expect(fixture.typed.isEmpty)
+    #expect(store.state.sessions[runID]?.run.status == .cancelled)
   }
 
   /// A fence that rises between the batch check and the issuance opens no record at all.

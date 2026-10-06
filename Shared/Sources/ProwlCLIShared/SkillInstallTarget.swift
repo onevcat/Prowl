@@ -32,6 +32,12 @@ nonisolated public struct SkillInstallTarget: Equatable, Sendable, Identifiable 
       userDirectory: ".agents/skills",
       projectDirectory: ".agents/skills"
     ),
+    SkillInstallTarget(
+      id: "devin",
+      displayName: "Devin",
+      userDirectory: ".config/devin/skills",
+      projectDirectory: ".devin/skills"
+    ),
   ]
 
   public static func target(id: String) -> SkillInstallTarget? {

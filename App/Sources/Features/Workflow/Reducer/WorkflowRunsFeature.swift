@@ -737,8 +737,8 @@ struct WorkflowRunsFeature {
       }
 
     case .inject(_, let surfaceID, let ordinal, let line, let opensActivation):
-      // Issuance, the typed line, and — when the terminal refuses it — the issuance's return
-      // share one main-actor turn: nothing can complete or bind the record in between.
+      // Reserve the activation before delivery. A paste wait can suspend; the runtime
+      // rechecks this run's fence before Enter and returns an unsubmitted issuance on cancel.
       guard isLive() else { return .stop }
       var dispatchID: String?
       if opensActivation {
@@ -751,12 +751,12 @@ struct WorkflowRunsFeature {
           return .stop
         }
       }
-      switch runtime.deliverLine(session.worktree, surfaceID, line, isLive) {
+      switch await runtime.deliverLine(session.worktree, surfaceID, line, isLive) {
       case .delivered:
         await send(
           .event(runID: runID, .injectionSucceeded(ordinal: ordinal, dispatchID: dispatchID)))
       case .stale:
-        // A cancel landed while the record was being issued: nothing was typed; give the
+        // A cancel prevented submission (a draft may remain after a paste wait); give the
         // issuance back and let the fence swallow the rest of the batch.
         if let dispatchID { activation.cancel(dispatchID) }
         return .stop
@@ -771,7 +771,7 @@ struct WorkflowRunsFeature {
       }
 
     case .typeLine(let role, let surfaceID, let line):
-      let delivery = runtime.deliverLine(session.worktree, surfaceID, line, isLive)
+      let delivery = await runtime.deliverLine(session.worktree, surfaceID, line, isLive)
       if delivery != .delivered && delivery != .stale {
         Self.logger.warning("[Workflow] Could not type into role '\(role)' of run \(runID).")
       }

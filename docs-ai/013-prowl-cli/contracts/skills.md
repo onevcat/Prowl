@@ -36,10 +36,11 @@ prowl skills path <skill> [--json]
 | --- | --- | --- | --- |
 | `claude` | `~/.claude/skills` | `<root>/.claude/skills` | Claude Code |
 | `codex` | `~/.codex/skills` | `<root>/.codex/skills` | Codex |
-| `agents` | `~/.agents/skills` | `<root>/.agents/skills` | Codex, Gemini CLI, Cursor Agent, OpenCode, Copilot CLI, Kimi CLI, Droid, Amp, Qoder CLI, Pi, Oh My Pi, Grok Build |
+| `agents` | `~/.agents/skills` | `<root>/.agents/skills` | Codex, Gemini CLI, Cursor Agent, OpenCode, Copilot CLI, Kimi CLI, Droid, Amp, Qoder CLI, Pi, Oh My Pi, Grok Build, Devin |
+| `devin` | `~/.config/devin/skills` | `<root>/.devin/skills` | Devin |
 
 A target is **detected** when the parent of its skills directory (`~/.claude`, `~/.codex`,
-`~/.agents`, or the same names under a project root) exists as a directory. `--target` is
+`~/.agents`, `~/.config/devin`, or the corresponding project directory) exists as a directory. `--target` is
 repeatable and accepts only the ids above; any other id fails with `TARGET_NOT_FOUND` before
 any change. An explicit `--target` selects exactly those targets and `install` creates their
 skills directory when it is missing, detected or not. `uninstall` never creates directories.

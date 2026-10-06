@@ -29,6 +29,8 @@ struct AgentRuntimeAdapterTests {
       CatalogExpectation(runtime: .opencode, agent: .opencode, executable: "opencode", arguments: []),
       CatalogExpectation(runtime: .copilot, agent: .copilot, executable: "copilot", arguments: []),
       CatalogExpectation(runtime: .kimi, agent: .kimi, executable: "kimi", arguments: []),
+      CatalogExpectation(
+        runtime: .devin, agent: .devin, executable: "devin", arguments: ["--permission-mode", "auto"]),
       CatalogExpectation(runtime: .droid, agent: .droid, executable: "droid", arguments: []),
       CatalogExpectation(runtime: .amp, agent: .amp, executable: "amp", arguments: []),
       CatalogExpectation(runtime: .qoder, agent: .qoder, executable: "qodercli", arguments: []),
@@ -79,6 +81,10 @@ struct AgentRuntimeAdapterTests {
         runtime: .kimi, promptedArguments: ["--prompt", "Review this."],
         headlessArguments: ["--print", "--prompt", "Review this."]),
       IntentExpectation(
+        runtime: .devin,
+        promptedArguments: ["--permission-mode", "auto", "--", "Review this."],
+        headlessArguments: ["--permission-mode", "auto", "--print", "--", "Review this."]),
+      IntentExpectation(
         runtime: .droid, promptedArguments: ["Review this."], headlessArguments: ["exec", "Review this."]),
       IntentExpectation(
         runtime: .qoder, promptedArguments: ["--prompt-interactive", "Review this."],
@@ -124,10 +130,10 @@ struct AgentRuntimeAdapterTests {
 
   @Test func profileOptionsAreCapabilityGated() throws {
     let noModel: Set<AgentProfileRuntime> = [.droid, .amp]
-    let noReasoning: Set<AgentProfileRuntime> = [.gemini, .cursor, .kimi, .droid]
+    let noReasoning: Set<AgentProfileRuntime> = [.gemini, .cursor, .kimi, .droid, .devin]
     let executionModeSelection: Set<AgentProfileRuntime> = [
       .claude, .codex, .gemini, .cursor, .cline, .opencode, .copilot, .kimi, .qoder, .qwen, .grok,
-      .omp,
+      .omp, .devin,
     ]
     let isolated: Set<AgentProfileRuntime> = [
       .claude, .codex, .gemini, .cline, .copilot, .qoder, .qwen, .pi, .omp,

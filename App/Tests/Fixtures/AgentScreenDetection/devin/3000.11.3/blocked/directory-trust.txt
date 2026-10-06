@@ -1,0 +1,12 @@
+Last login: Tue Oct  0 00:00:00 on ttys000
+➜  repo git:(master) ✗ devin
+
+ ✱ Do you trust the authors of this directory?
+   For security, devin should not be run in directories with untrusted content.
+
+ /private/tmp/prowl-devin-acceptance/repo
+
+ ❭ 1 Yes, trust
+   2 No, exit
+
+ ↓↑ to select · ↵ to choose · esc to quit

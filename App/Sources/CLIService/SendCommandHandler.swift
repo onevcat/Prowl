@@ -57,7 +57,7 @@ struct CLISendTextDelivery {
 @MainActor
 final class SendCommandHandler: CommandHandler {
   typealias ResolveProvider = @MainActor (TargetSelector) -> Result<SendResolvedTarget, TargetResolverError>
-  typealias TextDelivery = @MainActor (SendResolvedTarget, String, Bool) -> Bool
+  typealias TextDelivery = @MainActor (SendResolvedTarget, String, Bool) async -> Bool
   typealias WaiterProvider = @MainActor (String, UUID) -> AsyncStream<(exitCode: Int?, durationMs: Int)>?
   typealias CaptureProvider = @MainActor (SendResolvedTarget) -> ReadCaptureInput?
 
@@ -125,7 +125,7 @@ final class SendCommandHandler: CommandHandler {
     let preCapture: ReadCaptureInput? = input.captureOutput ? captureProvider?(target) : nil
 
     // Deliver text (and optional Enter)
-    guard textDelivery(target, input.text, input.trailingEnter) else {
+    guard await textDelivery(target, input.text, input.trailingEnter) else {
       return errorResponse(
         code: CLIErrorCode.sendFailed,
         message: "Input delivery could not be confirmed. Check the terminal before retrying.")

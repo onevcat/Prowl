@@ -24,6 +24,24 @@ On first run Prowl seeds one bare profile per installed runtime. Seeds are
 ordinary profiles: rename, edit, or delete them freely — deleted seeds never
 respawn.
 
+### Devin
+
+Choose **Devin** in the Profile runtime picker. Prowl resolves `devin` through your
+login shell and uses your existing Devin login and configuration. Model accepts
+any model ID your account can run; leaving it blank preserves the configured model.
+Standard renders `--permission-mode auto`; Unrestricted renders
+`--permission-mode dangerous`. Reasoning effort and Dedicated Home are not exposed:
+no separate effort flag or complete account relocation has been verified.
+
+Prompted launches put the task after `--`, as required by Devin's interactive CLI.
+Profiles can be selected for workflow launch roles, including handoff and Review
+Loop. Trust and permission requests remain visible as Blocked and must be resolved
+before work continues. Workflow completion requires the normal delivery receipt.
+Prowl waits for the pasted prompt to appear before submitting dispatches and workflow
+messages, and preserves an existing draft. The same protection applies to `prowl send`
+with Enter; `--no-enter` remains available for deliberate draft editing.
+Install bundled helper skills with `prowl skills install --target devin`.
+
 ## Launching
 
 - **Toolbar Agents capsule** — always opens a popover. A "Run a workflow"

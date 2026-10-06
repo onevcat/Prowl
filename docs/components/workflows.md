@@ -16,6 +16,9 @@
 
 **Related:** [cli](cli.md) · [agent-profiles](agent-profiles.md) · [command-palette](command-palette.md) · [active-agents](active-agents.md) · [settings](settings.md) · [notifications](notifications.md)
 
+Devin Profiles support launch roles and explicit delivery through the same workflow
+protocol. Use runtime token `devin` when a role specifically requires Devin.
+
 ## What it is
 
 A workflow bundle scripts several live agents: who takes part and what happens in
