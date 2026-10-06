@@ -35,14 +35,15 @@ once it arrives. This amendment reduces the load that provokes one.
   at most 25 branches, and waits `minimumQueryGap` (15 s) before every query after the
   first. After a batch it holds the host key for the same gap, and requests arriving
   meanwhile merge into the next batch. The client's own chunk concurrency is 1 as well.
-  The batch key is the host and the account override, so repositories pinned to
-  different accounts on one host are paced separately.
+  The batch key is the host and the account override, so a repository pinned to an
+  account is paced apart from unpinned ones, even when the pin names the account `gh`
+  already uses.
 
 Worst case for 50 worktrees across about 10 repositories on one host: one background
 sweep every 100 s (36 per hour) plus the focused repository every 30 s (120 per hour),
 about 156 GraphQL queries per hour. Because every query waits 15 s after the previous
-one, any mix of refreshes stays at or below 240 per hour for each host and account.
-The sampled incident ran at roughly 1,300 per hour.
+one in its queue, any mix of refreshes stays at or below 240 per hour for each host and
+account override. The sampled incident ran at roughly 1,300 per hour.
 
 ## Refs
 
