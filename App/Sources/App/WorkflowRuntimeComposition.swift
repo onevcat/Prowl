@@ -226,14 +226,14 @@ extension ProwlApp {
           return .insertFailed
         }
         guard isLive() else { return .stale }
-        if state.surfaceAgentStates[surfaceID]?.detectedAgent == .devin {
-          let delivered = await state.deliverAgentDispatch(line, surfaceID: surfaceID, isLive: isLive)
-          guard isLive() else { return .stale }
-          return delivered ? .delivered : .submitFailed
+        let submission = await state.submitAgentLine(
+          line, surfaceID: surfaceID, purpose: .workflowMessage, isLive: isLive)
+        guard isLive() else { return .stale }
+        switch submission {
+        case .submitted: return .delivered
+        case .notInserted: return .insertFailed
+        case .notSubmitted: return .submitFailed
         }
-        // Runtimes without paste acknowledgement submit on the same main-actor turn.
-        guard state.insertCommittedText(line, in: surfaceID) else { return .insertFailed }
-        return state.submitLine(in: surfaceID) ? .delivered : .submitFailed
       },
       launch: { worktree, frozenPlan, request in
         await launchWorkflowRole(

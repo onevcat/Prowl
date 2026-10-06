@@ -5,6 +5,7 @@
 | Date | Change | Ref |
 | --- | --- | --- |
 | 2026-10-06 | Added runtime, screen detection, exact session ownership, Profiles, workflow delivery, and skill installation. | #813 |
+| 2026-10-06 | Moved paste confirmation rules into `AgentComposerProfile`; `prowl send` types directly into Devin menus and drafts again; agent registries are exhaustive switches again. | Post-merge review of #865 |
 
 ## Outcome & current state (as of 2026-10-06)
 
@@ -19,9 +20,14 @@
   `DevinSessionProfile` resolves only process-owned lock descriptors. Two sessions
   in one working directory were observed with different exact native session IDs.
 - `AgentPromptDelivery` shares composer acknowledgement across supported runtimes.
-  Devin send, dispatch, and workflow messages wait for the pasted draft. Soft wraps
-  inside tokens are accepted only at screen row boundaries. User edits, IME input,
-  pane replacement, cancellation, and run fences prevent stale submission.
+  `AgentComposerProfile` holds the only per-runtime rules: how to read the input box,
+  which paste echo counts, and which purposes wait. Dispatch waits for every readable
+  composer. Workflow messages wait only for Devin, which can lose an early Enter.
+  `prowl send` with Enter waits for Devin only from an empty composer; it types directly
+  into menus and drafts. `WorktreeTerminalState.submitAgentLine` is the single entry.
+  Soft wraps inside tokens are accepted only at screen row boundaries. User edits, IME
+  input, pane replacement, cancellation, and run fences prevent stale submission.
+- Devin retitles its terminal to `devin: <folder>`; the `devin:` icon key covers it.
 - The `devin` skill target uses `.config/devin/skills` in the user home and
   `.devin/skills` in a project. CLI schemas and the agent-facing manual include Devin.
 

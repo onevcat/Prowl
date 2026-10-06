@@ -10,32 +10,43 @@ enum SplitCreationError: Error, Equatable, Sendable {
 }
 
 extension WorktreeTerminalState {
-  func deliverAgentDispatch(
-    _ text: String, surfaceID: UUID, isLive: @escaping @MainActor () -> Bool = { true }
-  ) async -> Bool {
-    guard isLive(), dispatchInputProtection(surfaceID: surfaceID) == nil,
-      let surface = surfaces[surfaceID]
-    else { return false }
-    if let agent = surfaceAgentStates[surfaceID]?.detectedAgent, agent == .claude || agent == .devin {
-      let delivery = AgentPromptDelivery(
-        observe: { [weak self, weak surface] in
-          guard isLive(), let self, let surface, self.surfaces[surfaceID] === surface,
-            self.surfaceAgentStates[surfaceID]?.detectedAgent == agent,
-            let text = surface.readActiveContentsForCLI()
-          else { return nil }
-          return .init(
-            composer: agent == .claude
-              ? ClaudeScreenProfile.composerContents(in: AgentScreenSnapshot(text: text))
-              : DevinScreenProfile.composerContents(in: AgentScreenSnapshot(text: text)),
-            editingRevision: surface.lastEditingAt, hasMarkedText: surface.hasMarkedText())
-        },
-        insert: { [weak self] in self?.insertCommittedText($0, in: surfaceID) == true },
-        submit: { [weak self] in isLive() && self?.submitLine(in: surfaceID) == true },
-        acceptsClaudePasteMarker: agent == .claude, acceptsSoftWrappedWords: agent == .devin)
-      return await delivery.deliver(text)
-    }
-    guard isLive(), !Task.isCancelled, insertCommittedText(text, in: surfaceID) else { return false }
-    return submitLine(in: surfaceID)
+  /// Types `text` into an agent pane and presses Enter. `AgentComposerProfile` decides, per runtime
+  /// and purpose, whether Enter waits for the paste echo. `isLive` is checked again before Enter.
+  func submitAgentLine(
+    _ text: String, surfaceID: UUID, purpose: AgentLinePurpose,
+    isLive: @escaping @MainActor () -> Bool = { true }
+  ) async -> AgentLineSubmission {
+    guard isLive(), let surface = surfaces[surfaceID] else { return .notInserted }
+    if purpose == .dispatch, dispatchInputProtection(surfaceID: surfaceID) != nil { return .notInserted }
+    let agent = surfaceAgentStates[surfaceID]?.detectedAgent
+    guard let profile = agent.flatMap(AgentComposerProfile.init(agent:)),
+      let confirmation = profile.pasteConfirmation(for: purpose),
+      confirmation == .required || composerContents(of: surface, profile: profile) == ""
+    else { return submitDirectly(text, surfaceID: surfaceID, isLive: isLive) }
+    let delivery = AgentPromptDelivery(
+      observe: { [weak self, weak surface] in
+        guard isLive(), let self, let surface, self.surfaces[surfaceID] === surface,
+          self.surfaceAgentStates[surfaceID]?.detectedAgent == agent
+        else { return nil }
+        return .init(
+          composer: self.composerContents(of: surface, profile: profile),
+          editingRevision: surface.lastEditingAt, hasMarkedText: surface.hasMarkedText())
+      },
+      insert: { [weak self] in self?.insertCommittedText($0, in: surfaceID) == true },
+      submit: { [weak self] in isLive() && self?.submitLine(in: surfaceID) == true },
+      profile: profile)
+    return await delivery.deliver(text)
+  }
+
+  private func submitDirectly(
+    _ text: String, surfaceID: UUID, isLive: @MainActor () -> Bool
+  ) -> AgentLineSubmission {
+    guard isLive(), !Task.isCancelled, insertCommittedText(text, in: surfaceID) else { return .notInserted }
+    return submitLine(in: surfaceID) ? .submitted : .notSubmitted
+  }
+
+  private func composerContents(of surface: GhosttySurfaceView, profile: AgentComposerProfile) -> String? {
+    surface.readActiveContentsForCLI().flatMap { profile.contents(in: AgentScreenSnapshot(text: $0)) }
   }
 
   func dispatchInputProtection(surfaceID: UUID) -> String? {
@@ -48,28 +59,22 @@ extension WorktreeTerminalState {
     {
       return refusal
     }
-    if surfaceAgentStates[surfaceID]?.detectedAgent == .claude {
-      guard let text = surface.readActiveContentsForCLI(),
-        let draft = ClaudeScreenProfile.composerContents(in: AgentScreenSnapshot(text: text))
-      else {
-        return "The Claude input area could not be verified. Check Host before dispatching."
+    let agent = surfaceAgentStates[surfaceID]?.detectedAgent
+    if let profile = agent.flatMap(AgentComposerProfile.init(agent:)) {
+      guard let draft = composerContents(of: surface, profile: profile) else {
+        return "The \(profile.name) input area could not be verified. Check Host before dispatching."
       }
       guard draft.isEmpty else {
-        return "Claude has an existing draft or attachment. Clear it on Host before dispatching."
+        return "\(profile.name) has an existing draft or attachment. Clear it on Host before dispatching."
       }
     }
-    if surfaceAgentStates[surfaceID]?.detectedAgent == .codex {
+    if agent == .codex {
       guard let text = surface.readStyledSnapshotForCLI(),
         CodexScreenProfile.composerHasNoDraft(styledSnapshot: text)
       else {
         return
           "Codex has a draft, attachment, or an unrecognized input area. Check Host before dispatching."
       }
-    }
-    if surfaceAgentStates[surfaceID]?.detectedAgent == .devin {
-      guard let text = surface.readActiveContentsForCLI(),
-        DevinScreenProfile.composerContents(in: AgentScreenSnapshot(text: text)) == ""
-      else { return "Devin has a draft or an unrecognized input area. Check Host before dispatching." }
     }
     return nil
   }

@@ -47,10 +47,7 @@ nonisolated enum AgentProfileRuntime: String, Codable, CaseIterable, Identifiabl
   }
 
   init(agent: DetectedAgent) {
-    guard let runtime = Self(rawValue: agent.rawValue) else {
-      preconditionFailure("Every detected agent must have a Profile runtime.")
-    }
-    self = runtime
+    self = agent.profileRuntime
   }
 
   var iconLookupToken: String {
@@ -78,6 +75,30 @@ nonisolated enum AgentProfileRuntime: String, Codable, CaseIterable, Identifiabl
     case .grok: ".grok"
     case .pi: ".pi/agent"
     case .omp: ".omp/agent"
+    }
+  }
+}
+
+extension DetectedAgent {
+  // An exhaustive switch makes a new agent fail to compile until it is mapped.
+  fileprivate nonisolated var profileRuntime: AgentProfileRuntime {
+    switch self {
+    case .claude: .claude
+    case .codex: .codex
+    case .gemini: .gemini
+    case .cursor: .cursor
+    case .cline: .cline
+    case .opencode: .opencode
+    case .copilot: .copilot
+    case .kimi: .kimi
+    case .droid: .droid
+    case .devin: .devin
+    case .amp: .amp
+    case .qoder: .qoder
+    case .qwen: .qwen
+    case .grok: .grok
+    case .pi: .pi
+    case .omp: .omp
     }
   }
 }

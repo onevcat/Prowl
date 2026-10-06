@@ -80,6 +80,9 @@ struct CommandIconMapTests {
     #expect(CommandIconMap.iconForFirstToken("qwen")?.assetName == "Qwen")
     #expect(CommandIconMap.iconForFirstToken("qodercli")?.systemSymbol == "sparkle")
     #expect(CommandIconMap.iconForFirstToken("grok")?.assetName == "Grok")
+    #expect(CommandIconMap.iconForFirstToken("devin --model swe-1-6-slow")?.assetName == "Devin")
+    // Devin 3000.11.3 retitles its terminal to `devin: <folder>`.
+    #expect(CommandIconMap.iconForFirstToken("devin: Prowl")?.assetName == "Devin")
     // Aider has no bundled brand asset — sparkle fallback only.
     #expect(CommandIconMap.iconForFirstToken("aider")?.systemSymbol == "sparkle")
     #expect(CommandIconMap.iconForFirstToken("aider")?.assetName == nil)
