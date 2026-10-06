@@ -37,9 +37,11 @@ Prompted launches put the task after `--`, as required by Devin's interactive CL
 Profiles can be selected for workflow launch roles, including handoff and Review
 Loop. Trust and permission requests remain visible as Blocked and must be resolved
 before work continues. Workflow completion requires the normal delivery receipt.
-Prowl waits for the pasted prompt to appear before submitting dispatches and workflow
-messages, and preserves an existing draft. The same protection applies to `prowl send`
-with Enter; `--no-enter` remains available for deliberate draft editing.
+Devin can lose an Enter that arrives before it accepts a paste. Prowl therefore waits
+for the pasted prompt to appear before it submits dispatches and workflow messages, and
+does not type them over an existing draft. `prowl send` with Enter waits the same way
+when the composer is empty. With a draft or a selection menu, it types directly, so it
+can still answer trust and permission prompts.
 Install bundled helper skills with `prowl skills install --target devin`.
 
 ## Launching

@@ -254,28 +254,33 @@ nonisolated enum AgentRuntimeError: Error, Equatable, Sendable {
   case unsupportedStartIntent(AgentProfileRuntime, AgentStartIntent)
 }
 
-nonisolated enum AgentRuntimeAdapterRegistry {
-  private static let adapters: [AgentProfileRuntime: any AgentRuntimeAdapter] = [
-    .claude: ClaudeCodeRuntimeAdapter(),
-    .codex: CodexRuntimeAdapter(),
-    .gemini: GeminiRuntimeAdapter(),
-    .cursor: CursorRuntimeAdapter(),
-    .cline: ClineRuntimeAdapter(),
-    .opencode: OpenCodeRuntimeAdapter(),
-    .copilot: CopilotRuntimeAdapter(),
-    .kimi: KimiRuntimeAdapter(),
-    .droid: DroidRuntimeAdapter(),
-    .devin: DevinRuntimeAdapter(),
-    .amp: AmpRuntimeAdapter(),
-    .qoder: QoderRuntimeAdapter(),
-    .qwen: QwenRuntimeAdapter(),
-    .grok: GrokRuntimeAdapter(),
-    .pi: PiRuntimeAdapter(),
-    .omp: OMPRuntimeAdapter(),
-  ]
+extension AgentProfileRuntime {
+  // An exhaustive switch makes a new agent fail to compile until it is mapped.
+  fileprivate nonisolated var adapter: any AgentRuntimeAdapter {
+    switch self {
+    case .claude: ClaudeCodeRuntimeAdapter()
+    case .codex: CodexRuntimeAdapter()
+    case .gemini: GeminiRuntimeAdapter()
+    case .cursor: CursorRuntimeAdapter()
+    case .cline: ClineRuntimeAdapter()
+    case .opencode: OpenCodeRuntimeAdapter()
+    case .copilot: CopilotRuntimeAdapter()
+    case .kimi: KimiRuntimeAdapter()
+    case .droid: DroidRuntimeAdapter()
+    case .devin: DevinRuntimeAdapter()
+    case .amp: AmpRuntimeAdapter()
+    case .qoder: QoderRuntimeAdapter()
+    case .qwen: QwenRuntimeAdapter()
+    case .grok: GrokRuntimeAdapter()
+    case .pi: PiRuntimeAdapter()
+    case .omp: OMPRuntimeAdapter()
+    }
+  }
+}
 
+nonisolated enum AgentRuntimeAdapterRegistry {
   static func profileAdapter(for runtime: AgentProfileRuntime) -> (any AgentRuntimeAdapter)? {
-    adapters[runtime]
+    runtime.adapter
   }
 
   /// Canonical launch adapter for one detected runtime.

@@ -9,14 +9,29 @@ struct AgentPromptDeliveryTests {
     #expect(
       AgentPromptDelivery.confirmsPaste(
         "run CBA7CC1B-\nCDB8 --invocation\n2", text: "run CBA7CC1B-CDB8 --invocation 2",
-        acceptsSoftWrappedWords: true))
+        profile: .devin))
     #expect(
-      !AgentPromptDelivery.confirmsPaste(
-        "run CBA7CC1B- CDB8", text: "run CBA7CC1B-CDB8", acceptsSoftWrappedWords: true))
+      !AgentPromptDelivery.confirmsPaste("run CBA7CC1B- CDB8", text: "run CBA7CC1B-CDB8", profile: .devin))
     #expect(
-      !AgentPromptDelivery.confirmsPaste(
-        "run CBA7CC1B-\nOTHER", text: "run CBA7CC1B-CDB8", acceptsSoftWrappedWords: true))
+      !AgentPromptDelivery.confirmsPaste("run CBA7CC1B-\nOTHER", text: "run CBA7CC1B-CDB8", profile: .devin))
+    #expect(
+      !AgentPromptDelivery.confirmsPaste("[Pasted text #1 +20 lines]", text: "hello", profile: .devin))
   }
+  @Test func onlyRuntimesThatDropEarlyEnterWaitOutsideDispatch() {
+    #expect(AgentComposerProfile(agent: .codex) == nil)
+    #expect(AgentComposerProfile(agent: .pi) == nil)
+    #expect(AgentComposerProfile.claude.pasteConfirmation(for: .dispatch) == .required)
+    #expect(AgentComposerProfile.claude.pasteConfirmation(for: .workflowMessage) == nil)
+    #expect(AgentComposerProfile.claude.pasteConfirmation(for: .send) == nil)
+    #expect(AgentComposerProfile.devin.pasteConfirmation(for: .dispatch) == .required)
+    #expect(AgentComposerProfile.devin.pasteConfirmation(for: .workflowMessage) == .required)
+  }
+
+  /// `prowl send` must still answer Devin menus and append to drafts, where the input box is not empty.
+  @Test func devinSendWaitsOnlyForAnEmptyComposer() {
+    #expect(AgentComposerProfile.devin.pasteConfirmation(for: .send) == .whenComposerIsEmpty)
+  }
+
   @Test func runFenceAfterPastePreventsEnter() async {
     let clock = TestClock()
     let fence = RunFence()
@@ -39,7 +54,7 @@ struct AgentPromptDeliveryTests {
     #expect(composer == "hello")
     fence.isLive = false
     await clock.advance(by: .milliseconds(100))
-    #expect(await task.value == false)
+    #expect(await task.value == .notSubmitted)
     #expect(!entered)
   }
 
@@ -73,7 +88,7 @@ struct AgentPromptDeliveryTests {
     #expect(entered == 0)
     observation = .init(composer: "first\n  second", editingRevision: 1, hasMarkedText: false)
     await clock.advance(by: .milliseconds(100))
-    #expect(await task.value)
+    #expect(await task.value == .submitted)
     #expect(entered == 1)
   }
 
@@ -96,7 +111,7 @@ struct AgentPromptDeliveryTests {
     await clock.advance(by: .milliseconds(50))
     observation = .init(composer: "hello local", editingRevision: 2, hasMarkedText: false)
     await clock.advance(by: .milliseconds(100))
-    #expect(await task.value == false)
+    #expect(await task.value == .notSubmitted)
     #expect(!entered)
   }
 
@@ -121,7 +136,7 @@ struct AgentPromptDeliveryTests {
     await clock.advance(by: .milliseconds(50))
     #expect(inserted)
     task.cancel()
-    #expect(await task.value == false)
+    #expect(await task.value == .notSubmitted)
     #expect(!entered)
   }
 
@@ -137,7 +152,7 @@ struct AgentPromptDeliveryTests {
       }, clock: clock)
     let task = Task { await delivery.deliver("hello") }
     await clock.advance(by: .seconds(3))
-    #expect(await task.value == false)
+    #expect(await task.value == .notSubmitted)
     #expect(!entered)
   }
 
@@ -149,11 +164,10 @@ struct AgentPromptDeliveryTests {
         inserted = true
         return true
       }, submit: { true })
-    #expect(await delivery.deliver("hello") == false)
+    #expect(await delivery.deliver("hello") == .notInserted)
     #expect(!inserted)
     #expect(
-      AgentPromptDelivery.confirmsPaste(
-        "[Pasted text #1 +20 lines]", text: "first\nsecond", acceptsClaudePasteMarker: true))
+      AgentPromptDelivery.confirmsPaste("[Pasted text #1 +20 lines]", text: "first\nsecond", profile: .claude))
     #expect(!AgentPromptDelivery.confirmsPaste("hello extra", text: "hello"))
     #expect(!AgentPromptDelivery.confirmsPaste("[Image #1]", text: "hello"))
   }

@@ -812,18 +812,8 @@ struct ProwlApp: App {
       },
       textDelivery: { target, text, trailingEnter in
         guard let state = terminalManager.stateIfExists(for: target.worktreeID) else { return false }
-        if trailingEnter, state.surfaceAgentStates[target.paneID]?.detectedAgent == .devin {
-          return await state.deliverAgentDispatch(text, surfaceID: target.paneID)
-        }
-        let delivery = CLISendTextDelivery(
-          insertText: { paneID, payload in
-            state.insertCommittedText(payload, in: paneID)
-          },
-          submitLine: { paneID in
-            state.submitLine(in: paneID)
-          }
-        )
-        return delivery.deliver(to: target, text: text, trailingEnter: trailingEnter)
+        guard trailingEnter else { return state.insertCommittedText(text, in: target.paneID) }
+        return await state.submitAgentLine(text, surfaceID: target.paneID, purpose: .send) == .submitted
       },
       waiterProvider: { worktreeID, surfaceID in
         terminalManager.stateIfExists(for: worktreeID)?
@@ -1004,7 +994,7 @@ struct ProwlApp: App {
         else {
           return false
         }
-        return await state.deliverAgentDispatch(text, surfaceID: surfaceID)
+        return await state.submitAgentLine(text, surfaceID: surfaceID, purpose: .dispatch) == .submitted
       },
       cancelDispatch: { dispatchID in
         terminalManager.cancelAgentDispatchIssuance(dispatchID: dispatchID)

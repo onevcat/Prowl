@@ -41,6 +41,7 @@ enum CommandIconMap {
     "cursor": TabIconSource(systemSymbol: "sparkle", assetName: "Cursor"),
     "cursor-agent": TabIconSource(systemSymbol: "sparkle", assetName: "Cursor"),
     "devin": TabIconSource(systemSymbol: "sparkle", assetName: "Devin"),
+    // Devin sets its title to `devin: <folder>` after the session starts.
     "devin:": TabIconSource(systemSymbol: "sparkle", assetName: "Devin"),
     "droid": TabIconSource(systemSymbol: "sparkle", assetName: "Droid"),
     "gemini": TabIconSource(systemSymbol: "sparkle", assetName: "Gemini"),

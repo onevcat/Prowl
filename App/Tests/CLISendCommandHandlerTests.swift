@@ -267,36 +267,7 @@ struct CLISendCommandHandlerTests {
     #expect(deliveredTrailingEnter == false)
   }
 
-  @Test func deliveryTargetsResolvedPane() {
-    var insertedPaneID: UUID?
-    var submittedPaneID: UUID?
-    let delivery = CLISendTextDelivery(
-      insertText: { paneID, _ in
-        insertedPaneID = paneID
-        return true
-      },
-      submitLine: { paneID in
-        submittedPaneID = paneID
-        return true
-      }
-    )
-
-    delivery.deliver(to: Self.makeTarget(), text: "echo hi", trailingEnter: true)
-
-    #expect(insertedPaneID == Self.testPaneID)
-    #expect(submittedPaneID == Self.testPaneID)
-  }
-
-  @Test func failedInsertionNeverSubmitsAndHandlerReportsFailure() async {
-    var submitted = false
-    let delivery = CLISendTextDelivery(
-      insertText: { _, _ in false },
-      submitLine: { _ in
-        submitted = true
-        return true
-      })
-    #expect(!delivery.deliver(to: Self.makeTarget(), text: "hello", trailingEnter: true))
-    #expect(!submitted)
+  @Test func failedDeliveryReportsFailure() async {
     let handler = SendCommandHandler(
       resolveProvider: { _ in .success(Self.makeTarget()) },
       textDelivery: { _, _, _ in false }, waiterProvider: { _, _ in nil })
