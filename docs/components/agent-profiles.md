@@ -238,6 +238,7 @@ executable, icon, screen heuristics, home, and session identity.
 | Grok Build | Yes | Yes | Standard / Unrestricted | No verified full-state relocation |
 | Pi | Yes | Yes | Runtime default only | `PI_CODING_AGENT_DIR` |
 | Oh My Pi | Yes | Yes | Standard / Unrestricted | `PI_CODING_AGENT_DIR` |
+| Devin | Yes | No | Standard / Unrestricted | No verified full-state relocation |
 
 The execution-mode picker appears only when Prowl can render both choices
 honestly. Cline maps Standard to `--auto-approve false` and Unrestricted to
