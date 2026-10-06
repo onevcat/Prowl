@@ -7,13 +7,23 @@ struct AgentScreenDetectionTests {
   @Test func unmigratedDetectorsReturnTheirExistingStateWithAStableReason() {
     let screen = "screen without a live rule"
 
-    for agent in DetectedAgent.allCases where agent != .codex && agent != .claude {
+    for agent in DetectedAgent.allCases where agent != .codex && agent != .claude && agent != .devin {
       let detection = agent.detectScreen(in: screen)
 
       #expect(detection.state == agent.detectState(in: screen))
       #expect(detection.reason == .legacyDetector)
       #expect(detection.reason.identifier == "legacy.detector")
     }
+  }
+
+  @Test(arguments: [DetectedAgent.claude, .codex, .devin])
+  func typedDetectorsReturnAnExplicitFallbackWhenNoRuleMatches(agent: DetectedAgent) {
+    let screen = "screen without a live rule"
+    let detection = agent.detectScreen(in: screen)
+
+    #expect(detection.state == agent.detectState(in: screen))
+    #expect(detection.reason == .noRuleMatched)
+    #expect(detection.reason.identifier == "fallback.noRuleMatched")
   }
 
   @Test func transitionDiagnosticsIncludeTheStableReasonWithoutScreenText() {

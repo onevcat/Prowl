@@ -49,25 +49,19 @@ nonisolated struct AgentSessionProfile: Sendable {
   /// while their relocation variables already point at those directories.
   var rootedPIDKeyedSession: (@Sendable (_ configRoot: URL, _ pid: pid_t, _ processStartedAt: Date) -> AgentSession?)?
 
+  private static let profiles: [DetectedAgent: AgentSessionProfile] = [
+    .codex: .codex, .claude: .claude, .pi: .pi, .omp: .omp, .gemini: .gemini,
+    .cursor: .cursor, .cline: .cline, .copilot: .copilot, .kimi: .kimi, .droid: .droid,
+    .opencode: .opencode, .amp: .amp, .qoder: .qoder, .qwen: .qwen, .grok: .grok, .devin: .devin,
+  ]
+
   static func profile(for agent: DetectedAgent) -> AgentSessionProfile {
-    switch agent {
-    case .codex: .codex
-    case .claude: .claude
-    case .pi: .pi
-    case .omp: .omp
-    case .gemini: .gemini
-    case .cursor: .cursor
-    case .cline: .cline
-    case .copilot: .copilot
-    case .kimi: .kimi
-    case .droid: .droid
-    case .opencode: .opencode
-    case .amp: .amp
-    case .qoder: .qoder
-    case .qwen: .qwen
-    case .grok: .grok
+    guard let profile = profiles[agent] else {
+      preconditionFailure("Every detected agent must have a session profile.")
     }
+    return profile
   }
+
 }
 
 // MARK: - Per-agent profiles

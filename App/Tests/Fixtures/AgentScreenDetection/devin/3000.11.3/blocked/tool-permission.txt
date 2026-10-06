@@ -1,0 +1,31 @@
+⠀⠻⢿⠿⠃⠀⠀⠀⠀
+
+❭ This is a tiny integration test. Do not inspect any files or use other skills.
+  Deliver exactly DEVIN_LAUNCH_OK through the Prowl workflow completion protocol. Use printf to provide the text on stdin.
+
+
+  Read the assigned task with `prowl workflow read --run F775B243-6832-4418-990E-87562F9AA24C --invocation 1`. Use `prowl workflow read --run
+  F775B243-6832-4418-990E-87562F9AA24C --invocation 1 <resource-id>` for its listed resources. Content is returned by Prowl; do not open workflow-
+  resource references as file paths.
+
+  ---
+  Prowl workflow completion protocol v1:
+  You are the "worker" role of the Prowl workflow run F775B243-6832-4418-990E-87562F9AA24C (Devin Smoke).
+  Deliver the output of this step as plain text on stdin.
+  When your work for this step is fully complete, make this command your final tool action:
+  prowl workflow deliver -
+  Do not use prowl agents dispatch-complete for this step; Prowl supplies the workflow context automatically.
+
+
+ ● Running command
+ └ $ prowl workflow read --run F775B243-6832-4418-990E-87562F9AA24C --invocation 1
+
+❭ 1 Yes  (Approve once)
+  2 Yes, allow `prowl workflow` commands
+  3 Yes, always allow `prowl workflow` commands in `repo`
+  4 Yes, always allow `prowl workflow` commands in all projects
+  5 Yes, switch to bypass mode
+  6 Edit command
+  7 Describe change to command
+  8 No
+↑↓ select · ↵ confirm · esc cancel

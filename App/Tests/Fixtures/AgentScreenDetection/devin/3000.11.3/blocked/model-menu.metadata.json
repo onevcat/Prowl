@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-10-06T04:32:00Z",
+  "cli_version": "3000.11.3",
+  "capture_source": "prowl-read-detection",
+  "terminal": {
+    "columns": 152,
+    "rows": 50
+  },
+  "redactions": [
+    "masked quota and login counters at their original widths",
+    "public model prices retained"
+  ],
+  "issue": null
+}

@@ -14,11 +14,30 @@ running and what state it's in. That signal drives the
 [Active Agents panel](active-agents.md), the per-tab activity indicator,
 [Canvas](canvas.md) cards lighting up, and [notifications](notifications.md).
 
+### Devin CLI
+
+Devin 3000.11.3 uses a `devin` terminal process and a `devin acp` child. Prowl
+selects the ACP child for native session ownership and keeps the original terminal
+launcher identity. An open `devin/cli/session_locks/<id>.lock` descriptor identifies
+the session exactly; leftover lock files and unrelated transcripts are not scanned.
+
+The live composer footer identifies **Working** while thinking, running tools, or
+streaming text. Directory trust, permission choices, and selection menus are
+**Blocked**. An empty composer after completion or cancellation is **Idle**.
+Retained dialog text and old working footers above a new composer are ignored.
+
+Devin currently uses screen state and cooperative delivery, without a managed
+`hook_devin` channel or a native state provider. Diagnostic logs and the session
+store do not expose a complete live state contract; the native `Stop` hook fires
+before other hooks can prevent stopping. A workflow finishes only after its explicit
+`prowl workflow deliver` receipt. `agents read` has no semantic Devin result reader;
+use `prowl read` for terminal output and workflow delivery for complete artifacts.
+
 ## Agents it recognizes
 
 Claude (Claude Code), Codex, Gemini, Cursor, Cline, OpenCode, GitHub Copilot,
 Kimi, Droid, Amp, Pi (`pi`), Oh My Pi (`omp`, `oh-my-pi`), Qoder CLI (`qodercli`),
-Qwen Code (`qwen`), and Grok Build (`grok`).
+Qwen Code (`qwen`), Grok Build (`grok`), and Devin (`devin`).
 Detection covers
 common wrappers (node, python, bun, bash, etc.) so agents launched indirectly are
 still found. Pi and Oh My Pi are independent detected agents. Pi recognizes its

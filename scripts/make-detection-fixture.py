@@ -92,6 +92,7 @@ DETECTED_AGENTS = (
     "copilot",
     "kimi",
     "droid",
+    "devin",
     "amp",
     "qodercli",
     "qwen",

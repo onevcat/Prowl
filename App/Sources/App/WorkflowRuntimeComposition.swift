@@ -225,8 +225,13 @@ extension ProwlApp {
         guard let state = terminalManager.stateIfExists(for: worktree.id) else {
           return .insertFailed
         }
-        // Same main-actor turn as the insertion: a fence raised by a cancel cannot slip in between.
         guard isLive() else { return .stale }
+        if state.surfaceAgentStates[surfaceID]?.detectedAgent == .devin {
+          let delivered = await state.deliverAgentDispatch(line, surfaceID: surfaceID, isLive: isLive)
+          guard isLive() else { return .stale }
+          return delivered ? .delivered : .submitFailed
+        }
+        // Runtimes without paste acknowledgement submit on the same main-actor turn.
         guard state.insertCommittedText(line, in: surfaceID) else { return .insertFailed }
         return state.submitLine(in: surfaceID) ? .delivered : .submitFailed
       },

@@ -471,7 +471,8 @@ directory exists:
 |---|---|---|---|
 | `claude` | `~/.claude/skills` | `<repo>/.claude/skills` | Claude Code |
 | `codex` | `~/.codex/skills` | `<repo>/.codex/skills` | Codex |
-| `agents` | `~/.agents/skills` | `<repo>/.agents/skills` | Codex, Gemini CLI, Cursor Agent, OpenCode, Copilot CLI, Kimi CLI, Droid, Amp, Qoder CLI, Pi, Oh My Pi, Grok Build |
+| `agents` | `~/.agents/skills` | `<repo>/.agents/skills` | Codex, Gemini CLI, Cursor Agent, OpenCode, Copilot CLI, Kimi CLI, Droid, Amp, Qoder CLI, Pi, Oh My Pi, Grok Build, Devin |
+| `devin` | `~/.config/devin/skills` | `<repo>/.devin/skills` | Devin |
 
 - A bare `prowl skills install` links every user-installable bundled skill into every
   detected target; repeat `--target` to pick targets explicitly (an explicit target's

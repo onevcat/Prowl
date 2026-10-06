@@ -1,0 +1,16 @@
+Last login: Tue Oct  0 00:00:00 on ttys000
+➜  repo git:(master) ✗ devin
+
+ ✓ Trust /private/tmp/prowl-devin-acceptance/repo?
+
+⠀⣴⣾⣶⡄⠀⠀⠀⠀
+⠀⠛⠿⠟⠻⣶⣾⣶⡄  Devin CLI
+⠀⣤⣶⣦⣴⠿⢿⠿⠃  v3000.11.3
+⠀⠻⢿⠿⠃⠀⠀⠀⠀
+
+ Free plan, use /upgrade to access better models · 00% remaining (resets in 0h 00m)
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❭ Ask Devin to build features, fix bugs, or work on your code
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+SWE-1.6 Slow                                                Type while the agent works to queue messages; press Enter on an empty input to send them now

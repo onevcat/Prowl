@@ -12,7 +12,8 @@ struct ProwlCommand: ParsableCommand {
     discussion: """
       Prowl bundles agent skills, including prowl-cli, which teaches a coding agent this CLI. \
       Run `prowl skills install` once to link them into your agents' skill folders \
-      (~/.claude/skills, ~/.codex/skills, ~/.agents/skills); `prowl skills list` shows the status. \
+      (~/.claude/skills, ~/.codex/skills, ~/.agents/skills, ~/.config/devin/skills); \
+      `prowl skills list` shows the status. \
       The skills commands work locally and do not need the app to be running.
       """,
     version: ProwlVersion.current,

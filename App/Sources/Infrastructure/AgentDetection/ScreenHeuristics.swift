@@ -44,40 +44,35 @@ extension DetectedAgent {
 
   nonisolated func detectScreen(in screen: String) -> AgentScreenDetection {
     let text = detectionScreenText(from: screen)
-    let state: AgentRawState
     switch self {
-    case .pi:
-      state = detectPi(text)
-    case .omp:
-      state = detectOMP(text)
     case .claude:
       return ClaudeScreenProfile.detect(in: AgentScreenSnapshot(text: text))
     case .codex:
       return CodexScreenProfile.detect(in: AgentScreenSnapshot(text: text))
-    case .gemini:
-      state = detectGemini(text)
-    case .cursor:
-      state = detectCursor(text)
-    case .cline:
-      state = detectCline(text)
-    case .opencode:
-      state = detectOpenCode(text)
-    case .copilot:
-      state = detectCopilot(text)
-    case .kimi:
-      state = detectKimi(text)
-    case .droid:
-      state = detectDroid(text)
-    case .amp:
-      state = detectAmp(text)
-    case .qoder:
-      state = detectQoder(text)
-    case .qwen:
-      state = detectQwen(text)
-    case .grok:
-      state = detectGrok(text)
+    case .devin:
+      return DevinScreenProfile.detect(in: AgentScreenSnapshot(text: text))
+    default:
+      return AgentScreenDetection(state: detectLegacyScreen(text), reason: .legacyDetector)
     }
-    return AgentScreenDetection(state: state, reason: .legacyDetector)
+  }
+
+  private nonisolated func detectLegacyScreen(_ text: String) -> AgentRawState {
+    switch self {
+    case .pi: detectPi(text)
+    case .omp: detectOMP(text)
+    case .gemini: detectGemini(text)
+    case .cursor: detectCursor(text)
+    case .cline: detectCline(text)
+    case .opencode: detectOpenCode(text)
+    case .copilot: detectCopilot(text)
+    case .kimi: detectKimi(text)
+    case .droid: detectDroid(text)
+    case .amp: detectAmp(text)
+    case .qoder: detectQoder(text)
+    case .qwen: detectQwen(text)
+    case .grok: detectGrok(text)
+    case .claude, .codex, .devin: .unknown
+    }
   }
 }
 

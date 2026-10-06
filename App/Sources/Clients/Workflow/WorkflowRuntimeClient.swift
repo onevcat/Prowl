@@ -12,7 +12,7 @@ nonisolated enum WorkflowTextDelivery: Equatable, Sendable {
   case delivered
   case insertFailed
   case submitFailed
-  /// The liveness guard failed right before insertion: nothing was typed.
+  /// The run fence failed. A pending paste may remain, but it was not submitted.
   case stale
 }
 
@@ -68,9 +68,10 @@ struct WorkflowRuntimeClient: Sendable {
   /// a stabilized detector view otherwise; returns when the role can receive a line.
   var waitForRole: @MainActor @Sendable (UUID) async -> WorkflowRoleWaitOutcome
   /// `insertCommittedText` + `submitLine` as one operation, entered only if the guard still
-  /// holds at that moment (the run's queue fence, checked on the same main-actor turn as the
-  /// insertion so a cancel cannot slip in between).
-  var deliverLine: @MainActor @Sendable (Worktree, UUID, String, @MainActor () -> Bool) -> WorkflowTextDelivery
+  /// holds before insertion and submission. A runtime may await its paste echo; it must
+  /// check the run fence again before Enter after any suspension.
+  var deliverLine:
+    @MainActor @Sendable (Worktree, UUID, String, @escaping @MainActor () -> Bool) async -> WorkflowTextDelivery
   /// Launches the frozen profile plan with the rendered kickoff prompt and the child-only
   /// workflow environment; issues and binds the launch activation when the step expects a delivery.
   var launch:

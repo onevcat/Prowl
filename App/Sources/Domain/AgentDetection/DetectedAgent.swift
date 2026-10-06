@@ -13,6 +13,7 @@ enum DetectedAgent: String, CaseIterable, Equatable, Identifiable, Sendable {
   case copilot
   case kimi
   case droid
+  case devin
   case amp
   case qoder = "qodercli"
   case qwen

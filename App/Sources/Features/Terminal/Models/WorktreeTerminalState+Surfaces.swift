@@ -10,26 +10,31 @@ enum SplitCreationError: Error, Equatable, Sendable {
 }
 
 extension WorktreeTerminalState {
-  func deliverAgentDispatch(_ text: String, surfaceID: UUID) async -> Bool {
-    guard dispatchInputProtection(surfaceID: surfaceID) == nil,
+  func deliverAgentDispatch(
+    _ text: String, surfaceID: UUID, isLive: @escaping @MainActor () -> Bool = { true }
+  ) async -> Bool {
+    guard isLive(), dispatchInputProtection(surfaceID: surfaceID) == nil,
       let surface = surfaces[surfaceID]
     else { return false }
-    if surfaceAgentStates[surfaceID]?.detectedAgent == .claude {
-      let delivery = ClaudePromptDelivery(
+    if let agent = surfaceAgentStates[surfaceID]?.detectedAgent, agent == .claude || agent == .devin {
+      let delivery = AgentPromptDelivery(
         observe: { [weak self, weak surface] in
-          guard let self, let surface, self.surfaces[surfaceID] === surface,
-            self.surfaceAgentStates[surfaceID]?.detectedAgent == .claude,
+          guard isLive(), let self, let surface, self.surfaces[surfaceID] === surface,
+            self.surfaceAgentStates[surfaceID]?.detectedAgent == agent,
             let text = surface.readActiveContentsForCLI()
           else { return nil }
           return .init(
-            composer: ClaudeScreenProfile.composerContents(in: AgentScreenSnapshot(text: text)),
+            composer: agent == .claude
+              ? ClaudeScreenProfile.composerContents(in: AgentScreenSnapshot(text: text))
+              : DevinScreenProfile.composerContents(in: AgentScreenSnapshot(text: text)),
             editingRevision: surface.lastEditingAt, hasMarkedText: surface.hasMarkedText())
         },
         insert: { [weak self] in self?.insertCommittedText($0, in: surfaceID) == true },
-        submit: { [weak self] in self?.submitLine(in: surfaceID) == true })
+        submit: { [weak self] in isLive() && self?.submitLine(in: surfaceID) == true },
+        acceptsClaudePasteMarker: agent == .claude, acceptsSoftWrappedWords: agent == .devin)
       return await delivery.deliver(text)
     }
-    guard !Task.isCancelled, insertCommittedText(text, in: surfaceID) else { return false }
+    guard isLive(), !Task.isCancelled, insertCommittedText(text, in: surfaceID) else { return false }
     return submitLine(in: surfaceID)
   }
 
@@ -60,6 +65,11 @@ extension WorktreeTerminalState {
         return
           "Codex has a draft, attachment, or an unrecognized input area. Check Host before dispatching."
       }
+    }
+    if surfaceAgentStates[surfaceID]?.detectedAgent == .devin {
+      guard let text = surface.readActiveContentsForCLI(),
+        DevinScreenProfile.composerContents(in: AgentScreenSnapshot(text: text)) == ""
+      else { return "Devin has a draft or an unrecognized input area. Check Host before dispatching." }
     }
     return nil
   }

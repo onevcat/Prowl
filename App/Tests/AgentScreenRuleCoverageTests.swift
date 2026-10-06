@@ -42,6 +42,7 @@ struct AgentScreenRuleCoverageTests {
     let typedRules =
       ClaudeScreenProfile.RuleID.all.map(\.rawValue)
       + CodexScreenProfile.RuleID.all.map(\.rawValue)
+      + DevinScreenProfile.RuleID.all.map(\.rawValue)
 
     let unwitnessed = Set(typedRules.filter { !witnessed.contains($0) })
 
