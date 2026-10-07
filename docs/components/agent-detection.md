@@ -33,12 +33,30 @@ before other hooks can prevent stopping. A workflow finishes only after its expl
 `prowl workflow deliver` receipt. `agents read` has no semantic Devin result reader;
 use `prowl read` for terminal output and workflow delivery for complete artifacts.
 
+### Antigravity CLI
+
+Antigravity (`agy`, verified 1.3.1) keeps an attached conversation's
+`~/.gemini/antigravity-cli/presence/<id>.lock` descriptor open for the life of
+the session, so that open file — not a lock file left behind after exit —
+identifies the session exactly. Its `conversations/<id>.db` and
+`brain/<id>/.system_generated/logs/transcript.jsonl` share the same id.
+
+A `esc to cancel` bottom status row is **Working** while a turn runs;
+`? for shortcuts` is **Idle**. Workspace-trust, tool-permission, and ask-user
+dialogs are **Blocked**: they render a `↑/↓ Navigate` hint row together with a
+`>`-selected option, and a permission dialog keeps `esc to cancel`, so the
+dialog chrome wins over the working footer. Answered dialogs in scrollback do
+not re-report Blocked.
+
+Antigravity currently uses screen state and cooperative delivery, without a
+managed hook channel or transcript reader.
+
 ## Agents it recognizes
 
 Claude (Claude Code), Codex, Gemini, Cursor, Cline, OpenCode, GitHub Copilot,
 Kimi, Droid, Amp, Pi (`pi`), Oh My Pi (`omp`, `oh-my-pi`), Qoder CLI (`qodercli`),
-Qwen Code (`qwen`), Grok Build (`grok`), and Devin (`devin`).
-Detection covers
+Qwen Code (`qwen`), Grok Build (`grok`), Devin (`devin`), and Antigravity
+(`agy`). Detection covers
 common wrappers (node, python, bun, bash, etc.) so agents launched indirectly are
 still found. Pi and Oh My Pi are independent detected agents. Pi recognizes its
 own minimal working/idle cues, including its built-in braille-prefixed `Working...`

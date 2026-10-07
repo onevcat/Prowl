@@ -12,7 +12,7 @@ struct SkillsCommand: ParsableCommand {
     discussion: """
       Runs locally against the skills bundled with this Prowl app; it never contacts or launches \
       the app. Targets: claude (~/.claude/skills), codex (~/.codex/skills), agents (~/.agents/skills),
-      devin (~/.config/devin/skills).
+      devin (~/.config/devin/skills), antigravity (~/.gemini/antigravity-cli/skills).
       """,
     subcommands: [
       SkillsListCommand.self,
@@ -49,7 +49,7 @@ struct SkillsChangeOptions: ParsableArguments {
   @Option(
     name: .long,
     parsing: .singleValue,
-    help: "Target id (repeatable): claude, codex, agents, or devin. Defaults to every detected target."
+    help: "Target id (repeatable): claude, codex, agents, devin, or antigravity. Defaults to every detected target."
   )
   var target: [String] = []
 

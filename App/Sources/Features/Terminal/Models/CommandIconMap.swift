@@ -33,7 +33,9 @@ enum CommandIconMap {
     // Coding agents
     "aider": TabIconSource(systemSymbol: "sparkle"),
     "agent": TabIconSource(systemSymbol: "sparkle", assetName: "Cursor"),
+    "agy": TabIconSource(systemSymbol: "sparkle", assetName: "Antigravity"),
     "amp": TabIconSource(systemSymbol: "sparkle", assetName: "Amp"),
+    "antigravity": TabIconSource(systemSymbol: "sparkle", assetName: "Antigravity"),
     "claude": TabIconSource(systemSymbol: "sparkle", assetName: "ClaudeCode"),
     "cline": TabIconSource(systemSymbol: "sparkle", assetName: "Cline"),
     "codex": TabIconSource(systemSymbol: "sparkle", assetName: "Codex"),

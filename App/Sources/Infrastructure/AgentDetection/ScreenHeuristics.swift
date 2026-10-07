@@ -71,6 +71,7 @@ extension DetectedAgent {
     case .qoder: detectQoder(text)
     case .qwen: detectQwen(text)
     case .grok: detectGrok(text)
+    case .antigravity: detectAntigravity(text)
     case .claude, .codex, .devin: .unknown
     }
   }
@@ -781,4 +782,34 @@ nonisolated private func hasBrailleSpinner(_ content: String) -> Bool {
     return (0x2800...0x28FF).contains(Int(first.value))
       && trimmed.contains(where: \.isLetter)
   }
+}
+
+// Antigravity CLI (`agy`, verified 1.3.1, live session): the bottom status row is
+// the live boundary — `esc to cancel` while a turn runs, `? for shortcuts` when
+// idle. Permission, workspace-trust, and ask-user dialogs keep the status row
+// (trust drops it entirely) but add a `↑/↓ Navigate …` hint row with a `> `
+// selected option. Requiring the pair keeps answered dialogs in transcript
+// history from re-reporting Blocked, and checking them before the cancel footer
+// keeps a permission dialog from reading as Working — it shows `esc to cancel`
+// too.
+nonisolated private func detectAntigravity(_ content: String) -> AgentRawState {
+  let lines = content.split(separator: "\n", omittingEmptySubsequences: false)
+    .map { $0.trimmingCharacters(in: .whitespaces) }
+    .filter { !$0.isEmpty }
+  let footer = lines.last ?? ""
+
+  // A small window (not just the last two rows) leaves room for a second
+  // status/footer row below the hint without losing the dialog.
+  let hasSelectionChrome = lines.suffix(3).contains { line in
+    line.hasPrefix("↑/↓ Navigate") || line.hasPrefix("↑↓ Navigate")
+  }
+  if hasSelectionChrome,
+    lines.suffix(12).contains(where: { $0.hasPrefix("> ") })
+  {
+    return .blocked
+  }
+  if footer.hasPrefix("esc to cancel") || footer.hasPrefix("esc to interrupt") {
+    return .working
+  }
+  return .idle
 }

@@ -1,0 +1,252 @@
+import Foundation
+import ProwlCLIShared
+import Testing
+
+@testable import Prowl
+
+struct AntigravitySupportTests {
+  private func agent() throws -> DetectedAgent {
+    try #require(DetectedAgent(rawValue: "antigravity"))
+  }
+
+  @Test func recognizesAgyAndPrefersTheSessionOwningTUI() throws {
+    let expected = try agent()
+    #expect(identifyAgent(processName: "agy") == expected)
+    #expect(identifyAgent(processName: "antigravity-cli") == expected)
+    #expect(identifyAgent(processName: "antigravity_cli") == expected)
+    // Bare `antigravity` is the desktop IDE launcher, not the CLI.
+    #expect(identifyAgent(processName: "antigravity") == nil)
+    #expect(identifyAgent(processName: "agy-module") == nil)
+
+    // The `--bg-updater` child shares argv0 and the foreground job but holds no
+    // presence lock; the TUI must win regardless of process enumeration order.
+    let tui = ForegroundProcess(
+      pid: 200, name: "agy", argv0: "agy", cmdline: "/Users/me/.local/bin/agy")
+    let updater = ForegroundProcess(
+      pid: 201, parentProcessID: 200, name: "agy", argv0: "agy",
+      cmdline: "agy --bg-updater --app_data_dir=antigravity-cli --gemini_dir=.gemini")
+    for processes in [[tui, updater], [updater, tui]] {
+      let identified = try #require(
+        identifyAgentInJob(ForegroundJob(processGroupID: 200, processes: processes)))
+      #expect(identified.agent == expected)
+      #expect(identified.process.pid == 200)
+      #expect(identified.launchProcessID == 200)
+    }
+
+    // The updater demotion covers every registered argv0 alias — a shim or
+    // direct install can spawn the child as `antigravity-cli` too.
+    let aliasedUpdater = ForegroundProcess(
+      pid: 203, parentProcessID: 200, name: "antigravity-cli", argv0: "antigravity-cli",
+      cmdline: "antigravity-cli --bg-updater")
+    for processes in [[tui, aliasedUpdater], [aliasedUpdater, tui]] {
+      let identified = try #require(
+        identifyAgentInJob(ForegroundJob(processGroupID: 200, processes: processes)))
+      #expect(identified.agent == expected)
+      #expect(identified.process.pid == 200)
+    }
+
+    // `--bg-updater` is pinned to the first argument: a TUI whose seeded prompt
+    // merely mentions the token keeps full score and still wins.
+    let promptedTUI = ForegroundProcess(
+      pid: 204, name: "agy", argv0: "agy",
+      cmdline: "agy --prompt-interactive \"explain what --bg-updater does\"")
+    for processes in [[promptedTUI, updater], [updater, promptedTUI]] {
+      let identified = try #require(
+        identifyAgentInJob(ForegroundJob(processGroupID: 204, processes: processes)))
+      #expect(identified.process.pid == 204)
+    }
+
+    // Without argv0 (procargs failure) the comm-name candidate is still demoted
+    // below the TUI's, so enumeration order never hands the pane the updater.
+    let nameOnlyTUI = ForegroundProcess(pid: 205, name: "agy", argv0: nil, cmdline: nil)
+    let nameOnlyUpdater = ForegroundProcess(
+      pid: 206, name: "agy", argv0: nil, cmdline: "agy --bg-updater")
+    for processes in [[nameOnlyTUI, nameOnlyUpdater], [nameOnlyUpdater, nameOnlyTUI]] {
+      let identified = try #require(
+        identifyAgentInJob(ForegroundJob(processGroupID: 205, processes: processes)))
+      #expect(identified.process.pid == 205)
+    }
+
+    // Native-executable name: a cmdline token inside a wrapped runtime must not
+    // classify the job (score-40 guard, same as grok/devin).
+    let wrapped = ForegroundProcess(
+      pid: 202, name: "node", argv0: "node", cmdline: "node /tmp/app.js --model agy")
+    #expect(identifyAgentInJob(ForegroundJob(processGroupID: 202, processes: [wrapped])) == nil)
+  }
+
+  @Test func launchBindsPromptAsLastValueTokenAndMapsModes() throws {
+    let runtime = try #require(AgentProfileRuntime(rawValue: "antigravity"))
+    // `--print`/`--prompt-interactive` consume the next token as the prompt
+    // unconditionally, so a prompt shaped like a flag stays a prompt — and the
+    // last-token contract keeps seeded-prompt probing (workflows) working.
+    let prompt = "--model is task text\nnot an option"
+    for (intent, suffix) in [
+      (AgentStartIntent.interactive, []),
+      (.prompt(prompt), ["--prompt-interactive", prompt]),
+      (.headless(prompt), ["--print", prompt]),
+    ] {
+      let invocation = try AgentRuntimeAdapterRegistry.makeStartInvocation(
+        AgentStartRequest(
+          runtime: runtime, intent: intent,
+          configuration: .init(model: "gemini-3-pro", reasoningEffort: "high")))
+      #expect(invocation.executable == "agy")
+      #expect(invocation.arguments == ["--model", "gemini-3-pro", "--effort", "high"] + suffix)
+    }
+    let unrestricted = try AgentRuntimeAdapterRegistry.makeStartInvocation(
+      AgentStartRequest(
+        runtime: runtime, intent: .interactive, configuration: .init(executionMode: .unrestricted)))
+    #expect(unrestricted.arguments == ["--dangerously-skip-permissions"])
+    let adapter = try #require(AgentRuntimeAdapterRegistry.profileAdapter(for: runtime))
+    #expect(!adapter.supportsAccountIsolation)
+    #expect(adapter.supportsReasoningEffort)
+    #expect(runtime.defaultHomeDirectoryName == ".gemini/antigravity-cli")
+  }
+
+  @Test func observesOptionsAroundPromptFlags() throws {
+    let runtime = try #require(AgentProfileRuntime(rawValue: "antigravity"))
+    let observation = AgentRuntimeAdapterRegistry.observe(
+      runtime: runtime,
+      arguments: [
+        "agy", "--model", "gemini-3-pro", "--dangerously-skip-permissions",
+        "-i", "--model", "wrong",
+      ])
+    #expect(observation.model == "gemini-3-pro")
+    #expect(observation.executionMode == .unrestricted)
+    // agy consumes exactly one token after a prompt flag; real flags after the
+    // prompt value are still observed.
+    #expect(
+      AgentRuntimeAdapterRegistry.observe(
+        runtime: runtime,
+        arguments: ["agy", "-i", "task text", "--model", "gemini-3-flash"])
+        == AgentLaunchObservation(model: "gemini-3-flash", executionMode: nil))
+    // A flag-shaped prompt value is consumed as text, never as an option.
+    #expect(
+      AgentRuntimeAdapterRegistry.observe(
+        runtime: runtime, arguments: ["agy", "-i", "--dangerously-skip-permissions"])
+        == AgentLaunchObservation(model: nil, executionMode: nil))
+    // Go-style bool: a space `false` is a positional, not the flag's value.
+    #expect(
+      AgentRuntimeAdapterRegistry.observe(
+        runtime: runtime, arguments: ["agy", "--dangerously-skip-permissions", "false"]
+      )
+      .executionMode == .unrestricted)
+    #expect(
+      AgentRuntimeAdapterRegistry.observe(runtime: runtime, arguments: ["agy"]).executionMode == nil)
+    #expect(
+      AgentRuntimeAdapterRegistry.observe(
+        runtime: runtime,
+        arguments: ["agy", "--model=gemini-3-pro", "--dangerously-skip-permissions=false"])
+        == AgentLaunchObservation(model: "gemini-3-pro", executionMode: .standard))
+  }
+
+  @Test func screenStatesUseStatusRowAndDialogChrome() throws {
+    let agent = try agent()
+    let idle = """
+      Antigravity CLI 1.3.1
+
+      >
+
+      ? for shortcuts                                             Gemini 3.1 Pro · high
+      """
+    #expect(agent.detectState(in: idle) == .idle)
+
+    let working = """
+      ⣻  Generating...
+      ────────────────────────────────────────────────────
+      >
+      ────────────────────────────────────────────────────
+      esc to cancel                                               Gemini 3.1 Pro · high
+      """
+    #expect(agent.detectState(in: working) == .working)
+    // A completed turn returns to the empty composer and the shortcuts footer.
+    #expect(agent.detectState(in: working + "\n" + idle) == .idle)
+
+    // Workspace trust (1.3.1): navigate hint is the last row, no status row.
+    let trust = """
+      Do you trust the contents of this project?
+      Antigravity CLI requires permission to read, edit, and execute files here.
+      > Yes, I trust this folder
+        No, exit
+        ↑/↓ Navigate · enter Confirm
+      """
+    #expect(agent.detectState(in: trust) == .blocked)
+
+    // Tool permission keeps the `esc to cancel` status row; the dialog chrome
+    // must win over the working footer.
+    let permission = """
+      Requesting permission for:
+         echo hello
+      Run this command?
+      > 1. Yes, run command
+        2. Yes, always allow
+        3. No, cancel
+        ↑/↓ Navigate · tab Amend · ctrl+g edit/expand command
+      esc to cancel                                               Gemini 3.1 Pro · high
+      """
+    #expect(agent.detectState(in: permission) == .blocked)
+
+    // Headroom: a second status row below the navigate hint must not mask a
+    // live dialog into Working.
+    let permissionWithExtraRow = """
+      Requesting permission for:
+         echo hello
+      > 1. Yes, run command
+        2. No, cancel
+        ↑/↓ Navigate · enter Confirm
+      usage: 12k tokens
+      esc to cancel                                               Gemini 3.1 Pro · high
+      """
+    #expect(agent.detectState(in: permissionWithExtraRow) == .blocked)
+
+    // Answered dialogs scroll into transcript without their live chrome.
+    let answered = """
+      Requesting permission for:
+         echo hello
+        1. Yes, run command
+        2. Yes, always allow
+      >
+      ? for shortcuts                                             Gemini 3.1 Pro · high
+      """
+    #expect(agent.detectState(in: answered) == .idle)
+    // Transcript prose cannot spoof the cancel footer or the navigate hint.
+    #expect(
+      agent.detectState(
+        in: "I explained that esc to cancel interrupts a turn.\n>\n? for shortcuts") == .idle)
+  }
+
+  @Test func sessionOwnershipUsesOnlyOpenLockPaths() throws {
+    let profile = AgentSessionProfile.profile(for: try agent())
+    let root = "/Users/test/.gemini/antigravity-cli"
+    let id = "7513431a-f203-40bf-a062-3c423b19babc"
+    let session = try #require(profile.parsePath(root + "/presence/\(id).lock"))
+    #expect(session.id == id)
+    #expect(
+      session.transcriptPath?.path
+        == root + "/brain/\(id)/.system_generated/logs/transcript.jsonl")
+    #expect(session.source == .openFile)
+    #expect(session.confidence == .exact)
+    let upper = try #require(profile.parsePath(root + "/presence/\(id.uppercased()).lock"))
+    #expect(upper.id == id)
+    // Stale or malformed locks resolve to nothing: only open descriptors parse.
+    #expect(profile.parsePath(root + "/presence/not-a-uuid.lock") == nil)
+    #expect(profile.parsePath(root + "/presence/.lock") == nil)
+    #expect(profile.parsePath(root + "/presence/nested/\(id).lock") == nil)
+    #expect(profile.parsePath(root + "/conversations/\(id).db") == nil)
+    #expect(profile.candidateRoots(URL(filePath: "/Users/test"), nil, Date(), Date()).isEmpty)
+  }
+
+  @Test func workflowBindsAntigravityThroughTheExistingProfilePath() throws {
+    let runtime = try #require(AgentProfileRuntime(rawValue: "antigravity"))
+    let profile = AgentProfile(name: "Antigravity", runtime: runtime)
+    for agents: [String]? in [nil, ["antigravity"]] {
+      let role = WorkflowRoleDefinition(
+        name: "worker", source: .launch, launch: WorkflowLaunchRequirements(agents: agents))
+      let result = try WorkflowBindingResolver.resolve(
+        role: role, remembered: nil, override: .profileID(profile.id),
+        context: WorkflowBindingResolverContext(profiles: [profile])
+      ).get()
+      #expect(result.resolution == .resolved(profile, tier: .override))
+    }
+    #expect(WorkflowBindingResolver.adapterSupportsSeededPrompt(profile))
+  }
+}

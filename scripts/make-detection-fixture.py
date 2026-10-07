@@ -97,6 +97,7 @@ DETECTED_AGENTS = (
     "qodercli",
     "qwen",
     "grok",
+    "antigravity",
 )
 
 

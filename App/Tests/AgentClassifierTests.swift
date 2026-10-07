@@ -32,6 +32,11 @@ struct AgentClassifierTests {
     // Model ids must not be treated as the install binary.
     #expect(identifyAgent(processName: "grok-4") == nil)
     #expect(identifyAgent(processName: "grok-4.5") == nil)
+    #expect(identifyAgent(processName: "agy") == .antigravity)
+    #expect(identifyAgent(processName: "antigravity-cli") == .antigravity)
+    #expect(identifyAgent(processName: "antigravity_cli") == .antigravity)
+    // The desktop IDE ships an `antigravity` launcher; only the CLI entrypoints map.
+    #expect(identifyAgent(processName: "antigravity") == nil)
   }
 
   @Test func identifiesGrokAgentAliasCommandLines() throws {

@@ -93,11 +93,14 @@ same status as `prowl skills list`.
   summary), and **Reveal** (shows the bundled skill folder in Finder). Workflow-only skills are
   not listed.
 - **Target lines** — one per *detected* target under each skill: `Claude Code`
-  (`~/.claude/skills`), `Codex` (`~/.codex/skills`), and `Shared agents directory`
-  (`~/.agents/skills`), each showing the link's folder (`~/.claude/skills/prowl-cli`), its
-  status, and one action. A target is detected when its parent folder (`~/.claude`, `~/.codex`,
-  `~/.agents`) exists. With no detected target the section says so and points at
-  `prowl skills install --target <claude|codex|agents>`, which creates the folder.
+  (`~/.claude/skills`), `Codex` (`~/.codex/skills`), `Shared agents directory`
+  (`~/.agents/skills`), `Devin` (`~/.config/devin/skills`), and `Antigravity`
+  (`~/.gemini/antigravity-cli/skills`), each showing the link's folder
+  (`~/.claude/skills/prowl-cli`), its status, and one action. A target is
+  detected when its parent folder exists. With no detected target the section
+  says so and points at
+  `prowl skills install --target <claude|codex|agents|devin|antigravity>`,
+  which creates the folder.
 - **Statuses and actions** — one explicit action per skill × target link:
 
   | Status | Meaning | Button |

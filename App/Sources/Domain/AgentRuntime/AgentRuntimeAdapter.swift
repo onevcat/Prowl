@@ -272,6 +272,7 @@ extension AgentProfileRuntime {
     case .qoder: QoderRuntimeAdapter()
     case .qwen: QwenRuntimeAdapter()
     case .grok: GrokRuntimeAdapter()
+    case .antigravity: AntigravityRuntimeAdapter()
     case .pi: PiRuntimeAdapter()
     case .omp: OMPRuntimeAdapter()
     }
@@ -804,6 +805,70 @@ nonisolated private struct GrokRuntimeAdapter: AgentRuntimeAdapter {
     case .interactive: AgentInvocation(executable: "grok", arguments: options)
     case .prompt(let prompt): AgentInvocation(executable: "grok", arguments: options + [prompt])
     case .headless(let prompt): AgentInvocation(executable: "grok", arguments: options + ["--single", prompt])
+    }
+  }
+}
+
+// Antigravity CLI (`agy`, verified 1.3.1). `--print`/`-p`/`--prompt`/`-i`/
+// `--prompt-interactive` are string flags that consume the following token as
+// the prompt unconditionally — even one that looks like a flag — so the prompt
+// always travels as that flag's final value token.
+nonisolated private struct AntigravityRuntimeAdapter: AgentRuntimeAdapter {
+  let runtime: AgentProfileRuntime = .antigravity
+  let displayName = "Antigravity"
+  let supportsModelSelection = true
+  let supportsReasoningEffort = true
+  let executionModeOptions = AgentExecutionMode.allCases
+  // `agy --help` 1.3.1: low|medium|high|xhigh|max.
+  let reasoningEffortSuggestions = ["low", "medium", "high", "xhigh", "max"]
+
+  /// Flags whose following token is prompt text, not an option. Observation
+  /// skips each flag and its value so a seeded prompt is never read as
+  /// configuration, then keeps scanning the real flags after it.
+  private static let promptFlags: Set<String> = [
+    "-p", "--print", "--prompt", "-i", "--prompt-interactive",
+  ]
+
+  func observe(arguments: [String]) -> AgentLaunchObservation {
+    // agy consumes exactly one token after a prompt flag; tokens after that are
+    // still flags, so skip flag+value and keep scanning rather than truncating.
+    var options: [String] = []
+    var index = arguments.startIndex
+    while index < arguments.endIndex {
+      let token = arguments[index]
+      options.append(token)
+      index = arguments.index(after: index)
+      if Self.promptFlags.contains(token), index < arguments.endIndex {
+        index = arguments.index(after: index)
+      }
+    }
+    // Go-style bool flag: only the `=false` form is an explicit off; a space
+    // `false` would be a positional argument with the flag still set.
+    let skipsPermissions =
+      options.contains("--dangerously-skip-permissions")
+      || options.contains("--dangerously-skip-permissions=true")
+    return AgentLaunchObservation(
+      model: options.optionValue(long: "--model"),
+      executionMode: skipsPermissions
+        ? .unrestricted
+        : options.contains("--dangerously-skip-permissions=false") ? .standard : nil
+    )
+  }
+
+  func makeStartInvocation(_ request: AgentStartRequest) throws -> AgentInvocation {
+    var generated: [String] = []
+    if let model = request.configuration.model { generated += ["--model", model] }
+    if let effort = request.configuration.reasoningEffort { generated += ["--effort", effort] }
+    if request.configuration.executionMode == .unrestricted {
+      generated += ["--dangerously-skip-permissions"]
+    }
+    let options = finalizedOptions(generated, request: request)
+    return switch request.intent {
+    case .interactive: AgentInvocation(executable: "agy", arguments: options)
+    case .prompt(let prompt):
+      AgentInvocation(executable: "agy", arguments: options + ["--prompt-interactive", prompt])
+    case .headless(let prompt):
+      AgentInvocation(executable: "agy", arguments: options + ["--print", prompt])
     }
   }
 }

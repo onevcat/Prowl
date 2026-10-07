@@ -19,6 +19,9 @@ private let knownAgentBinaries: [String: DetectedAgent] = [
   "qodercli": .qoder,
   "qwen": .qwen,
   "grok": .grok,
+  // Bare `antigravity` stays unmapped: the Antigravity IDE ships an
+  // `antigravity` launcher (and an `agy` shim) that opens the desktop app.
+  "agy": .antigravity, "antigravity-cli": .antigravity, "antigravity_cli": .antigravity,
 ]
 
 func identifyAgent(processName: String) -> DetectedAgent? {
@@ -93,16 +96,26 @@ func identifyAgentInJob(_ job: ForegroundJob) -> IdentifiedAgentProcess? {
 
 private func agentCandidates(for process: ForegroundProcess) -> [(name: String, score: Int)] {
   var candidates: [(String, Int)] = []
+  let arguments = process.arguments ?? process.cmdline?.split(whereSeparator: \.isWhitespace).map(String.init) ?? []
+  // agy spawns a transient `--bg-updater` child in the same foreground job
+  // (verified argv on 1.3.1: `agy --bg-updater --app_data_dir=…`). It shares
+  // argv0 but holds no presence lock, so the interactive TUI must always win
+  // the pick. The pinned first position keeps a prompt payload that merely
+  // mentions the token from demoting the real TUI.
+  let isAntigravityUpdater = arguments.dropFirst().first == "--bg-updater"
 
   if let argv0 = process.argv0, let name = normalizedProcessName(argv0) {
     // The REPL delegates to `devin acp`, which owns the native session lock.
     // Keep the shell-launched parent as launchProcessID while resolving that child.
-    let arguments = process.arguments ?? process.cmdline?.split(whereSeparator: \.isWhitespace).map(String.init) ?? []
     let isDevinEngine = name == "devin" && arguments.dropFirst().first == "acp"
-    candidates.append((name, isDevinEngine ? 90 : 80))
+    let demoted = isAntigravityUpdater && identifyAgent(processName: name) == .antigravity
+    candidates.append((name, isDevinEngine ? 90 : demoted ? 60 : 80))
   }
   if let name = normalizedProcessName(process.name) {
-    candidates.append((name, 70))
+    // Demote the comm-name candidate too (50 clears the score-40 wrapped-runtime
+    // guard), or a missing TUI argv0 would tie the pick at 70.
+    let demoted = isAntigravityUpdater && identifyAgent(processName: name) == .antigravity
+    candidates.append((name, demoted ? 50 : 70))
   }
 
   let primaryName = normalizedProcessName(process.argv0 ?? process.name) ?? process.name.lowercased()
@@ -128,9 +141,12 @@ private func identifyAgent(candidate: (name: String, score: Int), process: Foreg
     }
     return nil
   }
-  // Grok Build and Devin are native executables, not wrapped-runtime scripts.
-  // Their names can also be model arguments; require argv0/name evidence.
-  if ["grok", "devin"].contains(candidate.name), candidate.score == 40 {
+  // Grok Build, Devin, and Antigravity are native executables, not wrapped-runtime
+  // scripts. Their names can also appear as model arguments or quoted prompt
+  // tokens in a wrapper's cmdline; require argv0/name evidence.
+  if ["grok", "devin", "agy", "antigravity-cli", "antigravity_cli"].contains(candidate.name),
+    candidate.score == 40
+  {
     return nil
   }
   return identifyAgent(processName: candidate.name)

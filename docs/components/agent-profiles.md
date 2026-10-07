@@ -44,6 +44,25 @@ when the composer is empty. With a draft or a selection menu, it types directly,
 can still answer trust and permission prompts.
 Install bundled helper skills with `prowl skills install --target devin`.
 
+### Antigravity
+
+Choose **Antigravity** in the Profile runtime picker. Prowl launches `agy` through
+your login shell and uses your existing Antigravity login under
+`~/.gemini/antigravity-cli`. Model accepts any model ID your account can run
+(`--model`); reasoning effort renders `--effort low|medium|high|xhigh|max`;
+Unrestricted renders `--dangerously-skip-permissions`. Dedicated Home is not
+exposed:
+Antigravity's state spans fixed `~/.gemini` siblings and no complete relocation
+has been verified.
+
+Prompted launches seed the task with `--prompt-interactive`; headless launches
+use `--print`. The prompt always travels as that flag's trailing value token:
+agy's flag parser consumes the token after `--print` or `--prompt-interactive`
+as the prompt — even when that token looks like another flag. Trust and permission
+dialogs remain visible as Blocked and must be answered before work continues.
+Install bundled helper skills with `prowl skills install --target antigravity`;
+project scope shares the standard `.agents/skills` directory.
+
 ## Launching
 
 - **Toolbar Agents capsule** — always opens a popover. A "Run a workflow"
@@ -239,6 +258,7 @@ executable, icon, screen heuristics, home, and session identity.
 | Pi | Yes | Yes | Runtime default only | `PI_CODING_AGENT_DIR` |
 | Oh My Pi | Yes | Yes | Standard / Unrestricted | `PI_CODING_AGENT_DIR` |
 | Devin | Yes | No | Standard / Unrestricted | No verified full-state relocation |
+| Antigravity | Yes | Yes (`--effort`) | Standard / Unrestricted | No verified full-state relocation |
 
 The execution-mode picker appears only when Prowl can render both choices
 honestly. Cline maps Standard to `--auto-approve false` and Unrestricted to
