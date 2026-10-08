@@ -791,12 +791,13 @@ nonisolated private func hasBrailleSpinner(_ content: String) -> Bool {
 // selected option. Requiring the pair keeps answered dialogs in transcript
 // history from re-reporting Blocked, and checking them before the cancel footer
 // keeps a permission dialog from reading as Working — it shows `esc to cancel`
-// too.
+// too. The `stack_with_default` setting appends custom status output below the
+// built-in row, so the signatures are matched in a bounded tail rather than the
+// last line alone; an unrecognized layout is `.unknown`, never affirmative idle.
 nonisolated private func detectAntigravity(_ content: String) -> AgentRawState {
   let lines = content.split(separator: "\n", omittingEmptySubsequences: false)
     .map { $0.trimmingCharacters(in: .whitespaces) }
     .filter { !$0.isEmpty }
-  let footer = lines.last ?? ""
 
   // A small window (not just the last two rows) leaves room for a second
   // status/footer row below the hint without losing the dialog.
@@ -808,8 +809,19 @@ nonisolated private func detectAntigravity(_ content: String) -> AgentRawState {
   {
     return .blocked
   }
-  if footer.hasPrefix("esc to cancel") || footer.hasPrefix("esc to interrupt") {
-    return .working
+  // The composer box keeps ≥3 rows between the status row and transcript, so a
+  // four-row tail covers appended `stack_with_default` output without reaching
+  // stale transcript text.
+  let tail = lines.suffix(4)
+  let hasWorkingFooter = tail.contains {
+    $0.hasPrefix("esc to cancel") || $0.hasPrefix("esc to interrupt")
   }
-  return .idle
+  let hasIdleFooter = tail.contains { $0.hasPrefix("? for shortcuts") }
+  switch (hasWorkingFooter, hasIdleFooter) {
+  case (true, false): return .working
+  case (false, true): return .idle
+  // Absent or contradictory footer evidence: no affirmative state. Dispatch
+  // treats `.unknown` as no evidence rather than idle.
+  case (false, false), (true, true): return .unknown
+  }
 }

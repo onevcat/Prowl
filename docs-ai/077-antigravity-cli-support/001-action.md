@@ -29,12 +29,16 @@
   `--prompt-interactive` in both `=` and space forms on 1.3.1.
 - Screen detection is a legacy detector (`detectAntigravity`): the bottom status
   row is the live boundary — `esc to cancel`/`esc to interrupt` = Working,
-  `? for shortcuts` = Idle. Trust, permission, and ask-user dialogs are Blocked
-  via a `↑/↓ Navigate` hint row in the last two rows paired with a `> ` selected
-  option; a permission dialog keeps `esc to cancel`, so the dialog check runs
-  first. Answered dialogs in scrollback cannot re-report Blocked. A typed
-  profile was deferred: `AgentScreenRuleCoverageTests` requires real
-  `prowl read --source detection` captures, which need a Debug-app session.
+  `? for shortcuts` = Idle, matched in a bounded four-row tail because
+  `stack_with_default` can append custom status output below the built-in row.
+  Trust, permission, and ask-user dialogs are Blocked via a `↑/↓ Navigate` hint
+  row paired with a `> ` selected option; a permission dialog keeps
+  `esc to cancel`, so the dialog check runs first. A screen with neither footer
+  signature is `.unknown`, never affirmative Idle — screen heuristics are this
+  runtime's only evidence channel. Answered dialogs in scrollback cannot
+  re-report Blocked. A typed profile was deferred:
+  `AgentScreenRuleCoverageTests` requires real `prowl read --source detection`
+  captures, which need a Debug-app session.
 - `AntigravitySessionProfile` resolves `presence/<uuid>.lock` only when the
   descriptor is held open by the pane process — lock files persist after exit,
   so file existence is never evidence. The session id is a UUID (normalized
@@ -78,10 +82,21 @@
 - **`observe` keeps scanning past a prompt flag.** Review noted that truncating
   at the first prompt flag under-reported real flags placed after the prompt
   value; the scan now skips flag+value and continues, and `--dangerously-skip-
-  permissions` honors only the `=false` form (Go-style bools don't consume the
-  next token).
+  permissions` honors last-argument-wins with only the `=false` form counting
+  as an explicit off (Go-style bools don't consume the next token).
 - **Navigate-hint window widened** from two to three trailing rows so a second
   status row can't mask a live permission dialog into Working.
+- **PR review (onevtail) drove three more corrections**: appended
+  `stack_with_default` status output could push the cancel footer off the last
+  line and read Working as Idle — the footer signatures now scan a bounded
+  four-row tail and unmatched layouts return `.unknown` instead of `.idle`;
+  permission observation now honors last-argument-wins; the icon was
+  re-attributed from Simple Icons (CC0) to Lobe Icons (MIT) — the path data
+  matches lobe-icons `antigravity.svg`, and Simple Icons ships no Antigravity
+  mark. Also narrowed the flag-shaped-prompt claim: agy intercepts bare
+  `--help`/`--version` before flag parsing, so exact-token `--help` prompts are
+  unreachable via the space form (equals form works; generated prompts never
+  hit it).
 - **Prompt binding switched from `=`-form to space form.** The plan assumed
   `--prompt-interactive=<prompt>` was required to protect flag-shaped prompts.
   `adapterSupportsSeededPrompt` (the workflow seeded-prompt probe) requires the

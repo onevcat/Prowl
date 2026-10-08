@@ -76,9 +76,11 @@ struct AntigravitySupportTests {
 
   @Test func launchBindsPromptAsLastValueTokenAndMapsModes() throws {
     let runtime = try #require(AgentProfileRuntime(rawValue: "antigravity"))
-    // `--print`/`--prompt-interactive` consume the next token as the prompt
-    // unconditionally, so a prompt shaped like a flag stays a prompt — and the
-    // last-token contract keeps seeded-prompt probing (workflows) working.
+    // `--print`/`--prompt-interactive` consume the next token as the prompt, so
+    // a prompt shaped like a flag stays a prompt (except bare `--help`/
+    // `--version`, which agy intercepts before flag parsing — unreachable as
+    // seeded prompts, which carry task text) — and the last-token contract
+    // keeps seeded-prompt probing (workflows) working.
     let prompt = "--model is task text\nnot an option"
     for (intent, suffix) in [
       (AgentStartIntent.interactive, []),
@@ -130,6 +132,23 @@ struct AntigravitySupportTests {
         runtime: runtime, arguments: ["agy", "--dangerously-skip-permissions", "false"]
       )
       .executionMode == .unrestricted)
+    // Later arguments override earlier ones.
+    #expect(
+      AgentRuntimeAdapterRegistry.observe(
+        runtime: runtime,
+        arguments: [
+          "agy", "--dangerously-skip-permissions", "--dangerously-skip-permissions=false",
+        ]
+      )
+      .executionMode == .standard)
+    #expect(
+      AgentRuntimeAdapterRegistry.observe(
+        runtime: runtime,
+        arguments: [
+          "agy", "--dangerously-skip-permissions=false", "--dangerously-skip-permissions",
+        ]
+      )
+      .executionMode == .unrestricted)
     #expect(
       AgentRuntimeAdapterRegistry.observe(runtime: runtime, arguments: ["agy"]).executionMode == nil)
     #expect(
@@ -158,8 +177,17 @@ struct AntigravitySupportTests {
       esc to cancel                                               Gemini 3.1 Pro · high
       """
     #expect(agent.detectState(in: working) == .working)
-    // A completed turn returns to the empty composer and the shortcuts footer.
-    #expect(agent.detectState(in: working + "\n" + idle) == .idle)
+    // A completed turn redraws the status row in place: `? for shortcuts`
+    // replaces `esc to cancel` — the working footer never scrolls up.
+    let afterTurn = """
+      ⣻  Generating...
+      Done. Wrote the file.
+      ────────────────────────────────────────────────────
+      >
+      ────────────────────────────────────────────────────
+      ? for shortcuts                                             Gemini 3.1 Pro · high
+      """
+    #expect(agent.detectState(in: afterTurn) == .idle)
 
     // Workspace trust (1.3.1): navigate hint is the last row, no status row.
     let trust = """
@@ -212,6 +240,40 @@ struct AntigravitySupportTests {
     #expect(
       agent.detectState(
         in: "I explained that esc to cancel interrupts a turn.\n>\n? for shortcuts") == .idle)
+  }
+
+  @Test func appendedStatusOutputKeepsFooterEvidence() throws {
+    let agent = try agent()
+    // `stack_with_default` appends custom status output below the built-in row;
+    // the footer signatures must still be found in the bounded tail.
+    let workingStacked = """
+      ⣻  Generating...
+      >
+      esc to cancel                                               Gemini 3.1 Pro · high
+      ctx 12% · ⌘ custom status
+      """
+    #expect(agent.detectState(in: workingStacked) == .working)
+
+    let idleStacked = """
+      >
+      ? for shortcuts                                             Gemini 3.1 Pro · high
+      ctx 12% · ⌘ custom status
+      """
+    #expect(agent.detectState(in: idleStacked) == .idle)
+
+    // A layout with no footer signature is unknown, not affirmative idle —
+    // screen heuristics are the only evidence channel for this runtime.
+    let midStream = """
+      ⣻  Generating...
+      partial output row
+      more partial output
+      """
+    #expect(agent.detectState(in: midStream) == .unknown)
+
+    // Contradictory evidence in the tail is also unknown.
+    #expect(
+      agent.detectState(
+        in: "esc to cancel\n? for shortcuts") == .unknown)
   }
 
   @Test func sessionOwnershipUsesOnlyOpenLockPaths() throws {

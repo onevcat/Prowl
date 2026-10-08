@@ -811,8 +811,10 @@ nonisolated private struct GrokRuntimeAdapter: AgentRuntimeAdapter {
 
 // Antigravity CLI (`agy`, verified 1.3.1). `--print`/`-p`/`--prompt`/`-i`/
 // `--prompt-interactive` are string flags that consume the following token as
-// the prompt unconditionally — even one that looks like a flag — so the prompt
-// always travels as that flag's final value token.
+// the prompt, so the prompt always travels as that flag's final value token.
+// Exception: agy intercepts bare `--help`/`--version` before flag parsing, so
+// an exact `--help`/`--version` prompt token is unreachable via the space form
+// (equals form works). Generated prompts are task text and never hit this.
 nonisolated private struct AntigravityRuntimeAdapter: AgentRuntimeAdapter {
   let runtime: AgentProfileRuntime = .antigravity
   let displayName = "Antigravity"
@@ -842,16 +844,21 @@ nonisolated private struct AntigravityRuntimeAdapter: AgentRuntimeAdapter {
         index = arguments.index(after: index)
       }
     }
-    // Go-style bool flag: only the `=false` form is an explicit off; a space
-    // `false` would be a positional argument with the flag still set.
-    let skipsPermissions =
-      options.contains("--dangerously-skip-permissions")
-      || options.contains("--dangerously-skip-permissions=true")
+    // Later arguments override earlier ones. A bare token or `=true` sets the
+    // flag; only `=false` explicitly clears it — a space `false` is a
+    // positional, not the flag's value (Go-style bool parsing).
+    let lastPermissionsFlag = options.last { token in
+      token == "--dangerously-skip-permissions" || token.hasPrefix("--dangerously-skip-permissions=")
+    }
+    let executionMode: AgentExecutionMode? =
+      switch lastPermissionsFlag {
+      case "--dangerously-skip-permissions=false": .standard
+      case .some: .unrestricted
+      case nil: nil
+      }
     return AgentLaunchObservation(
       model: options.optionValue(long: "--model"),
-      executionMode: skipsPermissions
-        ? .unrestricted
-        : options.contains("--dangerously-skip-permissions=false") ? .standard : nil
+      executionMode: executionMode
     )
   }
 
