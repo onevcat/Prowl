@@ -313,7 +313,7 @@ extension RepositoriesFeature.State {
   // A worktree ID is its path, so a worktree created again at a removed one's path must start
   // without the removed worktree's refresh history.
   mutating func forgetPullRequestRefreshHistory(of worktreeID: Worktree.ID) {
-    pullRequestCheckedAtByWorktreeID.removeValue(forKey: worktreeID)
+    pullRequestRefreshCheckpointByWorktreeID.removeValue(forKey: worktreeID)
     pullRequestRefreshForcedWorktreeIDs.remove(worktreeID)
     for repositoryID in Array(sentPullRequestRefreshMarks.keys) {
       sentPullRequestRefreshMarks[repositoryID]?.remove(worktreeID)
@@ -336,7 +336,9 @@ extension RepositoriesFeature.State {
   }
 
   mutating func forgetPullRequestRefreshHistory(keeping worktreeIDs: Set<Worktree.ID>) {
-    pullRequestCheckedAtByWorktreeID = pullRequestCheckedAtByWorktreeID.filter { worktreeIDs.contains($0.key) }
+    pullRequestRefreshCheckpointByWorktreeID = pullRequestRefreshCheckpointByWorktreeID.filter {
+      worktreeIDs.contains($0.key)
+    }
     pullRequestRefreshForcedWorktreeIDs.formIntersection(worktreeIDs)
     sentPullRequestRefreshMarks = sentPullRequestRefreshMarks.mapValues {
       $0.intersection(worktreeIDs)

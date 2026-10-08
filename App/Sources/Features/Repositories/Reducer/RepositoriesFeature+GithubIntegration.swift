@@ -95,16 +95,16 @@ extension RepositoriesFeature {
         return .none
       }
       let selectedWorktreeID = state.selectedWorktreeID
-      let checkedAt = state.pullRequestCheckedAtByWorktreeID
+      let checkpoints = state.pullRequestRefreshCheckpointByWorktreeID
       let forced = state.pullRequestRefreshForcedWorktreeIDs
-      let currentDate = worktreeIDs.contains { checkedAt[$0] != nil && !forced.contains($0) } ? now : nil
+      let currentDate = worktreeIDs.contains { checkpoints[$0] != nil && !forced.contains($0) } ? now : nil
       let worktrees = worktreeIDs.compactMap { state.worktree(for: $0) }.filter { worktree in
         guard let currentDate, !forced.contains(worktree.id) else {
           return true
         }
         return PullRequestRefreshCadence.isDue(
-          pullRequest: state.worktreeInfo(for: worktree.id)?.pullRequest,
-          lastCheckedAt: checkedAt[worktree.id],
+          branch: worktree.name,
+          checkpoint: checkpoints[worktree.id],
           now: currentDate,
           isSelected: worktree.id == selectedWorktreeID
         )
@@ -770,11 +770,17 @@ extension RepositoriesFeature {
     outcome: PullRequestRefreshCoordinator.Outcome
   ) -> Effect<Action> {
     switch outcome {
-    case .refreshed(let repositoryID, _, let worktreeIDs, let prsByBranch, let confirmedNoPrBranches):
+    case .refreshed(let repositoryID, _, let worktreeIDs, let prsByBranch, let confirmedNoPrBranches, let isPartial):
       guard let repository = state.repositories[id: repositoryID] else {
         state.inFlightPullRequestRefreshRepositoryIDs.remove(repositoryID)
         clearPullRequestRefreshTracking(repositoryID: repositoryID, state: &state)
         return .none
+      }
+      // A host whose repositories did not all answer leaves the branch status on that host unknown,
+      // like a host whose batch failed: its found pull requests show, but nothing is confirmed absent
+      // and no checkpoint is recorded.
+      if isPartial {
+        state.prRefreshFailedBatchRepositoryIDs.insert(repositoryID)
       }
       mergePullRequestRefreshResults(
         repositoryID: repositoryID,
@@ -798,14 +804,15 @@ extension RepositoriesFeature {
       // it arrived before this final refreshed outcome — suppress confirmed clears.
       let confirmedNoPrBranches = hadFailedBatch ? [] : accumulatedConfirmedNoPrBranches
       state.prRefreshResultPrioritiesByRepositoryID.removeValue(forKey: repositoryID)
-      // A branch's status is settled only when every host batch came back and none failed: a found
-      // pull request or a confirmed absence then records when GitHub answered and drops its mark.
+      // A branch's status is settled only when every host batch came back complete: a found pull
+      // request or a confirmed absence then records a checkpoint from the answer and drops its mark.
       // Otherwise the branch stays due, and a sent mark goes back on completion.
       if !hadFailedBatch {
         recordAnsweredPullRequestRefresh(
           repositoryID: repositoryID,
           worktreeIDs: worktreeIDs,
-          answeredBranches: Set(mergedPRsByBranch.keys).union(confirmedNoPrBranches),
+          prsByBranch: mergedPRsByBranch,
+          confirmedNoPrBranches: confirmedNoPrBranches,
           state: &state
         )
       }
@@ -927,18 +934,29 @@ extension RepositoriesFeature {
   private func recordAnsweredPullRequestRefresh(
     repositoryID: Repository.ID,
     worktreeIDs: [Worktree.ID],
-    answeredBranches: Set<String>,
+    prsByBranch: [String: GithubPullRequest],
+    confirmedNoPrBranches: Set<String>,
     state: inout State
   ) {
-    guard !answeredBranches.isEmpty else {
+    let answered = worktreeIDs.compactMap { worktreeID -> (id: Worktree.ID, branch: String)? in
+      guard let branch = state.worktree(for: worktreeID)?.name,
+        prsByBranch[branch] != nil || confirmedNoPrBranches.contains(branch)
+      else {
+        return nil
+      }
+      return (worktreeID, branch)
+    }
+    guard !answered.isEmpty else {
       return
     }
-    let checkedAt = now
-    for worktreeID in worktreeIDs {
-      guard let name = state.worktree(for: worktreeID)?.name, answeredBranches.contains(name) else {
-        continue
-      }
-      state.pullRequestCheckedAtByWorktreeID[worktreeID] = checkedAt
+    // The checkpoint reads the answer as GitHub gave it; the display may keep an earlier mergeability.
+    let answeredAt = now
+    for (worktreeID, branch) in answered {
+      state.pullRequestRefreshCheckpointByWorktreeID[worktreeID] = PullRequestRefreshCadence.Checkpoint(
+        branch: branch,
+        pullRequest: prsByBranch[branch],
+        answeredAt: answeredAt
+      )
       state.sentPullRequestRefreshMarks[repositoryID]?.remove(worktreeID)
     }
   }

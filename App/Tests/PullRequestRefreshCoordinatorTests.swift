@@ -289,7 +289,7 @@ struct PullRequestRefreshCoordinatorTests {
 
     let snapshots = await outcomes.snapshot()
     let refreshed = snapshots.compactMap { outcome -> (Repository.ID, [String])? in
-      if case .refreshed(let id, _, _, let prs, _) = outcome {
+      if case .refreshed(let id, _, _, let prs, _, _) = outcome {
         return (id, Array(prs.keys))
       }
       return nil
@@ -336,7 +336,7 @@ struct PullRequestRefreshCoordinatorTests {
     #expect(calls.first?.requests.allSatisfy { $0.allowedHeadRepositories == expectedAllowedHeadRepositories } == true)
 
     let refreshed = await outcomes.snapshot().compactMap { outcome -> [String: GithubPullRequest]? in
-      if case .refreshed("local", _, _, let prsByBranch, _) = outcome {
+      if case .refreshed("local", _, _, let prsByBranch, _, _) = outcome {
         return prsByBranch
       }
       return nil
@@ -371,17 +371,12 @@ struct PullRequestRefreshCoordinatorTests {
     await advanceCoordinatorClock(clock, by: .milliseconds(250))
     await waitUntil { await outcomes.refreshedRepositories().count == 1 }
 
-    let refreshed = await outcomes.snapshot().compactMap {
-      outcome -> ([String: GithubPullRequest], Set<String>)? in
-      if case .refreshed("local", _, _, let prsByBranch, let confirmedNoPrBranches) = outcome {
-        return (prsByBranch, confirmedNoPrBranches)
-      }
-      return nil
-    }
+    let refreshed = await outcomes.snapshot().compactMap { RefreshedAnswer(outcome: $0, repositoryID: "local") }
     let result = try #require(refreshed.first)
     #expect(refreshed.count == 1)
-    #expect(result.0["feat-1"]?.title == "PR-upstream")
-    #expect(result.1 == ["feat-2"])
+    #expect(result.prsByBranch["feat-1"]?.title == "PR-upstream")
+    #expect(result.confirmedNoPrBranches == ["feat-2"])
+    #expect(!result.isPartial)
   }
 
   @Test func partialCandidateRepoFailureLeavesBranchesUnconfirmed() async throws {
@@ -414,17 +409,13 @@ struct PullRequestRefreshCoordinatorTests {
     await advanceCoordinatorClock(clock, by: .milliseconds(250))
     await waitUntil { await outcomes.refreshedRepositories().count == 1 }
 
-    let refreshed = await outcomes.snapshot().compactMap {
-      outcome -> ([String: GithubPullRequest], Set<String>)? in
-      if case .refreshed("local", _, _, let prsByBranch, let confirmedNoPrBranches) = outcome {
-        return (prsByBranch, confirmedNoPrBranches)
-      }
-      return nil
-    }
+    let refreshed = await outcomes.snapshot().compactMap { RefreshedAnswer(outcome: $0, repositoryID: "local") }
     let result = try #require(refreshed.first)
     #expect(refreshed.count == 1)
-    #expect(result.0.isEmpty)
-    #expect(result.1.isEmpty)
+    #expect(result.prsByBranch.isEmpty)
+    #expect(result.confirmedNoPrBranches.isEmpty)
+    // The reducer must not record this answer as complete.
+    #expect(result.isPartial)
   }
 
   @Test func duplicateRepoKeysFallbackOnceAndFanOutToEachRepository() async throws {
@@ -556,7 +547,7 @@ struct PullRequestRefreshCoordinatorTests {
     let snapshots = await outcomes.snapshot()
     let refresh = try #require(
       snapshots.compactMap { snapshot -> (String, [String: GithubPullRequest])? in
-        if case .refreshed(let id, _, _, let prs, _) = snapshot {
+        if case .refreshed(let id, _, _, let prs, _, _) = snapshot {
           return (id, prs)
         }
         return nil
@@ -772,6 +763,22 @@ actor CoordinatorProbe {
   }
 }
 
+nonisolated private struct RefreshedAnswer: Sendable {
+  let prsByBranch: [String: GithubPullRequest]
+  let confirmedNoPrBranches: Set<String>
+  let isPartial: Bool
+
+  init?(outcome: PullRequestRefreshCoordinator.Outcome, repositoryID: Repository.ID) {
+    guard case .refreshed(repositoryID, _, _, let prsByBranch, let confirmedNoPrBranches, let isPartial) = outcome
+    else {
+      return nil
+    }
+    self.prsByBranch = prsByBranch
+    self.confirmedNoPrBranches = confirmedNoPrBranches
+    self.isPartial = isPartial
+  }
+}
+
 actor OutcomeCollector {
   private var outcomes: [PullRequestRefreshCoordinator.Outcome] = []
 
@@ -785,7 +792,7 @@ actor OutcomeCollector {
 
   func refreshedRepositories() -> [String] {
     outcomes.compactMap {
-      if case .refreshed(let id, _, _, _, _) = $0 {
+      if case .refreshed(let id, _, _, _, _, _) = $0 {
         return id
       }
       return nil

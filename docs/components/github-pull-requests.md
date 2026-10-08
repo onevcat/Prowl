@@ -94,8 +94,9 @@ each query to the shared `gh` account stays small:
   place in the merge queue is refreshed every time.
 - A settled open PR is refreshed every 3 minutes, a branch without a PR every 5
   minutes, and a merged or closed PR every 30 minutes.
-- A new worktree is refreshed right away, and so is every worktree of a
-  repository whose remotes change.
+- A new worktree is refreshed right away, and so is a worktree that switched to
+  another branch and every worktree of a repository whose remotes change.
+- A refresh that GitHub answered only in part is repeated on the next sweep.
 
 A PR opened outside Prowl therefore appears within 5 minutes, or at once when you
 select its worktree.

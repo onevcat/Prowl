@@ -513,7 +513,12 @@ struct RepositoriesFeatureTests {
     initialState.githubIntegrationAvailability = .unavailable
     initialState.codeHostByRepositoryID[repository.id] = .github
     let answeredAt = Date(timeIntervalSince1970: 1_000_000)
-    initialState.pullRequestCheckedAtByWorktreeID = [mainWorktree.id: answeredAt, featureWorktree.id: answeredAt]
+    initialState.pullRequestRefreshCheckpointByWorktreeID = [
+      mainWorktree.id: PullRequestRefreshCadence.Checkpoint(branch: "main", pullRequest: nil, answeredAt: answeredAt),
+      featureWorktree.id: PullRequestRefreshCadence.Checkpoint(
+        branch: "feature", pullRequest: nil, answeredAt: answeredAt
+      ),
+    ]
     let store = TestStore(initialState: initialState) {
       RepositoriesFeature()
     } withDependencies: {
@@ -544,7 +549,11 @@ struct RepositoriesFeatureTests {
     let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
     var initialState = makeState(repositories: [repository])
     let answeredAt = Date(timeIntervalSince1970: 1_000_000)
-    initialState.pullRequestCheckedAtByWorktreeID = [worktree.id: answeredAt, removed.id: answeredAt]
+    let kept = PullRequestRefreshCadence.Checkpoint(branch: "main", pullRequest: nil, answeredAt: answeredAt)
+    initialState.pullRequestRefreshCheckpointByWorktreeID = [
+      worktree.id: kept,
+      removed.id: PullRequestRefreshCadence.Checkpoint(branch: "removed", pullRequest: nil, answeredAt: answeredAt),
+    ]
     initialState.pullRequestRefreshForcedWorktreeIDs = [removed.id]
 
     let store = TestStore(initialState: initialState) {
@@ -555,7 +564,7 @@ struct RepositoriesFeatureTests {
     await store.send(
       .repositoriesLoaded([repository], failures: [], roots: [repository.rootURL], animated: false)
     ) {
-      $0.pullRequestCheckedAtByWorktreeID = [worktree.id: answeredAt]
+      $0.pullRequestRefreshCheckpointByWorktreeID = [worktree.id: kept]
       $0.pullRequestRefreshForcedWorktreeIDs = []
     }
   }

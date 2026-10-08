@@ -4,7 +4,7 @@ import Testing
 @testable import Prowl
 
 struct PullRequestRefreshCadenceTests {
-  nonisolated static let checkedAt = Date(timeIntervalSince1970: 1_000_000)
+  nonisolated static let answeredAt = Date(timeIntervalSince1970: 1_000_000)
 
   struct Case: Sendable, CustomTestStringConvertible {
     let pullRequest: GithubPullRequest?
@@ -51,9 +51,9 @@ struct PullRequestRefreshCadenceTests {
   func dueByPullRequestState(_ testCase: Case) {
     #expect(
       PullRequestRefreshCadence.isDue(
-        pullRequest: testCase.pullRequest,
-        lastCheckedAt: Self.checkedAt,
-        now: Self.checkedAt.addingTimeInterval(TimeInterval(testCase.secondsSinceAnswer)),
+        branch: "feature",
+        checkpoint: checkpoint(for: testCase.pullRequest),
+        now: Self.answeredAt.addingTimeInterval(TimeInterval(testCase.secondsSinceAnswer)),
         isSelected: false
       ) == testCase.isDue
     )
@@ -62,9 +62,9 @@ struct PullRequestRefreshCadenceTests {
   @Test func selectedWorktreeIsAlwaysDue() {
     #expect(
       PullRequestRefreshCadence.isDue(
-        pullRequest: pullRequest(state: "MERGED"),
-        lastCheckedAt: Self.checkedAt,
-        now: Self.checkedAt.addingTimeInterval(1),
+        branch: "feature",
+        checkpoint: checkpoint(for: pullRequest(state: "MERGED")),
+        now: Self.answeredAt.addingTimeInterval(1),
         isSelected: true
       )
     )
@@ -72,14 +72,37 @@ struct PullRequestRefreshCadenceTests {
 
   @Test func neverAnsweredWorktreeIsDue() {
     #expect(
+      PullRequestRefreshCadence.isDue(branch: "feature", checkpoint: nil, now: Self.answeredAt, isSelected: false)
+    )
+  }
+
+  @Test func switchedBranchIsDue() {
+    // The checkpoint answered for the merged branch; the worktree is on another branch now.
+    #expect(
       PullRequestRefreshCadence.isDue(
-        pullRequest: pullRequest(state: "MERGED"),
-        lastCheckedAt: nil,
-        now: Self.checkedAt,
+        branch: "new-feature",
+        checkpoint: checkpoint(for: pullRequest(state: "MERGED")),
+        now: Self.answeredAt.addingTimeInterval(1),
         isSelected: false
       )
     )
   }
+
+  @Test func checkpointReadsItsIntervalFromTheAnswer() {
+    let computing = pullRequest(state: "OPEN", mergeable: "UNKNOWN", mergeStateStatus: "UNKNOWN")
+    #expect(checkpoint(for: computing).interval == nil)
+    #expect(checkpoint(for: pullRequest(state: "OPEN")).interval == PullRequestRefreshCadence.settledOpenInterval)
+    #expect(checkpoint(for: nil).interval == PullRequestRefreshCadence.noPullRequestInterval)
+    #expect(checkpoint(for: pullRequest(state: "MERGED")).interval == PullRequestRefreshCadence.finishedInterval)
+  }
+}
+
+nonisolated private func checkpoint(for pullRequest: GithubPullRequest?) -> PullRequestRefreshCadence.Checkpoint {
+  PullRequestRefreshCadence.Checkpoint(
+    branch: "feature",
+    pullRequest: pullRequest,
+    answeredAt: PullRequestRefreshCadenceTests.answeredAt
+  )
 }
 
 nonisolated private func pullRequest(

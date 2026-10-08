@@ -348,9 +348,10 @@ struct RepositoriesFeature {
     var statusToast: StatusToast?
     var snapshotPersistencePhase: SnapshotPersistencePhase = .idle
     var githubIntegrationAvailability: GithubIntegrationAvailability = .unknown
-    /// When GitHub last answered a pull request refresh for each worktree; a periodic refresh skips
-    /// a worktree whose pull request has settled until its cadence comes round.
-    var pullRequestCheckedAtByWorktreeID: [Worktree.ID: Date] = [:]
+    /// GitHub's last complete answer for each worktree: the branch it was for, when it arrived, and
+    /// how long it stays good. A periodic refresh skips a worktree whose pull request has settled
+    /// until its cadence comes round, and asks at once about one that moved to another branch.
+    var pullRequestRefreshCheckpointByWorktreeID: [Worktree.ID: PullRequestRefreshCadence.Checkpoint] = [:]
     /// Worktrees the next refresh must ask about whatever their cadence says: after a pull
     /// request action, or a remote change that can point a branch at other pull requests. A mark
     /// clears only when a refresh that asks about the worktree is sent, so an answer to an older

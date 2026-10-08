@@ -11,22 +11,40 @@ nonisolated enum PullRequestRefreshCadence {
   /// Merged or closed: only a reopened or new pull request for the same branch changes it.
   static let finishedInterval: Duration = .seconds(1_800)
 
+  /// What GitHub's last complete answer tells a periodic refresh about one worktree: the branch it
+  /// answered for, when, and how long the answer stays good. The interval comes from the answer as
+  /// GitHub gave it, not from the pull request on screen, which keeps the previous mergeability
+  /// while GitHub still computes the new one.
+  nonisolated struct Checkpoint: Equatable, Sendable {
+    let branch: String
+    let answeredAt: Date
+    /// nil means every sweep.
+    let interval: Duration?
+
+    init(branch: String, pullRequest: GithubPullRequest?, answeredAt: Date) {
+      self.branch = branch
+      self.answeredAt = answeredAt
+      self.interval = PullRequestRefreshCadence.interval(for: pullRequest)
+    }
+  }
+
   static func isDue(
-    pullRequest: GithubPullRequest?,
-    lastCheckedAt: Date?,
+    branch: String,
+    checkpoint: Checkpoint?,
     now: Date,
     isSelected: Bool
   ) -> Bool {
     if isSelected {
       return true
     }
-    guard let lastCheckedAt else {
+    // A checkpoint answers for the branch it was recorded for; a switched branch starts over.
+    guard let checkpoint, checkpoint.branch == branch else {
       return true
     }
-    guard let interval = interval(for: pullRequest) else {
+    guard let interval = checkpoint.interval else {
       return true
     }
-    return now.timeIntervalSince(lastCheckedAt) >= interval.seconds
+    return now.timeIntervalSince(checkpoint.answeredAt) >= interval.seconds
   }
 
   /// nil means every sweep.

@@ -66,12 +66,15 @@ final class PullRequestRefreshCoordinator {
   }
 
   nonisolated enum Outcome: Sendable, Equatable {
+    // isPartial: a candidate repository of the request did not answer, even after the fallback. The
+    // found pull requests are real, but nothing is confirmed absent and the answer is not complete.
     case refreshed(
       repositoryID: Repository.ID,
       repositoryRootURL: URL,
       worktreeIDs: [Worktree.ID],
       prsByBranch: [String: GithubPullRequest],
-      confirmedNoPrBranches: Set<String>
+      confirmedNoPrBranches: Set<String>,
+      isPartial: Bool = false
     )
     case failed(
       repositoryID: Repository.ID,
@@ -357,7 +360,8 @@ final class PullRequestRefreshCoordinator {
             repositoryRootURL: request.repositoryRootURL,
             worktreeIDs: request.worktreeIDs,
             prsByBranch: prsByBranch,
-            confirmedNoPrBranches: confirmedNoPrBranches
+            confirmedNoPrBranches: confirmedNoPrBranches,
+            isPartial: !allCandidatesSucceeded
           )
         )
       }
