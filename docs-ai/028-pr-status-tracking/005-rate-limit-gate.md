@@ -45,6 +45,17 @@ run through `runLocalGh`, outside the gate.
 - **No fallback on a refusal.** `PullRequestRefreshCoordinator` reports a rate-limited
   batch as failed and skips the per-repository fallback; other failures still fall
   back.
+- **A partial answer is an answer.** `gh api graphql` exits 1 whenever the response
+  lists any `errors`, even an HTTP 200 whose `data` carries every other repository.
+  Before this change that exit code failed the whole chunk, so the per-alias error
+  routing never ran in production and one unresolvable remote (a deleted fork, a
+  repository the account cannot see) cost one batch plus one concurrent fallback query
+  per repository on every cycle. `runGh` now keeps such an answer when the status is a
+  success and the body has `data` (`acceptsGraphQLErrors`), both GraphQL paths route
+  each error to its repository as `GithubCLIError.graphQLError(type:message:)`, and
+  the coordinator falls back only when `allowsFallback` says a smaller query could
+  change the answer: never for `NOT_FOUND`, `FORBIDDEN`, `INSUFFICIENT_SCOPES`, a
+  refusal, or an unusable gh.
 - **Surface.** The gate publishes its retry time (`GithubCLIClient.rateLimitRetryTimes`),
   so the UI follows the gate itself rather than inferring the limit from refresh
   outcomes. `RepositoriesFeature` subscribes in `.task` and stores
@@ -67,8 +78,12 @@ instead of up to 100 check contexts per pull request; and polling cadence follow
 pull request's state.
 
 Tests: `App/Tests/GithubRateLimitTests.swift` (classifier, gate, and a fake gh that
-asserts no process starts before the retry time and that `Retry-After` is honored),
-`PullRequestRefreshCoordinatorTests.swift` (no fallback on a refusal),
+asserts no process starts before the retry time, that `Retry-After` is honored, and
+that a partial answer with repository errors leaves the gate open),
+`GithubCLIClientTests.swift` (an exit-1 partial answer routes per repository in both
+query paths; an exit-1 without an answer still fails),
+`PullRequestRefreshCoordinatorTests.swift` (no fallback on a refusal or a permanent
+repository error; a typeless GraphQL error still falls back),
 `BatchedPullRequestRefreshReducerTests.swift` (the reducer follows the gate's retry
 times), and
 `WorkflowStatusCenterPresentationTests.swift` (toolbar precedence).

@@ -394,6 +394,50 @@ struct GithubRateLimitedClientTests {
     #expect(await client.isAvailable())
     #expect(launches.value == 1)
   }
+
+  @Test func partialAnswerWithRepositoryErrorsKeepsTheGateOpen() async throws {
+    let clock = LockIsolated(Date(timeIntervalSince1970: 1_000_000))
+    let gate = GithubRateLimitGate(now: { clock.value }, jitter: { 0 })
+    let launches = LockIsolated(0)
+    // gh exits 1 whenever the answer lists errors, even when it also carries data for the other
+    // aliases; that is an answer from GitHub, not a refusal.
+    let client = GithubCLIClient.live(
+      shell: fakeGh(launches: launches) { _ in
+        throw ShellClientError(
+          command: "gh api graphql",
+          stdout: """
+            HTTP/2.0 200 OK
+            X-Ratelimit-Remaining: 4900
+
+            {"data":{"r0":null,"r1":{"r1_b0":{"nodes":[]}}},\
+            "errors":[{"type":"NOT_FOUND","path":["r0"],\
+            "locations":[{"line":1,"column":3}],\
+            "message":"Could not resolve to a Repository with the name 'octo/gone'."}]}
+            """,
+          stderr: "gh: Could not resolve to a Repository with the name 'octo/gone'.",
+          exitCode: 1
+        )
+      },
+      rateLimitGate: gate
+    )
+    let requests = [
+      CrossRepoPullRequestRequest(owner: "octo", repo: "gone", branches: ["feature"]),
+      CrossRepoPullRequestRequest(owner: "octo", repo: "repo", branches: ["feature"]),
+    ]
+
+    let result = try await client.batchPullRequestsAcrossRepositories("github.com", requests, nil)
+
+    #expect(result.successByRepo[RepoKey(owner: "octo", repo: "repo")] == [:])
+    #expect(
+      result.failedRepos[RepoKey(owner: "octo", repo: "gone")]
+        == .graphQLError(
+          type: "NOT_FOUND",
+          message: "GraphQL error for octo/gone: Could not resolve to a Repository with the name 'octo/gone'."
+        )
+    )
+    _ = try await client.batchPullRequestsAcrossRepositories("github.com", requests, nil)
+    #expect(launches.value == 2)
+  }
 }
 
 private func fakeGh(

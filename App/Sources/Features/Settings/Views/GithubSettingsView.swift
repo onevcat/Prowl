@@ -54,7 +54,7 @@ final class GithubSettingsViewModel {
         state = .outdated
       case .unavailable:
         state = .unavailable
-      case .commandFailed(let message):
+      case .commandFailed(let message), .graphQLError(_, let message):
         state = .error(message)
       case .rateLimited(let retryAt):
         // The gate may have reopened while this load was in flight, after the observer already

@@ -113,6 +113,22 @@ enum GithubCLIOutput {
     throw GithubCLIError.commandFailed(sawValidJSON ? undecodableMessage : noPayloadMessage)
   }
 
+  // True when gh's output holds a complete GraphQL answer: an HTTP success status when `--include`
+  // printed one, and a body whose top-level `data` is a non-empty object. gh exits 1 whenever the
+  // body also lists `errors`, so the exit code alone cannot tell a partial answer from a failure.
+  nonisolated static func carriesGraphQLData(_ output: String) -> Bool {
+    if let status = GithubRateLimitClassifier.responseStatus(in: output), !(200..<300).contains(status) {
+      return false
+    }
+    guard let span = balancedJSONSpans(in: output).last,
+      let object = try? JSONSerialization.jsonObject(with: Data(span.utf8)) as? [String: Any],
+      let data = object["data"] as? [String: Any]
+    else {
+      return false
+    }
+    return !data.isEmpty
+  }
+
   // Logs a length-capped snapshot of the offending output so the user can retrieve it from the log
   // stream without flooding it with a large banner.
   nonisolated static func logDecodeFailure(_ output: String) {
@@ -557,7 +573,8 @@ nonisolated private func fetchCrossRepoChunk(
       "-f",
       "query=\(plan.query)",
     ],
-    repoRoot: nil
+    repoRoot: nil,
+    acceptsGraphQLErrors: true
   )
   guard !output.isEmpty else {
     var failed: [RepoKey: GithubCLIError] = [:]
@@ -570,12 +587,15 @@ nonisolated private func fetchCrossRepoChunk(
   decoder.dateDecodingStrategy = .iso8601
   let response = try GithubCLIOutput.decode(CrossRepoPullRequestResponse.self, from: output, decoder: decoder)
 
-  let errorMessagesByAlias = response.errorMessagesByAlias()
+  let errorsByAlias = response.errorsByAlias()
   var success: [RepoKey: [String: GithubPullRequest]] = [:]
   var failed: [RepoKey: GithubCLIError] = [:]
   for (alias, key) in plan.repoAliases {
-    if let detail = errorMessagesByAlias[alias] {
-      failed[key] = .commandFailed("GraphQL error for \(key.owner)/\(key.repo): \(detail)")
+    if let error = errorsByAlias[alias] {
+      failed[key] = .graphQLError(
+        type: error.type,
+        message: "GraphQL error for \(key.owner)/\(key.repo): \(error.message)"
+      )
       continue
     }
     guard let payload = response.repositories[alias] else {
@@ -1221,7 +1241,8 @@ nonisolated private func fetchPullRequestsChunk(
       "-f",
       "repo=\(request.repo)",
     ],
-    repoRoot: nil
+    repoRoot: nil,
+    acceptsGraphQLErrors: true
   )
   guard !output.isEmpty else {
     return [:]
@@ -1230,6 +1251,9 @@ nonisolated private func fetchPullRequestsChunk(
   let decoder = JSONDecoder()
   decoder.dateDecodingStrategy = .iso8601
   let response = try GithubCLIOutput.decode(GithubGraphQLPullRequestResponse.self, from: output, decoder: decoder)
+  if let repositoryError = response.repositoryError {
+    throw repositoryError
+  }
   let prsByBranch = response.pullRequestsByBranch(
     aliasMap: aliasMap,
     owner: request.owner,
@@ -1335,12 +1359,15 @@ nonisolated private func isOutdatedGitHubCLI(_ error: ShellClientError) -> Bool 
   return false
 }
 
+// `acceptsGraphQLErrors` keeps the output of a `gh api graphql` call that exited 1 only because the
+// answer lists GraphQL errors next to its data; the caller then routes each error to its repository.
 nonisolated private func runGh(
   shell: ShellClient,
   resolver: GithubCLIExecutableResolver,
   gate: GithubRateLimitGate,
   arguments: [String],
-  repoRoot: URL?
+  repoRoot: URL?,
+  acceptsGraphQLErrors: Bool = false
 ) async throws -> String {
   let command = (["gh"] + arguments).joined(separator: " ")
   let ticket = try await gate.admit()
@@ -1363,6 +1390,9 @@ nonisolated private func runGh(
     let answered = shellError.flatMap { GithubRateLimitClassifier.responseStatus(in: $0.stdout) } != nil
     if let retryAt = await gate.record(ticket, signal: signal, answered: answered) {
       throw GithubCLIError.rateLimited(retryAt: retryAt)
+    }
+    if acceptsGraphQLErrors, let shellError, GithubCLIOutput.carriesGraphQLData(shellError.stdout) {
+      return shellError.stdout
     }
     throw githubCLIError(from: error, command: command)
   }

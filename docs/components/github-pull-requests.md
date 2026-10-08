@@ -106,6 +106,9 @@ limit, Prowl stops sending GitHub requests of any kind:
 
 - "GitHub rate-limited until HH:MM" means Prowl is holding off for the whole
   account. Requests from other tools on that account can extend the limit too.
+- A remote GitHub cannot resolve for the account (a deleted fork, a repository the
+  account cannot see) fails only its own repository's refresh, and Prowl does not
+  retry it with smaller queries. Fix or remove the remote to stop the failure.
 - No `gh` / not authenticated → no PR features. If a human expects PR actions and
   they're missing, check `gh auth status`.
 - If a repo is pinned to a specific GitHub identity and PR actions fail, verify
