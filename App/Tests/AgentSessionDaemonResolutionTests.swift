@@ -16,13 +16,12 @@ struct AgentSessionDaemonResolutionTests {
     let secondID = "22222222-2222-4222-8222-222222222222"
     let childID = "33333333-3333-4333-8333-333333333333"
 
-    init() throws {
+    init(ownsRollout: Bool = false) throws {
       tui = Process()
       input = Pipe()
       tui.executableURL = URL(filePath: "/bin/cat")
       tui.standardInput = input
       tui.standardOutput = FileHandle.nullDevice
-      try tui.run()
       directory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         .appending(path: "prowl-session-\(UUID())")
       home = directory.appending(path: "custom-codex")
@@ -34,6 +33,8 @@ struct AgentSessionDaemonResolutionTests {
       for (url, id) in [(first, firstID), (second, secondID), (child, childID)] {
         try Data("{\"type\":\"session_meta\",\"payload\":{\"id\":\"\(id)\"}}\n".utf8).write(to: url)
       }
+      if ownsRollout { tui.standardOutput = try FileHandle(forWritingTo: first) }
+      try tui.run()
     }
 
     @MainActor var process: IdentifiedAgentProcess {
@@ -202,6 +203,30 @@ struct AgentSessionDaemonResolutionTests {
       identified: fixture.process, workingDirectory: fixture.directory, activeText: "",
       configRoot: fixture.home, surfaceID: UUID())
     #expect(result.session?.confidence != .exact)
+  }
+
+  @Test(arguments: [false, true])
+  func ownedLocalRolloutTakesPrecedenceOverDaemonSelection(pending: Bool) async throws {
+    let fixture = try Fixture(ownsRollout: true)
+    defer { fixture.cleanUp() }
+    #expect(ProcessDetection.openFilePaths(pid: fixture.tui.processIdentifier).contains(fixture.first.path))
+    let resolver = AgentSessionResolver(
+      tuiOpenFilePaths: { _ in [fixture.first.path] },
+      daemonBinding: { _, _, _ in
+        pending ? .selectionPending : fixture.binding(fixture.secondID, [fixture.second])
+      })
+    let pane = UUID()
+    let background = await resolver.resolve(
+      identified: fixture.process, workingDirectory: fixture.directory, activeText: "",
+      configRoot: fixture.home, surfaceID: pane)
+    let fresh = await resolver.resolveFresh(
+      identified: fixture.process, workingDirectory: fixture.directory, activeText: "",
+      configRoot: fixture.home, surfaceID: pane)
+    for result in [background, fresh] {
+      #expect(result.session?.id == fixture.firstID)
+      #expect(result.session?.source == .openFile)
+      #expect(result.session?.confidence == .exact)
+    }
   }
 
   @Test func noPaneDoesNotConsultDaemonBinding() async throws {

@@ -25,9 +25,10 @@ session resolver only checks the TUI files and transcript fingerprints.
   A pending selection explicitly suppresses both the fallback cache and text
   matching, so a fork cannot return its parent transcript through copied history.
   Reject client IDs that claim more than one rollout.
-- Consult selection evidence before the local FD inventory gate. An incomplete
-  inventory cannot bypass a known selection reset; accepting a daemon binding
-  still requires a complete inventory with no TUI-owned rollout.
+- Preserve local open-file resolution when a complete TUI inventory contains an
+  owned rollout, even if the same home also has a managed daemon. Otherwise a known
+  selection reset suppresses fallback, including when the inventory is incomplete.
+  Accepting a daemon binding requires a complete inventory with no TUI-owned rollout.
 - Share a bounded parsed TUI-log cache between caller routing and session lookup.
   Check device, inode, size, modification time, and change time on every lookup;
   read and parse only changed files. Validate the snapshot across reads and bound

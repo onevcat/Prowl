@@ -245,7 +245,8 @@ This reports `process_log` / `exact` without matching terminal text. A new or sw
 thread needs an indexed submit before this evidence is available. After a known
 selection change, unresolved identity suppresses text matching even if a local
 file-handle scan is incomplete, so copied history cannot select the previous thread. Otherwise the existing fallback and confidence
-requirements still apply.
+requirements still apply. An embedded TUI with a complete local rollout inventory
+keeps its normal local session resolution, even when the same home has a daemon.
 
 Default text output always reports current `Status`, decision `Reason`, last
 state-change time, and a result state. A blocked snapshot includes the raw current

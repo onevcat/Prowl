@@ -389,12 +389,13 @@ actor AgentSessionResolver {
     guard ProcessDetection.processStartDate(pid: process.pid) == startedAt else {
       return AgentSessionResolution(session: nil, isFresh: true)
     }
+    let paths = tuiOpenFilePaths(process.pid)
+    // An embedded TUI's complete local inventory takes precedence over a shared daemon.
+    if let paths, paths.contains(where: { parse($0) != nil }) { return nil }
     if case .selectionPending = lookup {
       return AgentSessionResolution(session: nil, isFresh: true)
     }
-    guard let binding = lookup.binding,
-      let paths = tuiOpenFilePaths(process.pid), !paths.contains(where: { parse($0) != nil })
-    else { return nil }
+    guard let binding = lookup.binding, paths != nil else { return nil }
     let roots = Set(binding.paths).compactMap { path -> URL? in
       guard let parsed = parse(path), parsed.id == binding.rootID, let url = parsed.transcriptPath,
         let handle = try? FileHandle(forReadingFrom: url)
