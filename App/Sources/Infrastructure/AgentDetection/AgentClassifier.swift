@@ -102,7 +102,11 @@ private func agentCandidates(for process: ForegroundProcess) -> [(name: String, 
   // argv0 but holds no presence lock, so the interactive TUI must always win
   // the pick. The pinned first position keeps a prompt payload that merely
   // mentions the token from demoting the real TUI.
-  let isAntigravityUpdater = arguments.dropFirst().first == "--bg-updater"
+  // agy's Go-style flags accept one dash too, so `-bg-updater` spells the
+  // same updater mode.
+  let isAntigravityUpdater =
+    arguments.dropFirst().first == "--bg-updater"
+    || arguments.dropFirst().first == "-bg-updater"
 
   if let argv0 = process.argv0, let name = normalizedProcessName(argv0) {
     // The REPL delegates to `devin acp`, which owns the native session lock.

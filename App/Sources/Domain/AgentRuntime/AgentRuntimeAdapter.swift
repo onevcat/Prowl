@@ -824,16 +824,51 @@ nonisolated private struct AntigravityRuntimeAdapter: AgentRuntimeAdapter {
   // `agy --help` 1.3.1: low|medium|high|xhigh|max.
   let reasoningEffortSuggestions = ["low", "medium", "high", "xhigh", "max"]
 
-  /// Flags that consume the following token as a value (`agy --help` 1.3.1):
-  /// prompt text, model, effort, and every other string-valued option.
-  /// Observation skips flag+value so a flag-shaped value is never read as an
-  /// option, then keeps scanning the real flags after it.
+  /// Flags that consume the following token as a value (`agy --help` 1.3.1
+  /// plus hidden flags seen in updater argv): prompt text, model, effort, and
+  /// every other string-valued option. Observation skips flag+value so a
+  /// flag-shaped value is never read as an option, then keeps scanning the
+  /// real flags after it.
   private static let valueFlags: Set<String> = [
-    "-p", "--print", "--prompt", "-i", "--prompt-interactive",
+    "--print", "--prompt", "--prompt-interactive",
     "--add-dir", "--agent", "--conversation", "--effort", "--input-format",
     "--json-schema", "--log-file", "--mode", "--output-format",
     "--print-timeout", "--project",
+    "--app_data_dir", "--gemini_dir",
   ]
+
+  /// Bool flags a session argv can carry (`agy --help` 1.3.1 plus the hidden
+  /// updater flag). Tokens matching none of the value/bool tables are unknown
+  /// to this parser, which the permission scan treats as unprovable.
+  private static let booleanFlags: Set<String> = [
+    "--continue", "--dangerously-skip-permissions", "--disable-slash-commands",
+    "--new-project", "--remote-control", "--sandbox", "--bg-updater",
+    "--help", "--version",
+  ]
+
+  /// agy's Go-style flag parser treats one or two leading dashes identically
+  /// (`-model`, `--model`, and even `--p` all work; verified 1.3.1). Matching
+  /// on the bare name resolves the short aliases; any other single-dash token
+  /// gains a second dash so every spelling reaches the same option.
+  private static let shortOptionNames = [
+    "p": "--print",
+    "i": "--prompt-interactive",
+    "c": "--continue",
+  ]
+
+  private static func normalizedFlag(_ token: String) -> String {
+    guard token.hasPrefix("-") else { return token }
+    var name = token
+    var valueSuffix = ""
+    if let eqIndex = token.firstIndex(of: "=") {
+      name = String(token[..<eqIndex])
+      valueSuffix = String(token[eqIndex...])
+    }
+    let bareName = name.drop(while: { $0 == "-" })
+    guard !bareName.isEmpty else { return token }
+    if let mapped = shortOptionNames[String(bareName)] { return mapped + valueSuffix }
+    return name.hasPrefix("--") ? token : "--\(bareName)\(valueSuffix)"
+  }
 
   /// Every `=` spelling Go's `strconv.ParseBool` accepts as false — the only
   /// forms that explicitly clear the flag. A space-separated `false` is a
@@ -852,7 +887,8 @@ nonisolated private struct AntigravityRuntimeAdapter: AgentRuntimeAdapter {
     var flags: [String] = []
     var index = arguments.startIndex
     while index < arguments.endIndex {
-      let token = arguments[index]
+      let isLeadingToken = index == arguments.startIndex
+      let token = Self.normalizedFlag(arguments[index])
       index = arguments.index(after: index)
       if token == "--model" {
         if index < arguments.endIndex {
@@ -863,6 +899,14 @@ nonisolated private struct AntigravityRuntimeAdapter: AgentRuntimeAdapter {
         model = String(token.dropFirst("--model=".count))
       } else if Self.valueFlags.contains(token) {
         if index < arguments.endIndex { index = arguments.index(after: index) }
+      } else if token == "--" {
+        // Go flag terminator: everything after it is positional.
+        break
+      } else if token == "-" || !token.hasPrefix("-") {
+        // argv0 is the only legitimate non-flag token. Go flag parsing stops
+        // at any later positional — and agy rejects one outright — so nothing
+        // after it is a real option.
+        if !isLeadingToken { break }
       } else {
         flags.append(token)
       }
@@ -870,15 +914,28 @@ nonisolated private struct AntigravityRuntimeAdapter: AgentRuntimeAdapter {
     // Later arguments override earlier ones. A bare token or `=true` sets the
     // flag; a Go-bool false spelling explicitly clears it (Go-style bool
     // parsing: a space `false` is a positional, not the flag's value).
-    let lastPermissionsFlag = flags.last { token in
-      token == "--dangerously-skip-permissions" || token.hasPrefix("--dangerously-skip-permissions=")
+    let flagIndex = flags.indices.last { index in
+      let token = flags[index]
+      return token == "--dangerously-skip-permissions"
+        || token.hasPrefix("--dangerously-skip-permissions=")
     }
-    let executionMode: AgentExecutionMode? =
-      switch lastPermissionsFlag {
-      case .some(let flag) where Self.permissionsOffForms.contains(flag): .standard
-      case .some: .unrestricted
-      case nil: nil
+    var executionMode: AgentExecutionMode?
+    if let flagIndex {
+      if Self.permissionsOffForms.contains(flags[flagIndex]) {
+        // A token directly before the off-form that agy knows but we don't
+        // (hidden or newer) could be a string flag that swallowed it, leaving
+        // an earlier bare flag in force — report unknown rather than an
+        // unprovable standard.
+        let previous = flagIndex > flags.startIndex ? flags[flags.index(before: flagIndex)] : nil
+        let couldSwallow =
+          previous.map {
+            $0.hasPrefix("-") && !$0.contains("=") && !Self.booleanFlags.contains($0)
+          } ?? false
+        executionMode = couldSwallow ? nil : .standard
+      } else {
+        executionMode = .unrestricted
       }
+    }
     return AgentLaunchObservation(model: model, executionMode: executionMode)
   }
 

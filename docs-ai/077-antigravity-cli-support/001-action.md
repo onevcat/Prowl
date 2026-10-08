@@ -107,6 +107,13 @@
   value-flag (`--model`, `--effort`, `--add-dir`, …) so a flag-shaped value
   can't be miscounted, tracks `--model` last-wins inline, and recognizes all
   Go `ParseBool` false spellings.
+- **Option spelling is normalized before interpretation**: agy's Go-style
+  parser accepts `-name` alongside `--name` (verified `-print`/`-model`/
+  `-help` on 1.3.1), so observation maps single-dash forms — including `=`
+  values and the `-p`/`-i`/`-c` aliases — to their long names, and stops at a
+  bare `--` terminator. This keeps value consumption and last-wins permission
+  overrides correct across mixed spellings. The classifier's updater demotion
+  accepts `-bg-updater` on the same grounds.
 - **Prompt binding switched from `=`-form to space form.** The plan assumed
   `--prompt-interactive=<prompt>` was required to protect flag-shaped prompts.
   `adapterSupportsSeededPrompt` (the workflow seeded-prompt probe) requires the

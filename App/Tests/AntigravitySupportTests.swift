@@ -56,6 +56,16 @@ struct AntigravitySupportTests {
       #expect(identified.process.pid == 204)
     }
 
+    // Go flag equivalence: `-bg-updater` spells the same updater mode.
+    let singleDashUpdater = ForegroundProcess(
+      pid: 207, parentProcessID: 200, name: "agy", argv0: "agy",
+      cmdline: "agy -bg-updater --app_data_dir=antigravity-cli")
+    for processes in [[tui, singleDashUpdater], [singleDashUpdater, tui]] {
+      let identified = try #require(
+        identifyAgentInJob(ForegroundJob(processGroupID: 200, processes: processes)))
+      #expect(identified.process.pid == 200)
+    }
+
     // Without argv0 (procargs failure) the comm-name candidate is still demoted
     // below the TUI's, so enumeration order never hands the pane the updater.
     let nameOnlyTUI = ForegroundProcess(pid: 205, name: "agy", argv0: nil, cmdline: nil)
@@ -170,6 +180,116 @@ struct AntigravitySupportTests {
         runtime: runtime,
         arguments: ["agy", "--model=gemini-3-pro", "--dangerously-skip-permissions=false"])
         == AgentLaunchObservation(model: "gemini-3-pro", executionMode: .standard))
+    // Go flag semantics: `-name` spells the same option as `--name`
+    // (verified `agy -print`/`-model`/`-help` on 1.3.1), including `=` forms,
+    // value consumption, and last-wins permission overrides.
+    #expect(
+      AgentRuntimeAdapterRegistry.observe(
+        runtime: runtime,
+        arguments: [
+          "agy", "--dangerously-skip-permissions=false", "-dangerously-skip-permissions",
+        ]
+      )
+      .executionMode == .unrestricted)
+    #expect(
+      AgentRuntimeAdapterRegistry.observe(
+        runtime: runtime,
+        arguments: [
+          "agy", "--dangerously-skip-permissions", "-dangerously-skip-permissions=false",
+        ]
+      )
+      .executionMode == .standard)
+    #expect(
+      AgentRuntimeAdapterRegistry.observe(
+        runtime: runtime, arguments: ["agy", "-model", "--dangerously-skip-permissions"])
+        == AgentLaunchObservation(model: "--dangerously-skip-permissions", executionMode: nil))
+    #expect(
+      AgentRuntimeAdapterRegistry.observe(
+        runtime: runtime,
+        arguments: ["agy", "-model=gemini-3-pro", "-dangerously-skip-permissions"])
+        == AgentLaunchObservation(model: "gemini-3-pro", executionMode: .unrestricted))
+    #expect(
+      AgentRuntimeAdapterRegistry.observe(
+        runtime: runtime, arguments: ["agy", "-effort", "high", "-dangerously-skip-permissions=0"])
+        == AgentLaunchObservation(model: nil, executionMode: .standard))
+    // A bare `--` ends flag parsing; following tokens are positionals.
+    #expect(
+      AgentRuntimeAdapterRegistry.observe(
+        runtime: runtime, arguments: ["agy", "--", "--dangerously-skip-permissions"]
+      )
+      .executionMode == nil)
+    // The `-p` alias consumes its value like `--print`; `-c` is a bool alias.
+    // Two-dash spellings of the aliases (`--i`, `--p`) are equivalent in Go.
+    #expect(
+      AgentRuntimeAdapterRegistry.observe(
+        runtime: runtime, arguments: ["agy", "-p", "--dangerously-skip-permissions"])
+        == AgentLaunchObservation(model: nil, executionMode: nil))
+    #expect(
+      AgentRuntimeAdapterRegistry.observe(
+        runtime: runtime, arguments: ["agy", "--i", "--dangerously-skip-permissions"])
+        == AgentLaunchObservation(model: nil, executionMode: nil))
+    #expect(
+      AgentRuntimeAdapterRegistry.observe(
+        runtime: runtime,
+        arguments: ["agy", "-c", "--dangerously-skip-permissions=false", "-model", "gemini-3-pro"])
+        == AgentLaunchObservation(model: "gemini-3-pro", executionMode: .standard))
+    // Hidden string flags (updater argv) consume their value like `--model`.
+    #expect(
+      AgentRuntimeAdapterRegistry.observe(
+        runtime: runtime, arguments: ["agy", "--gemini_dir", "--dangerously-skip-permissions"])
+        == AgentLaunchObservation(model: nil, executionMode: nil))
+    // Go flag parsing stops at the first positional (argv0 aside), so flags
+    // after a stray operand — or a subcommand — are never parsed by agy.
+    #expect(
+      AgentRuntimeAdapterRegistry.observe(
+        runtime: runtime, arguments: ["agy", "note", "--dangerously-skip-permissions"]
+      )
+      .executionMode == nil)
+    #expect(
+      AgentRuntimeAdapterRegistry.observe(
+        runtime: runtime, arguments: ["agy", "models", "--dangerously-skip-permissions"]
+      )
+      .executionMode == nil)
+    #expect(
+      AgentRuntimeAdapterRegistry.observe(
+        runtime: runtime,
+        arguments: [
+          "agy", "--dangerously-skip-permissions", "stray",
+          "--dangerously-skip-permissions=false",
+        ]
+      )
+      .executionMode == .unrestricted)
+    // A flag-shaped token the table doesn't know could be a hidden string
+    // flag that swallowed the off-form, so Standard is unprovable — nil.
+    #expect(
+      AgentRuntimeAdapterRegistry.observe(
+        runtime: runtime,
+        arguments: [
+          "agy", "--dangerously-skip-permissions", "--some-future-flag",
+          "--dangerously-skip-permissions=false",
+        ]
+      )
+      .executionMode == nil)
+    // A known bool in the same slot doesn't swallow, and an `=`-valued
+    // unknown is self-contained.
+    #expect(
+      AgentRuntimeAdapterRegistry.observe(
+        runtime: runtime,
+        arguments: [
+          "agy", "--dangerously-skip-permissions", "--sandbox",
+          "--dangerously-skip-permissions=false",
+        ]
+      )
+      .executionMode == .standard)
+    #expect(
+      AgentRuntimeAdapterRegistry.observe(
+        runtime: runtime,
+        arguments: [
+          "agy", "--dangerously-skip-permissions", "--some-future=x",
+          "--dangerously-skip-permissions=false",
+        ]
+      )
+      .executionMode == .standard)
   }
 
   @Test func screenStatesUseStatusRowAndDialogChrome() throws {
