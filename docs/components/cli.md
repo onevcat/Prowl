@@ -243,8 +243,8 @@ For a Codex TUI attached to the managed daemon, Prowl first correlates the pane'
 submitted message IDs with the daemon's rollouts and validates the root transcript.
 This reports `process_log` / `exact` without matching terminal text. A new or switched
 thread needs an indexed submit before this evidence is available. After a known
-selection change, unresolved identity suppresses text matching so copied history
-cannot select the previous thread. Otherwise the existing fallback and confidence
+selection change, unresolved identity suppresses text matching even if a local
+file-handle scan is incomplete, so copied history cannot select the previous thread. Otherwise the existing fallback and confidence
 requirements still apply.
 
 Default text output always reports current `Status`, decision `Reason`, last

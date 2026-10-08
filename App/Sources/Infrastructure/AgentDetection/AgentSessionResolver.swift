@@ -305,10 +305,16 @@ actor AgentSessionResolver {
   private let homeDirectory: URL
   typealias DaemonBinding = @Sendable (UUID, AgentProcessGeneration, URL?) async -> CodexDaemonBindingLookup
   private let daemonBinding: DaemonBinding
+  private let tuiOpenFilePaths: @Sendable (pid_t) -> [String]?
 
   init(
     fileManager: FileManager = .default,
     homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+    tuiOpenFilePaths: @escaping @Sendable (pid_t) -> [String]? = { pid in
+      var complete = false
+      let paths = ProcessDetection.openFilePaths(pid: pid, complete: &complete)
+      return complete ? paths : nil
+    },
     daemonBinding: @escaping DaemonBinding = { surfaceID, process, configRoot in
       await CodexLogProvider.lookupDaemonBinding(surfaceID: surfaceID, process: process, configRoot: configRoot)
     }
@@ -316,6 +322,7 @@ actor AgentSessionResolver {
     self.fileManager = fileManager
     self.homeDirectory = homeDirectory
     self.daemonBinding = daemonBinding
+    self.tuiOpenFilePaths = tuiOpenFilePaths
   }
 
   func resolve(
@@ -378,9 +385,6 @@ actor AgentSessionResolver {
     let process = AgentProcessGeneration(pid: identified.process.pid, startedAt: startedAt)
     let home = configRoot ?? CodexLogProvider.codexHome(forTUI: process.pid)
     let parse = Self.pathParser(profile: .profile(for: .codex), configRoot: home)
-    var complete = false
-    let paths = ProcessDetection.openFilePaths(pid: process.pid, complete: &complete)
-    guard complete, !paths.contains(where: { parse($0) != nil }) else { return nil }
     let lookup = await daemonBinding(surfaceID, process, home)
     guard ProcessDetection.processStartDate(pid: process.pid) == startedAt else {
       return AgentSessionResolution(session: nil, isFresh: true)
@@ -388,7 +392,9 @@ actor AgentSessionResolver {
     if case .selectionPending = lookup {
       return AgentSessionResolution(session: nil, isFresh: true)
     }
-    guard let binding = lookup.binding else { return nil }
+    guard let binding = lookup.binding,
+      let paths = tuiOpenFilePaths(process.pid), !paths.contains(where: { parse($0) != nil })
+    else { return nil }
     let roots = Set(binding.paths).compactMap { path -> URL? in
       guard let parsed = parse(path), parsed.id == binding.rootID, let url = parsed.transcriptPath,
         let handle = try? FileHandle(forReadingFrom: url)

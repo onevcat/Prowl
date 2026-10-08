@@ -74,16 +74,17 @@ actor CodexDaemonThreadMapper {
   }
 
   private let openFilePaths: @Sendable (pid_t) -> [String]?
+  private var sessionLogCache: CodexTUISessionLogCache
   private let sessionLogDirectory: URL
   private let fileManager: FileManager
   private var cursors: [String: Cursor] = [:]
   /// A first lookup reads each open rollout once; later lookups read only appended bytes.
   private let readBudget = 256 * 1_024 * 1_024
-  private let sessionLogLimit = 64 * 1_024 * 1_024
 
   init(
     sessionLogDirectory: URL = ProwlPaths.codexTUISessionLogDirectory,
     fileManager: FileManager = .default,
+    readSessionLog: @escaping @Sendable (URL) throws -> Data = CodexTUISessionLogCache.readStable,
     openFilePaths: @escaping @Sendable (pid_t) -> [String]? = { pid in
       var complete = false
       let paths = ProcessDetection.openFilePaths(pid: pid, complete: &complete)
@@ -92,6 +93,7 @@ actor CodexDaemonThreadMapper {
   ) {
     self.sessionLogDirectory = sessionLogDirectory
     self.fileManager = fileManager
+    self.sessionLogCache = CodexTUISessionLogCache(read: readSessionLog)
     self.openFilePaths = openFilePaths
   }
 
@@ -110,9 +112,7 @@ actor CodexDaemonThreadMapper {
 
   func bindingLookup(surfaceID: UUID, daemonPID: pid_t, tuiStartedAt: Date) -> CodexDaemonBindingLookup {
     let url = CodexTUISessionLog.url(for: surfaceID, in: sessionLogDirectory)
-    guard let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize, size <= sessionLogLimit,
-      let data = try? Data(contentsOf: url),
-      let log = Self.parseSessionLog(data, surfaceID: surfaceID),
+    guard let log = sessionLogCache.record(at: url, surfaceID: surfaceID),
       CodexTUISessionLog.belongs(sessionStartedAt: log.startedAt, toProcessStartedAt: tuiStartedAt)
     else { return .unavailable }
     let missing: CodexDaemonBindingLookup = log.selectionSubmitOffset == nil ? .unavailable : .selectionPending
@@ -182,14 +182,11 @@ actor CodexDaemonThreadMapper {
   private func sessionLogs() -> [SessionLog] {
     guard
       let entries = try? fileManager.contentsOfDirectory(
-        at: sessionLogDirectory, includingPropertiesForKeys: [.fileSizeKey], options: [.skipsHiddenFiles])
+        at: sessionLogDirectory, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])
     else { return [] }
     return entries.compactMap { entry in
-      guard let surfaceID = CodexTUISessionLog.surfaceID(forFileName: entry.lastPathComponent),
-        let size = (try? entry.resourceValues(forKeys: [.fileSizeKey]))?.fileSize, size <= sessionLogLimit,
-        let data = try? Data(contentsOf: entry)
-      else { return nil }
-      return Self.parseSessionLog(data, surfaceID: surfaceID)
+      guard let surfaceID = CodexTUISessionLog.surfaceID(forFileName: entry.lastPathComponent) else { return nil }
+      return sessionLogCache.record(at: entry, surfaceID: surfaceID)
     }
   }
 

@@ -39,7 +39,8 @@ struct AgentSessionDaemonResolutionTests {
     @MainActor var process: IdentifiedAgentProcess {
       IdentifiedAgentProcess(
         agent: .codex, name: "codex",
-        process: ForegroundProcess(pid: tui.processIdentifier, name: "codex", argv0: nil, cmdline: nil))
+        process: ForegroundProcess(
+          pid: tui.processIdentifier, name: "codex", argv0: nil, cmdline: nil))
     }
 
     func cleanUp() {
@@ -58,13 +59,15 @@ struct AgentSessionDaemonResolutionTests {
     defer { fixture.cleanUp() }
     let paneA = UUID()
     let paneB = UUID()
-    let resolver = AgentSessionResolver { pane, process, home in
-      #expect(process.pid == fixture.tui.processIdentifier)
-      #expect(home == fixture.home)
-      return pane == paneA
-        ? fixture.binding(fixture.firstID, [fixture.child, fixture.first])
-        : fixture.binding(fixture.secondID, [fixture.second])
-    }
+    let resolver = AgentSessionResolver(
+      tuiOpenFilePaths: { _ in [] },
+      daemonBinding: { pane, process, home in
+        #expect(process.pid == fixture.tui.processIdentifier)
+        #expect(home == fixture.home)
+        return pane == paneA
+          ? fixture.binding(fixture.firstID, [fixture.child, fixture.first])
+          : fixture.binding(fixture.secondID, [fixture.second])
+      })
     for screen in ["", "Old shell output with no transcript match", "Current response"] {
       for (pane, expectedID, expectedPath) in [
         (paneA, fixture.firstID, fixture.first), (paneB, fixture.secondID, fixture.second),
@@ -93,7 +96,8 @@ struct AgentSessionDaemonResolutionTests {
       func set(_ value: CodexDaemonBindingLookup) { self.value = value }
     }
     let store = BindingStore()
-    let resolver = AgentSessionResolver { _, _, _ in await store.value }
+    let resolver = AgentSessionResolver(
+      tuiOpenFilePaths: { _ in [] }, daemonBinding: { _, _, _ in await store.value })
     let pane = UUID()
     for (id, path) in [(fixture.firstID, fixture.first), (fixture.secondID, fixture.second)] {
       await store.set(fixture.binding(id, [path]))
@@ -119,7 +123,8 @@ struct AgentSessionDaemonResolutionTests {
     try FileManager.default.copyItem(at: fixture.first, to: duplicate)
     for paths in [[fixture.child], [fixture.second], [outside], [fixture.first, duplicate]] {
       let binding = fixture.binding(fixture.firstID, paths)
-      let resolver = AgentSessionResolver { _, _, _ in binding }
+      let resolver = AgentSessionResolver(
+        tuiOpenFilePaths: { _ in [] }, daemonBinding: { _, _, _ in binding })
       let result = await resolver.resolveFresh(
         identified: fixture.process, workingDirectory: fixture.directory, activeText: "",
         configRoot: fixture.home, surfaceID: UUID())
@@ -133,19 +138,24 @@ struct AgentSessionDaemonResolutionTests {
     defer { fixture.cleanUp() }
     let header: [String: Any] = [
       "type": "session_meta",
-      "payload": ["id": fixture.firstID, "base_instructions": String(repeating: "x", count: padding)],
+      "payload": [
+        "id": fixture.firstID, "base_instructions": String(repeating: "x", count: padding),
+      ],
     ]
     var data = try JSONSerialization.data(withJSONObject: header)
     data.append(10)
     try data.write(to: fixture.first)
-    let resolver = AgentSessionResolver { _, _, _ in fixture.binding(fixture.firstID, [fixture.first]) }
+    let resolver = AgentSessionResolver(
+      tuiOpenFilePaths: { _ in [] },
+      daemonBinding: { _, _, _ in fixture.binding(fixture.firstID, [fixture.first]) })
     let result = await resolver.resolveFresh(
       identified: fixture.process, workingDirectory: fixture.directory, activeText: "",
       configRoot: fixture.home, surfaceID: UUID())
     #expect((result.session?.confidence == .exact) == (padding < 1_048_576))
   }
 
-  @Test func knownSelectionChangeDoesNotMatchCopiedHistoryOrReplayTheCache() async throws {
+  @Test(arguments: [false, true])
+  func knownSelectionChangeDoesNotMatchCopiedHistoryOrReplayTheCache(incomplete: Bool) async throws {
     let fixture = try Fixture()
     defer { fixture.cleanUp() }
     try FileManager.default.removeItem(at: fixture.second)
@@ -160,9 +170,9 @@ struct AgentSessionDaemonResolutionTests {
       func change() { changed = true }
     }
     let selection = Selection()
-    let resolver = AgentSessionResolver { _, _, _ in
-      await selection.changed ? .selectionPending : .unavailable
-    }
+    let resolver = AgentSessionResolver(
+      tuiOpenFilePaths: { _ in incomplete ? nil : [] },
+      daemonBinding: { _, _, _ in await selection.changed ? .selectionPending : .unavailable })
     let pane = UUID()
     let initial = await resolver.resolve(
       identified: fixture.process, workingDirectory: fixture.directory, activeText: text,
@@ -179,13 +189,30 @@ struct AgentSessionDaemonResolutionTests {
     #expect(fresh.session == nil)
   }
 
+  @Test(arguments: [false, true])
+  func boundIdentityStillRequiresCompleteInventoryWithoutLocalRollouts(incomplete: Bool)
+    async throws
+  {
+    let fixture = try Fixture()
+    defer { fixture.cleanUp() }
+    let resolver = AgentSessionResolver(
+      tuiOpenFilePaths: { _ in incomplete ? nil : [fixture.first.path] },
+      daemonBinding: { _, _, _ in fixture.binding(fixture.secondID, [fixture.second]) })
+    let result = await resolver.resolveFresh(
+      identified: fixture.process, workingDirectory: fixture.directory, activeText: "",
+      configRoot: fixture.home, surfaceID: UUID())
+    #expect(result.session?.confidence != .exact)
+  }
+
   @Test func noPaneDoesNotConsultDaemonBinding() async throws {
     let fixture = try Fixture()
     defer { fixture.cleanUp() }
-    let resolver = AgentSessionResolver { _, _, _ in
-      Issue.record("A pane is required for daemon attribution")
-      return .unavailable
-    }
+    let resolver = AgentSessionResolver(
+      tuiOpenFilePaths: { _ in [] },
+      daemonBinding: { _, _, _ in
+        Issue.record("A pane is required for daemon attribution")
+        return .unavailable
+      })
     let result = await resolver.resolveFresh(
       identified: fixture.process, workingDirectory: fixture.directory, activeText: "",
       configRoot: fixture.home)
