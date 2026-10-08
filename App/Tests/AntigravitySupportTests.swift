@@ -147,32 +147,6 @@ struct AntigravitySupportTests {
       AgentRuntimeAdapterRegistry.observe(
         runtime: runtime, arguments: ["agy", "--effort", "-i", "--dangerously-skip-permissions"])
         == AgentLaunchObservation(model: nil, executionMode: .unrestricted))
-    // Go-style bool: a space `false` is a positional, not the flag's value.
-    #expect(
-      AgentRuntimeAdapterRegistry.observe(
-        runtime: runtime, arguments: ["agy", "--dangerously-skip-permissions", "false"]
-      )
-      .executionMode == .unrestricted)
-    // Later arguments override earlier ones, and every Go bool-false spelling
-    // explicitly clears the flag.
-    for offForm in ["=false", "=0", "=f", "=F", "=FALSE", "=False"] {
-      #expect(
-        AgentRuntimeAdapterRegistry.observe(
-          runtime: runtime,
-          arguments: [
-            "agy", "--dangerously-skip-permissions", "--dangerously-skip-permissions\(offForm)",
-          ]
-        )
-        .executionMode == .standard)
-    }
-    #expect(
-      AgentRuntimeAdapterRegistry.observe(
-        runtime: runtime,
-        arguments: [
-          "agy", "--dangerously-skip-permissions=false", "--dangerously-skip-permissions",
-        ]
-      )
-      .executionMode == .unrestricted)
     #expect(
       AgentRuntimeAdapterRegistry.observe(runtime: runtime, arguments: ["agy"]).executionMode == nil)
     #expect(
@@ -180,6 +154,10 @@ struct AntigravitySupportTests {
         runtime: runtime,
         arguments: ["agy", "--model=gemini-3-pro", "--dangerously-skip-permissions=false"])
         == AgentLaunchObservation(model: "gemini-3-pro", executionMode: .standard))
+  }
+
+  @Test func observesGoStyleFlagSpellingsAndPositionals() throws {
+    let runtime = try #require(AgentProfileRuntime(rawValue: "antigravity"))
     // Go flag semantics: `-name` spells the same option as `--name`
     // (verified `agy -print`/`-model`/`-help` on 1.3.1), including `=` forms,
     // value consumption, and last-wins permission overrides.
@@ -238,6 +216,36 @@ struct AntigravitySupportTests {
       AgentRuntimeAdapterRegistry.observe(
         runtime: runtime, arguments: ["agy", "--gemini_dir", "--dangerously-skip-permissions"])
         == AgentLaunchObservation(model: nil, executionMode: nil))
+  }
+
+  @Test func observesPermissionModesPositionalsAndUnprovableCases() throws {
+    let runtime = try #require(AgentProfileRuntime(rawValue: "antigravity"))
+    // Go-style bool: a space `false` is a positional, not the flag's value.
+    #expect(
+      AgentRuntimeAdapterRegistry.observe(
+        runtime: runtime, arguments: ["agy", "--dangerously-skip-permissions", "false"]
+      )
+      .executionMode == .unrestricted)
+    // Later arguments override earlier ones, and every Go bool-false spelling
+    // explicitly clears the flag.
+    for offForm in ["=false", "=0", "=f", "=F", "=FALSE", "=False"] {
+      #expect(
+        AgentRuntimeAdapterRegistry.observe(
+          runtime: runtime,
+          arguments: [
+            "agy", "--dangerously-skip-permissions", "--dangerously-skip-permissions\(offForm)",
+          ]
+        )
+        .executionMode == .standard)
+    }
+    #expect(
+      AgentRuntimeAdapterRegistry.observe(
+        runtime: runtime,
+        arguments: [
+          "agy", "--dangerously-skip-permissions=false", "--dangerously-skip-permissions",
+        ]
+      )
+      .executionMode == .unrestricted)
     // Go flag parsing stops at the first positional (argv0 aside), so flags
     // after a stray operand — or a subcommand — are never parsed by agy.
     #expect(
@@ -374,18 +382,6 @@ struct AntigravitySupportTests {
       """
     #expect(agent.detectState(in: permissionWithStackedStatus) == .blocked)
 
-    // A stale hint residue sits ABOVE the composer's `> typed` row — reversed
-    // order is transcript, not a live dialog.
-    let staleHintWithTypedComposer = """
-        1. Yes, run command
-        ↑/↓ Navigate · enter Confirm
-      ────────────────────────────────────────────────────
-      > explain this
-      ────────────────────────────────────────────────────
-      ? for shortcuts                                             Gemini 3.1 Pro · high
-      """
-    #expect(agent.detectState(in: staleHintWithTypedComposer) == .idle)
-
     // Answered dialogs scroll into transcript without their live chrome.
     let answered = """
       Requesting permission for:
@@ -400,6 +396,48 @@ struct AntigravitySupportTests {
     #expect(
       agent.detectState(
         in: "I explained that esc to cancel interrupts a turn.\n>\n? for shortcuts") == .idle)
+  }
+
+  @Test func historicalDialogChromeIsScrollback() throws {
+    let agent = try agent()
+    // A stale hint residue sits ABOVE the composer's `> typed` row — reversed
+    // order is transcript, not a live dialog.
+    let staleHintWithTypedComposer = """
+        1. Yes, run command
+        ↑/↓ Navigate · enter Confirm
+      ────────────────────────────────────────────────────
+      > explain this
+      ────────────────────────────────────────────────────
+      ? for shortcuts                                             Gemini 3.1 Pro · high
+      """
+    #expect(agent.detectState(in: staleHintWithTypedComposer) == .idle)
+
+    // A complete dialog quoted in transcript — `> ` option and hint intact —
+    // is scrollback once a fresh composer owns the bottom region, whatever the
+    // footer below it reports.
+    let quotedDialogThenIdle = """
+      Here is the dialog you asked me to explain:
+      > Yes, run command
+        No, cancel
+        ↑/↓ Navigate · enter Confirm
+      ────────────────────────────────────
+      >
+      ────────────────────────────────────
+      ? for shortcuts                                             Gemini 3.1 Pro · high
+      """
+    #expect(agent.detectState(in: quotedDialogThenIdle) == .idle)
+
+    let quotedDialogThenWorking = """
+      ⣻  Generating...
+      > Yes, run command
+        No, cancel
+        ↑/↓ Navigate · enter Confirm
+      ────────────────────────────────────
+      >
+      ────────────────────────────────────
+      esc to cancel                                               Gemini 3.1 Pro · high
+      """
+    #expect(agent.detectState(in: quotedDialogThenWorking) == .working)
   }
 
   @Test func appendedStatusOutputKeepsFooterEvidence() throws {
