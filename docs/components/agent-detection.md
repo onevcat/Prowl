@@ -41,14 +41,16 @@ the session, so that open file — not a lock file left behind after exit —
 identifies the session exactly. Its `conversations/<id>.db` and
 `brain/<id>/.system_generated/logs/transcript.jsonl` share the same id.
 
-A `esc to cancel` bottom status row is **Working** while a turn runs;
-`? for shortcuts` is **Idle**. Workspace-trust, tool-permission, and ask-user
-dialogs are **Blocked**: they render a `↑/↓ Navigate` hint row with a `> `-
-selected option above it, and a permission dialog keeps `esc to cancel`, so
-the dialog chrome wins over the working footer. A `─` composer-border row
-between the hint and the status row marks the whole dialog as scrollback —
-quoted or answered dialogs do not re-report Blocked, and `>`- or `─`-leading
-custom status output below the status row cannot mask a live one. The `stack_with_default` setting can append custom
+A `esc to cancel` or `esc to interrupt` bottom status row is **Working**
+while a turn runs; `? for shortcuts` is **Idle**. Workspace-trust,
+tool-permission, and ask-user dialogs are **Blocked**: they render a
+`↑/↓ Navigate` hint row with a `> `-selected option above it, and a
+permission dialog keeps `esc to cancel`, so the dialog chrome wins over the
+working footer. A `─` composer-border row between the hint and the last
+status row marks the whole dialog as scrollback — a quoted or answered
+dialog behind a boxed composer does not re-report Blocked, and `>`- or
+`─`-leading custom status output below the status row cannot mask a live
+one. The `stack_with_default` setting can append custom
 status output below the built-in row, so the footer signatures are matched in
 the last few rows; a screen with neither signature is **unknown**, not Idle.
 

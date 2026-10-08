@@ -802,10 +802,12 @@ nonisolated private func detectAntigravity(_ content: String) -> AgentRawState {
   // Live dialog order is `> `-selected option ABOVE the `↑/↓ Navigate` hint —
   // reversed order (e.g. a stale hint residue above a `> typed` composer row)
   // is transcript, not a dialog. A `─` composer-border row between the hint and
-  // the status row means the boxed composer owns the bottom region and the
-  // whole dialog is scrollback; the signature is scoped to that gap so
-  // `>`-prefixed or `─`-dividing `stack_with_default` output — which renders
-  // below the status row — cannot veto a live dialog.
+  // the last status row means the boxed composer owns the bottom region and
+  // the whole dialog is scrollback. Anchoring on the LAST status row keeps
+  // both edges honest: a transcript quote that includes the dialog's own
+  // status line still sees the fresh composer's border, while `>`- or
+  // `─`-leading `stack_with_default` output — rendered below the live status
+  // row — cannot veto a live dialog.
   let hintIndex = lines.lastIndex(where: {
     $0.hasPrefix("↑/↓ Navigate") || $0.hasPrefix("↑↓ Navigate")
   })
@@ -813,14 +815,17 @@ nonisolated private func detectAntigravity(_ content: String) -> AgentRawState {
     hintIndex.map { hint -> Bool in
       let below = lines[(hint + 1)...]
       let statusIndex =
-        below.firstIndex(where: {
+        below.lastIndex(where: {
           $0.hasPrefix("esc to cancel") || $0.hasPrefix("esc to interrupt")
             || $0.hasPrefix("? for shortcuts")
         }) ?? below.endIndex
       return below[..<statusIndex].contains { $0.hasPrefix("─") }
     } ?? false
+  // The window below the hint tolerates a usage row, the status row, and
+  // stacked `stack_with_default` output — missing a live dialog here can
+  // otherwise fall through to a spoofed footer signature.
   if let hintIndex,
-    hintIndex >= lines.count - 6,
+    hintIndex >= lines.count - 10,
     lines[..<hintIndex].suffix(8).contains(where: { $0.hasPrefix("> ") }),
     !composerBelow
   {

@@ -300,6 +300,28 @@ struct AntigravitySupportTests {
         ]
       )
       .executionMode == nil)
+    // Adjacency is not the test: `--weird` could be a newer string flag that
+    // consumed `--effort`, leaving `high` positional and the rest unparsed.
+    #expect(
+      AgentRuntimeAdapterRegistry.observe(
+        runtime: runtime,
+        arguments: [
+          "agy", "--weird", "--effort", "high", "--sandbox",
+          "--dangerously-skip-permissions",
+        ]
+      )
+      .executionMode == nil)
+    // `=`-valued unknowns are self-contained and cannot consume argv tokens,
+    // so they leave the decisive flag's mode provable.
+    #expect(
+      AgentRuntimeAdapterRegistry.observe(
+        runtime: runtime,
+        arguments: [
+          "agy", "--dangerously-skip-permissions", "--x=1",
+          "--dangerously-skip-permissions=false",
+        ]
+      )
+      .executionMode == .standard)
   }
 
   @Test func screenStatesUseStatusRowAndDialogChrome() throws {
@@ -440,6 +462,41 @@ struct AntigravitySupportTests {
       esc to cancel                                               Gemini 3.1 Pro · high
       """
     #expect(agent.detectState(in: quotedDialogThenWorking) == .working)
+
+    // A transcript quote can carry the dialog's own status line: the composer
+    // border still sits between the hint and the LAST (live) status row, so
+    // the veto must anchor there rather than on the quoted `esc to cancel`.
+    let quotedDialogWithStatusThenIdle = """
+      Requesting permission for:
+         echo hello
+      > 1. Yes, run command
+        2. No, cancel
+        ↑/↓ Navigate · enter Confirm
+      esc to cancel                                               Gemini 3.1 Pro · high
+      ────────────────────────────────────
+      >
+      ────────────────────────────────────
+      ? for shortcuts                                             Gemini 3.1 Pro · high
+      """
+    #expect(agent.detectState(in: quotedDialogWithStatusThenIdle) == .idle)
+
+    // Detection anchors on the LAST hint row: a quoted dialog above a live
+    // one still reports the live dialog.
+    let quotedDialogThenLiveDialog = """
+      > Yes, run command
+        No, cancel
+        ↑/↓ Navigate · enter Confirm
+      ────────────────────────────────────
+      >
+      ────────────────────────────────────
+      Requesting permission for:
+         echo hello
+      > 1. Yes, run command
+        2. No, cancel
+        ↑↓ Navigate · enter Confirm
+      esc to cancel                                               Gemini 3.1 Pro · high
+      """
+    #expect(agent.detectState(in: quotedDialogThenLiveDialog) == .blocked)
   }
 
   @Test func appendedStatusOutputKeepsFooterEvidence() throws {

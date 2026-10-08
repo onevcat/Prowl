@@ -117,16 +117,22 @@
 - **A composer border below the hint vetoes the dialog read**: a complete
   dialog quoted in transcript (`> ` option and `↑/↓ Navigate` intact) followed
   by a fresh composer used to report Blocked over the live footer. The veto
-  keys on a `─` composer-border row strictly between the hint and the status
-  row — `>`-prefixed or `─`-dividing `stack_with_default` output lives below
-  the status row and cannot veto a live dialog (verified 1.3.1:
-  trust/permission dialogs render only footer/status rows beneath the hint).
+  keys on a `─` composer-border row between the hint and the LAST status row —
+  anchoring on the last status row means a quote that carries the dialog's own
+  status line still sees the composer's border, while `>`-prefixed or
+  `─`-dividing `stack_with_default` output lives below the live status row and
+  cannot veto a live dialog (verified 1.3.1: trust/permission dialogs render
+  only footer/status rows beneath the hint). The `> ` option window above the
+  hint spans 8 rows for long option lists.
 - **Permission observation is conservative in both directions**: an
-  unrecognized flag-shaped token directly before the decisive permission
-  flag — off-form or bare — yields unknown rather than an unprovable mode;
-  the known-bool table (`--sandbox`, `--continue`, `--new-project`,
-  `--remote-control`, `--disable-slash-commands`, `--bg-updater`) was verified
-  arity-correct on 1.3.1 (each rejects a positional operand).
+  unrecognized bare flag anywhere before the decisive permission token —
+  off-form or bare — yields unknown rather than an unprovable mode, because a
+  hidden or newer string option can consume a known flag's slot and leave a
+  value positional (halting Go flag parsing). `=`-valued unknowns are
+  self-contained and cannot swallow. The known-bool table (`--sandbox`,
+  `--continue`, `--new-project`, `--remote-control`,
+  `--disable-slash-commands`, `--bg-updater`) was verified arity-correct on
+  1.3.1 (each rejects a positional operand).
 - **Prompt binding switched from `=`-form to space form.** The plan assumed
   `--prompt-interactive=<prompt>` was required to protect flag-shaped prompts.
   `adapterSupportsSeededPrompt` (the workflow seeded-prompt probe) requires the

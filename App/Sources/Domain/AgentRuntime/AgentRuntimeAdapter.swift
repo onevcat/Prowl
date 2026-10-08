@@ -838,8 +838,11 @@ nonisolated private struct AntigravityRuntimeAdapter: AgentRuntimeAdapter {
   ]
 
   /// Bool flags a session argv can carry (`agy --help` 1.3.1 plus the hidden
-  /// updater flag). Tokens matching none of the value/bool tables are unknown
-  /// to this parser, which the permission scan treats as unprovable.
+  /// updater flag; each verified to reject a positional operand on 1.3.1 —
+  /// re-verify on agy upgrades, since a string-valued entry here would let
+  /// agy consume a token this parser treats as decisive). Tokens matching
+  /// none of the value/bool tables are unknown to this parser, which the
+  /// permission scan treats as unprovable.
   private static let booleanFlags: Set<String> = [
     "--continue", "--dangerously-skip-permissions", "--disable-slash-commands",
     "--new-project", "--remote-control", "--sandbox", "--bg-updater",
@@ -921,15 +924,15 @@ nonisolated private struct AntigravityRuntimeAdapter: AgentRuntimeAdapter {
     }
     var executionMode: AgentExecutionMode?
     if let flagIndex {
-      // A token directly before the decisive flag that agy knows but we don't
-      // (hidden or newer) could be a string flag that swallowed it — report
-      // unknown rather than an unprovable mode in either direction.
-      let previous = flagIndex > flags.startIndex ? flags[flags.index(before: flagIndex)] : nil
-      let couldSwallow =
-        previous.map {
-          $0.hasPrefix("-") && !$0.contains("=") && !Self.booleanFlags.contains($0)
-        } ?? false
-      if couldSwallow {
+      // An unrecognized bare flag anywhere before the decisive token could be
+      // a hidden or newer string option that consumed argv tokens — including
+      // the decisive one — so the mode is unprovable. Adjacency is not enough:
+      // known value flags and their values are filtered out of `flags`, so an
+      // unknown flag only looks adjacent to a bool it actually swallowed.
+      let unprovable = flags[..<flagIndex].contains {
+        $0.hasPrefix("-") && !$0.contains("=") && !Self.booleanFlags.contains($0)
+      }
+      if unprovable {
         executionMode = nil
       } else if Self.permissionsOffForms.contains(flags[flagIndex]) {
         executionMode = .standard
