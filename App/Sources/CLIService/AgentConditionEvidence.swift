@@ -130,9 +130,12 @@ enum AgentConditionEvidence {
     guard snapshot.isLive else { return "gone" }
     guard let agent = snapshot.agent else { return "absent" }
     let state = status(for: agent, fallback: .idle).rawValue
-    // A screen fallback is not idle evidence. Current provider authority remains independent
-    // of whether the screen classifier recognizes the retained frame.
-    if snapshot.screenDetection?.reason == .noRuleMatched,
+    // An unmatched or unrecognized screen is not idle evidence: a retained
+    // `.idle` may have been stabilized before the layout became unclassifiable.
+    // Current provider authority remains independent of whether the screen
+    // classifier recognizes the retained frame.
+    if snapshot.screenDetection?.reason == .noRuleMatched
+      || snapshot.screenDetection?.state == .unknown,
       agent.stateDecision?.reason != .logTurnEnded,
       agent.stateDecision?.reason != .native(.idle),
       detectorReports(.idle, normalizedState: state)

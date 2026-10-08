@@ -799,13 +799,15 @@ nonisolated private func detectAntigravity(_ content: String) -> AgentRawState {
     .map { $0.trimmingCharacters(in: .whitespaces) }
     .filter { !$0.isEmpty }
 
-  // A small window (not just the last two rows) leaves room for a second
-  // status/footer row below the hint without losing the dialog.
-  let hasSelectionChrome = lines.suffix(3).contains { line in
-    line.hasPrefix("↑/↓ Navigate") || line.hasPrefix("↑↓ Navigate")
-  }
-  if hasSelectionChrome,
-    lines.suffix(12).contains(where: { $0.hasPrefix("> ") })
+  // Live dialog order is `> `-selected option ABOVE the `↑/↓ Navigate` hint —
+  // reversed order (e.g. a stale hint residue above a `> typed` composer row)
+  // is transcript, not a dialog. The hint window tolerates the status row, a
+  // usage row, and appended `stack_with_default` rows rendered below it.
+  if let hintIndex = lines.lastIndex(where: {
+    $0.hasPrefix("↑/↓ Navigate") || $0.hasPrefix("↑↓ Navigate")
+  }),
+    hintIndex >= lines.count - 6,
+    lines[..<hintIndex].suffix(6).contains(where: { $0.hasPrefix("> ") })
   {
     return .blocked
   }

@@ -49,8 +49,8 @@
   `~/.gemini/antigravity-cli/skills` (user) and `.agents/skills` (project — the
   shared directory Antigravity already reads). The `antigravity` target id is in
   the CLI output schema enums and command help.
-- Tab icon: `agy`/`antigravity` → the bundled `Antigravity` asset (Simple Icons
-  mark, CC0), template-rendered.
+- Tab icon: `agy`/`antigravity` → the bundled `Antigravity` asset (Lobe Icons
+  mark, MIT), template-rendered.
 - No managed hook channel, transcript reader, composer profile, or dedicated
   home — see plan non-goals. Upstream's hooks.json approach is a follow-up.
 
@@ -97,6 +97,16 @@
   `--help`/`--version` before flag parsing, so exact-token `--help` prompts are
   unreachable via the space form (equals form works; generated prompts never
   hit it).
+- **Follow-up review hardened the same surfaces further**: a pane whose screen
+  becomes unclassifiable while holding a retained `.idle` could still satisfy
+  dispatch's heuristic evidence — `normalizedState` now treats a raw `.unknown`
+  screen as no idle evidence regardless of reason (provider-backed idle still
+  wins). The dialog-chrome window was narrower than the footer tail (appended
+  stack rows could mask a live dialog into Working) and now tolerates the rows
+  a live dialog can show below the hint; `observe` skips values for every agy
+  value-flag (`--model`, `--effort`, `--add-dir`, …) so a flag-shaped value
+  can't be miscounted, tracks `--model` last-wins inline, and recognizes all
+  Go `ParseBool` false spellings.
 - **Prompt binding switched from `=`-form to space form.** The plan assumed
   `--prompt-interactive=<prompt>` was required to protect flag-shaped prompts.
   `adapterSupportsSeededPrompt` (the workflow seeded-prompt probe) requires the

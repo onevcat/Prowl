@@ -126,21 +126,35 @@ struct AntigravitySupportTests {
       AgentRuntimeAdapterRegistry.observe(
         runtime: runtime, arguments: ["agy", "-i", "--dangerously-skip-permissions"])
         == AgentLaunchObservation(model: nil, executionMode: nil))
+    // The same holds for every agy value-flag: `--model` takes the flag as its
+    // model name, so the permission flag never takes effect.
+    #expect(
+      AgentRuntimeAdapterRegistry.observe(
+        runtime: runtime, arguments: ["agy", "--model", "--dangerously-skip-permissions"])
+        == AgentLaunchObservation(model: "--dangerously-skip-permissions", executionMode: nil))
+    // `--effort` consumes `-i` as its value; the trailing permission flag is real.
+    #expect(
+      AgentRuntimeAdapterRegistry.observe(
+        runtime: runtime, arguments: ["agy", "--effort", "-i", "--dangerously-skip-permissions"])
+        == AgentLaunchObservation(model: nil, executionMode: .unrestricted))
     // Go-style bool: a space `false` is a positional, not the flag's value.
     #expect(
       AgentRuntimeAdapterRegistry.observe(
         runtime: runtime, arguments: ["agy", "--dangerously-skip-permissions", "false"]
       )
       .executionMode == .unrestricted)
-    // Later arguments override earlier ones.
-    #expect(
-      AgentRuntimeAdapterRegistry.observe(
-        runtime: runtime,
-        arguments: [
-          "agy", "--dangerously-skip-permissions", "--dangerously-skip-permissions=false",
-        ]
-      )
-      .executionMode == .standard)
+    // Later arguments override earlier ones, and every Go bool-false spelling
+    // explicitly clears the flag.
+    for offForm in ["=false", "=0", "=f", "=F", "=FALSE", "=False"] {
+      #expect(
+        AgentRuntimeAdapterRegistry.observe(
+          runtime: runtime,
+          arguments: [
+            "agy", "--dangerously-skip-permissions", "--dangerously-skip-permissions\(offForm)",
+          ]
+        )
+        .executionMode == .standard)
+    }
     #expect(
       AgentRuntimeAdapterRegistry.observe(
         runtime: runtime,
@@ -225,6 +239,32 @@ struct AntigravitySupportTests {
       esc to cancel                                               Gemini 3.1 Pro · high
       """
     #expect(agent.detectState(in: permissionWithExtraRow) == .blocked)
+
+    // The hint window tolerates status + usage + appended stack rows below it;
+    // the selected option stays above the hint in live dialogs.
+    let permissionWithStackedStatus = """
+      Requesting permission for:
+         echo hello
+      > 1. Yes, run command
+        2. No, cancel
+        ↑/↓ Navigate · enter Confirm
+      usage: 12k tokens
+      esc to cancel                                               Gemini 3.1 Pro · high
+      ctx 12% · custom status
+      """
+    #expect(agent.detectState(in: permissionWithStackedStatus) == .blocked)
+
+    // A stale hint residue sits ABOVE the composer's `> typed` row — reversed
+    // order is transcript, not a live dialog.
+    let staleHintWithTypedComposer = """
+        1. Yes, run command
+        ↑/↓ Navigate · enter Confirm
+      ────────────────────────────────────────────────────
+      > explain this
+      ────────────────────────────────────────────────────
+      ? for shortcuts                                             Gemini 3.1 Pro · high
+      """
+    #expect(agent.detectState(in: staleHintWithTypedComposer) == .idle)
 
     // Answered dialogs scroll into transcript without their live chrome.
     let answered = """

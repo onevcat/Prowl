@@ -824,42 +824,62 @@ nonisolated private struct AntigravityRuntimeAdapter: AgentRuntimeAdapter {
   // `agy --help` 1.3.1: low|medium|high|xhigh|max.
   let reasoningEffortSuggestions = ["low", "medium", "high", "xhigh", "max"]
 
-  /// Flags whose following token is prompt text, not an option. Observation
-  /// skips each flag and its value so a seeded prompt is never read as
-  /// configuration, then keeps scanning the real flags after it.
-  private static let promptFlags: Set<String> = [
+  /// Flags that consume the following token as a value (`agy --help` 1.3.1):
+  /// prompt text, model, effort, and every other string-valued option.
+  /// Observation skips flag+value so a flag-shaped value is never read as an
+  /// option, then keeps scanning the real flags after it.
+  private static let valueFlags: Set<String> = [
     "-p", "--print", "--prompt", "-i", "--prompt-interactive",
+    "--add-dir", "--agent", "--conversation", "--effort", "--input-format",
+    "--json-schema", "--log-file", "--mode", "--output-format",
+    "--print-timeout", "--project",
+  ]
+
+  /// Every `=` spelling Go's `strconv.ParseBool` accepts as false — the only
+  /// forms that explicitly clear the flag. A space-separated `false` is a
+  /// positional, not the flag's value.
+  private static let permissionsOffForms: Set<String> = [
+    "--dangerously-skip-permissions=0",
+    "--dangerously-skip-permissions=f",
+    "--dangerously-skip-permissions=F",
+    "--dangerously-skip-permissions=FALSE",
+    "--dangerously-skip-permissions=false",
+    "--dangerously-skip-permissions=False",
   ]
 
   func observe(arguments: [String]) -> AgentLaunchObservation {
-    // agy consumes exactly one token after a prompt flag; tokens after that are
-    // still flags, so skip flag+value and keep scanning rather than truncating.
-    var options: [String] = []
+    var model: String?
+    var flags: [String] = []
     var index = arguments.startIndex
     while index < arguments.endIndex {
       let token = arguments[index]
-      options.append(token)
       index = arguments.index(after: index)
-      if Self.promptFlags.contains(token), index < arguments.endIndex {
-        index = arguments.index(after: index)
+      if token == "--model" {
+        if index < arguments.endIndex {
+          model = arguments[index]
+          index = arguments.index(after: index)
+        }
+      } else if token.hasPrefix("--model=") {
+        model = String(token.dropFirst("--model=".count))
+      } else if Self.valueFlags.contains(token) {
+        if index < arguments.endIndex { index = arguments.index(after: index) }
+      } else {
+        flags.append(token)
       }
     }
     // Later arguments override earlier ones. A bare token or `=true` sets the
-    // flag; only `=false` explicitly clears it — a space `false` is a
-    // positional, not the flag's value (Go-style bool parsing).
-    let lastPermissionsFlag = options.last { token in
+    // flag; a Go-bool false spelling explicitly clears it (Go-style bool
+    // parsing: a space `false` is a positional, not the flag's value).
+    let lastPermissionsFlag = flags.last { token in
       token == "--dangerously-skip-permissions" || token.hasPrefix("--dangerously-skip-permissions=")
     }
     let executionMode: AgentExecutionMode? =
       switch lastPermissionsFlag {
-      case "--dangerously-skip-permissions=false": .standard
+      case .some(let flag) where Self.permissionsOffForms.contains(flag): .standard
       case .some: .unrestricted
       case nil: nil
       }
-    return AgentLaunchObservation(
-      model: options.optionValue(long: "--model"),
-      executionMode: executionMode
-    )
+    return AgentLaunchObservation(model: model, executionMode: executionMode)
   }
 
   func makeStartInvocation(_ request: AgentStartRequest) throws -> AgentInvocation {

@@ -50,6 +50,15 @@ not re-report Blocked. The `stack_with_default` setting can append custom
 status output below the built-in row, so the footer signatures are matched in
 the last few rows; a screen with neither signature is **unknown**, not Idle.
 
+A pane that never shows a recognized screen — a `stack_with_default` config
+whose appended rows permanently cover the footer, a headless `agy --print`
+run, or a future layout change — reports unknown the whole time. Its process
+is still classified, but an unknown pane emits no roster entry: it is absent
+from Active Agents and `prowl agents`, `agents wait --until idle|blocked`
+times out on it, and `agents wait --until exit` treats it as gone. The state
+machine retains the last recognized state, so a working turn that only
+briefly drops its footer stays Working.
+
 Antigravity currently uses screen state and cooperative delivery, without a
 managed hook channel or transcript reader.
 
