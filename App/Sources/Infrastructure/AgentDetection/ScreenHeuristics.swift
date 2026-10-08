@@ -801,17 +801,28 @@ nonisolated private func detectAntigravity(_ content: String) -> AgentRawState {
 
   // Live dialog order is `> `-selected option ABOVE the `↑/↓ Navigate` hint —
   // reversed order (e.g. a stale hint residue above a `> typed` composer row)
-  // is transcript, not a dialog. A `─`-border row BELOW the hint means the
-  // boxed composer owns the bottom region and the whole dialog is scrollback;
-  // the border signature (not `>` alone) keeps a `>`-prefixed
-  // `stack_with_default` row from vetoing a live dialog. The hint window
-  // tolerates the status row, a usage row, and appended rows rendered below it.
-  if let hintIndex = lines.lastIndex(where: {
+  // is transcript, not a dialog. A `─` composer-border row between the hint and
+  // the status row means the boxed composer owns the bottom region and the
+  // whole dialog is scrollback; the signature is scoped to that gap so
+  // `>`-prefixed or `─`-dividing `stack_with_default` output — which renders
+  // below the status row — cannot veto a live dialog.
+  let hintIndex = lines.lastIndex(where: {
     $0.hasPrefix("↑/↓ Navigate") || $0.hasPrefix("↑↓ Navigate")
-  }),
+  })
+  let composerBelow =
+    hintIndex.map { hint -> Bool in
+      let below = lines[(hint + 1)...]
+      let statusIndex =
+        below.firstIndex(where: {
+          $0.hasPrefix("esc to cancel") || $0.hasPrefix("esc to interrupt")
+            || $0.hasPrefix("? for shortcuts")
+        }) ?? below.endIndex
+      return below[..<statusIndex].contains { $0.hasPrefix("─") }
+    } ?? false
+  if let hintIndex,
     hintIndex >= lines.count - 6,
-    lines[..<hintIndex].suffix(6).contains(where: { $0.hasPrefix("> ") }),
-    !lines[(hintIndex + 1)...].contains(where: { $0.hasPrefix("─") })
+    lines[..<hintIndex].suffix(8).contains(where: { $0.hasPrefix("> ") }),
+    !composerBelow
   {
     return .blocked
   }

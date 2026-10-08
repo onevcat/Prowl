@@ -921,17 +921,18 @@ nonisolated private struct AntigravityRuntimeAdapter: AgentRuntimeAdapter {
     }
     var executionMode: AgentExecutionMode?
     if let flagIndex {
-      if Self.permissionsOffForms.contains(flags[flagIndex]) {
-        // A token directly before the off-form that agy knows but we don't
-        // (hidden or newer) could be a string flag that swallowed it, leaving
-        // an earlier bare flag in force — report unknown rather than an
-        // unprovable standard.
-        let previous = flagIndex > flags.startIndex ? flags[flags.index(before: flagIndex)] : nil
-        let couldSwallow =
-          previous.map {
-            $0.hasPrefix("-") && !$0.contains("=") && !Self.booleanFlags.contains($0)
-          } ?? false
-        executionMode = couldSwallow ? nil : .standard
+      // A token directly before the decisive flag that agy knows but we don't
+      // (hidden or newer) could be a string flag that swallowed it — report
+      // unknown rather than an unprovable mode in either direction.
+      let previous = flagIndex > flags.startIndex ? flags[flags.index(before: flagIndex)] : nil
+      let couldSwallow =
+        previous.map {
+          $0.hasPrefix("-") && !$0.contains("=") && !Self.booleanFlags.contains($0)
+        } ?? false
+      if couldSwallow {
+        executionMode = nil
+      } else if Self.permissionsOffForms.contains(flags[flagIndex]) {
+        executionMode = .standard
       } else {
         executionMode = .unrestricted
       }

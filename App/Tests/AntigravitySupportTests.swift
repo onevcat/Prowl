@@ -289,15 +289,17 @@ struct AntigravitySupportTests {
         ]
       )
       .executionMode == .standard)
+    // The unprovable check is symmetric: an unrecognized flag before a bare
+    // decisive flag could have swallowed it just as well.
     #expect(
       AgentRuntimeAdapterRegistry.observe(
         runtime: runtime,
         arguments: [
-          "agy", "--dangerously-skip-permissions", "--some-future=x",
-          "--dangerously-skip-permissions=false",
+          "agy", "--dangerously-skip-permissions=false", "--some-future-flag",
+          "--dangerously-skip-permissions",
         ]
       )
-      .executionMode == .standard)
+      .executionMode == nil)
   }
 
   @Test func screenStatesUseStatusRowAndDialogChrome() throws {
@@ -485,6 +487,36 @@ struct AntigravitySupportTests {
       > ahead 2
       """
     #expect(agent.detectState(in: permissionWithArrowStatus) == .blocked)
+
+    // Stacked output renders BELOW the status row, so a `─` divider there is
+    // not composer chrome either — only the hint-to-status gap can hold one.
+    let permissionWithDividedStatus = """
+      Requesting permission for:
+         echo hello
+      > 1. Yes, run command
+        2. No, cancel
+        ↑/↓ Navigate · enter Confirm
+      esc to cancel                                               Gemini 3.1 Pro · high
+      ────────────────
+      """
+    #expect(agent.detectState(in: permissionWithDividedStatus) == .blocked)
+
+    // Long option lists keep the selected row inside the widened window —
+    // here the `> ` row sits seven rows above the hint.
+    let permissionLongOptions = """
+      Requesting permission for:
+         echo hello
+      > 1. Yes, run command
+        2. Yes, always allow
+        3. Yes, allow always
+        4. Amend command
+        5. Explain command
+        6. Ask a question
+        7. No, cancel
+        ↑/↓ Navigate · enter Confirm
+      esc to cancel                                               Gemini 3.1 Pro · high
+      """
+    #expect(agent.detectState(in: permissionLongOptions) == .blocked)
   }
 
   @Test func sessionOwnershipUsesOnlyOpenLockPaths() throws {

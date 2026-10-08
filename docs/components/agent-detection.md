@@ -46,8 +46,9 @@ A `esc to cancel` bottom status row is **Working** while a turn runs;
 dialogs are **Blocked**: they render a `↑/↓ Navigate` hint row with a `> `-
 selected option above it, and a permission dialog keeps `esc to cancel`, so
 the dialog chrome wins over the working footer. A `─` composer-border row
-below the hint marks the whole dialog as scrollback — quoted or answered
-dialogs do not re-report Blocked. The `stack_with_default` setting can append custom
+between the hint and the status row marks the whole dialog as scrollback —
+quoted or answered dialogs do not re-report Blocked, and `>`- or `─`-leading
+custom status output below the status row cannot mask a live one. The `stack_with_default` setting can append custom
 status output below the built-in row, so the footer signatures are matched in
 the last few rows; a screen with neither signature is **unknown**, not Idle.
 
