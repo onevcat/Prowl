@@ -29,6 +29,8 @@ session resolver only checks the TUI files and transcript fingerprints.
   owned rollout, even if the same home also has a managed daemon. Otherwise a known
   selection reset suppresses fallback, including when the inventory is incomplete.
   Accepting a daemon binding requires a complete inventory with no TUI-owned rollout.
+  Capture the inventory before the live binding lookup, without an early return on
+  incomplete inventory, so resets during enumeration invalidate the previous binding.
 - Share a bounded parsed TUI-log cache between caller routing and session lookup.
   Check device, inode, size, modification time, and change time on every lookup;
   read and parse only changed files. Validate the snapshot across reads and bound

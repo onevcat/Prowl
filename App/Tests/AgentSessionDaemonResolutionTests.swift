@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Testing
 
 @testable import Prowl
@@ -227,6 +228,31 @@ struct AgentSessionDaemonResolutionTests {
       #expect(result.session?.source == .openFile)
       #expect(result.session?.confidence == .exact)
     }
+  }
+
+  @Test(arguments: [false, true])
+  func selectionResetDuringInventoryDoesNotReturnThePreviousBinding(fresh: Bool) async throws {
+    let fixture = try Fixture()
+    defer { fixture.cleanUp() }
+    let selection = Mutex(fixture.binding(fixture.firstID, [fixture.first]))
+    let resolver = AgentSessionResolver(
+      tuiOpenFilePaths: { _ in
+        selection.withLock { $0 = .selectionPending }
+        return []
+      },
+      daemonBinding: { _, _, _ in selection.withLock { $0 } })
+    let result =
+      if fresh {
+        await resolver.resolveFresh(
+          identified: fixture.process, workingDirectory: fixture.directory, activeText: "",
+          configRoot: fixture.home, surfaceID: UUID())
+      } else {
+        await resolver.resolve(
+          identified: fixture.process, workingDirectory: fixture.directory, activeText: "",
+          configRoot: fixture.home, surfaceID: UUID())
+      }
+    #expect(result.isFresh)
+    #expect(result.session == nil)
   }
 
   @Test func noPaneDoesNotConsultDaemonBinding() async throws {

@@ -385,11 +385,12 @@ actor AgentSessionResolver {
     let process = AgentProcessGeneration(pid: identified.process.pid, startedAt: startedAt)
     let home = configRoot ?? CodexLogProvider.codexHome(forTUI: process.pid)
     let parse = Self.pathParser(profile: .profile(for: .codex), configRoot: home)
+    // Read selection after the FD scan so a reset during enumeration invalidates the old binding.
+    let paths = tuiOpenFilePaths(process.pid)
     let lookup = await daemonBinding(surfaceID, process, home)
     guard ProcessDetection.processStartDate(pid: process.pid) == startedAt else {
       return AgentSessionResolution(session: nil, isFresh: true)
     }
-    let paths = tuiOpenFilePaths(process.pid)
     // An embedded TUI's complete local inventory takes precedence over a shared daemon.
     if let paths, paths.contains(where: { parse($0) != nil }) { return nil }
     if case .selectionPending = lookup {
