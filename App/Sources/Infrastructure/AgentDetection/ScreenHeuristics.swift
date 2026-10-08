@@ -274,6 +274,19 @@ nonisolated private func hasOMPWorkingLine(_ content: String) -> Bool {
   return lines.contains { line in
     isPiWorkingText(line) || hasOMPInterruptHint(line) || hasLabeledBrailleSpinner(line)
   } || lines.suffix(5).contains(where: hasOMPLeadingEscapeHint)
+    || hasOMPComposerSpinner(lines)
+}
+
+nonisolated private func hasOMPComposerSpinner(_ lines: [String]) -> Bool {
+  // OMP 18.8 renders the live spinner inside the composer, not before the tool label.
+  let footer = Array(lines.suffix(5))
+  return footer.indices.dropLast().contains { index in
+    let header = footer[index]
+    guard header.hasPrefix("╭── "), header.hasSuffix("╮"),
+      footer[index + 1].hasPrefix("╰─"), footer[index + 1].hasSuffix("╯")
+    else { return false }
+    return labeledBrailleSpinnerContent(String(header.dropFirst("╭── ".count))) != nil
+  }
 }
 
 nonisolated private func hasOMPLeadingEscapeHint(_ line: String) -> Bool {

@@ -30,6 +30,38 @@ struct OMPAndCopilotScreenTests {
     }
   }
 
+  @Test(arguments: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
+  func ompRecognizesComposerSpinner(frame: String) {
+    let screen = """
+      󱊷 Running a tool
+      ╭── \(frame) 2m · model · ~/project ──╮
+      ╰─                                  ─╯
+      Extension status
+      """
+    #expect(DetectedAgent.omp.detectState(in: screen) == .working)
+    #expect(DetectedAgent.pi.detectState(in: screen) == .idle)
+  }
+
+  @Test func ompComposerSpinnerRequiresLiveComposerStructure() {
+    for screen in [
+      "╭── 󰵗 · model · ~/project ──╮\n╰─ ─╯\nExtension status",
+      "The footer reads ╭── ⠧ 2m · model ──╮\n╰─ ─╯",
+      "╭── ⠧ 2m · model ──╮\nResult",
+      "╭── ⠧ 2m · model ──╮\n╰─ ─╯\nResult\nOne\nTwo\nThree\nReady",
+    ] {
+      #expect(DetectedAgent.omp.detectState(in: screen) == .idle)
+    }
+  }
+
+  @Test func ompAskPromptTakesPrecedenceOverComposerSpinner() {
+    let screen = """
+      Enter select · Esc cancel
+      ╭── ⠧ 2m · model ──╮
+      ╰─                  ─╯
+      """
+    #expect(DetectedAgent.omp.detectState(in: screen) == .blocked)
+  }
+
   @Test func copilotRecognizesWorkingInterruptFooter() {
     let screen = """
       ~/project [⎇ main] [#123]                   Session: 0 AIC used

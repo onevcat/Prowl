@@ -91,6 +91,10 @@ at a `~/.grok/` install (so Cursor's own `agent` entrypoint stays Cursor).
    responses are not confirmation boundaries.
    Pi also treats its bottom `── <braille spinner> Working ──` footer and the adjacent
    `async subagent … · background` header with a matching braille job row as **Working**.
+   Oh My Pi's composer also supplies **Working** evidence when its `╭──` header
+   starts with a labelled braille spinner and the next row closes with `╰─ … ╯`.
+   This is restricted to the bottom five non-blank rows and does not depend on
+   the current tool label, model, directory, or extension status text.
    The compact `subagents (N/M running)`, progressive
    `Async agents · N agent(s) running`, and multi-job `Async agents · background`
    layouts carry the same signal; completed, paused, and failed cards use static
