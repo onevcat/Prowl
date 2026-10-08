@@ -303,13 +303,19 @@ actor AgentSessionResolver {
   private var rootScans: [RootScanKey: RootScan] = [:]
   private let fileManager: FileManager
   private let homeDirectory: URL
+  typealias DaemonBinding = @Sendable (UUID, AgentProcessGeneration, URL?) async -> CodexDaemonBindingLookup
+  private let daemonBinding: DaemonBinding
 
   init(
     fileManager: FileManager = .default,
-    homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+    daemonBinding: @escaping DaemonBinding = { surfaceID, process, configRoot in
+      await CodexLogProvider.lookupDaemonBinding(surfaceID: surfaceID, process: process, configRoot: configRoot)
+    }
   ) {
     self.fileManager = fileManager
     self.homeDirectory = homeDirectory
+    self.daemonBinding = daemonBinding
   }
 
   func resolve(
@@ -317,9 +323,13 @@ actor AgentSessionResolver {
     workingDirectory: URL?,
     activeText: String,
     configRoot: URL? = nil,
-    now: Date = Date()
-  ) -> AgentSessionResolution {
-    resolve(
+    now: Date = Date(),
+    surfaceID: UUID? = nil
+  ) async -> AgentSessionResolution {
+    if let resolution = await resolveDaemon(identified: identified, surfaceID: surfaceID, configRoot: configRoot) {
+      return resolution
+    }
+    return resolve(
       ResolveInput(
         identified: identified,
         workingDirectory: workingDirectory,
@@ -339,9 +349,13 @@ actor AgentSessionResolver {
     workingDirectory: URL?,
     activeText: String,
     configRoot: URL? = nil,
-    now: Date = Date()
-  ) -> AgentSessionResolution {
-    resolve(
+    now: Date = Date(),
+    surfaceID: UUID? = nil
+  ) async -> AgentSessionResolution {
+    if let resolution = await resolveDaemon(identified: identified, surfaceID: surfaceID, configRoot: configRoot) {
+      return resolution
+    }
+    return resolve(
       ResolveInput(
         identified: identified,
         workingDirectory: workingDirectory,
@@ -351,6 +365,47 @@ actor AgentSessionResolver {
       ),
       bypassResultCache: true
     )
+  }
+
+  /// A daemon binding is live evidence, not a five-second process-cache entry. Check it
+  /// before the fallback cache so a new submit can select another thread immediately.
+  private func resolveDaemon(
+    identified: IdentifiedAgentProcess, surfaceID: UUID?, configRoot: URL?
+  ) async -> AgentSessionResolution? {
+    guard identified.agent == .codex, let surfaceID,
+      let startedAt = ProcessDetection.processStartDate(pid: identified.process.pid)
+    else { return nil }
+    let process = AgentProcessGeneration(pid: identified.process.pid, startedAt: startedAt)
+    let home = configRoot ?? CodexLogProvider.codexHome(forTUI: process.pid)
+    let parse = Self.pathParser(profile: .profile(for: .codex), configRoot: home)
+    var complete = false
+    let paths = ProcessDetection.openFilePaths(pid: process.pid, complete: &complete)
+    guard complete, !paths.contains(where: { parse($0) != nil }) else { return nil }
+    let lookup = await daemonBinding(surfaceID, process, home)
+    guard ProcessDetection.processStartDate(pid: process.pid) == startedAt else {
+      return AgentSessionResolution(session: nil, isFresh: true)
+    }
+    if case .selectionPending = lookup {
+      return AgentSessionResolution(session: nil, isFresh: true)
+    }
+    guard let binding = lookup.binding else { return nil }
+    let roots = Set(binding.paths).compactMap { path -> URL? in
+      guard let parsed = parse(path), parsed.id == binding.rootID, let url = parsed.transcriptPath,
+        let handle = try? FileHandle(forReadingFrom: url)
+      else { return nil }
+      defer { try? handle.close() }
+      // Session metadata includes instructions; use the same bound as CodexLogProvider.
+      guard let data = try? handle.read(upToCount: 1_024 * 1_024),
+        let end = data.firstIndex(of: 10),
+        let header = CodexDaemonThreadMapper.header(Data(data.prefix(upTo: end))),
+        header.id == binding.rootID, header.parentID == nil
+      else { return nil }
+      return url
+    }
+    guard roots.count == 1, let path = roots.first else { return nil }
+    return AgentSessionResolution(
+      session: AgentSession(id: binding.rootID, transcriptPath: path, source: .processLog, confidence: .exact),
+      isFresh: true)
   }
 
   private func resolve(_ input: ResolveInput, bypassResultCache: Bool) -> AgentSessionResolution {

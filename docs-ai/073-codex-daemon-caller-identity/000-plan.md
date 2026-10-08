@@ -112,3 +112,5 @@ The spike that validated the session-log mapping lives on branch
 ## Amendments
 
 - Updated 2026-09-29: daemon-mode Codex log detection reuses the thread mapper — see [002-daemon-log-detection.md](002-daemon-log-detection.md)
+
+- Updated 2026-10-08: Use the daemon binding for transcript resolution and fence selected-session changes — see [003-daemon-transcript-resolution.md](003-daemon-transcript-resolution.md).

@@ -239,6 +239,14 @@ Immediate, read-only semantic snapshot for a currently active **Codex** or
 it never guesses from focus, accepts no worktree/tab selector, and has no wait or
 timeout mode.
 
+For a Codex TUI attached to the managed daemon, Prowl first correlates the pane's
+submitted message IDs with the daemon's rollouts and validates the root transcript.
+This reports `process_log` / `exact` without matching terminal text. A new or switched
+thread needs an indexed submit before this evidence is available. After a known
+selection change, unresolved identity suppresses text matching so copied history
+cannot select the previous thread. Otherwise the existing fallback and confidence
+requirements still apply.
+
 Default text output always reports current `Status`, decision `Reason`, last
 state-change time, and a result state. A blocked snapshot includes the raw current
 interaction under `## Blocker`, preserving the question, numbered choices, selected
