@@ -114,11 +114,12 @@
   bare `--` terminator. This keeps value consumption and last-wins permission
   overrides correct across mixed spellings. The classifier's updater demotion
   accepts `-bg-updater` on the same grounds.
-- **A composer row below the hint vetoes the dialog read**: a complete dialog
-  quoted in transcript (`> ` option and `↑/↓ Navigate` intact) followed by a
-  fresh composer used to report Blocked over the live footer. A `>`-prefixed
-  row below the hint now means the dialog is scrollback — live dialogs only
-  show footer/status rows beneath the hint.
+- **A composer border below the hint vetoes the dialog read**: a complete
+  dialog quoted in transcript (`> ` option and `↑/↓ Navigate` intact) followed
+  by a fresh composer used to report Blocked over the live footer. The veto
+  keys on the `─` composer-border row, not `>` alone — a `>`-prefixed
+  `stack_with_default` row must not veto a live dialog (verified 1.3.1:
+  trust/permission dialogs only render footer/status rows beneath the hint).
 - **Prompt binding switched from `=`-form to space form.** The plan assumed
   `--prompt-interactive=<prompt>` was required to protect flag-shaped prompts.
   `adapterSupportsSeededPrompt` (the workflow seeded-prompt probe) requires the

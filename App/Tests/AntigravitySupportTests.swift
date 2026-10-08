@@ -472,6 +472,19 @@ struct AntigravitySupportTests {
     #expect(
       agent.detectState(
         in: "esc to cancel\n? for shortcuts") == .unknown)
+
+    // A `>`-leading custom status row is not composer chrome: the scrollback
+    // veto keys on the `─` border, so a live dialog survives stray output.
+    let permissionWithArrowStatus = """
+      Requesting permission for:
+         echo hello
+      > 1. Yes, run command
+        2. No, cancel
+        ↑/↓ Navigate · enter Confirm
+      esc to cancel                                               Gemini 3.1 Pro · high
+      > ahead 2
+      """
+    #expect(agent.detectState(in: permissionWithArrowStatus) == .blocked)
   }
 
   @Test func sessionOwnershipUsesOnlyOpenLockPaths() throws {

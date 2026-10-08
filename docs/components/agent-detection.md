@@ -43,10 +43,11 @@ identifies the session exactly. Its `conversations/<id>.db` and
 
 A `esc to cancel` bottom status row is **Working** while a turn runs;
 `? for shortcuts` is **Idle**. Workspace-trust, tool-permission, and ask-user
-dialogs are **Blocked**: they render a `↑/↓ Navigate` hint row together with a
-`>`-selected option, and a permission dialog keeps `esc to cancel`, so the
-dialog chrome wins over the working footer. Answered dialogs in scrollback do
-not re-report Blocked. The `stack_with_default` setting can append custom
+dialogs are **Blocked**: they render a `↑/↓ Navigate` hint row with a `> `-
+selected option above it, and a permission dialog keeps `esc to cancel`, so
+the dialog chrome wins over the working footer. A `─` composer-border row
+below the hint marks the whole dialog as scrollback — quoted or answered
+dialogs do not re-report Blocked. The `stack_with_default` setting can append custom
 status output below the built-in row, so the footer signatures are matched in
 the last few rows; a screen with neither signature is **unknown**, not Idle.
 

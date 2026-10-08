@@ -801,16 +801,17 @@ nonisolated private func detectAntigravity(_ content: String) -> AgentRawState {
 
   // Live dialog order is `> `-selected option ABOVE the `↑/↓ Navigate` hint —
   // reversed order (e.g. a stale hint residue above a `> typed` composer row)
-  // is transcript, not a dialog. A `>`-prefixed composer row BELOW the hint
-  // means a fresh composer owns the bottom region and the whole dialog is
-  // scrollback. The hint window tolerates the status row, a usage row, and
-  // appended `stack_with_default` rows rendered below it.
+  // is transcript, not a dialog. A `─`-border row BELOW the hint means the
+  // boxed composer owns the bottom region and the whole dialog is scrollback;
+  // the border signature (not `>` alone) keeps a `>`-prefixed
+  // `stack_with_default` row from vetoing a live dialog. The hint window
+  // tolerates the status row, a usage row, and appended rows rendered below it.
   if let hintIndex = lines.lastIndex(where: {
     $0.hasPrefix("↑/↓ Navigate") || $0.hasPrefix("↑↓ Navigate")
   }),
     hintIndex >= lines.count - 6,
     lines[..<hintIndex].suffix(6).contains(where: { $0.hasPrefix("> ") }),
-    !lines[(hintIndex + 1)...].contains(where: { $0.hasPrefix(">") })
+    !lines[(hintIndex + 1)...].contains(where: { $0.hasPrefix("─") })
   {
     return .blocked
   }
