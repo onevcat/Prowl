@@ -840,7 +840,9 @@ nonisolated private func hasBrailleSpinner(_ content: String) -> Bool {
 // from a right-aligned model label (`Gemini 3.8 Flash · high`,
 // `Claude Sonnet 4.6 (Thinking)`, or nothing until the label resolves). The
 // `stack_with_default` setting renders a user's status script verbatim below
-// that row, so nothing below the status row is evidence. Permission, ask-user,
+// that row, so nothing below the status row is evidence. A typed draft hides
+// the signature (the status row keeps only the model label), which reads
+// unknown and retains the prior state. Permission, ask-user,
 // and workspace-trust dialogs replace the composer with option rows (`> ` marks
 // the selection) above a `↑/↓ Navigate …` hint; a permission dialog keeps
 // `esc to cancel`, so the dialog read runs first and is never vetoed by what
@@ -909,20 +911,23 @@ nonisolated private func detectAntigravity(_ content: String) -> AgentRawState {
     line.hasPrefix("↑/↓ Navigate") || line.hasPrefix("↑↓ Navigate")
   }
   if let hint = lines.lastIndex(where: isHint) {
+    // The slash-command autocomplete popup (`> /` draft, option rows, the same
+    // hint shape) renders below a live composer box and rewrites the status
+    // row to `esc to cancel` whatever the turn state, so it is unknown: the
+    // state machine keeps the state from before the user started typing.
+    // Dialogs replace the composer, so no box sits above their hint.
+    if let composer = composers.last, composer.bottom < hint {
+      return .unknown
+    }
     let selected = rows.indices[..<hint].suffix(8).contains { isColumnZero($0) && lines[$0].hasPrefix("> ") }
     return selected ? .blocked : .unknown
   }
-  // Dialogs can carry hint copy this detector does not recognize. A column-0
-  // `> ` row followed by an indented sibling is a selected option (`  2. …`,
-  // `  No, exit`); the composer's prompt and the echoed prompt both sit
-  // directly beneath a `─` rule, so only option rows outside a box count.
-  let isOption = { (index: Int) -> Bool in
-    isColumnZero(index) && lines[index].hasPrefix("> ") && !(index > 0 && isRule(index - 1))
-      && index + 1 < rows.endIndex && !isColumnZero(index + 1)
-  }
-  if rows.indices.contains(where: isOption) {
-    return .blocked
-  }
+  // Option shape alone (a column-0 `> ` row over an indented sibling) is not
+  // dialog evidence: a slash command echoes exactly that way with no `─` rule
+  // above it, an answered question echoes its choice the same way, and so
+  // does any echoed prompt whose rule scrolled off the top of the screen.
+  // Every live dialog carries the hint, so a dialog with unrecognized hint
+  // copy falls through to the composer read and fails toward unknown.
 
   // The last composer is the live one; a redraw caught without its status row,
   // or a screen without a composer at all, is unknown rather than idle.
