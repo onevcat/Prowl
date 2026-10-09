@@ -156,6 +156,12 @@ at a `~/.grok/` install (so Cursor's own `agent` entrypoint stays Cursor).
    and initial sign-in menus as **Blocked** from
    their complete selected-choice and footer structures. Ordinary prompt text and completed
    responses are not confirmation boundaries.
+   Amp recognizes `Thinking`, `Streaming`, and `Running Tools` in the bottom border of
+   its current composer as **Working**, and `Waiting for Approval` as **Blocked**.
+   A complete current composer takes precedence over retained activity or approval text
+   in the conversation; an idle composer does not become active because of quoted examples.
+   Older Amp approval panels and `esc to cancel` working hints remain supported when
+   the current composer is absent.
    Pi also treats its bottom `── <braille spinner> Working ──` footer and the adjacent
    `async subagent … · background` header with a matching braille job row as **Working**.
    The compact `subagents (N/M running)`, progressive

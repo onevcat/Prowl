@@ -1156,6 +1156,61 @@ struct ScreenHeuristicsTests {
     #expect(DetectedAgent.amp.detectState(in: "done") == .idle)
   }
 
+  @Test(arguments: ["∼ Running Tools", "≋ Running Tools", "∼ Thinking", "∼ Streaming"])
+  func ampDetectsCurrentComposerActivity(_ status: String) {
+    let screen = """
+      ⠣ Ran 3 searches, running 1 command (3 finished) ▸
+      ╭───────────────────────────────────────────────────── medium ─╮
+      │                                                             │
+      │                                                             │
+      ╰ \(status) ──────────────────────────────── ~/project (main) ─╯
+      """
+
+    #expect(DetectedAgent.amp.detectState(in: screen) == .working)
+  }
+
+  @Test func ampDetectsCurrentComposerApproval() {
+    let screen = """
+      ⠣ Running a command
+      ╭───────────────────────────────────────────────────── medium ─╮
+      │                                                             │
+      │                                                             │
+      ╰ Waiting for Approval ───────────────────── ~/project (main) ─╯
+      """
+
+    #expect(DetectedAgent.amp.detectState(in: screen) == .blocked)
+  }
+
+  @Test func ampIdleComposerIgnoresHistoricalActivityAndApproval() {
+    let screen = """
+      The old UI displayed esc to cancel and this approval:
+      Waiting for approval
+      Approve
+      Allow All for This Session
+      ╭───────────────────────────────────────────────────── medium ─╮
+      │                                                             │
+      ╰ ∼ Running Tools ────────────────────────── ~/project (main) ─╯
+      Done. The text Thinking and Running Tools above is historical.
+      ╭───────────────────────────────────────────────────── medium ─╮
+      │ Draft: Running Tools                                        │
+      │                                                             │
+      ╰─────────────────────────────────────────── ~/project (main) ─╯
+      """
+
+    #expect(DetectedAgent.amp.detectState(in: screen) == .idle)
+  }
+
+  @Test func ampDoesNotMatchWorkingFooterWithoutComposer() {
+    #expect(
+      DetectedAgent.amp.detectState(
+        in: """
+          Example output:
+          ╰ ∼ Running Tools ────────────────────────── ~/project (main) ─╯
+          """
+      ) == .idle
+    )
+  }
+
   @Test func qwenDetection() {
     #expect(DetectedAgent.qwen.detectState(in: "Waiting for user confirmation...") == .blocked)
     #expect(

@@ -518,6 +518,25 @@ nonisolated private func detectDroid(_ content: String) -> AgentRawState {
 }
 
 nonisolated private func detectAmp(_ content: String) -> AgentRawState {
+  let lines = content.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+  if let footer = lines.last, footer.hasPrefix("╰"), footer.hasSuffix("╯"),
+    let composer = lines.lastIndex(where: { $0.hasPrefix("╭─") && $0.hasSuffix("╮") }),
+    composer < lines.count - 2,
+    lines[(composer + 1)..<(lines.count - 1)].allSatisfy({ $0.hasPrefix("│") && $0.hasSuffix("│") })
+  {
+    // The current composer wins over retained activity or approval examples in the transcript.
+    let status = footer.dropFirst().prefix { $0 != "─" }
+      .trimmingCharacters(in: CharacterSet(charactersIn: " ∼≋"))
+    switch status {
+    case "Thinking", "Streaming", "Running Tools":
+      return .working
+    case "Waiting for Approval":
+      return .blocked
+    default:
+      return .idle
+    }
+  }
+
   let lower = content.lowercased()
   let hasWaitingForApproval = lower.contains("waiting for approval")
   let hasApprovalHeader =
