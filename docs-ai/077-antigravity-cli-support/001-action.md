@@ -5,8 +5,9 @@
 | Date | Change | Ref |
 | --- | --- | --- |
 | 2026-10-08 | Added runtime, screen detection, exact session ownership, Profiles, workflow binding, icon, and skill installation. | (this branch) |
+| 2026-10-09 | Takeover of PR #873: screen detection re-anchored on the live composer box, full-screen slice, live 1.3.2 verification. | takeover/pr-873-antigravity |
 
-## Outcome & current state (as of 2026-10-08)
+## Outcome & current state (as of 2026-10-09)
 
 - `DetectedAgent.antigravity` (rawValue `antigravity`) is the persisted identity;
   `agy`, `antigravity-cli`, and `antigravity_cli` classify to it. Bare
@@ -27,18 +28,23 @@
   seeded-prompt probe contract (`arguments.last == prompt`) that workflow role
   binding relies on. Verified live: `--print`, `--prompt`, and
   `--prompt-interactive` in both `=` and space forms on 1.3.1.
-- Screen detection is a legacy detector (`detectAntigravity`): the bottom status
-  row is the live boundary — `esc to cancel`/`esc to interrupt` = Working,
-  `? for shortcuts` = Idle, matched in a bounded four-row tail because
-  `stack_with_default` can append custom status output below the built-in row.
-  Trust, permission, and ask-user dialogs are Blocked via a `↑/↓ Navigate` hint
-  row paired with a `> ` selected option; a permission dialog keeps
-  `esc to cancel`, so the dialog check runs first. A screen with neither footer
-  signature is `.unknown`, never affirmative Idle — screen heuristics are this
-  runtime's only evidence channel. Answered dialogs in scrollback cannot
-  re-report Blocked. A typed profile was deferred:
-  `AgentScreenRuleCoverageTests` requires real `prowl read --source detection`
-  captures, which need a Debug-app session.
+- Screen detection is a legacy detector (`detectAntigravity`) that reads the
+  full active screen (like Claude) and anchors on the live composer: the last
+  terminal-wide `─` / column-0 `>` / terminal-wide `─` box on screen. The row
+  directly below its bottom border is the only state evidence —
+  `esc to cancel`/`esc to interrupt` = Working, `? for shortcuts` = Idle, each
+  either alone or padded by two or more spaces from the right-aligned model
+  label. `stack_with_default` renders the user's status script verbatim below
+  that row, so nothing below it counts. Trust, permission, and ask-user
+  dialogs are Blocked via a `↑/↓ Navigate` hint row with a column-0 `> `
+  selection within eight rows above it, checked first because a permission
+  dialog keeps `esc to cancel`; a composer with its status row drawn below the
+  hint marks the dialog as scrollback. No composer, a composer without its
+  status row, or a dialog-less unrecognized layout is `.unknown`, never
+  affirmative Idle — screen heuristics are this runtime's only evidence
+  channel. A typed profile was deferred: `AgentScreenRuleCoverageTests`
+  requires real `prowl read --source detection` captures, which need a
+  Debug-app session.
 - `AntigravitySessionProfile` resolves `presence/<uuid>.lock` only when the
   descriptor is held open by the pane process — lock files persist after exit,
   so file existence is never evidence. The session id is a UUID (normalized
@@ -161,6 +167,58 @@
   flag-shaped text — so the space form is both correct and contract-compatible.
 - **`--effort` takes five values, not three.** `agy --help` on 1.3.1 lists
   `low|medium|high|xhigh|max`; the suggestions list carries all five.
+
+## Takeover (2026-10-09)
+
+The five review rounds on PR #873 all probed the same surface: a
+`stack_with_default` status script whose rows look like chrome. Each fix
+added another window or anchor to the tail scan, and the last review
+(onevtail on `ba25d6aa`) still reproduced a permission dialog read as Idle
+behind an appended `─`/`>`/`─` box, a historical idle box outvoting a
+footer-less composer, and 24 stacked rows cropping the real footer out of the
+slice. onevcat chose the screen-only route (no managed statusLine channel: it
+would require writing the user's `~/.gemini/antigravity-cli/settings.json`,
+which this fork does not do), so the detector was rebuilt around what the
+live app actually draws instead of patched again:
+
+- **Verified live on agy 1.3.2** (tmux, 100 columns): the composer borders
+  span the terminal, the echoed prompt's rule is 60 columns with no bottom
+  border, agent responses render indented, permission and ask-user dialogs
+  carry a `Command` / `Question` header plus a terminal-wide rule and no
+  composer, the trust prompt shows only the model label under its hint, and
+  the status label is `Gemini 3.8 Flash · high` for Gemini, `Claude Sonnet
+  4.6 (Thinking)` / `GPT-OSS 120B (Medium)` for other models, and absent for
+  the first seconds of a `--model` launch. `stack_with_default` output is
+  rendered verbatim, multi-line, at column 0, below the built-in row (25 rows
+  tested). The presence lock is held open (`lsof` fd `u`) and survives exit;
+  `brain/<id>/.system_generated/logs/transcript.jsonl` exists next to
+  `transcript_full.jsonl`.
+- **Composer-anchored contract** replaces box pairs, tail windows, and the
+  contradictory-pair rule: last composer wins, its next row is the state,
+  rows below are stack output. Dialogs are vetoed only by a composer *with*
+  a status row below the hint, so a stacked box (which never has one) cannot
+  demote a live dialog, while a quoted dialog above a live composer stays
+  scrollback. Full width is the longest `─`-only column-0 row on screen.
+- **Full-screen slice**: `detectionScreenText` returns the whole screen for
+  Antigravity (the fixture script and its README mirror this), because a
+  long stacked status line otherwise pushes the composer out of the tail and
+  turns a working pane unknown.
+- **Outcomes on the review probes**: permission + stacked box → Blocked
+  (real capture) or Unknown (the review's bare shape, where the stacked box
+  is the widest rule on screen); historical idle box + footer-less composer →
+  Unknown; working + 24 stacked rows → Working (the 24-row crop would read
+  Unknown, never Idle). The earlier `workingWithBoxedSpoofedIdle` fixture
+  now reads Working instead of Unknown — the narrower box is simply ignored.
+- **Accepted residual**: a user's own status script that draws a
+  terminal-wide `─`/`>`/`─` box followed by a padded status signature forges
+  a composer. That is the user's configuration; it is documented in
+  `docs/components/agent-detection.md` rather than guarded by another
+  heuristic, and every plain spoof reviewed so far fails toward Unknown or
+  keeps the live dialog Blocked.
+- **Not pursued**: the statusLine stdin payload (`agent_state`,
+  `tool_confirmation_pending`, `conversation_id`, `transcript_path`) is a
+  reliable evidence channel if a future product decision allows Prowl to
+  install a status line command.
 
 ## Open questions
 

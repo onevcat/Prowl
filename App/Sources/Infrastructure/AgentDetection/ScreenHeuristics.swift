@@ -17,6 +17,11 @@ extension DetectedAgent {
   /// the live signal off when a long todo list plus a multi-line status line
   /// pushed the spinner row past the limit and a working agent read as idle.
   ///
+  /// Antigravity reads the full screen for the same reason: its detector anchors
+  /// on the live composer box by shape and ignores everything below the status
+  /// row, so a tail budget only let a long `stack_with_default` status script
+  /// push the composer out of the slice and turn a working pane unknown.
+  ///
   /// Every other detector keeps a bounded tail as its guard against transcript
   /// history. Pi retains 32 non-blank lines so pi-subagents' adaptive widget can
   /// keep its header and live job row together; the remaining detectors keep 24.
@@ -26,7 +31,7 @@ extension DetectedAgent {
   /// until its regions are bounded by shape the same way.
   nonisolated func detectionScreenText(from screen: String) -> String {
     switch self {
-    case .claude:
+    case .claude, .antigravity:
       screen
     case .pi:
       agentDetectionRecentLines(screen, limit: piAgentDetectionRecentLineLimit)
@@ -784,105 +789,88 @@ nonisolated private func hasBrailleSpinner(_ content: String) -> Bool {
   }
 }
 
-// Antigravity CLI (`agy`, verified 1.3.1, live session): the bottom status row is
-// the live boundary — `esc to cancel` while a turn runs, `? for shortcuts` when
-// idle. Permission, workspace-trust, and ask-user dialogs keep the status row
-// (trust drops it entirely) but add a `↑/↓ Navigate …` hint row with a `> `
-// selected option. Requiring the pair keeps answered dialogs in transcript
-// history from re-reporting Blocked, and checking them before the cancel footer
-// keeps a permission dialog from reading as Working — it shows `esc to cancel`
-// too. The `stack_with_default` setting appends custom status output below the
-// built-in row, so the signatures are matched in a bounded tail rather than the
-// last line alone; an unrecognized layout is `.unknown`, never affirmative idle.
+// Antigravity CLI (`agy`, verified live on 1.3.2): the live region is the
+// composer — a full-width `─` border, a column-0 `>` prompt row (wrapped input
+// continues on indented rows), and a full-width `─` bottom border — and the
+// built-in status row renders directly below it: `esc to cancel` /
+// `esc to interrupt` while a turn runs, `? for shortcuts` when idle, padded away
+// from a right-aligned model label (`Gemini 3.8 Flash · high`,
+// `Claude Sonnet 4.6 (Thinking)`, or nothing until the label resolves). The
+// `stack_with_default` setting renders a user's status script verbatim below
+// that row, so nothing below the status row is evidence. Permission, ask-user,
+// and workspace-trust dialogs replace the composer with option rows (`> ` marks
+// the selection) above a `↑/↓ Navigate …` hint; a permission dialog keeps
+// `esc to cancel`, so the dialog read runs first. Full width is the longest
+// `─`-only column-0 row on screen: the echoed prompt's rule is narrower, agent
+// responses render indented, and a stacked script would have to draw a
+// terminal-wide `─`/`>`/`─` box of its own to forge a composer (documented
+// residual; it fails toward `.unknown`). A screen with neither a live dialog
+// nor a composer followed by a status row is `.unknown`, never affirmative
+// idle — screen heuristics are this runtime's only evidence channel.
 nonisolated private func detectAntigravity(_ content: String) -> AgentRawState {
-  // Two views of the same rows: trimmed `lines` for status/hint signatures,
-  // raw `raws` for box chrome — composer borders and the `>` prompt render at
-  // column 0 on 1.3.1, while wrapped composer content is indented, so raw
-  // prefixes keep typed `─`- or `>`-leading input from forging chrome.
+  // Trimmed `text` carries the signatures; `raw` keeps the column so typed or
+  // wrapped input (always indented inside the box) cannot pose as chrome.
   let rows = content.split(separator: "\n", omittingEmptySubsequences: false)
     .map { (raw: String($0), text: $0.trimmingCharacters(in: .whitespaces)) }
     .filter { !$0.text.isEmpty }
   let lines = rows.map(\.text)
-  let raws = rows.map(\.raw)
-
-  // Live dialog order is `> `-selected option ABOVE the `↑/↓ Navigate` hint —
-  // reversed order (e.g. a stale hint residue above a `> typed` composer row)
-  // is transcript, not a dialog. A boxed composer between the hint and the
-  // last status row means it owns the bottom region and the whole dialog is
-  // scrollback. The veto needs the composer's two-row signature — a `─`
-  // border row AND a `>` prompt row — so `>`-leading or `─`-dividing
-  // `stack_with_default` output cannot veto a live dialog on its own.
-  // Anchoring on the LAST status row keeps both edges honest: a transcript
-  // quote that includes the dialog's own status line still sees the fresh
-  // composer, while output rendered below the live status row stays outside
-  // the gap.
-  let isStatusRow = { (line: String) -> Bool in
-    line.hasPrefix("esc to cancel") || line.hasPrefix("esc to interrupt")
-      || line.hasPrefix("? for shortcuts")
+  let isColumnZero = { (index: Int) -> Bool in !rows[index].raw.hasPrefix(" ") }
+  let isRule = { (index: Int) -> Bool in isColumnZero(index) && lines[index].allSatisfy { $0 == "─" } }
+  let fullWidth = rows.indices.filter(isRule).map { lines[$0].count }.max() ?? 0
+  let isBorder = { (index: Int) -> Bool in isRule(index) && lines[index].count == fullWidth }
+  let isPrompt = { (index: Int) -> Bool in
+    isColumnZero(index) && (lines[index] == ">" || lines[index].hasPrefix("> "))
   }
-  let hintIndex = lines.lastIndex(where: {
-    $0.hasPrefix("↑/↓ Navigate") || $0.hasPrefix("↑↓ Navigate")
-  })
-  let composerBelow =
-    hintIndex.map { hint -> Bool in
-      let below = lines[(hint + 1)...]
-      let statusIndex = below.lastIndex(where: isStatusRow) ?? below.endIndex
-      let gap = raws[(hint + 1)..<statusIndex]
-      return gap.contains { $0.hasPrefix("─") } && gap.contains { $0.hasPrefix(">") }
-    } ?? false
-  // The window below the hint tolerates a usage row, the status row, and
-  // stacked `stack_with_default` output — missing a live dialog here can
-  // otherwise fall through to a spoofed footer signature.
-  if let hintIndex,
-    hintIndex >= lines.count - 10,
-    raws[..<hintIndex].suffix(8).contains(where: { $0.hasPrefix("> ") }),
-    !composerBelow
+
+  // Composer boxes in screen order. A bottom border may double as the next
+  // box's top border, so the scan resumes on it.
+  var composers: [(top: Int, bottom: Int)] = []
+  var index = rows.startIndex
+  while index < rows.endIndex {
+    guard isBorder(index), index + 1 < rows.endIndex, isPrompt(index + 1) else {
+      index += 1
+      continue
+    }
+    var bottom = index + 2
+    while bottom < rows.endIndex, !isColumnZero(bottom) {
+      bottom += 1
+    }
+    guard bottom < rows.endIndex, isBorder(bottom) else {
+      index += 1
+      continue
+    }
+    composers.append((top: index, bottom: bottom))
+    index = bottom
+  }
+
+  // The status row is the signature alone or the signature padded (two or more
+  // spaces) away from the model label. A custom row that continues the
+  // signature with a single space (`? for shortcuts custom help`) is not one.
+  let statusState = { (index: Int) -> AgentRawState? in
+    guard index < lines.endIndex else { return nil }
+    let signatures: [(String, AgentRawState)] = [
+      ("esc to cancel", .working), ("esc to interrupt", .working), ("? for shortcuts", .idle),
+    ]
+    return signatures.first { lines[index] == $0.0 || lines[index].hasPrefix($0.0 + "  ") }?.1
+  }
+
+  // A live dialog lists its `> ` selection within eight rows above the hint
+  // (long permission menus) and owns the bottom of the screen: a composer with
+  // its status row drawn below the hint means the dialog — quoted or answered —
+  // is scrollback. Stacked output renders below the status row and never
+  // carries one, so it cannot demote a live dialog.
+  let isHint = { (line: String) -> Bool in
+    line.hasPrefix("↑/↓ Navigate") || line.hasPrefix("↑↓ Navigate")
+  }
+  if let hint = lines.lastIndex(where: isHint),
+    rows.indices[..<hint].suffix(8).contains(where: { isColumnZero($0) && lines[$0].hasPrefix("> ") }),
+    !composers.contains(where: { $0.top > hint && statusState($0.bottom + 1) != nil })
   {
     return .blocked
   }
-  // The composer is a `─`-bordered box around a `>` prompt row; the status row
-  // renders below its bottom border, before any `stack_with_default` output.
-  // The first status signature after each box bottom is evidence, and every
-  // box's evidence must agree — a transcript-quoted composer or stacked
-  // output drawing its own box produces a second pair, and mixed signatures
-  // are ambiguous rather than proof of either state. Below-footer rows never
-  // reach the evidence, so status-signature-leading custom output cannot
-  // spoof a state on its own.
-  let dashRows = raws.indices.filter { raws[$0].hasPrefix("─") }
-  let boxBottoms = dashRows.filter { bottom in
-    guard let top = dashRows.last(where: { $0 < bottom }) else { return false }
-    return raws[top..<bottom].contains { $0.hasPrefix(">") }
-  }
-  var hasWorkingFooter = false
-  var hasIdleFooter = false
-  if boxBottoms.isEmpty {
-    // No identifiable composer: fall back to the bounded tail, where any
-    // contradictory pair still reads unknown.
-    let tail = lines.suffix(10)
-    hasWorkingFooter = tail.contains {
-      $0.hasPrefix("esc to cancel") || $0.hasPrefix("esc to interrupt")
-    }
-    hasIdleFooter = tail.contains { $0.hasPrefix("? for shortcuts") }
-  } else {
-    // Evidence ends at the next box bottom, so a box drawn by stacked output
-    // creates a second pair — and both must agree before either state wins.
-    for (position, bottom) in boxBottoms.enumerated() {
-      let end =
-        position + 1 < boxBottoms.endIndex ? boxBottoms[position + 1] : lines.endIndex
-      guard let signature = lines[(bottom + 1)..<end].first(where: isStatusRow)
-      else { continue }
-      if signature.hasPrefix("? for shortcuts") {
-        hasIdleFooter = true
-      } else {
-        hasWorkingFooter = true
-      }
-    }
-  }
-  switch (hasWorkingFooter, hasIdleFooter) {
-  case (true, false): return .working
-  case (false, true): return .idle
-  // Absent or contradictory footer evidence: no affirmative state. Dispatch
-  // treats `.unknown` as no evidence rather than idle.
-  case (false, false), (true, true): return .unknown
-  }
+
+  // The last composer is the live one; a redraw caught without its status row,
+  // or a screen without a composer at all, is unknown rather than idle.
+  guard let composer = composers.last else { return .unknown }
+  return statusState(composer.bottom + 1) ?? .unknown
 }

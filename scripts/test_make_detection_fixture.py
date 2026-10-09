@@ -186,11 +186,13 @@ class TailLimits(unittest.TestCase):
 
 
 class Reduction(unittest.TestCase):
-    def test_claude_keeps_the_full_screen(self):
+    def test_claude_and_antigravity_keep_the_full_screen(self):
         # Mirrors `DetectedAgent.detectionScreenText(from:)`: trimming a Claude
-        # capture can delete the very row that reproduces a bug.
+        # capture can delete the very row that reproduces a bug, and trimming an
+        # Antigravity capture can delete the composer box its detector anchors on.
         text = "\n".join(f"line {index}" for index in range(40))
         self.assertEqual(fixture.detection_screen_text(text, "claude"), text)
+        self.assertEqual(fixture.detection_screen_text(text, "antigravity"), text)
 
     def test_pi_takes_the_wider_bounded_tail(self):
         # Mirrors the `.pi` branch: 32 non-blank lines, not the default 24.

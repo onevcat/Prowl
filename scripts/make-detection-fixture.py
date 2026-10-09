@@ -7,11 +7,11 @@ that is not detector-faithful, reduces the screen to the exact slice the
 detector reads for the given agent, and applies redactions without changing
 the visible width of any line.
 
-The reduction mirrors `DetectedAgent.detectionScreenText(from:)`: `claude`
-consumes the full active screen and is passed through untrimmed, `pi` consumes a
-32-line tail, and every other agent consumes a 24-line tail. `--agent` selects
-among the three, and is required because the capture does not record which
-detector will consume it.
+The reduction mirrors `DetectedAgent.detectionScreenText(from:)`: `claude` and
+`antigravity` consume the full active screen and are passed through untrimmed,
+`pi` consumes a 32-line tail, and every other agent consumes a 24-line tail.
+`--agent` selects among the three, and is required because the capture does not
+record which detector will consume it.
 
 Width matters. A fixture exists to pin how the classifier reads a real screen,
 and the agent CLIs wrap, shorten, and truncate their rows to the terminal width.
@@ -104,13 +104,14 @@ DETECTED_AGENTS = (
 def detection_screen_text(text: str, agent: str) -> str:
     """Port of `DetectedAgent.detectionScreenText(from:)`.
 
-    `claude` consumes the full active screen, `pi` a 32-line tail, and every
-    other agent a 24-line tail. Claude's case is deliberate on the Swift side:
-    trimming a Claude capture can delete the very row that reproduces a bug. Pi
-    keeps the wider tail so the pi-subagents widget holds its header and its live
-    job row in one slice.
+    `claude` and `antigravity` consume the full active screen, `pi` a 32-line
+    tail, and every other agent a 24-line tail. The full-screen cases are
+    deliberate on the Swift side: trimming a Claude capture can delete the very
+    row that reproduces a bug, and Antigravity anchors on its composer box, which
+    a long stacked status line would push out of a tail. Pi keeps the wider tail
+    so the pi-subagents widget holds its header and its live job row in one slice.
     """
-    if agent == "claude":
+    if agent in ("claude", "antigravity"):
         return text
     if agent == "pi":
         return canonical_tail(text, limit=PI_DETECTOR_TAIL_LIMIT)

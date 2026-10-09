@@ -34,9 +34,11 @@ derived from `idle + unseen` and is never a fixture state.
    summary in a same-basename metadata file.
 6. Reduce the capture to the exact production detector input for the agent
    (`DetectedAgent.detectionScreenText(from:)`):
-   - `claude` consumes the full active screen. Commit the capture as read, without
-     trimming; it must not exceed the terminal rows recorded in metadata. Trimming a
-     Claude capture can delete the very row above the window that reproduces a bug.
+   - `claude` and `antigravity` consume the full active screen. Commit the capture as
+     read, without trimming; it must not exceed the terminal rows recorded in metadata.
+     Trimming a Claude capture can delete the very row above the window that reproduces
+     a bug, and trimming an Antigravity capture can delete the composer box its detector
+     anchors on when a stacked status line follows it.
    - `pi` consumes a 32-line tail, so the pi-subagents widget keeps its header and
      its live job row in one slice.
    - Every other agent consumes the 24-line tail produced by the production
@@ -66,9 +68,9 @@ scripts/make-detection-fixture.py .local/agent-screen-captures/capture.json \
   > claude/2.1.226/idle/composer.txt
 ```
 
-`--agent` is required and selects the step 6 reduction: `claude` keeps the full active
-screen, `pi` takes the bounded 32-line tail, and every other agent value takes the bounded
-24-line tail. The flag mirrors `DetectedAgent.detectionScreenText(from:)` rather than
+`--agent` is required and selects the step 6 reduction: `claude` and `antigravity` keep the
+full active screen, `pi` takes the bounded 32-line tail, and every other agent value takes
+the bounded 24-line tail. The flag mirrors `DetectedAgent.detectionScreenText(from:)` rather than
 reading the agent from the capture, because the capture does not record which detector will
 consume it. A capture reduced under the wrong budget cannot be caught later: applying a
 wider tail to an already narrower fixture leaves the fixture unchanged.

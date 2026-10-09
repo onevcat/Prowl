@@ -35,38 +35,51 @@ use `prowl read` for terminal output and workflow delivery for complete artifact
 
 ### Antigravity CLI
 
-Antigravity (`agy`, verified 1.3.1) keeps an attached conversation's
+Antigravity (`agy`, verified 1.3.2) keeps an attached conversation's
 `~/.gemini/antigravity-cli/presence/<id>.lock` descriptor open for the life of
 the session, so that open file — not a lock file left behind after exit —
 identifies the session exactly. Its `conversations/<id>.db` and
 `brain/<id>/.system_generated/logs/transcript.jsonl` share the same id.
 
-A `esc to cancel` or `esc to interrupt` bottom status row is **Working**
-while a turn runs; `? for shortcuts` is **Idle**. Workspace-trust,
-tool-permission, and ask-user dialogs are **Blocked**: they render a
-`↑/↓ Navigate` hint row with a `> `-selected option above it, and a
-permission dialog keeps `esc to cancel`, so the dialog chrome wins over the
-working footer. A boxed composer — `─` border rows around a `>` prompt row —
-between the hint and the last status row marks the whole dialog as
-scrollback, so a quoted or answered dialog behind a composer does not
-re-report Blocked; a lone `>`- or `─`-leading custom row cannot veto a live
-one. Footer evidence is the first status signature after each `─`/`>`/`─`
-box bottom, and every box's evidence must agree — a transcript-quoted
-composer or stacked output drawing its own box produces a second pair, and
-mixed signatures read as **unknown**. Rows below the real footer never reach
-the evidence, so a status-signature-leading custom row cannot supply a
-state. When no box can be identified, the bounded tail alone decides, with
-the same contradictory-pair rule; neither or both signatures means
-**unknown**, not Idle.
+The detector reads the full active screen and anchors on the live composer:
+a terminal-wide `─` border, a column-0 `>` prompt row (wrapped input
+continues on indented rows), and a terminal-wide `─` bottom border. The
+built-in status row renders directly below that box — `esc to cancel` or
+`esc to interrupt` is **Working** while a turn runs, `? for shortcuts` is
+**Idle** — padded away from the right-aligned model label (`Gemini 3.8 Flash
+· high`, `Claude Sonnet 4.6 (Thinking)`, or nothing until the label
+resolves). The last composer on screen is the live one, and the row under
+its bottom border is the only state evidence: a `stack_with_default` status
+script renders verbatim below that row, so nothing below it counts, however
+it is shaped. A screen without a composer, or a composer caught without its
+status row, is **unknown**, never Idle.
 
-A pane that never shows a recognized screen — a `stack_with_default` config
-whose appended rows permanently cover the footer, a headless `agy --print`
-run, or a future layout change — reports unknown the whole time. Its process
-is still classified, but an unknown pane emits no roster entry: it is absent
-from Active Agents and `prowl agents`, `agents wait --until idle|blocked`
-times out on it, and `agents wait --until exit` treats it as gone. The state
-machine retains the last recognized state, so a working turn that only
-briefly drops its footer stays Working.
+Workspace-trust, tool-permission, and ask-user dialogs are **Blocked**: they
+replace the composer with option rows (`> ` marks the selection, within
+eight rows above the hint) and a `↑/↓ Navigate` hint row, and a permission
+dialog keeps `esc to cancel`, so the dialog read runs before the status
+row. A composer with its status row drawn below the hint marks the dialog
+as scrollback, so a quoted or answered dialog behind a live composer does
+not re-report Blocked; stacked output never carries a status row, so it
+cannot demote a live dialog.
+
+Terminal width is the longest `─`-only column-0 row on screen. The echoed
+prompt's rule is narrower, agent responses render indented, and the dialog
+rule is not followed by a prompt row, so none of them can pose as the
+composer. The accepted residual is a user's own status script that draws a
+terminal-wide `─`/`>`/`─` box followed by a padded status signature; that
+output is the user's configuration, and the plain spoofs reviewed so far
+(`? for shortcuts custom help`, narrower boxes, dividers) fail toward
+unknown or keep the live dialog Blocked.
+
+A pane that never shows a recognized screen — a headless `agy --print` run,
+a viewer overlay such as `/diff`, or a future layout change — reports
+unknown the whole time. Its process is still classified, but an unknown
+pane emits no roster entry: it is absent from Active Agents and
+`prowl agents`, `agents wait --until idle|blocked` times out on it, and
+`agents wait --until exit` treats it as gone. The state machine retains the
+last recognized state, so a working turn that only briefly drops its footer
+stays Working.
 
 Antigravity currently uses screen state and cooperative delivery, without a
 managed hook channel or transcript reader.

@@ -324,14 +324,19 @@ struct AntigravitySupportTests {
       .executionMode == .standard)
   }
 
-  @Test func screenStatesUseStatusRowAndDialogChrome() throws {
+  // The screens below reproduce agy 1.3.2 chrome captured live in a 100-column
+  // tmux pane: full-width `─` composer borders, a column-0 `>` prompt, and the
+  // status row directly below the box, padded away from the right-aligned
+  // model label. Synthetic variants keep that shape at a narrower width.
+
+  @Test func screenStatesAnchorOnTheComposerAndItsStatusRow() throws {
     let agent = try agent()
     let idle = """
-      Antigravity CLI 1.3.1
-
+      Antigravity CLI 1.3.2
+      ────────────────────────────────────────────────────
       >
-
-      ? for shortcuts                                             Gemini 3.1 Pro · high
+      ────────────────────────────────────────────────────
+      ? for shortcuts                                             Gemini 3.8 Flash · high
       """
     #expect(agent.detectState(in: idle) == .idle)
 
@@ -340,47 +345,119 @@ struct AntigravitySupportTests {
       ────────────────────────────────────────────────────
       >
       ────────────────────────────────────────────────────
-      esc to cancel                                               Gemini 3.1 Pro · high
+      esc to cancel                                               Gemini 3.8 Flash · high
       """
     #expect(agent.detectState(in: working) == .working)
-    // A completed turn redraws the status row in place: `? for shortcuts`
-    // replaces `esc to cancel` — the working footer never scrolls up.
+    #expect(agent.detectState(in: working.replacing("esc to cancel", with: "esc to interrupt")) == .working)
+
+    // A completed turn redraws the status row in place below the same box; the
+    // echoed prompt above it has a narrower rule and no bottom border.
     let afterTurn = """
-      ⣻  Generating...
-      Done. Wrote the file.
-      ────────────────────────────────────────────────────
+      ────────────────────────────────────────────────────────────
+      > Run the shell command `echo hello` and tell me its output.
+      ● Ran (echo hello) (ctrl+o to expand)
+        The output of the command is:
+          hello
+      ────────────────────────────────────────────────────────────────────────────────────────────────────
       >
-      ────────────────────────────────────────────────────
-      ? for shortcuts                                             Gemini 3.1 Pro · high
+      ────────────────────────────────────────────────────────────────────────────────────────────────────
+      ? for shortcuts                                                              Gemini 3.8 Flash · high
       """
     #expect(agent.detectState(in: afterTurn) == .idle)
 
-    // Workspace trust (1.3.1): navigate hint is the last row, no status row.
+    // The label resolves asynchronously (bare signature for the first seconds
+    // of a `--model` launch) and non-Gemini labels carry no `· effort` tail.
+    for label in ["", "                         Claude Sonnet 4.6 (Thinking)", "        GPT-OSS 120B (Medium)"] {
+      let screen = idle.replacing("                                             Gemini 3.8 Flash · high", with: label)
+      #expect(agent.detectState(in: screen) == .idle, "label: \(label)")
+    }
+
+    // Wrapped input continues on indented rows inside the box (verified live):
+    // neither an indented `─` nor an indented signature is chrome.
+    let workingWithWrappedSigInput = """
+      ────────────────────────────────────
+      > a very long line that wraps inside the box
+        ────────────────────────────────────
+        ? for shortcuts docs
+      ────────────────────────────────────
+      esc to cancel                                               Gemini 3.8 Flash · high
+      """
+    #expect(agent.detectState(in: workingWithWrappedSigInput) == .working)
+    // Signature-shaped text typed into the prompt row is input, not a status row.
+    #expect(agent.detectState(in: working.replacing("\n>\n", with: "\n> ? for shortcuts\n")) == .working)
+
+    // No composer on screen — a redraw in flight, a viewer overlay, a headless
+    // run — is unknown, never affirmative idle; so is a contradictory tail.
+    #expect(agent.detectState(in: "⣻  Generating...\npartial output row\nmore partial output") == .unknown)
+    #expect(agent.detectState(in: "esc to cancel\n? for shortcuts") == .unknown)
+    // The last composer is the live one: a box caught without its status row is
+    // unknown even when an earlier box above it still shows an idle footer.
+    let historicalIdleThenUnsignedComposer = """
+      ────────────────────────────────────────────────────
+      > earlier prompt
+      ────────────────────────────────────────────────────
+      ? for shortcuts                                             Gemini 3.8 Flash · high
+      Some ordinary transcript output.
+      ────────────────────────────────────────────────────
+      >
+      ────────────────────────────────────────────────────
+      """
+    #expect(agent.detectState(in: historicalIdleThenUnsignedComposer) == .unknown)
+  }
+
+  @Test func dialogsAreBlockedUntilALiveComposerFollowsThem() throws {
+    let agent = try agent()
+    // Workspace trust (live 1.3.2): the hint is followed only by the model label.
     let trust = """
+      Accessing workspace:
+      /Users/usr/project
       Do you trust the contents of this project?
       Antigravity CLI requires permission to read, edit, and execute files here.
       > Yes, I trust this folder
         No, exit
         ↑/↓ Navigate · enter Confirm
+                                                                                   Gemini 3.8 Flash · high
       """
     #expect(agent.detectState(in: trust) == .blocked)
+    let trustWithoutLabel = trust.replacing("Gemini 3.8 Flash · high", with: "")
+    #expect(agent.detectState(in: trustWithoutLabel) == .blocked)
 
-    // Tool permission keeps the `esc to cancel` status row; the dialog chrome
-    // must win over the working footer.
+    // Tool permission (live 1.3.2) keeps the `esc to cancel` status row under a
+    // `Command` header and a full-width rule; the dialog chrome wins over it.
     let permission = """
+      ────────────────────────────────────────────────────────────
+      > Run the shell command `echo hello` and tell me its output.
+      ○ Thought for 4.2s (The task is to execute a simple shell command and retrieve its output. The...)
+      ● Ran (echo hello) (ctrl+o to expand)
+      Command
+      ────────────────────────────────────────────────────────────────────────────────────────────────────
       Requesting permission for:
          echo hello
       Run this command?
       > 1. Yes, run command
-        2. Yes, always allow
-        3. No, cancel
+        2. Yes, and always allow in this conversation for commands that start with 'echo'
+        3. Yes, and always allow for commands that start with 'echo' (Persist to settings.json)
+        4. No, cancel
         ↑/↓ Navigate · tab Amend · ctrl+g edit/expand command
-      esc to cancel                                               Gemini 3.1 Pro · high
+      esc to cancel                                                                Gemini 3.8 Flash · high
       """
     #expect(agent.detectState(in: permission) == .blocked)
 
-    // Headroom: a second status row below the navigate hint must not mask a
-    // live dialog into Working.
+    let askUser = """
+      ? Which color do you prefer?
+      Question
+      ────────────────────────────────────────────────────────────────────────────────────────────────────
+      Question 1/1: Which color do you prefer?
+      > 1. Red
+        2. Blue
+        3. Write-in...
+        ↑/↓ Navigate · enter Select · esc Skip
+      esc to cancel                                                                Gemini 3.8 Flash · high
+      """
+    #expect(agent.detectState(in: askUser) == .blocked)
+
+    // A usage row between the hint and the status row, and long option lists
+    // (the `> ` row seven rows above the hint) stay inside the dialog read.
     let permissionWithExtraRow = """
       Requesting permission for:
          echo hello
@@ -388,56 +465,62 @@ struct AntigravitySupportTests {
         2. No, cancel
         ↑/↓ Navigate · enter Confirm
       usage: 12k tokens
-      esc to cancel                                               Gemini 3.1 Pro · high
+      esc to cancel                                               Gemini 3.8 Flash · high
       """
     #expect(agent.detectState(in: permissionWithExtraRow) == .blocked)
-
-    // The hint window tolerates status + usage + appended stack rows below it;
-    // the selected option stays above the hint in live dialogs.
-    let permissionWithStackedStatus = """
+    let permissionLongOptions = """
       Requesting permission for:
          echo hello
       > 1. Yes, run command
-        2. No, cancel
+        2. Yes, always allow
+        3. Yes, allow always
+        4. Amend command
+        5. Explain command
+        6. Ask a question
+        7. No, cancel
         ↑/↓ Navigate · enter Confirm
-      usage: 12k tokens
-      esc to cancel                                               Gemini 3.1 Pro · high
-      ctx 12% · custom status
+      esc to cancel                                               Gemini 3.8 Flash · high
       """
-    #expect(agent.detectState(in: permissionWithStackedStatus) == .blocked)
+    #expect(agent.detectState(in: permissionLongOptions) == .blocked)
 
-    // Answered dialogs scroll into transcript without their live chrome.
+    // Answered dialogs scroll into the transcript without their `> ` selection.
     let answered = """
       Requesting permission for:
          echo hello
         1. Yes, run command
         2. Yes, always allow
+      ────────────────────────────────────────────────────
       >
-      ? for shortcuts                                             Gemini 3.1 Pro · high
+      ────────────────────────────────────────────────────
+      ? for shortcuts                                             Gemini 3.8 Flash · high
       """
     #expect(agent.detectState(in: answered) == .idle)
     // Transcript prose cannot spoof the cancel footer or the navigate hint.
-    #expect(
-      agent.detectState(
-        in: "I explained that esc to cancel interrupts a turn.\n>\n? for shortcuts") == .idle)
+    let prose = """
+      I explained that esc to cancel interrupts a turn.
+      ────────────────────────────────────────────────────
+      >
+      ────────────────────────────────────────────────────
+      ? for shortcuts
+      """
+    #expect(agent.detectState(in: prose) == .idle)
   }
 
   @Test func historicalDialogChromeIsScrollback() throws {
     let agent = try agent()
-    // A stale hint residue sits ABOVE the composer's `> typed` row — reversed
-    // order is transcript, not a live dialog.
+    // A stale hint residue above the composer's `> typed` row is transcript.
     let staleHintWithTypedComposer = """
         1. Yes, run command
         ↑/↓ Navigate · enter Confirm
       ────────────────────────────────────────────────────
       > explain this
       ────────────────────────────────────────────────────
-      ? for shortcuts                                             Gemini 3.1 Pro · high
+      ? for shortcuts                                             Gemini 3.8 Flash · high
       """
     #expect(agent.detectState(in: staleHintWithTypedComposer) == .idle)
 
     // A complete dialog quoted in transcript — `> ` option and hint intact —
-    // is scrollback once a fresh composer owns the bottom region, whatever the
+    // is scrollback once a live composer owns the bottom region, whatever the
     // footer below it reports.
     let quotedDialogThenIdle = """
       Here is the dialog you asked me to explain:
@@ -447,55 +530,26 @@ struct AntigravitySupportTests {
       ────────────────────────────────────
       >
       ────────────────────────────────────
-      ? for shortcuts                                             Gemini 3.1 Pro · high
+      ? for shortcuts                                             Gemini 3.8 Flash · high
       """
     #expect(agent.detectState(in: quotedDialogThenIdle) == .idle)
+    #expect(agent.detectState(in: quotedDialogThenIdle.replacing("? for shortcuts", with: "esc to cancel")) == .working)
 
-    let quotedDialogThenWorking = """
-      ⣻  Generating...
-      > Yes, run command
-        No, cancel
-        ↑/↓ Navigate · enter Confirm
-      ────────────────────────────────────
-      >
-      ────────────────────────────────────
-      esc to cancel                                               Gemini 3.1 Pro · high
-      """
-    #expect(agent.detectState(in: quotedDialogThenWorking) == .working)
-
-    // A transcript quote can carry the dialog's own status line: the composer
-    // border still sits between the hint and the LAST (live) status row, so
-    // the veto must anchor there rather than on the quoted `esc to cancel`.
+    // The quote may carry the dialog's own status line; the live composer and
+    // its status row still sit below it.
     let quotedDialogWithStatusThenIdle = """
       Requesting permission for:
          echo hello
       > 1. Yes, run command
         2. No, cancel
         ↑/↓ Navigate · enter Confirm
-      esc to cancel                                               Gemini 3.1 Pro · high
+      esc to cancel                                               Gemini 3.8 Flash · high
       ────────────────────────────────────
       >
       ────────────────────────────────────
-      ? for shortcuts                                             Gemini 3.1 Pro · high
+      ? for shortcuts                                             Gemini 3.8 Flash · high
       """
     #expect(agent.detectState(in: quotedDialogWithStatusThenIdle) == .idle)
-
-    // Stacked output below the status row must not veto a live dialog: a `─`
-    // divider alone is not a composer border, and the veto needs the box's
-    // `─`/`>` pair inside the hint-to-footer gap.
-    let permissionWithSpoofedFooter = """
-      Requesting permission for:
-         echo hello
-      > Yes, run command
-        No, cancel
-        ↑/↓ Navigate · enter Confirm
-      esc to cancel
-      ────────────────
-      branch main
-      ctx 12%
-      ? for shortcuts custom help
-      """
-    #expect(agent.detectState(in: permissionWithSpoofedFooter) == .blocked)
 
     // Detection anchors on the LAST hint row: a quoted dialog above a live
     // one still reports the live dialog.
@@ -511,132 +565,118 @@ struct AntigravitySupportTests {
       > 1. Yes, run command
         2. No, cancel
         ↑↓ Navigate · enter Confirm
-      esc to cancel                                               Gemini 3.1 Pro · high
+      esc to cancel                                               Gemini 3.8 Flash · high
       """
     #expect(agent.detectState(in: quotedDialogThenLiveDialog) == .blocked)
   }
 
-  @Test func appendedStatusOutputKeepsFooterEvidence() throws {
+  @Test func stackedStatusOutputIsNeverEvidence() throws {
     let agent = try agent()
-    // `stack_with_default` appends custom status output below the built-in row;
-    // the footer signatures must still be found in the bounded tail.
+    // `stack_with_default` renders the status script's stdout verbatim below
+    // the built-in status row (verified live with 25 rows), so rows under the
+    // status row never reach the evidence, whatever they look like.
     let workingStacked = """
       ⣻  Generating...
+      ────────────────────────────────────
       >
-      esc to cancel                                               Gemini 3.1 Pro · high
+      ────────────────────────────────────
+      esc to cancel                                               Gemini 3.8 Flash · high
       ctx 12% · ⌘ custom status
       """
     #expect(agent.detectState(in: workingStacked) == .working)
+    #expect(agent.detectState(in: workingStacked.replacing("esc to cancel", with: "? for shortcuts")) == .idle)
 
-    let idleStacked = """
-      >
-      ? for shortcuts                                             Gemini 3.1 Pro · high
-      ctx 12% · ⌘ custom status
-      """
-    #expect(agent.detectState(in: idleStacked) == .idle)
-
-    // A layout with no footer signature is unknown, not affirmative idle —
-    // screen heuristics are the only evidence channel for this runtime.
-    let midStream = """
-      ⣻  Generating...
-      partial output row
-      more partial output
-      """
-    #expect(agent.detectState(in: midStream) == .unknown)
-
-    // Contradictory evidence in the tail is also unknown.
-    #expect(
-      agent.detectState(
-        in: "esc to cancel\n? for shortcuts") == .unknown)
-
-    // An appended `? for shortcuts`-leading row cannot supply idle evidence:
-    // footer evidence is the first signature below the composer box, so rows
-    // under the real `esc` footer never reach it.
     let workingWithSpoofedIdle = """
       ⣻  Generating...
       ────────────────────────────────────
       >
       ────────────────────────────────────
-      esc to cancel                                               Gemini 3.1 Pro · high
+      esc to cancel                                               Gemini 3.8 Flash · high
       ────────────────
       branch main
       ctx 12%
       ? for shortcuts custom help
       """
     #expect(agent.detectState(in: workingWithSpoofedIdle) == .working)
-
-    // Stacked output drawing a complete `─`/`>`/`─` box below the footer adds
-    // a second box-and-signature pair — mixed evidence is ambiguous, so the
-    // screen reads unknown rather than the spoofed state.
+    // A stacked box narrower than the composer is not a composer.
     let workingWithBoxedSpoofedIdle = """
       ⣻  Generating...
       ────────────────────────────────────
       >
       ────────────────────────────────────
-      esc to cancel                                               Gemini 3.1 Pro · high
+      esc to cancel                                               Gemini 3.8 Flash · high
       ────────────────
       > ahead 2
       ────────────────
       ? for shortcuts custom help
       """
-    #expect(agent.detectState(in: workingWithBoxedSpoofedIdle) == .unknown)
+    #expect(agent.detectState(in: workingWithBoxedSpoofedIdle) == .working)
 
-    // Wrapped input puts indented content rows inside the composer box
-    // (verified live on 1.3.1): an indented `─` continuation must not forge
-    // a box border, and a signature-leading continuation must not become
-    // footer evidence — chrome checks use the column-0 raw rows.
-    let workingWithWrappedSigInput = """
-      ────────────────────────────────────
-      > a very long line that wraps inside the box
-        ────────────────────────────────────
-        ? for shortcuts docs
-      ────────────────────────────────────
-      esc to cancel                                               Gemini 3.1 Pro · high
-      """
-    #expect(agent.detectState(in: workingWithWrappedSigInput) == .working)
-
-    // A `>`-leading custom status row is not composer chrome: the scrollback
-    // veto keys on the `─` border, so a live dialog survives stray output.
-    let permissionWithArrowStatus = """
+    // Live permission and ask-user dialogs survive the same stacked box below
+    // their status row (captured on 1.3.2): the box has no status row of its
+    // own, so it cannot pose as the composer that would mark them scrollback.
+    let permissionWithStackedBox = """
+      Command
+      ────────────────────────────────────────────────────────────────────────────────────────────────────
       Requesting permission for:
          echo hello
+      Run this command?
       > 1. Yes, run command
-        2. No, cancel
-        ↑/↓ Navigate · enter Confirm
-      esc to cancel                                               Gemini 3.1 Pro · high
-      > ahead 2
-      """
-    #expect(agent.detectState(in: permissionWithArrowStatus) == .blocked)
-
-    // Stacked output renders BELOW the status row, so a `─` divider there is
-    // not composer chrome either — only the hint-to-status gap can hold one.
-    let permissionWithDividedStatus = """
-      Requesting permission for:
-         echo hello
-      > 1. Yes, run command
-        2. No, cancel
-        ↑/↓ Navigate · enter Confirm
-      esc to cancel                                               Gemini 3.1 Pro · high
+        2. Yes, and always allow in this conversation for commands that start with 'echo'
+        3. Yes, and always allow for commands that start with 'echo' (Persist to settings.json)
+        4. No, cancel
+        ↑/↓ Navigate · tab Amend · ctrl+g edit/expand command
+      esc to cancel                                                                Gemini 3.8 Flash · high
       ────────────────
+      > ahead 2
+      ────────────────
+      ? for shortcuts custom help
       """
-    #expect(agent.detectState(in: permissionWithDividedStatus) == .blocked)
+    #expect(agent.detectState(in: permissionWithStackedBox) == .blocked)
+    let askUserWithStackedBox = """
+      Question
+      ────────────────────────────────────────────────────────────────────────────────────────────────────
+      Question 1/1: Which color do you prefer?
+      > 1. Red
+        2. Blue
+        3. Write-in...
+        ↑/↓ Navigate · enter Select · esc Skip
+      esc to cancel                                                                Gemini 3.8 Flash · high
+      ────────────────
+      > ahead 2
+      ────────────────
+      ? for shortcuts custom help
+      """
+    #expect(agent.detectState(in: askUserWithStackedBox) == .blocked)
+    let stackedRows = [
+      "> ahead 2",
+      "────────────────",
+      "esc to cancel\n────────────────\nbranch main\nctx 12%\n? for shortcuts custom help",
+    ]
+    for stacked in stackedRows {
+      let screen = permissionWithExtraRowless + "\n" + stacked
+      #expect(agent.detectState(in: screen) == .blocked, "stacked: \(stacked)")
+    }
 
-    // Long option lists keep the selected row inside the widened window —
-    // here the `> ` row sits seven rows above the hint.
-    let permissionLongOptions = """
-      Requesting permission for:
-         echo hello
-      > 1. Yes, run command
-        2. Yes, always allow
-        3. Yes, allow always
-        4. Amend command
-        5. Explain command
-        6. Ask a question
-        7. No, cancel
-        ↑/↓ Navigate · enter Confirm
-      esc to cancel                                               Gemini 3.1 Pro · high
-      """
-    #expect(agent.detectState(in: permissionLongOptions) == .blocked)
+    // Twenty-five stacked rows would push the composer out of the 24-row tail
+    // the other legacy detectors read; Antigravity reads the full screen, and
+    // the cropped slice still reads unknown rather than the spoofed idle.
+    let longStack = (1...24).map { "ordinary output line \($0)" } + ["? for shortcuts custom help"]
+    let composerRows = workingStacked.split(separator: "\n").dropLast().map(String.init)
+    let workingWithLongStack = (composerRows + longStack).joined(separator: "\n")
+    #expect(agent.detectState(in: workingWithLongStack) == .working)
+    #expect(agent.detectState(in: agentDetectionRecentText(workingWithLongStack)) == .unknown)
+  }
+
+  private var permissionWithExtraRowless: String {
+    """
+    Requesting permission for:
+       echo hello
+    > 1. Yes, run command
+      2. No, cancel
+      ↑/↓ Navigate · enter Confirm
+    esc to cancel                                               Gemini 3.8 Flash · high
+    """
   }
 
   @Test func sessionOwnershipUsesOnlyOpenLockPaths() throws {
