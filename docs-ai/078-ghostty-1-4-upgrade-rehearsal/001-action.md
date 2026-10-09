@@ -15,7 +15,7 @@
 
 ## Outcome & current state (as of 2026-10-10)
 
-- Branch `ghostty-tip-rehearsal` on `onevcat/Prowl` (pushed, no PR) pins `ThirdParty/ghostty` at
+- Branch `ghostty-tip-rehearsal` on `onevcat/Prowl` (PR #886) pins `ThirdParty/ghostty` at
   `6ae199337` = upstream `9d479dcb1` + four fork patches. The branch is a rehearsal, not a
   release candidate: it tracks a nightly, not a tag.
 - Fork branch `rehearsal/tip-9d479dcb1-patched` on `onevcat/ghostty` holds the replayed patch
