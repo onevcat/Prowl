@@ -1,5 +1,23 @@
 # Changelog
 
+## [2026.10.10](https://github.com/onevcat/Prowl/releases/tag/v2026.10.10)
+
+This release adds Devin and Antigravity support, reduces GitHub refresh traffic, and improves agent status detection.
+
+### New
+- Added Devin CLI and Antigravity CLI (`agy`) support, including agent detection, profiles, and skill installation. Choose either runtime in Agent Profiles to configure launch options; Devin is also available in workflow role selection.
+- Added `gpt-6.1-sol` to the model suggestions in the profile editor.
+
+### Improved
+- Pull request refreshes now batch requests and check settled PRs less often, reducing GitHub API usage across large workspaces while keeping active checks refreshed.
+- When GitHub rate-limits requests, Prowl pauses and retries automatically. The toolbar and Settings › GitHub show the retry time.
+
+### Fixed
+- Corrected Working and Blocked detection for current Amp versions and Working detection for manually launched Oh My Pi sessions. Antigravity no longer gets stuck as Blocked after slash commands or answered questions.
+- Fixed transcript reads for Codex panes using a shared daemon, and prevented previous-session context from lingering after a thread switch.
+- Made Devin message submission wait for pasted text to be ready, and fixed `prowl send` when answering menus or adding to an existing draft.
+- Fixed delayed PR updates after branch switches and preserved known PR status when GitHub returns incomplete results.
+
 ## [2026.10.6](https://github.com/onevcat/Prowl/releases/tag/v2026.10.6)
 
 This release adds a separate terminal configuration for Prowl and fixes font rendering, font size resets, and a quit hang.
