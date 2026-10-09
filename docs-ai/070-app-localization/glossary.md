@@ -75,6 +75,7 @@ When “profile” and “configuration” meet in one sentence, write 设置 fo
 | symlink / link | 符号链接 / 链接 |
 | clone (n.) / worktree (n.) / link (n.) in a count | 克隆 / worktree / 链接 (`1 个克隆`, `%lld 个链接`) |
 | base ref / base branch | 基线引用 / 基线分支 (`Base branch` in a picker); 基准 for “relative to its base” |
+| rate limit / rate-limited | 速率限额 / 已限流 (`GitHub 已限流至 %@`) |
 
 ## Scripts and workflows
 

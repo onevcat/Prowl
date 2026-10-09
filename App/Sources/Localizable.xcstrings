@@ -8079,6 +8079,46 @@
         }
       }
     },
+    "GitHub rate-limited until %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GitHub 已限流至 %@"
+          }
+        }
+      }
+    },
+    "GitHub rate-limited, retrying at %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GitHub 已限流，将于 %@ 重试"
+          }
+        }
+      }
+    },
+    "GitHub refused requests for this account's rate limit. Prowl sends none until the retry time, so other tools on the account keep working." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GitHub 因该账户的速率限额拒绝了请求。Prowl 在重试时间之前不会再发送任何请求，这样该账户上的其他工具可以继续工作。"
+          }
+        }
+      }
+    },
+    "GitHub refused requests for this account's rate limit. Prowl sends none until the retry time." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GitHub 因该账户的速率限额拒绝了请求。Prowl 在重试时间之前不会再发送任何请求。"
+          }
+        }
+      }
+    },
     "GitHub repository not resolved" : {
       "localizations" : {
         "zh-Hans" : {
@@ -9819,6 +9859,16 @@
         }
       }
     },
+    "Missing repository payload" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "缺少仓库数据"
+          }
+        }
+      }
+    },
     "Mode" : {
       "localizations" : {
         "zh-Hans" : {
@@ -10379,12 +10429,12 @@
         }
       }
     },
-    "No agent skill folder was found in your home directory. Run Claude Code, Codex, or another agent once so it creates its folder, or create one from a terminal with prowl skills install --target claude|codex|agents." : {
+    "No agent skill folder was found in your home directory. Run Claude Code, Codex, or another agent once so it creates its folder, or create one from a terminal with prowl skills install --target claude|codex|agents|devin|antigravity." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "未在主目录中找到 Agent 技能文件夹。请先运行一次 Claude Code、Codex 或其他 Agent 以创建其文件夹，或在终端中使用 prowl skills install --target claude|codex|agents 创建。"
+            "value" : "未在主目录中找到 Agent 技能文件夹。请先运行一次 Claude Code、Codex 或其他 Agent 以创建其文件夹，或在终端中使用 prowl skills install --target claude|codex|agents|devin|antigravity 创建。"
           }
         }
       }
@@ -15962,6 +16012,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在访达中选中此 Agent 的会话日志"
+          }
+        }
+      }
+    },
+    "Select this worktree to list each check." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择此 worktree 以列出每项检查。"
           }
         }
       }

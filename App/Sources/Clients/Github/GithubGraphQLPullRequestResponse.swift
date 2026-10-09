@@ -17,7 +17,8 @@ nonisolated struct GithubGraphQLPullRequestResponse: Decodable {
       return nil
     }
     let error = errors.first
-    return .graphQLError(type: error?.type, message: error?.message ?? "Missing repository payload")
+    return .graphQLError(
+      type: error?.type, message: error?.message ?? String(localized: "Missing repository payload"))
   }
 
   func pullRequestsByBranch(
