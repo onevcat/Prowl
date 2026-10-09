@@ -26,6 +26,8 @@ nonisolated struct CodexDaemonBinding: Sendable, Equatable {
 nonisolated enum CodexDaemonBindingLookup: Sendable {
   case unavailable
   case selectionPending
+  /// This selection was bound, but its current evidence is temporarily unavailable.
+  case selectionUnavailable
   case bound(CodexDaemonBinding)
 
   var binding: CodexDaemonBinding? {
@@ -46,6 +48,8 @@ nonisolated struct CodexTUISessionRecord: Sendable, Equatable {
   let submits: [Submit]
   /// Earlier submits still route callers, but cannot identify the selected transcript.
   var selectionSubmitOffset: Int?
+  /// Distinguishes repeated resets without an intervening submit.
+  var selectionRevision = 0
 }
 
 /// Maps a thread that Codex's shared app-server daemon runs to the pane whose TUI drives it
@@ -73,6 +77,17 @@ actor CodexDaemonThreadMapper {
     var rollout: Rollout?
   }
 
+  private struct Selection {
+    let tuiStartedAt: Date
+    let logStartedAt: Date
+    let revision: Int
+    var hasBound = false
+
+    var missing: CodexDaemonBindingLookup { hasBound ? .selectionUnavailable : .selectionPending }
+  }
+
+  // Keep only the selection fence across read failures, never stale rollout evidence.
+  private var selections: [UUID: Selection] = [:]
   private let openFilePaths: @Sendable (pid_t) -> [String]?
   private var sessionLogCache: CodexTUISessionLogCache
   private let sessionLogDirectory: URL
@@ -111,15 +126,24 @@ actor CodexDaemonThreadMapper {
   }
 
   func bindingLookup(surfaceID: UUID, daemonPID: pid_t, tuiStartedAt: Date) -> CodexDaemonBindingLookup {
+    if selections[surfaceID]?.tuiStartedAt != tuiStartedAt { selections[surfaceID] = nil }
     let url = CodexTUISessionLog.url(for: surfaceID, in: sessionLogDirectory)
     guard let log = sessionLogCache.record(at: url, surfaceID: surfaceID),
       CodexTUISessionLog.belongs(sessionStartedAt: log.startedAt, toProcessStartedAt: tuiStartedAt)
-    else { return .unavailable }
-    let missing: CodexDaemonBindingLookup = log.selectionSubmitOffset == nil ? .unavailable : .selectionPending
+    else { return selections[surfaceID]?.missing ?? .unavailable }
+    if log.selectionSubmitOffset == nil {
+      selections[surfaceID] = nil
+    } else if selections[surfaceID]?.logStartedAt != log.startedAt
+      || selections[surfaceID]?.revision != log.selectionRevision
+    {
+      selections[surfaceID] = Selection(
+        tuiStartedAt: tuiStartedAt, logStartedAt: log.startedAt, revision: log.selectionRevision)
+    }
     guard !log.submits.isEmpty, let paths = openFilePaths(daemonPID),
       let rollouts = refreshRollouts(paths.filter(Self.isRolloutPath)),
       let binding = Self.binding(for: log, rollouts: rollouts)
-    else { return missing }
+    else { return selections[surfaceID]?.missing ?? .unavailable }
+    selections[surfaceID]?.hasBound = true
     return .bound(binding)
   }
 
@@ -195,6 +219,7 @@ actor CodexDaemonThreadMapper {
     var startedAt: Date?
     var submits: [SessionLog.Submit] = []
     var selectionSubmitOffset: Int?
+    var selectionRevision = 0
     for line in data.split(separator: 10) {
       let isStart = line.range(of: Data("\"session_start\"".utf8)) != nil
       let isSelection =
@@ -209,6 +234,7 @@ actor CodexDaemonThreadMapper {
         startedAt = timestamp
         submits = []
         selectionSubmitOffset = nil
+        selectionRevision = 0
       } else if isSelection,
         record["kind"] as? String == "new_session" || record["kind"] as? String == "clear_ui"
           || (record["kind"] as? String == "app_event"
@@ -216,6 +242,7 @@ actor CodexDaemonThreadMapper {
               .contains(record["variant"] as? String ?? ""))
       {
         selectionSubmitOffset = submits.count
+        selectionRevision += 1
       } else if record["kind"] as? String == "op",
         let turn = (record["payload"] as? [String: Any])?["UserTurn"] as? [String: Any],
         let clientID = turn["client_user_message_id"] as? String, !clientID.isEmpty
@@ -224,7 +251,9 @@ actor CodexDaemonThreadMapper {
       }
     }
     return startedAt.map {
-      SessionLog(surfaceID: surfaceID, startedAt: $0, submits: submits, selectionSubmitOffset: selectionSubmitOffset)
+      SessionLog(
+        surfaceID: surfaceID, startedAt: $0, submits: submits,
+        selectionSubmitOffset: selectionSubmitOffset, selectionRevision: selectionRevision)
     }
   }
 

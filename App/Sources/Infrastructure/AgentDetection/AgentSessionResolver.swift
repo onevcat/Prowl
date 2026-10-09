@@ -401,6 +401,14 @@ actor AgentSessionResolver {
     }
     // An embedded TUI's complete local inventory takes precedence over a shared daemon.
     if let paths, paths.contains(where: { parse($0) != nil }) { return nil }
+    // Live daemon evidence supersedes any fallback result from before the selection.
+    if case .unavailable = lookup {
+    } else {
+      cache[CacheKey(pid: process.pid, startedAt: startedAt)] = nil
+    }
+    if case .selectionUnavailable = lookup {
+      return AgentSessionResolution(session: nil, isFresh: true)
+    }
     if case .selectionPending = lookup {
       return AgentSessionResolution(session: nil, isFresh: true, invalidatesRetainedSession: true)
     }

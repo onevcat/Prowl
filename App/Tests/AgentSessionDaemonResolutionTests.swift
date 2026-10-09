@@ -170,6 +170,7 @@ struct AgentSessionDaemonResolutionTests {
     actor Selection {
       var changed = false
       func change() { changed = true }
+      func restore() { changed = false }
     }
     let selection = Selection()
     let resolver = AgentSessionResolver(
@@ -189,6 +190,12 @@ struct AgentSessionDaemonResolutionTests {
       configRoot: fixture.home, surfaceID: pane)
     #expect(cached.session == nil)
     #expect(fresh.session == nil)
+    await selection.restore()
+    let afterGap = await resolver.resolve(
+      identified: fixture.process, workingDirectory: fixture.directory, activeText: "",
+      configRoot: fixture.home, surfaceID: pane)
+    #expect(afterGap.session == nil)
+    #expect(afterGap.isFresh)
   }
 
   @Test(arguments: [false, true])
@@ -288,6 +295,110 @@ struct AgentSessionDaemonResolutionTests {
       previous.sessionMissStreak = retained.missStreak
     }
     #expect(previous.session?.confidence == .exact)
+  }
+
+  @MainActor
+  @Test(arguments: [false, true], [false, true])
+  func selectionFenceSurvivesReadFailureAndCompletedBindingMisses(exact: Bool, fresh: Bool) async throws {
+    let fixture = try Fixture()
+    defer { fixture.cleanUp() }
+    try FileManager.default.removeItem(at: fixture.child)
+    let text = "The old session has a unique answer that remains visible after switching."
+    func append(_ text: String, to url: URL) throws {
+      let handle = try FileHandle(forWritingTo: url)
+      defer { try? handle.close() }
+      try handle.seekToEnd()
+      try handle.write(contentsOf: Data((text + "\n").utf8))
+    }
+    func user(_ id: String) -> String {
+      #"{"type":"event_msg","payload":{"type":"item_completed","item":{"type":"UserMessage","client_id":"\#(id)"}}}"#
+    }
+    try append("{\"text\":\"\(text)\"}", to: fixture.first)
+    try append(user("a"), to: fixture.first)
+    // Keep fingerprint candidates unambiguous before B exists.
+    try FileManager.default.removeItem(at: fixture.second)
+    let pane = UUID()
+    let log = CodexTUISessionLog.url(for: pane, in: fixture.directory)
+    let timestamp = Date.ISO8601FormatStyle(includingFractionalSeconds: true).format(Date())
+    let start = "{\"ts\":\"\(timestamp)\",\"kind\":\"session_start\"}"
+    let reset = "{\"ts\":\"\(timestamp)\",\"kind\":\"new_session\"}"
+    func submit(_ id: String) -> String {
+      "{\"ts\":\"\(timestamp)\",\"kind\":\"op\",\"payload\":{\"UserTurn\":{\"client_user_message_id\":\"\(id)\"}}}"
+    }
+    try Data((start + "\n" + (exact ? submit("a") + "\n" : "")).utf8).write(to: log)
+    let unstable = Mutex(false)
+    let inventory = Mutex<[String]?>([fixture.first.path])
+    let mapper = CodexDaemonThreadMapper(
+      sessionLogDirectory: fixture.directory,
+      readSessionLog: { url in
+        let data = try Data(contentsOf: url)
+        if unstable.withLock({ $0 }) {
+          var changed = data
+          changed.append(32)
+          try changed.write(to: url)
+        }
+        return data
+      }, openFilePaths: { _ in inventory.withLock { $0 } })
+    let resolver = AgentSessionResolver(
+      tuiOpenFilePaths: { _ in [] },
+      daemonBinding: { surface, process, _ in
+        await mapper.bindingLookup(surfaceID: surface, daemonPID: 1, tuiStartedAt: process.startedAt)
+      })
+    func resolve() async -> AgentSessionResolution {
+      if fresh {
+        return await resolver.resolveFresh(
+          identified: fixture.process, workingDirectory: fixture.directory, activeText: text,
+          configRoot: fixture.home, surfaceID: pane)
+      }
+      return await resolver.resolve(
+        identified: fixture.process, workingDirectory: fixture.directory, activeText: text,
+        configRoot: fixture.home, surfaceID: pane)
+    }
+    let initial = await resolve()
+    #expect(initial.session?.id == fixture.firstID)
+    #expect(initial.session?.confidence == (exact ? .exact : .high))
+    var previous = PaneAgentState(agentProcessID: fixture.tui.processIdentifier, session: initial.session)
+    try append(reset, to: log)
+    for failRead in [false, true, false] {
+      unstable.withLock { $0 = failRead }
+      try append(" ", to: log)
+      let resolution = await resolve()
+      #expect(resolution.session == nil)
+      #expect(resolution.invalidatesRetainedSession)
+      let retained = PaneAgentState.retainedSession(
+        resolution: resolution, previous: previous, identifiedPID: fixture.tui.processIdentifier)
+      #expect(retained.session == nil)
+      previous.session = retained.session
+      previous.sessionMissStreak = retained.missStreak
+    }
+    try Data("{\"type\":\"session_meta\",\"payload\":{\"id\":\"\(fixture.secondID)\"}}\n".utf8)
+      .write(to: fixture.second)
+    try append(user("b"), to: fixture.second)
+    try append(submit("b"), to: log)
+    inventory.withLock { $0 = [fixture.first.path, fixture.second.path] }
+    let bound = await resolve()
+    #expect(bound.session?.id == fixture.secondID)
+    #expect(bound.session?.confidence == .exact)
+    previous.session = bound.session
+    inventory.withLock { $0 = nil }
+    for miss in 1...3 {
+      let resolution = await resolve()
+      #expect(resolution.session == nil)
+      #expect(resolution.isFresh)
+      #expect(!resolution.invalidatesRetainedSession)
+      let retained = PaneAgentState.retainedSession(
+        resolution: resolution, previous: previous, identifiedPID: fixture.tui.processIdentifier)
+      #expect(retained.session?.id == (miss < 3 ? fixture.secondID : nil))
+      previous.session = retained.session
+      previous.sessionMissStreak = retained.missStreak
+    }
+    inventory.withLock { $0 = [fixture.first.path, fixture.second.path] }
+    #expect(await resolve().session?.id == fixture.secondID)
+    try append(reset, to: log)
+    #expect(await resolve().invalidatesRetainedSession)
+    let restarted = await mapper.bindingLookup(
+      surfaceID: pane, daemonPID: 1, tuiStartedAt: Date().addingTimeInterval(3_600))
+    if case .unavailable = restarted {} else { Issue.record("A new TUI must not inherit the old fence") }
   }
 
   @Test func noPaneDoesNotConsultDaemonBinding() async throws {

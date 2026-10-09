@@ -249,6 +249,9 @@ requirements still apply. An embedded TUI with a complete local rollout inventor
 keeps its normal local session resolution, even when the same home has a daemon.
 A known pending selection also clears retained background identity on the first
 poll, including the session shown by `agents` and included in handoff context.
+This fence survives transient log read failures. Once the new selection binds,
+transient binding misses use the normal two-fresh-miss background grace period;
+fresh transcript reads stay unresolved until current binding evidence returns.
 
 Default text output always reports current `Status`, decision `Reason`, last
 state-change time, and a result state. A blocked snapshot includes the raw current
