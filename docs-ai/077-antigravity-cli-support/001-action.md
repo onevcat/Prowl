@@ -29,14 +29,18 @@
   `--prompt-interactive` in both `=` and space forms on 1.3.1.
 - Screen detection is a legacy detector (`detectAntigravity`): the bottom status
   row is the live boundary — `esc to cancel`/`esc to interrupt` = Working,
-  `? for shortcuts` = Idle, matched in a bounded four-row tail because
-  `stack_with_default` can append custom status output below the built-in row.
-  Trust, permission, and ask-user dialogs are Blocked via a `↑/↓ Navigate` hint
-  row paired with a `> ` selected option; a permission dialog keeps
-  `esc to cancel`, so the dialog check runs first. A screen with neither footer
-  signature is `.unknown`, never affirmative Idle — screen heuristics are this
-  runtime's only evidence channel. Answered dialogs in scrollback cannot
-  re-report Blocked. A typed profile was deferred:
+  `? for shortcuts` = Idle, anchored on the `─`/`>`/`─` composer box rather
+  than a tail scan because `stack_with_default` can append custom status
+  output below the built-in row. Trust, permission, and ask-user dialogs are
+  Blocked via a `↑/↓ Navigate` hint row paired with a `> ` selected option;
+  a permission dialog keeps `esc to cancel`, so the dialog check runs first.
+  Footer evidence requires the current composer's box — an unanchored
+  signature or missing live footer is `.unknown`, never affirmative Idle —
+  screen heuristics are this runtime's only evidence channel. Answered
+  dialogs in scrollback cannot re-report Blocked, but quoted dialog chrome
+  (option + hint intact) is indistinguishable from appended output under a
+  live dialog, so it reads Blocked until it scrolls out. A typed profile
+  was deferred:
   `AgentScreenRuleCoverageTests` requires real `prowl read --source detection`
   captures, which need a Debug-app session.
 - `AntigravitySessionProfile` resolves `presence/<uuid>.lock` only when the
@@ -56,7 +60,7 @@
 
 ## Validation
 
-- App builds clean (Debug). Focused suites pass: `AntigravitySupportTests` (5
+- App builds clean (Debug). Focused suites pass: `AntigravitySupportTests` (14
   tests), `AgentRuntimeAdapterTests`, `AgentClassifierTests`,
   `CommandIconMapTests`, `AgentScreenDetectionTests`, `AgentScreenRuleCoverageTests`,
   `AgentSessionProfileTests`, `AgentSessionResolverTests`.
@@ -114,29 +118,39 @@
   bare `--` terminator. This keeps value consumption and last-wins permission
   overrides correct across mixed spellings. The classifier's updater demotion
   accepts `-bg-updater` on the same grounds.
-- **A boxed composer below the hint vetoes the dialog read**: a complete
-  dialog quoted in transcript (`> ` option and `↑/↓ Navigate` intact) followed
-  by a fresh composer used to report Blocked over the live footer. The veto
-  needs the composer's two-row signature — a `─` border row AND a `>` prompt
-  row — between the hint and the LAST status row, so `>`-leading or
-  `─`-dividing `stack_with_default` output cannot veto a live dialog on its
-  own. Anchoring on the last status row means a quote that carries the
-  dialog's own status line still sees the composer (verified 1.3.1:
-  trust/permission dialogs render only footer/status rows beneath the hint).
-  The `> ` option window above the hint spans 8 rows for long option lists,
-  and the window below the hint spans 10 rows for stacked output.
-- **Footer evidence is the first status signature after each composer box**:
+- **Dialog chrome is not vetoable**: a complete dialog quoted in transcript
+  (`> ` option and `↑/↓ Navigate` intact) followed by a fresh composer is
+  row-for-row identical to a live dialog sitting above appended
+  `stack_with_default` output — the trust dialog carries no footer at all,
+  so a `─`/`>`/`─` box plus a signature row below its hint admits both
+  readings. Every anchoring rule tried (last status, first status,
+  two-row composer signature) left a fail-open path — the veto is removed
+  and quoted dialogs report Blocked until they scroll out of the window.
+  Delayed dispatch is safe; released dispatch onto a modal prompt is not.
+  The `> ` option window above the hint spans 8 rows for long option lists;
+  a bare hint row without one denies footer evidence entirely and reads
+  unknown, since a live dialog's option can be cropped while its stale
+  chrome still parses. Dialogs with hint copy the detector does not
+  recognize are caught structurally instead: a column-0 `> ` row followed
+  by an indented option sibling is a selected option, and the composer's
+  own `> ` row is excluded because it always sits directly beneath its
+  `─` top border.
+- **Footer evidence is the signature adjacent below each composer box**:
   the composer is a `─`-bordered box around a `>` prompt row, and the status
   row renders directly below its bottom border. Each `─`/`>`/`─` box bottom
-  contributes the first signature that follows it, and all boxes must agree —
+  contributes the signature in the very next row — anything deeper in the
+  window is output, not the footer — and all boxes must agree —
   a transcript-quoted composer or stacked output drawing its own box creates
   a second pair, and mixed signatures read unknown. Below-footer rows never
   reach the evidence, so a status-signature-leading `stack_with_default` row
-  cannot supply a spoofed state; without an identifiable box, the bounded
-  tail applies the same contradictory-pair rule. This replaces the raw
-  tail-suffix scan, where appended rows could push the real footer out of the
-  window and let a spoofed `? for shortcuts` row release dispatch readiness —
-  a shape onevclaw reproduced end-to-end.
+  cannot supply a spoofed state. Evidence must be anchored to the current
+  composer: a live box with no following signature is ambiguous (unknown),
+  and a signature with no box above it at all is unanchored transcript or
+  appended text — also unknown. This replaces the raw tail-suffix scan, where
+  appended rows could push the real footer out of the window and let a
+  spoofed `? for shortcuts` row release dispatch readiness — a shape
+  onevclaw reproduced end-to-end, and onevtail extended to an appended box
+  whose own signature row stretched the veto's anchor.
 - **Chrome checks use column-0 raw rows**: borders and the `>` prompt render
   at column 0, while wrapped composer content is indented (verified live —
   typing a long line ending in dashes puts `─`-leading text on an indented

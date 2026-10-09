@@ -44,20 +44,27 @@ identifies the session exactly. Its `conversations/<id>.db` and
 A `esc to cancel` or `esc to interrupt` bottom status row is **Working**
 while a turn runs; `? for shortcuts` is **Idle**. Workspace-trust,
 tool-permission, and ask-user dialogs are **Blocked**: they render a
-`↑/↓ Navigate` hint row with a `> `-selected option above it, and a
-permission dialog keeps `esc to cancel`, so the dialog chrome wins over the
-working footer. A boxed composer — `─` border rows around a `>` prompt row —
-between the hint and the last status row marks the whole dialog as
-scrollback, so a quoted or answered dialog behind a composer does not
-re-report Blocked; a lone `>`- or `─`-leading custom row cannot veto a live
-one. Footer evidence is the first status signature after each `─`/`>`/`─`
-box bottom, and every box's evidence must agree — a transcript-quoted
-composer or stacked output drawing its own box produces a second pair, and
-mixed signatures read as **unknown**. Rows below the real footer never reach
-the evidence, so a status-signature-leading custom row cannot supply a
-state. When no box can be identified, the bounded tail alone decides, with
-the same contradictory-pair rule; neither or both signatures means
-**unknown**, not Idle.
+`↑/↓ Navigate` (or `↑↓ Navigate`) hint row with a `> `-selected option no
+more than eight rows above it, and a permission dialog keeps `esc to
+cancel`, so the dialog chrome wins over the working footer. A column-0
+`> ` row followed by an indented option sibling (`  2. …`, `  No, exit`)
+is also **Blocked** — dialogs can carry hint copy this detector does not
+recognize, and the composer's own `> ` row always sits directly beneath
+its `─` top border, so the option shape outside a box is live chrome.
+Stale dialog chrome quoted in transcript reads **Blocked** too — a quoted
+dialog above a fresh composer is row-for-row identical to a live dialog
+above appended `stack_with_default` output, so the safe interpretation
+wins until the quote scrolls out of the window. A bare hint row with no
+option is cropped chrome or transcript residue: footer evidence is denied
+and the screen is **unknown**. Footer evidence is the status signature in the row directly
+beneath each `─`/`>`/`─` box bottom, and every box's evidence must
+agree — a transcript-quoted composer or stacked output drawing its own box
+produces a second pair, and mixed signatures read as **unknown**. Rows
+below the real footer never reach the evidence, so a
+status-signature-leading custom row cannot supply a state. A signature
+with no composer box above it is unanchored transcript or appended text
+and is not evidence: no identifiable box, or a live composer box with no
+adjacent signature, means **unknown**, not Idle.
 
 A pane that never shows a recognized screen — a `stack_with_default` config
 whose appended rows permanently cover the footer, a headless `agy --print`
