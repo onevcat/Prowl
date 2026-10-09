@@ -255,6 +255,7 @@ private struct WorktreeToolbarPreview: View {
         ),
         agentsLauncherItems: [],
         statusToast: nil,
+        githubRateLimitedUntil: nil,
         workflowStatus: WorkflowStatusCenterPresentation(
           state: WorkflowRunsFeature.State(),
           selectedWorktreeID: nil,

@@ -8,7 +8,7 @@ struct PullRequestStatusButton: View {
 
   var body: some View {
     PullRequestChecksPopoverButton(pullRequest: model.pullRequest) {
-      let breakdown = PullRequestCheckBreakdown(checks: model.statusChecks)
+      let breakdown = model.checkBreakdown
       let showsChecksRing = breakdown.total > 0 && model.state != "MERGED"
       HStack(spacing: 6) {
         PullRequestBadgeView(
@@ -56,7 +56,7 @@ struct PullRequestStatusModel: Equatable {
   let number: Int
   let state: String?
   let title: String
-  let statusChecks: [GithubPullRequestStatusCheck]
+  let checkBreakdown: PullRequestCheckBreakdown
   let detailText: String?
 
   init?(pullRequest: GithubPullRequest?) {
@@ -73,24 +73,23 @@ struct PullRequestStatusModel: Equatable {
     self.title = pullRequest.title
     if state == "MERGED" {
       self.detailText = nil
-      self.statusChecks = []
+      self.checkBreakdown = PullRequestCheckBreakdown(checks: [])
       return
     }
     if state == "CLOSED" {
       self.detailText = nil
-      self.statusChecks = []
+      self.checkBreakdown = PullRequestCheckBreakdown(checks: [])
       return
     }
     let isDraft = pullRequest.isDraft
     let prefix = isDraft ? "(Drafted) " : ""
     let mergeReadiness = PullRequestMergeReadiness(pullRequest: pullRequest)
-    let checks = pullRequest.statusCheckRollup?.checks ?? []
-    self.statusChecks = checks
+    let breakdown = pullRequest.checkBreakdown
+    self.checkBreakdown = breakdown
     let checksDetail: String?
-    if checks.isEmpty {
+    if breakdown.total == 0 {
       checksDetail = nil
     } else {
-      let breakdown = PullRequestCheckBreakdown(checks: checks)
       let checksLabel = breakdown.total == 1 ? "check" : "checks"
       checksDetail = breakdown.summaryText + " \(checksLabel)"
     }
