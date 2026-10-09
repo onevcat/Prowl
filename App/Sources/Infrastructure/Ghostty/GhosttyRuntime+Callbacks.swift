@@ -64,37 +64,55 @@ extension GhosttyRuntime {
   nonisolated static func readClipboardCallback(
     _ userdata: UnsafeMutableRawPointer?,
     _ location: ghostty_clipboard_e,
-    _ state: UnsafeMutableRawPointer?
-  ) -> Bool {
+    _ state: UnsafeMutableRawPointer?,
+    _ mimes: UnsafeBufferPointer<UnsafePointer<CChar>?>,
+    _ list: Bool
+  ) -> ghostty_clipboard_read_result_e {
+    // The MIME list is borrowed for the duration of the call: copy it before
+    // leaving the calling thread.
+    let requested = mimes.compactMap { pointer in pointer.map { String(cString: $0) } }
     let userdataBits = userdata.map { UInt(bitPattern: $0) }
     let stateBits = state.map { UInt(bitPattern: $0) }
     if Thread.isMainThread {
       return MainActor.assumeIsolated {
-        readClipboard(userdataBits: userdataBits, location: location, stateBits: stateBits)
+        readClipboard(
+          userdataBits: userdataBits,
+          location: location,
+          stateBits: stateBits,
+          mimes: requested,
+          list: list
+        )
       }
     }
     return DispatchQueue.main.sync {
       MainActor.assumeIsolated {
-        readClipboard(userdataBits: userdataBits, location: location, stateBits: stateBits)
+        readClipboard(
+          userdataBits: userdataBits,
+          location: location,
+          stateBits: stateBits,
+          mimes: requested,
+          list: list
+        )
       }
     }
   }
 
   nonisolated static func confirmReadClipboardCallback(
     _ userdata: UnsafeMutableRawPointer?,
-    _ string: UnsafePointer<CChar>?,
+    _ confirm: UnsafePointer<ghostty_clipboard_confirm_s>?,
     _ state: UnsafeMutableRawPointer?,
     _ request: ghostty_clipboard_request_e
   ) {
-    guard let string else { return }
-    let value = String(cString: string)
+    // The confirmation payload is borrowed from libghostty: copy it before
+    // leaving the calling thread.
+    let payload = confirm.map { GhosttyClipboardPayload(confirm: $0.pointee) }
     let userdataBits = userdata.map { UInt(bitPattern: $0) }
     let stateBits = state.map { UInt(bitPattern: $0) }
     if Thread.isMainThread {
       MainActor.assumeIsolated {
         confirmReadClipboard(
           userdataBits: userdataBits,
-          value: value,
+          payload: payload,
           stateBits: stateBits,
           request: request
         )
@@ -105,7 +123,7 @@ extension GhosttyRuntime {
       MainActor.assumeIsolated {
         confirmReadClipboard(
           userdataBits: userdataBits,
-          value: value,
+          payload: payload,
           stateBits: stateBits,
           request: request
         )
@@ -124,7 +142,10 @@ extension GhosttyRuntime {
     let items: [(mime: String, data: String)] = (0..<len).compactMap { index in
       let item = content.advanced(by: index).pointee
       guard let mimePtr = item.mime, let dataPtr = item.data else { return nil }
-      return (mime: String(cString: mimePtr), data: String(cString: dataPtr))
+      // `len` bounds the payload; the bytes are not necessarily NUL-terminated.
+      let bytes = UnsafeRawBufferPointer(start: dataPtr, count: item.len)
+      guard let data = String(bytes: bytes, encoding: .utf8) else { return nil }
+      return (mime: String(cString: mimePtr), data: data)
     }
     guard !items.isEmpty else { return }
     let exportUserdataBits = userdata.map { UInt(bitPattern: $0) }
@@ -260,29 +281,41 @@ extension GhosttyRuntime {
     try? process.run()
   }
 
+  /// Serves a clipboard read (paste, OSC 52, Kitty clipboard): the requested
+  /// MIME representations are read from the pasteboard and handed back through
+  /// `ghostty_surface_complete_clipboard_request`. `list` asks for the declared
+  /// MIME types without data (Kitty list requests, mode 5522 paste events).
   static func readClipboard(
     userdataBits: UInt?,
     location: ghostty_clipboard_e,
-    stateBits: UInt?
-  ) -> Bool {
+    stateBits: UInt?,
+    mimes: [String],
+    list: Bool
+  ) -> ghostty_clipboard_read_result_e {
     let userdata = userdataBits.flatMap { UnsafeMutableRawPointer(bitPattern: $0) }
     let state = stateBits.flatMap { UnsafeMutableRawPointer(bitPattern: $0) }
     guard let bridge = surfaceBridge(fromUserdata: userdata), let surface = bridge.surface else {
-      return false
+      return GHOSTTY_CLIPBOARD_READ_UNSUPPORTED
     }
-    guard let value = NSPasteboard.ghostty(location)?.getOpinionatedStringContents() else {
-      return false
+    guard let pasteboard = NSPasteboard.ghostty(location) else {
+      return GHOSTTY_CLIPBOARD_READ_UNSUPPORTED
     }
-    if !value.isEmpty { bridge.surfaceView?.recordEditingActivity() }
-    value.withCString { ptr in
-      ghostty_surface_complete_clipboard_request(surface, ptr, state, false)
+    let payload = GhosttyClipboardPayload(pasteboard: pasteboard, mimes: mimes, list: list)
+    if payload.contents.isEmpty, !list {
+      return GHOSTTY_CLIPBOARD_READ_UNAVAILABLE
     }
-    return true
+    if payload.hasText { bridge.surfaceView?.recordEditingActivity() }
+    completeClipboardRequest(surface, payload: payload, state: state)
+    return GHOSTTY_CLIPBOARD_READ_STARTED
   }
 
+  /// Prowl approves every clipboard read that libghostty asks to confirm
+  /// (unsafe paste, OSC 52 and Kitty reads) without a dialog, as it did before
+  /// the Kitty clipboard protocol. The payload libghostty handed over is
+  /// completed as confirmed, so the pasteboard is never read a second time.
   static func confirmReadClipboard(
     userdataBits: UInt?,
-    value: String,
+    payload: GhosttyClipboardPayload?,
     stateBits: UInt?,
     request: ghostty_clipboard_request_e
   ) {
@@ -292,9 +325,69 @@ extension GhosttyRuntime {
     guard let bridge = surfaceBridge(fromUserdata: userdata), let surface = bridge.surface else {
       return
     }
-    if !value.isEmpty { bridge.surfaceView?.recordEditingActivity() }
-    value.withCString { ptr in
-      ghostty_surface_complete_clipboard_request(surface, ptr, state, true)
+    guard let payload else {
+      ghostty_surface_deny_clipboard_request(surface, state)
+      return
+    }
+    if payload.hasText { bridge.surfaceView?.recordEditingActivity() }
+    completeClipboardRequest(surface, payload: payload, state: state, confirmed: true)
+  }
+
+  /// Marshals `payload` into C memory for the duration of
+  /// `ghostty_surface_complete_clipboard_request`; libghostty copies what it
+  /// needs before returning.
+  static func completeClipboardRequest(
+    _ surface: ghostty_surface_t,
+    payload: GhosttyClipboardPayload,
+    state: UnsafeMutableRawPointer?,
+    confirmed: Bool = false
+  ) {
+    var cStrings: [UnsafeMutablePointer<CChar>] = []
+    var cBuffers: [UnsafeMutableRawPointer] = []
+    defer {
+      for string in cStrings { free(string) }
+      for buffer in cBuffers { buffer.deallocate() }
+    }
+
+    var cContents: [ghostty_clipboard_content_s] = []
+    for entry in payload.contents {
+      guard let mime = strdup(entry.mime) else { continue }
+      cStrings.append(mime)
+      let buffer = UnsafeMutableRawPointer.allocate(byteCount: max(entry.data.count, 1), alignment: 1)
+      cBuffers.append(buffer)
+      entry.data.withUnsafeBytes { source in
+        if let base = source.baseAddress {
+          buffer.copyMemory(from: base, byteCount: source.count)
+        }
+      }
+      cContents.append(
+        ghostty_clipboard_content_s(
+          mime: mime,
+          data: buffer.assumingMemoryBound(to: CChar.self),
+          len: entry.data.count
+        )
+      )
+    }
+
+    var cAvailable: [UnsafePointer<CChar>?] = []
+    for mime in payload.available {
+      guard let string = strdup(mime) else { continue }
+      cStrings.append(string)
+      cAvailable.append(UnsafePointer(string))
+    }
+
+    cContents.withUnsafeBufferPointer { contents in
+      cAvailable.withUnsafeBufferPointer { available in
+        var complete = ghostty_clipboard_complete_s(
+          contents: contents.baseAddress,
+          contents_len: contents.count,
+          available: available.baseAddress,
+          available_len: available.count,
+          confirmed: confirmed,
+          remember: false
+        )
+        ghostty_surface_complete_clipboard_request(surface, &complete, state)
+      }
     }
   }
 

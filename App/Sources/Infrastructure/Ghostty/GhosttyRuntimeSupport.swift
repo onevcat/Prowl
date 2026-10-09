@@ -202,4 +202,101 @@ extension NSPasteboard {
       return nil
     }
   }
+
+  /// The pasteboard's representation of `mime`, read the way a paste reads it:
+  /// `text/plain` goes through `getOpinionatedStringContents()` so copied files
+  /// paste as shell-escaped paths. Other MIME types map to a pasteboard type
+  /// through `UTType`.
+  func ghosttyData(forMime mime: String) -> Data? {
+    switch mime {
+    case "text/plain":
+      return getOpinionatedStringContents().map { Data($0.utf8) }
+    default:
+      guard let type = NSPasteboard.PasteboardType(mimeType: mime) else { return nil }
+      return data(forType: type)
+    }
+  }
+
+  /// The MIME types the pasteboard declares, without reading any data. Plain
+  /// text and copied files both count as `text/plain`, matching
+  /// `ghosttyData(forMime:)`.
+  func ghosttyAvailableMimes() -> [String] {
+    let declared = types ?? []
+    var result: [String] = []
+    var seen = Set<String>()
+    if declared.contains(.string) || declared.contains(.fileURL) {
+      result.append("text/plain")
+      seen.insert("text/plain")
+    }
+    for type in declared {
+      guard let mime = UTType(type.rawValue)?.preferredMIMEType else { continue }
+      let normalized = mime == "text/plain;charset=utf-8" ? "text/plain" : mime
+      guard seen.insert(normalized).inserted else { continue }
+      result.append(normalized)
+    }
+    return result
+  }
+}
+
+/// One clipboard representation crossing the libghostty boundary.
+struct GhosttyClipboardContent: Equatable {
+  var mime: String
+  var data: Data
+}
+
+/// The owned copy of a clipboard read: the representations libghostty asked
+/// for plus, when it asked for a listing, the declared MIME types.
+struct GhosttyClipboardPayload: Equatable {
+  var contents: [GhosttyClipboardContent]
+  var available: [String]
+
+  nonisolated init(contents: [GhosttyClipboardContent], available: [String]) {
+    self.contents = contents
+    self.available = available
+  }
+
+  /// Reads the requested representations from `pasteboard`. Duplicate MIME
+  /// types are read once; types the pasteboard cannot serve are skipped.
+  init(pasteboard: NSPasteboard, mimes: [String], list: Bool) {
+    var contents: [GhosttyClipboardContent] = []
+    var seen = Set<String>()
+    for mime in mimes where seen.insert(mime).inserted {
+      guard let data = pasteboard.ghosttyData(forMime: mime) else { continue }
+      contents.append(GhosttyClipboardContent(mime: mime, data: data))
+    }
+    self.init(contents: contents, available: list ? pasteboard.ghosttyAvailableMimes() : [])
+  }
+
+  /// Copies the borrowed C payload of a confirmation request. Runs on the
+  /// libghostty thread that owns the request, so it is not actor-isolated.
+  nonisolated init(confirm: ghostty_clipboard_confirm_s) {
+    var contents: [GhosttyClipboardContent] = []
+    if let raw = confirm.contents {
+      for index in 0..<confirm.contents_len {
+        let item = raw[index]
+        guard let mime = item.mime else { continue }
+        let data: Data =
+          if let bytes = item.data, item.len > 0 {
+            Data(bytes: bytes, count: item.len)
+          } else {
+            Data()
+          }
+        contents.append(GhosttyClipboardContent(mime: String(cString: mime), data: data))
+      }
+    }
+    var available: [String] = []
+    if let raw = confirm.available {
+      for index in 0..<confirm.available_len {
+        guard let pointer = raw[index] else { continue }
+        available.append(String(cString: pointer))
+      }
+    }
+    self.init(contents: contents, available: available)
+  }
+
+  /// True when a non-empty `text/plain` representation is present: the paste
+  /// changes the terminal, so it counts as editing activity.
+  var hasText: Bool {
+    contents.contains { $0.mime == "text/plain" && !$0.data.isEmpty }
+  }
 }

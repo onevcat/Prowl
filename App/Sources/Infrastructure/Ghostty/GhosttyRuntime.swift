@@ -76,11 +76,17 @@ final class GhosttyRuntime {
       action_cb: { @Sendable app, target, action in
         GhosttyRuntime.actionCallback(app, target, action)
       },
-      read_clipboard_cb: { @Sendable userdata, location, state in
-        GhosttyRuntime.readClipboardCallback(userdata, location, state)
+      read_clipboard_cb: { @Sendable userdata, location, state, mimes, mimesLen, list in
+        GhosttyRuntime.readClipboardCallback(
+          userdata,
+          location,
+          state,
+          UnsafeBufferPointer(start: mimes, count: mimesLen),
+          list
+        )
       },
-      confirm_read_clipboard_cb: { @Sendable userdata, string, state, request in
-        GhosttyRuntime.confirmReadClipboardCallback(userdata, string, state, request)
+      confirm_read_clipboard_cb: { @Sendable userdata, confirm, state, request in
+        GhosttyRuntime.confirmReadClipboardCallback(userdata, confirm, state, request)
       },
       write_clipboard_cb: { @Sendable userdata, location, content, len, confirm in
         GhosttyRuntime.writeClipboardCallback(userdata, location, content, len, confirm)

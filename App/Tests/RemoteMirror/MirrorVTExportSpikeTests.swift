@@ -99,13 +99,14 @@ struct MirrorVTExportSpikeTests {
       var runtime = ghostty_runtime_config_s(
         userdata: nil, supports_selection_clipboard: false,
         wakeup_cb: { @Sendable _ in }, action_cb: { @Sendable _, _, _ in false },
-        read_clipboard_cb: { @Sendable _, _, _ in false },
+        read_clipboard_cb: { @Sendable _, _, _, _, _, _ in GHOSTTY_CLIPBOARD_READ_UNSUPPORTED },
         confirm_read_clipboard_cb: { @Sendable _, _, _, _ in },
         write_clipboard_cb: { @Sendable userdata, _, content, length, _ in
           guard let userdata, let content, length == 1, let data = content.pointee.data else {
             return
           }
-          let path = String(cString: data)
+          let bytes = UnsafeRawBufferPointer(start: data, count: content.pointee.len)
+          guard let path = String(bytes: bytes, encoding: .utf8) else { return }
           let pointer = UInt(bitPattern: userdata)
           MainActor.assumeIsolated {
             Unmanaged<Clipboard>.fromOpaque(UnsafeMutableRawPointer(bitPattern: pointer)!)

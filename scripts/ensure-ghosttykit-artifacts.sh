@@ -71,8 +71,16 @@ stamp_matches() {
 }
 
 refresh_archive_index() {
-  local archive="$XCFRAMEWORK_PATH/macos-arm64_x86_64/libghostty.a"
-  if [[ ! -f "$archive" ]]; then
+  # Ghostty renamed the static library from libghostty.a to ghostty-internal.a
+  # (upstream main, 2026); accept either name.
+  local archive=""
+  for candidate in "$XCFRAMEWORK_PATH"/macos-arm64_x86_64/*.a; do
+    if [[ -f "$candidate" ]]; then
+      archive="$candidate"
+      break
+    fi
+  done
+  if [[ -z "$archive" ]]; then
     return 0
   fi
 

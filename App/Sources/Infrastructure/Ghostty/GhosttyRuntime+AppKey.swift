@@ -15,14 +15,15 @@ extension GhosttyRuntime {
   ///
   /// `ghostty_app_key`'s own result only says a binding matched; the core
   /// discards the action callback's Boolean, so the outcome is read from the
-  /// callback instead.
+  /// callback instead. The binding lookup itself is answered by the config
+  /// (`ghostty_config_key_is_binding`, upstream `7c91cef28`).
   func performAppUndoRedoBinding(for event: NSEvent) -> Bool {
-    guard let app, event.type == .keyDown else { return false }
+    guard let app, let config, event.type == .keyDown else { return false }
     var key = Self.appKeyEvent(for: event)
     let text = event.characters ?? ""
     return text.withCString { pointer in
       key.text = text.isEmpty ? nil : pointer
-      guard ghostty_app_key_is_binding(app, key) else { return false }
+      guard ghostty_config_key_is_binding(config, key) else { return false }
       appUndoRedoOutcome = nil
       isDispatchingUndoRedoKey = true
       defer {
