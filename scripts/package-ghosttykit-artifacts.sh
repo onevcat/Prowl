@@ -36,12 +36,12 @@ XCFRAMEWORK_ARCHIVE="$DIST_DIR/GhosttyKit.xcframework.tar.gz"
 RESOURCES_ARCHIVE="$DIST_DIR/GhosttyKit-resources.tar.gz"
 
 (
-  cd "$PROJECT_DIR/Frameworks"
+  cd "$(dirname "$XCFRAMEWORK_PATH")"
   COPYFILE_DISABLE=1 tar czf "$XCFRAMEWORK_ARCHIVE" GhosttyKit.xcframework
 )
 
 (
-  cd "$PROJECT_DIR/Resources"
+  cd "$(dirname "$GHOSTTY_RESOURCE_PATH")"
   COPYFILE_DISABLE=1 tar czf "$RESOURCES_ARCHIVE" ghostty terminfo
 )
 
