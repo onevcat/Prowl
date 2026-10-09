@@ -405,7 +405,7 @@ struct AntigravitySupportTests {
     #expect(agent.detectState(in: historicalIdleThenUnsignedComposer) == .unknown)
   }
 
-  @Test func dialogsAreBlockedUntilALiveComposerFollowsThem() throws {
+  @Test func dialogsAreBlockedWhateverFollowsTheHint() throws {
     let agent = try agent()
     // Workspace trust (live 1.3.2): the hint is followed only by the model label.
     let trust = """
@@ -506,9 +506,10 @@ struct AntigravitySupportTests {
     #expect(agent.detectState(in: prose) == .idle)
   }
 
-  @Test func historicalDialogChromeIsScrollback() throws {
+  @Test func quotedDialogChromeStaysBlocked() throws {
     let agent = try agent()
-    // A stale hint residue above the composer's `> typed` row is transcript.
+    // A hint row with no column-0 `> ` selection above it is cropped live
+    // chrome or residue: the composer evidence below it is denied.
     let staleHintWithTypedComposer = """
         1. Yes, run command
         ↑/↓ Navigate · enter Confirm
@@ -517,11 +518,13 @@ struct AntigravitySupportTests {
       ────────────────────────────────────────────────────
       ? for shortcuts                                             Gemini 3.8 Flash · high
       """
-    #expect(agent.detectState(in: staleHintWithTypedComposer) == .idle)
+    #expect(agent.detectState(in: staleHintWithTypedComposer) == .unknown)
 
-    // A complete dialog quoted in transcript — `> ` option and hint intact —
-    // is scrollback once a live composer owns the bottom region, whatever the
-    // footer below it reports.
+    // Column-0 dialog chrome is terminal: agent responses render indented,
+    // so a `> ` selection at column 0 is the live dialog or the user's own
+    // echo. A verbatim quote above a live composer reads Blocked until it
+    // scrolls off — a delay, where a vetoed live dialog would be a dispatch
+    // into a modal prompt.
     let quotedDialogThenIdle = """
       Here is the dialog you asked me to explain:
       > Yes, run command
@@ -532,11 +535,10 @@ struct AntigravitySupportTests {
       ────────────────────────────────────
       ? for shortcuts                                             Gemini 3.8 Flash · high
       """
-    #expect(agent.detectState(in: quotedDialogThenIdle) == .idle)
-    #expect(agent.detectState(in: quotedDialogThenIdle.replacing("? for shortcuts", with: "esc to cancel")) == .working)
+    #expect(agent.detectState(in: quotedDialogThenIdle) == .blocked)
+    #expect(agent.detectState(in: quotedDialogThenIdle.replacing("? for shortcuts", with: "esc to cancel")) == .blocked)
 
-    // The quote may carry the dialog's own status line; the live composer and
-    // its status row still sit below it.
+    // The quote may carry the dialog's own status line; it stays Blocked.
     let quotedDialogWithStatusThenIdle = """
       Requesting permission for:
          echo hello
@@ -549,7 +551,7 @@ struct AntigravitySupportTests {
       ────────────────────────────────────
       ? for shortcuts                                             Gemini 3.8 Flash · high
       """
-    #expect(agent.detectState(in: quotedDialogWithStatusThenIdle) == .idle)
+    #expect(agent.detectState(in: quotedDialogWithStatusThenIdle) == .blocked)
 
     // Detection anchors on the LAST hint row: a quoted dialog above a live
     // one still reports the live dialog.
@@ -613,8 +615,8 @@ struct AntigravitySupportTests {
     #expect(agent.detectState(in: workingWithBoxedSpoofedIdle) == .working)
 
     // Live permission and ask-user dialogs survive the same stacked box below
-    // their status row (captured on 1.3.2): the box has no status row of its
-    // own, so it cannot pose as the composer that would mark them scrollback.
+    // their status row (captured on 1.3.2): nothing below the hint can veto
+    // the dialog.
     let permissionWithStackedBox = """
       Command
       ────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -654,7 +656,7 @@ struct AntigravitySupportTests {
       "esc to cancel\n────────────────\nbranch main\nctx 12%\n? for shortcuts custom help",
     ]
     for stacked in stackedRows {
-      let screen = permissionWithExtraRowless + "\n" + stacked
+      let screen = permissionDialog + "\n" + stacked
       #expect(agent.detectState(in: screen) == .blocked, "stacked: \(stacked)")
     }
 
@@ -668,7 +670,7 @@ struct AntigravitySupportTests {
     #expect(agent.detectState(in: agentDetectionRecentText(workingWithLongStack)) == .unknown)
   }
 
-  private var permissionWithExtraRowless: String {
+  private var permissionDialog: String {
     """
     Requesting permission for:
        echo hello
@@ -677,6 +679,175 @@ struct AntigravitySupportTests {
       ↑/↓ Navigate · enter Confirm
     esc to cancel                                               Gemini 3.8 Flash · high
     """
+  }
+
+  // The fixtures below come from the contributor's follow-up (`84fce7e0`);
+  // expectations follow the composer-anchored contract of this branch.
+
+  @Test func unanchoredSignaturesAreNotFooterEvidence() throws {
+    let agent = try agent()
+    // Deep output can push the composer and footer off the screen entirely;
+    // the remaining `? for shortcuts`-leading row has no composer to anchor
+    // to, so the screen is unknown rather than idle.
+    let croppedWorkingWithSpoofedIdle = """
+      ⣻  Generating...
+      partial output row 1
+      partial output row 2
+      partial output row 3
+      partial output row 4
+      partial output row 5
+      partial output row 6
+      partial output row 7
+      partial output row 8
+      partial output row 9
+      partial output row 10
+      partial output row 11
+      partial output row 12
+      partial output row 13
+      partial output row 14
+      partial output row 15
+      partial output row 16
+      partial output row 17
+      partial output row 18
+      partial output row 19
+      partial output row 20
+      partial output row 21
+      partial output row 22
+      partial output row 23
+      ? for shortcuts custom help
+      """
+    #expect(agent.detectState(in: croppedWorkingWithSpoofedIdle) == .unknown)
+
+    // A historical idle box does not rescue a live composer that has not
+    // rendered its footer — the last box must carry its own status row.
+    let quotedIdleThenUnsignedComposer = """
+      ────────────────────────────────────
+      > earlier prompt
+      ────────────────────────────────────
+      ? for shortcuts
+      ────────────────────────────────────
+      > current input
+      ────────────────────────────────────
+      """
+    #expect(agent.detectState(in: quotedIdleThenUnsignedComposer) == .unknown)
+
+    // Earlier boxes never vote: only the last box's status row decides.
+    let unsignedEarlierBox = """
+      ────────────────────────────────────
+      > earlier prompt
+      ────────────────────────────────────
+      ────────────────────────────────────
+      > current input
+      ────────────────────────────────────
+      ? for shortcuts
+      """
+    #expect(agent.detectState(in: unsignedEarlierBox) == .idle)
+    let agreeingBoxes = """
+      ────────────────────────────────────
+      > earlier prompt
+      ────────────────────────────────────
+      esc to cancel
+      ────────────────────────────────────
+      > current input
+      ────────────────────────────────────
+      esc to cancel                                               Gemini 3.1 Pro · high
+      """
+    #expect(agent.detectState(in: agreeingBoxes) == .working)
+
+    // An unclosed box is no box at all, so its signature is unanchored.
+    let unclosedBox = """
+      ────────────────────────────────────
+      > current input
+      esc to cancel
+      """
+    #expect(agent.detectState(in: unclosedBox) == .unknown)
+
+    // Appended `esc`-leading output below an idle footer cannot flip it to
+    // working either — rows under the real footer are not evidence.
+    let idleWithSpoofedWorking = """
+      ────────────────────────────────────
+      >
+      ────────────────────────────────────
+      ? for shortcuts                                             Gemini 3.1 Pro · high
+      esc to cancel custom
+      """
+    #expect(agent.detectState(in: idleWithSpoofedWorking) == .idle)
+  }
+
+  @Test func dialogWindowBounds() throws {
+    let agent = try agent()
+    // A live trust dialog carries no footer at all, so appended rows sit
+    // directly below its hint — an appended box and signature there cannot
+    // demote it, and neither can the same box under a permission dialog.
+    let trustWithBoxedSpoofedFooter = """
+      Do you trust the contents of this project?
+      Antigravity CLI requires permission to read, edit, and execute files here.
+      > Yes, I trust this folder
+        No, exit
+        ↑/↓ Navigate · enter Confirm
+      ────────────────
+      > ahead 2
+      ────────────────
+      ? for shortcuts custom help
+      """
+    #expect(agent.detectState(in: trustWithBoxedSpoofedFooter) == .blocked)
+    let permissionWithBoxedSpoofedFooter = """
+      Requesting permission for:
+         echo hello
+      > 1. Yes, run command
+        2. No, cancel
+        ↑/↓ Navigate · enter Confirm
+      esc to cancel
+      ────────────────
+      > ahead 2
+      ────────────────
+      ? for shortcuts custom help
+      """
+    #expect(agent.detectState(in: permissionWithBoxedSpoofedFooter) == .blocked)
+
+    // Depth below the hint does not hide the dialog.
+    let permissionBuriedHint = """
+      Requesting permission for:
+         echo hello
+      > 1. Yes, run command
+        2. No, cancel
+        ↑/↓ Navigate · enter Confirm
+      esc to cancel
+      output row 1
+      output row 2
+      output row 3
+      output row 4
+      output row 5
+      output row 6
+      output row 7
+      output row 8
+      output row 9
+      output row 10
+      output row 11
+      """
+    #expect(agent.detectState(in: permissionBuriedHint) == .blocked)
+
+    // The `> ` selection window spans eight rows above the hint; nine filler
+    // rows leave a bare hint — cropped dialog or residue — which denies the
+    // composer evidence below it rather than trusting it.
+    let optionBeyondWindow = """
+      > 1. Yes, run command
+        filler row 1
+        filler row 2
+        filler row 3
+        filler row 4
+        filler row 5
+        filler row 6
+        filler row 7
+        filler row 8
+        filler row 9
+        ↑/↓ Navigate · enter Confirm
+      ────────────────────────────────────
+      >
+      ────────────────────────────────────
+      ? for shortcuts                                             Gemini 3.1 Pro · high
+      """
+    #expect(agent.detectState(in: optionBeyondWindow) == .unknown)
   }
 
   @Test func sessionOwnershipUsesOnlyOpenLockPaths() throws {

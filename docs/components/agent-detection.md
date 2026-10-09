@@ -55,22 +55,26 @@ it is shaped. A screen without a composer, or a composer caught without its
 status row, is **unknown**, never Idle.
 
 Workspace-trust, tool-permission, and ask-user dialogs are **Blocked**: they
-replace the composer with option rows (`> ` marks the selection, within
-eight rows above the hint) and a `↑/↓ Navigate` hint row, and a permission
-dialog keeps `esc to cancel`, so the dialog read runs before the status
-row. A composer with its status row drawn below the hint marks the dialog
-as scrollback, so a quoted or answered dialog behind a live composer does
-not re-report Blocked; stacked output never carries a status row, so it
-cannot demote a live dialog.
+replace the composer with option rows (a column-0 `> ` marks the selection,
+within eight rows above the hint) and a `↑/↓ Navigate` hint row, and a
+permission dialog keeps `esc to cancel`, so the dialog read runs before the
+status row and nothing below the hint can veto it. Agent responses render
+indented, so column-0 dialog chrome is the live dialog or the user's own
+echoed text; a verbatim quote at column 0 reads Blocked until it scrolls off
+the screen, a delay rather than a dispatch into a modal prompt. Answered
+dialogs leave no chrome behind. A bare hint row with no selection — cropped
+chrome or residue — denies the composer evidence below it and reads
+**unknown**.
 
 Terminal width is the longest `─`-only column-0 row on screen. The echoed
 prompt's rule is narrower, agent responses render indented, and the dialog
 rule is not followed by a prompt row, so none of them can pose as the
 composer. The accepted residual is a user's own status script that draws a
-terminal-wide `─`/`>`/`─` box followed by a padded status signature; that
-output is the user's configuration, and the plain spoofs reviewed so far
-(`? for shortcuts custom help`, narrower boxes, dividers) fail toward
-unknown or keep the live dialog Blocked.
+terminal-wide `─`/`>`/`─` box followed by a padded status signature under
+an idle or working composer; that output is the user's configuration, and
+the plain spoofs reviewed so far (`? for shortcuts custom help`, narrower
+boxes, dividers) fail toward unknown, while a live dialog stays Blocked
+whatever is stacked beneath it.
 
 A pane that never shows a recognized screen — a headless `agy --print` run,
 a viewer overlay such as `/diff`, or a future layout change — reports

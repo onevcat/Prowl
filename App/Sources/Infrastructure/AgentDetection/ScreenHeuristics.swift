@@ -800,7 +800,8 @@ nonisolated private func hasBrailleSpinner(_ content: String) -> Bool {
 // that row, so nothing below the status row is evidence. Permission, ask-user,
 // and workspace-trust dialogs replace the composer with option rows (`> ` marks
 // the selection) above a `↑/↓ Navigate …` hint; a permission dialog keeps
-// `esc to cancel`, so the dialog read runs first. Full width is the longest
+// `esc to cancel`, so the dialog read runs first and is never vetoed by what
+// renders below the hint. Full width is the longest
 // `─`-only column-0 row on screen: the echoed prompt's rule is narrower, agent
 // responses render indented, and a stacked script would have to draw a
 // terminal-wide `─`/`>`/`─` box of its own to forge a composer (documented
@@ -847,26 +848,26 @@ nonisolated private func detectAntigravity(_ content: String) -> AgentRawState {
   // spaces) away from the model label. A custom row that continues the
   // signature with a single space (`? for shortcuts custom help`) is not one.
   let statusState = { (index: Int) -> AgentRawState? in
-    guard index < lines.endIndex else { return nil }
+    guard index < lines.endIndex, isColumnZero(index) else { return nil }
     let signatures: [(String, AgentRawState)] = [
       ("esc to cancel", .working), ("esc to interrupt", .working), ("? for shortcuts", .idle),
     ]
     return signatures.first { lines[index] == $0.0 || lines[index].hasPrefix($0.0 + "  ") }?.1
   }
 
-  // A live dialog lists its `> ` selection within eight rows above the hint
-  // (long permission menus) and owns the bottom of the screen: a composer with
-  // its status row drawn below the hint means the dialog — quoted or answered —
-  // is scrollback. Stacked output renders below the status row and never
-  // carries one, so it cannot demote a live dialog.
+  // Dialog chrome is terminal. A `↑/↓ Navigate` hint with a column-0 `> `
+  // selection within eight rows above it (long permission menus) is Blocked,
+  // whatever follows: agent responses render indented, so column-0 chrome is
+  // either the live dialog or the user's own echoed text, and a quoted dialog
+  // that reads Blocked until it scrolls off costs a delay where a vetoed live
+  // dialog would cost a dispatch into a modal prompt. A bare hint — selection
+  // cropped, or residue — denies the composer evidence below it instead.
   let isHint = { (line: String) -> Bool in
     line.hasPrefix("↑/↓ Navigate") || line.hasPrefix("↑↓ Navigate")
   }
-  if let hint = lines.lastIndex(where: isHint),
-    rows.indices[..<hint].suffix(8).contains(where: { isColumnZero($0) && lines[$0].hasPrefix("> ") }),
-    !composers.contains(where: { $0.top > hint && statusState($0.bottom + 1) != nil })
-  {
-    return .blocked
+  if let hint = lines.lastIndex(where: isHint) {
+    let selected = rows.indices[..<hint].suffix(8).contains { isColumnZero($0) && lines[$0].hasPrefix("> ") }
+    return selected ? .blocked : .unknown
   }
 
   // The last composer is the live one; a redraw caught without its status row,

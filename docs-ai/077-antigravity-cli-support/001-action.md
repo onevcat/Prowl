@@ -38,9 +38,9 @@
   that row, so nothing below it counts. Trust, permission, and ask-user
   dialogs are Blocked via a `↑/↓ Navigate` hint row with a column-0 `> `
   selection within eight rows above it, checked first because a permission
-  dialog keeps `esc to cancel`; a composer with its status row drawn below the
-  hint marks the dialog as scrollback. No composer, a composer without its
-  status row, or a dialog-less unrecognized layout is `.unknown`, never
+  dialog keeps `esc to cancel` and never vetoed by what renders below the
+  hint; a bare hint denies the composer evidence. No composer, a composer
+  without its status row, or a dialog-less unrecognized layout is `.unknown`, never
   affirmative Idle — screen heuristics are this runtime's only evidence
   channel. A typed profile was deferred: `AgentScreenRuleCoverageTests`
   requires real `prowl read --source detection` captures, which need a
@@ -195,19 +195,30 @@ live app actually draws instead of patched again:
   `transcript_full.jsonl`.
 - **Composer-anchored contract** replaces box pairs, tail windows, and the
   contradictory-pair rule: last composer wins, its next row is the state,
-  rows below are stack output. Dialogs are vetoed only by a composer *with*
-  a status row below the hint, so a stacked box (which never has one) cannot
-  demote a live dialog, while a quoted dialog above a live composer stays
-  scrollback. Full width is the longest `─`-only column-0 row on screen.
+  rows below are stack output. Full width is the longest `─`-only column-0
+  row on screen.
+- **Dialog chrome is terminal** (adopted from the contributor's follow-up
+  `84fce7e0`, merged into this branch): a hint with a column-0 `> `
+  selection within eight rows is Blocked unconditionally, and a bare hint is
+  unknown. The composer-based veto this branch first carried had a hole on
+  the trust prompt, which draws no `─` of its own, so a stacked box there
+  became the widest rule on screen and a padded spoof signature under it
+  could have read idle. Agent responses render indented, so the cost — a
+  verbatim column-0 quote reading Blocked until it scrolls off — is a delay,
+  not a release. The contributor's version otherwise keeps every `─`-led
+  row pair as a box, requires all boxes to agree, matches signatures by
+  prefix, and keeps the 24-row tail; on the live captures that turns a
+  working pane with a stacked box, and any 25-row status line, into unknown,
+  so this branch keeps its own composer rule, strict signature, and
+  full-screen slice while taking the dialog rule and the new fixtures.
 - **Full-screen slice**: `detectionScreenText` returns the whole screen for
   Antigravity (the fixture script and its README mirror this), because a
   long stacked status line otherwise pushes the composer out of the tail and
   turns a working pane unknown.
 - **Outcomes on the review probes**: permission + stacked box → Blocked
-  (real capture) or Unknown (the review's bare shape, where the stacked box
-  is the widest rule on screen); historical idle box + footer-less composer →
-  Unknown; working + 24 stacked rows → Working (the 24-row crop would read
-  Unknown, never Idle). The earlier `workingWithBoxedSpoofedIdle` fixture
+  (real capture and the review's bare shape alike); historical idle box +
+  footer-less composer → Unknown; working + 24 stacked rows → Working (the
+  24-row crop would read Unknown, never Idle). The earlier `workingWithBoxedSpoofedIdle` fixture
   now reads Working instead of Unknown — the narrower box is simply ignored.
 - **Accepted residual**: a user's own status script that draws a
   terminal-wide `─`/`>`/`─` box followed by a padded status signature forges
