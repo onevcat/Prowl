@@ -281,6 +281,7 @@ extension RepositoriesFeature {
     let filteredWorktreeInfo = state.worktreeInfoByID.filter {
       availableWorktreeIDs.contains($0.key)
     }
+    state.forgetPullRequestRefreshHistory(keeping: availableWorktreeIDs)
     state.$prowlCreatedWorktreeIDs.withLock {
       $0.removeAll { !availableWorktreeIDs.contains($0) }
     }

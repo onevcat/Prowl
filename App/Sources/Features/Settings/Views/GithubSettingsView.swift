@@ -9,16 +9,29 @@ final class GithubSettingsViewModel {
     case outdated
     case notAuthenticated
     case authenticated(GithubAuthStatusSnapshot)
+    case rateLimited(retryAt: Date)
     case error(String)
   }
 
   var state: State = .loading
+  var rateLimitedUntil: Date?
 
   @ObservationIgnored
   @Dependency(GithubIntegrationClient.self) private var githubIntegration
 
   @ObservationIgnored
   @Dependency(GithubCLIClient.self) private var githubCLI
+
+  // Follows the account's rate limit while the page is open, and reloads the account list once
+  // GitHub accepts requests again if the limit kept it from loading.
+  func observeRateLimit() async {
+    for await retryAt in await githubCLI.rateLimitRetryTimes() {
+      rateLimitedUntil = retryAt
+      if retryAt == nil, case .rateLimited = state {
+        await load()
+      }
+    }
+  }
 
   func load() async {
     state = .loading
@@ -41,8 +54,17 @@ final class GithubSettingsViewModel {
         state = .outdated
       case .unavailable:
         state = .unavailable
-      case .commandFailed(let message):
+      case .commandFailed(let message), .graphQLError(_, let message):
         state = .error(message)
+      case .rateLimited(let retryAt):
+        // The gate may have reopened while this load was in flight, after the observer already
+        // saw the recovery; its current state decides between reloading and waiting for it.
+        var gateState = await githubCLI.rateLimitRetryTimes().makeAsyncIterator()
+        if case .some(.none) = await gateState.next() {
+          await load()
+          return
+        }
+        state = .rateLimited(retryAt: retryAt)
       }
     } catch {
       state = .error(error.localizedDescription)
@@ -65,6 +87,9 @@ struct GithubSettingsView: View {
           .help("Enable GitHub integration")
         }
         Section("GitHub CLI") {
+          if let retryAt = viewModel.rateLimitedUntil, viewModel.state.isRateLimited == false {
+            GithubRateLimitNotice(retryAt: retryAt)
+          }
           switch viewModel.state {
           case .loading:
             HStack(spacing: 8) {
@@ -128,6 +153,9 @@ struct GithubSettingsView: View {
               }
             }
 
+          case .rateLimited(let retryAt):
+            GithubRateLimitNotice(retryAt: viewModel.rateLimitedUntil ?? retryAt)
+
           case .error(let message):
             VStack(alignment: .leading, spacing: 8) {
               Label("Error checking status", systemImage: "exclamationmark.triangle")
@@ -178,10 +206,42 @@ struct GithubSettingsView: View {
     .task {
       await viewModel.load()
     }
+    .task {
+      await viewModel.observeRateLimit()
+    }
     .onChange(of: store.githubIntegrationEnabled) { _, _ in
       Task {
         await viewModel.load()
       }
+    }
+  }
+}
+
+extension GithubSettingsViewModel.State {
+  var isRateLimited: Bool {
+    if case .rateLimited = self { return true }
+    return false
+  }
+}
+
+private struct GithubRateLimitNotice: View {
+  let retryAt: Date
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Label(
+        "GitHub rate-limited, retrying at \(retryAt, format: .dateTime.hour().minute())",
+        systemImage: "exclamationmark.triangle"
+      )
+      .foregroundStyle(.orange)
+      Text(
+        """
+        GitHub refused requests for this account's rate limit. Prowl sends none until the retry time, \
+        so other tools on the account keep working.
+        """
+      )
+      .foregroundStyle(.secondary)
+      .font(.callout)
     }
   }
 }

@@ -137,6 +137,11 @@ Arguments, and execution mode to the new runtime defaults. Unsupported fields
 disappear instead of carrying stale state across runtimes; add new values only
 after choosing the destination agent.
 
+**Model** and **Reasoning Effort** offer suggestions and accept custom values
+supported by your CLI and account. For example, a Codex profile can select
+`gpt-6.1-sol` and `max` from the suggestions. Leave either field blank to use
+the runtime default.
+
 **Recommended** resolves in three tiers: the repo's **Default Agent Profile**
 (Repo Settings) → the last profile explicitly launched in this repo → the
 first enabled profile in the Settings list order. Each tier only matches an

@@ -2,6 +2,23 @@ import Foundation
 
 nonisolated struct GithubGraphQLPullRequestResponse: Decodable {
   let data: DataContainer
+  let errors: [CrossRepoPullRequestResponseError]
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    self.data = try container.decodeIfPresent(DataContainer.self, forKey: .data) ?? DataContainer(repository: nil)
+    self.errors = (try? container.decode([CrossRepoPullRequestResponseError].self, forKey: .errors)) ?? []
+  }
+
+  // GitHub answers a repository it cannot resolve for the account with `"repository": null` and an
+  // error that names why; the error then stands for the whole query.
+  var repositoryError: GithubCLIError? {
+    guard data.repository == nil else {
+      return nil
+    }
+    let error = errors.first
+    return .graphQLError(type: error?.type, message: error?.message ?? "Missing repository payload")
+  }
 
   func pullRequestsByBranch(
     aliasMap: [String: String],
@@ -9,7 +26,7 @@ nonisolated struct GithubGraphQLPullRequestResponse: Decodable {
     repo: String
   ) -> [String: GithubPullRequest] {
     var results: [String: GithubPullRequest] = [:]
-    for (alias, connection) in data.repository.pullRequestsByAlias {
+    for (alias, connection) in data.repository?.pullRequestsByAlias ?? [:] {
       guard let branch = aliasMap[alias] else {
         continue
       }
@@ -21,7 +38,12 @@ nonisolated struct GithubGraphQLPullRequestResponse: Decodable {
   }
 
   nonisolated struct DataContainer: Decodable {
-    let repository: Repository
+    let repository: Repository?
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case data
+    case errors
   }
 
   nonisolated struct Repository: Decodable {
