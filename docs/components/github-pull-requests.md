@@ -3,7 +3,7 @@
 > See a worktree's PR status and CI, and act on it — merge, mark-ready, re-run
 > failed jobs, copy failure logs — without leaving Prowl.
 
-**Keywords:** github, pull request, PR, CI, checks, merge, mark ready, re-run, failing jobs, code host, gh cli
+**Keywords:** github, pull request, PR, CI, checks, merge, mark ready, re-run, failing jobs, code host, gh cli, rate limit
 
 **Related:** [command-palette](command-palette.md) · [repositories-and-worktrees](repositories-and-worktrees.md) · [diff-view](diff-view.md) · [settings](settings.md)
 
@@ -33,6 +33,9 @@ GitHub remote, stale PR badges are cleared.
 - Review decision (approved / changes requested / pending).
 - **CI status:** a rollup of all checks (success / failure / in-progress /
   expected / skipped) with failing/success counts and per-check detail URLs.
+  Every worktree's pull request carries the counts; the selected worktree's
+  also lists each check with its URL. Hovering the PR tag of another worktree
+  shows the counts and asks you to select that worktree to list each check.
 - **Merge readiness:** Prowl evaluates blockers in order — merge conflicts,
   changes requested, failed checks, other non-mergeable states.
 - **Merge queue:** for repos that use GitHub merge queues, an open PR waiting in
@@ -84,8 +87,65 @@ that repository, then switches the host back to the previously active account.
 This uses `gh`'s stored authentication state; Prowl still never reads or stores
 GitHub tokens.
 
+## Which pull requests a refresh asks about
+
+Background refreshes skip pull requests that are unlikely to have changed, so
+each query to the shared `gh` account stays small:
+
+- The selected worktree is always refreshed.
+- An open PR with checks still running, mergeability still being computed, or a
+  place in the merge queue is refreshed every time.
+- A settled open PR is refreshed every 3 minutes, a branch without a PR every 5
+  minutes, and a merged or closed PR every 30 minutes.
+- A new worktree is refreshed right away, and so is a worktree that switched to
+  another branch and every worktree of a repository whose remotes change.
+- A refresh that GitHub answered only in part is repeated on the next sweep.
+
+A PR opened outside Prowl therefore appears within 5 minutes, or at once when you
+select its worktree.
+
+## How often Prowl asks GitHub
+
+The `gh` account Prowl uses is usually shared with other tools and agents, so
+Prowl paces its pull request queries:
+
+- The selected worktree's repository refreshes every 30 seconds. Every other
+  repository refreshes in one background sweep, every 60 seconds or every 2
+  seconds per worktree Prowl tracks, whichever is longer — about every 100
+  seconds with 50 worktrees.
+- Adding or removing worktrees refreshes only the repositories they belong to.
+- Prowl keeps one query queue for each GitHub host and account pin. Each queue
+  runs one query at a time and waits at least 15 seconds between queries,
+  including the queries of one large refresh. Refreshes requested in the
+  meantime join the next query, so opening many worktrees at once costs one
+  query, not one each. A repository pinned to an account has its own queue,
+  even when the pin names the account `gh` already uses.
+
+## Rate limits
+
+The `gh` account Prowl uses is usually shared with other tools and agents, and
+GitHub limits requests per account. When GitHub refuses a request for its rate
+limit, Prowl stops sending GitHub requests of any kind:
+
+- It waits as long as GitHub's `Retry-After` header asks. Without one, it waits
+  until `X-RateLimit-Reset` when GitHub reports an exhausted budget. Otherwise,
+  it waits one minute, then doubles the wait after each further refusal, up to
+  one hour, with a little random spread.
+- When the wait ends, one request goes out first. If GitHub answers it, Prowl
+  resumes; if GitHub refuses again, the next, longer wait starts.
+- It never retries a refused query as smaller per-repository queries.
+- The toolbar shows **GitHub rate-limited, retrying at HH:MM**, and so does
+  Settings → **GitHub**. PR status keeps its last known state until then.
+- PR actions (merge, close, mark ready, re-run, copy logs) are refused with
+  **GitHub rate-limited until HH:MM** and send nothing to GitHub.
+
 ## Gotchas for agents
 
+- "GitHub rate-limited until HH:MM" means Prowl is holding off for the whole
+  account. Requests from other tools on that account can extend the limit too.
+- A remote GitHub cannot resolve for the account (a deleted fork, a repository the
+  account cannot see) fails only its own repository's refresh, and Prowl does not
+  retry it with smaller queries. Fix or remove the remote to stop the failure.
 - No `gh` / not authenticated → no PR features. If a human expects PR actions and
   they're missing, check `gh auth status`.
 - If a repo is pinned to a specific GitHub identity and PR actions fail, verify

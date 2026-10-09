@@ -113,6 +113,22 @@ enum GithubCLIOutput {
     throw GithubCLIError.commandFailed(sawValidJSON ? undecodableMessage : noPayloadMessage)
   }
 
+  // True when gh's output holds a complete GraphQL answer: an HTTP success status when `--include`
+  // printed one, and a body whose top-level `data` is a non-empty object. gh exits 1 whenever the
+  // body also lists `errors`, so the exit code alone cannot tell a partial answer from a failure.
+  nonisolated static func carriesGraphQLData(_ output: String) -> Bool {
+    if let status = GithubRateLimitClassifier.responseStatus(in: output), !(200..<300).contains(status) {
+      return false
+    }
+    guard let span = balancedJSONSpans(in: output).last,
+      let object = try? JSONSerialization.jsonObject(with: Data(span.utf8)) as? [String: Any],
+      let data = object["data"] as? [String: Any]
+    else {
+      return false
+    }
+    return !data.isEmpty
+  }
+
   // Logs a length-capped snapshot of the offending output so the user can retrieve it from the log
   // stream without flooding it with a large banner.
   nonisolated static func logDecodeFailure(_ output: String) {
@@ -180,7 +196,8 @@ struct GithubCLIClient: Sendable {
   var resolveRemoteInfo: @Sendable (URL) async -> GithubRemoteInfo?
   var latestRun: @Sendable (URL, String, GithubAccountOverride?) async throws -> GithubWorkflowRun?
   var batchPullRequests:
-    @Sendable (String, String, String, [String], GithubAccountOverride?) async throws -> [String: GithubPullRequest]
+    @Sendable (String, String, String, [String], Set<String>, GithubAccountOverride?) async throws -> [String:
+      GithubPullRequest]
   var batchPullRequestsAcrossRepositories:
     @Sendable (String, [CrossRepoPullRequestRequest], GithubAccountOverride?) async throws -> CrossRepoPullRequestResult
   var mergePullRequest:
@@ -193,6 +210,7 @@ struct GithubCLIClient: Sendable {
   var isAvailable: @Sendable () async -> Bool
   var authStatusSnapshot: @Sendable () async throws -> GithubAuthStatusSnapshot
   var authStatus: @Sendable () async throws -> GithubAuthStatus?
+  var rateLimitRetryTimes: @Sendable () async -> AsyncStream<Date?>
 }
 
 extension GithubCLIClient: DependencyKey {
@@ -200,24 +218,27 @@ extension GithubCLIClient: DependencyKey {
 
   static func live(
     shell: ShellClient = .liveValue,
-    fallbackExecutableURLs: [URL] = GithubCLIExecutableResolver.defaultFallbackExecutableURLs()
+    fallbackExecutableURLs: [URL] = GithubCLIExecutableResolver.defaultFallbackExecutableURLs(),
+    rateLimitGate gate: GithubRateLimitGate = .shared
   ) -> GithubCLIClient {
     let resolver = GithubCLIExecutableResolver(fallbackExecutableURLs: fallbackExecutableURLs)
     return GithubCLIClient(
-      defaultBranch: defaultBranchFetcher(shell: shell, resolver: resolver),
-      resolveRemoteInfo: resolveRemoteInfoFetcher(shell: shell, resolver: resolver),
-      latestRun: latestRunFetcher(shell: shell, resolver: resolver),
-      batchPullRequests: batchPullRequestsFetcher(shell: shell, resolver: resolver),
-      batchPullRequestsAcrossRepositories: batchPullRequestsAcrossRepositoriesFetcher(shell: shell, resolver: resolver),
-      mergePullRequest: mergePullRequestFetcher(shell: shell, resolver: resolver),
-      closePullRequest: closePullRequestFetcher(shell: shell, resolver: resolver),
-      markPullRequestReady: markPullRequestReadyFetcher(shell: shell, resolver: resolver),
-      rerunFailedJobs: rerunFailedJobsFetcher(shell: shell, resolver: resolver),
-      failedRunLogs: failedRunLogsFetcher(shell: shell, resolver: resolver),
-      runLogs: runLogsFetcher(shell: shell, resolver: resolver),
+      defaultBranch: defaultBranchFetcher(shell: shell, resolver: resolver, gate: gate),
+      resolveRemoteInfo: resolveRemoteInfoFetcher(shell: shell, resolver: resolver, gate: gate),
+      latestRun: latestRunFetcher(shell: shell, resolver: resolver, gate: gate),
+      batchPullRequests: batchPullRequestsFetcher(shell: shell, resolver: resolver, gate: gate),
+      batchPullRequestsAcrossRepositories: batchPullRequestsAcrossRepositoriesFetcher(
+        shell: shell, resolver: resolver, gate: gate),
+      mergePullRequest: mergePullRequestFetcher(shell: shell, resolver: resolver, gate: gate),
+      closePullRequest: closePullRequestFetcher(shell: shell, resolver: resolver, gate: gate),
+      markPullRequestReady: markPullRequestReadyFetcher(shell: shell, resolver: resolver, gate: gate),
+      rerunFailedJobs: rerunFailedJobsFetcher(shell: shell, resolver: resolver, gate: gate),
+      failedRunLogs: failedRunLogsFetcher(shell: shell, resolver: resolver, gate: gate),
+      runLogs: runLogsFetcher(shell: shell, resolver: resolver, gate: gate),
       isAvailable: isAvailableFetcher(shell: shell, resolver: resolver),
-      authStatusSnapshot: authStatusSnapshotFetcher(shell: shell, resolver: resolver),
-      authStatus: authStatusFetcher(shell: shell, resolver: resolver)
+      authStatusSnapshot: authStatusSnapshotFetcher(shell: shell, resolver: resolver, gate: gate),
+      authStatus: authStatusFetcher(shell: shell, resolver: resolver, gate: gate),
+      rateLimitRetryTimes: { await gate.retryTimes() }
     )
   }
 
@@ -225,7 +246,7 @@ extension GithubCLIClient: DependencyKey {
     defaultBranch: { _ in "main" },
     resolveRemoteInfo: { _ in nil },
     latestRun: { _, _, _ in nil },
-    batchPullRequests: { _, _, _, _, _ in [:] },
+    batchPullRequests: { _, _, _, _, _, _ in [:] },
     batchPullRequestsAcrossRepositories: { _, _, _ in CrossRepoPullRequestResult() },
     mergePullRequest: { _, _, _, _, _ in },
     closePullRequest: { _, _, _, _ in },
@@ -251,7 +272,8 @@ extension GithubCLIClient: DependencyKey {
         ]
       )
     },
-    authStatus: { GithubAuthStatus(username: "testuser", host: "github.com") }
+    authStatus: { GithubAuthStatus(username: "testuser", host: "github.com") },
+    rateLimitRetryTimes: { AsyncStream { $0.finish() } }
   )
 }
 
@@ -264,12 +286,14 @@ extension DependencyValues {
 
 nonisolated private func defaultBranchFetcher(
   shell: ShellClient,
-  resolver: GithubCLIExecutableResolver
+  resolver: GithubCLIExecutableResolver,
+  gate: GithubRateLimitGate
 ) -> @Sendable (URL) async throws -> String {
   { repoRoot in
     let output = try await runGh(
       shell: shell,
       resolver: resolver,
+      gate: gate,
       arguments: ["repo", "view", "--json", "defaultBranchRef"],
       repoRoot: repoRoot
     )
@@ -282,13 +306,15 @@ nonisolated private func defaultBranchFetcher(
 
 nonisolated private func resolveRemoteInfoFetcher(
   shell: ShellClient,
-  resolver: GithubCLIExecutableResolver
+  resolver: GithubCLIExecutableResolver,
+  gate: GithubRateLimitGate
 ) -> @Sendable (URL) async -> GithubRemoteInfo? {
   { repoRoot in
     do {
       let output = try await runGh(
         shell: shell,
         resolver: resolver,
+        gate: gate,
         arguments: ["repo", "view", "--json", "owner,name,url"],
         repoRoot: repoRoot
       )
@@ -305,13 +331,20 @@ nonisolated private func resolveRemoteInfoFetcher(
 
 nonisolated private func latestRunFetcher(
   shell: ShellClient,
-  resolver: GithubCLIExecutableResolver
+  resolver: GithubCLIExecutableResolver,
+  gate: GithubRateLimitGate
 ) -> @Sendable (URL, String, GithubAccountOverride?) async throws -> GithubWorkflowRun? {
   { repoRoot, branch, accountOverride in
-    try await withExpectedGithubAccount(shell: shell, resolver: resolver, accountOverride: accountOverride) {
+    try await withExpectedGithubAccount(
+      shell: shell,
+      resolver: resolver,
+      gate: gate,
+      accountOverride: accountOverride
+    ) {
       let output = try await runGh(
         shell: shell,
         resolver: resolver,
+        gate: gate,
         arguments: [
           "run",
           "list",
@@ -335,12 +368,17 @@ nonisolated private func latestRunFetcher(
 
 nonisolated private func batchPullRequestsFetcher(
   shell: ShellClient,
-  resolver: GithubCLIExecutableResolver
-) -> @Sendable (String, String, String, [String], GithubAccountOverride?) async throws -> [String: GithubPullRequest] {
-  { host, owner, repo, branches, accountOverride in
+  resolver: GithubCLIExecutableResolver,
+  gate: GithubRateLimitGate
+)
+  -> @Sendable (String, String, String, [String], Set<String>, GithubAccountOverride?) async throws -> [String:
+  GithubPullRequest]
+{
+  { host, owner, repo, branches, detailBranches, accountOverride in
     try await withExpectedGithubAccount(
       shell: shell,
       resolver: resolver,
+      gate: gate,
       host: host,
       accountOverride: accountOverride
     ) {
@@ -348,7 +386,7 @@ nonisolated private func batchPullRequestsFetcher(
       guard !dedupedBranches.isEmpty else {
         return [:]
       }
-      let request = GithubPullRequestsRequest(host: host, owner: owner, repo: repo)
+      let request = GithubPullRequestsRequest(host: host, owner: owner, repo: repo, detailBranches: detailBranches)
       let chunks = makeBranchChunks(
         dedupedBranches,
         chunkSize: batchPullRequestsChunkSize
@@ -356,6 +394,7 @@ nonisolated private func batchPullRequestsFetcher(
       let chunkResults = try await loadPullRequestChunks(
         shell: shell,
         resolver: resolver,
+        gate: gate,
         request: request,
         chunks: chunks
       )
@@ -367,8 +406,10 @@ nonisolated private func batchPullRequestsFetcher(
   }
 }
 
-nonisolated private let crossRepoBatchAliasLimit = 15
-nonisolated private let crossRepoBatchMaxConcurrentRequests = 3
+// Repositories per cross-repository query. One query runs at a time: GitHub's secondary limits
+// count concurrent requests and server time per account, and the account is shared.
+nonisolated let crossRepoBatchAliasLimit = 15
+nonisolated private let crossRepoBatchMaxConcurrentRequests = 1
 
 nonisolated private struct CrossRepoChunkOutcome: Sendable {
   let successByRepo: [RepoKey: [String: GithubPullRequest]]
@@ -377,7 +418,8 @@ nonisolated private struct CrossRepoChunkOutcome: Sendable {
 
 nonisolated private func batchPullRequestsAcrossRepositoriesFetcher(
   shell: ShellClient,
-  resolver: GithubCLIExecutableResolver
+  resolver: GithubCLIExecutableResolver,
+  gate: GithubRateLimitGate
 )
   -> @Sendable (String, [CrossRepoPullRequestRequest], GithubAccountOverride?) async throws ->
   CrossRepoPullRequestResult
@@ -386,6 +428,7 @@ nonisolated private func batchPullRequestsAcrossRepositoriesFetcher(
     try await withExpectedGithubAccount(
       shell: shell,
       resolver: resolver,
+      gate: gate,
       host: host,
       accountOverride: accountOverride
     ) {
@@ -397,6 +440,7 @@ nonisolated private func batchPullRequestsAcrossRepositoriesFetcher(
       let outcomes = try await loadCrossRepoChunks(
         shell: shell,
         resolver: resolver,
+        gate: gate,
         host: host,
         chunks: chunks
       )
@@ -426,7 +470,8 @@ nonisolated private func sanitizeCrossRepoRequests(
         owner: request.owner,
         repo: request.repo,
         branches: branches,
-        allowedHeadRepositories: request.allowedHeadRepositories
+        allowedHeadRepositories: request.allowedHeadRepositories,
+        detailBranches: Set(request.detailBranches.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) })
       )
     )
   }
@@ -453,6 +498,7 @@ nonisolated private func makeCrossRepoChunks(
 nonisolated private func loadCrossRepoChunks(
   shell: ShellClient,
   resolver: GithubCLIExecutableResolver,
+  gate: GithubRateLimitGate,
   host: String,
   chunks: [[CrossRepoPullRequestRequest]]
 ) async throws -> [CrossRepoChunkOutcome] {
@@ -466,6 +512,7 @@ nonisolated private func loadCrossRepoChunks(
         let outcome = try await fetchCrossRepoChunk(
           shell: shell,
           resolver: resolver,
+          gate: gate,
           host: host,
           chunk: chunk
         )
@@ -483,6 +530,7 @@ nonisolated private func loadCrossRepoChunks(
           let outcome = try await fetchCrossRepoChunk(
             shell: shell,
             resolver: resolver,
+            gate: gate,
             host: host,
             chunk: candidateChunk
           )
@@ -514,6 +562,7 @@ nonisolated private func mergeCrossRepoChunkResults(
 nonisolated private func fetchCrossRepoChunk(
   shell: ShellClient,
   resolver: GithubCLIExecutableResolver,
+  gate: GithubRateLimitGate,
   host: String,
   chunk: [CrossRepoPullRequestRequest]
 ) async throws -> CrossRepoChunkOutcome {
@@ -521,15 +570,18 @@ nonisolated private func fetchCrossRepoChunk(
   let output = try await runGh(
     shell: shell,
     resolver: resolver,
+    gate: gate,
     arguments: [
       "api",
       "graphql",
+      "--include",
       "--hostname",
       host,
       "-f",
       "query=\(plan.query)",
     ],
-    repoRoot: nil
+    repoRoot: nil,
+    acceptsGraphQLErrors: true
   )
   guard !output.isEmpty else {
     var failed: [RepoKey: GithubCLIError] = [:]
@@ -542,12 +594,15 @@ nonisolated private func fetchCrossRepoChunk(
   decoder.dateDecodingStrategy = .iso8601
   let response = try GithubCLIOutput.decode(CrossRepoPullRequestResponse.self, from: output, decoder: decoder)
 
-  let errorMessagesByAlias = response.errorMessagesByAlias()
+  let errorsByAlias = response.errorsByAlias()
   var success: [RepoKey: [String: GithubPullRequest]] = [:]
   var failed: [RepoKey: GithubCLIError] = [:]
   for (alias, key) in plan.repoAliases {
-    if let detail = errorMessagesByAlias[alias] {
-      failed[key] = .commandFailed("GraphQL error for \(key.owner)/\(key.repo): \(detail)")
+    if let error = errorsByAlias[alias] {
+      failed[key] = .graphQLError(
+        type: error.type,
+        message: "GraphQL error for \(key.owner)/\(key.repo): \(error.message)"
+      )
       continue
     }
     guard let payload = response.repositories[alias] else {
@@ -595,54 +650,7 @@ nonisolated private func makeCrossRepoBatchQuery(
       let selection = """
           \(branchAlias): pullRequests(\(pullRequestsArgs)) {
             nodes {
-              number
-              title
-              state
-              additions
-              deletions
-              isDraft
-              reviewDecision
-              mergeable
-              mergeStateStatus
-              url
-              updatedAt
-              headRefName
-              baseRefName
-              commits {
-                totalCount
-              }
-              author {
-                login
-              }
-              headRepository {
-                name
-                owner { login }
-              }
-              mergeQueueEntry {
-                position
-                estimatedTimeToMerge
-                state
-              }
-              statusCheckRollup {
-                contexts(first: 100) {
-                  nodes {
-                    ... on CheckRun {
-                      name
-                      status
-                      conclusion
-                      startedAt
-                      completedAt
-                      detailsUrl
-                    }
-                    ... on StatusContext {
-                      context
-                      state
-                      targetUrl
-                      createdAt
-                    }
-                  }
-                }
-              }
+        \(pullRequestNodeFields(includeCheckDetails: request.detailBranches.contains(branch)))
             }
           }
         """
@@ -671,6 +679,70 @@ nonisolated private func makeCrossRepoBatchQuery(
   )
 }
 
+// The pull request fields every refresh reads. Each check is listed only when asked for: per-state
+// counts carry the badge and merge readiness, while a list of up to 100 contexts per pull request
+// is most of what a batched query costs GitHub to resolve.
+nonisolated func pullRequestNodeFields(includeCheckDetails: Bool) -> String {
+  let checkDetails =
+    includeCheckDetails
+    ? """
+        nodes {
+          ... on CheckRun {
+            name
+            status
+            conclusion
+            startedAt
+            completedAt
+            detailsUrl
+          }
+          ... on StatusContext {
+            context
+            state
+            targetUrl
+            createdAt
+          }
+        }
+    """
+    : ""
+  return """
+    number
+    title
+    state
+    additions
+    deletions
+    isDraft
+    reviewDecision
+    mergeable
+    mergeStateStatus
+    url
+    updatedAt
+    headRefName
+    baseRefName
+    commits {
+      totalCount
+    }
+    author {
+      login
+    }
+    headRepository {
+      name
+      owner { login }
+    }
+    mergeQueueEntry {
+      position
+      estimatedTimeToMerge
+      state
+    }
+    statusCheckRollup {
+      contexts\(includeCheckDetails ? "(first: 100)" : "") {
+        checkRunCountsByState { state count }
+        statusContextCountsByState { state count }
+    \(checkDetails)
+      }
+    }
+    """
+}
+
 nonisolated private func rankCrossRepoPullRequests(
   pullRequestsByAlias: [String: GithubGraphQLPullRequestResponse.PullRequestConnection],
   aliasMap: [String: String],
@@ -690,18 +762,21 @@ nonisolated private func rankCrossRepoPullRequests(
 
 nonisolated private func mergePullRequestFetcher(
   shell: ShellClient,
-  resolver: GithubCLIExecutableResolver
+  resolver: GithubCLIExecutableResolver,
+  gate: GithubRateLimitGate
 ) -> @Sendable (URL, GithubRemoteInfo, Int, PullRequestMergeStrategy, GithubAccountOverride?) async throws -> Void {
   { repoRoot, remoteInfo, pullRequestNumber, strategy, accountOverride in
     try await withExpectedGithubAccount(
       shell: shell,
       resolver: resolver,
+      gate: gate,
       host: remoteInfo.host,
       accountOverride: accountOverride
     ) {
       _ = try await runGh(
         shell: shell,
         resolver: resolver,
+        gate: gate,
         arguments: [
           "pr",
           "merge",
@@ -716,18 +791,21 @@ nonisolated private func mergePullRequestFetcher(
 
 nonisolated private func closePullRequestFetcher(
   shell: ShellClient,
-  resolver: GithubCLIExecutableResolver
+  resolver: GithubCLIExecutableResolver,
+  gate: GithubRateLimitGate
 ) -> @Sendable (URL, GithubRemoteInfo, Int, GithubAccountOverride?) async throws -> Void {
   { repoRoot, remoteInfo, pullRequestNumber, accountOverride in
     try await withExpectedGithubAccount(
       shell: shell,
       resolver: resolver,
+      gate: gate,
       host: remoteInfo.host,
       accountOverride: accountOverride
     ) {
       _ = try await runGh(
         shell: shell,
         resolver: resolver,
+        gate: gate,
         arguments: [
           "pr",
           "close",
@@ -741,18 +819,21 @@ nonisolated private func closePullRequestFetcher(
 
 nonisolated private func markPullRequestReadyFetcher(
   shell: ShellClient,
-  resolver: GithubCLIExecutableResolver
+  resolver: GithubCLIExecutableResolver,
+  gate: GithubRateLimitGate
 ) -> @Sendable (URL, GithubRemoteInfo, Int, GithubAccountOverride?) async throws -> Void {
   { repoRoot, remoteInfo, pullRequestNumber, accountOverride in
     try await withExpectedGithubAccount(
       shell: shell,
       resolver: resolver,
+      gate: gate,
       host: remoteInfo.host,
       accountOverride: accountOverride
     ) {
       _ = try await runGh(
         shell: shell,
         resolver: resolver,
+        gate: gate,
         arguments: [
           "pr",
           "ready",
@@ -770,13 +851,20 @@ nonisolated private func repoArgument(_ remoteInfo: GithubRemoteInfo) -> [String
 
 nonisolated private func rerunFailedJobsFetcher(
   shell: ShellClient,
-  resolver: GithubCLIExecutableResolver
+  resolver: GithubCLIExecutableResolver,
+  gate: GithubRateLimitGate
 ) -> @Sendable (URL, Int, GithubAccountOverride?) async throws -> Void {
   { repoRoot, runID, accountOverride in
-    try await withExpectedGithubAccount(shell: shell, resolver: resolver, accountOverride: accountOverride) {
+    try await withExpectedGithubAccount(
+      shell: shell,
+      resolver: resolver,
+      gate: gate,
+      accountOverride: accountOverride
+    ) {
       _ = try await runGh(
         shell: shell,
         resolver: resolver,
+        gate: gate,
         arguments: [
           "run",
           "rerun",
@@ -791,13 +879,20 @@ nonisolated private func rerunFailedJobsFetcher(
 
 nonisolated private func failedRunLogsFetcher(
   shell: ShellClient,
-  resolver: GithubCLIExecutableResolver
+  resolver: GithubCLIExecutableResolver,
+  gate: GithubRateLimitGate
 ) -> @Sendable (URL, Int, GithubAccountOverride?) async throws -> String {
   { repoRoot, runID, accountOverride in
-    try await withExpectedGithubAccount(shell: shell, resolver: resolver, accountOverride: accountOverride) {
+    try await withExpectedGithubAccount(
+      shell: shell,
+      resolver: resolver,
+      gate: gate,
+      accountOverride: accountOverride
+    ) {
       try await runGh(
         shell: shell,
         resolver: resolver,
+        gate: gate,
         arguments: [
           "run",
           "view",
@@ -812,13 +907,20 @@ nonisolated private func failedRunLogsFetcher(
 
 nonisolated private func runLogsFetcher(
   shell: ShellClient,
-  resolver: GithubCLIExecutableResolver
+  resolver: GithubCLIExecutableResolver,
+  gate: GithubRateLimitGate
 ) -> @Sendable (URL, Int, GithubAccountOverride?) async throws -> String {
   { repoRoot, runID, accountOverride in
-    try await withExpectedGithubAccount(shell: shell, resolver: resolver, accountOverride: accountOverride) {
+    try await withExpectedGithubAccount(
+      shell: shell,
+      resolver: resolver,
+      gate: gate,
+      accountOverride: accountOverride
+    ) {
       try await runGh(
         shell: shell,
         resolver: resolver,
+        gate: gate,
         arguments: [
           "run",
           "view",
@@ -837,7 +939,7 @@ nonisolated private func isAvailableFetcher(
 ) -> @Sendable () async -> Bool {
   {
     do {
-      _ = try await runGh(
+      _ = try await runLocalGh(
         shell: shell,
         resolver: resolver,
         arguments: ["--version"],
@@ -852,10 +954,11 @@ nonisolated private func isAvailableFetcher(
 
 nonisolated private func authStatusFetcher(
   shell: ShellClient,
-  resolver: GithubCLIExecutableResolver
+  resolver: GithubCLIExecutableResolver,
+  gate: GithubRateLimitGate
 ) -> @Sendable () async throws -> GithubAuthStatus? {
   {
-    let response = try await loadAuthStatusResponse(shell: shell, resolver: resolver)
+    let response = try await loadAuthStatusResponse(shell: shell, resolver: resolver, gate: gate)
     guard let active = GithubAuthStatusParsing.activeAccount(in: response) else {
       return nil
     }
@@ -865,10 +968,11 @@ nonisolated private func authStatusFetcher(
 
 nonisolated private func authStatusSnapshotFetcher(
   shell: ShellClient,
-  resolver: GithubCLIExecutableResolver
+  resolver: GithubCLIExecutableResolver,
+  gate: GithubRateLimitGate
 ) -> @Sendable () async throws -> GithubAuthStatusSnapshot {
   {
-    let response = try await loadAuthStatusResponse(shell: shell, resolver: resolver)
+    let response = try await loadAuthStatusResponse(shell: shell, resolver: resolver, gate: gate)
     return GithubAuthStatusSnapshot(response: response)
   }
 }
@@ -876,6 +980,7 @@ nonisolated private func authStatusSnapshotFetcher(
 nonisolated private func loadAuthStatusResponse(
   shell: ShellClient,
   resolver: GithubCLIExecutableResolver,
+  gate: GithubRateLimitGate,
   host: String? = nil,
   activeOnly: Bool = false
 ) async throws -> GithubAuthStatusResponse {
@@ -890,6 +995,7 @@ nonisolated private func loadAuthStatusResponse(
   let output = try await runGh(
     shell: shell,
     resolver: resolver,
+    gate: gate,
     arguments: arguments,
     repoRoot: nil
   )
@@ -899,6 +1005,7 @@ nonisolated private func loadAuthStatusResponse(
 nonisolated private func withExpectedGithubAccount<Value>(
   shell: ShellClient,
   resolver: GithubCLIExecutableResolver,
+  gate: GithubRateLimitGate,
   host: String? = nil,
   accountOverride: GithubAccountOverride?,
   operation: () async throws -> Value
@@ -922,6 +1029,7 @@ nonisolated private func withExpectedGithubAccount<Value>(
     previousLogin = try await activeGithubLogin(
       shell: shell,
       resolver: resolver,
+      gate: gate,
       host: accountOverride.host
     )
     if previousLogin != accountOverride.login {
@@ -962,11 +1070,13 @@ nonisolated private func withExpectedGithubAccount<Value>(
 nonisolated private func activeGithubLogin(
   shell: ShellClient,
   resolver: GithubCLIExecutableResolver,
+  gate: GithubRateLimitGate,
   host: String
 ) async throws -> String? {
   let response = try await loadAuthStatusResponse(
     shell: shell,
     resolver: resolver,
+    gate: gate,
     host: host,
     activeOnly: true
   )
@@ -980,7 +1090,7 @@ nonisolated private func switchGithubAccount(
   accountOverride: GithubAccountOverride
 ) async throws {
   do {
-    _ = try await runGh(
+    _ = try await runLocalGh(
       shell: shell,
       resolver: resolver,
       arguments: [
@@ -1017,7 +1127,7 @@ nonisolated private func restoreGithubAccountIfNeeded(
     return
   }
   do {
-    _ = try await runGh(
+    _ = try await runLocalGh(
       shell: shell,
       resolver: resolver,
       arguments: [
@@ -1042,8 +1152,8 @@ nonisolated private func deduplicatedBranches(_ branches: [String]) -> [String] 
   return branches.filter { !$0.isEmpty && seen.insert($0).inserted }
 }
 
-nonisolated private let batchPullRequestsChunkSize = 25
-nonisolated private let batchPullRequestsMaxConcurrentRequests = 3
+nonisolated let batchPullRequestsChunkSize = 25
+nonisolated private let batchPullRequestsMaxConcurrentRequests = 1
 
 nonisolated private func makeBranchChunks(
   _ branches: [String],
@@ -1067,6 +1177,7 @@ nonisolated private func makeBranchChunks(
 nonisolated private func loadPullRequestChunks(
   shell: ShellClient,
   resolver: GithubCLIExecutableResolver,
+  gate: GithubRateLimitGate,
   request: GithubPullRequestsRequest,
   chunks: [[String]]
 ) async throws -> [Int: [String: GithubPullRequest]] {
@@ -1079,13 +1190,14 @@ nonisolated private func loadPullRequestChunks(
       let chunkIndex = nextChunkIndex
       let chunk = chunks[chunkIndex]
       group.addTask {
-        try await fetchPullRequestsChunk(
+        let prsByBranch = try await fetchPullRequestsChunk(
           shell: shell,
           resolver: resolver,
+          gate: gate,
           request: request,
-          chunk: chunk,
-          chunkIndex: chunkIndex
+          chunk: chunk
         )
+        return (chunkIndex, prsByBranch)
       }
       nextChunkIndex += 1
     }
@@ -1097,13 +1209,14 @@ nonisolated private func loadPullRequestChunks(
         let candidateIndex = nextChunkIndex
         let candidateChunk = chunks[candidateIndex]
         group.addTask {
-          try await fetchPullRequestsChunk(
+          let prsByBranch = try await fetchPullRequestsChunk(
             shell: shell,
             resolver: resolver,
+            gate: gate,
             request: request,
-            chunk: candidateChunk,
-            chunkIndex: candidateIndex
+            chunk: candidateChunk
           )
+          return (candidateIndex, prsByBranch)
         }
         nextChunkIndex += 1
       }
@@ -1130,17 +1243,19 @@ nonisolated private func mergePullRequestChunkResults(
 nonisolated private func fetchPullRequestsChunk(
   shell: ShellClient,
   resolver: GithubCLIExecutableResolver,
+  gate: GithubRateLimitGate,
   request: GithubPullRequestsRequest,
-  chunk: [String],
-  chunkIndex: Int
-) async throws -> (Int, [String: GithubPullRequest]) {
-  let (query, aliasMap) = makeBatchPullRequestsQuery(branches: chunk)
+  chunk: [String]
+) async throws -> [String: GithubPullRequest] {
+  let (query, aliasMap) = makeBatchPullRequestsQuery(branches: chunk, detailBranches: request.detailBranches)
   let output = try await runGh(
     shell: shell,
     resolver: resolver,
+    gate: gate,
     arguments: [
       "api",
       "graphql",
+      "--include",
       "--hostname",
       request.host,
       "-f",
@@ -1150,25 +1265,30 @@ nonisolated private func fetchPullRequestsChunk(
       "-f",
       "repo=\(request.repo)",
     ],
-    repoRoot: nil
+    repoRoot: nil,
+    acceptsGraphQLErrors: true
   )
   guard !output.isEmpty else {
-    return (chunkIndex, [:])
+    return [:]
   }
 
   let decoder = JSONDecoder()
   decoder.dateDecodingStrategy = .iso8601
   let response = try GithubCLIOutput.decode(GithubGraphQLPullRequestResponse.self, from: output, decoder: decoder)
+  if let repositoryError = response.repositoryError {
+    throw repositoryError
+  }
   let prsByBranch = response.pullRequestsByBranch(
     aliasMap: aliasMap,
     owner: request.owner,
     repo: request.repo
   )
-  return (chunkIndex, prsByBranch)
+  return prsByBranch
 }
 
 nonisolated private func makeBatchPullRequestsQuery(
-  branches: [String]
+  branches: [String],
+  detailBranches: Set<String>
 ) -> (query: String, aliasMap: [String: String]) {
   var aliasMap: [String: String] = [:]
   var selections: [String] = []
@@ -1180,54 +1300,7 @@ nonisolated private func makeBatchPullRequestsQuery(
     let selection = """
       \(alias): pullRequests(first: 5, states: [OPEN, MERGED, CLOSED], headRefName: \"\(escapedBranch)\", \(orderBy)) {
         nodes {
-          number
-          title
-          state
-          additions
-          deletions
-          isDraft
-          reviewDecision
-          mergeable
-          mergeStateStatus
-          url
-          updatedAt
-          headRefName
-          baseRefName
-          commits {
-            totalCount
-          }
-          author {
-            login
-          }
-          headRepository {
-            name
-            owner { login }
-          }
-          mergeQueueEntry {
-            position
-            estimatedTimeToMerge
-            state
-          }
-          statusCheckRollup {
-            contexts(first: 100) {
-              nodes {
-                ... on CheckRun {
-                  name
-                  status
-                  conclusion
-                  startedAt
-                  completedAt
-                  detailsUrl
-                }
-                ... on StatusContext {
-                  context
-                  state
-                  targetUrl
-                  createdAt
-                }
-              }
-            }
-          }
+      \(pullRequestNodeFields(includeCheckDetails: detailBranches.contains(branch)))
         }
       }
       """
@@ -1264,37 +1337,96 @@ nonisolated private func isOutdatedGitHubCLI(_ error: ShellClientError) -> Bool 
   return false
 }
 
+// `acceptsGraphQLErrors` keeps the output of a `gh api graphql` call that exited 1 only because the
+// answer lists GraphQL errors next to its data; the caller then routes each error to its repository.
 nonisolated private func runGh(
+  shell: ShellClient,
+  resolver: GithubCLIExecutableResolver,
+  gate: GithubRateLimitGate,
+  arguments: [String],
+  repoRoot: URL?,
+  acceptsGraphQLErrors: Bool = false
+) async throws -> String {
+  let command = (["gh"] + arguments).joined(separator: " ")
+  let ticket = try await gate.admit()
+  if Task.isCancelled {
+    await gate.abandon(ticket)
+    throw CancellationError()
+  }
+  let stdout: String
+  do {
+    stdout = try await launchGh(shell: shell, resolver: resolver, arguments: arguments, repoRoot: repoRoot)
+  } catch {
+    if error is CancellationError || Task.isCancelled {
+      await gate.abandon(ticket)
+      throw githubCLIError(from: error, command: command)
+    }
+    let shellError = error as? ShellClientError
+    let signal = shellError.flatMap {
+      GithubRateLimitClassifier.classify(stdout: $0.stdout, stderr: $0.stderr, succeeded: false)
+    }
+    let answered = shellError.flatMap { GithubRateLimitClassifier.responseStatus(in: $0.stdout) } != nil
+    if let retryAt = await gate.record(ticket, signal: signal, answered: answered) {
+      throw GithubCLIError.rateLimited(retryAt: retryAt)
+    }
+    if acceptsGraphQLErrors, let shellError, GithubCLIOutput.carriesGraphQLData(shellError.stdout) {
+      return shellError.stdout
+    }
+    throw githubCLIError(from: error, command: command)
+  }
+  let signal = GithubRateLimitClassifier.classify(stdout: stdout, stderr: "", succeeded: true)
+  if let retryAt = await gate.record(ticket, signal: signal, answered: true) {
+    throw GithubCLIError.rateLimited(retryAt: retryAt)
+  }
+  return stdout
+}
+
+// For gh commands that never leave the machine, such as `--version` and `auth switch`, so they keep
+// working while GitHub is refusing the account.
+nonisolated private func runLocalGh(
   shell: ShellClient,
   resolver: GithubCLIExecutableResolver,
   arguments: [String],
   repoRoot: URL?
 ) async throws -> String {
-  let command = (["gh"] + arguments).joined(separator: " ")
   do {
-    let executableURL = try await resolver.executableURL(shell: shell)
-    do {
-      return try await shell.runLogin(executableURL, arguments, repoRoot, log: false).stdout
-    } catch {
-      guard shouldRetryGhExecution(after: error) else {
-        throw error
-      }
-      await resolver.invalidate()
-      let executableURL = try await resolver.executableURL(shell: shell)
-      return try await shell.runLogin(executableURL, arguments, repoRoot, log: false).stdout
-    }
-  } catch let error as GithubCLIError {
-    throw error
+    return try await launchGh(shell: shell, resolver: resolver, arguments: arguments, repoRoot: repoRoot)
   } catch {
-    if let shellError = error as? ShellClientError {
-      if isOutdatedGitHubCLI(shellError) {
-        throw GithubCLIError.outdated
-      }
-      let message = shellError.errorDescription ?? String(localized: "Command failed: \(command)")
-      throw GithubCLIError.commandFailed(message)
-    }
-    throw GithubCLIError.commandFailed(error.localizedDescription)
+    throw githubCLIError(from: error, command: (["gh"] + arguments).joined(separator: " "))
   }
+}
+
+nonisolated private func launchGh(
+  shell: ShellClient,
+  resolver: GithubCLIExecutableResolver,
+  arguments: [String],
+  repoRoot: URL?
+) async throws -> String {
+  let executableURL = try await resolver.executableURL(shell: shell)
+  do {
+    return try await shell.runLogin(executableURL, arguments, repoRoot, log: false).stdout
+  } catch {
+    guard shouldRetryGhExecution(after: error) else {
+      throw error
+    }
+    await resolver.invalidate()
+    let executableURL = try await resolver.executableURL(shell: shell)
+    return try await shell.runLogin(executableURL, arguments, repoRoot, log: false).stdout
+  }
+}
+
+nonisolated private func githubCLIError(from error: Error, command: String) -> Error {
+  if let error = error as? GithubCLIError {
+    return error
+  }
+  if let shellError = error as? ShellClientError {
+    if isOutdatedGitHubCLI(shellError) {
+      return GithubCLIError.outdated
+    }
+    let message = shellError.errorDescription ?? String(localized: "Command failed: \(command)")
+    return GithubCLIError.commandFailed(message)
+  }
+  return GithubCLIError.commandFailed(error.localizedDescription)
 }
 
 nonisolated private func shouldRetryGhExecution(after error: Error) -> Bool {

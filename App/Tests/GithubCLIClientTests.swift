@@ -215,7 +215,7 @@ struct GithubCLIClientTests {
       ])
   }
 
-  @Test func batchPullRequestsCapsConcurrencyAtThree() async throws {
+  @Test func batchPullRequestsRunsChunksOneAtATime() async throws {
     let probe = GithubBatchShellProbe()
     let shell = ShellClient(
       run: { executableURL, arguments, _ in
@@ -246,11 +246,11 @@ struct GithubCLIClientTests {
     let client = GithubCLIClient.live(shell: shell)
     let branches = (0..<100).map { "feature-\($0)" }
 
-    _ = try await client.batchPullRequests("github.com", "khoi", "repo", branches, nil)
+    _ = try await client.batchPullRequests("github.com", "khoi", "repo", branches, [], nil)
 
     let snapshot = await probe.snapshot()
     #expect(snapshot.ghCallCount == 4)
-    #expect(snapshot.maxInFlight == 3)
+    #expect(snapshot.maxInFlight == 1)
     #expect(snapshot.whichCallCount == 1)
     #expect(snapshot.loginCallCount == 4)
   }
@@ -296,13 +296,13 @@ struct GithubCLIClientTests {
     let branches = (0..<30).map { "feature-\($0)" }
 
     do {
-      _ = try await client.batchPullRequests("github.com", "khoi", "repo", branches, nil)
+      _ = try await client.batchPullRequests("github.com", "khoi", "repo", branches, [], nil)
       Issue.record("Expected batchPullRequests to throw")
     } catch let error as GithubCLIError {
       switch error {
       case .commandFailed:
         break
-      case .outdated, .unavailable:
+      case .outdated, .unavailable, .rateLimited, .graphQLError:
         Issue.record("Unexpected GithubCLIError: \(error.localizedDescription)")
       }
     } catch {
@@ -336,7 +336,7 @@ struct GithubCLIClientTests {
     let uniqueBranches = (0..<30).map { "feature-\($0)" }
     let branches = uniqueBranches + ["feature-0", "feature-1", "feature-2", "", ""]
 
-    let result = try await client.batchPullRequests("github.com", "khoi", "repo", branches, nil)
+    let result = try await client.batchPullRequests("github.com", "khoi", "repo", branches, [], nil)
 
     #expect(result.isEmpty)
     let snapshot = await probe.snapshot()
@@ -509,7 +509,7 @@ struct GithubCLIClientTests {
     #expect(result.failedRepos.isEmpty)
   }
 
-  @Test func batchAcrossRepositoriesCapsConcurrencyAtThree() async throws {
+  @Test func batchAcrossRepositoriesRunsChunksOneAtATime() async throws {
     let probe = GithubBatchShellProbe()
     let shell = makeBatchAcrossShellMock(probe: probe) { arguments in
       try await ContinuousClock().sleep(for: .milliseconds(80))
@@ -524,7 +524,7 @@ struct GithubCLIClientTests {
 
     let snapshot = await probe.snapshot()
     #expect(snapshot.ghCallCount == 4)
-    #expect(snapshot.maxInFlight == 3)
+    #expect(snapshot.maxInFlight == 1)
   }
 
   @Test func batchAcrossRepositoriesRoutesPartialErrorsToFailedRepos() async throws {
@@ -545,6 +545,96 @@ struct GithubCLIClientTests {
     #expect(result.successByRepo[RepoKey(owner: "khoi", repo: "alpha")] != nil)
     #expect(result.successByRepo[RepoKey(owner: "supabit", repo: "beta")] != nil)
     #expect(result.failedRepos[RepoKey(owner: "ghost", repo: "missing")] != nil)
+  }
+
+  // gh exits 1 whenever the GraphQL answer lists errors, even when it also carries the data of the
+  // other repositories; the answer must still reach each repository.
+  @Test func batchAcrossRepositoriesRoutesPartialErrorsWhenGhExitsOne() async throws {
+    let probe = GithubBatchShellProbe()
+    let shell = makeBatchAcrossShellMock(probe: probe) { arguments in
+      let body = crossRepoGraphQLResponse(for: arguments, failedRepoAliases: ["r1"])
+      throw ShellClientError(
+        command: "gh api graphql",
+        stdout: "HTTP/2.0 200 OK\nX-Ratelimit-Remaining: 4900\n\n\(body)",
+        stderr: "gh: Could not resolve to a Repository",
+        exitCode: 1
+      )
+    }
+    let client = GithubCLIClient.live(shell: shell)
+    let requests = [
+      CrossRepoPullRequestRequest(owner: "khoi", repo: "alpha", branches: ["feat-1"]),
+      CrossRepoPullRequestRequest(owner: "ghost", repo: "missing", branches: ["main"]),
+      CrossRepoPullRequestRequest(owner: "supabit", repo: "beta", branches: ["feat-2"]),
+    ]
+
+    let result = try await client.batchPullRequestsAcrossRepositories("github.com", requests, nil)
+
+    #expect(result.successByRepo[RepoKey(owner: "khoi", repo: "alpha")] == [:])
+    #expect(result.successByRepo[RepoKey(owner: "supabit", repo: "beta")] == [:])
+    #expect(
+      result.failedRepos[RepoKey(owner: "ghost", repo: "missing")]
+        == .graphQLError(
+          type: "NOT_FOUND",
+          message: "GraphQL error for ghost/missing: Could not resolve to a Repository"
+        )
+    )
+    let snapshot = await probe.snapshot()
+    #expect(snapshot.ghCallCount == 1)
+  }
+
+  @Test func batchAcrossRepositoriesStillFailsWhenGhExitsOneWithoutAnAnswer() async throws {
+    let probe = GithubBatchShellProbe()
+    let shell = makeBatchAcrossShellMock(probe: probe) { _ in
+      throw ShellClientError(
+        command: "gh api graphql",
+        stdout: "HTTP/2.0 502 Bad Gateway\n\n{\"data\":{\"r0\":null},\"message\":\"Server Error\"}",
+        stderr: "gh: Server Error (HTTP 502)",
+        exitCode: 1
+      )
+    }
+    let client = GithubCLIClient.live(shell: shell)
+    let requests = [CrossRepoPullRequestRequest(owner: "khoi", repo: "alpha", branches: ["feat-1"])]
+
+    await #expect(throws: GithubCLIError.self) {
+      _ = try await client.batchPullRequestsAcrossRepositories("github.com", requests, nil)
+    }
+  }
+
+  @Test func batchPullRequestsReportsAnUnresolvedRepositoryWhenGhExitsOne() async throws {
+    let shell = ShellClient(
+      run: { executableURL, _, _ in
+        if executableURL.lastPathComponent == "which" {
+          return ShellOutput(stdout: "/usr/bin/gh", stderr: "", exitCode: 0)
+        }
+        return ShellOutput(stdout: "", stderr: "", exitCode: 0)
+      },
+      runLoginImpl: { executableURL, _, _, _ in
+        guard executableURL.lastPathComponent == "gh" else {
+          return ShellOutput(stdout: "", stderr: "", exitCode: 0)
+        }
+        throw ShellClientError(
+          command: "gh api graphql",
+          stdout: """
+            HTTP/2.0 200 OK
+
+            {"data":{"repository":null},"errors":[{"type":"NOT_FOUND","path":["repository"],\
+            "message":"Could not resolve to a Repository with the name 'khoi/gone'."}]}
+            """,
+          stderr: "gh: Could not resolve to a Repository with the name 'khoi/gone'.",
+          exitCode: 1
+        )
+      }
+    )
+    let client = GithubCLIClient.live(shell: shell)
+
+    await #expect(
+      throws: GithubCLIError.graphQLError(
+        type: "NOT_FOUND",
+        message: "Could not resolve to a Repository with the name 'khoi/gone'."
+      )
+    ) {
+      _ = try await client.batchPullRequests("github.com", "khoi", "gone", ["feature"], [], nil)
+    }
   }
 
   @Test func batchAcrossRepositoriesRoutesFieldErrorPathToOwnRepo() async throws {
@@ -611,7 +701,7 @@ struct GithubCLIClientTests {
       switch error {
       case .commandFailed:
         break
-      case .outdated, .unavailable:
+      case .outdated, .unavailable, .rateLimited, .graphQLError:
         Issue.record("Unexpected GithubCLIError: \(error.localizedDescription)")
       }
     } catch {

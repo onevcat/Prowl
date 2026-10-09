@@ -15,7 +15,7 @@ struct PullRequestChecksPopoverView: View {
   ) {
     self.pullRequest = pullRequest
     self.checks = checks
-    self.breakdown = PullRequestCheckBreakdown(checks: checks)
+    self.breakdown = pullRequest.statusCheckRollup?.counts ?? PullRequestCheckBreakdown(checks: checks)
     self.sortedChecks = checks.sorted {
       let left = Self.sortRank(for: $0.checkState)
       let right = Self.sortRank(for: $1.checkState)
@@ -97,6 +97,13 @@ struct PullRequestChecksPopoverView: View {
               .foregroundStyle(.secondary)
           }
           .font(.caption)
+        }
+
+        if sortedChecks.isEmpty && breakdown.total > 0 {
+          // Background refreshes fetch check counts only; the selected worktree also fetches each check.
+          Text("Select this worktree to list each check.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
         }
 
         if !sortedChecks.isEmpty {

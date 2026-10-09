@@ -22,6 +22,20 @@ nonisolated struct CodexDaemonBinding: Sendable, Equatable {
   let liveOffsets: [String: UInt64]
 }
 
+/// A known selection change must not fall back to matching the previous thread's history.
+nonisolated enum CodexDaemonBindingLookup: Sendable {
+  case unavailable
+  case selectionPending
+  /// This selection was bound, but its current evidence is temporarily unavailable.
+  case selectionUnavailable
+  case bound(CodexDaemonBinding)
+
+  var binding: CodexDaemonBinding? {
+    if case .bound(let binding) = self { return binding }
+    return nil
+  }
+}
+
 /// The submits of the TUI that last started a pane's session log.
 nonisolated struct CodexTUISessionRecord: Sendable, Equatable {
   struct Submit: Sendable, Equatable {
@@ -32,6 +46,10 @@ nonisolated struct CodexTUISessionRecord: Sendable, Equatable {
   let surfaceID: UUID
   let startedAt: Date
   let submits: [Submit]
+  /// Earlier submits still route callers, but cannot identify the selected transcript.
+  var selectionSubmitOffset: Int?
+  /// Distinguishes repeated resets without an intervening submit.
+  var selectionRevision = 0
 }
 
 /// Maps a thread that Codex's shared app-server daemon runs to the pane whose TUI drives it
@@ -59,17 +77,29 @@ actor CodexDaemonThreadMapper {
     var rollout: Rollout?
   }
 
+  private struct Selection {
+    let tuiStartedAt: Date
+    let logStartedAt: Date
+    let revision: Int
+    var hasBound = false
+
+    var missing: CodexDaemonBindingLookup { hasBound ? .selectionUnavailable : .selectionPending }
+  }
+
+  // Keep only the selection fence across read failures, never stale rollout evidence.
+  private var selections: [UUID: Selection] = [:]
   private let openFilePaths: @Sendable (pid_t) -> [String]?
+  private var sessionLogCache: CodexTUISessionLogCache
   private let sessionLogDirectory: URL
   private let fileManager: FileManager
   private var cursors: [String: Cursor] = [:]
   /// A first lookup reads each open rollout once; later lookups read only appended bytes.
   private let readBudget = 256 * 1_024 * 1_024
-  private let sessionLogLimit = 64 * 1_024 * 1_024
 
   init(
     sessionLogDirectory: URL = ProwlPaths.codexTUISessionLogDirectory,
     fileManager: FileManager = .default,
+    readSessionLog: @escaping @Sendable (URL) throws -> Data = CodexTUISessionLogCache.readStable,
     openFilePaths: @escaping @Sendable (pid_t) -> [String]? = { pid in
       var complete = false
       let paths = ProcessDetection.openFilePaths(pid: pid, complete: &complete)
@@ -78,6 +108,7 @@ actor CodexDaemonThreadMapper {
   ) {
     self.sessionLogDirectory = sessionLogDirectory
     self.fileManager = fileManager
+    self.sessionLogCache = CodexTUISessionLogCache(read: readSessionLog)
     self.openFilePaths = openFilePaths
   }
 
@@ -91,24 +122,37 @@ actor CodexDaemonThreadMapper {
   /// What the pane's current Codex TUI drives, or nil before its first indexed submit. The
   /// session log must belong to the TUI process that started at `tuiStartedAt`.
   func binding(surfaceID: UUID, daemonPID: pid_t, tuiStartedAt: Date) -> CodexDaemonBinding? {
+    bindingLookup(surfaceID: surfaceID, daemonPID: daemonPID, tuiStartedAt: tuiStartedAt).binding
+  }
+
+  func bindingLookup(surfaceID: UUID, daemonPID: pid_t, tuiStartedAt: Date) -> CodexDaemonBindingLookup {
+    if selections[surfaceID]?.tuiStartedAt != tuiStartedAt { selections[surfaceID] = nil }
     let url = CodexTUISessionLog.url(for: surfaceID, in: sessionLogDirectory)
-    guard let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize, size <= sessionLogLimit,
-      let data = try? Data(contentsOf: url),
-      let log = Self.parseSessionLog(data, surfaceID: surfaceID),
-      CodexTUISessionLog.belongs(sessionStartedAt: log.startedAt, toProcessStartedAt: tuiStartedAt),
-      !log.submits.isEmpty,
-      let paths = openFilePaths(daemonPID),
-      let rollouts = refreshRollouts(paths.filter(Self.isRolloutPath))
-    else { return nil }
-    return Self.binding(for: log, rollouts: rollouts)
+    guard let log = sessionLogCache.record(at: url, surfaceID: surfaceID),
+      CodexTUISessionLog.belongs(sessionStartedAt: log.startedAt, toProcessStartedAt: tuiStartedAt)
+    else { return selections[surfaceID]?.missing ?? .unavailable }
+    if log.selectionSubmitOffset == nil {
+      selections[surfaceID] = nil
+    } else if selections[surfaceID]?.logStartedAt != log.startedAt
+      || selections[surfaceID]?.revision != log.selectionRevision
+    {
+      selections[surfaceID] = Selection(
+        tuiStartedAt: tuiStartedAt, logStartedAt: log.startedAt, revision: log.selectionRevision)
+    }
+    guard !log.submits.isEmpty, let paths = openFilePaths(daemonPID),
+      let rollouts = refreshRollouts(paths.filter(Self.isRolloutPath)),
+      let binding = Self.binding(for: log, rollouts: rollouts)
+    else { return selections[surfaceID]?.missing ?? .unavailable }
+    selections[surfaceID]?.hasBound = true
+    return .bound(binding)
   }
 
   // MARK: - Resolution
 
   static func binding(for log: SessionLog, rollouts: [Rollout]) -> CodexDaemonBinding? {
     let byID = Dictionary(rollouts.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-    let owner = owners(rollouts)
-    guard let submit = log.submits.last(where: { owner[$0.clientID] != nil }),
+    guard let owner = owners(rollouts) else { return nil }
+    guard let submit = log.submits.dropFirst(log.selectionSubmitOffset ?? 0).last(where: { owner[$0.clientID] != nil }),
       let bound = owner[submit.clientID].flatMap({ byID[$0] })
     else { return nil }
     let rootID = root(of: bound.id, in: byID)
@@ -120,10 +164,13 @@ actor CodexDaemonThreadMapper {
     )
   }
 
-  private static func owners(_ rollouts: [Rollout]) -> [String: String] {
+  private static func owners(_ rollouts: [Rollout]) -> [String: String]? {
     var owner: [String: String] = [:]
     for rollout in rollouts {
-      for clientID in rollout.clientIDs { owner[clientID] = rollout.id }
+      for clientID in rollout.clientIDs {
+        guard owner[clientID] == nil || owner[clientID] == rollout.id else { return nil }
+        owner[clientID] = rollout.id
+      }
     }
     return owner
   }
@@ -139,7 +186,7 @@ actor CodexDaemonThreadMapper {
 
   static func resolve(threadID: String, rollouts: [Rollout], logs: [SessionLog]) -> CodexThreadPane? {
     let byID = Dictionary(rollouts.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-    let owner = owners(rollouts)
+    guard let owner = owners(rollouts) else { return nil }
     func root(_ id: String) -> String { Self.root(of: id, in: byID) }
     let target = root(threadID)
     let bound = logs.compactMap { log -> (log: SessionLog, submittedAt: Date)? in
@@ -159,14 +206,11 @@ actor CodexDaemonThreadMapper {
   private func sessionLogs() -> [SessionLog] {
     guard
       let entries = try? fileManager.contentsOfDirectory(
-        at: sessionLogDirectory, includingPropertiesForKeys: [.fileSizeKey], options: [.skipsHiddenFiles])
+        at: sessionLogDirectory, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])
     else { return [] }
     return entries.compactMap { entry in
-      guard let surfaceID = CodexTUISessionLog.surfaceID(forFileName: entry.lastPathComponent),
-        let size = (try? entry.resourceValues(forKeys: [.fileSizeKey]))?.fileSize, size <= sessionLogLimit,
-        let data = try? Data(contentsOf: entry)
-      else { return nil }
-      return Self.parseSessionLog(data, surfaceID: surfaceID)
+      guard let surfaceID = CodexTUISessionLog.surfaceID(forFileName: entry.lastPathComponent) else { return nil }
+      return sessionLogCache.record(at: entry, surfaceID: surfaceID)
     }
   }
 
@@ -174,15 +218,31 @@ actor CodexDaemonThreadMapper {
   static func parseSessionLog(_ data: Data, surfaceID: UUID) -> SessionLog? {
     var startedAt: Date?
     var submits: [SessionLog.Submit] = []
+    var selectionSubmitOffset: Int?
+    var selectionRevision = 0
     for line in data.split(separator: 10) {
       let isStart = line.range(of: Data("\"session_start\"".utf8)) != nil
-      guard isStart || line.range(of: Data("\"UserTurn\"".utf8)) != nil,
+      let isSelection =
+        line.range(of: Data("\"new_session\"".utf8)) != nil
+        || line.range(of: Data("\"clear_ui\"".utf8)) != nil
+        || line.range(of: Data("ResetTranscriptForThreadSwitch".utf8)) != nil
+      guard isStart || isSelection || line.range(of: Data("\"UserTurn\"".utf8)) != nil,
         let record = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
         let timestamp = (record["ts"] as? String).flatMap(parseTimestamp)
       else { continue }
       if record["kind"] as? String == "session_start" {
         startedAt = timestamp
         submits = []
+        selectionSubmitOffset = nil
+        selectionRevision = 0
+      } else if isSelection,
+        record["kind"] as? String == "new_session" || record["kind"] as? String == "clear_ui"
+          || (record["kind"] as? String == "app_event"
+            && ["ResetTranscriptForThreadSwitch", "ResetTranscriptForThreadSwitchPreservingScreen"]
+              .contains(record["variant"] as? String ?? ""))
+      {
+        selectionSubmitOffset = submits.count
+        selectionRevision += 1
       } else if record["kind"] as? String == "op",
         let turn = (record["payload"] as? [String: Any])?["UserTurn"] as? [String: Any],
         let clientID = turn["client_user_message_id"] as? String, !clientID.isEmpty
@@ -190,7 +250,11 @@ actor CodexDaemonThreadMapper {
         submits.append(.init(clientID: clientID, submittedAt: timestamp))
       }
     }
-    return startedAt.map { SessionLog(surfaceID: surfaceID, startedAt: $0, submits: submits) }
+    return startedAt.map {
+      SessionLog(
+        surfaceID: surfaceID, startedAt: $0, submits: submits,
+        selectionSubmitOffset: selectionSubmitOffset, selectionRevision: selectionRevision)
+    }
   }
 
   private static func parseTimestamp(_ value: String) -> Date? {

@@ -55,22 +55,31 @@ extension RepositoriesFeature {
 
     case .task:
       state.snapshotPersistencePhase = .restoring
-      return .run { send in
-        let pinned = await repositoryPersistence.loadPinnedWorktreeIDs()
-        let archived = await repositoryPersistence.loadArchivedWorktrees()
-        let lastFocused = await repositoryPersistence.loadLastFocusedWorktreeID()
-        let repositoryOrderIDs = await repositoryPersistence.loadRepositoryOrderIDs()
-        let worktreeOrderByRepository =
-          await repositoryPersistence.loadWorktreeOrderByRepository()
-        let repositorySnapshot = await repositoryPersistence.loadRepositorySnapshot()
-        await send(.pinnedWorktreeIDsLoaded(pinned))
-        await send(.archivedWorktreesLoaded(archived))
-        await send(.repositoryOrderIDsLoaded(repositoryOrderIDs))
-        await send(.worktreeOrderByRepositoryLoaded(worktreeOrderByRepository))
-        await send(.lastFocusedWorktreeIDLoaded(lastFocused))
-        await send(.repositorySnapshotLoaded(repositorySnapshot))
-        await send(.loadPersistedRepositories)
+      let githubCLI = githubCLI
+      let observeRateLimit = Effect<Action>.run { send in
+        for await retryAt in await githubCLI.rateLimitRetryTimes() {
+          await send(.githubIntegration(.rateLimitRetryTimeChanged(retryAt)))
+        }
       }
+      return .merge(
+        observeRateLimit,
+        .run { send in
+          let pinned = await repositoryPersistence.loadPinnedWorktreeIDs()
+          let archived = await repositoryPersistence.loadArchivedWorktrees()
+          let lastFocused = await repositoryPersistence.loadLastFocusedWorktreeID()
+          let repositoryOrderIDs = await repositoryPersistence.loadRepositoryOrderIDs()
+          let worktreeOrderByRepository =
+            await repositoryPersistence.loadWorktreeOrderByRepository()
+          let repositorySnapshot = await repositoryPersistence.loadRepositorySnapshot()
+          await send(.pinnedWorktreeIDsLoaded(pinned))
+          await send(.archivedWorktreesLoaded(archived))
+          await send(.repositoryOrderIDsLoaded(repositoryOrderIDs))
+          await send(.worktreeOrderByRepositoryLoaded(worktreeOrderByRepository))
+          await send(.lastFocusedWorktreeIDLoaded(lastFocused))
+          await send(.repositorySnapshotLoaded(repositorySnapshot))
+          await send(.loadPersistedRepositories)
+        }
+      )
 
     case .repositorySnapshotLoaded(let repositories):
       guard let repositories, !repositories.isEmpty else {
@@ -1009,6 +1018,8 @@ extension RepositoriesFeature {
         let repositories = IdentifiedArrayOf(uniqueElements: [repository])
         var effects: [Effect<Action>] = []
         let worktreeIDs = repository.worktrees.map(\.id)
+        // A changed remote can point every branch at different pull requests.
+        state.pullRequestRefreshForcedWorktreeIDs.formUnion(worktreeIDs)
         if repository.capabilities.supportsPullRequests, !worktreeIDs.isEmpty {
           effects.append(
             .send(

@@ -363,6 +363,36 @@ struct WorkflowStatusCenterPresentationTests {
     )
   }
 
+  @Test func toolbarSelectionShowsRateLimitBelowWorkflowAndAboveFallbacks() throws {
+    let session = try makeSession(id: UUID(10), worktreeID: "selected", updatedAt: Self.now)
+    var state = WorkflowRunsFeature.State()
+    state.sessions[session.run.id] = session
+    let workflow = WorkflowStatusCenterPresentation(state: state, selectedWorktreeID: "selected", now: Self.now)
+    let idle = WorkflowStatusCenterPresentation(
+      state: WorkflowRunsFeature.State(),
+      selectedWorktreeID: "selected",
+      now: Self.now
+    )
+    let retryAt = Self.now.addingTimeInterval(60)
+
+    #expect(
+      ToolbarStatusSelection(toast: nil, workflow: idle, pullRequest: nil, githubRateLimitedUntil: retryAt)
+        == .githubRateLimited(retryAt)
+    )
+    #expect(
+      ToolbarStatusSelection(toast: nil, workflow: workflow, pullRequest: nil, githubRateLimitedUntil: retryAt)
+        == .workflow(workflow)
+    )
+    #expect(
+      ToolbarStatusSelection(
+        toast: .success("Saved"),
+        workflow: idle,
+        pullRequest: nil,
+        githubRateLimitedUntil: retryAt
+      ) == .toast(.success("Saved"))
+    )
+  }
+
   nonisolated private static let authorPane = WorkflowPaneIdentity(
     surfaceID: UUID(101),
     tabID: UUID(102),

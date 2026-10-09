@@ -150,6 +150,7 @@ func cleanupWorktreeState(
   state.archiveScriptProgressByWorktreeID.removeValue(forKey: worktreeID)
   state.deletingWorktreeIDs.remove(worktreeID)
   state.worktreeInfoByID.removeValue(forKey: worktreeID)
+  state.forgetPullRequestRefreshHistory(of: worktreeID)
   let didUpdatePinned = state.pinnedWorktreeIDs.contains(worktreeID)
   if didUpdatePinned {
     state.pinnedWorktreeIDs.removeAll { $0 == worktreeID }
@@ -306,4 +307,41 @@ nonisolated func normalizedLineChanges(_ entry: WorktreeInfoEntry?) -> GitLineCh
 
 nonisolated func normalizedLineChanges(_ changes: GitLineChanges) -> GitLineChanges? {
   changes.isEmpty ? nil : changes
+}
+
+extension RepositoriesFeature.State {
+  // A worktree ID is its path, so a worktree created again at a removed one's path must start
+  // without the removed worktree's refresh history.
+  mutating func forgetPullRequestRefreshHistory(of worktreeID: Worktree.ID) {
+    pullRequestRefreshCheckpointByWorktreeID.removeValue(forKey: worktreeID)
+    pullRequestRefreshForcedWorktreeIDs.remove(worktreeID)
+    for repositoryID in Array(sentPullRequestRefreshMarks.keys) {
+      sentPullRequestRefreshMarks[repositoryID]?.remove(worktreeID)
+    }
+  }
+
+  /// Marks the refresh in flight for `repositoryID`, or for every repository, still carries go
+  /// back on the next refresh: GitHub did not answer for those branches.
+  mutating func restoreUnansweredPullRequestRefreshMarks(of repositoryID: Repository.ID? = nil) {
+    if let repositoryID {
+      if let unanswered = sentPullRequestRefreshMarks.removeValue(forKey: repositoryID) {
+        pullRequestRefreshForcedWorktreeIDs.formUnion(unanswered)
+      }
+      return
+    }
+    for unanswered in sentPullRequestRefreshMarks.values {
+      pullRequestRefreshForcedWorktreeIDs.formUnion(unanswered)
+    }
+    sentPullRequestRefreshMarks.removeAll()
+  }
+
+  mutating func forgetPullRequestRefreshHistory(keeping worktreeIDs: Set<Worktree.ID>) {
+    pullRequestRefreshCheckpointByWorktreeID = pullRequestRefreshCheckpointByWorktreeID.filter {
+      worktreeIDs.contains($0.key)
+    }
+    pullRequestRefreshForcedWorktreeIDs.formIntersection(worktreeIDs)
+    sentPullRequestRefreshMarks = sentPullRequestRefreshMarks.mapValues {
+      $0.intersection(worktreeIDs)
+    }
+  }
 }
