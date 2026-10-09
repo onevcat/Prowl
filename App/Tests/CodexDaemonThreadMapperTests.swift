@@ -22,6 +22,33 @@ struct CodexDaemonThreadMapperTests {
     Mapper.Rollout(id: id, parentID: parent, clientIDs: clientIDs)
   }
 
+  @Test(arguments: [
+    #"{"kind":"new_session"}"#,
+    #"{"kind":"clear_ui"}"#,
+    #"{"kind":"app_event","variant":"ResetTranscriptForThreadSwitch"}"#,
+    #"{"kind":"app_event","variant":"ResetTranscriptForThreadSwitchPreservingScreen"}"#,
+  ])
+  func selectionChangeDoesNotBindThePreviousTranscript(event: String) throws {
+    let start = #"{"ts":"2026-10-08T00:00:00.000Z","kind":"session_start"}"#
+    let submit =
+      #"{"ts":"2026-10-08T00:00:01.000Z","kind":"op","payload":{"UserTurn":{"client_user_message_id":"a"}}}"#
+    let reset = event.replacing("{", with: #"{"ts":"2026-10-08T00:00:02.000Z","#)
+    let log = try #require(Mapper.parseSessionLog(Data("\(start)\n\(submit)\n\(reset)\n".utf8), surfaceID: Self.paneA))
+    let rollouts = [Self.rollout("old", ["a"])]
+    #expect(Mapper.binding(for: log, rollouts: rollouts) == nil)
+    // Historical caller routing still has evidence for work that is finishing on the old thread.
+    #expect(Mapper.resolve(threadID: "old", rollouts: rollouts, logs: [log])?.surfaceID == Self.paneA)
+    let next = submit.replacing("00:00:01", with: "00:00:03").replacing(#""a""#, with: #""b""#)
+    let rebound = try #require(
+      Mapper.parseSessionLog(Data("\(start)\n\(submit)\n\(reset)\n\(next)\n".utf8), surfaceID: Self.paneA))
+    #expect(Mapper.binding(for: rebound, rollouts: rollouts + [Self.rollout("new", ["b"])])?.rootID == "new")
+  }
+
+  @Test func ambiguousClientIDsDoNotSelectAnArbitraryRollout() {
+    let rollouts = [Self.rollout("one", ["same"]), Self.rollout("two", ["same"])]
+    #expect(Mapper.binding(for: Self.log(Self.paneA, [("same", 1)]), rollouts: rollouts) == nil)
+  }
+
   @Test func panesSharingACwdResolveToTheirOwnThreads() {
     let rollouts = [Self.rollout("t1", ["a1"]), Self.rollout("t2", ["b1"])]
     let logs = [Self.log(Self.paneA, [("a1", 1)]), Self.log(Self.paneB, [("b1", 2)])]
@@ -228,6 +255,17 @@ struct CodexDaemonThreadMapperTests {
     let mainBinding = await mapper.binding(surfaceID: Self.paneB, daemonPID: 1, tuiStartedAt: tuiStart)
     #expect(mainBinding?.rootID == "main")
     #expect(mainBinding?.liveOffsets == [open[0]: UInt64(mainHead.utf8.count)])
+
+    let reset =
+      #"{"ts":"2026-09-28T14:25:06.000Z","kind":"app_event","variant":"ResetTranscriptForThreadSwitch"}"#
+    let logURL = CodexTUISessionLog.url(for: Self.paneA, in: logs)
+    try Data([start, submit, reset, ""].joined(separator: "\n").utf8).write(to: logURL)
+    let pending = await mapper.bindingLookup(surfaceID: Self.paneA, daemonPID: 1, tuiStartedAt: tuiStart)
+    if case .selectionPending = pending {} else { Issue.record("A known switch must suppress transcript fallback") }
+    #expect(await mapper.pane(threadID: "fork", daemonPID: 1)?.surfaceID == Self.paneA)
+    try Data([start, submit, reset, submitB, ""].joined(separator: "\n").utf8).write(to: logURL)
+    let selected = await mapper.bindingLookup(surfaceID: Self.paneA, daemonPID: 1, tuiStartedAt: tuiStart)
+    #expect(selected.binding?.rootID == "main")
   }
 
   @Test func preparingTheLogDirectoryRemovesOnlyStaleLogs() throws {

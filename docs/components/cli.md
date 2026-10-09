@@ -239,6 +239,20 @@ Immediate, read-only semantic snapshot for a currently active **Codex** or
 it never guesses from focus, accepts no worktree/tab selector, and has no wait or
 timeout mode.
 
+For a Codex TUI attached to the managed daemon, Prowl first correlates the pane's
+submitted message IDs with the daemon's rollouts and validates the root transcript.
+This reports `process_log` / `exact` without matching terminal text. A new or switched
+thread needs an indexed submit before this evidence is available. After a known
+selection change, unresolved identity suppresses text matching even if a local
+file-handle scan is incomplete, so copied history cannot select the previous thread. Otherwise the existing fallback and confidence
+requirements still apply. An embedded TUI with a complete local rollout inventory
+keeps its normal local session resolution, even when the same home has a daemon.
+A known pending selection also clears retained background identity on the first
+poll, including the session shown by `agents` and included in handoff context.
+This fence survives transient log read failures. Once the new selection binds,
+transient binding misses use the normal two-fresh-miss background grace period;
+fresh transcript reads stay unresolved until current binding evidence returns.
+
 Default text output always reports current `Status`, decision `Reason`, last
 state-change time, and a result state. A blocked snapshot includes the raw current
 interaction under `## Blocker`, preserving the question, numbered choices, selected

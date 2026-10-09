@@ -261,14 +261,34 @@ struct CodexLogProviderTests {
     #expect(startedTurns(await invalid.sample(paths: [path], liveOffsets: [path: 1 << 40])).isEmpty)
   }
 
+  /// Scanning the test host races with file operations in other parallel tests.
+  private func idleTUI() throws -> (Process, Pipe) {
+    let process = Process()
+    let input = Pipe()
+    let output = Pipe()
+    process.executableURL = URL(filePath: "/bin/cat")
+    process.standardInput = input
+    process.standardOutput = output
+    try process.run()
+    try input.fileHandleForWriting.write(contentsOf: Data([1]))
+    // The echo confirms startup has finished before the provider inspects its FDs.
+    _ = try output.fileHandleForReading.read(upToCount: 1)
+    return (process, input)
+  }
+
   @Test func aTUIWithoutOwnRolloutsReadsItsDaemonBinding() async throws {
     let directory = try fixture()
     defer { try? FileManager.default.removeItem(at: directory) }
     let path = directory.appending(path: "rollout-daemon.jsonl")
     let prefix = header("root")
     try (prefix + start("t1")).write(to: path, atomically: false, encoding: .utf8)
-    let started = try #require(ProcessDetection.processStartDate(pid: getpid()))
-    let process = AgentProcessGeneration(pid: getpid(), startedAt: started)
+    let (tui, input) = try idleTUI()
+    defer {
+      try? input.fileHandleForWriting.close()
+      tui.waitUntilExit()
+    }
+    let started = try #require(ProcessDetection.processStartDate(pid: tui.processIdentifier))
+    let process = AgentProcessGeneration(pid: tui.processIdentifier, startedAt: started)
     let requested = Mutex<[URL?]>([])
     let configRoot = directory.appending(path: "home")
     let provider = CodexLogProvider(
@@ -293,8 +313,13 @@ struct CodexLogProviderTests {
     let path = directory.appending(path: "rollout-daemon.jsonl")
     let prefix = header("root")
     try (prefix + start("t1")).write(to: path, atomically: false, encoding: .utf8)
-    let started = try #require(ProcessDetection.processStartDate(pid: getpid()))
-    let process = AgentProcessGeneration(pid: getpid(), startedAt: started)
+    let (tui, input) = try idleTUI()
+    defer {
+      try? input.fileHandleForWriting.close()
+      tui.waitUntilExit()
+    }
+    let started = try #require(ProcessDetection.processStartDate(pid: tui.processIdentifier))
+    let process = AgentProcessGeneration(pid: tui.processIdentifier, startedAt: started)
     let available = Mutex(true)
     let provider = CodexLogProvider(
       startedAt: .distantFuture,
