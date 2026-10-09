@@ -1,6 +1,6 @@
 {
   "_comment": "Metadata for the docs/ manual. The last_synced_commit is the commit at which docs/ was last verified against the implementation; the sync-docs skill (.agents/skills/sync-docs/SKILL.md) diffs HEAD against it and updates this file. Committed to git on purpose so the baseline persists across sessions and machines. A dotfile + .json so a future docs website does not render it as a page.",
-  "last_synced_commit": "92c18998c0ce749af14029eaa48c62f173b02898",
-  "last_synced_date": "2026-10-06",
-  "note": "Verified the dedicated Ghostty config source (#860), CJK font fallback (#861), and the font size baseline fix (#863). Feature PRs updated the manual. CLI socket accept (#857) and README changes (#858, #859) need no manual changes."
+  "last_synced_commit": "5325d42a9407a88cfee7bbb113c807e4f9733d51",
+  "last_synced_date": "2026-10-09",
+  "note": "Verified Devin (#865, #866) and Antigravity (#883, #884) support, PR refresh pacing, cadence, check counts, and the rate-limit gate (#877-#880), daemon-owned Codex session resolution (#876), and the Amp (#885) and Oh My Pi (#882) detection changes. Feature PRs updated the manual. The repository icon (#867), model suggestion (#872), and contract fingerprint (#864) changes need no manual changes."
 }
