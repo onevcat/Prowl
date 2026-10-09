@@ -72,12 +72,15 @@ final class PullRequestRefreshCoordinator {
   }
 
   nonisolated enum Outcome: Sendable, Equatable {
+    // isPartial: a candidate repository of the request did not answer, even after the fallback. The
+    // found pull requests are real, but nothing is confirmed absent and the answer is not complete.
     case refreshed(
       repositoryID: Repository.ID,
       repositoryRootURL: URL,
       worktreeIDs: [Worktree.ID],
       prsByBranch: [String: GithubPullRequest],
-      confirmedNoPrBranches: Set<String>
+      confirmedNoPrBranches: Set<String>,
+      isPartial: Bool = false
     )
     case failed(
       repositoryID: Repository.ID,
@@ -245,8 +248,11 @@ final class PullRequestRefreshCoordinator {
       )
       var prsByRepo = result.successByRepo
       var failedMessagesByRepo = result.failedRepos.mapValues { String(describing: $0) }
-      if !result.failedRepos.isEmpty {
-        let failedGroups = result.failedRepos.keys.compactMap { groupsByKey[$0] }
+      // A smaller query cannot fix a rate limit or a repository GitHub cannot resolve for the account,
+      // so only the other failures fall back per repository.
+      let retryableFailures = result.failedRepos.filter { $0.value.allowsFallback }
+      if !retryableFailures.isEmpty {
+        let failedGroups = retryableFailures.keys.compactMap { groupsByKey[$0] }
         let fallback = await fetchFallbackResults(key: key, groups: failedGroups)
         for (repoKey, prsByBranch) in fallback.successByRepo {
           prsByRepo[repoKey] = prsByBranch
@@ -259,6 +265,17 @@ final class PullRequestRefreshCoordinator {
         prsByRepo: prsByRepo,
         failedMessagesByRepo: failedMessagesByRepo
       )
+    } catch let error as GithubCLIError where !error.allowsFallback {
+      // A smaller query cannot fix a rate limit, and the gate reports the retry time on its own.
+      for request in requests {
+        resultHandler(
+          .failed(
+            repositoryID: request.repositoryID,
+            worktreeIDs: request.worktreeIDs,
+            message: error.localizedDescription
+          )
+        )
+      }
     } catch {
       let fallback = await fetchFallbackResults(key: key, groups: Array(groupsByKey.values))
       emitOutcomes(
@@ -371,7 +388,8 @@ final class PullRequestRefreshCoordinator {
             repositoryRootURL: request.repositoryRootURL,
             worktreeIDs: request.worktreeIDs,
             prsByBranch: prsByBranch,
-            confirmedNoPrBranches: confirmedNoPrBranches
+            confirmedNoPrBranches: confirmedNoPrBranches,
+            isPartial: !allCandidatesSucceeded
           )
         )
       }

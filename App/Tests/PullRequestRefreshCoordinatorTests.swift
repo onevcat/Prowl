@@ -245,6 +245,108 @@ struct PullRequestRefreshCoordinatorTests {
     #expect(await probe.legacyCalls().map(\.detailBranches) == [["feat-2"]])
   }
 
+  @Test func rateLimitedBatchSkipsFallback() async throws {
+    let clock = TestClock()
+    let probe = CoordinatorProbe()
+    let outcomes = OutcomeCollector()
+    let retryAt = Date(timeIntervalSince1970: 1_000_060)
+    let coordinator = makeCoordinator(
+      probe: probe,
+      clock: clock,
+      outcomes: outcomes,
+      batched: { _, _ in
+        throw GithubCLIError.rateLimited(retryAt: retryAt)
+      },
+      legacy: { _, _, _, _ in
+        Issue.record("A rate-limited batch must not fall back to per-repository queries")
+        return [:]
+      }
+    )
+
+    coordinator.enqueue(request(repo: "alpha"))
+    coordinator.enqueue(request(repo: "beta"))
+    await advanceCoordinatorClock(clock, by: .milliseconds(250))
+    await waitUntil { await outcomes.failedRepositories().count == 2 }
+
+    #expect(await probe.legacyCalls().isEmpty)
+    #expect(Set(await outcomes.failedRepositories()) == ["alpha", "beta"])
+  }
+
+  @Test func rateLimitedRepositoryInPartialResultSkipsFallback() async throws {
+    let clock = TestClock()
+    let probe = CoordinatorProbe()
+    let outcomes = OutcomeCollector()
+    let coordinator = makeCoordinator(
+      probe: probe,
+      clock: clock,
+      outcomes: outcomes,
+      batched: { _, requests in
+        var success: [RepoKey: [String: GithubPullRequest]] = [:]
+        var failed: [RepoKey: GithubCLIError] = [:]
+        for request in requests {
+          let key = RepoKey(owner: request.owner, repo: request.repo)
+          switch request.repo {
+          case "beta":
+            failed[key] = .rateLimited(retryAt: Date(timeIntervalSince1970: 1_000_060))
+          case "gamma":
+            failed[key] = .commandFailed("not found")
+          default:
+            success[key] = [:]
+          }
+        }
+        return CrossRepoPullRequestResult(successByRepo: success, failedRepos: failed)
+      },
+      legacy: { _, _, _, _ in [:] }
+    )
+
+    coordinator.enqueue(request(repo: "alpha"))
+    coordinator.enqueue(request(repo: "beta"))
+    coordinator.enqueue(request(repo: "gamma"))
+    await advanceCoordinatorClock(clock, by: .milliseconds(250))
+    await waitUntil { await outcomes.snapshot().count == 3 }
+
+    #expect(await probe.legacyCalls().map(\.repo) == ["gamma"])
+  }
+
+  @Test func permanentGraphQLErrorInPartialResultSkipsFallback() async throws {
+    let clock = TestClock()
+    let probe = CoordinatorProbe()
+    let outcomes = OutcomeCollector()
+    let coordinator = makeCoordinator(
+      probe: probe,
+      clock: clock,
+      outcomes: outcomes,
+      batched: { _, requests in
+        var success: [RepoKey: [String: GithubPullRequest]] = [:]
+        var failed: [RepoKey: GithubCLIError] = [:]
+        for request in requests {
+          let key = RepoKey(owner: request.owner, repo: request.repo)
+          switch request.repo {
+          case "beta":
+            // GitHub answered: the repository does not exist for this account.
+            failed[key] = .graphQLError(type: "NOT_FOUND", message: "Could not resolve to a Repository")
+          case "gamma":
+            // No type: GitHub may have timed out on this alias, so a smaller query is worth a try.
+            failed[key] = .graphQLError(type: nil, message: "Something went wrong while executing your query")
+          default:
+            success[key] = [:]
+          }
+        }
+        return CrossRepoPullRequestResult(successByRepo: success, failedRepos: failed)
+      },
+      legacy: { _, _, _, _ in [:] }
+    )
+
+    coordinator.enqueue(request(repo: "alpha"))
+    coordinator.enqueue(request(repo: "beta"))
+    coordinator.enqueue(request(repo: "gamma"))
+    await advanceCoordinatorClock(clock, by: .milliseconds(250))
+    await waitUntil { await outcomes.snapshot().count == 3 }
+
+    #expect(await probe.legacyCalls().map(\.repo) == ["gamma"])
+    #expect(Set(await outcomes.failedRepositories()) == ["beta"])
+  }
+
   @Test func inflightHostBuffersNewEnqueueAndFlushesAfterCompletion() async throws {
     let clock = TestClock()
     let probe = CoordinatorProbe()
@@ -351,7 +453,7 @@ struct PullRequestRefreshCoordinatorTests {
 
     let snapshots = await outcomes.snapshot()
     let refreshed = snapshots.compactMap { outcome -> (Repository.ID, [String])? in
-      if case .refreshed(let id, _, _, let prs, _) = outcome {
+      if case .refreshed(let id, _, _, let prs, _, _) = outcome {
         return (id, Array(prs.keys))
       }
       return nil
@@ -398,7 +500,7 @@ struct PullRequestRefreshCoordinatorTests {
     #expect(calls.first?.requests.allSatisfy { $0.allowedHeadRepositories == expectedAllowedHeadRepositories } == true)
 
     let refreshed = await outcomes.snapshot().compactMap { outcome -> [String: GithubPullRequest]? in
-      if case .refreshed("local", _, _, let prsByBranch, _) = outcome {
+      if case .refreshed("local", _, _, let prsByBranch, _, _) = outcome {
         return prsByBranch
       }
       return nil
@@ -433,17 +535,12 @@ struct PullRequestRefreshCoordinatorTests {
     await advanceCoordinatorClock(clock, by: .milliseconds(250))
     await waitUntil { await outcomes.refreshedRepositories().count == 1 }
 
-    let refreshed = await outcomes.snapshot().compactMap {
-      outcome -> ([String: GithubPullRequest], Set<String>)? in
-      if case .refreshed("local", _, _, let prsByBranch, let confirmedNoPrBranches) = outcome {
-        return (prsByBranch, confirmedNoPrBranches)
-      }
-      return nil
-    }
+    let refreshed = await outcomes.snapshot().compactMap { RefreshedAnswer(outcome: $0, repositoryID: "local") }
     let result = try #require(refreshed.first)
     #expect(refreshed.count == 1)
-    #expect(result.0["feat-1"]?.title == "PR-upstream")
-    #expect(result.1 == ["feat-2"])
+    #expect(result.prsByBranch["feat-1"]?.title == "PR-upstream")
+    #expect(result.confirmedNoPrBranches == ["feat-2"])
+    #expect(!result.isPartial)
   }
 
   @Test func partialCandidateRepoFailureLeavesBranchesUnconfirmed() async throws {
@@ -476,17 +573,13 @@ struct PullRequestRefreshCoordinatorTests {
     await advanceCoordinatorClock(clock, by: .milliseconds(250))
     await waitUntil { await outcomes.refreshedRepositories().count == 1 }
 
-    let refreshed = await outcomes.snapshot().compactMap {
-      outcome -> ([String: GithubPullRequest], Set<String>)? in
-      if case .refreshed("local", _, _, let prsByBranch, let confirmedNoPrBranches) = outcome {
-        return (prsByBranch, confirmedNoPrBranches)
-      }
-      return nil
-    }
+    let refreshed = await outcomes.snapshot().compactMap { RefreshedAnswer(outcome: $0, repositoryID: "local") }
     let result = try #require(refreshed.first)
     #expect(refreshed.count == 1)
-    #expect(result.0.isEmpty)
-    #expect(result.1.isEmpty)
+    #expect(result.prsByBranch.isEmpty)
+    #expect(result.confirmedNoPrBranches.isEmpty)
+    // The reducer must not record this answer as complete.
+    #expect(result.isPartial)
   }
 
   @Test func duplicateRepoKeysFallbackOnceAndFanOutToEachRepository() async throws {
@@ -618,7 +711,7 @@ struct PullRequestRefreshCoordinatorTests {
     let snapshots = await outcomes.snapshot()
     let refresh = try #require(
       snapshots.compactMap { snapshot -> (String, [String: GithubPullRequest])? in
-        if case .refreshed(let id, _, _, let prs, _) = snapshot {
+        if case .refreshed(let id, _, _, let prs, _, _) = snapshot {
           return (id, prs)
         }
         return nil
@@ -835,6 +928,22 @@ actor CoordinatorProbe {
   }
 }
 
+nonisolated private struct RefreshedAnswer: Sendable {
+  let prsByBranch: [String: GithubPullRequest]
+  let confirmedNoPrBranches: Set<String>
+  let isPartial: Bool
+
+  init?(outcome: PullRequestRefreshCoordinator.Outcome, repositoryID: Repository.ID) {
+    guard case .refreshed(repositoryID, _, _, let prsByBranch, let confirmedNoPrBranches, let isPartial) = outcome
+    else {
+      return nil
+    }
+    self.prsByBranch = prsByBranch
+    self.confirmedNoPrBranches = confirmedNoPrBranches
+    self.isPartial = isPartial
+  }
+}
+
 actor OutcomeCollector {
   private var outcomes: [PullRequestRefreshCoordinator.Outcome] = []
 
@@ -848,7 +957,7 @@ actor OutcomeCollector {
 
   func refreshedRepositories() -> [String] {
     outcomes.compactMap {
-      if case .refreshed(let id, _, _, _, _) = $0 {
+      if case .refreshed(let id, _, _, _, _, _) = $0 {
         return id
       }
       return nil

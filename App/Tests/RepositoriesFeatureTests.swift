@@ -490,7 +490,9 @@ struct RepositoriesFeatureTests {
       .worktreeInfoEvent(
         .repositoryRemoteConfigurationChanged(repositoryRootURL: repository.rootURL)
       )
-    )
+    ) {
+      $0.pullRequestRefreshForcedWorktreeIDs = [mainWorktree.id, featureWorktree.id]
+    }
     await store.receive(\.githubIntegration.repositoryPullRequestRefreshRequested) {
       $0.pendingPullRequestRefreshByRepositoryID[repository.id] = RepositoriesFeature.PendingPullRequestRefresh(
         repositoryRootURL: repository.rootURL,
@@ -499,6 +501,71 @@ struct RepositoriesFeatureTests {
     }
     await store.receive(\.codeHostsDetected) {
       $0.codeHostByRepositoryID[repository.id] = .unknown
+    }
+  }
+
+  @Test func repositoryRemoteConfigurationChangedMarksEveryBranchDue() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(id: "\(repoRoot)/feature", name: "feature", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.githubIntegrationAvailability = .unavailable
+    initialState.codeHostByRepositoryID[repository.id] = .github
+    let answeredAt = Date(timeIntervalSince1970: 1_000_000)
+    initialState.pullRequestRefreshCheckpointByWorktreeID = [
+      mainWorktree.id: PullRequestRefreshCadence.Checkpoint(branch: "main", pullRequest: nil, answeredAt: answeredAt),
+      featureWorktree.id: PullRequestRefreshCadence.Checkpoint(
+        branch: "feature", pullRequest: nil, answeredAt: answeredAt
+      ),
+    ]
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.repositoryWebURL = { _ in nil }
+    }
+    store.exhaustivity = .off
+
+    // A changed remote can point every branch at other pull requests, so all of them are due,
+    // whatever an answer from the old remote records meanwhile.
+    await store.send(
+      .worktreeInfoEvent(
+        .repositoryRemoteConfigurationChanged(repositoryRootURL: repository.rootURL)
+      )
+    ) {
+      $0.pullRequestRefreshForcedWorktreeIDs = [mainWorktree.id, featureWorktree.id]
+    }
+    await store.receive(\.githubIntegration.repositoryPullRequestRefreshRequested) {
+      $0.pendingPullRequestRefreshByRepositoryID[repository.id] = RepositoriesFeature.PendingPullRequestRefresh(
+        repositoryRootURL: repository.rootURL,
+        worktreeIDs: [mainWorktree.id, featureWorktree.id]
+      )
+    }
+  }
+
+  @Test func repositoriesLoadedForgetsRefreshHistoryOfRemovedWorktrees() async {
+    let worktree = makeWorktree(id: "/tmp/repo/main", name: "main")
+    let removed = makeWorktree(id: "/tmp/repo/removed", name: "removed")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var initialState = makeState(repositories: [repository])
+    let answeredAt = Date(timeIntervalSince1970: 1_000_000)
+    let kept = PullRequestRefreshCadence.Checkpoint(branch: "main", pullRequest: nil, answeredAt: answeredAt)
+    initialState.pullRequestRefreshCheckpointByWorktreeID = [
+      worktree.id: kept,
+      removed.id: PullRequestRefreshCadence.Checkpoint(branch: "removed", pullRequest: nil, answeredAt: answeredAt),
+    ]
+    initialState.pullRequestRefreshForcedWorktreeIDs = [removed.id]
+
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+    store.exhaustivity = .off
+
+    await store.send(
+      .repositoriesLoaded([repository], failures: [], roots: [repository.rootURL], animated: false)
+    ) {
+      $0.pullRequestRefreshCheckpointByWorktreeID = [worktree.id: kept]
+      $0.pullRequestRefreshForcedWorktreeIDs = []
     }
   }
 
