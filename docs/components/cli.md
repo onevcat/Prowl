@@ -247,6 +247,8 @@ selection change, unresolved identity suppresses text matching even if a local
 file-handle scan is incomplete, so copied history cannot select the previous thread. Otherwise the existing fallback and confidence
 requirements still apply. An embedded TUI with a complete local rollout inventory
 keeps its normal local session resolution, even when the same home has a daemon.
+A known pending selection also clears retained background identity on the first
+poll, including the session shown by `agents` and included in handoff context.
 
 Default text output always reports current `Status`, decision `Reason`, last
 state-change time, and a result state. A blocked snapshot includes the raw current

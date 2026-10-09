@@ -68,6 +68,14 @@ nonisolated extension [AgentSessionCandidate] {
 nonisolated struct AgentSessionResolution: Sendable {
   let session: AgentSession?
   let isFresh: Bool
+  /// A known selection reset must clear background identity, not count as a transient miss.
+  let invalidatesRetainedSession: Bool
+
+  init(session: AgentSession?, isFresh: Bool, invalidatesRetainedSession: Bool = false) {
+    self.session = session
+    self.isFresh = isFresh
+    self.invalidatesRetainedSession = invalidatesRetainedSession
+  }
 }
 
 /// Parsed, normalized transcript fragments reused across resolver polls and panes.
@@ -394,7 +402,7 @@ actor AgentSessionResolver {
     // An embedded TUI's complete local inventory takes precedence over a shared daemon.
     if let paths, paths.contains(where: { parse($0) != nil }) { return nil }
     if case .selectionPending = lookup {
-      return AgentSessionResolution(session: nil, isFresh: true)
+      return AgentSessionResolution(session: nil, isFresh: true, invalidatesRetainedSession: true)
     }
     guard let binding = lookup.binding, paths != nil else { return nil }
     let roots = Set(binding.paths).compactMap { path -> URL? in

@@ -24,6 +24,9 @@ session resolver only checks the TUI files and transcript fingerprints.
   historical submits for caller routing while waiting for a new indexed submit.
   A pending selection explicitly suppresses both the fallback cache and text
   matching, so a fork cannot return its parent transcript through copied history.
+  Propagate explicit invalidation to background retention so lists and handoff
+  context clear the old identity on the first pending-selection poll. Ordinary
+  ambiguous misses retain their existing grace period.
   Reject client IDs that claim more than one rollout.
 - Preserve local open-file resolution when a complete TUI inventory contains an
   owned rollout, even if the same home also has a managed daemon. Otherwise a known

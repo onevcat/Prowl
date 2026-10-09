@@ -255,6 +255,41 @@ struct AgentSessionDaemonResolutionTests {
     #expect(result.session == nil)
   }
 
+  @Test func backgroundSelectionResetClearsRetainedIdentityBeforeRebinding() async throws {
+    let fixture = try Fixture()
+    defer { fixture.cleanUp() }
+    let binding = Mutex(fixture.binding(fixture.firstID, [fixture.first]))
+    let resolver = AgentSessionResolver(
+      tuiOpenFilePaths: { _ in [] }, daemonBinding: { _, _, _ in binding.withLock { $0 } })
+    let pane = UUID()
+    let initial = await resolver.resolve(
+      identified: fixture.process, workingDirectory: fixture.directory, activeText: "",
+      configRoot: fixture.home, surfaceID: pane)
+    #expect(initial.session?.id == fixture.firstID)
+    #expect(initial.session?.confidence == .exact)
+    var previous = PaneAgentState(agentProcessID: fixture.tui.processIdentifier, session: initial.session)
+    let transitions: [(CodexDaemonBindingLookup, String?)] = [
+      (.unavailable, fixture.firstID),
+      (.selectionPending, nil),
+      (.selectionPending, nil),
+      (fixture.binding(fixture.secondID, [fixture.second]), fixture.secondID),
+    ]
+    for (lookup, expected) in transitions {
+      binding.withLock { $0 = lookup }
+      let resolution = await resolver.resolve(
+        identified: fixture.process, workingDirectory: fixture.directory, activeText: "",
+        configRoot: fixture.home, surfaceID: pane)
+      let retained = PaneAgentState.retainedSession(
+        resolution: resolution,
+        previous: previous, identifiedPID: fixture.tui.processIdentifier)
+      #expect(retained.session?.id == expected)
+      if expected == nil { #expect(retained.missStreak == 0) }
+      previous.session = retained.session
+      previous.sessionMissStreak = retained.missStreak
+    }
+    #expect(previous.session?.confidence == .exact)
+  }
+
   @Test func noPaneDoesNotConsultDaemonBinding() async throws {
     let fixture = try Fixture()
     defer { fixture.cleanUp() }

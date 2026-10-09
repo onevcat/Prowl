@@ -313,8 +313,7 @@ extension WorktreeTerminalState {
       )
     }
     return PaneAgentState.retainedSession(
-      resolved: resolution.session,
-      isFresh: resolution.isFresh,
+      resolution: resolution,
       previous: previous,
       identifiedPID: identified?.process.pid
     )

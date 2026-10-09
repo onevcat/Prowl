@@ -123,31 +123,38 @@ struct AgentSessionResolverTests {
 
     // Same process, FRESH ambiguous resolution: retained for two misses,
     // dropped on the third.
-    let miss1 = PaneAgentState.retainedSession(resolved: nil, isFresh: true, previous: previous, identifiedPID: 42)
+    let miss1 = PaneAgentState.retainedSession(
+      resolution: AgentSessionResolution(session: nil, isFresh: true), previous: previous, identifiedPID: 42)
     #expect(miss1.session?.id == "old")
     #expect(miss1.missStreak == 1)
     previous.sessionMissStreak = 2
-    let miss3 = PaneAgentState.retainedSession(resolved: nil, isFresh: true, previous: previous, identifiedPID: 42)
+    let miss3 = PaneAgentState.retainedSession(
+      resolution: AgentSessionResolution(session: nil, isFresh: true), previous: previous, identifiedPID: 42)
     #expect(miss3.session == nil)
 
     // Cached nil replayed during resolver backoff must NOT age the session:
     // only fresh resolutions count as misses.
     previous.sessionMissStreak = 2
-    let replay = PaneAgentState.retainedSession(resolved: nil, isFresh: false, previous: previous, identifiedPID: 42)
+    let replay = PaneAgentState.retainedSession(
+      resolution: AgentSessionResolution(session: nil, isFresh: false), previous: previous, identifiedPID: 42)
     #expect(replay.session?.id == "old")
     #expect(replay.missStreak == 2)
 
     // Presence hold (probe returned no process): keep without aging.
     previous.sessionMissStreak = 2
-    let held = PaneAgentState.retainedSession(resolved: nil, isFresh: false, previous: previous, identifiedPID: nil)
+    let held = PaneAgentState.retainedSession(
+      resolution: AgentSessionResolution(session: nil, isFresh: false), previous: previous, identifiedPID: nil)
     #expect(held.session?.id == "old")
     #expect(held.missStreak == 2)
 
     // Fresh resolution resets the streak; new pid drops the session.
-    let fresh = PaneAgentState.retainedSession(resolved: session, isFresh: true, previous: previous, identifiedPID: 42)
+    let fresh = PaneAgentState.retainedSession(
+      resolution: AgentSessionResolution(session: session, isFresh: true), previous: previous, identifiedPID: 42)
     #expect(fresh.missStreak == 0)
     #expect(
-      PaneAgentState.retainedSession(resolved: nil, isFresh: true, previous: previous, identifiedPID: 43).session
+      PaneAgentState.retainedSession(
+        resolution: AgentSessionResolution(session: nil, isFresh: true), previous: previous, identifiedPID: 43
+      ).session
         == nil
     )
   }
