@@ -125,16 +125,24 @@
   trust/permission dialogs render only footer/status rows beneath the hint).
   The `> ` option window above the hint spans 8 rows for long option lists,
   and the window below the hint spans 10 rows for stacked output.
-- **Footer evidence only counts below the composer box**: footer signatures
-  are scanned below the last `─`/`>`/`─` box bottom, keeping
-  transcript-quoted status rows out of the evidence. A status-signature-
-  leading `stack_with_default` row therefore lands beside the real footer as
-  contradictory evidence (unknown), instead of supplying a spoofed
-  idle/working state after pushing the real footer out of the tail window —
-  a shape onevclaw reproduced end-to-end into dispatch readiness. Residual:
-  `stack_with_default` output that renders a complete `─`/`>`/`─` box below
-  the footer can still shift the evidence boundary downward; that direction
-  only widens the contradiction set (unknown), never a wrong state.
+- **Footer evidence is the first status signature after each composer box**:
+  the composer is a `─`-bordered box around a `>` prompt row, and the status
+  row renders directly below its bottom border. Each `─`/`>`/`─` box bottom
+  contributes the first signature that follows it, and all boxes must agree —
+  a transcript-quoted composer or stacked output drawing its own box creates
+  a second pair, and mixed signatures read unknown. Below-footer rows never
+  reach the evidence, so a status-signature-leading `stack_with_default` row
+  cannot supply a spoofed state; without an identifiable box, the bounded
+  tail applies the same contradictory-pair rule. This replaces the raw
+  tail-suffix scan, where appended rows could push the real footer out of the
+  window and let a spoofed `? for shortcuts` row release dispatch readiness —
+  a shape onevclaw reproduced end-to-end.
+- **Chrome checks use column-0 raw rows**: borders and the `>` prompt render
+  at column 0, while wrapped composer content is indented (verified live —
+  typing a long line ending in dashes puts `─`-leading text on an indented
+  continuation row inside the box). Checking `─`/`>` prefixes on untrimmed
+  rows keeps typed or wrapped input from forging a box bottom or vetoing a
+  live dialog; status signatures and the navigate hint stay on trimmed rows.
 - **Permission observation is conservative in both directions**: an
   unrecognized bare flag anywhere before the decisive permission token —
   off-form or bare — yields unknown rather than an unprovable mode, because a

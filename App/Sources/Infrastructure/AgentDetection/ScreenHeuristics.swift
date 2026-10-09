@@ -795,9 +795,15 @@ nonisolated private func hasBrailleSpinner(_ content: String) -> Bool {
 // built-in row, so the signatures are matched in a bounded tail rather than the
 // last line alone; an unrecognized layout is `.unknown`, never affirmative idle.
 nonisolated private func detectAntigravity(_ content: String) -> AgentRawState {
-  let lines = content.split(separator: "\n", omittingEmptySubsequences: false)
-    .map { $0.trimmingCharacters(in: .whitespaces) }
-    .filter { !$0.isEmpty }
+  // Two views of the same rows: trimmed `lines` for status/hint signatures,
+  // raw `raws` for box chrome — composer borders and the `>` prompt render at
+  // column 0 on 1.3.1, while wrapped composer content is indented, so raw
+  // prefixes keep typed `─`- or `>`-leading input from forging chrome.
+  let rows = content.split(separator: "\n", omittingEmptySubsequences: false)
+    .map { (raw: String($0), text: $0.trimmingCharacters(in: .whitespaces)) }
+    .filter { !$0.text.isEmpty }
+  let lines = rows.map(\.text)
+  let raws = rows.map(\.raw)
 
   // Live dialog order is `> `-selected option ABOVE the `↑/↓ Navigate` hint —
   // reversed order (e.g. a stale hint residue above a `> typed` composer row)
@@ -810,18 +816,18 @@ nonisolated private func detectAntigravity(_ content: String) -> AgentRawState {
   // quote that includes the dialog's own status line still sees the fresh
   // composer, while output rendered below the live status row stays outside
   // the gap.
+  let isStatusRow = { (line: String) -> Bool in
+    line.hasPrefix("esc to cancel") || line.hasPrefix("esc to interrupt")
+      || line.hasPrefix("? for shortcuts")
+  }
   let hintIndex = lines.lastIndex(where: {
     $0.hasPrefix("↑/↓ Navigate") || $0.hasPrefix("↑↓ Navigate")
   })
   let composerBelow =
     hintIndex.map { hint -> Bool in
       let below = lines[(hint + 1)...]
-      let statusIndex =
-        below.lastIndex(where: {
-          $0.hasPrefix("esc to cancel") || $0.hasPrefix("esc to interrupt")
-            || $0.hasPrefix("? for shortcuts")
-        }) ?? below.endIndex
-      let gap = below[..<statusIndex]
+      let statusIndex = below.lastIndex(where: isStatusRow) ?? below.endIndex
+      let gap = raws[(hint + 1)..<statusIndex]
       return gap.contains { $0.hasPrefix("─") } && gap.contains { $0.hasPrefix(">") }
     } ?? false
   // The window below the hint tolerates a usage row, the status row, and
@@ -829,28 +835,49 @@ nonisolated private func detectAntigravity(_ content: String) -> AgentRawState {
   // otherwise fall through to a spoofed footer signature.
   if let hintIndex,
     hintIndex >= lines.count - 10,
-    lines[..<hintIndex].suffix(8).contains(where: { $0.hasPrefix("> ") }),
+    raws[..<hintIndex].suffix(8).contains(where: { $0.hasPrefix("> ") }),
     !composerBelow
   {
     return .blocked
   }
   // The composer is a `─`-bordered box around a `>` prompt row; the status row
-  // and any appended `stack_with_default` output render below its bottom
-  // border. Scanning only below the last box bottom keeps transcript-quoted
-  // status rows out of the evidence, while a status-signature-leading custom
-  // row still lands beside the real footer — contradictory evidence, not a
-  // spoofed state. Without an identifiable box the evidence is ambiguous, so
-  // the bounded tail alone is used and any contradictory pair reads unknown.
-  let dashRows = lines.indices.filter { lines[$0].hasPrefix("─") }
-  let composerBottom = dashRows.last { bottom in
+  // renders below its bottom border, before any `stack_with_default` output.
+  // The first status signature after each box bottom is evidence, and every
+  // box's evidence must agree — a transcript-quoted composer or stacked
+  // output drawing its own box produces a second pair, and mixed signatures
+  // are ambiguous rather than proof of either state. Below-footer rows never
+  // reach the evidence, so status-signature-leading custom output cannot
+  // spoof a state on its own.
+  let dashRows = raws.indices.filter { raws[$0].hasPrefix("─") }
+  let boxBottoms = dashRows.filter { bottom in
     guard let top = dashRows.last(where: { $0 < bottom }) else { return false }
-    return lines[top..<bottom].contains { $0.hasPrefix(">") }
+    return raws[top..<bottom].contains { $0.hasPrefix(">") }
   }
-  let tail = composerBottom.map { lines[($0 + 1)...] } ?? lines.suffix(10)
-  let hasWorkingFooter = tail.contains {
-    $0.hasPrefix("esc to cancel") || $0.hasPrefix("esc to interrupt")
+  var hasWorkingFooter = false
+  var hasIdleFooter = false
+  if boxBottoms.isEmpty {
+    // No identifiable composer: fall back to the bounded tail, where any
+    // contradictory pair still reads unknown.
+    let tail = lines.suffix(10)
+    hasWorkingFooter = tail.contains {
+      $0.hasPrefix("esc to cancel") || $0.hasPrefix("esc to interrupt")
+    }
+    hasIdleFooter = tail.contains { $0.hasPrefix("? for shortcuts") }
+  } else {
+    // Evidence ends at the next box bottom, so a box drawn by stacked output
+    // creates a second pair — and both must agree before either state wins.
+    for (position, bottom) in boxBottoms.enumerated() {
+      let end =
+        position + 1 < boxBottoms.endIndex ? boxBottoms[position + 1] : lines.endIndex
+      guard let signature = lines[(bottom + 1)..<end].first(where: isStatusRow)
+      else { continue }
+      if signature.hasPrefix("? for shortcuts") {
+        hasIdleFooter = true
+      } else {
+        hasWorkingFooter = true
+      }
+    }
   }
-  let hasIdleFooter = tail.contains { $0.hasPrefix("? for shortcuts") }
   switch (hasWorkingFooter, hasIdleFooter) {
   case (true, false): return .working
   case (false, true): return .idle

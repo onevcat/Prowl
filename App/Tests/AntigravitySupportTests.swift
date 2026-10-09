@@ -549,8 +549,9 @@ struct AntigravitySupportTests {
       agent.detectState(
         in: "esc to cancel\n? for shortcuts") == .unknown)
 
-    // An appended `? for shortcuts`-leading row does not win idle on its own:
-    // it lands beside the real `esc` footer — contradictory, so unknown.
+    // An appended `? for shortcuts`-leading row cannot supply idle evidence:
+    // footer evidence is the first signature below the composer box, so rows
+    // under the real `esc` footer never reach it.
     let workingWithSpoofedIdle = """
       ⣻  Generating...
       ────────────────────────────────────
@@ -562,7 +563,37 @@ struct AntigravitySupportTests {
       ctx 12%
       ? for shortcuts custom help
       """
-    #expect(agent.detectState(in: workingWithSpoofedIdle) == .unknown)
+    #expect(agent.detectState(in: workingWithSpoofedIdle) == .working)
+
+    // Stacked output drawing a complete `─`/`>`/`─` box below the footer adds
+    // a second box-and-signature pair — mixed evidence is ambiguous, so the
+    // screen reads unknown rather than the spoofed state.
+    let workingWithBoxedSpoofedIdle = """
+      ⣻  Generating...
+      ────────────────────────────────────
+      >
+      ────────────────────────────────────
+      esc to cancel                                               Gemini 3.1 Pro · high
+      ────────────────
+      > ahead 2
+      ────────────────
+      ? for shortcuts custom help
+      """
+    #expect(agent.detectState(in: workingWithBoxedSpoofedIdle) == .unknown)
+
+    // Wrapped input puts indented content rows inside the composer box
+    // (verified live on 1.3.1): an indented `─` continuation must not forge
+    // a box border, and a signature-leading continuation must not become
+    // footer evidence — chrome checks use the column-0 raw rows.
+    let workingWithWrappedSigInput = """
+      ────────────────────────────────────
+      > a very long line that wraps inside the box
+        ────────────────────────────────────
+        ? for shortcuts docs
+      ────────────────────────────────────
+      esc to cancel                                               Gemini 3.1 Pro · high
+      """
+    #expect(agent.detectState(in: workingWithWrappedSigInput) == .working)
 
     // A `>`-leading custom status row is not composer chrome: the scrollback
     // veto keys on the `─` border, so a live dialog survives stray output.

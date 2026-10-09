@@ -50,12 +50,14 @@ working footer. A boxed composer — `─` border rows around a `>` prompt row �
 between the hint and the last status row marks the whole dialog as
 scrollback, so a quoted or answered dialog behind a composer does not
 re-report Blocked; a lone `>`- or `─`-leading custom row cannot veto a live
-one. Footer evidence is only read below the composer's bottom border, which
-keeps transcript-quoted status rows out; a status-signature-leading custom
-row lands beside the real footer as contradictory evidence. The
-`stack_with_default` setting can append custom status output below the
-built-in row; a screen with neither signature, or with both, is **unknown**,
-not Idle.
+one. Footer evidence is the first status signature after each `─`/`>`/`─`
+box bottom, and every box's evidence must agree — a transcript-quoted
+composer or stacked output drawing its own box produces a second pair, and
+mixed signatures read as **unknown**. Rows below the real footer never reach
+the evidence, so a status-signature-leading custom row cannot supply a
+state. When no box can be identified, the bounded tail alone decides, with
+the same contradictory-pair rule; neither or both signatures means
+**unknown**, not Idle.
 
 A pane that never shows a recognized screen — a `stack_with_default` config
 whose appended rows permanently cover the footer, a headless `agy --print`
