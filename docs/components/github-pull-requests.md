@@ -103,6 +103,7 @@ each query to the shared `gh` account stays small:
 
 A PR opened outside Prowl therefore appears within 5 minutes, or at once when you
 select its worktree.
+
 ## Rate limits
 
 The `gh` account Prowl uses is usually shared with other tools and agents, and
