@@ -633,7 +633,7 @@ struct GithubCLIClientTests {
         message: "Could not resolve to a Repository with the name 'khoi/gone'."
       )
     ) {
-      _ = try await client.batchPullRequests("github.com", "khoi", "gone", ["feature"], nil)
+      _ = try await client.batchPullRequests("github.com", "khoi", "gone", ["feature"], [], nil)
     }
   }
 

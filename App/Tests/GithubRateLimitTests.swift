@@ -334,7 +334,7 @@ struct GithubRateLimitedClientTests {
       _ = try await client.batchPullRequestsAcrossRepositories("github.com", [request], nil)
     }
     await #expect(throws: GithubCLIError.rateLimited(retryAt: retryAt)) {
-      _ = try await client.batchPullRequests("github.com", "octo", "repo", ["feature"], nil)
+      _ = try await client.batchPullRequests("github.com", "octo", "repo", ["feature"], [], nil)
     }
     await #expect(throws: GithubCLIError.rateLimited(retryAt: retryAt)) {
       try await client.mergePullRequest(
