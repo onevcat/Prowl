@@ -43,6 +43,16 @@ final class WorktreeInfoWatcherManager {
     let task: Task<Void, Never>
   }
 
+  // Times are offsets on the manager's clock, so a shorter interval can be measured against the
+  // sleep already under way.
+  private struct PullRequestRefreshTask {
+    let id: UUID
+    let isFocused: Bool
+    let task: Task<Void, Never>
+    var sleepStartedAt: Duration
+    var fireTime: Duration
+  }
+
   private struct PullRequestSelectionCooldownTask {
     let id: UUID
     let task: Task<Void, Never>
@@ -60,6 +70,7 @@ final class WorktreeInfoWatcherManager {
   private struct RefreshTiming: Equatable {
     let focused: Duration
     let unfocused: Duration
+    let unfocusedPerWorktree: Duration
   }
 
   struct LineChangesTiming: Equatable, Sendable {
@@ -97,6 +108,7 @@ final class WorktreeInfoWatcherManager {
   private let worktreeRegistryMonitorFactory: WorktreeRegistryMonitorFactory
   private let remoteConfigMonitorFactory: RemoteConfigMonitorFactory
   private let sleep: @Sendable (Duration) async throws -> Void
+  private let elapsed: @Sendable () -> Duration
   private var worktrees: [Worktree.ID: Worktree] = [:]
   private var headWatchers: [Worktree.ID: HeadWatcher] = [:]
   private var worktreeFileEventMonitors: [Worktree.ID: WorktreeFileEventMonitoring] = [:]
@@ -110,7 +122,7 @@ final class WorktreeInfoWatcherManager {
   private let remoteConfigDebouncer: KeyedDebouncer<URL>
   private let restartDebouncer: KeyedDebouncer<Worktree.ID>
   private let lineChangesRefreshDebouncer: KeyedDebouncer<Worktree.ID>
-  private var pullRequestTasks: [URL: RefreshTask] = [:]
+  private var pullRequestTasks: [URL: PullRequestRefreshTask] = [:]
   private var lineChangeSafetyTasks: [Worktree.ID: RefreshTask] = [:]
   private var deferredLineChangeIDs: Set<Worktree.ID> = []
   private var openedWorktreeIDs: Set<Worktree.ID> = []
@@ -124,6 +136,7 @@ final class WorktreeInfoWatcherManager {
   init<C: Clock<Duration>>(
     focusedInterval: Duration = .seconds(30),
     unfocusedInterval: Duration = .seconds(60),
+    unfocusedIntervalPerWorktree: Duration = .seconds(2),
     defaultLineChangesTiming: LineChangesTiming = .small,
     repositoryWorktreesEventDebounceInterval: Duration = .seconds(2),
     remoteConfigEventDebounceInterval: Duration = .seconds(2),
@@ -144,7 +157,11 @@ final class WorktreeInfoWatcherManager {
     indexEntryCountProvider: @escaping IndexEntryCountProvider = { GitClient.indexEntryCount(at: $0) },
     clock: C = ContinuousClock()
   ) {
-    refreshTiming = RefreshTiming(focused: focusedInterval, unfocused: unfocusedInterval)
+    refreshTiming = RefreshTiming(
+      focused: focusedInterval,
+      unfocused: unfocusedInterval,
+      unfocusedPerWorktree: unfocusedIntervalPerWorktree
+    )
     self.defaultLineChangesTiming = defaultLineChangesTiming
     self.repositoryWorktreesEventDebounceInterval = repositoryWorktreesEventDebounceInterval
     self.remoteConfigEventDebounceInterval = remoteConfigEventDebounceInterval
@@ -161,6 +178,8 @@ final class WorktreeInfoWatcherManager {
     self.sleep = { duration in
       try await clock.sleep(for: duration)
     }
+    let origin = clock.now
+    self.elapsed = { origin.duration(to: clock.now) }
     branchChangedDebouncer = KeyedDebouncer(interval: .milliseconds(200), clock: clock)
     repositoryWorktreesDebouncer = KeyedDebouncer(interval: repositoryWorktreesEventDebounceInterval, clock: clock)
     remoteConfigDebouncer = KeyedDebouncer(interval: remoteConfigEventDebounceInterval, clock: clock)
@@ -207,6 +226,8 @@ final class WorktreeInfoWatcherManager {
     }
     let desiredIDs = Set(worktreesByID.keys)
     let currentIDs = Set(self.worktrees.keys)
+    let previousIDsByRepository = Dictionary(grouping: self.worktrees.values, by: \.repositoryRootURL)
+      .mapValues { Set($0.map(\.id)) }
     let removedIDs = currentIDs.subtracting(desiredIDs)
     for id in removedIDs {
       stopWatcher(for: id)
@@ -237,8 +258,13 @@ final class WorktreeInfoWatcherManager {
     refreshRepositoryTimings(for: normalizedRoots)
     syncWorktreeRegistryMonitors(repositoryRoots: repositoryRoots)
     syncRemoteConfigMonitors(repositoryRoots: repositoryRoots)
+    let currentIDsByRepository = Dictionary(grouping: uniqueWorktrees, by: \.repositoryRootURL)
+      .mapValues { Set($0.map(\.id)) }
     for repositoryRootURL in repositoryRoots {
-      updatePullRequestSchedule(repositoryRootURL: repositoryRootURL, immediate: true)
+      // Only a repository whose worktrees changed needs fresh pull request state now; the others
+      // keep their schedule, so adding one worktree does not re-query every repository.
+      let changed = previousIDsByRepository[repositoryRootURL] != currentIDsByRepository[repositoryRootURL]
+      updatePullRequestSchedule(repositoryRootURL: repositoryRootURL, immediate: changed)
     }
     let obsoleteRepositories = pullRequestTasks.keys.filter { !repositoryRoots.contains($0) }
     for repositoryRootURL in obsoleteRepositories {
@@ -503,34 +529,87 @@ final class WorktreeInfoWatcherManager {
       return
     }
     let isFocused = selectedWorktreeID.map { worktreeIDs.contains($0) } ?? false
-    let interval = isFocused ? refreshTiming.focused : refreshTiming.unfocused
-    if let existing = pullRequestTasks[repositoryRootURL], existing.interval == interval, !immediate {
+    let interval = pullRequestInterval(isFocused: isFocused)
+    if let existing = pullRequestTasks[repositoryRootURL], existing.isFocused == isFocused, !immediate {
+      // A running timer reads the interval again after each refresh, so a longer interval needs no
+      // restart; restarting would push an unchanged repository's refresh back every time a
+      // worktree appears elsewhere. A shorter one brings the refresh forward to when the shorter
+      // interval, counted from the same start, would have fired.
+      let shortenedFireTime = existing.sleepStartedAt + interval
+      guard shortenedFireTime < existing.fireTime else {
+        return
+      }
+      let remaining = shortenedFireTime - elapsed()
+      if remaining > .zero {
+        startPullRequestTimer(repositoryRootURL: repositoryRootURL, isFocused: isFocused, firstDelay: remaining)
+        return
+      }
+      emitPullRequestRefresh(repositoryRootURL: repositoryRootURL)
+      startPullRequestTimer(repositoryRootURL: repositoryRootURL, isFocused: isFocused, firstDelay: interval)
       return
     }
-    pullRequestTasks[repositoryRootURL]?.task.cancel()
     if immediate {
       emitPullRequestRefresh(repositoryRootURL: repositoryRootURL)
     }
-    let initialDelay = interval + pullRequestPhaseOffset(repositoryRootURL, interval)
+    let firstDelay = interval + pullRequestPhaseOffset(repositoryRootURL, interval)
+    startPullRequestTimer(repositoryRootURL: repositoryRootURL, isFocused: isFocused, firstDelay: firstDelay)
+  }
+
+  private func startPullRequestTimer(repositoryRootURL: URL, isFocused: Bool, firstDelay: Duration) {
+    pullRequestTasks[repositoryRootURL]?.task.cancel()
+    let id = UUID()
     let sleep = self.sleep
     let task = Task { [weak self, sleep] in
-      do {
-        try await sleep(initialDelay)
-      } catch {
-        return
-      }
+      var delay = firstDelay
       while !Task.isCancelled {
-        await MainActor.run {
-          self?.emitPullRequestRefresh(repositoryRootURL: repositoryRootURL)
-        }
         do {
-          try await sleep(interval)
+          try await sleep(delay)
         } catch {
           return
         }
+        let nextDelay = await MainActor.run { () -> Duration? in
+          // A timer replaced while its sleep was ending must not refresh as well as its successor.
+          guard let self, !Task.isCancelled, self.pullRequestTasks[repositoryRootURL]?.id == id else {
+            return nil
+          }
+          self.emitPullRequestRefresh(repositoryRootURL: repositoryRootURL)
+          let next = self.pullRequestInterval(isFocused: isFocused)
+          self.recordPullRequestSleep(repositoryRootURL: repositoryRootURL, id: id, delay: next)
+          return next
+        }
+        guard let nextDelay else {
+          return
+        }
+        delay = nextDelay
       }
     }
-    pullRequestTasks[repositoryRootURL] = RefreshTask(interval: interval, task: task)
+    let now = elapsed()
+    pullRequestTasks[repositoryRootURL] = PullRequestRefreshTask(
+      id: id,
+      isFocused: isFocused,
+      task: task,
+      sleepStartedAt: now,
+      fireTime: now + firstDelay
+    )
+  }
+
+  private func recordPullRequestSleep(repositoryRootURL: URL, id: UUID, delay: Duration) {
+    guard pullRequestTasks[repositoryRootURL]?.id == id else {
+      return
+    }
+    let now = elapsed()
+    pullRequestTasks[repositoryRootURL]?.sleepStartedAt = now
+    pullRequestTasks[repositoryRootURL]?.fireTime = now + delay
+  }
+
+  // Every repository's background refresh lands in one batched query per host, so its size, and
+  // the server time GitHub charges the shared account for it, grows with the total worktree count.
+  // Spacing the sweep out by the same count keeps that cost per hour flat.
+  private func pullRequestInterval(isFocused: Bool) -> Duration {
+    if isFocused {
+      return refreshTiming.focused
+    }
+    return max(refreshTiming.unfocused, refreshTiming.unfocusedPerWorktree * worktrees.count)
   }
 
   private func repositoryWorktreeIDs(for repositoryRootURL: URL) -> [Worktree.ID] {

@@ -406,8 +406,10 @@ nonisolated private func batchPullRequestsFetcher(
   }
 }
 
-nonisolated private let crossRepoBatchAliasLimit = 15
-nonisolated private let crossRepoBatchMaxConcurrentRequests = 3
+// Repositories per cross-repository query. One query runs at a time: GitHub's secondary limits
+// count concurrent requests and server time per account, and the account is shared.
+nonisolated let crossRepoBatchAliasLimit = 15
+nonisolated private let crossRepoBatchMaxConcurrentRequests = 1
 
 nonisolated private struct CrossRepoChunkOutcome: Sendable {
   let successByRepo: [RepoKey: [String: GithubPullRequest]]
@@ -1150,8 +1152,8 @@ nonisolated private func deduplicatedBranches(_ branches: [String]) -> [String] 
   return branches.filter { !$0.isEmpty && seen.insert($0).inserted }
 }
 
-nonisolated private let batchPullRequestsChunkSize = 25
-nonisolated private let batchPullRequestsMaxConcurrentRequests = 3
+nonisolated let batchPullRequestsChunkSize = 25
+nonisolated private let batchPullRequestsMaxConcurrentRequests = 1
 
 nonisolated private func makeBranchChunks(
   _ branches: [String],
