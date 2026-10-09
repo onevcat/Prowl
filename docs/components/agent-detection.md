@@ -51,24 +51,32 @@ built-in status row renders directly below that box — `esc to cancel` or
 resolves). The last composer on screen is the live one, and the row under
 its bottom border is the only state evidence: a `stack_with_default` status
 script renders verbatim below that row, so nothing below it counts, however
-it is shaped. A screen without a composer, or a composer caught without its
-status row, is **unknown**, never Idle.
+it is shaped. A typed draft drops the signature from the status row (only
+the model label remains), and the slash-command autocomplete popup that
+opens under the composer when `/` is typed rewrites it to `esc to cancel`
+whatever the turn state; both are **unknown**, so the state from before the
+user started typing is retained. A screen without a composer, a composer
+caught without its status row, or a viewer such as `/help` or `/model` is
+**unknown**, never Idle.
 
 Workspace-trust, tool-permission, and ask-user dialogs are **Blocked**: they
 replace the composer with option rows (a column-0 `> ` marks the selection,
 within eight rows above the hint) and a `↑/↓ Navigate` hint row, and a
 permission dialog keeps `esc to cancel`, so the dialog read runs before the
-status row and nothing below the hint can veto it. Agent responses render
+status row and nothing below the hint can veto it. The autocomplete popup
+shares the hint shape but renders below a live composer box, which a dialog
+never does, so a hint under a composer is the popup. Agent responses render
 indented, so column-0 dialog chrome is the live dialog or the user's own
 echoed text; a verbatim quote at column 0 reads Blocked until it scrolls off
 the screen, a delay rather than a dispatch into a modal prompt. Answered
-dialogs leave no chrome behind. A bare hint row with no selection — cropped
+dialogs leave only the chosen option echoed at column 0 (`> Red`), never the
+hint. A bare hint row with no selection — cropped
 chrome or residue — denies the composer evidence below it and reads
-**unknown**. A dialog whose hint copy the detector does not recognize is
-caught by shape: a column-0 `> ` row followed by an indented option sibling
-(`  2. …`, `  No, exit`) is **Blocked**, while the composer's prompt and the
-echoed prompt both sit directly beneath a `─` rule and are never read as
-options.
+**unknown**. Option shape alone is not dialog evidence: a slash command
+echoes as a column-0 `> ` row with no rule above it and an indented result
+beneath, and an echoed prompt whose rule scrolled off the top of the screen
+looks the same, so a dialog whose hint copy the detector does not recognize
+falls through to the composer read and fails toward unknown, never Idle.
 
 Terminal width is the longest `─`-only column-0 row on screen. The echoed
 prompt's rule is narrower, agent responses render indented, and the dialog

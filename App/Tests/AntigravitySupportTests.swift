@@ -554,14 +554,15 @@ struct AntigravitySupportTests {
     #expect(agent.detectState(in: quotedDialogWithStatusThenIdle) == .blocked)
 
     // Detection anchors on the LAST hint row: a quoted dialog above a live
-    // one still reports the live dialog.
+    // one still reports the live dialog. A live dialog replaces the composer,
+    // so no composer box sits between the quote and the dialog.
     let quotedDialogThenLiveDialog = """
       > Yes, run command
         No, cancel
         ↑/↓ Navigate · enter Confirm
-      ────────────────────────────────────
-      >
-      ────────────────────────────────────
+        I quoted that dialog above as you asked.
+      Command
+      ────────────────────────────────────────────────────────────
       Requesting permission for:
          echo hello
       > 1. Yes, run command
@@ -850,11 +851,145 @@ struct AntigravitySupportTests {
     #expect(agent.detectState(in: optionBeyondWindow) == .unknown)
   }
 
-  @Test func unrecognizedDialogShapesStayBlocked() throws {
+  @Test func echoedPromptsAreNeverOptionRows() throws {
     let agent = try agent()
-    // A dialog whose hint copy is unrecognized still fails closed: a column-0
-    // `> ` option row with an indented option sibling is dialog chrome, so a
-    // stacked box below it cannot produce idle.
+    // Live 1.3.2: a slash command echoes as a column-0 `> ` row with no `─`
+    // rule above it and an indented result beneath — the shape a selected
+    // dialog option has. The live composer below decides, so this is Idle.
+    let slashCommandEcho = """
+      ────────────────────────────────────────────────────────────
+      > hello
+
+        Hello! How can I help you with Prowl today?
+
+      > /model
+        ⎿  Model set to Gemini 3.8 Flash (High)
+
+      ────────────────────────────────────────────────────────────
+      > 你好啊
+
+        你好！今天有什么我可以帮你的吗？
+
+      ────────────────────────────────────────────────────────────────────────────────────────────────────
+      >
+      ────────────────────────────────────────────────────────────────────────────────────────────────────
+      ? for shortcuts                                                                 Gemini 3.8 Flash · high
+      """
+    #expect(agent.detectState(in: slashCommandEcho) == .idle)
+    let slashCommandEchoWhileWorking = slashCommandEcho.replacing(
+      "? for shortcuts   ", with: "esc to cancel     ")
+    #expect(agent.detectState(in: slashCommandEchoWhileWorking) == .working)
+
+    // Scrolled so the first row on screen is an echoed prompt whose rule
+    // scrolled off: the echo plus its indented response is not a dialog.
+    let echoAtTopOfScreen = """
+      > 你好啊
+
+        你好！今天有什么我可以帮你的吗？
+
+      ────────────────────────────────────────────────────────────────────────────────────────────────────
+      >
+      ────────────────────────────────────────────────────────────────────────────────────────────────────
+      ? for shortcuts                                                                 Gemini 3.8 Flash · high
+      """
+    #expect(agent.detectState(in: echoAtTopOfScreen) == .idle)
+  }
+
+  @Test func slashCommandPopupKeepsThePriorState() throws {
+    let agent = try agent()
+    // Live 1.3.2: typing `/` opens an autocomplete popup below the composer
+    // box with a selected option row and a `↑/↓ Navigate` hint, and the status
+    // row reads `esc to cancel` even while idle. The box above the hint marks
+    // it as the popup, not a dialog, and the state is unknown either way.
+    let popupWhileIdle = """
+        Prowl is a macOS orchestrator for running multiple coding agents.
+      ────────────────────────────────────────────────────────────
+      > /
+      ────────────────────────────────────────────────────────────
+      > /add-dir                 Add a directory to the workspace
+        /agents                  List available custom agents
+        /artifact                View and review artifacts
+         ↓ 48 more
+        ↑/↓ Navigate · enter Select · tab Complete
+      esc to cancel                               Gemini 3.8 Flash · high
+      """
+    #expect(agent.detectState(in: popupWhileIdle) == .unknown)
+    let popupWhileWorking = """
+      ────────────────────────────────────────────────────────────
+      > Count from 1 to 60, one number per line, nothing else.
+      ⡿  Working...
+      ────────────────────────────────────────────────────────────
+      > /
+      ────────────────────────────────────────────────────────────
+      > /add-dir                 Add a directory to the workspace
+        /agents                  List available custom agents
+        ↑/↓ Navigate · enter Select · tab Complete
+      esc to cancel                               Gemini 3.8 Flash · high
+      """
+    #expect(agent.detectState(in: popupWhileWorking) == .unknown)
+    // The popup can outlive the message it filtered (`No matches` residue
+    // under an empty composer, an echoed `> ` prompt within reach above it).
+    let popupResidue = """
+      ────────────────────────────────────────────────────────────
+      > //clear
+      ▸ Thought for 4s, 315 tokens
+        Ready for your next task. How can I help you?
+      ────────────────────────────────────────────────────────────
+      >
+      ────────────────────────────────────────────────────────────
+         No matches
+        ↑/↓ Navigate · enter Select · tab Complete
+      esc to cancel                               Gemini 3.8 Flash · high
+      """
+    #expect(agent.detectState(in: popupResidue) == .unknown)
+    // Dismissing the popup restores the plain composer and its status row.
+    let popupDismissed = """
+      ────────────────────────────────────────────────────────────
+      > //clear
+      ▸ Thought for 4s, 315 tokens
+        Ready for your next task. How can I help you?
+      ────────────────────────────────────────────────────────────
+      >
+      ────────────────────────────────────────────────────────────
+      ? for shortcuts                             Gemini 3.8 Flash · high
+      """
+    #expect(agent.detectState(in: popupDismissed) == .idle)
+  }
+
+  @Test func typedDraftHidesTheStatusSignature() throws {
+    let agent = try agent()
+    // Live 1.3.2: any draft in the composer, one row or wrapped, drops
+    // `? for shortcuts` from the status row; only the model label remains.
+    let shortDraft = """
+      ────────────────────────────────────────────────────────────
+      > short draft
+      ────────────────────────────────────────────────────────────
+                                                  Gemini 3.8 Flash · high
+      """
+    #expect(agent.detectState(in: shortDraft) == .unknown)
+    let wrappedDraft = """
+      ────────────────────────────────────────────────────────────
+      > This is a long draft that should wrap inside the composer box because
+        it keeps going so that it wraps onto continuation rows before I press
+        enter. Reply with one word: ok
+      ────────────────────────────────────────────────────────────
+                                                  Gemini 3.8 Flash · high
+      """
+    #expect(agent.detectState(in: wrappedDraft) == .unknown)
+    let draftCleared = """
+      ────────────────────────────────────────────────────────────
+      >
+      ────────────────────────────────────────────────────────────
+      ? for shortcuts                             Gemini 3.8 Flash · high
+      """
+    #expect(agent.detectState(in: draftCleared) == .idle)
+  }
+
+  @Test func unrecognizedDialogShapesFailTowardUnknown() throws {
+    let agent = try agent()
+    // A dialog whose hint copy is unrecognized is not read by option shape:
+    // echoed prompts share that shape. It fails toward unknown, never Idle,
+    // because the stacked box below cannot produce a padded status signature.
     let optionListWithUnrecognizedHint = """
       Requesting permission for:
          rm -rf build
@@ -868,19 +1003,19 @@ struct AntigravitySupportTests {
       ────────────────
       ? for shortcuts custom help
       """
-    #expect(agent.detectState(in: optionListWithUnrecognizedHint) == .blocked)
+    #expect(agent.detectState(in: optionListWithUnrecognizedHint) == .unknown)
 
-    // The composer's `> ` row and the echoed prompt both sit directly beneath
-    // a `─` rule, so typed or echoed input — even a numbered-looking line with
-    // a wrapped continuation — is not an option list.
+    // Live 1.3.2: a typed draft — even a numbered-looking line with a wrapped
+    // continuation — leaves only the model label on the status row, so the
+    // screen is unknown and the prior state is retained, never Blocked.
     let composerWithNumberedDraft = """
       ────────────────────────────────────
       > 1. first draft line
         2. wrapped continuation
       ────────────────────────────────────
-      ? for shortcuts                                             Gemini 3.1 Pro · high
+                                                                  Gemini 3.1 Pro · high
       """
-    #expect(agent.detectState(in: composerWithNumberedDraft) == .idle)
+    #expect(agent.detectState(in: composerWithNumberedDraft) == .unknown)
     let echoedMultilinePrompt = """
       ────────────────────────────────────────────────────────────
       > Before doing anything else, use your ask-user question tool to ask me which color I prefer,
