@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-10-09T13:54:04Z",
+  "cli_version": "0.0.1791547250",
+  "capture_source": "prowl-read-detection",
+  "terminal": {
+    "columns": 276,
+    "rows": 79
+  },
+  "redactions": [
+    "none required: the composer border carries no path while the credits dialog is open",
+    "probe prompts are scripted and kept verbatim",
+    "captured on an account without credits; the dialog is the real service response"
+  ],
+  "issue": null
+}

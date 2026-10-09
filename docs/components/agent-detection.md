@@ -156,12 +156,17 @@ at a `~/.grok/` install (so Cursor's own `agent` entrypoint stays Cursor).
    and initial sign-in menus as **Blocked** from
    their complete selected-choice and footer structures. Ordinary prompt text and completed
    responses are not confirmation boundaries.
-   Amp recognizes `Thinking`, `Streaming`, and `Running Tools` in the bottom border of
-   its current composer as **Working**, and `Waiting for Approval` as **Blocked**.
-   A complete current composer takes precedence over retained activity or approval text
-   in the conversation; an idle composer does not become active because of quoted examples.
-   Older Amp approval panels and `esc to cancel` working hints remain supported when
-   the current composer is absent.
+   Amp (verified 0.0.1791547250) reads only its bottom composer box. Any status in the
+   box's bottom border — `Connecting`, `Sending`, `Waiting`, `Thinking`, `Streaming`
+   (with or without a token counter), `Running Tools`, and whatever else the thread
+   client reports behind its `∼`/`≈`/`≋` spinner — is **Working**; a bare border is
+   **Idle**. `Disconnected` and `Amp Is Redeploying` keep the previous state. A dialog
+   box directly above the composer (`Approval Required` with `‣`-marked options,
+   `Tell Amp what to do differently`) is **Blocked** even though the border still says
+   `Running Tools`, and so is a `‣` option row inside the composer (`Out of Credits`).
+   Quoted status or approval text elsewhere on screen is ignored, and a screen without
+   a complete composer keeps the previous state. Older Amp builds cannot start threads
+   any more, so their `esc to cancel` and approval-text cues are no longer recognized.
    Pi also treats its bottom `── <braille spinner> Working ──` footer and the adjacent
    `async subagent … · background` header with a matching braille job row as **Working**.
    The compact `subagents (N/M running)`, progressive
