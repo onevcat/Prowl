@@ -94,9 +94,23 @@ at a `~/.grok/` install (so Cursor's own `agent` entrypoint stays Cursor).
    The compact `subagents (N/M running)`, progressive
    `Async agents · N agent(s) running`, and multi-job `Async agents · background`
    layouts carry the same signal; completed, paused, and failed cards use static
-   glyphs and remain idle. Other agent families keep their own patterns (including
-   Oh My Pi's `Working… ⟦esc⟧` loader and bottom-of-screen `󱊷 Working…`
-   (also `⎋`/`esc`) prefix form, braille frames, symbol cycles, Cursor's
+   glyphs and remain idle.
+   Oh My Pi's loader row is **Working** evidence when it leads with the theme's Esc
+   glyph (`󱊷`, `⎋`, or `esc`) followed by any label: the label is the model's own
+   intent (`Working…`, `Running requested command`, `等待命令完成`, …) and is not
+   enumerated. The row counts in the bottom five non-blank rows and in the five rows
+   directly above the live `box` composer, so a long queued draft does not hide it.
+   While a turn runs, Oh My Pi's status line swaps its brand glyph for a braille spinner
+   and turn timer (`⠋ 9s`); the `box` composer embeds that status in its `╭──` header,
+   which is **Working** evidence when the header belongs to the live composer — the last
+   `╭` row followed only by `│` input rows and a final `╰` row, which covers one-line,
+   multiline, and IME-safe layouts. An older spinner frame above transcript text or above
+   a newer idle composer is ignored. The `band` (fresh-install default), `claude`, and the
+   other composer shapes start a status row with that spinner, which the leading-spinner
+   rule reads; an idle composer shows the static brand glyph instead.
+   Other agent families keep their own patterns (including
+   Oh My Pi's `Working… ⟦esc⟧` loader and the Esc-prefixed loader row above,
+   braille frames, symbol cycles, Cursor's
    hexagons, Kimi's moon phases, etc.). Copilot recognizes the bottom
    `Working … esc interrupt` footer across its `∙ ∘ ○ ◎ ◉` animation frames,
    including an optional streaming-size field such as `· 101 B` or `· 1.2 KB`. Its live boxed numbered choices with

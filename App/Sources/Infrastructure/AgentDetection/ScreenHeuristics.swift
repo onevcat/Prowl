@@ -271,16 +271,59 @@ nonisolated private func hasOMPAskPrompt(_ content: String) -> Bool {
 nonisolated private func hasOMPWorkingLine(_ content: String) -> Bool {
   let lines = content.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
     .filter { !$0.isEmpty }
-  return lines.contains { line in
-    isPiWorkingText(line) || hasOMPInterruptHint(line) || hasLabeledBrailleSpinner(line)
-  } || lines.suffix(5).contains(where: hasOMPLeadingEscapeHint)
+  if lines.contains(where: { isPiWorkingText($0) || hasOMPInterruptHint($0) || hasLabeledBrailleSpinner($0) }) {
+    return true
+  }
+  let composerHeaderIndex = ompLiveBoxComposerHeaderIndex(lines)
+  if let composerHeaderIndex, ompBoxComposerHeaderHasSpinner(lines[composerHeaderIndex]) {
+    return true
+  }
+  return ompLoaderCandidateRows(lines, composerHeaderIndex: composerHeaderIndex).contains(where: isOMPLoaderRow)
 }
 
-nonisolated private func hasOMPLeadingEscapeHint(_ line: String) -> Bool {
-  // OMP 18.1.10 puts its theme's Esc symbol before the loader message.
+/// OMP's loader row leads with the theme's Esc glyph (the interrupt key) and shows the
+/// model's self-reported intent: `Working…` before the first token, then free text such as
+/// `Running requested command` or `等待命令完成` while a tool runs. The vocabulary is
+/// unbounded, so any label counts; the row is only read near the composer.
+nonisolated private func isOMPLoaderRow(_ line: String) -> Bool {
   let parts = line.split(maxSplits: 1, whereSeparator: \.isWhitespace)
-  guard parts.count == 2, ["󱊷", "⎋", "esc"].contains(String(parts[0])) else { return false }
-  return piWorkingMessages.contains(String(parts[1]))
+  guard parts.count == 2, ompEscapeGlyphs.contains(String(parts[0])) else { return false }
+  return parts[1].contains(where: \.isLetter)
+}
+
+nonisolated private let ompEscapeGlyphs: Set<String> = ["󱊷", "⎋", "esc"]
+
+/// The rows that can hold the live loader: the bottom of the screen, plus the rows directly
+/// above the live `box` composer, whose queued draft can grow to 18 rows and push the loader
+/// out of a bottom-anchored window.
+nonisolated private func ompLoaderCandidateRows(_ lines: [String], composerHeaderIndex: Int?) -> [String] {
+  var rows = Array(lines.suffix(5))
+  if let composerHeaderIndex {
+    rows += lines[..<composerHeaderIndex].suffix(5)
+  }
+  return rows
+}
+
+/// The live `box` composer is the last `╭` row that closes the screen: every row after it is
+/// a `│` input row and the final row is the `╰` bottom row. That shape covers a one-line
+/// prompt (`╭ … ╮` over `╰─ … ─╯`), a multiline draft, and the IME-safe layout that moves the
+/// bottom border to its own row. Transcript text after a `╰` row marks a tool box or a quoted
+/// frame instead, so an older frame never speaks for a newer composer.
+nonisolated private func ompLiveBoxComposerHeaderIndex(_ lines: [String]) -> Int? {
+  guard let headerIndex = lines.lastIndex(where: { $0.hasPrefix("╭") }),
+    let bottom = lines.last, bottom.hasPrefix("╰"), headerIndex < lines.count - 1
+  else { return nil }
+  let inputRows = lines[(headerIndex + 1)...].dropLast()
+  return inputRows.allSatisfy { $0.hasPrefix("│") } ? headerIndex : nil
+}
+
+/// While a turn runs, OMP's status line replaces its brand glyph with a braille spinner and
+/// a turn timer (`⠋ 9s`). The `box` composer embeds that status line in its top border,
+/// right after the `╭──` run; the other composer shapes start a status row with it, which the
+/// leading-spinner rule already reads.
+nonisolated private func ompBoxComposerHeaderHasSpinner(_ header: String) -> Bool {
+  let status = header.drop(while: { $0 == "╭" || $0 == "─" || $0 == " " })
+  return labeledBrailleSpinnerContent(String(status)) != nil
 }
 
 nonisolated private let piWorkingMessages: Set<String> = ["Working...", "Working…", "Interrupting…"]
