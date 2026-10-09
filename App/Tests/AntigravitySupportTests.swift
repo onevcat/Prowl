@@ -850,6 +850,50 @@ struct AntigravitySupportTests {
     #expect(agent.detectState(in: optionBeyondWindow) == .unknown)
   }
 
+  @Test func unrecognizedDialogShapesStayBlocked() throws {
+    let agent = try agent()
+    // A dialog whose hint copy is unrecognized still fails closed: a column-0
+    // `> ` option row with an indented option sibling is dialog chrome, so a
+    // stacked box below it cannot produce idle.
+    let optionListWithUnrecognizedHint = """
+      Requesting permission for:
+         rm -rf build
+      Run this command?
+      > 1. Yes, run command
+        2. No, cancel
+        select with arrows and press enter
+      esc to cancel
+      ────────────────
+      > ahead 2
+      ────────────────
+      ? for shortcuts custom help
+      """
+    #expect(agent.detectState(in: optionListWithUnrecognizedHint) == .blocked)
+
+    // The composer's `> ` row and the echoed prompt both sit directly beneath
+    // a `─` rule, so typed or echoed input — even a numbered-looking line with
+    // a wrapped continuation — is not an option list.
+    let composerWithNumberedDraft = """
+      ────────────────────────────────────
+      > 1. first draft line
+        2. wrapped continuation
+      ────────────────────────────────────
+      ? for shortcuts                                             Gemini 3.1 Pro · high
+      """
+    #expect(agent.detectState(in: composerWithNumberedDraft) == .idle)
+    let echoedMultilinePrompt = """
+      ────────────────────────────────────────────────────────────
+      > Before doing anything else, use your ask-user question tool to ask me which color I prefer,
+        offering exactly two options: red and blue. Wait for my answer.
+      ▸ Thought for 3s, 203 tokens
+      ────────────────────────────────────────────────────────────────────────────────────────────────────
+      >
+      ────────────────────────────────────────────────────────────────────────────────────────────────────
+      esc to cancel                                                                Gemini 3.8 Flash · high
+      """
+    #expect(agent.detectState(in: echoedMultilinePrompt) == .working)
+  }
+
   @Test func sessionOwnershipUsesOnlyOpenLockPaths() throws {
     let profile = AgentSessionProfile.profile(for: try agent())
     let root = "/Users/test/.gemini/antigravity-cli"

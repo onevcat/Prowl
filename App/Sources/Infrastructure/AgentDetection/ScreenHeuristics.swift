@@ -869,6 +869,17 @@ nonisolated private func detectAntigravity(_ content: String) -> AgentRawState {
     let selected = rows.indices[..<hint].suffix(8).contains { isColumnZero($0) && lines[$0].hasPrefix("> ") }
     return selected ? .blocked : .unknown
   }
+  // Dialogs can carry hint copy this detector does not recognize. A column-0
+  // `> ` row followed by an indented sibling is a selected option (`  2. …`,
+  // `  No, exit`); the composer's prompt and the echoed prompt both sit
+  // directly beneath a `─` rule, so only option rows outside a box count.
+  let isOption = { (index: Int) -> Bool in
+    isColumnZero(index) && lines[index].hasPrefix("> ") && !(index > 0 && isRule(index - 1))
+      && index + 1 < rows.endIndex && !isColumnZero(index + 1)
+  }
+  if rows.indices.contains(where: isOption) {
+    return .blocked
+  }
 
   // The last composer is the live one; a redraw caught without its status row,
   // or a screen without a composer at all, is unknown rather than idle.

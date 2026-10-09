@@ -198,9 +198,12 @@ live app actually draws instead of patched again:
   rows below are stack output. Full width is the longest `─`-only column-0
   row on screen.
 - **Dialog chrome is terminal** (adopted from the contributor's follow-up
-  `84fce7e0`, merged into this branch): a hint with a column-0 `> `
-  selection within eight rows is Blocked unconditionally, and a bare hint is
-  unknown. The composer-based veto this branch first carried had a hole on
+  `84fce7e0`, amended as `ac45bafa`; both merged into this branch): a hint
+  with a column-0 `> ` selection within eight rows is Blocked
+  unconditionally, a bare hint is unknown, and a column-0 `> ` row with an
+  indented option sibling outside a box is Blocked even when the hint copy
+  is unrecognized (the composer's prompt and the echoed prompt sit beneath
+  a `─` rule and are excluded). The composer-based veto this branch first carried had a hole on
   the trust prompt, which draws no `─` of its own, so a stacked box there
   became the widest rule on screen and a padded spoof signature under it
   could have read idle. Agent responses render indented, so the cost — a

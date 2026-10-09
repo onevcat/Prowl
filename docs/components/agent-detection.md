@@ -64,7 +64,11 @@ echoed text; a verbatim quote at column 0 reads Blocked until it scrolls off
 the screen, a delay rather than a dispatch into a modal prompt. Answered
 dialogs leave no chrome behind. A bare hint row with no selection — cropped
 chrome or residue — denies the composer evidence below it and reads
-**unknown**.
+**unknown**. A dialog whose hint copy the detector does not recognize is
+caught by shape: a column-0 `> ` row followed by an indented option sibling
+(`  2. …`, `  No, exit`) is **Blocked**, while the composer's prompt and the
+echoed prompt both sit directly beneath a `─` rule and are never read as
+options.
 
 Terminal width is the longest `─`-only column-0 row on screen. The echoed
 prompt's rule is narrower, agent responses render indented, and the dialog
