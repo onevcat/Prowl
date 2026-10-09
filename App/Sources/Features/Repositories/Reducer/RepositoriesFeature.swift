@@ -232,6 +232,7 @@ struct RepositoriesFeature {
     case setMergedWorktreeAction(MergedWorktreeAction?)
     case pullRequestAction(Worktree.ID, PullRequestAction)
     case pullRequestRefreshBatchOutcome(PullRequestRefreshCoordinator.Outcome)
+    case rateLimitRetryTimeChanged(Date?)
   }
 
   @CasePathable
@@ -360,6 +361,9 @@ struct RepositoriesFeature {
     /// Marks a sent refresh carries until GitHub answers for their branches. Whatever is left when
     /// the refresh completes, because it failed or never reached GitHub, is marked again.
     var sentPullRequestRefreshMarks: [Repository.ID: Set<Worktree.ID>] = [:]
+    /// While GitHub is refusing the account for its rate limit, the time Prowl sends its next
+    /// request; nil while requests flow.
+    var githubRateLimitedUntil: Date?
     var pendingPullRequestRefreshByRepositoryID: [Repository.ID: PendingPullRequestRefresh] = [:]
     var inFlightPullRequestRefreshRepositoryIDs: Set<Repository.ID> = []
     var prRefreshBatchCountsByRepositoryID: [Repository.ID: Int] = [:]

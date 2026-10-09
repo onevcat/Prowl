@@ -762,6 +762,10 @@ extension RepositoriesFeature {
 
     case .pullRequestRefreshBatchOutcome(let outcome):
       return reduceBatchOutcome(state: &state, outcome: outcome)
+
+    case .rateLimitRetryTimeChanged(let retryAt):
+      state.githubRateLimitedUntil = retryAt
+      return .none
     }
   }
 

@@ -183,6 +183,108 @@ struct PullRequestRefreshCoordinatorTests {
     #expect(failed == ["alpha"])
   }
 
+  @Test func rateLimitedBatchSkipsFallback() async throws {
+    let clock = TestClock()
+    let probe = CoordinatorProbe()
+    let outcomes = OutcomeCollector()
+    let retryAt = Date(timeIntervalSince1970: 1_000_060)
+    let coordinator = makeCoordinator(
+      probe: probe,
+      clock: clock,
+      outcomes: outcomes,
+      batched: { _, _ in
+        throw GithubCLIError.rateLimited(retryAt: retryAt)
+      },
+      legacy: { _, _, _, _ in
+        Issue.record("A rate-limited batch must not fall back to per-repository queries")
+        return [:]
+      }
+    )
+
+    coordinator.enqueue(request(repo: "alpha"))
+    coordinator.enqueue(request(repo: "beta"))
+    await advanceCoordinatorClock(clock, by: .milliseconds(250))
+    await waitUntil { await outcomes.failedRepositories().count == 2 }
+
+    #expect(await probe.legacyCalls().isEmpty)
+    #expect(Set(await outcomes.failedRepositories()) == ["alpha", "beta"])
+  }
+
+  @Test func rateLimitedRepositoryInPartialResultSkipsFallback() async throws {
+    let clock = TestClock()
+    let probe = CoordinatorProbe()
+    let outcomes = OutcomeCollector()
+    let coordinator = makeCoordinator(
+      probe: probe,
+      clock: clock,
+      outcomes: outcomes,
+      batched: { _, requests in
+        var success: [RepoKey: [String: GithubPullRequest]] = [:]
+        var failed: [RepoKey: GithubCLIError] = [:]
+        for request in requests {
+          let key = RepoKey(owner: request.owner, repo: request.repo)
+          switch request.repo {
+          case "beta":
+            failed[key] = .rateLimited(retryAt: Date(timeIntervalSince1970: 1_000_060))
+          case "gamma":
+            failed[key] = .commandFailed("not found")
+          default:
+            success[key] = [:]
+          }
+        }
+        return CrossRepoPullRequestResult(successByRepo: success, failedRepos: failed)
+      },
+      legacy: { _, _, _, _ in [:] }
+    )
+
+    coordinator.enqueue(request(repo: "alpha"))
+    coordinator.enqueue(request(repo: "beta"))
+    coordinator.enqueue(request(repo: "gamma"))
+    await advanceCoordinatorClock(clock, by: .milliseconds(250))
+    await waitUntil { await outcomes.snapshot().count == 3 }
+
+    #expect(await probe.legacyCalls().map(\.repo) == ["gamma"])
+  }
+
+  @Test func permanentGraphQLErrorInPartialResultSkipsFallback() async throws {
+    let clock = TestClock()
+    let probe = CoordinatorProbe()
+    let outcomes = OutcomeCollector()
+    let coordinator = makeCoordinator(
+      probe: probe,
+      clock: clock,
+      outcomes: outcomes,
+      batched: { _, requests in
+        var success: [RepoKey: [String: GithubPullRequest]] = [:]
+        var failed: [RepoKey: GithubCLIError] = [:]
+        for request in requests {
+          let key = RepoKey(owner: request.owner, repo: request.repo)
+          switch request.repo {
+          case "beta":
+            // GitHub answered: the repository does not exist for this account.
+            failed[key] = .graphQLError(type: "NOT_FOUND", message: "Could not resolve to a Repository")
+          case "gamma":
+            // No type: GitHub may have timed out on this alias, so a smaller query is worth a try.
+            failed[key] = .graphQLError(type: nil, message: "Something went wrong while executing your query")
+          default:
+            success[key] = [:]
+          }
+        }
+        return CrossRepoPullRequestResult(successByRepo: success, failedRepos: failed)
+      },
+      legacy: { _, _, _, _ in [:] }
+    )
+
+    coordinator.enqueue(request(repo: "alpha"))
+    coordinator.enqueue(request(repo: "beta"))
+    coordinator.enqueue(request(repo: "gamma"))
+    await advanceCoordinatorClock(clock, by: .milliseconds(250))
+    await waitUntil { await outcomes.snapshot().count == 3 }
+
+    #expect(await probe.legacyCalls().map(\.repo) == ["gamma"])
+    #expect(Set(await outcomes.failedRepositories()) == ["beta"])
+  }
+
   @Test func inflightHostBuffersNewEnqueueAndFlushesAfterCompletion() async throws {
     let clock = TestClock()
     let probe = CoordinatorProbe()
