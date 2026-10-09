@@ -387,6 +387,46 @@ struct BatchedPullRequestRefreshReducerTests {
     await store.finish()
   }
 
+  @Test func rateLimitRetryTimeFollowsTheGate() async {
+    let context = makeContext()
+    let retryAt = Date(timeIntervalSince1970: 1_000_060)
+    let store = TestStore(initialState: context.state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.githubIntegration(.rateLimitRetryTimeChanged(retryAt))) {
+      $0.githubRateLimitedUntil = retryAt
+    }
+    await store.send(.githubIntegration(.rateLimitRetryTimeChanged(nil))) {
+      $0.githubRateLimitedUntil = nil
+    }
+  }
+
+  @Test func taskForwardsTheGateRetryTimes() async {
+    let context = makeContext()
+    let retryAt = Date(timeIntervalSince1970: 1_000_060)
+    let store = TestStore(initialState: context.state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.githubCLI.rateLimitRetryTimes = {
+        AsyncStream { continuation in
+          continuation.yield(retryAt)
+          continuation.yield(nil)
+          continuation.finish()
+        }
+      }
+    }
+
+    store.exhaustivity = .off
+    await store.send(.task)
+    await store.receive(\.githubIntegration.rateLimitRetryTimeChanged) {
+      $0.githubRateLimitedUntil = retryAt
+    }
+    await store.receive(\.githubIntegration.rateLimitRetryTimeChanged) {
+      $0.githubRateLimitedUntil = nil
+    }
+  }
+
   @Test func coordinatorOutcomeConfirmedNoPrClearsStalePullRequest() async {
     let context = makeContext()
     let stalePullRequest = makePullRequestFixture(url: "https://github.com/khoi/alpha/pull/7")

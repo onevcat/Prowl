@@ -238,6 +238,7 @@ struct WorktreeDetailView: View {
       agentsCapsule: agentsCapsuleState(for: input.actionTargetWorktree),
       agentsLauncherItems: agentsLauncherItems(for: input.actionTargetWorktree),
       statusToast: input.repositories.statusToast,
+      githubRateLimitedUntil: input.repositories.githubRateLimitedUntil,
       workflowStatus: WorkflowStatusCenterPresentation(
         state: input.workflowRuns,
         selectedWorktreeID: input.actionTargetWorktree?.id,
@@ -301,6 +302,7 @@ struct WorktreeDetailView: View {
     ToolbarItem(placement: .principal) {
       ToolbarStatusView(
         toast: state.statusToast,
+        githubRateLimitedUntil: state.githubRateLimitedUntil,
         workflow: state.workflowStatus,
         pullRequest: state.pullRequest,
         codeHost: state.codeHost,
@@ -941,6 +943,7 @@ struct WorktreeDetailView: View {
     let agentsCapsule: AgentsCapsuleState?
     let agentsLauncherItems: [AgentsLauncherItem]
     let statusToast: RepositoriesFeature.StatusToast?
+    let githubRateLimitedUntil: Date?
     let workflowStatus: WorkflowStatusCenterPresentation
     let pullRequest: GithubPullRequest?
     let codeHost: CodeHost
@@ -1081,6 +1084,7 @@ struct WorktreeDetailView: View {
       ToolbarItem(placement: .principal) {
         ToolbarStatusView(
           toast: toolbarState.shared.statusToast,
+          githubRateLimitedUntil: toolbarState.shared.githubRateLimitedUntil,
           workflow: toolbarState.shared.workflowStatus,
           pullRequest: toolbarState.shared.pullRequest,
           codeHost: toolbarState.shared.codeHost,
