@@ -19,6 +19,7 @@ nonisolated enum AgentProfileRuntime: String, Codable, CaseIterable, Identifiabl
   case qoder = "qodercli"
   case qwen
   case grok
+  case antigravity
   // swiftlint:disable:next identifier_name
   case pi
   case omp
@@ -41,6 +42,7 @@ nonisolated enum AgentProfileRuntime: String, Codable, CaseIterable, Identifiabl
     case .qoder: .qoder
     case .qwen: .qwen
     case .grok: .grok
+    case .antigravity: .antigravity
     case .pi: .pi
     case .omp: .omp
     }
@@ -73,6 +75,7 @@ nonisolated enum AgentProfileRuntime: String, Codable, CaseIterable, Identifiabl
     case .qoder: ".qoder"
     case .qwen: ".qwen"
     case .grok: ".grok"
+    case .antigravity: ".gemini/antigravity-cli"
     case .pi: ".pi/agent"
     case .omp: ".omp/agent"
     }
@@ -97,6 +100,7 @@ extension DetectedAgent {
     case .qoder: .qoder
     case .qwen: .qwen
     case .grok: .grok
+    case .antigravity: .antigravity
     case .pi: .pi
     case .omp: .omp
     }

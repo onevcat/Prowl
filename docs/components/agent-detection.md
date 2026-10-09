@@ -33,12 +33,71 @@ before other hooks can prevent stopping. A workflow finishes only after its expl
 `prowl workflow deliver` receipt. `agents read` has no semantic Devin result reader;
 use `prowl read` for terminal output and workflow delivery for complete artifacts.
 
+### Antigravity CLI
+
+Antigravity (`agy`, verified 1.3.2) keeps an attached conversation's
+`~/.gemini/antigravity-cli/presence/<id>.lock` descriptor open for the life of
+the session, so that open file — not a lock file left behind after exit —
+identifies the session exactly. Its `conversations/<id>.db` and
+`brain/<id>/.system_generated/logs/transcript.jsonl` share the same id.
+
+The detector reads the full active screen and anchors on the live composer:
+a terminal-wide `─` border, a column-0 `>` prompt row (wrapped input
+continues on indented rows), and a terminal-wide `─` bottom border. The
+built-in status row renders directly below that box — `esc to cancel` or
+`esc to interrupt` is **Working** while a turn runs, `? for shortcuts` is
+**Idle** — padded away from the right-aligned model label (`Gemini 3.8 Flash
+· high`, `Claude Sonnet 4.6 (Thinking)`, or nothing until the label
+resolves). The last composer on screen is the live one, and the row under
+its bottom border is the only state evidence: a `stack_with_default` status
+script renders verbatim below that row, so nothing below it counts, however
+it is shaped. A screen without a composer, or a composer caught without its
+status row, is **unknown**, never Idle.
+
+Workspace-trust, tool-permission, and ask-user dialogs are **Blocked**: they
+replace the composer with option rows (a column-0 `> ` marks the selection,
+within eight rows above the hint) and a `↑/↓ Navigate` hint row, and a
+permission dialog keeps `esc to cancel`, so the dialog read runs before the
+status row and nothing below the hint can veto it. Agent responses render
+indented, so column-0 dialog chrome is the live dialog or the user's own
+echoed text; a verbatim quote at column 0 reads Blocked until it scrolls off
+the screen, a delay rather than a dispatch into a modal prompt. Answered
+dialogs leave no chrome behind. A bare hint row with no selection — cropped
+chrome or residue — denies the composer evidence below it and reads
+**unknown**. A dialog whose hint copy the detector does not recognize is
+caught by shape: a column-0 `> ` row followed by an indented option sibling
+(`  2. …`, `  No, exit`) is **Blocked**, while the composer's prompt and the
+echoed prompt both sit directly beneath a `─` rule and are never read as
+options.
+
+Terminal width is the longest `─`-only column-0 row on screen. The echoed
+prompt's rule is narrower, agent responses render indented, and the dialog
+rule is not followed by a prompt row, so none of them can pose as the
+composer. The accepted residual is a user's own status script that draws a
+terminal-wide `─`/`>`/`─` box followed by a padded status signature under
+an idle or working composer; that output is the user's configuration, and
+the plain spoofs reviewed so far (`? for shortcuts custom help`, narrower
+boxes, dividers) fail toward unknown, while a live dialog stays Blocked
+whatever is stacked beneath it.
+
+A pane that never shows a recognized screen — a headless `agy --print` run,
+a viewer overlay such as `/diff`, or a future layout change — reports
+unknown the whole time. Its process is still classified, but an unknown
+pane emits no roster entry: it is absent from Active Agents and
+`prowl agents`, `agents wait --until idle|blocked` times out on it, and
+`agents wait --until exit` treats it as gone. The state machine retains the
+last recognized state, so a working turn that only briefly drops its footer
+stays Working.
+
+Antigravity currently uses screen state and cooperative delivery, without a
+managed hook channel or transcript reader.
+
 ## Agents it recognizes
 
 Claude (Claude Code), Codex, Gemini, Cursor, Cline, OpenCode, GitHub Copilot,
 Kimi, Droid, Amp, Pi (`pi`), Oh My Pi (`omp`, `oh-my-pi`), Qoder CLI (`qodercli`),
-Qwen Code (`qwen`), Grok Build (`grok`), and Devin (`devin`).
-Detection covers
+Qwen Code (`qwen`), Grok Build (`grok`), Devin (`devin`), and Antigravity
+(`agy`). Detection covers
 common wrappers (node, python, bun, bash, etc.) so agents launched indirectly are
 still found. Pi and Oh My Pi are independent detected agents. Pi recognizes its
 own minimal working/idle cues, including its built-in braille-prefixed `Working...`

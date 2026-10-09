@@ -74,6 +74,7 @@ extension DetectedAgent {
     case .qoder: .qoder
     case .qwen: .qwen
     case .grok: .grok
+    case .antigravity: .antigravity
     }
   }
 }

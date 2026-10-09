@@ -38,6 +38,12 @@ nonisolated public struct SkillInstallTarget: Equatable, Sendable, Identifiable 
       userDirectory: ".config/devin/skills",
       projectDirectory: ".devin/skills"
     ),
+    SkillInstallTarget(
+      id: "antigravity",
+      displayName: "Antigravity",
+      userDirectory: ".gemini/antigravity-cli/skills",
+      projectDirectory: ".agents/skills"
+    ),
   ]
 
   public static func target(id: String) -> SkillInstallTarget? {

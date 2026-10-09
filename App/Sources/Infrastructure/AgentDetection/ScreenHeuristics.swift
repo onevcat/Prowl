@@ -17,6 +17,11 @@ extension DetectedAgent {
   /// the live signal off when a long todo list plus a multi-line status line
   /// pushed the spinner row past the limit and a working agent read as idle.
   ///
+  /// Antigravity reads the full screen for the same reason: its detector anchors
+  /// on the live composer box by shape and ignores everything below the status
+  /// row, so a tail budget only let a long `stack_with_default` status script
+  /// push the composer out of the slice and turn a working pane unknown.
+  ///
   /// Every other detector keeps a bounded tail as its guard against transcript
   /// history. Pi retains 32 non-blank lines so pi-subagents' adaptive widget can
   /// keep its header and live job row together; the remaining detectors keep 24.
@@ -26,7 +31,7 @@ extension DetectedAgent {
   /// until its regions are bounded by shape the same way.
   nonisolated func detectionScreenText(from screen: String) -> String {
     switch self {
-    case .claude:
+    case .claude, .antigravity:
       screen
     case .pi:
       agentDetectionRecentLines(screen, limit: piAgentDetectionRecentLineLimit)
@@ -71,6 +76,7 @@ extension DetectedAgent {
     case .qoder: detectQoder(text)
     case .qwen: detectQwen(text)
     case .grok: detectGrok(text)
+    case .antigravity: detectAntigravity(text)
     case .claude, .codex, .devin: .unknown
     }
   }
@@ -824,4 +830,102 @@ nonisolated private func hasBrailleSpinner(_ content: String) -> Bool {
     return (0x2800...0x28FF).contains(Int(first.value))
       && trimmed.contains(where: \.isLetter)
   }
+}
+
+// Antigravity CLI (`agy`, verified live on 1.3.2): the live region is the
+// composer — a full-width `─` border, a column-0 `>` prompt row (wrapped input
+// continues on indented rows), and a full-width `─` bottom border — and the
+// built-in status row renders directly below it: `esc to cancel` /
+// `esc to interrupt` while a turn runs, `? for shortcuts` when idle, padded away
+// from a right-aligned model label (`Gemini 3.8 Flash · high`,
+// `Claude Sonnet 4.6 (Thinking)`, or nothing until the label resolves). The
+// `stack_with_default` setting renders a user's status script verbatim below
+// that row, so nothing below the status row is evidence. Permission, ask-user,
+// and workspace-trust dialogs replace the composer with option rows (`> ` marks
+// the selection) above a `↑/↓ Navigate …` hint; a permission dialog keeps
+// `esc to cancel`, so the dialog read runs first and is never vetoed by what
+// renders below the hint. Full width is the longest
+// `─`-only column-0 row on screen: the echoed prompt's rule is narrower, agent
+// responses render indented, and a stacked script would have to draw a
+// terminal-wide `─`/`>`/`─` box of its own to forge a composer (documented
+// residual; it fails toward `.unknown`). A screen with neither a live dialog
+// nor a composer followed by a status row is `.unknown`, never affirmative
+// idle — screen heuristics are this runtime's only evidence channel.
+nonisolated private func detectAntigravity(_ content: String) -> AgentRawState {
+  // Trimmed `text` carries the signatures; `raw` keeps the column so typed or
+  // wrapped input (always indented inside the box) cannot pose as chrome.
+  let rows = content.split(separator: "\n", omittingEmptySubsequences: false)
+    .map { (raw: String($0), text: $0.trimmingCharacters(in: .whitespaces)) }
+    .filter { !$0.text.isEmpty }
+  let lines = rows.map(\.text)
+  let isColumnZero = { (index: Int) -> Bool in !rows[index].raw.hasPrefix(" ") }
+  let isRule = { (index: Int) -> Bool in isColumnZero(index) && lines[index].allSatisfy { $0 == "─" } }
+  let fullWidth = rows.indices.filter(isRule).map { lines[$0].count }.max() ?? 0
+  let isBorder = { (index: Int) -> Bool in isRule(index) && lines[index].count == fullWidth }
+  let isPrompt = { (index: Int) -> Bool in
+    isColumnZero(index) && (lines[index] == ">" || lines[index].hasPrefix("> "))
+  }
+
+  // Composer boxes in screen order. A bottom border may double as the next
+  // box's top border, so the scan resumes on it.
+  var composers: [(top: Int, bottom: Int)] = []
+  var index = rows.startIndex
+  while index < rows.endIndex {
+    guard isBorder(index), index + 1 < rows.endIndex, isPrompt(index + 1) else {
+      index += 1
+      continue
+    }
+    var bottom = index + 2
+    while bottom < rows.endIndex, !isColumnZero(bottom) {
+      bottom += 1
+    }
+    guard bottom < rows.endIndex, isBorder(bottom) else {
+      index += 1
+      continue
+    }
+    composers.append((top: index, bottom: bottom))
+    index = bottom
+  }
+
+  // The status row is the signature alone or the signature padded (two or more
+  // spaces) away from the model label. A custom row that continues the
+  // signature with a single space (`? for shortcuts custom help`) is not one.
+  let statusState = { (index: Int) -> AgentRawState? in
+    guard index < lines.endIndex, isColumnZero(index) else { return nil }
+    let signatures: [(String, AgentRawState)] = [
+      ("esc to cancel", .working), ("esc to interrupt", .working), ("? for shortcuts", .idle),
+    ]
+    return signatures.first { lines[index] == $0.0 || lines[index].hasPrefix($0.0 + "  ") }?.1
+  }
+
+  // Dialog chrome is terminal. A `↑/↓ Navigate` hint with a column-0 `> `
+  // selection within eight rows above it (long permission menus) is Blocked,
+  // whatever follows: agent responses render indented, so column-0 chrome is
+  // either the live dialog or the user's own echoed text, and a quoted dialog
+  // that reads Blocked until it scrolls off costs a delay where a vetoed live
+  // dialog would cost a dispatch into a modal prompt. A bare hint — selection
+  // cropped, or residue — denies the composer evidence below it instead.
+  let isHint = { (line: String) -> Bool in
+    line.hasPrefix("↑/↓ Navigate") || line.hasPrefix("↑↓ Navigate")
+  }
+  if let hint = lines.lastIndex(where: isHint) {
+    let selected = rows.indices[..<hint].suffix(8).contains { isColumnZero($0) && lines[$0].hasPrefix("> ") }
+    return selected ? .blocked : .unknown
+  }
+  // Dialogs can carry hint copy this detector does not recognize. A column-0
+  // `> ` row followed by an indented sibling is a selected option (`  2. …`,
+  // `  No, exit`); the composer's prompt and the echoed prompt both sit
+  // directly beneath a `─` rule, so only option rows outside a box count.
+  let isOption = { (index: Int) -> Bool in
+    isColumnZero(index) && lines[index].hasPrefix("> ") && !(index > 0 && isRule(index - 1))
+      && index + 1 < rows.endIndex && !isColumnZero(index + 1)
+  }
+  if rows.indices.contains(where: isOption) {
+    return .blocked
+  }
+
+  // The last composer is the live one; a redraw caught without its status row,
+  // or a screen without a composer at all, is unknown rather than idle.
+  guard let composer = composers.last else { return .unknown }
+  return statusState(composer.bottom + 1) ?? .unknown
 }

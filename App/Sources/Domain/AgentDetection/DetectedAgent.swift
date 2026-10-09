@@ -18,6 +18,7 @@ enum DetectedAgent: String, CaseIterable, Equatable, Identifiable, Sendable {
   case qoder = "qodercli"
   case qwen
   case grok
+  case antigravity
 
   var id: String { rawValue }
 

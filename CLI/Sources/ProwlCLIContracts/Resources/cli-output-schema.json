@@ -2689,7 +2689,8 @@
                 "claude",
                 "codex",
                 "agents",
-                "devin"
+                "devin",
+                "antigravity"
               ]
             },
             "detected": {
@@ -2722,7 +2723,8 @@
                 "claude",
                 "codex",
                 "agents",
-                "devin"
+                "devin",
+                "antigravity"
               ]
             },
             "detected": {
@@ -2757,7 +2759,8 @@
                 "claude",
                 "codex",
                 "agents",
-                "devin"
+                "devin",
+                "antigravity"
               ]
             },
             "detected": {
@@ -2856,7 +2859,8 @@
             "claude",
             "codex",
             "agents",
-            "devin"
+            "devin",
+            "antigravity"
           ]
         },
         "path": {

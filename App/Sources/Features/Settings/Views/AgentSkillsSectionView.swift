@@ -59,7 +59,7 @@ struct AgentSkillsSectionView: View {
           """
           No agent skill folder was found in your home directory. Run Claude Code, Codex, or another \
           agent once so it creates its folder, or create one from a terminal with \
-          prowl skills install --target claude|codex|agents.
+          prowl skills install --target claude|codex|agents|devin|antigravity.
           """
         )
         .foregroundStyle(.secondary)

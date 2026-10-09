@@ -176,8 +176,9 @@ profile, and start-sheet picker.
 When a restriction is required, `agents` lists runtime tokens — the agent column of
 `prowl profiles list`: `claude`, `codex`,
 `gemini`, `pi`, `omp`, `opencode`, `droid`, `cursor-agent`, `copilot`, `kimi`, `amp`,
-`qodercli`, `qwen`, `grok`, `cline`, `devin`. An unknown token, or a list no installed agent
-satisfies, is a validation warning. `kind` may be omitted (`interactive` is the only kind).
+`qodercli`, `qwen`, `grok`, `cline`, `devin`, `antigravity`. An unknown token, or a list
+no installed agent satisfies, is a validation warning. `kind` may be omitted
+(`interactive` is the only kind).
 
 
 ## `expect` — waiting for a delivery

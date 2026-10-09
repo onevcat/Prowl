@@ -71,6 +71,21 @@ struct AgentDispatchCommandHandlerTests {
     #expect(AgentConditionEvidence.idleVerdict(for: staleSignal) == .settling("unknown"))
   }
 
+  @Test func unrecognizedLegacyScreenIsNotIdleEvidence() {
+    // Antigravity's legacy detector returns `.unknown` for layouts its footer
+    // signatures don't match; a retained `.idle` must not count as dispatch
+    // evidence while the current screen is unclassifiable.
+    let agent = agentEntry(surfaceID: UUID(), status: .idle)
+    let snapshot = AgentConditionSnapshot(
+      agent: agent, signal: nil, revision: 1, isLive: true, signals: .empty,
+      screenDetection: .init(state: .unknown, reason: .legacyDetector))
+    #expect(AgentConditionEvidence.normalizedState(snapshot) == "unknown")
+    guard case .busy = AgentConditionEvidence.idleVerdict(for: snapshot) else {
+      Issue.record("An unrecognized legacy screen must not permit dispatch")
+      return
+    }
+  }
+
   @Test func unmatchedScreenDoesNotEraseBlockedOrAbsentState() {
     let blocked = AgentConditionSnapshot(
       agent: agentEntry(surfaceID: UUID(), status: .blocked), signal: nil,
