@@ -11,6 +11,7 @@
 | 2026-10-10 | Prowl adapted to the tip C API: config-based key binding lookup, Kitty-protocol clipboard callbacks, length-decoded clipboard writes, upstream foreground pid; xcframework sync with `--delete`; installer accepts `ghostty-internal.a` | `ff365b8e` |
 | 2026-10-10 | Launch crash on tip fixed: libghostty keeps the argv pointer; Prowl passed a Swift array buffer that was freed after `ghostty_init` | `78994f1a` |
 | 2026-10-10 | `make check`, `make build-app` (0 warnings), `make test` 3695 pass / 0 fail; live scenarios in an isolated Debug instance (below) | logs in the session scratchpad |
+| 2026-10-10 | Second live pass with the screen unlocked: rendering, glyphs, mouse selection, Japanese IME, AX; prebuilt GhosttyKit published for the pinned commit; artifact scripts fixed for the `App/` layout | release `xcframework-6ae1993379cf06f4e6ee9784b60c0e1e75b01ae1-prowl-v1` |
 
 ## Outcome & current state (as of 2026-10-10)
 
@@ -44,8 +45,9 @@
 
 ### Live verification (isolated Debug instance, `CFFIXED_USER_HOME`, dedicated socket)
 
-The screen was locked for the whole run, so every scenario that needs rendering or AX is
-inconclusive; everything else was driven through the bundle's `prowl` CLI.
+The first pass ran with the screen locked, which marks every surface occluded, so the
+rendering, AX, mouse and IME rows were added in a second pass after the screen was unlocked
+(the same instance, 02:10–02:20). Everything else was driven through the bundle's `prowl` CLI.
 
 | Scenario | Outcome | Evidence |
 | --- | --- | --- |
@@ -62,9 +64,13 @@ inconclusive; everything else was driven through the bundle's `prowl` CLI.
 | 60 000-line scrollback (compressed pages), `read --last` | PASS | tail correct; RSS 479 MB after the fill |
 | Agent detection with `claude` (foreground process group through upstream `ghostty_surface_foreground_pid`) | PASS | `agents --json`: `claude` blocked on the trust prompt, then `done`; `pane.agent = "claude"` |
 | Idle CPU after the scenarios | PASS | `top`: 0.0 % |
-| Terminal rendering (first frame, hidden-tab GPU release, display-link parking, fonts) | INCONCLUSIVE | locked screen marks every surface occluded; tip shows only the cursor box, the v1.3.1 control shows one initial frame, both then stop drawing |
-| Accessibility snapshot of the terminal (`ghostty_surface_read_snapshot`) | SKIPPED | AX degrades under the lock screen; the export is covered by the fork Zig tests and `MirrorTerminalIntegrationTests` |
-| Mouse selection, IME composition | SKIPPED | need an unlocked screen and a switched input source |
+| Terminal rendering after unlock: surfaces that had been occluded all night, tab switch both ways, new tab first frame within 0.4 s, split | PASS | screenshots `v1-unlocked-current`, `va-*`, `vb-newtab-0.4s`: full scrollback and prompt drawn, no blank or stale pane |
+| Glyphs: Japanese, Chinese (simplified and traditional), Korean, emoji with flag and ZWJ family, bold/italic/underline, 16-color and truecolor, box drawing, nerd icons, math | PASS | screenshot `vc-glyphs-crop` |
+| Mouse drag selection + ⌘C (SelectionGesture rewrite) | PASS | `pbpaste` returned `SELECT-ME-TOKEN-ABC` after a CGEvent drag over the row |
+| Japanese IME (Kotoeri romaji): preedit, conversion, commit | PASS | preedit `日本語` underlined in the pane; committed text read back through `cat -v` |
+| Hidden tab streaming 150 MB while another tab is visible | PASS | app CPU 0.5–1.5 % while hidden (43 % only in the first second of the stream), 0.3–0.5 % idle |
+| Accessibility value of the terminal | PASS | AX walk found an `AXTextArea` whose value holds `AX-TOKEN-7731` plus the prompt |
+| Prebuilt artifact path (`make ensure-ghostty` from a clean artifact state, then `make build-app`) | PASS | downloaded and validated in 8 s from release `xcframework-6ae19933…-prowl-v1` on `onevcat/ghostty`; app built with 0 warnings |
 
 A first attempt at the OSC 52 read scenario looked like a frozen pane. A symbolized build and
 `lldb` showed the io-reader idle in the new two-stage read pipeline waiting for pty data: the
@@ -74,15 +80,16 @@ ends with `ESC \`, not BEL. Sending ctrl-g released it. No Ghostty defect.
 ## Deviations from plan
 
 - The plan expected to try Xcode 27 first and fall back to 26.3; no fallback was needed.
-- The plan listed IME, selection and rendering checks; the locked screen made them impossible.
-  They stay on the list for the tagged port.
+- The plan listed IME, selection and rendering checks; they had to wait for an unlocked
+  screen and ran in a second pass.
+- `scripts/package-ghosttykit-artifacts.sh` still used the pre-074 `Frameworks/` and
+  `Resources/` roots and could not run; it and the installer now derive the directories
+  from the `App/` paths.
 - An argv lifetime bug in Prowl, not in the plan, turned out to be the only launch blocker. It
   is latent on `v1.3.1` too and can ship ahead of the port.
 
 ## Open questions
 
-- Rendering on tip has not been seen with an unlocked screen. Launch the branch's Debug build
-  and look at a tab, a split, and a tab switch before the real port.
 - Upstream PR #14444 (surface teardown deadlock, issue #14245) was still open; the heavy-output
   close scenario did not trigger the deadlock, but it is timing dependent.
 - `AppFeatureCommandPaletteTests/copyPathWritesWorktreePathToPasteboard()` writes the user's
