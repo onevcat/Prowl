@@ -58,7 +58,7 @@ extension WorktreeTerminalState {
 
   typealias RetainedSessionResolver =
     @MainActor (
-      IdentifiedAgentProcess?, PaneAgentState, URL?, String, URL?
+      IdentifiedAgentProcess?, PaneAgentState, URL?, String, (surfaceID: UUID, configRoot: URL?)
     ) async -> (session: AgentSession?, missStreak: Int)
 
   func detectAgentState(
@@ -118,7 +118,7 @@ extension WorktreeTerminalState {
     let workingDirectory = activeAgentWorkingDirectory(surfaceID: surfaceID)
     let (session, sessionMissStreak) = await (resolveSession ?? Self.resolveRetainedSession)(
       identified, previous, workingDirectory, activeText,
-      launchProfilesBySurface[surfaceID]?.configRoot(forDetected: agent)
+      (surfaceID, launchProfilesBySurface[surfaceID]?.configRoot(forDetected: agent))
     )
     // Re-check after the suspension: the pane may have been closed and its
     // agent state cleaned up while the resolver was doing file inspection;
@@ -300,7 +300,7 @@ extension WorktreeTerminalState {
     previous: PaneAgentState,
     workingDirectory: URL?,
     activeText: String,
-    configRoot: URL?
+    context: (surfaceID: UUID, configRoot: URL?)
   ) async -> (session: AgentSession?, missStreak: Int) {
     var resolution = AgentSessionResolution(session: nil, isFresh: false)
     if let identified {
@@ -308,12 +308,12 @@ extension WorktreeTerminalState {
         identified: identified,
         workingDirectory: workingDirectory,
         activeText: activeText,
-        configRoot: configRoot
+        configRoot: context.configRoot,
+        surfaceID: context.surfaceID
       )
     }
     return PaneAgentState.retainedSession(
-      resolved: resolution.session,
-      isFresh: resolution.isFresh,
+      resolution: resolution,
       previous: previous,
       identifiedPID: identified?.process.pid
     )

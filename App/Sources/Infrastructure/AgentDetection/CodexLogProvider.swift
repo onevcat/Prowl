@@ -207,11 +207,17 @@ actor CodexLogProvider {
 
   private static func daemonBinding(surfaceID: UUID) -> DaemonBinding {
     { process, configRoot in
-      let home = configRoot ?? codexHome(forTUI: process.pid)
-      guard let daemonPID = managedDaemonPID(codexHome: home) else { return nil }
-      return await CodexDaemonThreadMapper.shared.binding(
-        surfaceID: surfaceID, daemonPID: daemonPID, tuiStartedAt: process.startedAt)
+      await lookupDaemonBinding(surfaceID: surfaceID, process: process, configRoot: configRoot).binding
     }
+  }
+
+  nonisolated static func lookupDaemonBinding(
+    surfaceID: UUID, process: AgentProcessGeneration, configRoot: URL?
+  ) async -> CodexDaemonBindingLookup {
+    let home = configRoot ?? codexHome(forTUI: process.pid)
+    guard let daemonPID = managedDaemonPID(codexHome: home) else { return .unavailable }
+    return await CodexDaemonThreadMapper.shared.bindingLookup(
+      surfaceID: surfaceID, daemonPID: daemonPID, tuiStartedAt: process.startedAt)
   }
 
   /// The TUI's own `CODEX_HOME` selects its daemon socket, so it also selects the daemon.

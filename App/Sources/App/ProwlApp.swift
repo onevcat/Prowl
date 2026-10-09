@@ -625,7 +625,8 @@ struct ProwlApp: App {
       workingDirectory: state.activeAgentWorkingDirectory(surfaceID: resolved.paneID),
       activeText: activeText,
       configRoot: state.launchProfilesBySurface[resolved.paneID]?.configRoot(
-        forDetected: detectedAgent)
+        forDetected: detectedAgent),
+      surfaceID: resolved.paneID
     )
     let transcriptSession = freshResolution.session.flatMap { session -> AgentSession? in
       guard session.confidence == .exact || session.confidence == .high,
