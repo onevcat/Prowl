@@ -15,8 +15,7 @@ nonisolated struct PullRequestMergeReadiness: Equatable, Hashable {
     let mergeable = pullRequest.mergeable?.uppercased()
     let mergeStateStatus = pullRequest.mergeStateStatus?.uppercased()
     let reviewDecision = pullRequest.reviewDecision?.uppercased()
-    let checks = pullRequest.statusCheckRollup?.checks ?? []
-    let breakdown = PullRequestCheckBreakdown(checks: checks)
+    let breakdown = pullRequest.checkBreakdown
 
     if mergeable == "CONFLICTING" || mergeStateStatus == "DIRTY" {
       self.blockingReason = .mergeConflicts

@@ -35,6 +35,31 @@ struct PullRequestRefreshCadenceTests {
         secondsSinceAnswer: 1,
         isDue: true
       ),
+      // A background refresh reports the checks as per-state counts, without the list.
+      Case(
+        pullRequest: pullRequest(
+          state: "OPEN",
+          counts: PullRequestCheckBreakdown(passed: 2, failed: 0, inProgress: 1, expected: 0, skipped: 0)
+        ),
+        secondsSinceAnswer: 1,
+        isDue: true
+      ),
+      Case(
+        pullRequest: pullRequest(
+          state: "OPEN",
+          counts: PullRequestCheckBreakdown(passed: 0, failed: 0, inProgress: 0, expected: 1, skipped: 0)
+        ),
+        secondsSinceAnswer: 1,
+        isDue: true
+      ),
+      Case(
+        pullRequest: pullRequest(
+          state: "OPEN",
+          counts: PullRequestCheckBreakdown(passed: 3, failed: 1, inProgress: 0, expected: 0, skipped: 1)
+        ),
+        secondsSinceAnswer: 179,
+        isDue: false
+      ),
       Case(pullRequest: pullRequest(state: "OPEN", mergeable: "UNKNOWN"), secondsSinceAnswer: 1, isDue: true),
       Case(pullRequest: pullRequest(state: "OPEN", mergeStateStatus: "UNKNOWN"), secondsSinceAnswer: 1, isDue: true),
       Case(pullRequest: pullRequest(state: "OPEN", queued: true), secondsSinceAnswer: 1, isDue: true),
@@ -108,6 +133,7 @@ nonisolated private func checkpoint(for pullRequest: GithubPullRequest?) -> Pull
 nonisolated private func pullRequest(
   state: String,
   checks: [GithubPullRequestStatusCheck] = [],
+  counts: PullRequestCheckBreakdown? = nil,
   mergeable: String? = "MERGEABLE",
   mergeStateStatus: String? = "CLEAN",
   queued: Bool = false
@@ -128,7 +154,8 @@ nonisolated private func pullRequest(
     baseRefName: "main",
     commitsCount: 1,
     authorLogin: "khoi",
-    statusCheckRollup: checks.isEmpty ? nil : GithubPullRequestStatusCheckRollup(checks: checks),
+    statusCheckRollup: checks.isEmpty && counts == nil
+      ? nil : GithubPullRequestStatusCheckRollup(checks: checks, counts: counts),
     mergeQueueEntry: queued ? GithubMergeQueueEntry(position: 1, estimatedTimeToMerge: nil, state: "QUEUED") : nil
   )
 }

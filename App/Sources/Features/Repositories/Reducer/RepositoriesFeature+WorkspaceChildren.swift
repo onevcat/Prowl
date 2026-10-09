@@ -94,6 +94,7 @@ extension RepositoriesFeature {
       remote.owner,
       remote.repo,
       [branch],
+      [],
       nil
     )
     return pullRequestsByBranch?[branch]

@@ -11,6 +11,8 @@ final class PullRequestRefreshCoordinator {
     let accountOverride: GithubAccountOverride?
     let branches: [String]
     let worktreeIDs: [Worktree.ID]
+    /// Branches whose pull request also lists each check, such as the selected worktree's.
+    let detailBranches: [String]
 
     var owner: String {
       repositories.first?.owner ?? ""
@@ -28,7 +30,8 @@ final class PullRequestRefreshCoordinator {
       repo: String,
       accountOverride: GithubAccountOverride?,
       branches: [String],
-      worktreeIDs: [Worktree.ID]
+      worktreeIDs: [Worktree.ID],
+      detailBranches: [String] = []
     ) {
       self.init(
         repositoryID: repositoryID,
@@ -37,7 +40,8 @@ final class PullRequestRefreshCoordinator {
         repositories: [GithubRemoteInfo(host: host, owner: owner, repo: repo)],
         accountOverride: accountOverride,
         branches: branches,
-        worktreeIDs: worktreeIDs
+        worktreeIDs: worktreeIDs,
+        detailBranches: detailBranches
       )
     }
 
@@ -48,7 +52,8 @@ final class PullRequestRefreshCoordinator {
       repositories: [GithubRemoteInfo],
       accountOverride: GithubAccountOverride?,
       branches: [String],
-      worktreeIDs: [Worktree.ID]
+      worktreeIDs: [Worktree.ID],
+      detailBranches: [String] = []
     ) {
       self.repositoryID = repositoryID
       self.repositoryRootURL = repositoryRootURL
@@ -57,6 +62,7 @@ final class PullRequestRefreshCoordinator {
       self.accountOverride = accountOverride
       self.branches = branches
       self.worktreeIDs = worktreeIDs
+      self.detailBranches = detailBranches
     }
 
     private static func deduplicateRepositories(_ repositories: [GithubRemoteInfo]) -> [GithubRemoteInfo] {
@@ -129,7 +135,8 @@ final class PullRequestRefreshCoordinator {
       repositories: request.repositories.filter { $0.host == request.host },
       accountOverride: request.accountOverride,
       branches: cleanedBranches,
-      worktreeIDs: request.worktreeIDs
+      worktreeIDs: request.worktreeIDs,
+      detailBranches: request.detailBranches
     )
     guard !normalized.repositories.isEmpty else {
       return
@@ -181,6 +188,10 @@ final class PullRequestRefreshCoordinator {
       for repository in request.repositories where seenRepositories.insert(repository.key).inserted {
         combinedRepositories.append(repository)
       }
+      var combinedDetailBranches = existing.detailBranches
+      for branch in request.detailBranches where !combinedDetailBranches.contains(branch) {
+        combinedDetailBranches.append(branch)
+      }
       hostBucket[request.repositoryID] = Request(
         repositoryID: request.repositoryID,
         repositoryRootURL: request.repositoryRootURL,
@@ -188,7 +199,8 @@ final class PullRequestRefreshCoordinator {
         repositories: combinedRepositories,
         accountOverride: request.accountOverride,
         branches: combined,
-        worktreeIDs: workCombined
+        worktreeIDs: workCombined,
+        detailBranches: combinedDetailBranches
       )
     } else {
       hostBucket[request.repositoryID] = request
@@ -224,7 +236,8 @@ final class PullRequestRefreshCoordinator {
         owner: group.key.owner,
         repo: group.key.repo,
         branches: group.branches,
-        allowedHeadRepositories: group.allowedHeadRepositories
+        allowedHeadRepositories: group.allowedHeadRepositories,
+        detailBranches: group.detailBranches
       )
     }
     do {
@@ -289,6 +302,7 @@ final class PullRequestRefreshCoordinator {
               repoGroup.key.owner,
               repoGroup.key.repo,
               repoGroup.branches,
+              repoGroup.detailBranches,
               key.accountOverride
             )
             return .success(repoGroup.key, prs)
@@ -418,6 +432,7 @@ final class PullRequestRefreshCoordinator {
       for repository in request.repositories {
         groupsByKey[repository.key, default: RepoRequestGroup(key: repository.key)].append(
           branches: request.branches,
+          detailBranches: request.detailBranches,
           allowedHeadRepositories: allowedHeadRepositories
         )
       }
@@ -429,6 +444,7 @@ final class PullRequestRefreshCoordinator {
     let key: RepoKey
     private(set) var branches: [String] = []
     private(set) var allowedHeadRepositories: Set<RepoKey> = []
+    private(set) var detailBranches: Set<String> = []
     private var seenBranches: Set<String> = []
 
     init(key: RepoKey) {
@@ -437,11 +453,13 @@ final class PullRequestRefreshCoordinator {
 
     mutating func append(
       branches newBranches: [String],
+      detailBranches newDetailBranches: [String],
       allowedHeadRepositories newAllowedHeadRepositories: Set<RepoKey>
     ) {
       for branch in newBranches where seenBranches.insert(branch).inserted {
         branches.append(branch)
       }
+      detailBranches.formUnion(newDetailBranches)
       allowedHeadRepositories.formUnion(newAllowedHeadRepositories)
     }
   }

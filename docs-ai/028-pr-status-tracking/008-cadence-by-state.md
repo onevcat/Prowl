@@ -59,9 +59,10 @@ The HEAD watcher sees branch switches, not pushes or new commits, so a pull requ
 opened outside Prowl appears within the no-pull-request interval, or immediately when
 its worktree is selected.
 
-`isActive` reads checks from `statusCheckRollup.checks`. Combined with the check-count
-change (amendment 007, a separate change), it reads `GithubPullRequest.checkBreakdown`
-instead, since background refreshes then carry counts without a list.
+`isActive` reads the checks through `GithubPullRequest.checkBreakdown`, not from
+`statusCheckRollup.checks`: since the check-count change (amendment 007), a background
+refresh carries only the per-state counts, and a pull request whose checks are still
+running must stay on the every-refresh cadence while its list is absent.
 
 ## Refs
 

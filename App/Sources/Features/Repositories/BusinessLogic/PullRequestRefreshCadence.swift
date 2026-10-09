@@ -60,9 +60,10 @@ nonisolated enum PullRequestRefreshCadence {
     }
   }
 
-  // Checks still running, GitHub still computing mergeability, or a place in the merge queue.
+  // Checks still running, GitHub still computing mergeability, or a place in the merge queue. A background
+  // refresh carries only the per-state check counts, so the breakdown is read, never the check list.
   private static func isActive(_ pullRequest: GithubPullRequest) -> Bool {
-    let checks = PullRequestCheckBreakdown(checks: pullRequest.statusCheckRollup?.checks ?? [])
+    let checks = pullRequest.checkBreakdown
     if checks.inProgress + checks.expected > 0 {
       return true
     }

@@ -21,7 +21,7 @@ struct BatchedPullRequestRefreshReducerTests {
         Issue.record("gh resolveRemoteInfo should not run when git remotes resolve")
         return nil
       }
-      $0.githubCLI.batchPullRequests = { _, _, _, _, _ in
+      $0.githubCLI.batchPullRequests = { _, _, _, _, _, _ in
         Issue.record("Legacy batchPullRequests should not run on coordinator path")
         return [:]
       }
@@ -60,6 +60,37 @@ struct BatchedPullRequestRefreshReducerTests {
     #expect(request.host == "github.com")
     #expect(request.repositories == [context.remoteInfo, upstreamInfo])
     #expect(request.branches == ["main", "feature"])
+  }
+
+  @Test func refreshListsChecksOnlyForTheSelectedWorktree() async {
+    let context = makeContext()
+    var initialState = context.state
+    initialState.selection = .worktree(context.featureWorktree.id)
+    let enqueued = LockIsolated<[PullRequestRefreshCoordinator.Request]>([])
+
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.githubRemoteInfos = { _ in [context.remoteInfo] }
+      $0.pullRequestRefreshCoordinator = PullRequestRefreshCoordinatorClient(
+        enqueue: { request in enqueued.withValue { $0.append(request) } },
+        cancelHost: { _ in },
+        reset: {}
+      )
+    }
+    store.exhaustivity = .off
+
+    await store.send(
+      .worktreeInfoEvent(
+        .repositoryPullRequestRefresh(
+          repositoryRootURL: context.repoRootURL,
+          worktreeIDs: context.worktreeIDs
+        )
+      )
+    )
+    await store.finish()
+
+    #expect(enqueued.value.map(\.detailBranches) == [[context.featureWorktree.name]])
   }
 
   @Test func periodicRefreshAsksOnlyForDueWorktrees() async {

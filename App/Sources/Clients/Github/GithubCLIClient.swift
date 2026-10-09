@@ -196,7 +196,8 @@ struct GithubCLIClient: Sendable {
   var resolveRemoteInfo: @Sendable (URL) async -> GithubRemoteInfo?
   var latestRun: @Sendable (URL, String, GithubAccountOverride?) async throws -> GithubWorkflowRun?
   var batchPullRequests:
-    @Sendable (String, String, String, [String], GithubAccountOverride?) async throws -> [String: GithubPullRequest]
+    @Sendable (String, String, String, [String], Set<String>, GithubAccountOverride?) async throws -> [String:
+      GithubPullRequest]
   var batchPullRequestsAcrossRepositories:
     @Sendable (String, [CrossRepoPullRequestRequest], GithubAccountOverride?) async throws -> CrossRepoPullRequestResult
   var mergePullRequest:
@@ -245,7 +246,7 @@ extension GithubCLIClient: DependencyKey {
     defaultBranch: { _ in "main" },
     resolveRemoteInfo: { _ in nil },
     latestRun: { _, _, _ in nil },
-    batchPullRequests: { _, _, _, _, _ in [:] },
+    batchPullRequests: { _, _, _, _, _, _ in [:] },
     batchPullRequestsAcrossRepositories: { _, _, _ in CrossRepoPullRequestResult() },
     mergePullRequest: { _, _, _, _, _ in },
     closePullRequest: { _, _, _, _ in },
@@ -369,8 +370,11 @@ nonisolated private func batchPullRequestsFetcher(
   shell: ShellClient,
   resolver: GithubCLIExecutableResolver,
   gate: GithubRateLimitGate
-) -> @Sendable (String, String, String, [String], GithubAccountOverride?) async throws -> [String: GithubPullRequest] {
-  { host, owner, repo, branches, accountOverride in
+)
+  -> @Sendable (String, String, String, [String], Set<String>, GithubAccountOverride?) async throws -> [String:
+  GithubPullRequest]
+{
+  { host, owner, repo, branches, detailBranches, accountOverride in
     try await withExpectedGithubAccount(
       shell: shell,
       resolver: resolver,
@@ -382,7 +386,7 @@ nonisolated private func batchPullRequestsFetcher(
       guard !dedupedBranches.isEmpty else {
         return [:]
       }
-      let request = GithubPullRequestsRequest(host: host, owner: owner, repo: repo)
+      let request = GithubPullRequestsRequest(host: host, owner: owner, repo: repo, detailBranches: detailBranches)
       let chunks = makeBranchChunks(
         dedupedBranches,
         chunkSize: batchPullRequestsChunkSize
@@ -464,7 +468,8 @@ nonisolated private func sanitizeCrossRepoRequests(
         owner: request.owner,
         repo: request.repo,
         branches: branches,
-        allowedHeadRepositories: request.allowedHeadRepositories
+        allowedHeadRepositories: request.allowedHeadRepositories,
+        detailBranches: Set(request.detailBranches.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) })
       )
     )
   }
@@ -643,54 +648,7 @@ nonisolated private func makeCrossRepoBatchQuery(
       let selection = """
           \(branchAlias): pullRequests(\(pullRequestsArgs)) {
             nodes {
-              number
-              title
-              state
-              additions
-              deletions
-              isDraft
-              reviewDecision
-              mergeable
-              mergeStateStatus
-              url
-              updatedAt
-              headRefName
-              baseRefName
-              commits {
-                totalCount
-              }
-              author {
-                login
-              }
-              headRepository {
-                name
-                owner { login }
-              }
-              mergeQueueEntry {
-                position
-                estimatedTimeToMerge
-                state
-              }
-              statusCheckRollup {
-                contexts(first: 100) {
-                  nodes {
-                    ... on CheckRun {
-                      name
-                      status
-                      conclusion
-                      startedAt
-                      completedAt
-                      detailsUrl
-                    }
-                    ... on StatusContext {
-                      context
-                      state
-                      targetUrl
-                      createdAt
-                    }
-                  }
-                }
-              }
+        \(pullRequestNodeFields(includeCheckDetails: request.detailBranches.contains(branch)))
             }
           }
         """
@@ -717,6 +675,70 @@ nonisolated private func makeCrossRepoBatchQuery(
     branchAliasesByRepo: branchAliasesByRepo,
     allowedHeadRepositoriesByRepoAlias: allowedHeadRepositoriesByRepoAlias
   )
+}
+
+// The pull request fields every refresh reads. Each check is listed only when asked for: per-state
+// counts carry the badge and merge readiness, while a list of up to 100 contexts per pull request
+// is most of what a batched query costs GitHub to resolve.
+nonisolated func pullRequestNodeFields(includeCheckDetails: Bool) -> String {
+  let checkDetails =
+    includeCheckDetails
+    ? """
+        nodes {
+          ... on CheckRun {
+            name
+            status
+            conclusion
+            startedAt
+            completedAt
+            detailsUrl
+          }
+          ... on StatusContext {
+            context
+            state
+            targetUrl
+            createdAt
+          }
+        }
+    """
+    : ""
+  return """
+    number
+    title
+    state
+    additions
+    deletions
+    isDraft
+    reviewDecision
+    mergeable
+    mergeStateStatus
+    url
+    updatedAt
+    headRefName
+    baseRefName
+    commits {
+      totalCount
+    }
+    author {
+      login
+    }
+    headRepository {
+      name
+      owner { login }
+    }
+    mergeQueueEntry {
+      position
+      estimatedTimeToMerge
+      state
+    }
+    statusCheckRollup {
+      contexts\(includeCheckDetails ? "(first: 100)" : "") {
+        checkRunCountsByState { state count }
+        statusContextCountsByState { state count }
+    \(checkDetails)
+      }
+    }
+    """
 }
 
 nonisolated private func rankCrossRepoPullRequests(
@@ -1223,7 +1245,7 @@ nonisolated private func fetchPullRequestsChunk(
   request: GithubPullRequestsRequest,
   chunk: [String]
 ) async throws -> [String: GithubPullRequest] {
-  let (query, aliasMap) = makeBatchPullRequestsQuery(branches: chunk)
+  let (query, aliasMap) = makeBatchPullRequestsQuery(branches: chunk, detailBranches: request.detailBranches)
   let output = try await runGh(
     shell: shell,
     resolver: resolver,
@@ -1263,7 +1285,8 @@ nonisolated private func fetchPullRequestsChunk(
 }
 
 nonisolated private func makeBatchPullRequestsQuery(
-  branches: [String]
+  branches: [String],
+  detailBranches: Set<String>
 ) -> (query: String, aliasMap: [String: String]) {
   var aliasMap: [String: String] = [:]
   var selections: [String] = []
@@ -1275,54 +1298,7 @@ nonisolated private func makeBatchPullRequestsQuery(
     let selection = """
       \(alias): pullRequests(first: 5, states: [OPEN, MERGED, CLOSED], headRefName: \"\(escapedBranch)\", \(orderBy)) {
         nodes {
-          number
-          title
-          state
-          additions
-          deletions
-          isDraft
-          reviewDecision
-          mergeable
-          mergeStateStatus
-          url
-          updatedAt
-          headRefName
-          baseRefName
-          commits {
-            totalCount
-          }
-          author {
-            login
-          }
-          headRepository {
-            name
-            owner { login }
-          }
-          mergeQueueEntry {
-            position
-            estimatedTimeToMerge
-            state
-          }
-          statusCheckRollup {
-            contexts(first: 100) {
-              nodes {
-                ... on CheckRun {
-                  name
-                  status
-                  conclusion
-                  startedAt
-                  completedAt
-                  detailsUrl
-                }
-                ... on StatusContext {
-                  context
-                  state
-                  targetUrl
-                  createdAt
-                }
-              }
-            }
-          }
+      \(pullRequestNodeFields(includeCheckDetails: detailBranches.contains(branch)))
         }
       }
       """

@@ -246,7 +246,7 @@ struct GithubCLIClientTests {
     let client = GithubCLIClient.live(shell: shell)
     let branches = (0..<100).map { "feature-\($0)" }
 
-    _ = try await client.batchPullRequests("github.com", "khoi", "repo", branches, nil)
+    _ = try await client.batchPullRequests("github.com", "khoi", "repo", branches, [], nil)
 
     let snapshot = await probe.snapshot()
     #expect(snapshot.ghCallCount == 4)
@@ -296,7 +296,7 @@ struct GithubCLIClientTests {
     let branches = (0..<30).map { "feature-\($0)" }
 
     do {
-      _ = try await client.batchPullRequests("github.com", "khoi", "repo", branches, nil)
+      _ = try await client.batchPullRequests("github.com", "khoi", "repo", branches, [], nil)
       Issue.record("Expected batchPullRequests to throw")
     } catch let error as GithubCLIError {
       switch error {
@@ -336,7 +336,7 @@ struct GithubCLIClientTests {
     let uniqueBranches = (0..<30).map { "feature-\($0)" }
     let branches = uniqueBranches + ["feature-0", "feature-1", "feature-2", "", ""]
 
-    let result = try await client.batchPullRequests("github.com", "khoi", "repo", branches, nil)
+    let result = try await client.batchPullRequests("github.com", "khoi", "repo", branches, [], nil)
 
     #expect(result.isEmpty)
     let snapshot = await probe.snapshot()
@@ -633,7 +633,7 @@ struct GithubCLIClientTests {
         message: "Could not resolve to a Repository with the name 'khoi/gone'."
       )
     ) {
-      _ = try await client.batchPullRequests("github.com", "khoi", "gone", ["feature"], nil)
+      _ = try await client.batchPullRequests("github.com", "khoi", "gone", ["feature"], [], nil)
     }
   }
 
