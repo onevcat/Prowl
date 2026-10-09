@@ -440,6 +440,7 @@ extension RepositoriesFeature {
         state.pendingTerminalFocusWorktreeIDs.remove(worktreeID)
         state.archiveScriptProgressByWorktreeID.removeValue(forKey: worktreeID)
         state.worktreeInfoByID.removeValue(forKey: worktreeID)
+        state.forgetPullRequestRefreshHistory(of: worktreeID)
         state.pinnedWorktreeIDs.removeAll { $0 == worktreeID }
         state.archivedWorktrees.removeAll { $0.id == worktreeID }
         state.$prowlCreatedWorktreeIDs.withLock {

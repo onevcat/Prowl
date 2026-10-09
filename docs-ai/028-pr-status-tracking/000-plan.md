@@ -102,3 +102,6 @@ As of the anchor wave (reconstructed from #256/#305/#366/#379 PR descriptions):
 - Updated 2026-10-02: an account-wide gate stops every gh call on a rate-limit answer,
   backs off, and skips the per-repository fallback — see
   [005-rate-limit-gate.md](005-rate-limit-gate.md)
+- Updated 2026-10-02: periodic refreshes ask only about pull requests whose state can
+  change soon; settled, absent, and finished ones follow slower intervals — see
+  [008-cadence-by-state.md](008-cadence-by-state.md)
