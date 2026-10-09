@@ -517,29 +517,72 @@ nonisolated private func detectDroid(_ content: String) -> AgentRawState {
   return .idle
 }
 
+// Amp (0.0.1791547250) is a full-screen TUI whose composer box owns the bottom
+// rows: `╭───… ─ <mode> ─╮`, `│ … │` rows, and a bottom border
+// `╰ <spinner> <status> ───… <path> (<branch>) ─╯`. The status is the thread
+// client's live state — `Connecting`, `Sending`, `Waiting`, `Thinking`,
+// `Streaming`, `Streaming 45 tok`, `Running Tools`, … — behind a spinner that
+// cycles `∼`, `≈`, `≋`; an idle composer leaves the border bare. Any status is
+// Working: the label set is open (a token counter trails `Streaming`, a
+// half-painted frame reads `Streami Too`), while the bare border is the only
+// idle shape, so an allowlist flaps on every frame it misses. `Disconnected` and
+// `Amp Is Redeploying` (the two labels in Amp's table that are not turn
+// progress) retain the prior state. Approval and feedback dialogs render as a
+// separate box directly above the composer — `╭─ Approval Required ─…─╮` with
+// `‣`-marked option rows, `╭─ Tell Amp what to do differently ─…─╮` with a `>`
+// input row — while the border keeps `Running Tools`, so the dialog read runs
+// first; the `Out of Credits` dialog puts its `‣` rows inside the composer
+// itself. A screen without a complete composer (startup, a viewer, a redraw
+// caught mid-frame) is unknown so the state machine keeps the prior state;
+// there is no older Amp UI to fall back to, because the service refuses to
+// start threads from a stale CLI.
 nonisolated private func detectAmp(_ content: String) -> AgentRawState {
-  let lower = content.lowercased()
-  let hasWaitingForApproval = lower.contains("waiting for approval")
-  let hasApprovalHeader =
-    lower.contains("invoke tool")
-    || lower.contains("run this command?")
-    || lower.contains("allow editing file:")
-    || lower.contains("allow creating file:")
-    || lower.contains("confirm tool call")
-  let hasApprovalActions =
-    lower.contains("approve")
-    && (lower.contains("allow all for this session")
-      || lower.contains("allow all for every session")
-      || lower.contains("allow file for every session")
-      || lower.contains("deny with feedback"))
+  // Blank rows carry nothing here (every box row has borders), and dropping
+  // them also discards trailing whitespace-only screen rows below the footer.
+  let lines = content.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+    .filter { !$0.isEmpty }
+  let isTop = { (line: String) -> Bool in line.hasPrefix("╭─") && line.hasSuffix("╮") }
+  let isBottom = { (line: String) -> Bool in line.hasPrefix("╰") && line.hasSuffix("╯") }
+  let isInterior = { (line: String) -> Bool in line.hasPrefix("│") && line.hasSuffix("│") }
+  let isSelection = { (line: String) -> Bool in line.hasPrefix("│ ‣ ") }
 
-  if hasApprovalActions && (hasWaitingForApproval || hasApprovalHeader) {
+  guard let footer = lines.indices.last, isBottom(lines[footer]) else { return .unknown }
+  var composerTop = footer - 1
+  while composerTop >= 0, isInterior(lines[composerTop]) {
+    composerTop -= 1
+  }
+  guard composerTop >= 0, isTop(lines[composerTop]), composerTop < footer - 1 else { return .unknown }
+
+  if lines[(composerTop + 1)..<footer].contains(where: isSelection) {
     return .blocked
   }
-  if lower.contains("esc to cancel") {
-    return .working
+
+  // A box whose bottom border touches the composer's top border is a dialog
+  // when it is titled as one or carries a selection row; a long command can
+  // push the title above the detection window, so the rows alone suffice.
+  if composerTop > 0, isBottom(lines[composerTop - 1]) {
+    var dialogTop = composerTop - 2
+    var hasSelection = false
+    while dialogTop >= 0, isInterior(lines[dialogTop]) {
+      hasSelection = hasSelection || isSelection(lines[dialogTop])
+      dialogTop -= 1
+    }
+    let dialogTitles = ["╭─ Approval Required ", "╭─ Tell Amp what to do differently "]
+    let title = dialogTop >= 0 && isTop(lines[dialogTop]) ? lines[dialogTop] : ""
+    if hasSelection || dialogTitles.contains(where: { title.hasPrefix($0) }) {
+      return .blocked
+    }
   }
-  return .idle
+
+  let status = lines[footer].dropFirst().prefix { $0 != "─" }
+    .trimmingCharacters(in: CharacterSet(charactersIn: " ∼≈≋"))
+  if status.isEmpty {
+    return .idle
+  }
+  if status == "Disconnected" || status == "Amp Is Redeploying" {
+    return .unknown
+  }
+  return .working
 }
 
 nonisolated func isNumberedChoice(_ option: String) -> Bool {

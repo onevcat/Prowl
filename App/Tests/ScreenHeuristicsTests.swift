@@ -1141,19 +1141,160 @@ struct ScreenHeuristicsTests {
     #expect(DetectedAgent.droid.detectState(in: "done") == .idle)
   }
 
-  @Test func ampDetection() {
+  private static func ampScreen(footer: String, above: String = "", composer: String = "") -> String {
+    let rows = composer.isEmpty ? "│                                                             │" : composer
+    return """
+      \(above.isEmpty ? " ┃ Run the shell command `sleep 25; echo finished` with your Bash tool." : above)
+      ╭──────────────────────────────────────────────── $···· ─ medium ─╮
+      \(rows)
+      │                                                             │
+      │                                                             │
+      \(footer)
+      """
+  }
+
+  @Test(
+    arguments: [
+      "╰ ∼ Connecting ───────────────────────── private/tmp/…/lab (master) ─╯",
+      "╰ ∼ Sending ──────────────────────────── private/tmp/…/lab (master) ─╯",
+      "╰ ∼ Waiting ──────────────────────────── private/tmp/…/lab (master) ─╯",
+      "╰ ≈ Thinking ─────────────────────────── private/tmp/…/lab (master) ─╯",
+      "╰ ≈ Streaming 45 tok ─────────────────── private/tmp/…/lab (master) ─╯",
+      "╰ ≋ Running Tools ────────────────────── private/tmp/…/lab (master) ─╯",
+      "╰ ≋ Streami Too ──────────────────────── private/tmp/…/lab (master) ─╯",
+      "╰ ∼ Auto-Compacting ──────────────────── private/tmp/…/lab (master) ─╯",
+    ]
+  )
+  func ampLiveComposerStatusIsWorking(_ footer: String) {
+    #expect(DetectedAgent.amp.detectState(in: Self.ampScreen(footer: footer)) == .working)
+  }
+
+  @Test func ampBareComposerBorderIsIdle() {
+    let footer = "╰──────────────────────────────────────── private/tmp/…/lab (master) ─╯"
+    #expect(DetectedAgent.amp.detectState(in: Self.ampScreen(footer: footer)) == .idle)
+    #expect(
+      DetectedAgent.amp.detectState(
+        in: Self.ampScreen(footer: footer, composer: "│ draft text Running Tools not sent                           │")
+      ) == .idle
+    )
+  }
+
+  @Test func ampWorkingFooterSurvivesTrailingBlankRows() {
+    let footer = "╰ ≈ Running Tools ────────────────────── private/tmp/…/lab (master) ─╯"
+    #expect(DetectedAgent.amp.detectState(in: Self.ampScreen(footer: footer) + "\n   \n\n") == .working)
+  }
+
+  @Test func ampIdleComposerIgnoresHistoricalActivityAndApproval() {
+    let above = """
+       ┃ The old UI displayed esc to cancel and this approval:
+       Waiting for approval · Approve · Allow All for This Session
+       ╭──────────────────────────────────────────────── $···· ─ medium ─╮
+       │                                                             │
+       ╰ ∼ Running Tools ────────────────────── private/tmp/…/lab (master) ─╯
+       Done. The text Thinking and Running Tools above is historical.
+      """
+    let footer = "╰──────────────────────────────────────── private/tmp/…/lab (master) ─╯"
+    let draft = "│ Draft: Running Tools                                        │"
+    #expect(DetectedAgent.amp.detectState(in: Self.ampScreen(footer: footer, above: above, composer: draft)) == .idle)
+  }
+
+  @Test func ampApprovalDialogAboveComposerIsBlocked() {
+    let dialog = """
+       ⠭ Running 1 command ▸
+      ╭─ Approval Required ─────────────────────────────────────────────╮
+      │                                                                 │
+      │ Bash:                                                           │
+      │   sleep 5; echo finished                                        │
+      │   Working directory: /Users/usr/lab                             │
+      │   Timeout Ms: 10000                                             │
+      │                                                                 │
+      │ Matches user permissions rule 1: ask shell_command              │
+      │                                                                 │
+      │ ‣ Allow Once                                                    │
+      │   Reject with feedback                                          │
+      │   Allow All for This Session                                    │
+      │   Allow All for Every Session                                   │
+      │                                                                 │
+      ╰─────────────────────────────────────────────────────────────────╯
+      """
+    let footer = "╰ ≈ Running Tools ────────────────────── private/tmp/…/lab (master) ─╯"
+    #expect(DetectedAgent.amp.detectState(in: Self.ampScreen(footer: footer, above: dialog)) == .blocked)
+  }
+
+  @Test func ampApprovalRowsWithoutTitleAreBlocked() {
+    // A long command pushes the dialog title above the 24-line detection window.
+    let rows = """
+      │ Matches user permissions rule 1: ask shell_command              │
+      │   Allow Once                                                    │
+      │ ‣ Reject with feedback                                          │
+      │   Allow All for This Session                                    │
+      │   Allow All for Every Session                                   │
+      ╰─────────────────────────────────────────────────────────────────╯
+      """
+    let footer = "╰ ∼ Running Tools ────────────────────── private/tmp/…/lab (master) ─╯"
+    #expect(DetectedAgent.amp.detectState(in: Self.ampScreen(footer: footer, above: rows)) == .blocked)
+  }
+
+  @Test func ampFeedbackPromptAboveComposerIsBlocked() {
+    let prompt = """
+      ╭─ Tell Amp what to do differently ───────────────────────────────╮
+      │                                                                 │
+      │ >                                                               │
+      │                                                                 │
+      ╰─────────────────────────────────────────────────────────────────╯
+      """
+    let footer = "╰ ≈ Running Tools ────────────────────── private/tmp/…/lab (master) ─╯"
+    #expect(DetectedAgent.amp.detectState(in: Self.ampScreen(footer: footer, above: prompt)) == .blocked)
+  }
+
+  @Test func ampUntitledBoxAboveComposerIsNotADialog() {
+    let box = """
+      ╭─ Example ───────────────────────────────────────────────────────╮
+      │ Allow All for This Session                                      │
+      ╰─────────────────────────────────────────────────────────────────╯
+      """
+    let footer = "╰ ≋ Running Tools ────────────────────── private/tmp/…/lab (master) ─╯"
+    #expect(DetectedAgent.amp.detectState(in: Self.ampScreen(footer: footer, above: box)) == .working)
+  }
+
+  @Test func ampSelectionInsideComposerIsBlocked() {
+    let dialog = """
+      │ Out of Credits                                              │
+      │                                                             │
+      │ Add credits to keep using Amp.                              │
+      │                                                             │
+      │ ‣ Add Paid Credits (ampcode.com/pay)                        │
+      │   Retry                                                     │
+      │   Dismiss                                                   │
+      """
+    let footer = "╰─────────────────────────────────────────────────────────────╯"
+    #expect(DetectedAgent.amp.detectState(in: Self.ampScreen(footer: footer, composer: dialog)) == .blocked)
+  }
+
+  @Test func ampConnectionLossRetainsPriorState() {
+    let footer = "╰ ∼ Disconnected ─────────────────────── private/tmp/…/lab (master) ─╯"
+    #expect(DetectedAgent.amp.detectState(in: Self.ampScreen(footer: footer)) == .unknown)
+  }
+
+  @Test func ampScreenWithoutComposerIsUnknown() {
+    #expect(DetectedAgent.amp.detectState(in: "esc to cancel") == .unknown)
+    #expect(DetectedAgent.amp.detectState(in: "Waiting for approval\nApprove\nAllow All for This Session") == .unknown)
     #expect(
       DetectedAgent.amp.detectState(
         in: """
-          Waiting for approval
-          Approve
-          Allow All for This Session
+          Example output:
+          ╰ ∼ Running Tools ────────────────────── private/tmp/…/lab (master) ─╯
           """
-      ) == .blocked
+      ) == .unknown
     )
-    #expect(DetectedAgent.amp.detectState(in: "waiting for approval\nallow all for this session") == .idle)
-    #expect(DetectedAgent.amp.detectState(in: "esc to cancel") == .working)
-    #expect(DetectedAgent.amp.detectState(in: "done") == .idle)
+    #expect(
+      DetectedAgent.amp.detectState(
+        in: """
+          ╭──────────────────────────────────────────────── $···· ─ medium ─╮
+          ╰ ∼ Running Tools ────────────────────── private/tmp/…/lab (master) ─╯
+          """
+      ) == .unknown
+    )
   }
 
   @Test func qwenDetection() {
