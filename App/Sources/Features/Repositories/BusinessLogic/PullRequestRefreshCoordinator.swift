@@ -270,7 +270,8 @@ final class PullRequestRefreshCoordinator {
     var prsByRepo: [RepoKey: [String: GithubPullRequest]] = [:]
     var failedMessagesByRepo: [RepoKey: String] = [:]
     var fallbackKeys: [RepoKey] = []
-    for chunk in crossRepoRequests.chunked(by: crossRepoBatchAliasLimit) {
+    let chunks = crossRepoRequests.chunked(by: crossRepoBatchAliasLimit)
+    for (index, chunk) in chunks.enumerated() {
       await pacer.beforeQuery()
       do {
         let result = try await runBatchWithTimeout(
@@ -288,10 +289,13 @@ final class PullRequestRefreshCoordinator {
           }
         }
       } catch let error as GithubCLIError where !error.allowsFallback {
-        // A smaller query cannot fix a rate limit, and the gate reports the retry time on its own.
-        for request in chunk {
+        // A smaller query cannot fix a rate limit, and the gate reports the retry time on its own. The
+        // chunks still waiting would meet the same closed gate, so they fail now instead of each
+        // waiting out the gap first.
+        for request in chunks[index...].joined() {
           failedMessagesByRepo[request.key] = error.localizedDescription
         }
+        break
       } catch {
         for request in chunk {
           failedMessagesByRepo[request.key] = String(describing: error)

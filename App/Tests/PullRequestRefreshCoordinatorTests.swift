@@ -467,6 +467,38 @@ struct PullRequestRefreshCoordinatorTests {
     #expect(Set(await outcomes.failedRepositories()) == ["beta"])
   }
 
+  @Test func rateLimitedRefusalFailsTheWaitingChunksWithoutTheGap() async throws {
+    let clock = TestClock()
+    let probe = CoordinatorProbe()
+    let outcomes = OutcomeCollector()
+    let retryAt = Date(timeIntervalSince1970: 1_000_060)
+    let coordinator = makeCoordinator(
+      probe: probe,
+      clock: clock,
+      outcomes: outcomes,
+      minimumQueryGap: .seconds(15),
+      batched: { _, _ in
+        throw GithubCLIError.rateLimited(retryAt: retryAt)
+      },
+      legacy: { _, _, _, _ in
+        Issue.record("A rate-limited batch must not fall back to per-repository queries")
+        return [:]
+      }
+    )
+
+    // Twenty repositories need two queries; the gate refuses the first one.
+    for index in 0..<20 {
+      coordinator.enqueue(request(repo: "repo-\(index)"))
+    }
+    await advanceCoordinatorClock(clock, by: .milliseconds(250))
+    // The second chunk fails at once rather than waiting its 15 s turn at the same closed gate.
+    await waitUntil { await outcomes.failedRepositories().count == 20 }
+
+    #expect(await outcomes.failedRepositories().count == 20)
+    #expect(await probe.batchedCalls().count == 1)
+    #expect(await probe.legacyCalls().isEmpty)
+  }
+
   @Test func inflightHostBuffersNewEnqueueAndFlushesAfterCompletion() async throws {
     let clock = TestClock()
     let probe = CoordinatorProbe()

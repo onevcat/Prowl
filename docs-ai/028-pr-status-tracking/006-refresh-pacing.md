@@ -38,6 +38,12 @@ once it arrives. This amendment reduces the load that provokes one.
   The batch key is the host and the account override, so a repository pinned to an
   account is paced apart from unpinned ones, even when the pin names the account `gh`
   already uses.
+- **A refusal ends the batch.** When a query fails for a reason a smaller query cannot
+  change (the rate-limit gate of amendment 005, or a GraphQL error GitHub answered with),
+  nothing falls back per repository. A refused chunk also fails the chunks still waiting
+  behind it with the same message, so they do not each wait out the gap to meet the same
+  closed gate. Only transport, decode, and soft-timeout failures, and GraphQL errors
+  without a type, fall back.
 
 Worst case for 50 worktrees across about 10 repositories on one host: one background
 sweep every 100 s (36 per hour) plus the focused repository every 30 s (120 per hour),
@@ -50,5 +56,5 @@ account override. The sampled incident ran at roughly 1,300 per hour.
 Tests: `App/Tests/WorktreeInfoWatcherManagerTests.swift` (only the changed
 repository refreshes; the sweep slows with the worktree count),
 `PullRequestRefreshCoordinatorTests.swift` (requests within the gap merge into one later
-batch; a large batch and the fallback space each query), `GithubCLIClientTests.swift`
-(chunks run one at a time).
+batch; a large batch and the fallback space each query; a refused first chunk fails the
+waiting chunks without the gap), `GithubCLIClientTests.swift` (chunks run one at a time).
