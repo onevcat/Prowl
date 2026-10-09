@@ -480,6 +480,23 @@ struct AntigravitySupportTests {
       """
     #expect(agent.detectState(in: quotedDialogWithStatusThenIdle) == .idle)
 
+    // Stacked output below the status row must not veto a live dialog: a `─`
+    // divider alone is not a composer border, and the veto needs the box's
+    // `─`/`>` pair inside the hint-to-footer gap.
+    let permissionWithSpoofedFooter = """
+      Requesting permission for:
+         echo hello
+      > Yes, run command
+        No, cancel
+        ↑/↓ Navigate · enter Confirm
+      esc to cancel
+      ────────────────
+      branch main
+      ctx 12%
+      ? for shortcuts custom help
+      """
+    #expect(agent.detectState(in: permissionWithSpoofedFooter) == .blocked)
+
     // Detection anchors on the LAST hint row: a quoted dialog above a live
     // one still reports the live dialog.
     let quotedDialogThenLiveDialog = """
@@ -531,6 +548,21 @@ struct AntigravitySupportTests {
     #expect(
       agent.detectState(
         in: "esc to cancel\n? for shortcuts") == .unknown)
+
+    // An appended `? for shortcuts`-leading row does not win idle on its own:
+    // it lands beside the real `esc` footer — contradictory, so unknown.
+    let workingWithSpoofedIdle = """
+      ⣻  Generating...
+      ────────────────────────────────────
+      >
+      ────────────────────────────────────
+      esc to cancel                                               Gemini 3.1 Pro · high
+      ────────────────
+      branch main
+      ctx 12%
+      ? for shortcuts custom help
+      """
+    #expect(agent.detectState(in: workingWithSpoofedIdle) == .unknown)
 
     // A `>`-leading custom status row is not composer chrome: the scrollback
     // veto keys on the `─` border, so a live dialog survives stray output.

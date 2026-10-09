@@ -114,16 +114,27 @@
   bare `--` terminator. This keeps value consumption and last-wins permission
   overrides correct across mixed spellings. The classifier's updater demotion
   accepts `-bg-updater` on the same grounds.
-- **A composer border below the hint vetoes the dialog read**: a complete
+- **A boxed composer below the hint vetoes the dialog read**: a complete
   dialog quoted in transcript (`> ` option and `↑/↓ Navigate` intact) followed
   by a fresh composer used to report Blocked over the live footer. The veto
-  keys on a `─` composer-border row between the hint and the LAST status row —
-  anchoring on the last status row means a quote that carries the dialog's own
-  status line still sees the composer's border, while `>`-prefixed or
-  `─`-dividing `stack_with_default` output lives below the live status row and
-  cannot veto a live dialog (verified 1.3.1: trust/permission dialogs render
-  only footer/status rows beneath the hint). The `> ` option window above the
-  hint spans 8 rows for long option lists.
+  needs the composer's two-row signature — a `─` border row AND a `>` prompt
+  row — between the hint and the LAST status row, so `>`-leading or
+  `─`-dividing `stack_with_default` output cannot veto a live dialog on its
+  own. Anchoring on the last status row means a quote that carries the
+  dialog's own status line still sees the composer (verified 1.3.1:
+  trust/permission dialogs render only footer/status rows beneath the hint).
+  The `> ` option window above the hint spans 8 rows for long option lists,
+  and the window below the hint spans 10 rows for stacked output.
+- **Footer evidence only counts below the composer box**: footer signatures
+  are scanned below the last `─`/`>`/`─` box bottom, keeping
+  transcript-quoted status rows out of the evidence. A status-signature-
+  leading `stack_with_default` row therefore lands beside the real footer as
+  contradictory evidence (unknown), instead of supplying a spoofed
+  idle/working state after pushing the real footer out of the tail window —
+  a shape onevclaw reproduced end-to-end into dispatch readiness. Residual:
+  `stack_with_default` output that renders a complete `─`/`>`/`─` box below
+  the footer can still shift the evidence boundary downward; that direction
+  only widens the contradiction set (unknown), never a wrong state.
 - **Permission observation is conservative in both directions**: an
   unrecognized bare flag anywhere before the decisive permission token —
   off-form or bare — yields unknown rather than an unprovable mode, because a

@@ -46,13 +46,16 @@ while a turn runs; `? for shortcuts` is **Idle**. Workspace-trust,
 tool-permission, and ask-user dialogs are **Blocked**: they render a
 `↑/↓ Navigate` hint row with a `> `-selected option above it, and a
 permission dialog keeps `esc to cancel`, so the dialog chrome wins over the
-working footer. A `─` composer-border row between the hint and the last
-status row marks the whole dialog as scrollback — a quoted or answered
-dialog behind a boxed composer does not re-report Blocked, and `>`- or
-`─`-leading custom status output below the status row cannot mask a live
-one. The `stack_with_default` setting can append custom
-status output below the built-in row, so the footer signatures are matched in
-the last few rows; a screen with neither signature is **unknown**, not Idle.
+working footer. A boxed composer — `─` border rows around a `>` prompt row —
+between the hint and the last status row marks the whole dialog as
+scrollback, so a quoted or answered dialog behind a composer does not
+re-report Blocked; a lone `>`- or `─`-leading custom row cannot veto a live
+one. Footer evidence is only read below the composer's bottom border, which
+keeps transcript-quoted status rows out; a status-signature-leading custom
+row lands beside the real footer as contradictory evidence. The
+`stack_with_default` setting can append custom status output below the
+built-in row; a screen with neither signature, or with both, is **unknown**,
+not Idle.
 
 A pane that never shows a recognized screen — a `stack_with_default` config
 whose appended rows permanently cover the footer, a headless `agy --print`

@@ -801,13 +801,15 @@ nonisolated private func detectAntigravity(_ content: String) -> AgentRawState {
 
   // Live dialog order is `> `-selected option ABOVE the `↑/↓ Navigate` hint —
   // reversed order (e.g. a stale hint residue above a `> typed` composer row)
-  // is transcript, not a dialog. A `─` composer-border row between the hint and
-  // the last status row means the boxed composer owns the bottom region and
-  // the whole dialog is scrollback. Anchoring on the LAST status row keeps
-  // both edges honest: a transcript quote that includes the dialog's own
-  // status line still sees the fresh composer's border, while `>`- or
-  // `─`-leading `stack_with_default` output — rendered below the live status
-  // row — cannot veto a live dialog.
+  // is transcript, not a dialog. A boxed composer between the hint and the
+  // last status row means it owns the bottom region and the whole dialog is
+  // scrollback. The veto needs the composer's two-row signature — a `─`
+  // border row AND a `>` prompt row — so `>`-leading or `─`-dividing
+  // `stack_with_default` output cannot veto a live dialog on its own.
+  // Anchoring on the LAST status row keeps both edges honest: a transcript
+  // quote that includes the dialog's own status line still sees the fresh
+  // composer, while output rendered below the live status row stays outside
+  // the gap.
   let hintIndex = lines.lastIndex(where: {
     $0.hasPrefix("↑/↓ Navigate") || $0.hasPrefix("↑↓ Navigate")
   })
@@ -819,7 +821,8 @@ nonisolated private func detectAntigravity(_ content: String) -> AgentRawState {
           $0.hasPrefix("esc to cancel") || $0.hasPrefix("esc to interrupt")
             || $0.hasPrefix("? for shortcuts")
         }) ?? below.endIndex
-      return below[..<statusIndex].contains { $0.hasPrefix("─") }
+      let gap = below[..<statusIndex]
+      return gap.contains { $0.hasPrefix("─") } && gap.contains { $0.hasPrefix(">") }
     } ?? false
   // The window below the hint tolerates a usage row, the status row, and
   // stacked `stack_with_default` output — missing a live dialog here can
@@ -831,10 +834,19 @@ nonisolated private func detectAntigravity(_ content: String) -> AgentRawState {
   {
     return .blocked
   }
-  // The composer box keeps ≥3 rows between the status row and transcript, so a
-  // four-row tail covers appended `stack_with_default` output without reaching
-  // stale transcript text.
-  let tail = lines.suffix(4)
+  // The composer is a `─`-bordered box around a `>` prompt row; the status row
+  // and any appended `stack_with_default` output render below its bottom
+  // border. Scanning only below the last box bottom keeps transcript-quoted
+  // status rows out of the evidence, while a status-signature-leading custom
+  // row still lands beside the real footer — contradictory evidence, not a
+  // spoofed state. Without an identifiable box the evidence is ambiguous, so
+  // the bounded tail alone is used and any contradictory pair reads unknown.
+  let dashRows = lines.indices.filter { lines[$0].hasPrefix("─") }
+  let composerBottom = dashRows.last { bottom in
+    guard let top = dashRows.last(where: { $0 < bottom }) else { return false }
+    return lines[top..<bottom].contains { $0.hasPrefix(">") }
+  }
+  let tail = composerBottom.map { lines[($0 + 1)...] } ?? lines.suffix(10)
   let hasWorkingFooter = tail.contains {
     $0.hasPrefix("esc to cancel") || $0.hasPrefix("esc to interrupt")
   }
