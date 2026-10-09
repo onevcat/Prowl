@@ -187,7 +187,7 @@ Qoder may use a catalog-selected runtime-managed route after checking `qodercli 
 ```json
 {
   "provider": "qoder",
-  "model": "deepseek/deepseek-v4-flash-pg",
+  "model": "deepseek/deepseek-flash-pg",
   "base_url": null,
   "wire_api": "runtime-managed",
   "api_key_env": null
@@ -219,7 +219,7 @@ explicitly rather than cloning an entire agent home.
 | Codex | `deepseek-v4-flash` | Native custom provider using Responses, an isolated model catalog if required, and environment-key auth [2][3]. Direct Responses inference and the real notifier passed locally. |
 | Copilot | `deepseek-v4-flash` | `COPILOT_PROVIDER_*` environment, `COPILOT_MODEL`; Chat Completions supports streaming/tools and BYOK needs no GitHub login according to installed help [4]. |
 | Droid | `custom:deepseek-v4-flash` | Already in this machine's catalog; `customModels`, `generic-chat-completion-api`, `-m` [5]. The scoped entry uses its own id (`custom:prowl-contract-<model>`): Droid merges `--settings` with the global custom models by id, and a global entry for the same model would otherwise replace it and its credential. Scoped settings merge and inference passed on this machine; a Factory account may still be required. |
-| Qoder | Flash if available to this account | Local catalog lists `deepseek/deepseek-v4-flash-pg`; billing is unverified. `--model` accepts custom model IDs. Official BYOK setup is the `/model` Custom wizard; providers and access are account-dependent [6]. Do not invent a settings schema. |
+| Qoder | Flash if available to this account | Local catalog lists `deepseek/deepseek-flash-pg` (the custom DeepSeek-Flash entry re-registered on 2026-10-10 through the `/model` wizard after its earlier key was revoked; the previous id was `deepseek/deepseek-v4-flash-pg`); billing is unverified. `--model` accepts custom model IDs. Official BYOK setup is the `/model` Custom wizard; providers and access are account-dependent [6]. Do not invent a settings schema. |
 | Pi | Explicit DeepSeek Flash provider/model | `models.json` supports OpenAI-compatible providers; select with `--provider`/`--model` [7]. Verified with a temporary provider; Pi 0.85 requires `${DEEPSEEK_API_KEY}`, not a bare variable name. |
 | OMP | Explicit DeepSeek Flash provider/model | Custom `models.yml` provider plus `--model`; isolated profile/config and broker credentials need verification [8]. Verified with temporary `PI_CODING_AGENT_DIR` and `models.yml`. |
 | OpenCode | DeepSeek Flash; optional explicit Zen free model | `-m provider/model`, custom provider configuration or Zen catalog [9][10]. Verify plugin loading is retained in the isolated setup. |

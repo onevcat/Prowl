@@ -1,0 +1,299 @@
+{
+  "bridge_sha256": "2fcf2374d7ac998ccf04ee026e0397090751f504222934b0b101a761559fecc3",
+  "checked_on": "2026-10-09T15:10:03.068028+00:00",
+  "contract_revision": 2,
+  "interactive_verified": false,
+  "runtimes": [
+    {
+      "executable_sha256": "0116ee2e0a513900b633d9951367f18747686478e2b462805b8c31609f047f70",
+      "route": {
+        "api_key_env": "DEEPSEEK_API_KEY",
+        "base_url": "https://api.deepseek.com/anthropic",
+        "model": "deepseek-v4-flash",
+        "provider": "deepseek",
+        "wire_api": "anthropic-messages"
+      },
+      "runtime": "claude",
+      "scenarios": {
+        "headless": {
+          "required_events": [
+            [
+              "SessionStart",
+              "session-start"
+            ],
+            [
+              "Stop",
+              "turn-ended"
+            ],
+            [
+              "SessionEnd",
+              "session-end"
+            ]
+          ],
+          "status": "passed"
+        },
+        "zero_turn_lifecycle": {
+          "required_events": [
+            [
+              "SessionStart",
+              "session-start"
+            ],
+            [
+              "SessionEnd",
+              "session-end"
+            ]
+          ],
+          "status": "passed"
+        }
+      },
+      "version": "2.1.295"
+    },
+    {
+      "executable_sha256": "12ac11d2c7eee27cfae34393986d7b7c9ed0dea537cb749831cdd7033893e6de",
+      "route": {
+        "api_key_env": "DEEPSEEK_API_KEY",
+        "base_url": "https://api.deepseek.com",
+        "model": "deepseek-v4-flash",
+        "provider": "deepseek",
+        "wire_api": "responses"
+      },
+      "runtime": "codex",
+      "scenarios": {
+        "configuration": {
+          "scenarios": [
+            "base",
+            "absent",
+            "profile",
+            "override",
+            "cleanup"
+          ],
+          "status": "passed"
+        },
+        "headless": {
+          "required_events": [
+            [
+              "agent-turn-complete",
+              "turn-ended"
+            ]
+          ],
+          "status": "passed"
+        },
+        "zero_turn_lifecycle": {
+          "reason": "native_notifier_has_no_session_lifecycle",
+          "status": "not_applicable"
+        }
+      },
+      "version": "0.161.0"
+    },
+    {
+      "executable_sha256": "15f218a936f693a6b73df248824b9f7f528c2c61949ff446e4ca6062ee48b084",
+      "route": {
+        "api_key_env": "DEEPSEEK_API_KEY",
+        "base_url": "https://api.deepseek.com/v1",
+        "model": "deepseek-v4-flash",
+        "provider": "deepseek",
+        "wire_api": "chat-completions"
+      },
+      "runtime": "copilot",
+      "scenarios": {
+        "headless": {
+          "required_events": [
+            [
+              "SessionStart",
+              "session-start"
+            ],
+            [
+              "Stop",
+              "turn-ended"
+            ],
+            [
+              "SessionEnd",
+              "session-end"
+            ]
+          ],
+          "status": "passed"
+        },
+        "zero_turn_lifecycle": {
+          "reason": "empty_prompt_rejected_before_session",
+          "status": "not_applicable"
+        }
+      },
+      "version": "1.0.83"
+    },
+    {
+      "executable_sha256": "67566cb79e0b45c2803fc8e480a2ef1663474fc535504485f775c3cd9e0d26d9",
+      "route": {
+        "api_key_env": "DEEPSEEK_API_KEY",
+        "base_url": "https://api.deepseek.com/v1",
+        "model": "deepseek-v4-flash",
+        "provider": "deepseek",
+        "wire_api": "chat-completions"
+      },
+      "runtime": "droid",
+      "scenarios": {
+        "headless": {
+          "required_events": [
+            [
+              "SessionStart",
+              "session-start"
+            ],
+            [
+              "Stop",
+              "turn-ended"
+            ],
+            [
+              "SessionEnd",
+              "session-end"
+            ]
+          ],
+          "status": "passed"
+        },
+        "zero_turn_lifecycle": {
+          "reason": "empty_prompt_exits_without_lifecycle",
+          "status": "not_applicable"
+        }
+      },
+      "version": "0.210.0"
+    },
+    {
+      "executable_sha256": "9911e876112df13b5505f2f7935ef42bee6815c2485f5e95bacd586c5a868f89",
+      "route": {
+        "api_key_env": null,
+        "base_url": null,
+        "model": "deepseek/deepseek-flash-pg",
+        "provider": "qoder",
+        "wire_api": "runtime-managed"
+      },
+      "runtime": "qodercli",
+      "scenarios": {
+        "headless": {
+          "required_events": [
+            [
+              "SessionStart",
+              "session-start"
+            ],
+            [
+              "Stop",
+              "turn-ended"
+            ],
+            [
+              "SessionEnd",
+              "session-end"
+            ]
+          ],
+          "status": "passed"
+        },
+        "zero_turn_lifecycle": {
+          "reason": "empty_prompt_has_no_session_start",
+          "status": "not_applicable"
+        }
+      },
+      "version": "1.1.67"
+    },
+    {
+      "executable_sha256": "e79626f2dd6f94aa45d30f3fa63cd84319a6eefcd150b353cfaf274366926774",
+      "route": {
+        "api_key_env": "DEEPSEEK_API_KEY",
+        "base_url": "https://api.deepseek.com/v1",
+        "model": "deepseek-v4-flash",
+        "provider": "deepseek",
+        "wire_api": "chat-completions"
+      },
+      "runtime": "pi",
+      "scenarios": {
+        "headless": {
+          "required_events": [
+            [
+              "session_start",
+              "session-start"
+            ],
+            [
+              "agent_settled",
+              "turn-ended"
+            ],
+            [
+              "session_shutdown",
+              "session-end"
+            ]
+          ],
+          "status": "passed"
+        },
+        "zero_turn_lifecycle": {
+          "required_events": [
+            [
+              "session_start",
+              "session-start"
+            ],
+            [
+              "session_shutdown",
+              "session-end"
+            ]
+          ],
+          "status": "passed"
+        }
+      },
+      "version": "1.0.2"
+    },
+    {
+      "executable_sha256": "31faa0ee8420a13a783f4ca56d98f974e4a9f9081d269057a099f7eb618d1133",
+      "route": {
+        "api_key_env": "DEEPSEEK_API_KEY",
+        "base_url": "https://api.deepseek.com/v1",
+        "model": "deepseek-v4-flash",
+        "provider": "deepseek",
+        "wire_api": "chat-completions"
+      },
+      "runtime": "omp",
+      "scenarios": {
+        "headless": {
+          "required_events": [
+            [
+              "session_start",
+              "session-start"
+            ],
+            [
+              "session_stop",
+              "turn-ended"
+            ]
+          ],
+          "status": "passed"
+        },
+        "zero_turn_lifecycle": {
+          "reason": "empty_prompt_can_start_model_turn",
+          "status": "not_applicable"
+        }
+      },
+      "version": "18.8.6"
+    },
+    {
+      "executable_sha256": "7b63b34fafabded7d9231f6a9032755d0cdeaf8b9d2b70df8e25535471469eea",
+      "route": {
+        "api_key_env": "DEEPSEEK_API_KEY",
+        "base_url": "https://api.deepseek.com/v1",
+        "model": "deepseek-v4-flash",
+        "provider": "deepseek",
+        "wire_api": "chat-completions"
+      },
+      "runtime": "opencode",
+      "scenarios": {
+        "headless": {
+          "required_events": [
+            [
+              "session.idle",
+              "turn-ended"
+            ]
+          ],
+          "status": "passed"
+        },
+        "zero_turn_lifecycle": {
+          "reason": "native_plugin_has_no_session_lifecycle",
+          "status": "not_applicable"
+        }
+      },
+      "version": "1.18.34"
+    }
+  ],
+  "schema": 1,
+  "scope": "headless-contract",
+  "source_fingerprint": "0f386343dba984646958d2b8c10b0b03fcbca08d87877224160b78689bcd4014"
+}
