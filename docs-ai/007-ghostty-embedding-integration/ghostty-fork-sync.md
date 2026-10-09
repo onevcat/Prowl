@@ -55,6 +55,25 @@ new upstream tag, carry all patches, including the follow-up after the release b
    - Keep this patch until the upstream snapshot/formatter paths preserve the same state. Recheck both actual key bytes and effective cell colors when dropping it.
    - This is the commit the submodule currently points at. Matching artifacts use release tag `xcframework-5afdc9cf7315ef78533f245b97ef142dc50da67a-prowl-v1`.
 
+## Rehearsed Upgrade To Upstream Tip (2026-10-10, pre-1.4.0)
+
+[078](../078-ghostty-1-4-upgrade-rehearsal/000-plan.md) replayed the patch set on upstream
+`main` `9d479dcb1` ahead of the 1.4.0 tag. What the tagged port inherits:
+
+- Patch set shrinks to four: `76dce319f` (child PID), `02b3c6704` + `df5b32481` (snapshot and
+  bounded text) and `5afdc9cf7` (keyboard modes). Patches 2 and 3 are replaced by upstream
+  `ghostty_surface_foreground_pid`; patches 4 and 5 are upstream. The replayed commits with the
+  Zig 0.16 fixes live on `rehearsal/tip-9d479dcb1-patched` (`6ae199337`); cherry-pick them
+  instead of the `v1.3.1` originals.
+- Zig 0.16.0 (`mise.toml`). The Xcode 26.3 requirement below no longer applies: Zig 0.16 links
+  against the Xcode 27 SDK, and the full xcframework build takes about 2 minutes.
+- The xcframework keeps one `macos-arm64_x86_64` slice whose archive is `ghostty-internal.a`;
+  `Headers/` holds only `ghostty.h` and `module.modulemap`. The Makefile syncs it with
+  `rsync --delete` and the prebuilt installer accepts either archive name.
+- Prowl-side API breaks and their fixes are listed in
+  [078 001-action.md](../078-ghostty-1-4-upgrade-rehearsal/001-action.md); the argv lifetime
+  fix (`ghostty_init` keeps the pointer) is required on tip and safe on `v1.3.1`.
+
 ## Upgrade To A New Ghostty Tag
 
 ```bash

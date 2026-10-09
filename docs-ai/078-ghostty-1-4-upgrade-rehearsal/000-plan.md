@@ -2,9 +2,9 @@
 
 | | |
 | --- | --- |
-| **Status** | Planned |
+| **Status** | Implemented (rehearsal executed; branch not merged) |
 | **Anchor date** | 2026-10-10 |
-| **Primary PRs** | none yet (rehearsal branch `ghostty-tip-rehearsal`, not for merge) |
+| **Primary PRs** | none (branch `ghostty-tip-rehearsal`, pushed, not for merge); see [001-action.md](001-action.md) |
 | **Related** | [007-ghostty-embedding-integration/ghostty-fork-sync.md](../007-ghostty-embedding-integration/ghostty-fork-sync.md), [041-ghosttykit-prebuilt-artifacts](../041-ghosttykit-prebuilt-artifacts/000-plan.md), [063.009 display sleep spike](../063-agent-workflows/009-display-sleep-surface-spike.md), [069-undo-close-terminal](../069-undo-close-terminal/000-plan.md), [075-terminal-config-source](../075-terminal-config-source/000-plan.md) |
 
 ## Background
@@ -116,3 +116,4 @@ Every config key Prowl reads (`font-size`, `undo-timeout`, `scrollbar`, `backgro
 
 ## Amendments
 
+- Updated 2026-10-10: rehearsal executed; results, deviations and open questions in [001-action.md](001-action.md).
