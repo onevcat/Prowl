@@ -93,6 +93,20 @@ class ExportTests(unittest.TestCase):
             with self.assertRaises(live.core.PolicyError):
                 live.runtime_configuration('codex', route, Path(directory))
 
+    def test_droid_scoped_model_id_cannot_collide_with_a_global_entry(self):
+        import tempfile, json
+        from pathlib import Path
+        route = dict(model='deepseek-v4-flash', base_url='https://api.deepseek.com/v1',
+                     api_key_env='DEEPSEEK_API_KEY', wire_api='chat-completions')
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            model, arguments, _ = live.runtime_configuration('droid', route, root)
+            entry = json.loads((root / 'state/settings.json').read_text())['customModels'][0]
+            self.assertEqual((model, entry['model'], entry['apiKey']), ('deepseek-v4-flash', 'deepseek-v4-flash', '${DEEPSEEK_API_KEY}'))
+            # Droid resolves `custom:<model>` from the user's global settings too; the scoped entry must not share it.
+            self.assertNotEqual(entry['id'], 'custom:' + model)
+            self.assertEqual(arguments[arguments.index('-m') + 1], entry['id'])
+
 
 class SocketTests(unittest.TestCase):
     def test_real_transport_frame_and_wrong_token(self):

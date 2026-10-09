@@ -155,10 +155,13 @@ def runtime_configuration(runtime, route, directory):
                      '--available-tools=', '--disable-builtin-mcps', '--stream', 'off']
     elif runtime == 'droid':
         config = state / 'settings.json'
-        core.write_json(config, {'customModels': [{'model': model, 'displayName': 'Contract Flash',
+        # Droid merges the scoped settings with the user's global custom models by id. The default id is
+        # `custom:<model>`, so a global entry for the same model (and its own credential) would win.
+        model_id = 'custom:prowl-contract-' + model
+        core.write_json(config, {'customModels': [{'model': model, 'id': model_id, 'displayName': 'Contract Flash',
             'baseUrl': base, 'apiKey': '${' + key + '}', 'provider': 'generic-chat-completion-api',
             'maxOutputTokens': 512, 'extraArgs': {'thinking': {'type': 'disabled'}}}]})
-        arguments = ['--settings', str(config), '-m', 'custom:' + model, '--enabled-tools', '', '--disable-builtin-skills']
+        arguments = ['--settings', str(config), '-m', model_id, '--enabled-tools', '', '--disable-builtin-skills']
         # Factory credentials remain in its normal home: BYOK may still require a Factory account.
     elif runtime in ('pi', 'omp'):
         environment['PI_CODING_AGENT_DIR'] = str(state)
