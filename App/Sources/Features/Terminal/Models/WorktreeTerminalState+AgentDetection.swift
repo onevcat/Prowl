@@ -92,24 +92,13 @@ extension WorktreeTerminalState {
     }
     logUnmappedProgramStatusAppIfNeeded(surfaceID: surfaceID, agent: agent)
 
+    let probe = AgentDetectionDiagnostic.Probe(
+      tabId: tabId, childPID: childPID, processGroupID: processGroupID, job: job, identified: identified)
     guard let agent else {
       // Only log the moment we lose a previously detected agent; pre-agent
       // shells churn process lists every command and would otherwise spam.
       if surfaceAgentStates[surfaceID]?.detectedAgent != nil {
-        logAgentDetectionDiagnostic(
-          surfaceID: surfaceID,
-          diagnostic: AgentDetectionDiagnostic(
-            tabId: tabId,
-            childPID: childPID,
-            processGroupID: processGroupID,
-            job: job,
-            identified: identified,
-            retainedAgent: nil,
-            raw: nil,
-            reason: nil,
-            stabilized: nil
-          )
-        )
+        logAgentDetectionDiagnostic(surfaceID: surfaceID, diagnostic: AgentDetectionDiagnostic(probe: probe))
       }
       removeAgentEntryIfNeeded(surfaceID: surfaceID)
       return false
@@ -120,20 +109,8 @@ extension WorktreeTerminalState {
     let capturedAt = ProcessInfo.processInfo.systemUptime
     let coordinator = agentDetectionCoordinators[surfaceID] ?? makeAgentDetectionCoordinator(surfaceID: surfaceID)
     agentDetectionCoordinators[surfaceID] = coordinator
-    // A verified OSC 7501 root record decides the state: the delegated tick keeps the
-    // probe and the session resolution and does not read the screen at all. The
-    // last scan stands in as the raw state and as the resolver's text.
     let delegated = coordinator.isDelegated
-    let lastScan = lastAgentScreenScanBySurface[surfaceID]
-    let activeText = delegated ? (lastScan?.text ?? "") : (view.bridge.readActiveText() ?? "")
-    // Reuse the previous scan while the screen and detected agent are unchanged.
-    // A live-but-idle agent is polled every 300 ms and `detectState` re-splits,
-    // lowercases, and scans the whole screen each time; skipping that for
-    // identical text is the bulk of steady-state detection cost.
-    let detection =
-      delegated
-      ? (lastScan?.detection ?? AgentScreenDetection(state: .unknown, reason: .noRuleMatched))
-      : cachedScreenDetection(forSurfaceID: surfaceID, agent: agent, text: activeText)
+    let (activeText, detection) = pollScreen(for: view, surfaceID: surfaceID, agent: agent, delegated: delegated)
     let raw = detection.state
     guard surfaces[surfaceID] != nil else { return false }
 
@@ -199,20 +176,32 @@ extension WorktreeTerminalState {
       logAgentDetectionDiagnostic(
         surfaceID: surfaceID,
         diagnostic: AgentDetectionDiagnostic(
-          tabId: tabId,
-          childPID: childPID,
-          processGroupID: processGroupID,
-          job: job,
-          identified: identified,
-          retainedAgent: agent,
-          raw: raw,
-          reason: detection.reason,
-          stabilized: stabilized
-        )
+          probe: probe, retainedAgent: agent, raw: raw, reason: detection.reason, stabilized: stabilized)
       )
     }
     commitAgentState(next, previous: previous, surfaceID: surfaceID, tabId: tabId)
     return true
+  }
+
+  /// The screen half of one poll. A verified OSC 7501 root record decides the state,
+  /// so the delegated tick does not read the screen at all: the last scan stands in
+  /// as the raw state and as the resolver's text (docs-ai 079).
+  private func pollScreen(
+    for view: GhosttySurfaceView, surfaceID: UUID, agent: DetectedAgent, delegated: Bool
+  ) -> (activeText: String, detection: AgentScreenDetection) {
+    let lastScan = lastAgentScreenScanBySurface[surfaceID]
+    if delegated {
+      return (
+        lastScan?.text ?? "",
+        lastScan?.detection ?? AgentScreenDetection(state: .unknown, reason: .noRuleMatched)
+      )
+    }
+    let activeText = view.bridge.readActiveText() ?? ""
+    // Reuse the previous scan while the screen and detected agent are unchanged.
+    // A live-but-idle agent is polled every 300 ms and `detectState` re-splits,
+    // lowercases, and scans the whole screen each time; skipping that for
+    // identical text is the bulk of steady-state detection cost.
+    return (activeText, cachedScreenDetection(forSurfaceID: surfaceID, agent: agent, text: activeText))
   }
 
   private static func processGeneration(_ identified: IdentifiedAgentProcess?) -> AgentProcessGeneration? {

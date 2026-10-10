@@ -116,8 +116,13 @@ sequences:
   [agent-detection](agent-detection.md#worktree-running-indicator).
 - **Program status (OSC 7501)** — Prowl answers the support query, so programs
   that speak the protocol (Claude Code 2.1.295+, Pi 1.1.0+) report
-  idle/working/blocked/done. Prowl receives the reports but does not act on them
-  yet; the activity indicator and agent detection still use the signals above.
+  idle/working/blocked/done/error. Prowl keeps one record tree per pane with the
+  protocol's lifetime rules (a report replaces its record, `clear` removes a
+  subtree, `app` is inherited, at most 256 records) and feeds the root record to
+  agent detection — see
+  [agent-detection](agent-detection.md#program-status-osc-7501) for which
+  producers it trusts. OSC 133 also tells detection that the foreground command
+  ended, which releases an agent's entry within one probe.
 - **Bell / desktop notification** — increments unread indicators.
 
 `--capture` in the CLI **requires OSC 133** on the target pane; without it you get

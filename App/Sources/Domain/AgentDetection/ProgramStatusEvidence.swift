@@ -74,8 +74,9 @@ nonisolated struct ProgramStatusEvidence: Equatable, Sendable {
   let rootKind: GhosttyProgramStatusReport.Kind?
   let blockedChild: BlockedChild?
 
-  init(root: ProgramStatusRecord.State, rootKind: GhosttyProgramStatusReport.Kind? = nil, blockedChild: BlockedChild? = nil)
-  {
+  init(
+    root: ProgramStatusRecord.State, rootKind: GhosttyProgramStatusReport.Kind? = nil, blockedChild: BlockedChild? = nil
+  ) {
     self.root = root
     self.rootKind = rootKind
     self.blockedChild = blockedChild

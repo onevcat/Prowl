@@ -7,7 +7,7 @@ import Testing
 /// the bound process generation, the support table, the push path, and the authority
 /// epoch that discards provider samples which were in flight when OSC took over.
 @MainActor
-struct AgentDetectionCoordinatorProgramStatusTests {
+struct AgentCoordinatorProgramStatusTests {
   private let started = Date(timeIntervalSince1970: 1_000)
   private var generation: AgentProcessGeneration { AgentProcessGeneration(pid: 42, startedAt: started) }
   private let idle = AgentScreenDetection(state: .idle, reason: .noRuleMatched)

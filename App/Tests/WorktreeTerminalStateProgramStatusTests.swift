@@ -37,7 +37,8 @@ struct WorktreeTerminalStateProgramStatusTests {
   private func claudeJob(launchPID: pid_t? = nil) -> ForegroundJob {
     let pid = getpid()
     var processes = [
-      ForegroundProcess(pid: pid, parentProcessID: launchPID ?? getppid(), name: "claude", argv0: "claude", cmdline: "claude")
+      ForegroundProcess(
+        pid: pid, parentProcessID: launchPID ?? getppid(), name: "claude", argv0: "claude", cmdline: "claude")
     ]
     if let launchPID {
       processes.insert(
@@ -94,7 +95,7 @@ struct WorktreeTerminalStateProgramStatusTests {
 
   private func noSession(
     _: IdentifiedAgentProcess?, _: PaneAgentState, _: URL?, _: String, _: (surfaceID: UUID, configRoot: URL?)
-  ) async -> (session: AgentSession?, missStreak: Int) {
+  ) -> (session: AgentSession?, missStreak: Int) {
     (nil, 0)
   }
 
@@ -213,7 +214,9 @@ struct WorktreeTerminalStateProgramStatusTests {
     let active = AgentDetectionSchedule.cold.warmed(now: now).observedAgent(now: now)
     #expect(WorktreeTerminalState.nextSchedule(active, hasAgent: true, delegated: true, now: now) == .delegated)
     #expect(WorktreeTerminalState.nextSchedule(.delegated, hasAgent: true, delegated: false, now: now) == .active)
-    #expect(WorktreeTerminalState.nextSchedule(.delegated, hasAgent: false, delegated: false, now: now).nextInterval(now: now) == .seconds(2))
+    #expect(
+      WorktreeTerminalState.nextSchedule(.delegated, hasAgent: false, delegated: false, now: now).nextInterval(now: now)
+        == .seconds(2))
   }
 
   // MARK: Release on command finished
@@ -277,7 +280,8 @@ struct WorktreeTerminalStateProgramStatusTests {
       launchProcessID: 100)
     let sameOwner = PaneAgentState(detectedAgent: .claude, agentProcessID: 101, launchProcessID: 100)
     #expect(
-      WorktreeTerminalState.commandFinishedOutcome(identified: launcher, previous: sameOwner, isLiveAncestor: { _, _ in false })
+      WorktreeTerminalState.commandFinishedOutcome(
+        identified: launcher, previous: sameOwner, isLiveAncestor: { _, _ in false })
         == .sameOwner)
     // The engine child was replaced while the launcher stayed a live ancestor.
     let replaced = IdentifiedAgentProcess(
@@ -286,18 +290,22 @@ struct WorktreeTerminalStateProgramStatusTests {
       launchProcessID: 102)
     #expect(
       WorktreeTerminalState.commandFinishedOutcome(
-        identified: replaced, previous: sameOwner, isLiveAncestor: { ancestor, descendant in ancestor == 100 && descendant == 102 })
+        identified: replaced, previous: sameOwner,
+        isLiveAncestor: { ancestor, descendant in ancestor == 100 && descendant == 102 })
         == .sameOwner)
     // A successor launch: nothing links it to the finished owner.
     #expect(
-      WorktreeTerminalState.commandFinishedOutcome(identified: replaced, previous: sameOwner, isLiveAncestor: { _, _ in false })
+      WorktreeTerminalState.commandFinishedOutcome(
+        identified: replaced, previous: sameOwner, isLiveAncestor: { _, _ in false })
         == .successor)
     #expect(
-      WorktreeTerminalState.commandFinishedOutcome(identified: nil, previous: sameOwner, isLiveAncestor: { _, _ in false })
+      WorktreeTerminalState.commandFinishedOutcome(
+        identified: nil, previous: sameOwner, isLiveAncestor: { _, _ in false })
         == .released)
     // A first agent appearing right after the prompt returned owns nothing yet.
     #expect(
-      WorktreeTerminalState.commandFinishedOutcome(identified: replaced, previous: PaneAgentState(), isLiveAncestor: { _, _ in false })
+      WorktreeTerminalState.commandFinishedOutcome(
+        identified: replaced, previous: PaneAgentState(), isLiveAncestor: { _, _ in false })
         == .successor)
   }
 

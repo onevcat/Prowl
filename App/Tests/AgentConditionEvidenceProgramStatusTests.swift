@@ -43,7 +43,9 @@ struct AgentConditionEvidenceProgramStatusTests {
       signals: .empty, screenDetection: screen, decision: current)
   }
 
-  private func osc(_ reason: ProgramStatusReason, state: AgentRawState, outstanding: Bool = false) -> AgentStateDecision {
+  private func osc(
+    _ reason: ProgramStatusReason, state: AgentRawState, outstanding: Bool = false
+  ) -> AgentStateDecision {
     AgentStateDecision(state: state, reason: .programStatus(reason), hasOutstandingWork: outstanding)
   }
 

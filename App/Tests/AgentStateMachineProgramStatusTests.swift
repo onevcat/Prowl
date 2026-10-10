@@ -10,7 +10,9 @@ import Testing
 struct AgentStateMachineProgramStatusTests {
   private typealias Kind = GhosttyProgramStatusReport.Kind
 
-  private func screen(_ state: AgentRawState, reason: AgentScreenDetectionReason = .noRuleMatched) -> AgentDetectionEvent {
+  private func screen(_ state: AgentRawState, reason: AgentScreenDetectionReason = .noRuleMatched)
+    -> AgentDetectionEvent
+  {
     .screen(AgentScreenDetection(state: state, reason: reason))
   }
 
@@ -35,24 +37,34 @@ struct AgentStateMachineProgramStatusTests {
     .programStatus(evidence(root: root, rootKind: kind, blockedChild: blockedChild), revision: revision)
   }
 
+  private struct RootMapping {
+    let root: ProgramStatusRecord.State
+    let kind: Kind?
+    let state: AgentRawState
+    let identifier: String
+    let outstanding: Bool
+  }
+
   @Test func rootRecordMapsToStateReasonAndOutstandingWork() {
-    let cases: [(ProgramStatusRecord.State, Kind?, AgentRawState, String, Bool)] = [
-      (.working, nil, .working, "osc.working", true),
-      (.blocked, .permission, .blocked, "osc.blocked.permission", true),
-      (.blocked, .question, .blocked, "osc.blocked.question", true),
-      (.blocked, .auth, .blocked, "osc.blocked.auth", true),
-      (.blocked, nil, .blocked, "osc.blocked.unspecified", true),
-      (.idle, nil, .idle, "osc.idle", false),
-      (.done, nil, .idle, "osc.done", false),
-      (.error, nil, .idle, "osc.error", false),
+    let cases = [
+      RootMapping(root: .working, kind: nil, state: .working, identifier: "osc.working", outstanding: true),
+      RootMapping(
+        root: .blocked, kind: .permission, state: .blocked, identifier: "osc.blocked.permission", outstanding: true),
+      RootMapping(
+        root: .blocked, kind: .question, state: .blocked, identifier: "osc.blocked.question", outstanding: true),
+      RootMapping(root: .blocked, kind: .auth, state: .blocked, identifier: "osc.blocked.auth", outstanding: true),
+      RootMapping(root: .blocked, kind: nil, state: .blocked, identifier: "osc.blocked.unspecified", outstanding: true),
+      RootMapping(root: .idle, kind: nil, state: .idle, identifier: "osc.idle", outstanding: false),
+      RootMapping(root: .done, kind: nil, state: .idle, identifier: "osc.done", outstanding: false),
+      RootMapping(root: .error, kind: nil, state: .idle, identifier: "osc.error", outstanding: false),
     ]
-    for (root, kind, state, identifier, outstanding) in cases {
+    for mapping in cases {
       var machine = AgentStateMachine()
       _ = machine.receive(screen(.working), now: 0)
-      let decision = machine.receive(osc(root, kind: kind, revision: 1), now: 1)
-      #expect(decision.state == state, "\(identifier)")
-      #expect(decision.reason.identifier == identifier)
-      #expect(decision.hasOutstandingWork == outstanding, "\(identifier)")
+      let decision = machine.receive(osc(mapping.root, kind: mapping.kind, revision: 1), now: 1)
+      #expect(decision.state == mapping.state, "\(mapping.identifier)")
+      #expect(decision.reason.identifier == mapping.identifier)
+      #expect(decision.hasOutstandingWork == mapping.outstanding, "\(mapping.identifier)")
       #expect(decision.logSessionID == nil)
       #expect(machine.hasProgramStatusAuthority)
     }

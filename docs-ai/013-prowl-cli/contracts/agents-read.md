@@ -26,12 +26,18 @@ result is separate evidence and may be unavailable without invalidating the live
 snapshot. This prevents an unresolvable transcript from hiding a useful blocker.
 
 - `status` is Prowl's stabilized `working`, `blocked`, `done`, or `idle` display state.
-- `raw_state` and `screen_reason` come from the fresh active-screen classifier.
-- `detection_reason` explains the final state decision. Log evidence can override a
-  retained screen frame; only `status: blocked` indicates a current blocker.
+- `raw_state` and `screen_reason` come from the fresh active-screen classifier. This
+  command is the on-demand exception to delegation: it reads and classifies a fresh
+  screen even while an OSC 7501 root record decides the state, so `screen_reason` here
+  is a rule ID, never `screen.delegated`.
+- `detection_reason` explains the final state decision. Log, native, or OSC evidence
+  can override a retained screen frame; only `status: blocked` indicates a current
+  blocker. The `osc.*` values follow [agents](agents.md).
 - `blocker.text`, when present, is the current typed-profile interaction region. It
   preserves the question, visible options, current selection marker, and keyboard hints;
-  it is not a reconstructed or generic terminal viewport.
+  it is not a reconstructed or generic terminal viewport. A `blocked` decision that no
+  screen rule corroborates (an OSC-only blocker) returns a null `blocker` rather than
+  `BLOCKER_UNREADABLE`, which is reserved for a blocked screen without a readable region.
 - Transcript access requires a fresh `exact` or `high` native session resolution. A
   `medium` candidate is never read.
 

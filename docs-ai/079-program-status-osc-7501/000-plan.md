@@ -2,9 +2,9 @@
 
 | | |
 | --- | --- |
-| **Status** | Planned (slice 1 implemented) |
+| **Status** | Planned (slices 1 and 2 implemented) |
 | **Anchor date** | 2026-10-10 |
-| **Primary PRs** | #887 (slice 1); slices 2–4 to fill in as they merge |
+| **Primary PRs** | #887 (slice 1); slice 2 in [003-generic-provider.md](003-generic-provider.md); slices 3–4 to fill in as they merge |
 | **Related** | [078-ghostty-1-4-upgrade-rehearsal](../078-ghostty-1-4-upgrade-rehearsal/000-plan.md), [068-agent-state-providers](../068-agent-state-providers/architecture.md), [064-agent-completion-signals](../064-agent-completion-signals/000-plan.md), `docs/components/agent-detection.md`, [producer-baseline.md](producer-baseline.md), [#891](https://github.com/onevcat/Prowl/issues/891) (legacy background-work semantics, deferred) |
 
 ## Background
@@ -408,7 +408,7 @@ baseline rows, amendment `005-pi-verified.md`.
 | Slice | PR | Content | Gate to merge |
 | --- | --- | --- | --- |
 | 1 | #887 | fork action, Swift copy, harness, baselines | landed |
-| 2 | — | store, machine, coordinator, delegated schedule, command-finished release, all `.unverified` | `make check`, `make test`, `make build-app`; a Debug run with Claude and Pi shows shadow disagreements only where expected; legacy-only regression checks for the fast release (an agent that never reports, kill -9 and normal exit, relaunch in the same pane, `wait --until exit`, a pending dispatch across the release) |
+| 2 | [003](003-generic-provider.md) | store, machine, coordinator, delegated schedule, command-finished release, all `.unverified` | `make check`, `make test`, `make build-app`; a Debug run with Claude and Pi shows shadow disagreements only where expected; legacy-only regression checks for the fast release (an agent that never reports, kill -9 and normal exit, relaunch in the same pane, `wait --until exit`, a pending dispatch across the release) |
 | 3 | — | Claude `.verified` | acceptance list above replayed; no case where OSC was wrong and the legacy decision right; CPU recorded |
 | 4 | — | Pi `.verified` | same, for Pi |
 
@@ -525,3 +525,11 @@ pane) is expected to be noise; slices 3 and 4 measure it.
   owner retires the launch context); late provider samples from an earlier authority epoch
   are discarded; condition snapshots read the coordinator's current decision so a withdrawn
   `osc.*` reason is never readiness evidence.
+- Updated 2026-10-10: slice 2 implemented (record store, state machine event and authority
+  transition, coordinator push path and authority epoch, delegated schedule, interruptible
+  wake, command-finished release, undo-close feed, readiness through the coordinator's
+  current decision, CLI surface; every agent `.unverified`) — see
+  [003-generic-provider.md](003-generic-provider.md), which also lists the small
+  deviations (shadow lines on every transition, unmapped-app line from the poll,
+  revision bump on `commandFinished`, last scan text for the delegated resolver, owner
+  generation keyed by `launchProcessID` alone).

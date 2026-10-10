@@ -89,9 +89,9 @@ extension WorktreeTerminalState {
   /// finished owner's launch context exactly as a release would.
   func applyCommandFinished(_ pending: PendingCommandFinished, identified: IdentifiedAgentProcess?, surfaceID: UUID) {
     let previous = surfaceAgentStates[surfaceID] ?? PaneAgentState()
-    switch Self.commandFinishedOutcome(
+    let outcome = Self.commandFinishedOutcome(
       identified: identified, previous: previous, isLiveAncestor: Self.processIsLiveAncestor)
-    {
+    switch outcome {
     case .sameOwner:
       return
     case .successor:

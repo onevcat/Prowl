@@ -45,6 +45,15 @@ enum TerminalCloseConfirmationTarget {
 
 /// Transition metadata only. Never carry rendered screen text in diagnostics.
 struct AgentDetectionDiagnostic {
+  /// What one poll's process probe saw, before any agent-dependent work.
+  struct Probe {
+    let tabId: TerminalTabID
+    let childPID: pid_t?
+    let processGroupID: pid_t?
+    let job: ForegroundJob?
+    let identified: IdentifiedAgentProcess?
+  }
+
   let tabId: TerminalTabID
   let childPID: pid_t?
   let processGroupID: pid_t?
@@ -54,6 +63,40 @@ struct AgentDetectionDiagnostic {
   let raw: AgentRawState?
   let reason: AgentScreenDetectionReason?
   let stabilized: AgentRawState?
+
+  init(
+    tabId: TerminalTabID,
+    childPID: pid_t?,
+    processGroupID: pid_t?,
+    job: ForegroundJob?,
+    identified: IdentifiedAgentProcess?,
+    retainedAgent: DetectedAgent?,
+    raw: AgentRawState?,
+    reason: AgentScreenDetectionReason?,
+    stabilized: AgentRawState?
+  ) {
+    self.tabId = tabId
+    self.childPID = childPID
+    self.processGroupID = processGroupID
+    self.job = job
+    self.identified = identified
+    self.retainedAgent = retainedAgent
+    self.raw = raw
+    self.reason = reason
+    self.stabilized = stabilized
+  }
+
+  init(
+    probe: Probe,
+    retainedAgent: DetectedAgent? = nil,
+    raw: AgentRawState? = nil,
+    reason: AgentScreenDetectionReason? = nil,
+    stabilized: AgentRawState? = nil
+  ) {
+    self.init(
+      tabId: probe.tabId, childPID: probe.childPID, processGroupID: probe.processGroupID, job: probe.job,
+      identified: probe.identified, retainedAgent: retainedAgent, raw: raw, reason: reason, stabilized: stabilized)
+  }
 
   var summary: String {
     let processSummary =

@@ -99,22 +99,11 @@ nonisolated struct AgentStateMachine: Sendable {
     case .native(let snapshot):
       observeNative(snapshot)
     case .inventory(let sessions):
-      hasLogProvider = true
-      available = true
-      roots = roots.filter { sessions.contains($0.key) }
-      for session in sessions where roots[session] == nil { roots[session] = Root() }
+      observeInventory(sessions)
     case .turnStarted(let session, let turn):
-      if roots[session] != nil, roots[session]?.turn != turn {
-        roots[session]?.turn = turn
-        roots[session]?.lastActivity = now
-        suppressedScreen = nil
-      }
+      startTurn(session: session, turn: turn, now: now)
     case .turnEnded(let session, let turn):
-      if roots[session]?.turn == turn {
-        roots[session]?.turn = nil
-        roots[session]?.lastActivity = now
-        suppressCompletedScreen(session: session)
-      }
+      endTurn(session: session, turn: turn, now: now)
     case .childScheduled(let root, let child, let work):
       scheduleChild(root: root, child: child, work: work)
     case .childStarted(let root, let child, let work):
@@ -164,6 +153,27 @@ nonisolated struct AgentStateMachine: Sendable {
       for session in roots.keys { roots[session]?.lastActivity = nil }
     }
     programStatus = evidence
+  }
+
+  private mutating func observeInventory(_ sessions: Set<String>) {
+    hasLogProvider = true
+    available = true
+    roots = roots.filter { sessions.contains($0.key) }
+    for session in sessions where roots[session] == nil { roots[session] = Root() }
+  }
+
+  private mutating func startTurn(session: String, turn: String, now: TimeInterval) {
+    guard roots[session] != nil, roots[session]?.turn != turn else { return }
+    roots[session]?.turn = turn
+    roots[session]?.lastActivity = now
+    suppressedScreen = nil
+  }
+
+  private mutating func endTurn(session: String, turn: String, now: TimeInterval) {
+    guard roots[session]?.turn == turn else { return }
+    roots[session]?.turn = nil
+    roots[session]?.lastActivity = now
+    suppressCompletedScreen(session: session)
   }
 
   private mutating func observeNative(_ snapshot: AgentNativeSnapshot) {

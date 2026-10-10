@@ -113,7 +113,6 @@ final class AgentDetectionCoordinator {
     machine.receive(.interaction, now: now)
   }
 
-  // swiftlint:disable:next function_parameter_count
   func observe(
     agent: DetectedAgent,
     process: AgentProcessGeneration?,
