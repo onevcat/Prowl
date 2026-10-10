@@ -38,6 +38,26 @@ struct SplitTreeTests {
     #expect(emissions == [first.id, second.id])
   }
 
+  @Test func closeOperationRemovesThePaneLikeTheTabBarCloseButton() throws {
+    let state = makeWorktreeTerminalState()
+    let tabId = try #require(state.createTab())
+    let firstID = try #require(state.focusedSurfaceId(in: tabId))
+    #expect(state.performSplitAction(.newSplit(direction: .right), for: firstID))
+    let secondID = try #require(state.focusedSurfaceId(in: tabId))
+    #expect(secondID != firstID)
+
+    state.performSplitOperation(.close(surfaceId: secondID), in: tabId)
+
+    #expect(state.splitTree(for: tabId).leaves().map(\.id) == [firstID])
+    #expect(state.surfaceView(for: secondID) == nil)
+    #expect(state.focusedSurfaceId(in: tabId) == firstID)
+    #expect(state.tabManager.tabs.count == 1)
+
+    // Closing a pane that is already gone changes nothing.
+    state.performSplitOperation(.close(surfaceId: secondID), in: tabId)
+    #expect(state.splitTree(for: tabId).leaves().map(\.id) == [firstID])
+  }
+
   @Test func explicitAnchorSplitDoesNotUseTheFocusedSurface() throws {
     let state = makeWorktreeTerminalState()
     let tabID = try #require(state.createTab())
