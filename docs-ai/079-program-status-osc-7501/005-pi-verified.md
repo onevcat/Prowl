@@ -76,4 +76,4 @@ admission alone; the row was reworded. Round 3 confirmed the fix against the cod
 ## Refs
 
 Builds on #887 (slice 1), #892 (plan), #893 (slice 2); parallel to #895 (slice 3). #891
-(legacy background-work semantics) stays open. PR number to fill in on merge.
+(legacy background-work semantics) stays open. PR #896.
