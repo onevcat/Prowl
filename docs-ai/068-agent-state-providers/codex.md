@@ -7,7 +7,7 @@ Reference baseline: `e54b1e19`, 2026-09-14. Shared arbitration is in
 
 ## Acquisition contract
 
-`supacode/Infrastructure/AgentDetection/CodexLogProvider.swift` samples writable
+`App/Sources/Infrastructure/AgentDetection/CodexLogProvider.swift` samples writable
 rollout descriptors owned by the detected process. Process generation is checked
 before and after sampling. State authority requires a complete inventory, unlike
 best-effort public session lookup.
@@ -35,7 +35,7 @@ not include transcript content. Current limits and failures are not a full repla
 
 ## Lifecycle decoding
 
-`supacode/Infrastructure/AgentDetection/CodexLogDecoder.swift` emits private facts:
+`App/Sources/Infrastructure/AgentDetection/CodexLogDecoder.swift` emits private facts:
 
 | Runtime record | Private interpretation |
 | --- | --- |

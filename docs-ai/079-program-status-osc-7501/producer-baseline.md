@@ -92,3 +92,18 @@ out of durable logs. Pi 1.0.2 (the previous local version) sent no query.
   new state or kind.
 - Timings are for ordering (query before DA1, idle after mount), not latency guarantees.
 - Keep `msg` out of durable logs by default; it is untrusted program text.
+
+## Verification inside Prowl
+
+Filled in by the slice that marks a producer verified (slices 3 and 4 of
+[000-plan.md](000-plan.md)). Each row is one baseline scenario replayed in an isolated Debug
+instance, with the `detection_reason` that `prowl agents --json` reported and the schedule the
+pane was on. A producer is not flipped to `.verified` before its table is complete.
+
+### Claude Code
+
+Pending (slice 3).
+
+### Pi
+
+Pending (slice 4).

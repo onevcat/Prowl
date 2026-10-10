@@ -22,12 +22,12 @@ This is a shared decision path, not a general plugin interface for arbitrary pro
 
 | Responsibility | Current source |
 | --- | --- |
-| Process identity and generation | `supacode/Infrastructure/AgentDetection/ProcessDetection.swift` |
-| Observation acquisition and ordering | `supacode/Features/Terminal/BusinessLogic/AgentDetectionCoordinator.swift` |
-| Pure arbitration | `supacode/Domain/AgentDetection/AgentStateMachine.swift` |
+| Process identity and generation | `App/Sources/Infrastructure/AgentDetection/ProcessDetection.swift` |
+| Observation acquisition and ordering | `App/Sources/Features/Terminal/BusinessLogic/AgentDetectionCoordinator.swift` |
+| Pure arbitration | `App/Sources/Domain/AgentDetection/AgentStateMachine.swift` |
 | Runtime acquisition/decoding | [Codex provider](codex.md) |
-| Terminal publication | `supacode/Features/Terminal/Models/WorktreeTerminalState+AgentDetection.swift` |
-| Wait/readiness evidence | `supacode/CLIService/AgentConditionEvidence.swift` |
+| Terminal publication | `App/Sources/Features/Terminal/Models/WorktreeTerminalState+AgentDetection.swift` |
+| Wait/readiness evidence | `App/Sources/CLIService/AgentConditionEvidence.swift` |
 
 The existing adaptive polling clock drives acquisition and ticks. No additional
 watcher or timer was introduced. Captures receive monotonic timestamps before
