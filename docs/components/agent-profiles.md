@@ -188,7 +188,7 @@ appears in the typed command, shell history, or scrollback. Rules:
   `COPILOT_HOME`, `QWEN_HOME`, `PI_CODING_AGENT_DIR`, and `CLINE_DATA_DIR`) — a custom home must go
   through **Use Dedicated Home**, which always wins over a same-named row.
 - Later duplicate names win (shell-export semantics).
-- Values are stored in plaintext in `~/.prowl/global.onevcat.json` (kept
+- Values are stored in plaintext in `~/.prowl/global.user.json` (kept
   owner-only, `0600`); the Launch Preview shows only the `$PROWL_ENV_*`
   references, never the values.
 - Launch-scoped by design: manual launches, resumed sessions, and restored
@@ -288,8 +288,8 @@ still work; `create … --profile <amp-profile> --prompt -` fails without creati
 
 | What | Where |
 |------|-------|
-| Profiles + seeding flag | `~/.prowl/global.onevcat.json` |
-| Per-repo default + launch memory | `~/.prowl/repo/<name>/prowl.onevcat.json` |
+| Profiles + seeding flag | `~/.prowl/global.user.json` |
+| Per-repo default + launch memory | `~/.prowl/repo/<name>/prowl.user.json` |
 | Dedicated profile homes | `~/.prowl/agent-profiles/<uuid>/` |
 
 ## Gotchas for agents

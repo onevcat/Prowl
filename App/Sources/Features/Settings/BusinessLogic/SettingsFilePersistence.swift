@@ -5,6 +5,7 @@ import Sharing
 nonisolated struct SettingsFileStorage: Sendable {
   var load: @Sendable (URL) throws -> Data
   var save: @Sendable (Data, URL) throws -> Void
+  var create: (@Sendable (Data, URL, URL?) throws -> Void)?
 }
 
 nonisolated enum SettingsFileStorageKey: DependencyKey {
@@ -21,7 +22,10 @@ nonisolated enum SettingsFileStorageKey: DependencyKey {
       // `~/.prowl/settings.json` (and the repository-entries / appearances
       // files that share this closure) into a dotfiles repo keeps the link
       // instead of having it replaced with a plain file on every save (#478).
-      save: { data, url in try SymlinkPreservingFileWriter.write(data, to: url) }
+      save: { data, url in try SymlinkPreservingFileWriter.write(data, to: url) },
+      create: { data, url, source in
+        try SymlinkPreservingFileWriter.create(data, to: url, preservingLinkAt: source)
+      }
     )
   }
   static var previewValue: SettingsFileStorage { .inMemory() }

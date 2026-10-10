@@ -44,13 +44,15 @@ and opens that section's root.
 ## Where settings live on disk
 
 - **Global:** `~/.prowl/settings.json`
-- **Global custom commands + agent profiles + workflow settings:** `~/.prowl/global.onevcat.json`
+- **Global custom commands + agent profiles + workflow settings:** `~/.prowl/global.user.json`
 - **Your workflow files:** `~/.prowl/workflows/*.pwlworkflow` (per repository: `<repo root>/.prowl/workflows/*.pwlworkflow`)
 - **Per-repo:** `~/.prowl/repo/<repo-name>/prowl.json`
-- **Per-repo custom commands + agent profile default/memory:** `~/.prowl/repo/<repo-name>/prowl.onevcat.json`
+- **Per-repo custom commands + agent profile default/memory:** `~/.prowl/repo/<repo-name>/prowl.user.json`
 - **Dedicated agent profile homes:** `~/.prowl/agent-profiles/<uuid>/`
 
-Legacy `~/.supacode` is migrated to `~/.prowl` on first launch.
+Legacy `~/.supacode` is migrated to `~/.prowl` on first launch. Old `.onevcat.json`
+user settings migrate without deleting the source. See the
+[migration and recovery rules](../reference/settings-fields.md#user-settings-migration).
 
 ## Install the CLI from here
 
