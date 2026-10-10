@@ -68,7 +68,7 @@ nonisolated final class UserGlobalSettingsTestStorage: @unchecked Sendable {
   private func load(_ url: URL) throws -> Data {
     lock.lock()
     defer { lock.unlock() }
-    guard let data = dataByURL[url] else { throw UserGlobalSettingsTestStorageError.missing }
+    guard let data = dataByURL[url] else { throw SettingsFileStorageError.missing }
     return data
   }
 
@@ -77,8 +77,4 @@ nonisolated final class UserGlobalSettingsTestStorage: @unchecked Sendable {
     defer { lock.unlock() }
     dataByURL[url] = data
   }
-}
-
-private enum UserGlobalSettingsTestStorageError: Error {
-  case missing
 }

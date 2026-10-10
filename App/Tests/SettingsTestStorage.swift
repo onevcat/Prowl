@@ -17,7 +17,7 @@ nonisolated final class SettingsTestStorage: @unchecked Sendable {
     lock.lock()
     defer { lock.unlock() }
     guard let data = dataByURL[url] else {
-      throw SettingsTestStorageError.missing
+      throw SettingsFileStorageError.missing
     }
     return data
   }
@@ -27,8 +27,4 @@ nonisolated final class SettingsTestStorage: @unchecked Sendable {
     defer { lock.unlock() }
     dataByURL[url] = data
   }
-}
-
-enum SettingsTestStorageError: Error {
-  case missing
 }

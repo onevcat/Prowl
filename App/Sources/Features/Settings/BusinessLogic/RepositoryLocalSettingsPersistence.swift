@@ -4,6 +4,7 @@ import Foundation
 nonisolated struct RepositoryLocalSettingsStorage: Sendable {
   var load: @Sendable (URL) throws -> Data
   var save: @Sendable (Data, URL) throws -> Void
+  var create: (@Sendable (Data, URL, URL?) throws -> Void)?
 }
 
 nonisolated enum RepositoryLocalSettingsStorageKey: DependencyKey {
@@ -21,7 +22,10 @@ nonisolated enum RepositoryLocalSettingsStorageKey: DependencyKey {
       // — follow the link on write to preserve it (#478). Upstream keeps a
       // non-following write for its in-repo `supacode.json`; that exception does
       // not apply here because the fork stores these outside the repository.
-      save: { data, url in try SymlinkPreservingFileWriter.write(data, to: url) }
+      save: { data, url in try SymlinkPreservingFileWriter.write(data, to: url) },
+      create: { data, url, source in
+        try SymlinkPreservingFileWriter.create(data, to: url, preservingLinkAt: source)
+      }
     )
   }
 

@@ -81,8 +81,8 @@ key, and you choose Replace / Cancel.
 
 **Where they appear:** enabled commands appear in the window toolbar, the Worktrees
 menu, and the [Command Palette](command-palette.md). Global commands are stored in
-`~/.prowl/global.onevcat.json`; local commands remain in
-`~/.prowl/repo/<repo-name>/prowl.onevcat.json`.
+`~/.prowl/global.user.json`; local commands remain in
+`~/.prowl/repo/<repo-name>/prowl.user.json`.
 
 ## Example uses
 

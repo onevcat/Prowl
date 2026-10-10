@@ -13,12 +13,32 @@ For the UI grouping of these into tabs, see [`components/settings.md`](../compon
 | Scope | Path |
 |-------|------|
 | Global settings | `~/.prowl/settings.json` |
-| Global custom commands + agent profiles | `~/.prowl/global.onevcat.json` |
+| Global custom commands + agent profiles + workflows | `~/.prowl/global.user.json` |
 | Per-repository settings | `~/.prowl/repo/<repo-name>/prowl.json` |
-| Per-repository custom commands + agent-profile memory | `~/.prowl/repo/<repo-name>/prowl.onevcat.json` |
+| Per-repository custom commands + agent-profile memory | `~/.prowl/repo/<repo-name>/prowl.user.json` |
 
 JSON is pretty-printed with sorted keys. Legacy `~/.supacode` is migrated to
 `~/.prowl` on first launch.
+
+### User settings migration
+
+When a new user settings path is absent, Prowl reads `global.onevcat.json` or
+`prowl.onevcat.json` from the same directory. Repository settings also retain the
+older legacy-name fallback in that directory. The first successful load creates
+the new path; the old file is not deleted. If both exist, the new path wins.
+
+Migration preserves the original JSON bytes. New regular files are owner-only
+(`0600`). A legacy symlink produces a new symlink to the same resolved target,
+so dotfiles-backed settings stay connected. A damaged, unreadable, or dangling
+configuration stops loading and saving; Prowl does not replace it with defaults
+or recover from an older file silently. To recover, quit Prowl, back up the files,
+repair the JSON, permissions, or link target, then restart. Read and migration
+failures are recorded in the Settings log.
+
+Old regular files are migration-time snapshots, not synchronized backups.
+Downgrading to an older Prowl version does **not** carry later changes back to
+those files. Symlink-backed old and new paths share one target instead. Legacy
+reads have no scheduled removal date.
 
 ## Global settings (`GlobalSettings`)
 
@@ -96,25 +116,25 @@ Stored at `~/.prowl/repo/<repo-name>/prowl.json` (schema v2). For the tri-state
 | `observeLineDiffsAutomatically` | Bool? | `nil` (= on) | Keep worktree line-change badges updated; set `false` for large repos. |
 | `fetchPullRequestState` | Bool? | `nil` (= on) | Background-fetch PR state; set `false` to save GitHub rate limit. |
 
-**Custom Commands** live separately in `prowl.onevcat.json`. Each command has an
+**Custom Commands** live separately in `prowl.user.json`. Each command has an
 `isEnabled` Boolean that defaults to `true`; turning it off preserves its structure
 (title, icon, command, execution mode, close-on-success, shortcut, and order) but
 removes it from every command surface and hotkey dispatch.
 
 **Global Custom Commands** use the same command structure in
-`~/.prowl/global.onevcat.json`. Repository `prowl.onevcat.json` files additionally
+`~/.prowl/global.user.json`. Repository `prowl.user.json` files additionally
 store `disabledGlobalCommandIDs`: an absent ID means enabled for that repository, while
 an included ID hides that Global command there. Local commands are ordered before Global
 commands; matching titles do not hide either command.
 
-**Agent Profiles** share these files: `global.onevcat.json` also stores the
+**Agent Profiles** share these files: `global.user.json` also stores the
 `agentProfiles` array and the one-shot `didSeedAgentProfiles` flag, and each
-repository's `prowl.onevcat.json` stores `defaultAgentProfileID` (the explicit
+repository's `prowl.user.json` stores `defaultAgentProfileID` (the explicit
 per-repo Default Agent Profile) and `lastLaunchedAgentProfileID` (launch
 memory for the Recommended resolution). See
 [`components/agent-profiles.md`](../components/agent-profiles.md).
 
-**Workflows** also persist in `global.onevcat.json`: `disabledWorkflowIDs`
+**Workflows** also persist in `global.user.json`: `disabledWorkflowIDs`
 (`bundle/<id>`, `user/<id>`, or `repo:<canonical root>/<id>` keys of workflow definitions switched off — the Enabled control in
 Workflow Settings), `workflowBindModeOverrides` (`{workflow_key,
 mode}` entries, `mode` `ask` | `auto`; absent = follow the file's `bind` — the

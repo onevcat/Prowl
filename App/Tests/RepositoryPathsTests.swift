@@ -55,7 +55,7 @@ struct ProwlPathsTests {
     let root = URL(fileURLWithPath: "/tmp/work/repo-alpha/.bare")
     let settingsURL = ProwlPaths.userRepositorySettingsURL(for: root)
 
-    #expect(settingsURL.lastPathComponent == "prowl.onevcat.json")
+    #expect(settingsURL.lastPathComponent == "prowl.user.json")
     #expect(settingsURL.deletingLastPathComponent().lastPathComponent == ".bare")
     #expect(settingsURL.deletingLastPathComponent().deletingLastPathComponent().lastPathComponent == "repo")
   }

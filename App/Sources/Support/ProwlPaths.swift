@@ -261,7 +261,7 @@ nonisolated enum ProwlPaths {
   }
 
   static var userGlobalSettingsURL: URL {
-    baseDirectory.appending(path: "global.onevcat.json", directoryHint: .notDirectory)
+    baseDirectory.appending(path: "global.user.json", directoryHint: .notDirectory)
   }
 
   /// Base for account-bound agent profile homes: `~/.prowl/agent-profiles/`.
@@ -342,7 +342,21 @@ nonisolated enum ProwlPaths {
 
   static func userRepositorySettingsURL(for rootURL: URL) -> URL {
     repositorySettingsDirectory(for: rootURL)
-      .appending(path: "prowl.onevcat.json", directoryHint: .notDirectory)
+      .appending(path: "prowl.user.json", directoryHint: .notDirectory)
+  }
+
+  static func legacyUserGlobalSettingsURLs(for url: URL) -> [URL] {
+    // An explicitly injected, unrelated filename must not read personal settings.
+    guard url.lastPathComponent == "global.user.json" else { return [] }
+    return [url.deletingLastPathComponent().appending(path: "global.onevcat.json", directoryHint: .notDirectory)]
+  }
+
+  static func legacyUserRepositorySettingsURLs(for rootURL: URL) -> [URL] {
+    [
+      repositorySettingsDirectory(for: rootURL)
+        .appending(path: "prowl.onevcat.json", directoryHint: .notDirectory),
+      legacyUserRepositorySettingsURL(for: rootURL),
+    ]
   }
 
   /// Legacy location: ~/.prowl/repo/<name>/supacode.json (pre-rename)

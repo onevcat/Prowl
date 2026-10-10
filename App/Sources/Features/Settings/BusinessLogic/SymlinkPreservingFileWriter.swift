@@ -12,6 +12,8 @@ nonisolated enum SymlinkPreservingFileWriterError: Error, Equatable {
   case temporaryFileCreationFailed(URL)
   /// `rename(2)` of the temporary file onto the target failed with this errno.
   case renameFailed(URL, code: Int32)
+  /// Exclusive publication failed, for example because the destination now exists.
+  case linkFailed(URL, code: Int32)
 }
 
 /// Atomic file writes that survive a symlinked destination. When the target is a
@@ -26,11 +28,26 @@ nonisolated enum SymlinkPreservingFileWriter {
   /// the write rather than fabricating a phantom tree there).
   static func write(_ data: Data, to url: URL) throws {
     let target = try resolvedTarget(for: url)
+    try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try publish(data, to: target, replacing: true)
+  }
+
+  /// Creates a migration destination without replacing a competing file or link.
+  /// A legacy symlink keeps its resolved target instead of becoming a detached copy.
+  static func create(_ data: Data, to url: URL, preservingLinkAt source: URL?) throws {
     let fileManager = FileManager.default
-    try fileManager.createDirectory(
-      at: url.deletingLastPathComponent(),
-      withIntermediateDirectories: true
-    )
+    try fileManager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    if let source, try source.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink == true {
+      let target = try resolvedTarget(for: source)
+      _ = try Data(contentsOf: target)
+      try fileManager.createSymbolicLink(at: url, withDestinationURL: target)
+    } else {
+      try publish(data, to: url, replacing: false)
+    }
+  }
+
+  private static func publish(_ data: Data, to target: URL, replacing: Bool) throws {
+    let fileManager = FileManager.default
     // Settings may carry secrets (agent profile env overrides can hold API
     // keys, docs-ai 053/004): the temporary file is born 0600, and the
     // same-directory rename(2) both replaces the target atomically — through a
@@ -51,10 +68,18 @@ nonisolated enum SymlinkPreservingFileWriter {
     else {
       throw SymlinkPreservingFileWriterError.temporaryFileCreationFailed(target)
     }
-    guard rename(temporaryPath, target.path(percentEncoded: false)) == 0 else {
-      let code = errno
-      try? fileManager.removeItem(at: temporary)
-      throw SymlinkPreservingFileWriterError.renameFailed(target, code: code)
+    defer { try? fileManager.removeItem(at: temporary) }
+    let targetPath = target.path(percentEncoded: false)
+    if replacing {
+      guard rename(temporaryPath, targetPath) == 0 else {
+        throw SymlinkPreservingFileWriterError.renameFailed(target, code: errno)
+      }
+    } else {
+      // link(2) publishes the complete 0600 file atomically and refuses EEXIST.
+      // The temporary name is then removed; the source file is never hard-linked.
+      guard link(temporaryPath, targetPath) == 0 else {
+        throw SymlinkPreservingFileWriterError.linkFailed(target, code: errno)
+      }
     }
   }
 

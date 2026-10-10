@@ -78,7 +78,7 @@ all agents and their statuses is the
 
 - **Global settings:** `~/.prowl/settings.json`
 - **Per-repository settings:** `~/.prowl/repo/<repo-name>/prowl.json`
-- **Per-repository user custom commands:** `~/.prowl/repo/<repo-name>/prowl.onevcat.json`
+- **Per-repository user custom commands:** `~/.prowl/repo/<repo-name>/prowl.user.json`
 - **Per-workspace metadata:** `<workspace>/.prowl/workspace.json`
 - **Workflow files:** `~/.prowl/workflows/*.pwlworkflow` and `<repo root>/.prowl/workflows/*.pwlworkflow`;
   runs leave `~/.prowl/logs/workflow-runs/<root-name>-<root-hash>/YYYY-MM/<run-id>/`

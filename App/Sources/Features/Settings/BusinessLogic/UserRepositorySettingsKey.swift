@@ -9,10 +9,20 @@ nonisolated struct UserRepositorySettingsKeyID: Hashable, Sendable {
 nonisolated struct UserRepositorySettingsKey: SharedKey {
   let repositoryID: String
   let rootURL: URL
+  private let file: UserSettingsFile<UserRepositorySettings>
 
   init(rootURL: URL) {
-    self.rootURL = rootURL.standardizedFileURL
-    repositoryID = self.rootURL.path(percentEncoded: false)
+    @Dependency(\.repositoryLocalSettingsStorage) var storage
+    let rootURL = rootURL.standardizedFileURL
+    self.rootURL = rootURL
+    repositoryID = rootURL.path(percentEncoded: false)
+    file = UserSettingsFile(
+      url: ProwlPaths.userRepositorySettingsURL(for: rootURL),
+      legacyURLs: ProwlPaths.legacyUserRepositorySettingsURLs(for: rootURL),
+      loadData: storage.load,
+      saveData: storage.save,
+      createData: storage.create
+    )
   }
 
   var id: UserRepositorySettingsKeyID {
@@ -23,58 +33,13 @@ nonisolated struct UserRepositorySettingsKey: SharedKey {
     context: LoadContext<UserRepositorySettings>,
     continuation: LoadContinuation<UserRepositorySettings>
   ) {
-    @Dependency(\.repositoryLocalSettingsStorage) var repositoryLocalSettingsStorage
-    let settingsURL = ProwlPaths.userRepositorySettingsURL(for: rootURL)
-    let decoder = JSONDecoder()
-    if let localData = try? repositoryLocalSettingsStorage.load(settingsURL) {
-      if let settings = try? decoder.decode(UserRepositorySettings.self, from: localData) {
-        continuation.resume(returning: settings.normalized())
-        return
-      }
-      let path = settingsURL.path(percentEncoded: false)
-      ProwlLogger("Settings").warning(
-        "Unable to decode user repository settings at \(path); trying legacy settings."
-      )
-    }
-
-    let legacySettingsURL = ProwlPaths.legacyUserRepositorySettingsURL(for: rootURL)
-    if let legacyData = try? repositoryLocalSettingsStorage.load(legacySettingsURL) {
-      if let legacySettings = try? decoder.decode(UserRepositorySettings.self, from: legacyData) {
-        let normalized = legacySettings.normalized()
-        do {
-          let encoder = JSONEncoder()
-          encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-          let data = try encoder.encode(normalized)
-          try repositoryLocalSettingsStorage.save(data, settingsURL)
-        } catch {
-          let path = settingsURL.path(percentEncoded: false)
-          ProwlLogger("Settings").warning(
-            "Unable to write user repository settings to \(path): \(error.localizedDescription)"
-          )
-        }
-        continuation.resume(returning: normalized)
-        return
-      }
-      let path = legacySettingsURL.path(percentEncoded: false)
-      ProwlLogger("Settings").warning(
-        "Unable to decode legacy user repository settings at \(path); using defaults."
-      )
-    }
-
-    let defaultSettings = (context.initialValue ?? .default).normalized()
     do {
-      let encoder = JSONEncoder()
-      encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-      let data = try encoder.encode(defaultSettings)
-      try repositoryLocalSettingsStorage.save(data, settingsURL)
+      let settings = try file.load(initialValue: (context.initialValue ?? .default).normalized())
+      continuation.resume(returning: settings.normalized())
     } catch {
-      let path = settingsURL.path(percentEncoded: false)
-      ProwlLogger("Settings").warning(
-        "Unable to write user repository settings to \(path): \(error.localizedDescription)"
-      )
+      ProwlLogger("Settings").warning("Unable to load user repository settings: \(error.localizedDescription)")
+      continuation.resume(throwing: error)
     }
-
-    continuation.resume(returning: defaultSettings)
   }
 
   func subscribe(
@@ -89,18 +54,14 @@ nonisolated struct UserRepositorySettingsKey: SharedKey {
     context _: SaveContext,
     continuation: SaveContinuation
   ) {
-    @Dependency(\.repositoryLocalSettingsStorage) var repositoryLocalSettingsStorage
-    let settingsURL = ProwlPaths.userRepositorySettingsURL(for: rootURL)
     do {
-      let encoder = JSONEncoder()
-      encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-      let data = try encoder.encode(value.normalized())
-      try repositoryLocalSettingsStorage.save(data, settingsURL)
+      try file.save(value.normalized())
       continuation.resume()
     } catch {
       continuation.resume(throwing: error)
     }
   }
+
 }
 
 nonisolated extension SharedReaderKey where Self == UserRepositorySettingsKey.Default {
