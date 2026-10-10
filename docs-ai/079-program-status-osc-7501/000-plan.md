@@ -48,7 +48,8 @@ a fork patch; pure Swift cannot see the bytes.
 - No session identity from `app`/`id`; `logSessionID` keeps coming from native/log providers.
 - No UI for non-agent producers (cargo, terraform) in this entry; the record store is generic
   so a later entry can show them.
-- No upstream submission here; it is tracked as a follow-up decision.
+- No upstream submission: the action stays a fork patch (decided 2026-10-10); the struct
+  mirrors the libghostty-vt names so a later upstream action is a rename, not a redesign.
 
 ## Design / Approach
 

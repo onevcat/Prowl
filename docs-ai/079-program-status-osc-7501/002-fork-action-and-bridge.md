@@ -51,7 +51,10 @@ Slice 1 of [000-plan.md](000-plan.md): give Prowl the bytes before any detection
 
 - Claude Code did not show the trust dialog in the isolated instance's fresh `/tmp` repo, so
   the "no report before trust" row in the baseline is only verified in the pty harness.
-- Pi 1.1.0 sent nothing for the `/model` selector and ran a Bash tool without a confirmation
-  under onevcat's settings; `blocked` from Pi is still unobserved.
-- Whether to propose the action upstream (issue or PR against `ghostty-org/ghostty`) is open;
-  the struct mirrors the libghostty-vt field set and enum names to keep that cheap.
+- Pi 1.1.0 sent nothing for the `/model` selector and ran a Bash tool without a confirmation:
+  its built-in tools never ask, so `blocked` only comes from extension dialogs and OAuth
+  logins. Replayed with a gate extension (`kind=permission` and `kind=question`) and an
+  expired-credential run (`error`); see [producer-baseline.md](producer-baseline.md).
+  `kind=auth` stays unobserved.
+- Upstream proposal: decided against on 2026-10-10, the action stays in the fork. The struct
+  still mirrors the libghostty-vt field set and enum names in case upstream adds its own.

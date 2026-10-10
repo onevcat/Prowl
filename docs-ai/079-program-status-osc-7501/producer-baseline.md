@@ -15,7 +15,32 @@ scripts/program_status_probe.py --seconds 40 \
 # pi: prompt, then ctrl+d twice to exit
 scripts/program_status_probe.py --seconds 32 \
   --keys '4:reply with just the word ok\r;24:\x04;25:\x04' -- pi
+
+# pi blocked: gate the bash tool with an extension dialog, answer it with Enter (Yes)
+scripts/program_status_probe.py --seconds 48 \
+  --keys '4:use the bash tool to run: touch probe-touch.txt. Then reply with just the word ok\r;16:\r;24:\r;42:\x04;43:\x04' \
+  -- pi -e /path/to/confirm-gate.ts
 ```
+
+Pi's built-in tools never ask for confirmation and Pi has no permission setting, so `blocked`
+only comes from extension dialogs (`ctx.ui.confirm` → `kind=permission`; `ctx.ui.select`,
+`input`, `editor` → `kind=question`) and from an OAuth login wait (`kind=auth`). The gate
+extension for the replay is:
+
+```ts
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+
+export default function (pi: ExtensionAPI) {
+  pi.on("tool_call", async (event, ctx) => {
+    if (event.toolName !== "bash" || !ctx.hasUI) return undefined;
+    const allowed = await ctx.ui.confirm("Run bash?", String(event.input.command));
+    return allowed ? undefined : { block: true, reason: "Blocked by user" };
+  });
+}
+```
+
+Swap `ctx.ui.confirm(...)` for `ctx.ui.select("Run bash?", ["Yes", "No"]) === "Yes"` to
+replay `kind=question`.
 
 The harness spawns the program in a pty (120×40, `TERM=xterm-256color`, `CLAUDE*` variables
 removed), echoes `OSC 7501 ; ?` with the producer's terminator, answers DA1 and the kitty
@@ -48,11 +73,18 @@ command), so a write command is needed to reproduce `blocked`.
 | Turn finished | `state=done:app=pi` |
 | Escape during a turn | `state=idle:app=pi` ("Operation aborted"), not `error` |
 | ctrl+d at the prompt | `state=clear`, then exit |
-| `/model` selector open and dismissed | not observed (no report either way) |
-| Bash tool (`touch`) | ran without a confirmation under these settings: `working` → `done`, no `blocked` |
+| `/model` selector open and dismissed | not observed (no report either way; built-in selectors are not extension dialogs) |
+| Bash tool (`touch`), no gate extension | ran without a confirmation: `working` → `done`, no `blocked` |
+| Bash tool behind `ctx.ui.confirm` | `state=blocked:app=pi:kind=permission:msg=<base64 "Run bash?">` 4 s after Enter (model latency); msg is the dialog title only, not the command |
+| Bash tool behind `ctx.ui.select` | `state=blocked:app=pi:kind=question:msg=<base64 selector title>` |
+| Dialog answered (Enter = Yes) | `state=working:app=pi` within 0.01 s, then `state=done:app=pi` 2 s later |
+| Provider auth failure during a run (expired Anthropic OAuth) | `state=working` then `state=error:app=pi:msg=<base64 first error line>` 0.3 s later; no `done`; stays `error` until ctrl+d → `clear` |
+| Missing API key for the provider | pre-flight error in the TUI, the run never starts: no `working`, no `error` |
 
-Not observed: `blocked` of any kind, child records, `error`. Pi 1.0.2 (the previous local
-version) sent no query.
+Not observed: `kind=auth` (Pi sends it while an OAuth login waits for the browser; not run
+because it opens a real login flow), child records. `working`/`done` carry `msg` only when
+the session has a name. The `error` msg carried a URL and a server response body: keep it
+out of durable logs. Pi 1.0.2 (the previous local version) sent no query.
 
 ## Replay rules
 
