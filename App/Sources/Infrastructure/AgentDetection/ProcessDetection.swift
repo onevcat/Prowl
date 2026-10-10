@@ -62,7 +62,10 @@ actor AgentProcessProbe {
     self.cacheLifetime = cacheLifetime
   }
 
-  func foregroundJob(processGroupID: pid_t?, childPID: pid_t?) -> ForegroundJob? {
+  /// `bypassingCache` samples the process group again even inside the cache lifetime:
+  /// after a `COMMAND_FINISHED` a cached hit or miss could neither confirm nor deny
+  /// the exit (docs-ai 079). The fresh result replaces the cache entry.
+  func foregroundJob(processGroupID: pid_t?, childPID: pid_t?, bypassingCache: Bool = false) -> ForegroundJob? {
     let resolvedProcessGroupID: pid_t?
     if let processGroupID, processGroupID > 0 {
       resolvedProcessGroupID = processGroupID
@@ -73,11 +76,11 @@ actor AgentProcessProbe {
     }
 
     guard let resolvedProcessGroupID else { return nil }
-    return cachedForegroundJob(processGroupID: resolvedProcessGroupID, now: Date())
+    return cachedForegroundJob(processGroupID: resolvedProcessGroupID, now: Date(), bypassingCache: bypassingCache)
   }
 
-  private func cachedForegroundJob(processGroupID: pid_t, now: Date) -> ForegroundJob? {
-    if let cached = jobsByProcessGroupID[processGroupID],
+  private func cachedForegroundJob(processGroupID: pid_t, now: Date, bypassingCache: Bool) -> ForegroundJob? {
+    if !bypassingCache, let cached = jobsByProcessGroupID[processGroupID],
       now.timeIntervalSince(cached.capturedAt) < cacheLifetime
     {
       return cached.job

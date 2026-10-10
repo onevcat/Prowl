@@ -72,6 +72,7 @@ extension WorktreeTerminalState {
 
     surfaceRunningStartedAtById.removeValue(forKey: surfaceId)
     noteCommandFinishedForCommandDetection(surfaceId: surfaceId)
+    noteCommandFinishedForAgentDetection(surfaceID: surfaceId)
 
     // Custom command success toast. One-shot: removed regardless of outcome.
     if let commandName = pendingCustomCommands.removeValue(forKey: surfaceId), exitCode == 0 {

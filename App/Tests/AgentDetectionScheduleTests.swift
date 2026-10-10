@@ -39,4 +39,18 @@ struct AgentDetectionScheduleTests {
     #expect(cooldown.nextInterval(now: now.addingTimeInterval(149.9)) == .seconds(2))
     #expect(cooldown.nextInterval(now: now.addingTimeInterval(150.1)) == nil)
   }
+
+  @Test func delegatedAgentPollsSlowlyAndLeavesOnKeyPressOrLoss() {
+    let now = Date(timeIntervalSince1970: 100)
+    let delegated = AgentDetectionSchedule.active.observedDelegatedAgent(now: now)
+
+    #expect(delegated == .delegated)
+    #expect(delegated.nextInterval(now: now.addingTimeInterval(600)) == .seconds(2))
+    // A key press reads the screen once more before the next tick delegates again.
+    #expect(delegated.warmed(now: now) == .active)
+    #expect(delegated.observedAgent(now: now) == .active)
+    let cooldown = delegated.observedNoAgent(now: now)
+    #expect(cooldown.nextInterval(now: now.addingTimeInterval(29.9)) == .seconds(2))
+    #expect(cooldown.nextInterval(now: now.addingTimeInterval(30.1)) == nil)
+  }
 }

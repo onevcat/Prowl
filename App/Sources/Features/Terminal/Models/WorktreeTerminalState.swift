@@ -45,6 +45,15 @@ enum TerminalCloseConfirmationTarget {
 
 /// Transition metadata only. Never carry rendered screen text in diagnostics.
 struct AgentDetectionDiagnostic {
+  /// What one poll's process probe saw, before any agent-dependent work.
+  struct Probe {
+    let tabId: TerminalTabID
+    let childPID: pid_t?
+    let processGroupID: pid_t?
+    let job: ForegroundJob?
+    let identified: IdentifiedAgentProcess?
+  }
+
   let tabId: TerminalTabID
   let childPID: pid_t?
   let processGroupID: pid_t?
@@ -54,6 +63,40 @@ struct AgentDetectionDiagnostic {
   let raw: AgentRawState?
   let reason: AgentScreenDetectionReason?
   let stabilized: AgentRawState?
+
+  init(
+    tabId: TerminalTabID,
+    childPID: pid_t?,
+    processGroupID: pid_t?,
+    job: ForegroundJob?,
+    identified: IdentifiedAgentProcess?,
+    retainedAgent: DetectedAgent?,
+    raw: AgentRawState?,
+    reason: AgentScreenDetectionReason?,
+    stabilized: AgentRawState?
+  ) {
+    self.tabId = tabId
+    self.childPID = childPID
+    self.processGroupID = processGroupID
+    self.job = job
+    self.identified = identified
+    self.retainedAgent = retainedAgent
+    self.raw = raw
+    self.reason = reason
+    self.stabilized = stabilized
+  }
+
+  init(
+    probe: Probe,
+    retainedAgent: DetectedAgent? = nil,
+    raw: AgentRawState? = nil,
+    reason: AgentScreenDetectionReason? = nil,
+    stabilized: AgentRawState? = nil
+  ) {
+    self.init(
+      tabId: probe.tabId, childPID: probe.childPID, processGroupID: probe.processGroupID, job: probe.job,
+      identified: probe.identified, retainedAgent: retainedAgent, raw: raw, reason: reason, stabilized: stabilized)
+  }
 
   var summary: String {
     let processSummary =
@@ -157,6 +200,46 @@ final class WorktreeTerminalState {
   var agentDetectionTasks: [UUID: Task<Void, Never>] = [:]
   var agentDetectionPresenceBySurface: [UUID: AgentDetectionPresence] = [:]
   var lastAgentDetectionDiagnosticsBySurface: [UUID: String] = [:]
+  /// OSC 7501 record trees per surface (docs-ai 079). Records belong to the terminal,
+  /// not to a process: a store outlives `forgetSurface` while its surface is retained
+  /// for undo and is dropped when the surface is freed or closed for good.
+  @ObservationIgnored var programStatusStoresBySurface: [UUID: ProgramStatusRecordStore] = [:]
+  /// The sleeping half of each detection loop; `wakeAgentDetection` cancels it so a
+  /// report, a key press, or a finished command gets an immediate probe.
+  @ObservationIgnored var agentDetectionSleepersBySurface: [UUID: AgentDetectionSleeper] = [:]
+  /// The loop that currently owns each surface's schedule and sleeper.
+  @ObservationIgnored var agentDetectionLoopTokens: [UUID: UInt64] = [:]
+  @ObservationIgnored var agentDetectionLoopCounter: UInt64 = 0
+  struct AgentDetectionSleeper {
+    let token: UInt64
+    let task: Task<Void, any Error>
+  }
+  /// Wakes that arrived while a loop was mid-tick; the next sleep is skipped.
+  @ObservationIgnored var agentDetectionWakeRequests: Set<UUID> = []
+  /// Surfaces whose next probe bypasses the process cache (a `COMMAND_FINISHED` arrived).
+  @ObservationIgnored var agentDetectionFreshProbeRequests: Set<UUID> = []
+  /// Surfaces a key press asked for one full (non-delegated) tick; consumed only by a
+  /// tick that actually reads the screen, so a press during a delegated tick's
+  /// suspension still gets its full tick next.
+  @ObservationIgnored var agentDetectionFullTickRequests: Set<UUID> = []
+  /// Bumped by every cleanup of a surface's detection state. A poll re-reads it after
+  /// each suspension: a close followed by an undo restores the same surface id, and
+  /// the old poll's continuation must not act on the restored pane.
+  @ObservationIgnored var agentDetectionLifecycleBySurface: [UUID: UInt64] = [:]
+  /// What a `COMMAND_FINISHED` captured, consumed by the fresh probe that follows it.
+  @ObservationIgnored var pendingCommandFinishedBySurface: [UUID: PendingCommandFinished] = [:]
+  /// Unmapped `app` values already reported once per surface.
+  @ObservationIgnored var programStatusUnmappedAppsLoggedBySurface: [UUID: Set<String>] = [:]
+  /// Test seams: the process probe, the OSC support table, and the diagnostics sink.
+  @ObservationIgnored var agentProcessProbeForTesting: AgentProcessProbeOverride?
+  @ObservationIgnored var programStatusSupportForTesting: ((DetectedAgent) -> ProgramStatusSupport)?
+  @ObservationIgnored var programStatusLogForTesting: ((String) -> Void)?
+  typealias AgentProcessProbeOverride =
+    @MainActor (_ processGroupID: pid_t?, _ childPID: pid_t?, _ fresh: Bool) async -> ForegroundJob?
+  struct PendingCommandFinished: Equatable {
+    /// The store revision when the 133 D arrived; the cleanup is scoped to it.
+    let storeRevision: UInt64
+  }
   /// Memoizes the last agent-screen scan per surface so `detectAgentState` can
   /// reuse it while the terminal text and detected agent are unchanged. A
   /// live-but-idle agent is polled every 300 ms; without this each poll re-ran

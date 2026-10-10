@@ -11,20 +11,34 @@ extension WorktreeTerminalState {
     wakeAgentDetection(for: view, tabId: tabId)
   }
 
+  /// A real wake (docs-ai 079): besides warming the schedule and starting the loop,
+  /// it ends the loop's current sleep so a key press, a `COMMAND_FINISHED`, a report
+  /// for an unbound pane, or an OSC withdrawal gets an immediate probe.
   func wakeAgentDetection(for view: GhosttySurfaceView, tabId: TerminalTabID, now: Date = Date()) {
     agentDetectionSchedules[view.id] = (agentDetectionSchedules[view.id] ?? .cold).warmed(now: now)
     if surfaceAgentStates[view.id] == nil {
       surfaceAgentStates[view.id] = PaneAgentState(lastChangedAt: now)
     }
+    agentDetectionFullTickRequests.insert(view.id)
     startAgentDetectionTaskIfNeeded(for: view, tabId: tabId)
+    interruptAgentDetectionSleep(forSurfaceID: view.id)
   }
 
   func startAgentDetectionTaskIfNeeded(for view: GhosttySurfaceView, tabId: TerminalTabID) {
     guard agentDetectionTasks[view.id] == nil else { return }
+    // A loop owns its surface's schedule and sleeper only while its token is current:
+    // a close cancels the loop, and an undo can restore the same surface with a new
+    // loop before the old one's last continuation has run.
+    agentDetectionLoopCounter &+= 1
+    let token = agentDetectionLoopCounter
+    agentDetectionLoopTokens[view.id] = token
     agentDetectionTasks[view.id] = Task { @MainActor [weak self, weak view] in
       while !Task.isCancelled {
-        guard let self, let view, self.surfaces[view.id] != nil else { return }
+        guard let self, let view, self.surfaces[view.id] != nil,
+          self.agentDetectionLoopTokens[view.id] == token
+        else { return }
         let hasAgent = await self.detectAgentState(for: view, tabId: tabId)
+        guard !Task.isCancelled, self.agentDetectionLoopTokens[view.id] == token else { return }
         let now = Date()
         // Titles land on the manager's own clock now, because a non-agent program
         // can strand one after this schedule goes cold. An entry cannot be
@@ -32,21 +46,34 @@ extension WorktreeTerminalState {
         // and that is exactly the condition keeping this loop warm. So the poll
         // stays the trailing flush here, and no second timer is needed.
         self.flushPendingAgentEntry(surfaceID: view.id, now: now)
-        let schedule = self.agentDetectionSchedules[view.id] ?? .cold
-        self.agentDetectionSchedules[view.id] =
-          hasAgent ? schedule.observedAgent(now: now) : schedule.observedNoAgent(now: now)
+        self.agentDetectionSchedules[view.id] = self.nextScheduleAfterTick(
+          surfaceID: view.id, hasAgent: hasAgent, now: now)
 
         guard let interval = self.agentDetectionSchedules[view.id]?.nextInterval(now: now) else {
           self.finishColdAgentDetection(forSurfaceID: view.id)
           return
         }
-        try? await Task.sleep(for: interval)
+        await self.sleepAgentDetection(forSurfaceID: view.id, token: token, interval: interval)
       }
     }
   }
 
+  /// The schedule after one tick. A verified producer's eligible root delegates the
+  /// next tick only while the probe keeps confirming the agent: a miss leaves
+  /// delegation so the remaining misses run on the active cadence.
+  func nextScheduleAfterTick(surfaceID: UUID, hasAgent: Bool, now: Date = Date()) -> AgentDetectionSchedule {
+    let delegated =
+      agentDetectionCoordinators[surfaceID]?.isDelegated == true
+      && agentDetectionPresenceBySurface[surfaceID]?.consecutiveMisses == 0
+      && !agentDetectionFullTickRequests.contains(surfaceID)
+    return Self.nextSchedule(
+      agentDetectionSchedules[surfaceID] ?? .cold, hasAgent: hasAgent, delegated: delegated, now: now)
+  }
+
   func finishColdAgentDetection(forSurfaceID surfaceID: UUID) {
     agentDetectionTasks.removeValue(forKey: surfaceID)
+    agentDetectionLoopTokens.removeValue(forKey: surfaceID)
+    clearAgentDetectionWakeState(forSurfaceID: surfaceID)
     agentDetectionSchedules.removeValue(forKey: surfaceID)
     agentDetectionPresenceBySurface.removeValue(forKey: surfaceID)
     lastAgentDetectionDiagnosticsBySurface.removeValue(forKey: surfaceID)
@@ -69,34 +96,36 @@ extension WorktreeTerminalState {
     let surfaceID = view.id
     let childPID = view.bridge.childPID()
     let processGroupID = view.bridge.foregroundProcessGroupID()
-    let job = await AgentProcessProbe.shared.foregroundJob(processGroupID: processGroupID, childPID: childPID)
-    guard surfaces[surfaceID] != nil else { return false }
+    let lifecycle = agentDetectionLifecycleBySurface[surfaceID] ?? 0
+    // A `COMMAND_FINISHED` asked for a sample the probe cache cannot answer. Its mark
+    // is taken with the request, before the probe suspends, so a second D that lands
+    // during this sample keeps its own mark for its own fresh sample.
+    let fresh = agentDetectionFreshProbeRequests.remove(surfaceID) != nil
+    let finished = fresh ? pendingCommandFinishedBySurface.removeValue(forKey: surfaceID) : nil
+    let job = await probeForegroundJob(processGroupID: processGroupID, childPID: childPID, fresh: fresh)
+    // A close during the probe (even one undone since) retires this poll's verdict.
+    guard surfaces[surfaceID] != nil, agentDetectionLifecycleBySurface[surfaceID] ?? 0 == lifecycle else {
+      return false
+    }
 
     let identified = job.flatMap { identifyAgentInJob($0) }
     let probedAgent = identified?.agent
 
     var presence = agentDetectionPresenceBySurface[surfaceID] ?? AgentDetectionPresence()
-    let agent = presence.update(detectedAgent: probedAgent)
+    let agent = presence.update(detectedAgent: probedAgent, releaseOnMiss: finished != nil)
     agentDetectionPresenceBySurface[surfaceID] = presence
+    if let finished {
+      applyCommandFinished(finished, identified: identified, surfaceID: surfaceID)
+    }
+    logUnmappedProgramStatusAppIfNeeded(surfaceID: surfaceID, agent: agent)
 
+    let probe = AgentDetectionDiagnostic.Probe(
+      tabId: tabId, childPID: childPID, processGroupID: processGroupID, job: job, identified: identified)
     guard let agent else {
       // Only log the moment we lose a previously detected agent; pre-agent
       // shells churn process lists every command and would otherwise spam.
       if surfaceAgentStates[surfaceID]?.detectedAgent != nil {
-        logAgentDetectionDiagnostic(
-          surfaceID: surfaceID,
-          diagnostic: AgentDetectionDiagnostic(
-            tabId: tabId,
-            childPID: childPID,
-            processGroupID: processGroupID,
-            job: job,
-            identified: identified,
-            retainedAgent: nil,
-            raw: nil,
-            reason: nil,
-            stabilized: nil
-          )
-        )
+        logAgentDetectionDiagnostic(surfaceID: surfaceID, diagnostic: AgentDetectionDiagnostic(probe: probe))
       }
       removeAgentEntryIfNeeded(surfaceID: surfaceID)
       return false
@@ -105,12 +134,18 @@ extension WorktreeTerminalState {
     let now = Date()
     var previous = surfaceAgentStates[surfaceID] ?? PaneAgentState(lastChangedAt: now)
     let capturedAt = ProcessInfo.processInfo.systemUptime
-    let activeText = view.bridge.readActiveText() ?? ""
-    // Reuse the previous scan while the screen and detected agent are unchanged.
-    // A live-but-idle agent is polled every 300 ms and `detectState` re-splits,
-    // lowercases, and scans the whole screen each time; skipping that for
-    // identical text is the bulk of steady-state detection cost.
-    let detection = cachedScreenDetection(forSurfaceID: surfaceID, agent: agent, text: activeText)
+    let coordinator = agentDetectionCoordinators[surfaceID] ?? makeAgentDetectionCoordinator(surfaceID: surfaceID)
+    agentDetectionCoordinators[surfaceID] = coordinator
+    let process = Self.processGeneration(identified)
+    // The tick is delegated only while the schedule says so (a key press puts one full
+    // tick back on the active schedule) and the probe confirmed the generation the
+    // authority was bound to: a miss or an engine change gets a full acquisition.
+    let delegated =
+      coordinator.isDelegated && agentDetectionSchedules[surfaceID] == .delegated
+      && !agentDetectionFullTickRequests.contains(surfaceID)
+      && process != nil && process == coordinator.boundProcess
+    if !delegated { agentDetectionFullTickRequests.remove(surfaceID) }
+    let (activeText, detection) = pollScreen(for: view, surfaceID: surfaceID, agent: agent, delegated: delegated)
     let raw = detection.state
     guard surfaces[surfaceID] != nil else { return false }
 
@@ -123,28 +158,35 @@ extension WorktreeTerminalState {
     // Re-check after the suspension: the pane may have been closed and its
     // agent state cleaned up while the resolver was doing file inspection;
     // writing below would resurrect a ghost Active Agents entry.
-    guard surfaces[surfaceID] != nil else { return false }
+    guard surfaces[surfaceID] != nil, agentDetectionLifecycleBySurface[surfaceID] ?? 0 == lifecycle else {
+      return false
+    }
     // Acknowledgement can change while session inspection is suspended. Preserve it,
     // but discard this observation if any other state changed in the meantime.
     guard let current = surfaceAgentStates[surfaceID] else { return false }
     previous.seen = current.seen
     previous.lastChangedAt = current.lastChangedAt
     guard previous == current else { return true }
-    let coordinator = agentDetectionCoordinators[surfaceID] ?? AgentDetectionCoordinator(surfaceID: surfaceID)
-    agentDetectionCoordinators[surfaceID] = coordinator
-    let process = Self.processGeneration(identified)
 
     guard
       let decision = await coordinator.observe(
         agent: agent, process: process, screen: detection,
         screenContentID: detection.state == .blocked ? activeText.hashValue : nil,
         capturedAt: capturedAt,
-        configRoot: launchProfilesBySurface[surfaceID]?.configRoot(forDetected: agent)
-      ), surfaces[surfaceID] != nil, let latest = surfaceAgentStates[surfaceID]
+        configRoot: launchProfilesBySurface[surfaceID]?.configRoot(forDetected: agent),
+        programStatus: programStatusStoresBySurface[surfaceID],
+        delegated: delegated
+      ), surfaces[surfaceID] != nil, agentDetectionLifecycleBySurface[surfaceID] ?? 0 == lifecycle,
+      let latest = surfaceAgentStates[surfaceID]
     else { return false }
     previous.seen = latest.seen
     previous.lastChangedAt = latest.lastChangedAt
     guard previous == latest else { return true }
+    // An OSC withdrawal publishes nothing by itself: only an observe whose capture
+    // started after it may replace the last published state.
+    if let withdrawnAt = coordinator.lastProgramStatusWithdrawalAt, capturedAt < withdrawnAt {
+      return true
+    }
     let stabilized = decision.state
     let launchObservation = resolvedLaunchObservation(identified: identified, previous: previous)
     let lastChangedAt = (previous.detectedAgent != agent || previous.state != stabilized) ? now : previous.lastChangedAt
@@ -159,7 +201,7 @@ extension WorktreeTerminalState {
       iconLookupToken: iconLookupToken,
       fallbackState: raw,
       state: stabilized,
-      seen: resolvedSeen(previous: previous, stabilized: stabilized, surfaceID: surfaceID),
+      seen: Self.resolvedSeen(previous: previous, decision: decision, isViewed: isViewedSurface(surfaceID)),
       lastChangedAt: lastChangedAt
     )
     next.sessionMissStreak = sessionMissStreak
@@ -171,23 +213,32 @@ extension WorktreeTerminalState {
       logAgentDetectionDiagnostic(
         surfaceID: surfaceID,
         diagnostic: AgentDetectionDiagnostic(
-          tabId: tabId,
-          childPID: childPID,
-          processGroupID: processGroupID,
-          job: job,
-          identified: identified,
-          retainedAgent: agent,
-          raw: raw,
-          reason: detection.reason,
-          stabilized: stabilized
-        )
+          probe: probe, retainedAgent: agent, raw: raw, reason: detection.reason, stabilized: stabilized)
       )
     }
-    guard next != previous else { return true }
-    surfaceAgentStates[surfaceID] = next
-    updateTabAgentBusyState(for: tabId)
-    emitAgentEntry(surfaceID: surfaceID, tabId: tabId, state: next)
+    commitAgentState(next, previous: previous, surfaceID: surfaceID, tabId: tabId)
     return true
+  }
+
+  /// The screen half of one poll. A verified OSC 7501 root record decides the state,
+  /// so the delegated tick does not read the screen at all: the last scan stands in
+  /// as the raw state and as the resolver's text (docs-ai 079).
+  private func pollScreen(
+    for view: GhosttySurfaceView, surfaceID: UUID, agent: DetectedAgent, delegated: Bool
+  ) -> (activeText: String, detection: AgentScreenDetection) {
+    let lastScan = lastAgentScreenScanBySurface[surfaceID]
+    if delegated {
+      return (
+        lastScan?.text ?? "",
+        lastScan?.detection ?? AgentScreenDetection(state: .unknown, reason: .noRuleMatched)
+      )
+    }
+    let activeText = view.bridge.readActiveText() ?? ""
+    // Reuse the previous scan while the screen and detected agent are unchanged.
+    // A live-but-idle agent is polled every 300 ms and `detectState` re-splits,
+    // lowercases, and scans the whole screen each time; skipping that for
+    // identical text is the bulk of steady-state detection cost.
+    return (activeText, cachedScreenDetection(forSurfaceID: surfaceID, agent: agent, text: activeText))
   }
 
   private static func processGeneration(_ identified: IdentifiedAgentProcess?) -> AgentProcessGeneration? {
@@ -234,20 +285,6 @@ extension WorktreeTerminalState {
     )
     lastAgentScreenScanBySurface[surfaceID] = scan
     return detection
-  }
-
-  private func resolvedSeen(
-    previous: PaneAgentState,
-    stabilized: AgentRawState,
-    surfaceID: UUID
-  ) -> Bool {
-    if isViewedSurface(surfaceID) {
-      return true
-    }
-    if (previous.state == .working || previous.state == .blocked) && stabilized == .idle {
-      return false
-    }
-    return previous.seen
   }
 
   private func resolvedLaunchProcessID(
@@ -520,9 +557,16 @@ extension WorktreeTerminalState {
   }
 
   func cleanupAgentDetectionState(forSurfaceId surfaceId: UUID) {
+    agentDetectionLifecycleBySurface[surfaceId, default: 0] &+= 1
     agentDetectionCoordinators.removeValue(forKey: surfaceId)?.invalidate()
     agentDetectionTasks[surfaceId]?.cancel()
     agentDetectionTasks.removeValue(forKey: surfaceId)
+    agentDetectionLoopTokens.removeValue(forKey: surfaceId)
+    clearAgentDetectionWakeState(forSurfaceID: surfaceId)
+    // A surface retained for undo keeps its process and its records (docs-ai 079).
+    if !isRetainedForUndo(surfaceId) {
+      dropProgramStatusStores(forSurfaceIDs: [surfaceId])
+    }
     agentDetectionSchedules.removeValue(forKey: surfaceId)
     surfaceAgentStates.removeValue(forKey: surfaceId)
     agentDetectionPresenceBySurface.removeValue(forKey: surfaceId)
@@ -543,7 +587,17 @@ extension WorktreeTerminalState {
       task.cancel()
     }
     let removedIDs = Array(lastEmittedAgentEntriesBySurface.keys)
+    for surfaceID in surfaces.keys { agentDetectionLifecycleBySurface[surfaceID, default: 0] &+= 1 }
     agentDetectionTasks.removeAll()
+    agentDetectionFullTickRequests.removeAll()
+    agentDetectionLoopTokens.removeAll()
+    for sleeper in agentDetectionSleepersBySurface.values { sleeper.task.cancel() }
+    agentDetectionSleepersBySurface.removeAll()
+    agentDetectionWakeRequests.removeAll()
+    agentDetectionFreshProbeRequests.removeAll()
+    pendingCommandFinishedBySurface.removeAll()
+    programStatusStoresBySurface.removeAll()
+    programStatusUnmappedAppsLoggedBySurface.removeAll()
     agentDetectionSchedules.removeAll()
     surfaceAgentStates.removeAll()
     agentDetectionPresenceBySurface.removeAll()

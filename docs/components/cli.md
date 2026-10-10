@@ -204,11 +204,17 @@ Each agent contains:
   `working`, `done`, `idle`; `raw_state` is the lower-level detector state.
 - `detection_reason`: optional explanation of the final state decision, shared with
   `agents read`. Log evidence reports `log.openWork` or `log.turnEnded`; Claude native
-  evidence reports `native.working`, `native.blocked`, or `native.idle`; fallback
+  evidence reports `native.working`, `native.blocked`, or `native.idle`; a verified
+  OSC 7501 producer's root record reports `osc.working`, `osc.idle`, `osc.done`,
+  `osc.error`, `osc.blocked.<permission|question|auth|unspecified>`, or
+  `osc.childBlocked.<kind>` (see
+  [agent detection](agent-detection.md#program-status-osc-7501)); fallback
   decisions report `screen.*`. Screen-only decisions report the profile rule ID,
   `fallback.noRuleMatched`, or `legacy.detector`.
 - `screen_reason`: optional rule ID for the current screen classification, including
-  when log or native evidence controls the final state. Both reason fields omit screen text.
+  when log or native evidence controls the final state. While an `osc.*` decision
+  holds, the screen is not read and `screen_reason` is `screen.delegated`; `raw_state`
+  is then the last screen scan before delegation. Both reason fields omit screen text.
 - `last_changed_at`: ISO-8601 timestamp for the most recent state change.
 - `project`: display-oriented `name`, `branch`, `path` resolved from the
   agent's working directory.

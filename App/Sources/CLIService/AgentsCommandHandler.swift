@@ -101,6 +101,12 @@ final class AgentsCommandHandler: CommandHandler {
 
       let screenDetection = snapshot.screenDetectionsBySurfaceID[entry.surfaceID]
       let decision = snapshot.decisionsBySurfaceID[entry.surfaceID] ?? entry.stateDecision
+      // While an OSC 7501 root record decides, the screen is not read and the cached
+      // scan is stale: the decision's `screen.delegated` marker wins (docs-ai 079).
+      let screenReason =
+        decision?.reason.isProgramStatus == true
+        ? decision?.screenReason?.identifier
+        : screenDetection?.reason.identifier ?? decision?.screenReason?.identifier
       return AgentsCommandAgent(
         id: entry.surfaceID.uuidString,
         type: entry.agent.rawValue,
@@ -108,7 +114,7 @@ final class AgentsCommandHandler: CommandHandler {
         status: AgentsCommandStatus(rawValue: entry.displayState.rawValue) ?? .idle,
         rawState: (screenDetection?.state ?? entry.rawState).rawValue,
         detectionReason: decision?.reason.identifier ?? screenDetection?.reason.identifier,
-        screenReason: screenDetection?.reason.identifier ?? decision?.screenReason?.identifier,
+        screenReason: screenReason,
         lastChangedAt: dateFormatter.string(from: entry.lastChangedAt),
         project: AgentsCommandProject(
           name: display.repositoryName,

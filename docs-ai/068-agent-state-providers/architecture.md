@@ -18,6 +18,10 @@ Process generation + terminal screen + optional runtime evidence
 
 Every runtime uses the coordinator and machine. Codex has a log provider; Claude
 has a process-scoped native snapshot provider; other runtimes use screen observations.
+Since [079](../079-program-status-osc-7501/000-plan.md) every runtime also receives the
+pane's OSC 7501 root record as pushed evidence, resolved ahead of native, log, and
+screen; a static support table decides whether a producer's records drive the decision
+(`.verified`) or are only compared with it (`.unverified`, every agent as of slice 2).
 This is a shared decision path, not a general plugin interface for arbitrary providers.
 
 | Responsibility | Current source |
@@ -26,6 +30,7 @@ This is a shared decision path, not a general plugin interface for arbitrary pro
 | Observation acquisition and ordering | `App/Sources/Features/Terminal/BusinessLogic/AgentDetectionCoordinator.swift` |
 | Pure arbitration | `App/Sources/Domain/AgentDetection/AgentStateMachine.swift` |
 | Runtime acquisition/decoding | [Codex provider](codex.md) |
+| OSC 7501 program status (push, every producer) | `App/Sources/Domain/AgentDetection/ProgramStatusRecordStore.swift`, `ProgramStatusEvidence.swift`, `App/Sources/Features/Terminal/Models/WorktreeTerminalState+ProgramStatus.swift`; policy in [079](../079-program-status-osc-7501/000-plan.md) |
 | Terminal publication | `App/Sources/Features/Terminal/Models/WorktreeTerminalState+AgentDetection.swift` |
 | Wait/readiness evidence | `App/Sources/CLIService/AgentConditionEvidence.swift` |
 

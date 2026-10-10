@@ -545,15 +545,9 @@ extension WorktreeTerminalState {
       guard let self else { return }
       self.updateRunningState(for: tabId)
     }
-    view.bridge.onProgramStatus = { [weak view] report in
-      guard let view else { return }
-      // Diagnostics only until the record store lands (docs-ai 079). The
-      // message is untrusted program text and stays out of the log.
-      terminalStateLogger.debug(
-        "[ProgramStatus] surface=\(view.id) state=\(report.state.rawValue)"
-          + " kind=\(report.kind?.rawValue ?? "-") id=\(report.id.isEmpty ? "root" : report.id)"
-          + " app=\(report.app ?? "-") progress=\(report.progress.map(String.init) ?? "-")"
-      )
+    view.bridge.onProgramStatus = { [weak self, weak view] report in
+      guard let self, let view else { return }
+      self.handleProgramStatus(report, surfaceID: view.id)
     }
     view.bridge.onDesktopNotification = { [weak self, weak view] title, body in
       guard let self, let view else { return }

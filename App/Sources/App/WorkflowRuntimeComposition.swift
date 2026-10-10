@@ -136,20 +136,10 @@ extension ProwlApp {
     terminalManager: WorktreeTerminalManager,
     storeBox: ProwlAppStoreBox
   ) -> AgentConditionSnapshot {
-    let observed = terminalManager.agentObservationSnapshot(surfaceID: surfaceID)
     let agent = storeBox.store?.state.repositories.activeAgents.entries.first {
       $0.surfaceID == surfaceID
     }
-    let evidence = terminalManager.currentAgentSignalEvidence(surfaceID: surfaceID)
-    return AgentConditionSnapshot(
-      agent: agent,
-      signal: evidence.activeTerminal,
-      changedSignal: evidence.latest,
-      revision: observed?.revision ?? 0,
-      isLive: terminalManager.isSurfaceLive(surfaceID),
-      signals: terminalManager.agentSignalsPayload(surfaceID: surfaceID),
-      screenDetection: terminalManager.agentScreenDetection(surfaceID: surfaceID)
-    )
+    return terminalManager.agentConditionSnapshot(surfaceID: surfaceID, agent: agent)
   }
 
   // MARK: - Watchdog

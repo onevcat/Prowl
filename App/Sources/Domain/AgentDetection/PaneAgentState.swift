@@ -139,7 +139,10 @@ struct AgentDetectionPresence: Equatable, Sendable {
     self.consecutiveMisses = consecutiveMisses
   }
 
-  mutating func update(detectedAgent: DetectedAgent?) -> DetectedAgent? {
+  /// `releaseOnMiss` is the fresh sample that follows a `COMMAND_FINISHED` (docs-ai 079):
+  /// the shell reported that its foreground command ended, so one confirming miss
+  /// releases the entry instead of six. A cached or unrelated miss never qualifies.
+  mutating func update(detectedAgent: DetectedAgent?, releaseOnMiss: Bool = false) -> DetectedAgent? {
     if let detectedAgent {
       currentAgent = detectedAgent
       consecutiveMisses = 0
@@ -151,6 +154,11 @@ struct AgentDetectionPresence: Equatable, Sendable {
       return nil
     }
 
+    if releaseOnMiss {
+      currentAgent = nil
+      consecutiveMisses = 0
+      return nil
+    }
     consecutiveMisses = min(consecutiveMisses + 1, UInt8(Self.releaseMissThreshold))
     if consecutiveMisses >= Self.releaseMissThreshold {
       currentAgent = nil

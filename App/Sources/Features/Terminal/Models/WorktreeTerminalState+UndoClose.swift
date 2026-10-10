@@ -95,9 +95,19 @@ extension WorktreeTerminalState {
     bridge.onGotoTab = nil
     bridge.onCommandPaletteToggle = nil
     bridge.onProgressReport = nil
-    bridge.onProgramStatus = nil
+    // The process keeps running during retention and the protocol has no heartbeat,
+    // so the record store stays fed (publication is off: the surface is forgotten).
+    // There is no probe either, so a finished command applies the new-prompt rule
+    // to the store directly (docs-ai 079).
+    bridge.onProgramStatus = { [weak self, weak view] report in
+      guard let self, let view else { return }
+      self.handleProgramStatus(report, surfaceID: view.id)
+    }
     bridge.onDesktopNotification = nil
-    bridge.onCommandFinished = nil
+    bridge.onCommandFinished = { [weak self, weak view] _, _ in
+      guard let self, let view else { return }
+      self.noteCommandFinishedForAgentDetection(surfaceID: view.id)
+    }
     bridge.onPromptTitle = nil
     bridge.onCloseRequest = { [weak self, weak view] _ in
       guard let self, let view else { return }

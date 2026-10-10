@@ -14,6 +14,11 @@ nonisolated enum AgentDetectionEvent: Sendable {
   case suspended
   case interaction
   case tick
+  /// OSC 7501 evidence derived against the bound process generation (docs-ai 079);
+  /// `nil` withdraws it. `revision` is the record store revision the evidence was
+  /// taken at: an older or equal one is a stale poll snapshot and is ignored, so a
+  /// capture that suspended before applying cannot roll back a newer push.
+  case programStatus(ProgramStatusEvidence?, revision: UInt64)
 }
 
 nonisolated enum AgentScreenFallback: String, Sendable {
@@ -30,6 +35,7 @@ nonisolated enum AgentStateDecisionReason: Equatable, Sendable {
   case native(AgentRawState)
   case logOpenWork
   case logTurnEnded
+  case programStatus(ProgramStatusReason)
 
   var identifier: String {
     switch self {
@@ -38,7 +44,14 @@ nonisolated enum AgentStateDecisionReason: Equatable, Sendable {
     case .native(let state): "native.\(state.rawValue)"
     case .logOpenWork: "log.openWork"
     case .logTurnEnded: "log.turnEnded"
+    case .programStatus(let reason): reason.identifier
     }
+  }
+
+  /// Whether an eligible OSC 7501 root record decided the state.
+  var isProgramStatus: Bool {
+    if case .programStatus = self { return true }
+    return false
   }
 }
 
@@ -71,7 +84,12 @@ nonisolated struct AgentStateMachine: Sendable {
   private var screenContentID: Int?
   private var suppressedContentID: Int?
   private var suppressedSessionID: String?
+  private var programStatus: ProgramStatusEvidence?
+  private var programStatusRevision: UInt64 = 0
   private(set) var decision = AgentStateDecision(state: .unknown, reason: .screen(.noRuleMatched))
+
+  /// An eligible OSC 7501 root record currently decides the state.
+  var hasProgramStatusAuthority: Bool { programStatus != nil }
 
   @discardableResult
   mutating func receive(_ event: AgentDetectionEvent, now: TimeInterval) -> AgentStateDecision {
@@ -81,22 +99,11 @@ nonisolated struct AgentStateMachine: Sendable {
     case .native(let snapshot):
       observeNative(snapshot)
     case .inventory(let sessions):
-      hasLogProvider = true
-      available = true
-      roots = roots.filter { sessions.contains($0.key) }
-      for session in sessions where roots[session] == nil { roots[session] = Root() }
+      observeInventory(sessions)
     case .turnStarted(let session, let turn):
-      if roots[session] != nil, roots[session]?.turn != turn {
-        roots[session]?.turn = turn
-        roots[session]?.lastActivity = now
-        suppressedScreen = nil
-      }
+      startTurn(session: session, turn: turn, now: now)
     case .turnEnded(let session, let turn):
-      if roots[session]?.turn == turn {
-        roots[session]?.turn = nil
-        roots[session]?.lastActivity = now
-        suppressCompletedScreen(session: session)
-      }
+      endTurn(session: session, turn: turn, now: now)
     case .childScheduled(let root, let child, let work):
       scheduleChild(root: root, child: child, work: work)
     case .childStarted(let root, let child, let work):
@@ -118,10 +125,55 @@ nonisolated struct AgentStateMachine: Sendable {
       suppressedScreen = nil
     case .tick:
       break
+    case .programStatus(let evidence, let revision):
+      observeProgramStatus(evidence, revision: revision)
     }
     decision = resolve(now: now)
-    decision.screenReason = screen.reason
+    // The screen is not read while a root record holds authority; the marker says so
+    // instead of repeating a frame that may be stale.
+    decision.screenReason = programStatus == nil ? screen.reason : .delegated
     return decision
+  }
+
+  /// Taking authority retires the facts the machine will not refresh while the
+  /// schedule is delegated: the native snapshot, the completed-frame fence, and the
+  /// log roots' recency. This is deliberately not `.suspended`: suspension keeps the
+  /// snapshot and fence so a transient read failure recovers without flicker, and it
+  /// sets `hasLogProvider`, which would rename a screen-only agent's fallback reason.
+  /// Open log work stays accounted; a withdrawal falls back with today's reasons.
+  private mutating func observeProgramStatus(_ evidence: ProgramStatusEvidence?, revision: UInt64) {
+    guard revision > programStatusRevision else { return }
+    programStatusRevision = revision
+    if evidence != nil, programStatus == nil {
+      native = nil
+      nativeAvailable = false
+      suppressedScreen = nil
+      suppressedContentID = nil
+      suppressedSessionID = nil
+      for session in roots.keys { roots[session]?.lastActivity = nil }
+    }
+    programStatus = evidence
+  }
+
+  private mutating func observeInventory(_ sessions: Set<String>) {
+    hasLogProvider = true
+    available = true
+    roots = roots.filter { sessions.contains($0.key) }
+    for session in sessions where roots[session] == nil { roots[session] = Root() }
+  }
+
+  private mutating func startTurn(session: String, turn: String, now: TimeInterval) {
+    guard roots[session] != nil, roots[session]?.turn != turn else { return }
+    roots[session]?.turn = turn
+    roots[session]?.lastActivity = now
+    suppressedScreen = nil
+  }
+
+  private mutating func endTurn(session: String, turn: String, now: TimeInterval) {
+    guard roots[session]?.turn == turn else { return }
+    roots[session]?.turn = nil
+    roots[session]?.lastActivity = now
+    suppressCompletedScreen(session: session)
   }
 
   private mutating func observeNative(_ snapshot: AgentNativeSnapshot) {
@@ -170,6 +222,7 @@ nonisolated struct AgentStateMachine: Sendable {
   }
 
   private func resolve(now: TimeInterval) -> AgentStateDecision {
+    if let programStatus { return programStatus.decision }
     if let native, nativeAvailable {
       let suppressed = suppressedSessionID == native.sessionID && suppressedScreen == screen
       let blocked = native.state == .blocked || (screen.state == .blocked && !suppressed)
