@@ -20,7 +20,7 @@ create roster rows. Text output additionally shows a current-process `pN` handle
 for process-scoped native evidence, and `osc.working`, `osc.idle`, `osc.done`,
 `osc.error`, `osc.blocked.<permission|question|auth|unspecified>`, or
 `osc.childBlocked.<kind>` when a verified OSC 7501 producer's root record decides
-(docs-ai 079). `raw_state` and `screen_reason` still describe the screen; while an
+(docs-ai 079; Claude Code 2.1.295 and later since slice 3). `raw_state` and `screen_reason` still describe the screen; while an
 `osc.*` decision holds, the screen is not read, `screen_reason` is `screen.delegated`,
 and `raw_state` is the last scan before delegation. Provider selection does not change
 public session attribution or signal confidence; see
