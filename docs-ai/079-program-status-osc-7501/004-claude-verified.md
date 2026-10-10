@@ -115,4 +115,4 @@ confirmed the four fixes against the code with no new finding.
 ## Refs
 
 Builds on #887 (slice 1), #892 (plan), #893 (slice 2). #891 (legacy background-work
-semantics) stays open. PR number to fill in on merge.
+semantics) stays open. PR #895.
