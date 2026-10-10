@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | Planned (slices 1 and 2 implemented) |
 | **Anchor date** | 2026-10-10 |
-| **Primary PRs** | #887 (slice 1); slice 2 in [003-generic-provider.md](003-generic-provider.md); slices 3–4 to fill in as they merge |
+| **Primary PRs** | #887 (slice 1); #893 (slice 2, [003-generic-provider.md](003-generic-provider.md)); slices 3–4 to fill in as they merge |
 | **Related** | [078-ghostty-1-4-upgrade-rehearsal](../078-ghostty-1-4-upgrade-rehearsal/000-plan.md), [068-agent-state-providers](../068-agent-state-providers/architecture.md), [064-agent-completion-signals](../064-agent-completion-signals/000-plan.md), `docs/components/agent-detection.md`, [producer-baseline.md](producer-baseline.md), [#891](https://github.com/onevcat/Prowl/issues/891) (legacy background-work semantics, deferred) |
 
 ## Background
@@ -408,7 +408,7 @@ baseline rows, amendment `005-pi-verified.md`.
 | Slice | PR | Content | Gate to merge |
 | --- | --- | --- | --- |
 | 1 | #887 | fork action, Swift copy, harness, baselines | landed |
-| 2 | [003](003-generic-provider.md) | store, machine, coordinator, delegated schedule, command-finished release, all `.unverified` | `make check`, `make test`, `make build-app`; a Debug run with Claude and Pi shows shadow disagreements only where expected; legacy-only regression checks for the fast release (an agent that never reports, kill -9 and normal exit, relaunch in the same pane, `wait --until exit`, a pending dispatch across the release) |
+| 2 | #893 ([003](003-generic-provider.md)) | store, machine, coordinator, delegated schedule, command-finished release, all `.unverified` | `make check`, `make test`, `make build-app`; a Debug run with Claude and Pi shows shadow disagreements only where expected; legacy-only regression checks for the fast release (an agent that never reports, kill -9 and normal exit, relaunch in the same pane, `wait --until exit`, a pending dispatch across the release) |
 | 3 | — | Claude `.verified` | acceptance list above replayed; no case where OSC was wrong and the legacy decision right; CPU recorded |
 | 4 | — | Pi `.verified` | same, for Pi |
 

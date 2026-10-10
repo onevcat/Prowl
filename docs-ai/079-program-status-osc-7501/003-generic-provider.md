@@ -93,5 +93,5 @@ Filled in from the gate runs; see [000-plan.md](000-plan.md) *Slices and gates*.
 
 ## Refs
 
-PR: pending. Builds on #887 (slice 1) and #892 (plan). #891 (legacy background-work
+PR #893. Builds on #887 (slice 1) and #892 (plan). #891 (legacy background-work
 semantics) stays open.
