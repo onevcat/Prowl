@@ -2,9 +2,9 @@
 
 | | |
 | --- | --- |
-| **Status** | Planned (slices 1 and 2 implemented) |
+| **Status** | Planned (slices 1–3 implemented) |
 | **Anchor date** | 2026-10-10 |
-| **Primary PRs** | #887 (slice 1); #893 (slice 2, [003-generic-provider.md](003-generic-provider.md)); slices 3–4 to fill in as they merge |
+| **Primary PRs** | #887 (slice 1); #893 (slice 2, [003-generic-provider.md](003-generic-provider.md)); #895 (slice 3, [004-claude-verified.md](004-claude-verified.md)); slice 4 to fill in as it merges |
 | **Related** | [078-ghostty-1-4-upgrade-rehearsal](../078-ghostty-1-4-upgrade-rehearsal/000-plan.md), [068-agent-state-providers](../068-agent-state-providers/architecture.md), [064-agent-completion-signals](../064-agent-completion-signals/000-plan.md), `docs/components/agent-detection.md`, [producer-baseline.md](producer-baseline.md), [#891](https://github.com/onevcat/Prowl/issues/891) (legacy background-work semantics, deferred) |
 
 ## Background
@@ -362,10 +362,10 @@ path.
 | Claude boundary | Handling |
 | --- | --- |
 | trust dialog | no report before it is answered → screen rule `claude.blockedPrompt`, as today; `idle` after acceptance takes over |
-| `/clear` | same PID, new session; OSC unchanged. The public session follows the resolver's existing cache and retention policy (successful results cached 5 s, the old session retained for up to two fresh misses), invoked on the 2 s tick, so rotation can take a few ticks longer than under the 300 ms poll; OSC never supplies identity |
-| interrupt (Esc) | expected `idle` (static mapping `stopped → idle`, not yet observed) |
-| subagents (Agent tool) | expected child records; the pane follows the root |
-| background agents | expected root `done` with or without child records → Idle/Done; the fallback rule `claude.backgroundWork` keeps the old Working for older versions |
+| `/clear` | same PID, new session; OSC sends a momentary `working` then `idle`. The public session follows the resolver's existing cache and retention policy (successful results cached 5 s, the old session retained for up to two fresh misses), invoked on the 2 s tick with the screen text of the last full tick (the one a key press triggers), so a rotation that the frame did not yet show becomes visible only at the next key press or CLI input, not after a few ticks (slice 3 review finding, recorded in [004](004-claude-verified.md)); OSC never supplies identity |
+| interrupt (Esc) | `idle` (observed in slice 3) |
+| subagents (Agent tool) | the pane follows the root (`working` until the parent turn ends; child records are not visible through the CLI) |
+| background agents | 2.1.296 keeps the turn open while a background agent runs ("Waiting for 1 background agent to finish") and the root stays `working`, so the pane stays Working until Claude ends the turn; the fallback rule `claude.backgroundWork` reads the same frame. The Idle-while-background-work outcome therefore waits for Claude Code to end the turn (or to send `done` with child records); see [004](004-claude-verified.md) |
 | `CLAUDE_CODE_DISABLE_TERMINAL_TITLE`, `CLAUDE_CODE_SESSION_KIND=bg`, < 2.1.295 | no reports → legacy native + screen |
 
 Acceptance in an isolated Debug instance through `prowl agents --json`: trust → accept →
@@ -409,7 +409,7 @@ baseline rows, amendment `005-pi-verified.md`.
 | --- | --- | --- | --- |
 | 1 | #887 | fork action, Swift copy, harness, baselines | landed |
 | 2 | #893 ([003](003-generic-provider.md)) | store, machine, coordinator, delegated schedule, command-finished release, all `.unverified` | `make check`, `make test`, `make build-app`; a Debug run with Claude and Pi shows shadow disagreements only where expected; legacy-only regression checks for the fast release (an agent that never reports, kill -9 and normal exit, relaunch in the same pane, `wait --until exit`, a pending dispatch across the release) |
-| 3 | — | Claude `.verified` | acceptance list above replayed; no case where OSC was wrong and the legacy decision right; CPU recorded |
+| 3 | #895 ([004](004-claude-verified.md)) | Claude `.verified` | acceptance list above replayed; no case where OSC was wrong and the legacy decision right; CPU recorded |
 | 4 | — | Pi `.verified` | same, for Pi |
 
 PRs merge in order: slice 2 alone, then slices 3 and 4 from `main` in parallel (their
@@ -533,3 +533,4 @@ pane) is expected to be noise; slices 3 and 4 measure it.
   deviations (shadow lines on every transition, unmapped-app line from the poll,
   revision bump on `commandFinished`, last scan text for the delegated resolver, owner
   generation keyed by `launchProcessID` alone).
+- Updated 2026-10-11: slice 3 implemented (Claude Code `.verified`; the acceptance list replayed in an isolated Debug instance with Claude Code 2.1.296, CPU compared with the slice 2 baseline, the boundary rows for interrupt, subagents, background agents, and `/clear` corrected from the observations) — see [004-claude-verified.md](004-claude-verified.md)

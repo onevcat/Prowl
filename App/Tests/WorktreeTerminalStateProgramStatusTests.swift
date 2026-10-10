@@ -81,9 +81,10 @@ struct WorktreeTerminalStateProgramStatusTests {
   }
 
   /// `startsLoop: false` parks a placeholder task so a wake never starts the real
-  /// detection loop; the tests drive `detectAgentState` themselves.
+  /// detection loop; the tests drive `detectAgentState` themselves. `support: nil`
+  /// keeps the production table (`ProgramStatusSupport.level(for:)`).
   private func makeFixture(
-    support: ProgramStatusSupport = .verified,
+    support: ProgramStatusSupport? = .verified,
     probe: Probe,
     startsLoop: Bool = false
   ) -> Fixture {
@@ -98,7 +99,7 @@ struct WorktreeTerminalStateProgramStatusTests {
       ),
       skipsSurfaceCreationForTesting: true
     )
-    state.programStatusSupportForTesting = { _ in support }
+    state.programStatusSupportForTesting = support.map { level in { _ in level } }
     state.agentProcessProbeForTesting = { _, _, fresh in
       probe.calls.append(fresh)
       if let entered = probe.entered {
@@ -212,6 +213,41 @@ struct WorktreeTerminalStateProgramStatusTests {
 
     #expect(fixture.state.surfaceAgentStates[fixture.surfaceID] == before)
     #expect(fixture.state.programStatusStoresBySurface[fixture.surfaceID]?.root?.state == .working)
+  }
+
+  /// The production table (docs-ai 079 slice 3): a Claude Code root decides the
+  /// published state and delegates the schedule; a Pi root still publishes nothing.
+  @Test func productionTableVerifiesClaudeCodeAndNotPi() async {
+    let claudeProbe = Probe()
+    let claude = makeFixture(support: nil, probe: claudeProbe)
+    await bind(claude, probe: claudeProbe)
+
+    claude.state.handleProgramStatus(report(.working), surfaceID: claude.surfaceID)
+
+    let claudePane = claude.state.surfaceAgentStates[claude.surfaceID]
+    #expect(claudePane?.state == .working)
+    #expect(claudePane?.decision?.reason.identifier == "osc.working")
+    #expect(claude.state.agentDetectionCoordinators[claude.surfaceID]?.isDelegated == true)
+    #expect(claude.state.nextScheduleAfterTick(surfaceID: claude.surfaceID, hasAgent: true) == .delegated)
+
+    let piProbe = Probe()
+    let piFixture = makeFixture(support: nil, probe: piProbe)
+    piProbe.job = ForegroundJob(
+      processGroupID: getpid(),
+      processes: [
+        ForegroundProcess(pid: getpid(), parentProcessID: getppid(), name: "pi", argv0: "pi", cmdline: "pi")
+      ])
+    piFixture.state.lastAgentScreenScanBySurface[piFixture.surfaceID] = WorktreeTerminalState.AgentScreenScan(
+      agent: .pi, text: "", detection: AgentScreenDetection(state: .idle, reason: .legacyDetector))
+    #expect(await detect(piFixture))
+    #expect(piFixture.state.surfaceAgentStates[piFixture.surfaceID]?.detectedAgent == .pi)
+    let before = piFixture.state.surfaceAgentStates[piFixture.surfaceID]
+
+    piFixture.state.handleProgramStatus(report(.working, app: "pi"), surfaceID: piFixture.surfaceID)
+
+    #expect(piFixture.state.surfaceAgentStates[piFixture.surfaceID] == before)
+    #expect(piFixture.state.agentDetectionCoordinators[piFixture.surfaceID]?.isDelegated == false)
+    #expect(piFixture.state.nextScheduleAfterTick(surfaceID: piFixture.surfaceID, hasAgent: true) == .active)
   }
 
   @Test func withdrawalPublishesNothingUntilAnObserveThatStartedAfterIt() async {

@@ -21,7 +21,8 @@ has a process-scoped native snapshot provider; other runtimes use screen observa
 Since [079](../079-program-status-osc-7501/000-plan.md) every runtime also receives the
 pane's OSC 7501 root record as pushed evidence, resolved ahead of native, log, and
 screen; a static support table decides whether a producer's records drive the decision
-(`.verified`) or are only compared with it (`.unverified`, every agent as of slice 2).
+(`.verified`: Claude Code since [079 slice 3](../079-program-status-osc-7501/004-claude-verified.md))
+or are only compared with it (`.unverified`: Pi until slice 4, every other agent).
 This is a shared decision path, not a general plugin interface for arbitrary providers.
 
 | Responsibility | Current source |

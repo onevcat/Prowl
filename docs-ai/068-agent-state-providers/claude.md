@@ -32,6 +32,46 @@ and unsupported schemas use screen fallback. Older versions are not separately
 supported. No version switch, hook installation, messaging socket, transcript scan,
 or additional timer is introduced.
 
+## Program status (OSC 7501)
+
+Since [079 slice 3](../079-program-status-osc-7501/004-claude-verified.md) Claude Code is a
+verified OSC 7501 producer (`ProgramStatusSupport.level(for: .claude) == .verified` in
+`App/Sources/Domain/AgentDetection/ProgramStatusEvidence.swift`). The root record that
+Claude Code 2.1.295 and later writes (`app=claude-code`) is the first-priority state
+evidence, applied the moment the report arrives; the native registry above and the six
+Claude screen rules are the fallback. While the root record decides, the detection loop
+runs on the delegated schedule (process probe and session resolution every 2 s, no screen
+read) and `ClaudeRuntimeProvider` is not sampled at all, including on the tick that takes
+authority. A withdrawal while Claude is still there (`clear`, or a root that lost its
+eligibility) puts the active tick back: the provider keeps `lastUpdatedAt`, so an unchanged
+registry file resumes native authority and an older or unreadable one reports `suspended`;
+because taking OSC authority retired the pre-OSC native snapshot and completed-frame fence,
+a `suspended` first sample falls to the fresh screen read, never to a snapshot from before
+the OSC turns. A confirmed exit is different: the fresh probe after OSC 133 releases the
+entry and invalidates the coordinator, so the departed Claude is never sampled again and a
+later launch gets a fresh provider. Managed hooks are untouched and remain the exact path.
+
+Boundaries observed with Claude Code 2.1.296 in an isolated Debug instance (the replay is
+recorded in [producer-baseline.md](../079-program-status-osc-7501/producer-baseline.md)):
+
+| Claude boundary | Observed |
+| --- | --- |
+| trust dialog | no report until it is answered: screen rule `claude.blockedPrompt` (Blocked), then `osc.idle` within a second of the acceptance |
+| prompt, tool call, turn end | `osc.working` on submit, `osc.done` at the end of the turn; `done` and `error` may show the Done badge, `idle` never does |
+| Bash approval | `osc.blocked.permission`; approving returns `osc.working` then `osc.done` |
+| AskUserQuestion | `osc.blocked.question`; answering returns `osc.working` then `osc.done` |
+| foreground subagent (Agent tool) | the pane follows the root: `osc.working` until the parent turn ends |
+| background subagent (`run_in_background`) | Claude Code 2.1.296 keeps the turn open (`✻ Waiting for 1 background agent to finish`) and the root stays `working`; the fallback rule `claude.backgroundWork` reads the same frame as Working, so the two paths agree and a background agent does keep the pane Working until Claude ends the turn |
+| `/compact` | `osc.working` for the duration of the compaction, then `osc.done` (the screen rule `claude.spinner` agrees) |
+| interrupt (Esc) | `osc.idle`; an unviewed Done badge from an earlier turn is neither earned nor cleared |
+| `/clear` | same PID; `osc.working` for a moment, then `osc.idle`; the public session is re-resolved only against the screen text read at the last key press (see the known limitation in 079.004) |
+| invalid API key accepted at launch | `osc.blocked.auth` on the first prompt (`Invalid API key`), held until the user acts; the legacy screen rules read the same frame as an idle composer |
+| `/exit`, `kill -9` | the entry is released by the fresh probe after OSC 133 (hundreds of milliseconds through the CLI, versus about two seconds before 079) |
+| relaunch in the same pane | the new process gets its own `osc.idle`; the predecessor's records are fenced by arrival time |
+| undo-close | the retained store is pulled by the restored coordinator: `osc.done` at the pre-close revision with no new report |
+| `CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1`, `CLAUDE_CODE_SESSION_KIND=bg`, < 2.1.295 | no reports: `native.*` from the registry with the screen rules, as before |
+| Agent Profile launch | the Profile keeps its exact managed hook channel while OSC supplies the pane state and takes part in idle admission; the kickoff and a later assignment completed through explicit dispatch receipts, and the idle wait and the re-dispatch admission succeeded |
+
 ## Original recommendation and evidence scope
 
 Reuse [shared arbitration](architecture.md), with a process-scoped native status
