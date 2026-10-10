@@ -71,7 +71,12 @@ source and accepted:
 | 7 | Readiness tests bypassed the production snapshot builders | both builders share `WorktreeTerminalManager.agentConditionSnapshot`, tested with a real coordinator |
 | 8 | The manual presented the attribution fence as protection against forged reports | reworded: attribution, not authentication |
 
-Round 2: see the gate table.
+Round 2 returned two findings, both accepted: a key press that lands while a delegated
+tick is suspended in the session resolver lost its full tick (fixed with a per-surface
+full-tick request that only a non-delegated tick consumes), and a fresh probe from before a
+close could land after an undo and release the restored agent (fixed with a per-surface
+lifecycle counter that every poll re-checks after each suspension). Round 3 confirmed the
+fixes with no new findings.
 
 ## Verification
 
@@ -80,9 +85,11 @@ Filled in from the gate runs; see [000-plan.md](000-plan.md) *Slices and gates*.
 | Gate | Result |
 | --- | --- |
 | CPU baseline on `main` (gate 2) | `make measure-cpu` on the `main` Debug build in an isolated instance with one Claude Code 2.1.296 pane and one Pi 1.1.0 pane: idle run `~/Library/Logs/Prowl/measurements/20261010-214229-57604` (mean 1.0 %, `detectAgentState` 0.49 % of a core), working run `20261010-214500-60944` (both agents writing an essay: mean 26.1 %, `detectAgentState` 0.52 %, SwiftUI `stepTransactionFlush` 7.8 %). Load 2.6 on 12 cores. Slices 3/4 compare against these. |
-| `make check`, `make test`, `make build-app` | pending |
-| Isolated Debug run (gate 6) | pending |
-| Review loop (gate 7) | pending |
+| `make check` | passed on the final tree (swift-format, SwiftLint strict, 235 script tests, naming and localization checks) |
+| `make test` | passed on the final tree: ProwlTests 4022 passed / 0 failed / 5 skipped (runner count; the verified xcresult holds 3804 tests), event monitor 12, mirror 72 (1 skipped), shell cancellation 3; the 12 build warnings are the pre-existing ones on `main` (swift-issue-reporting, mirror test `#require`, command palette tests, Dependencies) |
+| `make build-app` | passed with 0 warnings on the final tree |
+| Isolated Debug run (gate 6) | Branch build in a second instance (`CFFIXED_USER_HOME`, own socket, `script -F` log) with Claude Code 2.1.296 and Pi 1.1.0: both producers logged shadow lines next to the legacy decision (`osc.idle`/`osc.working`/`osc.done` leading `claude.spinner`/`claude.idleComposer`/`legacy.detector`); `prowl agents --json` reasons identical to `main` (`screen.logUnavailable`, `claude.*`, `legacy.detector`); an `app=cargo` report from a plain shell pane logged "unmapped" exactly once and the pane stayed out of the roster; Claude `/exit` released the entry 469 ms after the keystroke and Pi `kill -9` 265 ms after the signal (both figures include the CLI polling round trips; `main` takes 1.8–2.1 s); a relaunch of Claude within a second produced its own `osc.idle` as the first shadow line, with no line from the predecessor's records; Pi exiting inside a nested `zsh -f` (no OSC 133 D) released after 1.9 s through the six-miss path; closing the Pi tab and undoing it restored the pane with the store intact (the restored coordinator logged `osc.idle` at the pre-close revision without a new report); `prowl agents wait --until idle` and `--until changed` resolved on the Claude pane. Not shown live: `agents dispatch` on the Claude pane was refused by the pre-existing composer draft protection, which reads Claude Code 2.1.296's `Try "…"` placeholder as a draft (unrelated to this slice; dispatch admission is covered by the readiness tests and by the dispatch on the Pi pane, see the PR). |
+| Review loop (gate 7) | Three Pi Reviewer rounds against the source: 8 findings, then 2, then 0 (round 3 confirmed both round 2 fixes closed and found no regression); every finding was verified by reading the code before it was accepted |
 
 ## Refs
 
