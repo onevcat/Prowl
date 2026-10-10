@@ -26,6 +26,8 @@ final class GhosttySurfaceBridge {
   var onMoveTab: ((ghostty_action_move_tab_s) -> Bool)?
   var onCommandPaletteToggle: (() -> Bool)?
   var onProgressReport: ((ghostty_action_progress_report_state_e) -> Void)?
+  /// An OSC 7501 report. The value is already copied out of the action.
+  var onProgramStatus: ((GhosttyProgramStatusReport) -> Void)?
   var onCellSizeChange: (() -> Void)?
   var onConfigChange: (() -> Void)?
   var onDesktopNotification: ((String, String) -> Void)?
@@ -304,6 +306,15 @@ final class GhosttySurfaceBridge {
         state: report.state,
         value: report.progress == -1 ? nil : Int(report.progress)
       )
+      return true
+
+    case GHOSTTY_ACTION_PROGRAM_STATUS:
+      // The report's strings live only for this call: copy them before
+      // anything can suspend.
+      guard let pointer = action.action.program_status,
+        let report = GhosttyProgramStatusReport(pointer.pointee)
+      else { return true }
+      onProgramStatus?(report)
       return true
 
     case GHOSTTY_ACTION_COMMAND_FINISHED:
