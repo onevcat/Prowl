@@ -172,7 +172,16 @@ at a `~/.grok/` install (so Cursor's own `agent` entrypoint stays Cursor).
    The compact `subagents (N/M running)`, progressive
    `Async agents · N agent(s) running`, and multi-job `Async agents · background`
    layouts carry the same signal; completed, paused, and failed cards use static
-   glyphs and remain idle.
+   glyphs and remain idle. Pi 1.1.0 and later also reports its state through
+   [program status](#program-status-osc-7501), and that root record outranks these
+   screen cues: the footer and the subagent cards are read only when Pi sends no
+   reports (`PI_PROGRAM_STATUS=0`, older versions). Pi's built-in tools never ask for
+   confirmation, so its first **Blocked** comes from the protocol: an extension dialog
+   (`ctx.ui.confirm` → `osc.blocked.permission`; `select`, `input`, `editor` →
+   `osc.blocked.question`) or an OAuth login wait (`osc.blocked.auth`); a provider
+   failure during a turn is `osc.error`, which reads as Idle and may show the Done
+   badge. Pi's own selectors (`/model`, `/settings`) send nothing and leave the
+   previous state in place.
    Oh My Pi's loader row is **Working** evidence when it leads with the theme's Esc
    glyph (`󱊷`, `⎋`, or `esc`) followed by any label: the label is the model's own
    intent (`Working…`, `Running requested command`, `等待命令完成`, …) and is not
@@ -255,7 +264,8 @@ the final state decision and `screen_reason` for the screen rule. Codex can repo
 the latest screen classification. A current blocker reports its screen-rule ID.
 Claude reports `native.working`, `native.blocked`, or `native.idle`; a fresh screen
 blocker can retain its screen-rule ID. Screen-only runtimes keep their existing rule identifiers. An ordinary profile miss
-reports `fallback.noRuleMatched`; unmigrated classifiers report `legacy.detector`.
+reports `fallback.noRuleMatched`; unmigrated classifiers report `legacy.detector`,
+which is also Pi's fallback reason when no root record decides.
 Reasons never include screen text. Screen fallback IDs are:
 
 - `screen.logUnavailable`: log authority is unavailable or suspended.
@@ -294,8 +304,8 @@ in the app, not a setting:
 
 | Support | Meaning |
 | --- | --- |
-| unverified | Records are stored and resolved, but only compared with the live decision; disagreements are logged (`AgentDetection` category). Every agent today. |
-| verified | The root record is the first-priority state evidence, applied the moment the report arrives. |
+| unverified | Records are stored and resolved, but only compared with the live decision; disagreements are logged (`AgentDetection` category). Every agent except Pi today (Claude Code flips in its own change). |
+| verified | The root record is the first-priority state evidence, applied the moment the report arrives. Pi (1.1.0 and later, `app=pi`). |
 
 For a verified producer the pane follows the **root** record only: `working` → Working
 (`osc.working`), `blocked` → Blocked (`osc.blocked.<kind>`, `unspecified` without a
