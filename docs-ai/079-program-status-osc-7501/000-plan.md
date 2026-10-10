@@ -2,9 +2,9 @@
 
 | | |
 | --- | --- |
-| **Status** | Planned (slices 1 and 2 implemented) |
+| **Status** | Planned (slices 1, 2, and 4 implemented; slice 3 in its own PR) |
 | **Anchor date** | 2026-10-10 |
-| **Primary PRs** | #887 (slice 1); #893 (slice 2, [003-generic-provider.md](003-generic-provider.md)); slices 3–4 to fill in as they merge |
+| **Primary PRs** | #887 (slice 1); #893 (slice 2, [003-generic-provider.md](003-generic-provider.md)); slice 3 (Claude, separate PR); slice 4 ([005-pi-verified.md](005-pi-verified.md)) |
 | **Related** | [078-ghostty-1-4-upgrade-rehearsal](../078-ghostty-1-4-upgrade-rehearsal/000-plan.md), [068-agent-state-providers](../068-agent-state-providers/architecture.md), [064-agent-completion-signals](../064-agent-completion-signals/000-plan.md), `docs/components/agent-detection.md`, [producer-baseline.md](producer-baseline.md), [#891](https://github.com/onevcat/Prowl/issues/891) (legacy background-work semantics, deferred) |
 
 ## Background
@@ -410,7 +410,7 @@ baseline rows, amendment `005-pi-verified.md`.
 | 1 | #887 | fork action, Swift copy, harness, baselines | landed |
 | 2 | #893 ([003](003-generic-provider.md)) | store, machine, coordinator, delegated schedule, command-finished release, all `.unverified` | `make check`, `make test`, `make build-app`; a Debug run with Claude and Pi shows shadow disagreements only where expected; legacy-only regression checks for the fast release (an agent that never reports, kill -9 and normal exit, relaunch in the same pane, `wait --until exit`, a pending dispatch across the release) |
 | 3 | — | Claude `.verified` | acceptance list above replayed; no case where OSC was wrong and the legacy decision right; CPU recorded |
-| 4 | — | Pi `.verified` | same, for Pi |
+| 4 | [005](005-pi-verified.md) | Pi `.verified` | same, for Pi |
 
 PRs merge in order: slice 2 alone, then slices 3 and 4 from `main` in parallel (their
 acceptance runs on merged slice 2 code). `001-action.md` is written when slice 4 lands.
@@ -533,3 +533,4 @@ pane) is expected to be noise; slices 3 and 4 measure it.
   deviations (shadow lines on every transition, unmapped-app line from the poll,
   revision bump on `commandFinished`, last scan text for the delegated resolver, owner
   generation keyed by `launchProcessID` alone).
+- Updated 2026-10-11: slice 4 implemented (Pi `.verified`; the acceptance list replayed in an isolated Debug instance with Pi 1.1.0, CPU compared with the slice 2 baseline) — see [005-pi-verified.md](005-pi-verified.md)
