@@ -76,15 +76,32 @@ struct AgentCoordinatorProgramStatusTests {
     #expect(lines.count == 2)
   }
 
-  @Test func defaultTableLeavesEveryAgentUnverified() async {
+  /// The production table (docs-ai 079 slice 3): Claude Code is verified; every other
+  /// agent stays unverified until its own baseline replays inside Prowl.
+  @Test func defaultTableVerifiesClaudeCodeOnly() async {
     for agent in DetectedAgent.allCases {
-      #expect(ProgramStatusSupport.level(for: agent) == .unverified, "\(agent)")
+      let expected: ProgramStatusSupport = agent == .claude ? .verified : .unverified
+      #expect(ProgramStatusSupport.level(for: agent) == expected, "\(agent)")
     }
-    let coordinator = AgentDetectionCoordinator(sample: { _, _ in [.unavailable] })
-    let decision = await coordinator.observe(
+    // With the default table a Claude root decides on the tick that sees it, the
+    // schedule delegates, and the native registry is not sampled while it does.
+    let claude = AgentDetectionCoordinator(sample: { _, _ in
+      Issue.record("A verified Claude root must not sample the native provider")
+      return [.unavailable]
+    })
+    let decision = await claude.observe(
+      agent: .claude, process: generation, screen: idle, configRoot: nil,
+      programStatus: store([(report(.working), 1)]))
+    #expect(decision?.reason.identifier == "osc.working")
+    #expect(decision?.screenReason == .delegated)
+    #expect(claude.isDelegated)
+    // Pi keeps its legacy detector until slice 4.
+    let piCoordinator = AgentDetectionCoordinator(sample: { _, _ in [.unavailable] })
+    let piDecision = await piCoordinator.observe(
       agent: .pi, process: generation, screen: legacyWorking, configRoot: nil,
       programStatus: store([(report(.idle, app: "pi"), 1)]))
-    #expect(decision?.reason.identifier == "legacy.detector")
+    #expect(piDecision?.reason.identifier == "legacy.detector")
+    #expect(piCoordinator.isDelegated == false)
   }
 
   @Test func verifiedEligibleRootDrivesTheDecisionAndDelegates() async {
