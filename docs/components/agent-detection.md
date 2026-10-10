@@ -286,9 +286,11 @@ removes a record and its descendants (an empty id removes everything), a record 
 
 A root record is **attributed** to the pane's detected agent only when its `app` is the
 agent's own name (`claude-code` for Claude Code, `pi` for Pi) and it arrived after that
-agent's process started, so a wrapper, a nested program, or a predecessor that exited
-without `clear` cannot speak for it. Whether an attributed root may **decide** the state
-is a static per-agent table in the app, not a setting:
+agent's process started. That rejects another program's records and a predecessor's
+leftovers (an agent that exited without `clear`); it does not authenticate the writer: a
+wrapper or nested program that writes the expected `app` is attributed like the agent
+itself. Whether an attributed root may **decide** the state is a static per-agent table
+in the app, not a setting:
 
 | Support | Meaning |
 | --- | --- |

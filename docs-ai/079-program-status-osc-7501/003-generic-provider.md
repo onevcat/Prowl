@@ -54,6 +54,25 @@ start time; placeholder loop task so wakes do not start the real loop),
   PID reuse of the launcher within one probe gap is not distinguished (no launch start
   time is stored). Deliberate limit.
 
+## Review
+
+A read-only Pi Reviewer loop against the branch (brief: plan, this record, 068 and 064.024
+invariants, full diff). Round 1 returned eight findings; every one was checked against the
+source and accepted:
+
+| # | Finding | Fix |
+| --- | --- | --- |
+| 1 | The `COMMAND_FINISHED` mark was removed after the probe suspended, so a second D during the sample lost its own fast release | the mark is taken with the fresh flag before the probe |
+| 2 | The tick that took authority still sampled the provider in the same epoch, so a native idle could recreate the retired fence | no provider sample while the machine holds authority |
+| 3 | A key press and a probe miss never left delegation (the owner only consulted `isDelegated`) | a tick is delegated only when the schedule says so and the probe confirmed the bound generation; a miss returns the loop to the active cadence |
+| 4 | An engine change on a delegated tick reset the machine without any acquisition and published Unknown, which revokes the managed hook | same predicate: the bound generation must be confirmed |
+| 5 | A cancelled loop's late sleeper continuation could unregister a restored loop's sleeper | per-loop tokens own the schedule and the sleeper |
+| 6 | No composed test for the successor outcome or for an agent that never reports | added; the cached-hit/miss probe test and the wait/dispatch-across-release test were not (see record) |
+| 7 | Readiness tests bypassed the production snapshot builders | both builders share `WorktreeTerminalManager.agentConditionSnapshot`, tested with a real coordinator |
+| 8 | The manual presented the attribution fence as protection against forged reports | reworded: attribution, not authentication |
+
+Round 2: see the gate table.
+
 ## Verification
 
 Filled in from the gate runs; see [000-plan.md](000-plan.md) *Slices and gates*.

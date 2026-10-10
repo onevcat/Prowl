@@ -25,10 +25,19 @@ extension WorktreeTerminalState {
 
   func startAgentDetectionTaskIfNeeded(for view: GhosttySurfaceView, tabId: TerminalTabID) {
     guard agentDetectionTasks[view.id] == nil else { return }
+    // A loop owns its surface's schedule and sleeper only while its token is current:
+    // a close cancels the loop, and an undo can restore the same surface with a new
+    // loop before the old one's last continuation has run.
+    agentDetectionLoopCounter &+= 1
+    let token = agentDetectionLoopCounter
+    agentDetectionLoopTokens[view.id] = token
     agentDetectionTasks[view.id] = Task { @MainActor [weak self, weak view] in
       while !Task.isCancelled {
-        guard let self, let view, self.surfaces[view.id] != nil else { return }
+        guard let self, let view, self.surfaces[view.id] != nil,
+          self.agentDetectionLoopTokens[view.id] == token
+        else { return }
         let hasAgent = await self.detectAgentState(for: view, tabId: tabId)
+        guard !Task.isCancelled, self.agentDetectionLoopTokens[view.id] == token else { return }
         let now = Date()
         // Titles land on the manager's own clock now, because a non-agent program
         // can strand one after this schedule goes cold. An entry cannot be
@@ -36,22 +45,32 @@ extension WorktreeTerminalState {
         // and that is exactly the condition keeping this loop warm. So the poll
         // stays the trailing flush here, and no second timer is needed.
         self.flushPendingAgentEntry(surfaceID: view.id, now: now)
-        let schedule = self.agentDetectionSchedules[view.id] ?? .cold
-        let delegated = self.agentDetectionCoordinators[view.id]?.isDelegated == true
-        self.agentDetectionSchedules[view.id] = Self.nextSchedule(
-          schedule, hasAgent: hasAgent, delegated: delegated, now: now)
+        self.agentDetectionSchedules[view.id] = self.nextScheduleAfterTick(
+          surfaceID: view.id, hasAgent: hasAgent, now: now)
 
         guard let interval = self.agentDetectionSchedules[view.id]?.nextInterval(now: now) else {
           self.finishColdAgentDetection(forSurfaceID: view.id)
           return
         }
-        await self.sleepAgentDetection(forSurfaceID: view.id, interval: interval)
+        await self.sleepAgentDetection(forSurfaceID: view.id, token: token, interval: interval)
       }
     }
   }
 
+  /// The schedule after one tick. A verified producer's eligible root delegates the
+  /// next tick only while the probe keeps confirming the agent: a miss leaves
+  /// delegation so the remaining misses run on the active cadence.
+  func nextScheduleAfterTick(surfaceID: UUID, hasAgent: Bool, now: Date = Date()) -> AgentDetectionSchedule {
+    let delegated =
+      agentDetectionCoordinators[surfaceID]?.isDelegated == true
+      && agentDetectionPresenceBySurface[surfaceID]?.consecutiveMisses == 0
+    return Self.nextSchedule(
+      agentDetectionSchedules[surfaceID] ?? .cold, hasAgent: hasAgent, delegated: delegated, now: now)
+  }
+
   func finishColdAgentDetection(forSurfaceID surfaceID: UUID) {
     agentDetectionTasks.removeValue(forKey: surfaceID)
+    agentDetectionLoopTokens.removeValue(forKey: surfaceID)
     clearAgentDetectionWakeState(forSurfaceID: surfaceID)
     agentDetectionSchedules.removeValue(forKey: surfaceID)
     agentDetectionPresenceBySurface.removeValue(forKey: surfaceID)
@@ -75,14 +94,16 @@ extension WorktreeTerminalState {
     let surfaceID = view.id
     let childPID = view.bridge.childPID()
     let processGroupID = view.bridge.foregroundProcessGroupID()
-    // A `COMMAND_FINISHED` asked for a sample the probe cache cannot answer.
+    // A `COMMAND_FINISHED` asked for a sample the probe cache cannot answer. Its mark
+    // is taken with the request, before the probe suspends, so a second D that lands
+    // during this sample keeps its own mark for its own fresh sample.
     let fresh = agentDetectionFreshProbeRequests.remove(surfaceID) != nil
+    let finished = fresh ? pendingCommandFinishedBySurface.removeValue(forKey: surfaceID) : nil
     let job = await probeForegroundJob(processGroupID: processGroupID, childPID: childPID, fresh: fresh)
     guard surfaces[surfaceID] != nil else { return false }
 
     let identified = job.flatMap { identifyAgentInJob($0) }
     let probedAgent = identified?.agent
-    let finished = fresh ? pendingCommandFinishedBySurface.removeValue(forKey: surfaceID) : nil
 
     var presence = agentDetectionPresenceBySurface[surfaceID] ?? AgentDetectionPresence()
     let agent = presence.update(detectedAgent: probedAgent, releaseOnMiss: finished != nil)
@@ -109,7 +130,13 @@ extension WorktreeTerminalState {
     let capturedAt = ProcessInfo.processInfo.systemUptime
     let coordinator = agentDetectionCoordinators[surfaceID] ?? makeAgentDetectionCoordinator(surfaceID: surfaceID)
     agentDetectionCoordinators[surfaceID] = coordinator
-    let delegated = coordinator.isDelegated
+    let process = Self.processGeneration(identified)
+    // The tick is delegated only while the schedule says so (a key press puts one full
+    // tick back on the active schedule) and the probe confirmed the generation the
+    // authority was bound to: a miss or an engine change gets a full acquisition.
+    let delegated =
+      coordinator.isDelegated && agentDetectionSchedules[surfaceID] == .delegated
+      && process != nil && process == coordinator.boundProcess
     let (activeText, detection) = pollScreen(for: view, surfaceID: surfaceID, agent: agent, delegated: delegated)
     let raw = detection.state
     guard surfaces[surfaceID] != nil else { return false }
@@ -130,7 +157,6 @@ extension WorktreeTerminalState {
     previous.seen = current.seen
     previous.lastChangedAt = current.lastChangedAt
     guard previous == current else { return true }
-    let process = Self.processGeneration(identified)
 
     guard
       let decision = await coordinator.observe(
@@ -523,6 +549,7 @@ extension WorktreeTerminalState {
     agentDetectionCoordinators.removeValue(forKey: surfaceId)?.invalidate()
     agentDetectionTasks[surfaceId]?.cancel()
     agentDetectionTasks.removeValue(forKey: surfaceId)
+    agentDetectionLoopTokens.removeValue(forKey: surfaceId)
     clearAgentDetectionWakeState(forSurfaceID: surfaceId)
     // A surface retained for undo keeps its process and its records (docs-ai 079).
     if !isRetainedForUndo(surfaceId) {
@@ -549,7 +576,8 @@ extension WorktreeTerminalState {
     }
     let removedIDs = Array(lastEmittedAgentEntriesBySurface.keys)
     agentDetectionTasks.removeAll()
-    for sleeper in agentDetectionSleepersBySurface.values { sleeper.cancel() }
+    agentDetectionLoopTokens.removeAll()
+    for sleeper in agentDetectionSleepersBySurface.values { sleeper.task.cancel() }
     agentDetectionSleepersBySurface.removeAll()
     agentDetectionWakeRequests.removeAll()
     agentDetectionFreshProbeRequests.removeAll()

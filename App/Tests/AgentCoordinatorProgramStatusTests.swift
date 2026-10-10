@@ -257,6 +257,35 @@ struct AgentCoordinatorProgramStatusTests {
     #expect(suspended?.reason.identifier == "screen.logUnavailable")
   }
 
+  @Test func tickThatTakesAuthorityDoesNotSampleTheProvider() async {
+    // First binding on the ordinary active tick with a root already present: the
+    // provider must not be sampled under authority, or its idle snapshot would
+    // recreate the completed-frame fence and resurface after a withdrawal.
+    var sampled = 0
+    let coordinator = verified(sample: { _, _ in
+      sampled += 1
+      // The first read after the withdrawal fails; the next one is a fresh snapshot.
+      return sampled == 1
+        ? [.suspended] : [.native(AgentNativeSnapshot(sessionID: "s", state: .idle, statusUpdatedAt: 1))]
+    })
+    var records = store([(report(.working), 1)])
+    let bound = await coordinator.observe(
+      agent: .claude, process: generation, screen: working, configRoot: nil, programStatus: records)
+    #expect(bound?.reason.identifier == "osc.working")
+    #expect(sampled == 0)
+
+    records.apply(report(.clear), arrivedAt: started.addingTimeInterval(2))
+    #expect(coordinator.receive(programStatus: records) == .withdrawn)
+    let first = await coordinator.observe(
+      agent: .claude, process: generation, screen: working, configRoot: nil, programStatus: records)
+    #expect(sampled == 1)
+    #expect(first?.state == .working)
+    #expect(first?.reason.identifier == "screen.logUnavailable")
+    let resumed = await coordinator.observe(
+      agent: .claude, process: generation, screen: working, configRoot: nil, programStatus: records)
+    #expect(resumed?.reason.identifier == "native.idle")
+  }
+
   @Test func invalidateBeforePushDropsThePush() async {
     let coordinator = verified()
     let records = store([(report(.working), 1)])
@@ -268,31 +297,48 @@ struct AgentCoordinatorProgramStatusTests {
   }
 
   @Test func staleSnapshotFromAPollCannotRollBackANewerPush() async {
+    // A poll captured its store snapshot, then queued behind an observe that was
+    // suspended at the provider; a push with a newer store landed in between. The
+    // queued poll's older snapshot must neither roll the machine back nor replace
+    // the coordinator's store.
     var resume: CheckedContinuation<[AgentDetectionEvent], Never>?
     let entered = AsyncStream<Void>.makeStream()
     var calls = 0
     let coordinator = verified(sample: { _, _ in
       calls += 1
-      if calls == 1 { return [.suspended] }
-      return await withCheckedContinuation {
-        resume = $0
-        entered.continuation.yield(())
+      if calls == 1 {
+        return await withCheckedContinuation {
+          resume = $0
+          entered.continuation.yield(())
+        }
       }
+      return [.suspended]
     })
-    var records = store([(report(.idle), 1)])
-    // Bind with a withdrawn-looking state so the poll samples the provider.
-    _ = await coordinator.observe(agent: .claude, process: generation, screen: idle, configRoot: nil)
-    let snapshotBeforePush = records
-    let pending = Task {
-      await coordinator.observe(
-        agent: .claude, process: generation, screen: idle, configRoot: nil, programStatus: snapshotBeforePush)
-    }
+    let stale = store([(report(.idle), 1)])
+    let first = Task { await coordinator.observe(agent: .claude, process: generation, screen: idle, configRoot: nil) }
     var iterator = entered.stream.makeAsyncIterator()
     _ = await iterator.next()
+    var records = stale
     records.apply(report(.working), arrivedAt: started.addingTimeInterval(2))
-    _ = coordinator.receive(programStatus: records)
+    guard case .decision(let pushed) = coordinator.receive(programStatus: records) else {
+      Issue.record("Expected a decision")
+      return
+    }
+    #expect(pushed.reason.identifier == "osc.working")
+    let queued = Task {
+      await coordinator.observe(
+        agent: .claude, process: generation, screen: idle, configRoot: nil, programStatus: stale)
+    }
     resume?.resume(returning: [.suspended])
-    let polled = await pending.value
-    #expect(polled?.reason.identifier == "osc.working")
+    #expect(await first.value?.reason.identifier == "osc.working")
+    #expect(await queued.value?.reason.identifier == "osc.working")
+    // The store the coordinator re-derives from on a rebind is still the newer one.
+    records.apply(report(.done), arrivedAt: started.addingTimeInterval(3))
+    guard case .decision(let later) = coordinator.receive(programStatus: records) else {
+      Issue.record("Expected a decision")
+      return
+    }
+    #expect(later.reason.identifier == "osc.done")
   }
+
 }

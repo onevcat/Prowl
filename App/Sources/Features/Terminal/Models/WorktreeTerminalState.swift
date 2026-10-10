@@ -206,7 +206,14 @@ final class WorktreeTerminalState {
   @ObservationIgnored var programStatusStoresBySurface: [UUID: ProgramStatusRecordStore] = [:]
   /// The sleeping half of each detection loop; `wakeAgentDetection` cancels it so a
   /// report, a key press, or a finished command gets an immediate probe.
-  @ObservationIgnored var agentDetectionSleepersBySurface: [UUID: Task<Void, any Error>] = [:]
+  @ObservationIgnored var agentDetectionSleepersBySurface: [UUID: AgentDetectionSleeper] = [:]
+  /// The loop that currently owns each surface's schedule and sleeper.
+  @ObservationIgnored var agentDetectionLoopTokens: [UUID: UInt64] = [:]
+  @ObservationIgnored var agentDetectionLoopCounter: UInt64 = 0
+  struct AgentDetectionSleeper {
+    let token: UInt64
+    let task: Task<Void, any Error>
+  }
   /// Wakes that arrived while a loop was mid-tick; the next sleep is skipped.
   @ObservationIgnored var agentDetectionWakeRequests: Set<UUID> = []
   /// Surfaces whose next probe bypasses the process cache (a `COMMAND_FINISHED` arrived).

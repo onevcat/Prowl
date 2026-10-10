@@ -818,6 +818,24 @@ final class WorktreeTerminalManager {
     activeWorktreeStates.lazy.compactMap { $0.agentDetectionCoordinators[surfaceID]?.decision }.first
   }
 
+  /// The view of a pane that `agents wait`, `agents dispatch`, and the workflow
+  /// runner evaluate (docs-ai 064.012/014, 079): the reducer's entry plus the live
+  /// terminal evidence, including the coordinator's current decision.
+  func agentConditionSnapshot(surfaceID: UUID, agent: ActiveAgentEntry?) -> AgentConditionSnapshot {
+    let observed = agentObservationSnapshot(surfaceID: surfaceID)
+    let evidence = currentAgentSignalEvidence(surfaceID: surfaceID)
+    return AgentConditionSnapshot(
+      agent: agent,
+      signal: evidence.activeTerminal,
+      changedSignal: evidence.latest,
+      revision: observed?.revision ?? 0,
+      isLive: isSurfaceLive(surfaceID),
+      signals: agentSignalsPayload(surfaceID: surfaceID),
+      screenDetection: agentScreenDetection(surfaceID: surfaceID),
+      decision: agentCurrentDecision(surfaceID: surfaceID)
+    )
+  }
+
   func agentDispatchSnapshot(dispatchID: String) -> AgentDispatchSnapshot? {
     agentDispatchStore.snapshot(dispatchID: dispatchID)
   }

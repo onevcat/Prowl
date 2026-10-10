@@ -920,21 +920,10 @@ struct ProwlApp: App {
       guard let surfaceID = UUID(uuidString: target.paneID) else {
         return .init(agent: nil, signal: nil, revision: 0, isLive: false, signals: .empty)
       }
-      let observed = terminalManager.agentObservationSnapshot(surfaceID: surfaceID)
       let agent = appStore.state.repositories.activeAgents.entries.first {
         $0.surfaceID == surfaceID
       }
-      let signalEvidence = terminalManager.currentAgentSignalEvidence(surfaceID: surfaceID)
-      return .init(
-        agent: agent,
-        signal: signalEvidence.activeTerminal,
-        changedSignal: signalEvidence.latest,
-        revision: observed?.revision ?? 0,
-        isLive: terminalManager.isSurfaceLive(surfaceID),
-        signals: terminalManager.agentSignalsPayload(surfaceID: surfaceID),
-        screenDetection: terminalManager.agentScreenDetection(surfaceID: surfaceID),
-        decision: terminalManager.agentCurrentDecision(surfaceID: surfaceID)
-      )
+      return terminalManager.agentConditionSnapshot(surfaceID: surfaceID, agent: agent)
     }
     let agentWaitHandler = AgentWaitCommandHandler(
       observeDispatch: { dispatchID in

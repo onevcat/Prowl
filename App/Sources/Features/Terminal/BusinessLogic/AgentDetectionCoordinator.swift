@@ -70,6 +70,10 @@ final class AgentDetectionCoordinator {
 
   var boundAgent: DetectedAgent? { agent }
 
+  /// The engine generation the evidence is bound to; the owner delegates a tick only
+  /// when the probe confirmed this generation again.
+  var boundProcess: AgentProcessGeneration? { process }
+
   /// A verified producer's eligible root decides the state: the owner's schedule
   /// drops the screen read and the provider sample.
   var isDelegated: Bool {
@@ -144,7 +148,11 @@ final class AgentDetectionCoordinator {
       if agent == .codex, process != nil { logProvider = CodexLogProvider(surfaceID: surfaceID) }
       if agent == .claude, process != nil { nativeProvider = ClaudeRuntimeProvider() }
     }
-    if let programStatus { programStatusStore = programStatus }
+    // A poll's snapshot can be older than a push that arrived while the poll was
+    // queued; the newer store stays.
+    if let programStatus, programStatus.revision > programStatusStore.revision {
+      programStatusStore = programStatus
+    }
     let expectedRevision = revision
     let inputRevision = interactionRevision
     // Screen capture precedes the file read. A completion can fence this frame;
@@ -153,7 +161,10 @@ final class AgentDetectionCoordinator {
       machine.receive(.screen(screen, contentID: screenContentID), now: now)
     }
     let evidence = applyProgramStatus()
-    if hasProvider, !delegated, let process = self.process {
+    // Under OSC authority the provider is not sampled at all, including on the tick
+    // that takes authority: a native snapshot applied now would recreate the facts
+    // the transition just retired and resurface after a withdrawal.
+    if hasProvider, !delegated, !machine.hasProgramStatusAuthority, let process = self.process {
       let epoch = authorityEpoch
       let events: [AgentDetectionEvent]
       if let sampleOverride {

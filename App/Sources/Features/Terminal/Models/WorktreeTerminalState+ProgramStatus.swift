@@ -182,27 +182,31 @@ extension WorktreeTerminalState {
   /// when the loop is mid-tick.
   func interruptAgentDetectionSleep(forSurfaceID surfaceID: UUID) {
     if let sleeper = agentDetectionSleepersBySurface.removeValue(forKey: surfaceID) {
-      sleeper.cancel()
+      sleeper.task.cancel()
     } else if agentDetectionTasks[surfaceID] != nil {
       agentDetectionWakeRequests.insert(surfaceID)
     }
   }
 
   /// The loop's interruptible sleep. Cancellation of the loop cancels the sleeper too.
-  func sleepAgentDetection(forSurfaceID surfaceID: UUID, interval: Duration) async {
+  /// Only the loop that registered a sleeper may unregister it: a restored surface
+  /// can own a new loop before the old loop's last continuation runs.
+  func sleepAgentDetection(forSurfaceID surfaceID: UUID, token: UInt64, interval: Duration) async {
     if agentDetectionWakeRequests.remove(surfaceID) != nil { return }
     let sleeper = Task { try await Task.sleep(for: interval) }
-    agentDetectionSleepersBySurface[surfaceID] = sleeper
+    agentDetectionSleepersBySurface[surfaceID] = AgentDetectionSleeper(token: token, task: sleeper)
     await withTaskCancellationHandler {
       _ = try? await sleeper.value
     } onCancel: {
       sleeper.cancel()
     }
-    agentDetectionSleepersBySurface.removeValue(forKey: surfaceID)
+    if agentDetectionSleepersBySurface[surfaceID]?.token == token {
+      agentDetectionSleepersBySurface.removeValue(forKey: surfaceID)
+    }
   }
 
   func clearAgentDetectionWakeState(forSurfaceID surfaceID: UUID) {
-    agentDetectionSleepersBySurface.removeValue(forKey: surfaceID)?.cancel()
+    agentDetectionSleepersBySurface.removeValue(forKey: surfaceID)?.task.cancel()
     agentDetectionWakeRequests.remove(surfaceID)
     agentDetectionFreshProbeRequests.remove(surfaceID)
     pendingCommandFinishedBySurface.removeValue(forKey: surfaceID)

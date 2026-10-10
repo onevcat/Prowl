@@ -22,9 +22,42 @@ struct WorktreeTerminalStateProgramStatusTests {
   private final class Probe {
     var job: ForegroundJob?
     var calls: [Bool] = []
+    /// When set, the next probe call suspends here until resumed.
+    var gate: CheckedContinuation<Void, Never>?
+    var entered: AsyncStream<Void>.Continuation?
   }
 
   private let epoch = Date(timeIntervalSince1970: 1_000)
+
+  /// A second real process (its start time is readable, unlike launchd's, which is
+  /// the test host's parent) to stand in for an engine child or a successor launch.
+  private func spawnSleeper() throws -> Process {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/bin/sleep")
+    process.arguments = ["30"]
+    try process.run()
+    return process
+  }
+
+  /// A real process that is not a descendant of the test host (double fork), so the
+  /// launcher-ancestry check sees a genuinely different launch.
+  private func spawnDetachedSleeper() throws -> pid_t {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/bin/sh")
+    process.arguments = ["-c", "sleep 30 >/dev/null 2>&1 & echo $!"]
+    let output = Pipe()
+    process.standardOutput = output
+    try process.run()
+    process.waitUntilExit()
+    let text = try #require(String(bytes: output.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8))
+    return try #require(pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)))
+  }
+
+  private func claudeJob(pid: pid_t) -> ForegroundJob {
+    ForegroundJob(
+      processGroupID: pid,
+      processes: [ForegroundProcess(pid: pid, parentProcessID: 1, name: "claude", argv0: "claude", cmdline: "claude")])
+  }
 
   private func report(
     _ state: GhosttyProgramStatusReport.State, id: String = "", app: String? = "claude-code",
@@ -68,6 +101,13 @@ struct WorktreeTerminalStateProgramStatusTests {
     state.programStatusSupportForTesting = { _ in support }
     state.agentProcessProbeForTesting = { _, _, fresh in
       probe.calls.append(fresh)
+      if let entered = probe.entered {
+        probe.entered = nil
+        await withCheckedContinuation { continuation in
+          probe.gate = continuation
+          entered.yield(())
+        }
+      }
       return probe.job
     }
     state.lastWindowIsKey = false
@@ -191,22 +231,81 @@ struct WorktreeTerminalStateProgramStatusTests {
     #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.decision?.reason.isProgramStatus == false)
   }
 
-  @Test func delegatedTickSkipsTheScreenRead() async {
-    let probe = Probe()
-    let fixture = makeFixture(probe: probe)
+  private let seededScan = WorktreeTerminalState.AgentScreenScan(
+    agent: .claude, text: "seeded frame", detection: AgentScreenDetection(state: .idle, reason: .legacyDetector))
+
+  /// Binds, takes OSC authority, and puts the loop on the delegated schedule as the
+  /// loop's tick would have.
+  private func delegate(_ fixture: Fixture, probe: Probe) async {
     await bind(fixture, probe: probe)
     fixture.state.handleProgramStatus(report(.working), surfaceID: fixture.surfaceID)
     #expect(fixture.state.agentDetectionCoordinators[fixture.surfaceID]?.isDelegated == true)
-    let seeded = WorktreeTerminalState.AgentScreenScan(
-      agent: .claude, text: "seeded frame", detection: AgentScreenDetection(state: .idle, reason: .legacyDetector))
-    fixture.state.lastAgentScreenScanBySurface[fixture.surfaceID] = seeded
+    fixture.state.agentDetectionSchedules[fixture.surfaceID] = .delegated
+    fixture.state.lastAgentScreenScanBySurface[fixture.surfaceID] = seededScan
+  }
+
+  @Test func delegatedTickSkipsTheScreenRead() async {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    await delegate(fixture, probe: probe)
 
     #expect(await detect(fixture))
 
     // An active tick would have replaced the memo with the (empty) live frame.
-    #expect(fixture.state.lastAgentScreenScanBySurface[fixture.surfaceID] == seeded)
+    #expect(fixture.state.lastAgentScreenScanBySurface[fixture.surfaceID] == seededScan)
     #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.decision?.reason.identifier == "osc.working")
     #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.fallbackState == .idle)
+    #expect(fixture.state.nextScheduleAfterTick(surfaceID: fixture.surfaceID, hasAgent: true) == .delegated)
+  }
+
+  @Test func keyPressGivesOneFullTickBeforeDelegatingAgain() async {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    await delegate(fixture, probe: probe)
+
+    fixture.state.wakeAgentDetection(for: fixture.surface, tabId: fixture.tabID)
+    #expect(fixture.state.agentDetectionSchedules[fixture.surfaceID] == .active)
+    #expect(await detect(fixture))
+
+    // The screen was read again (the memo now holds the live frame), the decision
+    // still follows the root record, and the next tick delegates again.
+    #expect(fixture.state.lastAgentScreenScanBySurface[fixture.surfaceID]?.text == "")
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.decision?.reason.identifier == "osc.working")
+    #expect(fixture.state.nextScheduleAfterTick(surfaceID: fixture.surfaceID, hasAgent: true) == .delegated)
+  }
+
+  @Test func probeMissLeavesDelegationForTheActiveCadence() async {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    await delegate(fixture, probe: probe)
+
+    probe.job = nil
+    #expect(await detect(fixture))
+
+    // Presence holds the agent and the authority, but the remaining misses must run
+    // on the 300 ms cadence, not every 2 s.
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == .claude)
+    #expect(fixture.state.nextScheduleAfterTick(surfaceID: fixture.surfaceID, hasAgent: true) == .active)
+  }
+
+  @Test func engineChangeOnADelegatedTickRunsAFullAcquisition() async throws {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    // Spawned before the report so the root record postdates the engine's start.
+    let engine = try spawnSleeper()
+    defer { engine.terminate() }
+    await delegate(fixture, probe: probe)
+
+    // The identified process moved to another (real) pid: the bound generation is gone.
+    probe.job = claudeJob(pid: engine.processIdentifier)
+    #expect(await detect(fixture))
+
+    // The screen was read (the memo holds the live frame) and the rebound coordinator
+    // re-derived the evidence against the new generation.
+    #expect(fixture.state.lastAgentScreenScanBySurface[fixture.surfaceID]?.text == "")
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcessID == engine.processIdentifier)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.decision?.reason.identifier == "osc.working")
+    #expect(fixture.state.agentDetectionCoordinators[fixture.surfaceID]?.boundProcess?.pid == engine.processIdentifier)
   }
 
   @Test func nextScheduleFollowsDelegation() {
@@ -243,6 +342,91 @@ struct WorktreeTerminalStateProgramStatusTests {
     let store = fixture.state.programStatusStoresBySurface[fixture.surfaceID]
     #expect(store?.root == nil)
     #expect(store?.record(id: "built")?.state == .done)
+  }
+
+  @Test func secondCommandFinishedDuringTheFreshProbeKeepsItsOwnMark() async {
+    let probe = Probe()
+    let fixture = makeFixture(support: .unverified, probe: probe)
+    await bind(fixture, probe: probe)
+    fixture.state.handleProgramStatus(report(.working), surfaceID: fixture.surfaceID)
+    fixture.state.noteCommandFinishedForAgentDetection(surfaceID: fixture.surfaceID)
+    let firstMark = fixture.state.pendingCommandFinishedBySurface[fixture.surfaceID]
+
+    let entered = AsyncStream<Void>.makeStream()
+    probe.entered = entered.continuation
+    let tick = Task { await self.detect(fixture) }
+    var iterator = entered.stream.makeAsyncIterator()
+    _ = await iterator.next()
+    // A successor reported and its shell prompt returned while the first fresh
+    // sample was still in flight.
+    fixture.state.handleProgramStatus(report(.working), surfaceID: fixture.surfaceID)
+    fixture.state.noteCommandFinishedForAgentDetection(surfaceID: fixture.surfaceID)
+    let secondMark = fixture.state.pendingCommandFinishedBySurface[fixture.surfaceID]
+    #expect(secondMark != firstMark)
+    probe.gate?.resume()
+    #expect(await tick.value)
+
+    // The first sample saw the agent (a nested shell's prompt): nothing was released,
+    // and the second D still owns its mark and its fresh sample.
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == .claude)
+    #expect(fixture.state.pendingCommandFinishedBySurface[fixture.surfaceID] == secondMark)
+    #expect(fixture.state.agentDetectionFreshProbeRequests.contains(fixture.surfaceID))
+    #expect(fixture.state.programStatusStoresBySurface[fixture.surfaceID]?.root?.state == .working)
+  }
+
+  @Test func successorAfterTheFinishedOwnerRetiresTheLaunchContextAndKeepsItsOwnRecords() async throws {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    var removed: [UUID] = []
+    var emitted: [ActiveAgentEntry] = []
+    fixture.state.onAgentEntryRemoved = { removed.append($0) }
+    fixture.state.onAgentEntryChanged = { emitted.append($0) }
+    let successor = try spawnDetachedSleeper()
+    defer { kill(successor, SIGTERM) }
+    await bind(fixture, probe: probe)
+    fixture.state.launchProfilesBySurface[fixture.surfaceID] = WorktreeTerminalState.SurfaceLaunchProfile(
+      profileID: UUID(), name: "Claude · Bound", runtime: .claude, dedicatedHome: nil)
+    fixture.state.handleProgramStatus(report(.working), surfaceID: fixture.surfaceID)
+
+    // The owner's shell prompt returned; a successor launched (another real pid) and
+    // reported before the probe ran.
+    fixture.state.noteCommandFinishedForAgentDetection(surfaceID: fixture.surfaceID)
+    fixture.state.handleProgramStatus(report(.working), surfaceID: fixture.surfaceID)
+    probe.job = claudeJob(pid: successor)
+    emitted.removeAll()
+    #expect(await detect(fixture))
+
+    #expect(removed == [fixture.surfaceID])
+    #expect(fixture.state.launchProfilesBySurface[fixture.surfaceID] == nil)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcessID == successor)
+    #expect(emitted.last?.launchProfileName == nil)
+    // The successor's root arrived after the D and survived the scoped cleanup, so it
+    // drives the successor's decision without another report.
+    #expect(fixture.state.programStatusStoresBySurface[fixture.surfaceID]?.root?.state == .working)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.decision?.reason.identifier == "osc.working")
+  }
+
+  @Test func agentWithoutReportsIsReleasedOnTheFreshMissToo() async {
+    let probe = Probe()
+    let fixture = makeFixture(support: .unverified, probe: probe)
+    var removed: [UUID] = []
+    fixture.state.onAgentEntryRemoved = { removed.append($0) }
+    probe.job = ForegroundJob(
+      processGroupID: getpid(),
+      processes: [
+        ForegroundProcess(pid: getpid(), parentProcessID: getppid(), name: "codex", argv0: "codex", cmdline: "codex")
+      ])
+    fixture.state.lastAgentScreenScanBySurface[fixture.surfaceID] = WorktreeTerminalState.AgentScreenScan(
+      agent: .codex, text: "", detection: AgentScreenDetection(state: .idle, reason: .legacyDetector))
+    #expect(await detect(fixture))
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == .codex)
+
+    fixture.state.noteCommandFinishedForAgentDetection(surfaceID: fixture.surfaceID)
+    probe.job = nil
+    #expect(await detect(fixture) == false)
+
+    #expect(removed == [fixture.surfaceID])
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == nil)
   }
 
   @Test func ordinaryMissStillNeedsSixSamples() async {
@@ -343,6 +527,24 @@ struct WorktreeTerminalStateProgramStatusTests {
     _ = await iterator.next()
     #expect(clock.now - start < .seconds(1))
     fixture.state.cleanupAllAgentDetectionState()
+  }
+
+  @Test func aLateSleeperContinuationDoesNotUnregisterANewerLoopsSleeper() async {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    let id = fixture.surfaceID
+    let old = Task { await fixture.state.sleepAgentDetection(forSurfaceID: id, token: 1, interval: .seconds(30)) }
+    while fixture.state.agentDetectionSleepersBySurface[id] == nil { await Task.yield() }
+    // The surface was closed and restored: a new loop owns the slot now.
+    let newer = Task<Void, any Error> { try await Task.sleep(for: .seconds(30)) }
+    fixture.state.agentDetectionSleepersBySurface[id] = WorktreeTerminalState.AgentDetectionSleeper(
+      token: 2, task: newer)
+
+    old.cancel()
+    await old.value
+
+    #expect(fixture.state.agentDetectionSleepersBySurface[id]?.token == 2)
+    newer.cancel()
   }
 
   // MARK: Undo-close
