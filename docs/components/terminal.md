@@ -111,6 +111,10 @@ sequences:
   tab's activity indicator and task status. Task status *also* folds in detected
   agent activity (Working/Blocked, incl. background workflows) — see
   [agent-detection](agent-detection.md#worktree-running-indicator).
+- **Program status (OSC 7501)** — Prowl answers the support query, so programs
+  that speak the protocol (Claude Code 2.1.295+, Pi 1.1.0+) report
+  idle/working/blocked/done. Prowl receives the reports but does not act on them
+  yet; the activity indicator and agent detection still use the signals above.
 - **Bell / desktop notification** — increments unread indicators.
 
 `--capture` in the CLI **requires OSC 133** on the target pane; without it you get

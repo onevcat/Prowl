@@ -95,6 +95,7 @@ extension WorktreeTerminalState {
     bridge.onGotoTab = nil
     bridge.onCommandPaletteToggle = nil
     bridge.onProgressReport = nil
+    bridge.onProgramStatus = nil
     bridge.onDesktopNotification = nil
     bridge.onCommandFinished = nil
     bridge.onPromptTitle = nil
