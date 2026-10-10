@@ -12,6 +12,11 @@ struct AgentConditionSnapshot: Sendable {
   let isLive: Bool
   let signals: AgentSignalsPayload
   let screenDetection: AgentScreenDetection?
+  /// The coordinator's current resolution (docs-ai 079). The reducer entry drops
+  /// reason-only changes from emission and the published pane decision is held back
+  /// during an OSC withdrawal, so neither carries the live reason that the OSC idle
+  /// exemption and the outstanding-work veto key on.
+  let decision: AgentStateDecision?
 
   init(
     agent: ActiveAgentEntry?,
@@ -20,7 +25,8 @@ struct AgentConditionSnapshot: Sendable {
     revision: UInt64,
     isLive: Bool,
     signals: AgentSignalsPayload,
-    screenDetection: AgentScreenDetection? = nil
+    screenDetection: AgentScreenDetection? = nil,
+    decision: AgentStateDecision? = nil
   ) {
     self.agent = agent
     self.signal = signal
@@ -29,6 +35,13 @@ struct AgentConditionSnapshot: Sendable {
     self.isLive = isLive
     self.signals = signals
     self.screenDetection = screenDetection
+    self.decision = decision
+  }
+
+  /// The decision readiness evaluates: the live one when the terminal supplied it,
+  /// else the entry's own.
+  var currentDecision: AgentStateDecision? {
+    decision ?? agent?.stateDecision
   }
 }
 
@@ -104,7 +117,7 @@ enum AgentConditionEvidence {
     for snapshot: AgentConditionSnapshot, baseline explicitBaseline: Baseline? = nil
   ) -> IdleVerdict {
     let state = normalizedState(snapshot)
-    if snapshot.agent?.stateDecision?.hasOutstandingWork == true { return .busy(state) }
+    if snapshot.currentDecision?.hasOutstandingWork == true { return .busy(state) }
     // Without a baseline every signal the snapshot holds predates this call (the re-dispatch
     // case); a wait that keeps polling passes the baseline it armed with, so a later exact
     // `turn-ended` counts even while the screen still shows `working`.
@@ -136,13 +149,26 @@ enum AgentConditionEvidence {
     // classifier recognizes the retained frame.
     if snapshot.screenDetection?.reason == .noRuleMatched
       || snapshot.screenDetection?.state == .unknown,
-      agent.stateDecision?.reason != .logTurnEnded,
-      agent.stateDecision?.reason != .native(.idle),
+      !providerReportsIdle(snapshot.currentDecision),
       detectorReports(.idle, normalizedState: state)
     {
       return "unknown"
     }
     return state
+  }
+
+  /// Decisions whose idle comes from a provider rather than the screen: a log turn end,
+  /// a native idle snapshot, or an OSC 7501 root at rest (`idle`, `done`, `error`).
+  static func providerReportsIdle(_ decision: AgentStateDecision?) -> Bool {
+    switch decision?.reason {
+    case .logTurnEnded, .native(.idle): true
+    case .programStatus(let reason):
+      switch reason {
+      case .idle, .done, .error: true
+      case .working, .blocked, .childBlocked: false
+      }
+    default: false
+    }
   }
 
   static func status(for agent: ActiveAgentEntry?, fallback: AgentsCommandStatus) -> AgentsCommandStatus {
@@ -178,7 +204,7 @@ enum AgentConditionEvidence {
     baseline: Baseline,
     minimumConfidence: AgentWaitMinimumConfidence
   ) -> AgentSignal? {
-    if condition == .idle, snapshot.agent?.stateDecision?.hasOutstandingWork == true { return nil }
+    if condition == .idle, snapshot.currentDecision?.hasOutstandingWork == true { return nil }
     let signal = condition == .changed ? snapshot.changedSignal : snapshot.signal
     guard let signal, accepts(signal.confidence, minimum: minimumConfidence) else { return nil }
     let isPreArmLevel = condition != .changed && signal == baseline.terminalSignal

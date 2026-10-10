@@ -157,6 +157,31 @@ final class WorktreeTerminalState {
   var agentDetectionTasks: [UUID: Task<Void, Never>] = [:]
   var agentDetectionPresenceBySurface: [UUID: AgentDetectionPresence] = [:]
   var lastAgentDetectionDiagnosticsBySurface: [UUID: String] = [:]
+  /// OSC 7501 record trees per surface (docs-ai 079). Records belong to the terminal,
+  /// not to a process: a store outlives `forgetSurface` while its surface is retained
+  /// for undo and is dropped when the surface is freed or closed for good.
+  @ObservationIgnored var programStatusStoresBySurface: [UUID: ProgramStatusRecordStore] = [:]
+  /// The sleeping half of each detection loop; `wakeAgentDetection` cancels it so a
+  /// report, a key press, or a finished command gets an immediate probe.
+  @ObservationIgnored var agentDetectionSleepersBySurface: [UUID: Task<Void, any Error>] = [:]
+  /// Wakes that arrived while a loop was mid-tick; the next sleep is skipped.
+  @ObservationIgnored var agentDetectionWakeRequests: Set<UUID> = []
+  /// Surfaces whose next probe bypasses the process cache (a `COMMAND_FINISHED` arrived).
+  @ObservationIgnored var agentDetectionFreshProbeRequests: Set<UUID> = []
+  /// What a `COMMAND_FINISHED` captured, consumed by the fresh probe that follows it.
+  @ObservationIgnored var pendingCommandFinishedBySurface: [UUID: PendingCommandFinished] = [:]
+  /// Unmapped `app` values already reported once per surface.
+  @ObservationIgnored var programStatusUnmappedAppsLoggedBySurface: [UUID: Set<String>] = [:]
+  /// Test seams: the process probe, the OSC support table, and the diagnostics sink.
+  @ObservationIgnored var agentProcessProbeForTesting: AgentProcessProbeOverride?
+  @ObservationIgnored var programStatusSupportForTesting: ((DetectedAgent) -> ProgramStatusSupport)?
+  @ObservationIgnored var programStatusLogForTesting: ((String) -> Void)?
+  typealias AgentProcessProbeOverride =
+    @MainActor (_ processGroupID: pid_t?, _ childPID: pid_t?, _ fresh: Bool) async -> ForegroundJob?
+  struct PendingCommandFinished: Equatable {
+    /// The store revision when the 133 D arrived; the cleanup is scoped to it.
+    let storeRevision: UInt64
+  }
   /// Memoizes the last agent-screen scan per surface so `detectAgentState` can
   /// reuse it while the terminal text and detected agent are unchanged. A
   /// live-but-idle agent is polled every 300 ms; without this each poll re-ran

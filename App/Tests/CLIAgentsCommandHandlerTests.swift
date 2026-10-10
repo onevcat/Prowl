@@ -37,6 +37,25 @@ struct CLIAgentsCommandHandlerTests {
     #expect(payload.agents.first?.detectionReason == "screen.afterTurn")
   }
 
+  @Test func oscDrivenDecisionReportsTheDelegatedMarkerOverTheCachedScan() async throws {
+    // While a verified root record holds authority the screen is not read, so the
+    // cached scan is stale; the decision's own marker wins and raw_state keeps the
+    // last scan (docs-ai 079).
+    let fixture = makePayloadFixture()
+    var decision = AgentStateDecision(state: .working, reason: .programStatus(.working), hasOutstandingWork: true)
+    decision.screenReason = .delegated
+    let snapshot = AgentsRuntimeSnapshot(
+      repositoriesState: fixture.snapshot.repositoriesState, listSnapshot: fixture.snapshot.listSnapshot,
+      screenDetectionsBySurfaceID: fixture.snapshot.screenDetectionsBySurfaceID,
+      decisionsBySurfaceID: [fixture.tabPaneID: decision])
+    let handler = AgentsCommandHandler { snapshot }
+    let response = await handler.handle(envelope: CommandEnvelope(output: .json, command: .agents(AgentsInput())))
+    let payload = try #require(try response.data?.decode(as: AgentsCommandPayload.self))
+    #expect(payload.agents.first?.detectionReason == "osc.working")
+    #expect(payload.agents.first?.screenReason == "screen.delegated")
+    #expect(payload.agents.first?.rawState == "working")
+  }
+
   @Test func buildsAgentsPayloadFromActiveEntriesAndTerminalSnapshot() async throws {
     let fixture = makePayloadFixture()
     let handler = AgentsCommandHandler {

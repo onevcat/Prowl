@@ -811,6 +811,13 @@ final class WorktreeTerminalManager {
       .first
   }
 
+  /// The coordinator's current resolution for readiness (docs-ai 079): the reducer
+  /// entry drops reason-only changes from emission, and the published pane decision
+  /// is held back during an OSC withdrawal, so neither carries the live reason.
+  func agentCurrentDecision(surfaceID: UUID) -> AgentStateDecision? {
+    activeWorktreeStates.lazy.compactMap { $0.agentDetectionCoordinators[surfaceID]?.decision }.first
+  }
+
   func agentDispatchSnapshot(dispatchID: String) -> AgentDispatchSnapshot? {
     agentDispatchStore.snapshot(dispatchID: dispatchID)
   }
@@ -1161,6 +1168,10 @@ final class WorktreeTerminalManager {
   /// Final disposal of retained surfaces: whatever the close deferred for a
   /// possible restore is released now.
   private func free(_ surfaces: [GhosttySurfaceView]) {
+    let surfaceIDs = surfaces.map(\.id)
+    for state in states.values {
+      state.dropProgramStatusStores(forSurfaceIDs: surfaceIDs)
+    }
     for surface in surfaces {
       if let record = deferredForwardingRecords.removeValue(forKey: surface.id) {
         retireForwardingRecord(record)

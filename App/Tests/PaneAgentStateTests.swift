@@ -28,6 +28,18 @@ struct PaneAgentStateTests {
     #expect(presence.currentAgent == nil)
   }
 
+  @Test func commandFinishedMissReleasesAtOnceButOnlyThatMiss() {
+    var presence = AgentDetectionPresence(currentAgent: .codex)
+    #expect(presence.update(detectedAgent: nil) == .codex)
+    #expect(presence.update(detectedAgent: nil, releaseOnMiss: true) == nil)
+    #expect(presence.currentAgent == nil)
+    #expect(presence.consecutiveMisses == 0)
+    // A hit on the fresh sample is a hit; nothing is released.
+    var held = AgentDetectionPresence(currentAgent: .claude)
+    #expect(held.update(detectedAgent: .claude, releaseOnMiss: true) == .claude)
+    #expect(held.consecutiveMisses == 0)
+  }
+
   @Test func isBusyReflectsWorkingAndBlockedDetectedAgents() {
     #expect(PaneAgentState(detectedAgent: .claude, state: .working).isBusy)
     #expect(PaneAgentState(detectedAgent: .claude, state: .blocked).isBusy)

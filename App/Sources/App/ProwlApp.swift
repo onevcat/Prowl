@@ -932,7 +932,8 @@ struct ProwlApp: App {
         revision: observed?.revision ?? 0,
         isLive: terminalManager.isSurfaceLive(surfaceID),
         signals: terminalManager.agentSignalsPayload(surfaceID: surfaceID),
-        screenDetection: terminalManager.agentScreenDetection(surfaceID: surfaceID)
+        screenDetection: terminalManager.agentScreenDetection(surfaceID: surfaceID),
+        decision: terminalManager.agentCurrentDecision(surfaceID: surfaceID)
       )
     }
     let agentWaitHandler = AgentWaitCommandHandler(

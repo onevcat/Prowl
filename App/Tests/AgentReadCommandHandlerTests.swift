@@ -31,6 +31,34 @@ struct AgentReadCommandHandlerTests {
     #expect(payload.result.error == nil)
   }
 
+  @Test func oscOnlyBlockedReportsANullBlockerInsteadOfFailing() async throws {
+    // The decision is Blocked from a root record while no screen rule finds a prompt
+    // (docs-ai 079): the snapshot succeeds with the decision's reason and no blocker.
+    let handler = AgentReadCommandHandler(
+      snapshotProvider: { _ in
+        .success(
+          self.makeSnapshot(
+            status: .blocked, detectionReason: "osc.blocked.permission", screenReason: "fallback.noRuleMatched"))
+      },
+      resultProvider: { _, _, _ in
+        Issue.record("Unexpected transcript read")
+        return .failure(.incomplete)
+      }
+    )
+
+    let response = await handler.handle(
+      envelope: CommandEnvelope(output: .json, command: .agentsRead(AgentReadInput(pane: "p7")))
+    )
+
+    #expect(response.ok)
+    let payload = try #require(try response.data?.decode(as: AgentReadCommandPayload.self))
+    #expect(payload.agent.status == .blocked)
+    #expect(payload.agent.detectionReason == "osc.blocked.permission")
+    #expect(payload.agent.screenReason == "fallback.noRuleMatched")
+    #expect(payload.blocker == nil)
+    #expect(payload.result.state == .pending)
+  }
+
   @Test func idleSnapshotWithoutSessionReportsUnavailable() async throws {
     let handler = AgentReadCommandHandler(
       snapshotProvider: { _ in .success(self.makeSnapshot(status: .idle)) },
@@ -170,7 +198,9 @@ struct AgentReadCommandHandlerTests {
   private func makeSnapshot(
     status: AgentsCommandStatus,
     blockerText: String? = nil,
-    session: AgentSession? = nil
+    session: AgentSession? = nil,
+    detectionReason: String = "claude.blockedPrompt",
+    screenReason: String = "claude.blockedPrompt"
   ) -> AgentReadRuntimeSnapshot {
     AgentReadRuntimeSnapshot(
       target: ReadTarget(
@@ -185,8 +215,8 @@ struct AgentReadCommandHandlerTests {
       agent: .claude,
       status: status,
       rawState: status == .done ? "idle" : status.rawValue,
-      detectionReason: "claude.blockedPrompt",
-      screenReason: "claude.blockedPrompt",
+      detectionReason: detectionReason,
+      screenReason: screenReason,
       lastChangedAt: "2026-08-11T12:00:00Z",
       blockerText: blockerText,
       transcriptSession: session

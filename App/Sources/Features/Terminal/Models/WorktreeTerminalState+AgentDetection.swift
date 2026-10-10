@@ -11,12 +11,16 @@ extension WorktreeTerminalState {
     wakeAgentDetection(for: view, tabId: tabId)
   }
 
+  /// A real wake (docs-ai 079): besides warming the schedule and starting the loop,
+  /// it ends the loop's current sleep so a key press, a `COMMAND_FINISHED`, a report
+  /// for an unbound pane, or an OSC withdrawal gets an immediate probe.
   func wakeAgentDetection(for view: GhosttySurfaceView, tabId: TerminalTabID, now: Date = Date()) {
     agentDetectionSchedules[view.id] = (agentDetectionSchedules[view.id] ?? .cold).warmed(now: now)
     if surfaceAgentStates[view.id] == nil {
       surfaceAgentStates[view.id] = PaneAgentState(lastChangedAt: now)
     }
     startAgentDetectionTaskIfNeeded(for: view, tabId: tabId)
+    interruptAgentDetectionSleep(forSurfaceID: view.id)
   }
 
   func startAgentDetectionTaskIfNeeded(for view: GhosttySurfaceView, tabId: TerminalTabID) {
@@ -33,20 +37,22 @@ extension WorktreeTerminalState {
         // stays the trailing flush here, and no second timer is needed.
         self.flushPendingAgentEntry(surfaceID: view.id, now: now)
         let schedule = self.agentDetectionSchedules[view.id] ?? .cold
-        self.agentDetectionSchedules[view.id] =
-          hasAgent ? schedule.observedAgent(now: now) : schedule.observedNoAgent(now: now)
+        let delegated = self.agentDetectionCoordinators[view.id]?.isDelegated == true
+        self.agentDetectionSchedules[view.id] = Self.nextSchedule(
+          schedule, hasAgent: hasAgent, delegated: delegated, now: now)
 
         guard let interval = self.agentDetectionSchedules[view.id]?.nextInterval(now: now) else {
           self.finishColdAgentDetection(forSurfaceID: view.id)
           return
         }
-        try? await Task.sleep(for: interval)
+        await self.sleepAgentDetection(forSurfaceID: view.id, interval: interval)
       }
     }
   }
 
   func finishColdAgentDetection(forSurfaceID surfaceID: UUID) {
     agentDetectionTasks.removeValue(forKey: surfaceID)
+    clearAgentDetectionWakeState(forSurfaceID: surfaceID)
     agentDetectionSchedules.removeValue(forKey: surfaceID)
     agentDetectionPresenceBySurface.removeValue(forKey: surfaceID)
     lastAgentDetectionDiagnosticsBySurface.removeValue(forKey: surfaceID)
@@ -69,15 +75,22 @@ extension WorktreeTerminalState {
     let surfaceID = view.id
     let childPID = view.bridge.childPID()
     let processGroupID = view.bridge.foregroundProcessGroupID()
-    let job = await AgentProcessProbe.shared.foregroundJob(processGroupID: processGroupID, childPID: childPID)
+    // A `COMMAND_FINISHED` asked for a sample the probe cache cannot answer.
+    let fresh = agentDetectionFreshProbeRequests.remove(surfaceID) != nil
+    let job = await probeForegroundJob(processGroupID: processGroupID, childPID: childPID, fresh: fresh)
     guard surfaces[surfaceID] != nil else { return false }
 
     let identified = job.flatMap { identifyAgentInJob($0) }
     let probedAgent = identified?.agent
+    let finished = fresh ? pendingCommandFinishedBySurface.removeValue(forKey: surfaceID) : nil
 
     var presence = agentDetectionPresenceBySurface[surfaceID] ?? AgentDetectionPresence()
-    let agent = presence.update(detectedAgent: probedAgent)
+    let agent = presence.update(detectedAgent: probedAgent, releaseOnMiss: finished != nil)
     agentDetectionPresenceBySurface[surfaceID] = presence
+    if let finished {
+      applyCommandFinished(finished, identified: identified, surfaceID: surfaceID)
+    }
+    logUnmappedProgramStatusAppIfNeeded(surfaceID: surfaceID, agent: agent)
 
     guard let agent else {
       // Only log the moment we lose a previously detected agent; pre-agent
@@ -105,12 +118,22 @@ extension WorktreeTerminalState {
     let now = Date()
     var previous = surfaceAgentStates[surfaceID] ?? PaneAgentState(lastChangedAt: now)
     let capturedAt = ProcessInfo.processInfo.systemUptime
-    let activeText = view.bridge.readActiveText() ?? ""
+    let coordinator = agentDetectionCoordinators[surfaceID] ?? makeAgentDetectionCoordinator(surfaceID: surfaceID)
+    agentDetectionCoordinators[surfaceID] = coordinator
+    // A verified OSC 7501 root record decides the state: the delegated tick keeps the
+    // probe and the session resolution and does not read the screen at all. The
+    // last scan stands in as the raw state and as the resolver's text.
+    let delegated = coordinator.isDelegated
+    let lastScan = lastAgentScreenScanBySurface[surfaceID]
+    let activeText = delegated ? (lastScan?.text ?? "") : (view.bridge.readActiveText() ?? "")
     // Reuse the previous scan while the screen and detected agent are unchanged.
     // A live-but-idle agent is polled every 300 ms and `detectState` re-splits,
     // lowercases, and scans the whole screen each time; skipping that for
     // identical text is the bulk of steady-state detection cost.
-    let detection = cachedScreenDetection(forSurfaceID: surfaceID, agent: agent, text: activeText)
+    let detection =
+      delegated
+      ? (lastScan?.detection ?? AgentScreenDetection(state: .unknown, reason: .noRuleMatched))
+      : cachedScreenDetection(forSurfaceID: surfaceID, agent: agent, text: activeText)
     let raw = detection.state
     guard surfaces[surfaceID] != nil else { return false }
 
@@ -130,8 +153,6 @@ extension WorktreeTerminalState {
     previous.seen = current.seen
     previous.lastChangedAt = current.lastChangedAt
     guard previous == current else { return true }
-    let coordinator = agentDetectionCoordinators[surfaceID] ?? AgentDetectionCoordinator(surfaceID: surfaceID)
-    agentDetectionCoordinators[surfaceID] = coordinator
     let process = Self.processGeneration(identified)
 
     guard
@@ -139,12 +160,19 @@ extension WorktreeTerminalState {
         agent: agent, process: process, screen: detection,
         screenContentID: detection.state == .blocked ? activeText.hashValue : nil,
         capturedAt: capturedAt,
-        configRoot: launchProfilesBySurface[surfaceID]?.configRoot(forDetected: agent)
+        configRoot: launchProfilesBySurface[surfaceID]?.configRoot(forDetected: agent),
+        programStatus: programStatusStoresBySurface[surfaceID],
+        delegated: delegated
       ), surfaces[surfaceID] != nil, let latest = surfaceAgentStates[surfaceID]
     else { return false }
     previous.seen = latest.seen
     previous.lastChangedAt = latest.lastChangedAt
     guard previous == latest else { return true }
+    // An OSC withdrawal publishes nothing by itself: only an observe whose capture
+    // started after it may replace the last published state.
+    if let withdrawnAt = coordinator.lastProgramStatusWithdrawalAt, capturedAt < withdrawnAt {
+      return true
+    }
     let stabilized = decision.state
     let launchObservation = resolvedLaunchObservation(identified: identified, previous: previous)
     let lastChangedAt = (previous.detectedAgent != agent || previous.state != stabilized) ? now : previous.lastChangedAt
@@ -159,7 +187,7 @@ extension WorktreeTerminalState {
       iconLookupToken: iconLookupToken,
       fallbackState: raw,
       state: stabilized,
-      seen: resolvedSeen(previous: previous, stabilized: stabilized, surfaceID: surfaceID),
+      seen: Self.resolvedSeen(previous: previous, decision: decision, isViewed: isViewedSurface(surfaceID)),
       lastChangedAt: lastChangedAt
     )
     next.sessionMissStreak = sessionMissStreak
@@ -183,10 +211,7 @@ extension WorktreeTerminalState {
         )
       )
     }
-    guard next != previous else { return true }
-    surfaceAgentStates[surfaceID] = next
-    updateTabAgentBusyState(for: tabId)
-    emitAgentEntry(surfaceID: surfaceID, tabId: tabId, state: next)
+    commitAgentState(next, previous: previous, surfaceID: surfaceID, tabId: tabId)
     return true
   }
 
@@ -234,20 +259,6 @@ extension WorktreeTerminalState {
     )
     lastAgentScreenScanBySurface[surfaceID] = scan
     return detection
-  }
-
-  private func resolvedSeen(
-    previous: PaneAgentState,
-    stabilized: AgentRawState,
-    surfaceID: UUID
-  ) -> Bool {
-    if isViewedSurface(surfaceID) {
-      return true
-    }
-    if (previous.state == .working || previous.state == .blocked) && stabilized == .idle {
-      return false
-    }
-    return previous.seen
   }
 
   private func resolvedLaunchProcessID(
@@ -523,6 +534,11 @@ extension WorktreeTerminalState {
     agentDetectionCoordinators.removeValue(forKey: surfaceId)?.invalidate()
     agentDetectionTasks[surfaceId]?.cancel()
     agentDetectionTasks.removeValue(forKey: surfaceId)
+    clearAgentDetectionWakeState(forSurfaceID: surfaceId)
+    // A surface retained for undo keeps its process and its records (docs-ai 079).
+    if !isRetainedForUndo(surfaceId) {
+      dropProgramStatusStores(forSurfaceIDs: [surfaceId])
+    }
     agentDetectionSchedules.removeValue(forKey: surfaceId)
     surfaceAgentStates.removeValue(forKey: surfaceId)
     agentDetectionPresenceBySurface.removeValue(forKey: surfaceId)
@@ -544,6 +560,13 @@ extension WorktreeTerminalState {
     }
     let removedIDs = Array(lastEmittedAgentEntriesBySurface.keys)
     agentDetectionTasks.removeAll()
+    for sleeper in agentDetectionSleepersBySurface.values { sleeper.cancel() }
+    agentDetectionSleepersBySurface.removeAll()
+    agentDetectionWakeRequests.removeAll()
+    agentDetectionFreshProbeRequests.removeAll()
+    pendingCommandFinishedBySurface.removeAll()
+    programStatusStoresBySurface.removeAll()
+    programStatusUnmappedAppsLoggedBySurface.removeAll()
     agentDetectionSchedules.removeAll()
     surfaceAgentStates.removeAll()
     agentDetectionPresenceBySurface.removeAll()
