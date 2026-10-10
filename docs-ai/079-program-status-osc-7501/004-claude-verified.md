@@ -114,5 +114,5 @@ confirmed the four fixes against the code with no new finding.
 
 ## Refs
 
-Builds on #887 (slice 1), #892 (plan), #893 (slice 2). #891 (legacy background-work
-semantics) stays open. PR #895.
+Builds on #887 (slice 1), #892 (plan), #893 (slice 2); parallel to #896 (slice 4, Pi). #891
+(legacy background-work semantics) stays open. PR #895.

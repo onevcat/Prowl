@@ -70,7 +70,7 @@ recorded in [producer-baseline.md](../079-program-status-osc-7501/producer-basel
 | relaunch in the same pane | the new process gets its own `osc.idle`; the predecessor's records are fenced by arrival time |
 | undo-close | the retained store is pulled by the restored coordinator: `osc.done` at the pre-close revision with no new report |
 | `CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1`, `CLAUDE_CODE_SESSION_KIND=bg`, < 2.1.295 | no reports: `native.*` from the registry with the screen rules, as before |
-| Agent Profile launch | the kickoff dispatch, `agents wait --until idle`, and a later `agents dispatch` all resolve on the `osc.*` decision while the managed hook channel stays `exact` |
+| Agent Profile launch | the Profile keeps its exact managed hook channel while OSC supplies the pane state and takes part in idle admission; the kickoff and a later assignment completed through explicit dispatch receipts, and the idle wait and the re-dispatch admission succeeded |
 
 ## Original recommendation and evidence scope
 
