@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | Implemented |
 | **Anchor date** | 2026-10-10 |
-| **Primary PRs** | Pending |
+| **Primary PRs** | #889 |
 | **Related** | Issue #751; [settings reference](../../docs/reference/settings-fields.md) |
 
 ## Background

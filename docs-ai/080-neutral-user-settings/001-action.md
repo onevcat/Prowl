@@ -4,7 +4,7 @@
 
 | Date | Change | Ref |
 | --- | --- | --- |
-| 2026-10-10 | Rename user settings, retain ordered legacy reads, and add non-destructive migration with strict error handling | Issue #751 |
+| 2026-10-10 | Rename user settings, retain ordered legacy reads, and add non-destructive migration with strict error handling | PR #889; `ec419037` |
 
 ## Outcome & current state (as of 2026-10-10)
 
