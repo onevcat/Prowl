@@ -15,7 +15,7 @@ Slice 1 of [000-plan.md](000-plan.md): give Prowl the bytes before any detection
 | 2026-10-10 | Fork commit `f35f9a84d` on `onevcat/ghostty` `rehearsal/tip-9d479dcb1-patched`: query reply, owned surface message, decode on the app thread, `GHOSTTY_ACTION_PROGRAM_STATUS`, `ghostty.h` enum tests | submodule pin in this branch |
 | 2026-10-10 | Prebuilt GhosttyKit published as release `xcframework-f35f9a84d57074dd98780ae53e67a14ed0dd6213-prowl-v1`; checksums recorded | `scripts/ghosttykit-checksums.txt` |
 | 2026-10-10 | Prowl: `GhosttyProgramStatusReport`, `GhosttySurfaceBridge.onProgramStatus`, diagnostics hook in the terminal owner, manual note, replay harness in `scripts/` | this branch |
-| 2026-10-10 | Verification: `zig build test -Dtest-filter=ghostty.h` pass; `make build-app` 0 warnings; `GhosttyProgramStatusReportTests` 5 pass; `make check` pass; isolated Debug instance received `idle` → `working` → `done` from `claude-code` through the action; `make test`: 3 pass / 0 fail | session logs |
+| 2026-10-10 | Verification: `zig build test -Dtest-filter=ghostty.h` pass; `make build-app` 0 warnings; `GhosttyProgramStatusReportTests` 5 pass; `make check` pass; isolated Debug instance received `idle` → `working` → `done` from `claude-code` through the action; `make test`: ProwlTests 3701 pass / 0 fail / 5 skipped, plus the mirror (53), event monitor (12) and shell cancellation (3) bundles | session logs |
 
 ## Current state (as of 2026-10-10)
 
