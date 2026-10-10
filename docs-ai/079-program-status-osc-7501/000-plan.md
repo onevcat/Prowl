@@ -12,9 +12,11 @@
 OSC 7501 (the program status protocol, Rex revision 0.3 of 2026-10-07) lets a program put one
 status record per terminal into the PTY stream: `idle`, `working`, `done`, `blocked` (with
 `kind=permission|question|auth`), `error`, plus `clear`; optional `id` (`/` nests records),
-`app`, `progress`, base64 `title` and `msg`. A program sends `OSC 7501 ; ?` and only reports
-when the terminal echoes the query. Claude Code 2.1.295 and Pi 1.1.0 ship native support;
-[producer-baseline.md](producer-baseline.md) records what each one actually sends.
+`app`, `progress`, base64 `title` and `msg`. A program may probe with `OSC 7501 ; ?` and
+start reporting when the terminal echoes it; revision 0.3 also allows reports without a
+probe, and the parser accepts either. Claude Code 2.1.295 and Pi 1.1.0 ship native support
+and both probe first; [producer-baseline.md](producer-baseline.md) records what each one
+actually sends.
 
 Prowl decides Working/Blocked/Idle per pane on a 300 ms poll: process probe, screen read and
 per-agent string rules, session resolution, then the optional file providers (Codex log,
@@ -102,8 +104,11 @@ a report replaces its record completely; `clear` removes the record and its desc
 with an empty id everything (a full reset arrives this way from the fork); a record without
 `app` inherits the nearest ancestor's; at most 256 records with LRU eviction; a monotonic
 `revision` per surface and an `arrivedAt` (`Date()` at the callback) per record.
-`commandFinished()` drops `working` and `blocked` records and keeps `idle`/`done`/`error`,
-which is the protocol's rule for a new shell prompt. `title`/`msg` are kept within the parser
+`commandFinished(upTo: revision)` drops the `working` and `blocked` records whose revision is
+at or below the store revision captured when the 133 D arrived, and keeps `idle`/`done`/`error`;
+this is the protocol's rule for a new shell prompt, scoped to the records that existed when
+the command finished so that a successor's reports arriving after the D are never touched.
+`title`/`msg` are kept within the parser
 limits and are neither logged nor published. The store belongs to the surface, next to
 `surfaceAgentStates`, because reports can arrive before the probe has bound an agent (Pi
 sends `idle` within 10 ms of the query echo) and because records belong to the terminal, not
@@ -113,9 +118,23 @@ to a process.
 `app` (after inheritance) equals `DetectedAgent.programStatusApp` (`claude` → `claude-code`,
 `pi` → `pi`, every other agent `nil`), and `arrivedAt >= process.startedAt` of the detected
 agent's process generation (`ProcessDetection.processStartDate` has microsecond precision).
-Children follow their root. Ineligible records stay in the store for diagnostics. The fence
-is attribution, not trust: a wrapper, a nested program, or `cat` can write a root, so `app`
-decides whose state a record is, never whether it is authentic.
+The arrival-time test applies to every record, not only the root: a child left behind by a
+previous process (it exited without `clear` and a new root replaced only the root record)
+has an `arrivedAt` before the new process started and is ineligible, whatever `app` it
+inherits now. Ineligible records stay in the store for diagnostics. The fence is attribution,
+not trust: a wrapper, a nested program, or `cat` can write a root, so `app` decides whose
+state a record is, never whether it is authentic.
+
+The fence is only as current as the coordinator's process binding. Today `observe` rebinds
+on a same-agent process change only for agents with a provider (`hasProvider`, Claude and
+Codex); a Pi relaunch keeps the first generation. Slice 2 rebinds for every agent with a
+`programStatusApp` as well (reset the machine, adopt the new generation), and the push path
+consumes a report only against the generation the last probe confirmed. A binding stays
+current until a probe reports a different generation or a miss; a report that arrives during
+a probe gap is consumed against the last confirmed binding, and the arrival-time test is
+what keeps a predecessor's records out of it. The generation is the identified agent process
+(`agentProcessID`, the same generation the providers use), not the shell-launched
+`launchProcessID`.
 
 **State machine.** New event `.programStatus(ProgramStatusEvidence?)`; `nil` withdraws the
 evidence (root cleared, command finished, eligibility lost) and the machine falls back to
@@ -131,12 +150,16 @@ state follows the root record only:
 | any child `blocked` | Blocked | `osc.childBlocked.<kind>` |
 | child `working` | no change; the record stays in the store | — |
 
-`hasOutstandingWork` is true only for a root `working`/`blocked`. Background agents and
-subagents therefore do not keep a pane Working and do not veto `agents wait --until idle`,
-dispatch readiness, or workflows (decision of 2026-10-10; the legacy providers still do, see
-#891). A child `blocked` still reads as Blocked because a subagent's prompt is shown to the
-user and needs an answer. While an eligible root exists the screen is not consulted at all
-(it is not even read, see the schedule); it enters only when the evidence is withdrawn.
+`hasOutstandingWork` is true for a root `working`/`blocked` and for any eligible child
+`blocked`; a child `working` never sets it. Background agents and subagents therefore do not
+keep a pane Working and do not veto `agents wait --until idle`, dispatch readiness, or
+workflows (decision of 2026-10-10; the legacy providers still do, see #891). A child
+`blocked` still reads as Blocked and still vetoes idle admission, because a subagent's prompt
+is shown to the user and needs an answer, and because `AgentConditionEvidence.exactMatch`
+accepts a post-arm `turn-ended` without detector corroboration: without the veto, a parent
+turn end would release a wait while the child's prompt is open. While an eligible root exists
+the screen is not consulted at all (it is not even read, see the schedule); it enters only
+when the evidence is withdrawn.
 
 **Done presentation.** `PaneAgentState.displayState` keeps its meaning: Done is a completed
 turn the user has not looked at, and it turns into Idle when the pane is actually viewed
@@ -150,7 +173,20 @@ from the tail of `detectAgentState` (pane state, seen, tab busy flag, Active Age
 `onProgramStatus` applies the report to the store and, when a coordinator is bound, calls
 `receive(programStatus:)` and publishes synchronously, so Active Agents, the tab indicator,
 and the CLI flip in the same main-thread turn. `observe` also pulls the store snapshot on
-every poll, so the push and the poll converge; the store revision de-duplicates.
+every poll, so the push and the poll converge. The commit contract for the two paths:
+
+- The machine records the highest store revision it has applied and ignores a snapshot with
+  an older or equal revision. A poll that captured its snapshot before suspending at the
+  provider `await` and applies it afterwards therefore cannot roll back a newer push.
+- The push publishes by merging state, decision, seen, and `lastChangedAt` into the current
+  `PaneAgentState`; session, pid, launch observation, and profile metadata are untouched.
+- A poll whose captured `previous` pane state went stale during its suspension is discarded
+  as today (`guard previous == latest` in `detectAgentState`) and the next tick redoes it.
+  State transitions are rare relative to the poll, so the discard cannot starve session
+  metadata; a `working` report that only changes `msg` does not change the decision and
+  publishes nothing.
+- The coordinator's `revision`/`invalidate` and `lastCapturedAt` ordering (064.024) are
+  unchanged; a push after `invalidate` is dropped like any other stale result.
 
 **Detection schedule.** `AgentDetectionSchedule` gains `.delegated`:
 
@@ -161,18 +197,60 @@ every poll, so the push and the poll converge; the store revision de-duplicates.
 | active | 300 ms | probe + screen read and rules + session + provider sample | agent present, no OSC authority |
 | delegated (new) | 2 s (`idleAgentDetectionInterval`) | probe + session resolution only | eligible root and the producer is verified |
 
-Leaving delegated for active: evidence withdrawn (`clear`, command finished), a key press,
-or a probe miss. The probe and the session resolver themselves do not change in this entry.
-`wakeAgentDetection` becomes a real wake: the loop's sleep is interruptible, and a key press,
-`COMMAND_FINISHED`, a report arriving while no agent is bound, and an OSC withdrawal each
-trigger an immediate probe. The title-coalescing trailing flush keeps riding the loop.
+Leaving delegated for active: evidence withdrawn (`clear`, a confirmed command-finished
+release), a key press, or a probe miss. The probe and the session resolver themselves do not
+change in this entry. `wakeAgentDetection` becomes a real wake: the loop's sleep is
+interruptible, and a key press, `COMMAND_FINISHED`, a report arriving while no agent is
+bound, and an OSC withdrawal each trigger an immediate probe. The title-coalescing trailing
+flush keeps riding the loop.
+
+When eligible OSC evidence first takes authority, the machine retires the provider facts
+and screen fences it will not refresh while delegated: the native snapshot, the suppressed
+screen frame and its session, and the log roots' recency. This is a dedicated transition
+inside the `.programStatus` handling, not `.suspended`: suspension is continuity-preserving
+by design (it keeps the native snapshot and the completed-frame fence so a transient read
+failure recovers without flicker, see 068 and `AgentNativeStateTests`), and it also sets
+`hasLogProvider`, which would turn Pi's fallback reason from `legacy.detector` into
+`screen.logUnavailable`. The dedicated transition touches neither. A withdrawal does not
+publish by itself: the last published state stands until an `observe` whose capture started
+after the withdrawal completes with a fresh screen read and a fresh provider sample. The
+coordinator stamps each observation with an authority epoch that the transition bumps; a
+provider sample that was already in flight when OSC took authority is **discarded** when it
+lands (its events are not applied), because applying it would recreate the native snapshot
+and completed-frame fence the transition just retired, and a later `suspended` first read
+after a withdrawal would then publish that pre-OSC Idle through the retained-completion path.
+The machine itself re-resolves on the withdrawal (its current decision immediately stops
+carrying an `osc.*` reason); only the pane publication waits for the fresh observe.
 
 **Release on command finished** (every agent, not only OSC producers). `handleCommandFinished`
-calls the store's `commandFinished()` and wakes the probe; `AgentDetectionPresence` treats
-the next probe miss after a command-finished wake as sufficient to release the entry instead
-of waiting for `releaseMissThreshold` (6) misses. The probe stays the judge: a 133 D from a
-nested interactive shell finds the agent still present and nothing happens. `clear` is not
-exit evidence (it is a legitimate "remove my status") and only withdraws and wakes.
+wakes the probe with the `AgentProcessProbe` cache bypassed (the cache keeps hits and misses
+for 0.75 s, so a cached sample could neither confirm nor deny the exit). `AgentDetectionPresence`
+treats a miss from that fresh sample as sufficient to release the entry instead of waiting
+for `releaseMissThreshold` (6) misses; a cached or unrelated miss does not qualify. The fresh
+sample has three outcomes:
+
+Two generations matter here and they are different keys. The *engine* generation is the
+identified agent process (`agentProcessID`), which binds the OSC/provider evidence and may
+legitimately change while the same launch continues (a runtime that forks or replaces an
+engine child; `PaneAgentState.retainedLaunchProcessID` keeps the launcher while it is still
+a live ancestor). The *owner* generation is the shell-launched process (`launchProcessID` +
+start), which keys the launch profile and the managed-hook evidence epoch. The D arrival
+also captures the store revision for the scoped cleanup.
+
+| Fresh sample after 133 D | Effect |
+| --- | --- |
+| same owner, same engine (nested-shell D) | nothing: records, OSC authority, schedule, launch context all stay |
+| same owner, different engine (engine child replaced) | the coordinator rebinds the evidence generation; launch context stays; no cleanup |
+| no agent | entry released; `commandFinished(upTo:)` drops the `working`/`blocked` that existed at the D (`done`/`error` stay for a later non-agent UI); the coordinator is invalidated |
+| different owner (a successor launch started before the probe ran) | the finished owner's launch context is retired exactly as a release would retire it (`launchProfilesBySurface`, hook registration), the coordinator rebinds, the successor is detected as the user's own agent, and `commandFinished(upTo:)` drops only the predecessor's records: anything the successor sent after the D keeps its revision above the captured one and stays |
+
+The last row closes a gap the six-miss path has today, where a successor that appears before
+the first miss inherits the predecessor's profile attribution. The probe stays the judge in
+all four. `clear` is not exit evidence (it is a legitimate "remove my status") and only
+withdraws and wakes.
+Ghostty emits `COMMAND_FINISHED` only when a 133 C started a command timer, so a prompt
+without a preceding C/D gets no accelerated release; the probe and the time fence cover it.
+Prompt start (133 A) is not exposed as an action; D is the approximation this entry uses.
 
 **Support table.** `ProgramStatusSupport` is a static table keyed by `DetectedAgent`:
 
@@ -181,8 +259,11 @@ exit evidence (it is a legitimate "remove my status") and only withdraws and wak
 | `.unverified` | reports are stored, fenced, and resolved, but only compared with the live decision; disagreements are logged | legacy | active |
 | `.verified` | an eligible root drives the decision | OSC | delegated |
 
-Slice 2 ships every agent `.unverified`, so it changes no published state. Slice 3 flips
-Claude, slice 4 flips Pi. Adding a producer later is: baseline replay, a `programStatusApp`
+Slice 2 ships every agent `.unverified`, so unverified OSC evidence never replaces the legacy
+decision. The slice is not behaviour-neutral, though: the command-finished release and the
+interruptible wake are active for every agent, so its gate includes legacy-only regression
+checks (an agent that never reports, a cached probe sample, dispatch and `wait --until exit`
+after a fast release). Slice 3 flips Claude, slice 4 flips Pi. Adding a producer later is: baseline replay, a `programStatusApp`
 mapping, a table flip, docs. An unmapped `app` that reports is logged once per surface
 ("program status present, app=<x> unmapped") so new producers show up in dogfooding logs.
 
@@ -191,19 +272,40 @@ category (surface, agent, OSC decision and reason, live decision and reason, rev
 throttled per surface like the provider warnings, never with `msg`.
 
 **CLI surface.** `detection_reason` gains the `osc.*` values. While delegated,
-`screen_reason` is `screen.delegated` and `raw_state` is the last screen scan; the manual
-says so. `AgentConditionEvidence` treats `osc.idle` and `osc.done` like `native.idle`: an
-unmatched screen is still idle evidence under current OSC authority. No `Shared/` change:
-reasons are strings.
+`screen_reason` is `screen.delegated` and `raw_state` is the last screen scan. `prowl agents`
+takes both from the decision when it is OSC-driven (today `AgentsCommandHandler` prefers the
+cached scan over the decision's screen reason, which would hide the marker). `prowl agents
+read` is the on-demand exception: it keeps reading and classifying a fresh screen, reports
+the decision's status and reason, and fills `blocker.text` only when a screen rule finds it;
+an OSC-only Blocked (no screen blocker) returns a null blocker rather than
+`blockerUnreadable`, and Pi stays unsupported by `agents read`. `AgentConditionEvidence`
+treats every OSC idle decision (`osc.idle`, `osc.done`, `osc.error`) like `native.idle`: an
+unmatched screen is still idle evidence under current OSC authority, and the child-blocked
+veto comes through `hasOutstandingWork`. For that to hold, the condition snapshots that
+`agents wait`, `agents dispatch`, and the workflow runner build must read the coordinator's
+**current** decision (`AgentDetectionCoordinator.decision`, the machine's latest resolution),
+not the `stateDecision` carried by the reducer's Active Agents entry and not the published
+`surfaceAgentStates` decision either. The reducer entry is wrong because
+`equalsIgnoringRawState` drops reason-only changes from emission on purpose, so a reason that
+moved from `screen.*` to `osc.idle` never reaches it until the state itself changes. The
+published pane decision is wrong in the other direction: a withdrawal publishes nothing until
+the fresh observe, so it would still carry `osc.idle` while the authority is gone, and a wait
+armed in that window would accept an unmatched screen as idle evidence. The machine
+re-resolves on the withdrawal, so its current decision drops the `osc.*` reason at once; the
+OSC exemption therefore applies exactly when the current decision's reason is `osc.*`.
+`AgentConditionSnapshot` gains that decision next to the entry; emission dedup and pane
+publication are unchanged. The living contracts
+`docs-ai/013-prowl-cli/contracts/agents.md` and `agents-read.md` are updated with the new
+values and the delegated semantics. No `Shared/` change: reasons are strings.
 
 **Lifecycle** (existing signals only):
 
 | Signal | Store | Decision |
 | --- | --- | --- |
 | `clear` (including RIS from the fork) | remove by id / empty | withdrawn → fallback |
-| `COMMAND_FINISHED` (OSC 133 D) | drop `working`/`blocked` | withdrawn → fallback; a killed agent is closed out here |
+| `COMMAND_FINISHED` (OSC 133 D) | revision captured; untouched until the fresh probe reports: same owner → nothing; no agent or a different owner → `commandFinished(upTo:)` drops the `working`/`blocked` that existed at the D | same owner → nothing (an engine-child change only rebinds); no agent → entry released; different owner → launch context retired, successor rebinds (see the release table) |
 | probe finds the agent gone | untouched | coordinator invalidated; the time fence rejects the old records for the next agent |
-| undo-close retains the surface | dropped (no reports while retained) | rebuilt by the agent's next report after restore |
+| undo-close retains the surface | kept and still fed: the bridge callback for reports stays wired to the store while publication is suppressed (the process keeps running and the protocol has no heartbeat, so a dropped store could never be rebuilt for an unchanged `blocked`). The retained surface has no entry, detector, or probe (`forgetSurface` removed them), so a `COMMAND_FINISHED` during retention applies `commandFinished(upTo:)` to the store directly with the revision at that D; a nested-shell D in that window is an accepted degradation (fallback after restore until the next report) | on restore the wake probe rebinds and pulls the snapshot through the fence |
 | surface closed | removed | — |
 
 `GHOSTTY_ACTION_SHOW_CHILD_EXITED` is not a lifecycle input: for a live pane the shell's
@@ -211,30 +313,56 @@ exit closes the pane, and `onChildExited` is wired only for undo-close surfaces.
 OSC 9;4 stale watch in `GhosttySurfaceBridge` is not reused, and OSC 9;4 is not mapped into
 7501 records; both keep feeding `taskStatus` independently as today.
 
-**Tests.** Store (replacement, subtree clear, inheritance, LRU, `commandFinished`, revision);
-machine (every mapping, child blocked, withdrawal fallback, root-only outstanding work, done
-versus idle badge eligibility); coordinator (app mismatch, time fence, unverified never
-drives, verified push, injected table); presence (single-miss release after command finished,
-nested-shell false positive does not release); pipeline (report → `PaneAgentState`); terminal
-state (wake when unbound, undo-close drop, delegated tick skips screen and provider sample).
-Swift Testing, injected clocks, no sleeps.
+**Tests.** Store (replacement, subtree clear, clear of a missing record, inheritance across
+a missing parent, LRU eviction of a root with children, `commandFinished`, revision, a report
+with no preceding query); machine (every mapping, child blocked veto, withdrawal fallback,
+root-only outstanding work, done versus idle badge eligibility, older snapshot revision
+ignored, OSC authority retiring the native snapshot and completed-frame fence while
+`hasLogProvider` and Pi's `legacy.detector` reason are untouched, native idle + unchanged
+working frame + OSC turns + withdrawal with a `suspended` first sample); coordinator (app
+mismatch, per-record time fence with a predecessor's child left behind, rebinding on same-app
+relaunch and PID reuse, report before the first probe, presence hold, unverified never
+drives, verified push, push during a suspended provider sample, in-flight provider sample
+from an earlier authority epoch discarded when it lands, then withdrawal with a `suspended`
+first read must not publish a pre-OSC Idle, invalidate before push, injected table); presence
+and release (single-miss release only from the fresh post-wake sample, cached hit and cached
+miss ignored, nested-shell false positive does not release, same owner with a replaced engine
+child rebinds without retiring the launch context, a different owner retires it, a successor
+root `working`/`blocked` that arrived after the D and before the probe survives
+`commandFinished(upTo:)` and keeps OSC authority without a further report); readiness,
+through the real `AgentConditionSnapshot` builders (`idleVerdict`, `exactMatch`, dispatch
+admission, and workflow role waits with root done + child blocked and pre-/post-arm
+`turn-ended`; `osc.error` with an unknown screen; a reason-only change from `screen.*` to
+`osc.idle` reaching the wait; a wait armed between a withdrawal and the fresh observe does not
+use the withdrawn `osc.idle`); pipeline (report → `PaneAgentState`); terminal state (wake when unbound,
+undo-close keeps feeding the store and a retained D applies directly, restore rebinds, close
+during a suspended observe, delegated tick skips screen and provider sample, withdrawal
+publishes nothing until an observe that started after it, engine-child takeover does not
+retire the launcher); CLI (`agents` delegated marker precedence, `agents read` OSC-only
+Blocked). Swift Testing, injected clocks, no sleeps.
 
 **Docs.** `docs/components/terminal.md` (Prowl now keeps the records), `agent-detection.md`
 (new "Program status (OSC 7501)" section: support table, reasons, release on command
-finished, no setting, producer variables), `cli.md` (reason values). Amendment
-`003-generic-provider.md`.
+finished, no setting, producer variables), `cli.md` (reason values, delegated fields),
+`docs-ai/013-prowl-cli/contracts/agents.md` and `agents-read.md` (living contracts).
+Amendment `003-generic-provider.md`.
 
 ### Slice 3 — Claude Code verified
 
 Flip `claude` to `.verified`. In delegated mode `ClaudeRuntimeProvider` is not sampled, so
-the 300 ms read of `~/.claude/sessions/<pid>.json` disappears while OSC holds authority and
-resumes on the next active tick after a withdrawal; the provider and the six Claude screen
-rules stay as the fallback. Managed hooks are untouched and remain the exact path.
+the 300 ms read of `~/.claude/sessions/<pid>.json` disappears while OSC holds authority. On a
+withdrawal the active tick samples it again: the provider keeps `lastUpdatedAt`, so an
+unchanged file resumes authority and an older or unreadable one reports `suspended` as today.
+Because OSC authority retired the pre-OSC native snapshot and completed-frame fence when it
+began (see the schedule section), a `suspended` first sample after withdrawal falls to the
+fresh screen read, never to a snapshot from before the OSC turns. The provider and the six
+Claude screen rules stay as the fallback. Managed hooks are untouched and remain the exact
+path.
 
 | Claude boundary | Handling |
 | --- | --- |
 | trust dialog | no report before it is answered → screen rule `claude.blockedPrompt`, as today; `idle` after acceptance takes over |
-| `/clear` | same PID, new session; OSC unchanged, public session refreshed by the resolver on the 2 s tick |
+| `/clear` | same PID, new session; OSC unchanged. The public session follows the resolver's existing cache and retention policy (successful results cached 5 s, the old session retained for up to two fresh misses), invoked on the 2 s tick, so rotation can take a few ticks longer than under the 300 ms poll; OSC never supplies identity |
 | interrupt (Esc) | expected `idle` (static mapping `stopped → idle`, not yet observed) |
 | subagents (Agent tool) | expected child records; the pane follows the root |
 | background agents | expected root `done` with or without child records → Idle/Done; the fallback rule `claude.backgroundWork` keeps the old Working for older versions |
@@ -280,7 +408,7 @@ baseline rows, amendment `005-pi-verified.md`.
 | Slice | PR | Content | Gate to merge |
 | --- | --- | --- | --- |
 | 1 | #887 | fork action, Swift copy, harness, baselines | landed |
-| 2 | — | store, machine, coordinator, delegated schedule, command-finished release, all `.unverified` | `make check`, `make test`, `make build-app`; a Debug run with Claude and Pi shows shadow disagreements only where expected |
+| 2 | — | store, machine, coordinator, delegated schedule, command-finished release, all `.unverified` | `make check`, `make test`, `make build-app`; a Debug run with Claude and Pi shows shadow disagreements only where expected; legacy-only regression checks for the fast release (an agent that never reports, kill -9 and normal exit, relaunch in the same pane, `wait --until exit`, a pending dispatch across the release) |
 | 3 | — | Claude `.verified` | acceptance list above replayed; no case where OSC was wrong and the legacy decision right; CPU recorded |
 | 4 | — | Pi `.verified` | same, for Pi |
 
@@ -288,6 +416,8 @@ PRs merge in order: slice 2 alone, then slices 3 and 4 from `main` in parallel (
 acceptance runs on merged slice 2 code). `001-action.md` is written when slice 4 lands.
 
 ### Expected timings
+
+Targets, not measurements: slices 3 and 4 record what the isolated instance actually shows.
 
 | Event | Today | After slices 2–4 |
 | --- | --- | --- |
@@ -340,8 +470,58 @@ pane) is expected to be noise; slices 3 and 4 measure it.
   code, so they branch from `main` after it lands.
 - **`done`/`error` records kept until `markAgentSeen`** (first draft): dropped. Store
   lifetime follows the protocol; the seen flag is a presentation concern of the pane.
+- **Drop `working`/`blocked` on every `COMMAND_FINISHED`** (first draft): replaced by
+  "release first, then drop". A 133 D from a nested interactive shell would otherwise erase a
+  live agent's records with no way to get them back (no heartbeat), and the probe is the
+  only judge of whether the command that finished was the agent.
+- **Drop the store on undo-close** (first draft): replaced by keeping it fed while retained.
+  The process keeps running during retention, and an unchanged `blocked` is never re-sent.
+- **Child `blocked` without an idle veto** (first draft): the child's prompt now sets
+  `hasOutstandingWork`, otherwise a parent `turn-ended` could release a wait while the
+  prompt is open. Child `working` still sets nothing (decision A).
+- **`.suspended` on entering delegated** (review round 1 fix): replaced by a dedicated
+  transition. Suspension preserves the native snapshot and the completed-frame fence by
+  design and sets `hasLogProvider`; reusing it would publish a pre-OSC Idle after a
+  withdrawal with a failed first read and would rename Pi's fallback reason.
+- **Readiness from the reducer's entry** (first draft, implicit): the condition snapshots
+  read the live terminal decision instead. Emission dedup intentionally hides reason-only
+  changes from the reducer, and the OSC idle exception is a reason.
+- **Root-only time fence** (first draft): every record is fenced by arrival time, so a
+  predecessor's child cannot survive a root replacement.
+- **Store-wide `commandFinished()`** (review round 1 fix): scoped to the revision captured
+  at the D. The successor branch deliberately allows a new launch to be reporting before the
+  probe confirms it, and a store-wide drop would delete that launch's live root with no way
+  to get it back.
+- **One generation for binding and ownership** (review round 1 fix): split into the engine
+  generation (OSC/provider binding, may change under the same launch) and the owner
+  generation (launch profile and hook epoch, `launchProcessID`). The existing
+  engine-child retention contract (`retainedLaunchProcessID`) and the launcher-based hook
+  epoch already draw this line.
+- **Apply late provider samples under OSC authority** (review round 1 fix): discarded by
+  authority epoch instead, because a late pre-authority snapshot recreates the facts the
+  transition retired.
+- **Readiness from the published pane decision** (review round 1 fix): the coordinator's
+  current decision is used instead, because publication is intentionally held back during
+  a withdrawal while the machine has already dropped the `osc.*` reason.
 
 ## Amendments
 
 - Updated 2026-10-10: slice 1 landed (fork action, Swift copy, harness, baselines) — see [002-fork-action-and-bridge.md](002-fork-action-and-bridge.md)
 - Updated 2026-10-10: slices 2–4 redesigned in place after reviewing the detection layer on `main` (the entry has no action log yet, so the plan was corrected rather than amended). Corrections: lifecycle inputs are `COMMAND_FINISHED` and the agent's own `clear` (not `SHOW_CHILD_EXITED`, which only fires for undo-close surfaces); the generation-change store reset became the arrival-time fence; store lifetime no longer tied to `markAgentSeen`; a push path replaces "the coordinator pulls on the next poll"; version gates replaced by root eligibility; the pane follows the root record only; a delegated schedule, command-finished release, and the `.verified`/`.unverified` support table were added; no user setting. Decisions recorded under Alternatives.
+- Updated 2026-10-10: design review round 1 (11 findings, all accepted) folded in: push/poll
+  commit contract, binding refresh for OSC-capable agents, cache-bypassing wake and
+  release-before-drop on `COMMAND_FINISHED`, child-blocked idle veto, provider suspension on
+  entering delegated and no publish on withdrawal, store kept fed during undo-close, `prowl
+  agents` precedence and the `agents read` exception, `osc.error` as idle evidence, slice 2
+  regression gates, resolver cache wording, 013 contracts in the docs list.
+- Updated 2026-10-10: design review round 2 (5 new findings, all accepted; 6 partial
+  resolutions closed): a dedicated authority transition instead of `.suspended`, condition
+  snapshots read the live decision, per-record arrival-time fence, three outcomes of the
+  post-D fresh sample including successor retirement, retained-surface D applied directly,
+  and the protocol summary no longer claims a mandatory query handshake.
+- Updated 2026-10-10: design review round 3 (1 new finding, 3 partials closed): the
+  command-finished cleanup is scoped to the revision captured at the D; owner and engine
+  generations are separate keys in the post-D table (engine-child replacement rebinds, a new
+  owner retires the launch context); late provider samples from an earlier authority epoch
+  are discarded; condition snapshots read the coordinator's current decision so a withdrawn
+  `osc.*` reason is never readiness evidence.
