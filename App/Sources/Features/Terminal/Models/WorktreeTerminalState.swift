@@ -218,6 +218,14 @@ final class WorktreeTerminalState {
   @ObservationIgnored var agentDetectionWakeRequests: Set<UUID> = []
   /// Surfaces whose next probe bypasses the process cache (a `COMMAND_FINISHED` arrived).
   @ObservationIgnored var agentDetectionFreshProbeRequests: Set<UUID> = []
+  /// Surfaces a key press asked for one full (non-delegated) tick; consumed only by a
+  /// tick that actually reads the screen, so a press during a delegated tick's
+  /// suspension still gets its full tick next.
+  @ObservationIgnored var agentDetectionFullTickRequests: Set<UUID> = []
+  /// Bumped by every cleanup of a surface's detection state. A poll re-reads it after
+  /// each suspension: a close followed by an undo restores the same surface id, and
+  /// the old poll's continuation must not act on the restored pane.
+  @ObservationIgnored var agentDetectionLifecycleBySurface: [UUID: UInt64] = [:]
   /// What a `COMMAND_FINISHED` captured, consumed by the fresh probe that follows it.
   @ObservationIgnored var pendingCommandFinishedBySurface: [UUID: PendingCommandFinished] = [:]
   /// Unmapped `app` values already reported once per surface.

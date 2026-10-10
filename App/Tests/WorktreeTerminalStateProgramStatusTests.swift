@@ -274,6 +274,38 @@ struct WorktreeTerminalStateProgramStatusTests {
     #expect(fixture.state.nextScheduleAfterTick(surfaceID: fixture.surfaceID, hasAgent: true) == .delegated)
   }
 
+  @Test func keyPressDuringADelegatedTicksSuspensionStillGetsItsFullTick() async {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    await delegate(fixture, probe: probe)
+    fixture.state.agentDetectionFullTickRequests.remove(fixture.surfaceID)
+    // Suspend the delegated tick inside the session resolver, after it chose to skip
+    // the screen; a key press lands while it is suspended.
+    let gate = AsyncStream<CheckedContinuation<Void, Never>>.makeStream()
+    let tick = Task {
+      await fixture.state.detectAgentState(
+        for: fixture.surface, tabId: fixture.tabID,
+        resolveSession: { _, _, _, _, _ in
+          await withCheckedContinuation { gate.continuation.yield($0) }
+          return (nil, 0)
+        })
+    }
+    var iterator = gate.stream.makeAsyncIterator()
+    let resume = await iterator.next()
+    fixture.state.wakeAgentDetection(for: fixture.surface, tabId: fixture.tabID)
+    resume?.resume()
+    #expect(await tick.value)
+
+    // That tick stayed delegated, so the request is still open: the loop stays on the
+    // active schedule and the next tick reads the screen before delegating again.
+    #expect(fixture.state.lastAgentScreenScanBySurface[fixture.surfaceID] == seededScan)
+    #expect(fixture.state.nextScheduleAfterTick(surfaceID: fixture.surfaceID, hasAgent: true) == .active)
+    fixture.state.agentDetectionSchedules[fixture.surfaceID] = .active
+    #expect(await detect(fixture))
+    #expect(fixture.state.lastAgentScreenScanBySurface[fixture.surfaceID]?.text == "")
+    #expect(fixture.state.nextScheduleAfterTick(surfaceID: fixture.surfaceID, hasAgent: true) == .delegated)
+  }
+
   @Test func probeMissLeavesDelegationForTheActiveCadence() async {
     let probe = Probe()
     let fixture = makeFixture(probe: probe)
@@ -547,6 +579,45 @@ struct WorktreeTerminalStateProgramStatusTests {
     newer.cancel()
   }
 
+  @Test func aStaleFreshProbeFromBeforeACloseCannotReleaseTheRestoredAgent() async {
+    let probe = Probe()
+    let fixture = makeFixture(support: .unverified, probe: probe)
+    var removed: [UUID] = []
+    fixture.state.onAgentEntryRemoved = { removed.append($0) }
+    await bind(fixture, probe: probe)
+    fixture.state.noteCommandFinishedForAgentDetection(surfaceID: fixture.surfaceID)
+    // The old poll consumed the mark and is suspended in its fresh probe.
+    let entered = AsyncStream<Void>.makeStream()
+    probe.entered = entered.continuation
+    let oldTick = Task { await self.detect(fixture) }
+    var iterator = entered.stream.makeAsyncIterator()
+    _ = await iterator.next()
+
+    // Close and undo: the same surface id comes back with fresh detection state, and
+    // the restored pane binds its agent again.
+    fixture.state.detachAndForgetSurface(fixture.surface)
+    removed.removeAll()
+    fixture.state.configureBridgeCallbacks(for: fixture.surface, tabId: fixture.tabID)
+    fixture.state.surfaces[fixture.surfaceID] = fixture.surface
+    fixture.state.agentDetectionTasks[fixture.surfaceID] = Task {}
+    fixture.state.surfaceAgentStates[fixture.surfaceID] = PaneAgentState(lastChangedAt: epoch)
+    fixture.state.lastAgentScreenScanBySurface[fixture.surfaceID] = WorktreeTerminalState.AgentScreenScan(
+      agent: .claude, text: "", detection: AgentScreenDetection(state: .idle, reason: .legacyDetector))
+    #expect(await detect(fixture))
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == .claude)
+    let restoredCoordinator = fixture.state.agentDetectionCoordinators[fixture.surfaceID]
+
+    // The old probe lands with a miss from before the close.
+    probe.job = nil
+    probe.gate?.resume()
+    #expect(await oldTick.value == false)
+
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == .claude)
+    #expect(fixture.state.agentDetectionCoordinators[fixture.surfaceID] === restoredCoordinator)
+    #expect(removed.isEmpty)
+    #expect(fixture.state.agentDetectionPresenceBySurface[fixture.surfaceID]?.currentAgent == .claude)
+  }
+
   // MARK: Undo-close
 
   @Test func retainedSurfaceKeepsFeedingTheStoreAndAppliesCommandFinishedDirectly() {
@@ -598,6 +669,21 @@ struct WorktreeTerminalStateProgramStatusTests {
     fixture.state.handleProgramStatus(report(.done, app: "cargo"), surfaceID: fixture.surfaceID)
     #expect(await detect(fixture))
 
+    #expect(lines.filter { $0.contains("app=cargo unmapped") }.count == 1)
+  }
+
+  @Test func knownProducerRecordOnAPaneWithoutAnAgentIsNotUnmapped() async {
+    // Pi's `done` survives the command-finished cleanup; after the release the pane has
+    // no agent, and that leftover is not a new producer.
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    var lines: [String] = []
+    fixture.state.programStatusLogForTesting = { lines.append($0) }
+    fixture.state.handleProgramStatus(report(.done, app: "pi"), surfaceID: fixture.surfaceID)
+    #expect(await detect(fixture) == false)
+    #expect(lines.isEmpty)
+    fixture.state.handleProgramStatus(report(.done, app: "cargo"), surfaceID: fixture.surfaceID)
+    #expect(await detect(fixture) == false)
     #expect(lines.filter { $0.contains("app=cargo unmapped") }.count == 1)
   }
 }

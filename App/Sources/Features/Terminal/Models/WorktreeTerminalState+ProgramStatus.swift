@@ -111,10 +111,13 @@ extension WorktreeTerminalState {
   }
 
   /// New producers show up in dogfooding logs: a root record whose `app` is not the
-  /// bound agent's is reported once per surface and app.
+  /// bound agent's is reported once per surface and app. A known producer's record
+  /// left on a pane with no agent (its process exited, or the probe has not bound it
+  /// yet) is not news.
   func logUnmappedProgramStatusAppIfNeeded(surfaceID: UUID, agent: DetectedAgent?) {
     guard let store = programStatusStoresBySurface[surfaceID], let root = store.root,
       let app = store.app(of: root), app != agent?.programStatusApp,
+      agent != nil || !DetectedAgent.allCases.contains(where: { $0.programStatusApp == app }),
       programStatusUnmappedAppsLoggedBySurface[surfaceID]?.contains(app) != true
     else { return }
     programStatusUnmappedAppsLoggedBySurface[surfaceID, default: []].insert(app)
@@ -209,6 +212,7 @@ extension WorktreeTerminalState {
     agentDetectionSleepersBySurface.removeValue(forKey: surfaceID)?.task.cancel()
     agentDetectionWakeRequests.remove(surfaceID)
     agentDetectionFreshProbeRequests.remove(surfaceID)
+    agentDetectionFullTickRequests.remove(surfaceID)
     pendingCommandFinishedBySurface.removeValue(forKey: surfaceID)
   }
 

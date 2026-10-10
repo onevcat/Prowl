@@ -19,6 +19,7 @@ extension WorktreeTerminalState {
     if surfaceAgentStates[view.id] == nil {
       surfaceAgentStates[view.id] = PaneAgentState(lastChangedAt: now)
     }
+    agentDetectionFullTickRequests.insert(view.id)
     startAgentDetectionTaskIfNeeded(for: view, tabId: tabId)
     interruptAgentDetectionSleep(forSurfaceID: view.id)
   }
@@ -64,6 +65,7 @@ extension WorktreeTerminalState {
     let delegated =
       agentDetectionCoordinators[surfaceID]?.isDelegated == true
       && agentDetectionPresenceBySurface[surfaceID]?.consecutiveMisses == 0
+      && !agentDetectionFullTickRequests.contains(surfaceID)
     return Self.nextSchedule(
       agentDetectionSchedules[surfaceID] ?? .cold, hasAgent: hasAgent, delegated: delegated, now: now)
   }
@@ -94,13 +96,17 @@ extension WorktreeTerminalState {
     let surfaceID = view.id
     let childPID = view.bridge.childPID()
     let processGroupID = view.bridge.foregroundProcessGroupID()
+    let lifecycle = agentDetectionLifecycleBySurface[surfaceID] ?? 0
     // A `COMMAND_FINISHED` asked for a sample the probe cache cannot answer. Its mark
     // is taken with the request, before the probe suspends, so a second D that lands
     // during this sample keeps its own mark for its own fresh sample.
     let fresh = agentDetectionFreshProbeRequests.remove(surfaceID) != nil
     let finished = fresh ? pendingCommandFinishedBySurface.removeValue(forKey: surfaceID) : nil
     let job = await probeForegroundJob(processGroupID: processGroupID, childPID: childPID, fresh: fresh)
-    guard surfaces[surfaceID] != nil else { return false }
+    // A close during the probe (even one undone since) retires this poll's verdict.
+    guard surfaces[surfaceID] != nil, agentDetectionLifecycleBySurface[surfaceID] ?? 0 == lifecycle else {
+      return false
+    }
 
     let identified = job.flatMap { identifyAgentInJob($0) }
     let probedAgent = identified?.agent
@@ -136,7 +142,9 @@ extension WorktreeTerminalState {
     // authority was bound to: a miss or an engine change gets a full acquisition.
     let delegated =
       coordinator.isDelegated && agentDetectionSchedules[surfaceID] == .delegated
+      && !agentDetectionFullTickRequests.contains(surfaceID)
       && process != nil && process == coordinator.boundProcess
+    if !delegated { agentDetectionFullTickRequests.remove(surfaceID) }
     let (activeText, detection) = pollScreen(for: view, surfaceID: surfaceID, agent: agent, delegated: delegated)
     let raw = detection.state
     guard surfaces[surfaceID] != nil else { return false }
@@ -150,7 +158,9 @@ extension WorktreeTerminalState {
     // Re-check after the suspension: the pane may have been closed and its
     // agent state cleaned up while the resolver was doing file inspection;
     // writing below would resurrect a ghost Active Agents entry.
-    guard surfaces[surfaceID] != nil else { return false }
+    guard surfaces[surfaceID] != nil, agentDetectionLifecycleBySurface[surfaceID] ?? 0 == lifecycle else {
+      return false
+    }
     // Acknowledgement can change while session inspection is suspended. Preserve it,
     // but discard this observation if any other state changed in the meantime.
     guard let current = surfaceAgentStates[surfaceID] else { return false }
@@ -166,7 +176,8 @@ extension WorktreeTerminalState {
         configRoot: launchProfilesBySurface[surfaceID]?.configRoot(forDetected: agent),
         programStatus: programStatusStoresBySurface[surfaceID],
         delegated: delegated
-      ), surfaces[surfaceID] != nil, let latest = surfaceAgentStates[surfaceID]
+      ), surfaces[surfaceID] != nil, agentDetectionLifecycleBySurface[surfaceID] ?? 0 == lifecycle,
+      let latest = surfaceAgentStates[surfaceID]
     else { return false }
     previous.seen = latest.seen
     previous.lastChangedAt = latest.lastChangedAt
@@ -546,6 +557,7 @@ extension WorktreeTerminalState {
   }
 
   func cleanupAgentDetectionState(forSurfaceId surfaceId: UUID) {
+    agentDetectionLifecycleBySurface[surfaceId, default: 0] &+= 1
     agentDetectionCoordinators.removeValue(forKey: surfaceId)?.invalidate()
     agentDetectionTasks[surfaceId]?.cancel()
     agentDetectionTasks.removeValue(forKey: surfaceId)
@@ -575,7 +587,9 @@ extension WorktreeTerminalState {
       task.cancel()
     }
     let removedIDs = Array(lastEmittedAgentEntriesBySurface.keys)
+    for surfaceID in surfaces.keys { agentDetectionLifecycleBySurface[surfaceID, default: 0] &+= 1 }
     agentDetectionTasks.removeAll()
+    agentDetectionFullTickRequests.removeAll()
     agentDetectionLoopTokens.removeAll()
     for sleeper in agentDetectionSleepersBySurface.values { sleeper.task.cancel() }
     agentDetectionSleepersBySurface.removeAll()
