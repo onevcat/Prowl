@@ -243,6 +243,14 @@ at a `~/.grok/` install (so Cursor's own `agent` entrypoint stays Cursor).
    records fall back to the screen. Background daemon/remote sessions are not
    supported by this adapter. A manually relocated config root must be supplied
    through a Prowl launch profile; shell-only overrides can fall back to screen.
+   Claude Code 2.1.295 and later also reports its state through
+   [program status](#program-status-osc-7501). That root record outranks the
+   registry and the screen, and the registry is not read while it decides. The
+   registry and the screen rules are the fallback: Claude sends nothing before the
+   trust dialog is answered, so that prompt is still the screen blocker, and a
+   cleared record hands the pane back to them. A finished command (OSC 133) only
+   wakes a fresh probe: the same Claude keeps its record and its authority (a
+   nested shell's prompt), and a confirmed exit releases the entry.
 
 For diagnostics and sanitized regression captures, `prowl read --source detection`
 returns the exact active-screen buffer used by stage 2. It is explicitly requested
@@ -253,7 +261,8 @@ because it can differ from the visible viewport when a pane is scrolled; the def
 the final state decision and `screen_reason` for the screen rule. Codex can report
 `log.openWork`, `log.turnEnded`, or a `screen.*` fallback reason; `raw_state` remains
 the latest screen classification. A current blocker reports its screen-rule ID.
-Claude reports `native.working`, `native.blocked`, or `native.idle`; a fresh screen
+Claude reports an `osc.*` reason while its program status root record decides, and
+otherwise `native.working`, `native.blocked`, or `native.idle`; a fresh screen
 blocker can retain its screen-rule ID. Screen-only runtimes keep their existing rule identifiers. An ordinary profile miss
 reports `fallback.noRuleMatched`; unmigrated classifiers report `legacy.detector`.
 Reasons never include screen text. Screen fallback IDs are:
@@ -294,8 +303,8 @@ in the app, not a setting:
 
 | Support | Meaning |
 | --- | --- |
-| unverified | Records are stored and resolved, but only compared with the live decision; disagreements are logged (`AgentDetection` category). Every agent today. |
-| verified | The root record is the first-priority state evidence, applied the moment the report arrives. |
+| unverified | Records are stored and resolved, but only compared with the live decision; disagreements are logged (`AgentDetection` category). Pi today. |
+| verified | The root record is the first-priority state evidence, applied the moment the report arrives. Claude Code (2.1.295 and later, `app=claude-code`). |
 
 For a verified producer the pane follows the **root** record only: `working` → Working
 (`osc.working`), `blocked` → Blocked (`osc.blocked.<kind>`, `unspecified` without a
@@ -305,10 +314,13 @@ idle waits, because a subagent's prompt needs an answer; a child that is `workin
 changes nothing, so background agents and subagents never keep a pane Working or block
 `agents wait --until idle`, dispatch, or workflows. `done` and `error` may show the Done
 badge; `idle` never does (it is sent at mount, on interrupt, and on a session reset).
-While the root record decides, Prowl stops reading the screen and the native/log files
-and polls only the process every 2 s; `screen_reason` reports `screen.delegated`. When
-the record is cleared or the command finishes, the legacy paths take over again with
-their usual reasons; there is no silence timeout.
+While the root record decides, Prowl stops reading the screen and the native/log files;
+every 2 s it only probes the process and resolves the session (against the screen text
+read at the last key press), and `screen_reason` reports `screen.delegated`. Clearing
+the record withdraws that authority and the next poll reads the screen and the
+native/log files again, with their usual reasons; a finished command wakes the probe
+described below, which keeps the authority when the same agent is still there and
+releases the entry when it is gone. There is no silence timeout.
 
 Producers that never report (older versions, `CLAUDE_CODE_DISABLE_TERMINAL_TITLE`,
 `PI_PROGRAM_STATUS=0`) get today's screen and provider detection unchanged. The
