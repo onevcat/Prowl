@@ -76,15 +76,32 @@ struct AgentCoordinatorProgramStatusTests {
     #expect(lines.count == 2)
   }
 
-  @Test func defaultTableLeavesEveryAgentUnverified() async {
+  /// The production table (docs-ai 079 slice 4): Pi is verified; every other agent
+  /// stays unverified until its own baseline replays inside Prowl.
+  @Test func defaultTableVerifiesPiOnly() async {
     for agent in DetectedAgent.allCases {
-      #expect(ProgramStatusSupport.level(for: agent) == .unverified, "\(agent)")
+      let expected: ProgramStatusSupport = agent == .pi ? .verified : .unverified
+      #expect(ProgramStatusSupport.level(for: agent) == expected, "\(agent)")
     }
-    let coordinator = AgentDetectionCoordinator(sample: { _, _ in [.unavailable] })
-    let decision = await coordinator.observe(
+    // With the default table a Pi root decides on the tick that sees it and the
+    // schedule delegates; Pi has no provider, so nothing else is sampled.
+    let piCoordinator = AgentDetectionCoordinator(sample: { _, _ in
+      Issue.record("Pi has no provider to sample")
+      return [.unavailable]
+    })
+    let piDecision = await piCoordinator.observe(
       agent: .pi, process: generation, screen: legacyWorking, configRoot: nil,
       programStatus: store([(report(.idle, app: "pi"), 1)]))
-    #expect(decision?.reason.identifier == "legacy.detector")
+    #expect(piDecision?.reason.identifier == "osc.idle")
+    #expect(piDecision?.screenReason == .delegated)
+    #expect(piCoordinator.isDelegated)
+    // Claude keeps its legacy path on this branch (slice 3 flips it separately).
+    let claude = AgentDetectionCoordinator(sample: { _, _ in [.unavailable] })
+    let decision = await claude.observe(
+      agent: .claude, process: generation, screen: idle, configRoot: nil,
+      programStatus: store([(report(.working), 1)]))
+    #expect(decision?.reason.isProgramStatus == false)
+    #expect(claude.isDelegated == false)
   }
 
   @Test func verifiedEligibleRootDrivesTheDecisionAndDelegates() async {

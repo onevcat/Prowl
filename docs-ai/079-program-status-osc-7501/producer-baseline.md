@@ -106,4 +106,31 @@ Pending (slice 3).
 
 ### Pi
 
-Pending (slice 4).
+Replayed on 2026-10-11 with Pi 1.1.0 (model `gpt-6-astra`, onevcat's settings) against
+the slice 4 build (Pi `.verified`) in an isolated Debug instance (`CFFIXED_USER_HOME`, own
+socket; the pane cwd was the real `/private/tmp/...` path). `detection_reason` and
+`screen_reason` are what `prowl agents --json` reported; timings are CLI-polled (they
+include the `prowl send` round trip and a poll interval of 250 ms) and are for ordering,
+not latency guarantees. "Delegated" means `screen_reason` was `screen.delegated`.
+
+| Scenario | `detection_reason` (schedule) | Notes |
+| --- | --- | --- |
+| Launch | `osc.idle` (delegated) | the first roster entry already carried the report (605 ms after `prowl send`); the probe's own diagnostic still read the screen as `legacy.detector` idle |
+| Prompt submitted | `osc.working` (delegated) | 90–130 ms after `prowl send` |
+| Turn finished | `osc.done` (delegated) | Done badge while unviewed |
+| Escape during a turn | `osc.idle` (delegated) | 93 ms after the key ("Operation aborted") |
+| `/model` selector open | unchanged `osc.idle` (delegated) | no report either way, as in the harness; the cached list had no anthropic models, so the selector could not be used for the error row |
+| Bash tool behind `ctx.ui.confirm` (`-e confirm-gate.ts`) | `osc.blocked.permission` (delegated) | 3.5 s after the prompt (model latency); `agents read` reports `AGENT_UNSUPPORTED` for Pi, as its contract says; Enter → `osc.working` → `osc.done` 1.7–2.3 s later |
+| Bash tool behind `ctx.ui.select` (`-e select-gate.ts`) | `osc.blocked.question` (delegated) | 3.4 s after the prompt; Enter → `osc.working` → `osc.done` |
+| Provider auth failure (`pi --provider anthropic --model claude`, expired OAuth) | `osc.idle` on mount, `osc.working` then `osc.error` (delegated) on the first prompt | 736 ms after `prowl send`; held (still `osc.error` 5 s later); status `done` (badge-eligible) |
+| ctrl+d at the prompt | entry released | 69 ms CLI-polled after the key (`clear` plus the shell's OSC 133 D; a second ctrl+d closes the shell); 243–258 ms in later runs |
+| `kill -9` | entry released | 143 ms CLI-polled |
+| Relaunch in the same pane | `legacy.detector` for one poll, then `osc.idle` (delegated) | 645 ms after `prowl send`; its own report, no shadow line (verified producers log none) |
+| `PI_PROGRAM_STATUS=0 pi` | `legacy.detector` throughout (active) | idle → working → done from the screen rules; zero `[ProgramStatus]` lines |
+| Agent Profile launch (`Pi Test`: gpt-6-astra, managed `-e prowl-hooks.ts`) | `osc.working` → `osc.done` (delegated) | launch dispatch receipt `succeeded`; `signals.channels` carried `hook_pi` at `exact`; `agents wait --until idle` and a re-dispatch resolved with a second receipt |
+
+Not exercised: `kind=auth` from a real OAuth login wait, a `pi-subagents` card running after
+the root `done` (the extension is installed but the scenario needs a long-running subagent
+and was not run), and child records. The Done → viewed → Idle step could not be reproduced
+in this run because the isolated window never reported itself visible on the locked
+screen; it is the unchanged `markAgentSeen` path and was reproduced in slice 3.
