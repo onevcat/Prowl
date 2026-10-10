@@ -421,6 +421,11 @@ extension WorktreeTerminalState {
 
     case .toggleZoom(let surfaceId):
       _ = performSplitAction(.toggleSplitZoom, for: surfaceId)
+
+    case .close(let surfaceId):
+      // Same protection as the tab bar's close button; ⌘W reaches the same
+      // pane through Ghostty's `close_surface` binding instead.
+      _ = closeSurface(id: surfaceId)
     }
   }
 

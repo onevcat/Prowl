@@ -48,6 +48,7 @@ struct TerminalSplitTreeView: View {
     case drop(payloadId: UUID, destinationId: UUID, zone: DropZone)
     case equalize
     case toggleZoom(surfaceId: UUID)
+    case close(surfaceId: UUID)
   }
 
   struct SubtreeView: View {
@@ -151,7 +152,7 @@ struct TerminalSplitTreeView: View {
 
     @State private var dropState: DropState = .idle
     @State private var isHandleHovering = false
-    @State private var isZoomButtonHovering = false
+    @State private var isControlsHovering = false
     @Shared(.settingsFile) private var settingsFile: SettingsFile
 
     private var shouldDim: Bool {
@@ -193,15 +194,22 @@ struct TerminalSplitTreeView: View {
             }
           }
           .overlay(alignment: .topTrailing) {
-            // The zoomed pane keeps a persistent exit button; other panes only
-            // reveal the zoom affordance while the drag handle (or the button
-            // itself, to survive the cursor hand-off) is hovered.
-            if isSplit, isZoomed || isHandleHovering || isZoomButtonHovering {
-              SplitZoomButton(isZoomed: isZoomed) {
-                action(.toggleZoom(surfaceId: surfaceView.id))
+            // The zoomed pane keeps its controls visible so the exit button is
+            // always there; other panes only reveal them while the drag handle
+            // (or the controls themselves, to survive the cursor hand-off) is
+            // hovered.
+            if isSplit, isZoomed || isHandleHovering || isControlsHovering {
+              HStack(spacing: 4) {
+                SplitZoomButton(isZoomed: isZoomed) {
+                  action(.toggleZoom(surfaceId: surfaceView.id))
+                }
+                SplitCloseButton {
+                  action(.close(surfaceId: surfaceView.id))
+                }
               }
-              .onHover { isZoomButtonHovering = $0 }
-              .onDisappear { isZoomButtonHovering = false }
+              .contentShape(.rect)
+              .onHover { isControlsHovering = $0 }
+              .onDisappear { isControlsHovering = false }
               .padding(6)
             }
           }
@@ -254,6 +262,32 @@ struct TerminalSplitTreeView: View {
         )
       )
       .accessibilityLabel(isZoomed ? "Exit split zoom" : "Zoom split")
+    }
+  }
+
+  struct SplitCloseButton: View {
+    let action: () -> Void
+    @Environment(GhosttyShortcutManager.self) private var ghosttyShortcuts: GhosttyShortcutManager?
+
+    var body: some View {
+      Button(action: action) {
+        Image(systemName: "xmark")
+          .font(.callout.weight(.semibold))
+          .foregroundStyle(.primary)
+          .padding(5)
+          .background(.regularMaterial, in: .rect(cornerRadius: 6))
+      }
+      .buttonStyle(.plain)
+      .help(helpText)
+      .accessibilityLabel("Close split")
+    }
+
+    // Closing a pane is a Ghostty-managed binding (`close_surface`), so the hint
+    // shows whatever key Ghostty resolves for it, ⌘W by default.
+    private var helpText: String {
+      let title = String(localized: "Close Split")
+      guard let shortcut = ghosttyShortcuts?.display(for: "close_surface") else { return title }
+      return "\(title) (\(shortcut))"
     }
   }
 

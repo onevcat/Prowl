@@ -4117,6 +4117,16 @@
         }
       }
     },
+    "Close Split" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭分屏"
+          }
+        }
+      }
+    },
     "Close Tab" : {
       "localizations" : {
         "zh-Hans" : {
@@ -4263,6 +4273,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "关闭拉取请求"
+          }
+        }
+      }
+    },
+    "Close split" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭分屏"
           }
         }
       }

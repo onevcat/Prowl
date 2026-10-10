@@ -58,9 +58,12 @@ next pane, `⌘⌥↑/↓/←/→` for directional pane focus, `⌘⌥⇧F` to z
 focused pane. Shelf spines also expose **split vertical / split horizontal**
 buttons on the open book.
 
-Zoom also has a mouse affordance: hovering a pane's top drag handle reveals a
-zoom button in the pane's top-right corner, and a zoomed pane keeps a persistent
-exit-zoom button in the same spot so it's always clear how to leave zoom.
+Zoom and close also have mouse affordances: hovering a pane's top drag handle
+reveals a zoom button and a close button in the pane's top-right corner. The
+close button closes that pane with the same confirmation as the tab bar's close
+button, and its tooltip shows the `close_surface` shortcut (⌘W by default) so
+the keyboard route is discoverable. A zoomed pane keeps both buttons visible so
+it's always clear how to leave zoom.
 
 ## Tab titles — important caveat
 
