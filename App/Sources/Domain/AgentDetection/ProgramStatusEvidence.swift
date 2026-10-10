@@ -10,10 +10,11 @@ nonisolated enum ProgramStatusSupport: Equatable, Sendable {
   /// An eligible root record drives the decision and the schedule is delegated.
   case verified
 
-  /// Slice 2 ships every agent unverified; slices 3 and 4 flip Claude and Pi after
-  /// their baselines replay inside Prowl.
+  /// A producer is flipped once its baseline has replayed inside Prowl: Pi (1.1.0 and
+  /// later, docs-ai 079.005) in slice 4; Claude Code is slice 3.
   static func level(for agent: DetectedAgent) -> ProgramStatusSupport {
     switch agent {
+    case .pi: .verified
     default: .unverified
     }
   }
