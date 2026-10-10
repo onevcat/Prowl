@@ -26,7 +26,7 @@ if [[ -n "${PROWL_GHOSTTY_SOURCE_DIR:-}" ]]; then
     echo "error: Build the mirror bridge XCFramework in $source_dir first." >&2
     exit 1
   fi
-  mkdir -p "$PROJECT_DIR/Frameworks" "$GHOSTTY_RESOURCE_PATH" "$TERMINFO_RESOURCE_PATH"
+  mkdir -p "$(dirname "$XCFRAMEWORK_PATH")" "$GHOSTTY_RESOURCE_PATH" "$TERMINFO_RESOURCE_PATH"
   rsync -a --delete "$framework/" "$XCFRAMEWORK_PATH/"
   rsync -a --delete "$source_dir/zig-out/share/ghostty/" "$GHOSTTY_RESOURCE_PATH/"
   rsync -a --delete "$source_dir/zig-out/share/terminfo/" "$TERMINFO_RESOURCE_PATH/"
@@ -71,8 +71,16 @@ stamp_matches() {
 }
 
 refresh_archive_index() {
-  local archive="$XCFRAMEWORK_PATH/macos-arm64_x86_64/libghostty.a"
-  if [[ ! -f "$archive" ]]; then
+  # Ghostty renamed the static library from libghostty.a to ghostty-internal.a
+  # (upstream main, 2026); accept either name.
+  local archive=""
+  for candidate in "$XCFRAMEWORK_PATH"/macos-arm64_x86_64/*.a; do
+    if [[ -f "$candidate" ]]; then
+      archive="$candidate"
+      break
+    fi
+  done
+  if [[ -z "$archive" ]]; then
     return 0
   fi
 
@@ -91,7 +99,7 @@ install_artifacts() {
   local resources_archive="$2"
   local tmp_extract="$3"
 
-  mkdir -p "$tmp_extract/xcframework" "$tmp_extract/resources" "$PROJECT_DIR/Frameworks" "$PROJECT_DIR/Resources"
+  mkdir -p "$tmp_extract/xcframework" "$tmp_extract/resources" "$(dirname "$XCFRAMEWORK_PATH")" "$(dirname "$GHOSTTY_RESOURCE_PATH")"
 
   tar -xzf "$xcframework_archive" -C "$tmp_extract/xcframework"
   tar -xzf "$resources_archive" -C "$tmp_extract/resources"

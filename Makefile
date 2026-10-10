@@ -106,7 +106,7 @@ build-ghostty-xcframework: $(GHOSTTY_BUILD_STAMP) # Build ghostty framework
 $(GHOSTTY_BUILD_STAMP):
 	git submodule update --init --recursive ThirdParty/ghostty
 	@cd $(CURRENT_MAKEFILE_DIR)/ThirdParty/ghostty && mise exec -- zig build -Doptimize=ReleaseFast -Demit-xcframework=true -Dsentry=false
-	rsync -a ThirdParty/ghostty/macos/GhosttyKit.xcframework "$(APP_DIR)/Frameworks"
+	rsync -a --delete ThirdParty/ghostty/macos/GhosttyKit.xcframework "$(APP_DIR)/Frameworks"
 	@src="$(CURRENT_MAKEFILE_DIR)/ThirdParty/ghostty/zig-out/share/ghostty"; \
 	dst="$(GHOSTTY_RESOURCE_PATH)"; \
 	terminfo_src="$(CURRENT_MAKEFILE_DIR)/ThirdParty/ghostty/zig-out/share/terminfo"; \

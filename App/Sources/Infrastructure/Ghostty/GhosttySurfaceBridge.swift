@@ -113,10 +113,14 @@ final class GhosttySurfaceBridge {
     return pid > 0 ? pid_t(pid) : nil
   }
 
+  /// The pty's foreground process group (`tcgetpgrp` on the master side), or
+  /// `nil` when the lookup fails. Upstream exports it as
+  /// `ghostty_surface_foreground_pid`; the fork no longer carries its own export.
   func foregroundProcessGroupID() -> pid_t? {
     guard let surface else { return nil }
-    let processGroupID = ghostty_surface_foreground_process_group(surface)
-    return processGroupID > 0 ? pid_t(processGroupID) : nil
+    let processGroupID = ghostty_surface_foreground_pid(surface)
+    guard processGroupID > 0, let pid = pid_t(exactly: processGroupID) else { return nil }
+    return pid
   }
 
   func closeSurface(processAlive: Bool) {
