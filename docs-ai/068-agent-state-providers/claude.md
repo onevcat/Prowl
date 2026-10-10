@@ -9,7 +9,7 @@ adding a duplicate production work ledger.
 
 ## Implemented adapter
 
-`supacode/Infrastructure/AgentDetection/ClaudeRuntimeProvider.swift` reads at most
+`App/Sources/Infrastructure/AgentDetection/ClaudeRuntimeProvider.swift` reads at most
 64 KiB from the detected PID's registry on the existing poll clock. The pure
 `ClaudeRuntimeDecoder` validates PID, UTC process start, session UUID, absolute cwd,
 interactive Darwin kind, timestamps, and supported status. Exact OS generation is
@@ -108,7 +108,7 @@ arrival order must not let delayed log bytes reopen completed main work.
 
 Sampled JSONL revisions were append-only. This does not remove the need to handle
 partial lines, truncation, replacement, duplicate events, and bounded parent graphs.
-The existing `supacode/Infrastructure/AgentDetection/AgentTranscriptResultReader.swift`
+The existing `App/Sources/Infrastructure/AgentDetection/AgentTranscriptResultReader.swift`
 already uses `turn_duration` and parent UUID traversal for final-answer extraction;
 state detection must retain its separate responsibility.
 
