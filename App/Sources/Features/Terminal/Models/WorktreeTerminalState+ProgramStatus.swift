@@ -13,10 +13,6 @@ struct ProgramStatusOrigin: Equatable {
   let origin: ProcessOrigin
   /// When this origin replaced another one; nil for the surface's first origin.
   let since: Date?
-  /// The last probe that saw an agent of this origin.
-  var lastSeenAt: Date?
-  /// When the origin this one replaced was last seen.
-  var departedLastSeenAt: Date?
 }
 
 extension WorktreeTerminalState {
@@ -128,32 +124,15 @@ extension WorktreeTerminalState {
   /// the change returned, so reports that arrived before that confirmation (also those
   /// that landed while the probe ran) are left out; the screen decides until the next report.
   func noteAgentOrigin(_ identified: IdentifiedAgentProcess?, surfaceID: UUID, now: Date) -> Date? {
-    guard var previous = programStatusOriginBySurface[surfaceID] else {
-      guard let origin = identified?.process.ref.origin else { return nil }
-      programStatusOriginBySurface[surfaceID] = ProgramStatusOrigin(origin: origin, since: nil, lastSeenAt: now)
+    let previous = programStatusOriginBySurface[surfaceID]
+    guard let origin = identified?.process.ref.origin else { return previous?.since }
+    guard let previous else {
+      programStatusOriginBySurface[surfaceID] = ProgramStatusOrigin(origin: origin, since: nil)
       return nil
     }
-    guard let origin = identified?.process.ref.origin else { return previous.since }
-    guard previous.origin != origin else {
-      previous.lastSeenAt = now
-      programStatusOriginBySurface[surfaceID] = previous
-      return previous.since
-    }
-    programStatusOriginBySurface[surfaceID] = ProgramStatusOrigin(
-      origin: origin, since: now, lastSeenAt: now, departedLastSeenAt: previous.lastSeenAt)
+    guard previous.origin != origin else { return previous.since }
+    programStatusOriginBySurface[surfaceID] = ProgramStatusOrigin(origin: origin, since: now)
     return now
-  }
-
-  /// The fence for a bound remote agent: the tracker's, raised to the moment the pane
-  /// switched to this remote origin when the origin it left was seen after the `ssh`
-  /// started (a suspended `ssh` with a local agent run in between). An agent that ran before
-  /// the `ssh` leaves the first remote agent's early reports alone.
-  func remoteProgramStatusFence(_ fence: Date?, surfaceID: UUID) -> Date? {
-    guard let fence, let origin = programStatusOriginBySurface[surfaceID], origin.origin != .local,
-      let since = origin.since, let departed = origin.departedLastSeenAt,
-      let sshStart = remotePaneTrackers[surfaceID]?.ssh.startedAt, departed > sshStart
-    else { return fence }
-    return max(fence, since)
   }
 
   /// New producers show up in dogfooding logs: a root record whose `app` is not the

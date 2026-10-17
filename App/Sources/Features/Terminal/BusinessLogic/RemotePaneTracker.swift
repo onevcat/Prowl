@@ -267,7 +267,14 @@ final class RemotePaneTracker {
     }
     return Observation(
       correlation: correlation, connection: lease?.connection, identified: bound, verdict: verdict,
-      programStatusFence: fenceHistory.fence, confirmedAt: confirmedAt)
+      programStatusFence: boundRecordFence, confirmedAt: confirmedAt)
+  }
+
+  /// The arrival fence of a probed agent: its successor fence, raised to the start of the
+  /// `ssh`'s current foreground interval, so a local agent run while the `ssh` was
+  /// suspended never decides for the resumed remote one.
+  var boundRecordFence: Date? {
+    [fenceHistory.fence, fenceHistory.foregroundSince].compactMap(\.self).max()
   }
 
   /// Whether a verified producer's report may stand in for a probed agent: the host cannot

@@ -177,11 +177,11 @@ the degraded OSC-only binding and admission refusal. Both stay behind
   `ssh` start; a successor counts only reports after the snapshot that confirmed it,
   timestamped after the tick's local probe returns (review round 1). The fence belongs to the
   `ssh` generation and lives with the surface's record store (`remoteFenceHistoryBySurface`),
-  so a tracker recreated by an undone close never moves it back (review round 2). The surface
-  origin record also keeps when each origin was last seen. When the pane returns to a remote
-  origin and the origin it left was seen after the `ssh` started, the remote fence rises to
-  the switch, so a local agent run while the `ssh` was suspended cannot decide for the
-  resumed remote one (review round 4). The S1
+  so a tracker recreated by an undone close never moves it back (review round 2). A local
+  agent run while the `ssh` was suspended cannot decide for the resumed remote one (review
+  round 4). Since S3c, this rests on the fence history's foreground interval: a probed agent's
+  fence is the later of its successor fence and the start of the `ssh`'s current foreground
+  interval. The S1
   origin fence applies to local generations only.
 - **Measured** in a Debug instance with the flag on:
   - mini (macOS 26.5), Claude Code 2.1.302 started by hand: appeared 0.62 s after the
@@ -261,6 +261,12 @@ degraded OSC-only binding.
   and its accepted degraded agent, so a quiet producer is listed again after Undo. Records
   from before that interval, or ones an earlier binding excluded, never acquire or confirm
   the agent (review rounds 1–3).
+- **One boundary.** The coordinator's state fence for a remote agent is the tracker's:
+  `unprobedRecordFence` for a degraded binding, and the successor fence raised to the
+  foreground interval for a probed one. The S3a origin-raise (last-seen times on the
+  surface's origin record) is removed, so the record that acquires a degraded binding also
+  decides its state. A degraded binding taken over by a probed one keeps the report it
+  accepted (follow-up review).
 - **Probe gaps.** A tick whose local probe reads no job is not a foreground change. An
   existing tracker observes through the same path (degraded binding, confirmation, history
   write-back); without one, nothing changes until a real sample. Only a job without the

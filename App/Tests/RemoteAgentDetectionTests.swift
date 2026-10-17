@@ -773,10 +773,13 @@ struct RemoteAgentDetectionTests {
     // becomes a remote agent.
     #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess != .unprobedRemote(sshGeneration))
     // A report from the remote side after the resume binds.
-    fixture.state.handleProgramStatus(report(.working), surfaceID: fixture.surfaceID)
+    fixture.state.handleProgramStatus(report(.blocked), surfaceID: fixture.surfaceID)
     await detect(fixture, screen: .unknown)
     #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == .claude)
     #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess == .unprobedRemote(sshGeneration))
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.state == .blocked)
+    await detect(fixture, screen: .unknown)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.state == .blocked)
   }
 
   @Test func aDegradedReacquisitionKeepsTheRetainedSuccessorFence() async throws {
@@ -805,6 +808,10 @@ struct RemoteAgentDetectionTests {
     await detect(fixture, screen: .unknown)
     #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess == .unprobedRemote(sshGeneration))
     #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == .pi)
+    // The report that bound the agent also decides its state, now and on later ticks.
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.decision?.reason.identifier == "osc.working")
+    await detect(fixture, screen: .unknown)
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.state == .working)
   }
 
   @Test func anUndoneCloseRestoresAQuietUnprobedBinding() async throws {
@@ -933,10 +940,12 @@ struct RemoteAgentDetectionTests {
     fixture.state.handleProgramStatus(report(.working), surfaceID: fixture.surfaceID)
     await detect(fixture)
     #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess == .unprobedRemote(sshGeneration))
-    // The pane is mapped now and shows the agent: the probed reference takes over.
+    // The pane is mapped now and shows the agent: the probed reference takes over and keeps
+    // the report the degraded binding accepted.
     await deliver(fixture, snapshot(2, pane: fixture.surfaceID, foreground: remoteProcess(200, name: "claude")))
-    await detect(fixture)
+    await detect(fixture, screen: .unknown)
     #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.agentProcess == remoteRef(200))
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.decision?.reason.identifier == "osc.working")
   }
 
   @Test func unsupportedArgvNeverConnects() async throws {
