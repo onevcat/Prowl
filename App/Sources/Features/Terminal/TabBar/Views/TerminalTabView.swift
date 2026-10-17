@@ -27,6 +27,12 @@ struct TerminalTabView: View {
   @Environment(CommandKeyObserver.self) private var commandKeyObserver
   @Environment(\.resolvedKeybindings) private var resolvedKeybindings
 
+  private var helpText: String {
+    guard !tab.remoteHosts.isEmpty else { return String(localized: "Open tab \(tab.displayTitle)") }
+    let hosts = tab.remoteHosts.formatted(.list(type: .and))
+    return String(localized: "Open tab \(tab.displayTitle) (connected to \(hosts))")
+  }
+
   var body: some View {
     ZStack(alignment: .leading) {
       Button(action: onSelect) {
@@ -48,7 +54,7 @@ struct TerminalTabView: View {
       )
       .frame(width: fixedWidth)
       .contentShape(.rect)
-      .help("Open tab \(tab.displayTitle)")
+      .help(helpText)
       .accessibilityLabel(tab.displayTitle)
       .allowsHitTesting(!isEditing)
       .opacity(isEditing ? 0 : 1)

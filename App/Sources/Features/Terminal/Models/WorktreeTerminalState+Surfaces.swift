@@ -860,6 +860,7 @@ extension WorktreeTerminalState {
     }
     tabIsRunningById[tabId] = isRunningNow
     tabManager.updateDirty(tabId, isDirty: isRunningNow)
+    updateRemoteHosts(for: tabId)
     emitTaskStatusIfChanged()
   }
 

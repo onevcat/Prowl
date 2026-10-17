@@ -176,6 +176,9 @@ struct TerminalSplitTreeView: View {
           .overlay(alignment: .top) {
             GhosttySurfaceProgressOverlay(state: surfaceView.bridge.state)
           }
+          .overlay(alignment: .bottomTrailing) {
+            RemotePaneBadge(indicator: surfaceView.bridge.state.remoteIndicator)
+          }
           .overlay(alignment: .topTrailing) {
             if surfaceView.bridge.state.searchNeedle != nil {
               GhosttySurfaceSearchOverlay(surfaceView: surfaceView)

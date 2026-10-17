@@ -72,7 +72,7 @@ nonisolated struct RemoteSnapshotSource: Sendable {
 /// How a pane relates to the remote host's sessions (docs-ai 082, L0 item 1). Prowl never
 /// picks an arbitrary session: anything but `correlated` leaves the pane without a probed
 /// remote agent.
-nonisolated enum RemotePaneCorrelation: Equatable, Sendable {
+nonisolated enum RemotePaneCorrelation: Hashable, Sendable {
   /// The connection is being resolved or the first snapshot has not arrived.
   case pending
   /// Exactly one session on the host carries this pane's id.

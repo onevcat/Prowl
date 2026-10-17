@@ -15,6 +15,9 @@ nonisolated struct ConnectionKey: Hashable, Sendable, Codable {
   /// The `-F` configuration file, or nil for the default user and system files.
   let configFile: String?
 
+  /// `user@hostname`, the label a remote pane and its agents show.
+  var label: String { "\(user)@\(hostname)" }
+
   init(user: String, hostname: String, port: Int = 22, jumpChain: [String] = [], configFile: String? = nil) {
     self.user = user
     self.hostname = hostname

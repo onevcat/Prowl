@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import GhosttyKit
 import ProwlCLIShared
@@ -216,6 +217,225 @@ struct RemoteAgentDetectionTests {
     // No local file evidence for a remote process.
     #expect(pane?.session == nil)
     #expect(fixture.state.agentDetectionCoordinators[fixture.surfaceID]?.boundProcess?.localGeneration == nil)
+  }
+
+  @Test func aRemotePaneShowsItsHostOnThePaneAndItsTab() async {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    await bindClaude(fixture, probe: probe)
+    #expect(fixture.surface.bridge.state.remoteIndicator?.connectedHost == "onevcat@mini.local")
+    #expect(fixture.state.tabManager.tabs.first?.remoteHosts == ["onevcat@mini.local"])
+    // A suspended `ssh` (still running) only drops the label.
+    probe.job = shellJob
+    await detect(fixture)
+    #expect(fixture.surface.bridge.state.remoteIndicator == nil)
+    #expect(fixture.state.tabManager.tabs.first?.remoteHosts == [])
+  }
+
+  /// A spawned process that stands in for a local `ssh` client, so it has its own generation.
+  private func spawnSSH(_ arguments: [String] = ["ssh", "-p", "2222", "mini"]) throws -> (Process, ForegroundJob) {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/bin/sleep")
+    process.arguments = ["30"]
+    try process.run()
+    let pid = process.processIdentifier
+    let job = ForegroundJob(
+      processGroupID: pid,
+      processes: [
+        ForegroundProcess(
+          pid: pid, parentProcessID: 1, name: "ssh", argv0: "ssh", cmdline: arguments.joined(separator: " "),
+          arguments: arguments)
+      ])
+    return (process, job)
+  }
+
+  private func connect(_ fixture: Fixture, probe: Probe, job: ForegroundJob) async {
+    probe.job = job
+    await detect(fixture)
+    await settle { fixture.state.remotePaneTrackers[fixture.surfaceID] != nil }
+    await settle { !fixture.source.recipes.isEmpty }
+    await deliver(
+      fixture,
+      snapshot(
+        (fixture.state.remotePaneTrackers[fixture.surfaceID]?.latest?.sequence ?? 0) + 1, pane: fixture.surfaceID,
+        foreground: remoteProcess(200, name: "zsh")))
+    await detect(fixture)
+  }
+
+  @Test func anExitedSSHLeavesAnEndedMarkerForItsDuration() async throws {
+    let (ssh, job) = try spawnSSH()
+    defer { if ssh.isRunning { ssh.terminate() } }
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    await connect(fixture, probe: probe, job: job)
+    #expect(fixture.surface.bridge.state.remoteIndicator?.connectedHost == "onevcat@mini.local")
+    ssh.terminate()
+    ssh.waitUntilExit()
+    probe.job = shellJob
+    let exitedAt = Date()
+    await detect(fixture, now: exitedAt)
+    // Detection stamps the sample no earlier than the wall clock.
+    guard case .ended(let host, let endedAt) = fixture.surface.bridge.state.remoteIndicator else {
+      Issue.record("no ended marker")
+      return
+    }
+    #expect(host == "onevcat@mini.local")
+    #expect(endedAt >= exitedAt)
+    #expect(fixture.state.tabManager.tabs.first?.remoteHosts == [])
+    // After its duration the marker is gone from the state, not only from one view.
+    await detect(fixture, now: endedAt.addingTimeInterval(RemotePaneIndicator.endedMarkerDuration + 1))
+    #expect(fixture.surface.bridge.state.remoteIndicator == nil)
+  }
+
+  @Test func theEndedMarkerDescribesOneExit() {
+    let endedAt = Date(timeIntervalSince1970: 1_000)
+    let ended = RemotePaneIndicator.ended(host: "h", endedAt: endedAt)
+    #expect(ended.showsEndedMarker(now: endedAt.addingTimeInterval(4)))
+    // A view mounted later (a tab switch, a new split) does not show it again.
+    #expect(!ended.showsEndedMarker(now: endedAt.addingTimeInterval(5)))
+    #expect(!RemotePaneIndicator.connected(host: "h", ssh: sshGeneration).showsEndedMarker(now: endedAt))
+  }
+
+  @Test func aRestoredPaneWhoseSSHExitedDropsTheConnectedLabel() async throws {
+    let (ssh, job) = try spawnSSH()
+    defer { if ssh.isRunning { ssh.terminate() } }
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    await connect(fixture, probe: probe, job: job)
+    // Close (the tracker retires, the surface is retained), the `ssh` exits, then Undo.
+    fixture.state.retireRemotePaneTracker(surfaceID: fixture.surfaceID)
+    ssh.terminate()
+    ssh.waitUntilExit()
+    probe.job = shellJob
+    await detect(fixture)
+    #expect(fixture.surface.bridge.state.remoteIndicator?.connectedHost == nil)
+    #expect(fixture.state.tabManager.tabs.first?.remoteHosts == [])
+  }
+
+  @Test func aReplacementSSHNeverInheritsThePreviousHost() async throws {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    await bindClaude(fixture, probe: probe)
+    #expect(fixture.surface.bridge.state.remoteIndicator?.connectedHost == "onevcat@mini.local")
+    // The next sampled job is another `ssh` that cannot be resolved (`-N` is unsupported).
+    let (other, job) = try spawnSSH(["ssh", "-N", "-L", "8080:localhost:80", "hostB"])
+    defer { other.terminate() }
+    probe.job = job
+    await detect(fixture)
+    // It is labelled as itself: an `ssh` Prowl cannot read, never as A.
+    guard case .connected(let host, let ssh, let issue) = fixture.surface.bridge.state.remoteIndicator else {
+      Issue.record("no label for the replacement ssh")
+      return
+    }
+    #expect(host == "Remote host")
+    #expect(ssh.pid == other.processIdentifier)
+    if case .unsupported = issue {
+    } else {
+      Issue.record("expected an unsupported issue, got \(String(describing: issue))")
+    }
+    #expect(fixture.state.tabManager.tabs.first?.remoteHosts == ["Remote host"])
+  }
+
+  @Test func aPaneWithoutAnAgentStillReportsWhyItIsNotRead() async {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    probe.job = sshJob
+    await detect(fixture)
+    await settle { fixture.source.recipes.count == 1 }
+    // The host answers, but no session carries this pane's id, and no producer reports.
+    await deliver(fixture, snapshot(1, pane: nil, foreground: nil))
+    await detect(fixture)
+    #expect(
+      fixture.surface.bridge.state.remoteIndicator
+        == .connected(
+          host: "onevcat@mini.local", ssh: sshGeneration, issue: .unmapped))
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == nil)
+    // Once the pane maps, the issue goes.
+    await deliver(fixture, snapshot(2, pane: fixture.surfaceID, foreground: remoteProcess(101, name: "zsh")))
+    await detect(fixture)
+    #expect(
+      fixture.surface.bridge.state.remoteIndicator
+        == .connected(
+          host: "onevcat@mini.local", ssh: sshGeneration, issue: nil))
+  }
+
+  @Test func thePaneAccessibilityElementCarriesTheRemoteState() {
+    let surface = GhosttySurfaceView(
+      runtime: GhosttyRuntime(), workingDirectory: URL(fileURLWithPath: "/tmp", isDirectory: true), fontSize: nil,
+      context: GHOSTTY_SURFACE_CONTEXT_TAB, skipsSurfaceCreationForTesting: true)
+    surface.bridge.state.title = "Claude Code"
+    surface.setAccessibilityPaneIndex(index: 1, total: 2)
+    #expect(surface.accessibilityLabel() == "Claude Code")
+    #expect(surface.accessibilityHelp() == "Pane 1 of 2")
+    surface.bridge.state.remoteIndicator = .connected(host: "dev@box", ssh: sshGeneration, issue: .unmapped)
+    #expect(surface.accessibilityLabel() == "Claude Code, connected to dev@box")
+    #expect(surface.accessibilityHelp()?.hasPrefix("Pane 1 of 2 dev@box has no session for this pane.") == true)
+    surface.bridge.state.remoteIndicator = .ended(host: "dev@box", endedAt: Date())
+    #expect(surface.accessibilityLabel() == "Claude Code, disconnected from dev@box")
+    // An old exit is not announced.
+    surface.bridge.state.remoteIndicator = .ended(host: "dev@box", endedAt: Date().addingTimeInterval(-10))
+    #expect(surface.accessibilityLabel() == "Claude Code")
+    surface.bridge.state.remoteIndicator = nil
+    #expect(surface.accessibilityHelp() == "Pane 1 of 2")
+  }
+
+  @Test func aChangedSpokenRemoteStateIsAnnounced() async throws {
+    let (ssh, job) = try spawnSSH()
+    defer { if ssh.isRunning { ssh.terminate() } }
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    var posts: [NSAccessibility.Notification] = []
+    fixture.state.accessibilityPosterForTesting = { _, notification in posts.append(notification) }
+    probe.job = job
+    await detect(fixture)
+    await settle { fixture.source.recipes.count == 1 }
+    // Healthy, then an issue: two announcements.
+    await deliver(fixture, snapshot(1, pane: fixture.surfaceID, foreground: remoteProcess(101, name: "zsh")))
+    await detect(fixture)
+    #expect(posts == [.titleChanged])
+    // The pane's session is gone (neither its id nor its pinned anchor is on the host).
+    await deliver(fixture, snapshot(2, pane: nil, foreground: nil, anchor: 999))
+    await detect(fixture)
+    #expect(posts == [.titleChanged, .titleChanged])
+    // An equal sample says nothing new.
+    await detect(fixture)
+    #expect(posts.count == 2)
+    // The `ssh` ends: announced.
+    ssh.terminate()
+    ssh.waitUntilExit()
+    probe.job = shellJob
+    await detect(fixture)
+    #expect(posts.count == 3)
+  }
+
+  @Test func anUnreachableHostIsReportedWithoutAnAgent() async throws {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    fixture.source.failNext(100)
+    probe.job = sshJob
+    await detect(fixture)
+    let tracker = try #require(fixture.state.remotePaneTrackers[fixture.surfaceID])
+    await settle { tracker.correlation == .probeUnavailable(nil) }
+    await detect(fixture)
+    guard case .connected(_, _, .probeUnavailable?) = fixture.surface.bridge.state.remoteIndicator else {
+      Issue.record("expected a probe-unavailable issue")
+      return
+    }
+    #expect(fixture.state.surfaceAgentStates[fixture.surfaceID]?.detectedAgent == nil)
+    #expect(
+      RemoteAgentPresentation.paneIssueExplanation(.probeUnavailable(.authentication), host: "h")
+        == "Prowl cannot read h: the key was refused or needs a prompt. "
+        + "Agents in this pane are detected only when they report their status themselves (OSC 7501).")
+  }
+
+  @Test func turningDetectionOffClearsTheRemoteLabel() async {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    await bindClaude(fixture, probe: probe)
+    fixture.state.remoteAgentDetectionEnabledForTesting = false
+    await detect(fixture)
+    #expect(fixture.surface.bridge.state.remoteIndicator == nil)
+    #expect(fixture.state.tabManager.tabs.first?.remoteHosts == [])
   }
 
   @Test func anUnconfirmedRemoteAgentTurnsStaleAndProvesNothing() async throws {
@@ -1082,6 +1302,18 @@ struct RemoteAgentDetectionTests {
       skipsSurfaceCreationForTesting: true)
     #expect(surface.launchEnvironment["LC_PROWL_PANE"] == surface.id.uuidString)
     #expect(surface.launchEnvironment["PROWL_PANE_ID"] == surface.id.uuidString)
+  }
+}
+
+struct RemoteAgentDetectionSwitchTests {
+  @Test func detectionIsOnUnlessTurnedOff() throws {
+    let defaults = try #require(UserDefaults(suiteName: "RemoteAgentDetectionSwitchTests-\(UUID().uuidString)"))
+    #expect(RemoteAgentDetection.isEnabled(environment: [:], defaults: defaults))
+    #expect(!RemoteAgentDetection.isEnabled(environment: ["PROWL_REMOTE_AGENT_DETECTION": "0"], defaults: defaults))
+    defaults.set(false, forKey: RemoteAgentDetection.defaultsKey)
+    #expect(!RemoteAgentDetection.isEnabled(environment: [:], defaults: defaults))
+    // The environment wins over the default, both ways.
+    #expect(RemoteAgentDetection.isEnabled(environment: ["PROWL_REMOTE_AGENT_DETECTION": "1"], defaults: defaults))
   }
 }
 

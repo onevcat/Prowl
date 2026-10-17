@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import GhosttyKit
 
@@ -321,6 +322,7 @@ extension WorktreeTerminalState {
   ) -> RemotePaneTracker.Observation? {
     guard remoteAgentDetectionEnabled else {
       retireRemotePaneTracker(surfaceID: surfaceID)
+      setRemoteIndicator(nil, surfaceID: surfaceID)
       return nil
     }
     let tracker: RemotePaneTracker
@@ -331,6 +333,7 @@ extension WorktreeTerminalState {
           remoteFenceHistoryBySurface[surfaceID]?[ssh]?.leftForeground = true
         }
         retireRemotePaneTracker(surfaceID: surfaceID)
+        reconcileRemoteIndicator(foregroundSSH: nil, observation: nil, surfaceID: surfaceID, now: now)
         return nil
       }
       tracker = remotePaneTracker(surfaceID: surfaceID, ssh: ssh)
@@ -345,7 +348,71 @@ extension WorktreeTerminalState {
     let observation = bindUnprobedProducer(
       observation: tracker.observe(active: active, now: now), tracker: tracker, surfaceID: surfaceID)
     storeFenceHistory(tracker.fenceHistory, surfaceID: surfaceID)
+    if job != nil {
+      reconcileRemoteIndicator(
+        foregroundSSH: tracker.ssh, observation: observation, surfaceID: surfaceID, now: now)
+    }
     return observation
+  }
+
+  /// Sets the pane's label from a sample that read the foreground job (a probe gap changes
+  /// nothing). It depends on no tracker, so a pane restored by Undo is reconciled too.
+  /// - The foreground `ssh` with a resolved connection, or with a correlation issue: connected,
+  ///   with that issue, so a pane without a listed agent still says why (L0-8).
+  /// - Another (or pending) `ssh`, or a shell: the label of an earlier `ssh` goes. An
+  ///   exited one leaves the ended marker for its duration; a suspended one leaves nothing.
+  private func reconcileRemoteIndicator(
+    foregroundSSH: LocalProcessGeneration?, observation: RemotePaneTracker.Observation?, surfaceID: UUID,
+    now: Date
+  ) {
+    let current = surfaces[surfaceID]?.bridge.state.remoteIndicator
+    if let foregroundSSH, let observation {
+      let issue = RemotePaneIndicator.issue(observation.correlation)
+      if observation.connection != nil || issue != nil {
+        let host = observation.connection?.label ?? String(localized: "Remote host")
+        setRemoteIndicator(.connected(host: host, ssh: foregroundSSH, issue: issue), surfaceID: surfaceID)
+        return
+      }
+    }
+    switch current {
+    case .connected(let host, let ssh, _) where ssh != foregroundSSH:
+      let exited = ProcessDetection.processStartDate(pid: ssh.pid) != ssh.startedAt
+      setRemoteIndicator(exited ? .ended(host: host, endedAt: now) : nil, surfaceID: surfaceID)
+    case .ended where current?.showsEndedMarker(now: now) == false:
+      setRemoteIndicator(nil, surfaceID: surfaceID)
+    default:
+      break
+    }
+  }
+
+  func setRemoteIndicator(_ indicator: RemotePaneIndicator?, surfaceID: UUID) {
+    guard let view = surfaces[surfaceID], view.bridge.state.remoteIndicator != indicator else { return }
+    let now = Date()
+    let spoken = RemoteAgentPresentation.paneAccessibility(view.bridge.state.remoteIndicator, now: now)
+    view.bridge.state.remoteIndicator = indicator
+    if let tabId = tabId(containing: surfaceID) { updateRemoteHosts(for: tabId) }
+    // The pane's accessibility label and help carry the remote state; like a title change,
+    // a change there is announced, or a focused VoiceOver user never hears it.
+    if RemoteAgentPresentation.paneAccessibility(indicator, now: now) != spoken {
+      if let poster = accessibilityPosterForTesting {
+        poster(view, .titleChanged)
+      } else {
+        NSAccessibility.post(element: view, notification: .titleChanged)
+      }
+    }
+  }
+
+  /// The tab shows the hosts its panes reach; tree changes (moved or closed panes) refresh it
+  /// through `updateRunningState`.
+  func updateRemoteHosts(for tabId: TerminalTabID) {
+    guard let tree = trees[tabId] else { return }
+    var hosts: [String] = []
+    for surface in tree.leaves() {
+      if let host = surface.bridge.state.remoteIndicator?.connectedHost, !hosts.contains(host) {
+        hosts.append(host)
+      }
+    }
+    tabManager.updateRemoteHosts(tabId, hosts: hosts)
   }
 
   /// Keeps `history` for its `ssh` and drops the histories of `ssh` clients that exited.

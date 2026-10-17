@@ -52,6 +52,14 @@ Rows appear in the order agents are first detected. (See
 A row whose pane is bound to an active workflow run replaces its subtitle with
 `in <workflow> · <role>` for the life of the run.
 
+An agent on a remote host behind the pane's `ssh` starts its subtitle with a network
+glyph and `user@host`. When the host has not confirmed the agent for 10 s, the pill keeps
+the last state in grey, and "Last seen … ago" (or "Status unavailable") appears under it.
+A grey **Unknown** pill means the host confirms the agent but nothing decides its state.
+The tooltip, in the panel and in the island roster, gives the reason. The context menu has
+no Copy Path or Reveal in Finder for a remote agent. See
+[agent detection](agent-detection.md#remote-agents-over-ssh).
+
 ## Interactions
 
 - **Click a row** → focuses that worktree + tab + pane and brings Prowl forward. A

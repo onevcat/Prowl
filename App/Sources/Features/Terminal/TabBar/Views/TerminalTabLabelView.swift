@@ -18,6 +18,13 @@ struct TerminalTabLabelView: View {
         if tab.isDirty || tab.icon != nil {
           TerminalTabIconBadge(tab: tab, isActive: isActive)
         }
+        if !tab.remoteHosts.isEmpty {
+          // A pane of this tab is on a remote host (docs-ai 082); the tooltip names it.
+          Image(systemName: "network")
+            .imageScale(.small)
+            .foregroundStyle(isActive ? TerminalTabBarColors.activeText : TerminalTabBarColors.inactiveText)
+            .accessibilityHidden(true)
+        }
         Text(tab.displayTitle)
           .font(.caption)
           .lineLimit(1)

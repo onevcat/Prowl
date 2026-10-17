@@ -12,7 +12,8 @@ sections below record what shipped and what differs from the plan.
 | 2026-10-17 | S3a: manual-session correlation behind `PROWL_REMOTE_AGENT_DETECTION` — `LC_PROWL_PANE`, argv grammar, per-pane tracker, identity, snapshot release, remote OSC fence. Review Loop: 4 rounds plus a 2-round follow-up, clean (R1–R10) | #926 |
 | 2026-10-18 | S3b: stale projection and refusal of remote agents in conditions, dispatch and workflow admission (behind the flag). Review Loop clean after 3 rounds | #927 |
 | 2026-10-18 | S3c: degraded OSC-only binding for panes the host cannot map or probe (behind the flag). Review Loop: 4 rounds, then two follow-ups, clean | #928 |
-| 2026-10-18 | S4a: host label and connection health on Active Agents rows, `remote` object in `prowl agents --json`, docs (behind the flag) | #930 |
+| 2026-10-18 | S4a: host label and connection health on Active Agents rows, `remote` object in `prowl agents --json`, docs (behind the flag). Review Loop clean after 2 rounds | #930 |
+| 2026-10-18 | S4b: pane and tab host label, ssh-ended marker; remote detection on by default | #931 |
 
 ## S1 — Typed process references
 
@@ -317,4 +318,53 @@ label, the ssh-ended marker, and turning the flag on.
 - **Docs.** `agent-detection.md` gains "Remote agents over SSH" (how, label and health,
   degraded binding, release, limits). `cli.md` documents the `remote` object. The
   `prowl-cli` skill lists the fields.
+
+## S4b — Pane and tab label, ssh-ended marker, on by default
+
+- **Indicator.** `RemotePaneIndicator` lives on the surface's `GhosttySurfaceState`, so
+  every host of a pane (tab content, Canvas, Shelf) can read it without new plumbing. Its
+  cases are `connected(host, ssh: generation)` and `ended(host, at:)`.
+  `reconcileRemoteIndicator` sets it on every sample that read a job, and needs no tracker:
+  - the foreground `ssh` with a resolved connection: `connected` to that generation;
+  - otherwise (another or unresolved `ssh`, or a shell): a `connected` of another
+    generation becomes `ended(at: now)` if that `ssh` exited, or nil if it still runs
+    (suspended);
+  - an `ended` older than five seconds becomes nil;
+  - the flag turning off: nil.
+
+  A probe gap changes nothing. Writes are guarded, so equal values never notify. Review
+  round 1 made the indicator independent of the tracker: a pane restored by Undo after
+  its `ssh` exited, and an unresolvable replacement `ssh`, both lost the old label. It
+  also made the ended marker carry its exit time: a view that mounted later showed an old
+  exit again.
+- **Issue (review round 2, L0-8).** `connected` also carries `issue`, which is the
+  correlation when it is `ambiguous`, `unmapped`, `probeUnavailable`, or `unsupported`. A
+  foreground `ssh` with an issue is labelled even without a resolved connection ("Remote
+  host"). Before this, a pane with no listed agent had no visible reason. The badge then
+  shows a multicolor warning glyph. Only that capsule takes the pointer, so its tooltip
+  (`RemotePaneBadge.issueExplanation`, reusing `RemoteAgentPresentation`) can say why, and
+  that only OSC 7501 producers are detected.
+- **Accessibility (review round 3).** The split container lists only the pane views as AX
+  children, so the badge's own metadata cannot be reached. The pane's AX element carries
+  the state itself, through `RemoteAgentPresentation.paneAccessibility`. The label gains
+  ", connected to host" or ", disconnected from host" (only while the ended marker shows),
+  and the help gains the issue explanation after "Pane n of m". When the spoken label or
+  help changes, `setRemoteIndicator` posts `.titleChanged` for the pane, as the title path
+  does, so a focused VoiceOver user hears it (follow-up review). An equal sample posts
+  nothing.
+- **Pane.** `RemotePaneBadge` sits in the bottom-trailing corner: a material capsule with a
+  network glyph and the host. It does not take hits. After an exit it reads "Disconnected
+  from host" with `network.slash` until five seconds after the exit (`showsEndedMarker`,
+  plus a view `.task` for the remainder), then fades out.
+- **Tab.** `TerminalTabItem.remoteHosts` lists the distinct hosts of the tab's panes in
+  pane order, and `updateRemoteHosts` refreshes it on every indicator change and from
+  `updateRunningState` (tree changes such as a moved or closed pane). The tab label shows
+  a network glyph before the title, and the tooltip reads "Open tab … (connected to
+  hosts)".
+- **On by default.** `RemoteAgentDetection.isEnabled(environment:defaults:)`: the
+  environment value wins (`0` off, anything else on). Otherwise the
+  `remoteAgentDetectionEnabled` default decides, and it defaults to on.
+- **Docs.** The `agent-detection.md` section drops the opt-in and documents the kill
+  switch, the pane and tab label, and the ended marker. `active-agents.md` documents the
+  remote row. `terminal.md` documents the tab glyph and pane corner.
 

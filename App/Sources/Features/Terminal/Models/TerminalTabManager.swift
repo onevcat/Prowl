@@ -266,6 +266,11 @@ final class TerminalTabManager {
     tabs[index].isDirty = isDirty
   }
 
+  func updateRemoteHosts(_ id: TerminalTabID, hosts: [String]) {
+    guard let index = tabs.firstIndex(where: { $0.id == id }), tabs[index].remoteHosts != hosts else { return }
+    tabs[index].remoteHosts = hosts
+  }
+
   func reorderTabs(_ orderedIds: [TerminalTabID]) {
     let existingIds = Set(tabs.map(\.id))
     let incomingIds = Set(orderedIds)
