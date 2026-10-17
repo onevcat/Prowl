@@ -22,11 +22,40 @@ struct RemoteConnectionOwnerTests {
     private var held: [CheckedContinuation<Void, Never>] = []
     private var enteredWaiters: [(count: Int, continuation: CheckedContinuation<Void, Never>)] = []
 
+    var holdsExit = false
+    private var heldExit: CheckedContinuation<Void, Never>?
+    private var exitWaiter: CheckedContinuation<Void, Never>?
+    var events: [String] = []
+
     func setOutcomes(_ outcomes: [RemoteCommandOutcome]) { self.outcomes = outcomes }
     func setHolds(_ holds: Bool) { self.holds = holds }
+    func setHoldsExit(_ holds: Bool) { holdsExit = holds }
+
+    func waitForExitCall() async {
+      guard heldExit == nil else { return }
+      await withCheckedContinuation { exitWaiter = $0 }
+    }
+
+    func releaseExit() {
+      heldExit?.resume()
+      heldExit = nil
+    }
 
     func run(_ arguments: [String], _ input: Data) async -> RemoteCommandOutcome {
       calls.append(FakeCall(arguments: arguments, input: input))
+      if arguments.contains("-O") {
+        events.append("exit started")
+        if holdsExit {
+          await withCheckedContinuation { continuation in
+            heldExit = continuation
+            exitWaiter?.resume()
+            exitWaiter = nil
+          }
+        }
+        events.append("exit finished")
+        return .exited(Self.success)
+      }
+      if arguments.last == "-s" { events.append("probe") }
       let probes = calls.filter { $0.arguments.last == "-s" }.count
       for waiter in enteredWaiters where waiter.count <= probes { waiter.continuation.resume() }
       enteredWaiters.removeAll { $0.count <= probes }
@@ -152,6 +181,46 @@ struct RemoteConnectionOwnerTests {
     #expect(exit.arguments.contains("-O"))
     #expect(exit.arguments.contains("exit"))
     #expect(await owner.subscriberCount == 0)
+  }
+
+  @Test func aReacquiredKeyWaitsUntilTheRetiringOwnerClosed() async {
+    let fake = FakeRunner()
+    await fake.setHoldsExit(true)
+    let registry = RemoteConnectionRegistry(
+      configuration: RemoteConnectionOwner.Configuration(controlDirectory: "/tmp/prowl-ssh-tests"),
+      runner: RemoteCommandRunner { _, arguments, input, _ in await fake.run(arguments, input) })
+    let first = await registry.acquire(Self.key, recipe: Self.recipe)
+    #expect(await registry.leaseCount(Self.key) == 1)
+    let retiring = Task { await registry.release(Self.key) }
+    await fake.waitForExitCall()
+    let reacquired = Task { () -> RemoteConnectionOwner in
+      let owner = await registry.acquire(Self.key, recipe: Self.recipe)
+      await owner.requestRefresh()
+      await owner.waitUntilIdle()
+      return owner
+    }
+    await fake.releaseExit()
+    await retiring.value
+    let second = await reacquired.value
+    #expect(first !== second)
+    #expect(await fake.events == ["exit started", "exit finished", "probe"])
+    await fake.setHoldsExit(false)
+    await registry.release(Self.key)
+  }
+
+  @Test func onlyTheLastLeaseRetiresTheOwner() async {
+    let fake = FakeRunner()
+    let registry = RemoteConnectionRegistry(
+      configuration: RemoteConnectionOwner.Configuration(controlDirectory: "/tmp/prowl-ssh-tests"),
+      runner: RemoteCommandRunner { _, arguments, input, _ in await fake.run(arguments, input) })
+    let first = await registry.acquire(Self.key, recipe: Self.recipe)
+    let second = await registry.acquire(Self.key, recipe: Self.recipe)
+    #expect(first === second)
+    await registry.release(Self.key)
+    #expect(await fake.events.isEmpty)
+    await registry.release(Self.key)
+    #expect(await fake.events == ["exit started", "exit finished"])
+    #expect(await registry.leaseCount(Self.key) == 0)
   }
 
   @Test func truncatedOrForeignOutputIsNeverComplete() {

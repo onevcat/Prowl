@@ -61,10 +61,15 @@ All under `App/Sources/Infrastructure/RemoteHost/`; nothing in the app calls it 
     native start token, elapsed, comm, argv), `D` (cwd).
   - Linux: owned `/proc/*/stat` files are read in one pass, plus `environ`, `cmdline` and
     `cwd` for anchors and foreground members only. The start token is the start tick,
-    the boot id is `boot_id`, and argv is a US-separated vector.
+    the boot id is `boot_id`, and argv is a US-separated vector. Untrusted strings
+    reach awk through `ENVIRON`, because `-v` decodes backslash escapes; a trailing
+    newline survives command substitution (review round 1).
   - macOS: one `ps -A` pass for the table, one for `ucomm`, one `ps -E` and one `lsof`
     for the foreground members. The start token is `lstart`, the boot id is
-    `kern.boottime`, and argv is the joined string.
+    `kern.boottime`, and argv is the joined string. `lsof` prints names in an escaped
+    display form (`\\`, `\t`, `\n`, `\xNN`, `^X`); the `D` record marks it (`l`, Linux `r`)
+    and the parser decodes it, so a cwd with Chinese characters, a backslash or a tab
+    round-trips (review round 1).
   - Cost: 0.14–0.22 s warm on mini (729 processes) and 0.13 s in the Debian container.
 - **Parser** (`RemoteProbeParser`). It works on bytes and decodes field by field: UTF-8,
   else Latin-1, so a non-UTF-8 argv garbles only its own field. It returns `complete` only
@@ -82,6 +87,9 @@ All under `App/Sources/Infrastructure/RemoteHost/`; nothing in the app calls it 
   - Failure reasons for the UX: authentication, host key, unresolvable, unreachable,
     launch, exit, unrecognized output.
   - `shutdown` sends `-O exit`.
+  - The registry leases owners. The last release retires one, and an acquire for the
+    same key waits until the old owner's `-O exit` finished, so two lifecycles never share
+    a control socket (review round 1).
   - The side channel is `ssh <overrides> -o ControlMaster=auto -o ControlPath=<hash>
     -o ControlPersist=60 -T <recipe options> -- <destination> sh -s`. The overrides come
     first, because `ssh` keeps the first value it obtains:
@@ -99,7 +107,10 @@ All under `App/Sources/Infrastructure/RemoteHost/`; nothing in the app calls it 
   - The ControlPath is a SHA-256 prefix of the key, under the user temp directory (78
     bytes, below the 104-byte `sun_path` minus the 17-byte creation suffix).
 - **Runner** (`RemoteCommandRunner`). `posix_spawn` in a new process group, so a stop
-  also reaches a `ProxyCommand`.
+  also reaches a `ProxyCommand`. The budget lasts until the command's I/O is finished, not
+  only until the leader exits: a descendant that keeps a pipe open is stopped with the
+  group, and reads are abandoned after the kill grace when a descendant left the group
+  (review round 1).
   - Stdin input, a 256 KiB output cap (truncation stops the command and makes the
     snapshot `partial`), a 5 s deadline, and SIGTERM followed by SIGKILL after 1 s.
   - The `waitpid`, read and write threads start before the first suspension. With

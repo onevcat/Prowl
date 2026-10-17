@@ -21,7 +21,7 @@ struct RemoteConnectionLiveTests {
     let registry = RemoteConnectionRegistry(
       configuration: RemoteConnectionOwner.Configuration(controlDirectory: directory.path(percentEncoded: false)))
     let key = try #require(await registry.resolve(recipe))
-    let owner = await registry.owner(for: key, recipe: recipe)
+    let owner = await registry.acquire(key, recipe: recipe)
     let (id, _) = await owner.subscribe()
     await owner.requestRefresh()
     await owner.waitUntilIdle()
@@ -36,7 +36,7 @@ struct RemoteConnectionLiveTests {
     #expect(second.sequence == first.sequence + 1)
     #expect(second.report?.bootID == first.report?.bootID)
     await owner.unsubscribe(id)
-    await registry.releaseIfUnused(key)
+    await registry.release(key)
     #expect(!FileManager.default.fileExists(atPath: await owner.controlPath))
   }
 }

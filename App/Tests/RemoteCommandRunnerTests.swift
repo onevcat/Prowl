@@ -41,6 +41,24 @@ nonisolated struct RemoteCommandRunnerTests {
     #expect(clock.now - started < .seconds(20))
   }
 
+  @Test(arguments: [
+    // The leader exits at once; a child it left behind keeps stdout open.
+    "sleep 30 & exit 0",
+    // The descendant ignores SIGTERM; SIGKILL after the grace period ends it.
+    "(trap '' TERM; sleep 30) & wait",
+    // The descendant leaves the process group; the reads are abandoned after the grace.
+    "/usr/bin/perl -e 'setpgrp(0, 0); sleep 8' & wait",
+  ])
+  func theBudgetCoversDescendantsThatKeepThePipesOpen(script: String) async {
+    let clock = ContinuousClock()
+    let started = clock.now
+    let outcome = await runner.run(
+      URL(filePath: "/bin/sh"), ["-c", script], Data(), RemoteCommandLimits(deadline: 0.3, outputBytes: 1024))
+    #expect(outcome == .timedOut)
+    // Deadline plus kill grace plus one poll interval, with room for a loaded machine.
+    #expect(clock.now - started < .seconds(6))
+  }
+
   @Test func aSignalDeathReportsTheShellStatus() async {
     let outcome = await runner.run(URL(filePath: "/bin/sh"), ["-c", "kill -9 $$"], Data(), RemoteCommandLimits())
     guard case .exited(let result) = outcome else {

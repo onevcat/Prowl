@@ -17,7 +17,8 @@ nonisolated enum RemoteProbeScript {
     #                                                a member of its foreground job;
     #                                                argv mode v = US-separated vector,
     #                                                s = one space-joined string
-    #   D <pane|-> <pid> <cwd>
+    #   D <pane|-> <pid> <r|l> <cwd>                 r = raw bytes, l = lsof's escaped
+    #                                                display form (macOS)
     #   END <S count> <P count>
     # A snapshot without END is incomplete.
     LC_ALL=C
@@ -63,19 +64,24 @@ nonisolated enum RemoteProbeScript {
         printf 'S\t%s\t%s\t%s\t%s\n' "${pane:--}" "$apid" "${tty:--}" "$tpgid"
         scount=$((scount + 1))
         for m in $(printf '%s\n' "$table" | awk -v g="$tpgid" '$3 == g { print $1 }'); do
-          argv=$(tr '\0' '\037' 2>/dev/null < "/proc/$m/cmdline")
-          cwd=$(readlink "/proc/$m/cwd" 2>/dev/null)
-          printf '%s\n' "$table" | awk -v m="$m" -v pane="${pane:--}" -v up="$up" -v hz="$hz" \
-            -v argv="$argv" -v cwd="$cwd" '
+          # The trailing x keeps trailing newlines that command substitution would strip.
+          argv=$(tr '\0' '\037' 2>/dev/null < "/proc/$m/cmdline"; printf x)
+          argv=${argv%x}
+          cwd=$(readlink "/proc/$m/cwd" 2>/dev/null && printf x)
+          [ -n "$cwd" ] && cwd=${cwd%?x}
+          # Untrusted strings reach awk through ENVIRON: `-v` would decode backslash escapes.
+          printf '%s\n' "$table" | PROWL_PANE="${pane:--}" PROWL_ARGV="$argv" PROWL_CWD="$cwd" \
+            awk -v m="$m" -v up="$up" -v hz="$hz" '
             function esc(s) {
               gsub(/%/, "%25", s); gsub(/\t/, "%09", s); gsub(/\n/, "%0A", s); gsub(/\r/, "%0D", s); return s
             }
             $1 == m {
+              pane = ENVIRON["PROWL_PANE"]; argv = ENVIRON["PROWL_ARGV"]; cwd = ENVIRON["PROWL_CWD"]
               comm = $0; sub(/^[^ ]+ [^ ]+ [^ ]+ [^ ]+ [^ ]+ /, "", comm)
               sub(/\037$/, "", argv)
               printf "P\t%s\t%s\t%s\t%s\t%s\t%d\t%s\tv\t%s\n", \
                 esc(pane), $1, $2, $3, $5, up - $5 / hz, esc(comm), esc(argv)
-              if (cwd != "") printf "D\t%s\t%s\t%s\n", esc(pane), $1, esc(cwd)
+              if (cwd != "") printf "D\t%s\t%s\tr\t%s\n", esc(pane), $1, esc(cwd)
             }'
           pcount=$((pcount + 1))
         done
@@ -157,7 +163,7 @@ nonisolated enum RemoteProbeScript {
             m = ms[j]
             printf "P\t%s\t%s\t%s\t%s\t%s\t%d\t%s\ts\t%s\n", \
               esc(pn), m, ppid[m], pgid[m], esc(start[m]), seconds(et[m]), esc(name[m]), esc(args[m])
-            if (m in cwd) printf "D\t%s\t%s\t%s\n", esc(pn), m, esc(cwd[m])
+            if (m in cwd) printf "D\t%s\t%s\tl\t%s\n", esc(pn), m, esc(cwd[m])
             pc++
           }
         }

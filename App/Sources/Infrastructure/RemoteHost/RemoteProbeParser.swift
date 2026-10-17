@@ -58,6 +58,44 @@ nonisolated enum RemoteProbeParser {
     decode(unescape(Data(field.utf8)))
   }
 
+  /// Reverses the display form `lsof` gives a name under `LC_ALL=C`: `\\`, `\t`, `\n`, `\r`,
+  /// `\b`, `\f`, `\xNN`, and `^X` for other control characters. A literal `^` before one
+  /// of `@A-Z[\]^_` cannot be told apart from a control character and decodes as one.
+  static func lsofName(_ text: String) -> String {
+    var bytes = Data()
+    var iterator = Array(text.utf8)[...]
+    let controls: [UInt8: UInt8] = [
+      UInt8(ascii: "t"): 0x09, UInt8(ascii: "n"): 0x0A, UInt8(ascii: "r"): 0x0D, UInt8(ascii: "b"): 0x08,
+      UInt8(ascii: "f"): 0x0C, UInt8(ascii: "\\"): UInt8(ascii: "\\"),
+    ]
+    while let byte = iterator.popFirst() {
+      switch byte {
+      case UInt8(ascii: "\\"):
+        if let next = iterator.first, let control = controls[next] {
+          bytes.append(control)
+          iterator = iterator.dropFirst()
+        } else if iterator.first == UInt8(ascii: "x"), iterator.count >= 3,
+          let hex = String(bytes: iterator.dropFirst().prefix(2), encoding: .ascii), let value = UInt8(hex, radix: 16)
+        {
+          bytes.append(value)
+          iterator = iterator.dropFirst(3)
+        } else {
+          bytes.append(byte)
+        }
+      case UInt8(ascii: "^"):
+        if let next = iterator.first, (0x40...0x5F).contains(next) {
+          bytes.append(next - 0x40)
+          iterator = iterator.dropFirst()
+        } else {
+          bytes.append(byte)
+        }
+      default:
+        bytes.append(byte)
+      }
+    }
+    return decode(bytes)
+  }
+
   /// UTF-8 when valid; otherwise Latin-1, which maps every byte, so the record survives.
   private static func decode(_ bytes: Data) -> String {
     String(bytes: bytes, encoding: .utf8) ?? String(bytes: bytes, encoding: .isoLatin1) ?? ""
@@ -149,10 +187,16 @@ nonisolated enum RemoteProbeParser {
     }
 
     private mutating func applyDirectory(_ record: [String]) -> Bool {
-      guard record.count == 4, let pid = Int32(record[2]), !sessions.isEmpty,
+      guard record.count == 5, let pid = Int32(record[2]), !sessions.isEmpty,
         let index = sessions[sessions.count - 1].processes.lastIndex(where: { $0.pid == pid })
       else { return false }
-      sessions[sessions.count - 1].processes[index].workingDirectory = record[3]
+      let path: String
+      switch record[3] {
+      case "r": path = record[4]
+      case "l": path = RemoteProbeParser.lsofName(record[4])
+      default: return false
+      }
+      sessions[sessions.count - 1].processes[index].workingDirectory = path
       return true
     }
 

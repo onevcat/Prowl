@@ -13,10 +13,10 @@ struct RemoteProbeParserTests {
       "H\tDarwin\t1783703386.707560",
       "S\t22222222-2222-4222-8222-222222222222\t59282\t/dev/ttys000\t59282",
       "P\t22222222-2222-4222-8222-222222222222\t59282\t59281\t59282\tSat Oct 17 20:50:38 2026\t20\tcodex\ts\tcodex",
-      "D\t22222222-2222-4222-8222-222222222222\t59282\t/private/tmp",
+      "D\t22222222-2222-4222-8222-222222222222\t59282\tl\t/private/tmp",
       "S\t11111111-1111-4111-8111-111111111111\t59286\t/dev/ttys001\t59286",
       "P\t11111111-1111-4111-8111-111111111111\t59286\t59284\t59286\tSat Oct 17 20:50:38 2026\t20\t2.1.302\ts\tclaude",
-      "D\t11111111-1111-4111-8111-111111111111\t59286\t/private/tmp",
+      "D\t11111111-1111-4111-8111-111111111111\t59286\tl\t/private/tmp",
       "END\t2\t2",
     ].joined(separator: "\n") + "\n"
 
@@ -28,10 +28,10 @@ struct RemoteProbeParserTests {
       "H\tLinux\td8e2436d-c605-4e3b-92d7-57b6424c1e78",
       "S\t44444444-4444-4444-8444-444444444444\t179\t/dev/pts/1\t179",
       "P\t44444444-4444-4444-8444-444444444444\t179\t178\t179\t29059914\t3\tsleep\tv\tsleep\u{1F}25",
-      "D\t44444444-4444-4444-8444-444444444444\t179\t/home/dev",
+      "D\t44444444-4444-4444-8444-444444444444\t179\tr\t/home/dev",
       "S\t33333333-3333-4333-8333-333333333333\t123\t/dev/pts/0\t123",
       "P\t33333333-3333-4333-8333-333333333333\t123\t116\t123\t29057954\t22\tsleep\tv\tclaude\u{1F}30",
-      "D\t33333333-3333-4333-8333-333333333333\t123\t/tmp/odd dir/t%09ab%25x",
+      "D\t33333333-3333-4333-8333-333333333333\t123\tr\t/tmp/odd dir/t%09ab%25x",
       "END\t2\t2",
     ].joined(separator: "\n") + "\n"
 
@@ -130,6 +130,36 @@ struct RemoteProbeParserTests {
       return
     }
     #expect(report.sessions.first?.processes.first?.arguments == ["bash", "\u{FF}\u{FE}"])
+  }
+
+  @Test func lsofNamesDecodeToTheRealPath() {
+    // `lsof -Fn` under LC_ALL=C on macOS 26.5 for `/tmp/a<TAB>b\c^d%e 中文`, `nl<LF>x`,
+    // and `x<0x01>y<CR>z<ESC>w<DEL>v<BS>u<FF>q`.
+    #expect(
+      RemoteProbeParser.lsofName(#"/tmp/a\tb\\c^d%e \xe4\xb8\xad\xe6\x96\x87"#) == "/tmp/a\tb\\c^d%e 中文")
+    #expect(RemoteProbeParser.lsofName(#"/tmp/nl\nx"#) == "/tmp/nl\nx")
+    #expect(
+      RemoteProbeParser.lsofName(#"/tmp/x^Ay\rz^[w\x7fv\bu\fq"#) == "/tmp/x\u{1}y\rz\u{1B}w\u{7F}v\u{8}u\u{C}q")
+    // Recorded over ssh for a shell in `/tmp/中文 \x<TAB>y`.
+    #expect(
+      RemoteProbeParser.lsofName(#"/private/tmp/\xe4\xb8\xad\xe6\x96\x87 \\x\ty"#) == "/private/tmp/中文 \\x\ty")
+    // An unknown escape stays literal.
+    #expect(RemoteProbeParser.lsofName(#"a\qb"#) == #"a\qb"#)
+  }
+
+  @Test func directoryEncodingIsChecked() {
+    let base = ["PROWL-PROBE\t1", "H\tDarwin\tb", "S\t-\t10\t/dev/ttys000\t10", "P\t-\t10\t9\t10\ts\t1\tzsh\ts\tzsh"]
+    let lsof = (base + ["D\t-\t10\tl\t" + #"/Users/me/\xe4\xb8\xad"#, "END\t1\t1"]).joined(separator: "\n")
+    guard case .complete(let report) = RemoteProbeParser.parse(lsof) else {
+      Issue.record("expected complete")
+      return
+    }
+    #expect(report.sessions.first?.processes.first?.workingDirectory == "/Users/me/中")
+    let unknown = (base + ["D\t-\t10\tq\t/x", "END\t1\t1"]).joined(separator: "\n")
+    guard case .partial = RemoteProbeParser.parse(unknown) else {
+      Issue.record("expected partial")
+      return
+    }
   }
 
   @Test func foreignOutputIsUnrecognized() {
