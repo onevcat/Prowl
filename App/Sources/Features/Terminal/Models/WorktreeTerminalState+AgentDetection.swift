@@ -321,6 +321,7 @@ extension WorktreeTerminalState {
   ) -> RemotePaneTracker.Observation? {
     guard remoteAgentDetectionEnabled else {
       retireRemotePaneTracker(surfaceID: surfaceID)
+      setRemoteIndicator(nil, surfaceID: surfaceID)
       return nil
     }
     let tracker: RemotePaneTracker
@@ -329,6 +330,7 @@ extension WorktreeTerminalState {
         // The `ssh` left the foreground: its next tracker starts a new interval.
         if let ssh = remotePaneTrackers[surfaceID]?.ssh {
           remoteFenceHistoryBySurface[surfaceID]?[ssh]?.leftForeground = true
+          endRemoteIndicator(ssh: ssh, surfaceID: surfaceID)
         }
         retireRemotePaneTracker(surfaceID: surfaceID)
         return nil
@@ -345,7 +347,37 @@ extension WorktreeTerminalState {
     let observation = bindUnprobedProducer(
       observation: tracker.observe(active: active, now: now), tracker: tracker, surfaceID: surfaceID)
     storeFenceHistory(tracker.fenceHistory, surfaceID: surfaceID)
+    if let connection = observation.connection {
+      setRemoteIndicator(.connected(connection.label), surfaceID: surfaceID)
+    }
     return observation
+  }
+
+  /// The pane's `ssh` left the foreground: an exited one leaves an ended marker, while a
+  /// suspended one (still running) just drops the label.
+  private func endRemoteIndicator(ssh: LocalProcessGeneration, surfaceID: UUID) {
+    guard let host = surfaces[surfaceID]?.bridge.state.remoteIndicator?.connectedHost else { return }
+    let exited = ProcessDetection.processStartDate(pid: ssh.pid) != ssh.startedAt
+    setRemoteIndicator(exited ? .ended(host) : nil, surfaceID: surfaceID)
+  }
+
+  func setRemoteIndicator(_ indicator: RemotePaneIndicator?, surfaceID: UUID) {
+    guard let view = surfaces[surfaceID], view.bridge.state.remoteIndicator != indicator else { return }
+    view.bridge.state.remoteIndicator = indicator
+    if let tabId = tabId(containing: surfaceID) { updateRemoteHosts(for: tabId) }
+  }
+
+  /// The tab shows the hosts its panes reach; tree changes (moved or closed panes) refresh it
+  /// through `updateRunningState`.
+  func updateRemoteHosts(for tabId: TerminalTabID) {
+    guard let tree = trees[tabId] else { return }
+    var hosts: [String] = []
+    for surface in tree.leaves() {
+      if let host = surface.bridge.state.remoteIndicator?.connectedHost, !hosts.contains(host) {
+        hosts.append(host)
+      }
+    }
+    tabManager.updateRemoteHosts(tabId, hosts: hosts)
   }
 
   /// Keeps `history` for its `ssh` and drops the histories of `ssh` clients that exited.

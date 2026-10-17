@@ -218,6 +218,58 @@ struct RemoteAgentDetectionTests {
     #expect(fixture.state.agentDetectionCoordinators[fixture.surfaceID]?.boundProcess?.localGeneration == nil)
   }
 
+  @Test func aRemotePaneShowsItsHostOnThePaneAndItsTab() async {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    await bindClaude(fixture, probe: probe)
+    #expect(fixture.surface.bridge.state.remoteIndicator == .connected("onevcat@mini.local"))
+    #expect(fixture.state.tabManager.tabs.first?.remoteHosts == ["onevcat@mini.local"])
+    // A suspended `ssh` (still running) only drops the label.
+    probe.job = shellJob
+    await detect(fixture)
+    #expect(fixture.surface.bridge.state.remoteIndicator == nil)
+    #expect(fixture.state.tabManager.tabs.first?.remoteHosts == [])
+  }
+
+  @Test func anExitedSSHLeavesAnEndedMarker() async throws {
+    let ssh = Process()
+    ssh.executableURL = URL(fileURLWithPath: "/bin/sleep")
+    ssh.arguments = ["30"]
+    try ssh.run()
+    defer { if ssh.isRunning { ssh.terminate() } }
+    let pid = ssh.processIdentifier
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    probe.job = ForegroundJob(
+      processGroupID: pid,
+      processes: [
+        ForegroundProcess(
+          pid: pid, parentProcessID: 1, name: "ssh", argv0: "ssh", cmdline: "ssh -p 2222 mini",
+          arguments: ["ssh", "-p", "2222", "mini"])
+      ])
+    await detect(fixture)
+    await settle { fixture.source.recipes.count == 1 }
+    await deliver(fixture, snapshot(1, pane: fixture.surfaceID, foreground: remoteProcess(200, name: "zsh")))
+    await detect(fixture)
+    #expect(fixture.surface.bridge.state.remoteIndicator == .connected("onevcat@mini.local"))
+    ssh.terminate()
+    ssh.waitUntilExit()
+    probe.job = shellJob
+    await detect(fixture)
+    #expect(fixture.surface.bridge.state.remoteIndicator == .ended("onevcat@mini.local"))
+    #expect(fixture.state.tabManager.tabs.first?.remoteHosts == [])
+  }
+
+  @Test func turningDetectionOffClearsTheRemoteLabel() async {
+    let probe = Probe()
+    let fixture = makeFixture(probe: probe)
+    await bindClaude(fixture, probe: probe)
+    fixture.state.remoteAgentDetectionEnabledForTesting = false
+    await detect(fixture)
+    #expect(fixture.surface.bridge.state.remoteIndicator == nil)
+    #expect(fixture.state.tabManager.tabs.first?.remoteHosts == [])
+  }
+
   @Test func anUnconfirmedRemoteAgentTurnsStaleAndProvesNothing() async throws {
     let probe = Probe()
     let fixture = makeFixture(probe: probe)
@@ -1082,6 +1134,18 @@ struct RemoteAgentDetectionTests {
       skipsSurfaceCreationForTesting: true)
     #expect(surface.launchEnvironment["LC_PROWL_PANE"] == surface.id.uuidString)
     #expect(surface.launchEnvironment["PROWL_PANE_ID"] == surface.id.uuidString)
+  }
+}
+
+struct RemoteAgentDetectionSwitchTests {
+  @Test func detectionIsOnUnlessTurnedOff() throws {
+    let defaults = try #require(UserDefaults(suiteName: "RemoteAgentDetectionSwitchTests-\(UUID().uuidString)"))
+    #expect(RemoteAgentDetection.isEnabled(environment: [:], defaults: defaults))
+    #expect(!RemoteAgentDetection.isEnabled(environment: ["PROWL_REMOTE_AGENT_DETECTION": "0"], defaults: defaults))
+    defaults.set(false, forKey: RemoteAgentDetection.defaultsKey)
+    #expect(!RemoteAgentDetection.isEnabled(environment: [:], defaults: defaults))
+    // The environment wins over the default, both ways.
+    #expect(RemoteAgentDetection.isEnabled(environment: ["PROWL_REMOTE_AGENT_DETECTION": "1"], defaults: defaults))
   }
 }
 

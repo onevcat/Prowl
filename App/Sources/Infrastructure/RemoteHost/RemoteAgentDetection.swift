@@ -1,13 +1,18 @@
 import Foundation
 
-/// The switch for SSH-transparent detection (docs-ai 082, L0). Off until the L0 UX ships;
-/// `PROWL_REMOTE_AGENT_DETECTION=1` or the `remoteAgentDetectionEnabled` default turns it
-/// on for dogfooding.
+/// The switch for SSH-transparent detection (docs-ai 082, L0). On by default since the L0 UX
+/// shipped; `PROWL_REMOTE_AGENT_DETECTION=0` or a `false` `remoteAgentDetectionEnabled`
+/// default turns it off.
 nonisolated enum RemoteAgentDetection {
   static let defaultsKey = "remoteAgentDetectionEnabled"
   static let environmentKey = "PROWL_REMOTE_AGENT_DETECTION"
 
   static var isEnabled: Bool {
-    ProcessInfo.processInfo.environment[environmentKey] == "1" || UserDefaults.standard.bool(forKey: defaultsKey)
+    isEnabled(environment: ProcessInfo.processInfo.environment, defaults: .standard)
+  }
+
+  static func isEnabled(environment: [String: String], defaults: UserDefaults) -> Bool {
+    if let value = environment[environmentKey] { return value != "0" }
+    return defaults.object(forKey: defaultsKey) as? Bool ?? true
   }
 }

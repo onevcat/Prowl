@@ -23,6 +23,8 @@ final class GhosttySurfaceState {
   var colorChangeR: UInt8?
   var colorChangeG: UInt8?
   var colorChangeB: UInt8?
+  /// The host of the pane's foreground `ssh`, set by agent detection (docs-ai 082).
+  var remoteIndicator: RemotePaneIndicator?
   var searchNeedle: String?
   var searchTotal: Int?
   var searchSelected: Int?

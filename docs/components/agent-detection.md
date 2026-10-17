@@ -399,10 +399,10 @@ frames keep the last trusted state instead of forcing Idle.
 
 ## Remote agents over SSH
 
-When a pane's foreground command is a local `ssh`, Prowl can show the agent that runs on
-the host (docs-ai 082, L0). Until this ships on by default, launch Prowl with
-`PROWL_REMOTE_AGENT_DETECTION=1` to enable it. Prowl installs nothing on the host and
-edits no rc file.
+When a pane's foreground command is a local `ssh`, Prowl shows the agent that runs on the
+host (docs-ai 082, L0). Prowl installs nothing on the host and edits no rc file. To turn
+the feature off, run `defaults write com.onevcat.prowl remoteAgentDetectionEnabled -bool
+false` and relaunch Prowl, or launch it with `PROWL_REMOTE_AGENT_DETECTION=0`.
 
 - **How.** Prowl opens its own SSH connection to the same target (`ssh -G` resolves user,
   host name, port, `ProxyJump` and `-F`). It runs a read-only probe over that connection:
@@ -411,6 +411,11 @@ edits no rc file.
   `SendEnv`/`AcceptEnv` settings forward, and reads the session's foreground process. A
   verified producer's OSC 7501 reports decide the state, as they do locally; otherwise the
   screen decides.
+- **Pane and tab.** A pane whose foreground `ssh` reaches a host shows `user@host` in its
+  bottom-trailing corner, and its tab shows a network glyph before the title (the tooltip
+  names the hosts). When that `ssh` exits and the pane is back in its local shell, the
+  corner reads "Disconnected from user@host" for five seconds. A suspended `ssh` (still
+  running) only removes the label.
 - **Host label and health.** The Active Agents row shows `user@host` with a network
   glyph. Connection health is shown apart from the agent's state. If no snapshot has
   confirmed the agent for 10 s, the row keeps the last state, greys it out, and adds

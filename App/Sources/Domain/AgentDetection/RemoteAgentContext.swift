@@ -21,7 +21,7 @@ nonisolated struct RemoteAgentContext: Equatable, Sendable {
 
   /// `user@hostname`, the label a remote pane shows.
   var hostLabel: String? {
-    connection.map { "\($0.user)@\($0.hostname)" }
+    connection?.label
   }
 
   init(

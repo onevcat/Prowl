@@ -27,6 +27,8 @@ struct TerminalTabItem: Identifiable, Equatable, Sendable {
   var isDirty: Bool
   var isTitleLocked: Bool
   var iconLock: TerminalTabIconLock
+  /// The hosts that the tab's panes reach over `ssh` (docs-ai 082), in pane order.
+  var remoteHosts: [String] = []
 
   var displayTitle: String { customTitle ?? title }
 
